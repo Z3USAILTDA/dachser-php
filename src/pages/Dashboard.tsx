@@ -270,41 +270,49 @@ const Dashboard = () => {
                             </button>
                             
                             {/* Voucher Children - Positioned absolutely to not affect parent layout */}
-                            {voucherExpanded && child.voucherChildren && (
-                              <div className="absolute top-full left-1/2 -translate-x-1/2 flex flex-col items-center mt-6 animate-in fade-in duration-300">
-                                {/* Vertical Line from Voucher */}
-                                <div className="w-0.5 h-5 bg-primary" />
-                                
-                                {/* Children Row */}
-                                <div className="relative flex gap-6">
-                                  {/* Horizontal line spanning from first to last child center */}
-                                  {child.voucherChildren.length > 1 && (
-                                    <div 
-                                      className="absolute top-0 h-0.5 bg-primary"
-                                      style={{ 
-                                        left: '90px',
-                                        right: '90px',
-                                      }}
-                                    />
-                                  )}
+                            <div 
+                              className={`absolute top-full left-1/2 -translate-x-1/2 flex flex-col items-center mt-6 transition-all duration-300 ${
+                                voucherExpanded && child.voucherChildren 
+                                  ? 'opacity-100 translate-y-0' 
+                                  : 'opacity-0 -translate-y-2 pointer-events-none'
+                              }`}
+                            >
+                              {child.voucherChildren && (
+                                <>
+                                  {/* Vertical Line from Voucher */}
+                                  <div className="w-0.5 h-5 bg-primary" />
                                   
-                                  {child.voucherChildren.map((vChild, vIdx) => (
-                                    <div key={vIdx} className="relative flex flex-col items-center pt-0 min-w-[180px]">
-                                      {/* Vertical connector */}
-                                      <div className="w-0.5 h-3 bg-primary" />
-                                      <div className="w-1.5 h-1.5 rounded-full bg-primary -mt-0.5" />
-                                      
-                                      <button
-                                        onClick={() => navigate(vChild.href)}
-                                        className="mt-2 min-w-[180px] px-5 py-2.5 rounded-full bg-background/86 border border-border/50 text-foreground text-sm font-medium hover:bg-background hover:border-primary/60 hover:-translate-y-0.5 transition-all duration-200 shadow-lg"
-                                      >
-                                        {vChild.label}
-                                      </button>
-                                    </div>
-                                  ))}
-                                </div>
-                              </div>
-                            )}
+                                  {/* Children Row */}
+                                  <div className="relative flex gap-6">
+                                    {/* Horizontal line spanning from first to last child center */}
+                                    {child.voucherChildren.length > 1 && (
+                                      <div 
+                                        className="absolute top-0 h-0.5 bg-primary"
+                                        style={{ 
+                                          left: '90px',
+                                          right: '90px',
+                                        }}
+                                      />
+                                    )}
+                                    
+                                    {child.voucherChildren.map((vChild, vIdx) => (
+                                      <div key={vIdx} className="relative flex flex-col items-center pt-0 min-w-[180px]">
+                                        {/* Vertical connector */}
+                                        <div className="w-0.5 h-3 bg-primary" />
+                                        <div className="w-1.5 h-1.5 rounded-full bg-primary -mt-0.5" />
+                                        
+                                        <button
+                                          onClick={() => navigate(vChild.href)}
+                                          className="mt-2 min-w-[180px] px-5 py-2.5 rounded-full bg-background/86 border border-border/50 text-foreground text-sm font-medium hover:bg-background hover:border-primary/60 hover:-translate-y-0.5 transition-all duration-200 shadow-lg"
+                                        >
+                                          {vChild.label}
+                                        </button>
+                                      </div>
+                                    ))}
+                                  </div>
+                                </>
+                              )}
+                            </div>
                           </div>
                         ) : (
                           <button
