@@ -126,9 +126,9 @@ const Dashboard = () => {
   const filteredMenuItems = menuItems.filter(item => !item.adminOnly || isAdmin);
 
   return (
-    <div className="min-h-screen bg-background relative overflow-x-hidden">
+    <div className="min-h-screen relative overflow-x-hidden">
       {/* Background Image */}
-      <div className="fixed inset-0 pointer-events-none -z-10">
+      <div className="fixed inset-0">
         <img 
           src={dachserBg} 
           alt="DACHSER Logistics" 
