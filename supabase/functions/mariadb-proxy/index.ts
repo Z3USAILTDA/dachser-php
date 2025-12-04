@@ -171,9 +171,8 @@ const body = await req.json() as QueryRequest;
           );
         }
 
-        // Hash the password with bcrypt
-        const salt = await bcrypt.genSalt(10);
-        const passwordHash = await bcrypt.hash(password, salt);
+        // Hash the password with bcrypt (using sync to avoid Worker issues in Edge Functions)
+        const passwordHash = bcrypt.hashSync(password);
 
         // Insert new user
         await client.execute(
