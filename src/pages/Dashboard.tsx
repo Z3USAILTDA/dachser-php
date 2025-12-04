@@ -96,6 +96,7 @@ const menuItems: MenuItem[] = [
 const Dashboard = () => {
   const navigate = useNavigate();
   const [activeMenu, setActiveMenu] = useState<string | null>(null);
+  const [voucherExpanded, setVoucherExpanded] = useState(false);
   const [user, setUser] = useState<{ id: number; email: string; username: string; is_admin: number } | null>(null);
 
   useEffect(() => {
@@ -115,6 +116,9 @@ const Dashboard = () => {
   };
 
   const toggleMenu = (menuId: string) => {
+    if (activeMenu !== menuId) {
+      setVoucherExpanded(false);
+    }
     setActiveMenu(activeMenu === menuId ? null : menuId);
   };
 
@@ -254,29 +258,42 @@ const Dashboard = () => {
                         
                         {child.isVoucher ? (
                           <div className="mt-2 flex flex-col items-center">
-                            <div className="min-w-[180px] px-5 py-2.5 rounded-full bg-background/90 border border-primary text-foreground text-sm font-medium shadow-[0_0_10px_hsl(var(--primary)/0.5)]">
+                            <button
+                              onClick={() => setVoucherExpanded(!voucherExpanded)}
+                              className={`min-w-[180px] px-5 py-2.5 rounded-full text-sm font-medium transition-all duration-200 cursor-pointer ${
+                                voucherExpanded 
+                                  ? 'bg-primary text-primary-foreground border border-primary shadow-[0_0_14px_hsl(var(--primary)/0.7)]' 
+                                  : 'bg-background/90 border border-primary text-foreground shadow-[0_0_10px_hsl(var(--primary)/0.5)] hover:bg-background hover:-translate-y-0.5'
+                              }`}
+                            >
                               {child.label}
-                            </div>
+                            </button>
                             
-                            <div className="relative mt-4 flex flex-col items-center">
-                              <div className="absolute top-0 bottom-0 left-1/2 -translate-x-1/2 w-0.5 bg-primary" />
-                              
-                              <div className="flex flex-col gap-3 relative z-10">
-                                {child.voucherChildren?.map((vChild, vIdx) => (
-                                  <div key={vIdx} className="relative flex items-center">
-                                    <div className="absolute left-1/2 -translate-x-1/2 -top-3 w-0.5 h-3 bg-primary" />
-                                    <div className="absolute left-1/2 -translate-x-1/2 top-0 -translate-y-1/2 w-1.5 h-1.5 rounded-full bg-primary" />
-                                    
-                                    <button
-                                      onClick={() => navigate(vChild.href)}
-                                      className="min-w-[180px] px-5 py-2.5 rounded-full bg-background/86 border border-border/50 text-foreground text-sm font-medium hover:bg-background hover:border-primary/60 hover:-translate-y-0.5 transition-all duration-200 shadow-lg"
-                                    >
-                                      {vChild.label}
-                                    </button>
-                                  </div>
-                                ))}
+                            {/* Voucher Children - Only show when expanded */}
+                            {voucherExpanded && (
+                              <div className="relative mt-4 flex flex-col items-center animate-in fade-in slide-in-from-top-2 duration-300">
+                                <div className="w-0.5 h-4 bg-primary" />
+                                
+                                <div className="flex flex-col gap-3 relative z-10">
+                                  {child.voucherChildren?.map((vChild, vIdx) => (
+                                    <div key={vIdx} className="relative flex flex-col items-center">
+                                      {vIdx > 0 && (
+                                        <>
+                                          <div className="w-0.5 h-3 bg-primary" />
+                                          <div className="w-1.5 h-1.5 rounded-full bg-primary -mt-0.5 mb-2" />
+                                        </>
+                                      )}
+                                      <button
+                                        onClick={() => navigate(vChild.href)}
+                                        className="min-w-[180px] px-5 py-2.5 rounded-full bg-background/86 border border-border/50 text-foreground text-sm font-medium hover:bg-background hover:border-primary/60 hover:-translate-y-0.5 transition-all duration-200 shadow-lg"
+                                      >
+                                        {vChild.label}
+                                      </button>
+                                    </div>
+                                  ))}
+                                </div>
                               </div>
-                            </div>
+                            )}
                           </div>
                         ) : (
                           <button
