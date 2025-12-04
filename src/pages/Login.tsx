@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { toast } from "@/hooks/use-toast";
+import { supabase } from "@/integrations/supabase/client";
 import logoZ3us from "@/assets/logo-z3us.png";
 import { Eye, EyeOff, LogIn } from "lucide-react";
 
@@ -16,26 +17,54 @@ const Login = () => {
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
+    
+    if (!email || !password) {
+      toast({
+        title: "Erro no login",
+        description: "Preencha todos os campos.",
+        variant: "destructive",
+      });
+      return;
+    }
+
     setIsLoading(true);
 
-    // Simulação de login - substituir por autenticação real
-    setTimeout(() => {
-      if (email && password) {
-        localStorage.setItem("user", JSON.stringify({ email, username: email.split("@")[0] }));
-        toast({
-          title: "Login realizado com sucesso!",
-          description: "Bem-vindo ao sistema DACHSER.",
-        });
-        navigate("/dashboard");
-      } else {
+    try {
+      const { data, error } = await supabase.functions.invoke('mariadb-proxy', {
+        body: { action: 'login', email, password }
+      });
+
+      if (error) {
+        throw new Error(error.message || 'Erro ao conectar');
+      }
+
+      if (data.error) {
         toast({
           title: "Erro no login",
-          description: "Preencha todos os campos.",
+          description: data.error,
           variant: "destructive",
         });
+        return;
       }
+
+      if (data.success && data.user) {
+        localStorage.setItem("user", JSON.stringify(data.user));
+        toast({
+          title: "Login realizado com sucesso!",
+          description: `Bem-vindo, ${data.user.username}!`,
+        });
+        navigate("/dashboard");
+      }
+    } catch (error) {
+      console.error('Login error:', error);
+      toast({
+        title: "Erro no login",
+        description: "Não foi possível conectar ao servidor.",
+        variant: "destructive",
+      });
+    } finally {
       setIsLoading(false);
-    }, 1000);
+    }
   };
 
   return (

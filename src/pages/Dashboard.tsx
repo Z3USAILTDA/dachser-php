@@ -78,8 +78,7 @@ const menuItems: MenuItem[] = [
 const Dashboard = () => {
   const navigate = useNavigate();
   const [activeMenu, setActiveMenu] = useState<string | null>(null);
-  const [user, setUser] = useState<{ email: string; username: string } | null>(null);
-  const isAdmin = true; // Simulação - substituir por verificação real
+  const [user, setUser] = useState<{ id: number; email: string; username: string; is_admin: number } | null>(null);
 
   useEffect(() => {
     const storedUser = localStorage.getItem("user");
@@ -89,6 +88,8 @@ const Dashboard = () => {
       navigate("/");
     }
   }, [navigate]);
+
+  const isAdmin = user?.is_admin === 1;
 
   const handleLogout = () => {
     localStorage.removeItem("user");
