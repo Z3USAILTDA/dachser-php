@@ -1,1 +1,4 @@
 project_id = "finktakbjcfmurqeiubz"
+
+[functions.mariadb-proxy]
+verify_jwt = false
