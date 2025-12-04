@@ -80,7 +80,7 @@ serve(async (req) => {
         const storedHash = user.password_hash;
         
         // Verify bcrypt password (plain text input vs bcrypt hash in DB)
-        const isValidPassword = await bcrypt.compare(password, storedHash);
+        const isValidPassword = bcrypt.compareSync(password, storedHash);
         
         if (!isValidPassword) {
           console.log('Login failed: Invalid password');
