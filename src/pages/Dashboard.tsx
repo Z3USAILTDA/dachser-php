@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { LogOut, Plane, Ship, CreditCard, FileText, Building2, UserCog } from "lucide-react";
 import logoZ3us from "@/assets/logo-z3us.png";
+import dachserBg from "@/assets/dachser-background.jpg";
 
 interface VoucherChild {
   label: string;
@@ -126,15 +127,18 @@ const Dashboard = () => {
 
   return (
     <div className="min-h-screen bg-background relative overflow-x-hidden">
-      {/* Background Effects */}
+      {/* Background Image */}
       <div className="fixed inset-0 pointer-events-none">
+        <img 
+          src={dachserBg} 
+          alt="DACHSER Logistics" 
+          className="w-full h-full object-cover"
+        />
         <div 
           className="absolute inset-0"
           style={{
             background: `
-              radial-gradient(circle at 10% 0%, hsl(var(--primary) / 0.18), transparent 55%),
-              radial-gradient(circle at 90% 100%, hsl(var(--primary) / 0.12), transparent 55%),
-              linear-gradient(180deg, rgba(0, 0, 0, 0.84), rgba(0, 0, 0, 0.95))
+              linear-gradient(180deg, rgba(5, 6, 8, 0.7) 0%, rgba(5, 6, 8, 0.85) 50%, rgba(5, 6, 8, 0.95) 100%)
             `
           }}
         />
