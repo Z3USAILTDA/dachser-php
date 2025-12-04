@@ -271,7 +271,7 @@ const Dashboard = () => {
                             
                             {/* Voucher Children - Positioned absolutely to not affect parent layout */}
                             {voucherExpanded && child.voucherChildren && (
-                              <div className="absolute top-full left-1/2 -translate-x-1/2 flex flex-col items-center mt-4 animate-in fade-in duration-300">
+                              <div className="absolute top-full left-1/2 -translate-x-1/2 flex flex-col items-center mt-6 animate-in fade-in duration-300">
                                 {/* Vertical Line from Voucher */}
                                 <div className="w-0.5 h-5 bg-primary" />
                                 
