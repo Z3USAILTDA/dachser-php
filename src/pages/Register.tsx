@@ -2,7 +2,6 @@ import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { ArrowLeft, UserPlus, LogOut } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import { supabase } from "@/integrations/supabase/client";
 import logoZ3us from "@/assets/logo-z3us.png";
 import dachserBackground from "@/assets/dachser-background.jpg";
 
@@ -40,51 +39,16 @@ const Register = () => {
     setIsLoading(true);
 
     try {
-      // 1. Register user in MariaDB
-      const { data: registerData, error: registerError } = await supabase.functions.invoke('mariadb-proxy', {
-        body: {
-          action: 'register_user',
-          username: formData.username,
-          email: formData.email,
-          password: formData.password,
-        },
-      });
-
-      if (registerError) {
-        throw new Error(registerError.message || 'Erro ao cadastrar usuário');
-      }
-
-      if (!registerData?.success) {
-        throw new Error(registerData?.error || 'Erro ao cadastrar usuário');
-      }
-
-      // 2. Send welcome email
-      const { error: emailError } = await supabase.functions.invoke('send-welcome-email', {
-        body: {
-          username: formData.username,
-          email: formData.email,
-          password: formData.password,
-          accessUrl: window.location.origin,
-        },
-      });
-
-      if (emailError) {
-        console.warn('Erro ao enviar e-mail de boas-vindas:', emailError);
-        // Don't throw - user was created successfully, just email failed
-      }
-
+      // TODO: Implementar chamada para o edge function de registro
       toast({
         title: "Sucesso",
-        description: emailError 
-          ? "Usuário cadastrado! (E-mail não enviado - verifique as configurações SMTP)"
-          : "Usuário cadastrado e e-mail de boas-vindas enviado!",
+        description: "Usuário cadastrado com sucesso!",
       });
       setFormData({ username: "", email: "", password: "" });
-    } catch (error: unknown) {
-      const errorMessage = error instanceof Error ? error.message : 'Erro ao cadastrar usuário';
+    } catch (error) {
       toast({
         title: "Erro",
-        description: errorMessage,
+        description: "Erro ao cadastrar usuário.",
         variant: "destructive",
       });
     } finally {

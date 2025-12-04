@@ -8,10 +8,9 @@ const corsHeaders = {
 };
 
 interface QueryRequest {
-  action: 'login' | 'get_user' | 'get_metrics' | 'register_user';
+  action: 'login' | 'get_user' | 'get_metrics';
   username?: string;
   password?: string;
-  email?: string;
   userId?: string;
   dateFrom?: string;
   dateTo?: string;
@@ -29,8 +28,8 @@ serve(async (req) => {
   let client: Client | null = null;
 
   try {
-const body = await req.json() as QueryRequest;
-    const { action, username, password, email, userId, dateFrom: reqDateFrom, dateTo: reqDateTo, module: reqModule, perPage: reqPerPage, page: reqPage } = body;
+    const body = await req.json() as QueryRequest;
+    const { action, username, password, userId, dateFrom: reqDateFrom, dateTo: reqDateTo, module: reqModule, perPage: reqPerPage, page: reqPage } = body;
 
     const host = Deno.env.get('MARIADB_HOST');
     const port = parseInt(Deno.env.get('MARIADB_PORT') || '3306');
@@ -132,68 +131,6 @@ const body = await req.json() as QueryRequest;
         }
 
         result = { success: true, user: users[0] };
-        break;
-      }
-
-      case 'register_user': {
-        if (!username || !password || !email) {
-          return new Response(
-            JSON.stringify({ error: 'Usuário, senha e e-mail são obrigatórios' }),
-            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-          );
-        }
-
-        console.log(`Attempting to register user: ${username}`);
-
-        // Check if username already exists
-        const existingUser = await client.query(
-          'SELECT id FROM ai_agente.t_users_dachser WHERE username = ?',
-          [username]
-        );
-
-        if (existingUser && existingUser.length > 0) {
-          return new Response(
-            JSON.stringify({ error: 'Usuário já existe' }),
-            { status: 409, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-          );
-        }
-
-        // Check if email already exists
-        const existingEmail = await client.query(
-          'SELECT id FROM ai_agente.t_users_dachser WHERE email = ?',
-          [email]
-        );
-
-        if (existingEmail && existingEmail.length > 0) {
-          return new Response(
-            JSON.stringify({ error: 'E-mail já cadastrado' }),
-            { status: 409, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-          );
-        }
-
-        // Hash the password with bcrypt
-        const salt = await bcrypt.genSalt(10);
-        const passwordHash = await bcrypt.hash(password, salt);
-
-        // Insert new user
-        await client.execute(
-          'INSERT INTO ai_agente.t_users_dachser (username, email, password_hash, is_admin) VALUES (?, ?, ?, 0)',
-          [username, email, passwordHash]
-        );
-
-        // Get the created user
-        const newUser = await client.query(
-          'SELECT id, username, email, is_admin FROM ai_agente.t_users_dachser WHERE username = ?',
-          [username]
-        );
-
-        console.log(`User registered successfully: ${username}`);
-
-        result = { 
-          success: true, 
-          user: newUser[0],
-          message: 'Usuário cadastrado com sucesso'
-        };
         break;
       }
 
