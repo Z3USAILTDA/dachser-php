@@ -269,23 +269,34 @@ const Dashboard = () => {
                               {child.label}
                             </button>
                             
-                            {/* Voucher Children - Only show when expanded */}
-                            {voucherExpanded && (
-                              <div className="relative mt-4 flex flex-col items-center animate-in fade-in slide-in-from-top-2 duration-300">
-                                <div className="w-0.5 h-4 bg-primary" />
+                            {/* Voucher Children - Same layout as parent children */}
+                            {voucherExpanded && child.voucherChildren && (
+                              <div className="flex flex-col items-center mt-4 animate-in fade-in slide-in-from-top-2 duration-300">
+                                {/* Vertical Line from Voucher */}
+                                <div className="w-0.5 h-5 bg-primary" />
                                 
-                                <div className="flex flex-col gap-3 relative z-10">
-                                  {child.voucherChildren?.map((vChild, vIdx) => (
-                                    <div key={vIdx} className="relative flex flex-col items-center">
-                                      {vIdx > 0 && (
-                                        <>
-                                          <div className="w-0.5 h-3 bg-primary" />
-                                          <div className="w-1.5 h-1.5 rounded-full bg-primary -mt-0.5 mb-2" />
-                                        </>
-                                      )}
+                                {/* Children Row */}
+                                <div className="relative flex gap-6">
+                                  {/* Horizontal line spanning from first to last child center */}
+                                  {child.voucherChildren.length > 1 && (
+                                    <div 
+                                      className="absolute top-0 h-0.5 bg-primary"
+                                      style={{ 
+                                        left: '90px',
+                                        right: '90px',
+                                      }}
+                                    />
+                                  )}
+                                  
+                                  {child.voucherChildren.map((vChild, vIdx) => (
+                                    <div key={vIdx} className="relative flex flex-col items-center pt-0 min-w-[180px]">
+                                      {/* Vertical connector */}
+                                      <div className="w-0.5 h-3 bg-primary" />
+                                      <div className="w-1.5 h-1.5 rounded-full bg-primary -mt-0.5" />
+                                      
                                       <button
                                         onClick={() => navigate(vChild.href)}
-                                        className="min-w-[180px] px-5 py-2.5 rounded-full bg-background/86 border border-border/50 text-foreground text-sm font-medium hover:bg-background hover:border-primary/60 hover:-translate-y-0.5 transition-all duration-200 shadow-lg"
+                                        className="mt-2 min-w-[180px] px-5 py-2.5 rounded-full bg-background/86 border border-border/50 text-foreground text-sm font-medium hover:bg-background hover:border-primary/60 hover:-translate-y-0.5 transition-all duration-200 shadow-lg"
                                       >
                                         {vChild.label}
                                       </button>
