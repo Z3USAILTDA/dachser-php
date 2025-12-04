@@ -34,7 +34,7 @@ const menuItems: MenuItem[] = [
     subtitle: "Gestão da plataforma",
     adminOnly: true,
     children: [
-      { label: "Cadastro de Usuário", href: "/admin/users" },
+      { label: "Cadastro de Usuário", href: "/admin/register" },
       { label: "Métricas de Uso", href: "/admin/metrics" },
     ],
   },
