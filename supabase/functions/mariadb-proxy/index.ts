@@ -78,6 +78,8 @@ serve(async (req) => {
         const user = users[0];
         const storedPassword = user.password_hash;
         
+        console.log(`Stored password length: ${storedPassword?.length}, Input password length: ${password.length}`);
+        
         // Compare plain text password
         if (password !== storedPassword) {
           console.log('Login failed: Invalid password');
