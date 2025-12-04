@@ -249,14 +249,23 @@ const Dashboard = () => {
               <div
                 onClick={() => item.href ? navigate(item.href) : toggleMenu(item.id)}
                 className={`
-                  w-[170px] h-[180px] rounded-3xl border flex flex-col items-center justify-center gap-3 cursor-pointer
+                  w-[170px] h-[180px] rounded-[22px] flex flex-col items-center justify-center gap-3 cursor-pointer
                   transition-all duration-200 
                   ${activeMenu === item.id 
-                    ? 'bg-primary text-primary-foreground border-background shadow-[0_22px_36px_rgba(0,0,0,0.95),0_0_22px_hsl(var(--primary)/0.65)] -translate-y-1' 
-                    : 'bg-background/90 border-border/30 text-foreground hover:bg-card hover:border-primary hover:-translate-y-1 hover:shadow-[0_22px_36px_rgba(0,0,0,0.95),0_0_22px_hsl(var(--primary)/0.65)]'
+                    ? 'text-primary-foreground -translate-y-1' 
+                    : 'text-foreground hover:-translate-y-1'
                   }
                 `}
-                style={{ boxShadow: '0 18px 30px rgba(0, 0, 0, 0.9)' }}
+                style={{ 
+                  background: activeMenu === item.id 
+                    ? 'linear-gradient(135deg, #ffc800, #ffe680)' 
+                    : 'rgba(4, 10, 30, 0.75)',
+                  boxShadow: activeMenu === item.id
+                    ? '0 22px 60px rgba(0, 0, 0, 0.85), 0 0 22px rgba(255, 200, 0, 0.65)'
+                    : '0 22px 60px rgba(0, 0, 0, 0.85), 0 0 0 1px rgba(255, 255, 255, 0.03)',
+                  backdropFilter: 'blur(18px)',
+                  border: '1px solid rgba(255, 255, 255, 0.08)',
+                }}
               >
                 <div 
                   className={`
