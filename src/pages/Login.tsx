@@ -10,7 +10,7 @@ import { Eye, EyeOff, LogIn } from "lucide-react";
 
 const Login = () => {
   const navigate = useNavigate();
-  const [email, setEmail] = useState("");
+  const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
@@ -18,7 +18,7 @@ const Login = () => {
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    if (!email || !password) {
+    if (!username || !password) {
       toast({
         title: "Erro no login",
         description: "Preencha todos os campos.",
@@ -31,7 +31,7 @@ const Login = () => {
 
     try {
       const { data, error } = await supabase.functions.invoke('mariadb-proxy', {
-        body: { action: 'login', email, password }
+        body: { action: 'login', username, password }
       });
 
       if (error) {
@@ -142,15 +142,15 @@ const Login = () => {
           {/* Login Form */}
           <form onSubmit={handleLogin} className="space-y-6">
             <div className="space-y-2">
-              <Label htmlFor="email" className="text-muted-foreground text-sm uppercase tracking-wider">
-                Email
+              <Label htmlFor="username" className="text-muted-foreground text-sm uppercase tracking-wider">
+                Usuário
               </Label>
               <Input
-                id="email"
-                type="email"
-                placeholder="seu.email@dachser.com"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
+                id="username"
+                type="text"
+                placeholder="seu.usuario"
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
                 className="bg-input border-border/50 focus:border-primary focus:ring-primary/30 h-12"
               />
             </div>
