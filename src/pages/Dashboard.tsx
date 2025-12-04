@@ -139,9 +139,9 @@ const Dashboard = () => {
           className="absolute inset-0"
           style={{
             background: `
-              radial-gradient(circle at 10% 0%, rgba(255, 200, 0, 0.18), transparent 55%),
-              radial-gradient(circle at 90% 100%, rgba(255, 200, 0, 0.12), transparent 55%),
-              linear-gradient(180deg, rgba(0, 0, 0, 0.6), rgba(0, 0, 0, 0.75))
+              radial-gradient(circle at 10% 0%, rgba(255, 200, 0, 0.22), transparent 55%),
+              radial-gradient(circle at 90% 100%, rgba(255, 200, 0, 0.16), transparent 55%),
+              linear-gradient(180deg, rgba(0, 0, 0, 0.7), rgba(0, 0, 0, 0.82))
             `
           }}
         />
