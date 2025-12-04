@@ -270,7 +270,7 @@ const Dashboard = () => {
                               className={`min-w-[180px] px-5 py-2.5 rounded-full text-sm font-medium transition-all duration-200 cursor-pointer ${
                                 voucherExpanded 
                                   ? 'bg-primary text-primary-foreground border border-primary shadow-[0_0_14px_hsl(var(--primary)/0.7)]' 
-                                  : 'bg-background/90 border border-primary text-foreground shadow-[0_0_10px_hsl(var(--primary)/0.5)] hover:bg-background hover:-translate-y-0.5'
+                                  : 'bg-background border border-primary text-foreground shadow-[0_0_10px_hsl(var(--primary)/0.5)] hover:-translate-y-0.5'
                               }`}
                             >
                               {child.label}
@@ -310,7 +310,7 @@ const Dashboard = () => {
                                         
                                         <button
                                           onClick={() => navigate(vChild.href)}
-                                          className="mt-2 min-w-[180px] px-5 py-2.5 rounded-full bg-background/86 border border-border/50 text-foreground text-sm font-medium hover:bg-background hover:border-primary/60 hover:-translate-y-0.5 transition-all duration-200 shadow-lg"
+                                          className="mt-2 min-w-[180px] px-5 py-2.5 rounded-full bg-background border border-border/50 text-foreground text-sm font-medium hover:border-primary/60 hover:-translate-y-0.5 transition-all duration-200 shadow-lg"
                                         >
                                           {vChild.label}
                                         </button>
@@ -324,7 +324,7 @@ const Dashboard = () => {
                         ) : (
                           <button
                             onClick={() => child.href && navigate(child.href)}
-                            className="mt-2 min-w-[180px] px-5 py-2.5 rounded-full bg-background/86 border border-border/50 text-foreground text-sm font-medium hover:bg-background hover:border-primary/60 hover:-translate-y-0.5 transition-all duration-200 shadow-lg"
+                            className="mt-2 min-w-[180px] px-5 py-2.5 rounded-full bg-background border border-border/50 text-foreground text-sm font-medium hover:border-primary/60 hover:-translate-y-0.5 transition-all duration-200 shadow-lg"
                           >
                             {child.label}
                           </button>
