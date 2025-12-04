@@ -226,7 +226,7 @@ const MetricsUsage = () => {
         {/* Grid: Stats + Filters */}
         <div className="grid grid-cols-1 lg:grid-cols-[2.2fr_1.2fr] gap-5 mb-5">
           {/* Stats Panel */}
-          <section className="bg-background/90 rounded-2xl border border-border/30 shadow-[0_18px_40px_rgba(0,0,0,0.85)] p-5">
+          <section className="bg-background rounded-2xl border border-border/30 shadow-[0_18px_40px_rgba(0,0,0,0.85)] p-5">
             <div className="flex items-center justify-between text-sm uppercase tracking-[0.18em]">
               <span className="font-semibold">Métricas Gerais</span>
               <span className="text-muted-foreground text-xs normal-case tracking-normal">
@@ -237,17 +237,17 @@ const MetricsUsage = () => {
 
             {/* Chips */}
             <div className="flex flex-wrap gap-2 mt-3">
-              <div className="px-3 py-1.5 rounded-full border border-border/30 bg-background/50 text-xs flex items-center gap-2">
+              <div className="px-3 py-1.5 rounded-full border border-border/50 bg-card text-xs flex items-center gap-2">
                 <span className="w-1.5 h-1.5 rounded-full bg-primary" />
                 Logs internos
               </div>
               {usernameFilter && (
-                <div className="px-3 py-1.5 rounded-full border border-border/30 bg-background/50 text-xs">
+                <div className="px-3 py-1.5 rounded-full border border-border/50 bg-card text-xs">
                   Usuário: {usernameFilter}
                 </div>
               )}
               {moduleFilter && (
-                <div className="px-3 py-1.5 rounded-full border border-border/30 bg-background/50 text-xs">
+                <div className="px-3 py-1.5 rounded-full border border-border/50 bg-card text-xs">
                   Módulo: {moduleFilter.toUpperCase()}
                 </div>
               )}
@@ -255,7 +255,7 @@ const MetricsUsage = () => {
 
             {/* KPIs */}
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mt-4">
-              <div className="p-3 rounded-xl bg-gradient-to-br from-background/40 to-background/80 border border-border/30">
+              <div className="p-3 rounded-xl bg-card border border-border/50">
                 <div className="text-[10px] uppercase tracking-[0.15em] text-muted-foreground">
                   Total de Logs
                 </div>
@@ -264,7 +264,7 @@ const MetricsUsage = () => {
                   {stats.avgPerDay.toFixed(1)} / dia (média)
                 </div>
               </div>
-              <div className="p-3 rounded-xl bg-gradient-to-br from-background/40 to-background/80 border border-border/30">
+              <div className="p-3 rounded-xl bg-card border border-border/50">
                 <div className="text-[10px] uppercase tracking-[0.15em] text-muted-foreground">
                   Usuários distintos
                 </div>
@@ -273,7 +273,7 @@ const MetricsUsage = () => {
                   {stats.distinctUsers ? "Atividade distribuída" : "Sem uso no período"}
                 </div>
               </div>
-              <div className="p-3 rounded-xl bg-gradient-to-br from-background/40 to-background/80 border border-border/30">
+              <div className="p-3 rounded-xl bg-card border border-border/50">
                 <div className="text-[10px] uppercase tracking-[0.15em] text-muted-foreground">
                   Endpoints distintos
                 </div>
@@ -282,7 +282,7 @@ const MetricsUsage = () => {
                   Cobertura de features
                 </div>
               </div>
-              <div className="p-3 rounded-xl bg-gradient-to-br from-background/40 to-background/80 border border-border/30">
+              <div className="p-3 rounded-xl bg-card border border-border/50">
                 <div className="text-[10px] uppercase tracking-[0.15em] text-muted-foreground">
                   Métodos GET x POST
                 </div>
@@ -369,7 +369,7 @@ const MetricsUsage = () => {
           </section>
 
           {/* Filters Panel */}
-          <aside className="bg-background/90 rounded-2xl border border-border/30 shadow-[0_18px_40px_rgba(0,0,0,0.85)] p-5">
+          <aside className="bg-background rounded-2xl border border-border/30 shadow-[0_18px_40px_rgba(0,0,0,0.85)] p-5">
             <div className="text-sm uppercase tracking-[0.18em] font-semibold">
               Visão de Filtros
             </div>
@@ -470,7 +470,7 @@ const MetricsUsage = () => {
         </div>
 
         {/* Table Section */}
-        <section className="bg-background/94 rounded-2xl border border-border/30 shadow-[0_18px_40px_rgba(0,0,0,0.9)] p-4">
+        <section className="bg-background rounded-2xl border border-border/30 shadow-[0_18px_40px_rgba(0,0,0,0.9)] p-4">
           <div className="flex justify-between items-end gap-3 mb-3">
             <div>
               <div className="text-sm uppercase tracking-[0.18em] font-semibold">
