@@ -251,13 +251,13 @@ const Dashboard = () => {
                     )}
                     
                     {item.children.map((child, idx) => (
-                      <div key={idx} className="relative flex flex-col items-center pt-0 min-w-[180px]">
+                      <div key={idx} className="relative flex flex-col items-center pt-0 w-[180px]">
                         {/* Vertical connector */}
                         <div className="w-0.5 h-3 bg-primary" />
                         <div className="w-1.5 h-1.5 rounded-full bg-primary -mt-0.5" />
                         
                         {child.isVoucher ? (
-                          <div className="mt-2 flex flex-col items-center">
+                          <div className="relative mt-2 flex flex-col items-center">
                             <button
                               onClick={() => setVoucherExpanded(!voucherExpanded)}
                               className={`min-w-[180px] px-5 py-2.5 rounded-full text-sm font-medium transition-all duration-200 cursor-pointer ${
@@ -269,9 +269,9 @@ const Dashboard = () => {
                               {child.label}
                             </button>
                             
-                            {/* Voucher Children - Same layout as parent children */}
+                            {/* Voucher Children - Positioned absolutely to not affect parent layout */}
                             {voucherExpanded && child.voucherChildren && (
-                              <div className="flex flex-col items-center mt-4 animate-in fade-in slide-in-from-top-2 duration-300">
+                              <div className="absolute top-full left-1/2 -translate-x-1/2 flex flex-col items-center mt-4 animate-in fade-in slide-in-from-top-2 duration-300">
                                 {/* Vertical Line from Voucher */}
                                 <div className="w-0.5 h-5 bg-primary" />
                                 
