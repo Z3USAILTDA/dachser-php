@@ -263,7 +263,15 @@ const MetricsUsage = () => {
         {/* Grid: Stats + Filters */}
         <div className="grid grid-cols-1 lg:grid-cols-[2.2fr_1.2fr] gap-5 mb-5">
           {/* Stats Panel */}
-          <section className="bg-background rounded-2xl border border-border/30 shadow-[0_18px_40px_rgba(0,0,0,0.85)] p-5">
+          <section 
+            className="rounded-[22px] p-5"
+            style={{
+              background: 'rgba(4, 10, 30, 0.75)',
+              boxShadow: '0 22px 60px rgba(0, 0, 0, 0.85), 0 0 0 1px rgba(255, 255, 255, 0.03)',
+              backdropFilter: 'blur(18px)',
+              border: '1px solid rgba(255, 255, 255, 0.08)',
+            }}
+          >
             <div className="flex items-center justify-between text-sm uppercase tracking-[0.18em]">
               <span className="font-semibold">Métricas Gerais</span>
               <span className="text-muted-foreground text-xs normal-case tracking-normal">
@@ -406,7 +414,15 @@ const MetricsUsage = () => {
           </section>
 
           {/* Filters Panel */}
-          <aside className="bg-background rounded-2xl border border-border/30 shadow-[0_18px_40px_rgba(0,0,0,0.85)] p-5">
+          <aside 
+            className="rounded-[22px] p-5"
+            style={{
+              background: 'rgba(4, 10, 30, 0.75)',
+              boxShadow: '0 22px 60px rgba(0, 0, 0, 0.85), 0 0 0 1px rgba(255, 255, 255, 0.03)',
+              backdropFilter: 'blur(18px)',
+              border: '1px solid rgba(255, 255, 255, 0.08)',
+            }}
+          >
             <div className="text-sm uppercase tracking-[0.18em] font-semibold">
               Visão de Filtros
             </div>
@@ -507,7 +523,15 @@ const MetricsUsage = () => {
         </div>
 
         {/* Table Section */}
-        <section className="bg-background rounded-2xl border border-border/30 shadow-[0_18px_40px_rgba(0,0,0,0.9)] p-4">
+        <section 
+          className="rounded-[22px] p-4"
+          style={{
+            background: 'rgba(4, 10, 30, 0.75)',
+            boxShadow: '0 22px 60px rgba(0, 0, 0, 0.85), 0 0 0 1px rgba(255, 255, 255, 0.03)',
+            backdropFilter: 'blur(18px)',
+            border: '1px solid rgba(255, 255, 255, 0.08)',
+          }}
+        >
           <div className="flex justify-between items-end gap-3 mb-3">
             <div>
               <div className="text-sm uppercase tracking-[0.18em] font-semibold">
