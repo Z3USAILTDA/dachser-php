@@ -3,12 +3,24 @@ import { useNavigate } from "react-router-dom";
 import { LogOut, Plane, Ship, CreditCard, FileText, Building2, UserCog } from "lucide-react";
 import logoZ3us from "@/assets/logo-z3us.png";
 
+interface VoucherChild {
+  label: string;
+  href: string;
+}
+
+interface ChildItem {
+  label: string;
+  href?: string;
+  isVoucher?: boolean;
+  voucherChildren?: VoucherChild[];
+}
+
 interface MenuItem {
   id: string;
   icon: React.ReactNode;
   label: string;
   subtitle: string;
-  children?: { label: string; href: string }[];
+  children?: ChildItem[];
   href?: string;
   adminOnly?: boolean;
 }
@@ -51,10 +63,16 @@ const menuItems: MenuItem[] = [
     subtitle: "Financeiro & Billing",
     children: [
       { label: "Régua de Cobrança", href: "/fin/billing" },
-      { label: "Local Charge", href: "/fin/local-charge" },
-      { label: "Alterações de Fee", href: "/fin/fee-changes" },
-      { label: "Análise Documental", href: "/fin/document-analysis" },
-      { label: "Esteira", href: "/fin/workflow" },
+      { 
+        label: "Voucher", 
+        isVoucher: true,
+        voucherChildren: [
+          { label: "Local Charge", href: "/fin/local-charge" },
+          { label: "Alterações de Fee", href: "/fin/fee-changes" },
+          { label: "Análise Documental", href: "/fin/document-analysis" },
+          { label: "Esteira", href: "/fin/workflow" },
+        ]
+      },
     ],
   },
   {
@@ -213,7 +231,7 @@ const Dashboard = () => {
               {item.children && (
                 <div className={`
                   mt-6 transition-all duration-400 overflow-hidden
-                  ${activeMenu === item.id ? 'max-h-[500px] opacity-100' : 'max-h-0 opacity-0'}
+                  ${activeMenu === item.id ? 'max-h-[600px] opacity-100' : 'max-h-0 opacity-0'}
                 `}>
                   {/* Vertical Line */}
                   <div className="w-0.5 h-5 bg-primary mx-auto" />
@@ -231,12 +249,44 @@ const Dashboard = () => {
                           <div className="w-0.5 h-3 bg-primary" />
                           <div className="w-1.5 h-1.5 rounded-full bg-primary -mt-0.5" />
                           
-                          <button
-                            onClick={() => navigate(child.href)}
-                            className="mt-2 min-w-[200px] px-6 py-3 rounded-full bg-background/86 border border-border/50 text-foreground text-sm font-medium hover:bg-background hover:border-primary/60 hover:-translate-y-0.5 transition-all duration-200 shadow-lg"
-                          >
-                            {child.label}
-                          </button>
+                          {child.isVoucher ? (
+                            /* Voucher with nested children */
+                            <div className="mt-2 flex flex-col items-center">
+                              <div className="min-w-[200px] px-6 py-3 rounded-full bg-background/90 border border-primary text-foreground text-sm font-medium shadow-[0_0_10px_hsl(var(--primary)/0.5)]">
+                                {child.label}
+                              </div>
+                              
+                              {/* Voucher Children */}
+                              <div className="relative mt-4 flex flex-col items-center">
+                                {/* Vertical line for voucher children */}
+                                <div className="absolute top-0 bottom-0 left-1/2 -translate-x-1/2 w-0.5 bg-primary" />
+                                
+                                <div className="flex flex-col gap-3 relative z-10">
+                                  {child.voucherChildren?.map((vChild, vIdx) => (
+                                    <div key={vIdx} className="relative flex items-center">
+                                      {/* Horizontal connector */}
+                                      <div className="absolute left-1/2 -translate-x-1/2 -top-3 w-0.5 h-3 bg-primary" />
+                                      <div className="absolute left-1/2 -translate-x-1/2 top-0 -translate-y-1/2 w-1.5 h-1.5 rounded-full bg-primary" />
+                                      
+                                      <button
+                                        onClick={() => navigate(vChild.href)}
+                                        className="min-w-[200px] px-6 py-3 rounded-full bg-background/86 border border-border/50 text-foreground text-sm font-medium hover:bg-background hover:border-primary/60 hover:-translate-y-0.5 transition-all duration-200 shadow-lg"
+                                      >
+                                        {vChild.label}
+                                      </button>
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            </div>
+                          ) : (
+                            <button
+                              onClick={() => child.href && navigate(child.href)}
+                              className="mt-2 min-w-[200px] px-6 py-3 rounded-full bg-background/86 border border-border/50 text-foreground text-sm font-medium hover:bg-background hover:border-primary/60 hover:-translate-y-0.5 transition-all duration-200 shadow-lg"
+                            >
+                              {child.label}
+                            </button>
+                          )}
                         </div>
                       ))}
                     </div>
