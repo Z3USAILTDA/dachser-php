@@ -222,7 +222,7 @@ const MetricsUsage = () => {
       </div>
 
       {/* Main Content */}
-      <main className="relative z-10 max-w-7xl mx-auto pt-4 pb-6 px-2">
+      <main className="relative z-10 max-w-[95%] mx-auto pt-4 pb-6 px-2">
         {/* Grid: Stats + Filters */}
         <div className="grid grid-cols-1 lg:grid-cols-[2.2fr_1.2fr] gap-5 mb-5">
           {/* Stats Panel */}
