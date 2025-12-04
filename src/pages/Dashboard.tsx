@@ -127,22 +127,19 @@ const Dashboard = () => {
 
   return (
     <div className="min-h-screen bg-background relative overflow-x-hidden">
-      {/* Background Image */}
-      <div className="fixed inset-0 pointer-events-none">
-        <img 
-          src={dachserBg} 
-          alt="DACHSER Logistics" 
-          className="w-full h-full object-cover"
-        />
-        <div 
-          className="absolute inset-0"
-          style={{
-            background: `
-              linear-gradient(180deg, rgba(5, 6, 8, 0.7) 0%, rgba(5, 6, 8, 0.85) 50%, rgba(5, 6, 8, 0.95) 100%)
-            `
-          }}
-        />
-      </div>
+      {/* Background with gradients and image */}
+      <div 
+        className="fixed inset-0 pointer-events-none -z-10"
+        style={{
+          background: `
+            radial-gradient(circle at 10% 0%, rgba(255, 200, 0, 0.18), transparent 55%),
+            radial-gradient(circle at 90% 100%, rgba(255, 200, 0, 0.12), transparent 55%),
+            linear-gradient(180deg, rgba(0, 0, 0, 0.84), rgba(0, 0, 0, 0.95)),
+            url(${dachserBg}) center/cover no-repeat
+          `,
+          filter: 'saturate(0.8)'
+        }}
+      />
 
       {/* Top Bar */}
       <header className="fixed top-0 left-0 right-0 z-50 flex justify-between items-center px-4 md:px-6 py-3 bg-background/30 backdrop-blur-sm border-b border-border/30">
