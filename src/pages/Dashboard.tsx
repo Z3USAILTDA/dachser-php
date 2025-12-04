@@ -193,109 +193,106 @@ const Dashboard = () => {
           ))}
         </div>
 
-        {/* Menu Grid */}
-        <div className="flex justify-center gap-1 overflow-x-auto pb-4 px-4">
+        {/* Menu Cards Row */}
+        <div className="flex justify-center gap-4 px-4">
           {filteredMenuItems.map((item) => (
-            <div key={item.id} className="flex flex-col items-center">
-              {/* Menu Card */}
-              <div
-                onClick={() => item.href ? navigate(item.href) : toggleMenu(item.id)}
+            <div
+              key={item.id}
+              onClick={() => item.href ? navigate(item.href) : toggleMenu(item.id)}
+              className={`
+                w-40 h-40 rounded-3xl border flex flex-col items-center justify-center gap-3 cursor-pointer shrink-0
+                transition-all duration-200 
+                ${activeMenu === item.id 
+                  ? 'bg-primary text-primary-foreground border-background shadow-[0_22px_36px_rgba(0,0,0,0.95),0_0_22px_hsl(var(--primary)/0.65)] -translate-y-1' 
+                  : 'bg-background/90 border-border/30 text-foreground hover:bg-card hover:border-primary hover:-translate-y-1 hover:shadow-[0_22px_36px_rgba(0,0,0,0.95),0_0_22px_hsl(var(--primary)/0.65)]'
+                }
+              `}
+              style={{ boxShadow: '0 18px 30px rgba(0, 0, 0, 0.9)' }}
+            >
+              <div 
                 className={`
-                  w-44 h-44 rounded-3xl border flex flex-col items-center justify-center gap-3 cursor-pointer
-                  transition-all duration-200 
+                  w-12 h-12 rounded-2xl flex items-center justify-center
                   ${activeMenu === item.id 
-                    ? 'bg-primary text-primary-foreground border-background shadow-[0_22px_36px_rgba(0,0,0,0.95),0_0_22px_hsl(var(--primary)/0.65)] -translate-y-1' 
-                    : 'bg-background/90 border-border/30 text-foreground hover:bg-card hover:border-primary hover:-translate-y-1 hover:shadow-[0_22px_36px_rgba(0,0,0,0.95),0_0_22px_hsl(var(--primary)/0.65)]'
+                    ? 'bg-background/12 border border-background/60 text-primary-foreground' 
+                    : 'bg-primary/12 border border-primary/60 text-primary'
                   }
                 `}
-                style={{ boxShadow: '0 18px 30px rgba(0, 0, 0, 0.9)' }}
               >
-                <div 
-                  className={`
-                    w-14 h-14 rounded-2xl flex items-center justify-center
-                    ${activeMenu === item.id 
-                      ? 'bg-background/12 border border-background/60 text-primary-foreground' 
-                      : 'bg-primary/12 border border-primary/60 text-primary'
-                    }
-                  `}
-                >
-                  {item.icon}
-                </div>
-                <span className="text-sm font-semibold tracking-[0.18em] uppercase">{item.label}</span>
-                <span className={`text-xs ${activeMenu === item.id ? 'text-primary-foreground/70' : 'text-muted-foreground'}`}>
-                  {item.subtitle}
-                </span>
+                {item.icon}
               </div>
-
-              {/* Children Menu */}
-              {item.children && (
-                <div className={`
-                  mt-6 transition-all duration-400 overflow-hidden
-                  ${activeMenu === item.id ? 'max-h-[600px] opacity-100' : 'max-h-0 opacity-0'}
-                `}>
-                  {/* Vertical Line */}
-                  <div className="w-0.5 h-5 bg-primary mx-auto" />
-                  
-                  {/* Horizontal Line */}
-                  <div className="relative">
-                    <div className="absolute top-0 left-1/2 -translate-x-1/2 h-0.5 bg-primary" 
-                      style={{ width: `${Math.min(item.children.length * 220, 600)}px` }} 
-                    />
-                    
-                    <div className="flex gap-8 pt-3 pb-4">
-                      {item.children.map((child, idx) => (
-                        <div key={idx} className="relative flex flex-col items-center">
-                          {/* Vertical connector */}
-                          <div className="w-0.5 h-3 bg-primary" />
-                          <div className="w-1.5 h-1.5 rounded-full bg-primary -mt-0.5" />
-                          
-                          {child.isVoucher ? (
-                            /* Voucher with nested children */
-                            <div className="mt-2 flex flex-col items-center">
-                              <div className="min-w-[200px] px-6 py-3 rounded-full bg-background/90 border border-primary text-foreground text-sm font-medium shadow-[0_0_10px_hsl(var(--primary)/0.5)]">
-                                {child.label}
-                              </div>
-                              
-                              {/* Voucher Children */}
-                              <div className="relative mt-4 flex flex-col items-center">
-                                {/* Vertical line for voucher children */}
-                                <div className="absolute top-0 bottom-0 left-1/2 -translate-x-1/2 w-0.5 bg-primary" />
-                                
-                                <div className="flex flex-col gap-3 relative z-10">
-                                  {child.voucherChildren?.map((vChild, vIdx) => (
-                                    <div key={vIdx} className="relative flex items-center">
-                                      {/* Horizontal connector */}
-                                      <div className="absolute left-1/2 -translate-x-1/2 -top-3 w-0.5 h-3 bg-primary" />
-                                      <div className="absolute left-1/2 -translate-x-1/2 top-0 -translate-y-1/2 w-1.5 h-1.5 rounded-full bg-primary" />
-                                      
-                                      <button
-                                        onClick={() => navigate(vChild.href)}
-                                        className="min-w-[200px] px-6 py-3 rounded-full bg-background/86 border border-border/50 text-foreground text-sm font-medium hover:bg-background hover:border-primary/60 hover:-translate-y-0.5 transition-all duration-200 shadow-lg"
-                                      >
-                                        {vChild.label}
-                                      </button>
-                                    </div>
-                                  ))}
-                                </div>
-                              </div>
-                            </div>
-                          ) : (
-                            <button
-                              onClick={() => child.href && navigate(child.href)}
-                              className="mt-2 min-w-[200px] px-6 py-3 rounded-full bg-background/86 border border-border/50 text-foreground text-sm font-medium hover:bg-background hover:border-primary/60 hover:-translate-y-0.5 transition-all duration-200 shadow-lg"
-                            >
-                              {child.label}
-                            </button>
-                          )}
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-              )}
+              <span className="text-xs font-semibold tracking-[0.18em] uppercase">{item.label}</span>
+              <span className={`text-[10px] ${activeMenu === item.id ? 'text-primary-foreground/70' : 'text-muted-foreground'}`}>
+                {item.subtitle}
+              </span>
             </div>
           ))}
         </div>
+
+        {/* Children Menu - Separate Section */}
+        {filteredMenuItems.map((item) => (
+          item.children && activeMenu === item.id && (
+            <div key={`children-${item.id}`} className="flex flex-col items-center mt-8 animate-in fade-in duration-300">
+              {/* Vertical Line */}
+              <div className="w-0.5 h-5 bg-primary" />
+              
+              {/* Horizontal Line */}
+              <div className="relative">
+                <div className="absolute top-0 left-1/2 -translate-x-1/2 h-0.5 bg-primary" 
+                  style={{ width: `${Math.min(item.children.length * 220, 600)}px` }} 
+                />
+                
+                <div className="flex gap-8 pt-3 pb-4">
+                  {item.children.map((child, idx) => (
+                    <div key={idx} className="relative flex flex-col items-center">
+                      {/* Vertical connector */}
+                      <div className="w-0.5 h-3 bg-primary" />
+                      <div className="w-1.5 h-1.5 rounded-full bg-primary -mt-0.5" />
+                      
+                      {child.isVoucher ? (
+                        /* Voucher with nested children */
+                        <div className="mt-2 flex flex-col items-center">
+                          <div className="min-w-[200px] px-6 py-3 rounded-full bg-background/90 border border-primary text-foreground text-sm font-medium shadow-[0_0_10px_hsl(var(--primary)/0.5)]">
+                            {child.label}
+                          </div>
+                          
+                          {/* Voucher Children */}
+                          <div className="relative mt-4 flex flex-col items-center">
+                            {/* Vertical line for voucher children */}
+                            <div className="absolute top-0 bottom-0 left-1/2 -translate-x-1/2 w-0.5 bg-primary" />
+                            
+                            <div className="flex flex-col gap-3 relative z-10">
+                              {child.voucherChildren?.map((vChild, vIdx) => (
+                                <div key={vIdx} className="relative flex items-center">
+                                  {/* Horizontal connector */}
+                                  <div className="absolute left-1/2 -translate-x-1/2 -top-3 w-0.5 h-3 bg-primary" />
+                                  <div className="absolute left-1/2 -translate-x-1/2 top-0 -translate-y-1/2 w-1.5 h-1.5 rounded-full bg-primary" />
+                                  
+                                  <button
+                                    onClick={() => navigate(vChild.href)}
+                                    className="min-w-[200px] px-6 py-3 rounded-full bg-background/86 border border-border/50 text-foreground text-sm font-medium hover:bg-background hover:border-primary/60 hover:-translate-y-0.5 transition-all duration-200 shadow-lg"
+                                  >
+                                    {vChild.label}
+                                  </button>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        </div>
+                      ) : (
+                        <button
+                          onClick={() => child.href && navigate(child.href)}
+                          className="mt-2 min-w-[200px] px-6 py-3 rounded-full bg-background/86 border border-border/50 text-foreground text-sm font-medium hover:bg-background hover:border-primary/60 hover:-translate-y-0.5 transition-all duration-200 shadow-lg"
+                        >
+                          {child.label}
+                        </button>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )
+        ))}
       </main>
     </div>
   );
