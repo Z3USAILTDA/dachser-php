@@ -1,6 +1,5 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { Client } from "https://deno.land/x/mysql@v2.12.1/mod.ts";
-import * as bcrypt from "https://deno.land/x/bcrypt@v0.4.1/mod.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -77,12 +76,10 @@ serve(async (req) => {
         }
 
         const user = users[0];
-        const storedHash = user.password_hash;
+        const storedPassword = user.password_hash;
         
-        // Verify bcrypt password
-        const isValidPassword = await bcrypt.compare(password, storedHash);
-        
-        if (!isValidPassword) {
+        // Compare plain text password
+        if (password !== storedPassword) {
           console.log('Login failed: Invalid password');
           return new Response(
             JSON.stringify({ error: 'Credenciais inválidas' }),
