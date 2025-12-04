@@ -87,11 +87,39 @@ const Login = () => {
             `
           }}
         />
+        
+        {/* Animated Lines */}
+        <div className="absolute inset-0 opacity-20">
+          {[...Array(6)].map((_, i) => (
+            <div
+              key={i}
+              className="absolute h-full w-px bg-gradient-to-b from-primary/70 to-primary/10"
+              style={{
+                left: `${15 + i * 14}%`,
+                transform: `skewX(${-20 + i * 8}deg)`,
+              }}
+            />
+          ))}
+        </div>
+
+        {/* Floating Particles */}
+        {[...Array(20)].map((_, i) => (
+          <div
+            key={i}
+            className="absolute w-1 h-1 rounded-full bg-primary/40 animate-float"
+            style={{
+              left: `${Math.random() * 100}%`,
+              top: `${Math.random() * 100}%`,
+              animationDelay: `${Math.random() * 5}s`,
+              animationDuration: `${4 + Math.random() * 4}s`,
+            }}
+          />
+        ))}
       </div>
 
       {/* Login Card */}
       <div 
-        className="relative z-10 w-full max-w-[420px] mx-4 p-8 rounded-[22px] text-center animate-in fade-in slide-in-from-bottom-4 duration-700"
+        className="relative z-10 w-full max-w-[420px] mx-4 p-8 rounded-[22px] text-center animate-in fade-in slide-in-from-bottom-4 duration-700 overflow-hidden"
         style={{
           background: 'rgba(4, 10, 30, 0.75)',
           boxShadow: '0 22px 60px rgba(0, 0, 0, 0.85), 0 0 0 1px rgba(255, 255, 255, 0.03)',
@@ -99,12 +127,13 @@ const Login = () => {
           border: '1px solid rgba(255, 255, 255, 0.08)',
         }}
       >
-        {/* Animated Border Glow */}
+        {/* Animated Border Glow - Inside card */}
         <div 
-          className="absolute inset-[-2px] rounded-[24px] -z-10 opacity-35 blur-[8px] animate-spin"
+          className="absolute inset-[-2px] rounded-[24px] opacity-35 blur-[8px] animate-spin pointer-events-none"
           style={{
             background: 'conic-gradient(from 180deg, rgba(26, 93, 173, 0), rgba(26, 93, 173, 0.7), rgba(255, 200, 0, 0.6), rgba(26, 93, 173, 0.7), rgba(26, 93, 173, 0))',
             animationDuration: '18s',
+            zIndex: -1,
           }}
         />
 
