@@ -8,10 +8,15 @@ const corsHeaders = {
 };
 
 interface QueryRequest {
-  action: 'login' | 'get_user';
+  action: 'login' | 'get_user' | 'get_metrics';
   username?: string;
   password?: string;
   userId?: string;
+  dateFrom?: string;
+  dateTo?: string;
+  module?: string;
+  perPage?: number;
+  page?: number;
 }
 
 serve(async (req) => {
@@ -23,7 +28,8 @@ serve(async (req) => {
   let client: Client | null = null;
 
   try {
-    const { action, username, password, userId } = await req.json() as QueryRequest;
+    const body = await req.json() as QueryRequest;
+    const { action, username, password, userId, dateFrom: reqDateFrom, dateTo: reqDateTo, module: reqModule, perPage: reqPerPage, page: reqPage } = body;
 
     const host = Deno.env.get('MARIADB_HOST');
     const port = parseInt(Deno.env.get('MARIADB_PORT') || '3306');
@@ -125,6 +131,116 @@ serve(async (req) => {
         }
 
         result = { success: true, user: users[0] };
+        break;
+      }
+
+      case 'get_metrics': {
+        const dateFrom = reqDateFrom || new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+        const dateTo = reqDateTo || new Date().toISOString().split('T')[0];
+        const usernameFilter = username || '';
+        const moduleFilter = reqModule || '';
+        const perPage = Math.min(Math.max(reqPerPage || 50, 10), 200);
+        const page = Math.max(reqPage || 1, 1);
+        const offset = (page - 1) * perPage;
+
+        // Build WHERE clause
+        let whereConditions = ["event_time BETWEEN ? AND ?"];
+        let params: (string | number)[] = [`${dateFrom} 00:00:00`, `${dateTo} 23:59:59`];
+
+        if (usernameFilter) {
+          whereConditions.push("username LIKE ?");
+          params.push(`%${usernameFilter}%`);
+        }
+
+        const validModules = ['air', 'chb', 'maritime'];
+        if (moduleFilter && validModules.includes(moduleFilter.toLowerCase())) {
+          whereConditions.push("LOWER(endpoint) LIKE ?");
+          params.push(`%${moduleFilter.toLowerCase()}%`);
+        }
+
+        const whereClause = whereConditions.length > 0 ? `WHERE ${whereConditions.join(' AND ')}` : '';
+
+        // Get total count
+        const countResult = await client.query(
+          `SELECT COUNT(*) as total FROM ai_agente.t_dachser_usage_logs ${whereClause}`,
+          params
+        );
+        const total = Number(countResult[0]?.total || 0);
+        const totalPages = Math.max(1, Math.ceil(total / perPage));
+
+        // Get stats
+        const statsResult = await client.query(
+          `SELECT
+            COUNT(DISTINCT username) AS users,
+            COUNT(DISTINCT endpoint) AS endpoints,
+            SUM(CASE WHEN method='GET' THEN 1 ELSE 0 END) AS get_calls,
+            SUM(CASE WHEN method='POST' THEN 1 ELSE 0 END) AS post_calls
+          FROM ai_agente.t_dachser_usage_logs
+          ${whereClause}`,
+          params
+        );
+        const statsRow = statsResult[0] || {};
+
+        // Calculate days diff for average
+        const fromDate = new Date(dateFrom);
+        const toDate = new Date(dateTo);
+        const daysDiff = Math.max(1, Math.ceil((toDate.getTime() - fromDate.getTime()) / (1000 * 60 * 60 * 24)) + 1);
+        const avgPerDay = daysDiff > 0 ? total / daysDiff : total;
+
+        // Get daily data for chart
+        const dailyResult = await client.query(
+          `SELECT DATE(event_time) AS d, COUNT(*) AS total
+          FROM ai_agente.t_dachser_usage_logs
+          ${whereClause}
+          GROUP BY DATE(event_time)
+          ORDER BY d ASC`,
+          params
+        );
+        const dailyData = dailyResult.map((row: { d: string; total: number }) => ({
+          date: new Date(row.d).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' }),
+          total: Number(row.total)
+        }));
+
+        // Get top endpoints
+        const endpointResult = await client.query(
+          `SELECT endpoint, COUNT(*) AS total
+          FROM ai_agente.t_dachser_usage_logs
+          ${whereClause}
+          GROUP BY endpoint
+          ORDER BY total DESC
+          LIMIT 5`,
+          params
+        );
+        const endpointData = endpointResult.map((row: { endpoint: string; total: number }) => ({
+          endpoint: row.endpoint,
+          total: Number(row.total)
+        }));
+
+        // Get paginated logs
+        const logsResult = await client.query(
+          `SELECT id, username, endpoint, method, event_time
+          FROM ai_agente.t_dachser_usage_logs
+          ${whereClause}
+          ORDER BY event_time DESC, id DESC
+          LIMIT ? OFFSET ?`,
+          [...params, perPage, offset]
+        );
+
+        result = {
+          logs: logsResult,
+          stats: {
+            total,
+            distinctUsers: Number(statsRow.users || 0),
+            distinctEndpoints: Number(statsRow.endpoints || 0),
+            getCalls: Number(statsRow.get_calls || 0),
+            postCalls: Number(statsRow.post_calls || 0),
+            avgPerDay: Math.round(avgPerDay * 10) / 10
+          },
+          dailyData,
+          endpointData,
+          totalPages,
+          currentPage: page
+        };
         break;
       }
 
