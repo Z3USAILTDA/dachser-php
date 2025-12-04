@@ -8,7 +8,7 @@ const corsHeaders = {
 
 interface QueryRequest {
   action: 'login' | 'get_user';
-  email?: string;
+  username?: string;
   password?: string;
   userId?: string;
 }
@@ -22,15 +22,15 @@ serve(async (req) => {
   let client: Client | null = null;
 
   try {
-    const { action, email, password, userId } = await req.json() as QueryRequest;
+    const { action, username, password, userId } = await req.json() as QueryRequest;
 
     const host = Deno.env.get('MARIADB_HOST');
     const port = parseInt(Deno.env.get('MARIADB_PORT') || '3306');
     const database = Deno.env.get('MARIADB_DATABASE');
-    const username = Deno.env.get('MARIADB_USER');
+    const dbUser = Deno.env.get('MARIADB_USER');
     const dbPassword = Deno.env.get('MARIADB_PASSWORD');
 
-    if (!host || !database || !username || !dbPassword) {
+    if (!host || !database || !dbUser || !dbPassword) {
       console.error('Missing database credentials');
       return new Response(
         JSON.stringify({ error: 'Database configuration error' }),
@@ -44,7 +44,7 @@ serve(async (req) => {
       hostname: host,
       port: port,
       db: database,
-      username: username,
+      username: dbUser,
       password: dbPassword,
     });
 
@@ -52,18 +52,18 @@ serve(async (req) => {
 
     switch (action) {
       case 'login': {
-        if (!email || !password) {
+        if (!username || !password) {
           return new Response(
-            JSON.stringify({ error: 'Email e senha são obrigatórios' }),
+            JSON.stringify({ error: 'Usuário e senha são obrigatórios' }),
             { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
           );
         }
 
-        console.log(`Attempting login for: ${email}`);
+        console.log(`Attempting login for: ${username}`);
         
         const users = await client.query(
-          'SELECT id, username, email, is_admin FROM ai_agente.t_users_dachser WHERE email = ? AND password = MD5(?)',
-          [email, password]
+          'SELECT id, username, email, is_admin FROM ai_agente.t_users_dachser WHERE username = ? AND password = MD5(?)',
+          [username, password]
         );
 
         if (!users || users.length === 0) {
