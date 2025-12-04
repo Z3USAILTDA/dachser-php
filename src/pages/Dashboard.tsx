@@ -132,8 +132,8 @@ const Dashboard = () => {
         <img 
           src={dachserBg} 
           alt="DACHSER Logistics" 
-          className="w-full h-full object-cover scale-105"
-          style={{ filter: 'blur(3px) saturate(0.8)' }}
+          className="w-full h-full object-cover"
+          style={{ filter: 'saturate(0.8)' }}
         />
         <div 
           className="absolute inset-0"
