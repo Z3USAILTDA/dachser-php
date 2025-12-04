@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { Client } from "https://deno.land/x/mysql@v2.12.1/mod.ts";
+import * as bcrypt from "https://deno.land/x/bcrypt@v0.4.1/mod.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -61,24 +62,45 @@ serve(async (req) => {
 
         console.log(`Attempting login for: ${username}`);
         
+        // First get the user with the password hash
         const users = await client.query(
-          'SELECT id, username, email, is_admin FROM ai_agente.t_users_dachser WHERE username = ? AND password_hash = MD5(?)',
-          [username, password]
+          'SELECT id, username, email, is_admin, password_hash FROM ai_agente.t_users_dachser WHERE username = ?',
+          [username]
         );
 
         if (!users || users.length === 0) {
-          console.log('Login failed: Invalid credentials');
+          console.log('Login failed: User not found');
           return new Response(
             JSON.stringify({ error: 'Credenciais inválidas' }),
             { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
           );
         }
 
+        const user = users[0];
+        const storedHash = user.password_hash;
+        
+        // Verify bcrypt password
+        const isValidPassword = await bcrypt.compare(password, storedHash);
+        
+        if (!isValidPassword) {
+          console.log('Login failed: Invalid password');
+          return new Response(
+            JSON.stringify({ error: 'Credenciais inválidas' }),
+            { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+
+        // Return user without password_hash
         result = { 
           success: true, 
-          user: users[0]
+          user: {
+            id: user.id,
+            username: user.username,
+            email: user.email,
+            is_admin: user.is_admin
+          }
         };
-        console.log(`Login successful for user: ${users[0].username}`);
+        console.log(`Login successful for user: ${user.username}`);
         break;
       }
 
