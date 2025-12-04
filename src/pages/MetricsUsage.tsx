@@ -189,7 +189,7 @@ const MetricsUsage = () => {
       </div>
 
       {/* Top Left - Back + Header */}
-      <div className="relative z-50 flex items-center gap-5 pt-5 pl-2 mb-4">
+      <div className="relative z-50 flex items-center gap-5 pt-5 pl-4 mb-4">
         <button
           onClick={() => navigate("/dashboard")}
           className="flex items-center gap-2 px-4 py-2.5 rounded-full border border-primary/90 bg-primary/15 text-primary font-bold text-sm backdrop-blur-sm hover:bg-primary/25 transition-all"
@@ -212,7 +212,7 @@ const MetricsUsage = () => {
       </div>
 
       {/* Top Right - User */}
-      <div className="fixed top-5 right-2 z-50 flex items-center gap-2.5 text-sm">
+      <div className="fixed top-5 right-4 z-50 flex items-center gap-2.5 text-sm">
         <div className="px-4 py-1.5 rounded-full bg-background/70 border border-border/30 text-muted-foreground max-w-[220px] truncate">
           @{user?.username}
         </div>
