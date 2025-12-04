@@ -62,7 +62,7 @@ serve(async (req) => {
         console.log(`Attempting login for: ${username}`);
         
         const users = await client.query(
-          'SELECT id, username, email, is_admin FROM ai_agente.t_users_dachser WHERE username = ? AND password = MD5(?)',
+          'SELECT id, username, email, is_admin FROM ai_agente.t_users_dachser WHERE username = ? AND password_hash = MD5(?)',
           [username, password]
         );
 
