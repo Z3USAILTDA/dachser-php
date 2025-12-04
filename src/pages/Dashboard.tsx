@@ -127,24 +127,61 @@ const Dashboard = () => {
 
   return (
     <div className="min-h-screen relative overflow-x-hidden">
-      {/* Background Image */}
-      <div className="fixed inset-0">
-        <img 
-          src={dachserBg} 
-          alt="DACHSER Logistics" 
-          className="w-full h-full object-cover"
-          style={{ filter: 'saturate(0.8)' }}
+      {/* Background with image and gradient overlay */}
+      <div className="fixed inset-0 z-0">
+        <div 
+          className="absolute inset-0"
+          style={{
+            backgroundImage: `url(${dachserBg})`,
+            backgroundSize: 'cover',
+            backgroundPosition: 'center',
+          }}
         />
         <div 
           className="absolute inset-0"
           style={{
+            background: 'linear-gradient(120deg, rgba(4, 17, 45, 0.92), rgba(26, 93, 173, 0.55))',
+          }}
+        />
+        
+        {/* Radial gradient overlay */}
+        <div 
+          className="absolute inset-0"
+          style={{
             background: `
-              radial-gradient(circle at 10% 0%, rgba(255, 200, 0, 0.22), transparent 55%),
-              radial-gradient(circle at 90% 100%, rgba(255, 200, 0, 0.16), transparent 55%),
-              linear-gradient(180deg, rgba(0, 0, 0, 0.7), rgba(0, 0, 0, 0.82))
+              radial-gradient(ellipse at 20% 20%, rgba(245, 184, 67, 0.12) 0%, transparent 50%),
+              radial-gradient(ellipse at 80% 80%, rgba(245, 184, 67, 0.08) 0%, transparent 50%)
             `
           }}
         />
+        
+        {/* Animated Lines */}
+        <div className="absolute inset-0 opacity-20">
+          {[...Array(6)].map((_, i) => (
+            <div
+              key={`line-${i}`}
+              className="absolute h-full w-px bg-gradient-to-b from-primary/70 to-primary/10"
+              style={{
+                left: `${15 + i * 14}%`,
+                transform: `skewX(${-20 + i * 8}deg)`,
+              }}
+            />
+          ))}
+        </div>
+
+        {/* Floating Particles */}
+        {[...Array(20)].map((_, i) => (
+          <div
+            key={`particle-${i}`}
+            className="absolute w-1 h-1 rounded-full bg-primary/40 animate-float"
+            style={{
+              left: `${Math.random() * 100}%`,
+              top: `${Math.random() * 100}%`,
+              animationDelay: `${Math.random() * 5}s`,
+              animationDuration: `${4 + Math.random() * 4}s`,
+            }}
+          />
+        ))}
       </div>
 
       {/* Top Bar */}
