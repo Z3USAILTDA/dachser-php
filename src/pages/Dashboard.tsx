@@ -194,7 +194,7 @@ const Dashboard = () => {
         </div>
 
         {/* Menu Grid */}
-        <div className="flex flex-wrap justify-center gap-6 max-w-6xl mx-auto">
+        <div className="flex justify-center gap-6 overflow-x-auto pb-4 px-4">
           {filteredMenuItems.map((item) => (
             <div key={item.id} className="flex flex-col items-center">
               {/* Menu Card */}
