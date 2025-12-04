@@ -1,0 +1,253 @@
+import { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
+import { LogOut, Plane, Ship, CreditCard, FileText, Building2, UserCog } from "lucide-react";
+import logoZ3us from "@/assets/logo-z3us.png";
+
+interface MenuItem {
+  id: string;
+  icon: React.ReactNode;
+  label: string;
+  subtitle: string;
+  children?: { label: string; href: string }[];
+  href?: string;
+  adminOnly?: boolean;
+}
+
+const menuItems: MenuItem[] = [
+  {
+    id: "admin",
+    icon: <UserCog size={28} />,
+    label: "ADMIN",
+    subtitle: "Gestão da plataforma",
+    adminOnly: true,
+    children: [
+      { label: "Cadastro de Usuário", href: "/admin/users" },
+      { label: "Métricas de Uso", href: "/admin/metrics" },
+    ],
+  },
+  {
+    id: "air",
+    icon: <Plane size={28} />,
+    label: "AIR",
+    subtitle: "Operações Aéreas",
+    children: [
+      { label: "Rastreio Aéreo", href: "/air/tracking" },
+      { label: "Check AWB x CNPJ", href: "/air/check" },
+    ],
+  },
+  {
+    id: "sea",
+    icon: <Ship size={28} />,
+    label: "SEA",
+    subtitle: "Operações Marítimas",
+    children: [
+      { label: "Análises Marítimas", href: "/sea/analytics" },
+    ],
+  },
+  {
+    id: "fin",
+    icon: <CreditCard size={28} />,
+    label: "FIN",
+    subtitle: "Financeiro & Billing",
+    children: [
+      { label: "Régua de Cobrança", href: "/fin/billing" },
+      { label: "Local Charge", href: "/fin/local-charge" },
+      { label: "Alterações de Fee", href: "/fin/fee-changes" },
+      { label: "Análise Documental", href: "/fin/document-analysis" },
+      { label: "Esteira", href: "/fin/workflow" },
+    ],
+  },
+  {
+    id: "chb",
+    icon: <FileText size={28} />,
+    label: "CHB",
+    subtitle: "Customs House Brokerage",
+    children: [
+      { label: "Conferências CHB", href: "/chb/conferences" },
+    ],
+  },
+  {
+    id: "olimpo",
+    icon: <Building2 size={28} />,
+    label: "OLIMPO",
+    subtitle: "Visão Estratégica",
+    href: "/olimpo",
+  },
+];
+
+const Dashboard = () => {
+  const navigate = useNavigate();
+  const [activeMenu, setActiveMenu] = useState<string | null>(null);
+  const [user, setUser] = useState<{ email: string; username: string } | null>(null);
+  const isAdmin = true; // Simulação - substituir por verificação real
+
+  useEffect(() => {
+    const storedUser = localStorage.getItem("user");
+    if (storedUser) {
+      setUser(JSON.parse(storedUser));
+    } else {
+      navigate("/");
+    }
+  }, [navigate]);
+
+  const handleLogout = () => {
+    localStorage.removeItem("user");
+    navigate("/");
+  };
+
+  const toggleMenu = (menuId: string) => {
+    setActiveMenu(activeMenu === menuId ? null : menuId);
+  };
+
+  const filteredMenuItems = menuItems.filter(item => !item.adminOnly || isAdmin);
+
+  return (
+    <div className="min-h-screen bg-background relative overflow-x-hidden">
+      {/* Background Effects */}
+      <div className="fixed inset-0 pointer-events-none">
+        <div 
+          className="absolute inset-0"
+          style={{
+            background: `
+              radial-gradient(circle at 10% 0%, hsl(var(--primary) / 0.18), transparent 55%),
+              radial-gradient(circle at 90% 100%, hsl(var(--primary) / 0.12), transparent 55%),
+              linear-gradient(180deg, rgba(0, 0, 0, 0.84), rgba(0, 0, 0, 0.95))
+            `
+          }}
+        />
+      </div>
+
+      {/* Top Bar */}
+      <header className="fixed top-0 left-0 right-0 z-50 flex justify-between items-center px-4 md:px-6 py-3 bg-background/30 backdrop-blur-sm border-b border-border/30">
+        <div className="flex items-center gap-3">
+          <img 
+            src={logoZ3us} 
+            alt="Z3US.AI" 
+            className="h-8 drop-shadow-[0_0_8px_rgba(0,0,0,0.9)]"
+          />
+          <span className="text-muted-foreground text-xs tracking-[0.2em] uppercase hidden sm:block">
+            FOR LOGISTICS
+          </span>
+        </div>
+
+        <div className="flex items-center gap-3">
+          <div className="px-4 py-1.5 rounded-full bg-background/65 border border-border/30 text-muted-foreground text-sm max-w-[200px] truncate">
+            @{user?.username || "usuario"}
+          </div>
+          <button
+            onClick={handleLogout}
+            className="w-9 h-9 rounded-full border border-border/50 flex items-center justify-center bg-background/70 text-primary hover:bg-background hover:shadow-[0_0_12px_hsl(var(--primary)/0.6)] transition-all duration-200"
+            title="Sair"
+          >
+            <LogOut size={18} />
+          </button>
+        </div>
+      </header>
+
+      {/* Main Content */}
+      <main className="relative z-10 pt-24 pb-20 px-4">
+        {/* Brand Area */}
+        <div className="text-center mb-8">
+          <h1 className="text-4xl md:text-5xl font-bold tracking-[0.16em] text-foreground mb-2">
+            DACHSER
+          </h1>
+          <p className="text-foreground/90 text-lg font-medium">Intelligent Logistics</p>
+          <div className="flex justify-center gap-3 mt-4">
+            <span className="w-2 h-2 rounded-full bg-primary shadow-[0_0_12px_hsl(var(--primary))]" />
+            <span className="w-2 h-2 rounded-full bg-primary shadow-[0_0_12px_hsl(var(--primary))]" />
+            <span className="w-2 h-2 rounded-full bg-primary shadow-[0_0_12px_hsl(var(--primary))]" />
+          </div>
+        </div>
+
+        {/* Decorative Lines */}
+        <div className="relative w-full max-w-5xl mx-auto h-28 mb-8 hidden md:block">
+          {[...Array(6)].map((_, i) => (
+            <div
+              key={i}
+              className="absolute top-0 left-1/2 w-0.5 h-full rounded-full opacity-70"
+              style={{
+                background: `linear-gradient(to bottom, hsl(var(--primary) / 0.7), hsl(var(--primary) / 0.08))`,
+                transform: `translateX(${-320 + i * 128}px) skewX(${-20 + i * 8}deg)`,
+                transformOrigin: 'top',
+              }}
+            />
+          ))}
+        </div>
+
+        {/* Menu Grid */}
+        <div className="flex flex-wrap justify-center gap-6 max-w-6xl mx-auto">
+          {filteredMenuItems.map((item) => (
+            <div key={item.id} className="flex flex-col items-center">
+              {/* Menu Card */}
+              <div
+                onClick={() => item.href ? navigate(item.href) : toggleMenu(item.id)}
+                className={`
+                  w-44 h-44 rounded-3xl border flex flex-col items-center justify-center gap-3 cursor-pointer
+                  transition-all duration-200 
+                  ${activeMenu === item.id 
+                    ? 'bg-primary text-primary-foreground border-background shadow-[0_22px_36px_rgba(0,0,0,0.95),0_0_22px_hsl(var(--primary)/0.65)] -translate-y-1' 
+                    : 'bg-background/90 border-border/30 text-foreground hover:bg-card hover:border-primary hover:-translate-y-1 hover:shadow-[0_22px_36px_rgba(0,0,0,0.95),0_0_22px_hsl(var(--primary)/0.65)]'
+                  }
+                `}
+                style={{ boxShadow: '0 18px 30px rgba(0, 0, 0, 0.9)' }}
+              >
+                <div 
+                  className={`
+                    w-14 h-14 rounded-2xl flex items-center justify-center
+                    ${activeMenu === item.id 
+                      ? 'bg-background/12 border border-background/60 text-primary-foreground' 
+                      : 'bg-primary/12 border border-primary/60 text-primary'
+                    }
+                  `}
+                >
+                  {item.icon}
+                </div>
+                <span className="text-sm font-semibold tracking-[0.18em] uppercase">{item.label}</span>
+                <span className={`text-xs ${activeMenu === item.id ? 'text-primary-foreground/70' : 'text-muted-foreground'}`}>
+                  {item.subtitle}
+                </span>
+              </div>
+
+              {/* Children Menu */}
+              {item.children && (
+                <div className={`
+                  mt-6 transition-all duration-400 overflow-hidden
+                  ${activeMenu === item.id ? 'max-h-[500px] opacity-100' : 'max-h-0 opacity-0'}
+                `}>
+                  {/* Vertical Line */}
+                  <div className="w-0.5 h-5 bg-primary mx-auto" />
+                  
+                  {/* Horizontal Line */}
+                  <div className="relative">
+                    <div className="absolute top-0 left-1/2 -translate-x-1/2 h-0.5 bg-primary" 
+                      style={{ width: `${Math.min(item.children.length * 220, 600)}px` }} 
+                    />
+                    
+                    <div className="flex gap-8 pt-3 pb-4">
+                      {item.children.map((child, idx) => (
+                        <div key={idx} className="relative flex flex-col items-center">
+                          {/* Vertical connector */}
+                          <div className="w-0.5 h-3 bg-primary" />
+                          <div className="w-1.5 h-1.5 rounded-full bg-primary -mt-0.5" />
+                          
+                          <button
+                            onClick={() => navigate(child.href)}
+                            className="mt-2 min-w-[200px] px-6 py-3 rounded-full bg-background/86 border border-border/50 text-foreground text-sm font-medium hover:bg-background hover:border-primary/60 hover:-translate-y-0.5 transition-all duration-200 shadow-lg"
+                          >
+                            {child.label}
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      </main>
+    </div>
+  );
+};
+
+export default Dashboard;
