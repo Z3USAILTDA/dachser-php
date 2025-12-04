@@ -240,16 +240,14 @@ const Dashboard = () => {
                       <div 
                         className="absolute top-0 h-0.5 bg-primary"
                         style={{ 
-                          left: '50%',
-                          right: '50%',
-                          marginLeft: `calc(-${(item.children.length - 1) * 50}% - ${(item.children.length - 1) * 12}px)`,
-                          marginRight: `calc(-${(item.children.length - 1) * 50}% - ${(item.children.length - 1) * 12}px)`,
+                          left: '90px',
+                          right: '90px',
                         }}
                       />
                     )}
                     
                     {item.children.map((child, idx) => (
-                      <div key={idx} className="relative flex flex-col items-center pt-0">
+                      <div key={idx} className="relative flex flex-col items-center pt-0 min-w-[180px]">
                         {/* Vertical connector */}
                         <div className="w-0.5 h-3 bg-primary" />
                         <div className="w-1.5 h-1.5 rounded-full bg-primary -mt-0.5" />
