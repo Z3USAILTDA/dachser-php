@@ -725,7 +725,7 @@ const CheckAwb = () => {
       <div className="fixed top-[18px] left-[18px] z-[1000] flex items-center gap-[18px]">
         <button
           onClick={() => navigate("/dashboard")}
-          className="inline-flex items-center gap-2 px-[14px] py-2.5 rounded-full border border-[rgba(255,200,0,.9)] bg-[rgba(255,200,0,.15)] text-[#ffc800] font-bold text-[0.9rem] backdrop-blur-sm hover:bg-[rgba(255,200,0,.25)] transition-all"
+          className="flex items-center gap-2 px-4 py-2.5 rounded-full border border-primary/90 bg-primary/15 text-primary font-bold text-sm backdrop-blur-sm hover:bg-primary/25 transition-all"
         >
           <ArrowLeft size={16} />
           <span>Voltar</span>
