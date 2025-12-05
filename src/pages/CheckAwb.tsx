@@ -776,7 +776,7 @@ const CheckAwb = () => {
       </div>
 
       {/* Main Content */}
-      <main className="relative z-10 max-w-[1280px] mx-auto mt-[130px] mb-12 px-4 space-y-[18px]">
+      <main className="relative z-10 max-w-[95%] mx-auto mt-[130px] mb-12 px-2 space-y-[18px]">
         {/* CARD DE BUSCA + FILTROS */}
         <section 
           className="rounded-2xl p-4"
