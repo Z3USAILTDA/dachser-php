@@ -721,58 +721,61 @@ const CheckAwb = () => {
         ))}
       </div>
 
-      {/* Top Left - Back + Header */}
-      <div className="fixed top-[18px] left-0 right-0 z-[1000] max-w-[95%] mx-auto px-2 flex items-center gap-[18px]">
-        <button
-          onClick={() => navigate("/dashboard")}
-          className="w-8 h-8 rounded-full border border-white/12 bg-[rgba(5,6,18,0.9)] text-white/80 flex items-center justify-center backdrop-blur-sm hover:bg-[rgba(5,6,18,1)] hover:text-white transition-all"
-        >
-          <ArrowLeft size={16} />
-        </button>
+      {/* Top Header Bar */}
+      <div className="fixed top-[18px] left-0 right-0 z-[1000] max-w-[95%] mx-auto px-2 flex items-center justify-between">
+        {/* Left - Back + Header */}
+        <div className="flex items-center gap-[18px]">
+          <button
+            onClick={() => navigate("/dashboard")}
+            className="w-8 h-8 rounded-full border border-white/12 bg-[rgba(5,6,18,0.9)] text-white/80 flex items-center justify-center backdrop-blur-sm hover:bg-[rgba(5,6,18,1)] hover:text-white transition-all"
+          >
+            <ArrowLeft size={16} />
+          </button>
 
-        <header>
-          <h1 className="text-[1.6rem] tracking-[0.24em] uppercase text-[#f5f5f5]">DACHSER</h1>
-          <p className="text-[0.9rem] text-[#aaaaaa] mt-0.5">
-            Intelligent Logistics – Check AWB x CNPJ
-          </p>
-          <div className="flex gap-1.5 mt-1.5">
-            <span className="w-1.5 h-1.5 rounded-full bg-[#ffc800] shadow-[0_0_10px_rgba(255,200,0,.9)]" />
-            <span className="w-1.5 h-1.5 rounded-full bg-[#ffc800] shadow-[0_0_10px_rgba(255,200,0,.9)]" />
-            <span className="w-1.5 h-1.5 rounded-full bg-[#ffc800] shadow-[0_0_10px_rgba(255,200,0,.9)]" />
-          </div>
-        </header>
-      </div>
-
-      {/* Top Right - User */}
-      <div className="fixed top-[18px] right-[18px] z-[1000] flex items-center gap-2.5 text-[0.85rem]">
-        <div className="px-[14px] py-1.5 rounded-full bg-[rgba(0,0,0,.70)] border border-[rgba(255,255,255,.18)] text-[#aaaaaa] max-w-[220px] truncate">
-          @{user?.username || user?.email}
+          <header>
+            <h1 className="text-[1.6rem] tracking-[0.24em] uppercase text-[#f5f5f5]">DACHSER</h1>
+            <p className="text-[0.9rem] text-[#aaaaaa] mt-0.5">
+              Intelligent Logistics – Check AWB x CNPJ
+            </p>
+            <div className="flex gap-1.5 mt-1.5">
+              <span className="w-1.5 h-1.5 rounded-full bg-[#ffc800] shadow-[0_0_10px_rgba(255,200,0,.9)]" />
+              <span className="w-1.5 h-1.5 rounded-full bg-[#ffc800] shadow-[0_0_10px_rgba(255,200,0,.9)]" />
+              <span className="w-1.5 h-1.5 rounded-full bg-[#ffc800] shadow-[0_0_10px_rgba(255,200,0,.9)]" />
+            </div>
+          </header>
         </div>
-        {userRole === "ADMIN" && (
-          <>
-            <button
-              type="button"
-              onClick={handleExportToMariaDB}
-              disabled={isExporting}
-              className="w-8 h-8 rounded-full border border-[rgba(255,255,255,.25)] flex items-center justify-center bg-[rgba(0,0,0,.7)] text-[#ffc800] hover:bg-[rgba(0,0,0,.9)] transition disabled:opacity-50"
-              title="Exportar para MariaDB"
-            >
-              {isExporting ? (
-                <Loader2 className="w-4 h-4 animate-spin" />
-              ) : (
-                <Database className="w-4 h-4" />
-              )}
-            </button>
-            <button
-              type="button"
-              onClick={() => navigate("/admin/logs")}
-              className="w-8 h-8 rounded-full border border-[rgba(255,255,255,.25)] flex items-center justify-center bg-[rgba(0,0,0,.7)] text-[#ffc800] hover:bg-[rgba(0,0,0,.9)] transition"
-              title="Logs do sistema"
-            >
-              <TerminalSquare className="w-4 h-4" />
-            </button>
-          </>
-        )}
+
+        {/* Right - User */}
+        <div className="flex items-center gap-2.5 text-[0.85rem]">
+          <div className="px-[14px] py-1.5 rounded-full bg-[rgba(0,0,0,.70)] border border-[rgba(255,255,255,.18)] text-[#aaaaaa] max-w-[220px] truncate">
+            @{user?.username || user?.email}
+          </div>
+          {userRole === "ADMIN" && (
+            <>
+              <button
+                type="button"
+                onClick={handleExportToMariaDB}
+                disabled={isExporting}
+                className="w-8 h-8 rounded-full border border-[rgba(255,255,255,.25)] flex items-center justify-center bg-[rgba(0,0,0,.7)] text-[#ffc800] hover:bg-[rgba(0,0,0,.9)] transition disabled:opacity-50"
+                title="Exportar para MariaDB"
+              >
+                {isExporting ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  <Database className="w-4 h-4" />
+                )}
+              </button>
+              <button
+                type="button"
+                onClick={() => navigate("/admin/logs")}
+                className="w-8 h-8 rounded-full border border-[rgba(255,255,255,.25)] flex items-center justify-center bg-[rgba(0,0,0,.7)] text-[#ffc800] hover:bg-[rgba(0,0,0,.9)] transition"
+                title="Logs do sistema"
+              >
+                <TerminalSquare className="w-4 h-4" />
+              </button>
+            </>
+          )}
+        </div>
       </div>
 
       {/* Main Content */}
