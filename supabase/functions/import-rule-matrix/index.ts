@@ -45,7 +45,7 @@ serve(async (req) => {
     const workbook = XLSX.read(data, { type: 'array' });
     console.log(`Workbook sheets: ${workbook.SheetNames.join(', ')}`);
 
-    const version = Date.now();
+    const version = Math.floor(Date.now() / 1000); // Unix timestamp in seconds
     const effectiveDate = new Date().toISOString().split('T')[0];
     
     let klabinCount = 0;
