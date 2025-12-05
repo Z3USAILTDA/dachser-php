@@ -452,6 +452,25 @@ serve(async (req) => {
         break;
       }
 
+      case 'delete_rule_row': {
+        const { ruleId } = body;
+        if (!ruleId) {
+          return new Response(
+            JSON.stringify({ error: 'Rule ID é obrigatório' }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+
+        await client.execute(
+          'DELETE FROM ai_agente.t_rule_row_awb WHERE id = ?',
+          [ruleId]
+        );
+
+        result = { success: true };
+        console.log(`Deleted rule row ID: ${ruleId}`);
+        break;
+      }
+
       case 'find_matching_rule': {
         const { customer, cnpj, airportCode } = body;
         if (!customer || !cnpj) {
