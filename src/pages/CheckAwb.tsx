@@ -664,25 +664,55 @@ const CheckAwb = () => {
 
   return (
     <div className="min-h-screen relative overflow-x-hidden">
-      {/* Background - seguindo CSS do PHP */}
+      {/* Background with radial gradients and image */}
       <div 
         className="fixed inset-0 z-[-2]"
         style={{
-          background: `
-            radial-gradient(circle at 10% 0%, rgba(255,200,0,.20), transparent 55%),
-            radial-gradient(circle at 90% 100%, rgba(255,200,0,.15), transparent 55%),
-            linear-gradient(180deg, rgba(0,0,0,.82), rgba(0,0,0,.96)),
-            url(${dachserBg}) center/cover no-repeat
+          backgroundImage: `
+            radial-gradient(circle at 10% 10%, rgba(255,200,0,0.18), transparent 50%),
+            radial-gradient(circle at 90% 90%, rgba(255,200,0,0.12), transparent 50%),
+            linear-gradient(to bottom, rgba(0,0,0,0.7), rgba(0,0,0,0.82)),
+            url(${dachserBg})
           `,
-          filter: 'saturate(.8)',
+          backgroundSize: 'cover',
+          backgroundPosition: 'center',
+          filter: 'saturate(0.8)',
         }}
       />
-      <div 
-        className="fixed inset-0 z-[-1]"
-        style={{
-          background: 'radial-gradient(circle at 50% 0%, rgba(0,0,0,.7), transparent 55%)',
-        }}
-      />
+
+      {/* Animated diagonal lines */}
+      <div className="fixed inset-0 z-[-1] overflow-hidden pointer-events-none">
+        <div className="absolute inset-0 animate-diagonal opacity-10">
+          {[...Array(20)].map((_, i) => (
+            <div
+              key={i}
+              className="absolute h-px bg-gradient-to-r from-transparent via-primary/40 to-transparent"
+              style={{
+                width: '200%',
+                top: `${i * 10}%`,
+                left: '-50%',
+                transform: 'rotate(-45deg)',
+              }}
+            />
+          ))}
+        </div>
+      </div>
+
+      {/* Floating particles */}
+      <div className="fixed inset-0 z-[-1] overflow-hidden pointer-events-none">
+        {[...Array(15)].map((_, i) => (
+          <div
+            key={i}
+            className="absolute w-1 h-1 rounded-full bg-primary/30 animate-float"
+            style={{
+              left: `${Math.random() * 100}%`,
+              top: `${Math.random() * 100}%`,
+              animationDelay: `${Math.random() * 5}s`,
+              animationDuration: `${6 + Math.random() * 4}s`,
+            }}
+          />
+        ))}
+      </div>
 
       {/* Top Left - Back + Header */}
       <div className="fixed top-[18px] left-[18px] z-[1000] flex items-center gap-[18px]">
