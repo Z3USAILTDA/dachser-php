@@ -722,7 +722,7 @@ const CheckAwb = () => {
       </div>
 
       {/* Top Left - Back + Header */}
-      <div className="fixed top-[18px] left-[18px] z-[1000] flex items-center gap-[18px]">
+      <div className="fixed top-[18px] left-0 right-0 z-[1000] max-w-[95%] mx-auto px-2 flex items-center gap-[18px]">
         <button
           onClick={() => navigate("/dashboard")}
           className="w-8 h-8 rounded-full border border-white/12 bg-[rgba(5,6,18,0.9)] text-white/80 flex items-center justify-center backdrop-blur-sm hover:bg-[rgba(5,6,18,1)] hover:text-white transition-all"
