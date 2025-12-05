@@ -725,9 +725,9 @@ const CheckAwb = () => {
       <div className="fixed top-[18px] left-[18px] z-[1000] flex items-center gap-[18px]">
         <button
           onClick={() => navigate("/dashboard")}
-          className="w-10 h-10 rounded-full border border-primary/90 bg-primary/15 text-primary flex items-center justify-center backdrop-blur-sm hover:bg-primary/25 transition-all"
+          className="w-8 h-8 rounded-full border border-primary/90 bg-primary/15 text-primary flex items-center justify-center backdrop-blur-sm hover:bg-primary/25 transition-all"
         >
-          <ArrowLeft size={20} />
+          <ArrowLeft size={16} />
         </button>
 
         <header>
