@@ -5,3 +5,6 @@ verify_jwt = false
 
 [functions.parse-awb]
 verify_jwt = false
+
+[functions.import-rule-matrix]
+verify_jwt = false
