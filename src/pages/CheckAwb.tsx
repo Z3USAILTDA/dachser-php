@@ -656,100 +656,151 @@ const CheckAwb = () => {
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-black">
-        <Loader2 className="h-8 w-8 animate-spin text-amber-400" />
+      <div className="min-h-screen flex items-center justify-center bg-background">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
       </div>
     );
   }
 
   return (
-    <div
-      className="min-h-screen text-white"
-      style={{
-        background: `linear-gradient(120deg, rgba(4, 17, 45, 0.92), rgba(26, 93, 173, 0.55)), url(${dachserBg}) center/cover no-repeat`,
-      }}
-    >
-      <div className="min-h-screen bg-black/80 backdrop-blur-sm">
-        <div className="max-w-6xl mx-auto px-6 py-6 space-y-6">
-          {/* HEADER */}
-          <div className="flex items-center justify-between gap-6">
-            <div className="flex items-center gap-4">
-              <Button
-                onClick={() => navigate("/dashboard")}
-                variant="ghost"
-                size="icon"
-                className="h-10 w-10 rounded-full border border-white/18 bg-black/70 hover:bg-black hover:border-amber-300/80"
-              >
-                <ArrowLeft className="h-5 w-5 text-amber-300" />
-              </Button>
-              <div className="flex flex-col gap-1">
-                <div className="text-[1.7rem] tracking-[0.22em] uppercase">DACHSER</div>
-                <div className="text-sm text-neutral-100">Intelligent Logistics – Check AWB x CNPJ</div>
-                <div className="flex gap-2 mt-2">
-                  <span className="w-1.5 h-1.5 rounded-full bg-amber-400 shadow-[0_0_10px_rgba(251,191,36,0.9)]" />
-                  <span className="w-1.5 h-1.5 rounded-full bg-amber-400/70" />
-                  <span className="w-1.5 h-1.5 rounded-full bg-amber-400/40" />
-                </div>
-              </div>
-            </div>
+    <div className="min-h-screen relative overflow-x-hidden">
+      {/* Background with image and gradient overlay */}
+      <div className="fixed inset-0 z-0">
+        <div 
+          className="absolute inset-0"
+          style={{
+            backgroundImage: `url(${dachserBg})`,
+            backgroundSize: 'cover',
+            backgroundPosition: 'center',
+          }}
+        />
+        <div 
+          className="absolute inset-0"
+          style={{
+            background: 'linear-gradient(120deg, rgba(4, 17, 45, 0.92), rgba(26, 93, 173, 0.55))',
+          }}
+        />
+        
+        {/* Radial gradient overlay */}
+        <div 
+          className="absolute inset-0"
+          style={{
+            background: `
+              radial-gradient(ellipse at 20% 20%, rgba(245, 184, 67, 0.12) 0%, transparent 50%),
+              radial-gradient(ellipse at 80% 80%, rgba(245, 184, 67, 0.08) 0%, transparent 50%)
+            `
+          }}
+        />
+        
+        {/* Animated Lines */}
+        <div className="absolute inset-0 opacity-20">
+          {[...Array(6)].map((_, i) => (
+            <div
+              key={`line-${i}`}
+              className="absolute h-full w-px bg-gradient-to-b from-primary/70 to-primary/10"
+              style={{
+                left: `${15 + i * 14}%`,
+                transform: `skewX(${-20 + i * 8}deg)`,
+              }}
+            />
+          ))}
+        </div>
 
-            <div className="flex items-center gap-3 text-sm text-neutral-300">
-              <div className="px-4 py-1 rounded-full bg-black/70 border border-white/12">
-                {user?.email ?? "seu.usuario"}
-              </div>
+        {/* Floating Particles */}
+        {[...Array(20)].map((_, i) => (
+          <div
+            key={`particle-${i}`}
+            className="absolute w-1 h-1 rounded-full bg-primary/40 animate-float"
+            style={{
+              left: `${Math.random() * 100}%`,
+              top: `${Math.random() * 100}%`,
+              animationDelay: `${Math.random() * 5}s`,
+              animationDuration: `${4 + Math.random() * 4}s`,
+            }}
+          />
+        ))}
+      </div>
 
-              {userRole === "ADMIN" && (
-                <>
-                  <button
-                    type="button"
-                    onClick={handleExportToMariaDB}
-                    disabled={isExporting}
-                    className="w-8 h-8 rounded-full border border-white/18 bg-black/70 flex items-center justify-center hover:bg-black hover:border-amber-300/80 transition disabled:opacity-50"
-                    title="Exportar para MariaDB"
-                  >
-                    {isExporting ? (
-                      <Loader2 className="w-4 h-4 text-amber-300 animate-spin" />
-                    ) : (
-                      <Database className="w-4 h-4 text-amber-300" />
-                    )}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => navigate("/admin/logs")}
-                    className="w-8 h-8 rounded-full border border-white/18 bg-black/70 flex items-center justify-center hover:bg-black hover:border-amber-300/80 transition"
-                    title="Logs do sistema"
-                  >
-                    <TerminalSquare className="w-4 h-4 text-amber-300" />
-                  </button>
-                </>
-              )}
-            </div>
+      {/* Top Left - Back + Header */}
+      <div className="relative z-50 flex items-center gap-5 pt-5 pl-4 mb-4">
+        <button
+          onClick={() => navigate("/dashboard")}
+          className="flex items-center gap-2 px-4 py-2.5 rounded-full border border-primary/90 bg-primary/15 text-primary font-bold text-sm backdrop-blur-sm hover:bg-primary/25 transition-all"
+        >
+          <ArrowLeft size={16} />
+          <span>Voltar</span>
+        </button>
+
+        <header>
+          <h1 className="text-2xl font-bold tracking-[0.24em] text-foreground">DACHSER</h1>
+          <p className="text-sm text-muted-foreground mt-0.5">
+            Intelligent Logistics – Check AWB x CNPJ
+          </p>
+          <div className="flex gap-1.5 mt-1.5">
+            <span className="w-1.5 h-1.5 rounded-full bg-primary shadow-[0_0_10px_hsl(var(--primary))]" />
+            <span className="w-1.5 h-1.5 rounded-full bg-primary shadow-[0_0_10px_hsl(var(--primary))]" />
+            <span className="w-1.5 h-1.5 rounded-full bg-primary shadow-[0_0_10px_hsl(var(--primary))]" />
           </div>
+        </header>
+      </div>
 
-          {/* CARD DE BUSCA + FILTROS */}
-          <Card className="bg-black/86 border border-white/10 rounded-2xl shadow-[0_18px_40px_rgba(0,0,0,0.9)]">
+      {/* Top Right - User */}
+      <div className="fixed top-5 right-4 z-50 flex items-center gap-2.5 text-sm">
+        <div className="px-4 py-1.5 rounded-full bg-background/70 border border-border/30 text-muted-foreground max-w-[220px] truncate">
+          @{user?.username || user?.email}
+        </div>
+        {userRole === "ADMIN" && (
+          <>
+            <button
+              type="button"
+              onClick={handleExportToMariaDB}
+              disabled={isExporting}
+              className="w-8 h-8 rounded-full border border-border/25 flex items-center justify-center bg-background/70 text-primary hover:bg-background/90 transition disabled:opacity-50"
+              title="Exportar para MariaDB"
+            >
+              {isExporting ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : (
+                <Database className="w-4 h-4" />
+              )}
+            </button>
+            <button
+              type="button"
+              onClick={() => navigate("/admin/logs")}
+              className="w-8 h-8 rounded-full border border-border/25 flex items-center justify-center bg-background/70 text-primary hover:bg-background/90 transition"
+              title="Logs do sistema"
+            >
+              <TerminalSquare className="w-4 h-4" />
+            </button>
+          </>
+        )}
+      </div>
+
+      {/* Main Content */}
+      <main className="relative z-10 max-w-6xl mx-auto pt-4 pb-6 px-4 space-y-5">
+        {/* CARD DE BUSCA + FILTROS */}
+        <Card className="bg-background rounded-2xl border border-border/30 shadow-[0_18px_40px_rgba(0,0,0,0.85)]">
             <CardContent className="pt-5 pb-4 space-y-4">
               <div className="relative">
-                <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-neutral-400" />
+                <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
                 <input
                   type="text"
                   placeholder="Buscar por AWB, CNPJ ou cliente"
                   value={searchTerm}
                   onChange={e => setSearchTerm(e.target.value)}
-                  style={{ backgroundColor: "rgba(0, 0, 0, 0.86)" }}
-                  className="h-11 w-full pl-11 pr-4 rounded-full border border-white/12 text-sm text-white placeholder:text-neutral-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-400 focus-visible:ring-offset-2 focus-visible:ring-offset-black"
+                  className="h-11 w-full pl-11 pr-4 rounded-full border border-border/30 bg-[#13141a] text-foreground text-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-background"
                 />
               </div>
 
               <div className="flex flex-wrap items-center gap-4 justify-between">
                 <div className="flex flex-wrap items-center gap-4">
                   <div className="flex items-center gap-2">
-                    <div className="flex items-center gap-2 px-3 py-1 rounded-full bg-black/86 border border-white/12">
-                      <FilterIcon className="h-3.5 w-3.5 text-amber-300" />
-                      <span className="text-[10px] tracking-[0.22em] uppercase text-neutral-400">Status</span>
+                    <div className="flex items-center gap-2 px-3 py-1 rounded-full bg-card border border-border/50">
+                      <FilterIcon className="h-3.5 w-3.5 text-primary" />
+                      <span className="text-[10px] tracking-[0.22em] uppercase text-muted-foreground">Status</span>
                     </div>
                     <Select value={statusFilter} onValueChange={setStatusFilter}>
-                      <SelectTrigger className="h-9 w-[150px] rounded-full bg-black/86 border border-white/14 text-xs">
+                      <SelectTrigger className="h-9 w-[150px] rounded-full bg-card border border-border/50 text-xs">
                         <SelectValue placeholder="Todos" />
                       </SelectTrigger>
                       <SelectContent>
@@ -761,12 +812,12 @@ const CheckAwb = () => {
                   </div>
 
                   <div className="flex items-center gap-2">
-                    <div className="flex items-center gap-2 px-3 py-1 rounded-full bg-black/86 border border-white/12">
-                      <span className="w-1.5 h-1.5 rounded-full bg-amber-300" />
-                      <span className="text-[10px] tracking-[0.22em] uppercase text-neutral-400">Período</span>
+                    <div className="flex items-center gap-2 px-3 py-1 rounded-full bg-card border border-border/50">
+                      <span className="w-1.5 h-1.5 rounded-full bg-primary" />
+                      <span className="text-[10px] tracking-[0.22em] uppercase text-muted-foreground">Período</span>
                     </div>
                     <Select value={periodFilter} onValueChange={setPeriodFilter}>
-                      <SelectTrigger className="h-9 w-[150px] rounded-full bg-black/86 border border-white/14 text-xs">
+                      <SelectTrigger className="h-9 w-[150px] rounded-full bg-card border border-border/50 text-xs">
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
@@ -781,7 +832,7 @@ const CheckAwb = () => {
                     onClick={fetchChecks}
                     disabled={isRefreshing}
                     variant="outline"
-                    className="h-9 rounded-full border-white/24 bg-black/86 text-xs px-4 hover:border-amber-400/80 hover:bg-black disabled:opacity-50"
+                    className="h-9 rounded-full border-border/50 bg-card text-xs px-4 hover:border-primary/80 hover:bg-card/80 disabled:opacity-50"
                   >
                     <RefreshCw className={`mr-2 h-4 w-4 ${isRefreshing ? "animate-spin" : ""}`} />
                     Atualizar
@@ -790,7 +841,7 @@ const CheckAwb = () => {
 
                 <Button
                   onClick={() => setIsUploadModalOpen(true)}
-                  className="h-10 rounded-full px-5 bg-amber-400 text-black font-semibold text-sm shadow-[0_0_22px_rgba(251,191,36,0.6)] hover:bg-amber-300"
+                  className="h-10 rounded-full px-5 bg-primary text-primary-foreground font-semibold text-sm shadow-[0_0_22px_hsl(var(--primary)/0.6)] hover:bg-primary/90"
                 >
                   <Plus className="mr-2 h-5 w-5" />
                   Nova Validação
@@ -800,41 +851,41 @@ const CheckAwb = () => {
           </Card>
 
           {/* TABELA DE HISTÓRICO */}
-          <Card className="bg-black/86 border border-white/10 rounded-2xl shadow-[0_18px_40px_rgba(0,0,0,0.9)]">
+          <Card className="bg-background rounded-2xl border border-border/30 shadow-[0_18px_40px_rgba(0,0,0,0.85)]">
             <CardContent className="pt-5 pb-4">
               <div className="flex items-center justify-between mb-4">
                 <div>
-                  <div className="text-xs tracking-[0.22em] uppercase text-neutral-400">
+                  <div className="text-xs tracking-[0.22em] uppercase text-muted-foreground">
                     Resumo de Validações
                   </div>
-                  <div className="text-[11px] text-neutral-400 mt-1">
+                  <div className="text-[11px] text-muted-foreground mt-1">
                     Consultas recentes de AWB/HAWB por status e cliente
                   </div>
                 </div>
-                <div className="text-xs text-neutral-400">
-                  Total: <span className="text-amber-300 font-semibold">{filteredChecks.length}</span> registros
+                <div className="text-xs text-muted-foreground">
+                  Total: <span className="text-primary font-semibold">{filteredChecks.length}</span> registros
                 </div>
               </div>
 
-              <div className="rounded-xl border border-white/8 bg-black/86 overflow-hidden">
+              <div className="rounded-xl border border-border/20 bg-[#05060c] overflow-hidden">
                 <Table>
                   <TableHeader>
-                    <TableRow className="border-b border-white/10 bg-black/86">
-                      <TableHead className="text-xs uppercase tracking-[0.18em] text-neutral-400">AWB</TableHead>
-                      <TableHead className="text-xs uppercase tracking-[0.18em] text-neutral-400">CNPJ</TableHead>
-                      <TableHead className="text-xs uppercase tracking-[0.18em] text-neutral-400">Rota</TableHead>
-                      <TableHead className="text-xs uppercase tracking-[0.18em] text-neutral-400">Cliente</TableHead>
-                      <TableHead className="text-xs uppercase tracking-[0.18em] text-neutral-400">Status</TableHead>
-                      <TableHead className="text-xs uppercase tracking-[0.18em] text-neutral-400">Motivo</TableHead>
-                      <TableHead className="text-xs uppercase tracking-[0.18em] text-neutral-400">Data</TableHead>
-                      <TableHead className="text-right text-xs uppercase tracking-[0.18em] text-neutral-400">
+                    <TableRow className="border-b border-border/20 bg-[#05060c]">
+                      <TableHead className="text-xs uppercase tracking-[0.18em] text-muted-foreground">AWB</TableHead>
+                      <TableHead className="text-xs uppercase tracking-[0.18em] text-muted-foreground">CNPJ</TableHead>
+                      <TableHead className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Rota</TableHead>
+                      <TableHead className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Cliente</TableHead>
+                      <TableHead className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Status</TableHead>
+                      <TableHead className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Motivo</TableHead>
+                      <TableHead className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Data</TableHead>
+                      <TableHead className="text-right text-xs uppercase tracking-[0.18em] text-muted-foreground">
                         Ações
                       </TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {filteredChecks.map(check => (
-                      <TableRow key={check.id} className="border-b border-white/5 hover:bg-white/5">
+                      <TableRow key={check.id} className="border-b border-border/10 hover:bg-muted/10">
                         <TableCell className="font-mono text-xs">{check.awb}</TableCell>
                         <TableCell className="font-mono text-xs">{check.cnpj}</TableCell>
                         <TableCell className="font-mono text-xs">
@@ -853,7 +904,7 @@ const CheckAwb = () => {
                             <Button
                               variant="ghost"
                               size="icon"
-                              className="h-8 w-8 text-neutral-300 hover:bg-white/10"
+                              className="h-8 w-8 text-muted-foreground hover:bg-muted/20"
                               onClick={() => handleViewDetails(check)}
                             >
                               <FileText className="h-4 w-4" />
@@ -873,7 +924,7 @@ const CheckAwb = () => {
 
                     {filteredChecks.length === 0 && (
                       <TableRow>
-                        <TableCell colSpan={8} className="text-center py-6 text-sm text-neutral-400">
+                        <TableCell colSpan={8} className="text-center py-6 text-sm text-muted-foreground">
                           Nenhuma validação encontrada para os filtros selecionados.
                         </TableCell>
                       </TableRow>
@@ -887,11 +938,11 @@ const CheckAwb = () => {
           {/* Matriz de Regras (ADMIN) */}
           {userRole === "ADMIN" && (
             <Collapsible open={isMatrixOpen} onOpenChange={setIsMatrixOpen}>
-              <Card className="bg-black/86 border border-white/10 rounded-2xl">
+              <Card className="bg-background rounded-2xl border border-border/30 shadow-[0_18px_40px_rgba(0,0,0,0.85)]">
                 <CollapsibleTrigger asChild>
                   <Button
                     variant="ghost"
-                    className="w-full flex items-center justify-between px-6 py-4 hover:bg-white/5"
+                    className="w-full flex items-center justify-between px-6 py-4 hover:bg-muted/10"
                   >
                     <span className="text-base font-semibold">Matriz de Regras</span>
                     {isMatrixOpen ? <ChevronUp className="h-5 w-5" /> : <ChevronDown className="h-5 w-5" />}
@@ -905,14 +956,13 @@ const CheckAwb = () => {
               </Card>
             </Collapsible>
           )}
-        </div>
-      </div>
+      </main>
 
       {/* MODAL UPLOAD */}
       <Dialog open={isUploadModalOpen} onOpenChange={setIsUploadModalOpen}>
-        <DialogContent className="sm:max-w-md bg-black/95 border border-white/10 text-white">
+        <DialogContent className="sm:max-w-md bg-background border border-border/30 text-foreground">
           <DialogHeader>
-            <DialogTitle className="text-xl text-white">Nova Validação de AWB/HAWB</DialogTitle>
+            <DialogTitle className="text-xl">Nova Validação de AWB/HAWB</DialogTitle>
           </DialogHeader>
           <div className="space-y-4">
             <input
@@ -929,25 +979,25 @@ const CheckAwb = () => {
               onDrop={handleDrop}
               onClick={() => fileInputRef.current?.click()}
               className={`border-2 border-dashed rounded-lg p-12 text-center transition-all cursor-pointer ${
-                isDragging ? "border-amber-400 bg-amber-400/5" : "border-white/20 hover:border-amber-400/50"
+                isDragging ? "border-primary bg-primary/5" : "border-border/50 hover:border-primary/50"
               } ${isUploading ? "opacity-50 cursor-not-allowed" : ""}`}
             >
               {isUploading ? (
                 <>
-                  <Loader2 className="h-16 w-16 text-amber-400 mx-auto mb-4 animate-spin" />
-                  <p className="text-lg text-white mb-2">Processando documento...</p>
-                  <p className="text-sm text-neutral-400">
+                  <Loader2 className="h-16 w-16 text-primary mx-auto mb-4 animate-spin" />
+                  <p className="text-lg mb-2">Processando documento...</p>
+                  <p className="text-sm text-muted-foreground">
                     Extraindo dados e validando contra matriz de regras
                   </p>
                 </>
               ) : (
                 <>
-                  <UploadCloud className="h-16 w-16 text-neutral-400 mx-auto mb-4" />
-                  <p className="text-lg text-white mb-2">
+                  <UploadCloud className="h-16 w-16 text-muted-foreground mx-auto mb-4" />
+                  <p className="text-lg mb-2">
                     {isDragging ? "Solte o(s) arquivo(s) aqui" : "Arraste arquivo(s) ou clique para selecionar"}
                   </p>
-                  <p className="text-sm text-neutral-400">Formatos aceitos: PDF ou imagens</p>
-                  <p className="text-xs text-amber-400/80 mt-2">
+                  <p className="text-sm text-muted-foreground">Formatos aceitos: PDF ou imagens</p>
+                  <p className="text-xs text-primary/80 mt-2">
                     Para ZF com múltiplos CNPJs: envie House + PDF de Instrução juntos
                   </p>
                 </>
@@ -959,38 +1009,38 @@ const CheckAwb = () => {
 
       {/* MODAL DETALHES */}
       <Dialog open={isDetailsModalOpen} onOpenChange={setIsDetailsModalOpen}>
-        <DialogContent className="sm:max-w-2xl bg-black/95 border border-white/10 text-white">
+        <DialogContent className="sm:max-w-2xl bg-background border border-border/30 text-foreground">
           <DialogHeader>
-            <DialogTitle className="text-xl text-white">Descrição Detalhada</DialogTitle>
+            <DialogTitle className="text-xl">Descrição Detalhada</DialogTitle>
           </DialogHeader>
           {selectedCheck && (
             <div className="space-y-4">
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <p className="text-sm text-neutral-400">AWB</p>
-                  <p className="font-mono text-sm text-white">{selectedCheck.awb}</p>
+                  <p className="text-sm text-muted-foreground">AWB</p>
+                  <p className="font-mono text-sm">{selectedCheck.awb}</p>
                 </div>
                 <div>
-                  <p className="text-sm text-neutral-400">CNPJ</p>
-                  <p className="font-mono text-sm text-white">{selectedCheck.cnpj}</p>
+                  <p className="text-sm text-muted-foreground">CNPJ</p>
+                  <p className="font-mono text-sm">{selectedCheck.cnpj}</p>
                 </div>
                 <div>
-                  <p className="text-sm text-neutral-400">Rota</p>
-                  <p className="font-mono text-sm text-white">
+                  <p className="text-sm text-muted-foreground">Rota</p>
+                  <p className="font-mono text-sm">
                     {selectedCheck.origin} → {selectedCheck.destination}
                   </p>
                 </div>
                 <div>
-                  <p className="text-sm text-neutral-400">Cliente</p>
-                  <p className="text-sm text-white">{selectedCheck.customer}</p>
+                  <p className="text-sm text-muted-foreground">Cliente</p>
+                  <p className="text-sm">{selectedCheck.customer}</p>
                 </div>
                 <div>
-                  <p className="text-sm text-neutral-400">Status</p>
+                  <p className="text-sm text-muted-foreground">Status</p>
                   {getResultBadge(selectedCheck.result)}
                 </div>
                 <div>
-                  <p className="text-sm text-neutral-400">Motivo</p>
-                  <p className="text-sm text-white">
+                  <p className="text-sm text-muted-foreground">Motivo</p>
+                  <p className="text-sm">
                     {selectedCheck.reason ||
                       (selectedCheck.result === "OK" ? "CNPJ e aeroporto compatíveis" : "CNPJ não compatível")}
                   </p>
@@ -998,43 +1048,43 @@ const CheckAwb = () => {
               </div>
 
               {selectedParsedData && (
-                <div className="border-t border-white/10 pt-4 mt-4">
-                  <h3 className="font-semibold mb-3 text-white">Dados Adicionais</h3>
+                <div className="border-t border-border/30 pt-4 mt-4">
+                  <h3 className="font-semibold mb-3">Dados Adicionais</h3>
                   <div className="grid grid-cols-2 gap-4 text-sm">
                     <div>
-                      <p className="text-neutral-400">Ref Othello</p>
-                      <p className="font-mono text-white">
+                      <p className="text-muted-foreground">Ref Othello</p>
+                      <p className="font-mono">
                         {selectedParsedData.mrn || "Referência não encontrada"}
                       </p>
                     </div>
                     <div>
-                      <p className="text-neutral-400">Transportadora</p>
-                      <p className="text-white">{selectedParsedData.carrier || "N/A"}</p>
+                      <p className="text-muted-foreground">Transportadora</p>
+                      <p>{selectedParsedData.carrier || "N/A"}</p>
                     </div>
                     <div>
-                      <p className="text-neutral-400">Remetente</p>
-                      <p className="text-white">{selectedParsedData.shipper || "N/A"}</p>
+                      <p className="text-muted-foreground">Remetente</p>
+                      <p>{selectedParsedData.shipper || "N/A"}</p>
                     </div>
                     <div>
-                      <p className="text-neutral-400">Destinatário</p>
-                      <p className="text-white">{selectedParsedData.consignee || "N/A"}</p>
+                      <p className="text-muted-foreground">Destinatário</p>
+                      <p>{selectedParsedData.consignee || "N/A"}</p>
                     </div>
                     {selectedParsedData.gross_weight_kg && (
                       <div>
-                        <p className="text-neutral-400">Peso Bruto</p>
-                        <p className="text-white">{selectedParsedData.gross_weight_kg} kg</p>
+                        <p className="text-muted-foreground">Peso Bruto</p>
+                        <p>{selectedParsedData.gross_weight_kg} kg</p>
                       </div>
                     )}
                     {selectedParsedData.chargeable_weight_kg && (
                       <div>
-                        <p className="text-neutral-400">Peso Taxável</p>
-                        <p className="text-white">{selectedParsedData.chargeable_weight_kg} kg</p>
+                        <p className="text-muted-foreground">Peso Taxável</p>
+                        <p>{selectedParsedData.chargeable_weight_kg} kg</p>
                       </div>
                     )}
                     {selectedEmailDespachante && (
                       <div className="col-span-2">
-                        <p className="text-neutral-400">E-mail Despachante</p>
-                        <p className="text-white">{selectedEmailDespachante}</p>
+                        <p className="text-muted-foreground">E-mail Despachante</p>
+                        <p>{selectedEmailDespachante}</p>
                       </div>
                     )}
                   </div>
@@ -1047,15 +1097,15 @@ const CheckAwb = () => {
 
       {/* CONFIRMAÇÃO DE EXCLUSÃO */}
       <AlertDialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
-        <AlertDialogContent className="bg-black/95 border border-white/10 text-white">
+        <AlertDialogContent className="bg-background border border-border/30">
           <AlertDialogHeader>
-            <AlertDialogTitle className="text-xl text-white">Confirmar Exclusão</AlertDialogTitle>
-            <AlertDialogDescription className="text-neutral-400">
+            <AlertDialogTitle className="text-xl">Confirmar Exclusão</AlertDialogTitle>
+            <AlertDialogDescription className="text-muted-foreground">
               Tem certeza que deseja excluir esta validação? Esta ação não pode ser desfeita.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel className="bg-white/10 text-white border-white/20 hover:bg-white/20">
+            <AlertDialogCancel className="bg-muted/20 border-border/30 hover:bg-muted/30">
               Cancelar
             </AlertDialogCancel>
             <AlertDialogAction onClick={handleDeleteConfirm} className="bg-rose-600 text-white hover:bg-rose-700">
