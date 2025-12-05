@@ -259,8 +259,7 @@ export const RuleMatrixManager = ({ userRole }: RuleMatrixManagerProps) => {
     <Collapsible open={isOpen} onOpenChange={setIsOpen} className="w-full">
       <div className="rounded-2xl border border-white/10 bg-[rgba(5,6,18,0.9)] overflow-hidden">
         {/* Header */}
-        <CollapsibleTrigger className="w-full flex items-center justify-between px-6 py-4 hover:bg-white/5 transition-colors">
-          <h3 className="text-lg font-semibold text-white">Matriz de Regras</h3>
+        <CollapsibleTrigger className="w-full flex items-center justify-end px-6 py-3 hover:bg-white/5 transition-colors">
           <ChevronUp className={`h-5 w-5 text-white/60 transition-transform ${isOpen ? "" : "rotate-180"}`} />
         </CollapsibleTrigger>
 
