@@ -1,14 +1,48 @@
-import { useState, useEffect, useCallback } from "react";
+import { useEffect, useState, useRef } from "react";
 import { useNavigate } from "react-router-dom";
-import { ArrowLeft, Upload, FileText, Check, X, AlertTriangle, Loader2, Search, Calendar, Trash2 } from "lucide-react";
+import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { Card, CardContent } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { useToast } from "@/hooks/use-toast";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { Search, RefreshCw, Filter as FilterIcon, UploadCloud, FileText, Trash2, TerminalSquare, Loader2, ChevronDown, ChevronUp, Plus, Database, ArrowLeft } from "lucide-react";
+import { toast } from "sonner";
+import { format } from "date-fns";
+import { RuleMatrixManager } from "@/components/RuleMatrixManager";
 import logoZ3us from "@/assets/logo-z3us.png";
 import dachserBg from "@/assets/dachser-background.jpg";
+
+interface AwbCheck {
+  id: string;
+  awb: string;
+  cnpj: string;
+  origin: string;
+  destination: string;
+  customer: "KLABIN" | "ZF";
+  result: "OK" | "ALERTA" | "BLOQUEIO";
+  reason: string | null;
+  rule_matrix_version: string;
+  created_at: string;
+  parsed_awb_id: string | null;
+}
+
+interface ParsedAwbData {
+  awb_number: string | null;
+  cnpj_detected: string | null;
+  origin_detected: string | null;
+  destination_detected: string | null;
+  shipper: string | null;
+  consignee: string | null;
+  carrier: string | null;
+  routing_legs: any;
+  gross_weight_kg: number | null;
+  chargeable_weight_kg: number | null;
+  mrn: string | null;
+}
 
 interface User {
   id: number;
@@ -17,75 +51,52 @@ interface User {
   is_admin: number;
 }
 
-interface ParsedAwbData {
-  awb_number: string | null;
-  cnpj: string | null;
-  origin_airport: string | null;
-  destination_airport: string | null;
-  shipper_name: string | null;
-  consignee_name: string | null;
-  customer: string | null;
-  delivery_address: string | null;
-  confidence: string;
-}
-
-interface AwbCheck {
-  id: number;
-  awb_number: string | null;
-  cnpj: string | null;
-  customer: string | null;
-  origin: string | null;
-  destination: string | null;
-  status: string;
-  validation_message: string | null;
-  rule_email?: string | null;
-  created_at: string;
-  username: string | null;
-  consignee?: string | null;
-}
-
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
 
 const CheckAwb = () => {
   const navigate = useNavigate();
-  const { toast } = useToast();
   const [user, setUser] = useState<User | null>(null);
-  
-  // Upload state
-  const [isDragging, setIsDragging] = useState(false);
-  const [uploadedFile, setUploadedFile] = useState<File | null>(null);
-  const [instructionFile, setInstructionFile] = useState<File | null>(null);
-  const [isParsing, setIsParsing] = useState(false);
-  const [parsedData, setParsedData] = useState<ParsedAwbData | null>(null);
-  const [isValidating, setIsValidating] = useState(false);
-  
-  // Results state
+  const [userRole, setUserRole] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
   const [checks, setChecks] = useState<AwbCheck[]>([]);
-  const [isLoadingChecks, setIsLoadingChecks] = useState(false);
-  const [statusFilter, setStatusFilter] = useState<string>("all");
-  const [dateFilter, setDateFilter] = useState<string>("");
-  const [searchFilter, setSearchFilter] = useState<string>("");
-  
-  // Detail modal
+  const [searchTerm, setSearchTerm] = useState("");
+  const [statusFilter, setStatusFilter] = useState("all");
+  const [periodFilter, setPeriodFilter] = useState("7");
+
+  // Modal states
+  const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
+  const [isDetailsModalOpen, setIsDetailsModalOpen] = useState(false);
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [selectedCheck, setSelectedCheck] = useState<AwbCheck | null>(null);
+  const [selectedParsedData, setSelectedParsedData] = useState<ParsedAwbData | null>(null);
+  const [selectedEmailDespachante, setSelectedEmailDespachante] = useState<string | null>(null);
+  const [checkToDelete, setCheckToDelete] = useState<string | null>(null);
+
+  // Upload states
+  const [isUploading, setIsUploading] = useState(false);
+  const [isDragging, setIsDragging] = useState(false);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [isExporting, setIsExporting] = useState(false);
+
+  // Matrix panel state
+  const [isMatrixOpen, setIsMatrixOpen] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     const storedUser = localStorage.getItem("user");
     if (storedUser) {
-      setUser(JSON.parse(storedUser));
+      const parsedUser = JSON.parse(storedUser);
+      setUser(parsedUser);
+      setUserRole(parsedUser.is_admin === 1 ? "ADMIN" : "OPERACAO");
+      fetchChecks();
     } else {
       navigate("/");
     }
+    setLoading(false);
   }, [navigate]);
 
-  useEffect(() => {
-    if (user) {
-      fetchChecks();
-    }
-  }, [user]);
-
   const fetchChecks = async () => {
-    setIsLoadingChecks(true);
+    setIsRefreshing(true);
     try {
       const response = await fetch(`${SUPABASE_URL}/functions/v1/mariadb-proxy`, {
         method: 'POST',
@@ -94,44 +105,147 @@ const CheckAwb = () => {
       });
       const data = await response.json();
       if (data.success) {
-        setChecks(data.checks || []);
+        // Map MariaDB fields to expected interface
+        const mappedChecks = (data.checks || []).map((check: any) => ({
+          id: check.id,
+          awb: check.awb_number || 'N/A',
+          cnpj: check.cnpj || 'N/A',
+          origin: check.origin || 'N/A',
+          destination: check.destination || 'N/A',
+          customer: check.customer || 'KLABIN',
+          result: check.status === 'VALID' ? 'OK' : 'BLOQUEIO',
+          reason: check.validation_message,
+          rule_matrix_version: '1.0',
+          created_at: check.created_at,
+          parsed_awb_id: check.parsed_awb_id,
+        }));
+        setChecks(mappedChecks);
       }
     } catch (error) {
       console.error('Error fetching checks:', error);
     } finally {
-      setIsLoadingChecks(false);
+      setIsRefreshing(false);
     }
   };
 
-  const handleDragOver = useCallback((e: React.DragEvent) => {
-    e.preventDefault();
-    setIsDragging(true);
-  }, []);
-
-  const handleDragLeave = useCallback((e: React.DragEvent) => {
-    e.preventDefault();
-    setIsDragging(false);
-  }, []);
-
-  const handleDrop = useCallback((e: React.DragEvent) => {
-    e.preventDefault();
-    setIsDragging(false);
-    const files = Array.from(e.dataTransfer.files);
-    if (files.length > 0) {
-      setUploadedFile(files[0]);
-      setParsedData(null);
-    }
-  }, []);
-
-  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>, isInstruction = false) => {
-    const files = e.target.files;
-    if (files && files.length > 0) {
-      if (isInstruction) {
-        setInstructionFile(files[0]);
-      } else {
-        setUploadedFile(files[0]);
-        setParsedData(null);
+  const handleViewDetails = async (check: AwbCheck) => {
+    setSelectedCheck(check);
+    setSelectedEmailDespachante(null);
+    setSelectedParsedData(null);
+    
+    if (check.parsed_awb_id) {
+      try {
+        const response = await fetch(`${SUPABASE_URL}/functions/v1/mariadb-proxy`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ 
+            action: 'get_parsed_awb',
+            parsedAwbId: check.parsed_awb_id 
+          }),
+        });
+        const data = await response.json();
+        if (data.success && data.parsedAwb) {
+          setSelectedParsedData({
+            awb_number: data.parsedAwb.awb_number,
+            cnpj_detected: data.parsedAwb.cnpj,
+            origin_detected: data.parsedAwb.origin,
+            destination_detected: data.parsedAwb.destination,
+            shipper: data.parsedAwb.shipper,
+            consignee: data.parsedAwb.consignee,
+            carrier: data.parsedAwb.carrier,
+            routing_legs: null,
+            gross_weight_kg: null,
+            chargeable_weight_kg: null,
+            mrn: null,
+          });
+        }
+      } catch (error) {
+        console.error("Error fetching parsed data:", error);
       }
+    }
+    setIsDetailsModalOpen(true);
+  };
+
+  const handleDeleteClick = (id: string) => {
+    setCheckToDelete(id);
+    setIsDeleteDialogOpen(true);
+  };
+
+  const handleDeleteConfirm = async () => {
+    if (!checkToDelete) return;
+    try {
+      const response = await fetch(`${SUPABASE_URL}/functions/v1/mariadb-proxy`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          action: 'delete_awb_check',
+          checkId: checkToDelete 
+        }),
+      });
+      const data = await response.json();
+      if (data.success) {
+        toast.success("Validação excluída com sucesso");
+        fetchChecks();
+      }
+    } catch (error: any) {
+      console.error("Erro ao excluir:", error);
+      toast.error("Erro ao excluir validação");
+    } finally {
+      setIsDeleteDialogOpen(false);
+      setCheckToDelete(null);
+    }
+  };
+
+  const handleExportToMariaDB = async () => {
+    setIsExporting(true);
+    try {
+      toast.info("Iniciando exportação para MariaDB...");
+      const response = await fetch(`${SUPABASE_URL}/functions/v1/mariadb-proxy`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'export_data' }),
+      });
+      const data = await response.json();
+      if (data.success) {
+        toast.success(data.message || "Exportação concluída");
+      } else {
+        throw new Error(data.error || "Erro desconhecido");
+      }
+    } catch (error: any) {
+      console.error("Export error:", error);
+      toast.error(`Erro na exportação: ${error.message}`);
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
+  const handleFilesUpload = async (files: File[]) => {
+    if (files.length === 0) return;
+
+    const validFiles = files.filter(f => f.type === "application/pdf" || f.type.includes("image"));
+    if (validFiles.length === 0) {
+      toast.error("Por favor, selecione arquivos PDF ou imagem");
+      return;
+    }
+    setIsUploading(true);
+    try {
+      if (!user) {
+        setIsUploading(false);
+        return;
+      }
+
+      if (validFiles.length >= 2) {
+        await processMultipleFiles(validFiles, user.id);
+      } else {
+        await processSingleFile(validFiles[0], user.id);
+      }
+      setIsUploadModalOpen(false);
+      fetchChecks();
+    } catch (error: any) {
+      console.error("Upload error:", error);
+      toast.error(error.message || "Erro ao processar documento(s)");
+    } finally {
+      setIsUploading(false);
     }
   };
 
@@ -148,13 +262,42 @@ const CheckAwb = () => {
     });
   };
 
-  const parseDocument = async () => {
-    if (!uploadedFile) return;
+  const processSingleFile = async (file: File, userId: number) => {
+    const base64 = await fileToBase64(file);
+    const fileType = file.type.includes('pdf') ? 'pdf' : 'image';
 
-    setIsParsing(true);
-    try {
-      const base64 = await fileToBase64(uploadedFile);
-      const fileType = uploadedFile.type.includes('pdf') ? 'pdf' : 'image';
+    const response = await fetch(`${SUPABASE_URL}/functions/v1/parse-awb`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        file_base64: base64,
+        file_type: fileType,
+        document_type: 'house_awb',
+      }),
+    });
+
+    const parsedData = await response.json();
+    if (!parsedData.success) {
+      throw new Error(parsedData.error || "Erro ao extrair dados do documento");
+    }
+
+    await processValidation(parsedData.data, userId);
+    toast.success("Documento processado com sucesso!");
+  };
+
+  const processMultipleFiles = async (files: File[], userId: number) => {
+    toast.info("Processando arquivos...");
+
+    const parsedResults: Array<{
+      file: File;
+      parsed: any;
+      isLikelyInstruction: boolean;
+      cnpjSuffixPattern: string | null;
+    }> = [];
+
+    for (const file of files) {
+      const base64 = await fileToBase64(file);
+      const fileType = file.type.includes('pdf') ? 'pdf' : 'image';
 
       const response = await fetch(`${SUPABASE_URL}/functions/v1/parse-awb`, {
         method: 'POST',
@@ -166,40 +309,85 @@ const CheckAwb = () => {
         }),
       });
 
-      const data = await response.json();
-      if (data.success) {
-        setParsedData(data.data);
-        toast({
-          title: "Documento processado",
-          description: `Confiança: ${data.data.confidence}`,
-        });
-      } else {
-        throw new Error(data.error || 'Erro ao processar documento');
+      const parsed = await response.json();
+      const data = parsed.data || parsed;
+
+      const references = data?.references || [];
+      let cnpjSuffixPattern: string | null = null;
+      for (const ref of references) {
+        const match = ref.match(/CNPJ\s*(\d{2})-(\d{2})/i) || ref.match(/^(\d{2})-(\d{2})$/);
+        if (match) {
+          cnpjSuffixPattern = match[1] + match[2];
+          break;
+        }
       }
-    } catch (error) {
-      console.error('Parse error:', error);
-      toast({
-        variant: "destructive",
-        title: "Erro ao processar",
-        description: error instanceof Error ? error.message : 'Erro desconhecido',
+
+      const cnpj = data?.cnpj?.replace(/\D/g, "") || "";
+      const isLikelyFabricatedCnpj = cnpj.length === 14 && (
+        cnpj.startsWith("0176") || 
+        cnpj.startsWith("0001") || 
+        /^0\d{3}0+\d{2,4}$/.test(cnpj)
+      );
+      const isLikelyInstruction = !!cnpjSuffixPattern || isLikelyFabricatedCnpj;
+      
+      parsedResults.push({
+        file,
+        parsed: data,
+        isLikelyInstruction,
+        cnpjSuffixPattern
       });
-    } finally {
-      setIsParsing(false);
     }
+
+    const instructionResult = parsedResults.find(r => r.isLikelyInstruction);
+    const houseResult = parsedResults.find(r => {
+      const cnpj = r.parsed?.cnpj?.replace(/\D/g, "") || "";
+      return cnpj.length === 14 && r.parsed?.awb_number && !r.isLikelyInstruction;
+    }) || parsedResults.find(r => {
+      const cnpj = r.parsed?.cnpj?.replace(/\D/g, "") || "";
+      return cnpj.length === 14 && r.parsed?.awb_number && r !== instructionResult;
+    });
+
+    if (!houseResult) {
+      throw new Error("Nenhum documento identificado como House AWB com CNPJ válido.");
+    }
+
+    const houseParsed = houseResult.parsed;
+    toast.info(`House AWB identificado: ${houseResult.file.name}`);
+
+    let finalCnpj = houseParsed.cnpj;
+
+    if (instructionResult) {
+      toast.info(`Instrução identificada: ${instructionResult.file.name}`);
+      let cnpjSuffix: string | null = instructionResult.cnpjSuffixPattern;
+
+      if (cnpjSuffix && houseParsed.cnpj) {
+        const baseCnpj = houseParsed.cnpj.replace(/\D/g, "");
+        if (cnpjSuffix.length === 4) {
+          finalCnpj = baseCnpj.substring(0, 8) + cnpjSuffix + baseCnpj.substring(12, 14);
+          toast.info(`CNPJ ajustado conforme instrução: filial ${cnpjSuffix}`);
+        }
+      }
+    }
+
+    const composedParsedData = {
+      ...houseParsed,
+      cnpj: finalCnpj,
+      instructionUsed: !!instructionResult
+    };
+
+    await processValidation(composedParsedData, userId);
+    toast.success("Documentos processados com sucesso!");
   };
 
-  const validateAwb = async () => {
-    if (!parsedData || !user) return;
-
-    setIsValidating(true);
+  const processValidation = async (parsedData: any, userId: number) => {
     try {
-      // First, create a parsed_awb record with the extracted data
+      // Create parsed_awb record
       const parsedResponse = await fetch(`${SUPABASE_URL}/functions/v1/mariadb-proxy`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           action: 'create_parsed_awb',
-          documentId: null, // No document storage for now
+          documentId: null,
           awbNumber: parsedData.awb_number,
           cnpj: parsedData.cnpj,
           customer: parsedData.customer,
@@ -242,12 +430,12 @@ const CheckAwb = () => {
       }
 
       // Create AWB check record
-      const checkResponse = await fetch(`${SUPABASE_URL}/functions/v1/mariadb-proxy`, {
+      await fetch(`${SUPABASE_URL}/functions/v1/mariadb-proxy`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           action: 'create_awb_check',
-          userId: user.id,
+          userId: userId,
           parsedDataId: parsedDataId,
           ruleRowId: ruleRowId,
           status,
@@ -255,520 +443,472 @@ const CheckAwb = () => {
         }),
       });
 
-      const checkData = await checkResponse.json();
-      
-      if (checkData.success) {
-        toast({
-          title: status === 'VALID' ? "Validação OK" : "Validação Falhou",
-          description: validationMessage,
-          variant: status === 'VALID' ? "default" : "destructive",
-        });
-        
-        // Refresh checks list
-        fetchChecks();
-        
-        // Reset upload
-        setUploadedFile(null);
-        setInstructionFile(null);
-        setParsedData(null);
-      }
     } catch (error) {
-      console.error('Validation error:', error);
-      toast({
-        variant: "destructive",
-        title: "Erro na validação",
-        description: error instanceof Error ? error.message : 'Erro desconhecido',
-      });
-    } finally {
-      setIsValidating(false);
+      console.error("Erro na validação:", error);
+      throw error;
     }
   };
 
-  const clearUpload = () => {
-    setUploadedFile(null);
-    setInstructionFile(null);
-    setParsedData(null);
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragging(true);
+  };
+
+  const handleDragLeave = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragging(false);
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragging(false);
+    const files = Array.from(e.dataTransfer.files);
+    if (files.length > 0) handleFilesUpload(files);
+  };
+
+  const handleFileInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files ? Array.from(e.target.files) : [];
+    if (files.length > 0) handleFilesUpload(files);
   };
 
   const filteredChecks = checks.filter(check => {
-    if (statusFilter !== "all" && check.status.toLowerCase() !== statusFilter) return false;
-    if (dateFilter && !check.created_at.startsWith(dateFilter)) return false;
-    if (searchFilter) {
-      const search = searchFilter.toLowerCase();
-      return (
-        check.awb_number?.toLowerCase().includes(search) ||
-        check.cnpj?.toLowerCase().includes(search) ||
-        check.customer?.toLowerCase().includes(search)
-      );
-    }
-    return true;
+    const matchesSearch = check.awb.toLowerCase().includes(searchTerm.toLowerCase()) || 
+      check.cnpj.includes(searchTerm) || 
+      check.customer.toLowerCase().includes(searchTerm.toLowerCase());
+    const matchesStatus = statusFilter === "all" || check.result === statusFilter;
+    const daysAgo = parseInt(periodFilter);
+    const checkDate = new Date(check.created_at);
+    const cutoffDate = new Date();
+    cutoffDate.setDate(cutoffDate.getDate() - daysAgo);
+    const matchesPeriod = checkDate >= cutoffDate;
+    return matchesSearch && matchesStatus && matchesPeriod;
   });
 
-  const getStatusIcon = (status: string) => {
-    const s = status.toLowerCase();
-    switch (s) {
-      case 'valid':
-        return <Check className="w-4 h-4 text-green-500" />;
-      case 'invalid':
-        return <X className="w-4 h-4 text-destructive" />;
-      default:
-        return <AlertTriangle className="w-4 h-4 text-warning" />;
+  const getResultBadge = (result: string) => {
+    if (result === "OK") {
+      return (
+        <Badge className="bg-emerald-500/15 text-emerald-300 border-emerald-500/40 px-3 py-1 rounded-full">
+          COMPATÍVEL
+        </Badge>
+      );
     }
+    return (
+      <Badge className="bg-rose-500/15 text-rose-300 border-rose-500/40 px-3 py-1 rounded-full">
+        INCOMPATÍVEL
+      </Badge>
+    );
   };
 
-  const getStatusClass = (status: string) => {
-    const s = status.toLowerCase();
-    switch (s) {
-      case 'valid':
-        return 'bg-green-500/20 text-green-400 border-green-500/30';
-      case 'invalid':
-        return 'bg-destructive/20 text-destructive border-destructive/30';
-      default:
-        return 'bg-warning/20 text-warning border-warning/30';
-    }
-  };
-
-  const formatDate = (dateStr: string) => {
-    return new Date(dateStr).toLocaleString('pt-BR');
-  };
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-black">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      </div>
+    );
+  }
 
   return (
-    <div className="min-h-screen relative overflow-x-hidden">
-      {/* Background */}
-      <div className="fixed inset-0 z-0">
-        <div 
-          className="absolute inset-0"
-          style={{
-            backgroundImage: `url(${dachserBg})`,
-            backgroundSize: 'cover',
-            backgroundPosition: 'center',
-          }}
-        />
-        <div 
-          className="absolute inset-0"
-          style={{
-            background: 'linear-gradient(120deg, rgba(4, 17, 45, 0.92), rgba(26, 93, 173, 0.55))',
-          }}
-        />
-        <div 
-          className="absolute inset-0"
-          style={{
-            background: `
-              radial-gradient(ellipse at 20% 20%, rgba(245, 184, 67, 0.12) 0%, transparent 50%),
-              radial-gradient(ellipse at 80% 80%, rgba(245, 184, 67, 0.08) 0%, transparent 50%)
-            `
-          }}
-        />
-        
-        {/* Animated Lines */}
-        <div className="absolute inset-0 opacity-20">
-          {[...Array(6)].map((_, i) => (
-            <div
-              key={`line-${i}`}
-              className="absolute h-full w-px bg-gradient-to-b from-primary/70 to-primary/10"
-              style={{
-                left: `${15 + i * 14}%`,
-                transform: `skewX(${-20 + i * 8}deg)`,
-              }}
-            />
-          ))}
-        </div>
-
-        {/* Floating Particles */}
-        {[...Array(15)].map((_, i) => (
-          <div
-            key={`particle-${i}`}
-            className="absolute w-1 h-1 rounded-full bg-primary/40 animate-float"
-            style={{
-              left: `${Math.random() * 100}%`,
-              top: `${Math.random() * 100}%`,
-              animationDelay: `${Math.random() * 5}s`,
-              animationDuration: `${4 + Math.random() * 4}s`,
-            }}
-          />
-        ))}
-      </div>
-
-      {/* Header */}
-      <header className="fixed top-0 left-0 right-0 z-50 flex justify-between items-center px-4 md:px-6 py-3 bg-background/30 backdrop-blur-sm border-b border-border/30">
-        <div className="flex items-center gap-3">
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={() => navigate('/dashboard')}
-            className="text-primary hover:text-primary hover:bg-primary/10"
-          >
-            <ArrowLeft size={20} />
-          </Button>
-          <img 
-            src={logoZ3us} 
-            alt="Z3US.AI" 
-            className="h-8 drop-shadow-[0_0_8px_rgba(0,0,0,0.9)]"
-          />
-          <span className="text-muted-foreground text-xs tracking-[0.2em] uppercase hidden sm:block">
-            Check AWB x CNPJ
-          </span>
-        </div>
-
-        <div className="px-4 py-1.5 rounded-full bg-background/65 border border-border/30 text-muted-foreground text-sm">
-          @{user?.username || "usuario"}
-        </div>
-      </header>
-
-      {/* Main Content */}
-      <main className="relative z-10 pt-24 pb-12 px-4 md:px-8 max-w-7xl mx-auto">
-        <h1 className="text-2xl md:text-3xl font-bold text-foreground mb-6">
-          Check AWB x CNPJ
-        </h1>
-
-        {/* Upload Section */}
-        <div 
-          className="rounded-2xl p-6 mb-8"
-          style={{
-            background: 'rgba(4, 10, 30, 0.75)',
-            backdropFilter: 'blur(18px)',
-            border: '1px solid rgba(255,255,255,0.08)',
-          }}
-        >
-          <h2 className="text-lg font-semibold text-foreground mb-4 flex items-center gap-2">
-            <Upload size={20} className="text-primary" />
-            Upload de Documento
-          </h2>
-
-          <div className="grid md:grid-cols-2 gap-6">
-            {/* Main Document Upload */}
-            <div>
-              <label className="text-sm text-muted-foreground mb-2 block">House AWB (PDF ou Imagem)</label>
-              <div
-                onDragOver={handleDragOver}
-                onDragLeave={handleDragLeave}
-                onDrop={handleDrop}
-                className={`
-                  border-2 border-dashed rounded-xl p-8 text-center transition-all cursor-pointer
-                  ${isDragging 
-                    ? 'border-primary bg-primary/10' 
-                    : 'border-border/50 hover:border-primary/50'
-                  }
-                `}
-                onClick={() => document.getElementById('file-input')?.click()}
+    <div 
+      className="min-h-screen text-white" 
+      style={{
+        background: `linear-gradient(120deg, rgba(4, 17, 45, 0.92), rgba(26, 93, 173, 0.55)), url(${dachserBg}) center/cover no-repeat`,
+        zIndex: -2
+      }}
+    >
+      {/* overlay para leitura */}
+      <div className="min-h-screen bg-black/80 backdrop-blur-sm">
+        <div className="max-w-6xl mx-auto px-6 py-6 space-y-6">
+          {/* HEADER */}
+          <div className="flex items-center justify-between gap-6">
+            <div className="flex items-center gap-4">
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => navigate('/dashboard')}
+                className="text-primary hover:text-primary hover:bg-primary/10"
               >
-                <input
-                  id="file-input"
-                  type="file"
-                  accept=".pdf,.png,.jpg,.jpeg,.gif,.webp"
-                  onChange={(e) => handleFileSelect(e)}
-                  className="hidden"
-                />
-                {uploadedFile ? (
-                  <div className="flex items-center justify-center gap-3">
-                    <FileText className="text-primary" size={24} />
-                    <span className="text-foreground">{uploadedFile.name}</span>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      onClick={(e) => { e.stopPropagation(); clearUpload(); }}
-                      className="text-destructive hover:text-destructive"
-                    >
-                      <Trash2 size={18} />
-                    </Button>
-                  </div>
-                ) : (
-                  <>
-                    <Upload className="mx-auto text-muted-foreground mb-2" size={32} />
-                    <p className="text-muted-foreground">
-                      Arraste o arquivo ou clique para selecionar
-                    </p>
-                  </>
-                )}
+                <ArrowLeft size={20} />
+              </Button>
+              <img 
+                src={logoZ3us} 
+                alt="Z3US.AI" 
+                className="h-10 drop-shadow-[0_0_8px_rgba(0,0,0,0.9)]"
+              />
+              <div className="flex flex-col gap-1">
+                <div className="text-[1.7rem] tracking-[0.22em] uppercase">DACHSER</div>
+                <div className="text-sm text-neutral-100">Intelligent Logistics – Check AWB x CNPJ</div>
+                <div className="flex gap-2 mt-2">
+                  <span className="w-1.5 h-1.5 rounded-full bg-primary shadow-[0_0_10px_rgba(251,191,36,0.9)]" />
+                  <span className="w-1.5 h-1.5 rounded-full bg-primary/70" />
+                  <span className="w-1.5 h-1.5 rounded-full bg-primary/40" />
+                </div>
               </div>
             </div>
 
-            {/* Instruction Document (Optional - for ZF) */}
-            <div>
-              <label className="text-sm text-muted-foreground mb-2 block">
-                Instrução ZF (Opcional)
-              </label>
-              <div
-                className="border-2 border-dashed rounded-xl p-8 text-center border-border/50 hover:border-primary/50 transition-all cursor-pointer"
-                onClick={() => document.getElementById('instruction-input')?.click()}
-              >
-                <input
-                  id="instruction-input"
-                  type="file"
-                  accept=".pdf,.png,.jpg,.jpeg,.gif,.webp"
-                  onChange={(e) => handleFileSelect(e, true)}
-                  className="hidden"
-                />
-                {instructionFile ? (
-                  <div className="flex items-center justify-center gap-3">
-                    <FileText className="text-primary" size={24} />
-                    <span className="text-foreground">{instructionFile.name}</span>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      onClick={(e) => { e.stopPropagation(); setInstructionFile(null); }}
-                      className="text-destructive hover:text-destructive"
-                    >
-                      <Trash2 size={18} />
-                    </Button>
-                  </div>
-                ) : (
-                  <>
-                    <FileText className="mx-auto text-muted-foreground mb-2" size={32} />
-                    <p className="text-muted-foreground text-sm">
-                      Para CNPJ composto ZF
-                    </p>
-                  </>
-                )}
+            <div className="flex items-center gap-3 text-sm text-neutral-300">
+              <div className="px-4 py-1 rounded-full bg-black/70 border border-white/12">
+                @{user?.username ?? "usuario"}
               </div>
+
+              {userRole === "ADMIN" && (
+                <>
+                  <button 
+                    type="button" 
+                    onClick={handleExportToMariaDB} 
+                    disabled={isExporting}
+                    className="w-8 h-8 rounded-full border border-white/18 bg-black/70 flex items-center justify-center hover:bg-black hover:border-primary/80 transition disabled:opacity-50" 
+                    title="Exportar para MariaDB"
+                  >
+                    {isExporting ? (
+                      <Loader2 className="w-4 h-4 text-primary animate-spin" />
+                    ) : (
+                      <Database className="w-4 h-4 text-primary" />
+                    )}
+                  </button>
+                  <button 
+                    type="button" 
+                    onClick={() => navigate("/logs")} 
+                    className="w-8 h-8 rounded-full border border-white/18 bg-black/70 flex items-center justify-center hover:bg-black hover:border-primary/80 transition" 
+                    title="Logs do sistema"
+                  >
+                    <TerminalSquare className="w-4 h-4 text-primary" />
+                  </button>
+                </>
+              )}
             </div>
           </div>
 
-          {/* Action Buttons */}
-          <div className="flex gap-4 mt-6">
-            <Button
-              onClick={parseDocument}
-              disabled={!uploadedFile || isParsing}
-              className="bg-primary text-primary-foreground hover:bg-primary/90"
-            >
-              {isParsing ? (
-                <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Processando...
-                </>
-              ) : (
-                <>
-                  <FileText className="mr-2 h-4 w-4" />
-                  Extrair Dados
-                </>
-              )}
-            </Button>
+          {/* CARD DE BUSCA + FILTROS */}
+          <Card className="bg-black/86 border border-white/10 rounded-2xl shadow-[0_18px_40px_rgba(0,0,0,0.9)]">
+            <CardContent className="pt-5 pb-4 space-y-4">
+              {/* busca */}
+              <div className="relative">
+                <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-neutral-400" />
+                <input 
+                  type="text" 
+                  placeholder="Buscar por AWB, CNPJ ou cliente" 
+                  value={searchTerm} 
+                  onChange={e => setSearchTerm(e.target.value)} 
+                  style={{ backgroundColor: 'rgba(0, 0, 0, 0.86)' }}
+                  className="h-11 w-full pl-11 pr-4 rounded-full border border-white/12 text-sm text-white placeholder:text-neutral-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-black" 
+                />
+              </div>
 
-            <Button
-              onClick={validateAwb}
-              disabled={!parsedData || isValidating}
-              variant="outline"
-              className="border-primary text-primary hover:bg-primary/10"
-            >
-              {isValidating ? (
-                <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Validando...
-                </>
-              ) : (
-                <>
-                  <Check className="mr-2 h-4 w-4" />
-                  Validar CNPJ
-                </>
-              )}
-            </Button>
-          </div>
+              {/* linha filtros */}
+              <div className="flex flex-wrap items-center gap-4 justify-between">
+                <div className="flex flex-wrap items-center gap-4">
+                  {/* Status */}
+                  <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 px-3 py-1 rounded-full bg-black/86 border border-white/12">
+                      <FilterIcon className="h-3.5 w-3.5 text-primary" />
+                      <span className="text-[10px] tracking-[0.22em] uppercase text-neutral-400">Status</span>
+                    </div>
+                    <Select value={statusFilter} onValueChange={setStatusFilter}>
+                      <SelectTrigger className="h-9 w-[150px] rounded-full bg-black/86 border border-white/14 text-xs">
+                        <SelectValue placeholder="Todos" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">Todos</SelectItem>
+                        <SelectItem value="OK">Compatível</SelectItem>
+                        <SelectItem value="BLOQUEIO">Incompatível</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
 
-          {/* Parsed Data Preview */}
-          {parsedData && (
-            <div className="mt-6 p-4 rounded-xl bg-background/50 border border-border/30">
-              <h3 className="text-sm font-semibold text-foreground mb-3">Dados Extraídos</h3>
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
-                <div>
-                  <span className="text-muted-foreground">AWB:</span>
-                  <p className="text-foreground font-medium">{parsedData.awb_number || '-'}</p>
+                  {/* Período */}
+                  <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 px-3 py-1 rounded-full bg-black/86 border border-white/12">
+                      <span className="w-1.5 h-1.5 rounded-full bg-primary" />
+                      <span className="text-[10px] tracking-[0.22em] uppercase text-neutral-400">Período</span>
+                    </div>
+                    <Select value={periodFilter} onValueChange={setPeriodFilter}>
+                      <SelectTrigger className="h-9 w-[150px] rounded-full bg-black/86 border border-white/14 text-xs">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="7">Últimos 7 dias</SelectItem>
+                        <SelectItem value="30">Últimos 30 dias</SelectItem>
+                        <SelectItem value="90">Últimos 90 dias</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <Button 
+                    onClick={fetchChecks} 
+                    disabled={isRefreshing} 
+                    variant="outline" 
+                    className="h-9 rounded-full border-white/24 bg-black/86 text-xs px-4 hover:border-primary/80 hover:bg-black disabled:opacity-50"
+                  >
+                    <RefreshCw className={`mr-2 h-4 w-4 ${isRefreshing ? 'animate-spin' : ''}`} />
+                    Atualizar
+                  </Button>
                 </div>
+
+                {/* Nova Validação */}
+                <Button 
+                  onClick={() => setIsUploadModalOpen(true)} 
+                  className="h-10 rounded-full px-5 bg-primary text-black font-semibold text-sm shadow-[0_0_22px_rgba(251,191,36,0.6)] hover:bg-primary/90"
+                >
+                  <Plus className="mr-2 h-5 w-5" />
+                  Nova Validação
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* CARD HISTÓRICO */}
+          <Card className="bg-black/86 border border-white/10 rounded-2xl shadow-[0_18px_40px_rgba(0,0,0,0.9)]">
+            <CardContent className="pt-5 pb-4">
+              <div className="flex items-center justify-between mb-4">
                 <div>
-                  <span className="text-muted-foreground">CNPJ:</span>
-                  <p className="text-foreground font-medium">{parsedData.cnpj || '-'}</p>
+                  <div className="text-xs tracking-[0.22em] uppercase text-neutral-400">Resumo de Validações</div>
+                  <div className="text-[11px] text-neutral-400 mt-1">
+                    Consultas recentes de AWB/HAWB por status e cliente
+                  </div>
                 </div>
-                <div>
-                  <span className="text-muted-foreground">Cliente:</span>
-                  <p className="text-foreground font-medium">{parsedData.customer || '-'}</p>
-                </div>
-                <div>
-                  <span className="text-muted-foreground">Confiança:</span>
-                  <p className={`font-medium ${
-                    parsedData.confidence === 'high' ? 'text-green-400' :
-                    parsedData.confidence === 'medium' ? 'text-warning' : 'text-destructive'
-                  }`}>
-                    {parsedData.confidence}
-                  </p>
-                </div>
-                <div>
-                  <span className="text-muted-foreground">Origem:</span>
-                  <p className="text-foreground font-medium">{parsedData.origin_airport || '-'}</p>
-                </div>
-                <div>
-                  <span className="text-muted-foreground">Destino:</span>
-                  <p className="text-foreground font-medium">{parsedData.destination_airport || '-'}</p>
-                </div>
-                <div className="col-span-2">
-                  <span className="text-muted-foreground">Endereço:</span>
-                  <p className="text-foreground font-medium truncate">{parsedData.delivery_address || '-'}</p>
+                <div className="text-xs text-neutral-400">
+                  Total: <span className="text-primary font-semibold">{filteredChecks.length}</span> registros
                 </div>
               </div>
-            </div>
+
+              <div className="rounded-xl border border-white/8 bg-black/86 overflow-hidden">
+                <Table>
+                  <TableHeader>
+                    <TableRow className="border-b border-white/10 bg-black/86">
+                      <TableHead className="text-xs uppercase tracking-[0.18em] text-neutral-400">AWB</TableHead>
+                      <TableHead className="text-xs uppercase tracking-[0.18em] text-neutral-400">CNPJ</TableHead>
+                      <TableHead className="text-xs uppercase tracking-[0.18em] text-neutral-400">Rota</TableHead>
+                      <TableHead className="text-xs uppercase tracking-[0.18em] text-neutral-400">Cliente</TableHead>
+                      <TableHead className="text-xs uppercase tracking-[0.18em] text-neutral-400">Status</TableHead>
+                      <TableHead className="text-xs uppercase tracking-[0.18em] text-neutral-400">Motivo</TableHead>
+                      <TableHead className="text-xs uppercase tracking-[0.18em] text-neutral-400">Data</TableHead>
+                      <TableHead className="text-right text-xs uppercase tracking-[0.18em] text-neutral-400">Ações</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {filteredChecks.map(check => (
+                      <TableRow key={check.id} className="border-b border-white/5 hover:bg-white/5">
+                        <TableCell className="font-mono text-xs">{check.awb}</TableCell>
+                        <TableCell className="font-mono text-xs">{check.cnpj}</TableCell>
+                        <TableCell className="font-mono text-xs">
+                          {check.origin} → {check.destination}
+                        </TableCell>
+                        <TableCell className="text-xs">{check.customer}</TableCell>
+                        <TableCell className="text-xs">{getResultBadge(check.result)}</TableCell>
+                        <TableCell className="max-w-xs text-xs truncate" title={check.reason || ""}>
+                          {check.reason || (check.result === "OK" ? "CNPJ e aeroporto compatíveis" : "CNPJ não compatível")}
+                        </TableCell>
+                        <TableCell className="text-xs">
+                          {format(new Date(check.created_at), "dd/MM/yyyy HH:mm")}
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <div className="flex justify-end gap-1.5">
+                            <Button 
+                              variant="ghost" 
+                              size="icon" 
+                              className="h-8 w-8 text-neutral-300 hover:bg-white/10" 
+                              onClick={() => handleViewDetails(check)}
+                            >
+                              <FileText className="h-4 w-4" />
+                            </Button>
+                            <Button 
+                              variant="ghost" 
+                              size="icon" 
+                              className="h-8 w-8 text-rose-400 hover:bg-rose-500/10" 
+                              onClick={() => handleDeleteClick(check.id)}
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+
+                    {filteredChecks.length === 0 && (
+                      <TableRow>
+                        <TableCell colSpan={8} className="text-center py-6 text-sm text-neutral-400">
+                          Nenhuma validação encontrada para os filtros selecionados.
+                        </TableCell>
+                      </TableRow>
+                    )}
+                  </TableBody>
+                </Table>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Matriz de Regras (ADMIN) */}
+          {userRole === "ADMIN" && (
+            <Collapsible open={isMatrixOpen} onOpenChange={setIsMatrixOpen}>
+              <Card className="bg-black/86 border border-white/10 rounded-2xl">
+                <CollapsibleTrigger asChild>
+                  <Button variant="ghost" className="w-full flex items-center justify-between px-6 py-4 hover:bg-white/5">
+                    <span className="text-base font-semibold">Matriz de Regras</span>
+                    {isMatrixOpen ? <ChevronUp className="h-5 w-5" /> : <ChevronDown className="h-5 w-5" />}
+                  </Button>
+                </CollapsibleTrigger>
+                <CollapsibleContent>
+                  <div className="px-6 pb-6">
+                    <RuleMatrixManager userRole={userRole} />
+                  </div>
+                </CollapsibleContent>
+              </Card>
+            </Collapsible>
           )}
         </div>
+      </div>
 
-        {/* Results Section */}
-        <div 
-          className="rounded-2xl p-6"
-          style={{
-            background: 'rgba(4, 10, 30, 0.75)',
-            backdropFilter: 'blur(18px)',
-            border: '1px solid rgba(255,255,255,0.08)',
-          }}
-        >
-          <h2 className="text-lg font-semibold text-foreground mb-4">Histórico de Validações</h2>
-
-          {/* Filters */}
-          <div className="flex flex-wrap gap-4 mb-6">
-            <div className="relative flex-1 min-w-[200px]">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" size={18} />
-              <Input
-                placeholder="Buscar AWB, CNPJ ou Cliente..."
-                value={searchFilter}
-                onChange={(e) => setSearchFilter(e.target.value)}
-                className="pl-10 bg-background/50 border-border/50"
-              />
-            </div>
-            
-            <Select value={statusFilter} onValueChange={setStatusFilter}>
-              <SelectTrigger className="w-[150px] bg-background/50 border-border/50">
-                <SelectValue placeholder="Status" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Todos</SelectItem>
-                <SelectItem value="valid">Válido</SelectItem>
-                <SelectItem value="invalid">Inválido</SelectItem>
-                <SelectItem value="pending">Pendente</SelectItem>
-              </SelectContent>
-            </Select>
-
-            <div className="relative">
-              <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" size={18} />
-              <Input
-                type="date"
-                value={dateFilter}
-                onChange={(e) => setDateFilter(e.target.value)}
-                className="pl-10 bg-background/50 border-border/50"
-              />
-            </div>
-          </div>
-
-          {/* Table */}
-          <div className="rounded-xl overflow-hidden border border-border/30">
-            <Table>
-              <TableHeader>
-                <TableRow className="bg-background/50 hover:bg-background/50">
-                  <TableHead className="text-muted-foreground">Status</TableHead>
-                  <TableHead className="text-muted-foreground">AWB</TableHead>
-                  <TableHead className="text-muted-foreground">CNPJ</TableHead>
-                  <TableHead className="text-muted-foreground">Cliente</TableHead>
-                  <TableHead className="text-muted-foreground">Destino</TableHead>
-                  <TableHead className="text-muted-foreground">Data</TableHead>
-                  <TableHead className="text-muted-foreground">Criado por</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {isLoadingChecks ? (
-                  <TableRow>
-                    <TableCell colSpan={7} className="text-center py-8">
-                      <Loader2 className="mx-auto h-6 w-6 animate-spin text-primary" />
-                    </TableCell>
-                  </TableRow>
-                ) : filteredChecks.length === 0 ? (
-                  <TableRow>
-                    <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
-                      Nenhuma validação encontrada
-                    </TableCell>
-                  </TableRow>
-                ) : (
-                  filteredChecks.map((check) => (
-                    <TableRow 
-                      key={check.id}
-                      className="cursor-pointer hover:bg-primary/5"
-                      onClick={() => setSelectedCheck(check)}
-                    >
-                      <TableCell>
-                        <span className={`inline-flex items-center gap-1.5 px-2 py-1 rounded-full text-xs border ${getStatusClass(check.status)}`}>
-                          {getStatusIcon(check.status)}
-                          {check.status}
-                        </span>
-                      </TableCell>
-                      <TableCell className="font-mono text-foreground">{check.awb_number || '-'}</TableCell>
-                      <TableCell className="font-mono text-foreground">{check.cnpj || '-'}</TableCell>
-                      <TableCell className="text-foreground">{check.customer || '-'}</TableCell>
-                      <TableCell className="text-foreground">{check.destination || '-'}</TableCell>
-                      <TableCell className="text-muted-foreground text-sm">{formatDate(check.created_at)}</TableCell>
-                      <TableCell className="text-muted-foreground">{check.username || '-'}</TableCell>
-                    </TableRow>
-                  ))
-                )}
-              </TableBody>
-            </Table>
-          </div>
-        </div>
-      </main>
-
-      {/* Detail Modal */}
-      <Dialog open={!!selectedCheck} onOpenChange={() => setSelectedCheck(null)}>
-        <DialogContent className="bg-card border-border/50 max-w-lg">
+      {/* MODAL UPLOAD */}
+      <Dialog open={isUploadModalOpen} onOpenChange={setIsUploadModalOpen}>
+        <DialogContent className="sm:max-w-md bg-black/95 border border-white/10 text-white">
           <DialogHeader>
-            <DialogTitle className="text-foreground flex items-center gap-2">
-              {selectedCheck && getStatusIcon(selectedCheck.status)}
-              Detalhes da Validação
-            </DialogTitle>
+            <DialogTitle className="text-xl text-white">Nova Validação de AWB/HAWB</DialogTitle>
           </DialogHeader>
-          
+          <div className="space-y-4">
+            <input 
+              ref={fileInputRef} 
+              type="file" 
+              accept=".pdf,image/*" 
+              multiple 
+              onChange={handleFileInputChange} 
+              className="hidden" 
+            />
+            <div 
+              onDragOver={handleDragOver} 
+              onDragLeave={handleDragLeave} 
+              onDrop={handleDrop} 
+              onClick={() => fileInputRef.current?.click()} 
+              className={`border-2 border-dashed rounded-lg p-12 text-center transition-all cursor-pointer ${
+                isDragging ? "border-primary bg-primary/5" : "border-white/20 hover:border-primary/50"
+              } ${isUploading ? "opacity-50 cursor-not-allowed" : ""}`}
+            >
+              {isUploading ? (
+                <>
+                  <Loader2 className="h-16 w-16 text-primary mx-auto mb-4 animate-spin" />
+                  <p className="text-lg text-white mb-2">Processando documento...</p>
+                  <p className="text-sm text-neutral-400">Extraindo dados e validando contra matriz de regras</p>
+                </>
+              ) : (
+                <>
+                  <UploadCloud className="h-16 w-16 text-neutral-400 mx-auto mb-4" />
+                  <p className="text-lg text-white mb-2">
+                    {isDragging ? "Solte o(s) arquivo(s) aqui" : "Arraste arquivo(s) ou clique para selecionar"}
+                  </p>
+                  <p className="text-sm text-neutral-400">Formatos aceitos: PDF ou imagens</p>
+                  <p className="text-xs text-primary/80 mt-2">
+                    Para ZF com múltiplos CNPJs: envie House + PDF de Instrução juntos
+                  </p>
+                </>
+              )}
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* MODAL DETALHES */}
+      <Dialog open={isDetailsModalOpen} onOpenChange={setIsDetailsModalOpen}>
+        <DialogContent className="sm:max-w-2xl bg-black/95 border border-white/10 text-white">
+          <DialogHeader>
+            <DialogTitle className="text-xl text-white">Descrição Detalhada</DialogTitle>
+          </DialogHeader>
           {selectedCheck && (
             <div className="space-y-4">
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="text-sm text-muted-foreground">AWB</label>
-                  <p className="text-foreground font-mono">{selectedCheck.awb_number || '-'}</p>
+                  <p className="text-sm text-neutral-400">AWB</p>
+                  <p className="font-mono text-sm text-white">{selectedCheck.awb}</p>
                 </div>
                 <div>
-                  <label className="text-sm text-muted-foreground">CNPJ</label>
-                  <p className="text-foreground font-mono">{selectedCheck.cnpj || '-'}</p>
+                  <p className="text-sm text-neutral-400">CNPJ</p>
+                  <p className="font-mono text-sm text-white">{selectedCheck.cnpj}</p>
                 </div>
                 <div>
-                  <label className="text-sm text-muted-foreground">Cliente</label>
-                  <p className="text-foreground">{selectedCheck.customer || '-'}</p>
+                  <p className="text-sm text-neutral-400">Rota</p>
+                  <p className="font-mono text-sm text-white">
+                    {selectedCheck.origin} → {selectedCheck.destination}
+                  </p>
                 </div>
                 <div>
-                  <label className="text-sm text-muted-foreground">Status</label>
-                  <span className={`inline-flex items-center gap-1.5 px-2 py-1 rounded-full text-xs border ${getStatusClass(selectedCheck.status)}`}>
-                    {getStatusIcon(selectedCheck.status)}
-                    {selectedCheck.status}
-                  </span>
+                  <p className="text-sm text-neutral-400">Cliente</p>
+                  <p className="text-sm text-white">{selectedCheck.customer}</p>
                 </div>
                 <div>
-                  <label className="text-sm text-muted-foreground">Origem</label>
-                  <p className="text-foreground">{selectedCheck.origin || '-'}</p>
+                  <p className="text-sm text-neutral-400">Status</p>
+                  {getResultBadge(selectedCheck.result)}
                 </div>
                 <div>
-                  <label className="text-sm text-muted-foreground">Destino</label>
-                  <p className="text-foreground">{selectedCheck.destination || '-'}</p>
+                  <p className="text-sm text-neutral-400">Motivo</p>
+                  <p className="text-sm text-white">
+                    {selectedCheck.reason || (selectedCheck.result === "OK" ? "CNPJ e aeroporto compatíveis" : "CNPJ não compatível")}
+                  </p>
                 </div>
               </div>
-              
-              <div>
-                <label className="text-sm text-muted-foreground">Mensagem de Validação</label>
-                <p className="text-foreground">{selectedCheck.validation_message || '-'}</p>
-              </div>
-              
-              {selectedCheck.rule_email && (
-                <div>
-                  <label className="text-sm text-muted-foreground">Email Despachante</label>
-                  <p className="text-primary">{selectedCheck.rule_email}</p>
+
+              {selectedParsedData && (
+                <div className="border-t border-white/10 pt-4 mt-4">
+                  <h3 className="font-semibold mb-3 text-white">Dados Adicionais</h3>
+                  <div className="grid grid-cols-2 gap-4 text-sm">
+                    <div>
+                      <p className="text-neutral-400">Ref Othello</p>
+                      <p className="font-mono text-white">
+                        {selectedParsedData.mrn || "Referência não encontrada na matriz de regras"}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-neutral-400">Transportadora</p>
+                      <p className="text-white">{selectedParsedData.carrier || "N/A"}</p>
+                    </div>
+                    <div>
+                      <p className="text-neutral-400">Remetente</p>
+                      <p className="text-white">{selectedParsedData.shipper || "N/A"}</p>
+                    </div>
+                    <div>
+                      <p className="text-neutral-400">Destinatário</p>
+                      <p className="text-white">{selectedParsedData.consignee || "N/A"}</p>
+                    </div>
+                    {selectedParsedData.gross_weight_kg && (
+                      <div>
+                        <p className="text-neutral-400">Peso Bruto</p>
+                        <p className="text-white">{selectedParsedData.gross_weight_kg} kg</p>
+                      </div>
+                    )}
+                    {selectedParsedData.chargeable_weight_kg && (
+                      <div>
+                        <p className="text-neutral-400">Peso Taxável</p>
+                        <p className="text-white">{selectedParsedData.chargeable_weight_kg} kg</p>
+                      </div>
+                    )}
+                    {selectedEmailDespachante && (
+                      <div className="col-span-2">
+                        <p className="text-neutral-400">E-mail Despachante</p>
+                        <p className="text-white">{selectedEmailDespachante}</p>
+                      </div>
+                    )}
+                  </div>
                 </div>
               )}
-              
-              <div className="pt-4 border-t border-border/30 text-sm text-muted-foreground">
-                Criado em {formatDate(selectedCheck.created_at)} por {selectedCheck.username || '-'}
-              </div>
             </div>
           )}
         </DialogContent>
       </Dialog>
+
+      {/* CONFIRMAÇÃO DE EXCLUSÃO */}
+      <AlertDialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
+        <AlertDialogContent className="bg-black/95 border border-white/10 text-white">
+          <AlertDialogHeader>
+            <AlertDialogTitle className="text-xl text-white">Confirmar Exclusão</AlertDialogTitle>
+            <AlertDialogDescription className="text-neutral-400">
+              Tem certeza que deseja excluir esta validação? Esta ação não pode ser desfeita.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel className="bg-white/10 text-white border-white/20 hover:bg-white/20">Cancelar</AlertDialogCancel>
+            <AlertDialogAction onClick={handleDeleteConfirm} className="bg-rose-600 text-white hover:bg-rose-700">
+              Excluir
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 };
