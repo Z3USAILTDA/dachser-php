@@ -694,7 +694,7 @@ const CheckAwb = () => {
       </div>
 
       {/* Top Header Bar */}
-      <div className="fixed top-[18px] left-0 right-0 z-[1000] max-w-[95%] mx-auto px-2 flex items-center justify-between">
+      <div className="relative z-10 max-w-[95%] mx-auto px-2 pt-5 pb-4 flex items-center justify-between">
         {/* Left - Back + Header */}
         <div className="flex items-center gap-[18px]">
           <button
@@ -751,7 +751,7 @@ const CheckAwb = () => {
       </div>
 
       {/* Main Content */}
-      <main className="relative z-10 max-w-[95%] mx-auto mt-[130px] mb-12 px-2 space-y-[18px]">
+      <main className="relative z-10 max-w-[95%] mx-auto mb-12 px-2 space-y-[18px]">
         {/* CARD DE BUSCA + FILTROS */}
         <section 
           className="rounded-2xl p-4"
