@@ -761,27 +761,27 @@ const CheckAwb = () => {
             boxShadow: '0 18px 40px rgba(0,0,0,.85)',
           }}
         >
-            <div className="space-y-4">
+            <div className="space-y-3">
               <div className="relative">
-                <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-[#aaaaaa]" />
+                <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-[#aaaaaa]" />
                 <input
                   type="text"
                   placeholder="Buscar por AWB, CNPJ ou cliente"
                   value={searchTerm}
                   onChange={e => setSearchTerm(e.target.value)}
-                  className="h-11 w-full pl-11 pr-4 rounded-full border border-[rgba(255,255,255,.14)] bg-[#13141a] text-[#f5f5f5] text-[0.85rem] placeholder:text-[#666] focus:outline-none focus:border-[#ffc800] focus:shadow-[0_0_0_1px_rgba(255,200,0,.8)]"
+                  className="h-9 w-full pl-10 pr-4 rounded-full border border-[rgba(255,255,255,.14)] bg-[#13141a] text-[#f5f5f5] text-[0.78rem] placeholder:text-[#666] focus:outline-none focus:border-[#ffc800] focus:shadow-[0_0_0_1px_rgba(255,200,0,.8)]"
                 />
               </div>
 
-              <div className="flex flex-wrap items-center gap-4 justify-between">
-                <div className="flex flex-wrap items-center gap-4">
-                  <div className="flex items-center gap-2">
-                    <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-[rgba(0,0,0,.5)] border border-[rgba(255,255,255,.22)]">
-                      <FilterIcon className="h-3.5 w-3.5 text-[#ffc800]" />
-                      <span className="text-[0.74rem] tracking-[0.12em] uppercase text-[#aaaaaa]">Status</span>
+              <div className="flex flex-wrap items-center gap-3 justify-between">
+                <div className="flex flex-wrap items-center gap-3">
+                  <div className="flex items-center gap-1.5">
+                    <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-[rgba(0,0,0,.5)] border border-[rgba(255,255,255,.22)]">
+                      <FilterIcon className="h-3 w-3 text-[#ffc800]" />
+                      <span className="text-[0.68rem] tracking-[0.1em] uppercase text-[#aaaaaa]">Status</span>
                     </div>
                     <Select value={statusFilter} onValueChange={setStatusFilter}>
-                      <SelectTrigger className="h-9 w-[150px] rounded-full bg-[#13141a] border border-[rgba(255,255,255,.14)] text-[0.85rem]">
+                      <SelectTrigger className="h-8 w-[130px] rounded-full bg-[#13141a] border border-[rgba(255,255,255,.14)] text-[0.78rem]">
                         <SelectValue placeholder="Todos" />
                       </SelectTrigger>
                       <SelectContent>
@@ -792,13 +792,13 @@ const CheckAwb = () => {
                     </Select>
                   </div>
 
-                  <div className="flex items-center gap-2">
-                    <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-[rgba(0,0,0,.5)] border border-[rgba(255,255,255,.22)]">
+                  <div className="flex items-center gap-1.5">
+                    <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-[rgba(0,0,0,.5)] border border-[rgba(255,255,255,.22)]">
                       <span className="w-1.5 h-1.5 rounded-full bg-[#ffc800]" />
-                      <span className="text-[0.74rem] tracking-[0.12em] uppercase text-[#aaaaaa]">Período</span>
+                      <span className="text-[0.68rem] tracking-[0.1em] uppercase text-[#aaaaaa]">Período</span>
                     </div>
                     <Select value={periodFilter} onValueChange={setPeriodFilter}>
-                      <SelectTrigger className="h-9 w-[150px] rounded-full bg-[#13141a] border border-[rgba(255,255,255,.14)] text-[0.85rem]">
+                      <SelectTrigger className="h-8 w-[130px] rounded-full bg-[#13141a] border border-[rgba(255,255,255,.14)] text-[0.78rem]">
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
@@ -812,18 +812,18 @@ const CheckAwb = () => {
                   <button
                     onClick={fetchChecks}
                     disabled={isRefreshing}
-                    className="inline-flex items-center gap-1.5 h-9 px-[14px] rounded-full bg-[rgba(255,255,255,.05)] border border-[rgba(255,255,255,.25)] text-[#f5f5f5] text-[0.8rem] font-bold uppercase tracking-[0.12em] hover:bg-[rgba(255,255,255,.08)] disabled:opacity-50"
+                    className="inline-flex items-center gap-1.5 h-8 px-3 rounded-full bg-[rgba(255,255,255,.05)] border border-[rgba(255,255,255,.25)] text-[#f5f5f5] text-[0.72rem] font-bold uppercase tracking-[0.1em] hover:bg-[rgba(255,255,255,.08)] disabled:opacity-50"
                   >
-                    <RefreshCw className={`h-4 w-4 ${isRefreshing ? "animate-spin" : ""}`} />
+                    <RefreshCw className={`h-3.5 w-3.5 ${isRefreshing ? "animate-spin" : ""}`} />
                     Atualizar
                   </button>
                 </div>
 
                 <Button
                   onClick={() => setIsUploadModalOpen(true)}
-                  className="h-10 rounded-full px-5 bg-[#ffc800] text-black font-semibold text-sm shadow-[0_0_22px_rgba(255,200,0,.6)] hover:bg-[#f5b843]"
+                  className="h-8 rounded-full px-4 bg-[#ffc800] text-black font-semibold text-[0.78rem] shadow-[0_0_22px_rgba(255,200,0,.6)] hover:bg-[#f5b843]"
                 >
-                  <Plus className="mr-2 h-5 w-5" />
+                  <Plus className="mr-1.5 h-4 w-4" />
                   Nova Validação
                 </Button>
               </div>
