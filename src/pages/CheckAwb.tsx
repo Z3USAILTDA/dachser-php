@@ -812,7 +812,7 @@ const CheckAwb = () => {
                   <button
                     onClick={fetchChecks}
                     disabled={isRefreshing}
-                    className="inline-flex items-center gap-1.5 h-8 px-3 rounded-full bg-[rgba(255,255,255,.05)] border border-[rgba(255,255,255,.25)] text-[#f5f5f5] text-[0.72rem] font-bold uppercase tracking-[0.1em] hover:bg-[rgba(255,255,255,.08)] disabled:opacity-50"
+                    className="inline-flex items-center gap-1.5 h-8 px-3 rounded-full bg-[rgba(255,255,255,.05)] border border-[rgba(255,255,255,.25)] text-[#f5f5f5] text-[0.78rem] font-semibold hover:bg-[rgba(255,255,255,.08)] disabled:opacity-50"
                   >
                     <RefreshCw className={`h-3.5 w-3.5 ${isRefreshing ? "animate-spin" : ""}`} />
                     Atualizar
