@@ -7,6 +7,7 @@ import Login from "./pages/Login";
 import Dashboard from "./pages/Dashboard";
 import MetricsUsage from "./pages/MetricsUsage";
 import Register from "./pages/Register";
+import CheckAwb from "./pages/CheckAwb";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -22,6 +23,7 @@ const App = () => (
           <Route path="/dashboard" element={<Dashboard />} />
           <Route path="/admin/metrics" element={<MetricsUsage />} />
           <Route path="/admin/register" element={<Register />} />
+          <Route path="/air/check" element={<CheckAwb />} />
           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
           <Route path="*" element={<NotFound />} />
         </Routes>
