@@ -7,6 +7,32 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
+// Helper to find column value by checking multiple possible names
+function getColumnValue(row: any, possibleNames: string[]): string {
+  for (const name of possibleNames) {
+    // Check exact match
+    if (row[name] !== undefined && row[name] !== null && row[name] !== '') {
+      return String(row[name]);
+    }
+    // Check case-insensitive match
+    const keys = Object.keys(row);
+    for (const key of keys) {
+      if (key.toLowerCase().trim() === name.toLowerCase().trim()) {
+        if (row[key] !== undefined && row[key] !== null && row[key] !== '') {
+          return String(row[key]);
+        }
+      }
+      // Check if key contains the name
+      if (key.toLowerCase().includes(name.toLowerCase())) {
+        if (row[key] !== undefined && row[key] !== null && row[key] !== '') {
+          return String(row[key]);
+        }
+      }
+    }
+  }
+  return '';
+}
+
 serve(async (req) => {
   // Handle CORS preflight
   if (req.method === 'OPTIONS') {
@@ -41,8 +67,8 @@ serve(async (req) => {
     const arrayBuffer = await file.arrayBuffer();
     const data = new Uint8Array(arrayBuffer);
     
-    // Parse Excel file
-    const workbook = XLSX.read(data, { type: 'array' });
+    // Parse Excel file with raw option to preserve all data
+    const workbook = XLSX.read(data, { type: 'array', raw: false });
     console.log(`Workbook sheets: ${workbook.SheetNames.join(', ')}`);
 
     const version = Math.floor(Date.now() / 1000); // Unix timestamp in seconds
@@ -59,7 +85,13 @@ serve(async (req) => {
     if (klabinSheetName) {
       console.log(`Processing KLABIN sheet: ${klabinSheetName}`);
       const klabinSheet = workbook.Sheets[klabinSheetName];
-      const klabinData = XLSX.utils.sheet_to_json(klabinSheet, { defval: '' }) as any[];
+      const klabinData = XLSX.utils.sheet_to_json(klabinSheet, { defval: '', raw: false }) as any[];
+      
+      // Log first row to see column names
+      if (klabinData.length > 0) {
+        console.log(`KLABIN columns found: ${Object.keys(klabinData[0]).join(', ')}`);
+        console.log(`KLABIN first row sample: ${JSON.stringify(klabinData[0])}`);
+      }
       
       if (klabinData.length > 0) {
         // Deactivate previous KLABIN matrix
@@ -81,15 +113,15 @@ serve(async (req) => {
 
         // Insert KLABIN rules
         for (const row of klabinData) {
-          // Try different column name variations
-          const cnpj = String(row['CNPJ'] || row['cnpj'] || row['Cnpj'] || '').replace(/\D/g, '');
-          const airportCode = String(row['Aeroporto'] || row['aeroporto'] || row['AEROPORTO'] || row['Airport'] || '').toUpperCase().trim();
-          const emailDespachante = String(row['Email Despachante'] || row['email_despachante'] || row['Email'] || row['email'] || '').trim();
-          const endereco = String(row['Endereço'] || row['endereco'] || row['Endereco'] || row['Address'] || '').trim();
-          const cidade = String(row['Cidade/Estado'] || row['cidade_estado'] || row['Cidade'] || '').trim();
-          const cep = String(row['CEP'] || row['cep'] || '').trim();
-          const empresa = String(row['Empresa'] || row['empresa'] || row['Company'] || '').trim();
-          const ref = String(row['Ref'] || row['ref'] || row['REF'] || '').trim();
+          const cnpjRaw = getColumnValue(row, ['CNPJ', 'cnpj', 'Cnpj']);
+          const cnpj = cnpjRaw.replace(/\D/g, '');
+          const airportCode = getColumnValue(row, ['Aeroporto', 'aeroporto', 'AEROPORTO', 'Airport', 'airport', 'IATA', 'iata']).toUpperCase().trim();
+          const emailDespachante = getColumnValue(row, ['Email Despachante', 'email_despachante', 'Email', 'email', 'E-mail', 'Despachante']).trim();
+          const endereco = getColumnValue(row, ['Endereço', 'endereco', 'Endereco', 'Address', 'Rua', 'Logradouro']).trim();
+          const cidade = getColumnValue(row, ['Cidade/Estado', 'cidade_estado', 'Cidade', 'cidade', 'City', 'UF', 'Estado']).trim();
+          const cep = getColumnValue(row, ['CEP', 'cep', 'Zip', 'Codigo Postal']).trim();
+          const empresa = getColumnValue(row, ['Empresa', 'empresa', 'Company', 'Razão Social', 'Nome']).trim();
+          const ref = getColumnValue(row, ['Ref', 'ref', 'REF', 'Referência', 'Observação', 'Obs', 'Notes']).trim();
           
           // Build notes from available fields
           const notes = [ref, empresa].filter(Boolean).join(' | ');
@@ -117,7 +149,13 @@ serve(async (req) => {
     if (zfSheetName) {
       console.log(`Processing ZF sheet: ${zfSheetName}`);
       const zfSheet = workbook.Sheets[zfSheetName];
-      const zfData = XLSX.utils.sheet_to_json(zfSheet, { defval: '' }) as any[];
+      const zfData = XLSX.utils.sheet_to_json(zfSheet, { defval: '', raw: false }) as any[];
+      
+      // Log first row to see column names
+      if (zfData.length > 0) {
+        console.log(`ZF columns found: ${Object.keys(zfData[0]).join(', ')}`);
+        console.log(`ZF first row sample: ${JSON.stringify(zfData[0])}`);
+      }
       
       if (zfData.length > 0) {
         // Deactivate previous ZF matrix
@@ -139,12 +177,13 @@ serve(async (req) => {
 
         // Insert ZF rules
         for (const row of zfData) {
-          const cnpj = String(row['CNPJ'] || row['cnpj'] || row['Cnpj'] || '').replace(/\D/g, '');
-          const endereco = String(row['Endereço'] || row['endereco'] || row['Endereco'] || row['Address'] || '').trim();
-          const cidade = String(row['Cidade/Estado'] || row['cidade_estado'] || row['Cidade'] || '').trim();
-          const cep = String(row['CEP'] || row['cep'] || '').trim();
-          const empresa = String(row['Empresa'] || row['empresa'] || row['Company'] || '').trim();
-          const ref = String(row['Ref'] || row['ref'] || row['REF'] || '').trim();
+          const cnpjRaw = getColumnValue(row, ['CNPJ', 'cnpj', 'Cnpj']);
+          const cnpj = cnpjRaw.replace(/\D/g, '');
+          const endereco = getColumnValue(row, ['Endereço', 'endereco', 'Endereco', 'Address', 'Rua', 'Logradouro']).trim();
+          const cidade = getColumnValue(row, ['Cidade/Estado', 'cidade_estado', 'Cidade', 'cidade', 'City', 'UF', 'Estado']).trim();
+          const cep = getColumnValue(row, ['CEP', 'cep', 'Zip', 'Codigo Postal']).trim();
+          const empresa = getColumnValue(row, ['Empresa', 'empresa', 'Company', 'Razão Social', 'Nome']).trim();
+          const ref = getColumnValue(row, ['Ref', 'ref', 'REF', 'Referência', 'Observação', 'Obs', 'Notes']).trim();
           
           const notes = [ref, empresa].filter(Boolean).join(' | ');
           const addressPattern = [endereco, cidade, cep].filter(Boolean).join(', ');
