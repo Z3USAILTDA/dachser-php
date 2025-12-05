@@ -754,6 +754,31 @@ serve(async (req) => {
         break;
       }
 
+      case 'delete_awb_check': {
+        const { awbCheckId } = body;
+        if (!awbCheckId) {
+          return new Response(
+            JSON.stringify({ error: 'AWB Check ID é obrigatório' }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+
+        // Delete related records first (cascade)
+        await client.execute(
+          'DELETE FROM ai_agente.t_parsed_awb WHERE awb_check_id = ?',
+          [awbCheckId]
+        );
+        
+        await client.execute(
+          'DELETE FROM ai_agente.t_awb_check WHERE id = ?',
+          [awbCheckId]
+        );
+
+        result = { success: true };
+        console.log(`Deleted AWB Check ID: ${awbCheckId}`);
+        break;
+      }
+
       // ==================== LOG ENTRY ====================
       case 'create_log_entry': {
         const { userId, logAction, entity, entityId, details } = body;

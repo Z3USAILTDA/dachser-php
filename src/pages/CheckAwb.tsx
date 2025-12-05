@@ -21,31 +21,29 @@ import logoZ3us from "@/assets/logo-z3us.png";
 import dachserBg from "@/assets/dachser-background.jpg";
 
 interface AwbCheck {
-  id: string;
-  awb: string;
+  id: number;
+  awb_number: string;
   cnpj: string;
   origin: string;
   destination: string;
   customer: "KLABIN" | "ZF";
-  result: "OK" | "ALERTA" | "BLOQUEIO";
-  reason: string | null;
-  rule_matrix_version: string;
+  validation_status: "OK" | "ALERTA" | "BLOQUEIO" | "PENDING";
+  validation_message: string | null;
+  matched_rule_id: number | null;
+  created_by: number | null;
   created_at: string;
-  parsed_awb_id: string | null;
-}
-
-interface ParsedAwbData {
-  awb_number: string | null;
-  cnpj_detected: string | null;
-  origin_detected: string | null;
-  destination_detected: string | null;
-  shipper: string | null;
-  consignee: string | null;
-  carrier: string | null;
-  routing_legs: any;
-  gross_weight_kg: number | null;
-  chargeable_weight_kg: number | null;
-  mrn: string | null;
+  // Joined fields
+  extracted_awb: string | null;
+  extracted_cnpj: string | null;
+  extracted_origin: string | null;
+  extracted_destination: string | null;
+  extracted_customer: string | null;
+  confidence_score: number | null;
+  raw_text: string | null;
+  hawb_file_name: string | null;
+  hawb_file_path: string | null;
+  rule_email: string | null;
+  rule_airport: string | null;
 }
 
 interface User {
@@ -70,9 +68,8 @@ const CheckAwb = () => {
   const [isDetailsModalOpen, setIsDetailsModalOpen] = useState(false);
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [selectedCheck, setSelectedCheck] = useState<AwbCheck | null>(null);
-  const [selectedParsedData, setSelectedParsedData] = useState<ParsedAwbData | null>(null);
   const [selectedEmailDespachante, setSelectedEmailDespachante] = useState<string | null>(null);
-  const [checkToDelete, setCheckToDelete] = useState<string | null>(null);
+  const [checkToDelete, setCheckToDelete] = useState<number | null>(null);
 
   // Upload states
   const [isUploading, setIsUploading] = useState(false);
@@ -100,13 +97,18 @@ const CheckAwb = () => {
   const fetchChecks = async () => {
     setIsRefreshing(true);
     try {
-      const { data, error } = await supabase
-        .from("awb_check")
-        .select("*")
-        .order("created_at", { ascending: false });
+      const { data, error } = await supabase.functions.invoke("mariadb-proxy", {
+        body: {
+          action: "get_awb_checks",
+          perPage: 100,
+          page: 1,
+        },
+      });
 
       if (error) throw error;
-      setChecks(data || []);
+      if (!data?.success) throw new Error(data?.error || "Erro ao buscar validações");
+      
+      setChecks(data.checks || []);
     } catch (error) {
       console.error("Error fetching checks:", error);
       toast.error("Erro ao carregar validações");
@@ -115,48 +117,14 @@ const CheckAwb = () => {
     }
   };
 
-  const handleViewDetails = async (check: AwbCheck) => {
+  const handleViewDetails = (check: AwbCheck) => {
     setSelectedCheck(check);
-    setSelectedEmailDespachante(null);
-    setSelectedParsedData(null);
-
-    if (check.parsed_awb_id) {
-      try {
-        const { data, error } = await supabase
-          .from("parsed_awb")
-          .select("*")
-          .eq("id", check.parsed_awb_id)
-          .single();
-
-        if (error) throw error;
-        setSelectedParsedData(data);
-      } catch (error) {
-        console.error("Error fetching parsed data:", error);
-      }
-    }
-
-    // Buscar email do despachante da matriz de regras (apenas para Klabin)
-    if (check.customer === "KLABIN") {
-      try {
-        const { data: ruleData } = await supabase
-          .from("rule_row")
-          .select("email_despachante")
-          .eq("cnpj", check.cnpj)
-          .not("email_despachante", "is", null)
-          .limit(1)
-          .maybeSingle();
-
-        if (ruleData?.email_despachante) {
-          setSelectedEmailDespachante(ruleData.email_despachante);
-        }
-      } catch (error) {
-        console.error("Error fetching email despachante:", error);
-      }
-    }
+    // O email do despachante já vem no campo rule_email do JOIN
+    setSelectedEmailDespachante(check.rule_email || null);
     setIsDetailsModalOpen(true);
   };
 
-  const handleDeleteClick = (id: string) => {
+  const handleDeleteClick = (id: number) => {
     setCheckToDelete(id);
     setIsDeleteDialogOpen(true);
   };
@@ -164,12 +132,16 @@ const CheckAwb = () => {
   const handleDeleteConfirm = async () => {
     if (!checkToDelete) return;
     try {
-      const { error } = await supabase
-        .from("awb_check")
-        .delete()
-        .eq("id", checkToDelete);
+      const { data, error } = await supabase.functions.invoke("mariadb-proxy", {
+        body: {
+          action: "delete_awb_check",
+          awbCheckId: checkToDelete,
+        },
+      });
 
       if (error) throw error;
+      if (!data?.success) throw new Error(data?.error || "Erro ao excluir");
+      
       toast.success("Validação excluída com sucesso");
       fetchChecks();
     } catch (error: any) {
@@ -627,10 +599,10 @@ const CheckAwb = () => {
 
   const filteredChecks = checks.filter(check => {
     const matchesSearch =
-      check.awb.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      check.cnpj.includes(searchTerm) ||
-      check.customer.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesStatus = statusFilter === "all" || check.result === statusFilter;
+      (check.awb_number || "").toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (check.cnpj || "").includes(searchTerm) ||
+      (check.customer || "").toLowerCase().includes(searchTerm.toLowerCase());
+    const matchesStatus = statusFilter === "all" || check.validation_status === statusFilter;
     const daysAgo = parseInt(periodFilter);
     const checkDate = new Date(check.created_at);
     const cutoffDate = new Date();
@@ -903,15 +875,15 @@ const CheckAwb = () => {
                 <TableBody>
                   {filteredChecks.map(check => (
                     <TableRow key={check.id} className="border-b border-[rgba(255,255,255,.09)] hover:bg-[rgba(255,255,255,.05)]">
-                      <TableCell className="font-mono text-[0.82rem] py-[9px] px-[10px]">{check.awb}</TableCell>
+                      <TableCell className="font-mono text-[0.82rem] py-[9px] px-[10px]">{check.awb_number}</TableCell>
                       <TableCell className="font-mono text-[0.82rem] py-[9px] px-[10px]">{check.cnpj}</TableCell>
                       <TableCell className="font-mono text-[0.82rem] py-[9px] px-[10px]">
                         {check.origin} → {check.destination}
                       </TableCell>
                       <TableCell className="text-[0.82rem] py-[9px] px-[10px]">{check.customer}</TableCell>
-                      <TableCell className="text-[0.82rem] py-[9px] px-[10px]">{getResultBadge(check.result)}</TableCell>
-                      <TableCell className="max-w-xs text-[0.82rem] py-[9px] px-[10px] truncate text-[#aaaaaa]" title={check.reason || ""}>
-                        {check.reason || (check.result === "OK" ? "CNPJ e aeroporto compatíveis" : "CNPJ não compatível")}
+                      <TableCell className="text-[0.82rem] py-[9px] px-[10px]">{getResultBadge(check.validation_status)}</TableCell>
+                      <TableCell className="max-w-xs text-[0.82rem] py-[9px] px-[10px] truncate text-[#aaaaaa]" title={check.validation_message || ""}>
+                        {check.validation_message || (check.validation_status === "OK" ? "CNPJ e aeroporto compatíveis" : "CNPJ não compatível")}
                       </TableCell>
                       <TableCell className="text-[0.82rem] py-[9px] px-[10px]">
                         {format(new Date(check.created_at), "dd/MM/yyyy HH:mm")}
@@ -1053,7 +1025,7 @@ const CheckAwb = () => {
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <p className="text-sm text-[#aaaaaa]">AWB</p>
-                  <p className="font-mono text-sm text-[#f5f5f5]">{selectedCheck.awb}</p>
+                  <p className="font-mono text-sm text-[#f5f5f5]">{selectedCheck.awb_number}</p>
                 </div>
                 <div>
                   <p className="text-sm text-[#aaaaaa]">CNPJ</p>
@@ -1071,55 +1043,56 @@ const CheckAwb = () => {
                 </div>
                 <div>
                   <p className="text-sm text-[#aaaaaa]">Status</p>
-                  {getResultBadge(selectedCheck.result)}
+                  {getResultBadge(selectedCheck.validation_status)}
                 </div>
                 <div>
                   <p className="text-sm text-[#aaaaaa]">Motivo</p>
                   <p className="text-sm text-[#f5f5f5]">
-                    {selectedCheck.reason ||
-                      (selectedCheck.result === "OK" ? "CNPJ e aeroporto compatíveis" : "CNPJ não compatível")}
+                    {selectedCheck.validation_message ||
+                      (selectedCheck.validation_status === "OK" ? "CNPJ e aeroporto compatíveis" : "CNPJ não compatível")}
                   </p>
                 </div>
               </div>
 
-              {selectedParsedData && (
+              {/* Dados Adicionais - usando dados do check que já vieram do JOIN */}
+              {(selectedCheck.extracted_awb || selectedCheck.rule_email || selectedEmailDespachante) && (
                 <div className="border-t border-[rgba(255,255,255,.12)] pt-4 mt-4">
                   <h3 className="font-semibold mb-3 text-[#f5f5f5]">Dados Adicionais</h3>
                   <div className="grid grid-cols-2 gap-4 text-sm">
-                    <div>
-                      <p className="text-[#aaaaaa]">Ref Othello</p>
-                      <p className="font-mono text-[#f5f5f5]">
-                        {selectedParsedData.mrn || "Referência não encontrada"}
-                      </p>
-                    </div>
-                    <div>
-                      <p className="text-[#aaaaaa]">Transportadora</p>
-                      <p className="text-[#f5f5f5]">{selectedParsedData.carrier || "N/A"}</p>
-                    </div>
-                    <div>
-                      <p className="text-[#aaaaaa]">Remetente</p>
-                      <p className="text-[#f5f5f5]">{selectedParsedData.shipper || "N/A"}</p>
-                    </div>
-                    <div>
-                      <p className="text-[#aaaaaa]">Destinatário</p>
-                      <p className="text-[#f5f5f5]">{selectedParsedData.consignee || "N/A"}</p>
-                    </div>
-                    {selectedParsedData.gross_weight_kg && (
+                    {selectedCheck.extracted_awb && (
                       <div>
-                        <p className="text-[#aaaaaa]">Peso Bruto</p>
-                        <p className="text-[#f5f5f5]">{selectedParsedData.gross_weight_kg} kg</p>
+                        <p className="text-[#aaaaaa]">AWB Extraído</p>
+                        <p className="font-mono text-[#f5f5f5]">{selectedCheck.extracted_awb}</p>
                       </div>
                     )}
-                    {selectedParsedData.chargeable_weight_kg && (
+                    {selectedCheck.extracted_cnpj && (
                       <div>
-                        <p className="text-[#aaaaaa]">Peso Taxável</p>
-                        <p className="text-[#f5f5f5]">{selectedParsedData.chargeable_weight_kg} kg</p>
+                        <p className="text-[#aaaaaa]">CNPJ Extraído</p>
+                        <p className="font-mono text-[#f5f5f5]">{selectedCheck.extracted_cnpj}</p>
                       </div>
                     )}
-                    {selectedEmailDespachante && (
+                    {selectedCheck.confidence_score && (
+                      <div>
+                        <p className="text-[#aaaaaa]">Confiança</p>
+                        <p className="text-[#f5f5f5]">{(selectedCheck.confidence_score * 100).toFixed(0)}%</p>
+                      </div>
+                    )}
+                    {selectedCheck.rule_airport && (
+                      <div>
+                        <p className="text-[#aaaaaa]">Aeroporto (Regra)</p>
+                        <p className="text-[#f5f5f5]">{selectedCheck.rule_airport}</p>
+                      </div>
+                    )}
+                    {(selectedEmailDespachante || selectedCheck.rule_email) && (
                       <div className="col-span-2">
                         <p className="text-[#aaaaaa]">E-mail Despachante</p>
-                        <p className="text-[#f5f5f5]">{selectedEmailDespachante}</p>
+                        <p className="text-[#f5f5f5]">{selectedEmailDespachante || selectedCheck.rule_email}</p>
+                      </div>
+                    )}
+                    {selectedCheck.hawb_file_name && (
+                      <div className="col-span-2">
+                        <p className="text-[#aaaaaa]">Arquivo</p>
+                        <p className="text-[#f5f5f5]">{selectedCheck.hawb_file_name}</p>
                       </div>
                     )}
                   </div>
