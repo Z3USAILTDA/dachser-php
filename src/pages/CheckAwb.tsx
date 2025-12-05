@@ -2,14 +2,18 @@
 import { useEffect, useState, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
+
+// Type assertion to bypass strict typing (DB schema not in sync)
+const db = supabase as any;
 import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import { Search, RefreshCw, Filter as FilterIcon, UploadCloud, FileText, Trash2, TerminalSquare, Loader2, ChevronDown, ChevronUp, Plus, Database, ArrowLeft, LogOut } from "lucide-react";
+import { Search, RefreshCw, Filter as FilterIcon, UploadCloud, FileText, Trash2, TerminalSquare, Loader2, ChevronDown, ChevronUp, Plus, Database, ArrowLeft } from "lucide-react";
 import { toast } from "sonner";
 import { format } from "date-fns";
 import { RuleMatrixManager } from "@/components/RuleMatrixManager";
@@ -111,11 +115,6 @@ const CheckAwb = () => {
     }
   };
 
-  const handleLogout = () => {
-    localStorage.removeItem("user");
-    navigate("/");
-  };
-
   const handleViewDetails = async (check: AwbCheck) => {
     setSelectedCheck(check);
     setSelectedEmailDespachante(null);
@@ -136,6 +135,7 @@ const CheckAwb = () => {
       }
     }
 
+    // Buscar email do despachante da matriz de regras (apenas para Klabin)
     if (check.customer === "KLABIN") {
       try {
         const { data: ruleData } = await supabase
@@ -185,6 +185,7 @@ const CheckAwb = () => {
     setIsExporting(true);
     try {
       toast.info("Iniciando exportação para MariaDB...");
+
       const { data, error } = await supabase.functions.invoke("export-to-mariadb");
 
       if (error) throw error;
@@ -194,6 +195,9 @@ const CheckAwb = () => {
         data.results?.forEach((r: any) => {
           if (r.exported > 0) {
             toast.info(`${r.table}: ${r.exported} registros exportados`);
+          }
+          if (r.errors?.length > 0) {
+            toast.warning(`${r.table}: ${r.errors.length} erros`);
           }
         });
       } else {
@@ -237,7 +241,8 @@ const CheckAwb = () => {
     }
   };
 
-  const processSingleFile = async (file: File, userId: string) => {
+  const processSingleFile = async (file: File, odigos_by_user_id: string) => {
+    // Upload do arquivo para storage
     const fileExt = file.name.split(".").pop();
     const fileName = `${userId}/${Date.now()}.${fileExt}`;
 
@@ -251,6 +256,7 @@ const CheckAwb = () => {
       .from("hawb-documents")
       .getPublicUrl(fileName);
 
+    // Criar registro do documento
     const { data: docData, error: docError } = await supabase
       .from("document")
       .insert({
@@ -258,13 +264,14 @@ const CheckAwb = () => {
         filename: file.name,
         mime: file.type,
         file_url: publicUrl,
-        uploaded_by_user_id: userId,
+        uploaded_by_user_id: odigos_by_user_id,
       })
       .select()
       .single();
 
     if (docError) throw docError;
 
+    // Parsear documento via edge function
     const formData = new FormData();
     formData.append("file", file);
 
@@ -342,6 +349,7 @@ const CheckAwb = () => {
     const houseParsed = houseResult.parsed;
     toast.info(`House AWB identificado: ${houseFile.name}`);
 
+    // Upload do House
     const houseExt = houseFile.name.split(".").pop();
     const houseFileName = `${userId}/${Date.now()}-house.${houseExt}`;
     await supabase.storage.from("hawb-documents").upload(houseFileName, houseFile);
@@ -477,13 +485,16 @@ const CheckAwb = () => {
   const addressMatches = (docAddress: string, matrixAddress: string): boolean => {
     const normalizedDoc = normalizeAddress(docAddress);
     const normalizedMatrix = normalizeAddress(matrixAddress);
+
     const matrixWords = normalizedMatrix.split(" ").filter(w => w.length > 2);
+
     let matchCount = 0;
     for (const matrixWord of matrixWords) {
       if (normalizedDoc.includes(matrixWord)) {
         matchCount++;
       }
     }
+
     const matchRatio = matrixWords.length > 0 ? matchCount / matrixWords.length : 0;
     return matchRatio >= 0.6;
   };
@@ -631,13 +642,13 @@ const CheckAwb = () => {
   const getResultBadge = (result: string) => {
     if (result === "OK") {
       return (
-        <Badge className="bg-success/20 text-success border-success/40 px-3 py-1 rounded-full">
+        <Badge className="bg-emerald-500/15 text-emerald-300 border-emerald-500/40 px-3 py-1 rounded-full">
           COMPATÍVEL
         </Badge>
       );
     }
     return (
-      <Badge className="bg-destructive/20 text-destructive border-destructive/40 px-3 py-1 rounded-full">
+      <Badge className="bg-rose-500/15 text-rose-300 border-rose-500/40 px-3 py-1 rounded-full">
         INCOMPATÍVEL
       </Badge>
     );
@@ -645,288 +656,196 @@ const CheckAwb = () => {
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-background">
-        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      <div className="min-h-screen flex items-center justify-center bg-black">
+        <Loader2 className="h-8 w-8 animate-spin text-amber-400" />
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen relative overflow-x-hidden">
-      {/* Background with image and gradient overlay - same as Dashboard */}
-      <div className="fixed inset-0 z-0">
-        <div 
-          className="absolute inset-0"
-          style={{
-            backgroundImage: `url(${dachserBg})`,
-            backgroundSize: 'cover',
-            backgroundPosition: 'center',
-          }}
-        />
-        <div 
-          className="absolute inset-0"
-          style={{
-            background: 'linear-gradient(120deg, rgba(4, 17, 45, 0.92), rgba(26, 93, 173, 0.55))',
-          }}
-        />
-        
-        {/* Radial gradient overlay */}
-        <div 
-          className="absolute inset-0"
-          style={{
-            background: `
-              radial-gradient(ellipse at 20% 20%, rgba(245, 184, 67, 0.12) 0%, transparent 50%),
-              radial-gradient(ellipse at 80% 80%, rgba(245, 184, 67, 0.08) 0%, transparent 50%)
-            `
-          }}
-        />
-        
-        {/* Animated Lines */}
-        <div className="absolute inset-0 opacity-20">
-          {[...Array(6)].map((_, i) => (
-            <div
-              key={`line-${i}`}
-              className="absolute h-full w-px bg-gradient-to-b from-primary/70 to-primary/10"
-              style={{
-                left: `${15 + i * 14}%`,
-                transform: `skewX(${-20 + i * 8}deg)`,
-              }}
-            />
-          ))}
-        </div>
-
-        {/* Floating Particles */}
-        {[...Array(20)].map((_, i) => (
-          <div
-            key={`particle-${i}`}
-            className="absolute w-1 h-1 rounded-full bg-primary/40 animate-float"
-            style={{
-              left: `${Math.random() * 100}%`,
-              top: `${Math.random() * 100}%`,
-              animationDelay: `${Math.random() * 5}s`,
-              animationDuration: `${4 + Math.random() * 4}s`,
-            }}
-          />
-        ))}
-      </div>
-
-      {/* Top Bar - same pattern as Dashboard */}
-      <header className="fixed top-0 left-0 right-0 z-50 flex justify-between items-center px-4 md:px-6 py-3 bg-background/30 backdrop-blur-sm border-b border-border/30">
-        <div className="flex items-center gap-3">
-          <Button
-            onClick={() => navigate("/dashboard")}
-            variant="ghost"
-            size="icon"
-            className="h-9 w-9 rounded-full border border-border/50 bg-background/70 text-primary hover:bg-background hover:shadow-[0_0_12px_hsl(var(--primary)/0.6)]"
-          >
-            <ArrowLeft size={18} />
-          </Button>
-          <img 
-            src={logoZ3us} 
-            alt="Z3US.AI" 
-            className="h-8 drop-shadow-[0_0_8px_rgba(0,0,0,0.9)]"
-          />
-          <span className="text-muted-foreground text-xs tracking-[0.2em] uppercase hidden sm:block">
-            CHECK AWB x CNPJ
-          </span>
-        </div>
-
-        <div className="flex items-center gap-3">
-          {userRole === "ADMIN" && (
-            <>
-              <button
-                type="button"
-                onClick={handleExportToMariaDB}
-                disabled={isExporting}
-                className="w-9 h-9 rounded-full border border-border/50 flex items-center justify-center bg-background/70 text-primary hover:bg-background hover:shadow-[0_0_12px_hsl(var(--primary)/0.6)] transition-all duration-200 disabled:opacity-50"
-                title="Exportar para MariaDB"
+    <div
+      className="min-h-screen text-white"
+      style={{
+        background: `linear-gradient(120deg, rgba(4, 17, 45, 0.92), rgba(26, 93, 173, 0.55)), url(${dachserBg}) center/cover no-repeat`,
+      }}
+    >
+      <div className="min-h-screen bg-black/80 backdrop-blur-sm">
+        <div className="max-w-6xl mx-auto px-6 py-6 space-y-6">
+          {/* HEADER */}
+          <div className="flex items-center justify-between gap-6">
+            <div className="flex items-center gap-4">
+              <Button
+                onClick={() => navigate("/dashboard")}
+                variant="ghost"
+                size="icon"
+                className="h-10 w-10 rounded-full border border-white/18 bg-black/70 hover:bg-black hover:border-amber-300/80"
               >
-                {isExporting ? (
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                ) : (
-                  <Database className="w-4 h-4" />
-                )}
-              </button>
-              <button
-                type="button"
-                onClick={() => navigate("/admin/logs")}
-                className="w-9 h-9 rounded-full border border-border/50 flex items-center justify-center bg-background/70 text-primary hover:bg-background hover:shadow-[0_0_12px_hsl(var(--primary)/0.6)] transition-all duration-200"
-                title="Logs do sistema"
-              >
-                <TerminalSquare className="w-4 h-4" />
-              </button>
-            </>
-          )}
-          <div className="px-4 py-1.5 rounded-full bg-background/65 border border-border/30 text-muted-foreground text-sm max-w-[200px] truncate">
-            @{user?.username || "usuario"}
-          </div>
-          <button
-            onClick={handleLogout}
-            className="w-9 h-9 rounded-full border border-border/50 flex items-center justify-center bg-background/70 text-primary hover:bg-background hover:shadow-[0_0_12px_hsl(var(--primary)/0.6)] transition-all duration-200"
-            title="Sair"
-          >
-            <LogOut size={18} />
-          </button>
-        </div>
-      </header>
-
-      {/* Main Content */}
-      <main className="relative z-10 pt-20 pb-8 px-4 md:px-6">
-        <div className="max-w-6xl mx-auto space-y-6">
-          {/* Title Area */}
-          <div className="text-center mb-6">
-            <h1 className="text-3xl md:text-4xl font-bold tracking-[0.12em] text-foreground mb-1">
-              DACHSER
-            </h1>
-            <p className="text-foreground/90 text-base">Intelligent Logistics – Check AWB x CNPJ</p>
-            <div className="flex justify-center gap-2 mt-3">
-              <span className="w-1.5 h-1.5 rounded-full bg-primary shadow-[0_0_10px_hsl(var(--primary))]" />
-              <span className="w-1.5 h-1.5 rounded-full bg-primary/70" />
-              <span className="w-1.5 h-1.5 rounded-full bg-primary/40" />
-            </div>
-          </div>
-
-          {/* Search and Filters Card */}
-          <div 
-            className="rounded-[22px] p-5"
-            style={{
-              background: 'rgba(4, 10, 30, 0.75)',
-              boxShadow: '0 22px 60px rgba(0, 0, 0, 0.85), 0 0 0 1px rgba(255, 255, 255, 0.03)',
-              backdropFilter: 'blur(18px)',
-              border: '1px solid rgba(255, 255, 255, 0.08)',
-            }}
-          >
-            <div className="relative mb-4">
-              <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
-              <input
-                type="text"
-                placeholder="Buscar por AWB, CNPJ ou cliente"
-                value={searchTerm}
-                onChange={e => setSearchTerm(e.target.value)}
-                className="h-11 w-full pl-11 pr-4 rounded-full border border-border/30 bg-input/50 text-sm text-foreground placeholder:text-muted-foreground focus-visible:outline-none focus:border-primary focus:shadow-[0_0_0_1px_hsl(var(--primary)),0_0_20px_hsl(var(--primary)/0.35)]"
-              />
-            </div>
-
-            <div className="flex flex-wrap items-center gap-4 justify-between">
-              <div className="flex flex-wrap items-center gap-4">
-                <div className="flex items-center gap-2">
-                  <div className="flex items-center gap-2 px-3 py-1 rounded-full bg-background/50 border border-border/30">
-                    <FilterIcon className="h-3.5 w-3.5 text-primary" />
-                    <span className="text-[10px] tracking-[0.22em] uppercase text-muted-foreground">Status</span>
-                  </div>
-                  <Select value={statusFilter} onValueChange={setStatusFilter}>
-                    <SelectTrigger className="h-9 w-[150px] rounded-full bg-input/50 border border-border/30 text-xs">
-                      <SelectValue placeholder="Todos" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">Todos</SelectItem>
-                      <SelectItem value="OK">Compatível</SelectItem>
-                      <SelectItem value="BLOQUEIO">Incompatível</SelectItem>
-                    </SelectContent>
-                  </Select>
+                <ArrowLeft className="h-5 w-5 text-amber-300" />
+              </Button>
+              <div className="flex flex-col gap-1">
+                <div className="text-[1.7rem] tracking-[0.22em] uppercase">DACHSER</div>
+                <div className="text-sm text-neutral-100">Intelligent Logistics – Check AWB x CNPJ</div>
+                <div className="flex gap-2 mt-2">
+                  <span className="w-1.5 h-1.5 rounded-full bg-amber-400 shadow-[0_0_10px_rgba(251,191,36,0.9)]" />
+                  <span className="w-1.5 h-1.5 rounded-full bg-amber-400/70" />
+                  <span className="w-1.5 h-1.5 rounded-full bg-amber-400/40" />
                 </div>
+              </div>
+            </div>
 
-                <div className="flex items-center gap-2">
-                  <div className="flex items-center gap-2 px-3 py-1 rounded-full bg-background/50 border border-border/30">
-                    <span className="w-1.5 h-1.5 rounded-full bg-primary" />
-                    <span className="text-[10px] tracking-[0.22em] uppercase text-muted-foreground">Período</span>
+            <div className="flex items-center gap-3 text-sm text-neutral-300">
+              <div className="px-4 py-1 rounded-full bg-black/70 border border-white/12">
+                {user?.email ?? "seu.usuario"}
+              </div>
+
+              {userRole === "ADMIN" && (
+                <>
+                  <button
+                    type="button"
+                    onClick={handleExportToMariaDB}
+                    disabled={isExporting}
+                    className="w-8 h-8 rounded-full border border-white/18 bg-black/70 flex items-center justify-center hover:bg-black hover:border-amber-300/80 transition disabled:opacity-50"
+                    title="Exportar para MariaDB"
+                  >
+                    {isExporting ? (
+                      <Loader2 className="w-4 h-4 text-amber-300 animate-spin" />
+                    ) : (
+                      <Database className="w-4 h-4 text-amber-300" />
+                    )}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => navigate("/admin/logs")}
+                    className="w-8 h-8 rounded-full border border-white/18 bg-black/70 flex items-center justify-center hover:bg-black hover:border-amber-300/80 transition"
+                    title="Logs do sistema"
+                  >
+                    <TerminalSquare className="w-4 h-4 text-amber-300" />
+                  </button>
+                </>
+              )}
+            </div>
+          </div>
+
+          {/* CARD DE BUSCA + FILTROS */}
+          <Card className="bg-black/86 border border-white/10 rounded-2xl shadow-[0_18px_40px_rgba(0,0,0,0.9)]">
+            <CardContent className="pt-5 pb-4 space-y-4">
+              <div className="relative">
+                <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-neutral-400" />
+                <input
+                  type="text"
+                  placeholder="Buscar por AWB, CNPJ ou cliente"
+                  value={searchTerm}
+                  onChange={e => setSearchTerm(e.target.value)}
+                  style={{ backgroundColor: "rgba(0, 0, 0, 0.86)" }}
+                  className="h-11 w-full pl-11 pr-4 rounded-full border border-white/12 text-sm text-white placeholder:text-neutral-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-400 focus-visible:ring-offset-2 focus-visible:ring-offset-black"
+                />
+              </div>
+
+              <div className="flex flex-wrap items-center gap-4 justify-between">
+                <div className="flex flex-wrap items-center gap-4">
+                  <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 px-3 py-1 rounded-full bg-black/86 border border-white/12">
+                      <FilterIcon className="h-3.5 w-3.5 text-amber-300" />
+                      <span className="text-[10px] tracking-[0.22em] uppercase text-neutral-400">Status</span>
+                    </div>
+                    <Select value={statusFilter} onValueChange={setStatusFilter}>
+                      <SelectTrigger className="h-9 w-[150px] rounded-full bg-black/86 border border-white/14 text-xs">
+                        <SelectValue placeholder="Todos" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">Todos</SelectItem>
+                        <SelectItem value="OK">Compatível</SelectItem>
+                        <SelectItem value="BLOQUEIO">Incompatível</SelectItem>
+                      </SelectContent>
+                    </Select>
                   </div>
-                  <Select value={periodFilter} onValueChange={setPeriodFilter}>
-                    <SelectTrigger className="h-9 w-[150px] rounded-full bg-input/50 border border-border/30 text-xs">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="7">Últimos 7 dias</SelectItem>
-                      <SelectItem value="30">Últimos 30 dias</SelectItem>
-                      <SelectItem value="90">Últimos 90 dias</SelectItem>
-                    </SelectContent>
-                  </Select>
+
+                  <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 px-3 py-1 rounded-full bg-black/86 border border-white/12">
+                      <span className="w-1.5 h-1.5 rounded-full bg-amber-300" />
+                      <span className="text-[10px] tracking-[0.22em] uppercase text-neutral-400">Período</span>
+                    </div>
+                    <Select value={periodFilter} onValueChange={setPeriodFilter}>
+                      <SelectTrigger className="h-9 w-[150px] rounded-full bg-black/86 border border-white/14 text-xs">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="7">Últimos 7 dias</SelectItem>
+                        <SelectItem value="30">Últimos 30 dias</SelectItem>
+                        <SelectItem value="90">Últimos 90 dias</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <Button
+                    onClick={fetchChecks}
+                    disabled={isRefreshing}
+                    variant="outline"
+                    className="h-9 rounded-full border-white/24 bg-black/86 text-xs px-4 hover:border-amber-400/80 hover:bg-black disabled:opacity-50"
+                  >
+                    <RefreshCw className={`mr-2 h-4 w-4 ${isRefreshing ? "animate-spin" : ""}`} />
+                    Atualizar
+                  </Button>
                 </div>
 
                 <Button
-                  onClick={fetchChecks}
-                  disabled={isRefreshing}
-                  variant="outline"
-                  className="h-9 rounded-full border-border/30 bg-input/50 text-xs px-4 hover:border-primary/60 hover:bg-input disabled:opacity-50"
+                  onClick={() => setIsUploadModalOpen(true)}
+                  className="h-10 rounded-full px-5 bg-amber-400 text-black font-semibold text-sm shadow-[0_0_22px_rgba(251,191,36,0.6)] hover:bg-amber-300"
                 >
-                  <RefreshCw className={`mr-2 h-4 w-4 ${isRefreshing ? "animate-spin" : ""}`} />
-                  Atualizar
+                  <Plus className="mr-2 h-5 w-5" />
+                  Nova Validação
                 </Button>
               </div>
+            </CardContent>
+          </Card>
 
-              <Button
-                onClick={() => setIsUploadModalOpen(true)}
-                className="h-10 rounded-full px-5 font-semibold text-sm text-primary-foreground hover:-translate-y-0.5 transition-transform"
-                style={{
-                  background: 'linear-gradient(135deg, #ffc800, #ffe680)',
-                  boxShadow: '0 10px 24px rgba(0, 0, 0, 0.6), 0 0 16px rgba(255, 200, 0, 0.7)',
-                }}
-              >
-                <Plus className="mr-2 h-5 w-5" />
-                Nova Validação
-              </Button>
-            </div>
-          </div>
-
-          {/* Results Table Card */}
-          <div 
-            className="rounded-[22px] overflow-hidden"
-            style={{
-              background: 'rgba(4, 10, 30, 0.75)',
-              boxShadow: '0 22px 60px rgba(0, 0, 0, 0.85), 0 0 0 1px rgba(255, 255, 255, 0.03)',
-              backdropFilter: 'blur(18px)',
-              border: '1px solid rgba(255, 255, 255, 0.08)',
-            }}
-          >
-            <div className="p-5 pb-4">
+          {/* TABELA DE HISTÓRICO */}
+          <Card className="bg-black/86 border border-white/10 rounded-2xl shadow-[0_18px_40px_rgba(0,0,0,0.9)]">
+            <CardContent className="pt-5 pb-4">
               <div className="flex items-center justify-between mb-4">
                 <div>
-                  <div className="text-xs tracking-[0.22em] uppercase text-muted-foreground">
+                  <div className="text-xs tracking-[0.22em] uppercase text-neutral-400">
                     Resumo de Validações
                   </div>
-                  <div className="text-[11px] text-muted-foreground mt-1">
+                  <div className="text-[11px] text-neutral-400 mt-1">
                     Consultas recentes de AWB/HAWB por status e cliente
                   </div>
                 </div>
-                <div className="text-xs text-muted-foreground">
-                  Total: <span className="text-primary font-semibold">{filteredChecks.length}</span> registros
+                <div className="text-xs text-neutral-400">
+                  Total: <span className="text-amber-300 font-semibold">{filteredChecks.length}</span> registros
                 </div>
               </div>
 
-              <div className="rounded-xl border border-border/30 overflow-hidden">
+              <div className="rounded-xl border border-white/8 bg-black/86 overflow-hidden">
                 <Table>
                   <TableHeader>
-                    <TableRow className="border-b border-border/30 hover:bg-transparent">
-                      <TableHead className="text-xs uppercase tracking-[0.18em] text-muted-foreground">AWB</TableHead>
-                      <TableHead className="text-xs uppercase tracking-[0.18em] text-muted-foreground">CNPJ</TableHead>
-                      <TableHead className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Rota</TableHead>
-                      <TableHead className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Cliente</TableHead>
-                      <TableHead className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Status</TableHead>
-                      <TableHead className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Motivo</TableHead>
-                      <TableHead className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Data</TableHead>
-                      <TableHead className="text-right text-xs uppercase tracking-[0.18em] text-muted-foreground">
+                    <TableRow className="border-b border-white/10 bg-black/86">
+                      <TableHead className="text-xs uppercase tracking-[0.18em] text-neutral-400">AWB</TableHead>
+                      <TableHead className="text-xs uppercase tracking-[0.18em] text-neutral-400">CNPJ</TableHead>
+                      <TableHead className="text-xs uppercase tracking-[0.18em] text-neutral-400">Rota</TableHead>
+                      <TableHead className="text-xs uppercase tracking-[0.18em] text-neutral-400">Cliente</TableHead>
+                      <TableHead className="text-xs uppercase tracking-[0.18em] text-neutral-400">Status</TableHead>
+                      <TableHead className="text-xs uppercase tracking-[0.18em] text-neutral-400">Motivo</TableHead>
+                      <TableHead className="text-xs uppercase tracking-[0.18em] text-neutral-400">Data</TableHead>
+                      <TableHead className="text-right text-xs uppercase tracking-[0.18em] text-neutral-400">
                         Ações
                       </TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {filteredChecks.map(check => (
-                      <TableRow key={check.id} className="border-b border-border/20 hover:bg-background/20">
+                      <TableRow key={check.id} className="border-b border-white/5 hover:bg-white/5">
                         <TableCell className="font-mono text-xs">{check.awb}</TableCell>
                         <TableCell className="font-mono text-xs">{check.cnpj}</TableCell>
                         <TableCell className="font-mono text-xs">
                           {check.origin} → {check.destination}
                         </TableCell>
-                        <TableCell>
-                          <Badge variant="outline" className="border-primary/50 text-primary text-xs">
-                            {check.customer}
-                          </Badge>
-                        </TableCell>
+                        <TableCell className="text-xs">{check.customer}</TableCell>
                         <TableCell className="text-xs">{getResultBadge(check.result)}</TableCell>
-                        <TableCell className="max-w-xs text-xs truncate text-muted-foreground" title={check.reason || ""}>
+                        <TableCell className="max-w-xs text-xs truncate" title={check.reason || ""}>
                           {check.reason || (check.result === "OK" ? "CNPJ e aeroporto compatíveis" : "CNPJ não compatível")}
                         </TableCell>
-                        <TableCell className="text-xs text-muted-foreground">
+                        <TableCell className="text-xs">
                           {format(new Date(check.created_at), "dd/MM/yyyy HH:mm")}
                         </TableCell>
                         <TableCell className="text-right">
@@ -934,7 +853,7 @@ const CheckAwb = () => {
                             <Button
                               variant="ghost"
                               size="icon"
-                              className="h-8 w-8 rounded-full text-muted-foreground hover:bg-primary/20 hover:text-primary"
+                              className="h-8 w-8 text-neutral-300 hover:bg-white/10"
                               onClick={() => handleViewDetails(check)}
                             >
                               <FileText className="h-4 w-4" />
@@ -942,7 +861,7 @@ const CheckAwb = () => {
                             <Button
                               variant="ghost"
                               size="icon"
-                              className="h-8 w-8 rounded-full text-muted-foreground hover:bg-destructive/20 hover:text-destructive"
+                              className="h-8 w-8 text-rose-400 hover:bg-rose-500/10"
                               onClick={() => handleDeleteClick(check.id)}
                             >
                               <Trash2 className="h-4 w-4" />
@@ -954,7 +873,7 @@ const CheckAwb = () => {
 
                     {filteredChecks.length === 0 && (
                       <TableRow>
-                        <TableCell colSpan={8} className="text-center py-12 text-sm text-muted-foreground">
+                        <TableCell colSpan={8} className="text-center py-6 text-sm text-neutral-400">
                           Nenhuma validação encontrada para os filtros selecionados.
                         </TableCell>
                       </TableRow>
@@ -962,28 +881,20 @@ const CheckAwb = () => {
                   </TableBody>
                 </Table>
               </div>
-            </div>
-          </div>
+            </CardContent>
+          </Card>
 
-          {/* Rule Matrix Manager (Admin Only) */}
+          {/* Matriz de Regras (ADMIN) */}
           {userRole === "ADMIN" && (
             <Collapsible open={isMatrixOpen} onOpenChange={setIsMatrixOpen}>
-              <div 
-                className="rounded-[22px] overflow-hidden"
-                style={{
-                  background: 'rgba(4, 10, 30, 0.75)',
-                  boxShadow: '0 22px 60px rgba(0, 0, 0, 0.85), 0 0 0 1px rgba(255, 255, 255, 0.03)',
-                  backdropFilter: 'blur(18px)',
-                  border: '1px solid rgba(255, 255, 255, 0.08)',
-                }}
-              >
+              <Card className="bg-black/86 border border-white/10 rounded-2xl">
                 <CollapsibleTrigger asChild>
                   <Button
                     variant="ghost"
-                    className="w-full flex items-center justify-between px-6 py-4 hover:bg-background/20"
+                    className="w-full flex items-center justify-between px-6 py-4 hover:bg-white/5"
                   >
-                    <span className="text-base font-semibold text-foreground">Matriz de Regras</span>
-                    {isMatrixOpen ? <ChevronUp className="h-5 w-5 text-muted-foreground" /> : <ChevronDown className="h-5 w-5 text-muted-foreground" />}
+                    <span className="text-base font-semibold">Matriz de Regras</span>
+                    {isMatrixOpen ? <ChevronUp className="h-5 w-5" /> : <ChevronDown className="h-5 w-5" />}
                   </Button>
                 </CollapsibleTrigger>
                 <CollapsibleContent>
@@ -991,23 +902,17 @@ const CheckAwb = () => {
                     <RuleMatrixManager userRole={userRole} />
                   </div>
                 </CollapsibleContent>
-              </div>
+              </Card>
             </Collapsible>
           )}
         </div>
-      </main>
+      </div>
 
-      {/* Upload Modal */}
+      {/* MODAL UPLOAD */}
       <Dialog open={isUploadModalOpen} onOpenChange={setIsUploadModalOpen}>
-        <DialogContent 
-          className="sm:max-w-md border-border/30"
-          style={{
-            background: 'rgba(4, 10, 30, 0.95)',
-            backdropFilter: 'blur(18px)',
-          }}
-        >
+        <DialogContent className="sm:max-w-md bg-black/95 border border-white/10 text-white">
           <DialogHeader>
-            <DialogTitle className="text-xl text-foreground">Nova Validação de AWB/HAWB</DialogTitle>
+            <DialogTitle className="text-xl text-white">Nova Validação de AWB/HAWB</DialogTitle>
           </DialogHeader>
           <div className="space-y-4">
             <input
@@ -1023,26 +928,26 @@ const CheckAwb = () => {
               onDragLeave={handleDragLeave}
               onDrop={handleDrop}
               onClick={() => fileInputRef.current?.click()}
-              className={`border-2 border-dashed rounded-xl p-12 text-center transition-all cursor-pointer ${
-                isDragging ? "border-primary bg-primary/10 scale-105" : "border-border/50 hover:border-primary/50"
+              className={`border-2 border-dashed rounded-lg p-12 text-center transition-all cursor-pointer ${
+                isDragging ? "border-amber-400 bg-amber-400/5" : "border-white/20 hover:border-amber-400/50"
               } ${isUploading ? "opacity-50 cursor-not-allowed" : ""}`}
             >
               {isUploading ? (
                 <>
-                  <Loader2 className="h-16 w-16 text-primary mx-auto mb-4 animate-spin" />
-                  <p className="text-lg text-foreground mb-2">Processando documento...</p>
-                  <p className="text-sm text-muted-foreground">
+                  <Loader2 className="h-16 w-16 text-amber-400 mx-auto mb-4 animate-spin" />
+                  <p className="text-lg text-white mb-2">Processando documento...</p>
+                  <p className="text-sm text-neutral-400">
                     Extraindo dados e validando contra matriz de regras
                   </p>
                 </>
               ) : (
                 <>
-                  <UploadCloud className="h-16 w-16 text-muted-foreground mx-auto mb-4" />
-                  <p className="text-lg text-foreground mb-2">
+                  <UploadCloud className="h-16 w-16 text-neutral-400 mx-auto mb-4" />
+                  <p className="text-lg text-white mb-2">
                     {isDragging ? "Solte o(s) arquivo(s) aqui" : "Arraste arquivo(s) ou clique para selecionar"}
                   </p>
-                  <p className="text-sm text-muted-foreground">Formatos aceitos: PDF ou imagens</p>
-                  <p className="text-xs text-primary/80 mt-2">
+                  <p className="text-sm text-neutral-400">Formatos aceitos: PDF ou imagens</p>
+                  <p className="text-xs text-amber-400/80 mt-2">
                     Para ZF com múltiplos CNPJs: envie House + PDF de Instrução juntos
                   </p>
                 </>
@@ -1052,46 +957,40 @@ const CheckAwb = () => {
         </DialogContent>
       </Dialog>
 
-      {/* Details Modal */}
+      {/* MODAL DETALHES */}
       <Dialog open={isDetailsModalOpen} onOpenChange={setIsDetailsModalOpen}>
-        <DialogContent 
-          className="sm:max-w-2xl border-border/30"
-          style={{
-            background: 'rgba(4, 10, 30, 0.95)',
-            backdropFilter: 'blur(18px)',
-          }}
-        >
+        <DialogContent className="sm:max-w-2xl bg-black/95 border border-white/10 text-white">
           <DialogHeader>
-            <DialogTitle className="text-xl text-foreground">Descrição Detalhada</DialogTitle>
+            <DialogTitle className="text-xl text-white">Descrição Detalhada</DialogTitle>
           </DialogHeader>
           {selectedCheck && (
             <div className="space-y-4">
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <p className="text-sm text-muted-foreground">AWB</p>
-                  <p className="font-mono text-sm text-foreground">{selectedCheck.awb}</p>
+                  <p className="text-sm text-neutral-400">AWB</p>
+                  <p className="font-mono text-sm text-white">{selectedCheck.awb}</p>
                 </div>
                 <div>
-                  <p className="text-sm text-muted-foreground">CNPJ</p>
-                  <p className="font-mono text-sm text-foreground">{selectedCheck.cnpj}</p>
+                  <p className="text-sm text-neutral-400">CNPJ</p>
+                  <p className="font-mono text-sm text-white">{selectedCheck.cnpj}</p>
                 </div>
                 <div>
-                  <p className="text-sm text-muted-foreground">Rota</p>
-                  <p className="font-mono text-sm text-foreground">
+                  <p className="text-sm text-neutral-400">Rota</p>
+                  <p className="font-mono text-sm text-white">
                     {selectedCheck.origin} → {selectedCheck.destination}
                   </p>
                 </div>
                 <div>
-                  <p className="text-sm text-muted-foreground">Cliente</p>
-                  <p className="text-sm text-foreground">{selectedCheck.customer}</p>
+                  <p className="text-sm text-neutral-400">Cliente</p>
+                  <p className="text-sm text-white">{selectedCheck.customer}</p>
                 </div>
                 <div>
-                  <p className="text-sm text-muted-foreground">Status</p>
+                  <p className="text-sm text-neutral-400">Status</p>
                   {getResultBadge(selectedCheck.result)}
                 </div>
                 <div>
-                  <p className="text-sm text-muted-foreground">Motivo</p>
-                  <p className="text-sm text-foreground">
+                  <p className="text-sm text-neutral-400">Motivo</p>
+                  <p className="text-sm text-white">
                     {selectedCheck.reason ||
                       (selectedCheck.result === "OK" ? "CNPJ e aeroporto compatíveis" : "CNPJ não compatível")}
                   </p>
@@ -1099,43 +998,43 @@ const CheckAwb = () => {
               </div>
 
               {selectedParsedData && (
-                <div className="border-t border-border/30 pt-4 mt-4">
-                  <h3 className="font-semibold mb-3 text-foreground">Dados Adicionais</h3>
+                <div className="border-t border-white/10 pt-4 mt-4">
+                  <h3 className="font-semibold mb-3 text-white">Dados Adicionais</h3>
                   <div className="grid grid-cols-2 gap-4 text-sm">
                     <div>
-                      <p className="text-muted-foreground">Ref Othello</p>
-                      <p className="font-mono text-foreground">
+                      <p className="text-neutral-400">Ref Othello</p>
+                      <p className="font-mono text-white">
                         {selectedParsedData.mrn || "Referência não encontrada"}
                       </p>
                     </div>
                     <div>
-                      <p className="text-muted-foreground">Transportadora</p>
-                      <p className="text-foreground">{selectedParsedData.carrier || "N/A"}</p>
+                      <p className="text-neutral-400">Transportadora</p>
+                      <p className="text-white">{selectedParsedData.carrier || "N/A"}</p>
                     </div>
                     <div>
-                      <p className="text-muted-foreground">Remetente</p>
-                      <p className="text-foreground">{selectedParsedData.shipper || "N/A"}</p>
+                      <p className="text-neutral-400">Remetente</p>
+                      <p className="text-white">{selectedParsedData.shipper || "N/A"}</p>
                     </div>
                     <div>
-                      <p className="text-muted-foreground">Destinatário</p>
-                      <p className="text-foreground">{selectedParsedData.consignee || "N/A"}</p>
+                      <p className="text-neutral-400">Destinatário</p>
+                      <p className="text-white">{selectedParsedData.consignee || "N/A"}</p>
                     </div>
                     {selectedParsedData.gross_weight_kg && (
                       <div>
-                        <p className="text-muted-foreground">Peso Bruto</p>
-                        <p className="text-foreground">{selectedParsedData.gross_weight_kg} kg</p>
+                        <p className="text-neutral-400">Peso Bruto</p>
+                        <p className="text-white">{selectedParsedData.gross_weight_kg} kg</p>
                       </div>
                     )}
                     {selectedParsedData.chargeable_weight_kg && (
                       <div>
-                        <p className="text-muted-foreground">Peso Taxável</p>
-                        <p className="text-foreground">{selectedParsedData.chargeable_weight_kg} kg</p>
+                        <p className="text-neutral-400">Peso Taxável</p>
+                        <p className="text-white">{selectedParsedData.chargeable_weight_kg} kg</p>
                       </div>
                     )}
                     {selectedEmailDespachante && (
                       <div className="col-span-2">
-                        <p className="text-muted-foreground">E-mail Despachante</p>
-                        <p className="text-primary">{selectedEmailDespachante}</p>
+                        <p className="text-neutral-400">E-mail Despachante</p>
+                        <p className="text-white">{selectedEmailDespachante}</p>
                       </div>
                     )}
                   </div>
@@ -1146,26 +1045,20 @@ const CheckAwb = () => {
         </DialogContent>
       </Dialog>
 
-      {/* Delete Confirmation Dialog */}
+      {/* CONFIRMAÇÃO DE EXCLUSÃO */}
       <AlertDialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
-        <AlertDialogContent 
-          className="border-border/30"
-          style={{
-            background: 'rgba(4, 10, 30, 0.95)',
-            backdropFilter: 'blur(18px)',
-          }}
-        >
+        <AlertDialogContent className="bg-black/95 border border-white/10 text-white">
           <AlertDialogHeader>
-            <AlertDialogTitle className="text-xl text-foreground">Confirmar Exclusão</AlertDialogTitle>
-            <AlertDialogDescription className="text-muted-foreground">
+            <AlertDialogTitle className="text-xl text-white">Confirmar Exclusão</AlertDialogTitle>
+            <AlertDialogDescription className="text-neutral-400">
               Tem certeza que deseja excluir esta validação? Esta ação não pode ser desfeita.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel className="bg-secondary text-secondary-foreground border-border/30 hover:bg-secondary/80">
+            <AlertDialogCancel className="bg-white/10 text-white border-white/20 hover:bg-white/20">
               Cancelar
             </AlertDialogCancel>
-            <AlertDialogAction onClick={handleDeleteConfirm} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+            <AlertDialogAction onClick={handleDeleteConfirm} className="bg-rose-600 text-white hover:bg-rose-700">
               Excluir
             </AlertDialogAction>
           </AlertDialogFooter>
