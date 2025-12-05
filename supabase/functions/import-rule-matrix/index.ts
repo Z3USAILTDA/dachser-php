@@ -118,21 +118,33 @@ serve(async (req) => {
           const airportCode = getColumnValue(row, ['Aeroporto', 'aeroporto', 'AEROPORTO', 'Airport', 'airport', 'IATA', 'iata']).toUpperCase().trim();
           const emailDespachante = getColumnValue(row, ['Email Despachante', 'email_despachante', 'Email', 'email', 'E-mail', 'Despachante']).trim();
           const endereco = getColumnValue(row, ['Endereço', 'endereco', 'Endereco', 'Address', 'Rua', 'Logradouro']).trim();
-          const cidade = getColumnValue(row, ['Cidade/Estado', 'cidade_estado', 'Cidade', 'cidade', 'City', 'UF', 'Estado']).trim();
+          const cidadeEstado = getColumnValue(row, ['Cidade / Estado', 'Cidade/Estado', 'cidade_estado', 'Cidade', 'cidade', 'City']).trim();
           const cep = getColumnValue(row, ['CEP', 'cep', 'Zip', 'Codigo Postal']).trim();
           const empresa = getColumnValue(row, ['Empresa', 'empresa', 'Company', 'Razão Social', 'Nome']).trim();
-          const ref = getColumnValue(row, ['Ref', 'ref', 'REF', 'Referência', 'Observação', 'Obs', 'Notes']).trim();
+          const refOthello = getColumnValue(row, ['Ref Othello', 'ref_othello', 'Ref', 'ref', 'REF', 'Referência']).trim();
+          const pais = getColumnValue(row, ['País', 'pais', 'Pais', 'Country']).trim();
           
-          // Build notes from available fields
-          const notes = [ref, empresa].filter(Boolean).join(' | ');
-          const enderecoCompleto = [endereco, cidade, cep].filter(Boolean).join(', ');
+          // Parse cidade and estado from "Cidade / Estado" field
+          let cidade = '';
+          let estado = '';
+          if (cidadeEstado.includes('–') || cidadeEstado.includes('-')) {
+            const parts = cidadeEstado.split(/[–-]/).map(p => p.trim());
+            cidade = parts[0] || '';
+            estado = parts[1] || '';
+          } else {
+            cidade = cidadeEstado;
+          }
+          
+          // Build address_pattern from full address
+          const addressPattern = [endereco, cidade, estado, cep, pais].filter(Boolean).join(', ');
 
           if (cnpj) {
             await client.execute(
               `INSERT INTO ai_agente.t_rule_row_awb 
-               (matrix_id, cnpj, airport_code, email_despachante, address_pattern, is_active) 
-               VALUES (?, ?, ?, ?, ?, 1)`,
-              [klabinMatrixId, cnpj, airportCode || null, emailDespachante || null, enderecoCompleto || null]
+               (matrix_id, cnpj, airport_code, email_despachante, address_pattern, is_active, ref_othello, empresa, endereco, cidade, estado, cep, pais) 
+               VALUES (?, ?, ?, ?, ?, 1, ?, ?, ?, ?, ?, ?, ?)`,
+              [klabinMatrixId, cnpj, airportCode || null, emailDespachante || null, addressPattern || null, 
+               refOthello || null, empresa || null, endereco || null, cidade || null, estado || null, cep || null, pais || null]
             );
             klabinCount++;
           }
@@ -180,20 +192,32 @@ serve(async (req) => {
           const cnpjRaw = getColumnValue(row, ['CNPJ', 'cnpj', 'Cnpj']);
           const cnpj = cnpjRaw.replace(/\D/g, '');
           const endereco = getColumnValue(row, ['Endereço', 'endereco', 'Endereco', 'Address', 'Rua', 'Logradouro']).trim();
-          const cidade = getColumnValue(row, ['Cidade/Estado', 'cidade_estado', 'Cidade', 'cidade', 'City', 'UF', 'Estado']).trim();
+          const cidadeEstado = getColumnValue(row, ['Cidade / Estado', 'Cidade/Estado', 'cidade_estado', 'Cidade', 'cidade', 'City']).trim();
           const cep = getColumnValue(row, ['CEP', 'cep', 'Zip', 'Codigo Postal']).trim();
           const empresa = getColumnValue(row, ['Empresa', 'empresa', 'Company', 'Razão Social', 'Nome']).trim();
-          const ref = getColumnValue(row, ['Ref', 'ref', 'REF', 'Referência', 'Observação', 'Obs', 'Notes']).trim();
+          const refOthello = getColumnValue(row, ['Ref Othello', 'ref_othello', 'Ref', 'ref', 'REF', 'Referência']).trim();
+          const pais = getColumnValue(row, ['País', 'pais', 'Pais', 'Country']).trim();
           
-          const notes = [ref, empresa].filter(Boolean).join(' | ');
-          const addressPattern = [endereco, cidade, cep].filter(Boolean).join(', ');
+          // Parse cidade and estado from "Cidade / Estado" field
+          let cidade = '';
+          let estado = '';
+          if (cidadeEstado.includes('–') || cidadeEstado.includes('-')) {
+            const parts = cidadeEstado.split(/[–-]/).map(p => p.trim());
+            cidade = parts[0] || '';
+            estado = parts[1] || '';
+          } else {
+            cidade = cidadeEstado;
+          }
+          
+          const addressPattern = [endereco, cidade, estado, cep, pais].filter(Boolean).join(', ');
 
           if (cnpj) {
             await client.execute(
               `INSERT INTO ai_agente.t_rule_row_awb 
-               (matrix_id, cnpj, airport_code, email_despachante, address_pattern, is_active) 
-               VALUES (?, ?, NULL, NULL, ?, 1)`,
-              [zfMatrixId, cnpj, addressPattern || null]
+               (matrix_id, cnpj, airport_code, email_despachante, address_pattern, is_active, ref_othello, empresa, endereco, cidade, estado, cep, pais) 
+               VALUES (?, ?, NULL, NULL, ?, 1, ?, ?, ?, ?, ?, ?, ?)`,
+              [zfMatrixId, cnpj, addressPattern || null, 
+               refOthello || null, empresa || null, endereco || null, cidade || null, estado || null, cep || null, pais || null]
             );
             zfCount++;
           }
