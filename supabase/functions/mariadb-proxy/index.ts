@@ -699,14 +699,16 @@ serve(async (req) => {
 
         // Get checks with related data
         const checks = await client.query(
-          `SELECT c.*, 
-            p.awb_number, p.cnpj, p.origin, p.destination, p.customer, p.consignee,
-            d.file_name as hawb_file_name,
-            u.username
+          `SELECT c.id, c.awb_number, c.cnpj, c.customer, c.origin, c.destination,
+            c.validation_status, c.validation_message, c.matched_rule_id, c.created_by, c.created_at,
+            p.extracted_awb, p.extracted_cnpj, p.extracted_origin, p.extracted_destination, 
+            p.extracted_customer, p.confidence_score, p.raw_text,
+            d.filename as hawb_file_name, d.storage_path as hawb_file_path,
+            r.email_despachante as rule_email, r.airport_code as rule_airport
            FROM ai_agente.t_awb_check c
-           LEFT JOIN ai_agente.t_parsed_awb p ON c.parsed_data_id = p.id
-           LEFT JOIN ai_agente.t_document_awb d ON c.hawb_document_id = d.id
-           LEFT JOIN ai_agente.t_users_dachser u ON c.user_id = u.id
+           LEFT JOIN ai_agente.t_parsed_awb p ON p.awb_check_id = c.id
+           LEFT JOIN ai_agente.t_document_awb d ON p.document_id = d.id
+           LEFT JOIN ai_agente.t_rule_row_awb r ON c.matched_rule_id = r.id
            ${whereClause}
            ORDER BY c.created_at DESC
            LIMIT ? OFFSET ?`,
@@ -727,19 +729,16 @@ serve(async (req) => {
         }
 
         const checks = await client.query(
-          `SELECT c.*, 
-            p.awb_number, p.shipper, p.consignee, p.customer, p.cnpj, p.origin, p.destination,
-            p.routing_legs, p.carrier, p.flight_numbers, p.gross_weight, p.chargeable_weight,
-            d.file_name as hawb_file_name, d.file_path as hawb_file_path,
-            di.file_name as instruction_file_name, di.file_path as instruction_file_path,
-            r.airport_code as rule_airport, r.email_despachante as rule_email,
-            u.username
+          `SELECT c.id, c.awb_number, c.cnpj, c.customer, c.origin, c.destination,
+            c.validation_status, c.validation_message, c.matched_rule_id, c.created_by, c.created_at,
+            p.extracted_awb, p.extracted_cnpj, p.extracted_origin, p.extracted_destination,
+            p.extracted_customer, p.confidence_score, p.raw_text,
+            d.filename as hawb_file_name, d.storage_path as hawb_file_path,
+            r.airport_code as rule_airport, r.email_despachante as rule_email
            FROM ai_agente.t_awb_check c
-           LEFT JOIN ai_agente.t_parsed_awb p ON c.parsed_data_id = p.id
-           LEFT JOIN ai_agente.t_document_awb d ON c.hawb_document_id = d.id
-           LEFT JOIN ai_agente.t_document_awb di ON c.instruction_document_id = di.id
-           LEFT JOIN ai_agente.t_rule_row_awb r ON c.rule_row_id = r.id
-           LEFT JOIN ai_agente.t_users_dachser u ON c.user_id = u.id
+           LEFT JOIN ai_agente.t_parsed_awb p ON p.awb_check_id = c.id
+           LEFT JOIN ai_agente.t_document_awb d ON p.document_id = d.id
+           LEFT JOIN ai_agente.t_rule_row_awb r ON c.matched_rule_id = r.id
            WHERE c.id = ?`,
           [awbCheckId]
         );
