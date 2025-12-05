@@ -399,7 +399,7 @@ serve(async (req) => {
         }
 
         const rules = await client.query(
-          'SELECT * FROM ai_agente.t_rule_row_awb WHERE rule_matrix_id = ? ORDER BY id',
+          'SELECT * FROM ai_agente.t_rule_row_awb WHERE matrix_id = ? ORDER BY id',
           [matrixId]
         );
 
@@ -418,7 +418,7 @@ serve(async (req) => {
 
         const insertResult = await client.execute(
           `INSERT INTO ai_agente.t_rule_row_awb 
-           (rule_matrix_id, cnpj, airport_code, notes, email_despachante, endereco_completo) 
+           (matrix_id, cnpj, airport_code, notes, email_despachante, endereco_completo) 
            VALUES (?, ?, ?, ?, ?, ?)`,
           [matrixId, cnpj, airportCode || null, notes || null, emailDespachante || null, enderecoCompleto || null]
         );
@@ -440,7 +440,7 @@ serve(async (req) => {
         for (const rule of rules) {
           await client.execute(
             `INSERT INTO ai_agente.t_rule_row_awb 
-             (rule_matrix_id, cnpj, airport_code, notes, email_despachante, endereco_completo) 
+             (matrix_id, cnpj, airport_code, notes, email_despachante, endereco_completo) 
              VALUES (?, ?, ?, ?, ?, ?)`,
             [matrixId, rule.cnpj, rule.airportCode || null, rule.notes || null, rule.emailDespachante || null, rule.enderecoCompleto || null]
           );
