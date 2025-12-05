@@ -664,89 +664,52 @@ const CheckAwb = () => {
 
   return (
     <div className="min-h-screen relative overflow-x-hidden">
-      {/* Background with image and gradient overlay */}
-      <div className="fixed inset-0 z-0">
-        <div 
-          className="absolute inset-0"
-          style={{
-            backgroundImage: `url(${dachserBg})`,
-            backgroundSize: 'cover',
-            backgroundPosition: 'center',
-          }}
-        />
-        <div 
-          className="absolute inset-0"
-          style={{
-            background: 'linear-gradient(120deg, rgba(4, 17, 45, 0.92), rgba(26, 93, 173, 0.55))',
-          }}
-        />
-        
-        {/* Radial gradient overlay */}
-        <div 
-          className="absolute inset-0"
-          style={{
-            background: `
-              radial-gradient(ellipse at 20% 20%, rgba(245, 184, 67, 0.12) 0%, transparent 50%),
-              radial-gradient(ellipse at 80% 80%, rgba(245, 184, 67, 0.08) 0%, transparent 50%)
-            `
-          }}
-        />
-        
-        {/* Animated Lines */}
-        <div className="absolute inset-0 opacity-20">
-          {[...Array(6)].map((_, i) => (
-            <div
-              key={`line-${i}`}
-              className="absolute h-full w-px bg-gradient-to-b from-primary/70 to-primary/10"
-              style={{
-                left: `${15 + i * 14}%`,
-                transform: `skewX(${-20 + i * 8}deg)`,
-              }}
-            />
-          ))}
-        </div>
-
-        {/* Floating Particles */}
-        {[...Array(20)].map((_, i) => (
-          <div
-            key={`particle-${i}`}
-            className="absolute w-1 h-1 rounded-full bg-primary/40 animate-float"
-            style={{
-              left: `${Math.random() * 100}%`,
-              top: `${Math.random() * 100}%`,
-              animationDelay: `${Math.random() * 5}s`,
-              animationDuration: `${4 + Math.random() * 4}s`,
-            }}
-          />
-        ))}
-      </div>
+      {/* Background - seguindo CSS do PHP */}
+      <div 
+        className="fixed inset-0 z-[-2]"
+        style={{
+          background: `
+            radial-gradient(circle at 10% 0%, rgba(255,200,0,.20), transparent 55%),
+            radial-gradient(circle at 90% 100%, rgba(255,200,0,.15), transparent 55%),
+            linear-gradient(180deg, rgba(0,0,0,.82), rgba(0,0,0,.96)),
+            url(${dachserBg}) center/cover no-repeat
+          `,
+          filter: 'saturate(.8)',
+        }}
+      />
+      <div 
+        className="fixed inset-0 z-[-1]"
+        style={{
+          background: 'radial-gradient(circle at 50% 0%, rgba(0,0,0,.7), transparent 55%)',
+        }}
+      />
 
       {/* Top Left - Back + Header */}
-      <div className="relative z-50 flex items-center gap-5 pt-5 pl-4 mb-4">
+      <div className="fixed top-[18px] left-[18px] z-[1000] flex items-center gap-[18px]">
         <button
           onClick={() => navigate("/dashboard")}
-          className="flex items-center gap-2 px-4 py-2.5 rounded-full border border-primary/90 bg-primary/15 text-primary font-bold text-sm backdrop-blur-sm hover:bg-primary/25 transition-all"
+          className="inline-flex items-center gap-2 px-[14px] py-2.5 rounded-full border border-[rgba(255,200,0,.9)] bg-[rgba(255,200,0,.15)] text-[#ffc800] font-bold text-[0.9rem] backdrop-blur-sm hover:bg-[rgba(255,200,0,.25)] transition-all"
         >
           <ArrowLeft size={16} />
           <span>Voltar</span>
         </button>
 
         <header>
-          <h1 className="text-2xl font-bold tracking-[0.24em] text-foreground">DACHSER</h1>
-          <p className="text-sm text-muted-foreground mt-0.5">
+          <h1 className="text-[1.6rem] tracking-[0.24em] uppercase text-[#f5f5f5]">DACHSER</h1>
+          <p className="text-[0.9rem] text-[#aaaaaa] mt-0.5">
             Intelligent Logistics – Check AWB x CNPJ
           </p>
           <div className="flex gap-1.5 mt-1.5">
-            <span className="w-1.5 h-1.5 rounded-full bg-primary shadow-[0_0_10px_hsl(var(--primary))]" />
-            <span className="w-1.5 h-1.5 rounded-full bg-primary shadow-[0_0_10px_hsl(var(--primary))]" />
-            <span className="w-1.5 h-1.5 rounded-full bg-primary shadow-[0_0_10px_hsl(var(--primary))]" />
+            <span className="w-1.5 h-1.5 rounded-full bg-[#ffc800] shadow-[0_0_10px_rgba(255,200,0,.9)]" />
+            <span className="w-1.5 h-1.5 rounded-full bg-[#ffc800] shadow-[0_0_10px_rgba(255,200,0,.9)]" />
+            <span className="w-1.5 h-1.5 rounded-full bg-[#ffc800] shadow-[0_0_10px_rgba(255,200,0,.9)]" />
           </div>
         </header>
       </div>
 
       {/* Top Right - User */}
-      <div className="fixed top-5 right-4 z-50 flex items-center gap-2.5 text-sm">
-        <div className="px-4 py-1.5 rounded-full bg-background/70 border border-border/30 text-muted-foreground max-w-[220px] truncate">
+      <div className="fixed top-[18px] right-[18px] z-[1000] flex items-center gap-2.5 text-[0.85rem]">
+        <div className="px-[14px] py-1.5 rounded-full bg-[rgba(0,0,0,.70)] border border-[rgba(255,255,255,.18)] text-[#aaaaaa] max-w-[220px] truncate">
           @{user?.username || user?.email}
         </div>
         {userRole === "ADMIN" && (
@@ -755,7 +718,7 @@ const CheckAwb = () => {
               type="button"
               onClick={handleExportToMariaDB}
               disabled={isExporting}
-              className="w-8 h-8 rounded-full border border-border/25 flex items-center justify-center bg-background/70 text-primary hover:bg-background/90 transition disabled:opacity-50"
+              className="w-8 h-8 rounded-full border border-[rgba(255,255,255,.25)] flex items-center justify-center bg-[rgba(0,0,0,.7)] text-[#ffc800] hover:bg-[rgba(0,0,0,.9)] transition disabled:opacity-50"
               title="Exportar para MariaDB"
             >
               {isExporting ? (
@@ -767,7 +730,7 @@ const CheckAwb = () => {
             <button
               type="button"
               onClick={() => navigate("/admin/logs")}
-              className="w-8 h-8 rounded-full border border-border/25 flex items-center justify-center bg-background/70 text-primary hover:bg-background/90 transition"
+              className="w-8 h-8 rounded-full border border-[rgba(255,255,255,.25)] flex items-center justify-center bg-[rgba(0,0,0,.7)] text-[#ffc800] hover:bg-[rgba(0,0,0,.9)] transition"
               title="Logs do sistema"
             >
               <TerminalSquare className="w-4 h-4" />
@@ -777,30 +740,37 @@ const CheckAwb = () => {
       </div>
 
       {/* Main Content */}
-      <main className="relative z-10 max-w-6xl mx-auto pt-4 pb-6 px-4 space-y-5">
+      <main className="relative z-10 max-w-[1280px] mx-auto mt-[130px] mb-12 px-4 space-y-[18px]">
         {/* CARD DE BUSCA + FILTROS */}
-        <Card className="bg-background rounded-2xl border border-border/30 shadow-[0_18px_40px_rgba(0,0,0,0.85)]">
-            <CardContent className="pt-5 pb-4 space-y-4">
+        <section 
+          className="rounded-2xl p-4"
+          style={{
+            background: 'rgba(5,6,18,.9)',
+            border: '1px solid rgba(255,255,255,.12)',
+            boxShadow: '0 18px 40px rgba(0,0,0,.85)',
+          }}
+        >
+            <div className="space-y-4">
               <div className="relative">
-                <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
+                <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-[#aaaaaa]" />
                 <input
                   type="text"
                   placeholder="Buscar por AWB, CNPJ ou cliente"
                   value={searchTerm}
                   onChange={e => setSearchTerm(e.target.value)}
-                  className="h-11 w-full pl-11 pr-4 rounded-full border border-border/30 bg-[#13141a] text-foreground text-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+                  className="h-11 w-full pl-11 pr-4 rounded-full border border-[rgba(255,255,255,.14)] bg-[#13141a] text-[#f5f5f5] text-[0.85rem] placeholder:text-[#666] focus:outline-none focus:border-[#ffc800] focus:shadow-[0_0_0_1px_rgba(255,200,0,.8)]"
                 />
               </div>
 
               <div className="flex flex-wrap items-center gap-4 justify-between">
                 <div className="flex flex-wrap items-center gap-4">
                   <div className="flex items-center gap-2">
-                    <div className="flex items-center gap-2 px-3 py-1 rounded-full bg-card border border-border/50">
-                      <FilterIcon className="h-3.5 w-3.5 text-primary" />
-                      <span className="text-[10px] tracking-[0.22em] uppercase text-muted-foreground">Status</span>
+                    <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-[rgba(0,0,0,.5)] border border-[rgba(255,255,255,.22)]">
+                      <FilterIcon className="h-3.5 w-3.5 text-[#ffc800]" />
+                      <span className="text-[0.74rem] tracking-[0.12em] uppercase text-[#aaaaaa]">Status</span>
                     </div>
                     <Select value={statusFilter} onValueChange={setStatusFilter}>
-                      <SelectTrigger className="h-9 w-[150px] rounded-full bg-card border border-border/50 text-xs">
+                      <SelectTrigger className="h-9 w-[150px] rounded-full bg-[#13141a] border border-[rgba(255,255,255,.14)] text-[0.85rem]">
                         <SelectValue placeholder="Todos" />
                       </SelectTrigger>
                       <SelectContent>
@@ -812,12 +782,12 @@ const CheckAwb = () => {
                   </div>
 
                   <div className="flex items-center gap-2">
-                    <div className="flex items-center gap-2 px-3 py-1 rounded-full bg-card border border-border/50">
-                      <span className="w-1.5 h-1.5 rounded-full bg-primary" />
-                      <span className="text-[10px] tracking-[0.22em] uppercase text-muted-foreground">Período</span>
+                    <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-[rgba(0,0,0,.5)] border border-[rgba(255,255,255,.22)]">
+                      <span className="w-1.5 h-1.5 rounded-full bg-[#ffc800]" />
+                      <span className="text-[0.74rem] tracking-[0.12em] uppercase text-[#aaaaaa]">Período</span>
                     </div>
                     <Select value={periodFilter} onValueChange={setPeriodFilter}>
-                      <SelectTrigger className="h-9 w-[150px] rounded-full bg-card border border-border/50 text-xs">
+                      <SelectTrigger className="h-9 w-[150px] rounded-full bg-[#13141a] border border-[rgba(255,255,255,.14)] text-[0.85rem]">
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
@@ -828,121 +798,135 @@ const CheckAwb = () => {
                     </Select>
                   </div>
 
-                  <Button
+                  <button
                     onClick={fetchChecks}
                     disabled={isRefreshing}
-                    variant="outline"
-                    className="h-9 rounded-full border-border/50 bg-card text-xs px-4 hover:border-primary/80 hover:bg-card/80 disabled:opacity-50"
+                    className="inline-flex items-center gap-1.5 h-9 px-[14px] rounded-full bg-[rgba(255,255,255,.05)] border border-[rgba(255,255,255,.25)] text-[#f5f5f5] text-[0.8rem] font-bold uppercase tracking-[0.12em] hover:bg-[rgba(255,255,255,.08)] disabled:opacity-50"
                   >
-                    <RefreshCw className={`mr-2 h-4 w-4 ${isRefreshing ? "animate-spin" : ""}`} />
+                    <RefreshCw className={`h-4 w-4 ${isRefreshing ? "animate-spin" : ""}`} />
                     Atualizar
-                  </Button>
+                  </button>
                 </div>
 
                 <Button
                   onClick={() => setIsUploadModalOpen(true)}
-                  className="h-10 rounded-full px-5 bg-primary text-primary-foreground font-semibold text-sm shadow-[0_0_22px_hsl(var(--primary)/0.6)] hover:bg-primary/90"
+                  className="h-10 rounded-full px-5 bg-[#ffc800] text-black font-semibold text-sm shadow-[0_0_22px_rgba(255,200,0,.6)] hover:bg-[#f5b843]"
                 >
                   <Plus className="mr-2 h-5 w-5" />
                   Nova Validação
                 </Button>
               </div>
-            </CardContent>
-          </Card>
+            </div>
+          </section>
 
           {/* TABELA DE HISTÓRICO */}
-          <Card className="bg-background rounded-2xl border border-border/30 shadow-[0_18px_40px_rgba(0,0,0,0.85)]">
-            <CardContent className="pt-5 pb-4">
-              <div className="flex items-center justify-between mb-4">
-                <div>
-                  <div className="text-xs tracking-[0.22em] uppercase text-muted-foreground">
-                    Resumo de Validações
-                  </div>
-                  <div className="text-[11px] text-muted-foreground mt-1">
-                    Consultas recentes de AWB/HAWB por status e cliente
-                  </div>
+          <section 
+            className="rounded-2xl p-[14px_16px_12px]"
+            style={{
+              background: 'rgba(4,5,15,.94)',
+              border: '1px solid rgba(255,255,255,.12)',
+              boxShadow: '0 18px 40px rgba(0,0,0,.9)',
+            }}
+          >
+            <div className="flex items-center justify-between mb-2">
+              <div>
+                <div className="text-[0.86rem] tracking-[0.18em] uppercase text-[#f5f5f5]">
+                  Resumo de Validações
                 </div>
-                <div className="text-xs text-muted-foreground">
-                  Total: <span className="text-primary font-semibold">{filteredChecks.length}</span> registros
+                <div className="text-[0.76rem] text-[#aaaaaa] mt-1">
+                  Consultas recentes de AWB/HAWB por status e cliente
                 </div>
               </div>
+              <div className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-full bg-[rgba(255,255,255,.06)] border border-[rgba(255,255,255,.20)] text-[0.75rem]">
+                <span className="w-[7px] h-[7px] rounded-full bg-[#ffc800]" />
+                <span>{filteredChecks.length} registros</span>
+              </div>
+            </div>
 
-              <div className="rounded-xl border border-border/20 bg-[#05060c] overflow-hidden">
-                <Table>
-                  <TableHeader>
-                    <TableRow className="border-b border-border/20 bg-[#05060c]">
-                      <TableHead className="text-xs uppercase tracking-[0.18em] text-muted-foreground">AWB</TableHead>
-                      <TableHead className="text-xs uppercase tracking-[0.18em] text-muted-foreground">CNPJ</TableHead>
-                      <TableHead className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Rota</TableHead>
-                      <TableHead className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Cliente</TableHead>
-                      <TableHead className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Status</TableHead>
-                      <TableHead className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Motivo</TableHead>
-                      <TableHead className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Data</TableHead>
-                      <TableHead className="text-right text-xs uppercase tracking-[0.18em] text-muted-foreground">
-                        Ações
-                      </TableHead>
+            <div 
+              className="mt-1.5 max-h-[52vh] overflow-auto rounded-xl border border-[rgba(255,255,255,.16)]"
+            >
+              <Table>
+                <TableHeader>
+                  <TableRow className="border-b border-[rgba(255,255,255,.09)] bg-[#14151c]">
+                    <TableHead className="text-[0.75rem] uppercase tracking-[0.12em] text-[#aaaaaa] sticky top-0 bg-[#14151c] z-5">AWB</TableHead>
+                    <TableHead className="text-[0.75rem] uppercase tracking-[0.12em] text-[#aaaaaa] sticky top-0 bg-[#14151c] z-5">CNPJ</TableHead>
+                    <TableHead className="text-[0.75rem] uppercase tracking-[0.12em] text-[#aaaaaa] sticky top-0 bg-[#14151c] z-5">Rota</TableHead>
+                    <TableHead className="text-[0.75rem] uppercase tracking-[0.12em] text-[#aaaaaa] sticky top-0 bg-[#14151c] z-5">Cliente</TableHead>
+                    <TableHead className="text-[0.75rem] uppercase tracking-[0.12em] text-[#aaaaaa] sticky top-0 bg-[#14151c] z-5">Status</TableHead>
+                    <TableHead className="text-[0.75rem] uppercase tracking-[0.12em] text-[#aaaaaa] sticky top-0 bg-[#14151c] z-5">Motivo</TableHead>
+                    <TableHead className="text-[0.75rem] uppercase tracking-[0.12em] text-[#aaaaaa] sticky top-0 bg-[#14151c] z-5">Data</TableHead>
+                    <TableHead className="text-right text-[0.75rem] uppercase tracking-[0.12em] text-[#aaaaaa] sticky top-0 bg-[#14151c] z-5">
+                      Ações
+                    </TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {filteredChecks.map(check => (
+                    <TableRow key={check.id} className="border-b border-[rgba(255,255,255,.09)] hover:bg-[rgba(255,255,255,.05)]">
+                      <TableCell className="font-mono text-[0.82rem] py-[9px] px-[10px]">{check.awb}</TableCell>
+                      <TableCell className="font-mono text-[0.82rem] py-[9px] px-[10px]">{check.cnpj}</TableCell>
+                      <TableCell className="font-mono text-[0.82rem] py-[9px] px-[10px]">
+                        {check.origin} → {check.destination}
+                      </TableCell>
+                      <TableCell className="text-[0.82rem] py-[9px] px-[10px]">{check.customer}</TableCell>
+                      <TableCell className="text-[0.82rem] py-[9px] px-[10px]">{getResultBadge(check.result)}</TableCell>
+                      <TableCell className="max-w-xs text-[0.82rem] py-[9px] px-[10px] truncate text-[#aaaaaa]" title={check.reason || ""}>
+                        {check.reason || (check.result === "OK" ? "CNPJ e aeroporto compatíveis" : "CNPJ não compatível")}
+                      </TableCell>
+                      <TableCell className="text-[0.82rem] py-[9px] px-[10px]">
+                        {format(new Date(check.created_at), "dd/MM/yyyy HH:mm")}
+                      </TableCell>
+                      <TableCell className="text-right py-[9px] px-[10px]">
+                        <div className="flex justify-end gap-1.5">
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8 text-[#aaaaaa] hover:bg-[rgba(255,255,255,.1)]"
+                            onClick={() => handleViewDetails(check)}
+                          >
+                            <FileText className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8 text-[#ff4d4f] hover:bg-[rgba(255,77,79,.12)]"
+                            onClick={() => handleDeleteClick(check.id)}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      </TableCell>
                     </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {filteredChecks.map(check => (
-                      <TableRow key={check.id} className="border-b border-border/10 hover:bg-muted/10">
-                        <TableCell className="font-mono text-xs">{check.awb}</TableCell>
-                        <TableCell className="font-mono text-xs">{check.cnpj}</TableCell>
-                        <TableCell className="font-mono text-xs">
-                          {check.origin} → {check.destination}
-                        </TableCell>
-                        <TableCell className="text-xs">{check.customer}</TableCell>
-                        <TableCell className="text-xs">{getResultBadge(check.result)}</TableCell>
-                        <TableCell className="max-w-xs text-xs truncate" title={check.reason || ""}>
-                          {check.reason || (check.result === "OK" ? "CNPJ e aeroporto compatíveis" : "CNPJ não compatível")}
-                        </TableCell>
-                        <TableCell className="text-xs">
-                          {format(new Date(check.created_at), "dd/MM/yyyy HH:mm")}
-                        </TableCell>
-                        <TableCell className="text-right">
-                          <div className="flex justify-end gap-1.5">
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="h-8 w-8 text-muted-foreground hover:bg-muted/20"
-                              onClick={() => handleViewDetails(check)}
-                            >
-                              <FileText className="h-4 w-4" />
-                            </Button>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="h-8 w-8 text-rose-400 hover:bg-rose-500/10"
-                              onClick={() => handleDeleteClick(check.id)}
-                            >
-                              <Trash2 className="h-4 w-4" />
-                            </Button>
-                          </div>
-                        </TableCell>
-                      </TableRow>
-                    ))}
+                  ))}
 
-                    {filteredChecks.length === 0 && (
-                      <TableRow>
-                        <TableCell colSpan={8} className="text-center py-6 text-sm text-muted-foreground">
-                          Nenhuma validação encontrada para os filtros selecionados.
-                        </TableCell>
-                      </TableRow>
-                    )}
-                  </TableBody>
-                </Table>
-              </div>
-            </CardContent>
-          </Card>
+                  {filteredChecks.length === 0 && (
+                    <TableRow>
+                      <TableCell colSpan={8} className="text-center py-6 text-sm text-[#aaaaaa]">
+                        Nenhuma validação encontrada para os filtros selecionados.
+                      </TableCell>
+                    </TableRow>
+                  )}
+                </TableBody>
+              </Table>
+            </div>
+          </section>
 
           {/* Matriz de Regras (ADMIN) */}
           {userRole === "ADMIN" && (
             <Collapsible open={isMatrixOpen} onOpenChange={setIsMatrixOpen}>
-              <Card className="bg-background rounded-2xl border border-border/30 shadow-[0_18px_40px_rgba(0,0,0,0.85)]">
+              <section 
+                className="rounded-2xl"
+                style={{
+                  background: 'rgba(5,6,18,.9)',
+                  border: '1px solid rgba(255,255,255,.12)',
+                  boxShadow: '0 18px 40px rgba(0,0,0,.85)',
+                }}
+              >
                 <CollapsibleTrigger asChild>
                   <Button
                     variant="ghost"
-                    className="w-full flex items-center justify-between px-6 py-4 hover:bg-muted/10"
+                    className="w-full flex items-center justify-between px-6 py-4 hover:bg-[rgba(255,255,255,.05)]"
                   >
                     <span className="text-base font-semibold">Matriz de Regras</span>
                     {isMatrixOpen ? <ChevronUp className="h-5 w-5" /> : <ChevronDown className="h-5 w-5" />}
@@ -953,16 +937,22 @@ const CheckAwb = () => {
                     <RuleMatrixManager userRole={userRole} />
                   </div>
                 </CollapsibleContent>
-              </Card>
+              </section>
             </Collapsible>
           )}
       </main>
 
       {/* MODAL UPLOAD */}
       <Dialog open={isUploadModalOpen} onOpenChange={setIsUploadModalOpen}>
-        <DialogContent className="sm:max-w-md bg-background border border-border/30 text-foreground">
+        <DialogContent 
+          className="sm:max-w-md rounded-2xl"
+          style={{
+            background: 'rgba(5,6,18,.95)',
+            border: '1px solid rgba(255,255,255,.12)',
+          }}
+        >
           <DialogHeader>
-            <DialogTitle className="text-xl">Nova Validação de AWB/HAWB</DialogTitle>
+            <DialogTitle className="text-xl text-[#f5f5f5]">Nova Validação de AWB/HAWB</DialogTitle>
           </DialogHeader>
           <div className="space-y-4">
             <input
@@ -979,25 +969,25 @@ const CheckAwb = () => {
               onDrop={handleDrop}
               onClick={() => fileInputRef.current?.click()}
               className={`border-2 border-dashed rounded-lg p-12 text-center transition-all cursor-pointer ${
-                isDragging ? "border-primary bg-primary/5" : "border-border/50 hover:border-primary/50"
+                isDragging ? "border-[#ffc800] bg-[rgba(255,200,0,.05)]" : "border-[rgba(255,255,255,.20)] hover:border-[rgba(255,200,0,.5)]"
               } ${isUploading ? "opacity-50 cursor-not-allowed" : ""}`}
             >
               {isUploading ? (
                 <>
-                  <Loader2 className="h-16 w-16 text-primary mx-auto mb-4 animate-spin" />
-                  <p className="text-lg mb-2">Processando documento...</p>
-                  <p className="text-sm text-muted-foreground">
+                  <Loader2 className="h-16 w-16 text-[#ffc800] mx-auto mb-4 animate-spin" />
+                  <p className="text-lg text-[#f5f5f5] mb-2">Processando documento...</p>
+                  <p className="text-sm text-[#aaaaaa]">
                     Extraindo dados e validando contra matriz de regras
                   </p>
                 </>
               ) : (
                 <>
-                  <UploadCloud className="h-16 w-16 text-muted-foreground mx-auto mb-4" />
-                  <p className="text-lg mb-2">
+                  <UploadCloud className="h-16 w-16 text-[#aaaaaa] mx-auto mb-4" />
+                  <p className="text-lg text-[#f5f5f5] mb-2">
                     {isDragging ? "Solte o(s) arquivo(s) aqui" : "Arraste arquivo(s) ou clique para selecionar"}
                   </p>
-                  <p className="text-sm text-muted-foreground">Formatos aceitos: PDF ou imagens</p>
-                  <p className="text-xs text-primary/80 mt-2">
+                  <p className="text-sm text-[#aaaaaa]">Formatos aceitos: PDF ou imagens</p>
+                  <p className="text-xs text-[rgba(255,200,0,.8)] mt-2">
                     Para ZF com múltiplos CNPJs: envie House + PDF de Instrução juntos
                   </p>
                 </>
@@ -1009,38 +999,44 @@ const CheckAwb = () => {
 
       {/* MODAL DETALHES */}
       <Dialog open={isDetailsModalOpen} onOpenChange={setIsDetailsModalOpen}>
-        <DialogContent className="sm:max-w-2xl bg-background border border-border/30 text-foreground">
+        <DialogContent 
+          className="sm:max-w-2xl rounded-2xl"
+          style={{
+            background: 'rgba(5,6,18,.95)',
+            border: '1px solid rgba(255,255,255,.12)',
+          }}
+        >
           <DialogHeader>
-            <DialogTitle className="text-xl">Descrição Detalhada</DialogTitle>
+            <DialogTitle className="text-xl text-[#f5f5f5]">Descrição Detalhada</DialogTitle>
           </DialogHeader>
           {selectedCheck && (
             <div className="space-y-4">
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <p className="text-sm text-muted-foreground">AWB</p>
-                  <p className="font-mono text-sm">{selectedCheck.awb}</p>
+                  <p className="text-sm text-[#aaaaaa]">AWB</p>
+                  <p className="font-mono text-sm text-[#f5f5f5]">{selectedCheck.awb}</p>
                 </div>
                 <div>
-                  <p className="text-sm text-muted-foreground">CNPJ</p>
-                  <p className="font-mono text-sm">{selectedCheck.cnpj}</p>
+                  <p className="text-sm text-[#aaaaaa]">CNPJ</p>
+                  <p className="font-mono text-sm text-[#f5f5f5]">{selectedCheck.cnpj}</p>
                 </div>
                 <div>
-                  <p className="text-sm text-muted-foreground">Rota</p>
-                  <p className="font-mono text-sm">
+                  <p className="text-sm text-[#aaaaaa]">Rota</p>
+                  <p className="font-mono text-sm text-[#f5f5f5]">
                     {selectedCheck.origin} → {selectedCheck.destination}
                   </p>
                 </div>
                 <div>
-                  <p className="text-sm text-muted-foreground">Cliente</p>
-                  <p className="text-sm">{selectedCheck.customer}</p>
+                  <p className="text-sm text-[#aaaaaa]">Cliente</p>
+                  <p className="text-sm text-[#f5f5f5]">{selectedCheck.customer}</p>
                 </div>
                 <div>
-                  <p className="text-sm text-muted-foreground">Status</p>
+                  <p className="text-sm text-[#aaaaaa]">Status</p>
                   {getResultBadge(selectedCheck.result)}
                 </div>
                 <div>
-                  <p className="text-sm text-muted-foreground">Motivo</p>
-                  <p className="text-sm">
+                  <p className="text-sm text-[#aaaaaa]">Motivo</p>
+                  <p className="text-sm text-[#f5f5f5]">
                     {selectedCheck.reason ||
                       (selectedCheck.result === "OK" ? "CNPJ e aeroporto compatíveis" : "CNPJ não compatível")}
                   </p>
@@ -1048,43 +1044,43 @@ const CheckAwb = () => {
               </div>
 
               {selectedParsedData && (
-                <div className="border-t border-border/30 pt-4 mt-4">
-                  <h3 className="font-semibold mb-3">Dados Adicionais</h3>
+                <div className="border-t border-[rgba(255,255,255,.12)] pt-4 mt-4">
+                  <h3 className="font-semibold mb-3 text-[#f5f5f5]">Dados Adicionais</h3>
                   <div className="grid grid-cols-2 gap-4 text-sm">
                     <div>
-                      <p className="text-muted-foreground">Ref Othello</p>
-                      <p className="font-mono">
+                      <p className="text-[#aaaaaa]">Ref Othello</p>
+                      <p className="font-mono text-[#f5f5f5]">
                         {selectedParsedData.mrn || "Referência não encontrada"}
                       </p>
                     </div>
                     <div>
-                      <p className="text-muted-foreground">Transportadora</p>
-                      <p>{selectedParsedData.carrier || "N/A"}</p>
+                      <p className="text-[#aaaaaa]">Transportadora</p>
+                      <p className="text-[#f5f5f5]">{selectedParsedData.carrier || "N/A"}</p>
                     </div>
                     <div>
-                      <p className="text-muted-foreground">Remetente</p>
-                      <p>{selectedParsedData.shipper || "N/A"}</p>
+                      <p className="text-[#aaaaaa]">Remetente</p>
+                      <p className="text-[#f5f5f5]">{selectedParsedData.shipper || "N/A"}</p>
                     </div>
                     <div>
-                      <p className="text-muted-foreground">Destinatário</p>
-                      <p>{selectedParsedData.consignee || "N/A"}</p>
+                      <p className="text-[#aaaaaa]">Destinatário</p>
+                      <p className="text-[#f5f5f5]">{selectedParsedData.consignee || "N/A"}</p>
                     </div>
                     {selectedParsedData.gross_weight_kg && (
                       <div>
-                        <p className="text-muted-foreground">Peso Bruto</p>
-                        <p>{selectedParsedData.gross_weight_kg} kg</p>
+                        <p className="text-[#aaaaaa]">Peso Bruto</p>
+                        <p className="text-[#f5f5f5]">{selectedParsedData.gross_weight_kg} kg</p>
                       </div>
                     )}
                     {selectedParsedData.chargeable_weight_kg && (
                       <div>
-                        <p className="text-muted-foreground">Peso Taxável</p>
-                        <p>{selectedParsedData.chargeable_weight_kg} kg</p>
+                        <p className="text-[#aaaaaa]">Peso Taxável</p>
+                        <p className="text-[#f5f5f5]">{selectedParsedData.chargeable_weight_kg} kg</p>
                       </div>
                     )}
                     {selectedEmailDespachante && (
                       <div className="col-span-2">
-                        <p className="text-muted-foreground">E-mail Despachante</p>
-                        <p>{selectedEmailDespachante}</p>
+                        <p className="text-[#aaaaaa]">E-mail Despachante</p>
+                        <p className="text-[#f5f5f5]">{selectedEmailDespachante}</p>
                       </div>
                     )}
                   </div>
@@ -1097,18 +1093,24 @@ const CheckAwb = () => {
 
       {/* CONFIRMAÇÃO DE EXCLUSÃO */}
       <AlertDialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
-        <AlertDialogContent className="bg-background border border-border/30">
+        <AlertDialogContent 
+          className="rounded-2xl"
+          style={{
+            background: 'rgba(5,6,18,.95)',
+            border: '1px solid rgba(255,255,255,.12)',
+          }}
+        >
           <AlertDialogHeader>
-            <AlertDialogTitle className="text-xl">Confirmar Exclusão</AlertDialogTitle>
-            <AlertDialogDescription className="text-muted-foreground">
+            <AlertDialogTitle className="text-xl text-[#f5f5f5]">Confirmar Exclusão</AlertDialogTitle>
+            <AlertDialogDescription className="text-[#aaaaaa]">
               Tem certeza que deseja excluir esta validação? Esta ação não pode ser desfeita.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel className="bg-muted/20 border-border/30 hover:bg-muted/30">
+            <AlertDialogCancel className="rounded-full bg-[rgba(255,255,255,.05)] border border-[rgba(255,255,255,.25)] text-[#f5f5f5] hover:bg-[rgba(255,255,255,.1)]">
               Cancelar
             </AlertDialogCancel>
-            <AlertDialogAction onClick={handleDeleteConfirm} className="bg-rose-600 text-white hover:bg-rose-700">
+            <AlertDialogAction onClick={handleDeleteConfirm} className="rounded-full bg-[#ff4d4f] text-white hover:bg-[#ff7171]">
               Excluir
             </AlertDialogAction>
           </AlertDialogFooter>
