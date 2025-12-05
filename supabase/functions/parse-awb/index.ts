@@ -19,9 +19,9 @@ serve(async (req) => {
   try {
     const { file_base64, file_type, document_type } = await req.json() as ParseRequest;
     
-    const ANTHROPIC_API_KEY = Deno.env.get('ANTHROPIC_API_KEY');
-    if (!ANTHROPIC_API_KEY) {
-      throw new Error('ANTHROPIC_API_KEY not configured');
+    const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
+    if (!LOVABLE_API_KEY) {
+      throw new Error('LOVABLE_API_KEY not configured');
     }
 
     console.log(`Parsing ${document_type} document of type ${file_type}`);
@@ -75,7 +75,7 @@ Your task is to extract CNPJ suffix patterns from ZF instruction documents that 
 }`;
     }
 
-    // Determine media type for Claude API
+    // Determine media type for Gemini API
     let mediaType: string;
     if (file_type === 'pdf') {
       mediaType = 'application/pdf';
@@ -89,67 +89,71 @@ Your task is to extract CNPJ suffix patterns from ZF instruction documents that 
       mediaType = 'image/jpeg';
     }
 
-    const response = await fetch('https://api.anthropic.com/v1/messages', {
+    // Build message content with inline image/document
+    const messageContent = [
+      {
+        type: 'text',
+        text: userPrompt,
+      },
+      {
+        type: 'image_url',
+        image_url: {
+          url: `data:${mediaType};base64,${file_base64}`,
+        },
+      },
+    ];
+
+    const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'x-api-key': ANTHROPIC_API_KEY,
-        'anthropic-version': '2023-06-01',
+        'Authorization': `Bearer ${LOVABLE_API_KEY}`,
       },
       body: JSON.stringify({
-        model: 'claude-sonnet-4-20250514',
-        max_tokens: 2048,
-        system: systemPrompt,
+        model: 'google/gemini-2.5-flash',
         messages: [
-          {
-            role: 'user',
-            content: [
-              {
-                type: file_type === 'pdf' ? 'document' : 'image',
-                source: {
-                  type: 'base64',
-                  media_type: mediaType,
-                  data: file_base64,
-                },
-              },
-              {
-                type: 'text',
-                text: userPrompt,
-              },
-            ],
-          },
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: messageContent },
         ],
+        max_tokens: 2048,
       }),
     });
 
     if (!response.ok) {
       const errorText = await response.text();
-      console.error('Anthropic API error:', response.status, errorText);
-      throw new Error(`Anthropic API error: ${response.status}`);
+      console.error('Lovable AI error:', response.status, errorText);
+      
+      if (response.status === 429) {
+        throw new Error('Rate limit exceeded. Please try again later.');
+      }
+      if (response.status === 402) {
+        throw new Error('Payment required. Please add credits to your workspace.');
+      }
+      throw new Error(`AI Gateway error: ${response.status}`);
     }
 
     const data = await response.json();
-    console.log('Claude response received');
+    console.log('Lovable AI response received');
 
-    // Extract the text content from Claude's response
-    const textContent = data.content?.find((c: any) => c.type === 'text');
+    // Extract the text content from the response
+    const textContent = data.choices?.[0]?.message?.content;
     if (!textContent) {
       throw new Error('No text content in response');
     }
 
-    // Parse the JSON from Claude's response
+    // Parse the JSON from the response
     let parsedData;
     try {
-      // Try to extract JSON from the response (Claude might wrap it in markdown)
-      const jsonMatch = textContent.text.match(/\{[\s\S]*\}/);
+      // Try to extract JSON from the response (model might wrap it in markdown)
+      const jsonMatch = textContent.match(/\{[\s\S]*\}/);
       if (jsonMatch) {
         parsedData = JSON.parse(jsonMatch[0]);
       } else {
         throw new Error('No JSON found in response');
       }
     } catch (parseError) {
-      console.error('JSON parse error:', parseError, 'Raw text:', textContent.text);
-      throw new Error('Failed to parse Claude response as JSON');
+      console.error('JSON parse error:', parseError, 'Raw text:', textContent);
+      throw new Error('Failed to parse AI response as JSON');
     }
 
     console.log('Parsed data:', JSON.stringify(parsedData));
