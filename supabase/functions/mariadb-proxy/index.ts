@@ -140,7 +140,12 @@ serve(async (req) => {
         }
 
         const user = users[0];
-        const isValidPassword = bcrypt.compareSync(password, user.password_hash);
+        // Convert PHP's $2y$ prefix to $2a$ for Deno bcrypt compatibility
+        let passwordHash = user.password_hash;
+        if (passwordHash && passwordHash.startsWith('$2y$')) {
+          passwordHash = '$2a$' + passwordHash.substring(4);
+        }
+        const isValidPassword = bcrypt.compareSync(password, passwordHash);
         
         if (!isValidPassword) {
           console.log('Login failed: Invalid password');
