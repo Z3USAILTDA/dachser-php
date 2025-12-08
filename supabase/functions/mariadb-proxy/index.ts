@@ -74,6 +74,9 @@ interface QueryRequest {
   entity?: string;
   entityId?: number;
   details?: string;
+  // DHL AWB Tracking updates
+  updates?: Record<string, any>;
+  awbNumbers?: string[];
 }
 
 serve(async (req) => {
@@ -800,6 +803,182 @@ serve(async (req) => {
 
         result = { success: true };
         console.log(`Deleted AWB Check ID: ${awbCheckId}`);
+        break;
+      }
+
+      // ==================== DHL AWB TRACKING ====================
+      case 'get_dhl_awb_tracking': {
+        const data = await client.query(
+          'SELECT * FROM ai_agente.dhl_awb_tracking ORDER BY id DESC'
+        );
+        result = { success: true, data };
+        console.log(`Fetched ${data.length} AWB tracking records`);
+        break;
+      }
+
+      case 'update_dhl_awb_tracking': {
+        const { awbNumber, updates } = body;
+        if (!awbNumber || !updates) {
+          return new Response(
+            JSON.stringify({ error: 'awbNumber e updates são obrigatórios' }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+
+        const updateFields: string[] = [];
+        const updateValues: any[] = [];
+        
+        for (const [key, value] of Object.entries(updates)) {
+          updateFields.push(`${key} = ?`);
+          updateValues.push(value);
+        }
+        
+        updateValues.push(awbNumber);
+
+        await client.execute(
+          `UPDATE ai_agente.dhl_awb_tracking SET ${updateFields.join(', ')} WHERE awb = ?`,
+          updateValues
+        );
+
+        result = { success: true };
+        console.log(`Updated dhl_awb_tracking for AWB: ${awbNumber}`);
+        break;
+      }
+
+      case 'bulk_update_dhl_awb_tracking': {
+        const { awbNumbers, updates } = body;
+        if (!awbNumbers || !Array.isArray(awbNumbers) || !updates) {
+          return new Response(
+            JSON.stringify({ error: 'awbNumbers array e updates são obrigatórios' }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+
+        const updateFields: string[] = [];
+        const updateValues: any[] = [];
+        
+        for (const [key, value] of Object.entries(updates)) {
+          updateFields.push(`${key} = ?`);
+          updateValues.push(value);
+        }
+
+        const placeholders = awbNumbers.map(() => '?').join(', ');
+        
+        await client.execute(
+          `UPDATE ai_agente.dhl_awb_tracking SET ${updateFields.join(', ')} WHERE awb IN (${placeholders})`,
+          [...updateValues, ...awbNumbers]
+        );
+
+        result = { success: true, updatedCount: awbNumbers.length };
+        console.log(`Bulk updated ${awbNumbers.length} AWB tracking records`);
+        break;
+      }
+
+      // ==================== AWB LOGS ====================
+      case 'get_awb_logs': {
+        const { awbNumber } = body;
+        if (!awbNumber) {
+          return new Response(
+            JSON.stringify({ error: 'awbNumber é obrigatório' }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+
+        const logs = await client.query(
+          `SELECT * FROM ai_agente.udlog_zeus_console_log_udlog_airfreight 
+           WHERE awb LIKE ? 
+           ORDER BY created_at DESC`,
+          [`%${awbNumber}%`]
+        );
+
+        result = { success: true, logs };
+        console.log(`Fetched ${logs.length} logs for AWB: ${awbNumber}`);
+        break;
+      }
+
+      // ==================== EMAIL HISTORY ====================
+      case 'get_email_history': {
+        const { awbNumber } = body;
+        if (!awbNumber) {
+          return new Response(
+            JSON.stringify({ error: 'awbNumber é obrigatório' }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+
+        const history = await client.query(
+          `SELECT * FROM ai_agente.udlog_af_email_history 
+           WHERE awb = ? 
+           ORDER BY created_at DESC`,
+          [awbNumber]
+        );
+
+        result = { success: true, history };
+        console.log(`Fetched ${history.length} email history records for AWB: ${awbNumber}`);
+        break;
+      }
+
+      // ==================== ATTENTION LIST ====================
+      case 'check_attention_list': {
+        const { awbNumber } = body;
+        if (!awbNumber) {
+          return new Response(
+            JSON.stringify({ error: 'awbNumber é obrigatório' }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+
+        const existing = await client.query(
+          'SELECT id FROM ai_agente.udlog_af_attention_list WHERE awb = ? LIMIT 1',
+          [awbNumber]
+        );
+
+        result = { success: true, exists: existing.length > 0, data: existing[0] || null };
+        break;
+      }
+
+      case 'add_to_attention_list': {
+        const { awbNumber } = body;
+        if (!awbNumber) {
+          return new Response(
+            JSON.stringify({ error: 'awbNumber é obrigatório' }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+
+        await client.execute(
+          'INSERT INTO ai_agente.udlog_af_attention_list (awb, created_at) VALUES (?, NOW())',
+          [awbNumber]
+        );
+
+        result = { success: true };
+        console.log(`Added AWB ${awbNumber} to attention list`);
+        break;
+      }
+
+      case 'remove_from_attention_list': {
+        const { awbNumber } = body;
+        if (!awbNumber) {
+          return new Response(
+            JSON.stringify({ error: 'awbNumber é obrigatório' }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+
+        // Archive first
+        await client.execute(
+          'INSERT INTO ai_agente.udlog_af_attention_list_archive (awb, removed_at) VALUES (?, NOW())',
+          [awbNumber]
+        );
+
+        // Then delete
+        await client.execute(
+          'DELETE FROM ai_agente.udlog_af_attention_list WHERE awb = ?',
+          [awbNumber]
+        );
+
+        result = { success: true };
+        console.log(`Removed AWB ${awbNumber} from attention list and archived`);
         break;
       }
 
