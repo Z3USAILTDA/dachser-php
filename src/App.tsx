@@ -9,7 +9,6 @@ import MetricsUsage from "./pages/MetricsUsage";
 import Register from "./pages/Register";
 import CheckAwb from "./pages/CheckAwb";
 import Logs from "./pages/Logs";
-import Index from "./pages/Index";
 import SeaAnalysis from "./pages/SeaAnalysis";
 import NotFound from "./pages/NotFound";
 
@@ -22,8 +21,7 @@ const App = () => (
       <Sonner />
       <BrowserRouter>
         <Routes>
-          <Route path="/" element={<Navigate to="/air/tracking" replace />} />
-          <Route path="/air/tracking" element={<Index />} />
+          <Route path="/" element={<Navigate to="/dashboard" replace />} />
           <Route path="/login" element={<Login />} />
           <Route path="/dashboard" element={<Dashboard />} />
           <Route path="/admin/metrics" element={<MetricsUsage />} />
