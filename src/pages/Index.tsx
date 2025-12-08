@@ -520,7 +520,7 @@ const Index = () => {
   }, [bugAlertExplication]);
 
   const fetchDashboardData = async () => {
-    const { data, error } = await supabase
+    const { data, error } = await db
       .from("dhl_awb_tracking")
       .select("*");
 
@@ -560,9 +560,9 @@ const Index = () => {
     });
 
     setAwbs(data);
-    const analystNames = Array.from(
+    const analystNames: string[] = Array.from(
       new Set(
-        data
+        (data as DhlAwbTracking[])
           .map((awb) => awb.analyst)
           .filter((analyst): analyst is string => analyst !== null)
       )
@@ -743,7 +743,7 @@ const Index = () => {
       ) || null
     );
 
-    const { data, error } = await supabase
+    const { data, error } = await db
       .from("udlog_zeus_console_log_udlog_airfreight")
       .select("*")
       .ilike("awb", `%${awbNumber}%`)
@@ -812,7 +812,7 @@ const Index = () => {
     try {
       logToConsole(`Iniciando envio de e-mail para AWB ${selectedAwbForEmail}`);
 
-      const { data, error } = await supabase.functions.invoke(
+      const { data, error } = await db.functions.invoke(
         "email-daclient",
         {
           body: {
@@ -858,7 +858,7 @@ const Index = () => {
     setIsEmailHistoryLoading(true);
     setIsEmailHistoryModalOpen(true);
 
-    const { data, error } = await supabase
+    const { data, error } = await db
       .from("udlog_af_email_history")
       .select("*")
       .eq("awb", awbNumber)
@@ -916,7 +916,7 @@ const Index = () => {
     if (!confirmed) return;
 
     try {
-      const { error } = await supabase
+      const { error } = await db
         .from("dhl_awb_tracking")
         .update({ email_alert: newValue })
         .eq("awb", awbNumber);
@@ -966,7 +966,7 @@ const Index = () => {
     if (!confirmed) return;
 
     try {
-      const { error } = await supabase
+      const { error } = await db
         .from("dhl_awb_tracking")
         .update({ whatsapp_alert: newValue })
         .eq("awb", awbNumber);
@@ -1013,7 +1013,7 @@ const Index = () => {
     try {
       const filteredAwbNumbers = filteredAwbs.map((awb) => awb.awb).filter(Boolean) as string[];
 
-      const { error } = await supabase
+      const { error } = await db
         .from("dhl_awb_tracking")
         .update({ email_alert: newValue })
         .in("awb", filteredAwbNumbers);
@@ -1062,7 +1062,7 @@ const Index = () => {
     try {
       const filteredAwbNumbers = filteredAwbs.map((awb) => awb.awb).filter(Boolean) as string[];
 
-      const { error } = await supabase
+      const { error } = await db
         .from("dhl_awb_tracking")
         .update({ whatsapp_alert: newValue })
         .in("awb", filteredAwbNumbers);
@@ -1237,7 +1237,7 @@ const Index = () => {
 
     try {
       setIsUpdatingAwb(awbNumber);
-      const { error } = await supabase
+      const { error } = await db
         .from("dhl_awb_tracking")
         .update({ notes: trimmedRemark })
         .eq("awb", awbNumber);
@@ -1278,7 +1278,7 @@ const Index = () => {
           : "udlog_af_attention_list_archive";
 
       if (action === "add") {
-        const existing = await supabase
+        const existing = await db
           .from("udlog_af_attention_list")
           .select("id")
           .eq("awb", awbNumber)
@@ -1295,7 +1295,7 @@ const Index = () => {
       }
 
       if (action === "remove") {
-        const historyInsert = await supabase
+        const historyInsert = await db
           .from("udlog_af_attention_list_archive")
           .insert({
             awb: awbNumber,
@@ -1307,7 +1307,7 @@ const Index = () => {
           throw historyInsert.error;
         }
 
-        const { error } = await supabase
+        const { error } = await db
           .from("udlog_af_attention_list")
           .delete()
           .eq("awb", awbNumber);
@@ -1322,7 +1322,7 @@ const Index = () => {
           description: `A AWB ${awbNumber} foi removida da lista de atenção e arquivada.`,
         });
       } else {
-        const { error } = await supabase.from(tableName).insert({
+        const { error } = await db.from(tableName).insert({
           awb: awbNumber,
           created_at: new Date().toISOString(),
         });
@@ -1361,7 +1361,7 @@ const Index = () => {
     if (!confirmed) return;
 
     try {
-      const { error } = await supabase
+      const { error } = await db
         .from("dhl_awb_tracking")
         .update({ bug_alert: newValue })
         .eq("awb", awbNumber);
@@ -1414,7 +1414,7 @@ const Index = () => {
     try {
       const filteredAwbNumbers = filteredAwbs.map((awb) => awb.awb).filter(Boolean) as string[];
 
-      const { error } = await supabase
+      const { error } = await db
         .from("dhl_awb_tracking")
         .update({ bug_alert: newValue })
         .in("awb", filteredAwbNumbers);
