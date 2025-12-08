@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useMemo } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import {
   Mail,
   ChevronLeft,
@@ -8,6 +8,13 @@ import {
   ExternalLink,
   Database,
   LogOut,
+  Search,
+  Filter,
+  X,
+  RefreshCw,
+  Loader2,
+  Edit2,
+  Check,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -15,16 +22,18 @@ import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/components/ui/use-toast";
 import { TableCell } from "@/components/ui/table";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Card } from "@/components/ui/card";
 import { useNavigate } from "react-router-dom";
 import dachserBg from "@/assets/dachser-background.jpg";
 
-// Components
-import { TrackingStatsCards } from "@/components/tracking/TrackingStatsCards";
-import { TrackingFilters } from "@/components/tracking/TrackingFilters";
-import { TrackingDetailsSidebar } from "@/components/tracking/TrackingDetailsSidebar";
-import { LogModal, EmailModal, EmailHistoryModal, RemarkModal } from "@/components/tracking/TrackingModals";
-
-// Types & Utils
 import {
   DhlAwbTracking,
   DashboardStats,
@@ -34,9 +43,11 @@ import {
   AlertCategory,
   COLUMN_LABELS,
   DEFAULT_COLUMN_VISIBILITY,
+  ALERT_FILTERS,
   ITEMS_PER_PAGE,
 } from "@/components/tracking/TrackingTypes";
 import {
+  airlineTrackingLinks,
   getFormattedTrackingLink,
   getBugAlertColor,
   getBugAlertDescription,
@@ -55,7 +66,7 @@ const db = supabase as any;
 const Index = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
-  
+
   // Stats & Data
   const [stats, setStats] = useState<DashboardStats>({
     total_awbs: 0,
@@ -423,6 +434,21 @@ const Index = () => {
     return parts.length === 0 ? "Nenhuma condição crítica identificada para esta AWB." : parts.join(" ");
   }, [selectedAwb]);
 
+  const getAlertIcon = (awb: DhlAwbTracking | null) => {
+    if (!awb) return <AlertTriangle className="w-5 h-5 text-muted-foreground" />;
+    switch (getAlertCategory(awb)) {
+      case "critical":
+        return <AlertTriangle className="w-5 h-5 text-destructive" />;
+      case "delayed":
+        return <AlertTriangle className="w-5 h-5 text-primary" />;
+      case "on_time":
+      default:
+        return <AlertTriangle className="w-5 h-5 text-green-400" />;
+    }
+  };
+
+  const hasExplanation = bugAlertExplication && bugAlertExplication.length > 0;
+
   return (
     <div className="min-h-screen bg-background text-foreground relative overflow-hidden">
       {/* Background */}
@@ -471,30 +497,246 @@ const Index = () => {
           </div>
         </header>
 
-        {/* Stats Cards */}
-        <TrackingStatsCards stats={stats} />
+        {/* Stats Cards - Inline */}
+        <section className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
+          {/* Total Monitorados */}
+          <Card className="bg-card/90 border-border backdrop-blur-sm shadow-lg">
+            <div className="p-4 flex flex-col h-full">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-xs uppercase tracking-wide text-muted-foreground">
+                  Total Monitorados
+                </span>
+                <span className="inline-flex items-center justify-center w-8 h-8 rounded-full bg-muted text-primary">
+                  <Mail className="w-4 h-4" />
+                </span>
+              </div>
+              <div className="flex items-end justify-between mt-auto">
+                <span className="text-3xl font-semibold text-foreground">
+                  {stats.total_awbs}
+                </span>
+                <span className="text-xs text-muted-foreground">AWBs ativos</span>
+              </div>
+            </div>
+          </Card>
 
-        {/* Filters */}
-        <TrackingFilters
-          searchTerm={searchTerm}
-          setSearchTerm={setSearchTerm}
-          analystFilter={analystFilter}
-          setAnalystFilter={setAnalystFilter}
-          analysts={analysts}
-          alertFilter={alertFilter}
-          setAlertFilter={setAlertFilter}
-          emailFilter={emailFilter}
-          setEmailFilter={setEmailFilter}
-          isColumnSelectorOpen={isColumnSelectorOpen}
-          setIsColumnSelectorOpen={setIsColumnSelectorOpen}
-          columnVisibility={columnVisibility}
-          handleToggleColumn={handleToggleColumn}
-          handleResetColumns={handleResetColumns}
-          handleBulkBugAlertToggle={handleBulkBugAlertToggle}
-          refreshDashboard={refreshDashboard}
-          isRefreshing={isRefreshing}
-          setCurrentPage={setCurrentPage}
-        />
+          {/* Em Trânsito */}
+          <Card className="bg-gradient-to-br from-blue-900/40 via-blue-900/10 to-card border-blue-700/50 shadow-lg">
+            <div className="p-4 flex flex-col h-full">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-xs uppercase tracking-wide text-blue-200">
+                  Em Trânsito
+                </span>
+                <span className="inline-flex items-center justify-center w-8 h-8 rounded-full bg-blue-900/60 text-blue-300">
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                </span>
+              </div>
+              <div className="flex items-end justify-between mt-auto">
+                <span className="text-3xl font-semibold text-blue-300">
+                  {stats.active_awbs}
+                </span>
+                <span className="text-xs text-blue-200/80">DEP, MAN, RCF, ARR</span>
+              </div>
+            </div>
+          </Card>
+
+          {/* Em Alerta */}
+          <Card className="bg-gradient-to-br from-primary/30 via-primary/10 to-card border-primary/50 shadow-lg">
+            <div className="p-4 flex flex-col h-full">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-xs uppercase tracking-wide text-primary">
+                  Em Alerta
+                </span>
+                <span className="inline-flex items-center justify-center w-8 h-8 rounded-full bg-primary/30 text-primary">
+                  <AlertTriangle className="w-4 h-4" />
+                </span>
+              </div>
+              <div className="flex items-end justify-between mt-auto">
+                <span className="text-3xl font-semibold text-primary">
+                  {stats.alert_awbs}
+                </span>
+                <span className="text-xs text-primary/80">DIS, OFLD – Atrasos</span>
+              </div>
+            </div>
+          </Card>
+
+          {/* Críticos */}
+          <Card className="bg-gradient-to-br from-destructive/40 via-destructive/20 to-card border-destructive/50 shadow-lg">
+            <div className="p-4 flex flex-col h-full">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-xs uppercase tracking-wide text-destructive">
+                  Críticos
+                </span>
+                <span className="inline-flex items-center justify-center w-8 h-8 rounded-full bg-destructive/40 text-destructive">
+                  <AlertTriangle className="w-4 h-4" />
+                </span>
+              </div>
+              <div className="flex items-end justify-between mt-auto">
+                <span className="text-3xl font-semibold text-destructive">
+                  {stats.critical_awbs}
+                </span>
+                <span className="text-xs text-destructive/80">NIL, NIF – Ação imediata</span>
+              </div>
+            </div>
+          </Card>
+        </section>
+
+        {/* Filters - Inline */}
+        <section className="mb-4">
+          <div className="flex flex-wrap items-center gap-3 mb-3">
+            {/* Search Input */}
+            <div className="flex items-center flex-1 min-w-[250px] max-w-xl bg-card border border-border rounded-full px-3 py-1.5 shadow-sm">
+              <Search className="w-4 h-4 text-muted-foreground mr-2" />
+              <Input
+                placeholder="Buscar por AWB, Consignee ou e-mail"
+                value={searchTerm}
+                onChange={(e) => {
+                  setSearchTerm(e.target.value);
+                  setCurrentPage(1);
+                }}
+                className="bg-transparent border-0 focus-visible:ring-0 focus-visible:ring-offset-0 text-sm placeholder:text-muted-foreground"
+              />
+            </div>
+
+            {/* Filter Selects */}
+            <div className="flex items-center gap-2">
+              <Select
+                value={analystFilter}
+                onValueChange={(value) => {
+                  setAnalystFilter(value);
+                  setCurrentPage(1);
+                }}
+              >
+                <SelectTrigger className="w-[160px] bg-card border-border text-xs rounded-full px-3">
+                  <SelectValue placeholder="Todos Analistas" />
+                </SelectTrigger>
+                <SelectContent className="bg-card border-border">
+                  <SelectItem value="all">Todos Analistas</SelectItem>
+                  {analysts.map((analyst) => (
+                    <SelectItem key={analyst} value={analyst}>
+                      {analyst}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+
+              <Select
+                value={alertFilter}
+                onValueChange={(value: AlertCategory | "all") => {
+                  setAlertFilter(value);
+                  setCurrentPage(1);
+                }}
+              >
+                <SelectTrigger className="w-[160px] bg-card border-border text-xs rounded-full px-3">
+                  <SelectValue placeholder="Todos os status" />
+                </SelectTrigger>
+                <SelectContent className="bg-card border-border">
+                  {ALERT_FILTERS.map((filter) => (
+                    <SelectItem key={filter.value} value={filter.value}>
+                      {filter.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+
+              <Select
+                value={emailFilter}
+                onValueChange={(value: "all" | "email_enabled" | "email_disabled") => {
+                  setEmailFilter(value);
+                  setCurrentPage(1);
+                }}
+              >
+                <SelectTrigger className="w-[170px] bg-card border-border text-xs rounded-full px-3">
+                  <SelectValue placeholder="Todos emails" />
+                </SelectTrigger>
+                <SelectContent className="bg-card border-border">
+                  <SelectItem value="all">Todos Emails</SelectItem>
+                  <SelectItem value="email_enabled">Email Ativo</SelectItem>
+                  <SelectItem value="email_disabled">Email Inativo</SelectItem>
+                </SelectContent>
+              </Select>
+
+              <Button
+                variant="outline"
+                size="icon"
+                className="rounded-full bg-card border-border text-muted-foreground hover:bg-muted"
+                onClick={() => setIsColumnSelectorOpen(!isColumnSelectorOpen)}
+              >
+                <Filter className="w-4 h-4" />
+              </Button>
+            </div>
+
+            {/* Action Buttons */}
+            <div className="flex items-center gap-2 ml-auto">
+              <Button
+                variant="outline"
+                className="rounded-full border-primary/60 text-primary bg-primary/10 hover:bg-primary/20 text-xs"
+                onClick={() => handleBulkBugAlertToggle(true)}
+              >
+                <AlertTriangle className="w-4 h-4 mr-1.5" />
+                Ativar BUG ALERT
+              </Button>
+              <Button
+                variant="outline"
+                className="rounded-full border-border text-foreground bg-card hover:bg-muted text-xs"
+                onClick={() => handleBulkBugAlertToggle(false)}
+              >
+                <X className="w-4 h-4 mr-1.5" />
+                Desativar BUG ALERT
+              </Button>
+              <Button
+                variant="outline"
+                className="rounded-full border-border text-foreground bg-card hover:bg-muted text-xs"
+                onClick={refreshDashboard}
+                disabled={isRefreshing}
+              >
+                {isRefreshing ? (
+                  <Loader2 className="w-4 h-4 mr-1.5 animate-spin" />
+                ) : (
+                  <RefreshCw className="w-4 h-4 mr-1.5" />
+                )}
+                Atualizar
+              </Button>
+            </div>
+          </div>
+
+          {/* Column Selector */}
+          {isColumnSelectorOpen && (
+            <div className="bg-card border border-border rounded-xl p-4 mb-4 text-sm shadow-lg">
+              <div className="flex items-center justify-between mb-3">
+                <div className="flex items-center gap-2">
+                  <Filter className="w-4 h-4 text-muted-foreground" />
+                  <span className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">
+                    Colunas Visíveis
+                  </span>
+                </div>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-7 px-2 text-xs text-muted-foreground hover:text-foreground"
+                  onClick={handleResetColumns}
+                >
+                  Resetar
+                </Button>
+              </div>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+                {Object.entries(columnVisibility).map(([key, value]) => (
+                  <label
+                    key={key}
+                    className="flex items-center gap-2 text-xs text-foreground cursor-pointer select-none hover:bg-muted/50 rounded-lg px-2 py-1"
+                  >
+                    <input
+                      type="checkbox"
+                      checked={value}
+                      onChange={() => handleToggleColumn(key as keyof ColumnVisibility)}
+                      className="rounded border-border bg-card text-primary focus:ring-0 focus:ring-offset-0"
+                    />
+                    <span>{COLUMN_LABELS[key as keyof ColumnVisibility]}</span>
+                  </label>
+                ))}
+              </div>
+            </div>
+          )}
+        </section>
 
         {/* Main Content */}
         <section className="grid grid-cols-1 lg:grid-cols-[minmax(0,2.2fr)_minmax(0,1fr)] gap-6">
@@ -625,15 +867,110 @@ const Index = () => {
             </div>
           </div>
 
-          {/* Sidebar */}
-          <TrackingDetailsSidebar
-            selectedAwb={selectedAwb}
-            alertSummary={alertSummary}
-            bugAlertExplication={bugAlertExplication}
-            triggerTrackingUpdate={triggerTrackingUpdate}
-            openRemarkModal={openRemarkModal}
-            openEmailModal={openEmailModal}
-          />
+          {/* Sidebar - Inline */}
+          <div className="bg-card/90 border border-border rounded-2xl p-4 flex flex-col gap-4 shadow-lg backdrop-blur-sm">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                {getAlertIcon(selectedAwb)}
+                <div>
+                  <p className="text-[10px] uppercase tracking-[0.25em] text-muted-foreground">
+                    Detalhes do Alerta
+                  </p>
+                  <p className="text-sm font-medium text-foreground">
+                    {selectedAwb ? formatAwbForDisplay(selectedAwb.awb || "") : "Nenhuma AWB selecionada"}
+                  </p>
+                </div>
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-8 rounded-full border-border text-[11px] text-foreground bg-card hover:bg-muted"
+                onClick={() => {
+                  if (selectedAwb?.awb) {
+                    triggerTrackingUpdate(selectedAwb.awb);
+                  }
+                }}
+                disabled={!selectedAwb}
+              >
+                <RefreshCw className="w-3 h-3 mr-1" />
+                Reprocessar
+              </Button>
+            </div>
+
+            <div className="text-xs space-y-1 text-foreground">
+              <p>
+                <span className="text-muted-foreground">Cliente: </span>
+                {selectedAwb?.consignee || "-"}
+              </p>
+              <p>
+                <span className="text-muted-foreground">Rota: </span>
+                {selectedAwb?.route || "-"}
+              </p>
+              <p>
+                <span className="text-muted-foreground">Status: </span>
+                <span className={getStatusTextColor(selectedAwb?.status || null)}>
+                  {selectedAwb?.status || "-"}
+                </span>
+              </p>
+              <p>
+                <span className="text-muted-foreground">Último evento: </span>
+                {selectedAwb?.last_event || "-"}
+              </p>
+              <p>
+                <span className="text-muted-foreground">Dias em trânsito: </span>
+                {selectedAwb?.days_in_transit ?? "-"}
+              </p>
+              <p>
+                <span className="text-muted-foreground">Qtd NFDs: </span>
+                {selectedAwb?.nfd_counter ?? "-"}
+              </p>
+            </div>
+
+            <div
+              className={`mt-4 rounded-lg border p-4 text-sm shadow-inner ${
+                hasExplanation
+                  ? "border-primary/50 bg-primary/10"
+                  : "border-border bg-muted/30"
+              }`}
+            >
+              <p className="text-[11px] font-semibold mb-1 text-primary flex items-center gap-1">
+                <AlertTriangle className="w-3 h-3" />
+                Resumo do alerta
+              </p>
+              <p className="text-[11px] leading-relaxed text-foreground">{alertSummary}</p>
+              {bugAlertExplication && (
+                <p className="text-[10px] text-muted-foreground mt-2">{bugAlertExplication}</p>
+              )}
+            </div>
+
+            <div className="mt-auto space-y-2">
+              <Button
+                variant="outline"
+                size="sm"
+                className="w-full justify-start rounded-full border-border text-[11px] text-foreground bg-card hover:bg-muted"
+                disabled={!selectedAwb}
+                onClick={() => {
+                  if (selectedAwb) openRemarkModal(selectedAwb);
+                }}
+              >
+                <Edit2 className="w-3 h-3 mr-2" />
+                Adicionar / editar observação
+              </Button>
+
+              <Button
+                variant="outline"
+                size="sm"
+                className="w-full justify-start rounded-full border-green-600/50 text-[11px] text-green-300 bg-green-950/30 hover:bg-green-900/40"
+                disabled={!selectedAwb}
+                onClick={() => {
+                  if (selectedAwb) openEmailModal(selectedAwb);
+                }}
+              >
+                <Mail className="w-3 h-3 mr-2" />
+                Enviar atualização por e-mail
+              </Button>
+            </div>
+          </div>
         </section>
 
         {/* Console Log */}
@@ -651,11 +988,291 @@ const Index = () => {
         )}
       </div>
 
-      {/* Modals */}
-      <LogModal isOpen={isLogModalOpen} onClose={() => setIsLogModalOpen(false)} selectedAwb={selectedAwb} logData={logData} isLoading={isLogLoading} />
-      <EmailModal isOpen={isEmailModalOpen} onClose={() => setIsEmailModalOpen(false)} selectedAwbForEmail={selectedAwbForEmail} emailRecipient={emailRecipient} setEmailRecipient={setEmailRecipient} emailSubject={emailSubject} setEmailSubject={setEmailSubject} emailContent={emailContent} setEmailContent={setEmailContent} handleSendEmail={handleSendEmail} isEmailSending={isEmailSending} />
-      <EmailHistoryModal isOpen={isEmailHistoryModalOpen} onClose={() => setIsEmailHistoryModalOpen(false)} selectedAwbForEmail={selectedAwbForEmail} emailHistory={emailHistory} isLoading={isEmailHistoryLoading} />
-      <RemarkModal isOpen={remarkModalOpen} onClose={() => setRemarkModalOpen(false)} currentRemarkAwb={currentRemarkAwb} currentRemarkText={currentRemarkText} setCurrentRemarkText={setCurrentRemarkText} handleSave={handleRemarkSave} isUpdating={!!isUpdatingAwb} />
+      {/* Log Modal - Inline */}
+      {isLogModalOpen && (
+        <div className="fixed inset-0 z-40 flex items-center justify-center bg-background/80 backdrop-blur-sm">
+          <div className="w-full max-w-3xl bg-card border border-border rounded-2xl shadow-2xl max-h-[80vh] flex flex-col">
+            <div className="px-4 py-3 border-b border-border flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Database className="w-4 h-4 text-muted-foreground" />
+                <div>
+                  <p className="text-sm font-semibold text-foreground">
+                    Logs da AWB {selectedAwb?.awb}
+                  </p>
+                  <p className="text-[11px] text-muted-foreground">
+                    Eventos mais recentes primeiro
+                  </p>
+                </div>
+              </div>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-7 w-7 text-muted-foreground hover:text-foreground hover:bg-muted rounded-full"
+                onClick={() => setIsLogModalOpen(false)}
+              >
+                <X className="w-3 h-3" />
+              </Button>
+            </div>
+
+            <div className="flex-1 overflow-auto text-xs">
+              {isLogLoading ? (
+                <div className="flex items-center justify-center py-6 text-muted-foreground">
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  Carregando logs...
+                </div>
+              ) : logData.length === 0 ? (
+                <div className="flex items-center justify-center py-6 text-muted-foreground">
+                  Nenhum log encontrado para essa AWB.
+                </div>
+              ) : (
+                <ul className="divide-y divide-border">
+                  {logData.map((log) => (
+                    <li key={log.id} className="px-4 py-3">
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="text-[11px] text-muted-foreground">
+                          {new Date(log.created_at).toLocaleString("pt-BR")}
+                        </span>
+                        <span className="text-[11px] text-muted-foreground">
+                          {log.actor_name || log.mimicked_operator_id || "Sistema"}
+                        </span>
+                      </div>
+                      <p className="text-[11px] text-foreground mb-1">
+                        {log.action || "Ação registrada"}
+                      </p>
+                      {log.new_value && (
+                        <pre className="mt-1 text-[10px] bg-muted border border-border rounded-lg p-2 text-muted-foreground overflow-auto max-h-40">
+                          {JSON.stringify(log.new_value, null, 2)}
+                        </pre>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Email Modal - Inline */}
+      {isEmailModalOpen && (
+        <div className="fixed inset-0 z-40 flex items-center justify-center bg-background/80 backdrop-blur-sm">
+          <div className="w-full max-w-xl bg-card border border-border rounded-2xl shadow-2xl max-h-[80vh] flex flex-col">
+            <div className="px-4 py-3 border-b border-border flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Mail className="w-4 h-4 text-muted-foreground" />
+                <div>
+                  <p className="text-sm font-semibold text-foreground">
+                    Enviar e-mail – AWB {selectedAwbForEmail}
+                  </p>
+                  <p className="text-[11px] text-muted-foreground">
+                    Ajuste o destinatário e o conteúdo antes de enviar.
+                  </p>
+                </div>
+              </div>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-7 w-7 text-muted-foreground hover:text-foreground hover:bg-muted rounded-full"
+                onClick={() => setIsEmailModalOpen(false)}
+              >
+                <X className="w-3 h-3" />
+              </Button>
+            </div>
+
+            <div className="flex-1 overflow-auto px-4 py-3 space-y-3 text-xs">
+              <div className="space-y-1">
+                <label className="text-[11px] text-muted-foreground">Destinatário</label>
+                <Input
+                  value={emailRecipient}
+                  onChange={(e) => setEmailRecipient(e.target.value)}
+                  className="bg-card border-border text-xs"
+                  placeholder="email@cliente.com"
+                />
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-[11px] text-muted-foreground">Assunto</label>
+                <Input
+                  value={emailSubject}
+                  onChange={(e) => setEmailSubject(e.target.value)}
+                  className="bg-card border-border text-xs"
+                />
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-[11px] text-muted-foreground">Conteúdo</label>
+                <textarea
+                  value={emailContent}
+                  onChange={(e) => setEmailContent(e.target.value)}
+                  className="w-full h-40 bg-card border border-border rounded-lg text-xs p-2 resize-none text-foreground"
+                />
+              </div>
+            </div>
+
+            <div className="px-4 py-3 border-t border-border flex items-center justify-end gap-2">
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-7 text-[11px] text-muted-foreground hover:text-foreground"
+                onClick={() => setIsEmailModalOpen(false)}
+              >
+                Cancelar
+              </Button>
+              <Button
+                size="sm"
+                className="h-7 rounded-full bg-green-600 hover:bg-green-500 text-[11px]"
+                onClick={handleSendEmail}
+                disabled={isEmailSending}
+              >
+                {isEmailSending ? (
+                  <>
+                    <Loader2 className="w-3 h-3 mr-1 animate-spin" />
+                    Enviando...
+                  </>
+                ) : (
+                  <>
+                    <Check className="w-3 h-3 mr-1" />
+                    Enviar e-mail
+                  </>
+                )}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Email History Modal - Inline */}
+      {isEmailHistoryModalOpen && (
+        <div className="fixed inset-0 z-40 flex items-center justify-center bg-background/80 backdrop-blur-sm">
+          <div className="w-full max-w-2xl bg-card border border-border rounded-2xl shadow-2xl max-h-[80vh] flex flex-col">
+            <div className="px-4 py-3 border-b border-border flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Mail className="w-4 h-4 text-muted-foreground" />
+                <div>
+                  <p className="text-sm font-semibold text-foreground">
+                    Histórico de e-mails – AWB {selectedAwbForEmail}
+                  </p>
+                  <p className="text-[11px] text-muted-foreground">
+                    Últimos envios registrados no sistema.
+                  </p>
+                </div>
+              </div>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-7 w-7 text-muted-foreground hover:text-foreground hover:bg-muted rounded-full"
+                onClick={() => setIsEmailHistoryModalOpen(false)}
+              >
+                <X className="w-3 h-3" />
+              </Button>
+            </div>
+
+            <div className="flex-1 overflow-auto text-xs">
+              {isEmailHistoryLoading ? (
+                <div className="flex items-center justify-center py-6 text-muted-foreground">
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  Carregando histórico...
+                </div>
+              ) : emailHistory.length === 0 ? (
+                <div className="flex items-center justify-center py-6 text-muted-foreground">
+                  Nenhum registro de e-mail para essa AWB.
+                </div>
+              ) : (
+                <ul className="divide-y divide-border">
+                  {emailHistory.map((email) => (
+                    <li key={email.id} className="px-4 py-3">
+                      <div className="flex items-center justify-between">
+                        <span className="text-[11px] text-muted-foreground">
+                          {new Date(email.created_at).toLocaleString("pt-BR")}
+                        </span>
+                        <span className="text-[11px] text-muted-foreground">
+                          {email.created_by}
+                        </span>
+                      </div>
+                      <p className="text-[11px] font-semibold text-foreground mt-1">
+                        {email.subject}
+                      </p>
+                      <p className="text-[11px] text-muted-foreground mt-1 line-clamp-3 whitespace-pre-wrap">
+                        {email.content}
+                      </p>
+                      <p className="text-[10px] text-muted-foreground mt-1">
+                        Destinatário: {email.consignee_email || "-"} — Status: {email.status}
+                      </p>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Remark Modal - Inline */}
+      {remarkModalOpen && (
+        <div className="fixed inset-0 z-40 flex items-center justify-center bg-background/80 backdrop-blur-sm">
+          <div className="w-full max-w-lg bg-card border border-border rounded-2xl shadow-2xl max-h-[80vh] flex flex-col">
+            <div className="px-4 py-3 border-b border-border flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Edit2 className="w-4 h-4 text-muted-foreground" />
+                <div>
+                  <p className="text-sm font-semibold text-foreground">
+                    Observação – AWB {currentRemarkAwb}
+                  </p>
+                  <p className="text-[11px] text-muted-foreground">
+                    Registro interno para a equipe de análise.
+                  </p>
+                </div>
+              </div>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-7 w-7 text-muted-foreground hover:text-foreground hover:bg-muted rounded-full"
+                onClick={() => setRemarkModalOpen(false)}
+              >
+                <X className="w-3 h-3" />
+              </Button>
+            </div>
+
+            <div className="flex-1 overflow-auto px-4 py-3">
+              <textarea
+                value={currentRemarkText}
+                onChange={(e) => setCurrentRemarkText(e.target.value)}
+                className="w-full h-40 bg-card border border-border rounded-lg text-xs p-2 resize-none text-foreground"
+                placeholder="Digite aqui a observação para essa AWB..."
+              />
+            </div>
+
+            <div className="px-4 py-3 border-t border-border flex items-center justify-end gap-2">
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-7 text-[11px] text-muted-foreground hover:text-foreground"
+                onClick={() => setRemarkModalOpen(false)}
+              >
+                Cancelar
+              </Button>
+              <Button
+                size="sm"
+                className="h-7 rounded-full bg-primary hover:bg-primary/90 text-primary-foreground text-[11px]"
+                onClick={handleRemarkSave}
+                disabled={!!isUpdatingAwb}
+              >
+                {isUpdatingAwb ? (
+                  <>
+                    <Loader2 className="w-3 h-3 mr-1 animate-spin" />
+                    Salvando...
+                  </>
+                ) : (
+                  <>
+                    <Check className="w-3 h-3 mr-1" />
+                    Salvar observação
+                  </>
+                )}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
