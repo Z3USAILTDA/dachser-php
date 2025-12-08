@@ -1,0 +1,2147 @@
+import React, { useState, useEffect, useRef, useMemo } from "react";
+import { useNavigate } from "react-router-dom";
+import { supabase } from "@/integrations/supabase/client";
+import { Card } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import {
+  Search,
+  Plus,
+  RefreshCw,
+  Plane,
+  Trash2,
+  ExternalLink,
+  Database,
+  LogOut,
+  Mail,
+  Edit2,
+  Check,
+  ArrowLeft,
+  User as UserIcon,
+} from "lucide-react";
+import { Checkbox } from "@/components/ui/checkbox";
+import { useToast } from "@/hooks/use-toast";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import type { User, Session } from "@supabase/supabase-js";
+import DashboardCards, { CardFilterType } from "@/components/DashboardCards";
+
+// TEMPORARIAMENTE DESATIVADO - Mudar para true para reativar envio de emails
+const EMAIL_SENDING_ENABLED = true;
+
+const airlines = [
+  { code: "006", name: "Delta Cargo" },
+  { code: "020", name: "Lufthansa Cargo" },
+  { code: "074", name: "KLM Cargo" },
+  { code: "369", name: "Atlas Air Cargo" },
+  { code: "577", name: "Azul Cargo" },
+  { code: "057", name: "Air France Cargo" },
+  { code: "045", name: "LATAM Cargo" },
+  { code: "047", name: "TAP Cargo" },
+  { code: "055", name: "ITA Cargo" },
+];
+
+// Função para construir URLs de rastreio por companhia
+const getTrackingUrl = (airlineCode: string, fullAwb: string): string | null => {
+  // Extrair apenas o número do AWB (remove o código da companhia e hífens/espaços)
+  const awbNumber = fullAwb
+    .replace(airlineCode, "")
+    .replace(/^[-\s]+/, "")
+    .trim();
+
+  const urlBuilders: Record<string, (iata: string, awb: string) => string> = {
+    "045": (iata, awb) => `https://www.latamcargo.com/en/trackshipment?docNumber=${awb}&docPrefix=${iata}&soType=MAWB`,
+    "577": (iata, awb) => `https://azulcargoexpress.smartkargo.com/FrmAWBTracking.aspx?AWBPrefix=${iata}&AWBno=${awb}`,
+    "057": (iata, awb) => `https://www.afklcargo.com/mycargo/shipment/detail/${iata}-${awb}`,
+    "074": (iata, awb) => `https://www.afklcargo.com/mycargo/shipment/detail/${iata}-${awb}`,
+    "369": (iata, awb) => `https://jumpseat.atlasair.com/aa/tracktracehtml/TrackTrace.html?pe=${iata}&se=${awb}`,
+    "020": (iata, awb) => `https://www.lufthansa-cargo.com/en/eservices/etracking/tracking/-/awb/${iata}/${awb}`,
+    "006": (iata, awb) =>
+      `https://www.deltacargo.com/Cargo/home/trackShipment?awbNumber=${iata}${awb}&timeZoneOffset=180&t=${Date.now()}`,
+    "047": () => `https://www.tapcargo.com/en/e-tracking-results`,
+    "055": (iata, awb) => `https://booking.ita-airways-cargo.com/trackAndTrace?awbno=${iata}${awb}`,
+  };
+
+  const builder = urlBuilders[airlineCode];
+  return builder ? builder(airlineCode, awbNumber) : null;
+};
+
+// Mapeamento de descrições de status para siglas
+const statusDescriptionToCode: Record<string, string> = {
+  delivered: "DLV",
+  "in transit": "TRA",
+  "customs clearance": "CLR",
+  "out for delivery": "OFD",
+  "arrival at destination": "ARR",
+  "departure from origin": "DEP",
+  "received from flight": "RCF",
+  warehouse: "WHR",
+  pending: "PND",
+  held: "HLD",
+  returned: "RTN",
+  cancelled: "CAN",
+  arrived: "ARR",
+  departed: "DEP",
+  "in customs": "CUS",
+  "cleared customs": "CLR",
+};
+
+// Função para extrair ou mapear o código do status
+const getStatusCode = (lastEvent: string | null): string => {
+  if (!lastEvent) return "AGUARDANDO CONSULTA";
+
+  // Tratamento de erros específicos do banco de dados
+  if (lastEvent === "NOT_FOUND") {
+    return "Status não encontrado";
+  }
+
+  // Processing/Timeout status
+  if (
+    lastEvent === "Em Processamento" ||
+    lastEvent.includes("Processando") ||
+    lastEvent.includes("Timeout") ||
+    lastEvent.includes("timeout")
+  ) {
+    return "Processando";
+  }
+
+  if (lastEvent === "COMPANY_NOT_REGISTERED") {
+    return "Companhia não registrada";
+  }
+
+  if (lastEvent === "ERRO") {
+    return "Falha na consulta";
+  }
+
+  // Tratamento de erros específicos (formatos antigos)
+  if (lastEvent.includes("AWB_NOT_FOUND") || lastEvent === "Status não encontrado") {
+    return "Status não encontrado";
+  }
+
+  if (lastEvent.includes("COMPANY_NOT_REGISTERED") || lastEvent === "Companhia não cadastrada") {
+    return "Companhia não cadastrada";
+  }
+
+  if (lastEvent === "AWB não encontrado") {
+    return "AWB não encontrado";
+  }
+
+  // Se tem o formato "XXX - Description", retorna a sigla
+  if (lastEvent.includes(" - ")) {
+    return lastEvent.split(" - ")[0];
+  }
+
+  // Tenta mapear a descrição para uma sigla conhecida
+  const lowerEvent = lastEvent.toLowerCase().trim();
+  const mappedCode = statusDescriptionToCode[lowerEvent];
+
+  if (mappedCode) {
+    return mappedCode;
+  }
+
+  // Se não encontrar mapeamento, retorna os primeiros 3 caracteres em maiúsculo
+  return lastEvent.substring(0, 3).toUpperCase();
+};
+
+// Função para calcular a posição do avião na timeline (0-100%)
+// Timeline dividida em 4 segmentos: Início-BKD (0-25%), BKD-RCF (25-50%), RCF-MNF (50-75%), MNF-Finalizado (75-100%)
+const getTimelineProgress = (lastEvent: string | null): number => {
+  if (!lastEvent) return 0;
+
+  const statusCode = getStatusCode(lastEvent).toUpperCase();
+  const lowerEvent = lastEvent.toLowerCase();
+
+  // Mapeamento de status para os 4 segmentos da timeline
+  const progressMap: Record<string, number> = {
+    // Segmento 1: Início - BKD (0-25%)
+    PND: 5,
+    PENDING: 5,
+    WHR: 10,
+    WAREHOUSE: 10,
+    BKD: 25,
+    BOOKED: 25,
+    BOOKING: 25,
+
+    // Segmento 2: BKD - RCF (25-50%)
+    FOH: 30,
+    "FREIGHT ON HAND": 30,
+    DEP: 35,
+    DEPARTED: 35,
+    DEPARTURE: 35,
+    MAN: 40,
+    MANIFESTED: 40,
+    MANIFEST: 40,
+    RCF: 50,
+    "RECEIVED FROM FLIGHT": 50,
+    RECEIVED: 50,
+
+    // Segmento 3: RCF - MNF (50-75%)
+    ARR: 60,
+    ARRIVED: 60,
+    ARRIVAL: 60,
+    CUS: 65,
+    "IN CUSTOMS": 65,
+    CUSTOMS: 65,
+    DIS: 70,
+    DISCREPANCY: 70, // Status de alerta - avião vermelho
+    OFLD: 70,
+    OFFLOADED: 70, // Status de alerta - avião vermelho
+    MNF: 75,
+    "MANIFESTED FOR DELIVERY": 75,
+
+    // Segmento 4: MNF - Finalizado (75-100%)
+    NFD: 80,
+    NOTIFIED: 80,
+    OFD: 85,
+    "OUT FOR DELIVERY": 85,
+    DLV: 100,
+    DELIVERED: 100,
+    POD: 100,
+    "PROOF OF DELIVERY": 100,
+  };
+
+  // Tenta encontrar por código exato
+  if (progressMap[statusCode]) {
+    return progressMap[statusCode];
+  }
+
+  // Tenta encontrar por descrição parcial
+  for (const [key, value] of Object.entries(progressMap)) {
+    if (lowerEvent.includes(key.toLowerCase())) {
+      return value;
+    }
+  }
+
+  // Status desconhecido ou aguardando - início da timeline
+  if (statusCode === "AGUARDANDO CONSULTA") return 0;
+
+  return 15; // Status desconhecido assume posição no primeiro segmento
+};
+
+interface AWBData {
+  id: string;
+  awb: string;
+  hawb?: string;
+  airline_code: string;
+  consignee_name: string;
+  last_event: string;
+  status: string;
+  created_at?: string;
+  last_check?: string;
+  nome_analista?: string;
+  email_analista?: string;
+  email_cliente?: string;
+  origem?: string;
+  destino?: string;
+  fromStatusAereo?: boolean;
+  data_atraso?: string | null;
+}
+
+const STORAGE_KEY = "tracked-awbs";
+
+const Index = () => {
+  const navigate = useNavigate();
+  const [user, setUser] = useState<User | null>(null);
+  const [session, setSession] = useState<Session | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [awbNumber, setAwbNumber] = useState("");
+  const [selectedAirline, setSelectedAirline] = useState("");
+  const [consigneeName, setConsigneeName] = useState("");
+  const [searchTerm, setSearchTerm] = useState("");
+  const [filterAirline, setFilterAirline] = useState("all");
+  const [filterAnalyst, setFilterAnalyst] = useState("all");
+  const [sortAnalyst, setSortAnalyst] = useState<"asc" | "desc" | null>(null);
+  const [sortAwb, setSortAwb] = useState<"asc" | "desc" | null>(null);
+  const [sortClient, setSortClient] = useState<"asc" | "desc" | null>(null);
+  const [sortLastCheck, setSortLastCheck] = useState<"asc" | "desc" | null>(null);
+  const [awbsList, setAwbsList] = useState<AWBData[]>([]);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [trackingAwb, setTrackingAwb] = useState<string | null>(null);
+  const [addingToDb, setAddingToDb] = useState<string | null>(null);
+  const [isPaused, setIsPaused] = useState(false);
+  const [statusAereoData, setStatusAereoData] = useState<AWBData[]>([]);
+  const [isLoadingStatusAereo, setIsLoadingStatusAereo] = useState(false);
+  const [retrackingAwbs, setRetrackingAwbs] = useState<Set<string>>(new Set());
+  const [showCompletionPopup, setShowCompletionPopup] = useState(false);
+  const [customerEmailEnabled, setCustomerEmailEnabled] = useState<Record<string, boolean>>({});
+  const [customerEmails, setCustomerEmails] = useState<Record<string, string>>({});
+  const [cardFilter, setCardFilter] = useState<CardFilterType>("all");
+  const isPausedRef = useRef(false);
+  const shouldSendEmailsRef = useRef(false); // Only send emails when user explicitly clicks button
+  const emailEnableTimestampRef = useRef<number>(0); // Track when emails were enabled
+  const EMAIL_ENABLE_TIMEOUT_MS = 30 * 60 * 1000; // 30 minutes timeout for email sending
+  const { toast } = useToast();
+
+  // Sync isPaused state with ref
+  useEffect(() => {
+    isPausedRef.current = isPaused;
+  }, [isPaused]);
+
+  const itemsPerPage = 10;
+
+  // Save AWBs to localStorage
+  const saveToStorage = React.useCallback((awbs: AWBData[]) => {
+    console.log("Saving to storage, first AWB:", awbs[0]);
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(awbs));
+    setAwbsList(awbs);
+  }, []);
+
+  // Check authentication
+  useEffect(() => {
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((event, session) => {
+      setSession(session);
+      setUser(session?.user ?? null);
+      setIsLoading(false);
+
+      if (!session) {
+        navigate("/auth");
+      }
+    });
+
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setSession(session);
+      setUser(session?.user ?? null);
+      setIsLoading(false);
+
+      if (!session) {
+        navigate("/auth");
+      }
+    });
+
+    return () => subscription.unsubscribe();
+  }, [navigate]);
+
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
+    toast({
+      title: "Logout realizado",
+      description: "Até logo!",
+    });
+    navigate("/auth");
+  };
+
+  // Load AWBs from localStorage
+  useEffect(() => {
+    const stored = localStorage.getItem(STORAGE_KEY);
+    if (stored) {
+      try {
+        const parsed = JSON.parse(stored);
+        console.log("Loaded from storage, first AWB:", parsed[0]);
+        setAwbsList(parsed);
+      } catch (e) {
+        console.error("Error loading AWBs:", e);
+      }
+    }
+  }, []);
+
+  // Fetch AWBs from t_status_aereo
+  const fetchStatusAereoData = React.useCallback(async () => {
+    setIsLoadingStatusAereo(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("fetch-status-aereo", {
+        body: { search: "" },
+      });
+
+      if (error) {
+        console.error("Error fetching status aereo:", error);
+        return;
+      }
+
+      if (data?.success && data?.data) {
+        // Convert t_status_aereo data to AWBData format
+        const convertedData: AWBData[] = data.data.map((item: any, index: number) => ({
+          id: `status-${item.id || index}`,
+          awb: item.awb || "",
+          airline_code: item.awb?.substring(0, 3) || "",
+          consignee_name: item.destinatário || "-",
+          hawb: item.hawb || "-",
+          nome_analista: item.nome_analista || "-",
+          email_cliente: item.email_cliente || "",
+          origem: item.origem || "N/A",
+          destino: item.destino || "N/A",
+          last_event: item.status_info || item.último_status || "-",
+          status: item.último_status || "-",
+          last_check: item["última atualização"]
+            ? new Date(item["última atualização"]).toISOString()
+            : new Date().toISOString(),
+          fromStatusAereo: true,
+          data_atraso: item.data_atraso || null,
+        }));
+
+        setStatusAereoData(convertedData);
+      }
+    } catch (error) {
+      console.error("Error in fetchStatusAereoData:", error);
+    } finally {
+      setIsLoadingStatusAereo(false);
+    }
+  }, []);
+
+  // Load status aereo data on mount
+  useEffect(() => {
+    // Initialize alert status column if needed
+    const initAlertColumn = async () => {
+      try {
+        await supabase.functions.invoke("add-alert-status-column", { body: {} });
+      } catch (e) {
+        console.log("Alert column already exists or initialization skipped");
+      }
+    };
+    initAlertColumn();
+
+    fetchStatusAereoData();
+    const interval = setInterval(fetchStatusAereoData, 30000); // Refresh every 30s
+    return () => clearInterval(interval);
+  }, [fetchStatusAereoData]);
+
+  // Function to re-track AWBs from t_status_aereo
+  // sendNoChangesEmail: only send "no changes" email when explicitly triggered by user (button click)
+  const retrackAWBsFromStatus = React.useCallback(
+    async (sendNoChangesEmail: boolean = false) => {
+      if (isPausedRef.current) {
+        console.log("Processing paused - not starting retrack");
+        return;
+      }
+
+      try {
+        console.log("Starting re-track process for AWBs in t_status_aereo");
+
+        const BATCH_SIZE = 10;
+        let offset = 0;
+        let totalRetracked = 0;
+        let hasMoreData = true;
+        const statusChanges: Array<{
+          awb: string;
+          oldStatus: string;
+          newStatus: string;
+          lastUpdate: string;
+          origin?: string;
+          destination?: string;
+          hawb?: string;
+        }> = [];
+
+        while (hasMoreData) {
+          if (isPausedRef.current) {
+            toast({
+              title: "Re-rastreio pausado",
+              description: `${totalRetracked} AWB(s) re-rastreados antes da pausa`,
+            });
+            return;
+          }
+
+          const { data, error } = await supabase.functions.invoke("fetch-awbs-for-retrack", {
+            body: { limit: BATCH_SIZE, offset },
+          });
+
+          if (error) {
+            console.error("Error fetching AWBs for retrack:", error);
+            break;
+          }
+
+          if (!data?.data || data.data.length === 0) {
+            hasMoreData = false;
+            break;
+          }
+
+          // Process each AWB in the batch
+          for (const item of data.data) {
+            if (isPausedRef.current) {
+              setRetrackingAwbs(new Set());
+              toast({
+                title: "Re-rastreio pausado",
+                description: `${totalRetracked} AWB(s) re-rastreados antes da pausa`,
+              });
+              return;
+            }
+
+            try {
+              const awbNumber = item.awb;
+              const airlineCode = awbNumber.substring(0, 3);
+              const oldStatus = item.último_status || item["último_status"] || "N/A";
+
+              // Debug: Log the full item to see all properties
+              console.log("Full item object:", JSON.stringify(item));
+              console.log("Item keys:", Object.keys(item));
+
+              // Get hawb from the item - explicitly access the hawb property
+              const rawItem = item as Record<string, any>;
+              const hawbValue = rawItem.hawb ?? rawItem["hawb"] ?? "";
+              const itemHawb = hawbValue && hawbValue !== "" && hawbValue !== "N/A" ? hawbValue : "N/A";
+              console.log(`Extracted HAWB for ${awbNumber}: "${itemHawb}" from raw value: "${rawItem.hawb}"`);
+              const itemUltimaAtualizacao =
+                item["última atualização"] ||
+                item.última_atualização ||
+                item["ultima atualizacao"] ||
+                new Date().toLocaleString("pt-BR");
+
+              // Get nome_analista from the item
+              const itemNomeAnalista = item.nome_analista || item["nome_analista"] || "N/A";
+
+              // Get email_cliente from the item
+              const itemEmailCliente = item.email_cliente || item["email_cliente"] || null;
+
+              // Mark AWB as being retracked
+              setRetrackingAwbs((prev) => new Set(prev).add(awbNumber));
+
+              console.log(`Re-tracking AWB: ${awbNumber}, HAWB: ${itemHawb}, Analista: ${itemNomeAnalista}`);
+
+              const { data: trackData, error: trackError } = await supabase.functions.invoke("track-awb", {
+                body: { awb: awbNumber, airlineCode },
+              });
+
+              if (!trackError && trackData?.success && trackData.data) {
+                const latestEvent = trackData.data.events?.[0];
+                const lastEventText = latestEvent ? `${latestEvent.status} - ${latestEvent.description}` : "Rastreado";
+                const newStatus = getStatusCode(lastEventText);
+
+                // Update t_status_aereo with new status (preserve hawb and nome_analista)
+                await supabase.functions.invoke("add-awb-to-status", {
+                  body: {
+                    mawb: awbNumber,
+                    last_event: lastEventText,
+                    consignee_name: item.destinatário || "N/A",
+                    airline_code: airlineCode,
+                    hawb: "N/A", // Always N/A during reprocessing to preserve existing values
+                    nome_analista: "N/A", // Always N/A during reprocessing to preserve existing values
+                    origin: trackData.data.origin || "N/A",
+                    destination: trackData.data.destination || "N/A",
+                  },
+                });
+
+                // Track status change - send individual email immediately
+                // Normalize both statuses to uppercase for comparison to avoid false positives (e.g., "ERRO" vs "Erro")
+                const normalizedOldStatus = (oldStatus || "").toUpperCase().trim();
+                const normalizedNewStatus = (newStatus || "").toUpperCase().trim();
+                
+                // CRITICAL: Skip if normalized statuses are the same (case-only difference)
+                if (normalizedOldStatus === normalizedNewStatus) {
+                  console.log(`[EMAIL SKIP] Case-only difference for ${awbNumber}: "${oldStatus}" vs "${newStatus}" - both normalize to "${normalizedOldStatus}"`);
+                } else {
+                  console.log(`Status change detected for ${awbNumber}: ${oldStatus} -> ${newStatus}`);
+                  console.log("Sending individual email for AWB:", awbNumber, "HAWB:", itemHawb);
+
+                  const statusChange = {
+                    awb: awbNumber,
+                    oldStatus,
+                    newStatus,
+                    lastUpdate: itemUltimaAtualizacao,
+                    origin: trackData.data.origin || "N/A",
+                    destination: trackData.data.destination || "N/A",
+                    hawb: itemHawb,
+                  };
+
+                  statusChanges.push(statusChange);
+
+                  // DETAILED LOGGING: Track email decision
+                  console.log(`[EMAIL DECISION] AWB: ${awbNumber}`);
+                  console.log(`[EMAIL DECISION] shouldSendEmailsRef.current: ${shouldSendEmailsRef.current}`);
+                  console.log(`[EMAIL DECISION] EMAIL_SENDING_ENABLED: ${EMAIL_SENDING_ENABLED}`);
+                  console.log(`[EMAIL DECISION] Old status: "${oldStatus}" -> Normalized: "${normalizedOldStatus}"`);
+                  console.log(`[EMAIL DECISION] New status: "${newStatus}" -> Normalized: "${normalizedNewStatus}"`);
+
+                  // Check if email enable timestamp is still valid (within timeout period)
+                  const emailEnableAge = Date.now() - emailEnableTimestampRef.current;
+                  const isEmailTimestampValid = emailEnableAge < EMAIL_ENABLE_TIMEOUT_MS && emailEnableTimestampRef.current > 0;
+                  console.log(`[EMAIL DECISION] Email enable age: ${Math.round(emailEnableAge / 1000)}s, Valid: ${isEmailTimestampValid}`);
+
+                  // Send individual email for this AWB - ONLY if user explicitly clicked button AND emails are enabled AND timestamp is valid
+                  if (shouldSendEmailsRef.current && EMAIL_SENDING_ENABLED && isEmailTimestampValid) {
+                    // Check if customer email is enabled for this AWB (default is disabled)
+                    const isCustomerEmailEnabled = customerEmailEnabled[awbNumber] === true;
+                    const customerEmail = isCustomerEmailEnabled
+                      ? (customerEmails[awbNumber] ?? itemEmailCliente)
+                      : undefined;
+
+                    console.log(
+                      `[EMAIL SENDING] Customer email for ${awbNumber}: enabled=${isCustomerEmailEnabled}, email=${customerEmail}`,
+                    );
+
+                    try {
+                      const { data: emailData, error: emailError } = await supabase.functions.invoke(
+                        "send-status-change-email",
+                        {
+                          body: {
+                            statusChanges: [statusChange],
+                            customerEmail: customerEmail,
+                          },
+                        },
+                      );
+
+                      if (emailError) {
+                        console.error(`Error sending email for AWB ${awbNumber}:`, emailError);
+                      } else {
+                        console.log(`Email sent successfully for AWB ${awbNumber}:`, emailData);
+                        toast({
+                          title: "Email enviado",
+                          description: customerEmail
+                            ? `Notificação enviada para AWB ${awbNumber} (incluindo cliente: ${customerEmail})`
+                            : `Notificação enviada para AWB ${awbNumber}`,
+                        });
+                      }
+                    } catch (emailError) {
+                      console.error(`Exception sending email for AWB ${awbNumber}:`, emailError);
+                    }
+
+                    // Wait 1 minute before processing next AWB to avoid spam
+                    console.log("Waiting 1 minute before processing next AWB...");
+                    await new Promise((resolve) => setTimeout(resolve, 60000));
+                  } else {
+                    console.log(`[EMAIL SKIPPED] AWB ${awbNumber} - shouldSendEmailsRef=${shouldSendEmailsRef.current}, EMAIL_SENDING_ENABLED=${EMAIL_SENDING_ENABLED}, timestampValid=${Date.now() - emailEnableTimestampRef.current < EMAIL_ENABLE_TIMEOUT_MS}`);
+                  }
+                }
+
+                totalRetracked++;
+              }
+
+              // Remove AWB from retracking set
+              setRetrackingAwbs((prev) => {
+                const newSet = new Set(prev);
+                newSet.delete(awbNumber);
+                return newSet;
+              });
+            } catch (error) {
+              console.error(`Error re-tracking AWB ${item.awb}:`, error);
+              // Remove from retracking set on error too
+              setRetrackingAwbs((prev) => {
+                const newSet = new Set(prev);
+                newSet.delete(item.awb);
+                return newSet;
+              });
+            }
+          }
+
+          offset += BATCH_SIZE;
+
+          if (data.data.length < BATCH_SIZE) {
+            hasMoreData = false;
+          }
+        }
+
+        // Clear all retracking indicators
+        setRetrackingAwbs(new Set());
+
+        // Email "no changes" disabled - user requested removal
+        if (statusChanges.length > 0) {
+          toast({
+            title: "Processamento concluído",
+            description: `${statusChanges.length} email(s) enviado(s) com alterações de status`,
+          });
+        }
+
+        if (totalRetracked > 0) {
+          const now = new Date();
+          const formattedDate = now.toLocaleString("pt-BR", {
+            day: "2-digit",
+            month: "2-digit",
+            year: "numeric",
+            hour: "2-digit",
+            minute: "2-digit",
+            second: "2-digit",
+          });
+
+          toast({
+            title: "Re-rastreio completo!",
+            description: `Rastreio atualizado às ${formattedDate}`,
+          });
+        }
+
+        // Show completion popup after retracking finishes
+        setShowCompletionPopup(true);
+        
+        // CRITICAL: Reset email flags after processing completes
+        // This prevents emails from being sent on automatic/background processing
+        console.log("[EMAIL CONTROL] Retracking complete - disabling email sending");
+        shouldSendEmailsRef.current = false;
+        emailEnableTimestampRef.current = 0;
+      } catch (error) {
+        console.error("Error in retrack process:", error);
+        // Reset email flags on error too
+        shouldSendEmailsRef.current = false;
+        emailEnableTimestampRef.current = 0;
+        toast({
+          title: "Erro no re-rastreio",
+          description: "Erro ao re-rastrear AWBs",
+          variant: "destructive",
+        });
+      }
+    },
+    [toast],
+  );
+
+  // Function to fetch AWBs in batches using persistent queue
+  const fetchAWBsInBatches = React.useCallback(async () => {
+    // Check if paused before starting
+    if (isPausedRef.current) {
+      console.log("Processing paused - not starting batch fetch");
+      return;
+    }
+
+    try {
+      // Step 1: Create queue table if not exists
+      console.log("Step 1: Creating/verifying queue table...");
+      await supabase.functions.invoke("manage-processing-queue", {
+        body: { action: "create_table" },
+      });
+
+      // Step 2: Populate queue with unprocessed AWBs
+      console.log("Step 2: Populating queue with unprocessed AWBs...");
+      const { data: populateData, error: populateError } = await supabase.functions.invoke("manage-processing-queue", {
+        body: { action: "populate" },
+      });
+
+      if (populateError) {
+        throw new Error(populateError.message || "Failed to populate queue");
+      }
+
+      const totalInQueue = populateData?.count || 0;
+      console.log(`Queue populated with ${totalInQueue} AWBs`);
+
+      if (totalInQueue === 0) {
+        toast({
+          title: "Nenhum AWB para processar",
+          description: "Todos os AWBs já foram processados",
+        });
+        return;
+      }
+
+      toast({
+        title: "Iniciando processamento",
+        description: `${totalInQueue} AWB(s) na fila de processamento`,
+      });
+
+      // Step 3: Process AWBs from queue in batches
+      const BATCH_SIZE = 10;
+      let batchNumber = 1;
+      let totalProcessed = 0;
+      let hasMoreData = true;
+
+      const stored = localStorage.getItem(STORAGE_KEY);
+      const existingAwbs = stored ? JSON.parse(stored) : [];
+
+      while (hasMoreData) {
+        // Check if paused
+        if (isPausedRef.current) {
+          toast({
+            title: "Processamento pausado",
+            description: `${totalProcessed} AWB(s) processados antes da pausa`,
+          });
+          return;
+        }
+
+        console.log(`Fetching batch ${batchNumber} from queue`);
+
+        // Fetch batch from queue
+        const { data: queueData, error: queueError } = await supabase.functions.invoke("manage-processing-queue", {
+          body: {
+            action: "fetch",
+            limit: BATCH_SIZE,
+            offset: 0, // Always fetch from start since we remove processed items
+          },
+        });
+
+        if (queueError) {
+          console.error("Error fetching from queue:", queueError);
+          break;
+        }
+
+        if (!queueData?.data || !Array.isArray(queueData.data) || queueData.data.length === 0) {
+          // Queue is empty, break and let retrackAWBsFromStatus handle retracking
+          console.log("Queue empty, will start re-tracking after batch processing completes...");
+          hasMoreData = false;
+          break;
+        }
+
+        const importedAwbs: AWBData[] = queueData.data
+          .filter((item: any) => {
+            const mawb = item.mawb?.trim() || "";
+            // Skip empty MAWBs
+            if (!mawb || mawb.length < 3) {
+              console.log(`Skipping invalid MAWB: "${mawb}"`);
+              return false;
+            }
+            return true;
+          })
+          .map((item: any, index: number) => {
+            const mawb = item.mawb.trim();
+            const airlineCode = mawb.slice(0, 3);
+
+            return {
+              id: `queue-${Date.now()}-${index}`,
+              awb: mawb,
+              hawb: item.hawb || "",
+              airline_code: airlineCode,
+              consignee_name: item.destinatario || "",
+              last_event: "Aguardando rastreio...",
+              status: "PENDING",
+              created_at: new Date().toISOString(),
+              nome_analista: item.nome_analista || "",
+              email_analista: "",
+              email_cliente: item.email_cliente || "",
+            };
+          });
+
+        // Process all AWBs from queue (queue already filtered against t_status_aereo)
+        const currentStorage = JSON.parse(localStorage.getItem(STORAGE_KEY) || "[]");
+        const newAwbs = importedAwbs;
+
+        if (newAwbs.length > 0) {
+          // Save batch immediately
+          const mergedAwbs = [...currentStorage, ...newAwbs];
+          saveToStorage(mergedAwbs);
+
+          toast({
+            title: `Processando lote ${batchNumber}`,
+            description: `${newAwbs.length} AWB(s) da fila. Rastreando...`,
+          });
+
+          // Track each AWB in this batch sequentially
+          for (let i = 0; i < newAwbs.length; i++) {
+            // Check if paused before processing each AWB
+            if (isPausedRef.current) {
+              toast({
+                title: "Processamento pausado",
+                description: `${totalProcessed + i} AWB(s) processados antes da pausa`,
+              });
+              return;
+            }
+
+            const awb = newAwbs[i];
+
+            try {
+              setTrackingAwb(awb.id);
+
+              // Validate AWB before tracking
+              if (!awb.awb || awb.awb.trim().length < 3) {
+                console.error(`Invalid AWB format: "${awb.awb}"`);
+                throw new Error("AWB inválido");
+              }
+
+              const { data: trackData, error: trackError } = await supabase.functions.invoke("track-awb", {
+                body: { awb: awb.awb, airlineCode: awb.airline_code },
+              });
+
+              if (!trackError && trackData?.success && trackData.data) {
+                const latestEvent = trackData.data.events?.[0];
+                const lastEventText = latestEvent ? `${latestEvent.status} - ${latestEvent.description}` : "Rastreado";
+                const updatedAwb = {
+                  ...awb,
+                  last_event: lastEventText,
+                  status: trackData.data.status || "TRACKED",
+                  last_check: new Date().toISOString(),
+                  origem: trackData.data.origin || "N/A",
+                  destino: trackData.data.destination || "N/A",
+                };
+
+                // Update storage with tracked AWB
+                const currentList = JSON.parse(localStorage.getItem(STORAGE_KEY) || "[]");
+                const updatedList = currentList.map((item: AWBData) => (item.id === awb.id ? updatedAwb : item));
+                saveToStorage(updatedList);
+
+                // Add to t_status_aereo
+                await supabase.functions.invoke("add-awb-to-status", {
+                  body: {
+                    mawb: awb.awb,
+                    last_event: lastEventText,
+                    consignee_name: awb.consignee_name,
+                    airline_code: awb.airline_code,
+                    hawb: awb.hawb || "N/A",
+                    nome_analista: awb.nome_analista || "N/A",
+                    origin: trackData.data.origin || "N/A",
+                    destination: trackData.data.destination || "N/A",
+                    email_cliente: awb.email_cliente || null,
+                  },
+                });
+
+                console.log(`AWB ${awb.awb} added to t_status_aereo`);
+
+                // Send individual email notification for new AWB
+                const newStatus = getStatusCode(lastEventText);
+                const statusChange = {
+                  awb: awb.awb,
+                  oldStatus: "NOVO",
+                  newStatus,
+                  lastUpdate: new Date().toLocaleString("pt-BR", {
+                    timeZone: "America/Sao_Paulo",
+                    day: "2-digit",
+                    month: "2-digit",
+                    year: "numeric",
+                    hour: "2-digit",
+                    minute: "2-digit",
+                  }),
+                  origin: trackData.data.origin || "N/A",
+                  destination: trackData.data.destination || "N/A",
+                  hawb: awb.hawb || "N/A",
+                };
+
+                // DETAILED LOGGING: Track email decision for new AWB
+                console.log(`[EMAIL DECISION NEW AWB] AWB: ${awb.awb}`);
+                console.log(`[EMAIL DECISION NEW AWB] shouldSendEmailsRef.current: ${shouldSendEmailsRef.current}`);
+                console.log(`[EMAIL DECISION NEW AWB] EMAIL_SENDING_ENABLED: ${EMAIL_SENDING_ENABLED}`);
+
+                // Check if email enable timestamp is still valid
+                const emailEnableAgeNew = Date.now() - emailEnableTimestampRef.current;
+                const isEmailTimestampValidNew = emailEnableAgeNew < EMAIL_ENABLE_TIMEOUT_MS && emailEnableTimestampRef.current > 0;
+                console.log(`[EMAIL DECISION NEW AWB] Email enable age: ${Math.round(emailEnableAgeNew / 1000)}s, Valid: ${isEmailTimestampValidNew}`);
+
+                // Send email for new AWB - ONLY if user explicitly clicked button AND emails are enabled AND timestamp valid
+                if (shouldSendEmailsRef.current && EMAIL_SENDING_ENABLED && isEmailTimestampValidNew) {
+                  try {
+                    console.log(`[EMAIL SENDING NEW AWB] Sending email for ${awb.awb}...`);
+                    const { data: emailData, error: emailError } = await supabase.functions.invoke(
+                      "send-status-change-email",
+                      {
+                        body: { statusChanges: [statusChange] },
+                      },
+                    );
+
+                    if (emailError) {
+                      console.error(`Error sending email for AWB ${awb.awb}:`, emailError);
+                    } else {
+                      console.log(`Email sent successfully for AWB ${awb.awb}:`, emailData);
+                      toast({
+                        title: "Email enviado",
+                        description: `Notificação enviada para novo AWB ${awb.awb}`,
+                      });
+                    }
+                  } catch (emailError) {
+                    console.error(`Exception sending email for AWB ${awb.awb}:`, emailError);
+                  }
+
+                  // Wait 1 minute before processing next AWB to avoid spam
+                  console.log("Waiting 1 minute before processing next AWB...");
+                  await new Promise((resolve) => setTimeout(resolve, 60000));
+                } else {
+                  console.log(`[EMAIL SKIPPED NEW AWB] AWB ${awb.awb} - shouldSendEmailsRef=${shouldSendEmailsRef.current}, EMAIL_SENDING_ENABLED=${EMAIL_SENDING_ENABLED}, timestampValid=${isEmailTimestampValidNew}`);
+                }
+
+                // Step 4: Remove from queue after successful processing
+                console.log(`[REMOVE] Requesting removal of AWB ${awb.awb} from queue...`);
+                const { data: removeData, error: removeError } = await supabase.functions.invoke(
+                  "manage-processing-queue",
+                  {
+                    body: {
+                      action: "remove",
+                      mawb: awb.awb,
+                    },
+                  },
+                );
+
+                if (removeError) {
+                  console.error(`[REMOVE ERROR] Failed to remove AWB ${awb.awb}:`, removeError);
+                  console.error(`[REMOVE ERROR] Full error object:`, JSON.stringify(removeError, null, 2));
+                } else {
+                  console.log(`[REMOVE SUCCESS] AWB ${awb.awb} removal response:`, JSON.stringify(removeData, null, 2));
+
+                  // Validate removal - verify AWB is no longer in queue
+                  const { data: verifyData } = await supabase.functions.invoke("manage-processing-queue", {
+                    body: { action: "count" },
+                  });
+                  console.log(`[REMOVE VERIFY] Queue count after removal: ${verifyData?.count || 0}`);
+
+                  if (removeData?.deletedCount === 0) {
+                    console.error(`[REMOVE WARNING] AWB ${awb.awb} was NOT removed from queue (deletedCount=0)`);
+                  } else {
+                    console.log(
+                      `[REMOVE CONFIRMED] AWB ${awb.awb} successfully removed (deletedCount=${removeData?.deletedCount || "unknown"})`,
+                    );
+                  }
+                }
+              } else {
+                throw new Error(trackError?.message || "Falha no rastreio");
+              }
+            } catch (error) {
+              console.error(`Error tracking AWB ${awb.awb}:`, error);
+
+              // Keep the AWB with original data but mark as error
+              const currentList = JSON.parse(localStorage.getItem(STORAGE_KEY) || "[]");
+              const updatedList = currentList.map((item: AWBData) =>
+                item.id === awb.id ? { ...item, last_event: "Erro no rastreio", status: "ERROR" } : item,
+              );
+              saveToStorage(updatedList);
+
+              // Remove from queue even on error to avoid reprocessing
+              console.log(`[REMOVE AFTER ERROR] AWB ${awb.awb} processing failed, requesting removal from queue...`);
+              const { data: removeErrorData, error: removeErrorError } = await supabase.functions.invoke(
+                "manage-processing-queue",
+                {
+                  body: {
+                    action: "remove",
+                    mawb: awb.awb,
+                  },
+                },
+              );
+
+              if (removeErrorError) {
+                console.error(`[REMOVE AFTER ERROR] Failed to remove AWB ${awb.awb}:`, removeErrorError);
+                console.error(`[REMOVE AFTER ERROR] Full error:`, JSON.stringify(removeErrorError, null, 2));
+              } else {
+                console.log(
+                  `[REMOVE AFTER ERROR SUCCESS] AWB ${awb.awb} removal response:`,
+                  JSON.stringify(removeErrorData, null, 2),
+                );
+
+                if (removeErrorData?.deletedCount === 0) {
+                  console.error(`[REMOVE AFTER ERROR WARNING] AWB ${awb.awb} was NOT removed (deletedCount=0)`);
+                } else {
+                  console.log(
+                    `[REMOVE AFTER ERROR CONFIRMED] AWB ${awb.awb} removed (deletedCount=${removeErrorData?.deletedCount || "unknown"})`,
+                  );
+                }
+              }
+            }
+
+            setTrackingAwb(null);
+          }
+
+          totalProcessed += newAwbs.length;
+
+          toast({
+            title: `Lote ${batchNumber} concluído`,
+            description: `${newAwbs.length} AWB(s) processados. Total: ${totalProcessed}`,
+          });
+        }
+
+        // Check queue count to see if there's more data
+        const { data: countData } = await supabase.functions.invoke("manage-processing-queue", {
+          body: { action: "count" },
+        });
+
+        const remainingInQueue = countData?.count || 0;
+        console.log(`Remaining in queue: ${remainingInQueue}`);
+
+        if (remainingInQueue === 0) {
+          hasMoreData = false;
+        }
+
+        batchNumber++;
+      }
+
+      // Clear the queue after processing
+      await supabase.functions.invoke("manage-processing-queue", {
+        body: { action: "clear" },
+      });
+
+      if (totalProcessed > 0) {
+        toast({
+          title: "Todos AWBs sincronizados!",
+          description: `${totalProcessed} AWB(s) processados e salvos no banco.`,
+        });
+      }
+
+      // Always start retracking after batch processing completes
+      // Pass false - don't send "no changes" email automatically, only when user explicitly clicks button
+      console.log("Batch processing complete, starting automatic retracking...");
+      await retrackAWBsFromStatus(false);
+    } catch (error) {
+      console.error("Error importing AWBs:", error);
+      // Reset email flags on error
+      shouldSendEmailsRef.current = false;
+      emailEnableTimestampRef.current = 0;
+      toast({
+        title: "Erro ao importar",
+        description: "Erro ao processar AWBs da fila.",
+        variant: "destructive",
+      });
+    }
+  }, [toast, saveToStorage, retrackAWBsFromStatus]);
+
+  // Handle refresh button - checks queue and decides to process or retrack
+  const handleRefresh = React.useCallback(async () => {
+    try {
+      // Enable email sending - user explicitly clicked button
+      shouldSendEmailsRef.current = true;
+      emailEnableTimestampRef.current = Date.now();
+      console.log(`[EMAIL CONTROL] User clicked Atualizar button - enabling email sending at ${new Date().toISOString()}`);
+
+      // Step 1: Create queue table and populate it
+      console.log("Checking processing queue...");
+
+      await supabase.functions.invoke("manage-processing-queue", {
+        body: { action: "create_table" },
+      });
+
+      const { data: populateData } = await supabase.functions.invoke("manage-processing-queue", {
+        body: { action: "populate" },
+      });
+
+      const queueCount = populateData?.count || 0;
+      console.log(`Queue has ${queueCount} unprocessed AWBs`);
+
+      // If there are unprocessed AWBs in queue, process them; otherwise start re-tracking
+      if (queueCount > 0) {
+        console.log("Found unprocessed AWBs in queue - starting batch processing");
+        toast({
+          title: "Processando novos AWBs",
+          description: `${queueCount} AWB(s) pendentes encontrados...`,
+        });
+        await fetchAWBsInBatches();
+      } else {
+        console.log("No unprocessed AWBs - starting re-track");
+        toast({
+          title: "Iniciando re-rastreio",
+          description: "Todos AWBs da tabela master processados. Iniciando re-rastreio da t_status_aereo...",
+        });
+        await retrackAWBsFromStatus(true); // User explicitly clicked button, send email if no changes
+      }
+
+      // Refresh status aereo data
+      await fetchStatusAereoData();
+
+      // Reset email flag after processing completes
+      shouldSendEmailsRef.current = false;
+      console.log("Processing complete - disabling email sending");
+    } catch (error) {
+      console.error("Error in handleRefresh:", error);
+      // Reset email flag on error
+      shouldSendEmailsRef.current = false;
+      toast({
+        title: "Erro",
+        description: "Erro ao atualizar dados",
+        variant: "destructive",
+      });
+    }
+  }, [toast, retrackAWBsFromStatus, fetchAWBsInBatches, fetchStatusAereoData]);
+
+  // Auto-fetch disabled - user must click "Atualizar" button to process AWBs
+  // useEffect(() => {
+  //   const timer = setTimeout(() => {
+  //     fetchAWBsInBatches();
+  //   }, 1000);
+  //   return () => clearTimeout(timer);
+  // }, [fetchAWBsInBatches]);
+
+  const handleAddAWB = async () => {
+    if (!awbNumber || !selectedAirline || !consigneeName) {
+      toast({
+        title: "Campos obrigatórios",
+        description: "Preencha todos os campos para cadastrar o AWB.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    // Format AWB with airline code if not already included
+    let formattedAwb = awbNumber;
+    if (!awbNumber.startsWith(selectedAirline)) {
+      const cleanNumber = awbNumber.replace(/\D/g, "");
+      formattedAwb = `${selectedAirline}-${cleanNumber}`;
+    }
+
+    const newAwb: AWBData = {
+      id: Date.now().toString(),
+      awb: formattedAwb,
+      airline_code: selectedAirline,
+      consignee_name: consigneeName,
+      last_event: "AWB cadastrado - Rastreando...",
+      status: "PENDING",
+      created_at: new Date().toISOString(),
+    };
+
+    const updatedList = [newAwb, ...awbsList];
+    saveToStorage(updatedList);
+
+    toast({
+      title: "AWB cadastrado",
+      description: "Rastreando automaticamente...",
+    });
+
+    setAwbNumber("");
+    setSelectedAirline("");
+    setConsigneeName("");
+
+    // Automatically track the AWB
+    setTrackingAwb(newAwb.id);
+
+    try {
+      const { data, error } = await supabase.functions.invoke("track-awb", {
+        body: { awb: newAwb.awb, airlineCode: newAwb.airline_code },
+      });
+
+      if (error) throw error;
+
+      if (data.success && data.data) {
+        const latestEvent = data.data.events?.[0];
+        const updatedAwb = {
+          ...newAwb,
+          last_event: latestEvent ? `${latestEvent.status} - ${latestEvent.description}` : newAwb.last_event,
+          status: data.data.status || newAwb.status,
+          last_check: new Date().toISOString(),
+          origem: data.data.origin || "N/A",
+          destino: data.data.destination || "N/A",
+        };
+
+        const listAfterTracking = awbsList.map((item) => (item.id === newAwb.id ? updatedAwb : item));
+
+        // If not found in list, add it (since it was just added)
+        if (!listAfterTracking.find((item) => item.id === newAwb.id)) {
+          listAfterTracking.unshift(updatedAwb);
+        }
+
+        saveToStorage(listAfterTracking);
+
+        // Automatically add to database
+        setAddingToDb(newAwb.id);
+
+        try {
+          const { data: dbData, error: dbError } = await supabase.functions.invoke("add-awb-to-status", {
+            body: {
+              mawb: updatedAwb.awb,
+              last_event: updatedAwb.last_event || "N/A",
+              consignee_name: updatedAwb.consignee_name || "N/A",
+              airline_code: updatedAwb.airline_code,
+              hawb: "N/A",
+              nome_analista: "N/A",
+              origin: data.data.origin || "N/A",
+              destination: data.data.destination || "N/A",
+            },
+          });
+
+          if (dbError) throw dbError;
+
+          if (dbData.success) {
+            toast({
+              title: "Sucesso completo",
+              description: "AWB rastreado e salvo no banco de dados.",
+            });
+          }
+        } catch (dbError) {
+          console.error("Error adding AWB to database:", dbError);
+          toast({
+            title: "AWB rastreado",
+            description: "Mas houve erro ao salvar no banco de dados.",
+            variant: "destructive",
+          });
+        } finally {
+          setAddingToDb(null);
+        }
+      }
+    } catch (error) {
+      console.error("Error tracking AWB:", error);
+      toast({
+        title: "AWB cadastrado",
+        description: "Mas houve erro no rastreamento automático.",
+        variant: "destructive",
+      });
+    } finally {
+      setTrackingAwb(null);
+    }
+  };
+
+  const handleDeleteAWB = (id: string) => {
+    const updatedList = awbsList.filter((awb) => awb.id !== id);
+    saveToStorage(updatedList);
+
+    toast({
+      title: "AWB removido",
+      description: "AWB removido da lista de rastreamento.",
+    });
+  };
+
+  const handleOpenTracking = (awb: string, airlineCode: string) => {
+    const [prefix, number] = awb.includes("-") ? awb.split("-") : [awb.slice(0, 3), awb.slice(3)];
+    const formattedAwb = awb.includes("-") ? awb : `${prefix}-${number}`;
+
+    const airlineUrls: Record<string, string> = {
+      "006": `https://www.deltacargo.com/Cargo/home/trackShipment?awbNumber=${awb.replace("-", "")}&timeZoneOffset=180&t=${Date.now()}`,
+      "020": `https://www.lufthansa-cargo.com/en/eservices/etracking/tracking/-/awb/${awb.replace("-", "/")}`,
+      "074": `https://www.afklcargo.com/mycargo/shipment/detail/${formattedAwb}`,
+      "369": `https://jumpseat.atlasair.com/aa/tracktracehtml/TrackTrace.html?pe=369&se=${number}`,
+      "577": `https://azulcargoexpress.smartkargo.com/FrmAWBTracking.aspx?AWBPrefix=577&AWBno=${number}`,
+      "057": `https://www.afklcargo.com/mycargo/shipment/detail/${formattedAwb}`,
+      "045": `https://www.latamcargo.com/en/trackshipment?docNumber=${number}&docPrefix=${prefix}&soType=MAWB`,
+      "047": `https://parcelsapp.com/en/tracking/${formattedAwb}`,
+      "055": `https://pg.fr8manage.app/cargospot/fetchTrackingData?airlinePrefix=${prefix}&serialNumber=${number}`,
+    };
+
+    const url = airlineUrls[airlineCode];
+    if (url) {
+      window.open(url, "_blank", "noopener,noreferrer");
+    } else {
+      toast({
+        title: "URL não disponível",
+        description: "Link de rastreamento não configurado para esta companhia.",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleTrackAWB = async (awb: AWBData) => {
+    setTrackingAwb(awb.id);
+
+    try {
+      const { data, error } = await supabase.functions.invoke("track-awb", {
+        body: { awb: awb.awb, airlineCode: awb.airline_code },
+      });
+
+      if (error) throw error;
+
+      if (data.success && data.data) {
+        const latestEvent = data.data.events?.[0];
+        const updatedAwb = {
+          ...awb,
+          last_event: latestEvent ? `${latestEvent.status} - ${latestEvent.description}` : awb.last_event,
+          status: data.data.status || awb.status,
+          last_check: new Date().toISOString(),
+        };
+
+        const updatedList = awbsList.map((item) => (item.id === awb.id ? updatedAwb : item));
+        saveToStorage(updatedList);
+
+        toast({
+          title: "Rastreamento atualizado",
+          description: `Status: ${latestEvent?.status || "N/A"}`,
+        });
+      }
+    } catch (error) {
+      console.error("Error tracking AWB:", error);
+      toast({
+        title: "Erro no rastreamento",
+        description: "Não foi possível consultar o site da companhia.",
+        variant: "destructive",
+      });
+    } finally {
+      setTrackingAwb(null);
+    }
+  };
+
+  const handleAddToDatabase = async (awb: AWBData) => {
+    setAddingToDb(awb.id);
+
+    try {
+      const { data, error } = await supabase.functions.invoke("add-awb-to-status", {
+        body: {
+          mawb: awb.awb,
+          last_event: awb.last_event || "N/A",
+          consignee_name: awb.consignee_name || "N/A",
+          airline_code: awb.airline_code,
+          hawb: awb.hawb || "N/A",
+          nome_analista: awb.nome_analista || "N/A",
+        },
+      });
+
+      if (error) throw error;
+
+      if (data.success) {
+        toast({
+          title: "Sucesso",
+          description: "AWB adicionado ao banco de dados.",
+        });
+      } else {
+        throw new Error(data.error || "Erro desconhecido");
+      }
+    } catch (error) {
+      console.error("Error adding AWB to database:", error);
+      toast({
+        title: "Erro ao adicionar",
+        description: "Não foi possível adicionar o AWB ao banco de dados.",
+        variant: "destructive",
+      });
+    } finally {
+      setAddingToDb(null);
+    }
+  };
+
+  const formatAWB = (value: string) => {
+    const cleaned = value.replace(/\D/g, "");
+    if (cleaned.length <= 8) return cleaned;
+    return `${cleaned.slice(0, 3)}-${cleaned.slice(3, 11)}`;
+  };
+
+  const abbreviateName = (name: string): string => {
+    if (!name || name === "-") return "-";
+
+    // Limita a 20 caracteres e adiciona reticências se necessário
+    if (name.length > 20) {
+      return name.substring(0, 20) + "...";
+    }
+    return name;
+  };
+
+  const getStatusFromEvent = (lastEvent: string): string => {
+    if (!lastEvent) return "-";
+
+    const eventLower = lastEvent.toLowerCase();
+
+    // Extract status code (first 3 letters, with or without parentheses)
+    const codeMatch = lastEvent.match(/^\(?([A-Z]{3})\)?/);
+    if (codeMatch) {
+      const code = codeMatch[1];
+      const statusMap: Record<string, string> = {
+        BKD: "Reserva confirmada",
+        FOH: "Carga recebida pela cia aérea",
+        MAN: "Carga manifestada",
+        DEP: "Partida confirmada",
+        ARR: "Chegou na conexão",
+        RCF: "Carga recebida pela cia aérea",
+        DLV: "Chegou em seu destino final",
+        NFD: "Agente notificado",
+      };
+      return statusMap[code] || "-";
+    }
+
+    // Check for written-out status keywords
+    if (eventLower.includes("delivered")) return "Chegou em seu destino final";
+    if (eventLower.includes("departed")) return "Partida confirmada";
+    if (eventLower.includes("arrived")) return "Chegou na conexão";
+    if (eventLower.includes("manifested")) return "Carga manifestada";
+    if (eventLower.includes("booking")) return "Reserva confirmada";
+    if (eventLower.includes("received from flight")) return "Carga recebida pela cia aérea";
+    if (eventLower.includes("freight on hand")) return "Carga recebida pela cia aérea";
+
+    return "-";
+  };
+
+  // Get unique analysts from data
+  const uniqueAnalysts = React.useMemo(() => {
+    const analysts = new Set<string>();
+    statusAereoData.forEach((awb) => {
+      if (awb.nome_analista && awb.nome_analista !== "-") {
+        analysts.add(awb.nome_analista);
+      }
+    });
+    return Array.from(analysts).sort();
+  }, [statusAereoData]);
+
+  // Handle column sorting
+  const handleAnalystSort = () => {
+    setSortAwb(null);
+    setSortClient(null);
+    setSortLastCheck(null);
+    if (sortAnalyst === null) {
+      setSortAnalyst("asc");
+    } else if (sortAnalyst === "asc") {
+      setSortAnalyst("desc");
+    } else {
+      setSortAnalyst(null);
+    }
+  };
+
+  const handleAwbSort = () => {
+    setSortAnalyst(null);
+    setSortClient(null);
+    setSortLastCheck(null);
+    if (sortAwb === null) {
+      setSortAwb("asc");
+    } else if (sortAwb === "asc") {
+      setSortAwb("desc");
+    } else {
+      setSortAwb(null);
+    }
+  };
+
+  const handleClientSort = () => {
+    setSortAnalyst(null);
+    setSortAwb(null);
+    setSortLastCheck(null);
+    if (sortClient === null) {
+      setSortClient("asc");
+    } else if (sortClient === "asc") {
+      setSortClient("desc");
+    } else {
+      setSortClient(null);
+    }
+  };
+
+  const handleLastCheckSort = () => {
+    setSortAnalyst(null);
+    setSortAwb(null);
+    setSortClient(null);
+    if (sortLastCheck === null) {
+      setSortLastCheck("asc");
+    } else if (sortLastCheck === "asc") {
+      setSortLastCheck("desc");
+    } else {
+      setSortLastCheck(null);
+    }
+  };
+
+  // Always use data from t_status_aereo
+  const filteredAwbs = React.useMemo(() => {
+    let awbs = statusAereoData.filter((awb) => {
+      const searchLower = searchTerm.toLowerCase();
+      const matchesSearch =
+        !searchTerm ||
+        awb.awb.toLowerCase().includes(searchLower) ||
+        (awb.hawb && awb.hawb.toLowerCase().includes(searchLower)) ||
+        (awb.consignee_name && awb.consignee_name.toLowerCase().includes(searchLower)) ||
+        (awb.airline_code && awb.airline_code.toLowerCase().includes(searchLower)) ||
+        (awb.nome_analista && awb.nome_analista.toLowerCase().includes(searchLower));
+      const matchesAirline = filterAirline === "all" || awb.airline_code === filterAirline;
+      const matchesAnalyst = filterAnalyst === "all" || awb.nome_analista === filterAnalyst;
+
+      // Exclude AWBs with specific status values
+      const excludedStatuses = ["COMPANY_NOT_REGISTERED", "ERRO", "INFO", "Em Processamento", "NOT_FOUND", "DLV"];
+      const statusToCheck = awb.status || "";
+      const isNotExcluded = !excludedStatuses.includes(statusToCheck);
+
+      return matchesSearch && matchesAirline && matchesAnalyst && isNotExcluded;
+    });
+
+    // Apply card filter
+    if (cardFilter !== "all") {
+      awbs = awbs.filter((awb) => {
+        const status = getStatusCode(awb.last_event).toUpperCase();
+        switch (cardFilter) {
+          case "transito":
+            return ["DEP", "MAN", "RCF", "ARR", "TRA", "FOH"].includes(status);
+          case "alerta":
+            return status === "DIS" || status === "OFLD";
+          case "criticos":
+            return status === "NIL" || status === "NIF";
+          default:
+            return true;
+        }
+      });
+    }
+
+    // Apply sorting if active
+    if (sortAnalyst !== null) {
+      awbs = [...awbs].sort((a, b) => {
+        const nameA = a.nome_analista || "";
+        const nameB = b.nome_analista || "";
+        const comparison = nameA.localeCompare(nameB);
+        return sortAnalyst === "asc" ? comparison : -comparison;
+      });
+    } else if (sortAwb !== null) {
+      awbs = [...awbs].sort((a, b) => {
+        const awbA = a.awb || "";
+        const awbB = b.awb || "";
+        const comparison = awbA.localeCompare(awbB);
+        return sortAwb === "asc" ? comparison : -comparison;
+      });
+    } else if (sortClient !== null) {
+      awbs = [...awbs].sort((a, b) => {
+        const clientA = a.consignee_name || "";
+        const clientB = b.consignee_name || "";
+        const comparison = clientA.localeCompare(clientB);
+        return sortClient === "asc" ? comparison : -comparison;
+      });
+    } else if (sortLastCheck !== null) {
+      awbs = [...awbs].sort((a, b) => {
+        const dateA = a.last_check ? new Date(a.last_check).getTime() : 0;
+        const dateB = b.last_check ? new Date(b.last_check).getTime() : 0;
+        const comparison = dateA - dateB;
+        return sortLastCheck === "asc" ? comparison : -comparison;
+      });
+    }
+
+    return awbs;
+  }, [statusAereoData, searchTerm, filterAirline, filterAnalyst, cardFilter, sortAnalyst, sortAwb, sortClient, sortLastCheck]);
+
+  const totalPages = Math.ceil(filteredAwbs.length / itemsPerPage);
+  const startIndex = (currentPage - 1) * itemsPerPage;
+  const endIndex = startIndex + itemsPerPage;
+  const currentAwbs = filteredAwbs.slice(startIndex, endIndex);
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-black flex items-center justify-center">
+        <p className="text-white">Carregando...</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-h-screen bg-black py-6 px-6">
+      <div className="w-full p-5">
+        {/* Header */}
+        <div className="mb-6">
+          <div className="flex items-center justify-between gap-4">
+            <div className="flex items-center gap-4">
+              <a
+                href="https://dachser.z3us.ai/home.php"
+                className="inline-flex items-center bg-primary/30 text-primary hover:bg-primary/50 border border-primary/50 rounded-full px-4 py-2 h-auto font-medium transition-colors"
+              >
+                <ArrowLeft className="w-4 h-4 mr-1" />
+                Voltar
+              </a>
+              <div>
+                <h1 className="text-foreground text-3xl font-normal tracking-[0.3em]">DACHSER</h1>
+                <p className="text-muted-foreground text-sm mt-0.5">Aéreo – Rastreio de AWBs</p>
+                <div className="flex gap-1 mt-2">
+                  <span className="w-2 h-2 rounded-full bg-primary"></span>
+                  <span className="w-2 h-2 rounded-full bg-primary"></span>
+                  <span className="w-2 h-2 rounded-full bg-primary"></span>
+                </div>
+              </div>
+            </div>
+            <div className="flex items-center gap-3">
+              <span className="text-muted-foreground text-sm">@{user?.email?.split("@")[0] || "admin"}</span>
+              <Button
+                variant="ghost"
+                onClick={handleLogout}
+                className="w-9 h-9 p-0 text-foreground hover:text-primary hover:bg-muted rounded-full border border-border"
+              >
+                <UserIcon className="w-4 h-4" />
+              </Button>
+            </div>
+          </div>
+        </div>
+
+        {/* Dashboard Cards */}
+        <DashboardCards
+          totalMonitorados={statusAereoData.filter((awb) => {
+            const excludedStatuses = ["COMPANY_NOT_REGISTERED", "ERRO", "INFO", "Em Processamento", "NOT_FOUND", "DLV"];
+            return !excludedStatuses.includes(awb.status || "");
+          }).length}
+          emTransito={statusAereoData.filter((awb) => {
+            const excludedStatuses = ["COMPANY_NOT_REGISTERED", "ERRO", "INFO", "Em Processamento", "NOT_FOUND", "DLV"];
+            if (excludedStatuses.includes(awb.status || "")) return false;
+            const status = getStatusCode(awb.last_event).toUpperCase();
+            return ["DEP", "MAN", "RCF", "ARR", "TRA", "FOH"].includes(status);
+          }).length}
+          emAlerta={statusAereoData.filter((awb) => {
+            const excludedStatuses = ["COMPANY_NOT_REGISTERED", "ERRO", "INFO", "Em Processamento", "NOT_FOUND", "DLV"];
+            if (excludedStatuses.includes(awb.status || "")) return false;
+            const status = getStatusCode(awb.last_event).toUpperCase();
+            return status === "DIS" || status === "OFLD";
+          }).length}
+          criticos={statusAereoData.filter((awb) => {
+            const excludedStatuses = ["COMPANY_NOT_REGISTERED", "ERRO", "INFO", "Em Processamento", "NOT_FOUND", "DLV"];
+            if (excludedStatuses.includes(awb.status || "")) return false;
+            const status = getStatusCode(awb.last_event).toUpperCase();
+            return status === "NIL" || status === "NIF";
+          }).length}
+          activeFilter={cardFilter}
+          onFilterChange={(filter) => {
+            setCardFilter(filter);
+            setCurrentPage(1);
+          }}
+        />
+
+        {/* Search and Filter Bar */}
+        <div className="flex flex-wrap gap-2 mb-4">
+          <Input
+            placeholder="Buscar por AWB, Consignee ou e-mail"
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className="flex-1 min-w-[200px] max-w-[350px] h-9 px-3 rounded-md border border-border bg-card text-foreground placeholder:text-muted-foreground"
+          />
+          <Select value={filterAirline} onValueChange={setFilterAirline}>
+            <SelectTrigger className="w-[180px] h-9 bg-card text-foreground border border-border rounded-md px-3">
+              <SelectValue placeholder="Todas as companhias" />
+            </SelectTrigger>
+            <SelectContent className="bg-card text-foreground border border-border z-50">
+              <SelectItem value="all">Todas as companhias</SelectItem>
+              {airlines.map((airline) => (
+                <SelectItem key={airline.code} value={airline.code}>
+                  {airline.code} - {airline.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Select value={filterAnalyst} onValueChange={setFilterAnalyst}>
+            <SelectTrigger className="w-[200px] h-9 bg-card text-foreground border border-border rounded-md px-3">
+              <SelectValue placeholder="Todos os analistas" />
+            </SelectTrigger>
+            <SelectContent className="bg-card text-foreground border border-border z-50">
+              <SelectItem value="all">Todos os analistas</SelectItem>
+              {Array.from(
+                new Set(
+                  statusAereoData
+                    .map((awb) => awb.nome_analista)
+                    .filter((name) => name && name !== "N/A" && name.trim() !== ""),
+                ),
+              )
+                .sort()
+                .map((analyst) => (
+                  <SelectItem key={analyst} value={analyst}>
+                    {analyst}
+                  </SelectItem>
+                ))}
+            </SelectContent>
+          </Select>
+          <Button
+            variant="ghost"
+            onClick={handleRefresh}
+            className="h-9 gap-1.5 text-foreground hover:text-primary hover:bg-transparent border border-border px-3"
+          >
+            <RefreshCw className="w-4 h-4" />
+            Atualizar
+          </Button>
+        </div>
+
+        {/* AWBs Table */}
+        <div className="panel-wrapper">
+          {filteredAwbs.length > 0 ? (
+            <>
+              <div className="overflow-x-auto">
+                <table className="w-full border-collapse">
+                  <thead>
+                    <tr className="bg-card border-b border-border">
+                      <th
+                        className="px-3 py-3 text-left text-foreground uppercase text-xs font-bold cursor-pointer select-none hover:bg-muted/50"
+                        onClick={handleAwbSort}
+                      >
+                        <span className="flex items-center gap-1">
+                          AWB
+                          {sortAwb === "asc" && <span>↑</span>}
+                          {sortAwb === "desc" && <span>↓</span>}
+                        </span>
+                      </th>
+                      <th className="px-3 py-3 text-left text-foreground uppercase text-xs font-bold">HAWB</th>
+                      <th
+                        className="px-3 py-3 text-left text-foreground uppercase text-xs font-bold cursor-pointer select-none hover:bg-muted/50"
+                        onClick={handleClientSort}
+                      >
+                        <span className="flex items-center gap-1">
+                          Cliente
+                          {sortClient === "asc" && <span>↑</span>}
+                          {sortClient === "desc" && <span>↓</span>}
+                        </span>
+                      </th>
+                      <th className="px-3 py-3 text-left text-foreground uppercase text-xs font-bold">Rota</th>
+                      <th className="px-3 py-3 text-left text-foreground uppercase text-xs font-bold">Rastreio</th>
+                      <th className="px-3 py-3 text-left text-foreground uppercase text-xs font-bold">Último Evento</th>
+                      <th
+                        className="px-3 py-3 text-left text-foreground uppercase text-xs font-bold cursor-pointer select-none hover:bg-muted/50"
+                        onClick={handleLastCheckSort}
+                      >
+                        <span className="flex items-center gap-1">
+                          Última Verificação
+                          {sortLastCheck === "asc" && <span>↑</span>}
+                          {sortLastCheck === "desc" && <span>↓</span>}
+                        </span>
+                      </th>
+                      <th
+                        className="px-3 py-3 text-left text-foreground uppercase text-xs font-bold cursor-pointer select-none hover:bg-muted/50"
+                        onClick={handleAnalystSort}
+                      >
+                        <span className="flex items-center gap-1">
+                          Nome Analista
+                          {sortAnalyst === "asc" && <span>↑</span>}
+                          {sortAnalyst === "desc" && <span>↓</span>}
+                        </span>
+                      </th>
+                      <th className="px-3 py-3 text-center text-foreground uppercase text-xs font-bold">
+                        Abrir rastreio
+                      </th>
+                      <th className="px-3 py-3 text-center text-foreground uppercase text-xs font-bold">
+                        Email Cliente
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {currentAwbs.map((awb: AWBData, index: number) => {
+                      const status = getStatusFromEvent(awb.last_event);
+                      const isDelivered = status === "Chegou em seu destino final";
+                      const isRetracking = retrackingAwbs.has(awb.awb);
+
+                      const isNilStatus = awb.last_event === "NIL" || awb.last_event === "NIF";
+
+                      return (
+                        <React.Fragment key={awb.id || index}>
+                          <tr
+                            className={`border-b border-border transition-all duration-300 ${
+                              isNilStatus
+                                ? "bg-red-500/20 border-red-500 border-2 animate-pulse shadow-[0_0_20px_rgba(255,0,0,0.3)]"
+                                : "hover:bg-muted/30"
+                            } ${isDelivered && !isNilStatus ? "bg-green-500/10" : ""} ${
+                              isRetracking && !isNilStatus ? "bg-blue-500/20 animate-pulse" : ""
+                            }`}
+                          >
+                            <td className="px-3 py-3 whitespace-nowrap">
+                              <div className="flex items-center gap-2">
+                                <span className="font-bold text-foreground text-sm">{awb.awb}</span>
+                                {isRetracking && (
+                                  <span className="text-xs text-blue-400 animate-pulse">Re-processando...</span>
+                                )}
+                              </div>
+                            </td>
+                            <td className="px-3 py-3 text-foreground text-sm whitespace-nowrap">{awb.hawb || "-"}</td>
+                            <td className="px-3 py-3">
+                              <div>
+                                <div className="text-foreground text-sm uppercase">
+                                  {abbreviateName(awb.consignee_name)}
+                                </div>
+                              </div>
+                            </td>
+                            <td className="px-3 py-3 text-foreground text-sm">
+                              {awb.origem || "N/A"} → {awb.destino || "N/A"}
+                            </td>
+                            <td className="px-3 py-3 min-w-[300px]">
+                              {(() => {
+                                const statusCode = getStatusCode(awb.last_event).toUpperCase();
+                                // Use data_atraso from DB (persists even after status changes) or check current status
+                                const isAlertStatus =
+                                  awb.data_atraso !== null || statusCode === "DIS" || statusCode === "OFLD";
+                                const progressGradient = isAlertStatus
+                                  ? "linear-gradient(90deg, hsl(0 84% 60%), hsl(0 84% 70%))"
+                                  : "linear-gradient(90deg, hsl(39 100% 50%), hsl(39 100% 60%))";
+                                const progressShadow = isAlertStatus
+                                  ? "0 0 12px rgba(239, 68, 68, 0.6)"
+                                  : "0 0 12px rgba(255, 165, 0, 0.4)";
+                                const dotColor = isAlertStatus ? "bg-red-400" : "bg-white/90";
+                                const dotColorMuted = isAlertStatus ? "bg-red-400/70" : "bg-white/70";
+                                const planeColor = isAlertStatus ? "rgb(239, 68, 68)" : "rgb(255, 165, 0)";
+                                const shadowColor = isAlertStatus ? "rgba(239, 68, 68, 1)" : "rgba(255, 165, 0, 1)";
+                                const bgBarColor = isAlertStatus ? "bg-red-900/30" : "bg-gray-800/50";
+
+                                return (
+                                  <div
+                                    className={`relative h-1.5 w-full flex items-center ${isAlertStatus ? "animate-pulse" : ""}`}
+                                  >
+                                    {/* Barra de fundo */}
+                                    <div className={`absolute inset-0 ${bgBarColor} rounded-full`} />
+
+                                    {/* Barra de progresso */}
+                                    <div
+                                      className="absolute left-0 h-full rounded-l-full transition-all duration-700 ease-out"
+                                      style={{
+                                        width: `${getTimelineProgress(awb.last_event)}%`,
+                                        background: progressGradient,
+                                        borderTopRightRadius:
+                                          getTimelineProgress(awb.last_event) === 100 ? "9999px" : "0",
+                                        borderBottomRightRadius:
+                                          getTimelineProgress(awb.last_event) === 100 ? "9999px" : "0",
+                                        boxShadow: progressShadow,
+                                      }}
+                                    />
+
+                                    {/* Pontos minimalistas ao longo da barra com tooltips */}
+                                    <TooltipProvider>
+                                      <Tooltip>
+                                        <TooltipTrigger asChild>
+                                          <div
+                                            className={`absolute left-0 w-1.5 h-1.5 rounded-full ${dotColor} shadow-sm z-10 cursor-pointer hover:scale-150 transition-transform`}
+                                          />
+                                        </TooltipTrigger>
+                                        <TooltipContent>
+                                          <p className="text-xs">Inicio</p>
+                                        </TooltipContent>
+                                      </Tooltip>
+
+                                      <Tooltip>
+                                        <TooltipTrigger asChild>
+                                          <div
+                                            className={`absolute left-1/4 -translate-x-1/2 w-1.5 h-1.5 rounded-full ${dotColorMuted} shadow-sm z-10 cursor-pointer hover:scale-150 transition-transform`}
+                                          />
+                                        </TooltipTrigger>
+                                        <TooltipContent>
+                                          <p className="text-xs">BKD - Reserva Confirmada</p>
+                                        </TooltipContent>
+                                      </Tooltip>
+
+                                      <Tooltip>
+                                        <TooltipTrigger asChild>
+                                          <div
+                                            className={`absolute left-1/2 -translate-x-1/2 w-1.5 h-1.5 rounded-full ${dotColorMuted} shadow-sm z-10 cursor-pointer hover:scale-150 transition-transform`}
+                                          />
+                                        </TooltipTrigger>
+                                        <TooltipContent>
+                                          <p className="text-xs">RCF - Recebida pela Cia Aérea</p>
+                                        </TooltipContent>
+                                      </Tooltip>
+
+                                      <Tooltip>
+                                        <TooltipTrigger asChild>
+                                          <div
+                                            className={`absolute left-3/4 -translate-x-1/2 w-1.5 h-1.5 rounded-full ${dotColorMuted} shadow-sm z-10 cursor-pointer hover:scale-150 transition-transform`}
+                                          />
+                                        </TooltipTrigger>
+                                        <TooltipContent>
+                                          <p className="text-xs">MNF - Manifestada</p>
+                                        </TooltipContent>
+                                      </Tooltip>
+
+                                      <Tooltip>
+                                        <TooltipTrigger asChild>
+                                          <div
+                                            className={`absolute right-0 w-1.5 h-1.5 rounded-full ${dotColor} shadow-sm z-10 cursor-pointer hover:scale-150 transition-transform`}
+                                          />
+                                        </TooltipTrigger>
+                                        <TooltipContent>
+                                          <p className="text-xs">DLV - Entregue</p>
+                                        </TooltipContent>
+                                      </Tooltip>
+                                    </TooltipProvider>
+
+                                    {/* Ícone de avião minimalista na posição do progresso */}
+                                    <div
+                                      className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 transition-all duration-700 ease-out z-20"
+                                      style={{ left: `${getTimelineProgress(awb.last_event)}%` }}
+                                    >
+                                      <div className="relative">
+                                        <Plane
+                                          className="w-4 h-4"
+                                          style={{
+                                            transform: "rotate(90deg)",
+                                            color: planeColor,
+                                            fill: planeColor,
+                                            filter: `drop-shadow(0 0 4px ${shadowColor}) drop-shadow(0 2px 6px rgba(0, 0, 0, 0.6))`,
+                                          }}
+                                        />
+                                      </div>
+                                    </div>
+                                  </div>
+                                );
+                              })()}
+                            </td>
+                            <td className="px-3 py-3">
+                              <span className="text-sm font-bold" style={{ color: "hsl(120 100% 35%)" }}>
+                                {getStatusCode(awb.last_event)}
+                              </span>
+                            </td>
+                            <td className="px-3 py-3 text-foreground text-sm">
+                              {awb.last_check
+                                ? (() => {
+                                    // Remove Z suffix to prevent UTC conversion since DB stores Brasilia time
+                                    const dateStr = awb.last_check.replace("Z", "");
+                                    const date = new Date(dateStr);
+                                    return date.toLocaleString("pt-BR", {
+                                      day: "2-digit",
+                                      month: "2-digit",
+                                      year: "numeric",
+                                      hour: "2-digit",
+                                      minute: "2-digit",
+                                    });
+                                  })()
+                                : "-"}
+                            </td>
+                            <td className="px-3 py-3 text-foreground text-sm uppercase">{awb.nome_analista || "-"}</td>
+                            <td className="px-3 py-3 text-center">
+                              <div className="flex items-center justify-center gap-1">
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={async () => {
+                                    try {
+                                      setRetrackingAwbs((prev) => new Set(prev).add(awb.awb));
+
+                                      toast({
+                                        title: "Re-rastreando AWB",
+                                        description: `Atualizando status de ${awb.awb}...`,
+                                      });
+
+                                      const awbNumber = awb.awb;
+                                      const airlineCode = awbNumber.substring(0, 3);
+                                      const oldStatus = awb.status || "N/A";
+
+                                      const { data: trackData, error: trackError } = await supabase.functions.invoke(
+                                        "track-awb",
+                                        {
+                                          body: { awb: awbNumber, airlineCode },
+                                        },
+                                      );
+
+                                      if (!trackError && trackData?.success && trackData.data) {
+                                        const latestEvent = trackData.data.events?.[0];
+                                        const lastEventText = latestEvent
+                                          ? `${latestEvent.status} - ${latestEvent.description}`
+                                          : "Rastreado";
+                                        const newStatus = getStatusCode(lastEventText);
+
+                                        await supabase.functions.invoke("add-awb-to-status", {
+                                          body: {
+                                            mawb: awbNumber,
+                                            last_event: lastEventText,
+                                            consignee_name: awb.consignee_name || "N/A",
+                                            airline_code: airlineCode,
+                                            hawb: "N/A",
+                                            nome_analista: "N/A",
+                                            origin: trackData.data.origin || "N/A",
+                                            destination: trackData.data.destination || "N/A",
+                                          },
+                                        });
+
+                                        await fetchStatusAereoData();
+
+                                        toast({
+                                          title: "AWB re-rastreado",
+                                          description: `${awbNumber} atualizado com sucesso`,
+                                        });
+                                      } else {
+                                        throw new Error("Erro ao rastrear AWB");
+                                      }
+                                    } catch (error: any) {
+                                      console.error("Retrack error:", error);
+                                      toast({
+                                        title: "Erro ao re-rastrear",
+                                        description: error.message,
+                                        variant: "destructive",
+                                      });
+                                    } finally {
+                                      setRetrackingAwbs((prev) => {
+                                        const newSet = new Set(prev);
+                                        newSet.delete(awb.awb);
+                                        return newSet;
+                                      });
+                                    }
+                                  }}
+                                  disabled={isRetracking}
+                                  className="gap-1.5 text-foreground hover:text-primary h-8 px-2 disabled:opacity-50"
+                                >
+                                  <RefreshCw className={`w-4 h-4 ${isRetracking ? "animate-spin" : ""}`} />
+                                </Button>
+                                {(() => {
+                                  const trackingUrl = getTrackingUrl(awb.airline_code, awb.awb);
+                                  return trackingUrl ? (
+                                    <Button
+                                      variant="ghost"
+                                      size="sm"
+                                      onClick={() => window.open(trackingUrl, "_blank")}
+                                      className="gap-1.5 text-foreground hover:text-primary h-8 px-2"
+                                    >
+                                      <ExternalLink className="w-4 h-4" />
+                                    </Button>
+                                  ) : (
+                                    <span className="text-muted-foreground text-xs">N/D</span>
+                                  );
+                                })()}
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={async () => {
+                                    try {
+                                      const customerEmail =
+                                        customerEmailEnabled[awb.awb] === true
+                                          ? (customerEmails[awb.awb] ?? awb.email_cliente)
+                                          : undefined;
+
+                                      if (!EMAIL_SENDING_ENABLED) {
+                                        toast({
+                                          title: "Emails desativados",
+                                          description: "O envio de emails está temporariamente desativado",
+                                          variant: "destructive",
+                                        });
+                                        return;
+                                      }
+
+                                      toast({
+                                        title: "Enviando email...",
+                                        description: customerEmail
+                                          ? `Teste para AWB ${awb.awb} (incluindo: ${customerEmail})`
+                                          : `Teste de email para AWB ${awb.awb}`,
+                                      });
+
+                                      const { data, error } = await supabase.functions.invoke(
+                                        "send-status-change-email",
+                                        {
+                                          body: {
+                                            statusChanges: [
+                                              {
+                                                awb: awb.awb,
+                                                oldStatus: "Status Anterior (Teste)",
+                                                newStatus: getStatusCode(awb.last_event),
+                                                lastUpdate: awb.last_check || new Date().toLocaleString("pt-BR"),
+                                                origin: awb.origem || "N/A",
+                                                destination: awb.destino || "N/A",
+                                                hawb: awb.hawb || "N/A",
+                                                customerEmail: customerEmail,
+                                              },
+                                            ],
+                                          },
+                                        },
+                                      );
+
+                                      if (error) throw error;
+
+                                      toast({
+                                        title: "Email enviado!",
+                                        description: customerEmail
+                                          ? `Enviado para destinatários internos e ${customerEmail}`
+                                          : "Verifique a caixa de entrada",
+                                      });
+                                    } catch (error: any) {
+                                      console.error("Email error:", error);
+                                      toast({
+                                        title: "Erro ao enviar",
+                                        description: error.message,
+                                        variant: "destructive",
+                                      });
+                                    }
+                                  }}
+                                  className="gap-1.5 text-foreground hover:text-primary h-8 px-2"
+                                >
+                                  <Mail className="w-4 h-4" />
+                                </Button>
+                              </div>
+                            </td>
+                            <td className="px-3 py-3">
+                              <div className="flex items-center justify-center">
+                                <Checkbox
+                                  id={`email-enabled-${awb.awb}`}
+                                  checked={customerEmailEnabled[awb.awb] === true}
+                                  onCheckedChange={(checked) => {
+                                    setCustomerEmailEnabled((prev) => ({
+                                      ...prev,
+                                      [awb.awb]: checked === true,
+                                    }));
+                                  }}
+                                />
+                              </div>
+                            </td>
+                          </tr>
+                        </React.Fragment>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+              {/* Pagination */}
+              <div className="p-4 border-t border-border flex items-center justify-between bg-card">
+                <div className="text-sm text-foreground">
+                  Página {currentPage} de {totalPages} | Total: {filteredAwbs.length} registros
+                </div>
+                <div className="flex gap-2">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setCurrentPage((prev) => Math.max(1, prev - 1))}
+                    disabled={currentPage === 1}
+                    className="text-foreground hover:bg-primary hover:text-primary-foreground"
+                  >
+                    Anterior
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setCurrentPage((prev) => Math.min(totalPages, prev + 1))}
+                    disabled={currentPage === totalPages}
+                    className="text-foreground hover:bg-primary hover:text-primary-foreground"
+                  >
+                    Próxima
+                  </Button>
+                </div>
+              </div>
+            </>
+          ) : (
+            <div className="p-12 text-center">
+              <p className="text-foreground uppercase tracking-wider font-medium">NENHUM AWB MONITORADO</p>
+              <p className="text-sm text-muted-foreground mt-2 uppercase">
+                CADASTRE UM AWB PARA INICIAR O RASTREAMENTO
+              </p>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Completion Popup - Fixed class for RPA */}
+      {showCompletionPopup && (
+        <div
+          className="rpa-completion-popup fixed bottom-4 right-4 bg-card border border-border rounded-lg shadow-lg p-4 z-50 animate-in slide-in-from-right"
+          style={{ minWidth: "300px" }}
+        >
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex items-center gap-2">
+              <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
+              <p className="text-sm font-medium text-foreground">Processamento concluído</p>
+            </div>
+            <button
+              onClick={() => setShowCompletionPopup(false)}
+              className="text-muted-foreground hover:text-foreground transition-colors"
+            >
+              ✕
+            </button>
+          </div>
+          <p className="text-xs text-muted-foreground mt-1">{new Date().toLocaleString("pt-BR")}</p>
+        </div>
+      )}
+    </div>
+  );
+};
+
+export default Index;
