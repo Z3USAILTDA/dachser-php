@@ -330,3 +330,317 @@ const airlineTrackingLinks: Record<string, string> = {
   "047": "https://parcelsapp.com/en/tracking/${formattedAwb}",
   "055": "https://pg.fr8manage.app/cargospot/fetchTrackingData?airlinePrefix=${pr}",
 };
+
+const getAirlinePrefix = (awbNumber: string): string => {
+  if (!awbNumber || awbNumber.length < 3) return "";
+  const numericPart = awbNumber.replace(/\D/g, "");
+  return numericPart.slice(0, 3);
+};
+
+const getFormattedTrackingLink = (awbNumber: string): string | null => {
+  const prefix = getAirlinePrefix(awbNumber);
+  const numericPart = awbNumber.replace(/\D/g, "");
+  const awb = numericPart.slice(-8);
+
+  if (!prefix || !awb) return null;
+
+  const baseUrl = airlineTrackingLinks[prefix];
+  if (!baseUrl) return null;
+
+  return baseUrl
+    .replace("${pr}", prefix)
+    .replace("${awb}", awb)
+    .replace("${formattedAwb}", `${prefix}-${awb}`);
+};
+
+const getBugAlertColor = (awb: DhlAwbTracking | null, isSelected: boolean): string => {
+  if (!awb) {
+    return isSelected ? "bg-slate-700 text-white" : "bg-slate-800 text-slate-200";
+  }
+
+  const { status, days_in_transit, nfd_counter } = awb;
+
+  if (awb.bug_alert) {
+    return isSelected ? "bg-red-700 text-white" : "bg-red-800 text-red-100";
+  }
+
+  if (status === "ENTREGUE" || status === "DELIVERED") {
+    return isSelected ? "bg-green-700 text-white" : "bg-green-800 text-green-100";
+  }
+
+  if (status === "ALERTA" || status === "DELAYED") {
+    if (days_in_transit !== null && days_in_transit !== undefined && days_in_transit > 10) {
+      return isSelected ? "bg-red-700 text-white" : "bg-red-800 text-red-100";
+    }
+
+    if (nfd_counter !== null && nfd_counter !== undefined && nfd_counter > 2) {
+      return isSelected ? "bg-orange-700 text-white" : "bg-orange-800 text-orange-100";
+    }
+
+    return isSelected ? "bg-yellow-700 text-black" : "bg-yellow-500 text-black";
+  }
+
+  if (days_in_transit !== null && days_in_transit !== undefined && days_in_transit > 15) {
+    return isSelected ? "bg-red-700 text-white" : "bg-red-800 text-red-100";
+  }
+
+  return isSelected ? "bg-slate-700 text-white" : "bg-slate-800 text-slate-200";
+};
+
+const getBugAlertDescription = (awb: DhlAwbTracking | null): string => {
+  if (!awb) return "Nenhuma AWB selecionada";
+
+  const issues = [];
+
+  if (awb.bug_alert) {
+    issues.push("Essa carga possui BUG ALERT no sistema.");
+  }
+
+  if (awb.days_in_transit !== null && awb.days_in_transit !== undefined && awb.days_in_transit > 15) {
+    issues.push(
+      `A carga está há ${awb.days_in_transit} dias em trânsito, o que é considerado muito acima do normal.`
+    );
+  }
+
+  if (awb.nfd_counter !== null && awb.nfd_counter !== undefined && awb.nfd_counter > 2) {
+    issues.push(
+      `Já foram registrados ${awb.nfd_counter} eventos de NFD para essa carga, indicando possíveis problemas recorrentes.`
+    );
+  }
+
+  if (awb.status === "ALERTA" || awb.status === "DELAYED") {
+    issues.push("Essa AWB está atualmente em status de ALERTA no rastreio.");
+  }
+
+  if (issues.length === 0) {
+    return "Nenhum alerta crítico identificado para essa AWB.";
+  }
+
+  return issues.join(" ");
+};
+
+const airCargoSearchLink = (awbNumber: string): string => {
+  const prefix = getAirlinePrefix(awbNumber);
+  const numericPart = awbNumber.replace(/\D/g, "");
+  const awb = numericPart.slice(-8);
+  return `https://aircargotrack.com/search/air-tracking/${prefix}-${awb}`;
+};
+
+const supabase = createClient();
+
+const Index = () => {
+  const [stats, setStats] = useState<DashboardStats>({
+    total_awbs: 0,
+    active_awbs: 0,
+    alert_awbs: 0,
+    critical_awbs: 0,
+  });
+
+  const [awbs, setAwbs] = useState<DhlAwbTracking[]>([]);
+  const [searchTerm, setSearchTerm] = useState("");
+  const [analystFilter, setAnalystFilter] = useState<string>("all");
+  const [alertFilter, setAlertFilter] = useState<AlertCategory | "all">("all");
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [analysts, setAnalysts] = useState<string[]>([]);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [selectedAwb, setSelectedAwb] = useState<DhlAwbTracking | null>(null);
+  const [isLogModalOpen, setIsLogModalOpen] = useState(false);
+  const [logData, setLogData] = useState<LogData[]>([]);
+  const [isLogLoading, setIsLogLoading] = useState(false);
+  const [isEmailModalOpen, setIsEmailModalOpen] = useState(false);
+  const [selectedAwbForEmail, setSelectedAwbForEmail] = useState<string | null>(null);
+  const [emailRecipient, setEmailRecipient] = useState<string>("");
+  const [emailSubject, setEmailSubject] = useState<string>("");
+  const [emailContent, setEmailContent] = useState<string>("");
+  const [emailHistory, setEmailHistory] = useState<EmailHistory[]>([]);
+  const [isEmailHistoryModalOpen, setIsEmailHistoryModalOpen] = useState(false);
+  const [isEmailHistoryLoading, setIsEmailHistoryLoading] = useState(false);
+  const [isEmailSending, setIsEmailSending] = useState(false);
+  const [sortField, setSortField] = useState<keyof DhlAwbTracking>("awb");
+  const [sortDirection, setSortDirection] = useState<"asc" | "desc">("asc");
+  const [isColumnSelectorOpen, setIsColumnSelectorOpen] = useState(false);
+  const [columnVisibility, setColumnVisibility] = useState<ColumnVisibility>(() => {
+    if (typeof window !== "undefined") {
+      const savedVisibility = localStorage.getItem("columnVisibility");
+      return savedVisibility ? JSON.parse(savedVisibility) : DEFAULT_COLUMN_VISIBILITY;
+    }
+    return DEFAULT_COLUMN_VISIBILITY;
+  });
+
+  const [filterModalAwb, setFilterModalAwb] = useState("");
+  const filterModalRef = useRef<HTMLDivElement | null>(null);
+  const [bugAlertExplication, setBugAlertExplication] = useState<string | null>(null);
+  const [emailFilter, setEmailFilter] = useState<"all" | "email_enabled" | "email_disabled">("all");
+  const [consoleLog, setConsoleLog] = useState<string[]>([]);
+  const [isUpdatingAwb, setIsUpdatingAwb] = useState<string | null>(null);
+
+  const [remarkModalOpen, setRemarkModalOpen] = useState(false);
+  const [currentRemarkAwb, setCurrentRemarkAwb] = useState<string | null>(null);
+  const [currentRemarkText, setCurrentRemarkText] = useState<string>("");
+
+  const { toast } = useToast();
+
+  const logToConsole = (message: string) => {
+    setConsoleLog((prev) => [message, ...prev].slice(0, 50));
+    console.log(message);
+  };
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (
+        filterModalRef.current &&
+        !filterModalRef.current.contains(event.target as Node)
+      ) {
+        setFilterModalAwb("");
+      }
+    };
+
+    if (filterModalAwb) {
+      document.addEventListener("mousedown", handleClickOutside);
+    } else {
+      document.removeEventListener("mousedown", handleClickOutside);
+    }
+
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, [filterModalAwb]);
+
+  const explanationAreaClasses = useMemo(() => {
+    const hasExplanation = bugAlertExplication && bugAlertExplication.length > 0;
+    return `mt-4 rounded-lg border ${
+      hasExplanation ? "border-yellow-500 bg-yellow-950/40" : "border-slate-700 bg-slate-900/60"
+    } p-4 text-sm text-slate-100 shadow-inner`;
+  }, [bugAlertExplication]);
+
+  const fetchDashboardData = async () => {
+    const { data, error } = await supabase
+      .from("dhl_awb_tracking")
+      .select("*");
+
+    if (error) {
+      console.error("Error fetching dashboard data:", error);
+      toast({
+        title: "Erro ao carregar dados",
+        description: "Não foi possível carregar os dados do dashboard.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const total_awbs = data.length;
+    const active_awbs = data.filter(
+      (awb) =>
+        awb.status === "EM ANDAMENTO" ||
+        (awb.days_in_transit !== null && awb.days_in_transit > 0)
+    ).length;
+    const alert_awbs = data.filter(
+      (awb) =>
+        awb.status === "ALERTA" ||
+        (awb.days_in_transit !== null && awb.days_in_transit > 10)
+    ).length;
+    const critical_awbs = data.filter(
+      (awb) =>
+        awb.bug_alert ||
+        (awb.days_in_transit !== null && awb.days_in_transit > 15) ||
+        (awb.nfd_counter !== null && awb.nfd_counter > 2)
+    ).length;
+
+  setStats({
+      total_awbs,
+      active_awbs,
+      alert_awbs,
+      critical_awbs,
+    });
+
+    setAwbs(data);
+    const analystNames = Array.from(
+      new Set(
+        data
+          .map((awb) => awb.analyst)
+          .filter((analyst): analyst is string => analyst !== null)
+      )
+    );
+    setAnalysts(analystNames);
+  };
+
+  const refreshDashboard = async () => {
+    setIsRefreshing(true);
+    try {
+      const response = await fetch(
+        "https://udlog.z3us.ai/auto-trigger-dhl-tracking",
+        {
+          method: "GET",
+        }
+      );
+
+      if (!response.ok) {
+        throw new Error("Failed to trigger DHL tracking update");
+      }
+
+      toast({
+        title: "Atualização em andamento",
+        description: "A atualização do rastreio foi iniciada.",
+      });
+
+      await new Promise((resolve) => setTimeout(resolve, 5000));
+
+      await fetchDashboardData();
+    } catch (error: any) {
+      console.error("Error refreshing dashboard:", error);
+      toast({
+        title: "Erro ao atualizar",
+        description: "Não foi possível atualizar os dados do rastreio.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsRefreshing(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchDashboardData();
+  }, []);
+
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      localStorage.setItem("columnVisibility", JSON.stringify(columnVisibility));
+    }
+  }, [columnVisibility]);
+
+  const filteredAwbs = awbs.filter((awb) => {
+    const matchesSearch =
+      awb.awb?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      awb.consignee?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      awb.customer_email?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      awb.consignee_email?.toLowerCase().includes(searchTerm.toLowerCase());
+
+    const matchesAnalyst =
+      analystFilter === "all" || awb.analyst === analystFilter;
+
+    const matchesAlert =
+      alertFilter === "all" ||
+      (alertFilter === "on_time" &&
+        !awb.bug_alert &&
+        (awb.days_in_transit ?? 0) <= 10 &&
+        (awb.nfd_counter ?? 0) <= 2 &&
+        awb.status !== "ALERTA" &&
+        awb.status !== "DELAYED") ||
+      (alertFilter === "delayed" &&
+        !awb.bug_alert &&
+        ((awb.days_in_transit ?? 0) > 10 ||
+          (awb.nfd_counter ?? 0) > 2 ||
+          awb.status === "ALERTA" ||
+          awb.status === "DELAYED")) ||
+      (alertFilter === "critical" &&
+        (awb.bug_alert ||
+          (awb.days_in_transit ?? 0) > 15 ||
+          (awb.nfd_counter ?? 0) > 2));
+
+    const matchesEmailFilter =
+      emailFilter === "all" ||
+      (emailFilter === "email_enabled" && awb.email_alert) ||
+      (emailFilter === "email_disabled" && !awb.email_alert);
+
+    return matchesSearch && matchesAnalyst && matchesAlert && matchesEmailFilter;
+  });
