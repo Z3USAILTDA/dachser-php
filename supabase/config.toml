@@ -8,3 +8,9 @@ verify_jwt = false
 
 [functions.import-rule-matrix]
 verify_jwt = false
+
+[functions.fetch-status-aereo]
+verify_jwt = false
+
+[functions.add-alert-status-column]
+verify_jwt = false
