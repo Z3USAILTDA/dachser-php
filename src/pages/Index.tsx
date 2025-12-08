@@ -2003,3 +2003,361 @@ const Index = () => {
       });
     }
   };
+
+  const formatAwbForDisplay = (awbNumber: string | null) => {
+    if (!awbNumber) return "-";
+    const numericPart = awbNumber.replace(/\D/g, "");
+    if (numericPart.length < 11) return awbNumber;
+
+    const prefix = numericPart.slice(0, 3);
+    const number = numericPart.slice(3);
+    return `${prefix}-${number}`;
+  };
+
+  return (
+    <div className="min-h-screen bg-black text-slate-100">
+      <div className="max-w-7xl mx-auto py-6 px-4 sm:px-6 lg:px-8">
+        <header className="flex items-center justify-between mb-8">
+          <div className="flex items-center space-x-4">
+            <button
+              onClick={() => window.history.back()}
+              className="inline-flex items-center px-4 py-2 rounded-full bg-zinc-900 hover:bg-zinc-800 text-slate-100 border border-zinc-700 transition-colors"
+            >
+              <ChevronLeft className="mr-2 h-4 w-4" />
+              Voltar
+            </button>
+            <div>
+              <h1 className="text-2xl font-semibold tracking-widest text-slate-100">
+                D A C H S E R
+              </h1>
+              <p className="text-xs text-zinc-400 tracking-[0.3em]">
+                Aéreo – Rastreamento de AWBs
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center space-x-2">
+            <span className="text-sm text-zinc-400">@rastreio.aereo</span>
+          </div>
+        </header>
+
+        <section className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
+          <Card className="bg-gradient-to-br from-zinc-900 to-zinc-950 border-zinc-800/80 shadow-lg shadow-black/40">
+            <div className="p-4 flex flex-col h-full">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-xs uppercase tracking-wide text-zinc-400">
+                  Total Monitorados
+                </span>
+                <span className="inline-flex items-center justify-center w-8 h-8 rounded-full bg-zinc-800 text-amber-400">
+                  <Mail className="w-4 h-4" />
+                </span>
+              </div>
+              <div className="flex items-end justify-between mt-auto">
+                <span className="text-3xl font-semibold">
+                  {stats.total_awbs}
+                </span>
+                <span className="text-xs text-zinc-500">
+                  AWBs ativos
+                </span>
+              </div>
+            </div>
+          </Card>
+
+          <Card className="bg-gradient-to-br from-sky-900/40 via-sky-900/10 to-zinc-950 border-sky-700/50 shadow-lg shadow-sky-900/40">
+            <div className="p-4 flex flex-col h-full">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-xs uppercase tracking-wide text-zinc-300">
+                  Em Trânsito
+                </span>
+                <span className="inline-flex items-center justify-center w-8 h-8 rounded-full bg-sky-900/60 text-sky-300">
+                  <Loader2 className="w-4 h-4 animate-spin-slow" />
+                </span>
+              </div>
+              <div className="flex items-end justify-between mt-auto">
+                <span className="text-3xl font-semibold text-sky-300">
+                  {stats.active_awbs}
+                </span>
+                <span className="text-xs text-zinc-400">
+                  DEP, MAN, RCF, ARR
+                </span>
+              </div>
+            </div>
+          </Card>
+
+          <Card className="bg-gradient-to-br from-amber-900/50 via-amber-900/10 to-zinc-950 border-amber-700/60 shadow-lg shadow-amber-900/40">
+            <div className="p-4 flex flex-col h-full">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-xs uppercase tracking-wide text-amber-200">
+                  Em Alerta
+                </span>
+                <span className="inline-flex items-center justify-center w-8 h-8 rounded-full bg-amber-900/70 text-amber-300">
+                  <AlertTriangle className="w-4 h-4" />
+                </span>
+              </div>
+              <div className="flex items-end justify-between mt-auto">
+                <span className="text-3xl font-semibold text-amber-300">
+                  {stats.alert_awbs}
+                </span>
+                <span className="text-xs text-amber-200/80">
+                  DIS, OFLD – Atrasos
+                </span>
+              </div>
+            </div>
+          </Card>
+
+          <Card className="bg-gradient-to-br from-red-900/60 via-red-900/20 to-zinc-950 border-red-700/70 shadow-lg shadow-red-900/50">
+            <div className="p-4 flex flex-col h-full">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-xs uppercase tracking-wide text-red-100">
+                  Críticos
+                </span>
+                <span className="inline-flex items-center justify-center w-8 h-8 rounded-full bg-red-900 text-red-200">
+                  <AlertTriangle className="w-4 h-4" />
+                </span>
+              </div>
+              <div className="flex items-end justify-between mt-auto">
+                <span className="text-3xl font-semibold text-red-200">
+                  {stats.critical_awbs}
+                </span>
+                <span className="text-xs text-red-100/90">
+                  NIL, NIF – Ação imediata
+                </span>
+              </div>
+            </div>
+          </Card>
+        </section>
+
+        <section className="mb-4">
+          <div className="flex flex-wrap items-center gap-3 mb-3">
+            <div className="flex items-center flex-1 min-w-[250px] max-w-xl bg-zinc-950 border border-zinc-800/80 rounded-full px-3 py-1.5 shadow-sm shadow-black/40">
+              <Search className="w-4 h-4 text-zinc-500 mr-2" />
+              <Input
+                placeholder="Buscar por AWB, Consignee ou e-mail"
+                value={searchTerm}
+                onChange={(e) => {
+                  setSearchTerm(e.target.value);
+                  setCurrentPage(1);
+                }}
+                className="bg-transparent border-0 focus-visible:ring-0 focus-visible:ring-offset-0 text-sm placeholder:text-zinc-500"
+              />
+            </div>
+
+            <div className="flex items-center gap-2">
+              <Select
+                value={analystFilter}
+                onValueChange={(value) => {
+                  setAnalystFilter(value);
+                  setCurrentPage(1);
+                }}
+              >
+                <SelectTrigger className="w-[160px] bg-zinc-950 border-zinc-800/80 text-xs rounded-full px-3">
+                  <SelectValue placeholder="Todos Analistas" />
+                </SelectTrigger>
+                <SelectContent className="bg-zinc-950 border-zinc-800">
+                  <SelectItem value="all">Todos Analistas</SelectItem>
+                  {analysts.map((analyst) => (
+                    <SelectItem key={analyst} value={analyst}>
+                      {analyst}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+
+              <Select
+                value={alertFilter}
+                onValueChange={(value: AlertCategory | "all") => {
+                  setAlertFilter(value);
+                  setCurrentPage(1);
+                }}
+              >
+                <SelectTrigger className="w-[160px] bg-zinc-950 border-zinc-800/80 text-xs rounded-full px-3">
+                  <SelectValue placeholder="Todos os status" />
+                </SelectTrigger>
+                <SelectContent className="bg-zinc-950 border-zinc-800">
+                  {ALERT_FILTERS.map((filter) => (
+                    <SelectItem key={filter.value} value={filter.value}>
+                      {filter.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+
+              <Select
+                value={emailFilter}
+                onValueChange={(value: "all" | "email_enabled" | "email_disabled") => {
+                  setEmailFilter(value);
+                  setCurrentPage(1);
+                }}
+              >
+                <SelectTrigger className="w-[170px] bg-zinc-950 border-zinc-800/80 text-xs rounded-full px-3">
+                  <SelectValue placeholder="Todos emails" />
+                </SelectTrigger>
+                <SelectContent className="bg-zinc-950 border-zinc-800">
+                  <SelectItem value="all">Todos Emails</SelectItem>
+                  <SelectItem value="email_enabled">Email Ativo</SelectItem>
+                  <SelectItem value="email_disabled">Email Inativo</SelectItem>
+                </SelectContent>
+              </Select>
+
+              <Button
+                variant="outline"
+                size="icon"
+                className="rounded-full bg-zinc-950 border-zinc-800/80 text-zinc-300 hover:bg-zinc-900"
+                onClick={() => setIsColumnSelectorOpen(!isColumnSelectorOpen)}
+              >
+                <Filter className="w-4 h-4" />
+              </Button>
+            </div>
+
+            <div className="flex items-center gap-2 ml-auto">
+              <Button
+                variant="outline"
+                className="rounded-full border-amber-500/80 text-amber-200 bg-amber-950/20 hover:bg-amber-900/40 text-xs"
+                onClick={() => handleBulkBugAlertToggle(true)}
+              >
+                <AlertTriangle className="w-4 h-4 mr-1.5" />
+                Ativar BUG ALERT
+              </Button>
+              <Button
+                variant="outline"
+                className="rounded-full border-zinc-700 text-zinc-200 bg-zinc-950 hover:bg-zinc-900 text-xs"
+                onClick={() => handleBulkBugAlertToggle(false)}
+              >
+                <X className="w-4 h-4 mr-1.5" />
+                Desativar BUG ALERT
+              </Button>
+              <Button
+                variant="outline"
+                className="rounded-full border-zinc-700 text-zinc-200 bg-zinc-950 hover:bg-zinc-900 text-xs"
+                onClick={refreshDashboard}
+                disabled={isRefreshing}
+              >
+                {isRefreshing ? (
+                  <Loader2 className="w-4 h-4 mr-1.5 animate-spin" />
+                ) : (
+                  <RefreshCw className="w-4 h-4 mr-1.5" />
+                )}
+                Atualizar
+              </Button>
+            </div>
+          </div>
+
+          {isColumnSelectorOpen && (
+            <div
+              ref={filterModalRef}
+              className="bg-zinc-950 border border-zinc-800 rounded-xl p-4 mb-4 text-sm shadow-lg shadow-black/40"
+            >
+              <div className="flex items-center justify-between mb-3">
+                <div className="flex items-center gap-2">
+                  <Filter className="w-4 h-4 text-zinc-400" />
+                  <span className="text-xs font-semibold tracking-wide text-zinc-300 uppercase">
+                    Colunas Visíveis
+                  </span>
+                </div>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-7 px-2 text-xs text-zinc-400 hover:text-zinc-100"
+                  onClick={handleResetColumns}
+                >
+                  Resetar
+                </Button>
+              </div>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+                {Object.entries(columnVisibility).map(([key, value]) => (
+                  <label
+                    key={key}
+                    className="flex items-center gap-2 text-xs text-zinc-200 cursor-pointer select-none hover:bg-zinc-900/80 rounded-lg px-2 py-1"
+                  >
+                    <input
+                      type="checkbox"
+                      checked={value}
+                      onChange={() =>
+                        handleToggleColumn(key as keyof ColumnVisibility)
+                      }
+                      className="rounded border-zinc-700 bg-zinc-950 text-amber-500 focus:ring-0 focus:ring-offset-0"
+                    />
+                    <span>{COLUMN_LABELS[key as keyof ColumnVisibility]}</span>
+                  </label>
+                ))}
+              </div>
+            </div>
+          )}
+        </section>
+
+        <section className="grid grid-cols-1 lg:grid-cols-[minmax(0,2.2fr)_minmax(0,1fr)] gap-6">
+          <div className="bg-zinc-950/80 border border-zinc-800/80 rounded-2xl overflow-hidden shadow-[0_18px_60px_rgba(0,0,0,0.72)] backdrop-blur-sm">
+            <div className="border-b border-zinc-800/80 px-4 py-3 flex items-center justify-between bg-gradient-to-r from-zinc-950/95 via-zinc-950/70 to-zinc-950/95">
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-semibold tracking-[0.25em] text-zinc-400 uppercase">
+                  Lista de AWBs
+                </span>
+                <Badge className="bg-zinc-900/80 border border-zinc-700/80 text-[10px] font-normal rounded-full px-2 py-0">
+                  {sortedAwbs.length} registros
+                </Badge>
+              </div>
+              <div className="flex items-center gap-2 text-[10px] text-zinc-500">
+                <span className="hidden sm:inline">
+                  Página {currentPage} de {totalPages || 1}
+                </span>
+                <div className="flex items-center border border-zinc-800 rounded-full overflow-hidden">
+                  <button
+                    onClick={() => handlePageChange("prev")}
+                    disabled={currentPage === 1}
+                    className="px-3 py-1 text-xs hover:bg-zinc-900 disabled:opacity-40 disabled:hover:bg-transparent"
+                  >
+                    <ChevronLeft className="w-3 h-3" />
+                  </button>
+                  <div className="px-3 py-1 text-[10px] border-x border-zinc-800 bg-zinc-950">
+                    {currentPage} / {totalPages || 1}
+                  </div>
+                  <button
+                    onClick={() => handlePageChange("next")}
+                    disabled={currentPage === totalPages || totalPages === 0}
+                    className="px-3 py-1 text-xs hover:bg-zinc-900 disabled:opacity-40 disabled:hover:bg-transparent"
+                  >
+                    <ChevronRight className="w-3 h-3" />
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <div className="overflow-x-auto">
+              <table className="min-w-full divide-y divide-zinc-800 text-xs">
+                <thead className="bg-zinc-950/70 backdrop-blur-sm">
+                  <tr>
+                    {columnVisibility.awb && (
+                      <th
+                        className="px-3 py-3 text-left text-foreground uppercase text-xs font-bold cursor-pointer select-none hover:bg-muted/50"
+                        onClick={() => handleSort("awb")}
+                      >
+                        <div className="flex items-center gap-1">
+                          AWB
+                          <ArrowUpDown className="w-3 h-3 text-zinc-500" />
+                        </div>
+                      </th>
+                    )}
+                    {columnVisibility.hawb && (
+                      <th className="px-3 py-3 text-left text-foreground uppercase text-xs font-bold">
+                        HAWB
+                      </th>
+                    )}
+                    {columnVisibility.consignee && (
+                      <th className="px-3 py-3 text-left text-foreground uppercase text-xs font-bold">
+                        Cliente
+                      </th>
+                    )}
+                    {columnVisibility.route && (
+                      <th className="px-3 py-3 text-left text-foreground uppercase text-xs font-bold">
+                        Rota
+                      </th>
+                    )}
+                    {columnVisibility.status && (
+                      <th className="px-3 py-3 text-left text-foreground uppercase text-xs font-bold">
+                        Rastreio
+                      </th>
+                    )}
+                    {columnVisibility.last_event && (
+                      <th className="px-3 py-3 text-left text-foreground uppercase text-xs font-bold">
+                        Último Evento
+                      </th>
+                    )}
