@@ -54,7 +54,7 @@ const menuItems: MenuItem[] = [
     label: "SEA",
     subtitle: "Operações Marítimas",
     children: [
-      { label: "Análises Marítimas", href: "/sea/analytics" },
+      { label: "Análises Marítimas", href: "/sea/analysis" },
     ],
   },
   {
