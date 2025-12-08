@@ -10,6 +10,7 @@ import Register from "./pages/Register";
 import CheckAwb from "./pages/CheckAwb";
 import Logs from "./pages/Logs";
 import Index from "./pages/Index";
+import SeaAnalysis from "./pages/SeaAnalysis";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -29,6 +30,7 @@ const App = () => (
           <Route path="/admin/register" element={<Register />} />
           <Route path="/admin/logs" element={<Logs />} />
           <Route path="/air/check" element={<CheckAwb />} />
+          <Route path="/sea/analysis" element={<SeaAnalysis />} />
           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
           <Route path="*" element={<NotFound />} />
         </Routes>
