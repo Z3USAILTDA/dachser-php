@@ -1,51 +1,13 @@
-import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
-import { faEnvelope, faLock, faArrowRight, faArrowLeft } from "@fortawesome/free-solid-svg-icons";
+import { faArrowLeft } from "@fortawesome/free-solid-svg-icons";
 import dachserBackground from "@/assets/dachser-background.jpg";
 
 const SeaAnalysis = () => {
   const navigate = useNavigate();
-  const [email, setEmail] = useState("sea.analises@dachser.com");
-  const [password, setPassword] = useState("");
-  const [submitting, setSubmitting] = useState(false);
-  const [isLoading, setIsLoading] = useState(false);
-  const [user, setUser] = useState<any>(null);
-
-  // Redirect if already logged in
-  useEffect(() => {
-    if (user && !isLoading) {
-      navigate("/maritimo");
-    }
-  }, [user, isLoading, navigate]);
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    
-    if (!email || !password) {
-      return;
-    }
-
-    setSubmitting(true);
-    // Simulate login - replace with actual auth logic
-    setTimeout(() => {
-      setSubmitting(false);
-    }, 1000);
-  };
-
-  if (isLoading) {
-    return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
-        <div className="text-foreground">Carregando...</div>
-      </div>
-    );
-  }
 
   return (
-    <div className="min-h-screen relative flex items-center justify-center p-6 overflow-hidden">
+    <div className="min-h-screen relative overflow-hidden">
       {/* Background with gradient overlays */}
       <div
         className="pointer-events-none fixed inset-0 z-0"
@@ -113,83 +75,32 @@ const SeaAnalysis = () => {
         Voltar
       </button>
 
-      <div className="w-full max-w-md relative z-10">
-        {/* Logo/Title */}
+      {/* Main Content */}
+      <div className="relative z-10 p-6 pt-20">
+        {/* Header */}
         <div className="text-center mb-8">
           <h1 className="text-4xl font-bold text-foreground mb-2">Z3US</h1>
-          <p className="text-muted-foreground">Sistema Marítimo</p>
+          <p className="text-muted-foreground">Análises Marítimas</p>
         </div>
 
-        {/* Login Form */}
-        <div 
-          className="rounded-2xl p-8"
-          style={{
-            background: "rgba(5, 6, 18, 0.9)",
-            border: "1px solid rgba(255, 255, 255, 0.12)",
-            boxShadow: "0 18px 40px rgba(0, 0, 0, 0.85)",
-            backdropFilter: "blur(18px)",
-          }}
-        >
-          <h2 className="text-2xl font-bold text-foreground mb-6">Login</h2>
-          
-          <form onSubmit={handleSubmit} className="space-y-6">
-            <div className="space-y-2">
-              <Label htmlFor="email" className="text-muted-foreground">
-                Email
-              </Label>
-              <div className="relative">
-                <FontAwesomeIcon 
-                  icon={faEnvelope} 
-                  className="absolute left-4 top-1/2 -translate-y-1/2 text-muted-foreground z-10"
-                />
-                <Input
-                  id="email"
-                  type="email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  placeholder="seu@email.com"
-                  required
-                  disabled={submitting}
-                  className="pl-12 h-12"
-                />
-              </div>
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="password" className="text-muted-foreground">
-                Senha
-              </Label>
-              <div className="relative">
-                <FontAwesomeIcon 
-                  icon={faLock} 
-                  className="absolute left-4 top-1/2 -translate-y-1/2 text-muted-foreground z-10"
-                />
-                <Input
-                  id="password"
-                  type="password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  placeholder="••••••••"
-                  required
-                  disabled={submitting}
-                  className="pl-12 h-12"
-                />
-              </div>
-            </div>
-
-            <Button
-              type="submit"
-              disabled={submitting || !email || !password}
-              className="w-full h-12 font-semibold"
-            >
-              <FontAwesomeIcon icon={faArrowRight} className="mr-2" />
-              {submitting ? "Entrando..." : "Entrar"}
-            </Button>
-          </form>
+        {/* Content Placeholder */}
+        <div className="max-w-6xl mx-auto">
+          <div 
+            className="rounded-2xl p-8"
+            style={{
+              background: "rgba(5, 6, 18, 0.9)",
+              border: "1px solid rgba(255, 255, 255, 0.12)",
+              boxShadow: "0 18px 40px rgba(0, 0, 0, 0.85)",
+              backdropFilter: "blur(18px)",
+            }}
+          >
+            <h2 className="text-2xl font-bold text-foreground mb-6">Análise Comparativa - 3 Cenários</h2>
+            <p className="text-muted-foreground">Conteúdo da análise marítima será implementado aqui.</p>
+          </div>
         </div>
 
         {/* Footer */}
-        <div className="text-center mt-6 text-muted-foreground text-sm">
+        <div className="text-center mt-8 text-muted-foreground text-sm">
           © 2024 Z3US Maritime System
         </div>
       </div>
