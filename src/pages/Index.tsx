@@ -20,12 +20,14 @@ import {
   Check,
   ArrowLeft,
   User as UserIcon,
+  Filter as FilterIcon,
 } from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
 import { useToast } from "@/hooks/use-toast";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import type { User, Session } from "@supabase/supabase-js";
 import DashboardCards, { CardFilterType } from "@/components/DashboardCards";
+import dachserBg from "@/assets/dachser-background.jpg";
 
 // TEMPORARIAMENTE DESATIVADO - Mudar para true para reativar envio de emails
 const EMAIL_SENDING_ENABLED = true;
@@ -1529,48 +1531,113 @@ const Index = () => {
 
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-black flex items-center justify-center">
-        <p className="text-white">Carregando...</p>
+      <div className="min-h-screen flex items-center justify-center bg-background">
+        <p className="text-foreground">Carregando...</p>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-black py-6 px-6">
-      <div className="w-full p-5">
-        {/* Header */}
-        <div className="mb-6">
-          <div className="flex items-center justify-between gap-4">
-            <div className="flex items-center gap-4">
-              <a
-                href="https://dachser.z3us.ai/home.php"
-                className="inline-flex items-center bg-primary/30 text-primary hover:bg-primary/50 border border-primary/50 rounded-full px-4 py-2 h-auto font-medium transition-colors"
-              >
-                <ArrowLeft className="w-4 h-4 mr-1" />
-                Voltar
-              </a>
-              <div>
-                <h1 className="text-foreground text-3xl font-normal tracking-[0.3em]">DACHSER</h1>
-                <p className="text-muted-foreground text-sm mt-0.5">Aéreo – Rastreio de AWBs</p>
-                <div className="flex gap-1 mt-2">
-                  <span className="w-2 h-2 rounded-full bg-primary"></span>
-                  <span className="w-2 h-2 rounded-full bg-primary"></span>
-                  <span className="w-2 h-2 rounded-full bg-primary"></span>
-                </div>
-              </div>
-            </div>
-            <div className="flex items-center gap-3">
-              <span className="text-muted-foreground text-sm">@{user?.email?.split("@")[0] || "admin"}</span>
-              <Button
-                variant="ghost"
-                onClick={handleLogout}
-                className="w-9 h-9 p-0 text-foreground hover:text-primary hover:bg-muted rounded-full border border-border"
-              >
-                <UserIcon className="w-4 h-4" />
-              </Button>
-            </div>
-          </div>
+    <div className="min-h-screen relative overflow-x-hidden">
+      {/* Background with image and gradient overlay */}
+      <div className="fixed inset-0 z-0">
+        <div 
+          className="absolute inset-0"
+          style={{
+            backgroundImage: `url(${dachserBg})`,
+            backgroundSize: 'cover',
+            backgroundPosition: 'center',
+          }}
+        />
+        <div 
+          className="absolute inset-0"
+          style={{
+            background: 'linear-gradient(120deg, rgba(4, 17, 45, 0.92), rgba(26, 93, 173, 0.55))',
+          }}
+        />
+        
+        {/* Radial gradient overlay */}
+        <div 
+          className="absolute inset-0"
+          style={{
+            background: `
+              radial-gradient(ellipse at 20% 20%, rgba(245, 184, 67, 0.12) 0%, transparent 50%),
+              radial-gradient(ellipse at 80% 80%, rgba(245, 184, 67, 0.08) 0%, transparent 50%)
+            `
+          }}
+        />
+        
+        {/* Animated Lines */}
+        <div className="absolute inset-0 opacity-20">
+          {[...Array(6)].map((_, i) => (
+            <div
+              key={`line-${i}`}
+              className="absolute h-full w-px bg-gradient-to-b from-primary/70 to-primary/10"
+              style={{
+                left: `${15 + i * 14}%`,
+                transform: `skewX(${-20 + i * 8}deg)`,
+              }}
+            />
+          ))}
         </div>
+
+        {/* Floating Particles */}
+        {[...Array(20)].map((_, i) => (
+          <div
+            key={`particle-${i}`}
+            className="absolute w-1 h-1 rounded-full bg-primary/40 animate-float"
+            style={{
+              left: `${Math.random() * 100}%`,
+              top: `${Math.random() * 100}%`,
+              animationDelay: `${Math.random() * 5}s`,
+              animationDuration: `${4 + Math.random() * 4}s`,
+            }}
+          />
+        ))}
+      </div>
+
+      {/* Top Header Bar */}
+      <div className="relative z-10 max-w-[95%] mx-auto px-2 pt-5 pb-4 flex items-center justify-between">
+        {/* Left - Back + Header */}
+        <div className="flex items-center gap-[18px]">
+          <a
+            href="https://dachser.z3us.ai/home.php"
+            className="w-8 h-8 rounded-full border border-white/12 bg-[rgba(5,6,18,0.9)] text-white/80 flex items-center justify-center backdrop-blur-sm hover:bg-[rgba(5,6,18,1)] hover:text-white transition-all"
+          >
+            <ArrowLeft size={16} />
+          </a>
+
+          <header>
+            <h1 className="text-[1.6rem] tracking-[0.24em] uppercase text-[#f5f5f5]">DACHSER</h1>
+            <p className="text-[0.9rem] text-[#aaaaaa] mt-0.5">
+              Intelligent Logistics – Rastreio de AWBs
+            </p>
+            <div className="flex gap-1.5 mt-1.5">
+              <span className="w-1.5 h-1.5 rounded-full bg-[#ffc800] shadow-[0_0_10px_rgba(255,200,0,.9)]" />
+              <span className="w-1.5 h-1.5 rounded-full bg-[#ffc800] shadow-[0_0_10px_rgba(255,200,0,.9)]" />
+              <span className="w-1.5 h-1.5 rounded-full bg-[#ffc800] shadow-[0_0_10px_rgba(255,200,0,.9)]" />
+            </div>
+          </header>
+        </div>
+
+        {/* Right - User */}
+        <div className="flex items-center gap-2.5 text-[0.85rem]">
+          <div className="px-[14px] py-1.5 rounded-full bg-[rgba(0,0,0,.70)] border border-[rgba(255,255,255,.18)] text-[#aaaaaa] max-w-[220px] truncate">
+            @{user?.email?.split("@")[0] || "admin"}
+          </div>
+          <button
+            type="button"
+            onClick={handleLogout}
+            className="w-8 h-8 rounded-full border border-[rgba(255,255,255,.25)] flex items-center justify-center bg-[rgba(0,0,0,.7)] text-[#ffc800] hover:bg-[rgba(0,0,0,.9)] transition"
+            title="Logout"
+          >
+            <LogOut className="w-4 h-4" />
+          </button>
+        </div>
+      </div>
+
+      {/* Main Content */}
+      <main className="relative z-10 max-w-[95%] mx-auto mb-12 px-2 space-y-[18px]">
 
         {/* Dashboard Cards */}
         <DashboardCards
@@ -1604,114 +1671,149 @@ const Index = () => {
         />
 
         {/* Search and Filter Bar */}
-        <div className="flex flex-wrap gap-2 mb-4">
-          <Input
-            placeholder="Buscar por AWB, Consignee ou e-mail"
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="flex-1 min-w-[200px] max-w-[350px] h-9 px-3 rounded-md border border-border bg-card text-foreground placeholder:text-muted-foreground"
-          />
-          <Select value={filterAirline} onValueChange={setFilterAirline}>
-            <SelectTrigger className="w-[180px] h-9 bg-card text-foreground border border-border rounded-md px-3">
-              <SelectValue placeholder="Todas as companhias" />
-            </SelectTrigger>
-            <SelectContent className="bg-card text-foreground border border-border z-50">
-              <SelectItem value="all">Todas as companhias</SelectItem>
-              {airlines.map((airline) => (
-                <SelectItem key={airline.code} value={airline.code}>
-                  {airline.code} - {airline.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <Select value={filterAnalyst} onValueChange={setFilterAnalyst}>
-            <SelectTrigger className="w-[200px] h-9 bg-card text-foreground border border-border rounded-md px-3">
-              <SelectValue placeholder="Todos os analistas" />
-            </SelectTrigger>
-            <SelectContent className="bg-card text-foreground border border-border z-50">
-              <SelectItem value="all">Todos os analistas</SelectItem>
-              {Array.from(
-                new Set(
-                  statusAereoData
-                    .map((awb) => awb.nome_analista)
-                    .filter((name) => name && name !== "N/A" && name.trim() !== ""),
-                ),
-              )
-                .sort()
-                .map((analyst) => (
-                  <SelectItem key={analyst} value={analyst}>
-                    {analyst}
-                  </SelectItem>
-                ))}
-            </SelectContent>
-          </Select>
-          <Button
-            variant="ghost"
-            onClick={handleRefresh}
-            className="h-9 gap-1.5 text-foreground hover:text-primary hover:bg-transparent border border-border px-3"
-          >
-            <RefreshCw className="w-4 h-4" />
-            Atualizar
-          </Button>
-        </div>
+        <section 
+          className="rounded-2xl p-4"
+          style={{
+            background: 'rgba(5,6,18,.9)',
+            border: '1px solid rgba(255,255,255,.12)',
+            boxShadow: '0 18px 40px rgba(0,0,0,.85)',
+          }}
+        >
+          <div className="space-y-3">
+            <div className="relative">
+              <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-[#aaaaaa]" />
+              <input
+                type="text"
+                placeholder="Buscar por AWB, Consignee ou e-mail"
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="h-9 w-full pl-10 pr-4 rounded-full border border-[rgba(255,255,255,.14)] bg-[#13141a] text-[#f5f5f5] text-[0.78rem] placeholder:text-[#666] focus:outline-none focus:border-[#ffc800] focus:shadow-[0_0_0_1px_rgba(255,200,0,.8)]"
+              />
+            </div>
+
+            <div className="flex flex-wrap items-center gap-3 justify-between">
+              <div className="flex flex-wrap items-center gap-3">
+                <div className="flex items-center gap-1.5">
+                  <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-[rgba(0,0,0,.5)] border border-[rgba(255,255,255,.22)]">
+                    <FilterIcon className="h-3 w-3 text-[#ffc800]" />
+                    <span className="text-[0.68rem] tracking-[0.1em] uppercase text-[#aaaaaa]">Companhia</span>
+                  </div>
+                  <Select value={filterAirline} onValueChange={setFilterAirline}>
+                    <SelectTrigger className="h-8 w-[160px] rounded-full bg-[#13141a] border border-[rgba(255,255,255,.14)] text-[0.78rem]">
+                      <SelectValue placeholder="Todas" />
+                    </SelectTrigger>
+                    <SelectContent className="bg-card border border-border z-50">
+                      <SelectItem value="all">Todas</SelectItem>
+                      {airlines.map((airline) => (
+                        <SelectItem key={airline.code} value={airline.code}>
+                          {airline.code} - {airline.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="flex items-center gap-1.5">
+                  <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-[rgba(0,0,0,.5)] border border-[rgba(255,255,255,.22)]">
+                    <span className="w-1.5 h-1.5 rounded-full bg-[#ffc800]" />
+                    <span className="text-[0.68rem] tracking-[0.1em] uppercase text-[#aaaaaa]">Analista</span>
+                  </div>
+                  <Select value={filterAnalyst} onValueChange={setFilterAnalyst}>
+                    <SelectTrigger className="h-8 w-[160px] rounded-full bg-[#13141a] border border-[rgba(255,255,255,.14)] text-[0.78rem]">
+                      <SelectValue placeholder="Todos" />
+                    </SelectTrigger>
+                    <SelectContent className="bg-card border border-border z-50">
+                      <SelectItem value="all">Todos</SelectItem>
+                      {Array.from(
+                        new Set(
+                          statusAereoData
+                            .map((awb) => awb.nome_analista)
+                            .filter((name) => name && name !== "N/A" && name.trim() !== ""),
+                        ),
+                      )
+                        .sort()
+                        .map((analyst) => (
+                          <SelectItem key={analyst} value={analyst}>
+                            {analyst}
+                          </SelectItem>
+                        ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+
+              <button
+                onClick={handleRefresh}
+                className="h-8 px-4 rounded-full bg-[#ffc800] text-[#000] text-[0.75rem] font-medium flex items-center gap-1.5 hover:bg-[#ffdc50] transition shadow-[0_0_20px_rgba(255,200,0,.3)]"
+              >
+                <RefreshCw className="w-3.5 h-3.5" />
+                Atualizar
+              </button>
+            </div>
+          </div>
+        </section>
 
         {/* AWBs Table */}
-        <div className="panel-wrapper">
+        <section 
+          className="rounded-2xl overflow-hidden"
+          style={{
+            background: 'rgba(5,6,18,.9)',
+            border: '1px solid rgba(255,255,255,.12)',
+            boxShadow: '0 18px 40px rgba(0,0,0,.85)',
+          }}
+        >
           {filteredAwbs.length > 0 ? (
             <>
               <div className="overflow-x-auto">
                 <table className="w-full border-collapse">
                   <thead>
-                    <tr className="bg-card border-b border-border">
+                    <tr className="bg-[rgba(0,0,0,.4)] border-b border-[rgba(255,255,255,.08)]">
                       <th
-                        className="px-3 py-3 text-left text-foreground uppercase text-xs font-bold cursor-pointer select-none hover:bg-muted/50"
+                        className="px-4 py-3 text-left text-[#aaaaaa] uppercase text-[0.68rem] tracking-[0.1em] font-medium cursor-pointer select-none hover:text-[#ffc800] transition"
                         onClick={handleAwbSort}
                       >
                         <span className="flex items-center gap-1">
                           AWB
-                          {sortAwb === "asc" && <span>↑</span>}
-                          {sortAwb === "desc" && <span>↓</span>}
+                          {sortAwb === "asc" && <span className="text-[#ffc800]">↑</span>}
+                          {sortAwb === "desc" && <span className="text-[#ffc800]">↓</span>}
                         </span>
                       </th>
-                      <th className="px-3 py-3 text-left text-foreground uppercase text-xs font-bold">HAWB</th>
+                      <th className="px-4 py-3 text-left text-[#aaaaaa] uppercase text-[0.68rem] tracking-[0.1em] font-medium">HAWB</th>
                       <th
-                        className="px-3 py-3 text-left text-foreground uppercase text-xs font-bold cursor-pointer select-none hover:bg-muted/50"
+                        className="px-4 py-3 text-left text-[#aaaaaa] uppercase text-[0.68rem] tracking-[0.1em] font-medium cursor-pointer select-none hover:text-[#ffc800] transition"
                         onClick={handleClientSort}
                       >
                         <span className="flex items-center gap-1">
                           Cliente
-                          {sortClient === "asc" && <span>↑</span>}
-                          {sortClient === "desc" && <span>↓</span>}
+                          {sortClient === "asc" && <span className="text-[#ffc800]">↑</span>}
+                          {sortClient === "desc" && <span className="text-[#ffc800]">↓</span>}
                         </span>
                       </th>
-                      <th className="px-3 py-3 text-left text-foreground uppercase text-xs font-bold">Rota</th>
-                      <th className="px-3 py-3 text-left text-foreground uppercase text-xs font-bold">Rastreio</th>
-                      <th className="px-3 py-3 text-left text-foreground uppercase text-xs font-bold">Último Evento</th>
+                      <th className="px-4 py-3 text-left text-[#aaaaaa] uppercase text-[0.68rem] tracking-[0.1em] font-medium">Rota</th>
+                      <th className="px-4 py-3 text-left text-[#aaaaaa] uppercase text-[0.68rem] tracking-[0.1em] font-medium">Status</th>
+                      <th className="px-4 py-3 text-left text-[#aaaaaa] uppercase text-[0.68rem] tracking-[0.1em] font-medium">Último Evento</th>
                       <th
-                        className="px-3 py-3 text-left text-foreground uppercase text-xs font-bold cursor-pointer select-none hover:bg-muted/50"
+                        className="px-4 py-3 text-left text-[#aaaaaa] uppercase text-[0.68rem] tracking-[0.1em] font-medium cursor-pointer select-none hover:text-[#ffc800] transition"
                         onClick={handleLastCheckSort}
                       >
                         <span className="flex items-center gap-1">
-                          Última Verificação
-                          {sortLastCheck === "asc" && <span>↑</span>}
-                          {sortLastCheck === "desc" && <span>↓</span>}
+                          Última Atualização
+                          {sortLastCheck === "asc" && <span className="text-[#ffc800]">↑</span>}
+                          {sortLastCheck === "desc" && <span className="text-[#ffc800]">↓</span>}
                         </span>
                       </th>
                       <th
-                        className="px-3 py-3 text-left text-foreground uppercase text-xs font-bold cursor-pointer select-none hover:bg-muted/50"
+                        className="px-4 py-3 text-left text-[#aaaaaa] uppercase text-[0.68rem] tracking-[0.1em] font-medium cursor-pointer select-none hover:text-[#ffc800] transition"
                         onClick={handleAnalystSort}
                       >
                         <span className="flex items-center gap-1">
-                          Nome Analista
-                          {sortAnalyst === "asc" && <span>↑</span>}
-                          {sortAnalyst === "desc" && <span>↓</span>}
+                          Analista
+                          {sortAnalyst === "asc" && <span className="text-[#ffc800]">↑</span>}
+                          {sortAnalyst === "desc" && <span className="text-[#ffc800]">↓</span>}
                         </span>
                       </th>
-                      <th className="px-3 py-3 text-center text-foreground uppercase text-xs font-bold">
-                        Abrir rastreio
-                      </th>
-                      <th className="px-3 py-3 text-center text-foreground uppercase text-xs font-bold">
-                        Email Cliente
+                      <th className="px-4 py-3 text-center text-[#aaaaaa] uppercase text-[0.68rem] tracking-[0.1em] font-medium">
+                        Ações
                       </th>
                     </tr>
                   </thead>
@@ -1726,34 +1828,34 @@ const Index = () => {
                       return (
                         <React.Fragment key={awb.id || index}>
                           <tr
-                            className={`border-b border-border transition-all duration-300 ${
+                            className={`border-b border-[rgba(255,255,255,.06)] transition-all duration-300 ${
                               isNilStatus
                                 ? "bg-red-500/20 border-red-500 border-2 animate-pulse shadow-[0_0_20px_rgba(255,0,0,0.3)]"
-                                : "hover:bg-muted/30"
-                            } ${isDelivered && !isNilStatus ? "bg-green-500/10" : ""} ${
+                                : "hover:bg-[rgba(255,255,255,.03)]"
+                            } ${isDelivered && !isNilStatus ? "bg-emerald-500/10" : ""} ${
                               isRetracking && !isNilStatus ? "bg-blue-500/20 animate-pulse" : ""
                             }`}
                           >
-                            <td className="px-3 py-3 whitespace-nowrap">
+                            <td className="px-4 py-3 whitespace-nowrap">
                               <div className="flex items-center gap-2">
-                                <span className="font-bold text-foreground text-sm">{awb.awb}</span>
+                                <span className="font-semibold text-[#f5f5f5] text-[0.82rem]">{awb.awb}</span>
                                 {isRetracking && (
-                                  <span className="text-xs text-blue-400 animate-pulse">Re-processando...</span>
+                                  <span className="text-[0.68rem] text-blue-400 animate-pulse">Re-processando...</span>
                                 )}
                               </div>
                             </td>
-                            <td className="px-3 py-3 text-foreground text-sm whitespace-nowrap">{awb.hawb || "-"}</td>
-                            <td className="px-3 py-3">
-                              <div>
-                                <div className="text-foreground text-sm uppercase">
-                                  {abbreviateName(awb.consignee_name)}
-                                </div>
+                            <td className="px-4 py-3 text-[#aaaaaa] text-[0.8rem] whitespace-nowrap">{awb.hawb || "-"}</td>
+                            <td className="px-4 py-3">
+                              <div className="text-[#f5f5f5] text-[0.8rem] uppercase">
+                                {abbreviateName(awb.consignee_name)}
                               </div>
                             </td>
-                            <td className="px-3 py-3 text-foreground text-sm">
-                              {awb.origem || "N/A"} → {awb.destino || "N/A"}
+                            <td className="px-4 py-3 text-[#aaaaaa] text-[0.8rem]">
+                              <span className="text-[#ffc800]">{awb.origem || "N/A"}</span>
+                              <span className="mx-1">→</span>
+                              <span>{awb.destino || "N/A"}</span>
                             </td>
-                            <td className="px-3 py-3 min-w-[300px]">
+                            <td className="px-4 py-3 min-w-[300px]">
                               {(() => {
                                 const statusCode = getStatusCode(awb.last_event).toUpperCase();
                                 // Use data_atraso from DB (persists even after status changes) or check current status
@@ -1876,10 +1978,9 @@ const Index = () => {
                                 {getStatusCode(awb.last_event)}
                               </span>
                             </td>
-                            <td className="px-3 py-3 text-foreground text-sm">
+                            <td className="px-4 py-3 text-[#aaaaaa] text-[0.8rem]">
                               {awb.last_check
                                 ? (() => {
-                                    // Remove Z suffix to prevent UTC conversion since DB stores Brasilia time
                                     const dateStr = awb.last_check.replace("Z", "");
                                     const date = new Date(dateStr);
                                     return date.toLocaleString("pt-BR", {
@@ -1892,8 +1993,8 @@ const Index = () => {
                                   })()
                                 : "-"}
                             </td>
-                            <td className="px-3 py-3 text-foreground text-sm uppercase">{awb.nome_analista || "-"}</td>
-                            <td className="px-3 py-3 text-center">
+                            <td className="px-4 py-3 text-[#aaaaaa] text-[0.8rem] uppercase">{awb.nome_analista || "-"}</td>
+                            <td className="px-4 py-3 text-center">
                               <div className="flex items-center justify-center gap-1">
                                 <Button
                                   variant="ghost"
@@ -2051,20 +2152,6 @@ const Index = () => {
                                 </Button>
                               </div>
                             </td>
-                            <td className="px-3 py-3">
-                              <div className="flex items-center justify-center">
-                                <Checkbox
-                                  id={`email-enabled-${awb.awb}`}
-                                  checked={customerEmailEnabled[awb.awb] === true}
-                                  onCheckedChange={(checked) => {
-                                    setCustomerEmailEnabled((prev) => ({
-                                      ...prev,
-                                      [awb.awb]: checked === true,
-                                    }));
-                                  }}
-                                />
-                              </div>
-                            </td>
                           </tr>
                         </React.Fragment>
                       );
@@ -2073,42 +2160,38 @@ const Index = () => {
                 </table>
               </div>
               {/* Pagination */}
-              <div className="p-4 border-t border-border flex items-center justify-between bg-card">
-                <div className="text-sm text-foreground">
+              <div className="p-4 border-t border-[rgba(255,255,255,.08)] flex items-center justify-between bg-[rgba(0,0,0,.3)]">
+                <div className="text-[0.78rem] text-[#aaaaaa]">
                   Página {currentPage} de {totalPages} | Total: {filteredAwbs.length} registros
                 </div>
                 <div className="flex gap-2">
-                  <Button
-                    variant="ghost"
-                    size="sm"
+                  <button
                     onClick={() => setCurrentPage((prev) => Math.max(1, prev - 1))}
                     disabled={currentPage === 1}
-                    className="text-foreground hover:bg-primary hover:text-primary-foreground"
+                    className="h-8 px-4 rounded-full bg-[rgba(255,255,255,.08)] text-[#aaaaaa] text-[0.75rem] hover:bg-[rgba(255,255,255,.12)] hover:text-[#f5f5f5] transition disabled:opacity-40 disabled:cursor-not-allowed"
                   >
                     Anterior
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="sm"
+                  </button>
+                  <button
                     onClick={() => setCurrentPage((prev) => Math.min(totalPages, prev + 1))}
                     disabled={currentPage === totalPages}
-                    className="text-foreground hover:bg-primary hover:text-primary-foreground"
+                    className="h-8 px-4 rounded-full bg-[rgba(255,255,255,.08)] text-[#aaaaaa] text-[0.75rem] hover:bg-[rgba(255,255,255,.12)] hover:text-[#f5f5f5] transition disabled:opacity-40 disabled:cursor-not-allowed"
                   >
                     Próxima
-                  </Button>
+                  </button>
                 </div>
               </div>
             </>
           ) : (
             <div className="p-12 text-center">
-              <p className="text-foreground uppercase tracking-wider font-medium">NENHUM AWB MONITORADO</p>
-              <p className="text-sm text-muted-foreground mt-2 uppercase">
-                CADASTRE UM AWB PARA INICIAR O RASTREAMENTO
+              <p className="text-[#f5f5f5] uppercase tracking-[0.15em] font-medium">NENHUM AWB MONITORADO</p>
+              <p className="text-[0.85rem] text-[#aaaaaa] mt-2">
+                Os dados serão carregados automaticamente do banco de dados
               </p>
             </div>
           )}
-        </div>
-      </div>
+        </section>
+      </main>
 
       {/* Completion Popup - Fixed class for RPA */}
       {showCompletionPopup && (
