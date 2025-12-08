@@ -808,11 +808,17 @@ serve(async (req) => {
 
       // ==================== DHL AWB TRACKING ====================
       case 'get_dhl_awb_tracking': {
-        const data = await client.query(
-          'SELECT * FROM ai_agente.dhl_awb_tracking ORDER BY id DESC'
-        );
-        result = { success: true, data };
-        console.log(`Fetched ${data.length} AWB tracking records`);
+        try {
+          const rows = await client.query(
+            `SELECT * FROM \`${database}\`.dhl_awb_tracking ORDER BY id DESC`
+          );
+          result = { success: true, data: rows };
+          console.log(`Fetched ${Array.isArray(rows) ? rows.length : 0} AWB tracking records from ${database}.dhl_awb_tracking`);
+        } catch (err: unknown) {
+          const errorMessage = err instanceof Error ? err.message : String(err);
+          console.error("Erro em get_dhl_awb_tracking:", errorMessage);
+          result = { success: false, error: errorMessage };
+        }
         break;
       }
 
