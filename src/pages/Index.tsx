@@ -644,3 +644,805 @@ const Index = () => {
 
     return matchesSearch && matchesAnalyst && matchesAlert && matchesEmailFilter;
   });
+
+  const sortedAwbs = [...filteredAwbs].sort((a, b) => {
+    const aValue = a[sortField];
+    const bValue = b[sortField];
+
+    if (aValue === null || aValue === undefined) return 1;
+    if (bValue === null || bValue === undefined) return -1;
+
+    if (aValue < bValue) return sortDirection === "asc" ? -1 : 1;
+    if (aValue > bValue) return sortDirection === "asc" ? 1 : -1;
+    return 0;
+  });
+
+  const totalPages = Math.ceil(sortedAwbs.length / ITEMS_PER_PAGE);
+  const paginatedAwbs = sortedAwbs.slice(
+    (currentPage - 1) * ITEMS_PER_PAGE,
+    currentPage * ITEMS_PER_PAGE
+  );
+
+  const handlePageChange = (direction: "prev" | "next") => {
+    if (direction === "prev" && currentPage > 1) {
+      setCurrentPage((prev) => prev - 1);
+    } else if (direction === "next" && currentPage < totalPages) {
+      setCurrentPage((prev) => prev + 1);
+    }
+  };
+
+  const handleAwbClick = (awb: DhlAwbTracking) => {
+    setSelectedAwb(awb);
+    setBugAlertExplication(getBugAlertDescription(awb));
+  };
+
+  const handleSort = (field: keyof DhlAwbTracking) => {
+    if (sortField === field) {
+      setSortDirection((prev) => (prev === "asc" ? "desc" : "asc"));
+    } else {
+      setSortField(field);
+      setSortDirection("asc");
+    }
+  };
+
+  const getStatusTextColor = (status: string | null) => {
+    switch (status) {
+      case "ENTREGUE":
+      case "DELIVERED":
+        return "text-green-400";
+      case "ALERTA":
+      case "DELAYED":
+        return "text-amber-400";
+      case "CRÍTICO":
+      case "CRITICAL":
+        return "text-red-400";
+      default:
+        return "text-slate-200";
+    }
+  };
+
+  const getStatusBadgeColor = (awb: DhlAwbTracking) => {
+    if (awb.bug_alert || (awb.days_in_transit ?? 0) > 15 || (awb.nfd_counter ?? 0) > 2) {
+      return "bg-red-900/80 border border-red-500/60 text-red-100";
+    }
+
+    if (awb.status === "ALERTA" || awb.status === "DELAYED") {
+      return "bg-yellow-900/70 border border-yellow-500/60 text-yellow-100";
+    }
+
+    if (awb.status === "ENTREGUE" || awb.status === "DELIVERED") {
+      return "bg-green-900/70 border border-green-500/60 text-green-100";
+    }
+
+    return "bg-slate-900/70 border border-slate-700/60 text-slate-100";
+  };
+
+  const getStatusLabel = (awb: DhlAwbTracking) => {
+    if (awb.bug_alert) return "BUG ALERT";
+    if ((awb.days_in_transit ?? 0) > 20) return "ACIMA DE 20 DIAS";
+    if ((awb.days_in_transit ?? 0) > 15) return "ACIMA DE 15 DIAS";
+    if ((awb.days_in_transit ?? 0) > 10) return "ACIMA DE 10 DIAS";
+    if ((awb.nfd_counter ?? 0) > 3) return "> 3 NFDs";
+    if ((awb.nfd_counter ?? 0) > 1) return "> 1 NFD";
+
+    return awb.status || "EM ANDAMENTO";
+  };
+
+  const openLogModal = async (awbNumber: string) => {
+    setIsLogLoading(true);
+    setIsLogModalOpen(true);
+    setSelectedAwb(
+      awbs.find(
+        (awb) => awb.awb?.replace(/\D/g, "") === awbNumber.replace(/\D/g, "")
+      ) || null
+    );
+
+    const { data, error } = await supabase
+      .from("udlog_zeus_console_log_udlog_airfreight")
+      .select("*")
+      .ilike("awb", `%${awbNumber}%`)
+      .order("created_at", { ascending: false });
+
+    if (error) {
+      console.error("Error fetching log data:", error);
+      toast({
+        title: "Erro ao carregar logs",
+        description: "Não foi possível carregar os logs para a AWB selecionada.",
+        variant: "destructive",
+      });
+    } else {
+      const formattedData: LogData[] =
+        data?.map((logEntry: any) => ({
+          id: logEntry.id,
+          created_at: logEntry.created_at,
+          mimicked_operator_id: logEntry.mimicked_operator_id,
+          actor_name: logEntry.actor_name,
+          action: logEntry.action,
+          new_value: JSON.parse(logEntry.new_value || "{}"),
+          awb: logEntry.awb,
+        })) || [];
+
+      setLogData(formattedData);
+    }
+
+    setIsLogLoading(false);
+  };
+
+  const openEmailModal = (awb: DhlAwbTracking) => {
+    setSelectedAwbForEmail(awb.awb || null);
+    setEmailRecipient(
+      awb.customer_email ||
+        awb.consignee_email ||
+        ""
+    );
+    setEmailSubject(`Atualização de Rastreamento - AWB ${awb.awb || ""}`);
+    setEmailContent(
+      `Olá ${awb.consignee || "cliente"},\n\n` +
+        `Segue atualização do rastreio da sua carga:\n\n` +
+        `AWB: ${awb.awb || "N/A"}\n` +
+        `Cliente: ${awb.consignee || "N/A"}\n` +
+        `Status: ${awb.status || "N/A"}\n` +
+        `Último evento: ${awb.last_event || "N/A"}\n` +
+        `Última atualização: ${awb.last_update || "N/A"}\n` +
+        `Dias em trânsito: ${awb.days_in_transit ?? "N/A"}\n` +
+        `Qtd de NFDs: ${awb.nfd_counter ?? "N/A"}\n\n` +
+        `Atenciosamente,\nEquipe DACHSER BRASIL`
+    );
+    setIsEmailModalOpen(true);
+  };
+
+  const handleSendEmail = async () => {
+    if (!selectedAwbForEmail || !emailRecipient || !emailSubject || !emailContent) {
+      toast({
+        title: "Campos obrigatórios",
+        description: "Preencha todos os campos antes de enviar o email.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setIsEmailSending(true);
+
+    try {
+      logToConsole(`Iniciando envio de e-mail para AWB ${selectedAwbForEmail}`);
+
+      const { data, error } = await supabase.functions.invoke(
+        "email-daclient",
+        {
+          body: {
+            awb: selectedAwbForEmail,
+            to: emailRecipient,
+            subject: emailSubject,
+            content: emailContent,
+          },
+        }
+      );
+
+      if (error) {
+        console.error("Erro ao enviar email:", error);
+        logToConsole(`Erro ao enviar e-mail: ${error.message}`);
+        throw error;
+      }
+
+      logToConsole(`Resposta da função de email: ${JSON.stringify(data)}`);
+
+      const message =
+        data?.message ||
+        `Email enviado com sucesso para ${emailRecipient} - AWB ${selectedAwbForEmail}`;
+
+      toast({
+        title: "Email enviado",
+        description: message,
+      });
+
+      setIsEmailModalOpen(false);
+    } catch (error: any) {
+      console.error("Erro ao enviar email:", error);
+      toast({
+        title: "Erro ao enviar email",
+        description: error.message || "Verifique os logs para mais detalhes.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsEmailSending(false);
+    }
+  };
+
+  const openEmailHistoryModal = async (awbNumber: string) => {
+    setIsEmailHistoryLoading(true);
+    setIsEmailHistoryModalOpen(true);
+
+    const { data, error } = await supabase
+      .from("udlog_af_email_history")
+      .select("*")
+      .eq("awb", awbNumber)
+      .order("created_at", { ascending: false });
+
+    if (error) {
+      console.error("Erro ao carregar histórico de emails:", error);
+      toast({
+        title: "Erro ao carregar histórico",
+        description: "Não foi possível carregar o histórico de emails.",
+        variant: "destructive",
+      });
+    } else {
+      setEmailHistory(
+        data?.map((entry: any) => ({
+          id: entry.id,
+          created_at: entry.created_at,
+          created_by: entry.created_by,
+          subject: entry.subject,
+          content: entry.content,
+          awb: entry.awb,
+          consignee_email: entry.consignee_email,
+          status: entry.status,
+        })) || []
+      );
+    }
+
+    setIsEmailHistoryLoading(false);
+  };
+
+  const handleToggleColumn = (column: keyof ColumnVisibility) => {
+    setColumnVisibility((prev) => {
+      const newVisibility = {
+        ...prev,
+        [column]: !prev[column],
+      };
+      return newVisibility;
+    });
+  };
+
+  const handleResetColumns = () => {
+    setColumnVisibility(DEFAULT_COLUMN_VISIBILITY);
+  };
+
+  const handleEmailToggle = async (
+    awbNumber: string,
+    currentValue: boolean | undefined
+  ) => {
+    const newValue = !currentValue;
+
+    const confirmed = window.confirm(
+      `Tem certeza que deseja ${newValue ? "ATIVAR" : "DESATIVAR"} os envios de email para a AWB ${awbNumber}?`
+    );
+
+    if (!confirmed) return;
+
+    try {
+      const { error } = await supabase
+        .from("dhl_awb_tracking")
+        .update({ email_alert: newValue })
+        .eq("awb", awbNumber);
+
+      if (error) {
+        console.error("Error updating email_alert:", error);
+        toast({
+          title: "Erro ao atualizar email_alert",
+          description: "Não foi possível atualizar o status de email para esta AWB.",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      setAwbs((prev) =>
+        prev.map((awb) =>
+          awb.awb === awbNumber ? { ...awb, email_alert: newValue } : awb
+        )
+      );
+
+      toast({
+        title: `Email ${newValue ? "ativado" : "desativado"}`,
+        description: `Os envios de email foram ${
+          newValue ? "ativados" : "desativados"
+        } para AWB ${awbNumber}.`,
+      });
+    } catch (error: any) {
+      console.error("Error in handleEmailToggle:", error);
+      toast({
+        title: "Erro inesperado",
+        description: "Ocorreu um erro inesperado ao atualizar o status de email.",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleWhatsAppToggle = async (
+    awbNumber: string,
+    currentValue: boolean | undefined
+  ) => {
+    const newValue = !currentValue;
+
+    const confirmed = window.confirm(
+      `Tem certeza que deseja ${newValue ? "ATIVAR" : "DESATIVAR"} os envios de WhatsApp para a AWB ${awbNumber}?`
+    );
+
+    if (!confirmed) return;
+
+    try {
+      const { error } = await supabase
+        .from("dhl_awb_tracking")
+        .update({ whatsapp_alert: newValue })
+        .eq("awb", awbNumber);
+
+      if (error) {
+        console.error("Error updating whatsapp_alert:", error);
+        toast({
+          title: "Erro ao atualizar whatsapp_alert",
+          description: "Não foi possível atualizar o status de WhatsApp para esta AWB.",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      setAwbs((prev) =>
+        prev.map((awb) =>
+          awb.awb === awbNumber ? { ...awb, whatsapp_alert: newValue } : awb
+        )
+      );
+
+      toast({
+        title: `WhatsApp ${newValue ? "ativado" : "desativado"}`,
+        description: `Os envios de WhatsApp foram ${
+          newValue ? "ativados" : "desativados"
+        } para AWB ${awbNumber}.`,
+      });
+    } catch (error: any) {
+      console.error("Error in handleWhatsAppToggle:", error);
+      toast({
+        title: "Erro inesperado",
+        description: "Ocorreu um erro inesperado ao atualizar o status de WhatsApp.",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleBulkEmailToggle = async (newValue: boolean) => {
+    const confirmed = window.confirm(
+      `Tem certeza que deseja ${newValue ? "ATIVAR" : "DESATIVAR"} os envios de email para todas as AWBs filtradas?`
+    );
+
+    if (!confirmed) return;
+
+    try {
+      const filteredAwbNumbers = filteredAwbs.map((awb) => awb.awb).filter(Boolean) as string[];
+
+      const { error } = await supabase
+        .from("dhl_awb_tracking")
+        .update({ email_alert: newValue })
+        .in("awb", filteredAwbNumbers);
+
+      if (error) {
+        console.error("Error in bulk email update:", error);
+        toast({
+          title: "Erro ao atualizar em massa",
+          description: "Não foi possível atualizar o status de email para as AWBs filtradas.",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      setAwbs((prev) =>
+        prev.map((awb) =>
+          filteredAwbNumbers.includes(awb.awb || "")
+            ? { ...awb, email_alert: newValue }
+            : awb
+        )
+      );
+
+      toast({
+        title: `Email em massa ${newValue ? "ativado" : "desativado"}`,
+        description: `Os envios de email foram ${
+          newValue ? "ativados" : "desativados"
+        } para todas as AWBs filtradas.`,
+      });
+    } catch (error: any) {
+      console.error("Error in handleBulkEmailToggle:", error);
+      toast({
+        title: "Erro inesperado",
+        description: "Ocorreu um erro inesperado ao atualizar o status de email em massa.",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleBulkWhatsAppToggle = async (newValue: boolean) => {
+    const confirmed = window.confirm(
+      `Tem certeza que deseja ${newValue ? "ATIVAR" : "DESATIVAR"} os envios de WhatsApp para todas as AWBs filtradas?`
+    );
+
+    if (!confirmed) return;
+
+    try {
+      const filteredAwbNumbers = filteredAwbs.map((awb) => awb.awb).filter(Boolean) as string[];
+
+      const { error } = await supabase
+        .from("dhl_awb_tracking")
+        .update({ whatsapp_alert: newValue })
+        .in("awb", filteredAwbNumbers);
+
+      if (error) {
+        console.error("Error in bulk WhatsApp update:", error);
+        toast({
+          title: "Erro ao atualizar em massa",
+          description: "Não foi possível atualizar o status de WhatsApp para as AWBs filtradas.",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      setAwbs((prev) =>
+        prev.map((awb) =>
+          filteredAwbNumbers.includes(awb.awb || "")
+            ? { ...awb, whatsapp_alert: newValue }
+            : awb
+        )
+      );
+
+      toast({
+        title: `WhatsApp em massa ${newValue ? "ativado" : "desativado"}`,
+        description: `Os envios de WhatsApp foram ${
+          newValue ? "ativados" : "desativados"
+        } para todas as AWBs filtradas.`,
+      });
+    } catch (error: any) {
+      console.error("Error in handleBulkWhatsAppToggle:", error);
+      toast({
+        title: "Erro inesperado",
+        description: "Ocorreu um erro inesperado ao atualizar o status de WhatsApp em massa.",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const formatDateTime = (value: string | null) => {
+    if (!value) return "-";
+    try {
+      const date = new Date(value);
+      return new Intl.DateTimeFormat("pt-BR", {
+        day: "2-digit",
+        month: "2-digit",
+        year: "2-digit",
+        hour: "2-digit",
+        minute: "2-digit",
+      }).format(date);
+    } catch {
+      return value;
+    }
+  };
+
+  const formatDate = (value: string | null) => {
+    if (!value) return "-";
+    try {
+      const date = new Date(value);
+      return new Intl.DateTimeFormat("pt-BR", {
+        day: "2-digit",
+        month: "2-digit",
+        year: "2-digit",
+      }).format(date);
+    } catch {
+      return value;
+    }
+  };
+
+  const getAlertCategory = (awb: DhlAwbTracking): AlertCategory => {
+    if (awb.bug_alert || (awb.days_in_transit ?? 0) > 15 || (awb.nfd_counter ?? 0) > 2) {
+      return "critical";
+    }
+
+    if (
+      awb.status === "ALERTA" ||
+      awb.status === "DELAYED" ||
+      (awb.days_in_transit ?? 0) > 10
+    ) {
+      return "delayed";
+    }
+
+    return "on_time";
+  };
+
+  const getAlertIcon = (awb: DhlAwbTracking | null) => {
+    if (!awb) return <AlertTriangle className="w-5 h-5 text-slate-400" />;
+
+    switch (getAlertCategory(awb)) {
+      case "critical":
+        return <AlertTriangle className="w-5 h-5 text-red-400" />;
+      case "delayed":
+        return <AlertTriangle className="w-5 h-5 text-amber-400" />;
+      case "on_time":
+      default:
+        return <AlertTriangle className="w-5 h-5 text-emerald-400" />;
+    }
+  };
+
+  const alertSummary = useMemo(() => {
+    if (!selectedAwb) return "Selecione uma AWB para ver os detalhes do alerta.";
+
+    const parts = [];
+
+    if (selectedAwb.bug_alert) {
+      parts.push("BUG ALERT ativo para essa carga.");
+    }
+
+    if ((selectedAwb.days_in_transit ?? 0) > 15) {
+      parts.push("Tempo em trânsito considerado crítico (mais de 15 dias).");
+    } else if ((selectedAwb.days_in_transit ?? 0) > 10) {
+      parts.push("Tempo em trânsito elevado (mais de 10 dias).");
+    }
+
+    if ((selectedAwb.nfd_counter ?? 0) > 2) {
+      parts.push("Ocorrência de NFD acima do esperado.");
+    }
+
+    if (
+      selectedAwb.status === "ALERTA" ||
+      selectedAwb.status === "DELAYED"
+    ) {
+      parts.push("Status atual do rastreio indica alerta.");
+    }
+
+    if (parts.length === 0) {
+      return "Nenhuma condição crítica identificada para esta AWB.";
+    }
+
+    return parts.join(" ");
+  }, [selectedAwb]);
+
+  useEffect(() => {
+    if (selectedAwb) {
+      setBugAlertExplication(getBugAlertDescription(selectedAwb));
+    } else {
+      setBugAlertExplication(null);
+    }
+  }, [selectedAwb]);
+
+  const handleRemarkChange = (awbNumber: string, newRemark: string) => {
+    logToConsole(
+      `handleRemarkChange chamado para AWB ${awbNumber} com observação: ${newRemark}`
+    );
+  const updatedAwbs = awbs.map((awb) =>
+      awb.awb === awbNumber ? { ...awb, notes: newRemark } : awb
+    );
+    setAwbs(updatedAwbs);
+  };
+
+  const openRemarkModal = (awb: DhlAwbTracking) => {
+    setCurrentRemarkAwb(awb.awb || null);
+    setCurrentRemarkText(awb.notes || "");
+    setRemarkModalOpen(true);
+  };
+
+  const handleRemarkBlur = async (awbNumber: string, newRemark: string) => {
+    const trimmedRemark = newRemark.trim();
+
+    if (!trimmedRemark) {
+      setRemarkModalOpen(false);
+      return;
+    }
+
+    if (!selectedAwb) {
+      toast({
+        title: "Nenhuma AWB selecionada",
+        description: "Selecione uma AWB antes de salvar uma observação.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    try {
+      setIsUpdatingAwb(awbNumber);
+      const { error } = await supabase
+        .from("dhl_awb_tracking")
+        .update({ notes: trimmedRemark })
+        .eq("awb", awbNumber);
+
+      if (error) {
+        throw error;
+      }
+
+      handleRemarkChange(awbNumber, trimmedRemark);
+
+      setRemarkModalOpen(false);
+
+      toast({
+        title: "Observação salva",
+        description: "Sua observação foi salva com sucesso.",
+      });
+    } catch (error: any) {
+      console.error("Erro ao salvar observação:", error);
+      toast({
+        title: "Erro ao salvar observação",
+        description:
+          error.message ||
+          "Não foi possível salvar a observação. Tente novamente.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsUpdatingAwb(null);
+    }
+  };
+
+  const handleAttentionList = async (awbNumber: string, action: "add" | "remove") => {
+    try {
+      setIsUpdatingAwb(awbNumber);
+
+      const tableName =
+        action === "add"
+          ? "udlog_af_attention_list"
+          : "udlog_af_attention_list_archive";
+
+      if (action === "add") {
+        const existing = await supabase
+          .from("udlog_af_attention_list")
+          .select("id")
+          .eq("awb", awbNumber)
+          .maybeSingle();
+
+        if (existing.data) {
+          toast({
+            title: "Já na atenção",
+            description: `A AWB ${awbNumber} já está na lista de atenção.`,
+          });
+          setIsUpdatingAwb(null);
+          return;
+        }
+      }
+
+      if (action === "remove") {
+        const historyInsert = await supabase
+          .from("udlog_af_attention_list_archive")
+          .insert({
+            awb: awbNumber,
+            removed_at: new Date().toISOString(),
+          });
+
+        if (historyInsert.error) {
+          console.error("Erro ao arquivar atenção:", historyInsert.error);
+          throw historyInsert.error;
+        }
+
+        const { error } = await supabase
+          .from("udlog_af_attention_list")
+          .delete()
+          .eq("awb", awbNumber);
+
+        if (error) {
+          console.error("Erro ao remover da lista de atenção:", error);
+          throw error;
+        }
+
+        toast({
+          title: "Removida da lista de atenção",
+          description: `A AWB ${awbNumber} foi removida da lista de atenção e arquivada.`,
+        });
+      } else {
+        const { error } = await supabase.from(tableName).insert({
+          awb: awbNumber,
+          created_at: new Date().toISOString(),
+        });
+
+        if (error) {
+          console.error("Erro ao adicionar à lista de atenção:", error);
+          throw error;
+        }
+
+        toast({
+          title: "Adicionada à lista de atenção",
+          description: `A AWB ${awbNumber} foi adicionada à lista de atenção.`,
+        });
+      }
+    } catch (error: any) {
+      console.error("Erro ao gerenciar lista de atenção:", error);
+      toast({
+        title: "Erro ao gerenciar lista de atenção",
+        description:
+          error.message ||
+          "Não foi possível atualizar a lista de atenção. Tente novamente.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsUpdatingAwb(null);
+    }
+  };
+
+  const handleBugAlertToggle = async (awbNumber: string, currentValue: boolean | undefined) => {
+    const newValue = !currentValue;
+
+    const confirmed = window.confirm(
+      `Tem certeza que deseja ${newValue ? "ATIVAR" : "DESATIVAR"} o BUG ALERT para a AWB ${awbNumber}?`
+    );
+
+    if (!confirmed) return;
+
+    try {
+      const { error } = await supabase
+        .from("dhl_awb_tracking")
+        .update({ bug_alert: newValue })
+        .eq("awb", awbNumber);
+
+      if (error) {
+        console.error("Error updating bug_alert:", error);
+        toast({
+          title: "Erro ao atualizar BUG ALERT",
+          description: "Não foi possível atualizar o status de BUG ALERT para esta AWB.",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      setAwbs((prev) =>
+        prev.map((awb) =>
+          awb.awb === awbNumber ? { ...awb, bug_alert: newValue } : awb
+        )
+      );
+
+      if (selectedAwb && selectedAwb.awb === awbNumber) {
+        setSelectedAwb((prev) =>
+          prev ? { ...prev, bug_alert: newValue } : prev
+        );
+      }
+
+      toast({
+        title: `BUG ALERT ${newValue ? "ativado" : "desativado"}`,
+        description: `O BUG ALERT foi ${
+          newValue ? "ativado" : "desativado"
+        } para AWB ${awbNumber}.`,
+      });
+    } catch (error: any) {
+      console.error("Error in handleBugAlertToggle:", error);
+      toast({
+        title: "Erro inesperado",
+        description: "Ocorreu um erro inesperado ao atualizar o BUG ALERT.",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleBulkBugAlertToggle = async (newValue: boolean) => {
+    const confirmed = window.confirm(
+      `Tem certeza que deseja ${newValue ? "ATIVAR" : "DESATIVAR"} o BUG ALERT para todas as AWBs filtradas?`
+    );
+
+    if (!confirmed) return;
+
+    try {
+      const filteredAwbNumbers = filteredAwbs.map((awb) => awb.awb).filter(Boolean) as string[];
+
+      const { error } = await supabase
+        .from("dhl_awb_tracking")
+        .update({ bug_alert: newValue })
+        .in("awb", filteredAwbNumbers);
+
+      if (error) {
+        console.error("Error in bulk bug_alert update:", error);
+        toast({
+          title: "Erro ao atualizar BUG ALERT em massa",
+          description: "Não foi possível atualizar o BUG ALERT para as AWBs filtradas.",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      setAwbs((prev) =>
+        prev.map((awb) =>
+          filteredAwbNumbers.includes(awb.awb || "")
+            ? { ...awb, bug_alert: newValue }
+            : awb
+        )
+      );
+
+      toast({
+        title: `BUG ALERT em massa ${newValue ? "ativado" : "desativado"}`,
+        description: `O BUG ALERT foi ${
+          newValue ? "ativado" : "desativado"
+        } para todas as AWBs filtradas.`,
+      });
+    } catch (error: any) {
+      console.error("Error in handleBulkBugAlertToggle:", error);
+      toast({
+        title: "Erro inesperado",
+        description: "Ocorreu um erro inesperado ao atualizar o BUG ALERT em massa.",
+        variant: "destructive",
+      });
+    }
+  };
