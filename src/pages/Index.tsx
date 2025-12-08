@@ -520,54 +520,65 @@ const Index = () => {
   }, [bugAlertExplication]);
 
   const fetchDashboardData = async () => {
-    const { data, error } = await db
-      .from("dhl_awb_tracking")
-      .select("*");
+    try {
+      const { data: response, error } = await supabase.functions.invoke("mariadb-proxy", {
+        body: { action: "get_dhl_awb_tracking" },
+      });
 
-    if (error) {
-      console.error("Error fetching dashboard data:", error);
+      if (error || !response?.success) {
+        console.error("Error fetching dashboard data:", error || response?.error);
+        toast({
+          title: "Erro ao carregar dados",
+          description: "Não foi possível carregar os dados do dashboard.",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      const data = response.data || [];
+
+      const total_awbs = data.length;
+      const active_awbs = data.filter(
+        (awb: DhlAwbTracking) =>
+          awb.status === "EM ANDAMENTO" ||
+          (awb.days_in_transit !== null && awb.days_in_transit > 0)
+      ).length;
+      const alert_awbs = data.filter(
+        (awb: DhlAwbTracking) =>
+          awb.status === "ALERTA" ||
+          (awb.days_in_transit !== null && awb.days_in_transit > 10)
+      ).length;
+      const critical_awbs = data.filter(
+        (awb: DhlAwbTracking) =>
+          awb.bug_alert ||
+          (awb.days_in_transit !== null && awb.days_in_transit > 15) ||
+          (awb.nfd_counter !== null && awb.nfd_counter > 2)
+      ).length;
+
+      setStats({
+        total_awbs,
+        active_awbs,
+        alert_awbs,
+        critical_awbs,
+      });
+
+      setAwbs(data);
+      const analystNames: string[] = Array.from(
+        new Set(
+          (data as DhlAwbTracking[])
+            .map((awb) => awb.analyst)
+            .filter((analyst): analyst is string => analyst !== null)
+        )
+      );
+      setAnalysts(analystNames);
+    } catch (err) {
+      console.error("Error in fetchDashboardData:", err);
       toast({
         title: "Erro ao carregar dados",
         description: "Não foi possível carregar os dados do dashboard.",
         variant: "destructive",
       });
-      return;
     }
-
-    const total_awbs = data.length;
-    const active_awbs = data.filter(
-      (awb) =>
-        awb.status === "EM ANDAMENTO" ||
-        (awb.days_in_transit !== null && awb.days_in_transit > 0)
-    ).length;
-    const alert_awbs = data.filter(
-      (awb) =>
-        awb.status === "ALERTA" ||
-        (awb.days_in_transit !== null && awb.days_in_transit > 10)
-    ).length;
-    const critical_awbs = data.filter(
-      (awb) =>
-        awb.bug_alert ||
-        (awb.days_in_transit !== null && awb.days_in_transit > 15) ||
-        (awb.nfd_counter !== null && awb.nfd_counter > 2)
-    ).length;
-
-  setStats({
-      total_awbs,
-      active_awbs,
-      alert_awbs,
-      critical_awbs,
-    });
-
-    setAwbs(data);
-    const analystNames: string[] = Array.from(
-      new Set(
-        (data as DhlAwbTracking[])
-          .map((awb) => awb.analyst)
-          .filter((analyst): analyst is string => analyst !== null)
-      )
-    );
-    setAnalysts(analystNames);
   };
 
   const refreshDashboard = async () => {
@@ -743,32 +754,39 @@ const Index = () => {
       ) || null
     );
 
-    const { data, error } = await db
-      .from("udlog_zeus_console_log_udlog_airfreight")
-      .select("*")
-      .ilike("awb", `%${awbNumber}%`)
-      .order("created_at", { ascending: false });
+    try {
+      const { data: response, error } = await supabase.functions.invoke("mariadb-proxy", {
+        body: { action: "get_awb_logs", awbNumber },
+      });
 
-    if (error) {
-      console.error("Error fetching log data:", error);
+      if (error || !response?.success) {
+        console.error("Error fetching log data:", error || response?.error);
+        toast({
+          title: "Erro ao carregar logs",
+          description: "Não foi possível carregar os logs para a AWB selecionada.",
+          variant: "destructive",
+        });
+      } else {
+        const formattedData: LogData[] =
+          (response.logs || []).map((logEntry: any) => ({
+            id: logEntry.id,
+            created_at: logEntry.created_at,
+            mimicked_operator_id: logEntry.mimicked_operator_id,
+            actor_name: logEntry.actor_name,
+            action: logEntry.action,
+            new_value: typeof logEntry.new_value === 'string' ? JSON.parse(logEntry.new_value || "{}") : logEntry.new_value || {},
+            awb: logEntry.awb,
+          }));
+
+        setLogData(formattedData);
+      }
+    } catch (err) {
+      console.error("Error in openLogModal:", err);
       toast({
         title: "Erro ao carregar logs",
         description: "Não foi possível carregar os logs para a AWB selecionada.",
         variant: "destructive",
       });
-    } else {
-      const formattedData: LogData[] =
-        data?.map((logEntry: any) => ({
-          id: logEntry.id,
-          created_at: logEntry.created_at,
-          mimicked_operator_id: logEntry.mimicked_operator_id,
-          actor_name: logEntry.actor_name,
-          action: logEntry.action,
-          new_value: JSON.parse(logEntry.new_value || "{}"),
-          awb: logEntry.awb,
-        })) || [];
-
-      setLogData(formattedData);
     }
 
     setIsLogLoading(false);
@@ -858,32 +876,39 @@ const Index = () => {
     setIsEmailHistoryLoading(true);
     setIsEmailHistoryModalOpen(true);
 
-    const { data, error } = await db
-      .from("udlog_af_email_history")
-      .select("*")
-      .eq("awb", awbNumber)
-      .order("created_at", { ascending: false });
+    try {
+      const { data: response, error } = await supabase.functions.invoke("mariadb-proxy", {
+        body: { action: "get_email_history", awbNumber },
+      });
 
-    if (error) {
-      console.error("Erro ao carregar histórico de emails:", error);
+      if (error || !response?.success) {
+        console.error("Erro ao carregar histórico de emails:", error || response?.error);
+        toast({
+          title: "Erro ao carregar histórico",
+          description: "Não foi possível carregar o histórico de emails.",
+          variant: "destructive",
+        });
+      } else {
+        setEmailHistory(
+          (response.history || []).map((entry: any) => ({
+            id: entry.id,
+            created_at: entry.created_at,
+            created_by: entry.created_by,
+            subject: entry.subject,
+            content: entry.content,
+            awb: entry.awb,
+            consignee_email: entry.consignee_email,
+            status: entry.status,
+          }))
+        );
+      }
+    } catch (err) {
+      console.error("Error in openEmailHistoryModal:", err);
       toast({
         title: "Erro ao carregar histórico",
         description: "Não foi possível carregar o histórico de emails.",
         variant: "destructive",
       });
-    } else {
-      setEmailHistory(
-        data?.map((entry: any) => ({
-          id: entry.id,
-          created_at: entry.created_at,
-          created_by: entry.created_by,
-          subject: entry.subject,
-          content: entry.content,
-          awb: entry.awb,
-          consignee_email: entry.consignee_email,
-          status: entry.status,
-        })) || []
-      );
     }
 
     setIsEmailHistoryLoading(false);
@@ -916,13 +941,12 @@ const Index = () => {
     if (!confirmed) return;
 
     try {
-      const { error } = await db
-        .from("dhl_awb_tracking")
-        .update({ email_alert: newValue })
-        .eq("awb", awbNumber);
+      const { data: response, error } = await supabase.functions.invoke("mariadb-proxy", {
+        body: { action: "update_dhl_awb_tracking", awbNumber, updates: { email_alert: newValue } },
+      });
 
-      if (error) {
-        console.error("Error updating email_alert:", error);
+      if (error || !response?.success) {
+        console.error("Error updating email_alert:", error || response?.error);
         toast({
           title: "Erro ao atualizar email_alert",
           description: "Não foi possível atualizar o status de email para esta AWB.",
@@ -966,13 +990,12 @@ const Index = () => {
     if (!confirmed) return;
 
     try {
-      const { error } = await db
-        .from("dhl_awb_tracking")
-        .update({ whatsapp_alert: newValue })
-        .eq("awb", awbNumber);
+      const { data: response, error } = await supabase.functions.invoke("mariadb-proxy", {
+        body: { action: "update_dhl_awb_tracking", awbNumber, updates: { whatsapp_alert: newValue } },
+      });
 
-      if (error) {
-        console.error("Error updating whatsapp_alert:", error);
+      if (error || !response?.success) {
+        console.error("Error updating whatsapp_alert:", error || response?.error);
         toast({
           title: "Erro ao atualizar whatsapp_alert",
           description: "Não foi possível atualizar o status de WhatsApp para esta AWB.",
@@ -1013,13 +1036,12 @@ const Index = () => {
     try {
       const filteredAwbNumbers = filteredAwbs.map((awb) => awb.awb).filter(Boolean) as string[];
 
-      const { error } = await db
-        .from("dhl_awb_tracking")
-        .update({ email_alert: newValue })
-        .in("awb", filteredAwbNumbers);
+      const { data: response, error } = await supabase.functions.invoke("mariadb-proxy", {
+        body: { action: "bulk_update_dhl_awb_tracking", awbNumbers: filteredAwbNumbers, updates: { email_alert: newValue } },
+      });
 
-      if (error) {
-        console.error("Error in bulk email update:", error);
+      if (error || !response?.success) {
+        console.error("Error in bulk email update:", error || response?.error);
         toast({
           title: "Erro ao atualizar em massa",
           description: "Não foi possível atualizar o status de email para as AWBs filtradas.",
@@ -1062,13 +1084,12 @@ const Index = () => {
     try {
       const filteredAwbNumbers = filteredAwbs.map((awb) => awb.awb).filter(Boolean) as string[];
 
-      const { error } = await db
-        .from("dhl_awb_tracking")
-        .update({ whatsapp_alert: newValue })
-        .in("awb", filteredAwbNumbers);
+      const { data: response, error } = await supabase.functions.invoke("mariadb-proxy", {
+        body: { action: "bulk_update_dhl_awb_tracking", awbNumbers: filteredAwbNumbers, updates: { whatsapp_alert: newValue } },
+      });
 
-      if (error) {
-        console.error("Error in bulk WhatsApp update:", error);
+      if (error || !response?.success) {
+        console.error("Error in bulk WhatsApp update:", error || response?.error);
         toast({
           title: "Erro ao atualizar em massa",
           description: "Não foi possível atualizar o status de WhatsApp para as AWBs filtradas.",
@@ -1237,17 +1258,15 @@ const Index = () => {
 
     try {
       setIsUpdatingAwb(awbNumber);
-      const { error } = await db
-        .from("dhl_awb_tracking")
-        .update({ notes: trimmedRemark })
-        .eq("awb", awbNumber);
+      const { data: response, error } = await supabase.functions.invoke("mariadb-proxy", {
+        body: { action: "update_dhl_awb_tracking", awbNumber, updates: { notes: trimmedRemark } },
+      });
 
-      if (error) {
-        throw error;
+      if (error || !response?.success) {
+        throw new Error(error?.message || response?.error || "Erro ao salvar");
       }
 
       handleRemarkChange(awbNumber, trimmedRemark);
-
       setRemarkModalOpen(false);
 
       toast({
@@ -1258,9 +1277,7 @@ const Index = () => {
       console.error("Erro ao salvar observação:", error);
       toast({
         title: "Erro ao salvar observação",
-        description:
-          error.message ||
-          "Não foi possível salvar a observação. Tente novamente.",
+        description: error.message || "Não foi possível salvar a observação. Tente novamente.",
         variant: "destructive",
       });
     } finally {
@@ -1272,19 +1289,12 @@ const Index = () => {
     try {
       setIsUpdatingAwb(awbNumber);
 
-      const tableName =
-        action === "add"
-          ? "udlog_af_attention_list"
-          : "udlog_af_attention_list_archive";
-
       if (action === "add") {
-        const existing = await db
-          .from("udlog_af_attention_list")
-          .select("id")
-          .eq("awb", awbNumber)
-          .maybeSingle();
+        const { data: checkResponse } = await supabase.functions.invoke("mariadb-proxy", {
+          body: { action: "check_attention_list", awbNumber },
+        });
 
-        if (existing.data) {
+        if (checkResponse?.exists) {
           toast({
             title: "Já na atenção",
             description: `A AWB ${awbNumber} já está na lista de atenção.`,
@@ -1292,58 +1302,38 @@ const Index = () => {
           setIsUpdatingAwb(null);
           return;
         }
-      }
 
-      if (action === "remove") {
-        const historyInsert = await db
-          .from("udlog_af_attention_list_archive")
-          .insert({
-            awb: awbNumber,
-            removed_at: new Date().toISOString(),
-          });
-
-        if (historyInsert.error) {
-          console.error("Erro ao arquivar atenção:", historyInsert.error);
-          throw historyInsert.error;
-        }
-
-        const { error } = await db
-          .from("udlog_af_attention_list")
-          .delete()
-          .eq("awb", awbNumber);
-
-        if (error) {
-          console.error("Erro ao remover da lista de atenção:", error);
-          throw error;
-        }
-
-        toast({
-          title: "Removida da lista de atenção",
-          description: `A AWB ${awbNumber} foi removida da lista de atenção e arquivada.`,
-        });
-      } else {
-        const { error } = await db.from(tableName).insert({
-          awb: awbNumber,
-          created_at: new Date().toISOString(),
+        const { data: response, error } = await supabase.functions.invoke("mariadb-proxy", {
+          body: { action: "add_to_attention_list", awbNumber },
         });
 
-        if (error) {
-          console.error("Erro ao adicionar à lista de atenção:", error);
-          throw error;
+        if (error || !response?.success) {
+          throw new Error(error?.message || response?.error || "Erro ao adicionar");
         }
 
         toast({
           title: "Adicionada à lista de atenção",
           description: `A AWB ${awbNumber} foi adicionada à lista de atenção.`,
         });
+      } else {
+        const { data: response, error } = await supabase.functions.invoke("mariadb-proxy", {
+          body: { action: "remove_from_attention_list", awbNumber },
+        });
+
+        if (error || !response?.success) {
+          throw new Error(error?.message || response?.error || "Erro ao remover");
+        }
+
+        toast({
+          title: "Removida da lista de atenção",
+          description: `A AWB ${awbNumber} foi removida da lista de atenção e arquivada.`,
+        });
       }
     } catch (error: any) {
       console.error("Erro ao gerenciar lista de atenção:", error);
       toast({
         title: "Erro ao gerenciar lista de atenção",
-        description:
-          error.message ||
-          "Não foi possível atualizar a lista de atenção. Tente novamente.",
+        description: error.message || "Não foi possível atualizar a lista de atenção. Tente novamente.",
         variant: "destructive",
       });
     } finally {
@@ -1361,13 +1351,12 @@ const Index = () => {
     if (!confirmed) return;
 
     try {
-      const { error } = await db
-        .from("dhl_awb_tracking")
-        .update({ bug_alert: newValue })
-        .eq("awb", awbNumber);
+      const { data: response, error } = await supabase.functions.invoke("mariadb-proxy", {
+        body: { action: "update_dhl_awb_tracking", awbNumber, updates: { bug_alert: newValue } },
+      });
 
-      if (error) {
-        console.error("Error updating bug_alert:", error);
+      if (error || !response?.success) {
+        console.error("Error updating bug_alert:", error || response?.error);
         toast({
           title: "Erro ao atualizar BUG ALERT",
           description: "Não foi possível atualizar o status de BUG ALERT para esta AWB.",
@@ -1414,13 +1403,12 @@ const Index = () => {
     try {
       const filteredAwbNumbers = filteredAwbs.map((awb) => awb.awb).filter(Boolean) as string[];
 
-      const { error } = await db
-        .from("dhl_awb_tracking")
-        .update({ bug_alert: newValue })
-        .in("awb", filteredAwbNumbers);
+      const { data: response, error } = await supabase.functions.invoke("mariadb-proxy", {
+        body: { action: "bulk_update_dhl_awb_tracking", awbNumbers: filteredAwbNumbers, updates: { bug_alert: newValue } },
+      });
 
-      if (error) {
-        console.error("Error in bulk bug_alert update:", error);
+      if (error || !response?.success) {
+        console.error("Error in bulk bug_alert update:", error || response?.error);
         toast({
           title: "Erro ao atualizar BUG ALERT em massa",
           description: "Não foi possível atualizar o BUG ALERT para as AWBs filtradas.",
