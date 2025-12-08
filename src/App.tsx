@@ -11,6 +11,8 @@ import CheckAwb from "./pages/CheckAwb";
 import Logs from "./pages/Logs";
 import Index from "./pages/Index";
 import SeaAnalysis from "./pages/SeaAnalysis";
+import CadastroHbl from "./pages/CadastroHbl";
+import CadastroManifest from "./pages/CadastroManifest";
 import Auth from "./pages/Auth";
 import NotFound from "./pages/NotFound";
 
@@ -33,6 +35,8 @@ const App = () => (
           <Route path="/admin/logs" element={<Logs />} />
           <Route path="/air/check" element={<CheckAwb />} />
           <Route path="/sea/analysis" element={<SeaAnalysis />} />
+          <Route path="/sea/cadastro-hbl" element={<CadastroHbl />} />
+          <Route path="/sea/cadastro-manifest" element={<CadastroManifest />} />
           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
           <Route path="*" element={<NotFound />} />
         </Routes>
