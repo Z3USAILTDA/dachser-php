@@ -1446,3 +1446,560 @@ const Index = () => {
       });
     }
   };
+
+  const handleSendBulkEmailNotification = async () => {
+    const filteredAwbNumbers = filteredAwbs
+      .filter((awb) => awb.email_alert)
+      .map((awb) => awb.awb)
+      .filter(Boolean) as string[];
+
+    if (filteredAwbNumbers.length === 0) {
+      toast({
+        title: "Nenhuma AWB com email ativo",
+        description: "Não há AWBs com envio de email ativado nos filtros atuais.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const confirmed = window.confirm(
+      `Você está prestes a enviar notificações de email para ${filteredAwbNumbers.length} AWBs. Deseja continuar?`
+    );
+
+    if (!confirmed) return;
+
+    try {
+      logToConsole("Iniciando envio em massa de notificações por email...");
+
+      const { data, error } = await supabase.functions.invoke(
+        "send-bulk-email-notification",
+        {
+          body: {
+            awbs: filteredAwbNumbers,
+          },
+        }
+      );
+
+      if (error) {
+        console.error("Erro ao enviar notificações em massa:", error);
+        logToConsole(`Erro ao enviar notificações em massa: ${error.message}`);
+        throw error;
+      }
+
+      logToConsole(
+        `Resposta da função send-bulk-email-notification: ${JSON.stringify(
+          data
+        )}`
+      );
+
+      const message =
+        data?.message ||
+        `Notificações de email enviadas para ${filteredAwbNumbers.length} AWBs.`;
+
+      toast({
+        title: "Notificações enviadas",
+        description: message,
+      });
+    } catch (error: any) {
+      console.error("Erro ao enviar notificações em massa:", error);
+      toast({
+        title: "Erro ao enviar notificações",
+        description: error.message || "Verifique os logs para mais detalhes.",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleSendManualEmailNotification = async (
+    awbNumber: string,
+    customEmail?: string
+  ) => {
+    if (!awbNumber) {
+      toast({
+        title: "AWB inválida",
+        description: "Por favor, selecione uma AWB válida para enviar a notificação.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const selectedAwbData = awbs.find(
+      (awb) => awb.awb?.replace(/\D/g, "") === awbNumber.replace(/\D/g, "")
+    );
+
+    if (!selectedAwbData) {
+      toast({
+        title: "AWB não encontrada",
+        description: "Não foi possível encontrar os dados da AWB selecionada.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const recipientEmail =
+      customEmail ||
+      selectedAwbData.customer_email ||
+      selectedAwbData.consignee_email;
+
+    if (!recipientEmail) {
+      toast({
+        title: "Email não configurado",
+        description: "Não há email configurado para essa AWB ou cliente.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    try {
+      logToConsole(`Iniciando envio de notificação manual para AWB ${awbNumber}`);
+
+      const { data, error } = await supabase.functions.invoke(
+        "send-manual-email-notification",
+        {
+          body: {
+            awb: awbNumber,
+            to: recipientEmail,
+          },
+        }
+      );
+
+      if (error) {
+        console.error("Erro ao enviar notificação manual:", error);
+        logToConsole(`Erro ao enviar notificação manual: ${error.message}`);
+        throw error;
+      }
+
+      logToConsole(
+        `Resposta da função send-manual-email-notification: ${JSON.stringify(
+          data
+        )}`
+      );
+
+      const message =
+        data?.message ||
+        `Notificação enviada para AWB ${awbNumber} (email: ${recipientEmail})`;
+
+      toast({
+        title: "Notificação enviada",
+        description: message,
+      });
+    } catch (error: any) {
+      console.error("Erro ao enviar notificação manual:", error);
+      toast({
+        title: "Erro ao enviar notificação",
+        description: error.message || "Verifique os logs para mais detalhes.",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleSendManualTrackingNotification = async (
+    awbNumber: string,
+    customConsignee?: string
+  ) => {
+    if (!awbNumber) {
+      toast({
+        title: "AWB inválida",
+        description: "Por favor, selecione uma AWB válida para enviar a notificação.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const selectedAwbData = awbs.find(
+      (awb) => awb.awb?.replace(/\D/g, "") === awbNumber.replace(/\D/g, "")
+    );
+
+    if (!selectedAwbData) {
+      toast({
+        title: "AWB não encontrada",
+        description: "Não foi possível encontrar os dados da AWB selecionada.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const consigneeName = customConsignee || selectedAwbData.consignee;
+
+    if (!consigneeName) {
+      toast({
+        title: "Consignee não informado",
+        description: "Não há consignee configurado para essa AWB.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    try {
+      logToConsole(`Iniciando envio de notificação manual de rastreio para AWB ${awbNumber}`);
+
+      const { data, error } = await supabase.functions.invoke(
+        "send-manual-tracking-notification",
+        {
+          body: {
+            awb: awbNumber,
+            consignee: consigneeName,
+          },
+        }
+      );
+
+      if (error) {
+        console.error("Erro ao enviar notificação manual de rastreio:", error);
+        logToConsole(
+          `Erro ao enviar notificação manual de rastreio: ${error.message}`
+        );
+        throw error;
+      }
+
+      logToConsole(
+        `Resposta da função send-manual-tracking-notification: ${JSON.stringify(
+          data
+        )}`
+      );
+
+      const message =
+        data?.message ||
+        `Notificação de rastreio enviada para AWB ${awbNumber} (consignee: ${consigneeName})`;
+
+      toast({
+        title: "Notificação de rastreio enviada",
+        description: message,
+      });
+    } catch (error: any) {
+      console.error("Erro ao enviar notificação manual de rastreio:", error);
+      toast({
+        title: "Erro ao enviar notificação de rastreio",
+        description: error.message || "Verifique os logs para mais detalhes.",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleSendManualTrackingNotificationWithCustomerEmail = async (
+    awbNumber: string,
+    customerEmail: string
+  ) => {
+    if (!awbNumber || !customerEmail) {
+      toast({
+        title: "Dados inválidos",
+        description: "AWB e email do cliente são obrigatórios.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    try {
+      logToConsole(
+        `Iniciando envio de notificação manual de rastreio para AWB ${awbNumber} com email do cliente ${customerEmail}`
+      );
+
+      const { data, error } = await supabase.functions.invoke(
+        "send-manual-tracking-notification",
+        {
+          body: {
+            awb: awbNumber,
+            customer_email: customerEmail,
+          },
+        }
+      );
+
+      if (error) {
+        console.error(
+          "Erro ao enviar notificação manual de rastreio com email do cliente:",
+          error
+        );
+        logToConsole(
+          `Erro ao enviar notificação manual de rastreio com email do cliente: ${error.message}`
+        );
+        throw error;
+      }
+
+      logToConsole(
+        `Resposta da função send-manual-tracking-notification (email cliente): ${JSON.stringify(
+          data
+        )}`
+      );
+
+      const message =
+        data?.message ||
+        `Notificação de rastreio enviada para AWB ${awbNumber} (incluindo cliente: ${customerEmail})`;
+
+      toast({
+        title: "Notificação de rastreio enviada",
+        description: message,
+      });
+    } catch (error: any) {
+      console.error(
+        "Erro ao enviar notificação manual de rastreio com email do cliente:",
+        error
+      );
+      toast({
+        title: "Erro ao enviar notificação de rastreio",
+        description: error.message || "Verifique os logs para mais detalhes.",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleSendManualTrackingNotificationWithCustomerName = async (
+    awbNumber: string,
+    customerName: string
+  ) => {
+    if (!awbNumber || !customerName) {
+      toast({
+        title: "Dados inválidos",
+        description: "AWB e nome do cliente são obrigatórios.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    try {
+      logToConsole(
+        `Iniciando envio de notificação manual de rastreio para AWB ${awbNumber} com nome do cliente ${customerName}`
+      );
+
+      const { data, error } = await supabase.functions.invoke(
+        "send-manual-tracking-notification",
+        {
+          body: {
+            awb: awbNumber,
+            customer_name: customerName,
+          },
+        }
+      );
+
+      if (error) {
+        console.error(
+          "Erro ao enviar notificação manual de rastreio com nome do cliente:",
+          error
+        );
+        logToConsole(
+          `Erro ao enviar notificação manual de rastreio com nome do cliente: ${error.message}`
+        );
+        throw error;
+      }
+
+      logToConsole(
+        `Resposta da função send-manual-tracking-notification (nome cliente): ${JSON.stringify(
+          data
+        )}`
+      );
+
+      const message =
+        data?.message ||
+        `Notificação de rastreio enviada para AWB ${awbNumber} (incluindo cliente: ${customerName})`;
+
+      toast({
+        title: "Notificação de rastreio enviada",
+        description: message,
+      });
+    } catch (error: any) {
+      console.error(
+        "Erro ao enviar notificação manual de rastreio com nome do cliente:",
+        error
+      );
+      toast({
+        title: "Erro ao enviar notificação de rastreio",
+        description: error.message || "Verifique os logs para mais detalhes.",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleSendManualTrackingNotificationWithCustomerEmailAndName = async (
+    awbNumber: string,
+    customerEmail: string,
+    customerName: string
+  ) => {
+    if (!awbNumber || !customerEmail || !customerName) {
+      toast({
+        title: "Dados inválidos",
+        description: "AWB, email e nome do cliente são obrigatórios.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    try {
+      logToConsole(
+        `Iniciando envio de notificação manual de rastreio para AWB ${awbNumber} com email e nome do cliente ${customerEmail} / ${customerName}`
+      );
+
+      const { data, error } = await supabase.functions.invoke(
+        "send-manual-tracking-notification",
+        {
+          body: {
+            awb: awbNumber,
+            customer_email: customerEmail,
+            customer_name: customerName,
+          },
+        }
+      );
+
+      if (error) {
+        console.error(
+          "Erro ao enviar notificação manual de rastreio com email e nome do cliente:",
+          error
+        );
+        logToConsole(
+          `Erro ao enviar notificação manual de rastreio com email e nome do cliente: ${error.message}`
+        );
+        throw error;
+      }
+
+      logToConsole(
+        `Resposta da função send-manual-tracking-notification (email e nome cliente): ${JSON.stringify(
+          data
+        )}`
+      );
+
+      const message =
+        data?.message ||
+        `Notificação de rastreio enviada para AWB ${awbNumber} (incluindo cliente: ${customerEmail} / ${customerName})`;
+
+      toast({
+        title: "Notificação de rastreio enviada",
+        description: message,
+      });
+    } catch (error: any) {
+      console.error(
+        "Erro ao enviar notificação manual de rastreio com email e nome do cliente:",
+        error
+      );
+      toast({
+        title: "Erro ao enviar notificação de rastreio",
+        description: error.message || "Verifique os logs para mais detalhes.",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleSendManualTrackingNotificationWithAllOptions = async (
+    awbNumber: string,
+    customerEmail?: string,
+    customerName?: string,
+    consigneeName?: string
+  ) => {
+    if (!awbNumber) {
+      toast({
+        title: "AWB inválida",
+        description: "AWB é obrigatório.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (!customerEmail && !customerName && !consigneeName) {
+      toast({
+        title: "Dados insuficientes",
+        description:
+          "Informe pelo menos um dado: email do cliente, nome do cliente ou consignee.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    try {
+      logToConsole(
+        `Iniciando envio de notificação manual de rastreio (all options) para AWB ${awbNumber}`
+      );
+
+      const payload: any = { awb: awbNumber };
+      if (customerEmail) payload.customer_email = customerEmail;
+      if (customerName) payload.customer_name = customerName;
+      if (consigneeName) payload.consignee = consigneeName;
+
+      const { data, error } = await supabase.functions.invoke(
+        "send-manual-tracking-notification",
+        {
+          body: payload,
+        }
+      );
+
+      if (error) {
+        console.error(
+          "Erro ao enviar notificação manual de rastreio (all options):",
+          error
+        );
+        logToConsole(
+          `Erro ao enviar notificação manual de rastreio (all options): ${error.message}`
+        );
+        throw error;
+      }
+
+      logToConsole(
+        `Resposta da função send-manual-tracking-notification (all options): ${JSON.stringify(
+          data
+        )}`
+      );
+
+      const message =
+        data?.message ||
+        `Notificação de rastreio enviada para AWB ${awbNumber} (dados usados: ${
+          customerEmail ? `email: ${customerEmail}; ` : ""
+        }${customerName ? `nome: ${customerName}; ` : ""}${
+          consigneeName ? `consignee: ${consigneeName}` : ""
+        })`;
+
+      toast({
+        title: "Notificação de rastreio enviada",
+        description: message,
+      });
+    } catch (error: any) {
+      console.error(
+        "Erro ao enviar notificação manual de rastreio (all options):",
+        error
+      );
+      toast({
+        title: "Erro ao enviar notificação de rastreio",
+        description: error.message || "Verifique os logs para mais detalhes.",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const triggerTrackingUpdate = async (awbNumber: string) => {
+    if (!awbNumber) {
+      toast({
+        title: "AWB inválida",
+        description: "Por favor, selecione uma AWB válida.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    try {
+      logToConsole(`Iniciando atualização de rastreio para AWB ${awbNumber}`);
+
+      const response = await fetch(
+        `https://udlog.z3us.ai/manual-trigger-dhl-tracking?awb=${awbNumber}`,
+        {
+          method: "GET",
+        }
+      );
+
+      if (!response.ok) {
+        throw new Error("Falha ao iniciar atualização de rastreio");
+      }
+
+      const result = await response.json();
+      logToConsole(
+        `Resposta da atualização de rastreio: ${JSON.stringify(result)}`
+      );
+
+      toast({
+        title: "Atualização de rastreio iniciada",
+        description: `A atualização do rastreio para AWB ${awbNumber} foi iniciada.`,
+      });
+
+      await fetchDashboardData();
+    } catch (error: any) {
+      console.error("Erro ao atualizar rastreio:", error);
+      toast({
+        title: "Erro ao atualizar rastreio",
+        description: error.message || "Verifique os logs para mais detalhes.",
+        variant: "destructive",
+      });
+    }
+  };
