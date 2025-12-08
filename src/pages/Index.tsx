@@ -287,7 +287,7 @@ const Index = () => {
     setAwbsList(awbs);
   }, []);
 
-  // Check authentication
+  // Check authentication (optional - just get user info if available)
   useEffect(() => {
     const {
       data: { subscription },
@@ -295,24 +295,16 @@ const Index = () => {
       setSession(session);
       setUser(session?.user ?? null);
       setIsLoading(false);
-
-      if (!session) {
-        navigate("/auth");
-      }
     });
 
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
       setUser(session?.user ?? null);
       setIsLoading(false);
-
-      if (!session) {
-        navigate("/auth");
-      }
     });
 
     return () => subscription.unsubscribe();
-  }, [navigate]);
+  }, []);
 
   const handleLogout = async () => {
     await supabase.auth.signOut();
@@ -320,7 +312,6 @@ const Index = () => {
       title: "Logout realizado",
       description: "Até logo!",
     });
-    navigate("/auth");
   };
 
   // Load AWBs from localStorage
