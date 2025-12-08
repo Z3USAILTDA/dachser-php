@@ -12,8 +12,16 @@ import {
   ArrowUpDown,
   AlertTriangle,
   X,
+  ExternalLink,
+  Database,
+  LogOut,
+  Edit2,
+  Check,
 } from "lucide-react";
-import { createClient } from "@/integrations/supabase/client";
+import { supabase } from "@/integrations/supabase/client";
+
+// Type assertion for external tables not in Supabase types
+const db = supabase as any;
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -26,6 +34,8 @@ import {
 } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/components/ui/use-toast";
+import { TableCell } from "@/components/ui/table";
+import { Checkbox } from "@/components/ui/checkbox";
 
 interface DhlAwbTracking {
   id: number;
@@ -162,8 +172,6 @@ const airlineTrackingLinks: Record<string, string> = {
   "125": "https://www.britishairways.com/travel/cargo-tracking/public/en_us?awb=125-${awb}",
   "160": "https://www.klmcargo.com/en/tracking/${awb}",
   "141": "https://www.klmcargo.com/en/tracking/${awb}",
-  "157": "https://www.qrcargo.com/tracking?AWB=157-${awb}",
-  "176": "https://www.lufthansa-cargo.com/tracking/awb?AWB_PREFIX=020&AWB_SUFFIX=${awb}",
   "180": "https://www.emirates.com/ae/english/cargo/tracking/?awb=176-${awb}",
   "186": "https://www.emirates.com/ae/english/cargo/tracking/?awb=176-${awb}",
   "205": "https://www.cma-cgm.com/ebusiness/tracking/awb/${awb}",
@@ -203,7 +211,6 @@ const airlineTrackingLinks: Record<string, string> = {
   "601": "https://www.emirates.com/ae/english/cargo/tracking/?awb=176-${awb}",
   "603": "https://www.cma-cgm.com/ebusiness/tracking/awb/${awb}",
   "615": "https://www.klmcargo.com/en/tracking/${awb}",
-  "618": "https://www.qrcargo.com/tracking?AWB=157-${awb}",
   "623": "https://www.lufthansa-cargo.com/tracking/awb?AWB_PREFIX=020&AWB_SUFFIX=${awb}",
   "625": "https://www.emirates.com/ae/english/cargo/tracking/?awb=176-${awb}",
   "631": "https://www.cma-cgm.com/ebusiness/tracking/awb/${awb}",
@@ -222,7 +229,6 @@ const airlineTrackingLinks: Record<string, string> = {
   "680": "https://www.lufthansa-cargo.com/tracking/awb?AWB_PREFIX=020&AWB_SUFFIX=${awb}",
   "686": "https://www.emirates.com/ae/english/cargo/tracking/?awb=176-${awb}",
   "689": "https://www.cma-cgm.com/ebusiness/tracking/awb/${awb}",
-  "695": "https://www.klmcargo.com/en/tracking/${awb}",
   "700": "https://www.qrcargo.com/tracking?AWB=157-${awb}",
   "705": "https://www.lufthansa-cargo.com/tracking/awb?AWB_PREFIX=020&AWB_SUFFIX=${awb}",
   "710": "https://www.emirates.com/ae/english/cargo/tracking/?awb=176-${awb}",
@@ -426,7 +432,7 @@ const airCargoSearchLink = (awbNumber: string): string => {
   return `https://aircargotrack.com/search/air-tracking/${prefix}-${awb}`;
 };
 
-const supabase = createClient();
+// supabase is imported from "@/integrations/supabase/client"
 
 const Index = () => {
   const [stats, setStats] = useState<DashboardStats>({
@@ -2361,3 +2367,725 @@ const Index = () => {
                         Último Evento
                       </th>
                     )}
+                    {columnVisibility.last_update && (
+                      <th className="px-3 py-3 text-left text-foreground uppercase text-xs font-bold">
+                        Última Atualização
+                      </th>
+                    )}
+                    {columnVisibility.last_checked && (
+                      <th
+                        className="px-3 py-3 text-left text-foreground uppercase text-xs font-bold cursor-pointer select-none hover:bg-muted/50"
+                        onClick={() => handleSort("last_checked" as keyof DhlAwbTracking)}
+                      >
+                        <div className="flex items-center gap-1">
+                          Última Verificação
+                          <ArrowUpDown className="w-3 h-3 text-zinc-500" />
+                        </div>
+                      </th>
+                    )}
+                    {columnVisibility.analyst && (
+                      <th className="px-3 py-3 text-left text-foreground uppercase text-xs font-bold">
+                        Nome Analista
+                      </th>
+                    )}
+                    {columnVisibility.terminal && (
+                      <th className="px-3 py-3 text-left text-foreground uppercase text-xs font-bold">
+                        Terminal
+                      </th>
+                    )}
+                    {columnVisibility.whatsapp_alert && (
+                      <th className="px-3 py-3 text-center text-foreground uppercase text-xs font-bold">
+                        WhatsApp
+                      </th>
+                    )}
+                    {columnVisibility.email_alert && (
+                      <th className="px-3 py-3 text-center text-foreground uppercase text-xs font-bold">
+                        E-mail
+                      </th>
+                    )}
+                    {columnVisibility.delivered_at && (
+                      <th className="px-3 py-3 text-left text-foreground uppercase text-xs font-bold">
+                        Data Entrega
+                      </th>
+                    )}
+                    {columnVisibility.estimated_delivery && (
+                      <th className="px-3 py-3 text-left text-foreground uppercase text-xs font-bold">
+                        Previsão Entrega
+                      </th>
+                    )}
+                    {columnVisibility.days_in_transit && (
+                      <th className="px-3 py-3 text-right text-foreground uppercase text-xs font-bold">
+                        Dias
+                      </th>
+                    )}
+                    {columnVisibility.nfd_counter && (
+                      <th className="px-3 py-3 text-right text-foreground uppercase text-xs font-bold">
+                        NFDs
+                      </th>
+                    )}
+                    <th className="px-3 py-3 text-right text-foreground uppercase text-xs font-bold">
+                      Ações
+                    </th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-zinc-800/70">
+                  {paginatedAwbs.length === 0 && (
+                    <tr>
+                      <td
+                        colSpan={16}
+                        className="px-3 py-6 text-center text-xs text-zinc-500"
+                      >
+                        Nenhuma AWB encontrada com os filtros atuais.
+                      </td>
+                    </tr>
+                  )}
+
+                  {paginatedAwbs.map((awb) => {
+                    const isSelected = selectedAwb?.awb === awb.awb;
+                    const bugColor = getBugAlertColor(awb, isSelected);
+
+                    return (
+                      <tr
+                        key={awb.id}
+                        className={`text-xs cursor-pointer hover:bg-zinc-900/80 ${
+                          isSelected ? "bg-zinc-900/70" : ""
+                        }`}
+                        onClick={() => handleAwbClick(awb)}
+                      >
+                        {columnVisibility.awb && (
+                          <TableCell className="px-3 py-2 font-mono whitespace-nowrap">
+                            <button
+                              type="button"
+                              className="text-blue-300 hover:underline"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                openLogModal(awb.awb || "");
+                              }}
+                            >
+                              {formatAwbForDisplay(awb.awb || "")}
+                            </button>
+                          </TableCell>
+                        )}
+
+                        {columnVisibility.hawb && (
+                          <TableCell className="px-3 py-2 truncate max-w-[160px]">
+                            {awb.hawb || "-"}
+                          </TableCell>
+                        )}
+
+                        {columnVisibility.consignee && (
+                          <TableCell className="px-3 py-2 truncate max-w-[220px]">
+                            {awb.consignee || "-"}
+                          </TableCell>
+                        )}
+
+                        {columnVisibility.route && (
+                          <TableCell className="px-3 py-2 whitespace-nowrap">
+                            {awb.route || "-"}
+                          </TableCell>
+                        )}
+
+                        {columnVisibility.status && (
+                          <TableCell className="px-3 py-2">
+                            <span
+                              className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] ${getStatusBadgeColor(
+                                awb
+                              )}`}
+                            >
+                              {getStatusLabel(awb)}
+                            </span>
+                          </TableCell>
+                        )}
+
+                        {columnVisibility.last_event && (
+                          <TableCell
+                            className={`px-3 py-2 font-mono text-xs ${getStatusTextColor(
+                              awb.last_event || null
+                            )}`}
+                          >
+                            {awb.last_event || "-"}
+                          </TableCell>
+                        )}
+
+                        {columnVisibility.last_update && (
+                          <TableCell className="px-3 py-2">
+                            {formatDateTime(awb.last_update || null)}
+                          </TableCell>
+                        )}
+
+                        {columnVisibility.last_checked && (
+                          <TableCell className="px-3 py-2">
+                            {formatDateTime(awb.last_checked || null)}
+                          </TableCell>
+                        )}
+
+                        {columnVisibility.analyst && (
+                          <TableCell className="px-3 py-2 whitespace-nowrap">
+                            {awb.analyst || "-"}
+                          </TableCell>
+                        )}
+
+                        {columnVisibility.terminal && (
+                          <TableCell className="px-3 py-2 whitespace-nowrap">
+                            {awb.terminal || "-"}
+                          </TableCell>
+                        )}
+
+                        {columnVisibility.whatsapp_alert && (
+                          <TableCell className="px-3 py-2 text-center">
+                            <Checkbox
+                              checked={!!awb.whatsapp_alert}
+                              onCheckedChange={(checked) =>
+                                handleWhatsAppToggle(awb.awb || "", !!checked)
+                              }
+                              onClick={(e) => e.stopPropagation()}
+                              className="border-zinc-600 data-[state=checked]:bg-emerald-500 data-[state=checked]:border-emerald-400"
+                            />
+                          </TableCell>
+                        )}
+
+                        {columnVisibility.email_alert && (
+                          <TableCell className="px-3 py-2 text-center">
+                            <Checkbox
+                              checked={!!awb.email_alert}
+                              onCheckedChange={(checked) =>
+                                handleEmailToggle(awb.awb || "", !!checked)
+                              }
+                              onClick={(e) => e.stopPropagation()}
+                              className="border-zinc-600 data-[state=checked]:bg-amber-500 data-[state=checked]:border-amber-400"
+                            />
+                          </TableCell>
+                        )}
+
+                        {columnVisibility.delivered_at && (
+                          <TableCell className="px-3 py-2">
+                            {formatDate(awb.delivered_at || null)}
+                          </TableCell>
+                        )}
+
+                        {columnVisibility.estimated_delivery && (
+                          <TableCell className="px-3 py-2">
+                            {formatDate(awb.estimated_delivery || null)}
+                          </TableCell>
+                        )}
+
+                        {columnVisibility.days_in_transit && (
+                          <TableCell className="px-3 py-2 text-right tabular-nums">
+                            {awb.days_in_transit ?? "-"}
+                          </TableCell>
+                        )}
+
+                        {columnVisibility.nfd_counter && (
+                          <TableCell className="px-3 py-2 text-right tabular-nums">
+                            {awb.nfd_counter ?? "-"}
+                          </TableCell>
+                        )}
+
+                        <TableCell className="px-3 py-2 text-right">
+                          <div className="flex items-center justify-end gap-2">
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-7 w-7 text-zinc-400 hover:text-zinc-100 hover:bg-zinc-900"
+                              title="Abrir rastreio externo"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                const link = getFormattedTrackingLink(
+                                  awb.awb || ""
+                                );
+                                if (link) window.open(link, "_blank");
+                              }}
+                            >
+                              <ExternalLink className="w-3 h-3" />
+                            </Button>
+
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-7 w-7 text-zinc-400 hover:text-zinc-100 hover:bg-zinc-900"
+                              title="Ver logs"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                openLogModal(awb.awb || "");
+                              }}
+                            >
+                              <Database className="w-3 h-3" />
+                            </Button>
+
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-7 w-7 text-zinc-400 hover:text-zinc-100 hover:bg-zinc-900"
+                              title="Enviar e-mail"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                openEmailModal(awb);
+                              }}
+                            >
+                              <Mail className="w-3 h-3" />
+                            </Button>
+
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-7 w-7 text-zinc-400 hover:text-zinc-100 hover:bg-zinc-900"
+                              title="Histórico de e-mails"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                openEmailHistoryModal(awb.awb || "");
+                              }}
+                            >
+                              <LogOut className="w-3 h-3 rotate-180" />
+                            </Button>
+
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className={`h-7 w-7 border ${bugColor} hover:opacity-80`}
+                              title="BUG ALERT / Lista de atenção"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleBugAlertToggle(awb.awb || "", awb.bug_alert);
+                              }}
+                            >
+                              <AlertTriangle className="w-3 h-3" />
+                            </Button>
+                          </div>
+                        </TableCell>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          {/* Painel lateral de detalhes */}
+          <div className="bg-zinc-950/80 border border-zinc-800/80 rounded-2xl p-4 flex flex-col gap-4 shadow-[0_18px_60px_rgba(0,0,0,0.72)]">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                {getAlertIcon(selectedAwb)}
+                <div>
+                  <p className="text-[10px] uppercase tracking-[0.25em] text-zinc-500">
+                    Detalhes do Alerta
+                  </p>
+                  <p className="text-sm font-medium text-zinc-100">
+                    {selectedAwb
+                      ? formatAwbForDisplay(selectedAwb.awb || "")
+                      : "Nenhuma AWB selecionada"}
+                  </p>
+                </div>
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-8 rounded-full border-zinc-700 text-[11px] text-zinc-200 bg-zinc-950 hover:bg-zinc-900"
+                onClick={() => {
+                  if (selectedAwb?.awb) {
+                    triggerTrackingUpdate(selectedAwb.awb);
+                  }
+                }}
+                disabled={!selectedAwb}
+              >
+                <RefreshCw className="w-3 h-3 mr-1" />
+                Reprocessar
+              </Button>
+            </div>
+
+            <div className="text-xs space-y-1 text-zinc-300">
+              <p>
+                <span className="text-zinc-500">Cliente: </span>
+                {selectedAwb?.consignee || "-"}
+              </p>
+              <p>
+                <span className="text-zinc-500">Rota: </span>
+                {selectedAwb?.route || "-"}
+              </p>
+              <p>
+                <span className="text-zinc-500">Status: </span>
+                <span className={getStatusTextColor(selectedAwb?.status || null)}>
+                  {selectedAwb?.status || "-"}
+                </span>
+              </p>
+              <p>
+                <span className="text-zinc-500">Último evento: </span>
+                {selectedAwb?.last_event || "-"}
+              </p>
+              <p>
+                <span className="text-zinc-500">Dias em trânsito: </span>
+                {selectedAwb?.days_in_transit ?? "-"}
+              </p>
+              <p>
+                <span className="text-zinc-500">Qtd NFDs: </span>
+                {selectedAwb?.nfd_counter ?? "-"}
+              </p>
+            </div>
+
+            <div className={explanationAreaClasses}>
+              <p className="text-[11px] font-semibold mb-1 text-amber-300 flex items-center gap-1">
+                <AlertTriangle className="w-3 h-3" />
+                Resumo do alerta
+              </p>
+              <p className="text-[11px] leading-relaxed text-zinc-100">
+                {alertSummary}
+              </p>
+              {bugAlertExplication && (
+                <p className="text-[10px] text-zinc-300 mt-2">
+                  {bugAlertExplication}
+                </p>
+              )}
+            </div>
+
+            <div className="mt-auto space-y-2">
+              <Button
+                variant="outline"
+                size="sm"
+                className="w-full justify-start rounded-full border-zinc-700 text-[11px] text-zinc-200 bg-zinc-950 hover:bg-zinc-900"
+                disabled={!selectedAwb}
+                onClick={() => {
+                  if (selectedAwb) openRemarkModal(selectedAwb);
+                }}
+              >
+                <Edit2 className="w-3 h-3 mr-2" />
+                Adicionar / editar observação
+              </Button>
+
+              <Button
+                variant="outline"
+                size="sm"
+                className="w-full justify-start rounded-full border-emerald-600/70 text-[11px] text-emerald-200 bg-emerald-950/40 hover:bg-emerald-900/60"
+                disabled={!selectedAwb}
+                onClick={() => {
+                  if (selectedAwb) openEmailModal(selectedAwb);
+                }}
+              >
+                <Mail className="w-3 h-3 mr-2" />
+                Enviar atualização por e-mail
+              </Button>
+            </div>
+          </div>
+        </section>
+
+        {/* Modal de LOGS */}
+        {isLogModalOpen && (
+          <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/70">
+            <div className="w-full max-w-3xl bg-zinc-950 border border-zinc-800 rounded-2xl shadow-2xl max-h-[80vh] flex flex-col">
+              <div className="px-4 py-3 border-b border-zinc-800 flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Database className="w-4 h-4 text-zinc-400" />
+                  <div>
+                    <p className="text-sm font-semibold text-zinc-100">
+                      Logs da AWB {selectedAwb?.awb}
+                    </p>
+                    <p className="text-[11px] text-zinc-500">
+                      Eventos mais recentes primeiro
+                    </p>
+                  </div>
+                </div>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-7 w-7 text-zinc-400 hover:text-zinc-100 hover:bg-zinc-900 rounded-full"
+                  onClick={() => setIsLogModalOpen(false)}
+                >
+                  <X className="w-3 h-3" />
+                </Button>
+              </div>
+
+              <div className="flex-1 overflow-auto text-xs">
+                {isLogLoading ? (
+                  <div className="flex items-center justify-center py-6 text-zinc-400">
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    Carregando logs...
+                  </div>
+                ) : logData.length === 0 ? (
+                  <div className="flex items-center justify-center py-6 text-zinc-400">
+                    Nenhum log encontrado para essa AWB.
+                  </div>
+                ) : (
+                  <ul className="divide-y divide-zinc-800">
+                    {logData.map((log) => (
+                      <li key={log.id} className="px-4 py-3">
+                        <div className="flex items-center justify-between mb-1">
+                          <span className="text-[11px] text-zinc-400">
+                            {new Date(log.created_at).toLocaleString("pt-BR")}
+                          </span>
+                          <span className="text-[11px] text-zinc-500">
+                            {log.actor_name || log.mimicked_operator_id || "Sistema"}
+                          </span>
+                        </div>
+                        <p className="text-[11px] text-zinc-200 mb-1">
+                          {log.action || "Ação registrada"}
+                        </p>
+                        {log.new_value && (
+                          <pre className="mt-1 text-[10px] bg-zinc-900 border border-zinc-800 rounded-lg p-2 text-zinc-300 overflow-auto max-h-40">
+                            {JSON.stringify(log.new_value, null, 2)}
+                          </pre>
+                        )}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Modal de E-MAIL */}
+        {isEmailModalOpen && (
+          <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/70">
+            <div className="w-full max-w-xl bg-zinc-950 border border-zinc-800 rounded-2xl shadow-2xl max-h-[80vh] flex flex-col">
+              <div className="px-4 py-3 border-b border-zinc-800 flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Mail className="w-4 h-4 text-zinc-400" />
+                  <div>
+                    <p className="text-sm font-semibold text-zinc-100">
+                      Enviar e-mail – AWB {selectedAwbForEmail}
+                    </p>
+                    <p className="text-[11px] text-zinc-500">
+                      Ajuste o destinatário e o conteúdo antes de enviar.
+                    </p>
+                  </div>
+                </div>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-7 w-7 text-zinc-400 hover:text-zinc-100 hover:bg-zinc-900 rounded-full"
+                  onClick={() => setIsEmailModalOpen(false)}
+                >
+                  <X className="w-3 h-3" />
+                </Button>
+              </div>
+
+              <div className="flex-1 overflow-auto px-4 py-3 space-y-3 text-xs">
+                <div className="space-y-1">
+                  <label className="text-[11px] text-zinc-400">Destinatário</label>
+                  <Input
+                    value={emailRecipient}
+                    onChange={(e) => setEmailRecipient(e.target.value)}
+                    className="bg-zinc-950 border-zinc-800 text-xs"
+                    placeholder="email@cliente.com"
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-[11px] text-zinc-400">Assunto</label>
+                  <Input
+                    value={emailSubject}
+                    onChange={(e) => setEmailSubject(e.target.value)}
+                    className="bg-zinc-950 border-zinc-800 text-xs"
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-[11px] text-zinc-400">Conteúdo</label>
+                  <textarea
+                    value={emailContent}
+                    onChange={(e) => setEmailContent(e.target.value)}
+                    className="w-full h-40 bg-zinc-950 border border-zinc-800 rounded-lg text-xs p-2 resize-none"
+                  />
+                </div>
+              </div>
+
+              <div className="px-4 py-3 border-t border-zinc-800 flex items-center justify-end gap-2">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-7 text-[11px] text-zinc-400 hover:text-zinc-100"
+                  onClick={() => setIsEmailModalOpen(false)}
+                >
+                  Cancelar
+                </Button>
+                <Button
+                  size="sm"
+                  className="h-7 rounded-full bg-emerald-600 hover:bg-emerald-500 text-[11px]"
+                  onClick={handleSendEmail}
+                  disabled={isEmailSending}
+                >
+                  {isEmailSending ? (
+                    <>
+                      <Loader2 className="w-3 h-3 mr-1 animate-spin" />
+                      Enviando...
+                    </>
+                  ) : (
+                    <>
+                      <Check className="w-3 h-3 mr-1" />
+                      Enviar e-mail
+                    </>
+                  )}
+                </Button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Modal de histórico de e-mail */}
+        {isEmailHistoryModalOpen && (
+          <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/70">
+            <div className="w-full max-w-2xl bg-zinc-950 border border-zinc-800 rounded-2xl shadow-2xl max-h-[80vh] flex flex-col">
+              <div className="px-4 py-3 border-b border-zinc-800 flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Mail className="w-4 h-4 text-zinc-400" />
+                  <div>
+                    <p className="text-sm font-semibold text-zinc-100">
+                      Histórico de e-mails – AWB {selectedAwbForEmail}
+                    </p>
+                    <p className="text-[11px] text-zinc-500">
+                      Últimos envios registrados no sistema.
+                    </p>
+                  </div>
+                </div>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-7 w-7 text-zinc-400 hover:text-zinc-100 hover:bg-zinc-900 rounded-full"
+                  onClick={() => setIsEmailHistoryModalOpen(false)}
+                >
+                  <X className="w-3 h-3" />
+                </Button>
+              </div>
+
+              <div className="flex-1 overflow-auto text-xs">
+                {isEmailHistoryLoading ? (
+                  <div className="flex items-center justify-center py-6 text-zinc-400">
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    Carregando histórico...
+                  </div>
+                ) : emailHistory.length === 0 ? (
+                  <div className="flex items-center justify-center py-6 text-zinc-400">
+                    Nenhum registro de e-mail para essa AWB.
+                  </div>
+                ) : (
+                  <ul className="divide-y divide-zinc-800">
+                    {emailHistory.map((email) => (
+                      <li key={email.id} className="px-4 py-3">
+                        <div className="flex items-center justify-between">
+                          <span className="text-[11px] text-zinc-400">
+                            {new Date(email.created_at).toLocaleString("pt-BR")}
+                          </span>
+                          <span className="text-[11px] text-zinc-500">
+                            {email.created_by}
+                          </span>
+                        </div>
+                        <p className="text-[11px] font-semibold text-zinc-100 mt-1">
+                          {email.subject}
+                        </p>
+                        <p className="text-[11px] text-zinc-300 mt-1 line-clamp-3 whitespace-pre-wrap">
+                          {email.content}
+                        </p>
+                        <p className="text-[10px] text-zinc-500 mt-1">
+                          Destinatário: {email.consignee_email || "-"} — Status:{" "}
+                          {email.status}
+                        </p>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Modal de observação */}
+        {remarkModalOpen && (
+          <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/70">
+            <div className="w-full max-w-lg bg-zinc-950 border border-zinc-800 rounded-2xl shadow-2xl max-h-[80vh] flex flex-col">
+              <div className="px-4 py-3 border-b border-zinc-800 flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Edit2 className="w-4 h-4 text-zinc-400" />
+                  <div>
+                    <p className="text-sm font-semibold text-zinc-100">
+                      Observação – AWB {currentRemarkAwb}
+                    </p>
+                    <p className="text-[11px] text-zinc-500">
+                      Registro interno para a equipe de análise.
+                    </p>
+                  </div>
+                </div>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-7 w-7 text-zinc-400 hover:text-zinc-100 hover:bg-zinc-900 rounded-full"
+                  onClick={() => setRemarkModalOpen(false)}
+                >
+                  <X className="w-3 h-3" />
+                </Button>
+              </div>
+
+              <div className="flex-1 overflow-auto px-4 py-3">
+                <textarea
+                  value={currentRemarkText}
+                  onChange={(e) => setCurrentRemarkText(e.target.value)}
+                  className="w-full h-40 bg-zinc-950 border border-zinc-800 rounded-lg text-xs p-2 resize-none text-zinc-100"
+                  placeholder="Digite aqui a observação para essa AWB..."
+                />
+              </div>
+
+              <div className="px-4 py-3 border-t border-zinc-800 flex items-center justify-end gap-2">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-7 text-[11px] text-zinc-400 hover:text-zinc-100"
+                  onClick={() => setRemarkModalOpen(false)}
+                >
+                  Cancelar
+                </Button>
+                <Button
+                  size="sm"
+                  className="h-7 rounded-full bg-amber-600 hover:bg-amber-500 text-[11px]"
+                  onClick={() => {
+                    if (currentRemarkAwb) {
+                      handleRemarkBlur(currentRemarkAwb, currentRemarkText);
+                    }
+                  }}
+                  disabled={!!isUpdatingAwb}
+                >
+                  {isUpdatingAwb ? (
+                    <>
+                      <Loader2 className="w-3 h-3 mr-1 animate-spin" />
+                      Salvando...
+                    </>
+                  ) : (
+                    <>
+                      <Check className="w-3 h-3 mr-1" />
+                      Salvar observação
+                    </>
+                  )}
+                </Button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Console técnico (opcional) */}
+        {consoleLog.length > 0 && (
+          <div className="mt-4 bg-zinc-950 border border-zinc-800 rounded-xl p-3 text-[10px] text-zinc-400 max-h-40 overflow-auto">
+            <div className="flex items-center justify-between mb-1">
+              <div className="flex items-center gap-1">
+                <Database className="w-3 h-3" />
+                <span className="uppercase tracking-[0.25em] text-[9px] text-zinc-500">
+                  Console Técnico
+                </span>
+              </div>
+              <button
+                className="text-[10px] text-muted-foreground hover:text-foreground transition-colors"
+                onClick={() => setConsoleLog([])}
+              >
+                Limpar
+              </button>
+            </div>
+            <ul className="space-y-1">
+              {consoleLog.map((line, index) => (
+                <li key={index} className="whitespace-pre-wrap">
+                  {line}
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
+export default Index;
