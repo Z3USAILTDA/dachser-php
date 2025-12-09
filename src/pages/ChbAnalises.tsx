@@ -320,7 +320,7 @@ export default function ChbAnalises() {
 
               <button onClick={() => navigate("/chb/cadastro-pre-alerta")} className="h-8 rounded-full px-4 flex items-center gap-1.5 bg-[#ffc800] text-black font-semibold text-[0.78rem] shadow-[0_0_22px_rgba(255,200,0,.6)] hover:bg-[#f5b843]">
                 <Upload className="h-4 w-4" />
-                Cadastro de Pré-Alerta
+                Novo Processo
               </button>
             </div>
           </div>
