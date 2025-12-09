@@ -64,7 +64,7 @@ const menuItems: MenuItem[] = [
     label: "FIN",
     subtitle: "Financeiro & Billing",
     children: [
-      { label: "Régua de Cobrança", href: "/fin/billing" },
+      { label: "Régua de Cobrança", href: "/fin/regua" },
       { 
         label: "Voucher", 
         isVoucher: true,
