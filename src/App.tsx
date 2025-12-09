@@ -73,8 +73,8 @@ const App = () => (
           <Route path="/fin/esteira/users" element={<EsteiraUserManagement />} />
           <Route path="/fin/esteira/voucher/:id" element={<EsteiraVoucherDetails />} />
           <Route path="/olimpo" element={<Olimpo />} />
-          <Route path="/chb/conferencia" element={<ConferenciaChb />} />
-          <Route path="/chb/conferencia/:id" element={<ConferenciaChb />} />
+          <Route path="/chb/conferences" element={<ConferenciaChb />} />
+          <Route path="/chb/conferences/:id" element={<ConferenciaChb />} />
           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
           <Route path="*" element={<NotFound />} />
         </Routes>
