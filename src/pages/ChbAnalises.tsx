@@ -371,6 +371,7 @@ export default function ChbAnalises() {
                     <th className="px-[10px] py-[10px] text-left text-[0.75rem] uppercase tracking-[0.12em] text-[#aaaaaa] font-medium sticky top-0 bg-[#14151c] z-[5] border-b border-[rgba(255,255,255,.09)]">Consignee</th>
                     <th className="px-[10px] py-[10px] text-left text-[0.75rem] uppercase tracking-[0.12em] text-[#aaaaaa] font-medium sticky top-0 bg-[#14151c] z-[5] border-b border-[rgba(255,255,255,.09)]">Status</th>
                     <th className="px-[10px] py-[10px] text-left text-[0.75rem] uppercase tracking-[0.12em] text-[#aaaaaa] font-medium sticky top-0 bg-[#14151c] z-[5] border-b border-[rgba(255,255,255,.09)]">Etapas</th>
+                    <th className="px-[10px] py-[10px] text-left text-[0.75rem] uppercase tracking-[0.12em] text-[#aaaaaa] font-medium sticky top-0 bg-[#14151c] z-[5] border-b border-[rgba(255,255,255,.09)]">Submeter</th>
                     <th className="px-[10px] py-[10px] text-left text-[0.75rem] uppercase tracking-[0.12em] text-[#aaaaaa] font-medium sticky top-0 bg-[#14151c] z-[5] border-b border-[rgba(255,255,255,.09)]">Data</th>
                     <th className="px-[10px] py-[10px] text-right text-[0.75rem] uppercase tracking-[0.12em] text-[#aaaaaa] font-medium sticky top-0 bg-[#14151c] z-[5] border-b border-[rgba(255,255,255,.09)]">Ações</th>
                   </tr>
@@ -386,6 +387,12 @@ export default function ChbAnalises() {
                       </td>
                       <td className="px-[10px] py-[9px] whitespace-nowrap text-[0.78rem] text-[#aaaaaa]">
                         1: {stepStatusLabel(item.step1_status)} · 2: {stepStatusLabel(item.step2_status)} · 3: {stepStatusLabel(item.step3_status)}
+                      </td>
+                      <td className="px-[10px] py-[9px] whitespace-nowrap">
+                        <button onClick={() => navigate(`/chb/conferences/${item.id}`)} className="h-8 px-3 rounded-xl flex items-center gap-1.5 bg-[#ffc800] text-[#111] font-bold text-[0.8rem] hover:bg-[#ffd940] transition-all">
+                          <Play size={14} />
+                          Analisar
+                        </button>
                       </td>
                       <td className="px-[10px] py-[9px] whitespace-nowrap text-[0.82rem]">
                         {item.created_at ? format(new Date(item.created_at), "dd/MM/yyyy HH:mm") : "—"}
