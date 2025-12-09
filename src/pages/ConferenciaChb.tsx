@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { ArrowLeft, FileCheck } from 'lucide-react';
 import { ChbStep, TabType, ChbNote } from '@/types/chb';
@@ -142,47 +142,53 @@ export default function ConferenciaChb() {
         ))}
       </div>
 
-      {/* Back button - Fixed */}
-      <button
-        onClick={() => navigate('/dashboard')}
-        className="fixed top-[18px] left-[18px] z-50 flex items-center gap-2 px-4 py-2 
-          rounded-full bg-black/50 backdrop-blur-sm border border-white/10 
-          text-white/80 hover:text-white hover:border-amber-500/50 transition-all"
-      >
-        <ArrowLeft className="w-4 h-4" />
-        <span className="text-sm font-medium">Voltar</span>
-      </button>
-
-      {/* Main content */}
-      <div className="relative z-10 max-w-6xl mx-auto px-4 py-20">
-        {/* Header */}
-        <div className="flex items-start justify-between mb-8">
-          <div>
-            <p className="text-amber-500 text-sm font-medium tracking-wider mb-1">DACHSER</p>
-            <h1 className="text-2xl md:text-3xl font-bold text-white mb-2">
-              Desembaraço — Conferência (CHB)
-            </h1>
-            <p className="text-white/50 text-sm">
-              Conferência guiada por etapas de Pré-Alerta, Instrução e DI.
-            </p>
-          </div>
+      {/* Header */}
+      <header className="relative z-20 w-full max-w-[95%] mx-auto flex items-center justify-between pt-5 pb-4 px-2">
+        {/* Left: Back button + Branding */}
+        <div className="flex items-center gap-4">
+          <button
+            onClick={() => navigate('/chb/conferences')}
+            className="w-8 h-8 flex items-center justify-center rounded-full 
+              border border-white/12 bg-[rgba(5,6,18,0.9)] text-white/80 
+              hover:text-white hover:border-amber-500/50 transition-all backdrop-blur-sm"
+          >
+            <ArrowLeft className="w-4 h-4" />
+          </button>
           
-          <div className="flex items-center gap-3">
-            <div className="flex items-center gap-2 px-4 py-2 rounded-full bg-black/50 
-              backdrop-blur-sm border border-white/10 text-white/80 text-sm">
-              <FileCheck className="w-4 h-4 text-amber-500" />
-              <span>{id ? `#${id}` : 'Processo'}</span>
-            </div>
-            <div className="px-4 py-2 rounded-full bg-black/50 backdrop-blur-sm 
-              border border-white/10 text-white/80 text-sm">
-              {currentUser}
+          <div>
+            <h1 className="text-lg font-bold tracking-[0.2em] uppercase text-white">
+              DACHSER
+            </h1>
+            <p className="text-white/50 text-sm mt-0.5">
+              Desembaraço — Conferência (CHB)
+            </p>
+            <div className="flex gap-1.5 mt-1.5">
+              <span className="w-1.5 h-1.5 rounded-full bg-amber-500 shadow-[0_0_8px_rgba(255,200,0,0.9)]" />
+              <span className="w-1.5 h-1.5 rounded-full bg-amber-500 shadow-[0_0_8px_rgba(255,200,0,0.9)]" />
+              <span className="w-1.5 h-1.5 rounded-full bg-amber-500 shadow-[0_0_8px_rgba(255,200,0,0.9)]" />
             </div>
           </div>
         </div>
 
+        {/* Right: Process ID + User */}
+        <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2 px-3 py-1.5 rounded-full 
+            bg-[rgba(5,6,18,0.9)] border border-white/12 text-white/80 text-sm backdrop-blur-sm">
+            <FileCheck className="w-4 h-4 text-amber-500" />
+            <span>{id ? `#${id}` : 'Processo'}</span>
+          </div>
+          <div className="px-3 py-1.5 rounded-full bg-[rgba(5,6,18,0.9)] 
+            border border-white/12 text-white/80 text-sm backdrop-blur-sm">
+            {currentUser}
+          </div>
+        </div>
+      </header>
+
+      {/* Main content */}
+      <div className="relative z-10 max-w-[95%] mx-auto px-2 pb-10">
         {/* Main card */}
         <div
-          className="rounded-2xl border border-white/10 overflow-hidden"
+          className="rounded-2xl border border-white/12 overflow-hidden"
           style={{
             background: 'rgba(5, 6, 18, 0.9)',
             boxShadow: '0 18px 40px rgba(0, 0, 0, 0.85)',
