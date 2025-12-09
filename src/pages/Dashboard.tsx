@@ -71,7 +71,7 @@ const menuItems: MenuItem[] = [
         voucherChildren: [
           { label: "Local Charge", href: "/fin/local-charge" },
           { label: "Alterações de Fee", href: "/fin/fee-changes" },
-          { label: "Análise Documental", href: "/fin/document-analysis" },
+          { label: "Análise Documental", href: "/fin/analise-documental" },
           { label: "Esteira", href: "/fin/workflow" },
         ]
       },
