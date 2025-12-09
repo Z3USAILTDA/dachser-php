@@ -14,3 +14,9 @@ verify_jwt = false
 
 [functions.add-alert-status-column]
 verify_jwt = false
+
+[functions.send-voucher-notification]
+verify_jwt = false
+
+[functions.olimpo-proxy]
+verify_jwt = false
