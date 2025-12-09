@@ -21,6 +21,13 @@ import LocalCharges from "./pages/LocalCharges";
 import ReguaCobranca from "./pages/ReguaCobranca";
 import FinanceiroDisputa from "./pages/FinanceiroDisputa";
 import AnaliseDocumental from "./pages/AnaliseDocumental";
+import EsteiraIndex from "./pages/esteira/EsteiraIndex";
+import ComprovanteRobot from "./pages/esteira/ComprovanteRobot";
+import EsteiraDashboard from "./pages/esteira/EsteiraDashboard";
+import EsteiraManual from "./pages/esteira/EsteiraManual";
+import EsteiraReports from "./pages/esteira/EsteiraReports";
+import EsteiraUserManagement from "./pages/esteira/EsteiraUserManagement";
+import EsteiraVoucherDetails from "./pages/esteira/EsteiraVoucherDetails";
 import Auth from "./pages/Auth";
 import NotFound from "./pages/NotFound";
 
@@ -56,6 +63,13 @@ const App = () => (
           <Route path="/fin/regua" element={<ReguaCobranca />} />
           <Route path="/fin/disputa" element={<FinanceiroDisputa />} />
           <Route path="/fin/analise-documental" element={<AnaliseDocumental />} />
+          <Route path="/fin/esteira" element={<EsteiraIndex />} />
+          <Route path="/fin/esteira/robot" element={<ComprovanteRobot />} />
+          <Route path="/fin/esteira/dashboard" element={<EsteiraDashboard />} />
+          <Route path="/fin/esteira/manual" element={<EsteiraManual />} />
+          <Route path="/fin/esteira/reports" element={<EsteiraReports />} />
+          <Route path="/fin/esteira/users" element={<EsteiraUserManagement />} />
+          <Route path="/fin/esteira/voucher/:id" element={<EsteiraVoucherDetails />} />
           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
           <Route path="*" element={<NotFound />} />
         </Routes>
