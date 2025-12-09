@@ -72,7 +72,7 @@ const menuItems: MenuItem[] = [
           { label: "Local Charge", href: "/fin/local-charge" },
           { label: "Alterações de Fee", href: "/fin/fee-changes" },
           { label: "Análise Documental", href: "/fin/analise-documental" },
-          { label: "Esteira", href: "/fin/workflow" },
+          { label: "Esteira", href: "/fin/esteira" },
         ]
       },
     ],
