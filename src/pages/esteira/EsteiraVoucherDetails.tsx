@@ -4,17 +4,25 @@ import { PageLayout } from "@/components/layout/PageLayout";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
+import { useUserRole } from "@/hooks/useUserRole";
 import { Voucher } from "@/types/voucher";
 import { Loader2 } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
+import { VoucherDetailsView } from "@/components/esteira/VoucherDetailsView";
+import { VoucherOperacaoActions } from "@/components/esteira/VoucherOperacaoActions";
+import { VoucherFiscalActions } from "@/components/esteira/VoucherFiscalActions";
+import { VoucherSupervisorActions } from "@/components/esteira/VoucherSupervisorActions";
+import { VoucherFinanceiroActions } from "@/components/esteira/VoucherFinanceiroActions";
+import { VoucherRoboActions } from "@/components/esteira/VoucherRoboActions";
 
 const EsteiraVoucherDetails = () => {
   const { id } = useParams();
   const navigate = useNavigate();
   const { toast } = useToast();
+  const { role, isAdmin } = useUserRole();
   const [voucher, setVoucher] = useState<Voucher | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -27,19 +35,19 @@ const EsteiraVoucherDetails = () => {
         .from("vouchers")
         .select(`
           *,
-          criado_por:profiles!criado_por_user_id(name, role),
+          criado_por:profiles!criado_por_user_id(name),
           responsavel_operacao:profiles!responsavel_operacao_user_id(name),
           responsavel_fiscal:profiles!responsavel_fiscal_user_id(name),
           responsavel_supervisor:profiles!responsavel_supervisor_user_id(name),
           responsavel_financeiro:profiles!responsavel_financeiro_user_id(name),
           aprovado_por:profiles!aprovado_por_user_id(name),
-          attachments:attachments(id, tipo, file_name, file_url, file_size, created_at),
-          logs:log_entries(
+          anexos:voucher_anexos(id, tipo, file_name, file_url, file_size, created_at),
+          logs:voucher_logs(
             id,
             data_hora,
             acao,
             detalhe,
-            user:profiles(name)
+            user:profiles!user_id(name)
           )
         `)
         .eq("id", id)
@@ -61,16 +69,15 @@ const EsteiraVoucherDetails = () => {
         tipoDocumento: data.tipo_documento,
         filial: data.filial,
         remessa: data.remessa,
-        urgente: data.urgente,
+        urgente: data.urgencia_tipo !== "NORMAL",
         urgenciaTipo: data.urgencia_tipo || "NORMAL",
-        urgenciaAutorizacaoAnexoId: data.urgencia_autorizacao_anexo_id,
         comentariosOperacao: data.comentarios_operacao,
         comentariosFiscal: data.comentarios_fiscal,
         comentariosFinanceiro: data.comentarios_financeiro,
         ajusteOperacao: data.ajuste_operacao,
         ajusteFiscal: data.ajuste_fiscal,
         etapaAtual: data.etapa_atual,
-        statusBaixa: data.status_baixa,
+        statusBaixa: data.status_baixa || "PENDENTE",
         statusFinanceiro: data.status_financeiro || "PENDENTE",
         statusEnvioCliente: data.status_envio_cliente,
         criadoPorUserId: data.criado_por_user_id,
@@ -88,7 +95,7 @@ const EsteiraVoucherDetails = () => {
         clienteEmail: data.cliente_email,
         createdAt: new Date(data.created_at),
         updatedAt: new Date(data.updated_at),
-        anexos: (data.attachments || []).map((a: any) => ({
+        anexos: (data.anexos || []).map((a: any) => ({
           id: a.id,
           voucherId: data.id,
           tipo: a.tipo,
@@ -106,7 +113,7 @@ const EsteiraVoucherDetails = () => {
           userName: l.user?.name,
           acao: l.acao,
           detalhe: l.detalhe,
-        })),
+        })).sort((a: any, b: any) => b.dataHora.getTime() - a.dataHora.getTime()),
       };
 
       setVoucher(mappedVoucher);
@@ -125,6 +132,42 @@ const EsteiraVoucherDetails = () => {
   useEffect(() => {
     loadVoucher();
   }, [id]);
+
+  const canShowOperacaoActions = () => {
+    if (!voucher || !role) return false;
+    const isOperacaoEtapa = voucher.etapaAtual === "OPERACAO" || voucher.etapaAtual === "AJUSTE_OPERACAO";
+    const hasRole = role === "OPERACAO" || role === "GESTOR_OPERACAO" || isAdmin;
+    return isOperacaoEtapa && hasRole;
+  };
+
+  const canShowFiscalActions = () => {
+    if (!voucher || !role) return false;
+    const isFiscalEtapa = voucher.etapaAtual === "FISCAL" || voucher.etapaAtual === "AJUSTE_FISCAL";
+    const isDachser = voucher.cobrancaEmNomeDe === "DACHSER";
+    const hasRole = role === "FISCAL" || role === "GESTOR_FISCAL" || isAdmin;
+    return isFiscalEtapa && isDachser && hasRole;
+  };
+
+  const canShowSupervisorActions = () => {
+    if (!voucher || !role) return false;
+    const isSupervisorEtapa = voucher.etapaAtual === "SUPERVISOR";
+    const hasRole = role === "SUPERVISOR" || role === "GESTOR_SUPERVISOR" || isAdmin;
+    return isSupervisorEtapa && hasRole;
+  };
+
+  const canShowFinanceiroActions = () => {
+    if (!voucher || !role) return false;
+    const isFinanceiroEtapa = voucher.etapaAtual === "FINANCEIRO";
+    const hasRole = role === "FINANCEIRO" || role === "GESTOR_FINANCEIRO" || isAdmin;
+    return isFinanceiroEtapa && hasRole;
+  };
+
+  const canShowRoboActions = () => {
+    if (!voucher || !role) return false;
+    const isRoboEtapa = voucher.etapaAtual === "ROBO";
+    const hasRole = role === "FINANCEIRO" || role === "GESTOR_FINANCEIRO" || isAdmin;
+    return isRoboEtapa && hasRole;
+  };
 
   if (loading) {
     return (
@@ -148,12 +191,14 @@ const EsteiraVoucherDetails = () => {
 
   const getEtapaBadgeColor = (etapa: string) => {
     switch (etapa) {
-      case "OPERACAO": return "bg-info/20 text-info";
-      case "FISCAL": return "bg-warning/20 text-warning";
-      case "SUPERVISOR": return "bg-primary/20 text-primary";
-      case "FINANCEIRO": return "bg-success/20 text-success";
-      case "ROBO": return "bg-muted text-muted-foreground";
-      case "CONCLUIDO": return "bg-success/20 text-success";
+      case "OPERACAO": return "bg-blue-500/20 text-blue-500";
+      case "FISCAL": return "bg-purple-500/20 text-purple-500";
+      case "SUPERVISOR": return "bg-orange-500/20 text-orange-500";
+      case "FINANCEIRO": return "bg-amber-500/20 text-amber-500";
+      case "ROBO": return "bg-cyan-500/20 text-cyan-500";
+      case "CONCLUIDO": return "bg-green-500/20 text-green-500";
+      case "AJUSTE_OPERACAO": return "bg-orange-500/20 text-orange-500";
+      case "AJUSTE_FISCAL": return "bg-red-500/20 text-red-500";
       default: return "bg-secondary text-secondary-foreground";
     }
   };
@@ -184,98 +229,54 @@ const EsteiraVoucherDetails = () => {
           </TabsList>
 
           <TabsContent value="detalhes" className="space-y-6 mt-6">
-            <Card className="p-6 bg-card/80 backdrop-blur-sm border-border/50 animate-fade-in">
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                <div>
-                  <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Número SPO</label>
-                  <p className="text-foreground font-medium mt-1">{voucher.numeroSPO}</p>
-                </div>
-                <div>
-                  <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Fornecedor</label>
-                  <p className="text-foreground font-medium mt-1">{voucher.fornecedor}</p>
-                </div>
-                <div>
-                  <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider">CNPJ</label>
-                  <p className="text-foreground font-medium mt-1">{voucher.cnpjFornecedor || "-"}</p>
-                </div>
-                <div>
-                  <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Valor</label>
-                  <p className="text-foreground font-medium mt-1">
-                    {voucher.valor ? `R$ ${voucher.valor.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}` : '-'}
-                  </p>
-                </div>
-                <div>
-                  <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Vencimento</label>
-                  <p className="text-foreground font-medium mt-1">{voucher.vencimento.toLocaleDateString('pt-BR')}</p>
-                </div>
-                <div>
-                  <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Forma de Pagamento</label>
-                  <p className="text-foreground font-medium mt-1">{voucher.formaPagamento?.replace("_", " ") || "-"}</p>
-                </div>
-                <div>
-                  <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Tipo Documento</label>
-                  <p className="text-foreground font-medium mt-1">{voucher.tipoDocumento?.replace("_", " ") || "-"}</p>
-                </div>
-                <div>
-                  <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Cobrança</label>
-                  <p className="text-foreground font-medium mt-1">{voucher.cobrancaEmNomeDe || "-"}</p>
-                </div>
-                <div>
-                  <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Urgência</label>
-                  <Badge className={cn(
-                    voucher.urgenciaTipo === "URGENTE_REAL" ? "bg-destructive/20 text-destructive" :
-                    voucher.urgenciaTipo === "URGENTE_AUTOMATICO" ? "bg-warning/20 text-warning" :
-                    "bg-muted text-muted-foreground"
-                  )}>
-                    {voucher.urgenciaTipo === "NORMAL" ? "Normal" : 
-                     voucher.urgenciaTipo === "URGENTE_REAL" ? "Urgente Real" : "Urgente Automático"}
-                  </Badge>
-                </div>
-              </div>
+            {/* Voucher Details */}
+            <VoucherDetailsView voucher={voucher} />
 
-              {/* Comentários */}
-              <div className="mt-8 space-y-4">
-                {voucher.comentariosOperacao && (
-                  <div>
-                    <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Comentários Operação</label>
-                    <p className="text-foreground mt-1 p-3 bg-muted/30 rounded-lg">{voucher.comentariosOperacao}</p>
-                  </div>
-                )}
-                {voucher.comentariosFiscal && (
-                  <div>
-                    <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Comentários Fiscal</label>
-                    <p className="text-foreground mt-1 p-3 bg-muted/30 rounded-lg">{voucher.comentariosFiscal}</p>
-                  </div>
-                )}
-                {voucher.comentariosFinanceiro && (
-                  <div>
-                    <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Comentários Financeiro</label>
-                    <p className="text-foreground mt-1 p-3 bg-muted/30 rounded-lg">{voucher.comentariosFinanceiro}</p>
-                  </div>
-                )}
-              </div>
+            {/* Stage Actions */}
+            {canShowOperacaoActions() && (
+              <Card className="p-6 bg-card/80 backdrop-blur-sm border-border/50">
+                <VoucherOperacaoActions voucher={voucher} onUpdate={loadVoucher} />
+              </Card>
+            )}
 
-              {/* Anexos */}
-              {voucher.anexos.length > 0 && (
-                <div className="mt-8">
-                  <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Anexos</label>
-                  <div className="mt-2 space-y-2">
-                    {voucher.anexos.map((anexo) => (
-                      <a
-                        key={anexo.id}
-                        href={anexo.fileUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="flex items-center gap-2 p-3 bg-muted/30 rounded-lg hover:bg-muted/50 transition-colors"
-                      >
-                        <span className="text-primary">{anexo.fileName}</span>
-                        <Badge variant="secondary" className="ml-auto">{anexo.tipo}</Badge>
-                      </a>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </Card>
+            {canShowFiscalActions() && (
+              <Card className="p-6 bg-card/80 backdrop-blur-sm border-border/50">
+                <VoucherFiscalActions voucher={voucher} onUpdate={loadVoucher} />
+              </Card>
+            )}
+
+            {canShowSupervisorActions() && (
+              <Card className="p-6 bg-card/80 backdrop-blur-sm border-border/50">
+                <VoucherSupervisorActions voucher={voucher} onUpdate={loadVoucher} />
+              </Card>
+            )}
+
+            {canShowFinanceiroActions() && (
+              <Card className="p-6 bg-card/80 backdrop-blur-sm border-border/50">
+                <VoucherFinanceiroActions voucher={voucher} onUpdate={loadVoucher} />
+              </Card>
+            )}
+
+            {canShowRoboActions() && (
+              <Card className="p-6 bg-card/80 backdrop-blur-sm border-border/50">
+                <VoucherRoboActions voucher={voucher} onUpdate={loadVoucher} />
+              </Card>
+            )}
+
+            {/* Alert Messages */}
+            {voucher.ajusteOperacao && voucher.etapaAtual === "AJUSTE_OPERACAO" && (
+              <Card className="p-4 bg-orange-500/10 border-orange-500/30">
+                <h4 className="font-semibold text-orange-500 mb-2">Ajuste Solicitado</h4>
+                <p className="text-foreground">{voucher.ajusteOperacao}</p>
+              </Card>
+            )}
+
+            {voucher.ajusteFiscal && voucher.etapaAtual === "AJUSTE_FISCAL" && (
+              <Card className="p-4 bg-red-500/10 border-red-500/30">
+                <h4 className="font-semibold text-red-500 mb-2">Ajuste Fiscal Solicitado</h4>
+                <p className="text-foreground">{voucher.ajusteFiscal}</p>
+              </Card>
+            )}
           </TabsContent>
 
           <TabsContent value="historico" className="mt-6">
@@ -292,7 +293,7 @@ const EsteiraVoucherDetails = () => {
                       style={{ animationDelay: `${index * 50}ms` }}
                     >
                       <div className="flex items-center justify-between mb-1">
-                        <span className="font-medium text-foreground">{log.acao.replace("_", " ")}</span>
+                        <span className="font-medium text-foreground">{log.acao.replace(/_/g, " ")}</span>
                         <span className="text-sm text-muted-foreground">
                           {log.dataHora.toLocaleString("pt-BR")}
                         </span>
