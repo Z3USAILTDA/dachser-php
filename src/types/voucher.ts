@@ -27,7 +27,13 @@ export type FormaPagamento =
   | "CARTAO" 
   | "DEPOSITO"
   | "DARF"
-  | "GPS";
+  | "GPS"
+  | "TRANSFERENCIA_PIX"
+  | "DEBITO"
+  | "CAMBIO"
+  | "ADF";
+
+export type Remessa = "NENHUM" | "REMESSA_12H" | "REMESSA_15H";
 
 export type CobrancaEmNomeDe = "DACHSER" | "CLIENTE";
 
@@ -37,6 +43,9 @@ export type TipoDocumento =
   | "DEMONSTRATIVO" 
   | "ICMS" 
   | "ARMAZENAGEM"
+  | "NF_SERVICO"
+  | "NF_DEBITO"
+  | "BOLETO"
   | "OUTROS";
 
 export type UrgenciaTipo = "NORMAL" | "URGENTE_REAL" | "URGENTE_AUTOMATICO";
@@ -47,6 +56,8 @@ export type TipoAnexo =
   | "BOLETO" 
   | "COMPROVANTE" 
   | "AUTORIZACAO_URGENCIA" 
+  | "FATURA_DEMONSTRATIVO"
+  | "BOLETO_INSTRUCOES"
   | "OUTROS";
 
 export type UserRole = 
@@ -94,7 +105,7 @@ export interface Voucher {
   formaPagamento: FormaPagamento;
   tipoDocumento: TipoDocumento;
   filial?: string;
-  remessa?: string;
+  remessa: Remessa;
   urgente: boolean;
   urgenciaTipo: UrgenciaTipo;
   urgenciaAutorizacaoAnexoId?: string;
