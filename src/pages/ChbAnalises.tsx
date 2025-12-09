@@ -1,11 +1,12 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { ArrowLeft, Search, Filter, RotateCcw, Upload, Play, ClipboardList, Trash2, Clock, Copy, Loader2 } from "lucide-react";
+import { ArrowLeft, Search, Filter, RotateCcw, Upload, Play, ClipboardList, Trash2, Clock, Copy, Loader2, FileText } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
+import { format } from "date-fns";
 import dachserBg from "@/assets/dachser-background.jpg";
 interface ChbItem {
   id: number;
@@ -16,6 +17,7 @@ interface ChbItem {
   step2_status: string;
   step3_status: string;
   last_run_at: string | null;
+  created_at: string | null;
 }
 interface HistoryEntry {
   id: number;
@@ -33,7 +35,8 @@ const mockItems: ChbItem[] = [{
   step1_status: "pendente",
   step2_status: "pendente",
   step3_status: "pendente",
-  last_run_at: "2025-01-10 14:30"
+  last_run_at: "2025-01-10 14:30",
+  created_at: "2025-01-05 10:00"
 }, {
   id: 2,
   reference: "CHB-2025-002",
@@ -42,7 +45,8 @@ const mockItems: ChbItem[] = [{
   step1_status: "aprovado",
   step2_status: "pendente",
   step3_status: "pendente",
-  last_run_at: "2025-01-09 10:15"
+  last_run_at: "2025-01-09 10:15",
+  created_at: "2025-01-04 09:30"
 }, {
   id: 3,
   reference: "CHB-2025-003",
@@ -51,7 +55,8 @@ const mockItems: ChbItem[] = [{
   step1_status: "aprovado",
   step2_status: "aprovado",
   step3_status: "pendente",
-  last_run_at: "2025-01-08 16:45"
+  last_run_at: "2025-01-08 16:45",
+  created_at: "2025-01-03 14:00"
 }, {
   id: 4,
   reference: "CHB-2025-004",
@@ -60,7 +65,8 @@ const mockItems: ChbItem[] = [{
   step1_status: "aprovado",
   step2_status: "aprovado",
   step3_status: "aprovado",
-  last_run_at: "2025-01-07 09:20"
+  last_run_at: "2025-01-07 09:20",
+  created_at: "2025-01-02 11:00"
 }, {
   id: 5,
   reference: "CHB-2025-005",
@@ -69,7 +75,8 @@ const mockItems: ChbItem[] = [{
   step1_status: "pendente",
   step2_status: "pendente",
   step3_status: "pendente",
-  last_run_at: null
+  last_run_at: null,
+  created_at: "2025-01-06 08:45"
 }];
 const mockHistory: Record<number, HistoryEntry[]> = {
   1: [],
@@ -364,8 +371,7 @@ export default function ChbAnalises() {
                     <th className="px-[10px] py-[10px] text-left text-[0.75rem] uppercase tracking-[0.12em] text-[#aaaaaa] font-medium sticky top-0 bg-[#14151c] z-[5] border-b border-[rgba(255,255,255,.09)]">Consignee</th>
                     <th className="px-[10px] py-[10px] text-left text-[0.75rem] uppercase tracking-[0.12em] text-[#aaaaaa] font-medium sticky top-0 bg-[#14151c] z-[5] border-b border-[rgba(255,255,255,.09)]">Status</th>
                     <th className="px-[10px] py-[10px] text-left text-[0.75rem] uppercase tracking-[0.12em] text-[#aaaaaa] font-medium sticky top-0 bg-[#14151c] z-[5] border-b border-[rgba(255,255,255,.09)]">Etapas</th>
-                    <th className="px-[10px] py-[10px] text-left text-[0.75rem] uppercase tracking-[0.12em] text-[#aaaaaa] font-medium sticky top-0 bg-[#14151c] z-[5] border-b border-[rgba(255,255,255,.09)]">Submeter</th>
-                    <th className="px-[10px] py-[10px] text-left text-[0.75rem] uppercase tracking-[0.12em] text-[#aaaaaa] font-medium sticky top-0 bg-[#14151c] z-[5] border-b border-[rgba(255,255,255,.09)]">Histórico</th>
+                    <th className="px-[10px] py-[10px] text-left text-[0.75rem] uppercase tracking-[0.12em] text-[#aaaaaa] font-medium sticky top-0 bg-[#14151c] z-[5] border-b border-[rgba(255,255,255,.09)]">Data</th>
                     <th className="px-[10px] py-[10px] text-right text-[0.75rem] uppercase tracking-[0.12em] text-[#aaaaaa] font-medium sticky top-0 bg-[#14151c] z-[5] border-b border-[rgba(255,255,255,.09)]">Ações</th>
                   </tr>
                 </thead>
@@ -381,23 +387,23 @@ export default function ChbAnalises() {
                       <td className="px-[10px] py-[9px] whitespace-nowrap text-[0.78rem] text-[#aaaaaa]">
                         1: {stepStatusLabel(item.step1_status)} · 2: {stepStatusLabel(item.step2_status)} · 3: {stepStatusLabel(item.step3_status)}
                       </td>
-                      <td className="px-[10px] py-[9px] whitespace-nowrap">
-                        <button onClick={() => navigate(`/chb/conferences/${item.id}`)} className="h-8 px-3 rounded-xl flex items-center gap-1.5 bg-[#ffc800] text-[#111] font-bold text-[0.8rem] hover:bg-[#ffd940] transition-all">
-                          <Play size={14} />
-                          Analisar
-                        </button>
-                      </td>
-                      <td className="px-[10px] py-[9px] whitespace-nowrap">
-                        <button onClick={() => handleOpenHistory(item.id)} className="h-8 w-8 rounded-lg flex items-center justify-center text-[#aaaaaa] hover:bg-[rgba(255,255,255,.1)] transition-all">
-                          <ClipboardList size={16} />
-                        </button>
+                      <td className="px-[10px] py-[9px] whitespace-nowrap text-[0.82rem]">
+                        {item.created_at ? format(new Date(item.created_at), "dd/MM/yyyy HH:mm") : "—"}
                       </td>
                       <td className="px-[10px] py-[9px] whitespace-nowrap text-right">
                         <div className="flex justify-end gap-1.5">
-                          <button onClick={() => setDeleteDialog({
-                      open: true,
-                      itemId: item.id
-                    })} className="h-8 w-8 rounded-lg flex items-center justify-center text-[#ff4d4f] hover:bg-[rgba(255,77,79,.12)] transition-all">
+                          <button 
+                            onClick={() => navigate(`/chb/conferences/${item.id}`)} 
+                            className="h-8 w-8 rounded-lg flex items-center justify-center text-[#aaaaaa] hover:bg-[rgba(255,255,255,.1)] transition-all"
+                            title="Analisar"
+                          >
+                            <FileText size={16} />
+                          </button>
+                          <button 
+                            onClick={() => setDeleteDialog({ open: true, itemId: item.id })} 
+                            className="h-8 w-8 rounded-lg flex items-center justify-center text-[#ff4d4f] hover:bg-[rgba(255,77,79,.12)] transition-all"
+                            title="Excluir"
+                          >
                             <Trash2 size={16} />
                           </button>
                         </div>
