@@ -1125,6 +1125,262 @@ serve(async (req) => {
         break;
       }
 
+      // ==================== RÉGUA DE COBRANÇA ====================
+      case 'get_regua_counts': {
+        const MAX_DIAS_ATRASO = 120;
+        
+        const sqlCount = `
+          SELECT stage, COUNT(*) as qt
+          FROM (
+            SELECT
+              CASE
+                WHEN DATEDIFF(CURDATE(), t.data_vencimento) < 0 THEN 'PRE'
+                WHEN DATEDIFF(CURDATE(), t.data_vencimento) = 1 THEN 'D1'
+                WHEN t.tipo_documento = 'FAT_NF' THEN
+                  CASE
+                    WHEN DATEDIFF(CURDATE(), t.data_vencimento) BETWEEN 7  AND 14 THEN 'D7'
+                    WHEN DATEDIFF(CURDATE(), t.data_vencimento) BETWEEN 15 AND 29 THEN 'D15'
+                    WHEN DATEDIFF(CURDATE(), t.data_vencimento) BETWEEN 30 AND 44 THEN 'D30'
+                    WHEN DATEDIFF(CURDATE(), t.data_vencimento) >= 45 THEN 'D60'
+                    ELSE NULL
+                  END
+                ELSE
+                  CASE
+                    WHEN DATEDIFF(CURDATE(), t.data_vencimento) BETWEEN 7  AND 14 THEN 'D7'
+                    WHEN DATEDIFF(CURDATE(), t.data_vencimento) BETWEEN 15 AND 29 THEN 'D15'
+                    WHEN DATEDIFF(CURDATE(), t.data_vencimento) BETWEEN 30 AND 44 THEN 'D30'
+                    WHEN DATEDIFF(CURDATE(), t.data_vencimento) BETWEEN 45 AND 59 THEN 'D45'
+                    WHEN DATEDIFF(CURDATE(), t.data_vencimento) >= 60 THEN 'D60'
+                    ELSE NULL
+                  END
+              END AS stage
+            FROM dados_dachser.t_dados_financeiro_nfs t
+            LEFT JOIN ai_agente.t_financeiro_soft_delete sd ON sd.documento = t.documento
+            WHERE COALESCE(sd.active, 1) = 1
+              AND (
+                DATEDIFF(CURDATE(), t.data_vencimento) < 0
+                OR DATEDIFF(CURDATE(), t.data_vencimento) <= ?
+                OR (t.tipo_documento <> 'FAT_NF' AND DATEDIFF(CURDATE(), t.data_vencimento) >= 61)
+                OR (t.tipo_documento = 'FAT_NF' AND DATEDIFF(CURDATE(), t.data_vencimento) >= 45)
+              )
+          ) x
+          WHERE stage IS NOT NULL
+          GROUP BY stage
+        `;
+        
+        const countRows = await client.query(sqlCount, [MAX_DIAS_ATRASO]);
+        const counts: Record<string, number> = { PRE: 0, D1: 0, D7: 0, D15: 0, D30: 0, D45: 0, D60: 0 };
+        
+        for (const row of countRows) {
+          if (row.stage && counts.hasOwnProperty(row.stage)) {
+            counts[row.stage] = Number(row.qt) || 0;
+          }
+        }
+        
+        console.log('Régua counts:', counts);
+        result = { success: true, counts };
+        break;
+      }
+
+      case 'get_regua_stage': {
+        const { stage } = body as { stage?: string };
+        if (!stage) {
+          return new Response(
+            JSON.stringify({ error: 'Stage é obrigatório' }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+        
+        const MAX_DIAS_ATRASO = 120;
+        const sanitizedStage = (stage || '').replace(/[^A-Z0-9+]/g, '');
+        
+        const sql = `
+          SELECT
+            SUBSTRING_INDEX(t.razao_social, ' - ', 1) AS razao_base,
+            t.razao_social,
+            t.documento,
+            COALESCE(NULLIF(t.numero_nf,''), t.documento) AS nf_exibicao,
+            DATE_FORMAT(t.data_vencimento, '%d/%m/%Y') AS data_venc_br,
+            DATEDIFF(CURDATE(), t.data_vencimento) AS dias,
+            CASE WHEN t.tipo_documento='FAT_NF' THEN 'À vista' ELSE 'A prazo' END AS tipo_pagto,
+            t.valor_nf
+          FROM dados_dachser.t_dados_financeiro_nfs t
+          LEFT JOIN ai_agente.t_financeiro_soft_delete sd ON sd.documento = t.documento
+          WHERE COALESCE(sd.active, 1) = 1
+            AND (
+              (? IN ('PRE','D1','D7','D15','D30','D45') AND (? = 'PRE' OR DATEDIFF(CURDATE(), t.data_vencimento) <= ?))
+              OR ? = 'D60'
+            )
+            AND (
+              CASE
+                WHEN ? = 'PRE' THEN DATEDIFF(CURDATE(), t.data_vencimento) < 0
+                WHEN ? = 'D1' THEN DATEDIFF(CURDATE(), t.data_vencimento) = 1
+                WHEN t.tipo_documento='FAT_NF' THEN
+                  CASE ?
+                    WHEN 'D7' THEN DATEDIFF(CURDATE(), t.data_vencimento) BETWEEN 7 AND 14
+                    WHEN 'D15' THEN DATEDIFF(CURDATE(), t.data_vencimento) BETWEEN 15 AND 29
+                    WHEN 'D30' THEN DATEDIFF(CURDATE(), t.data_vencimento) BETWEEN 30 AND 44
+                    ELSE FALSE
+                  END
+                ELSE
+                  CASE ?
+                    WHEN 'D7' THEN DATEDIFF(CURDATE(), t.data_vencimento) BETWEEN 7 AND 14
+                    WHEN 'D15' THEN DATEDIFF(CURDATE(), t.data_vencimento) BETWEEN 15 AND 29
+                    WHEN 'D30' THEN DATEDIFF(CURDATE(), t.data_vencimento) BETWEEN 30 AND 44
+                    WHEN 'D45' THEN DATEDIFF(CURDATE(), t.data_vencimento) BETWEEN 45 AND 59
+                    WHEN 'D60' THEN DATEDIFF(CURDATE(), t.data_vencimento) >= 60
+                    ELSE FALSE
+                  END
+              END
+            )
+          ORDER BY t.data_vencimento ASC, t.razao_social ASC
+        `;
+        
+        const rows = await client.query(sql, [
+          sanitizedStage, sanitizedStage, MAX_DIAS_ATRASO,
+          sanitizedStage,
+          sanitizedStage, sanitizedStage, sanitizedStage, sanitizedStage
+        ]);
+        
+        // Format valor_br
+        const formattedRows = rows.map((r: any) => ({
+          ...r,
+          valor_br: r.valor_nf !== null && r.valor_nf !== undefined 
+            ? 'R$ ' + Number(r.valor_nf).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+            : '-'
+        }));
+        
+        console.log(`Régua stage ${sanitizedStage}: ${formattedRows.length} rows`);
+        result = { success: true, rows: formattedRows };
+        break;
+      }
+
+      // ==================== DISPUTAS ====================
+      case 'get_disputas': {
+        const { tipo } = body as { tipo?: string };
+        
+        let whereClause = 't.disputa = 1';
+        const params: string[] = [];
+        
+        if (tipo) {
+          whereClause += " AND (CASE WHEN t.tipo_documento='FAT_NF' THEN 'À vista' ELSE 'A prazo' END) = ?";
+          params.push(tipo);
+        }
+        
+        const sql = `
+          SELECT
+            COALESCE(NULLIF(t.numero_nf,''), NULLIF(t.documento,''), NULLIF(t.nd,'')) AS nf,
+            t.nd,
+            t.razao_social AS cliente,
+            SUBSTRING_INDEX(t.razao_social, ' - ', 1) AS razao_base,
+            t.data_emissao AS emissao,
+            t.data_vencimento AS vencimento,
+            t.inicio_disputa AS created_at,
+            t.responsavel_disp AS responsavel,
+            t.valor_nf AS valor,
+            CASE WHEN t.tipo_documento='FAT_NF' THEN 'À vista' ELSE 'A prazo' END AS tipo,
+            COALESCE(NULLIF(t.documento,''), NULLIF(t.nd,''), NULLIF(t.numero_nf,'')) AS doc_key
+          FROM dados_dachser.t_dados_financeiro_nfs t
+          LEFT JOIN ai_agente.t_financeiro_soft_delete sd
+            ON sd.documento = t.documento
+            OR sd.documento = t.nd
+            OR sd.documento = t.numero_nf
+          WHERE ${whereClause}
+          ORDER BY t.inicio_disputa DESC, t.razao_social ASC
+        `;
+        
+        const rows = await client.query(sql, params);
+        console.log(`Disputas loaded: ${rows.length} rows`);
+        result = { success: true, rows };
+        break;
+      }
+
+      case 'save_disputa': {
+        const { nf, responsavel } = body as { nf?: string; responsavel?: string };
+        
+        if (!nf) {
+          return new Response(
+            JSON.stringify({ error: 'Documento/NF é obrigatório', success: false }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+        
+        // Check if document exists
+        const checkSql = `
+          SELECT id FROM dados_dachser.t_dados_financeiro_nfs 
+          WHERE documento = ? OR numero_nf = ? OR nd = ?
+          LIMIT 1
+        `;
+        const existingRows = await client.query(checkSql, [nf, nf, nf]);
+        
+        if (!existingRows || existingRows.length === 0) {
+          return new Response(
+            JSON.stringify({ error: 'Documento não encontrado', success: false }),
+            { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+        
+        // Update to mark as disputa
+        const updateSql = `
+          UPDATE dados_dachser.t_dados_financeiro_nfs 
+          SET disputa = 1, 
+              inicio_disputa = NOW(), 
+              responsavel_disp = ?
+          WHERE documento = ? OR numero_nf = ? OR nd = ?
+        `;
+        await client.execute(updateSql, [responsavel || null, nf, nf, nf]);
+        
+        console.log(`Disputa saved for: ${nf}`);
+        result = { success: true };
+        break;
+      }
+
+      case 'delete_disputa': {
+        const { doc_key } = body as { doc_key?: string };
+        
+        if (!doc_key) {
+          return new Response(
+            JSON.stringify({ error: 'doc_key é obrigatório', success: false }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+        
+        // Soft delete via t_financeiro_soft_delete
+        const insertSql = `
+          INSERT IGNORE INTO ai_agente.t_financeiro_soft_delete (documento, active, deleted_at)
+          VALUES (?, 0, NOW())
+        `;
+        await client.execute(insertSql, [doc_key]);
+        
+        console.log(`Disputa soft-deleted: ${doc_key}`);
+        result = { success: true };
+        break;
+      }
+
+      case 'resolve_disputa': {
+        const { doc_key } = body as { doc_key?: string };
+        
+        if (!doc_key) {
+          return new Response(
+            JSON.stringify({ error: 'doc_key é obrigatório', success: false }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+        
+        // Mark disputa as resolved (disputa = 0)
+        const updateSql = `
+          UPDATE dados_dachser.t_dados_financeiro_nfs 
+          SET disputa = 0, 
+              fim_disputa = NOW()
+          WHERE documento = ? OR numero_nf = ? OR nd = ?
+        `;
+        await client.execute(updateSql, [doc_key, doc_key, doc_key]);
+        
+        console.log(`Disputa resolved: ${doc_key}`);
+        result = { success: true };
+        break;
+      }
+
       default:
         return new Response(
           JSON.stringify({ error: `Ação não suportada: ${action}` }),
