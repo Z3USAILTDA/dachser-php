@@ -13,6 +13,10 @@ import Index from "./pages/Index";
 import SeaAnalysis from "./pages/SeaAnalysis";
 import CadastroHbl from "./pages/CadastroHbl";
 import CadastroManifest from "./pages/CadastroManifest";
+import SubmeterHblMbl from "./pages/SubmeterHblMbl";
+import SubmeterManifestHbl from "./pages/SubmeterManifestHbl";
+import InvoicesDraftHbl from "./pages/InvoicesDraftHbl";
+import SystemLogs from "./pages/SystemLogs";
 import Auth from "./pages/Auth";
 import NotFound from "./pages/NotFound";
 
@@ -35,8 +39,15 @@ const App = () => (
           <Route path="/admin/logs" element={<Logs />} />
           <Route path="/air/check" element={<CheckAwb />} />
           <Route path="/sea/analysis" element={<SeaAnalysis />} />
+          <Route path="/maritimo" element={<SeaAnalysis />} />
           <Route path="/sea/cadastro-hbl" element={<CadastroHbl />} />
           <Route path="/sea/cadastro-manifest" element={<CadastroManifest />} />
+          <Route path="/maritimo/cadastro-hbl" element={<CadastroHbl />} />
+          <Route path="/maritimo/cadastro-manifest" element={<CadastroManifest />} />
+          <Route path="/maritimo/submeter-hbl-mbl" element={<SubmeterHblMbl />} />
+          <Route path="/maritimo/submeter-manifest-hbl" element={<SubmeterManifestHbl />} />
+          <Route path="/maritimo/invoices-draft-hbl" element={<InvoicesDraftHbl />} />
+          <Route path="/admin/system-logs" element={<SystemLogs />} />
           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
           <Route path="*" element={<NotFound />} />
         </Routes>
