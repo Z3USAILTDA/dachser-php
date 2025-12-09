@@ -30,6 +30,7 @@ import EsteiraUserManagement from "./pages/esteira/EsteiraUserManagement";
 import EsteiraVoucherDetails from "./pages/esteira/EsteiraVoucherDetails";
 import Olimpo from "./pages/Olimpo";
 import ConferenciaChb from "./pages/ConferenciaChb";
+import ChbAnalises from "./pages/ChbAnalises";
 import Auth from "./pages/Auth";
 import NotFound from "./pages/NotFound";
 
@@ -73,7 +74,7 @@ const App = () => (
           <Route path="/fin/esteira/users" element={<EsteiraUserManagement />} />
           <Route path="/fin/esteira/voucher/:id" element={<EsteiraVoucherDetails />} />
           <Route path="/olimpo" element={<Olimpo />} />
-          <Route path="/chb/conferences" element={<ConferenciaChb />} />
+          <Route path="/chb/conferences" element={<ChbAnalises />} />
           <Route path="/chb/conferences/:id" element={<ConferenciaChb />} />
           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
           <Route path="*" element={<NotFound />} />
