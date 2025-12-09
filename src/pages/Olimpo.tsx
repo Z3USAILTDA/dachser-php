@@ -269,13 +269,7 @@ export default function Olimpo() {
     const newData: DataItem[] = [];
 
     try {
-      // Load AIR data
-      const { data: seedRes } = await supabase.functions.invoke("olimpo-proxy", {
-        body: null,
-        method: "GET",
-      });
-      
-      // Actually use fetch since we need query params
+      // Base URL for edge function
       const baseUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/olimpo-proxy`;
       
       // Seed AIR
