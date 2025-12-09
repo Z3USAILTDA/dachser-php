@@ -420,13 +420,13 @@ const EsteiraIndex = () => {
           responsavel_operacao:profiles!responsavel_operacao_user_id(name),
           responsavel_fiscal:profiles!responsavel_fiscal_user_id(name),
           responsavel_financeiro:profiles!responsavel_financeiro_user_id(name),
-          attachments:attachments(id, tipo, file_name, file_url),
-          logs:log_entries(
+          anexos:voucher_anexos(id, tipo, file_name, file_url, file_size),
+          logs:voucher_logs(
             id,
             data_hora,
             acao,
             detalhe,
-            user:profiles(name)
+            user:profiles!user_id(name)
           )
         `).order("created_at", { ascending: false });
 
@@ -473,12 +473,13 @@ const EsteiraIndex = () => {
         clienteEmail: v.cliente_email,
         createdAt: new Date(v.created_at),
         updatedAt: new Date(v.updated_at),
-        anexos: (v.attachments || []).map((a: any) => ({
+        anexos: (v.anexos || []).map((a: any) => ({
           id: a.id,
           voucherId: v.id,
           tipo: a.tipo,
           fileName: a.file_name,
           fileUrl: a.file_url,
+          fileSize: a.file_size,
           uploadedByUserId: v.criado_por_user_id,
           createdAt: new Date()
         })),
