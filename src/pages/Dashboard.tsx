@@ -55,6 +55,7 @@ const menuItems: MenuItem[] = [
     subtitle: "Operações Marítimas",
     children: [
       { label: "Análises Marítimas", href: "/sea/analysis" },
+      { label: "Local Charges", href: "/sea/local-charges" },
     ],
   },
   {
