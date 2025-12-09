@@ -2,26 +2,31 @@ import { useState, useEffect, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { PageLayout } from "@/components/layout/PageLayout";
 import { Button } from "@/components/ui/button";
-import { Plus, Package, AlertTriangle, AlertCircle, Clock, List, BarChart3, RefreshCw, TrendingUp, DollarSign, Calendar } from "lucide-react";
+import { Plus, Package, AlertTriangle, AlertCircle, Clock, List, BarChart3, RefreshCw, TrendingUp, DollarSign, Calendar, LayoutDashboard, Bot, FileText, HelpCircle } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { Voucher, EtapaAtual } from "@/types/voucher";
 import { cn } from "@/lib/utils";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, AreaChart, Area, Legend } from "recharts";
+import { VoucherTable, FilterValues } from "@/components/esteira/VoucherTable";
+import { CreateVoucherDialog } from "@/components/esteira/CreateVoucherDialog";
+import { EditVoucherDialog } from "@/components/esteira/EditVoucherDialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 
 interface DashboardMetrics {
   totalMonitorados: number;
   emAlerta: number;
   criticos: number;
   eventos24h: number;
-}
-
-interface FilterValues {
-  search: string;
-  etapa: string;
-  cobrancaEmNomeDe: string;
-  formaPagamento: string;
-  urgente: string;
 }
 
 const MetricCard = ({ 
@@ -408,6 +413,14 @@ const EsteiraIndex = () => {
     criticos: 0,
     eventos24h: 0,
   });
+  
+  // Dialog states
+  const [showCreateDialog, setShowCreateDialog] = useState(false);
+  const [showEditDialog, setShowEditDialog] = useState(false);
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  const [showGoBackDialog, setShowGoBackDialog] = useState(false);
+  const [selectedVoucher, setSelectedVoucher] = useState<Voucher | null>(null);
+  
   const { toast } = useToast();
   const navigate = useNavigate();
 
@@ -419,6 +432,7 @@ const EsteiraIndex = () => {
           criado_por:profiles!criado_por_user_id(name),
           responsavel_operacao:profiles!responsavel_operacao_user_id(name),
           responsavel_fiscal:profiles!responsavel_fiscal_user_id(name),
+          responsavel_supervisor:profiles!responsavel_supervisor_user_id(name),
           responsavel_financeiro:profiles!responsavel_financeiro_user_id(name),
           anexos:voucher_anexos(id, tipo, file_name, file_url, file_size),
           logs:voucher_logs(
@@ -446,16 +460,15 @@ const EsteiraIndex = () => {
         tipoDocumento: v.tipo_documento,
         filial: v.filial,
         remessa: v.remessa,
-        urgente: v.urgente,
+        urgente: v.urgencia_tipo !== "NORMAL",
         urgenciaTipo: v.urgencia_tipo || "NORMAL",
-        urgenciaAutorizacaoAnexoId: v.urgencia_autorizacao_anexo_id,
         comentariosOperacao: v.comentarios_operacao,
         comentariosFiscal: v.comentarios_fiscal,
         comentariosFinanceiro: v.comentarios_financeiro,
         ajusteOperacao: v.ajuste_operacao,
         ajusteFiscal: v.ajuste_fiscal,
         etapaAtual: v.etapa_atual,
-        statusBaixa: v.status_baixa,
+        statusBaixa: v.status_baixa || "PENDENTE",
         statusFinanceiro: v.status_financeiro || "PENDENTE",
         statusEnvioCliente: v.status_envio_cliente,
         criadoPorUserId: v.criado_por_user_id,
@@ -469,7 +482,6 @@ const EsteiraIndex = () => {
         responsavelFinanceiroUserId: v.responsavel_financeiro_user_id,
         responsavelFinanceiroUserName: v.responsavel_financeiro?.name,
         aprovadoPorUserId: v.aprovado_por_user_id,
-        aprovadoPorUserName: v.aprovado_por?.name,
         clienteEmail: v.cliente_email,
         createdAt: new Date(v.created_at),
         updatedAt: new Date(v.updated_at),
@@ -538,8 +550,11 @@ const EsteiraIndex = () => {
 
   const filterVouchers = (vouchersList: Voucher[]) => {
     return vouchersList.filter(voucher => {
-      if (filters.search && !voucher.numeroSPO.toLowerCase().includes(filters.search.toLowerCase())) {
-        return false;
+      if (filters.search) {
+        const searchLower = filters.search.toLowerCase();
+        const matchesSPO = voucher.numeroSPO.toLowerCase().includes(searchLower);
+        const matchesFornecedor = voucher.fornecedor?.toLowerCase().includes(searchLower);
+        if (!matchesSPO && !matchesFornecedor) return false;
       }
       if (filters.etapa !== "all" && voucher.etapaAtual !== filters.etapa) {
         return false;
@@ -550,8 +565,10 @@ const EsteiraIndex = () => {
       if (filters.formaPagamento !== "all" && voucher.formaPagamento !== filters.formaPagamento) {
         return false;
       }
-      if (filters.urgente !== "all" && String(voucher.urgente) !== filters.urgente) {
-        return false;
+      if (filters.urgente !== "all") {
+        const isUrgente = voucher.urgenciaTipo !== "NORMAL";
+        if (filters.urgente === "true" && !isUrgente) return false;
+        if (filters.urgente === "false" && isUrgente) return false;
       }
       return true;
     });
@@ -563,16 +580,161 @@ const EsteiraIndex = () => {
     navigate(`/fin/esteira/voucher/${voucher.id}`);
   };
 
+  const handleEdit = (voucher: Voucher) => {
+    setSelectedVoucher(voucher);
+    setShowEditDialog(true);
+  };
+
+  const handleDelete = (voucher: Voucher) => {
+    setSelectedVoucher(voucher);
+    setShowDeleteDialog(true);
+  };
+
+  const handleGoBack = (voucher: Voucher) => {
+    setSelectedVoucher(voucher);
+    setShowGoBackDialog(true);
+  };
+
+  const confirmDelete = async () => {
+    if (!selectedVoucher) return;
+    
+    try {
+      // Delete logs first
+      await (supabase as any).from("voucher_logs").delete().eq("voucher_id", selectedVoucher.id);
+      // Delete anexos
+      await (supabase as any).from("voucher_anexos").delete().eq("voucher_id", selectedVoucher.id);
+      // Delete voucher
+      const { error } = await (supabase as any).from("vouchers").delete().eq("id", selectedVoucher.id);
+      
+      if (error) throw error;
+      
+      toast({
+        title: "Voucher excluído",
+        description: `Voucher ${selectedVoucher.numeroSPO} foi excluído com sucesso`,
+      });
+      
+      loadVouchers();
+    } catch (error: any) {
+      toast({
+        title: "Erro ao excluir",
+        description: error.message,
+        variant: "destructive",
+      });
+    } finally {
+      setShowDeleteDialog(false);
+      setSelectedVoucher(null);
+    }
+  };
+
+  const confirmGoBack = async () => {
+    if (!selectedVoucher) return;
+    
+    const etapaAnterior: Record<string, EtapaAtual> = {
+      "FISCAL": "OPERACAO",
+      "SUPERVISOR": "OPERACAO",
+      "FINANCEIRO": "FISCAL",
+      "ROBO": "FINANCEIRO",
+      "AJUSTE_OPERACAO": "OPERACAO",
+      "AJUSTE_FISCAL": "FISCAL",
+    };
+    
+    const novaEtapa = etapaAnterior[selectedVoucher.etapaAtual];
+    if (!novaEtapa) {
+      toast({
+        title: "Não é possível voltar",
+        description: "Este voucher não pode voltar para etapa anterior",
+        variant: "destructive",
+      });
+      return;
+    }
+    
+    try {
+      const { error } = await (supabase as any)
+        .from("vouchers")
+        .update({ etapa_atual: novaEtapa })
+        .eq("id", selectedVoucher.id);
+      
+      if (error) throw error;
+      
+      // Log da ação
+      const { data: userData } = await supabase.auth.getUser();
+      await (supabase as any).from("voucher_logs").insert({
+        voucher_id: selectedVoucher.id,
+        acao: "ETAPA_REVERTIDA",
+        detalhe: `Voucher voltou de ${selectedVoucher.etapaAtual} para ${novaEtapa}`,
+        user_id: userData.user?.id,
+      });
+      
+      toast({
+        title: "Etapa revertida",
+        description: `Voucher voltou para ${novaEtapa}`,
+      });
+      
+      loadVouchers();
+    } catch (error: any) {
+      toast({
+        title: "Erro ao reverter",
+        description: error.message,
+        variant: "destructive",
+      });
+    } finally {
+      setShowGoBackDialog(false);
+      setSelectedVoucher(null);
+    }
+  };
+
   return (
     <PageLayout>
       <main className="container mx-auto px-4 py-6 space-y-6">
-        {/* Header */}
-        <div className="flex items-center gap-3 mb-6">
-          <div className="text-2xl font-bold tracking-wide text-foreground">Esteira de Vouchers</div>
-          <div className="flex gap-1.5 ml-2">
-            <span className="w-1.5 h-1.5 rounded-full bg-primary shadow-[0_0_8px_hsl(var(--primary))]" />
-            <span className="w-1.5 h-1.5 rounded-full bg-primary/70" />
-            <span className="w-1.5 h-1.5 rounded-full bg-primary/40" />
+        {/* Header with Navigation */}
+        <div className="flex items-center justify-between flex-wrap gap-4">
+          <div className="flex items-center gap-3">
+            <div className="text-2xl font-bold tracking-wide text-foreground">Esteira de Vouchers</div>
+            <div className="flex gap-1.5 ml-2">
+              <span className="w-1.5 h-1.5 rounded-full bg-primary shadow-[0_0_8px_hsl(var(--primary))]" />
+              <span className="w-1.5 h-1.5 rounded-full bg-primary/70" />
+              <span className="w-1.5 h-1.5 rounded-full bg-primary/40" />
+            </div>
+          </div>
+          
+          {/* Navigation Buttons */}
+          <div className="flex items-center gap-2">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => navigate("/fin/esteira/dashboard")}
+              className="gap-2 text-muted-foreground hover:text-foreground"
+            >
+              <LayoutDashboard className="h-4 w-4" />
+              Dashboard
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => navigate("/fin/esteira/robot")}
+              className="gap-2 text-muted-foreground hover:text-foreground"
+            >
+              <Bot className="h-4 w-4" />
+              Robô
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => navigate("/fin/esteira/reports")}
+              className="gap-2 text-muted-foreground hover:text-foreground"
+            >
+              <FileText className="h-4 w-4" />
+              Relatórios
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => navigate("/fin/esteira/manual")}
+              className="gap-2 text-muted-foreground hover:text-foreground"
+            >
+              <HelpCircle className="h-4 w-4" />
+              Ajuda
+            </Button>
           </div>
         </div>
 
@@ -654,6 +816,7 @@ const EsteiraIndex = () => {
             <Button 
               className="gap-2 bg-primary text-primary-foreground hover:bg-primary/90 shadow-lg shadow-primary/20" 
               size="sm"
+              onClick={() => setShowCreateDialog(true)}
             >
               <Plus className="h-4 w-4" />
               Novo Voucher
@@ -665,85 +828,76 @@ const EsteiraIndex = () => {
         {loading ? (
           <div className="text-center py-8 text-muted-foreground">Carregando...</div>
         ) : activeTab === "processos" ? (
-          <div className="bg-card/60 backdrop-blur-sm border border-border/30 rounded-xl overflow-hidden shadow-lg animate-fade-in">
-            <div className="overflow-x-auto">
-              <table className="w-full">
-                <thead>
-                  <tr className="border-b border-border/30 bg-muted/30">
-                    <th className="text-left p-4 text-xs font-semibold text-muted-foreground uppercase tracking-wider">SPO</th>
-                    <th className="text-left p-4 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Fornecedor</th>
-                    <th className="text-left p-4 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Valor</th>
-                    <th className="text-left p-4 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Vencimento</th>
-                    <th className="text-left p-4 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Etapa</th>
-                    <th className="text-left p-4 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Urgência</th>
-                    <th className="text-right p-4 text-xs font-semibold text-muted-foreground uppercase tracking-wider">Ações</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {filteredVouchers.length === 0 ? (
-                    <tr>
-                      <td colSpan={7} className="p-8 text-center text-muted-foreground">
-                        Nenhum voucher encontrado
-                      </td>
-                    </tr>
-                  ) : (
-                    filteredVouchers.map((voucher, index) => (
-                      <tr 
-                        key={voucher.id} 
-                        className="border-b border-border/20 hover:bg-muted/20 transition-colors animate-fade-in"
-                        style={{ animationDelay: `${index * 30}ms` }}
-                      >
-                        <td className="p-4 font-medium text-foreground">{voucher.numeroSPO}</td>
-                        <td className="p-4 text-muted-foreground">{voucher.fornecedor}</td>
-                        <td className="p-4 text-foreground">
-                          {voucher.valor ? `R$ ${voucher.valor.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}` : '-'}
-                        </td>
-                        <td className="p-4 text-muted-foreground">
-                          {voucher.vencimento.toLocaleDateString('pt-BR')}
-                        </td>
-                        <td className="p-4">
-                          <span className={cn(
-                            "px-2 py-1 rounded-full text-xs font-medium",
-                            voucher.etapaAtual === "CONCLUIDO" ? "bg-success/20 text-success" :
-                            voucher.etapaAtual === "FINANCEIRO" ? "bg-info/20 text-info" :
-                            voucher.etapaAtual === "FISCAL" ? "bg-warning/20 text-warning" :
-                            "bg-primary/20 text-primary"
-                          )}>
-                            {voucher.etapaAtual.replace("_", " ")}
-                          </span>
-                        </td>
-                        <td className="p-4">
-                          <span className={cn(
-                            "px-2 py-1 rounded-full text-xs font-medium",
-                            voucher.urgenciaTipo === "URGENTE_REAL" ? "bg-destructive/20 text-destructive" :
-                            voucher.urgenciaTipo === "URGENTE_AUTOMATICO" ? "bg-warning/20 text-warning" :
-                            "bg-muted text-muted-foreground"
-                          )}>
-                            {voucher.urgenciaTipo === "NORMAL" ? "Normal" : 
-                             voucher.urgenciaTipo === "URGENTE_REAL" ? "Urgente" : "Auto"}
-                          </span>
-                        </td>
-                        <td className="p-4 text-right">
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => handleViewDetails(voucher)}
-                            className="border-border/50 hover:border-primary/50 text-xs"
-                          >
-                            Detalhes
-                          </Button>
-                        </td>
-                      </tr>
-                    ))
-                  )}
-                </tbody>
-              </table>
-            </div>
-          </div>
+          <VoucherTable
+            vouchers={filteredVouchers}
+            onViewDetails={handleViewDetails}
+            onEdit={handleEdit}
+            onDelete={handleDelete}
+            onGoBack={handleGoBack}
+            filters={filters}
+            onFilterChange={setFilters}
+          />
         ) : (
           <AnalyticsDashboard vouchers={vouchers} />
         )}
       </main>
+
+      {/* Create Dialog */}
+      <CreateVoucherDialog
+        open={showCreateDialog}
+        onOpenChange={setShowCreateDialog}
+        onSuccess={loadVouchers}
+      />
+
+      {/* Edit Dialog */}
+      {selectedVoucher && (
+        <EditVoucherDialog
+          voucher={selectedVoucher}
+          open={showEditDialog}
+          onOpenChange={setShowEditDialog}
+          onSuccess={() => {
+            loadVouchers();
+            setSelectedVoucher(null);
+          }}
+        />
+      )}
+
+      {/* Delete Confirmation */}
+      <AlertDialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Excluir Voucher</AlertDialogTitle>
+            <AlertDialogDescription>
+              Tem certeza que deseja excluir o voucher {selectedVoucher?.numeroSPO}?
+              Esta ação não pode ser desfeita.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction onClick={confirmDelete} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+              Excluir
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Go Back Confirmation */}
+      <AlertDialog open={showGoBackDialog} onOpenChange={setShowGoBackDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Reverter Etapa</AlertDialogTitle>
+            <AlertDialogDescription>
+              Tem certeza que deseja voltar o voucher {selectedVoucher?.numeroSPO} para a etapa anterior?
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction onClick={confirmGoBack}>
+              Confirmar
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </PageLayout>
   );
 };
