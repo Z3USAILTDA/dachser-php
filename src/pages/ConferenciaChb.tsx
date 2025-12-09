@@ -106,96 +106,113 @@ export default function ConferenciaChb() {
   };
 
   return (
-    <div className="min-h-screen relative overflow-hidden">
-      {/* Background */}
-      <div className="fixed inset-0 -z-10">
-        <img
-          src={dachserBg}
-          alt=""
-          className="absolute inset-0 w-full h-full object-cover"
-          style={{ filter: 'saturate(0.8)' }}
-        />
-        <div
-          className="absolute inset-0"
+    <div className="min-h-screen relative overflow-x-hidden">
+      {/* Background with image and gradient overlay */}
+      <div className="fixed inset-0 z-0">
+        <div 
+          className="absolute inset-0" 
           style={{
-            background: `
-              radial-gradient(circle at 10% 10%, rgba(255,200,0,0.18) 0%, transparent 50%),
-              radial-gradient(circle at 90% 90%, rgba(255,200,0,0.12) 0%, transparent 50%),
-              linear-gradient(to bottom, rgba(0,0,0,0.7) 0%, rgba(0,0,0,0.82) 100%)
-            `,
-          }}
+            backgroundImage: `url(${dachserBg})`,
+            backgroundSize: 'cover',
+            backgroundPosition: 'center'
+          }} 
+        />
+        <div 
+          className="absolute inset-0" 
+          style={{
+            background: 'linear-gradient(120deg, rgba(4, 17, 45, 0.92), rgba(26, 93, 173, 0.55))'
+          }} 
         />
         
-        {/* Animated lines */}
-        {[...Array(5)].map((_, i) => (
-          <div
-            key={i}
-            className="absolute h-px bg-gradient-to-r from-transparent via-amber-500/20 to-transparent"
+        {/* Radial gradient overlay */}
+        <div 
+          className="absolute inset-0" 
+          style={{
+            background: `
+              radial-gradient(ellipse at 20% 20%, rgba(245, 184, 67, 0.12) 0%, transparent 50%),
+              radial-gradient(ellipse at 80% 80%, rgba(245, 184, 67, 0.08) 0%, transparent 50%)
+            `
+          }} 
+        />
+        
+        {/* Animated Lines */}
+        <div className="absolute inset-0 opacity-20">
+          {[...Array(6)].map((_, i) => (
+            <div 
+              key={`line-${i}`} 
+              className="absolute h-full w-px bg-gradient-to-b from-primary/70 to-primary/10" 
+              style={{
+                left: `${15 + i * 14}%`,
+                transform: `skewX(${-20 + i * 8}deg)`
+              }} 
+            />
+          ))}
+        </div>
+
+        {/* Floating Particles */}
+        {[...Array(20)].map((_, i) => (
+          <div 
+            key={`particle-${i}`} 
+            className="absolute w-1 h-1 rounded-full bg-primary/40 animate-float" 
             style={{
-              top: `${20 + i * 15}%`,
-              left: 0,
-              right: 0,
-              animation: `scan ${8 + i * 2}s linear infinite`,
-              animationDelay: `${i * 0.5}s`,
-            }}
+              left: `${Math.random() * 100}%`,
+              top: `${Math.random() * 100}%`,
+              animationDelay: `${Math.random() * 5}s`,
+              animationDuration: `${4 + Math.random() * 4}s`
+            }} 
           />
         ))}
       </div>
 
-      {/* Header */}
-      <header className="relative z-20 w-full max-w-[95%] mx-auto flex items-center justify-between pt-5 pb-4 px-2">
-        {/* Left: Back button + Branding */}
-        <div className="flex items-center gap-4">
-          <button
-            onClick={() => navigate('/chb/conferences')}
-            className="w-8 h-8 flex items-center justify-center rounded-full 
-              border border-white/12 bg-[rgba(5,6,18,0.9)] text-white/80 
-              hover:text-white hover:border-amber-500/50 transition-all backdrop-blur-sm"
+      {/* Top Header Bar */}
+      <div className="relative z-10 max-w-[95%] mx-auto px-2 pt-5 pb-4 flex items-center justify-between">
+        {/* Left - Back + Header */}
+        <div className="flex items-center gap-[18px]">
+          <button 
+            onClick={() => navigate("/chb/conferences")} 
+            className="w-8 h-8 rounded-full border border-[rgba(255,255,255,.12)] bg-[rgba(5,6,18,0.9)] text-[#aaaaaa] flex items-center justify-center backdrop-blur-sm hover:bg-[rgba(5,6,18,1)] hover:text-white transition-all"
           >
-            <ArrowLeft className="w-4 h-4" />
+            <ArrowLeft size={16} />
           </button>
-          
-          <div>
-            <h1 className="text-lg font-bold tracking-[0.2em] uppercase text-white">
-              DACHSER
-            </h1>
-            <p className="text-white/50 text-sm mt-0.5">
+
+          <header>
+            <h1 className="text-[1.6rem] tracking-[0.24em] uppercase text-[#f5f5f5]">DACHSER</h1>
+            <p className="text-[0.9rem] text-[#aaaaaa] mt-0.5">
               Desembaraço — Conferência (CHB)
             </p>
             <div className="flex gap-1.5 mt-1.5">
-              <span className="w-1.5 h-1.5 rounded-full bg-amber-500 shadow-[0_0_8px_rgba(255,200,0,0.9)]" />
-              <span className="w-1.5 h-1.5 rounded-full bg-amber-500 shadow-[0_0_8px_rgba(255,200,0,0.9)]" />
-              <span className="w-1.5 h-1.5 rounded-full bg-amber-500 shadow-[0_0_8px_rgba(255,200,0,0.9)]" />
+              <span className="w-1.5 h-1.5 rounded-full bg-[#ffc800] shadow-[0_0_10px_rgba(255,200,0,.9)]" />
+              <span className="w-1.5 h-1.5 rounded-full bg-[#ffc800] shadow-[0_0_10px_rgba(255,200,0,.9)]" />
+              <span className="w-1.5 h-1.5 rounded-full bg-[#ffc800] shadow-[0_0_10px_rgba(255,200,0,.9)]" />
             </div>
-          </div>
+          </header>
         </div>
 
-        {/* Right: Process ID + User */}
-        <div className="flex items-center gap-3">
-          <div className="flex items-center gap-2 px-3 py-1.5 rounded-full 
-            bg-[rgba(5,6,18,0.9)] border border-white/12 text-white/80 text-sm backdrop-blur-sm">
-            <FileCheck className="w-4 h-4 text-amber-500" />
+        {/* Right - Process ID + User */}
+        <div className="flex items-center gap-2.5 text-[0.85rem]">
+          <div className="flex items-center gap-2 px-[14px] py-1.5 rounded-full bg-[rgba(0,0,0,.70)] border border-[rgba(255,255,255,.18)] text-[#aaaaaa]">
+            <FileCheck size={14} className="text-[#ffc800]" />
             <span>{id ? `#${id}` : 'Processo'}</span>
           </div>
-          <div className="px-3 py-1.5 rounded-full bg-[rgba(5,6,18,0.9)] 
-            border border-white/12 text-white/80 text-sm backdrop-blur-sm">
-            {currentUser}
+          <div className="px-[14px] py-1.5 rounded-full bg-[rgba(0,0,0,.70)] border border-[rgba(255,255,255,.18)] text-[#aaaaaa] max-w-[220px] truncate">
+            @{currentUser.replace('@', '')}
           </div>
         </div>
-      </header>
+      </div>
 
-      {/* Main content */}
-      <div className="relative z-10 max-w-[95%] mx-auto px-2 pb-10">
+      {/* Main Content */}
+      <main className="relative z-10 max-w-[95%] mx-auto mb-12 px-2 space-y-[18px]">
         {/* Main card */}
-        <div
-          className="rounded-2xl border border-white/12 overflow-hidden"
+        <section 
+          className="rounded-2xl overflow-hidden"
           style={{
-            background: 'rgba(5, 6, 18, 0.9)',
-            boxShadow: '0 18px 40px rgba(0, 0, 0, 0.85)',
+            background: 'rgba(5,6,18,.9)',
+            border: '1px solid rgba(255,255,255,.12)',
+            boxShadow: '0 18px 40px rgba(0,0,0,.85)'
           }}
         >
           {/* Stepper */}
-          <div className="border-b border-white/10">
+          <div className="border-b border-[rgba(255,255,255,.10)]">
             <ChbStepper
               steps={steps}
               activeStep={activeStep}
@@ -204,7 +221,7 @@ export default function ConferenciaChb() {
           </div>
 
           {/* Tabs */}
-          <div className="py-4 border-b border-white/10">
+          <div className="py-4 border-b border-[rgba(255,255,255,.10)]">
             <ChbTabs activeTab={activeTab} onTabChange={setActiveTab} />
           </div>
 
@@ -212,8 +229,8 @@ export default function ConferenciaChb() {
           <div className="p-6 min-h-[400px]">
             {renderPanel()}
           </div>
-        </div>
-      </div>
+        </section>
+      </main>
     </div>
   );
 }
