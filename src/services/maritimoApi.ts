@@ -94,13 +94,25 @@ export const maritimoApi = {
     }
   },
 
-  async submitAnalysis(params: any) {
+  async submitAnalysis(params: any): Promise<{
+    analysisId: string;
+    status?: string;
+    result_text?: string;
+    result_data?: any;
+    error?: string;
+  }> {
     try {
       const { data, error } = await supabase.functions.invoke('maritimo-analyze', {
         body: params
       });
       if (error) throw error;
-      return { analysisId: data?.analysisId || '' };
+      return {
+        analysisId: data?.analysisId || '',
+        status: data?.status,
+        result_text: data?.result_text,
+        result_data: data?.result_data,
+        error: data?.error
+      };
     } catch (error: any) {
       console.error('Error submitting analysis:', error);
       throw error;
@@ -129,6 +141,19 @@ export const maritimoApi = {
       await new Promise(resolve => setTimeout(resolve, 2000));
     }
     throw new Error('Analysis timeout');
+  },
+
+  async completeAnalysis(analysisId: string, itemId: string, completed: boolean) {
+    try {
+      const { data, error } = await supabase.functions.invoke('mariadb-proxy', {
+        body: { action: 'complete_maritimo_analysis', analysisId, itemId, completed }
+      });
+      if (error) throw error;
+      return { success: true };
+    } catch (error: any) {
+      console.error('Error completing analysis:', error);
+      throw error;
+    }
   },
 
   async deleteItem(itemId: string) {

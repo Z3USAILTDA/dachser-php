@@ -1,0 +1,433 @@
+import { useState, useEffect } from "react";
+import { useNavigate, useLocation } from "react-router-dom";
+import { ArrowLeft, Send, FileText, Copy, Check, Info } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { UploadZone } from "@/components/maritimo/UploadZone";
+import { FileItem } from "@/components/maritimo/FileItem";
+import { Progress } from "@/components/ui/progress";
+import { toast } from "sonner";
+import { maritimoApi } from "@/services/maritimoApi";
+
+interface BaseInfo {
+  itemId: string;
+  arquivo: string;
+  arquivoUrl: string;
+  container: string | null;
+  consignee: string | null;
+}
+
+export default function SubmeterHblMbl() {
+  const navigate = useNavigate();
+  const location = useLocation();
+  const [mblFile, setMblFile] = useState<File | null>(null);
+  const [analysisResult, setAnalysisResult] = useState<any>(null);
+  const [analysisId, setAnalysisId] = useState<string | null>(null);
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [analysisProgress, setAnalysisProgress] = useState(0);
+  const [analysisStep, setAnalysisStep] = useState("");
+  const [baseInfo, setBaseInfo] = useState<BaseInfo | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isCompletingAnalysis, setIsCompletingAnalysis] = useState(false);
+  const [copiedResult, setCopiedResult] = useState(false);
+  const [inlineStatus, setInlineStatus] = useState<{ message: string; type: 'info' | 'success' | 'error' } | null>(null);
+
+  const itemId = location.state?.itemId;
+
+  useEffect(() => {
+    if (!itemId) {
+      toast.error("ID do item não encontrado");
+      navigate("/maritimo");
+      return;
+    }
+
+    const fetchItem = async () => {
+      try {
+        const item = await maritimoApi.getItem(itemId);
+        setBaseInfo({
+          itemId: item.id,
+          arquivo: item.base_file_name,
+          arquivoUrl: item.base_file_url,
+          container: item.container || "Não identificado",
+          consignee: item.consignee || "Não identificado"
+        });
+      } catch (error: any) {
+        toast.error("Erro ao carregar dados do HBL: " + (error.message || 'Erro desconhecido'));
+        navigate("/maritimo");
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchItem();
+  }, [itemId, navigate]);
+
+  useEffect(() => {
+    setMblFile(null);
+    setAnalysisResult(null);
+    setAnalysisId(null);
+    setIsAnalyzing(false);
+    setAnalysisProgress(0);
+    setAnalysisStep("");
+    setIsCompletingAnalysis(false);
+    setInlineStatus(null);
+  }, [itemId]);
+
+  const showInlineStatus = (message: string, type: 'info' | 'success' | 'error' = 'info') => {
+    setInlineStatus({ message, type });
+  };
+
+  const handleFilesSelected = (files: File[]) => {
+    if (files.length > 0) {
+      const file = files[0];
+      
+      if (file.type !== "application/pdf" && !file.name.toLowerCase().endsWith(".pdf")) {
+        showInlineStatus("Envie apenas arquivo PDF", 'error');
+        return;
+      }
+
+      if (file.size > 20 * 1024 * 1024) {
+        showInlineStatus("Arquivo não pode exceder 20MB", 'error');
+        return;
+      }
+      
+      setMblFile(file);
+      showInlineStatus("Arquivo MBL cadastrado", 'success');
+    }
+  };
+
+  const handleAnalise = async () => {
+    if (!mblFile) {
+      showInlineStatus("Adicione o arquivo MBL", 'error');
+      return;
+    }
+
+    if (!itemId) {
+      showInlineStatus("Item ID não encontrado", 'error');
+      return;
+    }
+
+    const maxFileSize = 50 * 1024 * 1024;
+    if (mblFile.size > maxFileSize) {
+      showInlineStatus(`Arquivo muito grande (${(mblFile.size / 1024 / 1024).toFixed(1)}MB). Limite: 50MB`, 'error');
+      return;
+    }
+
+    setIsAnalyzing(true);
+    setAnalysisProgress(5);
+    setAnalysisStep("Enviando arquivos...");
+    setInlineStatus(null);
+    showInlineStatus("Processando análise com IA...", 'info');
+
+    try {
+      const progressInterval = setInterval(() => {
+        setAnalysisProgress(prev => {
+          if (prev >= 90) {
+            clearInterval(progressInterval);
+            return 90;
+          }
+          return prev + 2;
+        });
+      }, 500);
+
+      const response = await maritimoApi.submitAnalysis({
+        itemId,
+        analysisType: 'hbl_mbl',
+        files: [mblFile]
+      });
+
+      clearInterval(progressInterval);
+      setAnalysisId(response.analysisId);
+      
+      let result: { status: string; result_text?: string; result_data?: any };
+      
+      if (response.result_text || response.status === 'completed' || response.status === 'error') {
+        console.log('Analysis completed synchronously');
+        result = {
+          status: response.status || 'completed',
+          result_text: response.result_text,
+          result_data: response.result_data
+        };
+        
+        if (response.error) {
+          throw new Error(response.error);
+        }
+      } else {
+        console.log('Falling back to polling mode');
+        setAnalysisStep("Aguardando resultado...");
+        result = await maritimoApi.pollAnalysisUntilComplete(
+          response.analysisId,
+          (percent, step) => {
+            setAnalysisProgress(Math.min(percent, 95));
+            setAnalysisStep(step);
+          },
+          300000
+        );
+      }
+
+      setAnalysisProgress(100);
+      await new Promise(resolve => setTimeout(resolve, 300));
+      
+      setIsAnalyzing(false);
+      setAnalysisProgress(0);
+      setAnalysisStep("");
+      setInlineStatus(null);
+      
+      if (result.status === 'error') {
+        showInlineStatus("Erro na análise. Verifique os arquivos e tente novamente.", 'error');
+      } else {
+        setTimeout(() => {
+          document.getElementById('analysis-results')?.scrollIntoView({ 
+            behavior: 'smooth', 
+            block: 'start' 
+          });
+        }, 100);
+      }
+      
+      setAnalysisResult({
+        status: result.status,
+        result_text: result.result_text,
+        result_data: result.result_data
+      });
+    } catch (error: any) {
+      console.error('Submit error:', error);
+      showInlineStatus(`Erro ao submeter análise: ${error.message || 'Erro desconhecido'}`, 'error');
+      setIsAnalyzing(false);
+      setAnalysisProgress(0);
+      setAnalysisStep("");
+    }
+  };
+
+  const handleCompleteAnalysis = async () => {
+    if (!analysisId || !itemId) {
+      toast.error("Informações da análise não encontradas");
+      return;
+    }
+
+    setIsCompletingAnalysis(true);
+    const loadingToast = toast.loading("Concluindo análise...");
+
+    try {
+      await maritimoApi.completeAnalysis(analysisId, itemId, true);
+      toast.dismiss(loadingToast);
+      toast.success("Análise concluída com sucesso!");
+      
+      setTimeout(() => navigate("/maritimo"), 1000);
+    } catch (error: any) {
+      console.error('Complete analysis error:', error);
+      toast.dismiss(loadingToast);
+      toast.error("Erro ao atualizar status: " + (error.message || 'Erro desconhecido'));
+    } finally {
+      setIsCompletingAnalysis(false);
+    }
+  };
+
+  const handleNewAnalysis = async () => {
+    setAnalysisResult(null);
+    setAnalysisId(null);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+    await handleAnalise();
+  };
+
+  const handleCopyResult = () => {
+    if (!analysisResult?.result_text || analysisResult.result_text.trim().length === 0) {
+      toast.error("Não há conteúdo para copiar");
+      return;
+    }
+
+    try {
+      const textarea = document.createElement('textarea');
+      textarea.value = analysisResult.result_text;
+      textarea.style.position = 'fixed';
+      textarea.style.opacity = '0';
+      document.body.appendChild(textarea);
+      textarea.select();
+      
+      const successful = document.execCommand('copy');
+      document.body.removeChild(textarea);
+      
+      if (successful) {
+        setCopiedResult(true);
+        toast.success("Resultado copiado");
+        setTimeout(() => setCopiedResult(false), 2000);
+      } else {
+        throw new Error("execCommand failed");
+      }
+    } catch (err) {
+      console.error('Copy error:', err);
+      toast.error("Não foi possível copiar. Selecione o texto manualmente.");
+    }
+  };
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-background p-6 flex items-center justify-center">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+      </div>
+    );
+  }
+
+  if (!baseInfo) {
+    return null;
+  }
+
+  return (
+    <div className="min-h-screen text-white" style={{
+      background: "linear-gradient(120deg, rgba(4, 17, 45, 0.92), rgba(26, 93, 173, 0.55)), url('https://www.dachser.com.br/images/Corporate/DGI_003215_rdax_65s.jpg') center/cover no-repeat"
+    }}>
+      <div className="min-h-screen bg-black/80 backdrop-blur-sm">
+        <div className="max-w-4xl mx-auto px-6 py-6">
+          <Button
+            variant="outline"
+            onClick={() => navigate("/maritimo")}
+            className="mb-6 rounded-full border-white/24 bg-black/40 text-white hover:border-amber-400/80 hover:bg-black"
+          >
+            <ArrowLeft className="w-4 h-4 mr-2" />
+            Voltar
+          </Button>
+
+          <div className="bg-black/40 border border-white/10 rounded-2xl shadow-[0_18px_40px_rgba(0,0,0,0.9)] p-8">
+            <h1 className="text-2xl font-bold text-white mb-2">Submeter – HBL × MBL</h1>
+            <p className="text-sm text-neutral-400 mb-8">Envie o arquivo MBL para comparação com o HBL base</p>
+
+            <div className="bg-black/20 border border-white/5 rounded-xl p-6 mb-8">
+              <h3 className="text-xs tracking-[0.22em] uppercase text-neutral-400 mb-4">Informações do HBL base:</h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <span className="text-xs text-neutral-500">Arquivo:</span>
+                  <div className="flex items-center gap-2 mt-1">
+                    <FileText className="w-4 h-4 text-amber-300" />
+                    <span className="text-white text-sm">{baseInfo.arquivo}</span>
+                  </div>
+                </div>
+                <div>
+                  <span className="text-xs text-neutral-500">Container:</span>
+                  <p className="text-white text-sm mt-1">{baseInfo.container}</p>
+                </div>
+                <div>
+                  <span className="text-xs text-neutral-500">Consignee:</span>
+                  <p className="text-white text-sm mt-1">{baseInfo.consignee}</p>
+                </div>
+              </div>
+            </div>
+
+            <h3 className="text-xs tracking-[0.22em] uppercase text-neutral-400 mb-4">Envie o arquivo MBL:</h3>
+          
+            <UploadZone
+              onFilesSelected={handleFilesSelected}
+              accept=".pdf"
+              multiple={false}
+              label="Arraste e solte ou clique para enviar"
+              description="Aceito apenas: PDF (um arquivo, máx. 20MB)"
+            />
+
+            {mblFile && (
+              <div className="mt-6">
+                <h3 className="text-xs tracking-[0.22em] uppercase text-neutral-400 mb-3">Arquivo MBL selecionado:</h3>
+                <FileItem
+                  file={mblFile}
+                  onRemove={() => setMblFile(null)}
+                />
+              </div>
+            )}
+
+            {inlineStatus && !isAnalyzing && (
+              <div className={`mt-6 rounded-xl p-4 border ${
+                inlineStatus.type === 'success' ? 'bg-emerald-500/15 border-emerald-500/40 text-emerald-300' :
+                inlineStatus.type === 'error' ? 'bg-rose-500/15 border-rose-500/40 text-rose-300' :
+                'bg-amber-500/15 border-amber-500/40 text-amber-300'
+              }`}>
+                <p className="text-sm font-medium">{inlineStatus.message}</p>
+              </div>
+            )}
+
+            {isAnalyzing && (
+              <div className="mt-6">
+                <div className="bg-black/20 border border-white/5 rounded-xl p-4">
+                  <div className="flex items-center gap-3 mb-3">
+                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-amber-400"></div>
+                    <span className="text-sm text-white font-medium">{analysisStep}</span>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <Progress value={analysisProgress} className="h-2 flex-1" />
+                    <span className="text-xs text-neutral-400 font-mono min-w-[3rem] text-right">{analysisProgress}%</span>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {analysisResult?.result_text && (
+              <div id="analysis-results" className="mt-8 space-y-6">
+                <div className="flex items-center gap-2 text-emerald-300">
+                  <div className="w-2 h-2 bg-emerald-400 rounded-full shadow-[0_0_10px_rgba(52,211,153,0.6)]" />
+                  <span className="font-semibold text-sm">Análise concluída</span>
+                </div>
+
+                <div className="bg-black/20 border border-white/5 rounded-xl p-6">
+                  <pre className="text-sm text-neutral-300 whitespace-pre-wrap font-mono bg-black/30 p-4 rounded-lg max-h-96 overflow-y-auto">
+                    {analysisResult.result_text}
+                  </pre>
+                </div>
+
+                <div className="flex items-center gap-4">
+                  <Button
+                    onClick={handleNewAnalysis}
+                    disabled={isCompletingAnalysis || isAnalyzing}
+                    className="h-10 rounded-full px-6 bg-amber-400 text-black font-semibold text-sm shadow-[0_0_22px_rgba(251,191,36,0.6)] hover:bg-amber-300"
+                  >
+                    <Send className="w-4 h-4 mr-2" />
+                    {isAnalyzing ? "Processando..." : "Fazer nova análise"}
+                  </Button>
+                  <Button
+                    onClick={handleCompleteAnalysis}
+                    disabled={isCompletingAnalysis}
+                    variant="outline"
+                    className="h-10 rounded-full px-6 border-white/24 bg-black/40 text-white hover:border-amber-400/80 hover:bg-black"
+                  >
+                    Concluir análise
+                  </Button>
+                  <Button
+                    onClick={handleCopyResult}
+                    variant="ghost"
+                    size="icon"
+                    className="rounded-full w-10 h-10 text-white hover:bg-white/10"
+                    title="Copiar resultado"
+                  >
+                    {copiedResult ? (
+                      <Check className="w-4 h-4" />
+                    ) : (
+                      <Copy className="w-4 h-4" />
+                    )}
+                  </Button>
+                </div>
+              </div>
+            )}
+
+            {!analysisResult && (
+              <div className="mt-8 flex justify-start">
+                <Button
+                  onClick={handleAnalise}
+                  disabled={!mblFile || isAnalyzing}
+                  className="h-10 rounded-full px-6 bg-amber-400 text-black font-semibold text-sm shadow-[0_0_22px_rgba(251,191,36,0.6)] hover:bg-amber-300"
+                >
+                  <Send className="w-4 h-4 mr-2" />
+                  {isAnalyzing ? "Processando..." : "Fazer análise"}
+                </Button>
+              </div>
+            )}
+          </div>
+
+          {!analysisResult && (
+            <div className="flex items-center justify-center mt-6">
+              <div className="flex items-start gap-3 text-xs text-neutral-400 bg-black/20 border border-white/5 p-4 rounded-xl max-w-2xl">
+                <Info className="w-4 h-4 flex-shrink-0 mt-0.5 text-amber-300" />
+                <p>
+                  As análises são geradas por um modelo de IA e podem conter imprecisões. Revise antes de concluir processos.
+                </p>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
