@@ -230,30 +230,6 @@ export default function ChbAnalises() {
             boxShadow: '0 18px 40px rgba(0,0,0,.85)',
           }}
         >
-          {/* Title Row */}
-          <div className="flex flex-col lg:flex-row lg:items-end lg:justify-between gap-4 mb-4">
-            <div>
-              <div className="text-[0.9rem] uppercase tracking-[0.18em] text-[#f5f5f5]">Esteira de análises CHB</div>
-              <div className="text-[0.9rem] text-[#aaaaaa] mt-1">Fluxo de 3 etapas: Pré-Alerta → Instrução → DI.</div>
-            </div>
-
-            {/* Pending Count + Cadastro */}
-            <div className="flex items-center gap-3">
-              <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-[rgba(255,255,255,.05)] border border-[rgba(255,255,255,.18)] text-[0.78rem] text-[#aaaaaa]">
-                <Clock size={14} />
-                Itens pendentes: <strong className="text-[#f5f5f5]">{pendingCount}</strong>
-              </div>
-              <button 
-                onClick={() => navigate("/chb/cadastro-pre-alerta")}
-                className="h-9 px-4 rounded-full flex items-center gap-2 bg-[#ffc800] text-[#111] font-bold text-[0.8rem] uppercase tracking-[0.12em] hover:bg-[#ffd940] transition-all"
-              >
-                <Upload size={14} />
-                Cadastro de Pré-Alerta
-              </button>
-            </div>
-          </div>
-
-          {/* Search + Filters Row */}
           <div className="space-y-3">
             <div className="relative">
               <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-[#aaaaaa]" />
@@ -287,37 +263,65 @@ export default function ChbAnalises() {
                     </SelectContent>
                   </Select>
                 </div>
-              </div>
 
-              {/* Action Buttons */}
-              <div className="flex items-center gap-2">
                 <button
                   onClick={handleRefresh}
                   disabled={isRefreshing}
-                  className="h-8 px-3.5 rounded-full flex items-center gap-1.5 bg-[rgba(255,255,255,.05)] border border-[rgba(255,255,255,.25)] text-[#f5f5f5] text-[0.75rem] uppercase tracking-[0.12em] font-bold hover:bg-[rgba(255,255,255,.08)] transition disabled:opacity-50"
+                  className="inline-flex items-center gap-1.5 h-8 px-3 rounded-full bg-[rgba(255,255,255,.05)] border border-[rgba(255,255,255,.25)] text-[#f5f5f5] text-[0.78rem] font-semibold hover:bg-[rgba(255,255,255,.08)] disabled:opacity-50"
                 >
-                  {isRefreshing ? <Loader2 size={14} className="animate-spin" /> : <Search size={14} />}
-                  Buscar
+                  <RotateCcw className={`h-3.5 w-3.5 ${isRefreshing ? "animate-spin" : ""}`} />
+                  Atualizar
                 </button>
-                <button
-                  onClick={handleClearFilters}
-                  className="h-8 px-3.5 rounded-full flex items-center gap-1.5 bg-[rgba(255,255,255,.05)] border border-[rgba(255,255,255,.25)] text-[#f5f5f5] text-[0.75rem] uppercase tracking-[0.12em] font-bold hover:bg-[rgba(255,255,255,.08)] transition"
-                >
-                  <RotateCcw size={14} />
-                  Limpar
-                </button>
+              </div>
+
+              <button 
+                onClick={() => navigate("/chb/cadastro-pre-alerta")}
+                className="h-8 rounded-full px-4 flex items-center gap-1.5 bg-[#ffc800] text-black font-semibold text-[0.78rem] shadow-[0_0_22px_rgba(255,200,0,.6)] hover:bg-[#f5b843]"
+              >
+                <Upload className="h-4 w-4" />
+                Cadastro de Pré-Alerta
+              </button>
+            </div>
+          </div>
+        </section>
+
+        {/* CARD DA TABELA */}
+        <section 
+          className="rounded-2xl p-[14px_16px_12px]"
+          style={{
+            background: 'rgba(4,5,15,.94)',
+            border: '1px solid rgba(255,255,255,.12)',
+            boxShadow: '0 18px 40px rgba(0,0,0,.9)',
+          }}
+        >
+          <div className="flex items-center justify-between mb-2">
+            <div>
+              <div className="text-[0.86rem] tracking-[0.18em] uppercase text-[#f5f5f5]">
+                Esteira de análises CHB
+              </div>
+              <div className="text-[0.76rem] text-[#aaaaaa] mt-1">
+                Fluxo de 3 etapas: Pré-Alerta → Instrução → DI
+              </div>
+            </div>
+            <div className="flex items-center gap-3">
+              <div className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-full bg-[rgba(255,255,255,.06)] border border-[rgba(255,255,255,.20)] text-[0.75rem]">
+                <Clock size={12} className="text-[#ffc800]" />
+                <span>Pendentes: <strong className="text-[#f5f5f5]">{pendingCount}</strong></span>
+              </div>
+              <div className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-full bg-[rgba(255,255,255,.06)] border border-[rgba(255,255,255,.20)] text-[0.75rem]">
+                <span className="w-[7px] h-[7px] rounded-full bg-[#ffc800]" />
+                <span>{filteredItems.length} registros</span>
               </div>
             </div>
           </div>
 
-          {/* Table */}
           {filteredItems.length === 0 ? (
             <div className="mt-4 p-3 rounded-xl border border-[rgba(255,255,255,.25)] bg-[rgba(255,255,255,.06)] text-[0.85rem] text-[#aaaaaa]">
               Nenhum processo encontrado.
             </div>
           ) : (
             <div 
-              className="mt-4 rounded-xl border border-[rgba(255,255,255,.16)] max-h-[60vh] overflow-auto"
+              className="mt-1.5 max-h-[52vh] overflow-auto rounded-xl border border-[rgba(255,255,255,.16)]"
               style={{
                 scrollbarWidth: 'thin',
                 scrollbarColor: 'rgba(255,255,255,.35) rgba(255,255,255,.10)'
@@ -325,33 +329,33 @@ export default function ChbAnalises() {
             >
               <table className="w-full text-[0.82rem]">
                 <thead>
-                  <tr className="bg-[#14151c] sticky top-0 z-10">
-                    <th className="px-3 py-2.5 text-left text-[0.75rem] uppercase tracking-[0.12em] font-medium border-b border-[rgba(255,255,255,.09)]">Referência</th>
-                    <th className="px-3 py-2.5 text-left text-[0.75rem] uppercase tracking-[0.12em] font-medium border-b border-[rgba(255,255,255,.09)]">Consignee</th>
-                    <th className="px-3 py-2.5 text-left text-[0.75rem] uppercase tracking-[0.12em] font-medium border-b border-[rgba(255,255,255,.09)]">Status</th>
-                    <th className="px-3 py-2.5 text-left text-[0.75rem] uppercase tracking-[0.12em] font-medium border-b border-[rgba(255,255,255,.09)]">Etapas</th>
-                    <th className="px-3 py-2.5 text-left text-[0.75rem] uppercase tracking-[0.12em] font-medium border-b border-[rgba(255,255,255,.09)]">Submeter</th>
-                    <th className="px-3 py-2.5 text-left text-[0.75rem] uppercase tracking-[0.12em] font-medium border-b border-[rgba(255,255,255,.09)]">Histórico</th>
-                    <th className="px-3 py-2.5 text-left text-[0.75rem] uppercase tracking-[0.12em] font-medium border-b border-[rgba(255,255,255,.09)]"></th>
+                  <tr className="bg-[#14151c]">
+                    <th className="px-[10px] py-[10px] text-left text-[0.75rem] uppercase tracking-[0.12em] text-[#aaaaaa] font-medium sticky top-0 bg-[#14151c] z-[5] border-b border-[rgba(255,255,255,.09)]">Referência</th>
+                    <th className="px-[10px] py-[10px] text-left text-[0.75rem] uppercase tracking-[0.12em] text-[#aaaaaa] font-medium sticky top-0 bg-[#14151c] z-[5] border-b border-[rgba(255,255,255,.09)]">Consignee</th>
+                    <th className="px-[10px] py-[10px] text-left text-[0.75rem] uppercase tracking-[0.12em] text-[#aaaaaa] font-medium sticky top-0 bg-[#14151c] z-[5] border-b border-[rgba(255,255,255,.09)]">Status</th>
+                    <th className="px-[10px] py-[10px] text-left text-[0.75rem] uppercase tracking-[0.12em] text-[#aaaaaa] font-medium sticky top-0 bg-[#14151c] z-[5] border-b border-[rgba(255,255,255,.09)]">Etapas</th>
+                    <th className="px-[10px] py-[10px] text-left text-[0.75rem] uppercase tracking-[0.12em] text-[#aaaaaa] font-medium sticky top-0 bg-[#14151c] z-[5] border-b border-[rgba(255,255,255,.09)]">Submeter</th>
+                    <th className="px-[10px] py-[10px] text-left text-[0.75rem] uppercase tracking-[0.12em] text-[#aaaaaa] font-medium sticky top-0 bg-[#14151c] z-[5] border-b border-[rgba(255,255,255,.09)]">Histórico</th>
+                    <th className="px-[10px] py-[10px] text-right text-[0.75rem] uppercase tracking-[0.12em] text-[#aaaaaa] font-medium sticky top-0 bg-[#14151c] z-[5] border-b border-[rgba(255,255,255,.09)]">Ações</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {filteredItems.map((item, idx) => (
+                  {filteredItems.map((item) => (
                     <tr 
                       key={item.id}
-                      className={`border-b border-[rgba(255,255,255,.09)] hover:bg-[rgba(255,255,255,.05)] transition-colors ${idx % 2 === 0 ? 'bg-[rgba(0,0,0,.18)]' : 'bg-[rgba(255,255,255,.01)]'}`}
+                      className="border-b border-[rgba(255,255,255,.09)] hover:bg-[rgba(255,255,255,.05)] transition-colors"
                     >
-                      <td className="px-3 py-2.5 whitespace-nowrap">{item.reference || "—"}</td>
-                      <td className="px-3 py-2.5 whitespace-nowrap">{item.consignee || "—"}</td>
-                      <td className="px-3 py-2.5 whitespace-nowrap">
+                      <td className="px-[10px] py-[9px] whitespace-nowrap font-mono">{item.reference || "—"}</td>
+                      <td className="px-[10px] py-[9px] whitespace-nowrap">{item.consignee || "—"}</td>
+                      <td className="px-[10px] py-[9px] whitespace-nowrap">
                         <span className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-full border border-[rgba(255,255,255,.14)] bg-[#111] text-[0.8rem] ${getStatusColor(item.status_macro)}`}>
                           {statusLabels[item.status_macro] || item.status_macro}
                         </span>
                       </td>
-                      <td className="px-3 py-2.5 whitespace-nowrap text-[0.78rem] text-[#aaaaaa]">
+                      <td className="px-[10px] py-[9px] whitespace-nowrap text-[0.78rem] text-[#aaaaaa]">
                         1: {stepStatusLabel(item.step1_status)} · 2: {stepStatusLabel(item.step2_status)} · 3: {stepStatusLabel(item.step3_status)}
                       </td>
-                      <td className="px-3 py-2.5 whitespace-nowrap">
+                      <td className="px-[10px] py-[9px] whitespace-nowrap">
                         <button
                           onClick={() => navigate(`/chb/conferences/${item.id}`)}
                           className="h-8 px-3 rounded-xl flex items-center gap-1.5 bg-[#ffc800] text-[#111] font-bold text-[0.8rem] hover:bg-[#ffd940] transition-all"
@@ -360,21 +364,23 @@ export default function ChbAnalises() {
                           Analisar
                         </button>
                       </td>
-                      <td className="px-3 py-2.5 whitespace-nowrap">
+                      <td className="px-[10px] py-[9px] whitespace-nowrap">
                         <button
                           onClick={() => handleOpenHistory(item.id)}
-                          className="h-8 px-2.5 rounded-xl flex items-center justify-center bg-[rgba(255,255,255,.06)] border border-[rgba(255,255,255,.16)] text-[#f5f5f5] hover:border-[#ffc800] hover:text-[#ffc800] transition-all"
+                          className="h-8 w-8 rounded-lg flex items-center justify-center text-[#aaaaaa] hover:bg-[rgba(255,255,255,.1)] transition-all"
                         >
-                          <ClipboardList size={14} />
+                          <ClipboardList size={16} />
                         </button>
                       </td>
-                      <td className="px-3 py-2.5 whitespace-nowrap">
-                        <button
-                          onClick={() => setDeleteDialog({ open: true, itemId: item.id })}
-                          className="h-8 px-2.5 rounded-xl flex items-center justify-center bg-transparent border border-[rgba(255,99,71,.55)] text-[#ff4d4f] hover:bg-[rgba(255,99,71,.10)] hover:border-[rgba(255,99,71,.9)] transition-all"
-                        >
-                          <Trash2 size={14} />
-                        </button>
+                      <td className="px-[10px] py-[9px] whitespace-nowrap text-right">
+                        <div className="flex justify-end gap-1.5">
+                          <button
+                            onClick={() => setDeleteDialog({ open: true, itemId: item.id })}
+                            className="h-8 w-8 rounded-lg flex items-center justify-center text-[#ff4d4f] hover:bg-[rgba(255,77,79,.12)] transition-all"
+                          >
+                            <Trash2 size={16} />
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   ))}
