@@ -54,7 +54,7 @@ export default function FinanceiroDisputa() {
   const [rows, setRows] = useState<DisputaRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
-  const [tipoFilter, setTipoFilter] = useState("");
+  const [tipoFilter, setTipoFilter] = useState("all");
 
   const [addModalOpen, setAddModalOpen] = useState(false);
   const [addNf, setAddNf] = useState("");
@@ -78,7 +78,7 @@ export default function FinanceiroDisputa() {
     setLoading(true);
     try {
       const { data, error } = await supabase.functions.invoke("mariadb-proxy", {
-        body: { action: "get_disputas", tipo: tipoFilter },
+        body: { action: "get_disputas", tipo: tipoFilter === "all" ? "" : tipoFilter },
       });
 
       if (error) throw error;
@@ -230,7 +230,7 @@ export default function FinanceiroDisputa() {
 
   const clearFilters = () => {
     setSearchQuery("");
-    setTipoFilter("");
+    setTipoFilter("all");
   };
 
   return (
@@ -315,16 +315,16 @@ export default function FinanceiroDisputa() {
             <div className="inline-flex items-center gap-2 px-3 py-[6px] rounded-full bg-[#121212] border border-white/12 text-[0.85rem]">
               <Filter className="w-4 h-4" />
               <span>Tipo:</span>
-              <Select value={tipoFilter} onValueChange={setTipoFilter}>
-                <SelectTrigger className="w-[100px] h-7 border-0 bg-transparent text-[0.85rem] p-0">
-                  <SelectValue placeholder="Todos" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="">Todos</SelectItem>
-                  <SelectItem value="A prazo">A prazo</SelectItem>
-                  <SelectItem value="À vista">À vista</SelectItem>
-                </SelectContent>
-              </Select>
+            <Select value={tipoFilter} onValueChange={setTipoFilter}>
+              <SelectTrigger className="w-[100px] h-7 border-0 bg-transparent text-[0.85rem] p-0">
+                <SelectValue placeholder="Todos" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Todos</SelectItem>
+                <SelectItem value="A prazo">A prazo</SelectItem>
+                <SelectItem value="À vista">À vista</SelectItem>
+              </SelectContent>
+            </Select>
             </div>
 
             <Button
