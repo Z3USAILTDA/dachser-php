@@ -63,7 +63,8 @@ interface EditVoucherDialogProps {
   voucher: Voucher | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onVoucherUpdated: () => void;
+  onVoucherUpdated?: () => void;
+  onSuccess?: () => void;
 }
 
 export const EditVoucherDialog = ({
@@ -71,6 +72,7 @@ export const EditVoucherDialog = ({
   open,
   onOpenChange,
   onVoucherUpdated,
+  onSuccess,
 }: EditVoucherDialogProps) => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const { toast } = useToast();
@@ -158,7 +160,8 @@ export const EditVoucherDialog = ({
       });
 
       onOpenChange(false);
-      onVoucherUpdated();
+      onVoucherUpdated?.();
+      onSuccess?.();
     } catch (error: any) {
       console.error("Erro ao atualizar voucher:", error);
       toast({

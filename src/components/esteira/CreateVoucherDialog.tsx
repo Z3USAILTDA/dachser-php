@@ -71,11 +71,29 @@ const formSchema = z.object({
 type FormValues = z.infer<typeof formSchema>;
 
 interface CreateVoucherDialogProps {
-  onVoucherCreated: () => void;
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
+  onSuccess?: () => void;
+  onVoucherCreated?: () => void;
 }
 
-export const CreateVoucherDialog = ({ onVoucherCreated }: CreateVoucherDialogProps) => {
-  const [open, setOpen] = useState(false);
+export const CreateVoucherDialog = ({ 
+  open: controlledOpen, 
+  onOpenChange, 
+  onSuccess,
+  onVoucherCreated 
+}: CreateVoucherDialogProps) => {
+  const [internalOpen, setInternalOpen] = useState(false);
+  
+  const isControlled = controlledOpen !== undefined;
+  const open = isControlled ? controlledOpen : internalOpen;
+  const setOpen = (value: boolean) => {
+    if (isControlled && onOpenChange) {
+      onOpenChange(value);
+    } else {
+      setInternalOpen(value);
+    }
+  };
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
   const { toast } = useToast();
@@ -195,7 +213,8 @@ export const CreateVoucherDialog = ({ onVoucherCreated }: CreateVoucherDialogPro
       form.reset();
       setSelectedFiles([]);
       setOpen(false);
-      onVoucherCreated();
+      onSuccess?.();
+      onVoucherCreated?.();
     } catch (error: any) {
       console.error("Erro ao criar voucher:", error);
       toast({
@@ -210,12 +229,14 @@ export const CreateVoucherDialog = ({ onVoucherCreated }: CreateVoucherDialogPro
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger asChild>
-        <Button className="gap-2">
-          <Plus className="h-4 w-4" />
-          Novo Voucher
-        </Button>
-      </DialogTrigger>
+      {!isControlled && (
+        <DialogTrigger asChild>
+          <Button className="gap-2">
+            <Plus className="h-4 w-4" />
+            Novo Voucher
+          </Button>
+        </DialogTrigger>
+      )}
       <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Criar Novo Voucher</DialogTitle>
