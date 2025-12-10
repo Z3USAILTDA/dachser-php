@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { ChartLine, RotateCcw } from "lucide-react";
+import { TablePagination } from "@/components/layout/TablePagination";
 import { supabase } from "@/integrations/supabase/client";
 import { PageLayout } from "@/components/layout/PageLayout";
 import { PageCard } from "@/components/layout/PageCard";
@@ -382,35 +383,11 @@ const MetricsUsage = () => {
         </div>
 
         {/* Pagination */}
-        {totalPages > 1 && (
-          <div className="flex flex-wrap gap-1.5 justify-end mt-3 text-xs">
-            {currentPage > 1 && (
-              <>
-                <button onClick={() => setCurrentPage(1)} className="px-3 py-1.5 rounded-full border border-white/12 bg-white/5 hover:bg-white/10">« Primeiro</button>
-                <button onClick={() => setCurrentPage((p) => p - 1)} className="px-3 py-1.5 rounded-full border border-white/12 bg-white/5 hover:bg-white/10">‹ Anterior</button>
-              </>
-            )}
-            {Array.from({ length: Math.min(7, totalPages) }, (_, i) => {
-              const page = Math.max(1, currentPage - 3) + i;
-              if (page > totalPages) return null;
-              return (
-                <button
-                  key={page}
-                  onClick={() => setCurrentPage(page)}
-                  className={`px-3 py-1.5 rounded-full border ${page === currentPage ? "border-primary/90 bg-primary/20 text-primary font-bold" : "border-white/12 bg-white/5 hover:bg-white/10"}`}
-                >
-                  {page}
-                </button>
-              );
-            })}
-            {currentPage < totalPages && (
-              <>
-                <button onClick={() => setCurrentPage((p) => p + 1)} className="px-3 py-1.5 rounded-full border border-white/12 bg-white/5 hover:bg-white/10">Próxima ›</button>
-                <button onClick={() => setCurrentPage(totalPages)} className="px-3 py-1.5 rounded-full border border-white/12 bg-white/5 hover:bg-white/10">Última »</button>
-              </>
-            )}
-          </div>
-        )}
+        <TablePagination
+          currentPage={currentPage}
+          totalPages={totalPages}
+          onPageChange={setCurrentPage}
+        />
       </PageCard>
 
       {/* Footer */}
