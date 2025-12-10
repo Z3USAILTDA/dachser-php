@@ -13,7 +13,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import { Search, RefreshCw, Filter as FilterIcon, UploadCloud, FileText, Trash2, TerminalSquare, Loader2, ChevronDown, ChevronUp, Plus, Database, ArrowLeft } from "lucide-react";
+import { Search, RefreshCw, Filter as FilterIcon, UploadCloud, FileText, Trash2, TerminalSquare, Loader2, ChevronDown, ChevronUp, Plus, Database, ArrowLeft, RotateCw } from "lucide-react";
 import { toast } from "sonner";
 import { format } from "date-fns";
 import { RuleMatrixManager } from "@/components/RuleMatrixManager";
@@ -91,6 +91,8 @@ const CheckAwb = () => {
   const [isDragging, setIsDragging] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
+  const [isReextracting, setIsReextracting] = useState(false);
+  const [reextractProgress, setReextractProgress] = useState({ current: 0, total: 0 });
 
   // Matrix panel state
   const [isMatrixOpen, setIsMatrixOpen] = useState(false);
@@ -196,6 +198,104 @@ const CheckAwb = () => {
     } finally {
       setIsExporting(false);
     }
+  };
+
+  const handleReextractAll = async () => {
+    if (checks.length === 0) {
+      toast.error("Nenhum processo para reextrair");
+      return;
+    }
+
+    setIsReextracting(true);
+    setReextractProgress({ current: 0, total: checks.length });
+    
+    let successCount = 0;
+    let errorCount = 0;
+
+    toast.info(`Iniciando reextração de ${checks.length} processos...`);
+
+    for (let i = 0; i < checks.length; i++) {
+      const check = checks[i];
+      setReextractProgress({ current: i + 1, total: checks.length });
+
+      try {
+        // Get file path from check
+        const filePath = check.hawb_file_path;
+        if (!filePath) {
+          console.log(`Check ${check.id} sem arquivo, pulando...`);
+          continue;
+        }
+
+        // Download file from storage
+        const { data: fileData, error: downloadError } = await supabase.storage
+          .from("hawb-documents")
+          .download(filePath);
+
+        if (downloadError || !fileData) {
+          console.error(`Erro ao baixar arquivo para check ${check.id}:`, downloadError);
+          errorCount++;
+          continue;
+        }
+
+        // Create form data and parse
+        const formData = new FormData();
+        formData.append("file", fileData, check.hawb_file_name || "document.pdf");
+
+        const { data: parsedData, error: parseError } = await supabase.functions.invoke(
+          "parse-awb",
+          { body: formData }
+        );
+
+        if (parseError || !parsedData) {
+          console.error(`Erro ao parsear check ${check.id}:`, parseError);
+          errorCount++;
+          continue;
+        }
+
+        console.log(`Reextracted data for check ${check.id}:`, parsedData);
+
+        // Update parsed_awb record
+        const { error: updateError } = await supabase.functions.invoke("mariadb-proxy", {
+          body: {
+            action: "update_parsed_awb",
+            awbCheckId: check.id,
+            shipper: parsedData.shipper,
+            consignee: parsedData.consignee,
+            carrier: parsedData.carrier,
+            grossWeight: parsedData.grossWeight,
+            chargeableWeight: parsedData.chargeableWeight,
+            mrn: parsedData.mrn,
+            routingLegs: parsedData.routingLegs,
+            flightNumbers: parsedData.flightNumbers,
+            hsCodes: parsedData.hsCodes,
+            dimensions: parsedData.dimensions,
+            incoterms: parsedData.incoterms,
+            references: parsedData.references,
+            extractedAwb: parsedData.awbNumber,
+            extractedCnpj: parsedData.cnpj,
+            extractedOrigin: parsedData.origin,
+            extractedDestination: parsedData.destination,
+            extractedCustomer: parsedData.customer,
+          },
+        });
+
+        if (updateError) {
+          console.error(`Erro ao atualizar check ${check.id}:`, updateError);
+          errorCount++;
+        } else {
+          successCount++;
+        }
+      } catch (error) {
+        console.error(`Erro no check ${check.id}:`, error);
+        errorCount++;
+      }
+    }
+
+    setIsReextracting(false);
+    setReextractProgress({ current: 0, total: 0 });
+    
+    toast.success(`Reextração concluída: ${successCount} sucesso, ${errorCount} erros`);
+    fetchChecks();
   };
 
   const handleFilesUpload = async (files: File[]) => {
@@ -743,6 +843,19 @@ const CheckAwb = () => {
           </div>
           {userRole === "ADMIN" && (
             <>
+              <button
+                type="button"
+                onClick={handleReextractAll}
+                disabled={isReextracting || checks.length === 0}
+                className="w-8 h-8 rounded-full border border-[rgba(255,255,255,.25)] flex items-center justify-center bg-[rgba(0,0,0,.7)] text-[#ffc800] hover:bg-[rgba(0,0,0,.9)] transition disabled:opacity-50"
+                title={isReextracting ? `Reextraindo ${reextractProgress.current}/${reextractProgress.total}` : "Reextrair todos os documentos"}
+              >
+                {isReextracting ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  <RotateCw className="w-4 h-4" />
+                )}
+              </button>
               <button
                 type="button"
                 onClick={handleExportToMariaDB}
