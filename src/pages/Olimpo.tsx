@@ -8,6 +8,9 @@ import dachserBg from "@/assets/dachser-background.jpg";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 
+// Olimpo mantém seu próprio layout devido ao mapa fullscreen
+// Mas usa os mesmos estilos de card e cores do PageLayout
+
 // Types
 interface DataItem {
   id: string | number;
@@ -628,7 +631,7 @@ export default function Olimpo() {
 
   return (
     <div className={`min-h-screen relative ${isFullscreen ? "fixed inset-0 z-50" : ""}`}>
-      {/* Background */}
+      {/* Background - consistente com PageLayout */}
       <div className="fixed inset-0 z-0">
         <div
           className="absolute inset-0"
@@ -653,6 +656,29 @@ export default function Olimpo() {
             `,
           }}
         />
+        {/* Animated Lines */}
+        <div className="absolute inset-0 opacity-20">
+          {[...Array(6)].map((_, i) => (
+            <div
+              key={`line-${i}`}
+              className="absolute h-full w-px bg-gradient-to-b from-[#ffc800]/70 to-[#ffc800]/10"
+              style={{ left: `${15 + i * 14}%`, transform: `skewX(${-20 + i * 8}deg)` }}
+            />
+          ))}
+        </div>
+        {/* Floating Particles */}
+        {[...Array(20)].map((_, i) => (
+          <div
+            key={`particle-${i}`}
+            className="absolute w-1 h-1 rounded-full bg-[#ffc800]/40 animate-float"
+            style={{
+              left: `${Math.random() * 100}%`,
+              top: `${Math.random() * 100}%`,
+              animationDelay: `${Math.random() * 5}s`,
+              animationDuration: `${4 + Math.random() * 4}s`,
+            }}
+          />
+        ))}
       </div>
 
       {/* Layout */}
@@ -692,9 +718,16 @@ export default function Olimpo() {
 
         {/* Content */}
         <div className={`flex-1 grid gap-4 min-h-0 ${isFullscreen ? "grid-cols-1" : "grid-cols-1 lg:grid-cols-[3fr_1fr]"}`}>
-          {/* Map Card */}
-          <div className="bg-[rgba(0,0,0,0.86)] rounded-[20px] border border-white/[0.06] shadow-[0_18px_36px_rgba(0,0,0,0.9)] backdrop-blur-sm flex flex-col overflow-hidden">
-            <div className="flex items-center justify-between p-4 border-b border-white/[0.04]">
+          {/* Map Card - consistente com PageCard */}
+          <div 
+            className="rounded-2xl flex flex-col overflow-hidden"
+            style={{
+              background: 'rgba(5,6,18,.9)',
+              border: '1px solid rgba(255,255,255,.12)',
+              boxShadow: '0 18px 40px rgba(0,0,0,.85)',
+            }}
+          >
+            <div className="flex items-center justify-between p-4 border-b border-white/[0.08]">
               <div>
                 <h2 className="text-sm tracking-[0.16em] uppercase text-white/90">Air & Sea Movements</h2>
                 <p className="text-xs text-muted-foreground">Origem x Destino com rotas em tempo quase real</p>
@@ -723,9 +756,16 @@ export default function Olimpo() {
             </div>
           </div>
 
-          {/* Side Card (Filters + KPIs) */}
-          <div className={`bg-[rgba(0,0,0,0.86)] rounded-[20px] border border-white/[0.06] shadow-[0_18px_36px_rgba(0,0,0,0.9)] backdrop-blur-sm flex flex-col ${isFullscreen ? "absolute right-8 top-24 w-80 max-h-[calc(100vh-160px)] z-[1000]" : ""}`}>
-            <div className="p-4 border-b border-white/[0.04]">
+          {/* Side Card (Filters + KPIs) - consistente com PageCard */}
+          <div 
+            className={`rounded-2xl flex flex-col ${isFullscreen ? "absolute right-8 top-24 w-80 max-h-[calc(100vh-160px)] z-[1000]" : ""}`}
+            style={{
+              background: 'rgba(5,6,18,.9)',
+              border: '1px solid rgba(255,255,255,.12)',
+              boxShadow: '0 18px 40px rgba(0,0,0,.85)',
+            }}
+          >
+            <div className="p-4 border-b border-white/[0.08]">
               <h2 className="text-sm tracking-[0.16em] uppercase text-white/90">Visão de Filtros</h2>
               <p className="text-xs text-muted-foreground">Refine a visualização do mapa e do resumo</p>
             </div>
@@ -794,10 +834,17 @@ export default function Olimpo() {
           </div>
         </div>
 
-        {/* Bottom Table */}
+        {/* Bottom Table - consistente com PageCard */}
         {!isFullscreen && (
-          <div className="bg-[rgba(0,0,0,0.86)] rounded-[20px] border border-white/[0.06] shadow-[0_18px_36px_rgba(0,0,0,0.9)] backdrop-blur-sm h-[32vh] min-h-[210px] flex flex-col">
-            <div className="p-4 border-b border-white/[0.04]">
+          <div 
+            className="rounded-2xl h-[32vh] min-h-[210px] flex flex-col"
+            style={{
+              background: 'rgba(5,6,18,.9)',
+              border: '1px solid rgba(255,255,255,.12)',
+              boxShadow: '0 18px 40px rgba(0,0,0,.85)',
+            }}
+          >
+            <div className="p-4 border-b border-white/[0.08]">
               <h2 className="text-sm tracking-[0.16em] uppercase text-white/90">Resumo de Movimentações</h2>
               <p className="text-xs text-muted-foreground">Principais embarques por origem, destino, modal e status</p>
             </div>

@@ -1,9 +1,9 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { ArrowLeft, ChartLine, RotateCcw } from "lucide-react";
+import { ChartLine, RotateCcw } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
-import logoZ3us from "@/assets/logo-z3us.png";
-import dachserBg from "@/assets/dachser-background.jpg";
+import { PageLayout } from "@/components/layout/PageLayout";
+import { PageCard } from "@/components/layout/PageCard";
 import {
   LineChart,
   Line,
@@ -59,7 +59,6 @@ const MetricsUsage = () => {
   const [dailyData, setDailyData] = useState<DailyData[]>([]);
   const [endpointData, setEndpointData] = useState<EndpointData[]>([]);
 
-  // Filtros
   const today = new Date();
   const defaultFrom = new Date(today);
   defaultFrom.setDate(defaultFrom.getDate() - 7);
@@ -166,483 +165,259 @@ const MetricsUsage = () => {
 
   if (!user) return null;
 
-  return (
-    <div className="min-h-screen relative overflow-x-hidden">
-      {/* Background with image and gradient overlay */}
-      <div className="fixed inset-0 z-0">
-        <div 
-          className="absolute inset-0"
-          style={{
-            backgroundImage: `url(${dachserBg})`,
-            backgroundSize: 'cover',
-            backgroundPosition: 'center',
-          }}
-        />
-        <div 
-          className="absolute inset-0"
-          style={{
-            background: 'linear-gradient(120deg, rgba(4, 17, 45, 0.92), rgba(26, 93, 173, 0.55))',
-          }}
-        />
-        
-        {/* Radial gradient overlay */}
-        <div 
-          className="absolute inset-0"
-          style={{
-            background: `
-              radial-gradient(ellipse at 20% 20%, rgba(245, 184, 67, 0.12) 0%, transparent 50%),
-              radial-gradient(ellipse at 80% 80%, rgba(245, 184, 67, 0.08) 0%, transparent 50%)
-            `
-          }}
-        />
-        
-        {/* Animated Lines */}
-        <div className="absolute inset-0 opacity-20">
-          {[...Array(6)].map((_, i) => (
-            <div
-              key={`line-${i}`}
-              className="absolute h-full w-px bg-gradient-to-b from-primary/70 to-primary/10"
-              style={{
-                left: `${15 + i * 14}%`,
-                transform: `skewX(${-20 + i * 8}deg)`,
-              }}
-            />
-          ))}
-        </div>
-
-        {/* Floating Particles */}
-        {[...Array(20)].map((_, i) => (
-          <div
-            key={`particle-${i}`}
-            className="absolute w-1 h-1 rounded-full bg-primary/40 animate-float"
-            style={{
-              left: `${Math.random() * 100}%`,
-              top: `${Math.random() * 100}%`,
-              animationDelay: `${Math.random() * 5}s`,
-              animationDuration: `${4 + Math.random() * 4}s`,
-            }}
-          />
-        ))}
-      </div>
-
-      {/* Top Left - Back + Header */}
-      <div className="relative z-50 flex items-center gap-5 pt-5 pl-4 mb-4">
-        <button
-          onClick={() => navigate("/dashboard")}
-          className="flex items-center gap-2 px-4 py-2.5 rounded-full border border-primary/90 bg-primary/15 text-primary font-bold text-sm backdrop-blur-sm hover:bg-primary/25 transition-all"
-        >
-          <ArrowLeft size={16} />
-          <span>Voltar</span>
-        </button>
-
-        <header>
-          <h1 className="text-2xl font-bold tracking-[0.24em] text-foreground">DACHSER</h1>
-          <p className="text-sm text-muted-foreground mt-0.5">
-            Intelligent Logistics – Métricas de Uso
-          </p>
-          <div className="flex gap-1.5 mt-1.5">
-            <span className="w-1.5 h-1.5 rounded-full bg-primary shadow-[0_0_10px_hsl(var(--primary))]" />
-            <span className="w-1.5 h-1.5 rounded-full bg-primary shadow-[0_0_10px_hsl(var(--primary))]" />
-            <span className="w-1.5 h-1.5 rounded-full bg-primary shadow-[0_0_10px_hsl(var(--primary))]" />
-          </div>
-        </header>
-      </div>
-
-      {/* Top Right - User */}
-      <div className="fixed top-5 right-4 z-50 flex items-center gap-2.5 text-sm">
-        <div className="px-4 py-1.5 rounded-full bg-background/70 border border-border/30 text-muted-foreground max-w-[220px] truncate">
-          @{user?.username}
-        </div>
-        <div className="w-8 h-8 rounded-full border border-border/25 flex items-center justify-center bg-background/70 text-primary">
-          <ChartLine size={16} />
-        </div>
-      </div>
-
-      {/* Main Content */}
-      <main className="relative z-10 max-w-[95%] mx-auto pt-4 pb-6 px-2">
-        {/* Grid: Stats + Filters */}
-        <div className="grid grid-cols-1 lg:grid-cols-[2.2fr_1.2fr] gap-5 mb-5">
-          {/* Stats Panel */}
-          <section className="bg-background rounded-2xl border border-border/30 shadow-[0_18px_40px_rgba(0,0,0,0.85)] p-5">
-            <div className="flex items-center justify-between text-sm uppercase tracking-[0.18em]">
-              <span className="font-semibold">Métricas Gerais</span>
-              <span className="text-muted-foreground text-xs normal-case tracking-normal">
-                Período: {new Date(dateFrom).toLocaleDateString("pt-BR")} –{" "}
-                {new Date(dateTo).toLocaleDateString("pt-BR")} ({getDaysDiff()} dias)
-              </span>
-            </div>
-
-            {/* Chips */}
-            <div className="flex flex-wrap gap-2 mt-3">
-              <div className="px-3 py-1.5 rounded-full border border-border/50 bg-card text-xs flex items-center gap-2">
-                <span className="w-1.5 h-1.5 rounded-full bg-primary" />
-                Logs internos
-              </div>
-              {usernameFilter && (
-                <div className="px-3 py-1.5 rounded-full border border-border/50 bg-card text-xs">
-                  Usuário: {usernameFilter}
-                </div>
-              )}
-              {moduleFilter && (
-                <div className="px-3 py-1.5 rounded-full border border-border/50 bg-card text-xs">
-                  Módulo: {moduleFilter.toUpperCase()}
-                </div>
-              )}
-            </div>
-
-            {/* KPIs */}
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mt-4">
-              <div className="p-3 rounded-xl bg-card border border-border/50">
-                <div className="text-[10px] uppercase tracking-[0.15em] text-muted-foreground">
-                  Total de Logs
-                </div>
-                <div className="text-xl font-bold mt-1">{stats.total}</div>
-                <div className="text-[10px] text-muted-foreground mt-0.5">
-                  {stats.avgPerDay.toFixed(1)} / dia (média)
-                </div>
-              </div>
-              <div className="p-3 rounded-xl bg-card border border-border/50">
-                <div className="text-[10px] uppercase tracking-[0.15em] text-muted-foreground">
-                  Usuários distintos
-                </div>
-                <div className="text-xl font-bold mt-1">{stats.distinctUsers}</div>
-                <div className="text-[10px] text-muted-foreground mt-0.5">
-                  {stats.distinctUsers ? "Atividade distribuída" : "Sem uso no período"}
-                </div>
-              </div>
-              <div className="p-3 rounded-xl bg-card border border-border/50">
-                <div className="text-[10px] uppercase tracking-[0.15em] text-muted-foreground">
-                  Endpoints distintos
-                </div>
-                <div className="text-xl font-bold mt-1">{stats.distinctEndpoints}</div>
-                <div className="text-[10px] text-muted-foreground mt-0.5">
-                  Cobertura de features
-                </div>
-              </div>
-              <div className="p-3 rounded-xl bg-card border border-border/50">
-                <div className="text-[10px] uppercase tracking-[0.15em] text-muted-foreground">
-                  Métodos GET x POST
-                </div>
-                <div className="text-xl font-bold mt-1">
-                  {stats.getCalls} / {stats.postCalls}
-                </div>
-                <div className="text-[10px] text-muted-foreground mt-0.5">GET / POST</div>
-              </div>
-            </div>
-
-            {/* Charts */}
-            <div className="grid grid-cols-1 md:grid-cols-[1.3fr_1fr] gap-3 mt-5">
-              <div className="rounded-xl bg-[#05060c] border border-border/20 p-3">
-                <div className="text-[11px] uppercase tracking-[0.15em] text-muted-foreground mb-1">
-                  Logs por Dia
-                </div>
-                <div className="text-[10px] text-muted-foreground mb-2">
-                  Volume diário de chamadas no período filtrado.
-                </div>
-                <div className="h-48">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <LineChart data={dailyData}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.08)" />
-                      <XAxis
-                        dataKey="date"
-                        tick={{ fill: "#ccc", fontSize: 10 }}
-                        axisLine={false}
-                      />
-                      <YAxis
-                        tick={{ fill: "#ccc", fontSize: 10 }}
-                        axisLine={false}
-                      />
-                      <Tooltip
-                        contentStyle={{
-                          background: "#111",
-                          border: "1px solid rgba(255,200,0,0.3)",
-                          borderRadius: "8px",
-                        }}
-                      />
-                      <Line
-                        type="monotone"
-                        dataKey="total"
-                        stroke="#ffc800"
-                        strokeWidth={2}
-                        dot={{ r: 3, fill: "#ffc800" }}
-                        fill="rgba(255,200,0,0.15)"
-                      />
-                    </LineChart>
-                  </ResponsiveContainer>
-                </div>
-              </div>
-
-              <div className="rounded-xl bg-[#05060c] border border-border/20 p-3">
-                <div className="text-[11px] uppercase tracking-[0.15em] text-muted-foreground mb-1">
-                  Top 5 Endpoints
-                </div>
-                <div className="text-[10px] text-muted-foreground mb-2">
-                  Endpoints mais acionados no período.
-                </div>
-                <div className="h-48">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={endpointData} layout="vertical">
-                      <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.08)" />
-                      <XAxis type="number" tick={{ fill: "#ccc", fontSize: 10 }} />
-                      <YAxis
-                        type="category"
-                        dataKey="endpoint"
-                        tick={{ fill: "#ccc", fontSize: 9 }}
-                        width={100}
-                      />
-                      <Tooltip
-                        contentStyle={{
-                          background: "#111",
-                          border: "1px solid rgba(255,200,0,0.3)",
-                          borderRadius: "8px",
-                        }}
-                      />
-                      <Bar dataKey="total" fill="rgba(255,200,0,0.7)" />
-                    </BarChart>
-                  </ResponsiveContainer>
-                </div>
-              </div>
-            </div>
-          </section>
-
-          {/* Filters Panel */}
-          <aside className="bg-background rounded-2xl border border-border/30 shadow-[0_18px_40px_rgba(0,0,0,0.85)] p-5">
-            <div className="text-sm uppercase tracking-[0.18em] font-semibold">
-              Visão de Filtros
-            </div>
-            <p className="text-xs text-muted-foreground mt-1 mb-4">
-              Refine por período, usuário e módulo.
-            </p>
-
-            <div className="space-y-3">
-              <div>
-                <label className="text-[10px] uppercase tracking-[0.12em] text-muted-foreground block mb-1">
-                  De
-                </label>
-                <input
-                  type="date"
-                  value={dateFrom}
-                  onChange={(e) => {
-                    setDateFrom(e.target.value);
-                    setCurrentPage(1);
-                  }}
-                  className="w-full px-3 py-2 rounded-full border border-border/30 bg-[#13141a] text-foreground text-sm outline-none focus:border-primary focus:ring-1 focus:ring-primary"
-                />
-              </div>
-              <div>
-                <label className="text-[10px] uppercase tracking-[0.12em] text-muted-foreground block mb-1">
-                  Até
-                </label>
-                <input
-                  type="date"
-                  value={dateTo}
-                  onChange={(e) => {
-                    setDateTo(e.target.value);
-                    setCurrentPage(1);
-                  }}
-                  className="w-full px-3 py-2 rounded-full border border-border/30 bg-[#13141a] text-foreground text-sm outline-none focus:border-primary focus:ring-1 focus:ring-primary"
-                />
-              </div>
-              <div>
-                <label className="text-[10px] uppercase tracking-[0.12em] text-muted-foreground block mb-1">
-                  Usuário
-                </label>
-                <input
-                  type="text"
-                  placeholder="login..."
-                  value={usernameFilter}
-                  onChange={(e) => {
-                    setUsernameFilter(e.target.value);
-                    setCurrentPage(1);
-                  }}
-                  className="w-full px-3 py-2 rounded-full border border-border/30 bg-[#13141a] text-foreground text-sm outline-none focus:border-primary focus:ring-1 focus:ring-primary"
-                />
-              </div>
-              <div>
-                <label className="text-[10px] uppercase tracking-[0.12em] text-muted-foreground block mb-1">
-                  Módulo
-                </label>
-                <select
-                  value={moduleFilter}
-                  onChange={(e) => {
-                    setModuleFilter(e.target.value);
-                    setCurrentPage(1);
-                  }}
-                  className="w-full px-3 py-2 rounded-full border border-border/30 bg-[#13141a] text-foreground text-sm outline-none focus:border-primary focus:ring-1 focus:ring-primary"
-                >
-                  <option value="">(todos)</option>
-                  <option value="air">AIR</option>
-                  <option value="chb">CHB</option>
-                  <option value="maritime">MARITIME</option>
-                </select>
-              </div>
-              <div>
-                <label className="text-[10px] uppercase tracking-[0.12em] text-muted-foreground block mb-1">
-                  Registros por página
-                </label>
-                <select
-                  value={perPage}
-                  onChange={(e) => {
-                    setPerPage(Number(e.target.value));
-                    setCurrentPage(1);
-                  }}
-                  className="w-full px-3 py-2 rounded-full border border-border/30 bg-[#13141a] text-foreground text-sm outline-none focus:border-primary focus:ring-1 focus:ring-primary"
-                >
-                  <option value={25}>25</option>
-                  <option value={50}>50</option>
-                  <option value={100}>100</option>
-                  <option value={200}>200</option>
-                </select>
-              </div>
-
-              <button
-                onClick={clearFilters}
-                className="flex items-center gap-2 px-4 py-2 rounded-full border border-border/30 bg-background/50 text-foreground text-sm font-semibold uppercase tracking-[0.12em] hover:bg-background/70 transition-all"
-              >
-                <RotateCcw size={14} />
-                Limpar
-              </button>
-            </div>
-          </aside>
-        </div>
-
-        {/* Table Section */}
-        <section className="bg-background rounded-2xl border border-border/30 shadow-[0_18px_40px_rgba(0,0,0,0.9)] p-4">
-          <div className="flex justify-between items-end gap-3 mb-3">
-            <div>
-              <div className="text-sm uppercase tracking-[0.18em] font-semibold">
-                Resumo de Logs
-              </div>
-              <p className="text-xs text-muted-foreground">
-                Eventos individuais de consumo por usuário, método e endpoint.
-              </p>
-            </div>
-            <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-background/50 border border-border/30 text-xs">
-              <span className="w-2 h-2 rounded-full bg-primary" />
-              {stats.total} logs encontrados
-            </div>
-          </div>
-
-          <div className="max-h-[52vh] overflow-auto rounded-xl border border-border/30">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="bg-[#14151c] sticky top-0 z-10">
-                  <th className="py-2.5 px-3 text-left text-[11px] uppercase tracking-[0.12em] font-medium text-muted-foreground w-[20%]">
-                    Data / Hora
-                  </th>
-                  <th className="py-2.5 px-3 text-left text-[11px] uppercase tracking-[0.12em] font-medium text-muted-foreground w-[16%]">
-                    Usuário
-                  </th>
-                  <th className="py-2.5 px-3 text-left text-[11px] uppercase tracking-[0.12em] font-medium text-muted-foreground w-[10%]">
-                    Método
-                  </th>
-                  <th className="py-2.5 px-3 text-left text-[11px] uppercase tracking-[0.12em] font-medium text-muted-foreground">
-                    Endpoint
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {loading ? (
-                  <tr>
-                    <td colSpan={4} className="py-8 text-center text-muted-foreground">
-                      Carregando...
-                    </td>
-                  </tr>
-                ) : logs.length === 0 ? (
-                  <tr>
-                    <td colSpan={4} className="py-8 text-center text-muted-foreground">
-                      Sem registros no período.
-                    </td>
-                  </tr>
-                ) : (
-                  logs.map((log) => (
-                    <tr
-                      key={log.id}
-                      className="border-b border-border/20 hover:bg-background/50 transition-colors"
-                    >
-                      <td className="py-2.5 px-3">{formatDate(log.event_time)}</td>
-                      <td className="py-2.5 px-3">{log.username}</td>
-                      <td className="py-2.5 px-3">
-                        <span
-                          className={`inline-flex items-center justify-center px-2.5 py-1 rounded-full text-[11px] border ${getMethodClass(
-                            log.method
-                          )}`}
-                        >
-                          {log.method}
-                        </span>
-                      </td>
-                      <td className="py-2.5 px-3 text-muted-foreground">{log.endpoint}</td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          </div>
-
-          {/* Pagination */}
-          {totalPages > 1 && (
-            <div className="flex flex-wrap gap-1.5 justify-end mt-3 text-xs">
-              {currentPage > 1 && (
-                <>
-                  <button
-                    onClick={() => setCurrentPage(1)}
-                    className="px-3 py-1.5 rounded-full border border-border/30 bg-background/50 hover:bg-background/70"
-                  >
-                    « Primeiro
-                  </button>
-                  <button
-                    onClick={() => setCurrentPage((p) => p - 1)}
-                    className="px-3 py-1.5 rounded-full border border-border/30 bg-background/50 hover:bg-background/70"
-                  >
-                    ‹ Anterior
-                  </button>
-                </>
-              )}
-
-              {Array.from({ length: Math.min(7, totalPages) }, (_, i) => {
-                const page = Math.max(1, currentPage - 3) + i;
-                if (page > totalPages) return null;
-                return (
-                  <button
-                    key={page}
-                    onClick={() => setCurrentPage(page)}
-                    className={`px-3 py-1.5 rounded-full border ${
-                      page === currentPage
-                        ? "border-primary/90 bg-primary/20 text-primary font-bold"
-                        : "border-border/30 bg-background/50 hover:bg-background/70"
-                    }`}
-                  >
-                    {page}
-                  </button>
-                );
-              })}
-
-              {currentPage < totalPages && (
-                <>
-                  <button
-                    onClick={() => setCurrentPage((p) => p + 1)}
-                    className="px-3 py-1.5 rounded-full border border-border/30 bg-background/50 hover:bg-background/70"
-                  >
-                    Próxima ›
-                  </button>
-                  <button
-                    onClick={() => setCurrentPage(totalPages)}
-                    className="px-3 py-1.5 rounded-full border border-border/30 bg-background/50 hover:bg-background/70"
-                  >
-                    Última »
-                  </button>
-                </>
-              )}
-            </div>
-          )}
-        </section>
-
-        {/* Footer */}
-        <div className="mt-5 text-center text-[10px] text-muted-foreground uppercase tracking-[0.16em]">
-          Z3US.AI • For Logistics
-        </div>
-      </main>
+  const rightContent = (
+    <div className="w-8 h-8 rounded-full border border-white/25 flex items-center justify-center bg-black/70 text-primary">
+      <ChartLine size={16} />
     </div>
+  );
+
+  return (
+    <PageLayout title="DACHSER" subtitle="Métricas de Uso" rightContent={rightContent}>
+      {/* Grid: Stats + Filters */}
+      <div className="grid grid-cols-1 lg:grid-cols-[2.2fr_1.2fr] gap-5">
+        {/* Stats Panel */}
+        <PageCard>
+          <div className="flex items-center justify-between text-sm uppercase tracking-[0.18em]">
+            <span className="font-semibold">Métricas Gerais</span>
+            <span className="text-muted-foreground text-xs normal-case tracking-normal">
+              Período: {new Date(dateFrom).toLocaleDateString("pt-BR")} –{" "}
+              {new Date(dateTo).toLocaleDateString("pt-BR")} ({getDaysDiff()} dias)
+            </span>
+          </div>
+
+          {/* Chips */}
+          <div className="flex flex-wrap gap-2 mt-3">
+            <div className="px-3 py-1.5 rounded-full border border-white/12 bg-white/5 text-xs flex items-center gap-2">
+              <span className="w-1.5 h-1.5 rounded-full bg-primary" />
+              Logs internos
+            </div>
+            {usernameFilter && (
+              <div className="px-3 py-1.5 rounded-full border border-white/12 bg-white/5 text-xs">
+                Usuário: {usernameFilter}
+              </div>
+            )}
+            {moduleFilter && (
+              <div className="px-3 py-1.5 rounded-full border border-white/12 bg-white/5 text-xs">
+                Módulo: {moduleFilter.toUpperCase()}
+              </div>
+            )}
+          </div>
+
+          {/* KPIs */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mt-4">
+            <div className="p-3 rounded-xl bg-[#0a0b10] border border-white/10">
+              <div className="text-[10px] uppercase tracking-[0.15em] text-muted-foreground">Total de Logs</div>
+              <div className="text-xl font-bold mt-1">{stats.total}</div>
+              <div className="text-[10px] text-muted-foreground mt-0.5">{stats.avgPerDay.toFixed(1)} / dia (média)</div>
+            </div>
+            <div className="p-3 rounded-xl bg-[#0a0b10] border border-white/10">
+              <div className="text-[10px] uppercase tracking-[0.15em] text-muted-foreground">Usuários distintos</div>
+              <div className="text-xl font-bold mt-1">{stats.distinctUsers}</div>
+              <div className="text-[10px] text-muted-foreground mt-0.5">{stats.distinctUsers ? "Atividade distribuída" : "Sem uso no período"}</div>
+            </div>
+            <div className="p-3 rounded-xl bg-[#0a0b10] border border-white/10">
+              <div className="text-[10px] uppercase tracking-[0.15em] text-muted-foreground">Endpoints distintos</div>
+              <div className="text-xl font-bold mt-1">{stats.distinctEndpoints}</div>
+              <div className="text-[10px] text-muted-foreground mt-0.5">Cobertura de features</div>
+            </div>
+            <div className="p-3 rounded-xl bg-[#0a0b10] border border-white/10">
+              <div className="text-[10px] uppercase tracking-[0.15em] text-muted-foreground">Métodos GET x POST</div>
+              <div className="text-xl font-bold mt-1">{stats.getCalls} / {stats.postCalls}</div>
+              <div className="text-[10px] text-muted-foreground mt-0.5">GET / POST</div>
+            </div>
+          </div>
+
+          {/* Charts */}
+          <div className="grid grid-cols-1 md:grid-cols-[1.3fr_1fr] gap-3 mt-5">
+            <div className="rounded-xl bg-[#05060c] border border-white/10 p-3">
+              <div className="text-[11px] uppercase tracking-[0.15em] text-muted-foreground mb-1">Logs por Dia</div>
+              <div className="text-[10px] text-muted-foreground mb-2">Volume diário de chamadas no período filtrado.</div>
+              <div className="h-48">
+                <ResponsiveContainer width="100%" height="100%">
+                  <LineChart data={dailyData}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.08)" />
+                    <XAxis dataKey="date" tick={{ fill: "#ccc", fontSize: 10 }} axisLine={false} />
+                    <YAxis tick={{ fill: "#ccc", fontSize: 10 }} axisLine={false} />
+                    <Tooltip contentStyle={{ background: "#111", border: "1px solid rgba(255,200,0,0.3)", borderRadius: "8px" }} />
+                    <Line type="monotone" dataKey="total" stroke="#ffc800" strokeWidth={2} dot={{ r: 3, fill: "#ffc800" }} fill="rgba(255,200,0,0.15)" />
+                  </LineChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+
+            <div className="rounded-xl bg-[#05060c] border border-white/10 p-3">
+              <div className="text-[11px] uppercase tracking-[0.15em] text-muted-foreground mb-1">Top 5 Endpoints</div>
+              <div className="text-[10px] text-muted-foreground mb-2">Endpoints mais acionados no período.</div>
+              <div className="h-48">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={endpointData} layout="vertical">
+                    <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.08)" />
+                    <XAxis type="number" tick={{ fill: "#ccc", fontSize: 10 }} />
+                    <YAxis type="category" dataKey="endpoint" tick={{ fill: "#ccc", fontSize: 9 }} width={100} />
+                    <Tooltip contentStyle={{ background: "#111", border: "1px solid rgba(255,200,0,0.3)", borderRadius: "8px" }} />
+                    <Bar dataKey="total" fill="rgba(255,200,0,0.7)" />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+          </div>
+        </PageCard>
+
+        {/* Filters Panel */}
+        <PageCard>
+          <div className="text-sm uppercase tracking-[0.18em] font-semibold">Visão de Filtros</div>
+          <p className="text-xs text-muted-foreground mt-1 mb-4">Refine por período, usuário e módulo.</p>
+
+          <div className="space-y-3">
+            <div>
+              <label className="text-[10px] uppercase tracking-[0.12em] text-muted-foreground block mb-1">De</label>
+              <input
+                type="date"
+                value={dateFrom}
+                onChange={(e) => { setDateFrom(e.target.value); setCurrentPage(1); }}
+                className="w-full px-3 py-2 rounded-full border border-white/20 bg-[#13141a] text-foreground text-sm outline-none focus:border-primary focus:ring-1 focus:ring-primary"
+              />
+            </div>
+            <div>
+              <label className="text-[10px] uppercase tracking-[0.12em] text-muted-foreground block mb-1">Até</label>
+              <input
+                type="date"
+                value={dateTo}
+                onChange={(e) => { setDateTo(e.target.value); setCurrentPage(1); }}
+                className="w-full px-3 py-2 rounded-full border border-white/20 bg-[#13141a] text-foreground text-sm outline-none focus:border-primary focus:ring-1 focus:ring-primary"
+              />
+            </div>
+            <div>
+              <label className="text-[10px] uppercase tracking-[0.12em] text-muted-foreground block mb-1">Usuário</label>
+              <input
+                type="text"
+                placeholder="login..."
+                value={usernameFilter}
+                onChange={(e) => { setUsernameFilter(e.target.value); setCurrentPage(1); }}
+                className="w-full px-3 py-2 rounded-full border border-white/20 bg-[#13141a] text-foreground text-sm outline-none focus:border-primary focus:ring-1 focus:ring-primary"
+              />
+            </div>
+            <div>
+              <label className="text-[10px] uppercase tracking-[0.12em] text-muted-foreground block mb-1">Módulo</label>
+              <select
+                value={moduleFilter}
+                onChange={(e) => { setModuleFilter(e.target.value); setCurrentPage(1); }}
+                className="w-full px-3 py-2 rounded-full border border-white/20 bg-[#13141a] text-foreground text-sm outline-none focus:border-primary focus:ring-1 focus:ring-primary"
+              >
+                <option value="">(todos)</option>
+                <option value="air">AIR</option>
+                <option value="chb">CHB</option>
+                <option value="maritime">MARITIME</option>
+              </select>
+            </div>
+            <div>
+              <label className="text-[10px] uppercase tracking-[0.12em] text-muted-foreground block mb-1">Registros por página</label>
+              <select
+                value={perPage}
+                onChange={(e) => { setPerPage(Number(e.target.value)); setCurrentPage(1); }}
+                className="w-full px-3 py-2 rounded-full border border-white/20 bg-[#13141a] text-foreground text-sm outline-none focus:border-primary focus:ring-1 focus:ring-primary"
+              >
+                <option value={25}>25</option>
+                <option value={50}>50</option>
+                <option value={100}>100</option>
+                <option value={200}>200</option>
+              </select>
+            </div>
+
+            <button
+              onClick={clearFilters}
+              className="flex items-center gap-2 px-4 py-2 rounded-full border border-white/20 bg-white/5 text-foreground text-sm font-semibold uppercase tracking-[0.12em] hover:bg-white/10 transition-all w-full justify-center"
+            >
+              <RotateCcw size={14} />
+              Limpar
+            </button>
+          </div>
+        </PageCard>
+      </div>
+
+      {/* Table Section */}
+      <PageCard>
+        <div className="flex justify-between items-end gap-3 mb-3">
+          <div>
+            <div className="text-sm uppercase tracking-[0.18em] font-semibold">Resumo de Logs</div>
+            <p className="text-xs text-muted-foreground">Eventos individuais de consumo por usuário, método e endpoint.</p>
+          </div>
+          <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/5 border border-white/12 text-xs">
+            <span className="w-2 h-2 rounded-full bg-primary" />
+            {stats.total} logs encontrados
+          </div>
+        </div>
+
+        <div className="max-h-[52vh] overflow-auto rounded-xl border border-white/12">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="bg-[#14151c] sticky top-0 z-10">
+                <th className="py-2.5 px-3 text-left text-[11px] uppercase tracking-[0.12em] font-medium text-muted-foreground w-[20%]">Data / Hora</th>
+                <th className="py-2.5 px-3 text-left text-[11px] uppercase tracking-[0.12em] font-medium text-muted-foreground w-[16%]">Usuário</th>
+                <th className="py-2.5 px-3 text-left text-[11px] uppercase tracking-[0.12em] font-medium text-muted-foreground w-[10%]">Método</th>
+                <th className="py-2.5 px-3 text-left text-[11px] uppercase tracking-[0.12em] font-medium text-muted-foreground">Endpoint</th>
+              </tr>
+            </thead>
+            <tbody>
+              {loading ? (
+                <tr><td colSpan={4} className="py-8 text-center text-muted-foreground">Carregando...</td></tr>
+              ) : logs.length === 0 ? (
+                <tr><td colSpan={4} className="py-8 text-center text-muted-foreground">Sem registros no período.</td></tr>
+              ) : (
+                logs.map((log) => (
+                  <tr key={log.id} className="border-b border-white/10 hover:bg-white/5 transition-colors">
+                    <td className="py-2.5 px-3">{formatDate(log.event_time)}</td>
+                    <td className="py-2.5 px-3">{log.username}</td>
+                    <td className="py-2.5 px-3">
+                      <span className={`inline-flex items-center justify-center px-2.5 py-1 rounded-full text-[11px] border ${getMethodClass(log.method)}`}>
+                        {log.method}
+                      </span>
+                    </td>
+                    <td className="py-2.5 px-3 text-muted-foreground">{log.endpoint}</td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+
+        {/* Pagination */}
+        {totalPages > 1 && (
+          <div className="flex flex-wrap gap-1.5 justify-end mt-3 text-xs">
+            {currentPage > 1 && (
+              <>
+                <button onClick={() => setCurrentPage(1)} className="px-3 py-1.5 rounded-full border border-white/12 bg-white/5 hover:bg-white/10">« Primeiro</button>
+                <button onClick={() => setCurrentPage((p) => p - 1)} className="px-3 py-1.5 rounded-full border border-white/12 bg-white/5 hover:bg-white/10">‹ Anterior</button>
+              </>
+            )}
+            {Array.from({ length: Math.min(7, totalPages) }, (_, i) => {
+              const page = Math.max(1, currentPage - 3) + i;
+              if (page > totalPages) return null;
+              return (
+                <button
+                  key={page}
+                  onClick={() => setCurrentPage(page)}
+                  className={`px-3 py-1.5 rounded-full border ${page === currentPage ? "border-primary/90 bg-primary/20 text-primary font-bold" : "border-white/12 bg-white/5 hover:bg-white/10"}`}
+                >
+                  {page}
+                </button>
+              );
+            })}
+            {currentPage < totalPages && (
+              <>
+                <button onClick={() => setCurrentPage((p) => p + 1)} className="px-3 py-1.5 rounded-full border border-white/12 bg-white/5 hover:bg-white/10">Próxima ›</button>
+                <button onClick={() => setCurrentPage(totalPages)} className="px-3 py-1.5 rounded-full border border-white/12 bg-white/5 hover:bg-white/10">Última »</button>
+              </>
+            )}
+          </div>
+        )}
+      </PageCard>
+
+      {/* Footer */}
+      <div className="text-center text-[10px] text-muted-foreground uppercase tracking-[0.16em]">
+        Z3US.AI • For Logistics
+      </div>
+    </PageLayout>
   );
 };
 
