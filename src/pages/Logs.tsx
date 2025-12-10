@@ -15,6 +15,7 @@ import { Search, RefreshCw, ArrowLeft, Loader2, FileText, CheckCircle, Database,
 import { toast } from "sonner";
 import { format } from "date-fns";
 import dachserBg from "@/assets/dachser-background.jpg";
+import { TablePagination } from "@/components/layout/TablePagination";
 
 interface LogEntry {
   id: string;
@@ -54,6 +55,8 @@ const Logs = () => {
   const [searchTerm, setSearchTerm] = useState("");
   const [actionFilter, setActionFilter] = useState("all");
   const [entityFilter, setEntityFilter] = useState("all");
+  const [currentPage, setCurrentPage] = useState(1);
+  const pageSize = 20;
 
   useEffect(() => {
     const storedUser = localStorage.getItem("user");
@@ -135,6 +138,14 @@ const Logs = () => {
 
     return matchesSearch && matchesAction && matchesEntity;
   });
+
+  const totalPages = Math.max(1, Math.ceil(filteredLogs.length / pageSize));
+  const paginatedLogs = filteredLogs.slice((currentPage - 1) * pageSize, currentPage * pageSize);
+
+  // Reset page when filters change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm, actionFilter, entityFilter]);
 
   const getActionBadge = (action: string) => {
     const badgeMap: Record<string, { color: string; label: string }> = {
@@ -324,14 +335,14 @@ const Logs = () => {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {filteredLogs.length === 0 ? (
+                    {paginatedLogs.length === 0 ? (
                       <TableRow>
                         <TableCell colSpan={5} className="text-center text-neutral-400 py-8">
                           Nenhum log encontrado
                         </TableCell>
                       </TableRow>
                     ) : (
-                      filteredLogs.map(log => (
+                      paginatedLogs.map(log => (
                         <TableRow key={log.id} className="border-b border-white/5 hover:bg-white/5">
                           <TableCell className="font-mono text-xs whitespace-nowrap">
                             {format(new Date(log.created_at), "dd/MM/yyyy HH:mm:ss")}
@@ -357,6 +368,13 @@ const Logs = () => {
                   </TableBody>
                 </Table>
               </div>
+              
+              {/* Pagination */}
+              <TablePagination
+                currentPage={currentPage}
+                totalPages={totalPages}
+                onPageChange={setCurrentPage}
+              />
             </CardContent>
           </Card>
         </main>

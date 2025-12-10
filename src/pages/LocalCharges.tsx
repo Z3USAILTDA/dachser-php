@@ -16,6 +16,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { PageLayout } from "@/components/layout/PageLayout";
 import { PageCard } from "@/components/layout/PageCard";
+import { TablePagination } from "@/components/layout/TablePagination";
 
 // Types
 interface LocalChargeRow {
@@ -124,61 +125,6 @@ function CompanyTable({ title, data, isLoading }: CompanyTableProps) {
     }
   };
 
-  const renderPagination = () => {
-    const pages: (number | string)[] = [];
-    const set = new Set([1, 2, totalPages, totalPages - 1, currentPage - 1, currentPage, currentPage + 1]);
-    const arr = Array.from(set).filter(n => typeof n === 'number' && n >= 1 && n <= totalPages).sort((a, b) => (a as number) - (b as number));
-    
-    for (let i = 0; i < arr.length; i++) {
-      if (i > 0 && (arr[i] as number) !== (arr[i - 1] as number) + 1) pages.push('…');
-      pages.push(arr[i]);
-    }
-
-    return (
-      <div className="flex items-center justify-end gap-1.5 mt-3">
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
-          disabled={currentPage === 1}
-          className="h-7 px-2 text-xs rounded-full border-white/12 bg-[#121212]"
-        >
-          « Anterior
-        </Button>
-        <span className="text-xs text-muted-foreground px-2">
-          Página {currentPage}/{totalPages}
-        </span>
-        {pages.map((p, i) => 
-          p === '…' ? (
-            <span key={`ellipsis-${i}`} className="text-muted-foreground px-1">…</span>
-          ) : (
-            <Button
-              key={p}
-              variant={currentPage === p ? "default" : "outline"}
-              size="sm"
-              onClick={() => setCurrentPage(p as number)}
-              className={`h-7 w-7 p-0 text-xs rounded-full ${
-                currentPage === p 
-                  ? 'bg-primary text-primary-foreground border-primary' 
-                  : 'border-white/12 bg-[#121212]'
-              }`}
-            >
-              {p}
-            </Button>
-          )
-        )}
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
-          disabled={currentPage === totalPages}
-          className="h-7 px-2 text-xs rounded-full border-white/12 bg-[#121212]"
-        >
-          Próxima »
-        </Button>
-      </div>
-    );
-  };
 
   return (
     <PageCard>
@@ -285,7 +231,12 @@ function CompanyTable({ title, data, isLoading }: CompanyTableProps) {
       </div>
 
       {/* Pagination */}
-      {renderPagination()}
+      <TablePagination
+        currentPage={currentPage}
+        totalPages={totalPages}
+        onPageChange={setCurrentPage}
+        showFirstLast={false}
+      />
     </PageCard>
   );
 }
