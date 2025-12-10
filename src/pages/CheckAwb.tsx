@@ -632,13 +632,13 @@ const CheckAwb = () => {
   const getResultBadge = (result: string) => {
     if (result === "OK") {
       return (
-        <Badge className="bg-emerald-500/15 text-emerald-300 border-emerald-500/40 px-3 py-1 rounded-full">
+        <Badge className="bg-transparent text-emerald-400 border border-emerald-500 px-3 py-0.5 rounded-md text-xs font-medium">
           COMPATÍVEL
         </Badge>
       );
     }
     return (
-      <Badge className="bg-rose-500/15 text-rose-300 border-rose-500/40 px-3 py-1 rounded-full">
+      <Badge className="bg-transparent text-rose-400 border border-rose-500 px-3 py-0.5 rounded-md text-xs font-medium">
         INCOMPATÍVEL
       </Badge>
     );
@@ -1029,44 +1029,44 @@ const CheckAwb = () => {
       {/* MODAL DETALHES */}
       <Dialog open={isDetailsModalOpen} onOpenChange={setIsDetailsModalOpen}>
         <DialogContent 
-          className="sm:max-w-2xl rounded-2xl"
+          className="sm:max-w-[640px] rounded-xl p-6"
           style={{
-            background: 'rgba(5,6,18,.95)',
-            border: '1px solid rgba(255,255,255,.12)',
+            background: 'rgba(18,22,28,.98)',
+            border: '1px solid rgba(255,255,255,.08)',
           }}
         >
-          <DialogHeader>
-            <DialogTitle className="text-xl text-[#f5f5f5]">Descrição Detalhada</DialogTitle>
+          <DialogHeader className="pb-4">
+            <DialogTitle className="text-lg font-medium text-white">Descrição Detalhada</DialogTitle>
           </DialogHeader>
           {selectedCheck && (
-            <div className="space-y-6">
+            <div className="space-y-5">
               {/* Seção Principal */}
-              <div className="grid grid-cols-2 gap-x-8 gap-y-4">
+              <div className="grid grid-cols-2 gap-x-12 gap-y-4">
                 <div>
-                  <p className="text-sm text-[#aaaaaa] mb-1">AWB</p>
-                  <p className="font-mono text-sm text-[#f5f5f5]">{selectedCheck.awb_number}</p>
+                  <p className="text-[13px] text-[#888] mb-0.5">AWB</p>
+                  <p className="text-[14px] text-white">{selectedCheck.awb_number}</p>
                 </div>
                 <div>
-                  <p className="text-sm text-[#aaaaaa] mb-1">CNPJ</p>
-                  <p className="font-mono text-sm text-[#f5f5f5]">{selectedCheck.cnpj}</p>
+                  <p className="text-[13px] text-[#888] mb-0.5">CNPJ</p>
+                  <p className="text-[14px] text-white">{selectedCheck.cnpj}</p>
                 </div>
                 <div>
-                  <p className="text-sm text-[#aaaaaa] mb-1">Rota</p>
-                  <p className="font-mono text-sm text-[#f5f5f5]">
+                  <p className="text-[13px] text-[#888] mb-0.5">Rota</p>
+                  <p className="text-[14px] text-white">
                     {selectedCheck.origin} → {selectedCheck.destination}
                   </p>
                 </div>
                 <div>
-                  <p className="text-sm text-[#aaaaaa] mb-1">Cliente</p>
-                  <p className="text-sm text-[#f5f5f5]">{selectedCheck.customer}</p>
+                  <p className="text-[13px] text-[#888] mb-0.5">Cliente</p>
+                  <p className="text-[14px] text-white">{selectedCheck.customer}</p>
                 </div>
                 <div>
-                  <p className="text-sm text-[#aaaaaa] mb-1">Status</p>
-                  {getResultBadge(selectedCheck.validation_status)}
+                  <p className="text-[13px] text-[#888] mb-0.5">Status</p>
+                  <div className="mt-1">{getResultBadge(selectedCheck.validation_status)}</div>
                 </div>
                 <div>
-                  <p className="text-sm text-[#aaaaaa] mb-1">Motivo</p>
-                  <p className="text-sm text-[#f5f5f5]">
+                  <p className="text-[13px] text-[#888] mb-0.5">Motivo</p>
+                  <p className="text-[14px] text-white">
                     {selectedCheck.validation_message ||
                       (selectedCheck.validation_status === "OK" ? "CNPJ e aeroporto compatíveis" : "CNPJ não compatível")}
                   </p>
@@ -1074,39 +1074,39 @@ const CheckAwb = () => {
               </div>
 
               {/* Dados Adicionais */}
-              <div className="border-t border-[rgba(255,255,255,.12)] pt-5">
-                <h3 className="font-semibold mb-4 text-[#f5f5f5]">Dados Adicionais</h3>
-                <div className="grid grid-cols-2 gap-x-8 gap-y-4 text-sm">
+              <div className="border-t border-[rgba(255,255,255,.08)] pt-5">
+                <h3 className="text-[15px] font-medium mb-4 text-white">Dados Adicionais</h3>
+                <div className="grid grid-cols-2 gap-x-12 gap-y-4">
                   <div>
-                    <p className="text-[#aaaaaa] mb-1">Ref Othello</p>
-                    <p className="font-mono text-[#f5f5f5]">{selectedCheck.mrn || selectedCheck.references || "-"}</p>
+                    <p className="text-[13px] text-[#888] mb-0.5">Ref Othello</p>
+                    <p className="text-[14px] text-white">{selectedCheck.mrn || selectedCheck.references || "-"}</p>
                   </div>
                   <div>
-                    <p className="text-[#aaaaaa] mb-1">Transportadora</p>
-                    <p className="text-[#f5f5f5]">{selectedCheck.carrier || "-"}</p>
+                    <p className="text-[13px] text-[#888] mb-0.5">Transportadora</p>
+                    <p className="text-[14px] text-white">{selectedCheck.carrier || "-"}</p>
                   </div>
                   <div>
-                    <p className="text-[#aaaaaa] mb-1">Remetente</p>
-                    <p className="text-[#f5f5f5]">{selectedCheck.shipper || "-"}</p>
+                    <p className="text-[13px] text-[#888] mb-0.5">Remetente</p>
+                    <p className="text-[14px] text-white leading-relaxed">{selectedCheck.shipper || "-"}</p>
                   </div>
                   <div>
-                    <p className="text-[#aaaaaa] mb-1">Destinatário</p>
-                    <p className="text-[#f5f5f5]">{selectedCheck.consignee || "-"}</p>
+                    <p className="text-[13px] text-[#888] mb-0.5">Destinatário</p>
+                    <p className="text-[14px] text-white leading-relaxed">{selectedCheck.consignee || "-"}</p>
                   </div>
                   <div>
-                    <p className="text-[#aaaaaa] mb-1">Peso Bruto</p>
-                    <p className="text-[#f5f5f5]">{selectedCheck.gross_weight_kg ? `${selectedCheck.gross_weight_kg} kg` : "-"}</p>
+                    <p className="text-[13px] text-[#888] mb-0.5">Peso Bruto</p>
+                    <p className="text-[14px] text-white">{selectedCheck.gross_weight_kg ? `${selectedCheck.gross_weight_kg} kg` : "-"}</p>
                   </div>
                   <div>
-                    <p className="text-[#aaaaaa] mb-1">Peso Taxável</p>
-                    <p className="text-[#f5f5f5]">{selectedCheck.chargeable_weight_kg ? `${selectedCheck.chargeable_weight_kg} kg` : "-"}</p>
+                    <p className="text-[13px] text-[#888] mb-0.5">Peso Taxável</p>
+                    <p className="text-[14px] text-white">{selectedCheck.chargeable_weight_kg ? `${selectedCheck.chargeable_weight_kg} kg` : "-"}</p>
                   </div>
                   {(selectedEmailDespachante || selectedCheck.rule_email) && selectedCheck.customer === "KLABIN" && (
                     <div>
-                      <p className="text-[#aaaaaa] mb-1">E-mail Despachante</p>
+                      <p className="text-[13px] text-[#888] mb-0.5">E-mail Despachante</p>
                       <a 
                         href={`mailto:${selectedEmailDespachante || selectedCheck.rule_email}`}
-                        className="text-[#ffc800] hover:underline"
+                        className="text-[14px] text-[#d4a84b] hover:underline"
                       >
                         {selectedEmailDespachante || selectedCheck.rule_email}
                       </a>
