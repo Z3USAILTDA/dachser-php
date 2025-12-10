@@ -5,9 +5,19 @@ import dachserBg from "@/assets/dachser-background.jpg";
 
 interface PageLayoutProps {
   children: ReactNode;
+  title?: string;
+  subtitle?: string;
+  showLogout?: boolean;
+  rightContent?: ReactNode;
 }
 
-export function PageLayout({ children }: PageLayoutProps) {
+export function PageLayout({ 
+  children, 
+  title = "DACHSER", 
+  subtitle,
+  showLogout = true,
+  rightContent
+}: PageLayoutProps) {
   const navigate = useNavigate();
 
   const handleLogout = () => {
@@ -18,7 +28,7 @@ export function PageLayout({ children }: PageLayoutProps) {
   const user = JSON.parse(localStorage.getItem("user") || "{}");
 
   return (
-    <div className="min-h-screen relative">
+    <div className="min-h-screen relative overflow-x-hidden">
       {/* Background with image and gradient overlay */}
       <div className="fixed inset-0 z-0">
         <div 
@@ -52,7 +62,7 @@ export function PageLayout({ children }: PageLayoutProps) {
           {[...Array(6)].map((_, i) => (
             <div
               key={`line-${i}`}
-              className="absolute h-full w-px bg-gradient-to-b from-primary/70 to-primary/10"
+              className="absolute h-full w-px bg-gradient-to-b from-[#ffc800]/70 to-[#ffc800]/10"
               style={{
                 left: `${15 + i * 14}%`,
                 transform: `skewX(${-20 + i * 8}deg)`,
@@ -62,10 +72,10 @@ export function PageLayout({ children }: PageLayoutProps) {
         </div>
 
         {/* Floating Particles */}
-        {[...Array(15)].map((_, i) => (
+        {[...Array(20)].map((_, i) => (
           <div
             key={`particle-${i}`}
-            className="absolute w-1 h-1 rounded-full bg-primary/40 animate-float"
+            className="absolute w-1 h-1 rounded-full bg-[#ffc800]/40 animate-float"
             style={{
               left: `${Math.random() * 100}%`,
               top: `${Math.random() * 100}%`,
@@ -76,45 +86,55 @@ export function PageLayout({ children }: PageLayoutProps) {
         ))}
       </div>
 
-      {/* Top Bar */}
-      <header className="fixed top-0 left-0 right-0 z-50 flex justify-between items-center px-4 md:px-6 py-3 bg-background/30 backdrop-blur-sm border-b border-border/30">
-        <div className="flex items-center gap-4">
+      {/* Top Header Bar */}
+      <div className="relative z-10 max-w-[95%] mx-auto px-2 pt-5 pb-4 flex items-center justify-between">
+        {/* Left - Back + Header */}
+        <div className="flex items-center gap-[18px]">
           <button
             onClick={() => navigate("/dashboard")}
-            className="w-9 h-9 rounded-full border border-primary/50 flex items-center justify-center bg-primary/10 text-primary hover:bg-primary/20 transition-all duration-200"
-            title="Voltar ao Dashboard"
+            className="w-8 h-8 rounded-full border border-[rgba(255,255,255,.12)] bg-[rgba(5,6,18,0.9)] text-[#aaaaaa] flex items-center justify-center backdrop-blur-sm hover:bg-[rgba(5,6,18,1)] hover:text-white transition-all"
           >
-            <ArrowLeft size={18} />
+            <ArrowLeft size={16} />
           </button>
-          
-          <div className="flex items-center gap-2">
-            <span className="text-xl font-bold tracking-[0.12em] text-foreground">DACHSER</span>
-            <div className="flex gap-1.5 ml-2">
-              <span className="w-1.5 h-1.5 rounded-full bg-primary shadow-[0_0_8px_hsl(var(--primary))]" />
-              <span className="w-1.5 h-1.5 rounded-full bg-primary/70" />
-              <span className="w-1.5 h-1.5 rounded-full bg-primary/40" />
+
+          <header>
+            <h1 className="text-[1.6rem] tracking-[0.24em] uppercase text-[#f5f5f5]">{title}</h1>
+            {subtitle && (
+              <p className="text-[0.9rem] text-[#aaaaaa] mt-0.5">
+                Intelligent Logistics – {subtitle}
+              </p>
+            )}
+            <div className="flex gap-1.5 mt-1.5">
+              <span className="w-1.5 h-1.5 rounded-full bg-[#ffc800] shadow-[0_0_10px_rgba(255,200,0,.9)]" />
+              <span className="w-1.5 h-1.5 rounded-full bg-[#ffc800] shadow-[0_0_10px_rgba(255,200,0,.9)]" />
+              <span className="w-1.5 h-1.5 rounded-full bg-[#ffc800] shadow-[0_0_10px_rgba(255,200,0,.9)]" />
             </div>
-          </div>
+          </header>
         </div>
 
-        <div className="flex items-center gap-3">
-          <div className="px-4 py-1.5 rounded-full bg-background/65 border border-border/30 text-muted-foreground text-sm max-w-[200px] truncate">
-            @{user?.username || "usuario"}
+        {/* Right - User + Actions */}
+        <div className="flex items-center gap-2.5 text-[0.85rem]">
+          {rightContent}
+          <div className="px-[14px] py-1.5 rounded-full bg-[rgba(0,0,0,.70)] border border-[rgba(255,255,255,.18)] text-[#aaaaaa] max-w-[220px] truncate">
+            @{user?.username || user?.email?.split("@")[0] || "usuario"}
           </div>
-          <button
-            onClick={handleLogout}
-            className="w-9 h-9 rounded-full border border-border/50 flex items-center justify-center bg-background/70 text-primary hover:bg-background hover:shadow-[0_0_12px_hsl(var(--primary)/0.6)] transition-all duration-200"
-            title="Sair"
-          >
-            <LogOut size={18} />
-          </button>
+          {showLogout && (
+            <button
+              type="button"
+              onClick={handleLogout}
+              className="w-8 h-8 rounded-full border border-[rgba(255,255,255,.25)] flex items-center justify-center bg-[rgba(0,0,0,.7)] text-[#ffc800] hover:bg-[rgba(0,0,0,.9)] transition"
+              title="Logout"
+            >
+              <LogOut className="w-4 h-4" />
+            </button>
+          )}
         </div>
-      </header>
+      </div>
 
       {/* Main Content */}
-      <div className="relative z-10 pt-16">
+      <main className="relative z-10 max-w-[95%] mx-auto mb-12 px-2 space-y-[18px]">
         {children}
-      </div>
+      </main>
     </div>
   );
 }
