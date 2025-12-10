@@ -1,6 +1,8 @@
 import { useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { ArrowLeft, FileCheck } from 'lucide-react';
+import { FileCheck } from 'lucide-react';
+import { PageLayout } from '@/components/layout/PageLayout';
+import { PageCard } from '@/components/layout/PageCard';
 import { ChbStep, TabType, ChbNote } from '@/types/chb';
 import { 
   initialSteps, 
@@ -15,8 +17,6 @@ import { ChbDocumentsPanel } from '@/components/chb/ChbDocumentsPanel';
 import { ChbAnalysisPanel } from '@/components/chb/ChbAnalysisPanel';
 import { ChbHistoryPanel } from '@/components/chb/ChbHistoryPanel';
 import { ChbNotesPanel } from '@/components/chb/ChbNotesPanel';
-
-import dachserBg from '@/assets/dachser-background.jpg';
 
 export default function ConferenciaChb() {
   const navigate = useNavigate();
@@ -105,132 +105,40 @@ export default function ConferenciaChb() {
     }
   };
 
-  return (
-    <div className="min-h-screen relative overflow-x-hidden">
-      {/* Background with image and gradient overlay */}
-      <div className="fixed inset-0 z-0">
-        <div 
-          className="absolute inset-0" 
-          style={{
-            backgroundImage: `url(${dachserBg})`,
-            backgroundSize: 'cover',
-            backgroundPosition: 'center'
-          }} 
-        />
-        <div 
-          className="absolute inset-0" 
-          style={{
-            background: 'linear-gradient(120deg, rgba(4, 17, 45, 0.92), rgba(26, 93, 173, 0.55))'
-          }} 
-        />
-        
-        {/* Radial gradient overlay */}
-        <div 
-          className="absolute inset-0" 
-          style={{
-            background: `
-              radial-gradient(ellipse at 20% 20%, rgba(245, 184, 67, 0.12) 0%, transparent 50%),
-              radial-gradient(ellipse at 80% 80%, rgba(245, 184, 67, 0.08) 0%, transparent 50%)
-            `
-          }} 
-        />
-        
-        {/* Animated Lines */}
-        <div className="absolute inset-0 opacity-20">
-          {[...Array(6)].map((_, i) => (
-            <div 
-              key={`line-${i}`} 
-              className="absolute h-full w-px bg-gradient-to-b from-primary/70 to-primary/10" 
-              style={{
-                left: `${15 + i * 14}%`,
-                transform: `skewX(${-20 + i * 8}deg)`
-              }} 
-            />
-          ))}
-        </div>
-
-        {/* Floating Particles */}
-        {[...Array(20)].map((_, i) => (
-          <div 
-            key={`particle-${i}`} 
-            className="absolute w-1 h-1 rounded-full bg-primary/40 animate-float" 
-            style={{
-              left: `${Math.random() * 100}%`,
-              top: `${Math.random() * 100}%`,
-              animationDelay: `${Math.random() * 5}s`,
-              animationDuration: `${4 + Math.random() * 4}s`
-            }} 
-          />
-        ))}
-      </div>
-
-      {/* Top Header Bar */}
-      <div className="relative z-10 max-w-[95%] mx-auto px-2 pt-5 pb-4 flex items-center justify-between">
-        {/* Left - Back + Header */}
-        <div className="flex items-center gap-[18px]">
-          <button 
-            onClick={() => navigate("/chb/conferences")} 
-            className="w-8 h-8 rounded-full border border-[rgba(255,255,255,.12)] bg-[rgba(5,6,18,0.9)] text-[#aaaaaa] flex items-center justify-center backdrop-blur-sm hover:bg-[rgba(5,6,18,1)] hover:text-white transition-all"
-          >
-            <ArrowLeft size={16} />
-          </button>
-
-          <header>
-            <h1 className="text-[1.6rem] tracking-[0.24em] uppercase text-[#f5f5f5]">DACHSER</h1>
-            <p className="text-[0.9rem] text-[#aaaaaa] mt-0.5">
-              Desembaraço — Conferência (CHB)
-            </p>
-            <div className="flex gap-1.5 mt-1.5">
-              <span className="w-1.5 h-1.5 rounded-full bg-[#ffc800] shadow-[0_0_10px_rgba(255,200,0,.9)]" />
-              <span className="w-1.5 h-1.5 rounded-full bg-[#ffc800] shadow-[0_0_10px_rgba(255,200,0,.9)]" />
-              <span className="w-1.5 h-1.5 rounded-full bg-[#ffc800] shadow-[0_0_10px_rgba(255,200,0,.9)]" />
-            </div>
-          </header>
-        </div>
-
-        {/* Right - Process ID + User */}
-        <div className="flex items-center gap-2.5 text-[0.85rem]">
-          <div className="flex items-center gap-2 px-[14px] py-1.5 rounded-full bg-[rgba(0,0,0,.70)] border border-[rgba(255,255,255,.18)] text-[#aaaaaa]">
-            <FileCheck size={14} className="text-[#ffc800]" />
-            <span>{id ? `#${id}` : 'Processo'}</span>
-          </div>
-          <div className="px-[14px] py-1.5 rounded-full bg-[rgba(0,0,0,.70)] border border-[rgba(255,255,255,.18)] text-[#aaaaaa] max-w-[220px] truncate">
-            @{currentUser.replace('@', '')}
-          </div>
-        </div>
-      </div>
-
-      {/* Main Content */}
-      <main className="relative z-10 max-w-[95%] mx-auto mb-12 px-2 space-y-[18px]">
-        {/* Main card */}
-        <section 
-          className="rounded-2xl overflow-hidden"
-          style={{
-            background: 'rgba(5,6,18,.9)',
-            border: '1px solid rgba(255,255,255,.12)',
-            boxShadow: '0 18px 40px rgba(0,0,0,.85)'
-          }}
-        >
-          {/* Stepper */}
-          <div className="border-b border-[rgba(255,255,255,.10)]">
-            <ChbStepper
-              steps={steps}
-              activeStep={activeStep}
-              onStepClick={handleStepClick}
-            />
-          </div>
-
-          {/* Tabs */}
-          <div className="py-4 border-b border-[rgba(255,255,255,.10)]">
-            <ChbTabs activeTab={activeTab} onTabChange={setActiveTab} />
-          </div>
-
-          {/* Content panel */}
-          <div className="p-6 min-h-[400px]">
-            {renderPanel()}
-          </div>
-        </section>
-      </main>
+  const rightContent = (
+    <div className="flex items-center gap-2 px-[14px] py-1.5 rounded-full bg-[rgba(0,0,0,.70)] border border-[rgba(255,255,255,.18)] text-[#aaaaaa]">
+      <FileCheck size={14} className="text-[#ffc800]" />
+      <span>{id ? `#${id}` : 'Processo'}</span>
     </div>
+  );
+
+  return (
+    <PageLayout
+      title="DACHSER"
+      subtitle="Desembaraço — Conferência (CHB)"
+      rightContent={rightContent}
+    >
+      {/* Main card */}
+      <PageCard className="overflow-hidden" padding="sm">
+        {/* Stepper */}
+        <div className="border-b border-[rgba(255,255,255,.10)]">
+          <ChbStepper
+            steps={steps}
+            activeStep={activeStep}
+            onStepClick={handleStepClick}
+          />
+        </div>
+
+        {/* Tabs */}
+        <div className="py-4 border-b border-[rgba(255,255,255,.10)]">
+          <ChbTabs activeTab={activeTab} onTabChange={setActiveTab} />
+        </div>
+
+        {/* Content panel */}
+        <div className="p-6 min-h-[400px]">
+          {renderPanel()}
+        </div>
+      </PageCard>
+    </PageLayout>
   );
 }
