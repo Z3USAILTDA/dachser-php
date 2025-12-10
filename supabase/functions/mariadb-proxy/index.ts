@@ -1381,6 +1381,61 @@ serve(async (req) => {
         break;
       }
 
+      // ==================== USER REGISTRATION ====================
+      case 'register_user': {
+        const { username, password, email } = body as { username?: string; password?: string; email?: string };
+        
+        if (!username || !password || !email) {
+          return new Response(
+            JSON.stringify({ error: 'Username, password e email são obrigatórios', success: false }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+
+        // Check if username already exists
+        const existingUsername = await client.query(
+          'SELECT id FROM ai_agente.t_users_dachser WHERE username = ?',
+          [username]
+        );
+        if (existingUsername && existingUsername.length > 0) {
+          return new Response(
+            JSON.stringify({ error: 'Este nome de usuário já está em uso', success: false }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+
+        // Check if email already exists
+        const existingEmail = await client.query(
+          'SELECT id FROM ai_agente.t_users_dachser WHERE email = ?',
+          [email]
+        );
+        if (existingEmail && existingEmail.length > 0) {
+          return new Response(
+            JSON.stringify({ error: 'Este e-mail já está cadastrado', success: false }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+
+        // Hash password with bcrypt
+        const salt = await bcrypt.genSalt(10);
+        const passwordHash = await bcrypt.hash(password, salt);
+
+        // Insert new user
+        const insertResult = await client.execute(
+          `INSERT INTO ai_agente.t_users_dachser (username, email, password_hash, is_admin, created_at) 
+           VALUES (?, ?, ?, 0, NOW())`,
+          [username, email, passwordHash]
+        );
+
+        console.log(`User registered successfully: ${username} (ID: ${insertResult.lastInsertId})`);
+        result = { 
+          success: true, 
+          userId: insertResult.lastInsertId,
+          message: 'Usuário cadastrado com sucesso'
+        };
+        break;
+      }
+
       default:
         return new Response(
           JSON.stringify({ error: `Ação não suportada: ${action}` }),
