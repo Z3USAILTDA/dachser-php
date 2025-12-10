@@ -1,8 +1,6 @@
 import { useState, useEffect, useMemo } from "react";
-import { useNavigate } from "react-router-dom";
-import { ArrowLeft, Search, RefreshCw, FileSpreadsheet } from "lucide-react";
+import { Search, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -14,9 +12,10 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
+import { PageLayout } from "@/components/layout/PageLayout";
+import { PageCard } from "@/components/layout/PageCard";
 
 // Types
 interface LocalChargeRow {
@@ -79,7 +78,6 @@ function CompanyTable({ title, data, isLoading }: CompanyTableProps) {
   const [sortDirection, setSortDirection] = useState<SortDirection>(null);
   const pageSize = 5;
 
-  // Filter rows
   const filteredRows = useMemo(() => {
     if (!searchTerm) return data.rows;
     const q = searchTerm.toLowerCase();
@@ -90,7 +88,6 @@ function CompanyTable({ title, data, isLoading }: CompanyTableProps) {
     );
   }, [data.rows, searchTerm]);
 
-  // Sort rows
   const sortedRows = useMemo(() => {
     if (!sortColumn || !sortDirection) return filteredRows;
     
@@ -98,7 +95,6 @@ function CompanyTable({ title, data, isLoading }: CompanyTableProps) {
       const aVal = a[sortColumn as keyof LocalChargeRow] ?? '';
       const bVal = b[sortColumn as keyof LocalChargeRow] ?? '';
       
-      // Try numeric comparison
       const aNum = typeof aVal === 'number' ? aVal : parseFloat(String(aVal).replace(/\./g, '').replace(',', '.'));
       const bNum = typeof bVal === 'number' ? bVal : parseFloat(String(bVal).replace(/\./g, '').replace(',', '.'));
       
@@ -106,17 +102,14 @@ function CompanyTable({ title, data, isLoading }: CompanyTableProps) {
         return sortDirection === 'asc' ? aNum - bNum : bNum - aNum;
       }
       
-      // String comparison
       const comparison = String(aVal).localeCompare(String(bVal));
       return sortDirection === 'asc' ? comparison : -comparison;
     });
   }, [filteredRows, sortColumn, sortDirection]);
 
-  // Pagination
   const totalPages = Math.max(1, Math.ceil(sortedRows.length / pageSize));
   const paginatedRows = sortedRows.slice((currentPage - 1) * pageSize, currentPage * pageSize);
 
-  // Reset to first page when search changes
   useEffect(() => {
     setCurrentPage(1);
   }, [searchTerm]);
@@ -148,7 +141,7 @@ function CompanyTable({ title, data, isLoading }: CompanyTableProps) {
           size="sm"
           onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
           disabled={currentPage === 1}
-          className="h-7 px-2 text-xs rounded-full border-border bg-card"
+          className="h-7 px-2 text-xs rounded-full border-white/12 bg-[#121212]"
         >
           « Anterior
         </Button>
@@ -167,7 +160,7 @@ function CompanyTable({ title, data, isLoading }: CompanyTableProps) {
               className={`h-7 w-7 p-0 text-xs rounded-full ${
                 currentPage === p 
                   ? 'bg-primary text-primary-foreground border-primary' 
-                  : 'border-border bg-card'
+                  : 'border-white/12 bg-[#121212]'
               }`}
             >
               {p}
@@ -179,7 +172,7 @@ function CompanyTable({ title, data, isLoading }: CompanyTableProps) {
           size="sm"
           onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
           disabled={currentPage === totalPages}
-          className="h-7 px-2 text-xs rounded-full border-border bg-card"
+          className="h-7 px-2 text-xs rounded-full border-white/12 bg-[#121212]"
         >
           Próxima »
         </Button>
@@ -188,20 +181,20 @@ function CompanyTable({ title, data, isLoading }: CompanyTableProps) {
   };
 
   return (
-    <Card className="bg-[rgba(4,5,15,0.94)] border-border rounded-2xl shadow-[0_18px_40px_rgba(0,0,0,0.9)] p-4">
+    <PageCard>
       {/* Header */}
       <div className="flex flex-col lg:flex-row lg:items-end lg:justify-between gap-3 mb-3">
         <div>
           <h3 className="text-sm font-semibold uppercase tracking-widest text-foreground">{title}</h3>
           <div className="flex flex-wrap items-center gap-2 mt-2">
-            <Badge variant="outline" className="text-[0.68rem] border-border bg-card/50">
+            <Badge variant="outline" className="text-[0.68rem] border-white/12 bg-white/5">
               <span className="w-1.5 h-1.5 rounded-full bg-primary mr-1.5" />
               Atualizado: {data.meta.updated_at ? fmtDate(data.meta.updated_at) : '-'}
             </Badge>
-            <Badge variant="outline" className="text-[0.68rem] border-border bg-card/50">
+            <Badge variant="outline" className="text-[0.68rem] border-white/12 bg-white/5">
               Effective: {data.meta.effective || '-'}
             </Badge>
-            <Badge variant="outline" className="text-[0.68rem] border-border bg-card/50">
+            <Badge variant="outline" className="text-[0.68rem] border-white/12 bg-white/5">
               Origem: {data.source || '-'}
             </Badge>
           </div>
@@ -212,17 +205,17 @@ function CompanyTable({ title, data, isLoading }: CompanyTableProps) {
             placeholder="Buscar por qualquer coluna"
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            className="pl-9 h-9 text-sm rounded-full bg-card border-border"
+            className="pl-9 h-9 text-sm rounded-full bg-[#13141a] border-white/20"
           />
         </div>
       </div>
 
       {/* Table */}
-      <div className="border border-border rounded-xl overflow-hidden">
+      <div className="border border-white/12 rounded-xl overflow-hidden">
         <ScrollArea className="h-[280px]">
           <Table>
             <TableHeader>
-              <TableRow className="bg-card hover:bg-card">
+              <TableRow className="bg-[#15151f] hover:bg-[#15151f]">
                 {[
                   { key: 'empresa', label: 'Empresa' },
                   { key: 'charge_description', label: 'Charge Description' },
@@ -270,7 +263,7 @@ function CompanyTable({ title, data, isLoading }: CompanyTableProps) {
                 </TableRow>
               ) : (
                 paginatedRows.map((row, idx) => (
-                  <TableRow key={row.id || idx} className="text-sm">
+                  <TableRow key={row.id || idx} className="text-sm hover:bg-white/5">
                     <TableCell className="whitespace-nowrap">{row.empresa || '-'}</TableCell>
                     <TableCell>{row.charge_description || '-'}</TableCell>
                     <TableCell>{row.charge_code || '-'}</TableCell>
@@ -293,14 +286,12 @@ function CompanyTable({ title, data, isLoading }: CompanyTableProps) {
 
       {/* Pagination */}
       {renderPagination()}
-    </Card>
+    </PageCard>
   );
 }
 
 // Main Component
 export default function LocalCharges() {
-  const navigate = useNavigate();
-  const { user } = useAuth();
   const [isLoading, setIsLoading] = useState(true);
   
   const [hapagData, setHapagData] = useState<CompanyData>({ rows: [], meta: { updated_at: null, effective: null }, source: '' });
@@ -319,7 +310,6 @@ export default function LocalCharges() {
       if (error) throw error;
       if (!data?.success) throw new Error(data?.error || 'Erro ao carregar dados');
 
-      // Set data for each company
       if (data.hapag) setHapagData(data.hapag);
       if (data.msc) setMscData(data.msc);
       if (data.cma) setCmaData(data.cma);
@@ -339,73 +329,28 @@ export default function LocalCharges() {
     fetchLocalCharges();
   }, []);
 
-  return (
-    <div 
-      className="min-h-screen text-foreground"
-      style={{
-        background: `
-          radial-gradient(circle at 10% 0%, rgba(255,200,0,0.18), transparent 55%),
-          radial-gradient(circle at 90% 100%, rgba(255,200,0,0.12), transparent 55%),
-          linear-gradient(180deg, rgba(0,0,0,0.7), rgba(0,0,0,0.82)),
-          url('/dachser-background.jpg') center/cover no-repeat
-        `
-      }}
+  const rightContent = (
+    <Button
+      onClick={fetchLocalCharges}
+      disabled={isLoading}
+      className="h-8 rounded-full bg-primary text-primary-foreground hover:bg-primary/90 shadow-[0_0_20px_rgba(255,200,0,0.4)]"
     >
-      <div className="min-h-screen bg-black/60 backdrop-blur-sm">
-        {/* Header */}
-        <div className="max-w-[95%] mx-auto pt-5 pb-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-4">
-              <Button
-                variant="outline"
-                size="icon"
-                onClick={() => navigate("/dashboard")}
-                className="w-9 h-9 rounded-full border-border bg-card hover:bg-muted"
-              >
-                <ArrowLeft className="h-4 w-4" />
-              </Button>
-              
-              <div>
-                <h1 className="text-xl font-bold tracking-widest uppercase">DACHSER</h1>
-                <p className="text-sm text-muted-foreground">Local Charges – Tabelas consolidadas</p>
-                <div className="flex gap-1.5 mt-1.5">
-                  <span className="w-1.5 h-1.5 rounded-full bg-primary shadow-[0_0_10px_rgba(255,200,0,0.9)]" />
-                  <span className="w-1.5 h-1.5 rounded-full bg-primary shadow-[0_0_10px_rgba(255,200,0,0.9)]" />
-                  <span className="w-1.5 h-1.5 rounded-full bg-primary shadow-[0_0_10px_rgba(255,200,0,0.9)]" />
-                </div>
-              </div>
-            </div>
+      <RefreshCw className={`h-4 w-4 mr-2 ${isLoading ? 'animate-spin' : ''}`} />
+      Atualizar
+    </Button>
+  );
 
-            <div className="flex items-center gap-2">
-              <Button
-                onClick={fetchLocalCharges}
-                disabled={isLoading}
-                className="h-9 rounded-full bg-primary text-primary-foreground hover:bg-primary/90 shadow-[0_0_20px_rgba(255,200,0,0.4)]"
-              >
-                <RefreshCw className={`h-4 w-4 mr-2 ${isLoading ? 'animate-spin' : ''}`} />
-                Atualizar
-              </Button>
-              
-              <div className="px-3 py-1.5 rounded-full bg-card/80 border border-border text-sm">
-                @{user?.username || user?.email || 'user'}
-              </div>
-              
-              <div className="w-9 h-9 rounded-full bg-card/80 border border-border flex items-center justify-center text-primary">
-                <FileSpreadsheet className="h-4 w-4" />
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Content */}
-        <div className="max-w-[95%] mx-auto pb-12 space-y-4">
-          <CompanyTable title="HAPAG-LLOYD" data={hapagData} isLoading={isLoading} />
-          <CompanyTable title="MSC" data={mscData} isLoading={isLoading} />
-          <CompanyTable title="CMA" data={cmaData} isLoading={isLoading} />
-          <CompanyTable title="HMM" data={hmmData} isLoading={isLoading} />
-          <CompanyTable title="ONE" data={oneData} isLoading={isLoading} />
-        </div>
-      </div>
-    </div>
+  return (
+    <PageLayout 
+      title="DACHSER" 
+      subtitle="Local Charges – Tabelas consolidadas"
+      rightContent={rightContent}
+    >
+      <CompanyTable title="HAPAG-LLOYD" data={hapagData} isLoading={isLoading} />
+      <CompanyTable title="MSC" data={mscData} isLoading={isLoading} />
+      <CompanyTable title="CMA" data={cmaData} isLoading={isLoading} />
+      <CompanyTable title="HMM" data={hmmData} isLoading={isLoading} />
+      <CompanyTable title="ONE" data={oneData} isLoading={isLoading} />
+    </PageLayout>
   );
 }
