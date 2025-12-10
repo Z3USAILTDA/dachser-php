@@ -317,8 +317,16 @@ const Dashboard = () => {
                               className={`min-w-[180px] px-5 py-2.5 rounded-full text-sm font-medium transition-all duration-200 cursor-pointer ${
                                 voucherExpanded 
                                   ? 'bg-primary text-primary-foreground border border-primary shadow-[0_0_14px_hsl(var(--primary)/0.7)]' 
-                                  : 'bg-background border border-primary text-foreground shadow-[0_0_10px_hsl(var(--primary)/0.5)] hover:-translate-y-0.5'
+                                  : 'text-foreground hover:-translate-y-0.5'
                               }`}
+                              style={{
+                                ...(!voucherExpanded && {
+                                  background: 'rgba(4, 10, 30, 0.75)',
+                                  boxShadow: '0 12px 30px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(255, 255, 255, 0.08)',
+                                  backdropFilter: 'blur(18px)',
+                                  border: '1px solid rgba(255, 255, 255, 0.08)',
+                                })
+                              }}
                             >
                               {child.label}
                             </button>
@@ -357,7 +365,13 @@ const Dashboard = () => {
                                         
                                         <button
                                           onClick={() => navigate(vChild.href)}
-                                          className="mt-2 min-w-[180px] px-5 py-2.5 rounded-full bg-background border border-border/50 text-foreground text-sm font-medium hover:border-primary/60 hover:-translate-y-0.5 transition-all duration-200 shadow-lg"
+                                          className="mt-2 min-w-[180px] px-5 py-2.5 rounded-full text-foreground text-sm font-medium hover:-translate-y-0.5 transition-all duration-200"
+                                          style={{
+                                            background: 'rgba(4, 10, 30, 0.75)',
+                                            boxShadow: '0 12px 30px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(255, 255, 255, 0.08)',
+                                            backdropFilter: 'blur(18px)',
+                                            border: '1px solid rgba(255, 255, 255, 0.08)',
+                                          }}
                                         >
                                           {vChild.label}
                                         </button>
@@ -371,7 +385,13 @@ const Dashboard = () => {
                         ) : (
                           <button
                             onClick={() => child.href && navigate(child.href)}
-                            className="mt-2 min-w-[180px] px-5 py-2.5 rounded-full bg-background border border-border/50 text-foreground text-sm font-medium hover:border-primary/60 hover:-translate-y-0.5 transition-all duration-200 shadow-lg"
+                            className="mt-2 min-w-[180px] px-5 py-2.5 rounded-full text-foreground text-sm font-medium hover:-translate-y-0.5 transition-all duration-200"
+                            style={{
+                              background: 'rgba(4, 10, 30, 0.75)',
+                              boxShadow: '0 12px 30px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(255, 255, 255, 0.08)',
+                              backdropFilter: 'blur(18px)',
+                              border: '1px solid rgba(255, 255, 255, 0.08)',
+                            }}
                           >
                             {child.label}
                           </button>
