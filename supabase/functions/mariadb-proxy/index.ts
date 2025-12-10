@@ -740,9 +740,9 @@ serve(async (req) => {
         if (hawbFileName && hawbFilePath) {
           const docResult = await client.execute(
             `INSERT INTO ai_agente.t_document_awb 
-             (filename, storage_path, file_type, uploaded_by_user_id, created_at) 
-             VALUES (?, ?, ?, ?, NOW())`,
-            [hawbFileName, hawbFilePath, 'application/pdf', createdBy || null]
+             (filename, storage_path, file_type, created_at) 
+             VALUES (?, ?, ?, NOW())`,
+            [hawbFileName, hawbFilePath, 'application/pdf']
           );
           documentId = docResult.lastInsertId;
           console.log(`Created document record: ${hawbFileName}, ID: ${documentId}`);
