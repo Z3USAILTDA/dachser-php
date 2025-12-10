@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate, useLocation, useParams } from "react-router-dom";
-import { ArrowLeft, Send, FileText, AlertCircle, Copy, Check, Info } from "lucide-react";
+import { Send, FileText, AlertCircle, Copy, Check, Info } from "lucide-react";
+import { PageLayout } from "@/components/layout/PageLayout";
+import { PageCard } from "@/components/layout/PageCard";
 import { Button } from "@/components/ui/button";
 import { UploadZone } from "@/components/maritimo/UploadZone";
 import { FileItem } from "@/components/maritimo/FileItem";
@@ -334,21 +336,8 @@ export default function SubmeterManifestHbl() {
     analysisResult?.result_data?.manifest?.ncm8?.length === 0;
 
   return (
-    <div className="min-h-screen text-white" style={{
-      background: "linear-gradient(120deg, rgba(4, 17, 45, 0.92), rgba(26, 93, 173, 0.55)), url('https://www.dachser.com.br/images/Corporate/DGI_003215_rdax_65s.jpg') center/cover no-repeat"
-    }}>
-      <div className="min-h-screen bg-black/80 backdrop-blur-sm">
-        <div className="max-w-4xl mx-auto px-6 py-6">
-          <Button
-            variant="outline"
-            onClick={() => navigate("/maritimo")}
-            className="mb-6 rounded-full border-white/24 bg-black/40 text-white hover:border-amber-400/80 hover:bg-black"
-          >
-            <ArrowLeft className="w-4 h-4 mr-2" />
-            Voltar
-          </Button>
-
-          <div className="bg-black/40 border border-white/10 rounded-2xl shadow-[0_18px_40px_rgba(0,0,0,0.9)] p-8">
+    <PageLayout title="DACHSER" subtitle="Submeter – Manifest/Pack List × Draft HBL">
+      <PageCard className="max-w-4xl mx-auto">
             <h1 className="text-2xl font-bold text-white mb-2">Submeter – Manifest/Pack List × Draft HBL</h1>
             <p className="text-sm text-neutral-400 mb-8">Adicione os arquivos HBL para análise comparativa</p>
 
@@ -530,20 +519,31 @@ export default function SubmeterManifestHbl() {
                 </Button>
               </div>
             )}
-          </div>
 
-          {!analysisResult && (
-            <div className="flex items-center justify-center mt-6">
-              <div className="flex items-start gap-3 text-xs text-neutral-400 bg-black/20 border border-white/5 p-4 rounded-xl max-w-2xl">
-                <Info className="w-4 h-4 flex-shrink-0 mt-0.5 text-amber-300" />
-                <p>
-                  As análises são geradas por um modelo de IA e podem conter imprecisões. Revise antes de concluir processos.
-                </p>
+            {!analysisResult && (
+              <div className="mt-8 flex justify-start">
+                <Button
+                  onClick={handleAnalise}
+                  disabled={!hblFiles.length || isAnalyzing}
+                  className="h-10 rounded-full px-6 bg-amber-400 text-black font-semibold text-sm shadow-[0_0_22px_rgba(251,191,36,0.6)] hover:bg-amber-300"
+                >
+                  <Send className="w-4 h-4 mr-2" />
+                  {isAnalyzing ? "Processando..." : "Fazer análise"}
+                </Button>
               </div>
-            </div>
-          )}
+            )}
+      </PageCard>
+
+      {!analysisResult && (
+        <div className="flex items-center justify-center mt-6 max-w-4xl mx-auto">
+          <div className="flex items-start gap-3 text-xs text-neutral-400 bg-black/20 border border-white/5 p-4 rounded-xl">
+            <Info className="w-4 h-4 flex-shrink-0 mt-0.5 text-amber-300" />
+            <p>
+              As análises são geradas por um modelo de IA e podem conter imprecisões. Revise antes de concluir processos.
+            </p>
+          </div>
         </div>
-      </div>
-    </div>
+      )}
+    </PageLayout>
   );
 }
