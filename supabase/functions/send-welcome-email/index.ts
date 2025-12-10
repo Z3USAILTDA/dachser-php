@@ -12,96 +12,107 @@ interface WelcomeEmailRequest {
   password: string;
 }
 
-const generateEmailHtml = (username: string, password: string): string => {
-  return `
-<!DOCTYPE html>
-<html lang="pt-BR">
+const generateEmailHtml = (username: string, password: string, forceTheme: string = 'auto'): string => {
+  const logoLight = 'https://i.ibb.co/TgXzCqz/logo-preto.png';
+  const logoDark = 'https://i.ibb.co/sJkY7y5/logo-branco.png';
+  const accessUrl = 'https://dachser.z3us.ai/change_password.php';
+  const hostHref = 'https://dachser.z3us.ai/';
+  const brand = 'Z3US';
+  
+  // Use ZWSP to prevent auto-linking of "Z3US.AI"
+  const brandPlain = 'Z3US&#8203;.AI';
+  
+  // Inline default + overrides de tema
+  let lightInline = 'display:block;';
+  let darkInline = 'display:none;';
+  if (forceTheme === 'dark') { lightInline = 'display:none;'; darkInline = 'display:block;'; }
+  if (forceTheme === 'light') { lightInline = 'display:block;'; darkInline = 'display:none;'; }
+  
+  let forceCss = '';
+  if (forceTheme === 'dark') {
+    forceCss = '.logo-light{display:none!important}.logo-dark{display:block!important}'
+      + '.bg{background:#0b0b0b!important}.panel{background:#141414!important;border-color:#262626!important}'
+      + '.text{color:#ededed!important}.muted{color:#bdbdbd!important}';
+  } else if (forceTheme === 'light') {
+    forceCss = '.logo-dark{display:none!important}.logo-light{display:block!important}'
+      + '.bg{background:#ffffff!important}.panel{background:#ffffff!important;border-color:#e8e8e8!important}'
+      + '.text{color:#111!important}.muted{color:#666!important}';
+  }
+
+  return `<!doctype html>
+<html lang="pt-br">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Bem-vindo ao Z3US.AI - DACHSER</title>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width">
+<meta name="color-scheme" content="light dark"><meta name="supported-color-schemes" content="light dark">
+<title>Boas-vindas</title>
+<style>
+  .bg{background:#fff}
+  .panel{background:#fff;border:1px solid #e8e8e8;border-radius:12px}
+  .text{color:#111}.muted{color:#666}
+  .btn{display:inline-block;background:#ffa500;color:#111;text-decoration:none;font-weight:700;border-radius:999px;padding:12px 20px}
+  @media (prefers-color-scheme: dark){
+    .bg{background:#0b0b0b!important}
+    .panel{background:#141414!important;border-color:#262626!important}
+    .text{color:#ededed!important}.muted{color:#bdbdbd!important}
+    .logo-light{display:none!important}.logo-dark{display:block!important}
+  }
+  ${forceCss}
+</style>
 </head>
-<body style="margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; background-color: #050608;">
-  <table role="presentation" style="width: 100%; border-collapse: collapse;">
-    <tr>
-      <td style="padding: 40px 20px;">
-        <table role="presentation" style="max-width: 600px; margin: 0 auto; background: linear-gradient(135deg, rgba(4, 10, 30, 0.95), rgba(26, 93, 173, 0.3)); border-radius: 16px; border: 1px solid rgba(255, 255, 255, 0.1); overflow: hidden;">
-          <!-- Header -->
-          <tr>
-            <td style="padding: 30px 40px; text-align: center; border-bottom: 1px solid rgba(255, 255, 255, 0.08);">
-              <h1 style="margin: 0; color: #ffc800; font-size: 28px; font-weight: 600;">Z3US.AI</h1>
-              <p style="margin: 8px 0 0; color: #b9c4e0; font-size: 14px;">Plataforma de Inteligência Logística</p>
-            </td>
-          </tr>
-          
-          <!-- Content -->
-          <tr>
-            <td style="padding: 40px;">
-              <h2 style="margin: 0 0 20px; color: #f5f7ff; font-size: 22px; font-weight: 500;">
-                Bem-vindo(a), ${username}!
-              </h2>
-              
-              <p style="margin: 0 0 20px; color: #b9c4e0; font-size: 15px; line-height: 1.6;">
-                Sua conta no sistema DACHSER foi criada com sucesso. Abaixo estão suas credenciais de acesso:
-              </p>
-              
-              <!-- Credentials Box -->
-              <table role="presentation" style="width: 100%; margin: 25px 0; background: rgba(2, 8, 26, 0.6); border-radius: 12px; border: 1px solid rgba(255, 200, 0, 0.2);">
-                <tr>
-                  <td style="padding: 25px;">
-                    <table role="presentation" style="width: 100%;">
-                      <tr>
-                        <td style="padding: 8px 0;">
-                          <span style="color: #b9c4e0; font-size: 12px; text-transform: uppercase; letter-spacing: 1px;">Usuário</span>
-                          <p style="margin: 6px 0 0; color: #ffc800; font-size: 18px; font-weight: 600;">${username}</p>
-                        </td>
-                      </tr>
-                      <tr>
-                        <td style="padding: 12px 0 8px; border-top: 1px solid rgba(255, 255, 255, 0.05);">
-                          <span style="color: #b9c4e0; font-size: 12px; text-transform: uppercase; letter-spacing: 1px;">Senha Temporária</span>
-                          <p style="margin: 6px 0 0; color: #ffc800; font-size: 18px; font-weight: 600; font-family: monospace;">${password}</p>
-                        </td>
-                      </tr>
-                    </table>
-                  </td>
-                </tr>
-              </table>
-              
-              <!-- Warning -->
-              <table role="presentation" style="width: 100%; margin: 25px 0; background: rgba(255, 200, 0, 0.08); border-radius: 8px; border-left: 4px solid #ffc800;">
-                <tr>
-                  <td style="padding: 16px 20px;">
-                    <p style="margin: 0; color: #f5f7ff; font-size: 14px; line-height: 1.5;">
-                      <strong style="color: #ffc800;">⚠️ Importante:</strong> Recomendamos alterar sua senha no primeiro acesso para garantir a segurança da sua conta.
-                    </p>
-                  </td>
-                </tr>
-              </table>
-              
-              <p style="margin: 25px 0 0; color: #b9c4e0; font-size: 14px; line-height: 1.6;">
-                Em caso de dúvidas, entre em contato com o administrador do sistema.
-              </p>
-            </td>
-          </tr>
-          
-          <!-- Footer -->
-          <tr>
-            <td style="padding: 25px 40px; background: rgba(0, 0, 0, 0.3); border-top: 1px solid rgba(255, 255, 255, 0.05);">
-              <p style="margin: 0; color: #6b7a99; font-size: 12px; text-align: center;">
-                Este é um e-mail automático. Por favor, não responda.
-              </p>
-              <p style="margin: 10px 0 0; color: #6b7a99; font-size: 12px; text-align: center;">
-                powered by <span style="color: #ffc800; font-weight: 600;">Z3US.AI</span> • DACHSER Brasil
-              </p>
-            </td>
-          </tr>
-        </table>
-      </td>
-    </tr>
+<body class="bg" style="margin:0;padding:24px">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse">
+    <tr><td align="center">
+      <table role="presentation" width="640" cellpadding="0" cellspacing="0" class="panel" style="border-collapse:collapse;max-width:640px">
+        <tr><td style="padding:28px 28px 0" align="center">
+          <img src="${logoLight}" width="120" alt="${brand}" class="logo-light" style="${lightInline}margin:0 auto 8px;border:0">
+          <img src="${logoDark}" width="120" alt="${brand}" class="logo-dark" style="${darkInline}margin:0 auto 8px;border:0">
+        </td></tr>
+
+        <tr><td style="padding:8px 28px 0" align="left" class="text">
+          <h1 style="margin:8px 0 4px;font-family:Arial,Helvetica,sans-serif;font-size:22px;line-height:1.3">Bem-vindo(a), ${username}!</h1>
+          <p style="margin:0 0 12px;font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.5" class="muted">
+            Sua conta foi criada com sucesso no <span style="color:inherit;text-decoration:none">${brandPlain}</span> @ Dachser
+            (<a href="${hostHref}" target="_blank" rel="noopener" style="color:#ffa500;text-decoration:none">dachser.z3us.ai</a>).
+            Seguem seus dados iniciais de acesso:
+          </p>
+        </td></tr>
+
+        <tr><td style="padding:0 28px 12px" align="left">
+          <table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="border-collapse:collapse">
+            <tr><td style="font-family:Arial,Helvetica,sans-serif;font-size:14px;padding:6px 0" class="text"><b>Usuário:</b> ${username}</td></tr>
+            <tr><td style="font-family:Arial,Helvetica,sans-serif;font-size:14px;padding:6px 0" class="text"><b>Senha atual:</b> <code style="font-family:Consolas,monospace;padding:2px 6px;border-radius:6px;background:rgba(0,0,0,.06)">${password}</code></td></tr>
+          </table>
+          <p style="margin:12px 0 0;font-family:Arial,Helvetica,sans-serif;font-size:14px" class="muted">Por segurança, altere sua senha no primeiro acesso.</p>
+        </td></tr>
+
+        <tr><td style="padding:10px 28px 22px" align="left">
+          <a href="${accessUrl}" class="btn" style="font-family:Arial,Helvetica,sans-serif">Alterar senha</a>
+        </td></tr>
+
+        <tr><td style="padding:0 28px 26px" align="left">
+          <p style="margin:0;font-family:Arial,Helvetica,sans-serif;font-size:12px;line-height:1.5" class="muted">Caso não tenha solicitado este cadastro, ignore este e-mail.</p>
+        </td></tr>
+      </table>
+      <div style="height:20px;line-height:20px">&nbsp;</div>
+      <div style="font-family:Arial,Helvetica,sans-serif;font-size:11px;color:#888;text-align:center" class="muted">
+        © ${brand} — Esta é uma mensagem automática.
+      </div>
+    </td></tr>
   </table>
 </body>
-</html>
-`;
+</html>`;
+};
+
+const generateEmailText = (username: string, password: string): string => {
+  return `Bem-vindo(a), ${username}!
+
+Sua conta foi criada com sucesso no Z3US.AI @ Dachser (dachser.z3us.ai).
+Usuário: ${username}
+Senha temporária: ${password}
+
+Alterar senha: https://dachser.z3us.ai/change_password.php
+
+Por segurança, altere a senha no primeiro acesso.`;
 };
 
 const handler = async (req: Request): Promise<Response> => {
@@ -137,8 +148,9 @@ const handler = async (req: Request): Promise<Response> => {
     const { data, error } = await resend.emails.send({
       from: "Z3US.AI - DACHSER <noreply@hermes.z3us.ai>",
       to: [email],
-      subject: "Bem-vindo ao Z3US.AI - Suas credenciais de acesso",
+      subject: "Bem-vindo(a) ao Z3US",
       html: generateEmailHtml(username, password),
+      text: generateEmailText(username, password),
     });
 
     if (error) {
