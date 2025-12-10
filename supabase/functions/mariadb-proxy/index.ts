@@ -907,17 +907,19 @@ serve(async (req) => {
           );
         }
 
+        // Busca regra de matriz ATIVA pelo CNPJ
         const rules = await client.query(
-          `SELECT ref_othello, email_despachante 
-           FROM ai_agente.t_rule_row_awb 
-           WHERE cnpj = ? 
+          `SELECT r.ref_othello, r.email_despachante, r.empresa, r.endereco, r.cidade, r.estado, m.customer
+           FROM ai_agente.t_rule_row_awb r
+           INNER JOIN ai_agente.t_rule_matrix_awb m ON r.matrix_id = m.id
+           WHERE r.cnpj = ? AND m.is_active = 1 AND r.is_active = 1
            LIMIT 1`,
           [cnpj]
         );
 
         const rule = Array.isArray(rules) && rules.length > 0 ? rules[0] : null;
         result = { success: true, rule };
-        console.log(`Fetched rule for CNPJ ${cnpj}:`, rule);
+        console.log(`Fetched rule for CNPJ ${cnpj} from active matrix:`, rule);
         break;
       }
 
