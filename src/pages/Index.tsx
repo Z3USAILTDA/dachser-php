@@ -130,6 +130,18 @@ const getStatusCode = (lastEvent: string | null): string => {
     return "AWB não encontrado";
   }
 
+  // Se o lastEvent já é um código de status conhecido (4 caracteres ou menos), retorna como está
+  const knownStatusCodes = [
+    "OFLD", "NIL", "NIF", "DIS", "DLV", "DEP", "ARR", "RCF", "RCS", 
+    "MAN", "NFD", "AWD", "BKD", "BKF", "AWB", "FWB", "FOH", "TFD", "RCT", 
+    "RCP", "PRE", "LOF", "TDE", "CCD", "ASN", "MIS", "TFS", "POD", "TRM",
+    "ARRT", "CAN", "DISCREPANCY"
+  ];
+  const upperEvent = lastEvent.toUpperCase().trim();
+  if (knownStatusCodes.includes(upperEvent)) {
+    return upperEvent;
+  }
+
   // Se tem o formato "XXX - Description", retorna a sigla
   if (lastEvent.includes(" - ")) {
     return lastEvent.split(" - ")[0];
@@ -148,60 +160,85 @@ const getStatusCode = (lastEvent: string | null): string => {
 };
 
 // Função para calcular a posição do avião na timeline (0-100%)
-// Timeline dividida em 4 segmentos: Início-BKD (0-25%), BKD-RCF (25-50%), RCF-MNF (50-75%), MNF-Finalizado (75-100%)
+// Ordem dos status conforme sequência de emissão:
+// BKD, BKF, AWB, RCS, MAN, DEP, FOH, TFD, RCT, RCP, PRE, LOF, ARRT, TDE, ARR, RCF, NFD, AWD, CCD, ASN, MIS, TFS, DLV, POD
 const getTimelineProgress = (lastEvent: string | null): number => {
   if (!lastEvent) return 0;
 
   const statusCode = getStatusCode(lastEvent).toUpperCase();
   const lowerEvent = lastEvent.toLowerCase();
 
-  // Mapeamento de status para os 4 segmentos da timeline
+  // Mapeamento de status conforme ordem cronológica de emissão (24 status):
+  // BKD, BKF, AWB, RCS, MAN, DEP, FOH, TFD, RCT, RCP, PRE, LOF, ARRT, TDE, ARR, RCF, NFD, AWD, CCD, ASN, MIS, TFS, DLV, POD
+  // Os pontos visuais estão em: 0% (BKD), 25% (MAN), 50% (RCT/TFD), 75% (RCF), 100% (DLV)
   const progressMap: Record<string, number> = {
-    // Segmento 1: Início - BKD (0-25%)
-    PND: 5,
-    PENDING: 5,
-    WHR: 10,
-    WAREHOUSE: 10,
-    BKD: 25,
-    BOOKED: 25,
-    BOOKING: 25,
+    // 1-4: BKD, BKF, AWB, RCS (0-25%)
+    BKD: 0,
+    BOOKED: 0,
+    BOOKING: 0,
+    KK: 0, // Reserva confirmada TAP
+    BKF: 6,
+    AWB: 12,
+    FWB: 12,
+    RCS: 18,
+    "RECEIVED FROM SHIPPER": 18,
 
-    // Segmento 2: BKD - RCF (25-50%)
-    FOH: 30,
-    "FREIGHT ON HAND": 30,
-    DEP: 35,
-    DEPARTED: 35,
-    DEPARTURE: 35,
-    MAN: 40,
-    MANIFESTED: 40,
-    MANIFEST: 40,
-    RCF: 50,
-    "RECEIVED FROM FLIGHT": 50,
-    RECEIVED: 50,
+    // 5: MAN em 25%
+    MAN: 25,
+    MANIFESTED: 25,
+    MANIFEST: 25,
+    MNF: 25,
 
-    // Segmento 3: RCF - MNF (50-75%)
-    ARR: 60,
-    ARRIVED: 60,
-    ARRIVAL: 60,
-    CUS: 65,
-    "IN CUSTOMS": 65,
-    CUSTOMS: 65,
-    DIS: 70,
-    DISCREPANCY: 70, // Status de alerta - avião vermelho
-    OFLD: 70,
-    OFFLOADED: 70, // Status de alerta - avião vermelho
-    MNF: 75,
-    "MANIFESTED FOR DELIVERY": 75,
+    // 6-7: DEP, FOH (25-50%)
+    DEP: 32,
+    DEPARTED: 32,
+    DEPARTURE: 32,
+    FOH: 40,
+    "FREIGHT ON HAND": 40,
 
-    // Segmento 4: MNF - Finalizado (75-100%)
+    // 8-9: TFD, RCT em 50%
+    TFD: 50,
+    "TRANSFERRED TO ANOTHER AIRLINE": 50,
+    RCT: 50,
+    "RECEIVED FROM ANOTHER AIRLINE": 50,
+
+    // 10-15: RCP, PRE, LOF, ARRT, TDE, ARR (50-75%)
+    RCP: 55,
+    PRE: 58,
+    LOF: 61,
+    ARRT: 64,
+    TDE: 67,
+    ARR: 70,
+    ARRIVED: 70,
+    ARRIVAL: 70,
+
+    // 16: RCF em 75%
+    RCF: 75,
+    "RECEIVED FROM FLIGHT": 75,
+    RECEIVED: 75,
+
+    // 17-24: NFD, AWD, CCD, ASN, MIS, TFS, DLV, POD (75-100%)
     NFD: 80,
     NOTIFIED: 80,
-    OFD: 85,
-    "OUT FOR DELIVERY": 85,
+    AWD: 84,
+    "DOCUMENT DELIVERED": 84,
+    CCD: 88,
+    ASN: 90,
+    MIS: 92,
+    TFS: 95,
     DLV: 100,
     DELIVERED: 100,
     POD: 100,
     "PROOF OF DELIVERY": 100,
+
+    // Status de alerta (mantém posição intermediária)
+    DIS: 49,
+    DISCREPANCY: 49,
+    OFLD: 49,
+    OFFLOADED: 49,
+    NIL: 40,
+    NIF: 40,
+    TRM: 35,
   };
 
   // Tenta encontrar por código exato
@@ -274,6 +311,8 @@ const Index = () => {
   const shouldSendEmailsRef = useRef(false); // Only send emails when user explicitly clicks button
   const emailEnableTimestampRef = useRef<number>(0); // Track when emails were enabled
   const EMAIL_ENABLE_TIMEOUT_MS = 30 * 60 * 1000; // 30 minutes timeout for email sending
+  // Track emails already sent to prevent duplicates (key: "AWB-STATUS")
+  const emailsSentRef = useRef<Set<string>>(new Set());
   const { toast } = useToast();
 
   // Sync isPaused state with ref
@@ -353,6 +392,7 @@ const Index = () => {
           consignee_name: item.destinatário || "-",
           hawb: item.hawb || "-",
           nome_analista: item.nome_analista || "-",
+          email_analista: item.email_analista || null,
           email_cliente: item.email_cliente || "",
           origem: item.origem || "N/A",
           destino: item.destino || "N/A",
@@ -474,13 +514,16 @@ const Index = () => {
               // Get nome_analista from the item
               const itemNomeAnalista = item.nome_analista || item["nome_analista"] || "N/A";
 
+              // Get email_analista from the item
+              const itemEmailAnalista = item.email_analista || item["email_analista"] || null;
+
               // Get email_cliente from the item
               const itemEmailCliente = item.email_cliente || item["email_cliente"] || null;
 
               // Mark AWB as being retracked
               setRetrackingAwbs((prev) => new Set(prev).add(awbNumber));
 
-              console.log(`Re-tracking AWB: ${awbNumber}, HAWB: ${itemHawb}, Analista: ${itemNomeAnalista}`);
+              console.log(`Re-tracking AWB: ${awbNumber}, HAWB: ${itemHawb}, Analista: ${itemNomeAnalista}, Email Analista: ${itemEmailAnalista}`);
 
               const { data: trackData, error: trackError } = await supabase.functions.invoke("track-awb", {
                 body: { awb: awbNumber, airlineCode },
@@ -525,6 +568,7 @@ const Index = () => {
                     origin: trackData.data.origin || "N/A",
                     destination: trackData.data.destination || "N/A",
                     hawb: itemHawb,
+                    analystEmail: itemEmailAnalista,
                   };
 
                   statusChanges.push(statusChange);
@@ -543,45 +587,59 @@ const Index = () => {
 
                   // Send individual email for this AWB - ONLY if user explicitly clicked button AND emails are enabled AND timestamp is valid
                   if (shouldSendEmailsRef.current && EMAIL_SENDING_ENABLED && isEmailTimestampValid) {
-                    // Check if customer email is enabled for this AWB (default is disabled)
-                    const isCustomerEmailEnabled = customerEmailEnabled[awbNumber] === true;
-                    const customerEmail = isCustomerEmailEnabled
-                      ? (customerEmails[awbNumber] ?? itemEmailCliente)
-                      : undefined;
+                    // Check if email was already sent for this AWB+status combination to prevent duplicates
+                    const emailKey = `${awbNumber}-${normalizedNewStatus}`;
+                    if (emailsSentRef.current.has(emailKey)) {
+                      console.log(`[EMAIL SKIPPED DUPLICATE] Email already sent for ${emailKey} - preventing duplicate`);
+                    } else {
+                      // Mark as sent BEFORE sending to prevent race conditions
+                      emailsSentRef.current.add(emailKey);
+                      
+                      // Check if customer email is enabled for this AWB (default is disabled)
+                      const isCustomerEmailEnabled = customerEmailEnabled[awbNumber] === true;
+                      const customerEmail = isCustomerEmailEnabled
+                        ? (customerEmails[awbNumber] ?? itemEmailCliente)
+                        : undefined;
 
-                    console.log(
-                      `[EMAIL SENDING] Customer email for ${awbNumber}: enabled=${isCustomerEmailEnabled}, email=${customerEmail}`,
-                    );
-
-                    try {
-                      const { data: emailData, error: emailError } = await supabase.functions.invoke(
-                        "send-status-change-email",
-                        {
-                          body: {
-                            statusChanges: [statusChange],
-                            customerEmail: customerEmail,
-                          },
-                        },
+                      console.log(
+                        `[EMAIL SENDING] Customer email for ${awbNumber}: enabled=${isCustomerEmailEnabled}, email=${customerEmail}`,
                       );
 
-                      if (emailError) {
-                        console.error(`Error sending email for AWB ${awbNumber}:`, emailError);
-                      } else {
-                        console.log(`Email sent successfully for AWB ${awbNumber}:`, emailData);
-                        toast({
-                          title: "Email enviado",
-                          description: customerEmail
-                            ? `Notificação enviada para AWB ${awbNumber} (incluindo cliente: ${customerEmail})`
-                            : `Notificação enviada para AWB ${awbNumber}`,
-                        });
-                      }
-                    } catch (emailError) {
-                      console.error(`Exception sending email for AWB ${awbNumber}:`, emailError);
-                    }
+                      try {
+                        const { data: emailData, error: emailError } = await supabase.functions.invoke(
+                          "send-status-change-email",
+                          {
+                            body: {
+                              statusChanges: [statusChange],
+                              customerEmail: customerEmail,
+                              analystEmail: itemEmailAnalista,
+                            },
+                          },
+                        );
 
-                    // Wait 1 minute before processing next AWB to avoid spam
-                    console.log("Waiting 1 minute before processing next AWB...");
-                    await new Promise((resolve) => setTimeout(resolve, 60000));
+                        if (emailError) {
+                          console.error(`Error sending email for AWB ${awbNumber}:`, emailError);
+                          // Remove from sent set so it can be retried
+                          emailsSentRef.current.delete(emailKey);
+                        } else {
+                          console.log(`Email sent successfully for AWB ${awbNumber}:`, emailData);
+                          toast({
+                            title: "Email enviado",
+                            description: customerEmail
+                              ? `Notificação enviada para AWB ${awbNumber} (incluindo cliente: ${customerEmail})`
+                              : `Notificação enviada para AWB ${awbNumber}`,
+                          });
+                        }
+                      } catch (emailError) {
+                        console.error(`Exception sending email for AWB ${awbNumber}:`, emailError);
+                        // Remove from sent set so it can be retried
+                        emailsSentRef.current.delete(emailKey);
+                      }
+
+                      // Wait 1 minute before processing next AWB to avoid spam
+                      console.log("Waiting 1 minute before processing next AWB...");
+                      await new Promise((resolve) => setTimeout(resolve, 60000));
+                    }
                   } else {
                     console.log(`[EMAIL SKIPPED] AWB ${awbNumber} - shouldSendEmailsRef=${shouldSendEmailsRef.current}, EMAIL_SENDING_ENABLED=${EMAIL_SENDING_ENABLED}, timestampValid=${Date.now() - emailEnableTimestampRef.current < EMAIL_ENABLE_TIMEOUT_MS}`);
                   }
@@ -882,31 +940,47 @@ const Index = () => {
 
                 // Send email for new AWB - ONLY if user explicitly clicked button AND emails are enabled AND timestamp valid
                 if (shouldSendEmailsRef.current && EMAIL_SENDING_ENABLED && isEmailTimestampValidNew) {
-                  try {
-                    console.log(`[EMAIL SENDING NEW AWB] Sending email for ${awb.awb}...`);
-                    const { data: emailData, error: emailError } = await supabase.functions.invoke(
-                      "send-status-change-email",
-                      {
-                        body: { statusChanges: [statusChange] },
-                      },
-                    );
+                  // Check if email was already sent for this AWB+status combination to prevent duplicates
+                  const emailKey = `${awb.awb}-${newStatus.toUpperCase()}`;
+                  if (emailsSentRef.current.has(emailKey)) {
+                    console.log(`[EMAIL SKIPPED DUPLICATE NEW AWB] Email already sent for ${emailKey} - preventing duplicate`);
+                  } else {
+                    // Mark as sent BEFORE sending to prevent race conditions
+                    emailsSentRef.current.add(emailKey);
+                    
+                    try {
+                      console.log(`[EMAIL SENDING NEW AWB] Sending email for ${awb.awb}...`);
+                      const { data: emailData, error: emailError } = await supabase.functions.invoke(
+                        "send-status-change-email",
+                        {
+                          body: { 
+                            statusChanges: [statusChange],
+                            analystEmail: awb.email_analista || null,
+                          },
+                        },
+                      );
 
-                    if (emailError) {
-                      console.error(`Error sending email for AWB ${awb.awb}:`, emailError);
-                    } else {
-                      console.log(`Email sent successfully for AWB ${awb.awb}:`, emailData);
-                      toast({
-                        title: "Email enviado",
-                        description: `Notificação enviada para novo AWB ${awb.awb}`,
-                      });
+                      if (emailError) {
+                        console.error(`Error sending email for AWB ${awb.awb}:`, emailError);
+                        // Remove from sent set so it can be retried
+                        emailsSentRef.current.delete(emailKey);
+                      } else {
+                        console.log(`Email sent successfully for AWB ${awb.awb}:`, emailData);
+                        toast({
+                          title: "Email enviado",
+                          description: `Notificação enviada para novo AWB ${awb.awb}`,
+                        });
+                      }
+                    } catch (emailError) {
+                      console.error(`Exception sending email for AWB ${awb.awb}:`, emailError);
+                      // Remove from sent set so it can be retried
+                      emailsSentRef.current.delete(emailKey);
                     }
-                  } catch (emailError) {
-                    console.error(`Exception sending email for AWB ${awb.awb}:`, emailError);
-                  }
 
-                  // Wait 1 minute before processing next AWB to avoid spam
-                  console.log("Waiting 1 minute before processing next AWB...");
-                  await new Promise((resolve) => setTimeout(resolve, 60000));
+                    // Wait 1 minute before processing next AWB to avoid spam
+                    console.log("Waiting 1 minute before processing next AWB...");
+                    await new Promise((resolve) => setTimeout(resolve, 60000));
+                  }
                 } else {
                   console.log(`[EMAIL SKIPPED NEW AWB] AWB ${awb.awb} - shouldSendEmailsRef=${shouldSendEmailsRef.current}, EMAIL_SENDING_ENABLED=${EMAIL_SENDING_ENABLED}, timestampValid=${isEmailTimestampValidNew}`);
                 }
@@ -1048,6 +1122,8 @@ const Index = () => {
       // Enable email sending - user explicitly clicked button
       shouldSendEmailsRef.current = true;
       emailEnableTimestampRef.current = Date.now();
+      // Clear the emails sent tracker at the start of each update cycle
+      emailsSentRef.current.clear();
       console.log(`[EMAIL CONTROL] User clicked Atualizar button - enabling email sending at ${new Date().toISOString()}`);
 
       // Step 1: Create queue table and populate it
@@ -1791,30 +1867,24 @@ const Index = () => {
                         </span>
                       </th>
                       <th className="px-4 py-3 text-left text-[#aaaaaa] uppercase text-[0.68rem] tracking-[0.1em] font-medium">Rota</th>
-                      <th className="px-4 py-3 text-left text-[#aaaaaa] uppercase text-[0.68rem] tracking-[0.1em] font-medium">Status</th>
+                      <th className="px-4 py-3 text-left text-[#aaaaaa] uppercase text-[0.68rem] tracking-[0.1em] font-medium">Rastreio</th>
                       <th className="px-4 py-3 text-left text-[#aaaaaa] uppercase text-[0.68rem] tracking-[0.1em] font-medium">Último Evento</th>
-                      <th
-                        className="px-4 py-3 text-left text-[#aaaaaa] uppercase text-[0.68rem] tracking-[0.1em] font-medium cursor-pointer select-none hover:text-[#ffc800] transition"
-                        onClick={handleLastCheckSort}
-                      >
-                        <span className="flex items-center gap-1">
-                          Última Atualização
-                          {sortLastCheck === "asc" && <span className="text-[#ffc800]">↑</span>}
-                          {sortLastCheck === "desc" && <span className="text-[#ffc800]">↓</span>}
-                        </span>
-                      </th>
+                      <th className="px-4 py-3 text-center text-[#aaaaaa] uppercase text-[0.68rem] tracking-[0.1em] font-medium">Situação</th>
                       <th
                         className="px-4 py-3 text-left text-[#aaaaaa] uppercase text-[0.68rem] tracking-[0.1em] font-medium cursor-pointer select-none hover:text-[#ffc800] transition"
                         onClick={handleAnalystSort}
                       >
                         <span className="flex items-center gap-1">
-                          Analista
+                          Nome Analista
                           {sortAnalyst === "asc" && <span className="text-[#ffc800]">↑</span>}
                           {sortAnalyst === "desc" && <span className="text-[#ffc800]">↓</span>}
                         </span>
                       </th>
                       <th className="px-4 py-3 text-center text-[#aaaaaa] uppercase text-[0.68rem] tracking-[0.1em] font-medium">
-                        Ações
+                        Abrir rastreio
+                      </th>
+                      <th className="px-4 py-3 text-center text-[#aaaaaa] uppercase text-[0.68rem] tracking-[0.1em] font-medium">
+                        Email Cliente
                       </th>
                     </tr>
                   </thead>
@@ -1979,22 +2049,24 @@ const Index = () => {
                                 {getStatusCode(awb.last_event)}
                               </span>
                             </td>
-                            <td className="px-4 py-3 text-[#aaaaaa] text-[0.8rem]">
-                              {awb.last_check
-                                ? (() => {
-                                    const dateStr = awb.last_check.replace("Z", "");
-                                    const date = new Date(dateStr);
-                                    return date.toLocaleString("pt-BR", {
-                                      day: "2-digit",
-                                      month: "2-digit",
-                                      year: "numeric",
-                                      hour: "2-digit",
-                                      minute: "2-digit",
-                                    });
-                                  })()
-                                : "-"}
+                            <td className="px-3 py-3 text-center">
+                              {(() => {
+                                const statusCode = getStatusCode(awb.last_event).toUpperCase();
+                                const isDelayed = awb.data_atraso !== null || statusCode === "DIS" || statusCode === "OFLD";
+                                return isDelayed ? (
+                                  <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-semibold bg-red-500/20 text-red-400 border border-red-500/30 animate-pulse">
+                                    <span className="w-1.5 h-1.5 rounded-full bg-red-400"></span>
+                                    Em Atraso
+                                  </span>
+                                ) : (
+                                  <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-semibold bg-green-500/20 text-green-400 border border-green-500/30">
+                                    <span className="w-1.5 h-1.5 rounded-full bg-green-400"></span>
+                                    No Prazo
+                                  </span>
+                                );
+                              })()}
                             </td>
-                            <td className="px-4 py-3 text-[#aaaaaa] text-[0.8rem] uppercase">{awb.nome_analista || "-"}</td>
+                            <td className="px-3 py-3 text-[#aaaaaa] text-sm uppercase">{awb.nome_analista || "-"}</td>
                             <td className="px-4 py-3 text-center">
                               <div className="flex items-center justify-center gap-1">
                                 <Button
@@ -2151,6 +2223,20 @@ const Index = () => {
                                 >
                                   <Mail className="w-4 h-4" />
                                 </Button>
+                              </div>
+                            </td>
+                            <td className="px-3 py-3">
+                              <div className="flex items-center justify-center">
+                                <Checkbox
+                                  id={`email-enabled-${awb.awb}`}
+                                  checked={customerEmailEnabled[awb.awb] === true}
+                                  onCheckedChange={(checked) => {
+                                    setCustomerEmailEnabled((prev) => ({
+                                      ...prev,
+                                      [awb.awb]: checked === true,
+                                    }));
+                                  }}
+                                />
                               </div>
                             </td>
                           </tr>
