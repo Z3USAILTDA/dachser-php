@@ -135,7 +135,7 @@ const handler = async (req: Request): Promise<Response> => {
     const resend = new Resend(resendApiKey);
 
     const { data, error } = await resend.emails.send({
-      from: "Z3US.AI - DACHSER <onboarding@resend.dev>",
+      from: "Z3US.AI - DACHSER <noreply@hermes.z3us.ai>",
       to: [email],
       subject: "Bem-vindo ao Z3US.AI - Suas credenciais de acesso",
       html: generateEmailHtml(username, password),
