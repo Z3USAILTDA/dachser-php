@@ -741,8 +741,8 @@ serve(async (req) => {
             `INSERT INTO ai_agente.t_parsed_awb 
              (awb_check_id, extracted_awb, extracted_cnpj, extracted_origin, extracted_destination,
               extracted_customer, confidence_score, shipper, consignee, carrier,
-              gross_weight, chargeable_weight, mrn, routing_legs, flight_numbers,
-              hs_codes, dimensions, incoterms, \`references\`) 
+              gross_weight_kg, chargeable_weight_kg, mrn, routing_legs, flight_numbers,
+              hs_codes, dims, incoterms, \`references\`) 
              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
             [
               awbCheckId, extractedAwb || null, extractedCnpj || null,
@@ -817,9 +817,9 @@ serve(async (req) => {
           `SELECT c.id, c.awb_number, c.cnpj, c.customer, c.origin, c.destination,
             c.validation_status, c.validation_message, c.matched_rule_id, c.created_by, c.created_at,
             p.extracted_awb, p.extracted_cnpj, p.extracted_origin, p.extracted_destination, 
-            p.extracted_customer, p.confidence_score, p.raw_text,
-            p.shipper, p.consignee, p.carrier, p.gross_weight, p.chargeable_weight,
-            p.mrn, p.routing_legs, p.flight_numbers, p.hs_codes, p.dimensions, p.incoterms, p.\`references\`,
+            p.extracted_customer, p.confidence_score,
+            p.shipper, p.consignee, p.carrier, p.gross_weight_kg, p.chargeable_weight_kg,
+            p.mrn, p.routing_legs, p.flight_numbers, p.hs_codes, p.dims, p.incoterms, p.\`references\`,
             d.filename as hawb_file_name, d.storage_path as hawb_file_path,
             r.email_despachante as rule_email, r.airport_code as rule_airport
            FROM ai_agente.t_awb_check c
@@ -849,7 +849,9 @@ serve(async (req) => {
           `SELECT c.id, c.awb_number, c.cnpj, c.customer, c.origin, c.destination,
             c.validation_status, c.validation_message, c.matched_rule_id, c.created_by, c.created_at,
             p.extracted_awb, p.extracted_cnpj, p.extracted_origin, p.extracted_destination,
-            p.extracted_customer, p.confidence_score, p.raw_text,
+            p.extracted_customer, p.confidence_score,
+            p.shipper, p.consignee, p.carrier, p.gross_weight_kg, p.chargeable_weight_kg,
+            p.mrn, p.routing_legs, p.flight_numbers, p.hs_codes, p.dims, p.incoterms, p.\`references\`,
             d.filename as hawb_file_name, d.storage_path as hawb_file_path,
             r.airport_code as rule_airport, r.email_despachante as rule_email
            FROM ai_agente.t_awb_check c
