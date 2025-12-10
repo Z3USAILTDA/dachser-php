@@ -84,7 +84,6 @@ const CheckAwb = () => {
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [selectedCheck, setSelectedCheck] = useState<AwbCheck | null>(null);
   const [selectedEmailDespachante, setSelectedEmailDespachante] = useState<string | null>(null);
-  const [selectedRefOthello, setSelectedRefOthello] = useState<string | null>(null);
   const [checkToDelete, setCheckToDelete] = useState<number | null>(null);
 
   // Upload states
@@ -133,31 +132,10 @@ const CheckAwb = () => {
     }
   };
 
-  const handleViewDetails = async (check: AwbCheck) => {
-    // 1. Define estados iniciais
+  const handleViewDetails = (check: AwbCheck) => {
     setSelectedCheck(check);
-    setSelectedEmailDespachante(null);
-    setSelectedRefOthello(null);
-
-    // 2. Busca ref_othello e email_despachante da rule_row pelo CNPJ
-    try {
-      const { data, error } = await supabase.functions.invoke("mariadb-proxy", {
-        body: {
-          action: "get_rule_by_cnpj",
-          cnpj: check.cnpj,
-        },
-      });
-
-      if (!error && data?.success && data?.rule) {
-        setSelectedRefOthello(data.rule.ref_othello || null);
-        if (check.customer === "KLABIN" && data.rule.email_despachante) {
-          setSelectedEmailDespachante(data.rule.email_despachante);
-        }
-      }
-    } catch (err) {
-      console.error("Erro ao buscar dados da regra:", err);
-    }
-
+    // O email do despachante já vem no campo rule_email do JOIN
+    setSelectedEmailDespachante(check.rule_email || null);
     setIsDetailsModalOpen(true);
   };
 
@@ -1102,7 +1080,7 @@ const CheckAwb = () => {
                 <div className="grid grid-cols-2 gap-x-8 gap-y-4 text-sm">
                   <div>
                     <p className="text-[#aaaaaa] mb-1">Ref Othello</p>
-                    <p className="font-mono text-[#f5f5f5]">{selectedRefOthello || "-"}</p>
+                    <p className="font-mono text-[#f5f5f5]">{selectedCheck.rule_ref_othello || "-"}</p>
                   </div>
                   <div>
                     <p className="text-[#aaaaaa] mb-1">Transportadora</p>
