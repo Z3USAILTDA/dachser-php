@@ -39,18 +39,17 @@ interface AwbCheck {
   extracted_destination: string | null;
   extracted_customer: string | null;
   confidence_score: number | null;
-  raw_text: string | null;
   // Additional parsed fields
   shipper: string | null;
   consignee: string | null;
   carrier: string | null;
-  gross_weight: number | null;
-  chargeable_weight: number | null;
+  gross_weight_kg: number | null;
+  chargeable_weight_kg: number | null;
   mrn: string | null;
   routing_legs: string | null;
   flight_numbers: string | null;
   hs_codes: string | null;
-  dimensions: string | null;
+  dims: string | null;
   incoterms: string | null;
   references: string | null;
   // File info
@@ -1040,32 +1039,33 @@ const CheckAwb = () => {
             <DialogTitle className="text-xl text-[#f5f5f5]">Descrição Detalhada</DialogTitle>
           </DialogHeader>
           {selectedCheck && (
-            <div className="space-y-4">
-              <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-6">
+              {/* Seção Principal */}
+              <div className="grid grid-cols-2 gap-x-8 gap-y-4">
                 <div>
-                  <p className="text-sm text-[#aaaaaa]">AWB</p>
+                  <p className="text-sm text-[#aaaaaa] mb-1">AWB</p>
                   <p className="font-mono text-sm text-[#f5f5f5]">{selectedCheck.awb_number}</p>
                 </div>
                 <div>
-                  <p className="text-sm text-[#aaaaaa]">CNPJ</p>
+                  <p className="text-sm text-[#aaaaaa] mb-1">CNPJ</p>
                   <p className="font-mono text-sm text-[#f5f5f5]">{selectedCheck.cnpj}</p>
                 </div>
                 <div>
-                  <p className="text-sm text-[#aaaaaa]">Rota</p>
+                  <p className="text-sm text-[#aaaaaa] mb-1">Rota</p>
                   <p className="font-mono text-sm text-[#f5f5f5]">
                     {selectedCheck.origin} → {selectedCheck.destination}
                   </p>
                 </div>
                 <div>
-                  <p className="text-sm text-[#aaaaaa]">Cliente</p>
+                  <p className="text-sm text-[#aaaaaa] mb-1">Cliente</p>
                   <p className="text-sm text-[#f5f5f5]">{selectedCheck.customer}</p>
                 </div>
                 <div>
-                  <p className="text-sm text-[#aaaaaa]">Status</p>
+                  <p className="text-sm text-[#aaaaaa] mb-1">Status</p>
                   {getResultBadge(selectedCheck.validation_status)}
                 </div>
                 <div>
-                  <p className="text-sm text-[#aaaaaa]">Motivo</p>
+                  <p className="text-sm text-[#aaaaaa] mb-1">Motivo</p>
                   <p className="text-sm text-[#f5f5f5]">
                     {selectedCheck.validation_message ||
                       (selectedCheck.validation_status === "OK" ? "CNPJ e aeroporto compatíveis" : "CNPJ não compatível")}
@@ -1073,73 +1073,43 @@ const CheckAwb = () => {
                 </div>
               </div>
 
-              {/* Dados Adicionais - usando dados do check que já vieram do JOIN */}
-              <div className="border-t border-[rgba(255,255,255,.12)] pt-4 mt-4">
-                <h3 className="font-semibold mb-3 text-[#f5f5f5]">Dados Adicionais</h3>
-                <div className="grid grid-cols-2 gap-4 text-sm">
-                  {selectedCheck.mrn && (
-                    <div>
-                      <p className="text-[#aaaaaa]">Ref Othello</p>
-                      <p className="font-mono text-[#f5f5f5]">{selectedCheck.mrn}</p>
-                    </div>
-                  )}
-                  {selectedCheck.carrier && (
-                    <div>
-                      <p className="text-[#aaaaaa]">Transportadora</p>
-                      <p className="text-[#f5f5f5]">{selectedCheck.carrier}</p>
-                    </div>
-                  )}
-                  {selectedCheck.shipper && (
-                    <div className="col-span-2">
-                      <p className="text-[#aaaaaa]">Remetente</p>
-                      <p className="text-[#f5f5f5]">{selectedCheck.shipper}</p>
-                    </div>
-                  )}
-                  {selectedCheck.consignee && (
-                    <div className="col-span-2">
-                      <p className="text-[#aaaaaa]">Destinatário</p>
-                      <p className="text-[#f5f5f5]">{selectedCheck.consignee}</p>
-                    </div>
-                  )}
-                  {selectedCheck.gross_weight && (
-                    <div>
-                      <p className="text-[#aaaaaa]">Peso Bruto</p>
-                      <p className="text-[#f5f5f5]">{selectedCheck.gross_weight} kg</p>
-                    </div>
-                  )}
-                  {selectedCheck.chargeable_weight && (
-                    <div>
-                      <p className="text-[#aaaaaa]">Peso Taxável</p>
-                      <p className="text-[#f5f5f5]">{selectedCheck.chargeable_weight} kg</p>
-                    </div>
-                  )}
+              {/* Dados Adicionais */}
+              <div className="border-t border-[rgba(255,255,255,.12)] pt-5">
+                <h3 className="font-semibold mb-4 text-[#f5f5f5]">Dados Adicionais</h3>
+                <div className="grid grid-cols-2 gap-x-8 gap-y-4 text-sm">
+                  <div>
+                    <p className="text-[#aaaaaa] mb-1">Ref Othello</p>
+                    <p className="font-mono text-[#f5f5f5]">{selectedCheck.mrn || selectedCheck.references || "-"}</p>
+                  </div>
+                  <div>
+                    <p className="text-[#aaaaaa] mb-1">Transportadora</p>
+                    <p className="text-[#f5f5f5]">{selectedCheck.carrier || "-"}</p>
+                  </div>
+                  <div>
+                    <p className="text-[#aaaaaa] mb-1">Remetente</p>
+                    <p className="text-[#f5f5f5]">{selectedCheck.shipper || "-"}</p>
+                  </div>
+                  <div>
+                    <p className="text-[#aaaaaa] mb-1">Destinatário</p>
+                    <p className="text-[#f5f5f5]">{selectedCheck.consignee || "-"}</p>
+                  </div>
+                  <div>
+                    <p className="text-[#aaaaaa] mb-1">Peso Bruto</p>
+                    <p className="text-[#f5f5f5]">{selectedCheck.gross_weight_kg ? `${selectedCheck.gross_weight_kg} kg` : "-"}</p>
+                  </div>
+                  <div>
+                    <p className="text-[#aaaaaa] mb-1">Peso Taxável</p>
+                    <p className="text-[#f5f5f5]">{selectedCheck.chargeable_weight_kg ? `${selectedCheck.chargeable_weight_kg} kg` : "-"}</p>
+                  </div>
                   {(selectedEmailDespachante || selectedCheck.rule_email) && selectedCheck.customer === "KLABIN" && (
-                    <div className="col-span-2">
-                      <p className="text-[#aaaaaa]">E-mail Despachante</p>
+                    <div>
+                      <p className="text-[#aaaaaa] mb-1">E-mail Despachante</p>
                       <a 
                         href={`mailto:${selectedEmailDespachante || selectedCheck.rule_email}`}
                         className="text-[#ffc800] hover:underline"
                       >
                         {selectedEmailDespachante || selectedCheck.rule_email}
                       </a>
-                    </div>
-                  )}
-                  {selectedCheck.rule_airport && (
-                    <div>
-                      <p className="text-[#aaaaaa]">Aeroporto (Regra)</p>
-                      <p className="text-[#f5f5f5]">{selectedCheck.rule_airport}</p>
-                    </div>
-                  )}
-                  {selectedCheck.confidence_score && (
-                    <div>
-                      <p className="text-[#aaaaaa]">Confiança</p>
-                      <p className="text-[#f5f5f5]">{(selectedCheck.confidence_score * 100).toFixed(0)}%</p>
-                    </div>
-                  )}
-                  {selectedCheck.hawb_file_name && (
-                    <div className="col-span-2">
-                      <p className="text-[#aaaaaa]">Arquivo</p>
-                      <p className="text-[#f5f5f5]">{selectedCheck.hawb_file_name}</p>
                     </div>
                   )}
                 </div>
