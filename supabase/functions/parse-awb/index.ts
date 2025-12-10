@@ -34,10 +34,18 @@ serve(async (req) => {
 
       console.log(`Received file: ${file.name}, type: ${file.type}, size: ${file.size}`);
       
-      // Convert file to base64
+      // Convert file to base64 - handle large files by processing in chunks
       const arrayBuffer = await file.arrayBuffer();
       const uint8Array = new Uint8Array(arrayBuffer);
-      file_base64 = btoa(String.fromCharCode(...uint8Array));
+      
+      // Process in chunks to avoid stack overflow
+      const CHUNK_SIZE = 8192;
+      let binaryString = '';
+      for (let i = 0; i < uint8Array.length; i += CHUNK_SIZE) {
+        const chunk = uint8Array.subarray(i, Math.min(i + CHUNK_SIZE, uint8Array.length));
+        binaryString += String.fromCharCode.apply(null, Array.from(chunk));
+      }
+      file_base64 = btoa(binaryString);
       file_type = file.type;
       document_type = formData.get('document_type')?.toString() || 'house_awb';
     } else {
