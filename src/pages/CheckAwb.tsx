@@ -213,7 +213,7 @@ const CheckAwb = () => {
     }
   };
 
-  const processSingleFile = async (file: File, odigos_by_user_id: string) => {
+  const processSingleFile = async (file: File, userId: string) => {
     // Upload do arquivo para storage
     const fileExt = file.name.split(".").pop();
     const fileName = `${userId}/${Date.now()}.${fileExt}`;
@@ -236,7 +236,7 @@ const CheckAwb = () => {
         filename: file.name,
         mime: file.type,
         file_url: publicUrl,
-        uploaded_by_user_id: odigos_by_user_id,
+        uploaded_by_user_id: userId,
       })
       .select()
       .single();
