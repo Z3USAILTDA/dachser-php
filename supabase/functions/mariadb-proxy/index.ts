@@ -898,6 +898,65 @@ serve(async (req) => {
         break;
       }
 
+      case 'update_parsed_awb': {
+        const { 
+          awbCheckId, shipper, consignee, carrier, grossWeight, chargeableWeight,
+          mrn, routingLegs, flightNumbers, hsCodes, dimensions, incoterms, references,
+          extractedAwb, extractedCnpj, extractedOrigin, extractedDestination, extractedCustomer
+        } = body;
+        
+        if (!awbCheckId) {
+          return new Response(
+            JSON.stringify({ error: 'AWB Check ID é obrigatório' }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+
+        await client.execute(
+          `UPDATE ai_agente.t_parsed_awb SET
+            shipper = ?, consignee = ?, carrier = ?,
+            gross_weight_kg = ?, chargeable_weight_kg = ?, mrn = ?,
+            routing_legs = ?, flight_numbers = ?, hs_codes = ?,
+            dims = ?, incoterms = ?, \`references\` = ?,
+            extracted_awb = COALESCE(?, extracted_awb),
+            extracted_cnpj = COALESCE(?, extracted_cnpj),
+            extracted_origin = COALESCE(?, extracted_origin),
+            extracted_destination = COALESCE(?, extracted_destination),
+            extracted_customer = COALESCE(?, extracted_customer)
+           WHERE awb_check_id = ?`,
+          [
+            shipper || null, consignee || null, carrier || null,
+            grossWeight || null, chargeableWeight || null, mrn || null,
+            routingLegs ? JSON.stringify(routingLegs) : null,
+            flightNumbers ? JSON.stringify(flightNumbers) : null,
+            hsCodes ? JSON.stringify(hsCodes) : null,
+            dimensions || null, incoterms || null,
+            references ? JSON.stringify(references) : null,
+            extractedAwb || null, extractedCnpj || null, extractedOrigin || null,
+            extractedDestination || null, extractedCustomer || null,
+            awbCheckId
+          ]
+        );
+
+        result = { success: true };
+        console.log(`Updated parsed AWB for check ID: ${awbCheckId}`);
+        break;
+      }
+
+      case 'get_awb_checks_with_files': {
+        // Get all checks that have file paths for reextraction
+        const checks = await client.query(
+          `SELECT c.id, c.awb_number, c.cnpj, d.storage_path as file_path
+           FROM ai_agente.t_awb_check c
+           LEFT JOIN ai_agente.t_parsed_awb p ON p.awb_check_id = c.id
+           LEFT JOIN ai_agente.t_document_awb d ON p.document_id = d.id
+           WHERE d.storage_path IS NOT NULL
+           ORDER BY c.created_at DESC`
+        );
+        result = { success: true, checks };
+        break;
+      }
+
       // ==================== DHL AWB TRACKING ====================
       case 'get_dhl_awb_tracking': {
         try {
