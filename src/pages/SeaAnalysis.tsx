@@ -1,5 +1,5 @@
 import { useState, useMemo } from "react";
-import { RefreshCw, Trash2, Play, FileText, ArrowRightLeft, Download, FolderOpen, ChevronLeft, ChevronRight } from "lucide-react";
+import { RefreshCw, Trash2, Play, FileText, ArrowRightLeft, Download, FolderOpen } from "lucide-react";
 import { NavTabs } from "@/components/maritimo/NavTabs";
 import { BadgeStatus } from "@/components/maritimo/BadgeStatus";
 import { HistoryModal } from "@/components/maritimo/HistoryModal";
@@ -26,6 +26,7 @@ import { faTerminal } from "@fortawesome/free-solid-svg-icons";
 import { PageLayout } from "@/components/layout/PageLayout";
 import { PageCard } from "@/components/layout/PageCard";
 import { FilterBar, filterPresets } from "@/components/layout/FilterBar";
+import { TablePagination } from "@/components/layout/TablePagination";
 import { Clock } from "lucide-react";
 
 export default function SeaAnalysis() {
@@ -86,21 +87,6 @@ export default function SeaAnalysis() {
     safeCurrentPage * PAGE_SIZE
   );
 
-  const getPageNumbers = (): (number | string)[] => {
-    const pages: (number | string)[] = [];
-    if (totalPages <= 5) {
-      for (let i = 1; i <= totalPages; i++) pages.push(i);
-    } else {
-      pages.push(1);
-      if (safeCurrentPage > 3) pages.push('...');
-      for (let i = Math.max(2, safeCurrentPage - 1); i <= Math.min(totalPages - 1, safeCurrentPage + 1); i++) {
-        pages.push(i);
-      }
-      if (safeCurrentPage < totalPages - 2) pages.push('...');
-      pages.push(totalPages);
-    }
-    return pages;
-  };
 
   const getTabValue = () => {
     switch (activeTab) {
@@ -340,46 +326,13 @@ export default function SeaAnalysis() {
 
             {/* Pagination */}
             {filteredData.length > PAGE_SIZE && (
-              <div className="mt-4 flex justify-end">
-                <div className="flex flex-wrap gap-1.5 items-center text-xs bg-[rgba(0,0,0,.5)] rounded-full border border-[rgba(255,255,255,.22)] px-2 py-1">
-                  <button
-                    onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
-                    disabled={safeCurrentPage === 1}
-                    className="px-2.5 py-1 rounded-full border border-[rgba(255,255,255,.2)] bg-[rgba(0,0,0,.3)] text-[#aaaaaa] text-xs transition-colors hover:bg-[rgba(255,255,255,.1)] disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1"
-                  >
-                    <ChevronLeft className="h-3 w-3" />
-                    Anterior
-                  </button>
-                  <span className="px-1 py-0.5 text-[#aaaaaa] text-xs">
-                    Página {safeCurrentPage}/{totalPages}
-                  </span>
-                  {getPageNumbers().map((page, idx) => 
-                    page === '...' ? (
-                      <span key={`ellipsis-${idx}`} className="text-[#aaaaaa] px-0.5 text-xs">…</span>
-                    ) : (
-                      <button
-                        key={page}
-                        onClick={() => setCurrentPage(page as number)}
-                        className={`px-2.5 py-1 rounded-full border text-xs transition-colors ${
-                          page === safeCurrentPage
-                            ? 'border-[#ffc800]/90 bg-[#ffc800]/20 text-[#ffc800] font-bold'
-                            : 'border-[rgba(255,255,255,.2)] bg-[rgba(0,0,0,.3)] text-[#aaaaaa] hover:bg-[rgba(255,255,255,.1)]'
-                        }`}
-                      >
-                        {page}
-                      </button>
-                    )
-                  )}
-                  <button
-                    onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
-                    disabled={safeCurrentPage === totalPages}
-                    className="px-2.5 py-1 rounded-full border border-[rgba(255,255,255,.2)] bg-[rgba(0,0,0,.3)] text-[#aaaaaa] text-xs transition-colors hover:bg-[rgba(255,255,255,.1)] disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1"
-                  >
-                    Próxima
-                    <ChevronRight className="h-3 w-3" />
-                  </button>
-                </div>
-              </div>
+              <TablePagination
+                currentPage={safeCurrentPage}
+                totalPages={totalPages}
+                onPageChange={setCurrentPage}
+                maxVisiblePages={5}
+                showFirstLast={false}
+              />
             )}
           </>
         )}
