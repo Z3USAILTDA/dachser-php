@@ -222,26 +222,14 @@ const CheckAwb = () => {
       .from("hawb-documents")
       .upload(fileName, file);
 
-    if (uploadError) throw uploadError;
+    if (uploadError) {
+      console.error("Upload error:", uploadError);
+      throw new Error(`Erro no upload: ${uploadError.message}`);
+    }
 
     const { data: { publicUrl } } = supabase.storage
       .from("hawb-documents")
       .getPublicUrl(fileName);
-
-    // Criar registro do documento
-    const { data: docData, error: docError } = await supabase
-      .from("document")
-      .insert({
-        type: "HAWB",
-        filename: file.name,
-        mime: file.type,
-        file_url: publicUrl,
-        uploaded_by_user_id: userId,
-      })
-      .select()
-      .single();
-
-    if (docError) throw docError;
 
     // Parsear documento via edge function
     const formData = new FormData();
@@ -252,11 +240,19 @@ const CheckAwb = () => {
       { body: formData }
     );
 
-    if (parseError || !parsedData || parsedData.error) {
+    if (parseError) {
+      console.error("Parse error:", parseError);
+      throw new Error(`Erro ao parsear: ${parseError.message}`);
+    }
+    
+    if (!parsedData || parsedData.error) {
       throw new Error(parsedData?.error || "Erro ao extrair dados do documento");
     }
 
-    await processValidation(parsedData, docData.id, userId);
+    console.log("Parsed data:", parsedData);
+
+    // Processar validação via MariaDB
+    await processValidationViaMariaDB(parsedData, fileName, file.name, publicUrl, userId);
     toast.success("Documento processado com sucesso!");
   };
 
@@ -281,10 +277,12 @@ const CheckAwb = () => {
       const references = parsed?.references || [];
       let cnpjSuffixPattern: string | null = null;
       for (const ref of references) {
-        const match = ref.match(/CNPJ\s*(\d{2})-(\d{2})/i) || ref.match(/^(\d{2})-(\d{2})$/);
-        if (match) {
-          cnpjSuffixPattern = match[1] + match[2];
-          break;
+        if (typeof ref === 'string') {
+          const match = ref.match(/CNPJ\s*(\d{2})-(\d{2})/i) || ref.match(/^(\d{2})-(\d{2})$/);
+          if (match) {
+            cnpjSuffixPattern = match[1] + match[2];
+            break;
+          }
         }
       }
 
@@ -324,25 +322,16 @@ const CheckAwb = () => {
     // Upload do House
     const houseExt = houseFile.name.split(".").pop();
     const houseFileName = `${userId}/${Date.now()}-house.${houseExt}`;
-    await supabase.storage.from("hawb-documents").upload(houseFileName, houseFile);
+    
+    const { error: uploadError } = await supabase.storage.from("hawb-documents").upload(houseFileName, houseFile);
+    if (uploadError) {
+      console.error("Upload error:", uploadError);
+      throw new Error(`Erro no upload: ${uploadError.message}`);
+    }
 
     const { data: { publicUrl: houseUrl } } = supabase.storage
       .from("hawb-documents")
       .getPublicUrl(houseFileName);
-
-    const { data: docData, error: docError } = await supabase
-      .from("document")
-      .insert({
-        type: "HAWB",
-        filename: houseFile.name,
-        mime: houseFile.type,
-        file_url: houseUrl,
-        uploaded_by_user_id: userId,
-      })
-      .select()
-      .single();
-
-    if (docError) throw docError;
 
     let finalCnpj = houseParsed.cnpj;
 
@@ -353,7 +342,8 @@ const CheckAwb = () => {
       if (!cnpjSuffix) {
         const instructionFormData = new FormData();
         instructionFormData.append("file", instructionResult.file);
-        const { data: instructionParsed } = await supabase.functions.invoke("parse-instruction", {
+        instructionFormData.append("document_type", "instruction");
+        const { data: instructionParsed } = await supabase.functions.invoke("parse-awb", {
           body: instructionFormData,
         });
         cnpjSuffix = instructionParsed?.cnpjSuffix?.replace(/\D/g, "") || null;
@@ -378,100 +368,59 @@ const CheckAwb = () => {
       instructionUsed: !!instructionResult,
     };
 
-    await processValidation(composedParsedData, docData.id, userId);
+    await processValidationViaMariaDB(composedParsedData, houseFileName, houseFile.name, houseUrl, userId);
     toast.success("Documentos processados com sucesso!");
   };
 
-  const processValidation = async (parsedData: any, documentId: string, userId: string) => {
+  // Nova função para validação via MariaDB
+  const processValidationViaMariaDB = async (
+    parsedData: any, 
+    filePath: string, 
+    fileName: string,
+    fileUrl: string,
+    userId: string
+  ) => {
     try {
-      const { data: parsedAwbData, error: parsedError } = await supabase
-        .from("parsed_awb")
-        .insert({
-          document_id: documentId,
-          awb_number: parsedData.awbNumber,
-          cnpj_detected: parsedData.cnpj,
-          origin_detected: parsedData.origin,
-          destination_detected: parsedData.destination,
-          shipper: parsedData.shipper,
-          consignee: parsedData.consignee,
-          carrier: parsedData.carrier,
-          gross_weight_kg: parsedData.grossWeight,
-          chargeable_weight_kg: parsedData.chargeableWeight,
-          routing_legs: parsedData.routingLegs,
-          flight_numbers: parsedData.flightNumbers,
-          mrn: parsedData.mrn,
-          hs_codes: parsedData.hsCodes,
-          dims: parsedData.dimensions,
-          incoterms: parsedData.incoterms,
-          reference_numbers: parsedData.references,
-        })
-        .select()
-        .single();
-
-      if (parsedError) throw parsedError;
-
-      const result = await validateAgainstMatrix(parsedData);
+      // Validar contra matriz de regras via MariaDB
+      const result = await validateAgainstMatrixViaMariaDB(parsedData);
       const dbResult = result.result === "COMPATIVEL" ? "OK" : "BLOQUEIO";
 
-      const { error: checkError } = await supabase
-        .from("awb_check")
-        .insert({
-          awb: parsedData.awbNumber || "N/A",
-          cnpj: parsedData.cnpj || "N/A",
+      // Inserir registro de validação no MariaDB
+      const { data, error } = await supabase.functions.invoke("mariadb-proxy", {
+        body: {
+          action: "create_awb_check",
+          awbNumber: parsedData.awbNumber || "N/A",
+          cnpj: parsedData.cnpj?.replace(/\D/g, "") || "N/A",
           origin: parsedData.origin || "N/A",
           destination: parsedData.destination || "N/A",
           customer: result.customer,
-          result: dbResult,
-          reason: result.reason,
-          rule_matrix_version: result.matrixVersion,
-          uploaded_by_user_id: userId,
-          parsed_awb_id: parsedAwbData.id,
-        });
-
-      if (checkError) throw checkError;
-
-      await supabase.from("log_entry").insert({
-        entity: "CHECK",
-        action: "RUN_CHECK",
-        entity_id: documentId,
-        user_id: userId,
-        details: `AWB ${parsedData.awbNumber} validado - Resultado: ${result.result}`,
+          validationStatus: dbResult,
+          validationMessage: result.reason,
+          matchedRuleId: result.matchedRuleId || null,
+          createdBy: userId,
+          hawbFileName: fileName,
+          hawbFilePath: fileUrl,
+          extractedAwb: parsedData.awbNumber,
+          extractedCnpj: parsedData.cnpj,
+          extractedOrigin: parsedData.origin,
+          extractedDestination: parsedData.destination,
+          extractedCustomer: parsedData.customer,
+          confidenceScore: parsedData.confidence === "high" ? 0.9 : parsedData.confidence === "medium" ? 0.7 : 0.5,
+        },
       });
+
+      if (error) throw error;
+      if (!data?.success) throw new Error(data?.error || "Erro ao salvar validação");
+
+      console.log("Validation saved:", data);
     } catch (error) {
       console.error("Erro na validação:", error);
       throw error;
     }
   };
 
-  const normalizeAddress = (address: string): string => {
-    return address
-      .toLowerCase()
-      .normalize("NFD")
-      .replace(/[\u0300-\u036f]/g, "")
-      .replace(/rodovia|rod\.|via|av\.|avenida|rua|r\./g, "")
-      .replace(/[^a-z0-9\s]/g, "")
-      .replace(/\s+/g, " ")
-      .trim();
-  };
-
-  const addressMatches = (docAddress: string, matrixAddress: string): boolean => {
-    const normalizedDoc = normalizeAddress(docAddress);
-    const normalizedMatrix = normalizeAddress(matrixAddress);
-
-    const matrixWords = normalizedMatrix.split(" ").filter(w => w.length > 2);
-
-    let matchCount = 0;
-    for (const matrixWord of matrixWords) {
-      if (normalizedDoc.includes(matrixWord)) {
-        matchCount++;
-      }
-    }
-
-    const matchRatio = matrixWords.length > 0 ? matchCount / matrixWords.length : 0;
-    return matchRatio >= 0.6;
-  };
-
-  const validateAgainstMatrix = async (parsedData: any) => {
+  // Nova função para validar contra matriz via MariaDB
+  const validateAgainstMatrixViaMariaDB = async (parsedData: any) => {
     const missingFields = [];
     if (!parsedData.cnpj) missingFields.push("CNPJ");
     if (!parsedData.origin) missingFields.push("Origem");
@@ -486,77 +435,86 @@ const CheckAwb = () => {
       throw new Error("CNPJ inválido detectado");
     }
 
-    const today = new Date().toISOString().split("T")[0];
-    const { data: matrices, error: matrixError } = await supabase
-      .from("rule_matrix")
-      .select("*")
-      .eq("is_active", true)
-      .lte("effective_from", today)
-      .or(`effective_to.is.null,effective_to.gte.${today}`);
+    // Buscar matrizes ativas via MariaDB
+    const { data: matricesData, error: matrixError } = await supabase.functions.invoke("mariadb-proxy", {
+      body: { action: "get_active_matrices" },
+    });
 
     if (matrixError) throw matrixError;
-    if (!matrices || matrices.length === 0) {
+    if (!matricesData?.success || !matricesData?.matrices?.length) {
       throw new Error("Nenhuma matriz de regras ativa encontrada");
     }
 
-    const extractedCustomer = parsedData.customer as "KLABIN" | "ZF" | null;
+    const matrices = matricesData.matrices;
+    const extractedCustomer = parsedData.customer?.toUpperCase() as "KLABIN" | "ZF" | null;
+    
     if (!extractedCustomer) {
       return {
         result: "INCOMPATIVEL" as const,
-        reason: "Não foi possível identificar o cliente (Klabin/ZF) no consignee do documento",
+        reason: "Não foi possível identificar o cliente (Klabin/ZF) no documento",
         customer: "KLABIN" as const,
-        matrixVersion: matrices[0].version,
+        matrixVersion: matrices[0]?.version || 1,
+        matchedRuleId: null,
       };
     }
 
-    const customerMatrix = matrices.find(m => m.customer === extractedCustomer);
+    const customerMatrix = matrices.find((m: any) => m.customer?.toUpperCase() === extractedCustomer);
     if (!customerMatrix) {
       return {
         result: "INCOMPATIVEL" as const,
         reason: `Matriz ${extractedCustomer} não encontrada ou inativa`,
         customer: extractedCustomer,
-        matrixVersion: matrices[0].version,
+        matrixVersion: matrices[0]?.version || 1,
+        matchedRuleId: null,
       };
     }
 
-    const { data: rules, error: rulesError } = await supabase
-      .from("rule_row")
-      .select("*")
-      .eq("rule_matrix_id", customerMatrix.id)
-      .eq("cnpj", normalizedCnpj);
+    // Buscar regras para o CNPJ via MariaDB
+    const { data: rulesData, error: rulesError } = await supabase.functions.invoke("mariadb-proxy", {
+      body: { 
+        action: "get_rules_by_cnpj",
+        matrixId: customerMatrix.id,
+        cnpj: normalizedCnpj,
+      },
+    });
 
     if (rulesError) throw rulesError;
 
+    const rules = rulesData?.rules || [];
     let result: "COMPATIVEL" | "INCOMPATIVEL";
     let reason: string;
+    let matchedRuleId: number | null = null;
 
-    if (rules && rules.length > 0) {
-      const consigneeAddress = parsedData.consignee || "";
+    if (rules.length > 0) {
+      const consigneeAddress = parsedData.consignee || parsedData.deliveryAddress || "";
 
-      const airportMatch = rules.find(r =>
+      const airportMatch = rules.find((r: any) =>
         r.airport_code &&
         r.airport_code !== "N/A" &&
-        (r.airport_code === parsedData.origin.toUpperCase() ||
-          r.airport_code === parsedData.destination.toUpperCase())
+        (r.airport_code.toUpperCase() === parsedData.origin?.toUpperCase() ||
+          r.airport_code.toUpperCase() === parsedData.destination?.toUpperCase())
       );
 
-      const addressMatch = rules.find(r =>
-        r.endereco_completo && addressMatches(consigneeAddress, r.endereco_completo)
+      const addressMatch = rules.find((r: any) =>
+        r.address_pattern && addressMatches(consigneeAddress, r.address_pattern)
       );
 
       if (airportMatch) {
         result = "COMPATIVEL";
         reason = "CNPJ e aeroporto compatíveis";
+        matchedRuleId = airportMatch.id;
       } else if (addressMatch) {
         result = "COMPATIVEL";
         reason = "CNPJ e endereço compatíveis";
+        matchedRuleId = addressMatch.id;
       } else {
-        const hasValidAirport = rules.some(r => r.airport_code && r.airport_code !== "N/A");
-        const hasValidAddress = rules.some(r => r.endereco_completo && r.endereco_completo.trim() !== "");
+        const hasValidAirport = rules.some((r: any) => r.airport_code && r.airport_code !== "N/A");
+        const hasValidAddress = rules.some((r: any) => r.address_pattern && r.address_pattern.trim() !== "");
 
         if (!hasValidAirport && !hasValidAddress) {
           result = "COMPATIVEL";
           reason = "CNPJ compatível";
+          matchedRuleId = rules[0]?.id || null;
         } else {
           result = "INCOMPATIVEL";
           reason = "Aeroporto não compatível";
@@ -572,7 +530,39 @@ const CheckAwb = () => {
       reason,
       customer: extractedCustomer,
       matrixVersion: customerMatrix.version,
+      matchedRuleId,
     };
+  };
+
+  // Função auxiliar para normalização de endereço
+  const normalizeAddress = (address: string): string => {
+    return address
+      .toLowerCase()
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .replace(/rodovia|rod\.|via|av\.|avenida|rua|r\./g, "")
+      .replace(/[^a-z0-9\s]/g, "")
+      .replace(/\s+/g, " ")
+      .trim();
+  };
+
+  const addressMatches = (docAddress: string, matrixAddress: string): boolean => {
+    if (!docAddress || !matrixAddress) return false;
+    const normalizedDoc = normalizeAddress(docAddress);
+    const normalizedMatrix = normalizeAddress(matrixAddress);
+
+    const matrixWords = normalizedMatrix.split(" ").filter(w => w.length > 2);
+    if (matrixWords.length === 0) return false;
+
+    let matchCount = 0;
+    for (const matrixWord of matrixWords) {
+      if (normalizedDoc.includes(matrixWord)) {
+        matchCount++;
+      }
+    }
+
+    const matchRatio = matchCount / matrixWords.length;
+    return matchRatio >= 0.6;
   };
 
   const handleDragOver = (e: React.DragEvent) => {
