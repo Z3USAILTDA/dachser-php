@@ -33,9 +33,17 @@ interface QueryRequest {
   ruleId?: number;
   cnpj?: string;
   airportCode?: string;
+  addressPattern?: string;
   notes?: string;
   emailDespachante?: string;
   enderecoCompleto?: string;
+  refOthello?: string;
+  empresa?: string;
+  endereco?: string;
+  cidade?: string;
+  estado?: string;
+  cep?: string;
+  pais?: string;
   // Document
   documentId?: number;
   fileName?: string;
@@ -416,7 +424,7 @@ serve(async (req) => {
       }
 
       case 'create_rule_row': {
-        const { matrixId, cnpj, airportCode, notes, emailDespachante, enderecoCompleto } = body;
+        const { matrixId, cnpj, airportCode, addressPattern, emailDespachante, refOthello, empresa, endereco, cidade, estado, cep, pais } = body;
         if (!matrixId || !cnpj) {
           return new Response(
             JSON.stringify({ error: 'Matrix ID e CNPJ são obrigatórios' }),
@@ -426,9 +434,9 @@ serve(async (req) => {
 
         const insertResult = await client.execute(
           `INSERT INTO ai_agente.t_rule_row_awb 
-           (matrix_id, cnpj, airport_code, notes, email_despachante, endereco_completo) 
-           VALUES (?, ?, ?, ?, ?, ?)`,
-          [matrixId, cnpj, airportCode || null, notes || null, emailDespachante || null, enderecoCompleto || null]
+           (matrix_id, cnpj, airport_code, address_pattern, email_despachante, ref_othello, empresa, endereco, cidade, estado, cep, pais) 
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          [matrixId, cnpj, airportCode || null, addressPattern || null, emailDespachante || null, refOthello || null, empresa || null, endereco || null, cidade || null, estado || null, cep || null, pais || null]
         );
 
         result = { success: true, ruleId: insertResult.lastInsertId };
