@@ -714,7 +714,10 @@ serve(async (req) => {
           awbNumber, cnpj, origin, destination, customer, 
           validationStatus, validationMessage, matchedRuleId, createdBy,
           hawbFileName, hawbFilePath, extractedAwb, extractedCnpj,
-          extractedOrigin, extractedDestination, extractedCustomer, confidenceScore
+          extractedOrigin, extractedDestination, extractedCustomer, confidenceScore,
+          // Additional parsed data fields
+          shipper, consignee, carrier, grossWeight, chargeableWeight,
+          mrn, routingLegs, flightNumbers, hsCodes, dimensions, incoterms, references
         } = body;
 
         // Insert AWB check
@@ -732,17 +735,26 @@ serve(async (req) => {
 
         const awbCheckId = insertResult.lastInsertId;
 
-        // Also create parsed_awb record if we have extracted data
-        if (extractedAwb || extractedCnpj) {
+        // Also create parsed_awb record with all extracted data
+        if (extractedAwb || extractedCnpj || shipper || consignee) {
           await client.execute(
             `INSERT INTO ai_agente.t_parsed_awb 
              (awb_check_id, extracted_awb, extracted_cnpj, extracted_origin, extracted_destination,
-              extracted_customer, confidence_score) 
-             VALUES (?, ?, ?, ?, ?, ?, ?)`,
+              extracted_customer, confidence_score, shipper, consignee, carrier,
+              gross_weight, chargeable_weight, mrn, routing_legs, flight_numbers,
+              hs_codes, dimensions, incoterms, \`references\`) 
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
             [
               awbCheckId, extractedAwb || null, extractedCnpj || null,
               extractedOrigin || null, extractedDestination || null,
-              extractedCustomer || null, confidenceScore || null
+              extractedCustomer || null, confidenceScore || null,
+              shipper || null, consignee || null, carrier || null,
+              grossWeight || null, chargeableWeight || null, mrn || null,
+              routingLegs ? JSON.stringify(routingLegs) : null,
+              flightNumbers ? JSON.stringify(flightNumbers) : null,
+              hsCodes ? JSON.stringify(hsCodes) : null,
+              dimensions || null, incoterms || null,
+              references ? JSON.stringify(references) : null
             ]
           );
         }
@@ -800,12 +812,14 @@ serve(async (req) => {
         const total = Number(countResult[0]?.total || 0);
         const totalPages = Math.max(1, Math.ceil(total / perPage));
 
-        // Get checks with related data
+        // Get checks with related data including all parsed fields
         const checks = await client.query(
           `SELECT c.id, c.awb_number, c.cnpj, c.customer, c.origin, c.destination,
             c.validation_status, c.validation_message, c.matched_rule_id, c.created_by, c.created_at,
             p.extracted_awb, p.extracted_cnpj, p.extracted_origin, p.extracted_destination, 
             p.extracted_customer, p.confidence_score, p.raw_text,
+            p.shipper, p.consignee, p.carrier, p.gross_weight, p.chargeable_weight,
+            p.mrn, p.routing_legs, p.flight_numbers, p.hs_codes, p.dimensions, p.incoterms, p.\`references\`,
             d.filename as hawb_file_name, d.storage_path as hawb_file_path,
             r.email_despachante as rule_email, r.airport_code as rule_airport
            FROM ai_agente.t_awb_check c
