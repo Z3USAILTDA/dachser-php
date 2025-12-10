@@ -898,6 +898,29 @@ serve(async (req) => {
         break;
       }
 
+      case 'get_rule_by_cnpj': {
+        const { cnpj } = body;
+        if (!cnpj) {
+          return new Response(
+            JSON.stringify({ error: 'CNPJ é obrigatório' }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+
+        const rules = await client.query(
+          `SELECT ref_othello, email_despachante 
+           FROM ai_agente.t_rule_row_awb 
+           WHERE cnpj = ? 
+           LIMIT 1`,
+          [cnpj]
+        );
+
+        const rule = Array.isArray(rules) && rules.length > 0 ? rules[0] : null;
+        result = { success: true, rule };
+        console.log(`Fetched rule for CNPJ ${cnpj}:`, rule);
+        break;
+      }
+
       // ==================== DHL AWB TRACKING ====================
       case 'get_dhl_awb_tracking': {
         try {
