@@ -1,13 +1,14 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Search, Filter, RotateCcw, Upload, Clock, Copy, FileText, Trash2 } from "lucide-react";
+import { Upload, Clock, Copy, FileText, Trash2 } from "lucide-react";
 import { PageLayout } from "@/components/layout/PageLayout";
 import { PageCard, FilterCard, TableCard } from "@/components/layout/PageCard";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { FilterBar, FilterOption } from "@/components/layout/FilterBar";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { toast } from "sonner";
 import { format } from "date-fns";
+import { Filter as FilterIcon } from "lucide-react";
 
 interface ChbItem {
   id: number;
@@ -244,49 +245,31 @@ export default function ChbAnalises() {
     >
       {/* CARD DE BUSCA + FILTROS */}
       <FilterCard>
-        <div className="space-y-3">
-          <div className="relative">
-            <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-[#aaaaaa]" />
-            <input
-              type="text"
-              placeholder="Buscar por referência ou consignee"
-              value={search}
-              onChange={e => setSearch(e.target.value)}
-              className="h-9 w-full pl-10 pr-4 rounded-full border border-[rgba(255,255,255,.14)] bg-[#13141a] text-[#f5f5f5] text-[0.78rem] placeholder:text-[#666] focus:outline-none focus:border-[#ffc800] focus:shadow-[0_0_0_1px_rgba(255,200,0,.8)]"
-            />
-          </div>
-
-          <div className="flex flex-wrap items-center gap-3">
-            {/* Status Filter */}
-            <div className="flex items-center gap-1.5">
-              <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-[rgba(0,0,0,.5)] border border-[rgba(255,255,255,.22)]">
-                <Filter className="h-3 w-3 text-[#ffc800]" />
-                <span className="text-[0.68rem] tracking-[0.1em] uppercase text-[#aaaaaa]">Status</span>
-              </div>
-              <Select value={statusFilter} onValueChange={setStatusFilter}>
-                <SelectTrigger className="h-8 w-[200px] rounded-full bg-[#13141a] border border-[rgba(255,255,255,.14)] text-[0.78rem]">
-                  <SelectValue placeholder="Todos" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="todos">Todos</SelectItem>
-                  <SelectItem value="pre_alerta_pendente">Análise de Pré-Alerta Pendente</SelectItem>
-                  <SelectItem value="instrucao_pendente">Análise de Instrução Pendente</SelectItem>
-                  <SelectItem value="di_pendente">Análise de Itens de DI Pendente</SelectItem>
-                  <SelectItem value="concluida">Concluída</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-
-            <button
-              onClick={handleRefresh}
-              disabled={isRefreshing}
-              className="inline-flex items-center gap-1.5 h-8 px-3 rounded-full bg-[rgba(255,255,255,.05)] border border-[rgba(255,255,255,.25)] text-[#f5f5f5] text-[0.78rem] font-semibold hover:bg-[rgba(255,255,255,.08)] disabled:opacity-50"
-            >
-              <RotateCcw className={`h-3.5 w-3.5 ${isRefreshing ? "animate-spin" : ""}`} />
-              Atualizar
-            </button>
-          </div>
-        </div>
+        <FilterBar
+          searchValue={search}
+          onSearchChange={setSearch}
+          searchPlaceholder="Buscar por referência ou consignee"
+          filters={[
+            {
+              id: "status",
+              label: "Status",
+              icon: FilterIcon,
+              value: statusFilter,
+              onChange: setStatusFilter,
+              options: [
+                { value: "todos", label: "Todos" },
+                { value: "pre_alerta_pendente", label: "Análise de Pré-Alerta Pendente" },
+                { value: "instrucao_pendente", label: "Análise de Instrução Pendente" },
+                { value: "di_pendente", label: "Análise de Itens de DI Pendente" },
+                { value: "concluida", label: "Concluída" },
+              ],
+              width: "200px",
+            },
+          ]}
+          showRefresh
+          onRefresh={handleRefresh}
+          isRefreshing={isRefreshing}
+        />
       </FilterCard>
 
       {/* CARD DA TABELA */}

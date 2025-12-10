@@ -1,7 +1,5 @@
 import { useState, useMemo } from "react";
-import { Search, RefreshCw, Trash2, Play, Filter, Clock, FileText, ArrowRightLeft, Download, LogOut, FolderOpen, ChevronLeft, ChevronRight } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { RefreshCw, Trash2, Play, FileText, ArrowRightLeft, Download, FolderOpen, ChevronLeft, ChevronRight } from "lucide-react";
 import { NavTabs } from "@/components/maritimo/NavTabs";
 import { BadgeStatus } from "@/components/maritimo/BadgeStatus";
 import { HistoryModal } from "@/components/maritimo/HistoryModal";
@@ -27,6 +25,8 @@ import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import { faTerminal } from "@fortawesome/free-solid-svg-icons";
 import { PageLayout } from "@/components/layout/PageLayout";
 import { PageCard } from "@/components/layout/PageCard";
+import { FilterBar, filterPresets } from "@/components/layout/FilterBar";
+import { Clock } from "lucide-react";
 
 export default function SeaAnalysis() {
   const navigate = useNavigate();
@@ -204,79 +204,30 @@ export default function SeaAnalysis() {
     <PageLayout title="DACHSER" subtitle="Maritime Analysis" rightContent={rightContent}>
       {/* Card de Filtros */}
       <PageCard>
-        <div className="space-y-3">
-          <div className="relative">
-            <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-[#aaaaaa]" />
-            <input
-              type="text"
-              placeholder="Buscar por arquivo, consignee ou container"
-              value={searchTerm}
-              onChange={(e) => handleSearchChange(e.target.value)}
-              className="h-9 w-full pl-10 pr-4 rounded-full border border-[rgba(255,255,255,.14)] bg-[#13141a] text-[#f5f5f5] text-[0.78rem] placeholder:text-[#666] focus:outline-none focus:border-[#ffc800] focus:shadow-[0_0_0_1px_rgba(255,200,0,.8)]"
-            />
-          </div>
-
-          <div className="flex flex-wrap items-center gap-3 justify-between">
-            <div className="flex flex-wrap items-center gap-3">
-              {/* Status Filter */}
-              <div className="flex items-center gap-1.5">
-                <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-[rgba(0,0,0,.5)] border border-[rgba(255,255,255,.22)]">
-                  <Filter className="h-3 w-3 text-[#ffc800]" />
-                  <span className="text-[0.68rem] tracking-[0.1em] uppercase text-[#aaaaaa]">Status</span>
-                </div>
-                <Select value={statusFilter} onValueChange={handleStatusChange}>
-                  <SelectTrigger className="h-8 w-[130px] rounded-full bg-[#13141a] border border-[rgba(255,255,255,.14)] text-[0.78rem]">
-                    <SelectValue placeholder="Todos" />
-                  </SelectTrigger>
-                  <SelectContent className="bg-[#13141a] border border-[rgba(255,255,255,.14)]">
-                    <SelectItem value="todos">Todos</SelectItem>
-                    <SelectItem value="pendente">Pendente</SelectItem>
-                    <SelectItem value="realizado">Realizado</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-
-              {/* Period Filter */}
-              <div className="flex items-center gap-1.5">
-                <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-[rgba(0,0,0,.5)] border border-[rgba(255,255,255,.22)]">
-                  <Clock className="h-3 w-3 text-[#ffc800]" />
-                  <span className="text-[0.68rem] tracking-[0.1em] uppercase text-[#aaaaaa]">Período</span>
-                </div>
-                <Select value={periodFilter} onValueChange={handlePeriodChange}>
-                  <SelectTrigger className="h-8 w-[120px] rounded-full bg-[#13141a] border border-[rgba(255,255,255,.14)] text-[0.78rem]">
-                    <SelectValue placeholder="Todos" />
-                  </SelectTrigger>
-                  <SelectContent className="bg-[#13141a] border border-[rgba(255,255,255,.14)]">
-                    <SelectItem value="todos">Todos</SelectItem>
-                    <SelectItem value="7">7 dias</SelectItem>
-                    <SelectItem value="30">30 dias</SelectItem>
-                    <SelectItem value="90">90 dias</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-
+        <FilterBar
+          searchValue={searchTerm}
+          onSearchChange={handleSearchChange}
+          searchPlaceholder="Buscar por arquivo, consignee ou container"
+          filters={[
+            filterPresets.status(statusFilter, handleStatusChange),
+            filterPresets.period(periodFilter, handlePeriodChange),
+          ]}
+          showRefresh
+          onRefresh={() => refetch()}
+          isRefreshing={isLoading}
+          rightContent={
+            !devAccessLoading && isDevOrAdmin && (
               <button
-                onClick={() => refetch()}
-                disabled={isLoading}
-                className="h-8 px-4 rounded-full bg-[#ffc800] text-[#000] text-[0.75rem] font-medium flex items-center gap-1.5 hover:bg-[#ffdc50] transition shadow-[0_0_20px_rgba(255,200,0,.3)]"
+                onClick={handleReextractMetadata}
+                disabled={isReextracting}
+                className="h-8 px-4 rounded-full border border-border/50 bg-background/50 text-muted-foreground text-[0.75rem] font-medium flex items-center gap-1.5 hover:bg-background/70 hover:text-foreground transition"
               >
-                <RefreshCw className={`w-3.5 h-3.5 ${isLoading ? 'animate-spin' : ''}`} />
-                Atualizar
+                <ArrowRightLeft className={`w-3.5 h-3.5 ${isReextracting ? 'animate-spin' : ''}`} />
+                {isReextracting ? 'Reextraindo...' : 'Reextrair'}
               </button>
-
-              {!devAccessLoading && isDevOrAdmin && (
-                <button
-                  onClick={handleReextractMetadata}
-                  disabled={isReextracting}
-                  className="h-8 px-4 rounded-full border border-[rgba(255,255,255,.25)] bg-[rgba(0,0,0,.5)] text-[#aaaaaa] text-[0.75rem] font-medium flex items-center gap-1.5 hover:bg-[rgba(0,0,0,.7)] hover:text-white transition"
-                >
-                  <ArrowRightLeft className={`w-3.5 h-3.5 ${isReextracting ? 'animate-spin' : ''}`} />
-                  {isReextracting ? 'Reextraindo...' : 'Reextrair'}
-                </button>
-              )}
-            </div>
-          </div>
-        </div>
+            )
+          }
+        />
       </PageCard>
 
       {/* Card da Tabela */}
