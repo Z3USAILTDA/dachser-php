@@ -1,5 +1,5 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
-import { SMTPClient } from "https://deno.land/x/denomailer@1.6.0/mod.ts";
+import { Resend } from "https://esm.sh/resend@2.0.0";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -104,26 +104,6 @@ const generateEmailHtml = (username: string, password: string): string => {
 `;
 };
 
-const generateEmailText = (username: string, password: string): string => {
-  return `
-Bem-vindo(a) ao Z3US.AI - DACHSER!
-
-Sua conta foi criada com sucesso.
-
-CREDENCIAIS DE ACESSO:
-- Usuário: ${username}
-- Senha Temporária: ${password}
-
-IMPORTANTE: Recomendamos alterar sua senha no primeiro acesso.
-
-Em caso de dúvidas, entre em contato com o administrador do sistema.
-
----
-Este é um e-mail automático. Por favor, não responda.
-powered by Z3US.AI • DACHSER Brasil
-`;
-};
-
 const handler = async (req: Request): Promise<Response> => {
   // Handle CORS preflight requests
   if (req.method === "OPTIONS") {
@@ -140,49 +120,39 @@ const handler = async (req: Request): Promise<Response> => {
       );
     }
 
-    const smtpHost = Deno.env.get("SMTP_HOST");
-    const smtpPort = parseInt(Deno.env.get("SMTP_PORT") || "587");
-    const smtpUser = Deno.env.get("SMTP_USER");
-    const smtpPass = Deno.env.get("SMTP_PASS");
-    const fromEmail = Deno.env.get("SMTP_FROM_EMAIL");
-    const fromName = Deno.env.get("SMTP_FROM_NAME") || "Z3US.AI - DACHSER";
+    const resendApiKey = Deno.env.get("RESEND_API_KEY");
 
-    if (!smtpHost || !smtpUser || !smtpPass || !fromEmail) {
-      console.error("Missing SMTP configuration");
+    if (!resendApiKey) {
+      console.error("Missing RESEND_API_KEY");
       return new Response(
-        JSON.stringify({ error: "Configuração SMTP incompleta", success: false }),
+        JSON.stringify({ error: "Configuração Resend incompleta", success: false }),
         { status: 500, headers: { "Content-Type": "application/json", ...corsHeaders } }
       );
     }
 
     console.log(`Sending welcome email to: ${email} (user: ${username})`);
 
-    const client = new SMTPClient({
-      connection: {
-        hostname: smtpHost,
-        port: smtpPort,
-        tls: true,
-        auth: {
-          username: smtpUser,
-          password: smtpPass,
-        },
-      },
-    });
+    const resend = new Resend(resendApiKey);
 
-    await client.send({
-      from: `${fromName} <${fromEmail}>`,
-      to: email,
-      subject: `Bem-vindo ao Z3US.AI - Suas credenciais de acesso`,
-      content: generateEmailText(username, password),
+    const { data, error } = await resend.emails.send({
+      from: "Z3US.AI - DACHSER <onboarding@resend.dev>",
+      to: [email],
+      subject: "Bem-vindo ao Z3US.AI - Suas credenciais de acesso",
       html: generateEmailHtml(username, password),
     });
 
-    await client.close();
+    if (error) {
+      console.error("Resend error:", error);
+      return new Response(
+        JSON.stringify({ error: "Erro ao enviar e-mail", details: error.message, success: false }),
+        { status: 500, headers: { "Content-Type": "application/json", ...corsHeaders } }
+      );
+    }
 
-    console.log(`Welcome email sent successfully to: ${email}`);
+    console.log(`Welcome email sent successfully to: ${email}, id: ${data?.id}`);
 
     return new Response(
-      JSON.stringify({ success: true, message: "E-mail enviado com sucesso" }),
+      JSON.stringify({ success: true, message: "E-mail enviado com sucesso", emailId: data?.id }),
       { status: 200, headers: { "Content-Type": "application/json", ...corsHeaders } }
     );
   } catch (error: unknown) {
