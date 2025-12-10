@@ -7,6 +7,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { PageLayout } from "@/components/layout/PageLayout";
 import { PageCard } from "@/components/layout/PageCard";
+import { TablePagination } from "@/components/layout/TablePagination";
 
 interface StageCounts {
   PRE: number;
@@ -326,31 +327,12 @@ export default function ReguaCobranca() {
               </div>
 
               {filteredRows.length > PAGE_SIZE && (
-                <div className="flex justify-end mt-3">
-                  <div className="flex items-center gap-2 bg-[#121212] border border-white/12 px-3 py-[6px] rounded-xl">
-                    <button
-                      className={`px-3 py-[6px] rounded-[10px] bg-[#151515] border border-[#333] text-[13px] ${
-                        currentPage === 1 ? "opacity-50 cursor-not-allowed" : "hover:brightness-110"
-                      }`}
-                      disabled={currentPage === 1}
-                      onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
-                    >
-                      « Anterior
-                    </button>
-                    <span className="text-[#D7D7D7] text-[13px] mx-2">
-                      Página {currentPage}/{totalPages}
-                    </span>
-                    <button
-                      className={`px-3 py-[6px] rounded-[10px] bg-[#151515] border border-[#333] text-[13px] ${
-                        currentPage === totalPages ? "opacity-50 cursor-not-allowed" : "hover:brightness-110"
-                      }`}
-                      disabled={currentPage === totalPages}
-                      onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
-                    >
-                      Próxima »
-                    </button>
-                  </div>
-                </div>
+                <TablePagination
+                  currentPage={currentPage}
+                  totalPages={totalPages}
+                  onPageChange={setCurrentPage}
+                  showFirstLast={false}
+                />
               )}
             </>
           )}

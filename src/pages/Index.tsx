@@ -28,6 +28,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import type { User, Session } from "@supabase/supabase-js";
 import DashboardCards, { CardFilterType } from "@/components/DashboardCards";
 import dachserBg from "@/assets/dachser-background.jpg";
+import { TablePagination } from "@/components/layout/TablePagination";
 
 // TEMPORARIAMENTE DESATIVADO - Mudar para true para reativar envio de emails
 const EMAIL_SENDING_ENABLED = true;
@@ -2164,22 +2165,12 @@ const Index = () => {
                 <div className="text-[0.78rem] text-[#aaaaaa]">
                   Página {currentPage} de {totalPages} | Total: {filteredAwbs.length} registros
                 </div>
-                <div className="flex gap-2">
-                  <button
-                    onClick={() => setCurrentPage((prev) => Math.max(1, prev - 1))}
-                    disabled={currentPage === 1}
-                    className="h-8 px-4 rounded-full bg-[rgba(255,255,255,.08)] text-[#aaaaaa] text-[0.75rem] hover:bg-[rgba(255,255,255,.12)] hover:text-[#f5f5f5] transition disabled:opacity-40 disabled:cursor-not-allowed"
-                  >
-                    Anterior
-                  </button>
-                  <button
-                    onClick={() => setCurrentPage((prev) => Math.min(totalPages, prev + 1))}
-                    disabled={currentPage === totalPages}
-                    className="h-8 px-4 rounded-full bg-[rgba(255,255,255,.08)] text-[#aaaaaa] text-[0.75rem] hover:bg-[rgba(255,255,255,.12)] hover:text-[#f5f5f5] transition disabled:opacity-40 disabled:cursor-not-allowed"
-                  >
-                    Próxima
-                  </button>
-                </div>
+                <TablePagination
+                  currentPage={currentPage}
+                  totalPages={totalPages}
+                  onPageChange={setCurrentPage}
+                  showFirstLast={false}
+                />
               </div>
             </>
           ) : (
