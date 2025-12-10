@@ -31,7 +31,7 @@ import EsteiraVoucherDetails from "./pages/esteira/EsteiraVoucherDetails";
 import Olimpo from "./pages/Olimpo";
 import ConferenciaChb from "./pages/ConferenciaChb";
 import ChbAnalises from "./pages/ChbAnalises";
-import Auth from "./pages/Auth";
+
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -45,7 +45,7 @@ const App = () => (
         <Routes>
           <Route path="/" element={<Navigate to="/air/tracking" replace />} />
           <Route path="/air/tracking" element={<Index />} />
-          <Route path="/auth" element={<Auth />} />
+          
           <Route path="/login" element={<Login />} />
           <Route path="/dashboard" element={<Dashboard />} />
           <Route path="/admin/metrics" element={<MetricsUsage />} />
