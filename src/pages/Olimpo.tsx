@@ -688,9 +688,9 @@ export default function Olimpo() {
           <div className="flex items-center gap-4">
             <button
               onClick={() => navigate("/dashboard")}
-              className="w-9 h-9 rounded-full border border-primary/50 flex items-center justify-center bg-primary/10 text-primary hover:bg-primary/20 transition-all duration-200"
+              className="w-8 h-8 rounded-full border border-[rgba(255,255,255,.12)] bg-[rgba(5,6,18,0.9)] text-[#aaaaaa] flex items-center justify-center backdrop-blur-sm hover:bg-[rgba(5,6,18,1)] hover:text-white transition-all"
             >
-              <ArrowLeft size={18} />
+              <ArrowLeft size={16} />
             </button>
             <div>
               <h1 className="text-xl md:text-2xl font-bold tracking-[0.22em]">DACHSER</h1>

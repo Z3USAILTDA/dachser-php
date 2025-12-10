@@ -160,16 +160,9 @@ const Register = () => {
       <div className="fixed top-[18px] left-[18px] z-50">
         <button
           onClick={() => navigate("/dashboard")}
-          className="inline-flex items-center gap-2 px-[14px] py-[9px] rounded-full font-semibold text-[0.8rem] transition-all"
-          style={{
-            background: 'rgba(255, 200, 0, 0.1)',
-            border: '1px solid rgba(255, 200, 0, 0.85)',
-            color: '#ffc800',
-            backdropFilter: 'blur(4px)',
-          }}
+          className="w-8 h-8 rounded-full border border-[rgba(255,255,255,.12)] bg-[rgba(5,6,18,0.9)] text-[#aaaaaa] flex items-center justify-center backdrop-blur-sm hover:bg-[rgba(5,6,18,1)] hover:text-white transition-all"
         >
-          <ArrowLeft className="w-4 h-4" />
-          <span>Voltar</span>
+          <ArrowLeft size={16} />
         </button>
       </div>
 
