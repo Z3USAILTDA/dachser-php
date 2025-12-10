@@ -195,14 +195,12 @@ const Logs = () => {
         <header className="border-b border-white/10 bg-black/50 backdrop-blur">
           <div className="max-w-6xl mx-auto px-6 py-4">
             <div className="flex items-center gap-4">
-              <Button
+              <button
                 onClick={() => navigate("/air/check")}
-                variant="ghost"
-                size="icon"
-                className="h-10 w-10 rounded-full border border-white/18 bg-black/70 hover:bg-black hover:border-amber-300/80"
+                className="w-8 h-8 rounded-full border border-[rgba(255,255,255,.12)] bg-[rgba(5,6,18,0.9)] text-[#aaaaaa] flex items-center justify-center backdrop-blur-sm hover:bg-[rgba(5,6,18,1)] hover:text-white transition-all"
               >
-                <ArrowLeft className="h-5 w-5 text-amber-300" />
-              </Button>
+                <ArrowLeft size={16} />
+              </button>
               <div>
                 <h1 className="text-2xl font-bold text-white">Sistema de Logs</h1>
                 <p className="text-sm text-neutral-400">

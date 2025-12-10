@@ -10,7 +10,8 @@ import { useDevAccess } from "@/hooks/useDevAccess";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
-import { faArrowLeft, faSearch, faDownload, faSync, faSignOut } from "@fortawesome/free-solid-svg-icons";
+import { faSearch, faDownload, faSync, faSignOut } from "@fortawesome/free-solid-svg-icons";
+import { ArrowLeft } from "lucide-react";
 import { toast } from "sonner";
 
 export default function SystemLogs() {
@@ -240,14 +241,12 @@ export default function SystemLogs() {
         {/* Header */}
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-4">
-            <Button
-              variant="ghost"
+            <button
               onClick={() => navigate("/maritimo")}
-              className="text-foreground hover:text-primary"
+              className="w-8 h-8 rounded-full border border-[rgba(255,255,255,.12)] bg-[rgba(5,6,18,0.9)] text-[#aaaaaa] flex items-center justify-center backdrop-blur-sm hover:bg-[rgba(5,6,18,1)] hover:text-white transition-all"
             >
-              <FontAwesomeIcon icon={faArrowLeft} className="mr-2" />
-              Voltar
-            </Button>
+              <ArrowLeft size={16} />
+            </button>
             <h1 className="text-2xl font-bold text-foreground">System Logs</h1>
           </div>
           
