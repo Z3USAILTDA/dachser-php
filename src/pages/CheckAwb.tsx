@@ -58,6 +58,7 @@ interface AwbCheck {
   // Rule info
   rule_email: string | null;
   rule_airport: string | null;
+  rule_ref_othello: string | null;
 }
 
 interface User {
@@ -1079,7 +1080,7 @@ const CheckAwb = () => {
                 <div className="grid grid-cols-2 gap-x-8 gap-y-4 text-sm">
                   <div>
                     <p className="text-[#aaaaaa] mb-1">Ref Othello</p>
-                    <p className="font-mono text-[#f5f5f5]">{selectedCheck.mrn || selectedCheck.references || "-"}</p>
+                    <p className="font-mono text-[#f5f5f5]">{selectedCheck.rule_ref_othello || "-"}</p>
                   </div>
                   <div>
                     <p className="text-[#aaaaaa] mb-1">Transportadora</p>
