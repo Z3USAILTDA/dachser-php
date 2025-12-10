@@ -43,7 +43,7 @@ const App = () => (
       <Sonner />
       <BrowserRouter>
         <Routes>
-          <Route path="/" element={<Navigate to="/air/tracking" replace />} />
+          <Route path="/" element={<Navigate to="/login" replace />} />
           <Route path="/air/tracking" element={<Index />} />
           
           <Route path="/login" element={<Login />} />
