@@ -66,44 +66,60 @@ serve(async (req) => {
     let userPrompt: string;
 
     if (document_type === 'house_awb') {
-      systemPrompt = `Você é um especialista em extração de dados de documentos AWB (Air Waybill) para operações logísticas. 
-Extraia as informações com alta precisão seguindo estas REGRAS CRÍTICAS:
+      systemPrompt = `Você é um especialista em extração de dados de documentos AWB (Air Waybill) e House AWB para operações logísticas. 
+Extraia as informações com ALTA PRECISÃO seguindo estas REGRAS:
 
-1. CNPJ: Deve ter EXATAMENTE 14 dígitos numéricos. Ignore sufixos como "01-76", esses são padrões de instrução, não CNPJs.
-2. ORIGEM: Se não encontrar explicitamente, deduza do PREFIXO do AWB (ex: HAJ-xxxxx → origem = HAJ, MIA-xxxxx → origem = MIA)
-3. DESTINO: Deduza da cidade do consignee/destinatário no Brasil usando códigos IATA (São Paulo=GRU/CGH, Rio=GIG/SDU, Curitiba=CWB)
-4. CLIENTE: Identifique pelo texto do consignee/shipper - procure por "KLABIN" ou "ZF" no nome da empresa
-5. AWB NUMBER: Formato típico: XXX-XXXXXXXX ou XXX-XXXX XXXX (prefixo de 3 letras + números)
+1. CNPJ: EXATAMENTE 14 dígitos numéricos. Ignore sufixos como "01-76".
+2. ORIGEM: Código IATA. Se não explícito, deduza do prefixo AWB (HAJ-xxxxx → HAJ)
+3. DESTINO: Código IATA da cidade do destinatário (São Paulo=GRU, Rio=GIG, Curitiba=CWB, Viracopos=VCP)
+4. CLIENTE: Procure "KLABIN" ou "ZF" no shipper/consignee
+5. AWB NUMBER: Formato XXX-XXXXXXXX ou XXX XXXX XXXX
 
-Retorne APENAS um objeto JSON válido sem texto adicional.`;
+CAMPOS CRÍTICOS DE EXTRAÇÃO:
+- SHIPPER/REMETENTE: Normalmente no topo do documento, campo "Shipper" ou "Expedidor". Extraia nome completo da empresa.
+- CONSIGNEE/DESTINATÁRIO: Campo "Consignee" ou "Destinatário". Extraia nome completo + endereço.
+- CARRIER/TRANSPORTADORA: Procure por "Carrier", "Airline", "Companhia Aérea" ou identifique pelo logo/cabeçalho (ex: Lufthansa, LATAM, Emirates, DHL, FedEx, UPS)
+- GROSS WEIGHT/PESO BRUTO: Campo "Gross Weight", "Peso Bruto", "GRS WT" - valor em KG
+- CHARGEABLE WEIGHT/PESO TAXÁVEL: Campo "Chargeable Weight", "Peso Taxável", "CHG WT" - valor em KG
 
-      userPrompt = `Extraia as informações do AWB deste documento e retorne um JSON com estes campos exatos:
+Retorne APENAS JSON válido.`;
+
+      userPrompt = `Analise este documento AWB/HAWB e extraia TODOS os dados com máxima precisão.
+
+PROCURE ESPECIFICAMENTE:
+1. **SHIPPER (Remetente)**: Campo no topo, nome da empresa exportadora/remetente
+2. **CONSIGNEE (Destinatário)**: Nome + endereço completo do importador/destinatário  
+3. **CARRIER (Transportadora)**: Companhia aérea ou forwarder (olhe cabeçalho, logo, "Issued by")
+4. **GROSS WEIGHT (Peso Bruto)**: Número em KG, campo "Gross Weight" ou "GRS WT"
+5. **CHARGEABLE WEIGHT (Peso Taxável)**: Número em KG, campo "Chargeable Weight" ou "CHG WT"
+
+Retorne JSON:
 {
-  "awbNumber": "string (formato: XXX-XXXXXXXX) ou null",
-  "cnpj": "string (EXATAMENTE 14 dígitos, sem formatação) ou null",
-  "origin": "string (código IATA 3 letras, deduza do prefixo AWB se não explícito) ou null",
-  "destination": "string (código IATA 3 letras, deduza da cidade do destinatário) ou null", 
-  "shipper": "string (nome do remetente/expedidor) ou null",
-  "consignee": "string (nome completo + endereço do destinatário) ou null",
-  "customer": "KLABIN ou ZF ou null (procure esses termos no consignee/shipper)",
-  "deliveryAddress": "string (endereço completo de entrega) ou null",
-  "carrier": "string (transportadora/companhia aérea) ou null",
-  "grossWeight": "number (peso bruto em kg) ou null",
-  "chargeableWeight": "number (peso taxável em kg) ou null",
-  "routingLegs": "array de strings (aeroportos de conexão) ou null",
-  "flightNumbers": "array de strings (números dos voos) ou null",
-  "mrn": "string (Ref Othello ou MRN) ou null",
-  "hsCodes": "array de strings (códigos NCM/HS) ou null",
-  "dimensions": "string (dimensões da carga) ou null",
-  "incoterms": "string (EXW, FOB, CIF, DAP, etc) ou null",
-  "references": "array de strings (todas referências, POs, invoices) ou null",
+  "awbNumber": "string (XXX-XXXXXXXX) ou null",
+  "cnpj": "string (14 dígitos sem formatação) ou null",
+  "origin": "string (código IATA 3 letras) ou null",
+  "destination": "string (código IATA 3 letras) ou null", 
+  "shipper": "string (NOME COMPLETO do remetente/expedidor) ou null",
+  "consignee": "string (NOME COMPLETO + endereço do destinatário) ou null",
+  "customer": "KLABIN ou ZF ou null",
+  "deliveryAddress": "string (endereço de entrega) ou null",
+  "carrier": "string (nome da transportadora/companhia aérea - ex: Lufthansa, LATAM, DHL) ou null",
+  "grossWeight": "number (peso bruto em KG, apenas número) ou null",
+  "chargeableWeight": "number (peso taxável em KG, apenas número) ou null",
+  "routingLegs": ["array de códigos IATA de conexões"] ou null,
+  "flightNumbers": ["array de números de voo"] ou null,
+  "mrn": "string ou null",
+  "hsCodes": ["array de códigos NCM/HS"] ou null,
+  "dimensions": "string (LxWxH) ou null",
+  "incoterms": "string (EXW, FOB, CIF, etc) ou null",
+  "references": ["array de referências, POs, invoices"] ou null,
   "confidence": "high | medium | low"
 }
 
-IMPORTANTE:
-- CNPJ deve ter EXATAMENTE 14 dígitos numéricos (ignore padrões XX-XX que são sufixos de instrução)
-- Para customer: Se encontrar "KLABIN" em qualquer lugar, retorne "KLABIN". Se encontrar "ZF", retorne "ZF".
-- Use o prefixo do AWB como origem se não encontrar explicitamente (HAJ-xxxxx → HAJ)`;
+REGRAS:
+- grossWeight e chargeableWeight devem ser NÚMEROS, não strings
+- shipper e consignee devem conter o NOME COMPLETO da empresa
+- carrier deve ser o nome da companhia aérea ou forwarder (ex: "Lufthansa Cargo", "LATAM Cargo", "DHL Express")`;
     } else {
       // instruction document for ZF
       systemPrompt = `Você é um especialista em documentos de instrução logística.
