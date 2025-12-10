@@ -1421,8 +1421,8 @@ serve(async (req) => {
 
         // Insert new user
         const insertResult = await client.execute(
-          `INSERT INTO ai_agente.t_users_dachser (username, email, password_hash, is_admin, created_at) 
-           VALUES (?, ?, ?, 0, NOW())`,
+          `INSERT INTO ai_agente.t_users_dachser (username, email, password_hash, is_admin) 
+           VALUES (?, ?, ?, 0)`,
           [username, email, passwordHash]
         );
 
