@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
-import { ArrowLeft, Info, Copy, Check, Upload, Download, X, Link as LinkIcon, FolderOpen, Loader2 } from "lucide-react";
+import { Info, Copy, Check, Upload, Download, X, Link as LinkIcon, FolderOpen, Loader2 } from "lucide-react";
+import { PageLayout } from "@/components/layout/PageLayout";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
@@ -814,24 +815,8 @@ export default function InvoicesDraftHbl() {
   };
 
   return (
-    <div 
-      className="min-h-screen text-white"
-      style={{
-        background: "linear-gradient(120deg, rgba(4, 17, 45, 0.92), rgba(26, 93, 173, 0.55)), url('https://www.dachser.com.br/images/Corporate/DGI_003215_rdax_65s.jpg') center/cover no-repeat"
-      }}
-    >
-      <div className="min-h-screen bg-black/80 backdrop-blur-sm">
-        <div className="max-w-7xl mx-auto p-6">
-          <Button
-            variant="outline"
-            onClick={() => navigate("/maritimo")}
-            className="mb-6 rounded-full border-white/20 bg-black/40 hover:bg-black hover:border-amber-400/80"
-          >
-            <ArrowLeft className="w-4 h-4 mr-2" />
-            Voltar
-          </Button>
-
-          <h1 className="text-3xl font-bold text-white mb-8">Invoices × Draft HBL</h1>
+    <PageLayout title="DACHSER" subtitle="Invoices × Draft HBL">
+      <div className="max-w-7xl mx-auto">
 
           <Card className="bg-black/40 border border-white/10 rounded-2xl shadow-[0_18px_40px_rgba(0,0,0,0.9)] p-8 mb-6">
             {/* Upload and Options Grid */}
@@ -1134,7 +1119,6 @@ export default function InvoicesDraftHbl() {
             </AlertDialogFooter>
           </AlertDialogContent>
         </AlertDialog>
-      </div>
-    </div>
+    </PageLayout>
   );
 }
