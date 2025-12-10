@@ -24,10 +24,17 @@ interface RuleRow {
   matrix_id: number;
   cnpj: string;
   airport_code: string | null;
-  endereco_completo: string | null;
+  address_pattern: string | null;
   email_despachante: string | null;
-  notes: string | null;
+  is_active: number | boolean;
   created_at: string | null;
+  ref_othello: string | null;
+  empresa: string | null;
+  endereco: string | null;
+  cidade: string | null;
+  estado: string | null;
+  cep: string | null;
+  pais: string | null;
 }
 
 interface RuleMatrixManagerProps {
@@ -49,9 +56,15 @@ export const RuleMatrixManager = ({ userRole }: RuleMatrixManagerProps) => {
   const [newRule, setNewRule] = useState({
     cnpj: "",
     airport_code: "",
-    endereco_completo: "",
+    address_pattern: "",
     email_despachante: "",
-    notes: "",
+    ref_othello: "",
+    empresa: "",
+    endereco: "",
+    cidade: "",
+    estado: "",
+    cep: "",
+    pais: "",
   });
 
   useEffect(() => {
@@ -189,9 +202,15 @@ export const RuleMatrixManager = ({ userRole }: RuleMatrixManagerProps) => {
           matrixId: selectedMatrix.id,
           cnpj: newRule.cnpj.replace(/\D/g, ""),
           airportCode: newRule.airport_code || null,
-          enderecoCompleto: newRule.endereco_completo || null,
+          addressPattern: newRule.address_pattern || null,
           emailDespachante: newRule.email_despachante || null,
-          notes: newRule.notes || null,
+          refOthello: newRule.ref_othello || null,
+          empresa: newRule.empresa || null,
+          endereco: newRule.endereco || null,
+          cidade: newRule.cidade || null,
+          estado: newRule.estado || null,
+          cep: newRule.cep || null,
+          pais: newRule.pais || null,
         },
       });
 
@@ -203,9 +222,15 @@ export const RuleMatrixManager = ({ userRole }: RuleMatrixManagerProps) => {
       setNewRule({
         cnpj: "",
         airport_code: "",
-        endereco_completo: "",
+        address_pattern: "",
         email_despachante: "",
-        notes: "",
+        ref_othello: "",
+        empresa: "",
+        endereco: "",
+        cidade: "",
+        estado: "",
+        cep: "",
+        pais: "",
       });
       setShowAddForm(false);
     } catch (error: any) {
@@ -384,7 +409,19 @@ export const RuleMatrixManager = ({ userRole }: RuleMatrixManagerProps) => {
             {showAddForm && selectedMatrix && (
               <div className="p-4 rounded-xl border border-white/10 bg-black/30 space-y-3">
                 <h4 className="text-sm font-medium text-white mb-3">Nova Regra</h4>
-                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+                  <Input
+                    placeholder="Ref Othello"
+                    value={newRule.ref_othello}
+                    onChange={e => setNewRule({ ...newRule, ref_othello: e.target.value })}
+                    className="bg-black/40 border-white/10"
+                  />
+                  <Input
+                    placeholder="Empresa"
+                    value={newRule.empresa}
+                    onChange={e => setNewRule({ ...newRule, empresa: e.target.value })}
+                    className="bg-black/40 border-white/10"
+                  />
                   <Input
                     placeholder="CNPJ *"
                     value={newRule.cnpj}
@@ -398,22 +435,40 @@ export const RuleMatrixManager = ({ userRole }: RuleMatrixManagerProps) => {
                     className="bg-black/40 border-white/10"
                   />
                   <Input
-                    placeholder="E-mail Despachante"
-                    value={newRule.email_despachante}
-                    onChange={e => setNewRule({ ...newRule, email_despachante: e.target.value })}
-                    className="bg-black/40 border-white/10"
-                  />
-                  <Input
-                    placeholder="Endereço completo"
-                    value={newRule.endereco_completo}
-                    onChange={e => setNewRule({ ...newRule, endereco_completo: e.target.value })}
+                    placeholder="Endereço"
+                    value={newRule.endereco}
+                    onChange={e => setNewRule({ ...newRule, endereco: e.target.value })}
                     className="bg-black/40 border-white/10 col-span-2"
                   />
                   <Input
-                    placeholder="Observações"
-                    value={newRule.notes}
-                    onChange={e => setNewRule({ ...newRule, notes: e.target.value })}
+                    placeholder="Cidade"
+                    value={newRule.cidade}
+                    onChange={e => setNewRule({ ...newRule, cidade: e.target.value })}
                     className="bg-black/40 border-white/10"
+                  />
+                  <Input
+                    placeholder="Estado"
+                    value={newRule.estado}
+                    onChange={e => setNewRule({ ...newRule, estado: e.target.value })}
+                    className="bg-black/40 border-white/10"
+                  />
+                  <Input
+                    placeholder="CEP"
+                    value={newRule.cep}
+                    onChange={e => setNewRule({ ...newRule, cep: e.target.value })}
+                    className="bg-black/40 border-white/10"
+                  />
+                  <Input
+                    placeholder="País"
+                    value={newRule.pais}
+                    onChange={e => setNewRule({ ...newRule, pais: e.target.value })}
+                    className="bg-black/40 border-white/10"
+                  />
+                  <Input
+                    placeholder="E-mail Despachante"
+                    value={newRule.email_despachante}
+                    onChange={e => setNewRule({ ...newRule, email_despachante: e.target.value })}
+                    className="bg-black/40 border-white/10 col-span-2"
                   />
                 </div>
                 <div className="flex justify-end gap-2 pt-2">
@@ -436,7 +491,7 @@ export const RuleMatrixManager = ({ userRole }: RuleMatrixManagerProps) => {
 
             {/* Rules Table */}
             {selectedMatrix && (
-              <div className="rounded-xl border border-white/8 overflow-hidden">
+              <div className="rounded-xl border border-white/8 overflow-x-auto">
                 {isLoadingRules ? (
                   <div className="flex items-center justify-center py-12">
                     <Loader2 className="h-8 w-8 animate-spin text-primary" />
@@ -445,17 +500,25 @@ export const RuleMatrixManager = ({ userRole }: RuleMatrixManagerProps) => {
                   <Table>
                     <TableHeader>
                       <TableRow className="border-b border-white/10 hover:bg-transparent">
+                        <TableHead className="text-xs uppercase tracking-wider text-white/50 font-medium">Ref</TableHead>
+                        <TableHead className="text-xs uppercase tracking-wider text-white/50 font-medium">Empresa</TableHead>
                         <TableHead className="text-xs uppercase tracking-wider text-white/50 font-medium">CNPJ</TableHead>
-                        <TableHead className="text-xs uppercase tracking-wider text-white/50 font-medium">Aeroporto (IATA)</TableHead>
+                        <TableHead className="text-xs uppercase tracking-wider text-white/50 font-medium">Aeroporto</TableHead>
+                        <TableHead className="text-xs uppercase tracking-wider text-white/50 font-medium">Endereço</TableHead>
+                        <TableHead className="text-xs uppercase tracking-wider text-white/50 font-medium">Cidade</TableHead>
+                        <TableHead className="text-xs uppercase tracking-wider text-white/50 font-medium">UF</TableHead>
+                        <TableHead className="text-xs uppercase tracking-wider text-white/50 font-medium">CEP</TableHead>
+                        <TableHead className="text-xs uppercase tracking-wider text-white/50 font-medium">País</TableHead>
                         <TableHead className="text-xs uppercase tracking-wider text-white/50 font-medium">Email Despachante</TableHead>
-                        <TableHead className="text-xs uppercase tracking-wider text-white/50 font-medium">Observações</TableHead>
-                        <TableHead className="text-xs uppercase tracking-wider text-white/50 font-medium">Data de Criação</TableHead>
+                        <TableHead className="text-xs uppercase tracking-wider text-white/50 font-medium">Criação</TableHead>
                         <TableHead className="text-right text-xs uppercase tracking-wider text-white/50 font-medium">Ações</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
                       {rules.map(rule => (
                         <TableRow key={rule.id} className="border-b border-white/5 hover:bg-white/5">
+                          <TableCell className="text-sm text-white/70">{rule.ref_othello || "-"}</TableCell>
+                          <TableCell className="text-sm text-white/70 max-w-[150px] truncate" title={rule.empresa || ""}>{rule.empresa || "-"}</TableCell>
                           <TableCell className="font-mono text-sm text-white">{rule.cnpj}</TableCell>
                           <TableCell>
                             {rule.airport_code ? (
@@ -466,6 +529,11 @@ export const RuleMatrixManager = ({ userRole }: RuleMatrixManagerProps) => {
                               <span className="text-white/30">-</span>
                             )}
                           </TableCell>
+                          <TableCell className="text-sm text-white/70 max-w-[180px] truncate" title={rule.endereco || rule.address_pattern || ""}>{rule.endereco || rule.address_pattern || "-"}</TableCell>
+                          <TableCell className="text-sm text-white/70">{rule.cidade || "-"}</TableCell>
+                          <TableCell className="text-sm text-white/70">{rule.estado || "-"}</TableCell>
+                          <TableCell className="text-sm text-white/70">{rule.cep || "-"}</TableCell>
+                          <TableCell className="text-sm text-white/70">{rule.pais || "-"}</TableCell>
                           <TableCell>
                             {rule.email_despachante ? (
                               <a
@@ -477,9 +545,6 @@ export const RuleMatrixManager = ({ userRole }: RuleMatrixManagerProps) => {
                             ) : (
                               <span className="text-white/30">-</span>
                             )}
-                          </TableCell>
-                          <TableCell className="text-sm text-white/70 max-w-xs truncate" title={rule.notes || ""}>
-                            {rule.notes || <span className="text-white/30">-</span>}
                           </TableCell>
                           <TableCell className="text-sm text-white/70">{formatDate(rule.created_at)}</TableCell>
                           <TableCell className="text-right">
@@ -507,7 +572,7 @@ export const RuleMatrixManager = ({ userRole }: RuleMatrixManagerProps) => {
 
                       {rules.length === 0 && (
                         <TableRow>
-                          <TableCell colSpan={6} className="text-center py-8 text-sm text-white/40">
+                          <TableCell colSpan={12} className="text-center py-8 text-sm text-white/40">
                             Nenhuma regra cadastrada nesta matriz.
                           </TableCell>
                         </TableRow>
