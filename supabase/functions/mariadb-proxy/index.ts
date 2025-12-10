@@ -68,15 +68,26 @@ interface QueryRequest {
   incoterms?: string;
   references?: string[];
   rawJson?: object;
-  // AWB Check
+  // AWB Check - new fields
   awbCheckId?: number;
   hawbDocumentId?: number;
   instructionDocumentId?: number;
   parsedDataId?: number;
   ruleRowId?: number;
   status?: string;
+  validationStatus?: string;
   validationMessage?: string;
   validatedAt?: string;
+  matchedRuleId?: number;
+  createdBy?: string;
+  hawbFileName?: string;
+  hawbFilePath?: string;
+  extractedAwb?: string;
+  extractedCnpj?: string;
+  extractedOrigin?: string;
+  extractedDestination?: string;
+  extractedCustomer?: string;
+  confidenceScore?: number;
   // Log Entry
   logAction?: string;
   entity?: string;
@@ -666,21 +677,78 @@ serve(async (req) => {
       }
 
       // ==================== AWB CHECK ====================
-      case 'create_awb_check': {
-        const { userId, hawbDocumentId, instructionDocumentId, parsedDataId, ruleRowId, status, validationMessage } = body;
+      case 'get_active_matrices': {
+        const matrices = await client.query(
+          `SELECT id, customer, version, is_active, effective_date, created_at
+           FROM ai_agente.t_rule_matrix_awb 
+           WHERE is_active = 1 
+           ORDER BY customer, created_at DESC`
+        );
+        result = { success: true, matrices };
+        break;
+      }
 
+      case 'get_rules_by_cnpj': {
+        const { matrixId, cnpj } = body;
+        if (!matrixId || !cnpj) {
+          return new Response(
+            JSON.stringify({ error: 'matrixId e cnpj são obrigatórios' }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+
+        const rules = await client.query(
+          `SELECT id, cnpj, airport_code, address_pattern, email_despachante, 
+                  ref_othello, empresa, endereco, cidade, estado, cep, pais, is_active
+           FROM ai_agente.t_rule_row_awb 
+           WHERE matrix_id = ? AND REPLACE(cnpj, '.', '') = REPLACE(REPLACE(?, '/', ''), '-', '')
+           AND is_active = 1`,
+          [matrixId, cnpj]
+        );
+        result = { success: true, rules };
+        break;
+      }
+
+      case 'create_awb_check': {
+        const { 
+          awbNumber, cnpj, origin, destination, customer, 
+          validationStatus, validationMessage, matchedRuleId, createdBy,
+          hawbFileName, hawbFilePath, extractedAwb, extractedCnpj,
+          extractedOrigin, extractedDestination, extractedCustomer, confidenceScore
+        } = body;
+
+        // Insert AWB check
         const insertResult = await client.execute(
           `INSERT INTO ai_agente.t_awb_check 
-           (user_id, hawb_document_id, instruction_document_id, parsed_data_id, rule_row_id, status, validation_message, validated_at) 
-           VALUES (?, ?, ?, ?, ?, ?, ?, NOW())`,
+           (awb_number, cnpj, origin, destination, customer, validation_status, validation_message, 
+            matched_rule_id, created_by, created_at) 
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())`,
           [
-            userId || null, hawbDocumentId || null, instructionDocumentId || null, 
-            parsedDataId || null, ruleRowId || null, status || 'PENDING', validationMessage || null
+            awbNumber || 'N/A', cnpj || 'N/A', origin || 'N/A', destination || 'N/A',
+            customer || 'KLABIN', validationStatus || 'PENDING', validationMessage || null,
+            matchedRuleId || null, createdBy || null
           ]
         );
 
-        result = { success: true, awbCheckId: insertResult.lastInsertId };
-        console.log(`Created AWB check, ID: ${insertResult.lastInsertId}, Status: ${status}`);
+        const awbCheckId = insertResult.lastInsertId;
+
+        // Also create parsed_awb record if we have extracted data
+        if (extractedAwb || extractedCnpj) {
+          await client.execute(
+            `INSERT INTO ai_agente.t_parsed_awb 
+             (awb_check_id, extracted_awb, extracted_cnpj, extracted_origin, extracted_destination,
+              extracted_customer, confidence_score) 
+             VALUES (?, ?, ?, ?, ?, ?, ?)`,
+            [
+              awbCheckId, extractedAwb || null, extractedCnpj || null,
+              extractedOrigin || null, extractedDestination || null,
+              extractedCustomer || null, confidenceScore || null
+            ]
+          );
+        }
+
+        result = { success: true, awbCheckId };
+        console.log(`Created AWB check, ID: ${awbCheckId}, Status: ${validationStatus}`);
         break;
       }
 
