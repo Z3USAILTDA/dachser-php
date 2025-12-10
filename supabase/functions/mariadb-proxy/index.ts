@@ -735,17 +735,30 @@ serve(async (req) => {
 
         const awbCheckId = insertResult.lastInsertId;
 
+        // Create document record if file info is provided
+        let documentId = null;
+        if (hawbFileName && hawbFilePath) {
+          const docResult = await client.execute(
+            `INSERT INTO ai_agente.t_document_awb 
+             (filename, storage_path, file_type, uploaded_by_user_id, created_at) 
+             VALUES (?, ?, ?, ?, NOW())`,
+            [hawbFileName, hawbFilePath, 'application/pdf', createdBy || null]
+          );
+          documentId = docResult.lastInsertId;
+          console.log(`Created document record: ${hawbFileName}, ID: ${documentId}`);
+        }
+
         // Also create parsed_awb record with all extracted data
         if (extractedAwb || extractedCnpj || shipper || consignee) {
           await client.execute(
             `INSERT INTO ai_agente.t_parsed_awb 
-             (awb_check_id, extracted_awb, extracted_cnpj, extracted_origin, extracted_destination,
+             (awb_check_id, document_id, extracted_awb, extracted_cnpj, extracted_origin, extracted_destination,
               extracted_customer, confidence_score, shipper, consignee, carrier,
               gross_weight_kg, chargeable_weight_kg, mrn, routing_legs, flight_numbers,
               hs_codes, dims, incoterms, \`references\`) 
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
             [
-              awbCheckId, extractedAwb || null, extractedCnpj || null,
+              awbCheckId, documentId, extractedAwb || null, extractedCnpj || null,
               extractedOrigin || null, extractedDestination || null,
               extractedCustomer || null, confidenceScore || null,
               shipper || null, consignee || null, carrier || null,
