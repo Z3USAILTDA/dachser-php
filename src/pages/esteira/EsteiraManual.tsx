@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { PageLayout } from "@/components/layout/PageLayout";
+import { PageCard } from "@/components/layout/PageCard";
 import { 
-  ArrowLeft, 
   BookOpen, 
   LayoutDashboard, 
   Clock, 
@@ -18,7 +18,6 @@ import {
   ChevronRight
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import dachserBg from "@/assets/dachser-background.jpg";
 
 type Section = 
   | "visao-geral" 
@@ -84,7 +83,6 @@ const FeatureCard = ({
 );
 
 export default function EsteiraManual() {
-  const navigate = useNavigate();
   const [activeSection, setActiveSection] = useState<Section>("visao-geral");
   const contentRef = useRef<HTMLDivElement>(null);
   const sectionRefs = useRef<Record<Section, HTMLDivElement | null>>({
@@ -132,57 +130,27 @@ export default function EsteiraManual() {
     }
   }, []);
 
+  const rightContent = (
+    <div className="px-3 py-1.5 rounded-md border border-primary/50 bg-primary/10 text-primary text-xs font-medium">
+      VOUCHER DACHSER v1.0
+    </div>
+  );
+
   return (
-    <div className="min-h-screen relative">
-      {/* Background */}
-      <div className="fixed inset-0 z-0">
-        <div 
-          className="absolute inset-0"
-          style={{
-            backgroundImage: `url(${dachserBg})`,
-            backgroundSize: 'cover',
-            backgroundPosition: 'center',
-          }}
-        />
-        <div 
-          className="absolute inset-0"
-          style={{
-            background: 'linear-gradient(120deg, rgba(4, 17, 45, 0.95), rgba(26, 93, 173, 0.65))',
-          }}
-        />
-      </div>
-
-      {/* Header */}
-      <header className="sticky top-0 z-50 bg-card/95 backdrop-blur-sm border-b border-border/50">
-        <div className="flex items-center justify-between px-6 py-4">
-          <div className="flex items-center gap-6">
-            <button
-              onClick={() => navigate("/fin/esteira")}
-              className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors"
-            >
-              <ArrowLeft className="h-4 w-4" />
-              Voltar ao Sistema
-            </button>
-            <div className="flex items-center gap-3">
-              <BookOpen className="h-5 w-5 text-primary" />
-              <h1 className="text-lg font-semibold text-foreground">Manual do Usuário</h1>
-            </div>
-          </div>
-          <div className="px-3 py-1.5 rounded-md border border-primary/50 bg-primary/10 text-primary text-xs font-medium">
-            VOUCHER DACHSER v1.0
-          </div>
-        </div>
-      </header>
-
-      <div className="relative z-10 flex">
+    <PageLayout 
+      title="DACHSER" 
+      subtitle="Manual do Usuário"
+      rightContent={rightContent}
+    >
+      <div className="flex gap-4">
         {/* Sidebar */}
-        <aside className="w-64 h-[calc(100vh-65px)] sticky top-[65px] border-r border-border/50 bg-card/30 backdrop-blur-sm p-4 overflow-y-auto">
-          <div className="mb-4">
+        <PageCard className="w-64 h-fit sticky top-4" padding="sm">
+          <div className="p-3">
             <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
               Navegação
             </span>
           </div>
-          <nav className="space-y-1">
+          <nav className="space-y-1 p-2">
             {navItems.map((item) => (
               <button
                 key={item.id}
@@ -199,14 +167,14 @@ export default function EsteiraManual() {
               </button>
             ))}
           </nav>
-        </aside>
+        </PageCard>
 
         {/* Content */}
-        <main 
+        <div 
           ref={contentRef}
-          className="flex-1 h-[calc(100vh-65px)] overflow-y-auto"
+          className="flex-1 max-h-[calc(100vh-180px)] overflow-y-auto pr-2"
         >
-          <div className="max-w-4xl mx-auto p-8 space-y-16">
+          <div className="space-y-12">
             <div ref={(el) => (sectionRefs.current["visao-geral"] = el)}>
               <VisaoGeralSection />
             </div>
@@ -232,9 +200,9 @@ export default function EsteiraManual() {
               <GlossarioSection />
             </div>
           </div>
-        </main>
+        </div>
       </div>
-    </div>
+    </PageLayout>
   );
 }
 
@@ -246,15 +214,15 @@ function VisaoGeralSection() {
         <h2 className="text-2xl font-bold text-foreground">Visão Geral do Sistema</h2>
       </div>
 
-      <div className="bg-card/60 border border-border/30 rounded-xl p-6 space-y-4 backdrop-blur-sm">
-        <h3 className="text-lg font-semibold">O que é o Sistema de Vouchers?</h3>
+      <PageCard>
+        <h3 className="text-lg font-semibold mb-4">O que é o Sistema de Vouchers?</h3>
         <p className="text-muted-foreground">
           O <span className="text-primary font-semibold">Sistema de Vouchers Dachser</span> é uma plataforma desenvolvida pela Z3US para a DACHSER, 
           responsável pelo gerenciamento completo do ciclo de vida de vouchers financeiros.
         </p>
-      </div>
+      </PageCard>
 
-      <div className="bg-card/60 border border-border/30 rounded-xl p-6 backdrop-blur-sm">
+      <PageCard>
         <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider mb-6">
           Fluxo Operacional
         </h3>
@@ -267,7 +235,7 @@ function VisaoGeralSection() {
           <ChevronRight className="h-5 w-5 text-muted-foreground" />
           <FlowStep number={4} title="Robô/RM" icon={Bot} />
         </div>
-      </div>
+      </PageCard>
 
       <div>
         <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider mb-4">
@@ -292,35 +260,37 @@ function DashboardSection() {
         <h2 className="text-2xl font-bold text-foreground">Dashboard</h2>
       </div>
 
-      <div className="bg-card/60 border border-border/30 rounded-xl p-6 space-y-4 backdrop-blur-sm">
-        <h3 className="text-lg font-semibold">Visão Geral do Dashboard</h3>
+      <PageCard>
+        <h3 className="text-lg font-semibold mb-4">Visão Geral do Dashboard</h3>
         <p className="text-muted-foreground">
           O dashboard é a página inicial do sistema, oferecendo uma visão consolidada de todos os vouchers 
           e métricas importantes para acompanhamento.
         </p>
-      </div>
+      </PageCard>
 
       <div className="space-y-4">
         <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">
           Cards de Métricas
         </h3>
-        <div className="bg-card/60 border border-border/30 rounded-xl p-6 space-y-3 backdrop-blur-sm">
-          <div className="flex items-center gap-2">
-            <div className="w-3 h-3 rounded-full bg-primary" />
-            <span className="font-medium">Total Monitorados:</span>
-            <span className="text-muted-foreground">Vouchers ativos no sistema</span>
+        <PageCard>
+          <div className="space-y-3">
+            <div className="flex items-center gap-2">
+              <div className="w-3 h-3 rounded-full bg-primary" />
+              <span className="font-medium">Total Monitorados:</span>
+              <span className="text-muted-foreground">Vouchers ativos no sistema</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <div className="w-3 h-3 rounded-full bg-warning" />
+              <span className="font-medium">Em Alerta:</span>
+              <span className="text-muted-foreground">Vencimento nas próximas 24h</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <div className="w-3 h-3 rounded-full bg-destructive" />
+              <span className="font-medium">Críticos:</span>
+              <span className="text-muted-foreground">Vouchers vencidos não concluídos</span>
+            </div>
           </div>
-          <div className="flex items-center gap-2">
-            <div className="w-3 h-3 rounded-full bg-warning" />
-            <span className="font-medium">Em Alerta:</span>
-            <span className="text-muted-foreground">Vencimento nas próximas 24h</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <div className="w-3 h-3 rounded-full bg-destructive" />
-            <span className="font-medium">Críticos:</span>
-            <span className="text-muted-foreground">Vouchers vencidos não concluídos</span>
-          </div>
-        </div>
+        </PageCard>
       </div>
     </div>
   );
@@ -335,7 +305,7 @@ function FluxoVoucherSection() {
       </div>
 
       <div className="space-y-6">
-        <div className="bg-card/60 border border-border/30 rounded-xl p-6 backdrop-blur-sm">
+        <PageCard>
           <div className="flex items-center gap-3 mb-4">
             <div className="p-2 rounded-lg bg-primary/20">
               <FileText className="h-5 w-5 text-primary" />
@@ -348,9 +318,9 @@ function FluxoVoucherSection() {
             <li>• Definir nível de urgência</li>
             <li>• Enviar para etapa Fiscal</li>
           </ul>
-        </div>
+        </PageCard>
 
-        <div className="bg-card/60 border border-border/30 rounded-xl p-6 backdrop-blur-sm">
+        <PageCard>
           <div className="flex items-center gap-3 mb-4">
             <div className="p-2 rounded-lg bg-info/20">
               <CheckCircle className="h-5 w-5 text-info" />
@@ -362,9 +332,9 @@ function FluxoVoucherSection() {
             <li>• Validar informações</li>
             <li>• Aprovar e enviar para Financeiro</li>
           </ul>
-        </div>
+        </PageCard>
 
-        <div className="bg-card/60 border border-border/30 rounded-xl p-6 backdrop-blur-sm">
+        <PageCard>
           <div className="flex items-center gap-3 mb-4">
             <div className="p-2 rounded-lg bg-success/20">
               <DollarSign className="h-5 w-5 text-success" />
@@ -376,7 +346,7 @@ function FluxoVoucherSection() {
             <li>• Anexar boleto</li>
             <li>• Enviar para Robô</li>
           </ul>
-        </div>
+        </PageCard>
       </div>
     </div>
   );
@@ -391,20 +361,20 @@ function UrgenciasSection() {
       </div>
 
       <div className="space-y-4">
-        <div className="bg-card/60 border border-border/30 rounded-xl p-6 border-l-4 border-l-success backdrop-blur-sm">
+        <PageCard className="border-l-4 border-l-success">
           <h4 className="font-semibold text-success mb-2">Normal</h4>
           <p className="text-muted-foreground">Fluxo padrão do voucher.</p>
-        </div>
+        </PageCard>
 
-        <div className="bg-card/60 border border-border/30 rounded-xl p-6 border-l-4 border-l-destructive backdrop-blur-sm">
+        <PageCard className="border-l-4 border-l-destructive">
           <h4 className="font-semibold text-destructive mb-2">Urgente Real</h4>
           <p className="text-muted-foreground">Requer autorização e aprovação do supervisor.</p>
-        </div>
+        </PageCard>
 
-        <div className="bg-card/60 border border-border/30 rounded-xl p-6 border-l-4 border-l-warning backdrop-blur-sm">
+        <PageCard className="border-l-4 border-l-warning">
           <h4 className="font-semibold text-warning mb-2">Urgente Automático</h4>
           <p className="text-muted-foreground">Atribuído automaticamente para ICMS e ARMAZENAGEM.</p>
-        </div>
+        </PageCard>
       </div>
     </div>
   );
@@ -418,12 +388,12 @@ function NotificacoesSection() {
         <h2 className="text-2xl font-bold text-foreground">Notificações</h2>
       </div>
 
-      <div className="bg-card/60 border border-border/30 rounded-xl p-6 backdrop-blur-sm">
+      <PageCard>
         <h3 className="text-lg font-semibold mb-4">Sistema de Notificações por E-mail</h3>
         <p className="text-muted-foreground">
           O sistema envia notificações automáticas para os gestores responsáveis.
         </p>
-      </div>
+      </PageCard>
 
       <div className="grid gap-4">
         <FeatureCard icon={AlertTriangle} title="Alertas SLA" description="Enviados quando vouchers ficam parados" />
@@ -451,17 +421,17 @@ function PerfisSection() {
 
       <div className="grid gap-4">
         {perfis.map((perfil) => (
-          <div key={perfil.nome} className="bg-card/60 border border-border/30 rounded-xl p-5 backdrop-blur-sm">
+          <PageCard key={perfil.nome}>
             <h4 className="font-semibold text-foreground mb-1">{perfil.nome}</h4>
             <p className="text-sm text-muted-foreground mb-3">{perfil.descricao}</p>
             <div className="flex flex-wrap gap-2">
               {perfil.permissoes.map((perm) => (
-                <span key={perm} className="px-2 py-1 bg-muted rounded text-xs text-muted-foreground">
+                <span key={perm} className="px-2 py-1 text-xs rounded-full bg-primary/20 text-primary">
                   {perm}
                 </span>
               ))}
             </div>
-          </div>
+          </PageCard>
         ))}
       </div>
     </div>
@@ -470,23 +440,27 @@ function PerfisSection() {
 
 function FAQSection() {
   const faqs = [
-    { pergunta: "Como criar um voucher urgente?", resposta: "Selecione 'Urgente Real' ao criar e anexe a autorização." },
-    { pergunta: "Como sei se um voucher está atrasado?", resposta: "Vouchers atrasados aparecem em vermelho no dashboard." },
+    { pergunta: "Como marcar um voucher como urgente?", resposta: "Na etapa de Operação, selecione o tipo de urgência no formulário de criação." },
+    { pergunta: "Como funciona o urgente automático?", resposta: "Vouchers de ICMS e ARMAZENAGEM são marcados automaticamente como urgentes." },
+    { pergunta: "Como visualizar documentos anexados?", resposta: "Clique no ícone de anexo na linha do voucher para abrir a visualização." },
+    { pergunta: "Quais campos são obrigatórios?", resposta: "Número SPO, fornecedor, valor, vencimento, cobrança em nome de e forma de pagamento." },
+    { pergunta: "Como funcionam os alertas de SLA?", resposta: "Os gestores recebem notificações automáticas quando vouchers permanecem parados por mais de 24h." },
+    { pergunta: "Posso editar um voucher após criado?", resposta: "Sim, desde que esteja na etapa de Operação e você tenha permissão de edição." },
   ];
 
   return (
     <div className="space-y-8">
       <div className="flex items-center gap-3">
         <HelpCircle className="h-6 w-6 text-primary" />
-        <h2 className="text-2xl font-bold text-foreground">FAQ</h2>
+        <h2 className="text-2xl font-bold text-foreground">Perguntas Frequentes</h2>
       </div>
 
       <div className="space-y-4">
         {faqs.map((faq, index) => (
-          <div key={index} className="bg-card/60 border border-border/30 rounded-xl p-5 backdrop-blur-sm">
+          <PageCard key={index}>
             <h4 className="font-semibold text-foreground mb-2">{faq.pergunta}</h4>
-            <p className="text-sm text-muted-foreground">{faq.resposta}</p>
-          </div>
+            <p className="text-muted-foreground">{faq.resposta}</p>
+          </PageCard>
         ))}
       </div>
     </div>
@@ -495,10 +469,12 @@ function FAQSection() {
 
 function GlossarioSection() {
   const termos = [
-    { termo: "SPO", definicao: "Número de identificação único do voucher." },
-    { termo: "Voucher", definicao: "Documento de solicitação de pagamento." },
-    { termo: "SLA", definicao: "Service Level Agreement - tempo máximo por etapa." },
-    { termo: "RM", definicao: "Sistema de gestão financeira integrado." },
+    { termo: "SPO", definicao: "Número de identificação único do voucher no sistema" },
+    { termo: "SLA", definicao: "Service Level Agreement - tempo máximo de permanência em cada etapa" },
+    { termo: "Voucher", definicao: "Documento financeiro de pagamento a fornecedores" },
+    { termo: "Etapa", definicao: "Fase do processo de aprovação (Operação, Fiscal, Financeiro, Robô)" },
+    { termo: "Baixa", definicao: "Confirmação de pagamento efetivado" },
+    { termo: "RM", definicao: "Sistema de gestão financeira integrado" },
   ];
 
   return (
@@ -508,24 +484,16 @@ function GlossarioSection() {
         <h2 className="text-2xl font-bold text-foreground">Glossário</h2>
       </div>
 
-      <div className="bg-card/60 border border-border/30 rounded-xl overflow-hidden backdrop-blur-sm">
-        <table className="w-full">
-          <thead>
-            <tr className="border-b border-border/50 bg-muted/30">
-              <th className="text-left p-4 font-semibold text-foreground">Termo</th>
-              <th className="text-left p-4 font-semibold text-foreground">Definição</th>
-            </tr>
-          </thead>
-          <tbody>
-            {termos.map((item, index) => (
-              <tr key={index} className="border-b border-border/30 last:border-0">
-                <td className="p-4 font-medium text-primary">{item.termo}</td>
-                <td className="p-4 text-muted-foreground">{item.definicao}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+      <PageCard>
+        <div className="space-y-4">
+          {termos.map((item) => (
+            <div key={item.termo} className="flex gap-4 pb-4 border-b border-border/30 last:border-0 last:pb-0">
+              <span className="font-semibold text-primary min-w-[80px]">{item.termo}</span>
+              <span className="text-muted-foreground">{item.definicao}</span>
+            </div>
+          ))}
+        </div>
+      </PageCard>
     </div>
   );
 }
