@@ -821,7 +821,7 @@ serve(async (req) => {
             p.shipper, p.consignee, p.carrier, p.gross_weight_kg, p.chargeable_weight_kg,
             p.mrn, p.routing_legs, p.flight_numbers, p.hs_codes, p.dims, p.incoterms, p.\`references\`,
             d.filename as hawb_file_name, d.storage_path as hawb_file_path,
-            r.email_despachante as rule_email, r.airport_code as rule_airport
+            r.email_despachante as rule_email, r.airport_code as rule_airport, r.ref_othello as rule_ref_othello
            FROM ai_agente.t_awb_check c
            LEFT JOIN ai_agente.t_parsed_awb p ON p.awb_check_id = c.id
            LEFT JOIN ai_agente.t_document_awb d ON p.document_id = d.id
@@ -853,7 +853,7 @@ serve(async (req) => {
             p.shipper, p.consignee, p.carrier, p.gross_weight_kg, p.chargeable_weight_kg,
             p.mrn, p.routing_legs, p.flight_numbers, p.hs_codes, p.dims, p.incoterms, p.\`references\`,
             d.filename as hawb_file_name, d.storage_path as hawb_file_path,
-            r.airport_code as rule_airport, r.email_despachante as rule_email
+            r.airport_code as rule_airport, r.email_despachante as rule_email, r.ref_othello as rule_ref_othello
            FROM ai_agente.t_awb_check c
            LEFT JOIN ai_agente.t_parsed_awb p ON p.awb_check_id = c.id
            LEFT JOIN ai_agente.t_document_awb d ON p.document_id = d.id
