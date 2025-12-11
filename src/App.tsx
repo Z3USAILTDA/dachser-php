@@ -39,6 +39,7 @@ import ManualUsuario from "./pages/cct/ManualUsuario";
 import ConsoleTecnico from "./pages/cct/ConsoleTecnico";
 import RegrasNotificacao from "./pages/cct/RegrasNotificacao";
 import AnalyticsDashboard from "./pages/cct/AnalyticsDashboard";
+import ProcessoTimeline from "./pages/cct/ProcessoTimeline";
 
 import NotFound from "./pages/NotFound";
 
@@ -92,6 +93,7 @@ const App = () => (
           <Route path="/air/cct/notificacoes" element={<RegrasNotificacao />} />
           <Route path="/air/cct/console" element={<ConsoleTecnico />} />
           <Route path="/air/cct/manual" element={<ManualUsuario />} />
+          <Route path="/air/cct/processo/:id" element={<ProcessoTimeline />} />
           
           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
           <Route path="*" element={<NotFound />} />
