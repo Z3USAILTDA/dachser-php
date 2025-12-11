@@ -1609,12 +1609,12 @@ serve(async (req) => {
             s.id,
             TRIM(s.awb) as master,
             TRIM(s.hawb) as house,
-            TRIM(s.destinatário) as cliente,
+            TRIM(s.\`destinatário\`) as cliente,
             TRIM(s.origem) as aeroporto_origem,
             TRIM(s.destino) as aeroporto_destino,
-            s.ultimo_status as status_cct_oficial,
+            s.\`último_status\` as status_cct_oficial,
             s.\`última atualização\` as ultimo_evento_data,
-            s.ultimo_status as ultimo_evento_codigo,
+            s.\`último_status\` as ultimo_evento_codigo,
             s.nome_analista,
             s.email_analista,
             s.email_cliente as emails_cliente,
@@ -1625,7 +1625,7 @@ serve(async (req) => {
             m.cnpj as cnpj_consignatario
           FROM ${database}.t_status_aereo s
           LEFT JOIN ${database}.t_dados_master m ON TRIM(s.awb) = TRIM(m.mawb)
-          WHERE s.ultimo_status NOT IN ('DLV', 'POD', 'FINALIZADO')
+          WHERE s.\`último_status\` NOT IN ('DLV', 'POD', 'FINALIZADO')
           ORDER BY s.\`última atualização\` DESC
           LIMIT 500
         `);
@@ -1696,10 +1696,10 @@ serve(async (req) => {
             s.id,
             TRIM(s.awb) as master,
             TRIM(s.hawb) as house,
-            TRIM(s.destinatário) as cliente,
+            TRIM(s.\`destinatário\`) as cliente,
             TRIM(s.origem) as aeroporto_origem,
             TRIM(s.destino) as aeroporto_destino,
-            s.ultimo_status as status_cct_oficial,
+            s.\`último_status\` as status_cct_oficial,
             s.\`última atualização\` as ultimo_evento_data,
             s.nome_analista,
             s.email_analista,
@@ -1784,11 +1784,11 @@ serve(async (req) => {
         // Get status distribution
         const statusCounts = await client.query(`
           SELECT 
-            ultimo_status as status,
+            \`último_status\` as status,
             COUNT(*) as count
           FROM ${database}.t_status_aereo
-          WHERE ultimo_status NOT IN ('DLV', 'POD', 'FINALIZADO')
-          GROUP BY ultimo_status
+          WHERE \`último_status\` NOT IN ('DLV', 'POD', 'FINALIZADO')
+          GROUP BY \`último_status\`
           ORDER BY count DESC
         `);
 
@@ -1796,14 +1796,14 @@ serve(async (req) => {
         const alertCounts = await client.query(`
           SELECT COUNT(*) as count
           FROM ${database}.t_status_aereo
-          WHERE ultimo_status IN ('DIS', 'OFLD')
+          WHERE \`último_status\` IN ('DIS', 'OFLD')
         `);
 
         // Get shipments with no update in 24h
         const staleShipments = await client.query(`
           SELECT COUNT(*) as count
           FROM ${database}.t_status_aereo
-          WHERE ultimo_status NOT IN ('DLV', 'POD', 'FINALIZADO')
+          WHERE \`último_status\` NOT IN ('DLV', 'POD', 'FINALIZADO')
           AND \`última atualização\` < DATE_SUB(NOW(), INTERVAL 24 HOUR)
         `);
 
