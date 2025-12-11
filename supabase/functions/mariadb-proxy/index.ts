@@ -1599,6 +1599,263 @@ serve(async (req) => {
         break;
       }
 
+      // ==================== CCT (Control Tower) ====================
+      case 'get_cct_shipments': {
+        console.log('Fetching CCT shipments from t_status_aereo + t_dados_master...');
+        
+        // Query active shipments joining t_status_aereo with t_dados_master for additional info
+        const shipments = await client.query(`
+          SELECT 
+            s.id,
+            TRIM(s.awb) as master,
+            TRIM(s.hawb) as house,
+            TRIM(s.destinatário) as cliente,
+            TRIM(s.origem) as aeroporto_origem,
+            TRIM(s.destino) as aeroporto_destino,
+            s.ultimo_status as status_cct_oficial,
+            s.\`última atualização\` as ultimo_evento_data,
+            s.ultimo_status as ultimo_evento_codigo,
+            s.nome_analista,
+            s.email_analista,
+            s.email_cliente as emails_cliente,
+            s.data_atraso,
+            m.eta,
+            m.etd,
+            m.peso_bruto as peso_declarado,
+            m.cnpj as cnpj_consignatario
+          FROM ${database}.t_status_aereo s
+          LEFT JOIN ${database}.t_dados_master m ON TRIM(s.awb) = TRIM(m.mawb)
+          WHERE s.ultimo_status NOT IN ('DLV', 'POD', 'FINALIZADO')
+          ORDER BY s.\`última atualização\` DESC
+          LIMIT 500
+        `);
+
+        // Calculate SLA status for each shipment
+        const now = new Date();
+        const processedShipments = (shipments || []).map((row: any) => {
+          const lastUpdate = row.ultimo_evento_data ? new Date(row.ultimo_evento_data) : null;
+          const hoursSinceUpdate = lastUpdate ? (now.getTime() - lastUpdate.getTime()) / (1000 * 60 * 60) : null;
+          
+          let slaStatus = 'OK';
+          if (hoursSinceUpdate !== null) {
+            if (hoursSinceUpdate > 48) slaStatus = 'CRITICO';
+            else if (hoursSinceUpdate > 24) slaStatus = 'ALERTA';
+          }
+
+          // Check for alert statuses
+          const alertStatuses = ['DIS', 'OFLD', 'NOT_FOUND', 'ERRO'];
+          const isAlert = alertStatuses.includes(row.status_cct_oficial);
+
+          return {
+            id: row.id?.toString() || row.master,
+            house: row.house || '',
+            master: row.master || '',
+            cliente: row.cliente || '',
+            aeroporto_origem: row.aeroporto_origem || 'N/A',
+            aeroporto_destino: row.aeroporto_destino || 'N/A',
+            status_cct_oficial: row.status_cct_oficial || 'EM_TRANSITO',
+            sla_status: slaStatus,
+            sla_limite: null,
+            ultimo_evento_data: row.ultimo_evento_data,
+            ultimo_evento_codigo: row.ultimo_evento_codigo,
+            nome_analista: row.nome_analista,
+            email_analista: row.email_analista,
+            emails_cliente: row.emails_cliente,
+            eta: row.eta,
+            etd: row.etd,
+            peso_declarado: row.peso_declarado,
+            cnpj_consignatario: row.cnpj_consignatario,
+            excecoes_abertas: isAlert ? 1 : 0,
+            data_atraso: row.data_atraso,
+            created_at: row.ultimo_evento_data || new Date().toISOString(),
+            updated_at: row.ultimo_evento_data || new Date().toISOString(),
+          };
+        });
+
+        console.log(`CCT: Found ${processedShipments.length} active shipments`);
+        result = { success: true, data: processedShipments };
+        break;
+      }
+
+      case 'get_cct_shipment': {
+        const { shipmentId, awbNumber } = body as { shipmentId?: string; awbNumber?: string };
+        
+        if (!shipmentId && !awbNumber) {
+          return new Response(
+            JSON.stringify({ error: 'shipmentId ou awbNumber é obrigatório' }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+
+        const whereClause = shipmentId 
+          ? `s.id = ${parseInt(shipmentId)}` 
+          : `TRIM(s.awb) = '${(awbNumber || '').trim()}'`;
+
+        const shipment = await client.query(`
+          SELECT 
+            s.id,
+            TRIM(s.awb) as master,
+            TRIM(s.hawb) as house,
+            TRIM(s.destinatário) as cliente,
+            TRIM(s.origem) as aeroporto_origem,
+            TRIM(s.destino) as aeroporto_destino,
+            s.ultimo_status as status_cct_oficial,
+            s.\`última atualização\` as ultimo_evento_data,
+            s.nome_analista,
+            s.email_analista,
+            s.email_cliente as emails_cliente,
+            s.data_atraso,
+            m.eta,
+            m.etd,
+            m.peso_bruto as peso_declarado,
+            m.cnpj as cnpj_consignatario
+          FROM ${database}.t_status_aereo s
+          LEFT JOIN ${database}.t_dados_master m ON TRIM(s.awb) = TRIM(m.mawb)
+          WHERE ${whereClause}
+          LIMIT 1
+        `);
+
+        if (!shipment || shipment.length === 0) {
+          return new Response(
+            JSON.stringify({ error: 'Shipment não encontrado', success: false }),
+            { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+
+        result = { success: true, data: shipment[0] };
+        break;
+      }
+
+      case 'update_cct_shipment': {
+        const { shipmentId, awbNumber, updates } = body as { 
+          shipmentId?: string; 
+          awbNumber?: string; 
+          updates?: Record<string, any>;
+        };
+        
+        if (!shipmentId && !awbNumber) {
+          return new Response(
+            JSON.stringify({ error: 'shipmentId ou awbNumber é obrigatório' }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+
+        if (!updates || Object.keys(updates).length === 0) {
+          return new Response(
+            JSON.stringify({ error: 'updates é obrigatório' }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+
+        // Map CCT field names to t_status_aereo column names
+        const fieldMapping: Record<string, string> = {
+          nome_analista: 'nome_analista',
+          email_analista: 'email_analista',
+          emails_cliente: 'email_cliente',
+        };
+
+        const setClauses: string[] = [];
+        const values: any[] = [];
+
+        for (const [key, value] of Object.entries(updates)) {
+          const dbColumn = fieldMapping[key] || key;
+          setClauses.push(`${dbColumn} = ?`);
+          values.push(value);
+        }
+
+        const whereClause = shipmentId 
+          ? `id = ?` 
+          : `TRIM(awb) = ?`;
+        values.push(shipmentId || (awbNumber || '').trim());
+
+        await client.execute(
+          `UPDATE ${database}.t_status_aereo SET ${setClauses.join(', ')} WHERE ${whereClause}`,
+          values
+        );
+
+        console.log(`CCT: Updated shipment ${shipmentId || awbNumber}`);
+        result = { success: true, message: 'Shipment atualizado' };
+        break;
+      }
+
+      case 'get_cct_analytics': {
+        console.log('Fetching CCT analytics...');
+        
+        // Get status distribution
+        const statusCounts = await client.query(`
+          SELECT 
+            ultimo_status as status,
+            COUNT(*) as count
+          FROM ${database}.t_status_aereo
+          WHERE ultimo_status NOT IN ('DLV', 'POD', 'FINALIZADO')
+          GROUP BY ultimo_status
+          ORDER BY count DESC
+        `);
+
+        // Get alert counts (DIS, OFLD statuses)
+        const alertCounts = await client.query(`
+          SELECT COUNT(*) as count
+          FROM ${database}.t_status_aereo
+          WHERE ultimo_status IN ('DIS', 'OFLD')
+        `);
+
+        // Get shipments with no update in 24h
+        const staleShipments = await client.query(`
+          SELECT COUNT(*) as count
+          FROM ${database}.t_status_aereo
+          WHERE ultimo_status NOT IN ('DLV', 'POD', 'FINALIZADO')
+          AND \`última atualização\` < DATE_SUB(NOW(), INTERVAL 24 HOUR)
+        `);
+
+        // Get daily event counts for last 7 days
+        const dailyEvents = await client.query(`
+          SELECT 
+            DATE(\`última atualização\`) as date,
+            COUNT(*) as count
+          FROM ${database}.t_status_aereo
+          WHERE \`última atualização\` >= DATE_SUB(NOW(), INTERVAL 7 DAY)
+          GROUP BY DATE(\`última atualização\`)
+          ORDER BY date DESC
+        `);
+
+        result = { 
+          success: true, 
+          data: {
+            statusDistribution: statusCounts || [],
+            alertCount: alertCounts?.[0]?.count || 0,
+            staleCount: staleShipments?.[0]?.count || 0,
+            dailyEvents: dailyEvents || [],
+          }
+        };
+        break;
+      }
+
+      case 'get_cct_profiles': {
+        console.log('Fetching CCT profiles (analysts)...');
+        
+        // Get unique analysts from t_status_aereo
+        const analysts = await client.query(`
+          SELECT DISTINCT
+            nome_analista as nome,
+            email_analista as email
+          FROM ${database}.t_status_aereo
+          WHERE nome_analista IS NOT NULL 
+          AND nome_analista != ''
+          ORDER BY nome_analista
+        `);
+
+        const profiles = (analysts || []).map((row: any, index: number) => ({
+          id: `analyst-${index + 1}`,
+          nome: row.nome || '',
+          email: row.email || '',
+          ativo: true,
+        }));
+
+        console.log(`CCT: Found ${profiles.length} analyst profiles`);
+        result = { success: true, data: profiles };
+        break;
+      }
+
       default:
         return new Response(
           JSON.stringify({ error: `Ação não suportada: ${action}` }),
