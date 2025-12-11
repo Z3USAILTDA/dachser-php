@@ -137,17 +137,7 @@ export function ProcessosTable({ processos, onAssignAnalista, metricFilter }: Pr
                   className={`border-[rgba(255,255,255,0.05)] hover:bg-[rgba(255,255,255,0.03)] ${index % 2 === 0 ? "bg-[rgba(255,255,255,0.02)]" : ""}`}
                 >
                   <TableCell>
-                    <div className="flex items-center gap-2">
-                      <Badge 
-                        className={`text-[0.65rem] font-medium px-2 py-0.5 ${isCCT 
-                          ? "bg-emerald-500/20 text-emerald-400 border-emerald-500/30" 
-                          : "bg-yellow-500/20 text-yellow-400 border-yellow-500/30"
-                        }`}
-                      >
-                        {isCCT ? "CCT" : "DEP"}
-                      </Badge>
-                      <span className="text-white text-[0.85rem] max-w-[120px] truncate">{processo.shipment.cliente}</span>
-                    </div>
+                    <span className="text-white text-[0.85rem] max-w-[150px] truncate block">{processo.shipment.cliente}</span>
                   </TableCell>
                   <TableCell>
                     <span className="font-mono text-[#ffc800] text-[0.85rem]">{processo.shipment.house}</span>
