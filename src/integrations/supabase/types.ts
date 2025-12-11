@@ -44,6 +44,108 @@ export type Database = {
         }
         Relationships: []
       }
+      shipments: {
+        Row: {
+          aeroporto_destino: string
+          aeroporto_origem: string
+          cliente: string
+          cnpj_consignatario: string | null
+          created_at: string
+          data_decolagem_ultimo_trecho: string | null
+          data_finalizacao: string | null
+          data_manifestacao_cct: string | null
+          email_analista: string | null
+          emails_cliente: string | null
+          eta: string | null
+          etd: string | null
+          excecoes_abertas: number
+          house: string
+          id: string
+          master: string
+          nome_analista: string | null
+          peso_constatado: number | null
+          peso_declarado: number | null
+          sla_limite: string | null
+          sla_status: string | null
+          status_cct_oficial: string | null
+          status_manifestacao: string | null
+          tipo_voo: string | null
+          tratamentos_especiais: string | null
+          ultimo_evento_codigo: string | null
+          ultimo_evento_data: string | null
+          ultimo_evento_descricao: string | null
+          updated_at: string
+          volume_constatado: number | null
+          volume_declarado: number | null
+        }
+        Insert: {
+          aeroporto_destino: string
+          aeroporto_origem: string
+          cliente: string
+          cnpj_consignatario?: string | null
+          created_at?: string
+          data_decolagem_ultimo_trecho?: string | null
+          data_finalizacao?: string | null
+          data_manifestacao_cct?: string | null
+          email_analista?: string | null
+          emails_cliente?: string | null
+          eta?: string | null
+          etd?: string | null
+          excecoes_abertas?: number
+          house: string
+          id?: string
+          master: string
+          nome_analista?: string | null
+          peso_constatado?: number | null
+          peso_declarado?: number | null
+          sla_limite?: string | null
+          sla_status?: string | null
+          status_cct_oficial?: string | null
+          status_manifestacao?: string | null
+          tipo_voo?: string | null
+          tratamentos_especiais?: string | null
+          ultimo_evento_codigo?: string | null
+          ultimo_evento_data?: string | null
+          ultimo_evento_descricao?: string | null
+          updated_at?: string
+          volume_constatado?: number | null
+          volume_declarado?: number | null
+        }
+        Update: {
+          aeroporto_destino?: string
+          aeroporto_origem?: string
+          cliente?: string
+          cnpj_consignatario?: string | null
+          created_at?: string
+          data_decolagem_ultimo_trecho?: string | null
+          data_finalizacao?: string | null
+          data_manifestacao_cct?: string | null
+          email_analista?: string | null
+          emails_cliente?: string | null
+          eta?: string | null
+          etd?: string | null
+          excecoes_abertas?: number
+          house?: string
+          id?: string
+          master?: string
+          nome_analista?: string | null
+          peso_constatado?: number | null
+          peso_declarado?: number | null
+          sla_limite?: string | null
+          sla_status?: string | null
+          status_cct_oficial?: string | null
+          status_manifestacao?: string | null
+          tipo_voo?: string | null
+          tratamentos_especiais?: string | null
+          ultimo_evento_codigo?: string | null
+          ultimo_evento_data?: string | null
+          ultimo_evento_descricao?: string | null
+          updated_at?: string
+          volume_constatado?: number | null
+          volume_declarado?: number | null
+        }
+        Relationships: []
+      }
       user_roles: {
         Row: {
           created_at: string
