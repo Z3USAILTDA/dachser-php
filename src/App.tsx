@@ -32,6 +32,14 @@ import Olimpo from "./pages/Olimpo";
 import ConferenciaChb from "./pages/ConferenciaChb";
 import ChbAnalises from "./pages/ChbAnalises";
 
+// CCT Module
+import CCTDashboard from "./pages/cct/CCTDashboard";
+import ExcecoesPage from "./pages/cct/ExcecoesPage";
+import ManualUsuario from "./pages/cct/ManualUsuario";
+import ConsoleTecnico from "./pages/cct/ConsoleTecnico";
+import RegrasNotificacao from "./pages/cct/RegrasNotificacao";
+import AnalyticsDashboard from "./pages/cct/AnalyticsDashboard";
+
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -76,6 +84,15 @@ const App = () => (
           <Route path="/olimpo" element={<Olimpo />} />
           <Route path="/chb/conferences" element={<ChbAnalises />} />
           <Route path="/chb/conferences/:id" element={<ConferenciaChb />} />
+          
+          {/* CCT Module Routes */}
+          <Route path="/air/cct" element={<CCTDashboard />} />
+          <Route path="/air/cct/excecoes" element={<ExcecoesPage />} />
+          <Route path="/air/cct/analytics" element={<AnalyticsDashboard />} />
+          <Route path="/air/cct/notificacoes" element={<RegrasNotificacao />} />
+          <Route path="/air/cct/console" element={<ConsoleTecnico />} />
+          <Route path="/air/cct/manual" element={<ManualUsuario />} />
+          
           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
           <Route path="*" element={<NotFound />} />
         </Routes>
