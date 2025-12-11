@@ -46,7 +46,7 @@ const menuItems: MenuItem[] = [
     children: [
       { label: "Rastreio Aéreo", href: "/air/tracking" },
       { label: "Check AWB x CNPJ", href: "/air/check" },
-      { label: "Robô CCT", href: "/air/robo-cct" },
+      { label: "Robô CCT", href: "/air/cct" },
     ],
   },
   {
