@@ -14,6 +14,144 @@ export type Database = {
   }
   public: {
     Tables: {
+      cct_evento_normalizado: {
+        Row: {
+          aeroporto: string | null
+          codigo_evento: string
+          created_at: string
+          data_hora_evento: string
+          descricao_evento: string | null
+          detalhes_raw: Json | null
+          fonte: string | null
+          id: string
+          nivel_confianca: string | null
+          shipment_id: string
+        }
+        Insert: {
+          aeroporto?: string | null
+          codigo_evento: string
+          created_at?: string
+          data_hora_evento?: string
+          descricao_evento?: string | null
+          detalhes_raw?: Json | null
+          fonte?: string | null
+          id?: string
+          nivel_confianca?: string | null
+          shipment_id: string
+        }
+        Update: {
+          aeroporto?: string | null
+          codigo_evento?: string
+          created_at?: string
+          data_hora_evento?: string
+          descricao_evento?: string | null
+          detalhes_raw?: Json | null
+          fonte?: string | null
+          id?: string
+          nivel_confianca?: string | null
+          shipment_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "cct_evento_normalizado_shipment_id_fkey"
+            columns: ["shipment_id"]
+            isOneToOne: false
+            referencedRelation: "shipments"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      cct_excecao_operacional: {
+        Row: {
+          created_at: string
+          descricao: string
+          fonte_detectou: string | null
+          id: string
+          resolvido_em: string | null
+          shipment_id: string
+          status_excecao: string
+          tipo_excecao: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          descricao: string
+          fonte_detectou?: string | null
+          id?: string
+          resolvido_em?: string | null
+          shipment_id: string
+          status_excecao?: string
+          tipo_excecao: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          descricao?: string
+          fonte_detectou?: string | null
+          id?: string
+          resolvido_em?: string | null
+          shipment_id?: string
+          status_excecao?: string
+          tipo_excecao?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "cct_excecao_operacional_shipment_id_fkey"
+            columns: ["shipment_id"]
+            isOneToOne: false
+            referencedRelation: "shipments"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      cct_status_atual: {
+        Row: {
+          created_at: string
+          id: string
+          shipment_id: string
+          sla_limite: string | null
+          sla_status: string
+          status_cct_oficial: string
+          status_handler: string | null
+          tipo_voo: string | null
+          ultima_atualizacao: string | null
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          shipment_id: string
+          sla_limite?: string | null
+          sla_status?: string
+          status_cct_oficial?: string
+          status_handler?: string | null
+          tipo_voo?: string | null
+          ultima_atualizacao?: string | null
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          shipment_id?: string
+          sla_limite?: string | null
+          sla_status?: string
+          status_cct_oficial?: string
+          status_handler?: string | null
+          tipo_voo?: string | null
+          ultima_atualizacao?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "cct_status_atual_shipment_id_fkey"
+            columns: ["shipment_id"]
+            isOneToOne: true
+            referencedRelation: "shipments"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       profiles: {
         Row: {
           active: boolean | null
