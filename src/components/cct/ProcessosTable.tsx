@@ -102,10 +102,12 @@ export function ProcessosTable({ processos, onAssignAnalista, metricFilter }: Pr
               <TableHead className="text-[#888] text-[0.75rem] uppercase tracking-wider font-medium">Master</TableHead>
               <TableHead className="text-[#888] text-[0.75rem] uppercase tracking-wider font-medium">Rota</TableHead>
               <TableHead className="text-[#888] text-[0.75rem] uppercase tracking-wider font-medium">Manifestação</TableHead>
+              <TableHead className="text-[#888] text-[0.75rem] uppercase tracking-wider font-medium">Tratamentos</TableHead>
               <TableHead className="text-[#888] text-[0.75rem] uppercase tracking-wider font-medium">Status</TableHead>
               <TableHead className="text-[#888] text-[0.75rem] uppercase tracking-wider font-medium">SLA</TableHead>
               <TableHead className="text-[#888] text-[0.75rem] uppercase tracking-wider font-medium">Analista</TableHead>
               <TableHead className="text-[#888] text-[0.75rem] uppercase tracking-wider font-medium">Atualização</TableHead>
+              <TableHead className="text-[#888] text-[0.75rem] uppercase tracking-wider font-medium">Exceções</TableHead>
               <TableHead className="text-[#888] text-[0.75rem] uppercase tracking-wider font-medium text-right">Ações</TableHead>
             </TableRow>
           </TableHeader>
@@ -129,7 +131,7 @@ export function ProcessosTable({ processos, onAssignAnalista, metricFilter }: Pr
                       >
                         {isCCT ? "CCT" : "DEP"}
                       </Badge>
-                      <span className="text-white text-[0.85rem]">{processo.shipment.cliente}</span>
+                      <span className="text-white text-[0.85rem] max-w-[120px] truncate">{processo.shipment.cliente}</span>
                     </div>
                   </TableCell>
                   <TableCell>
@@ -154,6 +156,9 @@ export function ProcessosTable({ processos, onAssignAnalista, metricFilter }: Pr
                       <div className="w-2 h-2 rounded-full bg-emerald-400" />
                     </div>
                   </TableCell>
+                  <TableCell className="text-[#666] text-[0.85rem]">
+                    {processo.shipment.tratamentos_especiais || "—"}
+                  </TableCell>
                   <TableCell>
                     <StatusBadge status={processo.status_atual?.status_cct_oficial || "AGUARDANDO_MANIFESTACAO"} />
                   </TableCell>
@@ -161,12 +166,19 @@ export function ProcessosTable({ processos, onAssignAnalista, metricFilter }: Pr
                     <SLABadge status={processo.status_atual?.sla_status || "OK"} />
                   </TableCell>
                   <TableCell className="text-[#aaaaaa] text-[0.85rem]">
-                    <div className="flex items-center gap-1.5">
+                    <div className="flex items-center gap-1.5 max-w-[120px] truncate">
                       <span>{processo.shipment.analista?.nome || processo.shipment.nome_analista_legado || "-"}</span>
                     </div>
                   </TableCell>
                   <TableCell className="text-[#888] text-[0.8rem]">
                     {formatDate(processo.status_atual?.updated_at)}
+                  </TableCell>
+                  <TableCell className="text-[#666] text-[0.85rem]">
+                    {excecoesAbertas > 0 ? (
+                      <Badge className="bg-red-500/20 text-red-400 border-red-500/30 text-[0.7rem]">
+                        {excecoesAbertas}
+                      </Badge>
+                    ) : "—"}
                   </TableCell>
                   <TableCell className="text-right">
                     <button
