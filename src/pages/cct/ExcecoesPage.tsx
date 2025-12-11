@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { PageLayout } from "@/components/cct/PageLayout";
 import { Badge } from "@/components/ui/badge";
@@ -25,6 +25,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
+import { TablePagination } from "@/components/layout/TablePagination";
 import { useExcecoes, useUpdateExcecao } from "@/hooks/useCCTData";
 import { 
   AlertTriangle, 
@@ -44,6 +45,8 @@ import {
 } from "lucide-react";
 import type { StatusExcecao, TipoExcecao } from "@/types/cct";
 import { cn } from "@/lib/utils";
+
+const ITEMS_PER_PAGE = 15;
 
 const TIPO_LABELS: Record<TipoExcecao, string> = {
   HOUSE_NAO_ENCONTRADO: "House não encontrado",
@@ -74,6 +77,7 @@ export default function ExcecoesPage() {
   const [filterTipo, setFilterTipo] = useState<string>("all");
   const [filterStatus, setFilterStatus] = useState<string>("all");
   const [activeTab, setActiveTab] = useState("lista");
+  const [currentPage, setCurrentPage] = useState(1);
 
   const filteredExcecoes = useMemo(() => {
     return excecoes.filter((exc) => {
@@ -88,6 +92,17 @@ export default function ExcecoesPage() {
       return matchesSearch && matchesTipo && matchesStatus;
     });
   }, [excecoes, searchTerm, filterTipo, filterStatus]);
+
+  // Reset page when filters change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm, filterTipo, filterStatus]);
+
+  const totalPages = Math.ceil(filteredExcecoes.length / ITEMS_PER_PAGE);
+  const paginatedExcecoes = filteredExcecoes.slice(
+    (currentPage - 1) * ITEMS_PER_PAGE,
+    currentPage * ITEMS_PER_PAGE
+  );
 
   const handleStatusChange = (id: string, newStatus: StatusExcecao) => {
     updateExcecao.mutate({ id, status_excecao: newStatus });
@@ -262,83 +277,94 @@ export default function ExcecoesPage() {
                 <p>Nenhuma exceção encontrada</p>
               </div>
             ) : (
-              <Table>
-                <TableHeader>
-                  <TableRow className="hover:bg-transparent border-[rgba(255,255,255,0.12)]">
-                    <TableHead className="text-[#aaaaaa]">House / Master</TableHead>
-                    <TableHead className="text-[#aaaaaa]">Tipo</TableHead>
-                    <TableHead className="text-[#aaaaaa]">Descrição</TableHead>
-                    <TableHead className="text-[#aaaaaa]">Status</TableHead>
-                    <TableHead className="text-[#aaaaaa] text-right">Ações</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {filteredExcecoes.map((exc, index) => {
-                    const statusConfig = STATUS_CONFIG[exc.status_excecao];
-                    const StatusIcon = statusConfig.icon;
-                    const TipoIcon = TIPO_ICONS[exc.tipo_excecao] || AlertTriangle;
-                    
-                    return (
-                      <TableRow 
-                        key={exc.id}
-                        className={cn(
-                          "border-[rgba(255,255,255,0.08)] hover:bg-[rgba(255,255,255,0.03)]",
-                          index % 2 === 0 ? "bg-[rgba(255,255,255,0.02)]" : "bg-transparent"
-                        )}
-                      >
-                        <TableCell>
-                          <div>
-                            <p className="font-medium text-[#f5f5f5] font-mono">{exc.shipments?.house || "-"}</p>
-                            <p className="text-xs text-[#aaaaaa]">{exc.shipments?.master || "-"}</p>
-                          </div>
-                        </TableCell>
-                        <TableCell>
-                          <Badge variant="outline" className="bg-[rgba(255,200,0,0.1)] text-[#ffc800] border-[#ffc800]/30">
-                            <TipoIcon className="h-3 w-3 mr-1" />
-                            {TIPO_LABELS[exc.tipo_excecao]}
-                          </Badge>
-                        </TableCell>
-                        <TableCell className="max-w-[250px]">
-                          <p className="text-sm text-[#aaaaaa] truncate">{exc.descricao}</p>
-                        </TableCell>
-                        <TableCell>
-                          <Badge variant="outline" className={statusConfig.color}>
-                            <StatusIcon className="h-3 w-3 mr-1" />
-                            {statusConfig.label}
-                          </Badge>
-                        </TableCell>
-                        <TableCell className="text-right">
-                          <DropdownMenu>
-                            <DropdownMenuTrigger asChild>
-                              <button className="h-8 w-8 rounded-full flex items-center justify-center text-[#aaaaaa] hover:text-[#f5f5f5] hover:bg-[rgba(255,255,255,0.1)] transition">
-                                <MoreVertical className="h-4 w-4" />
-                              </button>
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent align="end" className="bg-[rgba(5,6,18,0.95)] border-[rgba(255,255,255,0.12)]">
-                              {exc.status_excecao === "ABERTA" && (
-                                <DropdownMenuItem onClick={() => handleStatusChange(exc.id, "EM_ANALISE")} className="text-[#f5f5f5] focus:bg-[rgba(255,255,255,0.1)]">
+              <>
+                <Table>
+                  <TableHeader>
+                    <TableRow className="hover:bg-transparent border-[rgba(255,255,255,0.12)]">
+                      <TableHead className="text-[#aaaaaa]">House / Master</TableHead>
+                      <TableHead className="text-[#aaaaaa]">Tipo</TableHead>
+                      <TableHead className="text-[#aaaaaa]">Descrição</TableHead>
+                      <TableHead className="text-[#aaaaaa]">Status</TableHead>
+                      <TableHead className="text-[#aaaaaa] text-right">Ações</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {paginatedExcecoes.map((exc, index) => {
+                      const statusConfig = STATUS_CONFIG[exc.status_excecao];
+                      const StatusIcon = statusConfig.icon;
+                      const TipoIcon = TIPO_ICONS[exc.tipo_excecao] || AlertTriangle;
+                      
+                      return (
+                        <TableRow 
+                          key={exc.id}
+                          className={cn(
+                            "border-[rgba(255,255,255,0.08)] hover:bg-[rgba(255,255,255,0.03)]",
+                            index % 2 === 0 ? "bg-[rgba(255,255,255,0.02)]" : "bg-transparent"
+                          )}
+                        >
+                          <TableCell>
+                            <div>
+                              <p className="font-medium text-[#f5f5f5] font-mono">{exc.shipments?.house || "-"}</p>
+                              <p className="text-xs text-[#aaaaaa]">{exc.shipments?.master || "-"}</p>
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            <Badge variant="outline" className="bg-[rgba(255,200,0,0.1)] text-[#ffc800] border-[#ffc800]/30">
+                              <TipoIcon className="h-3 w-3 mr-1" />
+                              {TIPO_LABELS[exc.tipo_excecao]}
+                            </Badge>
+                          </TableCell>
+                          <TableCell className="max-w-[250px]">
+                            <p className="text-sm text-[#aaaaaa] truncate">{exc.descricao}</p>
+                          </TableCell>
+                          <TableCell>
+                            <Badge variant="outline" className={statusConfig.color}>
+                              <StatusIcon className="h-3 w-3 mr-1" />
+                              {statusConfig.label}
+                            </Badge>
+                          </TableCell>
+                          <TableCell className="text-right">
+                            <DropdownMenu>
+                              <DropdownMenuTrigger asChild>
+                                <button className="h-8 w-8 rounded-full flex items-center justify-center text-[#aaaaaa] hover:text-[#f5f5f5] hover:bg-[rgba(255,255,255,0.1)] transition">
+                                  <MoreVertical className="h-4 w-4" />
+                                </button>
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent align="end" className="bg-[rgba(5,6,18,0.95)] border-[rgba(255,255,255,0.12)]">
+                                {exc.status_excecao === "ABERTA" && (
+                                  <DropdownMenuItem onClick={() => handleStatusChange(exc.id, "EM_ANALISE")} className="text-[#f5f5f5] focus:bg-[rgba(255,255,255,0.1)]">
+                                    <Eye className="h-4 w-4 mr-2" />
+                                    Iniciar Análise
+                                  </DropdownMenuItem>
+                                )}
+                                {exc.status_excecao !== "RESOLVIDA" && (
+                                  <DropdownMenuItem onClick={() => handleStatusChange(exc.id, "RESOLVIDA")} className="text-[#f5f5f5] focus:bg-[rgba(255,255,255,0.1)]">
+                                    <CheckCircle className="h-4 w-4 mr-2" />
+                                    Resolver
+                                  </DropdownMenuItem>
+                                )}
+                                <DropdownMenuItem onClick={() => navigate(`/air/cct/processo/${exc.shipment_id}`)} className="text-[#f5f5f5] focus:bg-[rgba(255,255,255,0.1)]">
                                   <Eye className="h-4 w-4 mr-2" />
-                                  Iniciar Análise
+                                  Ver Processo
                                 </DropdownMenuItem>
-                              )}
-                              {exc.status_excecao !== "RESOLVIDA" && (
-                                <DropdownMenuItem onClick={() => handleStatusChange(exc.id, "RESOLVIDA")} className="text-[#f5f5f5] focus:bg-[rgba(255,255,255,0.1)]">
-                                  <CheckCircle className="h-4 w-4 mr-2" />
-                                  Resolver
-                                </DropdownMenuItem>
-                              )}
-                              <DropdownMenuItem onClick={() => navigate(`/air/cct/processo/${exc.shipment_id}`)} className="text-[#f5f5f5] focus:bg-[rgba(255,255,255,0.1)]">
-                                <Eye className="h-4 w-4 mr-2" />
-                                Ver Processo
-                              </DropdownMenuItem>
-                            </DropdownMenuContent>
-                          </DropdownMenu>
-                        </TableCell>
-                      </TableRow>
-                    );
-                  })}
-                </TableBody>
-              </Table>
+                              </DropdownMenuContent>
+                            </DropdownMenu>
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
+                  </TableBody>
+                </Table>
+                
+                {/* Pagination */}
+                <div className="p-4 border-t border-[rgba(255,255,255,0.08)]">
+                  <TablePagination
+                    currentPage={currentPage}
+                    totalPages={totalPages}
+                    onPageChange={setCurrentPage}
+                  />
+                </div>
+              </>
             )}
           </div>
         </TabsContent>
