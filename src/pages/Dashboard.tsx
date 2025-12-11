@@ -47,18 +47,7 @@ const menuItems: MenuItem[] = [
     children: [
       { label: "Rastreio Aéreo", href: "/air/tracking" },
       { label: "Check AWB x CNPJ", href: "/air/check" },
-      { 
-        label: "Robô CCT", 
-        expandableId: "cct",
-        subChildren: [
-          { label: "Dashboard", href: "/air/cct" },
-          { label: "Exceções", href: "/air/cct/excecoes" },
-          { label: "Analytics", href: "/air/cct/analytics" },
-          { label: "Notificações", href: "/air/cct/notificacoes" },
-          { label: "Console", href: "/air/cct/console" },
-          { label: "Manual", href: "/air/cct/manual" },
-        ]
-      },
+      { label: "Robô CCT", href: "/air/cct" },
     ],
   },
   {
