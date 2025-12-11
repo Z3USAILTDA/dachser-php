@@ -4,7 +4,7 @@ import { LogOut, Plane, Ship, CreditCard, FileText, Building2, UserCog } from "l
 import logoZ3us from "@/assets/logo-z3us.png";
 import dachserBg from "@/assets/dachser-background.jpg";
 
-interface VoucherChild {
+interface SubChild {
   label: string;
   href: string;
 }
@@ -12,8 +12,8 @@ interface VoucherChild {
 interface ChildItem {
   label: string;
   href?: string;
-  isVoucher?: boolean;
-  voucherChildren?: VoucherChild[];
+  expandableId?: string;
+  subChildren?: SubChild[];
 }
 
 interface MenuItem {
@@ -46,7 +46,18 @@ const menuItems: MenuItem[] = [
     children: [
       { label: "Rastreio Aéreo", href: "/air/tracking" },
       { label: "Check AWB x CNPJ", href: "/air/check" },
-      { label: "Robô CCT", href: "/air/cct" },
+      { 
+        label: "Robô CCT", 
+        expandableId: "cct",
+        subChildren: [
+          { label: "Dashboard", href: "/air/cct" },
+          { label: "Exceções", href: "/air/cct/excecoes" },
+          { label: "Analytics", href: "/air/cct/analytics" },
+          { label: "Notificações", href: "/air/cct/notificacoes" },
+          { label: "Console", href: "/air/cct/console" },
+          { label: "Manual", href: "/air/cct/manual" },
+        ]
+      },
     ],
   },
   {
@@ -68,8 +79,8 @@ const menuItems: MenuItem[] = [
       { label: "Régua de Cobrança", href: "/fin/regua" },
       { 
         label: "Voucher", 
-        isVoucher: true,
-        voucherChildren: [
+        expandableId: "voucher",
+        subChildren: [
           { label: "Análise Documental", href: "/fin/analise-documental" },
           { label: "Esteira", href: "/fin/esteira" },
         ]
@@ -97,7 +108,7 @@ const menuItems: MenuItem[] = [
 const Dashboard = () => {
   const navigate = useNavigate();
   const [activeMenu, setActiveMenu] = useState<string | null>(null);
-  const [voucherExpanded, setVoucherExpanded] = useState(false);
+  const [expandedChild, setExpandedChild] = useState<string | null>(null);
   const [user, setUser] = useState<{ id: number; email: string; username: string; is_admin: number } | null>(null);
 
   useEffect(() => {
@@ -118,7 +129,7 @@ const Dashboard = () => {
 
   const toggleMenu = (menuId: string) => {
     if (activeMenu !== menuId) {
-      setVoucherExpanded(false);
+      setExpandedChild(null);
     }
     setActiveMenu(activeMenu === menuId ? null : menuId);
   };
@@ -309,17 +320,17 @@ const Dashboard = () => {
                         <div className="w-0.5 h-3 bg-primary" />
                         <div className="w-1.5 h-1.5 rounded-full bg-primary -mt-0.5" />
                         
-                        {child.isVoucher ? (
+                        {child.expandableId ? (
                           <div className="relative mt-2 flex flex-col items-center">
                             <button
-                              onClick={() => setVoucherExpanded(!voucherExpanded)}
+                              onClick={() => setExpandedChild(expandedChild === child.expandableId ? null : child.expandableId!)}
                               className={`min-w-[180px] px-5 py-2.5 rounded-full text-sm font-medium transition-all duration-200 cursor-pointer ${
-                                voucherExpanded 
+                                expandedChild === child.expandableId 
                                   ? 'bg-primary text-primary-foreground border border-primary shadow-[0_0_14px_hsl(var(--primary)/0.7)]' 
                                   : 'text-foreground hover:-translate-y-0.5'
                               }`}
                               style={{
-                                ...(!voucherExpanded && {
+                                ...(expandedChild !== child.expandableId && {
                                   background: 'rgba(4, 10, 30, 0.75)',
                                   boxShadow: '0 12px 30px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(255, 255, 255, 0.08)',
                                   backdropFilter: 'blur(18px)',
@@ -330,41 +341,41 @@ const Dashboard = () => {
                               {child.label}
                             </button>
                             
-                            {/* Voucher Children - Positioned absolutely to not affect parent layout */}
+                            {/* Sub Children - Positioned absolutely to not affect parent layout */}
                             <div 
                               className={`absolute top-full left-1/2 -translate-x-1/2 flex flex-col items-center mt-6 transition-all duration-300 ${
-                                voucherExpanded && child.voucherChildren 
+                                expandedChild === child.expandableId && child.subChildren 
                                   ? 'opacity-100 translate-y-0' 
                                   : 'opacity-0 -translate-y-2 pointer-events-none'
                               }`}
                             >
-                              {child.voucherChildren && (
+                              {child.subChildren && (
                                 <>
-                                  {/* Vertical Line from Voucher */}
+                                  {/* Vertical Line */}
                                   <div className="w-0.5 h-5 bg-primary" />
                                   
                                   {/* Children Row */}
-                                  <div className="relative flex gap-6">
+                                  <div className="relative flex flex-wrap justify-center gap-4">
                                     {/* Horizontal line spanning from first to last child center */}
-                                    {child.voucherChildren.length > 1 && (
+                                    {child.subChildren.length > 1 && (
                                       <div 
                                         className="absolute top-0 h-0.5 bg-primary"
                                         style={{ 
-                                          left: '90px',
-                                          right: '90px',
+                                          left: '70px',
+                                          right: '70px',
                                         }}
                                       />
                                     )}
                                     
-                                    {child.voucherChildren.map((vChild, vIdx) => (
-                                      <div key={vIdx} className="relative flex flex-col items-center pt-0 min-w-[180px]">
+                                    {child.subChildren.map((subChild, subIdx) => (
+                                      <div key={subIdx} className="relative flex flex-col items-center pt-0 min-w-[140px]">
                                         {/* Vertical connector */}
                                         <div className="w-0.5 h-3 bg-primary" />
                                         <div className="w-1.5 h-1.5 rounded-full bg-primary -mt-0.5" />
                                         
                                         <button
-                                          onClick={() => navigate(vChild.href)}
-                                          className="mt-2 min-w-[180px] px-5 py-2.5 rounded-full text-foreground text-sm font-medium hover:-translate-y-0.5 transition-all duration-200"
+                                          onClick={() => navigate(subChild.href)}
+                                          className="mt-2 min-w-[140px] px-4 py-2 rounded-full text-foreground text-xs font-medium hover:-translate-y-0.5 transition-all duration-200"
                                           style={{
                                             background: 'rgba(4, 10, 30, 0.75)',
                                             boxShadow: '0 12px 30px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(255, 255, 255, 0.08)',
@@ -372,7 +383,7 @@ const Dashboard = () => {
                                             border: '1px solid rgba(255, 255, 255, 0.08)',
                                           }}
                                         >
-                                          {vChild.label}
+                                          {subChild.label}
                                         </button>
                                       </div>
                                     ))}
