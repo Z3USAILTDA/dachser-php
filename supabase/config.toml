@@ -74,3 +74,36 @@ verify_jwt = false
 
 [functions.track-awb]
 verify_jwt = false
+
+[functions.cct-dep-alert]
+verify_jwt = false
+
+[functions.cct-ingest]
+verify_jwt = false
+
+[functions.cct-notify]
+verify_jwt = false
+
+[functions.create-user]
+verify_jwt = false
+
+[functions.fetch-awbs-dep]
+verify_jwt = false
+
+[functions.leadcomex-sync]
+verify_jwt = false
+
+[functions.mariadb-connect]
+verify_jwt = false
+
+[functions.mariadb-contacts-sync]
+verify_jwt = false
+
+[functions.mariadb-dep-sync]
+verify_jwt = false
+
+[functions.mariadb-sync]
+verify_jwt = false
+
+[functions.rfb-webhook]
+verify_jwt = false
