@@ -10,12 +10,15 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { StatusBadge, SLABadge } from "./StatusBadge";
+import { TablePagination } from "@/components/layout/TablePagination";
 import { Search, Eye, AlertTriangle } from "lucide-react";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import type { ProcessoCCT } from "@/types/cct";
 
 export type MetricFilterType = "total" | "alerta" | "critico" | "eventos24h" | null;
+
+const ITEMS_PER_PAGE = 15;
 
 interface ProcessosTableProps {
   processos: ProcessoCCT[];
@@ -26,6 +29,7 @@ interface ProcessosTableProps {
 export function ProcessosTable({ processos, onAssignAnalista, metricFilter }: ProcessosTableProps) {
   const navigate = useNavigate();
   const [searchTerm, setSearchTerm] = useState("");
+  const [currentPage, setCurrentPage] = useState(1);
 
   const filteredProcessos = useMemo(() => {
     let filtered = processos;
@@ -58,6 +62,17 @@ export function ProcessosTable({ processos, onAssignAnalista, metricFilter }: Pr
 
     return filtered;
   }, [processos, searchTerm, metricFilter]);
+
+  // Reset to page 1 when filters change
+  useMemo(() => {
+    setCurrentPage(1);
+  }, [searchTerm, metricFilter]);
+
+  const totalPages = Math.ceil(filteredProcessos.length / ITEMS_PER_PAGE);
+  const paginatedProcessos = filteredProcessos.slice(
+    (currentPage - 1) * ITEMS_PER_PAGE,
+    currentPage * ITEMS_PER_PAGE
+  );
 
   const formatDate = (dateStr?: string | null) => {
     if (!dateStr) return "-";
@@ -112,7 +127,7 @@ export function ProcessosTable({ processos, onAssignAnalista, metricFilter }: Pr
             </TableRow>
           </TableHeader>
           <TableBody>
-            {filteredProcessos.map((processo, index) => {
+            {paginatedProcessos.map((processo, index) => {
               const isCCT = processo.status_atual?.status_cct_oficial !== "AGUARDANDO_MANIFESTACAO";
               const excecoesAbertas = processo.excecoes.filter(e => e.status_excecao !== "RESOLVIDA").length;
 
@@ -194,6 +209,15 @@ export function ProcessosTable({ processos, onAssignAnalista, metricFilter }: Pr
             })}
           </TableBody>
         </Table>
+      </div>
+
+      {/* Pagination */}
+      <div className="p-4 border-t border-[rgba(255,255,255,0.08)]">
+        <TablePagination
+          currentPage={currentPage}
+          totalPages={totalPages}
+          onPageChange={setCurrentPage}
+        />
       </div>
 
       {/* Empty state for filtered results */}
