@@ -1,5 +1,4 @@
 import { LucideIcon } from "lucide-react";
-import { Card, CardContent } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 
 interface MetricCardProps {
@@ -14,29 +13,29 @@ interface MetricCardProps {
 
 const variantStyles = {
   default: {
-    bg: "bg-card/50",
-    icon: "bg-primary/20 text-primary",
-    border: "border-border",
+    iconBg: "bg-primary/20",
+    iconColor: "text-primary",
+    valueBorder: "",
   },
   warning: {
-    bg: "bg-yellow-500/10",
-    icon: "bg-yellow-500/20 text-yellow-400",
-    border: "border-yellow-500/30",
+    iconBg: "bg-yellow-500/20",
+    iconColor: "text-yellow-400",
+    valueBorder: "border-l-2 border-l-yellow-500/50",
   },
   critical: {
-    bg: "bg-destructive/10",
-    icon: "bg-destructive/20 text-destructive",
-    border: "border-destructive/30",
+    iconBg: "bg-rose-500/20",
+    iconColor: "text-rose-400",
+    valueBorder: "border-l-2 border-l-rose-500/50",
   },
   success: {
-    bg: "bg-emerald-500/10",
-    icon: "bg-emerald-500/20 text-emerald-400",
-    border: "border-emerald-500/30",
+    iconBg: "bg-emerald-500/20",
+    iconColor: "text-emerald-400",
+    valueBorder: "border-l-2 border-l-emerald-500/50",
   },
   info: {
-    bg: "bg-blue-500/10",
-    icon: "bg-blue-500/20 text-blue-400",
-    border: "border-blue-500/30",
+    iconBg: "bg-blue-500/20",
+    iconColor: "text-blue-400",
+    valueBorder: "border-l-2 border-l-blue-500/50",
   },
 };
 
@@ -52,28 +51,40 @@ export function MetricCard({
   const styles = variantStyles[variant];
 
   return (
-    <Card
-      className={cn(
-        "transition-all duration-200 backdrop-blur-sm",
-        styles.bg,
-        styles.border,
-        onClick && "cursor-pointer hover:scale-[1.02]",
-        active && "ring-2 ring-primary"
-      )}
+    <div
       onClick={onClick}
+      className={cn(
+        "relative rounded-2xl p-5 transition-all duration-200",
+        "bg-[rgba(5,6,18,0.9)] border border-[rgba(255,255,255,0.12)]",
+        "backdrop-blur-[18px]",
+        "shadow-[0_18px_40px_rgba(0,0,0,0.85)]",
+        onClick && "cursor-pointer hover:-translate-y-0.5 hover:shadow-[0_22px_50px_rgba(0,0,0,0.9)]",
+        active && "ring-2 ring-primary/60 shadow-[0_0_20px_rgba(255,200,0,0.3)]"
+      )}
     >
-      <CardContent className="p-4 flex items-center gap-4">
-        <div className={cn("p-3 rounded-lg", styles.icon)}>
-          <Icon className="h-6 w-6" />
-        </div>
-        <div>
-          <p className="text-2xl font-bold text-foreground">{value}</p>
-          <p className="text-sm text-muted-foreground">{title}</p>
+      <div className="flex items-start justify-between">
+        <div className={cn("flex-1", styles.valueBorder, styles.valueBorder && "pl-4")}>
+          <p className="text-[0.75rem] uppercase tracking-wider text-[#aaaaaa] mb-1">{title}</p>
+          <p className={cn(
+            "text-3xl font-bold text-white",
+            variant === "warning" && "text-yellow-400",
+            variant === "critical" && "text-rose-400",
+            variant === "success" && "text-emerald-400",
+          )}>
+            {value}
+          </p>
           {subtitle && (
-            <p className="text-xs text-muted-foreground/70">{subtitle}</p>
+            <p className="text-[0.7rem] text-[#888888] mt-1">{subtitle}</p>
           )}
         </div>
-      </CardContent>
-    </Card>
+        
+        <div className={cn(
+          "w-12 h-12 rounded-xl flex items-center justify-center",
+          styles.iconBg
+        )}>
+          <Icon className={cn("h-6 w-6", styles.iconColor)} />
+        </div>
+      </div>
+    </div>
   );
 }

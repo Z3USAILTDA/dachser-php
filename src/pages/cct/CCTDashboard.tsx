@@ -6,17 +6,7 @@ import { AssignAnalistaDialog } from "@/components/cct/AssignAnalistaDialog";
 import { NovoShipmentDialog } from "@/components/cct/NovoShipmentDialog";
 import { useProfiles, useProcessosCCT } from "@/hooks/useCCTData";
 import { ProcessoCCT } from "@/types/cct";
-import { Button } from "@/components/ui/button";
-import { Skeleton } from "@/components/ui/skeleton";
-import { Badge } from "@/components/ui/badge";
-import { Database as DatabaseIcon, Plane } from "lucide-react";
-import { 
-  Package, 
-  AlertTriangle, 
-  AlertCircle, 
-  Clock,
-  RefreshCw,
-} from "lucide-react";
+import { Database as DatabaseIcon, Plane, Package, AlertTriangle, AlertCircle, Clock, RefreshCw } from "lucide-react";
 
 export default function CCTDashboard() {
   const { data: processos = [], isLoading, refetch, isRefetching, error } = useProcessosCCT();
@@ -55,33 +45,31 @@ export default function CCTDashboard() {
     <PageLayout
       title="DACHSER"
       subtitle="CRONOS CCT — Monitoramento de Carga Aérea"
-      showBack={false}
+      showBack={true}
       headerActions={
-        <div className="flex items-center gap-4">
-          <div className="flex items-center gap-2 px-3 py-1.5 bg-primary/20 rounded-full border border-primary/30">
-            <DatabaseIcon className="h-4 w-4 text-primary" />
-            <span className="text-xs text-primary font-medium">Supabase</span>
+        <div className="flex items-center gap-2.5">
+          <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-[rgba(255,200,0,0.15)] border border-[#ffc800]/40">
+            <DatabaseIcon className="h-4 w-4 text-[#ffc800]" />
+            <span className="text-xs text-[#ffc800] font-medium">Supabase</span>
           </div>
           
-          <Button
-            variant="outline"
-            size="sm"
+          <button
             onClick={() => refetch()}
             disabled={isRefetching}
-            className="border-border text-muted-foreground hover:bg-muted/50 rounded-full px-4"
+            className="flex items-center gap-2 px-4 py-2 rounded-full border border-[rgba(255,255,255,.25)] bg-[rgba(0,0,0,.7)] text-[#aaaaaa] hover:text-white hover:bg-[rgba(0,0,0,.9)] transition disabled:opacity-50 text-[0.8rem]"
           >
-            <RefreshCw className={`h-4 w-4 mr-2 ${isRefetching ? "animate-spin" : ""}`} />
+            <RefreshCw className={`h-4 w-4 ${isRefetching ? "animate-spin" : ""}`} />
             Atualizar
-          </Button>
+          </button>
           <NovoShipmentDialog />
         </div>
       }
     >
       <div className="space-y-6">
         {error && (
-          <div className="bg-destructive/10 border border-destructive/30 rounded-lg p-3 flex items-center gap-2">
-            <DatabaseIcon className="h-5 w-5 text-destructive" />
-            <span className="text-sm text-destructive">Erro ao conectar: {error.message}</span>
+          <div className="rounded-xl bg-rose-500/10 border border-rose-500/30 p-3 flex items-center gap-2">
+            <DatabaseIcon className="h-5 w-5 text-rose-400" />
+            <span className="text-sm text-rose-400">Erro ao conectar: {error.message}</span>
           </div>
         )}
         
@@ -89,10 +77,10 @@ export default function CCTDashboard() {
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
           {isLoading ? (
             <>
-              <Skeleton className="h-28 bg-card/40" />
-              <Skeleton className="h-28 bg-card/40" />
-              <Skeleton className="h-28 bg-card/40" />
-              <Skeleton className="h-28 bg-card/40" />
+              <div className="h-28 rounded-2xl bg-[rgba(5,6,18,0.9)] border border-[rgba(255,255,255,0.12)] animate-pulse" />
+              <div className="h-28 rounded-2xl bg-[rgba(5,6,18,0.9)] border border-[rgba(255,255,255,0.12)] animate-pulse" />
+              <div className="h-28 rounded-2xl bg-[rgba(5,6,18,0.9)] border border-[rgba(255,255,255,0.12)] animate-pulse" />
+              <div className="h-28 rounded-2xl bg-[rgba(5,6,18,0.9)] border border-[rgba(255,255,255,0.12)] animate-pulse" />
             </>
           ) : (
             <>
@@ -137,27 +125,26 @@ export default function CCTDashboard() {
 
         {/* Header with counts */}
         <div className="flex items-center gap-3">
-          <Plane className="h-5 w-5 text-primary" />
-          <h3 className="text-lg font-semibold">Monitoramento CCT</h3>
+          <Plane className="h-5 w-5 text-[#ffc800]" />
+          <h3 className="text-lg font-semibold text-white">Monitoramento CCT</h3>
           {metricFilter && (
-            <Badge 
-              variant="outline" 
-              className="bg-primary/10 text-primary border-primary/30 font-mono cursor-pointer"
+            <span 
+              className="px-3 py-1 rounded-full bg-[rgba(255,200,0,0.15)] text-[#ffc800] border border-[#ffc800]/40 text-[0.75rem] font-mono cursor-pointer hover:bg-[rgba(255,200,0,0.25)] transition"
               onClick={() => setMetricFilter(null)}
             >
               Filtro ativo: {metricFilter === "total" ? "Todos" : metricFilter === "alerta" ? "Em Alerta" : metricFilter === "critico" ? "Críticos" : "Eventos 24h"} ✕
-            </Badge>
+            </span>
           )}
           {metrics.emTransito > 0 && !metricFilter && (
-            <Badge variant="outline" className="bg-blue-500/10 text-blue-400 border-blue-500/30 font-mono">
+            <span className="px-3 py-1 rounded-full bg-blue-500/15 text-blue-400 border border-blue-500/40 text-[0.75rem] font-mono">
               {metrics.emTransito} aguardando manifestação
-            </Badge>
+            </span>
           )}
         </div>
 
         {/* Unified Table */}
         {isLoading ? (
-          <Skeleton className="h-96 bg-card/40" />
+          <div className="h-96 rounded-2xl bg-[rgba(5,6,18,0.9)] border border-[rgba(255,255,255,0.12)] animate-pulse" />
         ) : (
           <ProcessosTable 
             processos={processos}
