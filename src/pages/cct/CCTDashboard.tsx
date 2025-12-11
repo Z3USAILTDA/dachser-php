@@ -1,4 +1,5 @@
 import { useState, useMemo, useCallback } from "react";
+import { useNavigate } from "react-router-dom";
 import { PageLayout } from "@/components/cct/PageLayout";
 import { MetricCard } from "@/components/cct/MetricCard";
 import { ProcessosTable, MetricFilterType } from "@/components/cct/ProcessosTable";
@@ -6,9 +7,10 @@ import { AssignAnalistaDialog } from "@/components/cct/AssignAnalistaDialog";
 import { NovoShipmentDialog } from "@/components/cct/NovoShipmentDialog";
 import { useProfiles, useProcessosCCT } from "@/hooks/useCCTData";
 import { ProcessoCCT } from "@/types/cct";
-import { Database as DatabaseIcon, Plane, Package, AlertTriangle, AlertCircle, Clock, RefreshCw } from "lucide-react";
+import { BookOpen, Plane, Package, AlertTriangle, AlertCircle, Clock, RefreshCw, Database } from "lucide-react";
 
 export default function CCTDashboard() {
+  const navigate = useNavigate();
   const { data: processos = [], isLoading, refetch, isRefetching, error } = useProcessosCCT();
   const { data: profiles = [] } = useProfiles();
   
@@ -48,10 +50,13 @@ export default function CCTDashboard() {
       showBack={true}
       headerActions={
         <div className="flex items-center gap-2.5">
-          <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-[rgba(255,200,0,0.15)] border border-[#ffc800]/40">
-            <DatabaseIcon className="h-4 w-4 text-[#ffc800]" />
-            <span className="text-xs text-[#ffc800] font-medium">Supabase</span>
-          </div>
+          <button
+            onClick={() => navigate('/air/cct/manual')}
+            className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-[rgba(255,200,0,0.15)] border border-[#ffc800]/40 hover:bg-[rgba(255,200,0,0.25)] transition"
+          >
+            <BookOpen className="h-4 w-4 text-[#ffc800]" />
+            <span className="text-xs text-[#ffc800] font-medium">Manual</span>
+          </button>
           
           <button
             onClick={() => refetch()}
@@ -68,7 +73,7 @@ export default function CCTDashboard() {
       <div className="space-y-6">
         {error && (
           <div className="rounded-xl bg-rose-500/10 border border-rose-500/30 p-3 flex items-center gap-2">
-            <DatabaseIcon className="h-5 w-5 text-rose-400" />
+            <Database className="h-5 w-5 text-rose-400" />
             <span className="text-sm text-rose-400">Erro ao conectar: {error.message}</span>
           </div>
         )}
