@@ -1604,38 +1604,30 @@ serve(async (req) => {
         console.log('Fetching CCT shipments from t_dados_master (AIR IMPORT)...');
         
         // Query from t_dados_master as primary source, LEFT JOIN t_status_aereo for latest status
+        // Note: t_dados_master only has: id, cliente, mawb, hawb, emails_cliente, nome_analista, email_analista, active, tipo_processo, previsao_faturamento, data_finalizacao
         const shipments = await client.query(`
           SELECT 
             m.id,
             TRIM(m.mawb) as master,
             TRIM(m.hawb) as house,
             TRIM(m.cliente) as cliente,
-            TRIM(SUBSTRING_INDEX(m.mawb, '-', 1)) as aeroporto_origem,
-            'GRU' as aeroporto_destino,
-            COALESCE(s.\`último_status\`, 'AGUARDANDO_MANIFESTACAO') as status_cct_oficial,
-            COALESCE(s.\`última atualização\`, m.created_at) as ultimo_evento_data,
-            COALESCE(s.\`último_status\`, 'AGUARDANDO_MANIFESTACAO') as ultimo_evento_codigo,
-            m.nome_analista,
-            m.email_analista,
+            TRIM(m.nome_analista) as nome_analista,
+            TRIM(m.email_analista) as email_analista,
             m.emails_cliente,
-            s.data_atraso,
-            m.eta,
-            m.etd,
-            m.peso_bruto as peso_declarado,
-            m.peso_real as peso_constatado,
-            m.volume as volume_declarado,
-            m.cnpj as cnpj_consignatario,
-            m.tratamento_especial as tratamentos_especiais,
             m.previsao_faturamento,
             m.data_finalizacao,
-            m.created_at,
-            m.updated_at
+            COALESCE(s.\`último_status\`, 'AGUARDANDO_MANIFESTACAO') as status_cct_oficial,
+            s.\`última atualização\` as ultimo_evento_data,
+            COALESCE(s.\`último_status\`, 'AGUARDANDO_MANIFESTACAO') as ultimo_evento_codigo,
+            TRIM(s.origem) as aeroporto_origem,
+            TRIM(s.destino) as aeroporto_destino,
+            s.data_atraso
           FROM ${database}.t_dados_master m
           LEFT JOIN ${database}.t_status_aereo s ON TRIM(m.mawb) = TRIM(s.awb)
           WHERE m.active = 1 
           AND m.tipo_processo = 'AIR IMPORT'
           AND m.data_finalizacao IS NULL
-          ORDER BY COALESCE(s.\`última atualização\`, m.updated_at) DESC
+          ORDER BY s.\`última atualização\` DESC, m.id DESC
           LIMIT 500
         `);
 
@@ -1669,41 +1661,15 @@ serve(async (req) => {
           };
           const derivedStatus = statusMap[row.status_cct_oficial] || row.status_cct_oficial || 'AGUARDANDO_MANIFESTACAO';
 
-          // Parse tratamentos_especiais
-          let tratamentos = null;
-          if (row.tratamentos_especiais) {
-            if (typeof row.tratamentos_especiais === 'string') {
-              tratamentos = row.tratamentos_especiais.split(',').map((t: string) => t.trim()).filter(Boolean);
-            }
-          }
-
-          // Infer aeroporto_origem from MAWB prefix (first 3 chars are airline code)
-          let aeroportoOrigem = row.aeroporto_origem || 'N/A';
-          if (row.master && aeroportoOrigem === 'N/A') {
-            // Common airline prefixes to airport mapping
-            const prefixMap: Record<string, string> = {
-              '020': 'FRA', // Lufthansa
-              '057': 'CDG', // Air France
-              '074': 'AMS', // KLM
-              '006': 'MIA', // American
-              '016': 'JFK', // United
-              '055': 'LHR', // British Airways
-              '618': 'PVG', // China Eastern
-              '999': 'HKG', // Cathay
-            };
-            const prefix = row.master.substring(0, 3);
-            aeroportoOrigem = prefixMap[prefix] || 'N/A';
-          }
-
           return {
             id: row.id?.toString() || row.master,
             house: row.house || '',
             master: row.master || '',
             cliente: row.cliente || '',
-            aeroporto_origem: aeroportoOrigem,
+            aeroporto_origem: row.aeroporto_origem || 'N/A',
             aeroporto_destino: row.aeroporto_destino || 'GRU',
             status_cct_oficial: derivedStatus,
-            status_manifestacao: row.status_cct_oficial ? 'MANIFESTADO_CCT' : 'RECEBIDO_NOVA',
+            status_manifestacao: row.status_cct_oficial && row.status_cct_oficial !== 'AGUARDANDO_MANIFESTACAO' ? 'MANIFESTADO_CCT' : 'RECEBIDO_NOVA',
             sla_status: slaStatus,
             sla_limite: null,
             tipo_voo: null,
@@ -1713,21 +1679,21 @@ serve(async (req) => {
             nome_analista: row.nome_analista,
             email_analista: row.email_analista,
             emails_cliente: row.emails_cliente,
-            eta: row.eta,
-            etd: row.etd,
-            peso_declarado: row.peso_declarado ? parseFloat(row.peso_declarado) : null,
-            peso_constatado: row.peso_constatado ? parseFloat(row.peso_constatado) : null,
-            volume_declarado: row.volume_declarado ? parseInt(row.volume_declarado) : null,
+            eta: null,
+            etd: null,
+            peso_declarado: null,
+            peso_constatado: null,
+            volume_declarado: null,
             volume_constatado: null,
-            cnpj_consignatario: row.cnpj_consignatario,
-            tratamentos_especiais: tratamentos,
+            cnpj_consignatario: null,
+            tratamentos_especiais: null,
             excecoes_abertas: isAlert ? 1 : 0,
             data_atraso: row.data_atraso,
             data_decolagem_ultimo_trecho: null,
             previsao_faturamento: row.previsao_faturamento,
             data_finalizacao: row.data_finalizacao,
-            created_at: row.created_at || new Date().toISOString(),
-            updated_at: row.updated_at || row.ultimo_evento_data || new Date().toISOString(),
+            created_at: row.ultimo_evento_data || new Date().toISOString(),
+            updated_at: row.ultimo_evento_data || new Date().toISOString(),
           };
         });
 
