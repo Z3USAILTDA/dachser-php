@@ -9,6 +9,7 @@ const corsHeaders = {
 
 interface QueryRequest {
   action: string;
+  id?: number | string;
   // Auth/User
   username?: string;
   password?: string;
@@ -96,6 +97,14 @@ interface QueryRequest {
   // DHL AWB Tracking updates
   updates?: Record<string, any>;
   awbNumbers?: string[];
+  // CCT Notification Rules
+  cliente_nome?: string;
+  cnpj_consignatario?: string;
+  aeroportos?: string;
+  eventos_disparo?: string;
+  canais?: string;
+  template_id?: string;
+  ativo?: boolean;
 }
 
 serve(async (req) => {
@@ -1878,6 +1887,97 @@ serve(async (req) => {
 
         console.log(`CCT: Found ${profiles.length} analyst profiles`);
         result = { success: true, data: profiles };
+        break;
+      }
+
+      case 'get_cct_regras_notificacao': {
+        console.log('Fetching CCT notification rules...');
+        
+        // Create table if not exists
+        await client.execute(`
+          CREATE TABLE IF NOT EXISTS ${database}.t_cct_regras_notificacao (
+            id INT PRIMARY KEY AUTO_INCREMENT,
+            cliente_nome VARCHAR(255),
+            cnpj_consignatario VARCHAR(20),
+            aeroportos TEXT,
+            eventos_disparo TEXT,
+            canais TEXT,
+            template_id VARCHAR(100) DEFAULT 'default',
+            ativo BOOLEAN DEFAULT TRUE,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+          )
+        `);
+
+        const regras = await client.query(`
+          SELECT * FROM ${database}.t_cct_regras_notificacao
+          ORDER BY created_at DESC
+        `);
+
+        console.log(`Found ${regras?.length || 0} notification rules`);
+        result = { success: true, data: regras || [] };
+        break;
+      }
+
+      case 'create_cct_regra_notificacao': {
+        const { cliente_nome, cnpj_consignatario, aeroportos, eventos_disparo, canais, template_id, ativo } = body;
+        console.log('Creating CCT notification rule:', { cliente_nome, cnpj_consignatario });
+
+        await client.execute(`
+          INSERT INTO ${database}.t_cct_regras_notificacao 
+          (cliente_nome, cnpj_consignatario, aeroportos, eventos_disparo, canais, template_id, ativo)
+          VALUES (?, ?, ?, ?, ?, ?, ?)
+        `, [
+          cliente_nome || null,
+          cnpj_consignatario || null,
+          aeroportos || '[]',
+          eventos_disparo || '[]',
+          canais || '[]',
+          template_id || 'default',
+          ativo !== false ? 1 : 0
+        ]);
+
+        result = { success: true, message: 'Regra criada com sucesso' };
+        break;
+      }
+
+      case 'update_cct_regra_notificacao': {
+        const { id, cliente_nome, cnpj_consignatario, aeroportos, eventos_disparo, canais, template_id, ativo } = body;
+        console.log('Updating CCT notification rule:', id);
+
+        const updateFields: string[] = [];
+        const updateValues: any[] = [];
+
+        if (cliente_nome !== undefined) { updateFields.push('cliente_nome = ?'); updateValues.push(cliente_nome); }
+        if (cnpj_consignatario !== undefined) { updateFields.push('cnpj_consignatario = ?'); updateValues.push(cnpj_consignatario); }
+        if (aeroportos !== undefined) { updateFields.push('aeroportos = ?'); updateValues.push(aeroportos); }
+        if (eventos_disparo !== undefined) { updateFields.push('eventos_disparo = ?'); updateValues.push(eventos_disparo); }
+        if (canais !== undefined) { updateFields.push('canais = ?'); updateValues.push(canais); }
+        if (template_id !== undefined) { updateFields.push('template_id = ?'); updateValues.push(template_id); }
+        if (ativo !== undefined) { updateFields.push('ativo = ?'); updateValues.push(ativo ? 1 : 0); }
+
+        if (updateFields.length > 0) {
+          updateValues.push(id);
+          await client.execute(`
+            UPDATE ${database}.t_cct_regras_notificacao 
+            SET ${updateFields.join(', ')}
+            WHERE id = ?
+          `, updateValues);
+        }
+
+        result = { success: true, message: 'Regra atualizada com sucesso' };
+        break;
+      }
+
+      case 'delete_cct_regra_notificacao': {
+        const { id } = body;
+        console.log('Deleting CCT notification rule:', id);
+
+        await client.execute(`
+          DELETE FROM ${database}.t_cct_regras_notificacao WHERE id = ?
+        `, [id]);
+
+        result = { success: true, message: 'Regra excluída com sucesso' };
         break;
       }
 
