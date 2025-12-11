@@ -1,3 +1,4 @@
+// Dashboard with expandable CCT submenus
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { LogOut, Plane, Ship, CreditCard, FileText, Building2, UserCog } from "lucide-react";
