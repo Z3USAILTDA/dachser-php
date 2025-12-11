@@ -23,3 +23,54 @@ verify_jwt = false
 
 [functions.send-welcome-email]
 verify_jwt = false
+
+[functions.add-awb]
+verify_jwt = false
+
+[functions.add-awb-to-status]
+verify_jwt = false
+
+[functions.add-email-cliente-column]
+verify_jwt = false
+
+[functions.add-origin-destination-columns]
+verify_jwt = false
+
+[functions.check-db-connection]
+verify_jwt = false
+
+[functions.check-table-structure]
+verify_jwt = false
+
+[functions.diagnose-queue]
+verify_jwt = false
+
+[functions.fetch-air-imports]
+verify_jwt = false
+
+[functions.fetch-awbs]
+verify_jwt = false
+
+[functions.fetch-awbs-for-retrack]
+verify_jwt = false
+
+[functions.get-last-processed-awb]
+verify_jwt = false
+
+[functions.manage-processing-queue]
+verify_jwt = false
+
+[functions.send-status-change-email]
+verify_jwt = false
+
+[functions.validate-dachser-user]
+verify_jwt = false
+
+[functions.update-customer-email]
+verify_jwt = false
+
+[functions.update-analyst-emails]
+verify_jwt = false
+
+[functions.track-awb]
+verify_jwt = false
