@@ -6,6 +6,10 @@ import { ComparisonResults, ComparisonRow } from "@/components/analise-documenta
 import { useAuth } from "@/hooks/useAuth";
 import { PageLayout } from "@/components/layout/PageLayout";
 import { PageCard } from "@/components/layout/PageCard";
+import { parseExcelFile } from "@/lib/parseExcel";
+import { compareDocuments } from "@/lib/compareDocuments";
+import { toast } from "sonner";
+import { supabase } from "@/integrations/supabase/client";
 
 const AnaliseDocumental = () => {
   const [pdfFile, setPdfFile] = useState<File | null>(null);
@@ -25,18 +29,70 @@ const AnaliseDocumental = () => {
     if (!pdfFile || !excelFile) return;
 
     setIsComparing(true);
-    // Simulation of comparison - in real app, this would parse and compare documents
-    setTimeout(() => {
-      const mockResults: ComparisonRow[] = [
-        { rowNumber: 1, itemName: "Serviço de Consultoria", pdfValue: 1000, excelValue: 1000, difference: 0, status: "success" },
-        { rowNumber: 2, itemName: "Material de Escritório", pdfValue: 2500, excelValue: 2530, difference: 30, status: "warning" },
-        { rowNumber: 3, itemName: "Licença de Software", pdfValue: 5000, excelValue: 5000, difference: 0, status: "success" },
-        { rowNumber: 4, itemName: "Manutenção de Equipamentos", pdfValue: 3200, excelValue: 3280, difference: 80, status: "error" },
-        { rowNumber: 5, itemName: "Treinamento de Equipe", pdfValue: 1500, excelValue: 1500, difference: 0, status: "success" },
-      ];
-      setComparisonResults(mockResults);
+    
+    try {
+      // Parse PDF via Edge Function with Lovable AI
+      toast.info("Extraindo dados do PDF...");
+      
+      const formData = new FormData();
+      formData.append("file", pdfFile);
+
+      const { data: pdfData, error: pdfError } = await supabase.functions.invoke(
+        "parse-invoice-pdf",
+        { body: formData }
+      );
+
+      if (pdfError || pdfData?.error) {
+        throw new Error(pdfData?.error || pdfError?.message || "Erro ao processar PDF");
+      }
+
+      const pdfItems = pdfData.items || [];
+      console.log("PDF items extracted:", pdfItems);
+
+      // Parse Excel locally
+      toast.info("Extraindo dados do Excel...");
+      const excelResult = await parseExcelFile(excelFile);
+      const excelItems = excelResult.items || [];
+      console.log("Excel items extracted:", excelItems);
+
+      if (pdfItems.length === 0) {
+        toast.warning("Nenhum item encontrado no PDF. Verifique se o documento é uma fatura válida.");
+      }
+
+      if (excelItems.length === 0) {
+        toast.warning("Nenhum item encontrado no Excel. Verifique se a planilha contém itens com valores.");
+      }
+
+      if (pdfItems.length === 0 && excelItems.length === 0) {
+        toast.error("Não foi possível extrair itens de nenhum dos documentos.");
+        setIsComparing(false);
+        return;
+      }
+
+      // Compare documents
+      toast.info("Comparando documentos...");
+      const results = compareDocuments(pdfItems, excelItems);
+
+      setComparisonResults(results);
+
+      const successCount = results.filter(r => r.status === "success").length;
+      const warningCount = results.filter(r => r.status === "warning").length;
+      const errorCount = results.filter(r => r.status === "error").length;
+
+      if (errorCount > 0) {
+        toast.error(`Comparação concluída: ${errorCount} erro(s) encontrado(s)`);
+      } else if (warningCount > 0) {
+        toast.warning(`Comparação concluída: ${warningCount} item(s) com atenção`);
+      } else {
+        toast.success(`Comparação concluída: todos os ${successCount} itens conferem!`);
+      }
+
+    } catch (error) {
+      console.error("Comparison error:", error);
+      toast.error(error instanceof Error ? error.message : "Erro ao comparar documentos");
+    } finally {
       setIsComparing(false);
-    }, 2000);
+    }
   };
 
   const handleReset = () => {
