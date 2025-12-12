@@ -1839,11 +1839,9 @@ serve(async (req) => {
         
         const searchTerm = nf.toString().trim();
         
-        // Check if document exists and get doc_key + cliente
+        // Check if document exists and get doc_key
         const checkSql = `
-          SELECT 
-            COALESCE(NULLIF(documento,''), NULLIF(nd,''), NULLIF(numero_nf,'')) AS doc_key,
-            cliente
+          SELECT COALESCE(NULLIF(documento,''), NULLIF(nd,''), NULLIF(numero_nf,'')) AS doc_key
           FROM dados_dachser.t_dados_financeiro_nfs 
           WHERE documento = ? OR numero_nf = ? OR nd = ?
           LIMIT 1
@@ -1858,7 +1856,6 @@ serve(async (req) => {
         }
         
         const docKey = existingRows[0].doc_key;
-        const cliente = existingRows[0].cliente || '';
         
         // Update to mark as disputa in t_dados_financeiro_nfs
         const updateSql = `
@@ -1870,12 +1867,11 @@ serve(async (req) => {
         `;
         await client.execute(updateSql, [responsavel || null, searchTerm, searchTerm, searchTerm]);
         
-        // Insert/update extra data in t_fin_disputas (include cliente)
+        // Insert/update extra data in t_fin_disputas
         const upsertSql = `
-          INSERT INTO ai_agente.t_fin_disputas (nf, cliente, departamento, observacoes, escalation, updated_at)
-          VALUES (?, ?, ?, ?, ?, NOW())
+          INSERT INTO ai_agente.t_fin_disputas (nf, departamento, observacoes, escalation, updated_at)
+          VALUES (?, ?, ?, ?, NOW())
           ON DUPLICATE KEY UPDATE 
-            cliente = VALUES(cliente),
             departamento = VALUES(departamento),
             observacoes = VALUES(observacoes),
             escalation = VALUES(escalation),
@@ -1883,7 +1879,6 @@ serve(async (req) => {
         `;
         await client.execute(upsertSql, [
           docKey, 
-          cliente,
           departamento || null, 
           observacoes || null,
           escalation || null
