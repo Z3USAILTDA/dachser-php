@@ -41,7 +41,7 @@ const Register = () => {
 
     try {
       // 1. Register user in MariaDB
-      const { data: registerData, error: registerError } = await supabase.functions.invoke('mariadb-proxy', {
+      const response = await supabase.functions.invoke('mariadb-proxy', {
         body: {
           action: 'register_user',
           username: formData.username,
@@ -50,10 +50,22 @@ const Register = () => {
         }
       });
 
+      const registerData = response.data;
+      const registerError = response.error;
+
+      // Handle both error scenarios: explicit error or success=false in response
       if (registerError || !registerData?.success) {
-        const errorMsg = registerData?.error || registerError?.message || 'Erro ao cadastrar usuário';
+        // Extract error message from response body or error object
+        let errorMsg = 'Erro ao cadastrar usuário';
+        
+        if (registerData?.error) {
+          errorMsg = registerData.error;
+        } else if (registerError?.message) {
+          errorMsg = registerError.message;
+        }
+        
         toast({
-          title: "Erro",
+          title: "Erro no cadastro",
           description: errorMsg,
           variant: "destructive",
         });
