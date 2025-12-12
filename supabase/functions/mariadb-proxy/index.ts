@@ -1781,8 +1781,54 @@ serve(async (req) => {
         break;
       }
 
+      case 'lookup_documento': {
+        const { nd } = body as { nd?: string };
+        
+        if (!nd) {
+          return new Response(
+            JSON.stringify({ error: 'ND/NF/Documento é obrigatório', success: false }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+        
+        const searchTerm = nd.toString().trim();
+        const lookupSql = `
+          SELECT 
+            COALESCE(NULLIF(documento,''), NULLIF(nd,''), NULLIF(numero_nf,'')) AS doc_key,
+            cliente,
+            numero_nf AS nf,
+            nd,
+            valor,
+            DATE_FORMAT(vencimento, '%Y-%m-%d') AS vencimento,
+            DATE_FORMAT(emissao, '%Y-%m-%d') AS emissao,
+            tipo,
+            responsavel_disp AS responsavel
+          FROM dados_dachser.t_dados_financeiro_nfs 
+          WHERE documento = ? OR numero_nf = ? OR nd = ?
+          LIMIT 1
+        `;
+        const rows = await client.query(lookupSql, [searchTerm, searchTerm, searchTerm]);
+        
+        if (!rows || rows.length === 0) {
+          return new Response(
+            JSON.stringify({ success: false, error: 'Documento não encontrado' }),
+            { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+        
+        console.log(`Lookup documento found: ${rows[0].doc_key}`);
+        result = { success: true, data: rows[0] };
+        break;
+      }
+
       case 'save_disputa': {
-        const { nf, responsavel } = body as { nf?: string; responsavel?: string };
+        const { nf, responsavel, departamento, observacoes, escalation } = body as { 
+          nf?: string; 
+          responsavel?: string;
+          departamento?: string;
+          observacoes?: string;
+          escalation?: string;
+        };
         
         if (!nf) {
           return new Response(
@@ -1791,13 +1837,16 @@ serve(async (req) => {
           );
         }
         
-        // Check if document exists
+        const searchTerm = nf.toString().trim();
+        
+        // Check if document exists and get doc_key
         const checkSql = `
-          SELECT id FROM dados_dachser.t_dados_financeiro_nfs 
+          SELECT COALESCE(NULLIF(documento,''), NULLIF(nd,''), NULLIF(numero_nf,'')) AS doc_key
+          FROM dados_dachser.t_dados_financeiro_nfs 
           WHERE documento = ? OR numero_nf = ? OR nd = ?
           LIMIT 1
         `;
-        const existingRows = await client.query(checkSql, [nf, nf, nf]);
+        const existingRows = await client.query(checkSql, [searchTerm, searchTerm, searchTerm]);
         
         if (!existingRows || existingRows.length === 0) {
           return new Response(
@@ -1806,7 +1855,9 @@ serve(async (req) => {
           );
         }
         
-        // Update to mark as disputa
+        const docKey = existingRows[0].doc_key;
+        
+        // Update to mark as disputa in t_dados_financeiro_nfs
         const updateSql = `
           UPDATE dados_dachser.t_dados_financeiro_nfs 
           SET disputa = 1, 
@@ -1814,9 +1865,26 @@ serve(async (req) => {
               responsavel_disp = ?
           WHERE documento = ? OR numero_nf = ? OR nd = ?
         `;
-        await client.execute(updateSql, [responsavel || null, nf, nf, nf]);
+        await client.execute(updateSql, [responsavel || null, searchTerm, searchTerm, searchTerm]);
         
-        console.log(`Disputa saved for: ${nf}`);
+        // Insert/update extra data in t_fin_disputas
+        const upsertSql = `
+          INSERT INTO ai_agente.t_fin_disputas (nf, departamento, observacoes, escalation, updated_at)
+          VALUES (?, ?, ?, ?, NOW())
+          ON DUPLICATE KEY UPDATE 
+            departamento = VALUES(departamento),
+            observacoes = VALUES(observacoes),
+            escalation = VALUES(escalation),
+            updated_at = NOW()
+        `;
+        await client.execute(upsertSql, [
+          docKey, 
+          departamento || null, 
+          observacoes || null,
+          escalation || null
+        ]);
+        
+        console.log(`Disputa saved for: ${searchTerm} (doc_key: ${docKey})`);
         result = { success: true };
         break;
       }
