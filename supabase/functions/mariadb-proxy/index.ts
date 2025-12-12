@@ -1978,9 +1978,15 @@ serve(async (req) => {
           const nd = item.nd?.toString().trim();
           if (!nd) continue;
           
-          // Check if document exists and get doc_key
+          // Check if document exists and get all required fields
           const checkSql = `
-            SELECT COALESCE(NULLIF(documento,''), NULLIF(nd,''), NULLIF(numero_nf,'')) AS doc_key
+            SELECT 
+              COALESCE(NULLIF(documento,''), NULLIF(nd,''), NULLIF(numero_nf,'')) AS doc_key,
+              cliente,
+              data_vencimento AS vencimento,
+              valor_nf AS valor,
+              CASE WHEN tipo_documento LIKE '%PRAZO%' THEN 'A prazo' ELSE 'À vista' END AS tipo,
+              responsavel_disp
             FROM dados_dachser.t_dados_financeiro_nfs 
             WHERE documento = ? OR numero_nf = ? OR nd = ?
             LIMIT 1
@@ -1993,7 +1999,8 @@ serve(async (req) => {
             continue;
           }
           
-          const docKey = existingRows[0].doc_key;
+          const docData = existingRows[0];
+          const docKey = docData.doc_key;
           
           // Update to mark as disputa in t_dados_financeiro_nfs
           const updateSql = `
@@ -2005,11 +2012,16 @@ serve(async (req) => {
           `;
           await client.execute(updateSql, [item.responsavel || null, nd, nd, nd]);
           
-          // Insert/update extra data in t_fin_disputas
+          // Insert/update extra data in t_fin_disputas with all required fields
           const upsertSql = `
-            INSERT INTO ai_agente.t_fin_disputas (nf, departamento, observacoes, escalation, updated_at)
-            VALUES (?, ?, ?, ?, NOW())
+            INSERT INTO ai_agente.t_fin_disputas (nf, cliente, vencimento, valor, tipo, responsavel, departamento, observacoes, escalation, is_disputa, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, NOW(), NOW())
             ON DUPLICATE KEY UPDATE 
+              cliente = VALUES(cliente),
+              vencimento = VALUES(vencimento),
+              valor = VALUES(valor),
+              tipo = VALUES(tipo),
+              responsavel = VALUES(responsavel),
               departamento = VALUES(departamento),
               observacoes = VALUES(observacoes),
               escalation = VALUES(escalation),
@@ -2017,6 +2029,11 @@ serve(async (req) => {
           `;
           await client.execute(upsertSql, [
             docKey, 
+            docData.cliente || 'N/A',
+            docData.vencimento || null,
+            docData.valor || 0,
+            docData.tipo || 'À vista',
+            item.responsavel || docData.responsavel_disp || null,
             item.departamento || null, 
             item.descricao || null,  // descricao → observacoes
             item.escalation || null
