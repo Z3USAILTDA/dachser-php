@@ -1861,8 +1861,8 @@ serve(async (req) => {
         }
         
         const docKey = existingRows[0].doc_key;
-        const cliente = existingRows[0].cliente || '';
-        const vencimento = existingRows[0].vencimento || null;
+        const cliente = existingRows[0].cliente || 'N/A';
+        const vencimento = existingRows[0].vencimento || new Date().toISOString().split('T')[0];
         const valor = existingRows[0].valor || 0;
         const tipo = existingRows[0].tipo || 'A prazo';
         
