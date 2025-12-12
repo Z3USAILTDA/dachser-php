@@ -1,6 +1,6 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { useNavigate } from "react-router-dom";
-import { Flag, Search, Filter, X, Plus, Check, Trash2, Clock, Scale } from "lucide-react";
+import { Flag, Search, Filter, X, Plus, Check, Trash2, Clock, Scale, Upload, FileSpreadsheet } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -68,6 +68,13 @@ export default function FinanceiroDisputa() {
 
   const [resolveDialogOpen, setResolveDialogOpen] = useState(false);
   const [resolveDocKey, setResolveDocKey] = useState<string | null>(null);
+
+  // Import from spreadsheet
+  const [importModalOpen, setImportModalOpen] = useState(false);
+  const [importLoading, setImportLoading] = useState(false);
+  const [importFile, setImportFile] = useState<File | null>(null);
+  const [importResp, setImportResp] = useState("");
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     fetchDisputas();
@@ -231,13 +238,94 @@ export default function FinanceiroDisputa() {
     setTipoFilter("all");
   };
 
+  const parseSpreadsheet = async (file: File): Promise<Array<{ nf: string }>> => {
+    const text = await file.text();
+    const lines = text.split(/\r?\n/).filter(line => line.trim());
+    
+    // Skip header if it looks like one
+    const startIdx = lines[0]?.toLowerCase().includes('documento') || 
+                     lines[0]?.toLowerCase().includes('nf') ||
+                     lines[0]?.toLowerCase().includes('numero') ? 1 : 0;
+    
+    const items: Array<{ nf: string }> = [];
+    for (let i = startIdx; i < lines.length; i++) {
+      const cols = lines[i].split(/[,;\t]/);
+      const nf = cols[0]?.trim();
+      if (nf) {
+        items.push({ nf });
+      }
+    }
+    return items;
+  };
+
+  const handleImportSpreadsheet = async () => {
+    if (!importFile) {
+      toast({ title: "Erro", description: "Selecione um arquivo", variant: "destructive" });
+      return;
+    }
+
+    setImportLoading(true);
+    try {
+      const items = await parseSpreadsheet(importFile);
+      
+      if (items.length === 0) {
+        toast({ title: "Erro", description: "Nenhum documento encontrado na planilha", variant: "destructive" });
+        setImportLoading(false);
+        return;
+      }
+
+      // Add responsavel to all items
+      const itemsWithResp = items.map(item => ({
+        ...item,
+        responsavel: importResp.trim() || undefined
+      }));
+
+      const { data, error } = await supabase.functions.invoke("mariadb-proxy", {
+        body: { action: "import_disputas_planilha", items: itemsWithResp },
+      });
+
+      if (error) throw error;
+      
+      if (data?.success) {
+        const msg = `${data.imported} disputa(s) importada(s)` + 
+          (data.notFound > 0 ? `, ${data.notFound} não encontrado(s)` : '');
+        toast({ title: "Importação concluída", description: msg });
+        
+        if (data.notFoundItems?.length > 0) {
+          console.log("Documentos não encontrados:", data.notFoundItems);
+        }
+        
+        setImportModalOpen(false);
+        setImportFile(null);
+        setImportResp("");
+        fetchDisputas();
+      } else {
+        toast({ title: "Erro", description: data?.error || "Falha na importação", variant: "destructive" });
+      }
+    } catch (err) {
+      console.error("Erro ao importar:", err);
+      toast({ title: "Erro", description: "Falha ao processar planilha", variant: "destructive" });
+    } finally {
+      setImportLoading(false);
+    }
+  };
+
   const rightContent = (
-    <Button
-      onClick={() => setAddModalOpen(true)}
-      className="h-8 rounded-full bg-primary text-primary-foreground font-bold text-[0.85rem] hover:bg-primary/90"
-    >
-      <Plus className="w-4 h-4 mr-1" /> Adicionar Disputa
-    </Button>
+    <div className="flex gap-2">
+      <Button
+        onClick={() => setImportModalOpen(true)}
+        variant="outline"
+        className="h-8 rounded-full font-bold text-[0.85rem]"
+      >
+        <FileSpreadsheet className="w-4 h-4 mr-1" /> Importar Planilha
+      </Button>
+      <Button
+        onClick={() => setAddModalOpen(true)}
+        className="h-8 rounded-full bg-primary text-primary-foreground font-bold text-[0.85rem] hover:bg-primary/90"
+      >
+        <Plus className="w-4 h-4 mr-1" /> Adicionar Disputa
+      </Button>
+    </div>
   );
 
   return (
@@ -471,6 +559,82 @@ export default function FinanceiroDisputa() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Import Spreadsheet Modal */}
+      <Dialog open={importModalOpen} onOpenChange={setImportModalOpen}>
+        <DialogContent className="bg-[rgba(4,5,15,0.98)] border-white/12">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <FileSpreadsheet className="w-5 h-5" />
+              Importar Disputas via Planilha
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-3">
+            <div className="text-sm text-muted-foreground">
+              Faça upload de um arquivo CSV ou TXT com uma coluna de documentos/NFs.
+              A primeira coluna será usada como identificador do documento.
+            </div>
+            
+            <div
+              onClick={() => fileInputRef.current?.click()}
+              className={`
+                border-2 border-dashed rounded-xl p-6 text-center cursor-pointer transition-colors
+                ${importFile ? 'border-primary/50 bg-primary/5' : 'border-white/20 hover:border-primary/40 hover:bg-white/5'}
+              `}
+            >
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept=".csv,.txt,.tsv"
+                className="hidden"
+                onChange={(e) => setImportFile(e.target.files?.[0] || null)}
+              />
+              {importFile ? (
+                <div className="flex items-center justify-center gap-2 text-primary">
+                  <FileSpreadsheet className="w-5 h-5" />
+                  <span>{importFile.name}</span>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setImportFile(null);
+                    }}
+                    className="ml-2 p-1 rounded-full hover:bg-white/10"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+              ) : (
+                <div className="text-muted-foreground">
+                  <Upload className="w-8 h-8 mx-auto mb-2 opacity-50" />
+                  <p>Clique ou arraste um arquivo CSV/TXT</p>
+                </div>
+              )}
+            </div>
+
+            <div>
+              <Label className="text-sm text-muted-foreground">Responsável (opcional)</Label>
+              <Input
+                value={importResp}
+                onChange={(e) => setImportResp(e.target.value)}
+                placeholder="Nome do responsável para todas as disputas"
+                className="mt-1 bg-[#13141a] border-white/20"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => { setImportModalOpen(false); setImportFile(null); }}>
+              Cancelar
+            </Button>
+            <Button 
+              onClick={handleImportSpreadsheet} 
+              disabled={importLoading || !importFile} 
+              className="bg-primary text-primary-foreground"
+            >
+              {importLoading ? "Importando..." : "Importar"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </PageLayout>
   );
 }
