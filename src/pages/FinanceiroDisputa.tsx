@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
+import * as XLSX from "xlsx";
 import { Flag, Search, Filter, X, Plus, Check, Trash2, Clock, Scale, Upload, FileSpreadsheet, Loader2 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -292,14 +293,6 @@ export default function FinanceiroDisputa() {
     responsavel: string;
     escalation: string;
   }>> => {
-    const text = await file.text();
-    const lines = text.split(/\r?\n/).filter(line => line.trim());
-    
-    // Skip header if it looks like one
-    const startIdx = lines[0]?.toLowerCase().includes('nd') || 
-                     lines[0]?.toLowerCase().includes('cnpj') ||
-                     lines[0]?.toLowerCase().includes('documento') ? 1 : 0;
-    
     const items: Array<{
       nd: string;
       descricao: string;
@@ -307,20 +300,58 @@ export default function FinanceiroDisputa() {
       responsavel: string;
       escalation: string;
     }> = [];
+
+    const ext = file.name.toLowerCase();
     
-    for (let i = startIdx; i < lines.length; i++) {
-      const cols = lines[i].split(/[,;\t]/);
-      const nd = cols[0]?.trim();  // ND (coluna 0)
-      if (nd) {
-        items.push({
-          nd,
-          descricao: cols[8]?.trim() || '',      // DESCRIÇÃO/PENDÊNCIA (coluna 8) → observacoes
-          departamento: cols[9]?.trim() || '',   // DEPARTAMENTO (coluna 9)
-          responsavel: cols[10]?.trim() || '',   // RESPONSÁVEL (coluna 10)
-          escalation: cols[13]?.trim() || '',    // ESCALATION (coluna 13)
-        });
+    if (ext.endsWith('.xlsx') || ext.endsWith('.xls')) {
+      // Parse Excel file
+      const arrayBuffer = await file.arrayBuffer();
+      const workbook = XLSX.read(arrayBuffer, { type: 'array' });
+      const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
+      const rows = XLSX.utils.sheet_to_json<string[]>(firstSheet, { header: 1 });
+      
+      // Skip header if it looks like one
+      const startIdx = rows[0]?.[0]?.toString().toLowerCase().includes('nd') || 
+                       rows[0]?.[0]?.toString().toLowerCase().includes('cnpj') ||
+                       rows[0]?.[0]?.toString().toLowerCase().includes('documento') ? 1 : 0;
+      
+      for (let i = startIdx; i < rows.length; i++) {
+        const cols = rows[i];
+        const nd = cols[0]?.toString().trim();
+        if (nd) {
+          items.push({
+            nd,
+            descricao: cols[8]?.toString().trim() || '',
+            departamento: cols[9]?.toString().trim() || '',
+            responsavel: cols[10]?.toString().trim() || '',
+            escalation: cols[13]?.toString().trim() || '',
+          });
+        }
+      }
+    } else {
+      // Parse CSV/TXT file
+      const text = await file.text();
+      const lines = text.split(/\r?\n/).filter(line => line.trim());
+      
+      const startIdx = lines[0]?.toLowerCase().includes('nd') || 
+                       lines[0]?.toLowerCase().includes('cnpj') ||
+                       lines[0]?.toLowerCase().includes('documento') ? 1 : 0;
+      
+      for (let i = startIdx; i < lines.length; i++) {
+        const cols = lines[i].split(/[,;\t]/);
+        const nd = cols[0]?.trim();
+        if (nd) {
+          items.push({
+            nd,
+            descricao: cols[8]?.trim() || '',
+            departamento: cols[9]?.trim() || '',
+            responsavel: cols[10]?.trim() || '',
+            escalation: cols[13]?.trim() || '',
+          });
+        }
       }
     }
+    
     return items;
   };
 
@@ -687,7 +718,7 @@ export default function FinanceiroDisputa() {
           </DialogHeader>
           <div className="space-y-4 py-3">
             <div className="text-sm text-muted-foreground">
-              Faça upload de um arquivo CSV ou TXT com uma coluna de documentos/NFs.
+              Faça upload de um arquivo Excel, CSV ou TXT com os documentos/NFs.
               A primeira coluna será usada como identificador do documento.
             </div>
             
@@ -715,10 +746,10 @@ export default function FinanceiroDisputa() {
                 const file = e.dataTransfer.files?.[0];
                 if (file) {
                   const ext = file.name.toLowerCase();
-                  if (ext.endsWith('.csv') || ext.endsWith('.txt') || ext.endsWith('.tsv')) {
+                  if (ext.endsWith('.csv') || ext.endsWith('.txt') || ext.endsWith('.tsv') || ext.endsWith('.xlsx') || ext.endsWith('.xls')) {
                     setImportFile(file);
                   } else {
-                    toast({ title: "Formato inválido", description: "Use arquivos CSV, TXT ou TSV", variant: "destructive" });
+                    toast({ title: "Formato inválido", description: "Use arquivos XLSX, CSV, TXT ou TSV", variant: "destructive" });
                   }
                 }
               }}
@@ -731,7 +762,7 @@ export default function FinanceiroDisputa() {
               <input
                 ref={fileInputRef}
                 type="file"
-                accept=".csv,.txt,.tsv"
+                accept=".xlsx,.xls,.csv,.txt,.tsv"
                 className="hidden"
                 onChange={(e) => setImportFile(e.target.files?.[0] || null)}
               />
@@ -753,7 +784,7 @@ export default function FinanceiroDisputa() {
                 <div className={`text-muted-foreground ${isDragging ? 'text-primary' : ''}`}>
                   <Upload className={`w-10 h-10 mx-auto mb-3 ${isDragging ? 'opacity-100 animate-bounce' : 'opacity-50'}`} />
                   <p className="font-medium">{isDragging ? 'Solte o arquivo aqui' : 'Clique ou arraste um arquivo'}</p>
-                  <p className="text-xs mt-1 opacity-70">CSV, TXT ou TSV</p>
+                  <p className="text-xs mt-1 opacity-70">XLSX, CSV, TXT ou TSV</p>
                 </div>
               )}
             </div>
