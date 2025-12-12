@@ -1717,7 +1717,7 @@ serve(async (req) => {
       case 'get_disputas': {
         const { tipo } = body as { tipo?: string };
         
-        let whereClause = 't.disputa = 1';
+        let whereClause = 't.disputa = 1 AND COALESCE(sd.active, 1) = 1';
         const params: string[] = [];
         
         if (tipo) {
