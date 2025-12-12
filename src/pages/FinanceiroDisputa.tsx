@@ -5,6 +5,7 @@ import { Flag, Search, Filter, X, Plus, Check, Trash2, Clock, Scale, Upload, Fil
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { TablePagination } from "@/components/layout/TablePagination";
 import {
   Select,
   SelectContent,
@@ -61,6 +62,8 @@ export default function FinanceiroDisputa() {
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
   const [tipoFilter, setTipoFilter] = useState("all");
+  const [currentPage, setCurrentPage] = useState(1);
+  const PAGE_SIZE = 15;
 
   const [addModalOpen, setAddModalOpen] = useState(false);
   const [addNf, setAddNf] = useState("");
@@ -124,6 +127,17 @@ export default function FinanceiroDisputa() {
       return hay.includes(q);
     });
   }, [rows, searchQuery]);
+
+  // Reset page when filters change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchQuery, tipoFilter]);
+
+  const totalPages = Math.ceil(filteredRows.length / PAGE_SIZE);
+  const paginatedRows = useMemo(() => {
+    const start = (currentPage - 1) * PAGE_SIZE;
+    return filteredRows.slice(start, start + PAGE_SIZE);
+  }, [filteredRows, currentPage]);
 
   const formatDate = (dateStr: string) => {
     if (!dateStr) return "-";
@@ -575,7 +589,7 @@ export default function FinanceiroDisputa() {
                   </td>
                 </tr>
               ) : (
-                filteredRows.map((r) => (
+                paginatedRows.map((r) => (
                   <tr key={r.doc_key} className="hover:bg-white/4 border-b border-white/14">
                     <td className="px-4 py-[14px] whitespace-nowrap max-w-[220px] overflow-hidden text-ellipsis" title={r.cliente || "-"}>
                       {r.razao_base || r.cliente || "-"}
@@ -656,6 +670,14 @@ export default function FinanceiroDisputa() {
             </tbody>
           </table>
         </div>
+        
+        {!loading && filteredRows.length > PAGE_SIZE && (
+          <TablePagination
+            currentPage={currentPage}
+            totalPages={totalPages}
+            onPageChange={setCurrentPage}
+          />
+        )}
       </TableCard>
 
       {/* Add Modal */}
