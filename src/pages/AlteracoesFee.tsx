@@ -150,7 +150,8 @@ export default function AlteracoesFee() {
     <Button
       onClick={fetchChanges}
       disabled={isLoading}
-      className="h-8 rounded-full bg-primary text-primary-foreground hover:bg-primary/90 shadow-[0_0_20px_rgba(255,200,0,0.4)]"
+      variant="outline"
+      className="h-8 rounded-full text-xs"
     >
       <RefreshCw className={`h-4 w-4 mr-2 ${isLoading ? 'animate-spin' : ''}`} />
       Atualizar
