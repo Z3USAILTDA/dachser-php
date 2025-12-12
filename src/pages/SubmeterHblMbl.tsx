@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
-import { Send, FileText, Copy, Check, Info } from "lucide-react";
+import { Send, FileText, Copy, Check, Info, GitCompare } from "lucide-react";
 import { PageLayout } from "@/components/layout/PageLayout";
 import { PageCard } from "@/components/layout/PageCard";
 import { Button } from "@/components/ui/button";
@@ -276,6 +276,7 @@ export default function SubmeterHblMbl() {
     <PageLayout
       title="DACHSER"
       subtitle="Submeter – HBL × MBL"
+      pageIcon={GitCompare}
     >
       <PageCard className="max-w-4xl mx-auto">
         <h1 className="text-2xl font-bold text-white mb-2">Submeter – HBL × MBL</h1>

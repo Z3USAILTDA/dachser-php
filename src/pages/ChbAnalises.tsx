@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Upload, Clock, Copy, FileText, Trash2 } from "lucide-react";
+import { Upload, Clock, Copy, FileText, Trash2, ClipboardList } from "lucide-react";
 import { PageLayout } from "@/components/layout/PageLayout";
 import { PageCard, FilterCard, TableCard } from "@/components/layout/PageCard";
 import { FilterBar, FilterOption } from "@/components/layout/FilterBar";
@@ -242,6 +242,7 @@ export default function ChbAnalises() {
       title="DACHSER"
       subtitle="Desembaraço — Esteira de Análises (CHB)"
       rightContent={rightContent}
+      pageIcon={ClipboardList}
     >
       {/* CARD DE BUSCA + FILTROS */}
       <FilterCard>

@@ -1,5 +1,5 @@
 import { useState, useMemo } from "react";
-import { RefreshCw, Trash2, Play, FileText, ArrowRightLeft, Download, FolderOpen } from "lucide-react";
+import { RefreshCw, Trash2, Play, FileText, ArrowRightLeft, Download, FolderOpen, Ship } from "lucide-react";
 import { NavTabs } from "@/components/maritimo/NavTabs";
 import { BadgeStatus } from "@/components/maritimo/BadgeStatus";
 import { HistoryModal } from "@/components/maritimo/HistoryModal";
@@ -187,7 +187,7 @@ export default function SeaAnalysis() {
   );
 
   return (
-    <PageLayout title="DACHSER" subtitle="Maritime Analysis" rightContent={rightContent}>
+    <PageLayout title="DACHSER" subtitle="Maritime Analysis" rightContent={rightContent} pageIcon={Ship}>
       {/* Card de Filtros */}
       <PageCard>
         <FilterBar

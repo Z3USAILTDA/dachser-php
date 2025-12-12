@@ -164,6 +164,7 @@ export default function AlteracoesFee() {
       subtitle="Alterações de Fee – Histórico consolidado"
       rightContent={rightContent}
       backTo="/sea/local-charges"
+      pageIcon={TrendingUp}
     >
       <PageCard>
         {/* Header */}

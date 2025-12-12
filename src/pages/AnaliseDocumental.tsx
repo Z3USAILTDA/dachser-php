@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
+import { FileSearch } from "lucide-react";
 import { FileUploadSection } from "@/components/analise-documental/FileUploadSection";
 import { ComparisonResults, ComparisonRow } from "@/components/analise-documental/ComparisonResults";
 import { useAuth } from "@/hooks/useAuth";
@@ -53,7 +54,7 @@ const AnaliseDocumental = () => {
   }
 
   return (
-    <PageLayout title="DACHSER" subtitle="Análise Documental">
+    <PageLayout title="DACHSER" subtitle="Análise Documental" pageIcon={FileSearch}>
       {/* Main content */}
       <PageCard padding="lg">
         {!comparisonResults ? (

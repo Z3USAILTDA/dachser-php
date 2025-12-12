@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate, useLocation, useParams } from "react-router-dom";
-import { Send, FileText, AlertCircle, Copy, Check, Info } from "lucide-react";
+import { Send, FileText, AlertCircle, Copy, Check, Info, FileStack } from "lucide-react";
 import { PageLayout } from "@/components/layout/PageLayout";
 import { PageCard } from "@/components/layout/PageCard";
 import { Button } from "@/components/ui/button";
@@ -336,7 +336,7 @@ export default function SubmeterManifestHbl() {
     analysisResult?.result_data?.manifest?.ncm8?.length === 0;
 
   return (
-    <PageLayout title="DACHSER" subtitle="Submeter – Manifest/Pack List × Draft HBL">
+    <PageLayout title="DACHSER" subtitle="Submeter – Manifest/Pack List × Draft HBL" pageIcon={FileStack}>
       <PageCard className="max-w-4xl mx-auto">
             <h1 className="text-2xl font-bold text-white mb-2">Submeter – Manifest/Pack List × Draft HBL</h1>
             <p className="text-sm text-neutral-400 mb-8">Adicione os arquivos HBL para análise comparativa</p>

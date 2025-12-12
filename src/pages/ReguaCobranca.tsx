@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo } from "react";
+import { CalendarRange } from "lucide-react";
 import { FileText, Clock, Flag, Search, X, RefreshCw } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -186,6 +187,7 @@ export default function ReguaCobranca() {
       title="DACHSER" 
       subtitle="Régua de cobrança – títulos em aberto"
       rightContent={rightContent}
+      pageIcon={CalendarRange}
     >
       {/* Meta pills */}
       <div className="flex flex-wrap gap-[10px] mb-[18px]">
