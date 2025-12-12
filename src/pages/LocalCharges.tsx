@@ -133,14 +133,14 @@ function CompanyTable({ title, data, isLoading }: CompanyTableProps) {
         <div>
           <h3 className="text-sm font-semibold uppercase tracking-widest text-foreground">{title}</h3>
           <div className="flex flex-wrap items-center gap-2 mt-2">
-            <Badge variant="outline" className="text-[0.68rem] border-white/12 bg-white/5">
+            <Badge variant="outline" className="text-[0.68rem] border-border/50 bg-white/5">
               <span className="w-1.5 h-1.5 rounded-full bg-primary mr-1.5" />
               Atualizado: {data.meta.updated_at ? fmtDate(data.meta.updated_at) : '-'}
             </Badge>
-            <Badge variant="outline" className="text-[0.68rem] border-white/12 bg-white/5">
+            <Badge variant="outline" className="text-[0.68rem] border-border/50 bg-white/5">
               Effective: {data.meta.effective || '-'}
             </Badge>
-            <Badge variant="outline" className="text-[0.68rem] border-white/12 bg-white/5">
+            <Badge variant="outline" className="text-[0.68rem] border-border/50 bg-white/5">
               Origem: {data.source || '-'}
             </Badge>
           </div>
@@ -151,13 +151,13 @@ function CompanyTable({ title, data, isLoading }: CompanyTableProps) {
             placeholder="Buscar por qualquer coluna"
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            className="pl-9 h-9 text-sm rounded-full bg-[#13141a] border-white/20"
+            className="pl-9 h-9 text-sm rounded-full bg-[#13141a] border-border/50"
           />
         </div>
       </div>
 
       {/* Table */}
-      <div className="border border-white/12 rounded-xl overflow-hidden">
+      <div className="border border-border/30 rounded-xl overflow-hidden">
         <ScrollArea className="h-[280px]">
           <Table>
             <TableHeader>
