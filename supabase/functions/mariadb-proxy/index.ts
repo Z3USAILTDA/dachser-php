@@ -1214,87 +1214,125 @@ serve(async (req) => {
       case 'get_local_charges': {
         console.log('Fetching local charges data...');
         
-        // Helper function to load data for a company
-        async function loadChargesForCompany(
-          client: Client,
-          preferredTable: string,
-          empresa: string
-        ): Promise<{ rows: any[]; meta: { updated_at: string | null; effective: string | null }; source: string }> {
-          const emptyResult = { rows: [], meta: { updated_at: null, effective: null }, source: '' };
+        // Use separate database credentials for charges
+        const chargesHost = Deno.env.get('MARIADB_CHARGES_HOST');
+        const chargesPort = parseInt(Deno.env.get('MARIADB_CHARGES_PORT') || '3306');
+        const chargesDatabase = Deno.env.get('MARIADB_CHARGES_DATABASE');
+        const chargesUser = Deno.env.get('MARIADB_CHARGES_USER');
+        const chargesPassword = Deno.env.get('MARIADB_CHARGES_PASSWORD');
+        
+        // Create separate client for charges database
+        let chargesClient: Client | null = null;
+        
+        try {
+          if (!chargesHost || !chargesDatabase || !chargesUser || !chargesPassword) {
+            console.error('Missing charges database credentials, using default connection');
+            // Fall back to default connection if charges credentials not set
+            chargesClient = client;
+          } else {
+            console.log(`Connecting to Charges DB at ${chargesHost}:${chargesPort}/${chargesDatabase}`);
+            chargesClient = await new Client().connect({
+              hostname: chargesHost,
+              port: chargesPort,
+              db: chargesDatabase,
+              username: chargesUser,
+              password: chargesPassword,
+            });
+          }
           
-          try {
-            // Try preferred table first
-            const tableCheck = await client.query(`SHOW TABLES LIKE ?`, [preferredTable]);
+          // Helper function to load data for a company
+          async function loadChargesForCompany(
+            dbClient: Client,
+            preferredTable: string,
+            empresa: string
+          ): Promise<{ rows: any[]; meta: { updated_at: string | null; effective: string | null }; source: string }> {
+            const emptyResult = { rows: [], meta: { updated_at: null, effective: null }, source: '' };
             
-            if (tableCheck && tableCheck.length > 0) {
-              const countResult = await client.query(`SELECT COUNT(*) as cnt FROM ai_agente.${preferredTable}`);
-              const count = Number(countResult[0]?.cnt || 0);
+            try {
+              // Try preferred table first (without schema prefix since we're connected to the specific database)
+              const tableCheck = await dbClient.query(`SHOW TABLES LIKE ?`, [preferredTable]);
               
-              if (count > 0) {
-                const rows = await client.query(`
-                  SELECT empresa, charge_description, charge_code, container_type, currency, fee,
-                         unit_of_measure, effective_date, expiry_date, effective, data_atualizacao, user_atualizacao
-                  FROM ai_agente.${preferredTable}
-                  ORDER BY id DESC
-                `);
+              if (tableCheck && tableCheck.length > 0) {
+                const countResult = await dbClient.query(`SELECT COUNT(*) as cnt FROM ${preferredTable}`);
+                const count = Number(countResult[0]?.cnt || 0);
                 
-                const metaResult = await client.query(`
-                  SELECT MAX(data_atualizacao) AS updated_at, MAX(effective) AS effective 
-                  FROM ai_agente.${preferredTable}
-                `);
-                const meta = metaResult[0] || { updated_at: null, effective: null };
-                
-                return { rows, meta, source: preferredTable };
+                if (count > 0) {
+                  const rows = await dbClient.query(`
+                    SELECT empresa, charge_description, charge_code, container_type, currency, fee,
+                           unit_of_measure, effective_date, expiry_date, effective, data_atualizacao, user_atualizacao
+                    FROM ${preferredTable}
+                    ORDER BY id DESC
+                  `);
+                  
+                  const metaResult = await dbClient.query(`
+                    SELECT MAX(data_atualizacao) AS updated_at, MAX(effective) AS effective 
+                    FROM ${preferredTable}
+                  `);
+                  const meta = metaResult[0] || { updated_at: null, effective: null };
+                  
+                  return { rows, meta, source: preferredTable };
+                }
               }
-            }
-            
-            // Fallback to unified table with empresa filter
-            const fallbackTable = 't_local_charge';
-            const fallbackCheck = await client.query(`SHOW TABLES LIKE ?`, [fallbackTable]);
-            
-            if (fallbackCheck && fallbackCheck.length > 0) {
-              const countResult = await client.query(
-                `SELECT COUNT(*) as cnt FROM ai_agente.${fallbackTable} WHERE empresa = ?`,
-                [empresa]
-              );
-              const count = Number(countResult[0]?.cnt || 0);
               
-              if (count > 0) {
-                const rows = await client.query(`
-                  SELECT empresa, charge_description, charge_code, container_type, currency, fee,
-                         unit_of_measure, effective_date, expiry_date, effective, data_atualizacao, user_atualizacao
-                  FROM ai_agente.${fallbackTable}
-                  WHERE empresa = ?
-                  ORDER BY id DESC
-                `, [empresa]);
+              // Fallback to unified table with empresa filter
+              const fallbackTable = 't_local_charge';
+              const fallbackCheck = await dbClient.query(`SHOW TABLES LIKE ?`, [fallbackTable]);
+              
+              if (fallbackCheck && fallbackCheck.length > 0) {
+                const countResult = await dbClient.query(
+                  `SELECT COUNT(*) as cnt FROM ${fallbackTable} WHERE empresa = ?`,
+                  [empresa]
+                );
+                const count = Number(countResult[0]?.cnt || 0);
                 
-                const metaResult = await client.query(`
-                  SELECT MAX(data_atualizacao) AS updated_at, MAX(effective) AS effective 
-                  FROM ai_agente.${fallbackTable} WHERE empresa = ?
-                `, [empresa]);
-                const meta = metaResult[0] || { updated_at: null, effective: null };
-                
-                return { rows, meta, source: `${fallbackTable} (empresa='${empresa}')` };
+                if (count > 0) {
+                  const rows = await dbClient.query(`
+                    SELECT empresa, charge_description, charge_code, container_type, currency, fee,
+                           unit_of_measure, effective_date, expiry_date, effective, data_atualizacao, user_atualizacao
+                    FROM ${fallbackTable}
+                    WHERE empresa = ?
+                    ORDER BY id DESC
+                  `, [empresa]);
+                  
+                  const metaResult = await dbClient.query(`
+                    SELECT MAX(data_atualizacao) AS updated_at, MAX(effective) AS effective 
+                    FROM ${fallbackTable} WHERE empresa = ?
+                  `, [empresa]);
+                  const meta = metaResult[0] || { updated_at: null, effective: null };
+                  
+                  return { rows, meta, source: `${fallbackTable} (empresa='${empresa}')` };
+                }
               }
+              
+              return emptyResult;
+            } catch (err) {
+              console.error(`Error loading charges for ${empresa}:`, err);
+              return emptyResult;
             }
-            
-            return emptyResult;
-          } catch (err) {
-            console.error(`Error loading charges for ${empresa}:`, err);
-            return emptyResult;
+          }
+          
+          // Load data for each company
+          const hapag = await loadChargesForCompany(chargesClient, 't_local_charge', 'Hapag');
+          const msc = await loadChargesForCompany(chargesClient, 't_local_charge_msc', 'MSC');
+          const cma = await loadChargesForCompany(chargesClient, 't_local_charge_cma', 'CMA');
+          const hmm = await loadChargesForCompany(chargesClient, 't_local_charge_hmm', 'HMM');
+          const one = await loadChargesForCompany(chargesClient, 't_local_charge_one', 'ONE');
+          
+          console.log(`Local charges loaded: Hapag=${hapag.rows.length}, MSC=${msc.rows.length}, CMA=${cma.rows.length}, HMM=${hmm.rows.length}, ONE=${one.rows.length}`);
+          
+          result = { success: true, hapag, msc, cma, hmm, one };
+          
+        } finally {
+          // Close charges client if it's different from main client
+          if (chargesClient && chargesClient !== client) {
+            try {
+              await chargesClient.close();
+            } catch (e) {
+              console.error('Error closing charges client:', e);
+            }
           }
         }
         
-        // Load data for each company
-        const hapag = await loadChargesForCompany(client, 't_local_charge', 'Hapag');
-        const msc = await loadChargesForCompany(client, 't_local_charge_msc', 'MSC');
-        const cma = await loadChargesForCompany(client, 't_local_charge_cma', 'CMA');
-        const hmm = await loadChargesForCompany(client, 't_local_charge_hmm', 'HMM');
-        const one = await loadChargesForCompany(client, 't_local_charge_one', 'ONE');
-        
-        console.log(`Local charges loaded: Hapag=${hapag.rows.length}, MSC=${msc.rows.length}, CMA=${cma.rows.length}, HMM=${hmm.rows.length}, ONE=${one.rows.length}`);
-        
-        result = { success: true, hapag, msc, cma, hmm, one };
         break;
       }
 
