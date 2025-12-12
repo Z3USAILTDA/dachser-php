@@ -107,3 +107,6 @@ verify_jwt = false
 
 [functions.rfb-webhook]
 verify_jwt = false
+
+[functions.parse-invoice-pdf]
+verify_jwt = false
