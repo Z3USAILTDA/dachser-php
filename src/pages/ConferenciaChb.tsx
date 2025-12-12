@@ -95,11 +95,25 @@ export default function ConferenciaChb() {
   };
 
   const handleStartAnalysis = async () => {
-    // Use all files available for this step (inherited + current)
-    const allFiles = getUploadedFilesForStep(activeStep);
+    // Get NEW files uploaded for current step only
+    const currentStepFiles = uploadedFiles[activeStep] || [];
     
-    if (allFiles.length === 0) {
+    // Get documents from previous steps (already analyzed)
+    const previousStepDocs = activeStep > 1 
+      ? Array.from({ length: activeStep - 1 }, (_, i) => documents[i + 1] || []).flat()
+      : [];
+    
+    // For analysis, we need: new files from current step + documents from previous steps
+    const hasNewFiles = currentStepFiles.length > 0;
+    const hasPreviousDocs = previousStepDocs.length > 0;
+    
+    if (!hasNewFiles && activeStep === 1) {
       toast.error('Nenhum arquivo para analisar');
+      return;
+    }
+    
+    if (!hasNewFiles && activeStep > 1) {
+      toast.error('Adicione os arquivos desta etapa para analisar');
       return;
     }
 
@@ -107,21 +121,37 @@ export default function ConferenciaChb() {
     setActiveTab('analise');
 
     try {
-      // Convert files to base64
-      const filesContent = await Promise.all(
-        allFiles.map(async (file) => ({
+      // Convert new uploaded files to base64
+      const newFilesContent = await Promise.all(
+        currentStepFiles.map(async (file) => ({
           name: file.name,
           content: await fileToBase64(file),
           mimeType: file.type || 'application/octet-stream',
+          stepId: activeStep,
         }))
       );
 
-      console.log(`Sending ${filesContent.length} files for analysis...`);
+      // Convert previous step documents (that have file reference) to base64
+      const previousDocsContent = await Promise.all(
+        previousStepDocs
+          .filter(doc => doc.file) // Only include docs with file reference
+          .map(async (doc) => ({
+            name: doc.name,
+            content: await fileToBase64(doc.file!),
+            mimeType: doc.file!.type || 'application/octet-stream',
+            stepId: doc.stepId,
+          }))
+      );
+
+      // Combine: previous docs first, then new files
+      const allFilesContent = [...previousDocsContent, ...newFilesContent];
+
+      console.log(`Sending ${allFilesContent.length} files for analysis (${previousDocsContent.length} from previous steps, ${newFilesContent.length} new)`);
 
       const { data, error } = await supabase.functions.invoke('analyze-chb-documents', {
         body: {
           stepId: activeStep,
-          files: filesContent,
+          files: allFilesContent,
         },
       });
 
@@ -129,8 +159,8 @@ export default function ConferenciaChb() {
         throw new Error(error.message);
       }
 
-      // After successful analysis, convert uploaded files to documents
-      const newDocs = allFiles.map((file, idx) => ({
+      // After successful analysis, convert ONLY NEW uploaded files to documents
+      const newDocs = currentStepFiles.map((file, idx) => ({
         id: `doc-${activeStep}-${Date.now()}-${idx}`,
         name: file.name,
         type: detectDocumentType(file.name),
@@ -140,18 +170,17 @@ export default function ConferenciaChb() {
         file: file, // Keep reference for download
       }));
 
-      // Add new documents to current step
+      // Add new documents to current step only
       setDocuments(prev => ({
         ...prev,
         [activeStep]: [...(prev[activeStep] || []), ...newDocs],
       }));
 
-      // Clear uploaded files since they are now documents
-      setUploadedFiles({
-        1: [],
-        2: [],
-        3: [],
-      });
+      // Clear only current step uploaded files
+      setUploadedFiles(prev => ({
+        ...prev,
+        [activeStep]: [],
+      }));
 
       setAnalysisResults(prev => ({
         ...prev,
