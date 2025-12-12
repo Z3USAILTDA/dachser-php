@@ -1,7 +1,7 @@
 import { useRef } from 'react';
 import { ChbDocument } from '@/types/chb';
 import { stepTitles } from '@/data/chbMocks';
-import { Upload, FileText, Eye, Download, X, Play, Loader2 } from 'lucide-react';
+import { Upload, FileText, Eye, Download, X, Play, Loader2, Trash2 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 
 interface ChbDocumentsPanelProps {
@@ -10,6 +10,7 @@ interface ChbDocumentsPanelProps {
   uploadedFiles: File[];
   onFilesChange: (files: File[]) => void;
   onStartAnalysis: () => void;
+  onDeleteDocument?: (docId: string) => void;
   isAnalyzing: boolean;
 }
 
@@ -28,6 +29,7 @@ export function ChbDocumentsPanel({
   uploadedFiles, 
   onFilesChange, 
   onStartAnalysis,
+  onDeleteDocument,
   isAnalyzing 
 }: ChbDocumentsPanelProps) {
   const inputRef = useRef<HTMLInputElement>(null);
@@ -103,15 +105,26 @@ export function ChbDocumentsPanel({
                 <button
                   onClick={() => console.log('Abrir:', doc.name)}
                   className="p-2 rounded-lg hover:bg-white/5 text-white/60 hover:text-white transition-colors"
+                  title="Visualizar"
                 >
                   <Eye className="w-4 h-4" />
                 </button>
                 <button
                   onClick={() => console.log('Baixar:', doc.name)}
                   className="p-2 rounded-lg hover:bg-white/5 text-white/60 hover:text-white transition-colors"
+                  title="Baixar"
                 >
                   <Download className="w-4 h-4" />
                 </button>
+                {onDeleteDocument && (
+                  <button
+                    onClick={() => onDeleteDocument(doc.id)}
+                    className="p-2 rounded-lg hover:bg-red-500/20 text-white/60 hover:text-red-400 transition-colors"
+                    title="Excluir documento"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                )}
               </div>
             </div>
           ))}

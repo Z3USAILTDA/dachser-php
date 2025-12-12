@@ -26,6 +26,11 @@ export default function ConferenciaChb() {
   const [activeStep, setActiveStep] = useState(1);
   const [activeTab, setActiveTab] = useState<TabType>('documentos');
   const [notes, setNotes] = useState<Record<number, ChbNote[]>>(notesByStep);
+  const [documents, setDocuments] = useState<Record<number, typeof documentsByStep[1]>>({
+    1: documentsByStep[1] || [],
+    2: documentsByStep[2] || [],
+    3: documentsByStep[3] || [],
+  });
   
   // Centralized state for files, analysis results, and history
   const [uploadedFiles, setUploadedFiles] = useState<Record<number, File[]>>({
@@ -184,16 +189,25 @@ export default function ConferenciaChb() {
     }));
   };
 
+  const handleDeleteDocument = (docId: string) => {
+    setDocuments((prev) => ({
+      ...prev,
+      [activeStep]: (prev[activeStep] || []).filter((doc) => doc.id !== docId),
+    }));
+    toast.success('Documento excluído');
+  };
+
   const renderPanel = () => {
     switch (activeTab) {
       case 'documentos':
         return (
           <ChbDocumentsPanel
             stepId={activeStep}
-            documents={documentsByStep[activeStep] || []}
+            documents={documents[activeStep] || []}
             uploadedFiles={uploadedFiles[activeStep] || []}
             onFilesChange={handleFilesChange}
             onStartAnalysis={handleStartAnalysis}
+            onDeleteDocument={handleDeleteDocument}
             isAnalyzing={isAnalyzing}
           />
         );
