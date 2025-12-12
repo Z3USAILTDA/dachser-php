@@ -303,55 +303,85 @@ export default function FinanceiroDisputa() {
 
     const ext = file.name.toLowerCase();
     
+    // Helper to find column index by name (case-insensitive, ignores accents)
+    const findColumnIndex = (headers: string[], ...names: string[]): number => {
+      const normalize = (s: string) => s?.toString().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/\s+/g, ' ').trim() || '';
+      for (let i = 0; i < headers.length; i++) {
+        const h = normalize(headers[i]);
+        for (const name of names) {
+          if (h.includes(normalize(name))) return i;
+        }
+      }
+      return -1;
+    };
+    
     if (ext.endsWith('.xlsx') || ext.endsWith('.xls')) {
-      // Parse Excel file
       const arrayBuffer = await file.arrayBuffer();
       const workbook = XLSX.read(arrayBuffer, { type: 'array' });
       const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
       const rows = XLSX.utils.sheet_to_json<string[]>(firstSheet, { header: 1 });
       
-      // Skip header if it looks like one
-      const startIdx = rows[0]?.[0]?.toString().toLowerCase().includes('nd') || 
-                       rows[0]?.[0]?.toString().toLowerCase().includes('cnpj') ||
-                       rows[0]?.[0]?.toString().toLowerCase().includes('documento') ? 1 : 0;
+      if (rows.length === 0) return items;
+      
+      // Detect header row and column indices
+      const headerRow = rows[0]?.map(c => c?.toString() || '') || [];
+      const hasHeader = headerRow.some(h => h.toLowerCase().includes('nd') || h.toLowerCase().includes('cnpj') || h.toLowerCase().includes('documento'));
+      
+      // Find column indices dynamically or use defaults
+      const ndIdx = findColumnIndex(headerRow, 'nd', 'documento', 'nf');
+      const descIdx = findColumnIndex(headerRow, 'descrição', 'descricao', 'pendência', 'pendencia');
+      const deptIdx = findColumnIndex(headerRow, 'departamento', 'depto');
+      const respIdx = findColumnIndex(headerRow, 'responsável', 'responsavel');
+      const escIdx = findColumnIndex(headerRow, 'escalation', 'escalonamento');
+      
+      const startIdx = hasHeader ? 1 : 0;
       
       for (let i = startIdx; i < rows.length; i++) {
         const cols = rows[i];
-        const nd = cols[0]?.toString().trim();
+        const nd = (ndIdx >= 0 ? cols[ndIdx] : cols[0])?.toString().trim();
         if (nd) {
           items.push({
             nd,
-            descricao: cols[8]?.toString().trim() || '',
-            departamento: cols[9]?.toString().trim() || '',
-            responsavel: cols[10]?.toString().trim() || '',
-            escalation: cols[13]?.toString().trim() || '',
+            descricao: (descIdx >= 0 ? cols[descIdx] : cols[8])?.toString().trim() || '',
+            departamento: (deptIdx >= 0 ? cols[deptIdx] : cols[9])?.toString().trim() || '',
+            responsavel: (respIdx >= 0 ? cols[respIdx] : cols[10])?.toString().trim() || '',
+            escalation: (escIdx >= 0 ? cols[escIdx] : cols[13])?.toString().trim() || '',
           });
         }
       }
     } else {
-      // Parse CSV/TXT file
       const text = await file.text();
       const lines = text.split(/\r?\n/).filter(line => line.trim());
       
-      const startIdx = lines[0]?.toLowerCase().includes('nd') || 
-                       lines[0]?.toLowerCase().includes('cnpj') ||
-                       lines[0]?.toLowerCase().includes('documento') ? 1 : 0;
+      if (lines.length === 0) return items;
+      
+      const headerCols = lines[0].split(/[,;\t]/);
+      const hasHeader = headerCols.some(h => h.toLowerCase().includes('nd') || h.toLowerCase().includes('cnpj') || h.toLowerCase().includes('documento'));
+      
+      const ndIdx = findColumnIndex(headerCols, 'nd', 'documento', 'nf');
+      const descIdx = findColumnIndex(headerCols, 'descrição', 'descricao', 'pendência', 'pendencia');
+      const deptIdx = findColumnIndex(headerCols, 'departamento', 'depto');
+      const respIdx = findColumnIndex(headerCols, 'responsável', 'responsavel');
+      const escIdx = findColumnIndex(headerCols, 'escalation', 'escalonamento');
+      
+      const startIdx = hasHeader ? 1 : 0;
       
       for (let i = startIdx; i < lines.length; i++) {
         const cols = lines[i].split(/[,;\t]/);
-        const nd = cols[0]?.trim();
+        const nd = (ndIdx >= 0 ? cols[ndIdx] : cols[0])?.trim();
         if (nd) {
           items.push({
             nd,
-            descricao: cols[8]?.trim() || '',
-            departamento: cols[9]?.trim() || '',
-            responsavel: cols[10]?.trim() || '',
-            escalation: cols[13]?.trim() || '',
+            descricao: (descIdx >= 0 ? cols[descIdx] : cols[8])?.trim() || '',
+            departamento: (deptIdx >= 0 ? cols[deptIdx] : cols[9])?.trim() || '',
+            responsavel: (respIdx >= 0 ? cols[respIdx] : cols[10])?.trim() || '',
+            escalation: (escIdx >= 0 ? cols[escIdx] : cols[13])?.trim() || '',
           });
         }
       }
     }
     
+    console.log('Parsed items:', items.slice(0, 3)); // Debug log
     return items;
   };
 
