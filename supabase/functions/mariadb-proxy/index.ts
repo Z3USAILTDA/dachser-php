@@ -9,7 +9,7 @@ const corsHeaders = {
 
 interface QueryRequest {
   action: string;
-  id?: number | string;
+  query?: string; // For raw_query action
   // Auth/User
   username?: string;
   password?: string;
@@ -2315,6 +2315,38 @@ serve(async (req) => {
         `, [id]);
 
         result = { success: true, message: 'Regra excluída com sucesso' };
+        break;
+      }
+
+      // ==================== RAW QUERY (ADMIN) ====================
+      case 'raw_query': {
+        const { query, params: queryParams } = body as { query?: string; params?: any[] };
+        if (!query) {
+          return new Response(
+            JSON.stringify({ error: 'Query é obrigatória' }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+
+        console.log('Executing raw query:', query.substring(0, 200));
+        
+        // Check if it's a SELECT query (read-only) or a modifying query
+        const isReadOnly = query.trim().toUpperCase().startsWith('SELECT') || 
+                           query.trim().toUpperCase().startsWith('SHOW') ||
+                           query.trim().toUpperCase().startsWith('DESCRIBE');
+        
+        if (isReadOnly) {
+          const queryResult = await client.query(query, queryParams || []);
+          result = { success: true, data: queryResult };
+        } else {
+          const execResult = await client.execute(query, queryParams || []);
+          result = { 
+            success: true, 
+            affectedRows: execResult.affectedRows,
+            lastInsertId: execResult.lastInsertId 
+          };
+        }
+        console.log('Raw query executed successfully');
         break;
       }
 
