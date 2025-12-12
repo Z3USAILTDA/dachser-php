@@ -345,27 +345,31 @@ const Dashboard = () => {
                                   <div className="w-0.5 h-5 bg-primary" />
                                   
                                   {/* Children Row */}
-                                  <div className="relative flex flex-wrap justify-center gap-4">
+                                  <div className="relative flex justify-center gap-6">
                                     {/* Horizontal line spanning from first to last child center */}
                                     {child.subChildren.length > 1 && (
                                       <div 
                                         className="absolute top-0 h-0.5 bg-primary"
                                         style={{ 
-                                          left: '70px',
-                                          right: '70px',
+                                          left: '50%',
+                                          right: '50%',
+                                          marginLeft: `-${(child.subChildren.length - 1) * 85}px`,
+                                          marginRight: `-${(child.subChildren.length - 1) * 85}px`,
+                                          width: `${(child.subChildren.length - 1) * 170}px`,
+                                          transform: 'translateX(-50%)',
                                         }}
                                       />
                                     )}
                                     
                                     {child.subChildren.map((subChild, subIdx) => (
-                                      <div key={subIdx} className="relative flex flex-col items-center pt-0 min-w-[140px]">
+                                      <div key={subIdx} className="relative flex flex-col items-center pt-0 w-[160px]">
                                         {/* Vertical connector */}
                                         <div className="w-0.5 h-3 bg-primary" />
                                         <div className="w-1.5 h-1.5 rounded-full bg-primary -mt-0.5" />
                                         
                                         <button
                                           onClick={() => navigate(subChild.href)}
-                                          className="mt-2 min-w-[140px] px-4 py-2 rounded-full text-foreground text-xs font-medium hover:-translate-y-0.5 transition-all duration-200"
+                                          className="mt-2 min-w-[150px] px-4 py-2 rounded-full text-foreground text-xs font-medium hover:-translate-y-0.5 transition-all duration-200"
                                           style={{
                                             background: 'rgba(4, 10, 30, 0.75)',
                                             boxShadow: '0 12px 30px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(255, 255, 255, 0.08)',
