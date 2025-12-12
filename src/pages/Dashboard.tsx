@@ -345,18 +345,14 @@ const Dashboard = () => {
                                   <div className="w-0.5 h-5 bg-primary" />
                                   
                                   {/* Children Row */}
-                                  <div className="relative flex justify-center gap-6">
+                                  <div className="relative flex flex-wrap justify-center gap-4">
                                     {/* Horizontal line spanning from first to last child center */}
                                     {child.subChildren.length > 1 && (
                                       <div 
                                         className="absolute top-0 h-0.5 bg-primary"
                                         style={{ 
-                                          left: '50%',
-                                          right: '50%',
-                                          marginLeft: `-${(child.subChildren.length - 1) * 85}px`,
-                                          marginRight: `-${(child.subChildren.length - 1) * 85}px`,
-                                          width: `${(child.subChildren.length - 1) * 170}px`,
-                                          transform: 'translateX(-50%)',
+                                          left: '80px',
+                                          right: '80px',
                                         }}
                                       />
                                     )}
@@ -369,7 +365,7 @@ const Dashboard = () => {
                                         
                                         <button
                                           onClick={() => navigate(subChild.href)}
-                                          className="mt-2 min-w-[150px] px-4 py-2 rounded-full text-foreground text-xs font-medium hover:-translate-y-0.5 transition-all duration-200"
+                                          className="mt-2 min-w-[150px] px-4 py-2 rounded-full text-foreground text-sm font-medium hover:-translate-y-0.5 transition-all duration-200"
                                           style={{
                                             background: 'rgba(4, 10, 30, 0.75)',
                                             boxShadow: '0 12px 30px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(255, 255, 255, 0.08)',
