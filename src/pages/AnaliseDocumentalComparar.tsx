@@ -111,7 +111,7 @@ const AnaliseDocumentalComparar = () => {
   };
 
   return (
-    <PageLayout title="DACHSER" subtitle="Nova Comparação" pageIcon={FileSearch}>
+    <PageLayout title="DACHSER" subtitle="Nova Comparação" pageIcon={FileSearch} backTo="/fin/analise-documental">
       <PageCard padding="lg">
         {!comparisonResults ? (
           <div className="space-y-6">

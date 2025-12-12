@@ -161,7 +161,7 @@ const AnaliseDocumental = () => {
         <div className="text-white/60">Carregando...</div>
       </div>;
   }
-  return <PageLayout title="DACHSER" subtitle="Análise Documental" pageIcon={FileSearch}>
+  return <PageLayout title="DACHSER" subtitle="Análise Documental" pageIcon={FileSearch} backTo="/dashboard">
       {/* Card de Filtros */}
       <PageCard>
         <FilterBar searchValue={searchTerm} onSearchChange={handleSearchChange} searchPlaceholder="Buscar por arquivo ou usuário" filters={[filterPresets.status(statusFilter, handleStatusChange), filterPresets.period(periodFilter, handlePeriodChange)]} showRefresh onRefresh={handleRefresh} isRefreshing={isLoading} />
