@@ -129,7 +129,7 @@ export default function FinanceiroDisputa() {
     if (!dateStr) return "-";
     try {
       const d = new Date(dateStr);
-      return d.toLocaleDateString("pt-BR");
+      return d.toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" });
     } catch {
       return dateStr;
     }
@@ -139,7 +139,14 @@ export default function FinanceiroDisputa() {
     if (!dateStr) return "-";
     try {
       const d = new Date(dateStr);
-      return d.toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" });
+      return d.toLocaleString("pt-BR", { 
+        timeZone: "America/Sao_Paulo",
+        day: "2-digit", 
+        month: "2-digit", 
+        year: "numeric", 
+        hour: "2-digit", 
+        minute: "2-digit" 
+      });
     } catch {
       return dateStr;
     }
@@ -149,12 +156,23 @@ export default function FinanceiroDisputa() {
     return "R$ " + val.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   };
 
+  // Get current time in São Paulo timezone
+  const getNowInSaoPaulo = () => {
+    const now = new Date();
+    // Get the offset for São Paulo (UTC-3 or UTC-2 depending on DST)
+    const saoPauloOffset = new Date().toLocaleString("en-US", { timeZone: "America/Sao_Paulo" });
+    return new Date(saoPauloOffset).getTime();
+  };
+
   const formatElapsed = (startDate: string) => {
     if (!startDate) return "—";
     try {
-      const start = new Date(startDate).getTime();
-      const now = Date.now();
-      const ms = now - start;
+      // Parse the start date and convert to São Paulo timezone
+      const startDateObj = new Date(startDate);
+      const startInSaoPaulo = new Date(startDateObj.toLocaleString("en-US", { timeZone: "America/Sao_Paulo" }));
+      const nowInSaoPaulo = new Date(new Date().toLocaleString("en-US", { timeZone: "America/Sao_Paulo" }));
+      
+      const ms = nowInSaoPaulo.getTime() - startInSaoPaulo.getTime();
       const s = Math.floor(ms / 1000);
       const d = Math.floor(s / 86400);
       const h = Math.floor((s % 86400) / 3600);
