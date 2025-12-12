@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo } from "react";
-import { Search, RefreshCw } from "lucide-react";
+import { Search, RefreshCw, TrendingUp } from "lucide-react";
+import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -241,6 +242,7 @@ function CompanyTable({ title, data, isLoading }: CompanyTableProps) {
 
 // Main Component
 export default function LocalCharges() {
+  const navigate = useNavigate();
   const [isLoading, setIsLoading] = useState(true);
   
   const [hapagData, setHapagData] = useState<CompanyData>({ rows: [], meta: { updated_at: null, effective: null }, source: '' });
@@ -279,14 +281,24 @@ export default function LocalCharges() {
   }, []);
 
   const rightContent = (
-    <Button
-      onClick={fetchLocalCharges}
-      disabled={isLoading}
-      className="h-8 rounded-full bg-primary text-primary-foreground hover:bg-primary/90 shadow-[0_0_20px_rgba(255,200,0,0.4)]"
-    >
-      <RefreshCw className={`h-4 w-4 mr-2 ${isLoading ? 'animate-spin' : ''}`} />
-      Atualizar
-    </Button>
+    <div className="flex items-center gap-2">
+      <Button
+        onClick={() => navigate('/sea/alteracoes-fee')}
+        variant="outline"
+        className="h-8 rounded-full text-xs"
+      >
+        <TrendingUp className="h-4 w-4 mr-2" />
+        Alterações de Fee
+      </Button>
+      <Button
+        onClick={fetchLocalCharges}
+        disabled={isLoading}
+        className="h-8 rounded-full bg-primary text-primary-foreground hover:bg-primary/90 shadow-[0_0_20px_rgba(255,200,0,0.4)]"
+      >
+        <RefreshCw className={`h-4 w-4 mr-2 ${isLoading ? 'animate-spin' : ''}`} />
+        Atualizar
+      </Button>
+    </div>
   );
 
   return (

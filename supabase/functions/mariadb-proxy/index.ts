@@ -1336,6 +1336,251 @@ serve(async (req) => {
         break;
       }
 
+      // ==================== FEE CHANGES (ALTERAÇÕES DE FEE) ====================
+      case 'get_fee_changes': {
+        console.log('Fetching fee changes data...');
+        
+        // Use separate database credentials for charges
+        const chargesHost = Deno.env.get('MARIADB_CHARGES_HOST');
+        const chargesPort = parseInt(Deno.env.get('MARIADB_CHARGES_PORT') || '3306');
+        const chargesDatabase = Deno.env.get('MARIADB_CHARGES_DATABASE');
+        const chargesUser = Deno.env.get('MARIADB_CHARGES_USER');
+        const chargesPassword = Deno.env.get('MARIADB_CHARGES_PASSWORD');
+        
+        let chargesClient: Client | null = null;
+        
+        try {
+          if (!chargesHost || !chargesDatabase || !chargesUser || !chargesPassword) {
+            console.error('Missing charges database credentials, using default connection');
+            chargesClient = client;
+          } else {
+            console.log(`Connecting to Charges DB at ${chargesHost}:${chargesPort}/${chargesDatabase} for fee changes`);
+            chargesClient = await new Client().connect({
+              hostname: chargesHost,
+              port: chargesPort,
+              db: chargesDatabase,
+              username: chargesUser,
+              password: chargesPassword,
+            });
+          }
+          
+          // PHP-style approach: load current and history data, then compare
+          const pairs = [
+            { main: 't_local_charge', hist: 't_local_charge_hapag_history' },
+            { main: 't_local_charge_msc', hist: 't_local_charge_msc_history' },
+            { main: 't_local_charge_cma', hist: 't_local_charge_cma_history' },
+            { main: 't_local_charge_hmm', hist: 't_local_charge_hmm_history' },
+            { main: 't_local_charge_one', hist: 't_local_charge_one_history' },
+          ];
+          
+          const changes: any[] = [];
+          
+          // Helper to normalize date
+          const normalizeDt = (row: any): string => {
+            const candidates = [row.data_atualizacao_chave, row.data_atualizacao].filter(Boolean);
+            for (const d of candidates) {
+              if (d) {
+                try {
+                  const date = new Date(d);
+                  if (!isNaN(date.getTime())) {
+                    return date.toISOString();
+                  }
+                } catch {}
+              }
+            }
+            return '1970-01-01T00:00:00.000Z';
+          };
+          
+          // Helper to create unique key for matching
+          const keyOf = (row: any): string => {
+            return [
+              (row.empresa || '').toUpperCase().trim(),
+              (row.charge_description || '').trim(),
+              (row.charge_code || '').trim(),
+              (row.container_type || '').trim(),
+              (row.currency || '').trim(),
+              (row.unit_of_measure || '').trim(),
+            ].join(' | ');
+          };
+          
+          for (const pair of pairs) {
+            try {
+              // Check if tables exist
+              const mainCheck = await chargesClient.query(`SHOW TABLES LIKE ?`, [pair.main]);
+              const histCheck = await chargesClient.query(`SHOW TABLES LIKE ?`, [pair.hist]);
+              
+              if (!mainCheck.length || !histCheck.length) {
+                console.log(`Tables not found: ${pair.main} or ${pair.hist}, skipping...`);
+                continue;
+              }
+              
+              // Load current data
+              const currRows = await chargesClient.query(`
+                SELECT id, chave, empresa, charge_description, charge_code, container_type,
+                       currency, unit_of_measure, fee, effective, data_atualizacao_chave, data_atualizacao
+                FROM ${pair.main}
+              `);
+              
+              // Load history data
+              const histRows = await chargesClient.query(`
+                SELECT id, chave, empresa, charge_description, charge_code, container_type,
+                       currency, unit_of_measure, fee, effective, data_atualizacao_chave, data_atualizacao
+                FROM ${pair.hist}
+              `);
+              
+              if (!currRows.length || !histRows.length) {
+                console.log(`No data in ${pair.main} or ${pair.hist}, skipping...`);
+                continue;
+              }
+              
+              // Add normalized date to each row
+              for (const r of currRows) {
+                r._dt_key = normalizeDt(r);
+              }
+              for (const h of histRows) {
+                h._dt_key = normalizeDt(h);
+              }
+              
+              // Group history by key
+              const histByKey: Record<string, any[]> = {};
+              for (const h of histRows) {
+                const k = keyOf(h);
+                if (!histByKey[k]) histByKey[k] = [];
+                histByKey[k].push(h);
+              }
+              
+              // Sort each group by date desc
+              for (const k in histByKey) {
+                histByKey[k].sort((a, b) => {
+                  if (a._dt_key === b._dt_key) return (b.id || 0) - (a.id || 0);
+                  return b._dt_key.localeCompare(a._dt_key);
+                });
+              }
+              
+              // Find previous fee for each current row
+              for (const c of currRows) {
+                const k = keyOf(c);
+                const cDt = c._dt_key;
+                const list = histByKey[k] || [];
+                
+                if (!list.length) continue;
+                
+                let prev = null;
+                for (const h of list) {
+                  if (h._dt_key < cDt || (h._dt_key === cDt && (h.id || 0) < (c.id || 0))) {
+                    if (parseFloat(h.fee) !== parseFloat(c.fee)) {
+                      prev = h;
+                      break;
+                    }
+                  }
+                }
+                
+                if (!prev) continue;
+                
+                const feeAnterior = parseFloat(prev.fee) || 0;
+                const feeAtual = parseFloat(c.fee) || 0;
+                const diffAbs = feeAtual - feeAnterior;
+                const diffPct = feeAnterior !== 0 ? ((feeAtual - feeAnterior) / feeAnterior) * 100 : null;
+                
+                changes.push({
+                  chave: c.chave || null,
+                  empresa: c.empresa || null,
+                  charge_description: c.charge_description || null,
+                  charge_code: c.charge_code || null,
+                  container_type: c.container_type || null,
+                  currency: c.currency || null,
+                  unit_of_measure: c.unit_of_measure || null,
+                  fee_anterior: feeAnterior,
+                  fee_atual: feeAtual,
+                  diff_abs: diffAbs,
+                  diff_pct: diffPct,
+                  effective_anterior: prev.effective || null,
+                  effective_atual: c.effective || null,
+                  dt_chave_anterior: prev.data_atualizacao_chave || null,
+                  dt_chave_atual: c.data_atualizacao_chave || null,
+                  dt_ordenacao_anterior: prev._dt_key,
+                  dt_ordenacao_atual: c._dt_key,
+                  src_anterior: pair.hist,
+                  src_atual: pair.main,
+                });
+              }
+              
+            } catch (err) {
+              console.error(`Error processing pair ${pair.main}/${pair.hist}:`, err);
+            }
+          }
+          
+          // Sort by dt_ordenacao_atual desc
+          changes.sort((a, b) => {
+            if ((a.dt_ordenacao_atual || '') === (b.dt_ordenacao_atual || '')) {
+              return ((a.empresa || '') + (a.charge_description || '')).localeCompare(
+                (b.empresa || '') + (b.charge_description || '')
+              );
+            }
+            return (b.dt_ordenacao_atual || '').localeCompare(a.dt_ordenacao_atual || '');
+          });
+          
+          // Find latest global and per empresa
+          let latestIdx: number | null = null;
+          let latestTs = 0;
+          const latestByEmpresa: Record<string, { ts: number; idx: number }> = {};
+          
+          changes.forEach((r, i) => {
+            const ts = new Date(r.dt_ordenacao_atual || r.dt_chave_atual || '').getTime();
+            if (ts && ts > latestTs) {
+              latestTs = ts;
+              latestIdx = i;
+            }
+            
+            const emp = r.empresa || '';
+            if (emp && ts) {
+              if (!latestByEmpresa[emp] || ts > latestByEmpresa[emp].ts) {
+                latestByEmpresa[emp] = { ts, idx: i };
+              }
+            }
+          });
+          
+          // Mark latest rows
+          if (latestIdx !== null) {
+            changes[latestIdx].is_latest = true;
+          }
+          for (const emp in latestByEmpresa) {
+            const idx = latestByEmpresa[emp].idx;
+            changes[idx].is_latest_empresa = true;
+          }
+          
+          // Collect latest marked items
+          const latestMarkedIdx = new Set<number>();
+          if (latestIdx !== null) latestMarkedIdx.add(latestIdx);
+          for (const emp in latestByEmpresa) {
+            latestMarkedIdx.add(latestByEmpresa[emp].idx);
+          }
+          
+          const latestMarked = Array.from(latestMarkedIdx)
+            .map(i => changes[i])
+            .sort((a, b) => {
+              const tsA = new Date(a.dt_ordenacao_atual || '').getTime() || 0;
+              const tsB = new Date(b.dt_ordenacao_atual || '').getTime() || 0;
+              return tsB - tsA;
+            });
+          
+          console.log(`Fee changes loaded: ${changes.length} total, ${latestMarked.length} marked as latest`);
+          
+          result = { success: true, changes, latestMarked };
+          
+        } finally {
+          if (chargesClient && chargesClient !== client) {
+            try {
+              await chargesClient.close();
+            } catch (e) {
+              console.error('Error closing charges client:', e);
+            }
+          }
+        }
+        
+        break;
+      }
+
       // ==================== RÉGUA DE COBRANÇA ====================
       case 'get_regua_counts': {
         const MAX_DIAS_ATRASO = 120;

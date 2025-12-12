@@ -9,6 +9,7 @@ interface PageLayoutProps {
   subtitle?: string;
   showLogout?: boolean;
   rightContent?: ReactNode;
+  backTo?: string;
 }
 
 export function PageLayout({ 
@@ -16,7 +17,8 @@ export function PageLayout({
   title = "DACHSER", 
   subtitle,
   showLogout = true,
-  rightContent
+  rightContent,
+  backTo = "/dashboard"
 }: PageLayoutProps) {
   const navigate = useNavigate();
 
@@ -91,7 +93,7 @@ export function PageLayout({
         {/* Left - Back + Header */}
         <div className="flex items-center gap-[18px]">
           <button
-            onClick={() => navigate("/dashboard")}
+            onClick={() => navigate(backTo)}
             className="w-8 h-8 rounded-full border border-[rgba(255,255,255,.12)] bg-[rgba(5,6,18,0.9)] text-[#aaaaaa] flex items-center justify-center backdrop-blur-sm hover:bg-[rgba(5,6,18,1)] hover:text-white transition-all"
           >
             <ArrowLeft size={16} />
