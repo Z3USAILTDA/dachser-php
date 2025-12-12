@@ -1795,13 +1795,13 @@ serve(async (req) => {
         const lookupSql = `
           SELECT 
             COALESCE(NULLIF(documento,''), NULLIF(nd,''), NULLIF(numero_nf,'')) AS doc_key,
-            cliente,
+            razao_social AS cliente,
             numero_nf AS nf,
             nd,
-            valor,
-            DATE_FORMAT(vencimento, '%Y-%m-%d') AS vencimento,
-            DATE_FORMAT(emissao, '%Y-%m-%d') AS emissao,
-            tipo,
+            valor_nf AS valor,
+            DATE_FORMAT(data_vencimento, '%Y-%m-%d') AS vencimento,
+            DATE_FORMAT(data_emissao, '%Y-%m-%d') AS emissao,
+            CASE WHEN tipo_documento='FAT_NF' THEN 'À vista' ELSE 'A prazo' END AS tipo,
             responsavel_disp AS responsavel
           FROM dados_dachser.t_dados_financeiro_nfs 
           WHERE documento = ? OR numero_nf = ? OR nd = ?
@@ -1843,10 +1843,10 @@ serve(async (req) => {
         const checkSql = `
           SELECT 
             COALESCE(NULLIF(documento,''), NULLIF(nd,''), NULLIF(numero_nf,'')) AS doc_key,
-            cliente,
-            vencimento,
-            valor,
-            tipo
+            razao_social AS cliente,
+            data_vencimento AS vencimento,
+            valor_nf AS valor,
+            CASE WHEN tipo_documento='FAT_NF' THEN 'À vista' ELSE 'A prazo' END AS tipo
           FROM dados_dachser.t_dados_financeiro_nfs 
           WHERE documento = ? OR numero_nf = ? OR nd = ?
           LIMIT 1
