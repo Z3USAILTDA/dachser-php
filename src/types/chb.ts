@@ -1,6 +1,6 @@
 export type StepStatus = 'completed' | 'current' | 'pending';
 
-export type TabType = 'documentos' | 'analise' | 'historico' | 'observacoes';
+export type TabType = 'documentos' | 'analise' | 'historico';
 
 export interface ChbStep {
   id: number;
@@ -14,6 +14,7 @@ export interface ChbDocument {
   type: 'HBL' | 'Invoice' | 'Packing List' | 'DI' | 'AWB' | 'Certificado';
   uploadedAt: string;
   size: string;
+  stepId?: number;
 }
 
 export interface ChbAnalysis {

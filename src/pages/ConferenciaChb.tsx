@@ -25,8 +25,8 @@ export default function ConferenciaChb() {
   const [activeTab, setActiveTab] = useState<TabType>('documentos');
   const [documents, setDocuments] = useState<Record<number, typeof documentsByStep[1]>>({
     1: documentsByStep[1] || [],
-    2: documentsByStep[2] || [],
-    3: documentsByStep[3] || [],
+    2: [],
+    3: [],
   });
   
   // Centralized state for files, analysis results, and history
@@ -45,6 +45,25 @@ export default function ConferenciaChb() {
     2: [],
     3: [],
   });
+
+  // Get documents for current step (inherited from previous steps + current)
+  const getDocumentsForStep = (stepId: number) => {
+    const allDocs: typeof documentsByStep[1] = [];
+    // Inherit documents from all previous steps
+    for (let i = 1; i <= stepId; i++) {
+      allDocs.push(...(documents[i] || []));
+    }
+    return allDocs;
+  };
+
+  // Get uploaded files for current step (inherited from previous steps + current)
+  const getUploadedFilesForStep = (stepId: number) => {
+    const allFiles: File[] = [];
+    for (let i = 1; i <= stepId; i++) {
+      allFiles.push(...(uploadedFiles[i] || []));
+    }
+    return allFiles;
+  };
   const [isAnalyzing, setIsAnalyzing] = useState(false);
 
   const currentUser = localStorage.getItem('user_email') || '@usuario.chb';
@@ -76,9 +95,10 @@ export default function ConferenciaChb() {
   };
 
   const handleStartAnalysis = async () => {
-    const currentFiles = uploadedFiles[activeStep] || [];
+    // Use all files available for this step (inherited + current)
+    const allFiles = getUploadedFilesForStep(activeStep);
     
-    if (currentFiles.length === 0) {
+    if (allFiles.length === 0) {
       toast.error('Nenhum arquivo para analisar');
       return;
     }
@@ -89,7 +109,7 @@ export default function ConferenciaChb() {
     try {
       // Convert files to base64
       const filesContent = await Promise.all(
-        currentFiles.map(async (file) => ({
+        allFiles.map(async (file) => ({
           name: file.name,
           content: await fileToBase64(file),
           mimeType: file.type || 'application/octet-stream',
@@ -109,6 +129,30 @@ export default function ConferenciaChb() {
         throw new Error(error.message);
       }
 
+      // After successful analysis, convert uploaded files to documents
+      const newDocs = allFiles.map((file, idx) => ({
+        id: `doc-${activeStep}-${Date.now()}-${idx}`,
+        name: file.name,
+        type: detectDocumentType(file.name),
+        uploadedAt: new Date().toLocaleString('pt-BR'),
+        size: formatFileSize(file.size),
+        stepId: activeStep,
+        file: file, // Keep reference for download
+      }));
+
+      // Add new documents to current step
+      setDocuments(prev => ({
+        ...prev,
+        [activeStep]: [...(prev[activeStep] || []), ...newDocs],
+      }));
+
+      // Clear uploaded files since they are now documents
+      setUploadedFiles({
+        1: [],
+        2: [],
+        3: [],
+      });
+
       setAnalysisResults(prev => ({
         ...prev,
         [activeStep]: data as ChbAnalysisResult,
@@ -121,6 +165,25 @@ export default function ConferenciaChb() {
     } finally {
       setIsAnalyzing(false);
     }
+  };
+
+  // Helper to detect document type from filename
+  const detectDocumentType = (filename: string): 'HBL' | 'Invoice' | 'Packing List' | 'DI' | 'AWB' | 'Certificado' => {
+    const lower = filename.toLowerCase();
+    if (lower.includes('hbl') || lower.includes('house')) return 'HBL';
+    if (lower.includes('invoice') || lower.includes('fatura')) return 'Invoice';
+    if (lower.includes('packing') || lower.includes('romaneio')) return 'Packing List';
+    if (lower.includes('di') || lower.includes('declaracao')) return 'DI';
+    if (lower.includes('awb') || lower.includes('conhecimento')) return 'AWB';
+    if (lower.includes('cert') || lower.includes('certificado')) return 'Certificado';
+    return 'Invoice'; // default
+  };
+
+  // Helper to format file size
+  const formatFileSize = (bytes: number): string => {
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
   };
 
   const handleApproveAndAdvance = () => {
@@ -186,12 +249,13 @@ export default function ConferenciaChb() {
         return (
           <ChbDocumentsPanel
             stepId={activeStep}
-            documents={documents[activeStep] || []}
+            documents={getDocumentsForStep(activeStep)}
             uploadedFiles={uploadedFiles[activeStep] || []}
             onFilesChange={handleFilesChange}
             onStartAnalysis={handleStartAnalysis}
             onDeleteDocument={handleDeleteDocument}
             isAnalyzing={isAnalyzing}
+            hasAnalysisResult={!!analysisResults[activeStep]}
           />
         );
       case 'analise':
