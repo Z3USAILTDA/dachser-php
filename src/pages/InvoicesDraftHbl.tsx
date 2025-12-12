@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
-import { Info, Copy, Check, Upload, Download, X, Link as LinkIcon, FolderOpen, Loader2 } from "lucide-react";
+import { Info, Copy, Check, Upload, Download, X, Link as LinkIcon, FolderOpen, Loader2, FileBox } from "lucide-react";
 import { PageLayout } from "@/components/layout/PageLayout";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -815,7 +815,7 @@ export default function InvoicesDraftHbl() {
   };
 
   return (
-    <PageLayout title="DACHSER" subtitle="Invoices × Draft HBL">
+    <PageLayout title="DACHSER" subtitle="Invoices × Draft HBL" pageIcon={FileBox}>
       <div className="max-w-7xl mx-auto">
 
           <Card className="bg-black/40 border border-white/10 rounded-2xl shadow-[0_18px_40px_rgba(0,0,0,0.9)] p-8 mb-6">

@@ -1,6 +1,6 @@
 import { ReactNode } from "react";
 import { useNavigate } from "react-router-dom";
-import { ArrowLeft, LogOut } from "lucide-react";
+import { ArrowLeft, LogOut, LucideIcon } from "lucide-react";
 import dachserBg from "@/assets/dachser-background.jpg";
 
 interface PageLayoutProps {
@@ -10,6 +10,7 @@ interface PageLayoutProps {
   showLogout?: boolean;
   rightContent?: ReactNode;
   backTo?: string;
+  pageIcon?: LucideIcon;
 }
 
 export function PageLayout({ 
@@ -18,7 +19,8 @@ export function PageLayout({
   subtitle,
   showLogout = true,
   rightContent,
-  backTo = "/dashboard"
+  backTo = "/dashboard",
+  pageIcon: PageIcon
 }: PageLayoutProps) {
   const navigate = useNavigate();
 
@@ -120,7 +122,14 @@ export function PageLayout({
           <div className="px-[14px] py-1.5 rounded-full bg-[rgba(0,0,0,.70)] border border-[rgba(255,255,255,.18)] text-[#aaaaaa] max-w-[220px] truncate">
             @{user?.username || user?.email?.split("@")[0] || "usuario"}
           </div>
-          {showLogout && (
+          {PageIcon ? (
+            <div
+              className="w-8 h-8 rounded-full border border-[rgba(255,255,255,.25)] flex items-center justify-center bg-[rgba(0,0,0,.7)] text-[#ffc800]"
+              title={subtitle || title}
+            >
+              <PageIcon className="w-4 h-4" />
+            </div>
+          ) : showLogout && (
             <button
               type="button"
               onClick={handleLogout}

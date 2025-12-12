@@ -1,6 +1,6 @@
 import { ReactNode } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
-import { ArrowLeft, LayoutDashboard, BarChart3, AlertTriangle, Bell, Settings, HelpCircle, LogOut } from "lucide-react";
+import { ArrowLeft, LayoutDashboard, BarChart3, AlertTriangle, Bell, Settings, HelpCircle, LogOut, LucideIcon, Radio } from "lucide-react";
 import dachserBg from "@/assets/dachser-background.jpg";
 
 interface NavTab {
@@ -23,6 +23,7 @@ interface PageLayoutProps {
   subtitle?: string;
   showBack?: boolean;
   headerActions?: ReactNode;
+  pageIcon?: LucideIcon;
 }
 
 export function PageLayout({ 
@@ -30,7 +31,8 @@ export function PageLayout({
   title = "DACHSER", 
   subtitle = "CRONOS CCT — Monitoramento de Carga Aérea",
   showBack = true,
-  headerActions 
+  headerActions,
+  pageIcon: PageIcon = Radio
 }: PageLayoutProps) {
   const navigate = useNavigate();
   const location = useLocation();
@@ -169,13 +171,12 @@ export function PageLayout({
             </div>
           )}
 
-          <button
-            onClick={handleLogout}
-            className="w-8 h-8 rounded-full border border-[rgba(255,255,255,.25)] flex items-center justify-center bg-[rgba(0,0,0,.7)] text-[#aaaaaa] hover:text-rose-400 hover:bg-[rgba(0,0,0,.9)] transition"
-            title="Sair"
+          <div
+            className="w-8 h-8 rounded-full border border-[rgba(255,255,255,.25)] flex items-center justify-center bg-[rgba(0,0,0,.7)] text-[#ffc800]"
+            title={subtitle || title}
           >
-            <LogOut size={16} />
-          </button>
+            <PageIcon size={16} />
+          </div>
         </div>
       </div>
 

@@ -117,6 +117,7 @@ export default function ConferenciaChb() {
       title="DACHSER"
       subtitle="Desembaraço — Conferência (CHB)"
       rightContent={rightContent}
+      pageIcon={FileCheck}
     >
       {/* Main card */}
       <PageCard className="overflow-hidden" padding="sm">

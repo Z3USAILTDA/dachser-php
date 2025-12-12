@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
-import { Flag, Search, Filter, X, Plus, Check, Trash2, Clock } from "lucide-react";
+import { Flag, Search, Filter, X, Plus, Check, Trash2, Clock, Scale } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -245,6 +245,7 @@ export default function FinanceiroDisputa() {
       title="DACHSER" 
       subtitle="Financeiro — NFs em disputa"
       rightContent={rightContent}
+      pageIcon={Scale}
     >
       {/* Filter Card */}
       <FilterCard>

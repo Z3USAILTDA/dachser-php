@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from "react";
-import { Search, RefreshCw, TrendingUp } from "lucide-react";
+import { Search, RefreshCw, TrendingUp, Receipt } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -306,6 +306,7 @@ export default function LocalCharges() {
       title="DACHSER" 
       subtitle="Local Charges – Tabelas consolidadas"
       rightContent={rightContent}
+      pageIcon={Receipt}
     >
       <CompanyTable title="HAPAG-LLOYD" data={hapagData} isLoading={isLoading} />
       <CompanyTable title="CMA" data={cmaData} isLoading={isLoading} />

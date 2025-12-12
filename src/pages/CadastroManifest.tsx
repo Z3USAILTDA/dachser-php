@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Check } from "lucide-react";
+import { Check, FileSpreadsheet } from "lucide-react";
 import { PageLayout } from "@/components/layout/PageLayout";
 import { PageCard } from "@/components/layout/PageCard";
 import { Button } from "@/components/ui/button";
@@ -60,6 +60,7 @@ export default function CadastroManifest() {
     <PageLayout
       title="DACHSER"
       subtitle="Cadastro – Manifest/Pack List"
+      pageIcon={FileSpreadsheet}
     >
       <PageCard className="max-w-4xl mx-auto">
         <h1 className="text-2xl font-bold text-white mb-2">Cadastro – Manifest/Pack List</h1>
