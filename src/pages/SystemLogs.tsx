@@ -11,7 +11,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import { faSearch, faDownload, faSync, faSignOut } from "@fortawesome/free-solid-svg-icons";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, Terminal } from "lucide-react";
 import { toast } from "sonner";
 
 export default function SystemLogs() {
@@ -248,8 +248,13 @@ export default function SystemLogs() {
               <ArrowLeft size={16} />
             </button>
             <h1 className="text-2xl font-bold text-foreground">System Logs</h1>
+            <div
+              className="w-8 h-8 rounded-full border border-border flex items-center justify-center bg-card text-primary ml-2"
+              title="System Logs"
+            >
+              <Terminal className="w-4 h-4" />
+            </div>
           </div>
-          
           <div className="flex items-center gap-2">
             <Button
               onClick={() => {

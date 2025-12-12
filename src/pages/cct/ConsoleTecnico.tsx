@@ -228,7 +228,7 @@ export default function ConsoleTecnico() {
   );
 
   return (
-    <PageLayout title="DACHSER" subtitle="Console Técnico — Sistema Hermes">
+    <PageLayout title="DACHSER" subtitle="Console Técnico — Sistema Hermes" pageIcon={Settings}>
       <Tabs defaultValue="status" className="space-y-6">
         <TabsList className="bg-white/5 border border-white/10">
           <TabsTrigger value="status" className="data-[state=active]:bg-amber-500 data-[state=active]:text-black">

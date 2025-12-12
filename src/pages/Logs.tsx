@@ -11,7 +11,7 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { Search, RefreshCw, ArrowLeft, Loader2, FileText, CheckCircle, Database, Terminal } from "lucide-react";
+import { Search, RefreshCw, ArrowLeft, Loader2, FileText, CheckCircle, Database, Terminal, ScrollText } from "lucide-react";
 import { toast } from "sonner";
 import { format } from "date-fns";
 import dachserBg from "@/assets/dachser-background.jpg";
@@ -206,6 +206,12 @@ const Logs = () => {
                 <p className="text-sm text-neutral-400">
                   Monitoramento e auditoria de ações do sistema
                 </p>
+              </div>
+              <div
+                className="w-8 h-8 rounded-full border border-[rgba(255,255,255,.25)] flex items-center justify-center bg-[rgba(0,0,0,.7)] text-[#ffc800] ml-auto"
+                title="Sistema de Logs"
+              >
+                <ScrollText className="w-4 h-4" />
               </div>
             </div>
           </div>
