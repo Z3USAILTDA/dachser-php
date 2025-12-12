@@ -1,13 +1,15 @@
-import { useState } from 'react';
-import { ChbAnalysis } from '@/types/chb';
-import { stepTitles, analysisByStep } from '@/data/chbMocks';
-import { Bot, Play, CheckCircle, Loader2 } from 'lucide-react';
+import { ChbAnalysisResult } from '@/types/chb';
+import { stepTitles } from '@/data/chbMocks';
+import { Bot, Play, CheckCircle, Loader2, RefreshCw, AlertTriangle, FileText } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 
 interface ChbAnalysisPanelProps {
   stepId: number;
-  analysis: ChbAnalysis;
+  analysisResult: ChbAnalysisResult | null;
+  onRunAnalysis: () => void;
   onApproveAndAdvance: () => void;
+  isAnalyzing: boolean;
+  hasFiles: boolean;
 }
 
 const variantColors = {
@@ -16,87 +18,145 @@ const variantColors = {
   error: 'bg-red-500/20 text-red-400 border-red-500/30',
 };
 
-export function ChbAnalysisPanel({ stepId, analysis, onApproveAndAdvance }: ChbAnalysisPanelProps) {
-  const [isLoading, setIsLoading] = useState(false);
-  const [currentAnalysis, setCurrentAnalysis] = useState(analysis);
+export function ChbAnalysisPanel({ 
+  stepId, 
+  analysisResult, 
+  onRunAnalysis, 
+  onApproveAndAdvance, 
+  isAnalyzing,
+  hasFiles 
+}: ChbAnalysisPanelProps) {
+  // No files uploaded yet
+  if (!hasFiles && !analysisResult) {
+    return (
+      <div className="space-y-6">
+        <h3 className="text-lg font-semibold text-white">
+          Análise automatizada — {stepTitles[stepId]}
+        </h3>
+        
+        <div className="p-12 text-center rounded-xl bg-black/30 border border-white/10">
+          <FileText className="w-16 h-16 text-white/20 mx-auto mb-4" />
+          <p className="text-white/60 mb-2">Nenhum documento para analisar</p>
+          <p className="text-sm text-white/40">
+            Vá para a aba "Documentos" e faça upload dos arquivos para iniciar a análise.
+          </p>
+        </div>
+      </div>
+    );
+  }
 
-  const runAnalysis = async () => {
-    setIsLoading(true);
-    await new Promise((resolve) => setTimeout(resolve, 2000));
-    
-    const updatedAnalysis = {
-      ...analysisByStep[stepId],
-      generatedAt: new Date().toLocaleString('pt-BR'),
-      content: analysisByStep[stepId].content + '\n\n**[Atualização]** Nova análise executada com sucesso.',
-    };
-    
-    setCurrentAnalysis(updatedAnalysis);
-    setIsLoading(false);
-  };
+  // Has files but no analysis yet
+  if (!analysisResult) {
+    return (
+      <div className="space-y-6">
+        <h3 className="text-lg font-semibold text-white">
+          Análise automatizada — {stepTitles[stepId]}
+        </h3>
+        
+        <div className="p-12 text-center rounded-xl bg-black/30 border border-white/10">
+          <Bot className="w-16 h-16 text-amber-500/40 mx-auto mb-4" />
+          <p className="text-white/60 mb-4">
+            {isAnalyzing 
+              ? 'Processando documentos com IA...' 
+              : 'Clique para iniciar a análise dos documentos.'}
+          </p>
+          
+          <button
+            onClick={onRunAnalysis}
+            disabled={isAnalyzing}
+            className="flex items-center gap-2 px-6 py-3 mx-auto rounded-full bg-amber-500 text-black font-medium
+              hover:bg-amber-400 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {isAnalyzing ? (
+              <>
+                <Loader2 className="w-4 h-4 animate-spin" />
+                Analisando...
+              </>
+            ) : (
+              <>
+                <Play className="w-4 h-4" />
+                Iniciar Análise IA
+              </>
+            )}
+          </button>
+        </div>
+      </div>
+    );
+  }
 
+  // Has analysis result
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <h3 className="text-lg font-semibold text-white">
           Análise automatizada — {stepTitles[stepId]}
         </h3>
-        <span className="text-xs text-white/40">
-          Gerado em: {currentAnalysis.generatedAt}
-        </span>
+        <div className="flex items-center gap-3">
+          {analysisResult.usedFallback && (
+            <Badge className="bg-orange-500/20 text-orange-400 border border-orange-500/30">
+              <AlertTriangle className="w-3 h-3 mr-1" />
+              Fallback OpenAI
+            </Badge>
+          )}
+          <span className="text-xs text-white/40">
+            Gerado em: {analysisResult.generatedAt}
+          </span>
+        </div>
       </div>
 
+      {/* Tags summary */}
       <div className="flex flex-wrap gap-2">
-        {currentAnalysis.tags.map((tag, index) => (
+        {analysisResult.tags.map((tag, index) => (
           <Badge key={index} className={`${variantColors[tag.variant]} border`}>
             {tag.label}
           </Badge>
         ))}
       </div>
 
-      <div className="p-6 rounded-xl bg-black/30 border border-white/10">
+      {/* Files analyzed */}
+      <div className="text-xs text-white/50">
+        Arquivos analisados: {analysisResult.filesAnalyzed.join(', ')}
+      </div>
+
+      {/* Analysis HTML content */}
+      <div className="p-6 rounded-xl bg-black/30 border border-white/10 overflow-auto">
         <div className="flex items-start gap-4">
           <div className="w-10 h-10 rounded-lg bg-amber-500/20 flex items-center justify-center flex-shrink-0">
             <Bot className="w-5 h-5 text-amber-500" />
           </div>
-          <div className="prose prose-invert prose-sm max-w-none">
-            <div
-              dangerouslySetInnerHTML={{
-                __html: currentAnalysis.content
-                  .replace(/\n/g, '<br />')
-                  .replace(/##\s(.+)/g, '<h4 class="text-white font-semibold mt-4 mb-2">$1</h4>')
-                  .replace(/\*\*(.+?)\*\*/g, '<strong class="text-white">$1</strong>')
-                  .replace(/•/g, '<span class="text-amber-500">•</span>'),
-              }}
-            />
-          </div>
+          <div 
+            className="prose prose-invert prose-sm max-w-none chb-analysis-content"
+            dangerouslySetInnerHTML={{ __html: analysisResult.html }}
+          />
         </div>
       </div>
 
+      {/* Action buttons */}
       <div className="flex gap-4">
         <button
-          onClick={runAnalysis}
-          disabled={isLoading}
-          className="flex items-center gap-2 px-6 py-3 rounded-full bg-amber-500 text-black font-medium
-            hover:bg-amber-400 transition-colors disabled:opacity-50"
+          onClick={onRunAnalysis}
+          disabled={isAnalyzing}
+          className="flex items-center gap-2 px-6 py-3 rounded-full bg-white/10 border border-white/20
+            text-white font-medium hover:bg-white/20 transition-colors disabled:opacity-50"
         >
-          {isLoading ? (
+          {isAnalyzing ? (
             <>
               <Loader2 className="w-4 h-4 animate-spin" />
               Analisando...
             </>
           ) : (
             <>
-              <Play className="w-4 h-4" />
-              Rodar análise desta etapa
+              <RefreshCw className="w-4 h-4" />
+              Fazer Análise Novamente
             </>
           )}
         </button>
 
         <button
           onClick={onApproveAndAdvance}
-          disabled={isLoading}
-          className="flex items-center gap-2 px-6 py-3 rounded-full bg-white/10 border border-white/20
-            text-white font-medium hover:bg-white/20 transition-colors disabled:opacity-50"
+          disabled={isAnalyzing}
+          className="flex items-center gap-2 px-6 py-3 rounded-full bg-amber-500 text-black font-medium
+            hover:bg-amber-400 transition-colors disabled:opacity-50"
         >
           <CheckCircle className="w-4 h-4" />
           Aprovar etapa & avançar

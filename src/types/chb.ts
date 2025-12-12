@@ -24,6 +24,26 @@ export interface ChbAnalysis {
   generatedAt: string;
 }
 
+export interface ChbAnalysisResult {
+  id: string;
+  stepId: number;
+  html: string;
+  tags: { label: string; variant: 'success' | 'warning' | 'error' }[];
+  summary: string;
+  generatedAt: string;
+  filesAnalyzed: string[];
+  usedFallback?: boolean;
+}
+
+export interface ChbApprovedHistory {
+  id: string;
+  stepId: number;
+  date: string;
+  user: string;
+  summary: string;
+  tags: { label: string; variant: 'success' | 'warning' | 'error' }[];
+}
+
 export interface ChbHistoryEntry {
   id: string;
   stepId: number;

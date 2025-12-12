@@ -110,3 +110,6 @@ verify_jwt = false
 
 [functions.parse-invoice-pdf]
 verify_jwt = false
+
+[functions.analyze-chb-documents]
+verify_jwt = false
