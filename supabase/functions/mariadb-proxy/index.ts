@@ -1982,7 +1982,7 @@ serve(async (req) => {
           const checkSql = `
             SELECT 
               COALESCE(NULLIF(documento,''), NULLIF(nd,''), NULLIF(numero_nf,'')) AS doc_key,
-              cliente,
+              razao_social AS cliente,
               data_vencimento AS vencimento,
               valor_nf AS valor,
               CASE WHEN tipo_documento LIKE '%PRAZO%' THEN 'A prazo' ELSE 'À vista' END AS tipo,
