@@ -3,12 +3,10 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { FileCheck } from 'lucide-react';
 import { PageLayout } from '@/components/layout/PageLayout';
 import { PageCard } from '@/components/layout/PageCard';
-import { ChbStep, TabType, ChbNote } from '@/types/chb';
+import { ChbStep, TabType, ChbNote, ChbAnalysisResult, ChbApprovedHistory } from '@/types/chb';
 import { 
   initialSteps, 
   documentsByStep, 
-  analysisByStep, 
-  historyByStep, 
   notesByStep 
 } from '@/data/chbMocks';
 import { ChbStepper } from '@/components/chb/ChbStepper';
@@ -17,15 +15,35 @@ import { ChbDocumentsPanel } from '@/components/chb/ChbDocumentsPanel';
 import { ChbAnalysisPanel } from '@/components/chb/ChbAnalysisPanel';
 import { ChbHistoryPanel } from '@/components/chb/ChbHistoryPanel';
 import { ChbNotesPanel } from '@/components/chb/ChbNotesPanel';
+import { supabase } from '@/integrations/supabase/client';
+import { toast } from 'sonner';
 
 export default function ConferenciaChb() {
   const navigate = useNavigate();
   const { id } = useParams();
   
   const [steps, setSteps] = useState<ChbStep[]>(initialSteps);
-  const [activeStep, setActiveStep] = useState(2);
+  const [activeStep, setActiveStep] = useState(1);
   const [activeTab, setActiveTab] = useState<TabType>('documentos');
   const [notes, setNotes] = useState<Record<number, ChbNote[]>>(notesByStep);
+  
+  // Centralized state for files, analysis results, and history
+  const [uploadedFiles, setUploadedFiles] = useState<Record<number, File[]>>({
+    1: [],
+    2: [],
+    3: [],
+  });
+  const [analysisResults, setAnalysisResults] = useState<Record<number, ChbAnalysisResult | null>>({
+    1: null,
+    2: null,
+    3: null,
+  });
+  const [approvedHistory, setApprovedHistory] = useState<Record<number, ChbApprovedHistory[]>>({
+    1: [],
+    2: [],
+    3: [],
+  });
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
 
   const currentUser = localStorage.getItem('user_email') || '@usuario.chb';
 
@@ -34,7 +52,100 @@ export default function ConferenciaChb() {
     setActiveTab('documentos');
   };
 
+  const handleFilesChange = (files: File[]) => {
+    setUploadedFiles(prev => ({
+      ...prev,
+      [activeStep]: files,
+    }));
+  };
+
+  const fileToBase64 = (file: File): Promise<string> => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.readAsDataURL(file);
+      reader.onload = () => {
+        const result = reader.result as string;
+        // Remove the data:mime;base64, prefix
+        const base64 = result.split(',')[1];
+        resolve(base64);
+      };
+      reader.onerror = reject;
+    });
+  };
+
+  const handleStartAnalysis = async () => {
+    const currentFiles = uploadedFiles[activeStep] || [];
+    
+    if (currentFiles.length === 0) {
+      toast.error('Nenhum arquivo para analisar');
+      return;
+    }
+
+    setIsAnalyzing(true);
+    setActiveTab('analise');
+
+    try {
+      // Convert files to base64
+      const filesContent = await Promise.all(
+        currentFiles.map(async (file) => ({
+          name: file.name,
+          content: await fileToBase64(file),
+          mimeType: file.type || 'application/octet-stream',
+        }))
+      );
+
+      console.log(`Sending ${filesContent.length} files for analysis...`);
+
+      const { data, error } = await supabase.functions.invoke('analyze-chb-documents', {
+        body: {
+          stepId: activeStep,
+          files: filesContent,
+        },
+      });
+
+      if (error) {
+        throw new Error(error.message);
+      }
+
+      setAnalysisResults(prev => ({
+        ...prev,
+        [activeStep]: data as ChbAnalysisResult,
+      }));
+
+      toast.success('Análise concluída com sucesso!');
+    } catch (error) {
+      console.error('Error analyzing documents:', error);
+      toast.error(`Erro na análise: ${error instanceof Error ? error.message : 'Erro desconhecido'}`);
+    } finally {
+      setIsAnalyzing(false);
+    }
+  };
+
   const handleApproveAndAdvance = () => {
+    const currentAnalysis = analysisResults[activeStep];
+    
+    if (!currentAnalysis) {
+      toast.error('Nenhuma análise para aprovar');
+      return;
+    }
+
+    // Create history entry
+    const historyEntry: ChbApprovedHistory = {
+      id: `h${Date.now()}`,
+      stepId: activeStep,
+      date: new Date().toLocaleString('pt-BR'),
+      user: currentUser,
+      summary: currentAnalysis.summary,
+      tags: currentAnalysis.tags,
+    };
+
+    // Add to history
+    setApprovedHistory(prev => ({
+      ...prev,
+      [activeStep]: [historyEntry, ...(prev[activeStep] || [])],
+    }));
+
+    // Update step status
     setSteps((prev) =>
       prev.map((step) => {
         if (step.id === activeStep) {
@@ -46,10 +157,15 @@ export default function ConferenciaChb() {
         return step;
       })
     );
+
+    toast.success('Etapa aprovada com sucesso!');
     
+    // Advance to next step if not the last one
     if (activeStep < 3) {
       setActiveStep(activeStep + 1);
       setActiveTab('documentos');
+    } else {
+      toast.success('Processo CHB concluído!');
     }
   };
 
@@ -75,21 +191,28 @@ export default function ConferenciaChb() {
           <ChbDocumentsPanel
             stepId={activeStep}
             documents={documentsByStep[activeStep] || []}
+            uploadedFiles={uploadedFiles[activeStep] || []}
+            onFilesChange={handleFilesChange}
+            onStartAnalysis={handleStartAnalysis}
+            isAnalyzing={isAnalyzing}
           />
         );
       case 'analise':
         return (
           <ChbAnalysisPanel
             stepId={activeStep}
-            analysis={analysisByStep[activeStep]}
+            analysisResult={analysisResults[activeStep]}
+            onRunAnalysis={handleStartAnalysis}
             onApproveAndAdvance={handleApproveAndAdvance}
+            isAnalyzing={isAnalyzing}
+            hasFiles={(uploadedFiles[activeStep] || []).length > 0}
           />
         );
       case 'historico':
         return (
           <ChbHistoryPanel
             stepId={activeStep}
-            history={historyByStep[activeStep] || []}
+            approvedHistory={approvedHistory[activeStep] || []}
           />
         );
       case 'observacoes':
@@ -141,6 +264,47 @@ export default function ConferenciaChb() {
           {renderPanel()}
         </div>
       </PageCard>
+
+      {/* CSS for analysis table styling */}
+      <style>{`
+        .chb-analysis-content table {
+          width: 100%;
+          border-collapse: collapse;
+          margin: 1rem 0;
+          font-size: 0.875rem;
+        }
+        .chb-analysis-content thead {
+          background: rgba(255, 255, 255, 0.05);
+        }
+        .chb-analysis-content th,
+        .chb-analysis-content td {
+          padding: 0.75rem 1rem;
+          text-align: left;
+          border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        .chb-analysis-content th {
+          font-weight: 600;
+          color: rgba(255, 255, 255, 0.9);
+        }
+        .chb-analysis-content td {
+          color: rgba(255, 255, 255, 0.7);
+        }
+        .chb-analysis-content tr:nth-child(even) {
+          background: rgba(255, 255, 255, 0.02);
+        }
+        .chb-analysis-content p {
+          margin: 0.75rem 0;
+          color: rgba(255, 255, 255, 0.8);
+        }
+        .chb-analysis-content ul {
+          margin: 0.5rem 0;
+          padding-left: 1.5rem;
+        }
+        .chb-analysis-content li {
+          margin: 0.25rem 0;
+          color: rgba(255, 255, 255, 0.7);
+        }
+      `}</style>
     </PageLayout>
   );
 }
