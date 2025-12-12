@@ -64,9 +64,7 @@ export default function FinanceiroDisputa() {
   const [addModalOpen, setAddModalOpen] = useState(false);
   const [addNf, setAddNf] = useState("");
   const [addResp, setAddResp] = useState("");
-  const [addDepartamento, setAddDepartamento] = useState("");
   const [addObservacoes, setAddObservacoes] = useState("");
-  const [addEscalation, setAddEscalation] = useState("");
   const [addError, setAddError] = useState("");
   const [addLoading, setAddLoading] = useState(false);
   const [lookupLoading, setLookupLoading] = useState(false);
@@ -223,9 +221,7 @@ export default function FinanceiroDisputa() {
           action: "save_disputa", 
           nf: addNf.trim(), 
           responsavel: addResp.trim(),
-          departamento: addDepartamento.trim(),
           observacoes: addObservacoes.trim(),
-          escalation: addEscalation.trim(),
         },
       });
 
@@ -235,9 +231,7 @@ export default function FinanceiroDisputa() {
         setAddModalOpen(false);
         setAddNf("");
         setAddResp("");
-        setAddDepartamento("");
         setAddObservacoes("");
-        setAddEscalation("");
         setLookupData(null);
         fetchDisputas();
       } else {
@@ -525,9 +519,6 @@ export default function FinanceiroDisputa() {
                 <th className="bg-[#15151f] sticky top-0 z-[1] px-4 py-[14px] text-left text-[0.78rem] uppercase tracking-wider font-bold whitespace-nowrap">
                   Tipo
                 </th>
-                <th className="bg-[#15151f] sticky top-0 z-[1] px-4 py-[14px] text-left text-[0.78rem] uppercase tracking-wider font-bold whitespace-nowrap">
-                  Departamento
-                </th>
                 <th className="bg-[#15151f] sticky top-0 z-[1] px-4 py-[14px] text-left text-[0.78rem] uppercase tracking-wider font-bold whitespace-nowrap min-w-[200px]">
                   Observações
                 </th>
@@ -567,7 +558,6 @@ export default function FinanceiroDisputa() {
                     <td className="px-4 py-[14px] whitespace-nowrap">{r.responsavel || "-"}</td>
                     <td className="px-4 py-[14px] whitespace-nowrap">{formatMoney(r.valor)}</td>
                     <td className="px-4 py-[14px] whitespace-nowrap">{r.tipo || "-"}</td>
-                    <td className="px-4 py-[14px] whitespace-nowrap">{r.departamento || "-"}</td>
                     <td className="px-4 py-[10px] whitespace-nowrap min-w-[200px]">
                       <div className="relative flex items-center gap-2">
                         <Input
@@ -619,9 +609,7 @@ export default function FinanceiroDisputa() {
         if (!open) {
           setAddNf("");
           setAddResp("");
-          setAddDepartamento("");
           setAddObservacoes("");
-          setAddEscalation("");
           setLookupData(null);
           setAddError("");
         }
@@ -683,25 +671,14 @@ export default function FinanceiroDisputa() {
             )}
 
             {/* Extra fields */}
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <Label className="text-sm text-muted-foreground">Responsável</Label>
-                <Input
-                  value={addResp}
-                  onChange={(e) => setAddResp(e.target.value)}
-                  placeholder="Nome do responsável"
-                  className="mt-1 bg-[#13141a] border-white/20"
-                />
-              </div>
-              <div>
-                <Label className="text-sm text-muted-foreground">Departamento</Label>
-                <Input
-                  value={addDepartamento}
-                  onChange={(e) => setAddDepartamento(e.target.value)}
-                  placeholder="Ex: Financeiro"
-                  className="mt-1 bg-[#13141a] border-white/20"
-                />
-              </div>
+            <div>
+              <Label className="text-sm text-muted-foreground">Responsável</Label>
+              <Input
+                value={addResp}
+                onChange={(e) => setAddResp(e.target.value)}
+                placeholder="Nome do responsável"
+                className="mt-1 bg-[#13141a] border-white/20"
+              />
             </div>
             
             <div>
@@ -711,16 +688,6 @@ export default function FinanceiroDisputa() {
                 onChange={(e) => setAddObservacoes(e.target.value)}
                 placeholder="Descrição/Pendência..."
                 className="mt-1 bg-[#13141a] border-white/20 min-h-[80px]"
-              />
-            </div>
-
-            <div>
-              <Label className="text-sm text-muted-foreground">Escalation</Label>
-              <Input
-                value={addEscalation}
-                onChange={(e) => setAddEscalation(e.target.value)}
-                placeholder="Ex: Gerente, Diretoria"
-                className="mt-1 bg-[#13141a] border-white/20"
               />
             </div>
 
