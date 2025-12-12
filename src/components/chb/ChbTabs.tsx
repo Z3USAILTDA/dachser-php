@@ -1,5 +1,5 @@
 import { TabType } from '@/types/chb';
-import { FileText, Bot, History, MessageSquare } from 'lucide-react';
+import { FileText, Bot, History } from 'lucide-react';
 
 interface ChbTabsProps {
   activeTab: TabType;
@@ -10,7 +10,6 @@ const tabs: { id: TabType; label: string; icon: React.ReactNode }[] = [
   { id: 'documentos', label: 'Documentos', icon: <FileText className="w-4 h-4" /> },
   { id: 'analise', label: 'Análise da IA', icon: <Bot className="w-4 h-4" /> },
   { id: 'historico', label: 'Histórico aprovado', icon: <History className="w-4 h-4" /> },
-  { id: 'observacoes', label: 'Observações', icon: <MessageSquare className="w-4 h-4" /> },
 ];
 
 export function ChbTabs({ activeTab, onTabChange }: ChbTabsProps) {

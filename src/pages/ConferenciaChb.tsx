@@ -3,18 +3,16 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { FileCheck } from 'lucide-react';
 import { PageLayout } from '@/components/layout/PageLayout';
 import { PageCard } from '@/components/layout/PageCard';
-import { ChbStep, TabType, ChbNote, ChbAnalysisResult, ChbApprovedHistory } from '@/types/chb';
+import { ChbStep, TabType, ChbAnalysisResult, ChbApprovedHistory } from '@/types/chb';
 import { 
   initialSteps, 
-  documentsByStep, 
-  notesByStep 
+  documentsByStep
 } from '@/data/chbMocks';
 import { ChbStepper } from '@/components/chb/ChbStepper';
 import { ChbTabs } from '@/components/chb/ChbTabs';
 import { ChbDocumentsPanel } from '@/components/chb/ChbDocumentsPanel';
 import { ChbAnalysisPanel } from '@/components/chb/ChbAnalysisPanel';
 import { ChbHistoryPanel } from '@/components/chb/ChbHistoryPanel';
-import { ChbNotesPanel } from '@/components/chb/ChbNotesPanel';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 
@@ -25,7 +23,6 @@ export default function ConferenciaChb() {
   const [steps, setSteps] = useState<ChbStep[]>(initialSteps);
   const [activeStep, setActiveStep] = useState(1);
   const [activeTab, setActiveTab] = useState<TabType>('documentos');
-  const [notes, setNotes] = useState<Record<number, ChbNote[]>>(notesByStep);
   const [documents, setDocuments] = useState<Record<number, typeof documentsByStep[1]>>({
     1: documentsByStep[1] || [],
     2: documentsByStep[2] || [],
@@ -174,20 +171,6 @@ export default function ConferenciaChb() {
     }
   };
 
-  const handleAddNote = (content: string) => {
-    const newNote: ChbNote = {
-      id: `n${Date.now()}`,
-      stepId: activeStep,
-      user: currentUser,
-      date: new Date().toLocaleString('pt-BR'),
-      content,
-    };
-    
-    setNotes((prev) => ({
-      ...prev,
-      [activeStep]: [newNote, ...(prev[activeStep] || [])],
-    }));
-  };
 
   const handleDeleteDocument = (docId: string) => {
     setDocuments((prev) => ({
@@ -227,14 +210,6 @@ export default function ConferenciaChb() {
           <ChbHistoryPanel
             stepId={activeStep}
             approvedHistory={approvedHistory[activeStep] || []}
-          />
-        );
-      case 'observacoes':
-        return (
-          <ChbNotesPanel
-            stepId={activeStep}
-            notes={notes[activeStep] || []}
-            onAddNote={handleAddNote}
           />
         );
       default:
