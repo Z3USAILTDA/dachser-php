@@ -82,8 +82,9 @@ export default function FinanceiroDisputa() {
 
   // Observações editing state
   const [savingObservacoes, setSavingObservacoes] = useState<Record<string, boolean>>({});
+  const [editingObservacoes, setEditingObservacoes] = useState<string | null>(null);
   const debounceTimers = useRef<Record<string, NodeJS.Timeout>>({});
-
+  const observacoesInputRef = useRef<HTMLInputElement>(null);
   useEffect(() => {
     fetchDisputas();
   }, [tipoFilter]);
@@ -514,18 +515,39 @@ export default function FinanceiroDisputa() {
                     <td className="px-4 py-[14px] whitespace-nowrap">{r.responsavel || "-"}</td>
                     <td className="px-4 py-[14px] whitespace-nowrap">{formatMoney(r.valor)}</td>
                     <td className="px-4 py-[14px] whitespace-nowrap">{r.tipo || "-"}</td>
-                    <td className="px-4 py-[10px] whitespace-nowrap min-w-[200px]">
-                      <div className="relative flex items-center gap-2">
-                        <Input
-                          value={r.observacoes || ""}
-                          onChange={(e) => handleObservacoesChange(r.doc_key, e.target.value)}
-                          placeholder="Adicionar observação..."
-                          className="h-8 text-[0.8rem] bg-[#0a0a0f] border-white/15 rounded-lg pr-8"
-                        />
-                        {savingObservacoes[r.doc_key] && (
-                          <Loader2 className="w-4 h-4 animate-spin absolute right-2 text-muted-foreground" />
-                        )}
-                      </div>
+                    <td className="px-4 py-[14px] whitespace-nowrap min-w-[200px] max-w-[300px]">
+                      {editingObservacoes === r.doc_key ? (
+                        <div className="relative flex items-center gap-2">
+                          <Input
+                            ref={observacoesInputRef}
+                            value={r.observacoes || ""}
+                            onChange={(e) => handleObservacoesChange(r.doc_key, e.target.value)}
+                            onBlur={() => setEditingObservacoes(null)}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter' || e.key === 'Escape') {
+                                setEditingObservacoes(null);
+                              }
+                            }}
+                            placeholder="Adicionar observação..."
+                            className="h-8 text-[0.85rem] bg-[#0a0a0f] border-white/15 rounded-lg pr-8"
+                            autoFocus
+                          />
+                          {savingObservacoes[r.doc_key] && (
+                            <Loader2 className="w-4 h-4 animate-spin absolute right-2 text-muted-foreground" />
+                          )}
+                        </div>
+                      ) : (
+                        <span 
+                          onClick={() => setEditingObservacoes(r.doc_key)}
+                          className="cursor-pointer hover:text-primary transition-colors block overflow-hidden text-ellipsis"
+                          title={r.observacoes || "Clique para editar"}
+                        >
+                          {r.observacoes || <span className="text-muted-foreground italic">—</span>}
+                          {savingObservacoes[r.doc_key] && (
+                            <Loader2 className="w-3 h-3 animate-spin inline ml-2 text-muted-foreground" />
+                          )}
+                        </span>
+                      )}
                     </td>
                     <td className="px-4 py-[14px] whitespace-nowrap">
                       <div className="flex gap-2">
