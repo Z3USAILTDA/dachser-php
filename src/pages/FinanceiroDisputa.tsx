@@ -692,6 +692,22 @@ export default function FinanceiroDisputa() {
             
             <div
               onClick={() => fileInputRef.current?.click()}
+              onDragOver={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+              }}
+              onDragEnter={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+              }}
+              onDrop={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                const file = e.dataTransfer.files?.[0];
+                if (file && (file.name.endsWith('.csv') || file.name.endsWith('.txt') || file.name.endsWith('.tsv'))) {
+                  setImportFile(file);
+                }
+              }}
               className={`
                 border-2 border-dashed rounded-xl p-6 text-center cursor-pointer transition-colors
                 ${importFile ? 'border-primary/50 bg-primary/5' : 'border-white/20 hover:border-primary/40 hover:bg-white/5'}
