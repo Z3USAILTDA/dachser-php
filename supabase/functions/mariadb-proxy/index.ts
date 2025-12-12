@@ -1920,8 +1920,8 @@ serve(async (req) => {
         
         // Soft delete via t_financeiro_soft_delete
         const insertSql = `
-          INSERT IGNORE INTO ai_agente.t_financeiro_soft_delete (documento, active, deleted_at)
-          VALUES (?, 0, NOW())
+          INSERT IGNORE INTO ai_agente.t_financeiro_soft_delete (documento, active)
+          VALUES (?, 0)
         `;
         await client.execute(insertSql, [doc_key]);
         
