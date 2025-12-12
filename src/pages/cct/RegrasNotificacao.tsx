@@ -74,7 +74,7 @@ export default function RegrasNotificacao() {
   };
 
   return (
-    <PageLayout title="DACHSER" subtitle="Regras de Notificação — Sistema Hermes">
+    <PageLayout title="DACHSER" subtitle="Regras de Notificação — Sistema Hermes" pageIcon={Bell}>
       {/* Header Actions */}
       <div className="flex items-center justify-between mb-6">
         <div className="flex items-center gap-3">

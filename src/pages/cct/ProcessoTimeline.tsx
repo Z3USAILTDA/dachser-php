@@ -173,6 +173,7 @@ export default function ProcessoTimeline() {
     <PageLayout
       title="DACHSER"
       subtitle={`Processo ${shipment.house}`}
+      pageIcon={Clock}
       headerActions={
         <div className="flex items-center gap-2 text-sm text-[#888]">
           <span 

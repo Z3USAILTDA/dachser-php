@@ -159,6 +159,7 @@ export default function AnalyticsDashboard() {
     <PageLayout 
       title="DACHSER" 
       subtitle="Analytics CCT — Indicadores e Performance"
+      pageIcon={BarChart3}
       headerActions={
         <div className="flex items-center gap-3">
           <Select value={periodo} onValueChange={setPeriodo}>

@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { ArrowLeft, UserPlus, LogOut } from "lucide-react";
+import { ArrowLeft, UserPlus, LogIn } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import logoZ3us from "@/assets/logo-z3us.png";
@@ -354,7 +354,7 @@ const Register = () => {
               e.currentTarget.style.background = 'rgba(4, 10, 30, 0.7)';
             }}
           >
-            <LogOut className="w-4 h-4" />
+            <LogIn className="w-4 h-4" />
             Ir para tela de login
           </button>
 

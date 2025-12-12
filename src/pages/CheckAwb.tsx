@@ -13,7 +13,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import { Search, RefreshCw, Filter as FilterIcon, UploadCloud, FileText, Trash2, TerminalSquare, Loader2, ChevronDown, ChevronUp, Plus, Database, ArrowLeft, RotateCw } from "lucide-react";
+import { Search, RefreshCw, Filter as FilterIcon, UploadCloud, FileText, Trash2, TerminalSquare, Loader2, ChevronDown, ChevronUp, Plus, Database, ArrowLeft, RotateCw, FileCheck } from "lucide-react";
 import { toast } from "sonner";
 import { format } from "date-fns";
 import { RuleMatrixManager } from "@/components/RuleMatrixManager";
@@ -879,6 +879,12 @@ const CheckAwb = () => {
               </button>
             </>
           )}
+          <div
+            className="w-8 h-8 rounded-full border border-[rgba(255,255,255,.25)] flex items-center justify-center bg-[rgba(0,0,0,.7)] text-[#ffc800]"
+            title="Check AWB x CNPJ"
+          >
+            <FileCheck className="w-4 h-4" />
+          </div>
         </div>
       </div>
 

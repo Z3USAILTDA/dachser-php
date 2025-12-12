@@ -7,7 +7,7 @@ import { AssignAnalistaDialog } from "@/components/cct/AssignAnalistaDialog";
 import { NovoShipmentDialog } from "@/components/cct/NovoShipmentDialog";
 import { useProfiles, useProcessosCCT } from "@/hooks/useCCTData";
 import { ProcessoCCT } from "@/types/cct";
-import { BookOpen, Plane, Package, AlertTriangle, AlertCircle, Clock, RefreshCw, Database } from "lucide-react";
+import { BookOpen, Plane, Package, AlertTriangle, AlertCircle, Clock, RefreshCw, Database, LayoutDashboard } from "lucide-react";
 export default function CCTDashboard() {
   const navigate = useNavigate();
   const {
@@ -51,7 +51,7 @@ export default function CCTDashboard() {
   const handleMetricClick = (filter: MetricFilterType) => {
     setMetricFilter(prev => prev === filter ? null : filter);
   };
-  return <PageLayout title="DACHSER" subtitle="CRONOS CCT — Monitoramento de Carga Aérea" showBack={true} headerActions={<div className="flex items-center gap-2.5">
+  return <PageLayout title="DACHSER" subtitle="CRONOS CCT — Monitoramento de Carga Aérea" showBack={true} pageIcon={LayoutDashboard} headerActions={<div className="flex items-center gap-2.5">
           
           
           <button onClick={() => refetch()} disabled={isRefetching} className="flex items-center gap-2 px-4 py-2 rounded-full border border-[rgba(255,255,255,.25)] bg-[rgba(0,0,0,.7)] text-[#aaaaaa] hover:text-white hover:bg-[rgba(0,0,0,.9)] transition disabled:opacity-50 text-[0.8rem]">

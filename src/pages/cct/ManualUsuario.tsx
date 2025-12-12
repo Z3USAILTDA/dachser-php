@@ -102,7 +102,7 @@ export default function ManualUsuario() {
   );
 
   return (
-    <PageLayout title="DACHSER" subtitle="Manual do Usuário — Sistema CCT v2.0">
+    <PageLayout title="DACHSER" subtitle="Manual do Usuário — Sistema CCT v2.0" pageIcon={BookOpen}>
       <div className="flex gap-6">
         {/* Sidebar Navigation */}
         <aside className="w-64 shrink-0">

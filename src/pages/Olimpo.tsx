@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
-import { ArrowLeft, LogOut, Maximize2, Minimize2 } from "lucide-react";
+import { ArrowLeft, Maximize2, Minimize2, Globe } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { supabase } from "@/integrations/supabase/client";
@@ -707,12 +707,12 @@ export default function Olimpo() {
             <div className="px-4 py-1.5 rounded-full bg-background/65 border border-border/30 text-muted-foreground text-sm">
               @{user?.username || "usuario"}
             </div>
-            <button
-              onClick={handleLogout}
-              className="w-9 h-9 rounded-full border border-border/50 flex items-center justify-center bg-background/70 text-primary hover:bg-background hover:shadow-[0_0_12px_hsl(var(--primary)/0.6)] transition-all duration-200"
+            <div
+              className="w-9 h-9 rounded-full border border-border/50 flex items-center justify-center bg-background/70 text-primary"
+              title="Movimentação Global"
             >
-              <LogOut size={18} />
-            </button>
+              <Globe size={18} />
+            </div>
           </div>
         </header>
 

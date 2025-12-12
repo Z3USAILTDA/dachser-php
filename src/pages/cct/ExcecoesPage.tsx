@@ -121,6 +121,7 @@ export default function ExcecoesPage() {
     <PageLayout
       title="DACHSER"
       subtitle="Gestão de Exceções — Monitoramento e Tratativas"
+      pageIcon={AlertTriangle}
     >
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
         <TabsList className="bg-[rgba(5,6,18,0.9)] border border-[rgba(255,255,255,0.12)]">
