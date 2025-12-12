@@ -1,6 +1,6 @@
-import { useState, useEffect, useMemo, useRef } from "react";
+import { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
-import { Flag, Search, Filter, X, Plus, Check, Trash2, Clock, Scale, Upload, FileSpreadsheet } from "lucide-react";
+import { Flag, Search, Filter, X, Plus, Check, Trash2, Clock, Scale, Upload, FileSpreadsheet, Loader2 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -46,6 +46,9 @@ interface DisputaRow {
   responsavel: string;
   valor: number;
   tipo: string;
+  departamento: string;
+  observacoes: string;
+  escalation: string;
 }
 
 export default function FinanceiroDisputa() {
@@ -75,6 +78,10 @@ export default function FinanceiroDisputa() {
   const [importFile, setImportFile] = useState<File | null>(null);
   const [importResp, setImportResp] = useState("");
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Observações editing state
+  const [savingObservacoes, setSavingObservacoes] = useState<Record<string, boolean>>({});
+  const debounceTimers = useRef<Record<string, NodeJS.Timeout>>({});
 
   useEffect(() => {
     fetchDisputas();
@@ -238,6 +245,37 @@ export default function FinanceiroDisputa() {
     setTipoFilter("all");
   };
 
+  // Debounced observacoes update
+  const handleObservacoesChange = useCallback((docKey: string, value: string) => {
+    // Update local state immediately
+    setRows(prev => prev.map(r => r.doc_key === docKey ? { ...r, observacoes: value } : r));
+
+    // Clear existing timer
+    if (debounceTimers.current[docKey]) {
+      clearTimeout(debounceTimers.current[docKey]);
+    }
+
+    // Set new debounce timer (500ms)
+    debounceTimers.current[docKey] = setTimeout(async () => {
+      setSavingObservacoes(prev => ({ ...prev, [docKey]: true }));
+      try {
+        const { data, error } = await supabase.functions.invoke("mariadb-proxy", {
+          body: { action: "update_disputa_observacoes", doc_key: docKey, observacoes: value },
+        });
+
+        if (error) throw error;
+        if (!data?.success) {
+          toast({ title: "Erro", description: "Falha ao salvar observações", variant: "destructive" });
+        }
+      } catch (err) {
+        console.error("Erro ao salvar observações:", err);
+        toast({ title: "Erro", description: "Falha ao salvar observações", variant: "destructive" });
+      } finally {
+        setSavingObservacoes(prev => ({ ...prev, [docKey]: false }));
+      }
+    }, 500);
+  }, [toast]);
+
   const parseSpreadsheet = async (file: File): Promise<Array<{ nf: string }>> => {
     const text = await file.text();
     const lines = text.split(/\r?\n/).filter(line => line.trim());
@@ -388,7 +426,7 @@ export default function FinanceiroDisputa() {
       {/* Table Card */}
       <TableCard>
         <div className="rounded-2xl overflow-auto">
-          <table className="w-full min-w-[1200px] border-collapse">
+          <table className="w-full min-w-[1500px] border-collapse">
             <thead>
               <tr>
                 <th className="bg-[#15151f] sticky top-0 z-[1] px-4 py-[14px] text-left text-[0.78rem] uppercase tracking-wider font-bold whitespace-nowrap max-w-[220px]">
@@ -419,6 +457,12 @@ export default function FinanceiroDisputa() {
                   Tipo
                 </th>
                 <th className="bg-[#15151f] sticky top-0 z-[1] px-4 py-[14px] text-left text-[0.78rem] uppercase tracking-wider font-bold whitespace-nowrap">
+                  Departamento
+                </th>
+                <th className="bg-[#15151f] sticky top-0 z-[1] px-4 py-[14px] text-left text-[0.78rem] uppercase tracking-wider font-bold whitespace-nowrap min-w-[200px]">
+                  Observações
+                </th>
+                <th className="bg-[#15151f] sticky top-0 z-[1] px-4 py-[14px] text-left text-[0.78rem] uppercase tracking-wider font-bold whitespace-nowrap">
                   ㅤㅤ
                 </th>
               </tr>
@@ -426,13 +470,13 @@ export default function FinanceiroDisputa() {
             <tbody>
               {loading ? (
                 <tr>
-                  <td colSpan={10} className="px-4 py-[18px] text-muted-foreground">
+                  <td colSpan={12} className="px-4 py-[18px] text-muted-foreground">
                     Carregando...
                   </td>
                 </tr>
               ) : filteredRows.length === 0 ? (
                 <tr>
-                  <td colSpan={10} className="px-4 py-[18px] text-muted-foreground">
+                  <td colSpan={12} className="px-4 py-[18px] text-muted-foreground">
                     Nenhuma NF em disputa.
                   </td>
                 </tr>
@@ -454,6 +498,20 @@ export default function FinanceiroDisputa() {
                     <td className="px-4 py-[14px] whitespace-nowrap">{r.responsavel || "-"}</td>
                     <td className="px-4 py-[14px] whitespace-nowrap">{formatMoney(r.valor)}</td>
                     <td className="px-4 py-[14px] whitespace-nowrap">{r.tipo || "-"}</td>
+                    <td className="px-4 py-[14px] whitespace-nowrap">{r.departamento || "-"}</td>
+                    <td className="px-4 py-[10px] whitespace-nowrap min-w-[200px]">
+                      <div className="relative flex items-center gap-2">
+                        <Input
+                          value={r.observacoes || ""}
+                          onChange={(e) => handleObservacoesChange(r.doc_key, e.target.value)}
+                          placeholder="Adicionar observação..."
+                          className="h-8 text-[0.8rem] bg-[#0a0a0f] border-white/15 rounded-lg pr-8"
+                        />
+                        {savingObservacoes[r.doc_key] && (
+                          <Loader2 className="w-4 h-4 animate-spin absolute right-2 text-muted-foreground" />
+                        )}
+                      </div>
+                    </td>
                     <td className="px-4 py-[14px] whitespace-nowrap">
                       <div className="flex gap-2">
                         <button
