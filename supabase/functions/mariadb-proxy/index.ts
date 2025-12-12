@@ -1837,6 +1837,60 @@ serve(async (req) => {
         break;
       }
 
+      case 'import_disputas_planilha': {
+        const { items } = body as { items?: Array<{ nf: string; responsavel?: string }> };
+        
+        if (!items || !Array.isArray(items) || items.length === 0) {
+          return new Response(
+            JSON.stringify({ error: 'Lista de itens é obrigatória', success: false }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+        
+        let successCount = 0;
+        let notFoundCount = 0;
+        const notFoundItems: string[] = [];
+        
+        for (const item of items) {
+          const nf = item.nf?.toString().trim();
+          if (!nf) continue;
+          
+          // Check if document exists
+          const checkSql = `
+            SELECT id FROM dados_dachser.t_dados_financeiro_nfs 
+            WHERE documento = ? OR numero_nf = ? OR nd = ?
+            LIMIT 1
+          `;
+          const existingRows = await client.query(checkSql, [nf, nf, nf]);
+          
+          if (!existingRows || existingRows.length === 0) {
+            notFoundCount++;
+            notFoundItems.push(nf);
+            continue;
+          }
+          
+          // Update to mark as disputa
+          const updateSql = `
+            UPDATE dados_dachser.t_dados_financeiro_nfs 
+            SET disputa = 1, 
+                inicio_disputa = NOW(), 
+                responsavel_disp = ?
+            WHERE documento = ? OR numero_nf = ? OR nd = ?
+          `;
+          await client.execute(updateSql, [item.responsavel || null, nf, nf, nf]);
+          successCount++;
+        }
+        
+        console.log(`Disputas import: ${successCount} success, ${notFoundCount} not found`);
+        result = { 
+          success: true, 
+          imported: successCount, 
+          notFound: notFoundCount,
+          notFoundItems: notFoundItems.slice(0, 10) // Return first 10 not found items
+        };
+        break;
+      }
+
       // ==================== USER REGISTRATION ====================
       case 'register_user': {
         const { username, password, email } = body as { username?: string; password?: string; email?: string };
