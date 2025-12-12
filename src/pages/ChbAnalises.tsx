@@ -243,6 +243,7 @@ export default function ChbAnalises() {
       subtitle="Desembaraço — Esteira de Análises (CHB)"
       rightContent={rightContent}
       pageIcon={ClipboardList}
+      backTo="/dashboard"
     >
       {/* CARD DE BUSCA + FILTROS */}
       <FilterCard>

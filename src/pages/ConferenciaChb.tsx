@@ -118,6 +118,7 @@ export default function ConferenciaChb() {
       subtitle="Desembaraço — Conferência (CHB)"
       rightContent={rightContent}
       pageIcon={FileCheck}
+      backTo="/chb/conferences"
     >
       {/* Main card */}
       <PageCard className="overflow-hidden" padding="sm">
