@@ -9,7 +9,9 @@ const corsHeaders = {
 
 interface QueryRequest {
   action: string;
+  id?: number | string; // For update/delete operations
   query?: string; // For raw_query action
+  observacoes?: string; // For disputa observacoes update
   // Auth/User
   username?: string;
   password?: string;
@@ -1735,12 +1737,17 @@ serve(async (req) => {
             t.responsavel_disp AS responsavel,
             t.valor_nf AS valor,
             CASE WHEN t.tipo_documento='FAT_NF' THEN 'À vista' ELSE 'A prazo' END AS tipo,
-            COALESCE(NULLIF(t.documento,''), NULLIF(t.nd,''), NULLIF(t.numero_nf,'')) AS doc_key
+            COALESCE(NULLIF(t.documento,''), NULLIF(t.nd,''), NULLIF(t.numero_nf,'')) AS doc_key,
+            fd.departamento,
+            fd.observacoes,
+            fd.escalation
           FROM dados_dachser.t_dados_financeiro_nfs t
           LEFT JOIN ai_agente.t_financeiro_soft_delete sd
             ON sd.documento = t.documento
             OR sd.documento = t.nd
             OR sd.documento = t.numero_nf
+          LEFT JOIN ai_agente.t_fin_disputas fd
+            ON fd.nf = COALESCE(NULLIF(t.documento,''), NULLIF(t.nd,''), NULLIF(t.numero_nf,''))
           WHERE ${whereClause}
           ORDER BY t.inicio_disputa DESC, t.razao_social ASC
         `;
@@ -1748,6 +1755,29 @@ serve(async (req) => {
         const rows = await client.query(sql, params);
         console.log(`Disputas loaded: ${rows.length} rows`);
         result = { success: true, rows };
+        break;
+      }
+
+      case 'update_disputa_observacoes': {
+        const { doc_key, observacoes } = body as { doc_key?: string; observacoes?: string };
+        
+        if (!doc_key) {
+          return new Response(
+            JSON.stringify({ error: 'doc_key é obrigatório', success: false }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+        
+        // Upsert: insert if not exists, update if exists
+        const upsertSql = `
+          INSERT INTO ai_agente.t_fin_disputas (nf, observacoes, updated_at)
+          VALUES (?, ?, NOW())
+          ON DUPLICATE KEY UPDATE observacoes = VALUES(observacoes), updated_at = NOW()
+        `;
+        await client.execute(upsertSql, [doc_key, observacoes || '']);
+        
+        console.log(`Disputa observacoes updated for: ${doc_key}`);
+        result = { success: true };
         break;
       }
 
