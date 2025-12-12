@@ -173,7 +173,6 @@ function CompanyTable({ title, data, isLoading }: CompanyTableProps) {
                   { key: 'effective_date', label: 'Effective Date' },
                   { key: 'expiry_date', label: 'Expiry Date' },
                   { key: 'effective', label: 'Effective (Header)' },
-                  { key: 'user_atualizacao', label: 'User' },
                   { key: 'data_atualizacao', label: 'Data Atualização' },
                 ].map(col => (
                   <TableHead
@@ -194,7 +193,7 @@ function CompanyTable({ title, data, isLoading }: CompanyTableProps) {
             <TableBody>
               {isLoading ? (
                 <TableRow>
-                  <TableCell colSpan={12} className="text-center py-8 text-muted-foreground">
+                  <TableCell colSpan={11} className="text-center py-8 text-muted-foreground">
                     <div className="flex items-center justify-center gap-2">
                       <RefreshCw className="h-4 w-4 animate-spin" />
                       Carregando...
@@ -203,7 +202,7 @@ function CompanyTable({ title, data, isLoading }: CompanyTableProps) {
                 </TableRow>
               ) : paginatedRows.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={12} className="text-center py-8 text-muted-foreground">
+                  <TableCell colSpan={11} className="text-center py-8 text-muted-foreground">
                     Nenhum registro encontrado
                   </TableCell>
                 </TableRow>
@@ -220,7 +219,6 @@ function CompanyTable({ title, data, isLoading }: CompanyTableProps) {
                     <TableCell className="whitespace-nowrap">{fmtDateOnly(row.effective_date)}</TableCell>
                     <TableCell className="whitespace-nowrap">{row.expiry_date || '-'}</TableCell>
                     <TableCell>{row.effective || '-'}</TableCell>
-                    <TableCell>{row.user_atualizacao || '-'}</TableCell>
                     <TableCell className="whitespace-nowrap">{fmtDate(row.data_atualizacao)}</TableCell>
                   </TableRow>
                 ))
