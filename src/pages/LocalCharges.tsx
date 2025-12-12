@@ -284,8 +284,7 @@ export default function LocalCharges() {
     <div className="flex items-center gap-2">
       <Button
         onClick={() => navigate('/sea/alteracoes-fee')}
-        variant="outline"
-        className="h-8 rounded-full text-xs"
+        className="h-8 rounded-full bg-primary text-primary-foreground hover:bg-primary/90 shadow-[0_0_20px_rgba(255,200,0,0.4)]"
       >
         <TrendingUp className="h-4 w-4 mr-2" />
         Alterações de Fee
@@ -293,7 +292,8 @@ export default function LocalCharges() {
       <Button
         onClick={fetchLocalCharges}
         disabled={isLoading}
-        className="h-8 rounded-full bg-primary text-primary-foreground hover:bg-primary/90 shadow-[0_0_20px_rgba(255,200,0,0.4)]"
+        variant="outline"
+        className="h-8 rounded-full text-xs"
       >
         <RefreshCw className={`h-4 w-4 mr-2 ${isLoading ? 'animate-spin' : ''}`} />
         Atualizar
