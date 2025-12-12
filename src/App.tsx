@@ -22,6 +22,7 @@ import AlteracoesFee from "./pages/AlteracoesFee";
 import ReguaCobranca from "./pages/ReguaCobranca";
 import FinanceiroDisputa from "./pages/FinanceiroDisputa";
 import AnaliseDocumental from "./pages/AnaliseDocumental";
+import AnaliseDocumentalComparar from "./pages/AnaliseDocumentalComparar";
 import EsteiraIndex from "./pages/esteira/EsteiraIndex";
 import ComprovanteRobot from "./pages/esteira/ComprovanteRobot";
 import EsteiraDashboard from "./pages/esteira/EsteiraDashboard";
@@ -77,6 +78,7 @@ const App = () => (
           <Route path="/fin/regua" element={<ReguaCobranca />} />
           <Route path="/fin/disputa" element={<FinanceiroDisputa />} />
           <Route path="/fin/analise-documental" element={<AnaliseDocumental />} />
+          <Route path="/fin/analise-documental/comparar" element={<AnaliseDocumentalComparar />} />
           <Route path="/fin/esteira" element={<EsteiraIndex />} />
           <Route path="/fin/esteira/robot" element={<ComprovanteRobot />} />
           <Route path="/fin/esteira/dashboard" element={<EsteiraDashboard />} />
