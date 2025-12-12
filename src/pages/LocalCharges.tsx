@@ -298,10 +298,10 @@ export default function LocalCharges() {
       rightContent={rightContent}
     >
       <CompanyTable title="HAPAG-LLOYD" data={hapagData} isLoading={isLoading} />
-      <CompanyTable title="MSC" data={mscData} isLoading={isLoading} />
       <CompanyTable title="CMA" data={cmaData} isLoading={isLoading} />
       <CompanyTable title="HMM" data={hmmData} isLoading={isLoading} />
       <CompanyTable title="ONE" data={oneData} isLoading={isLoading} />
+      <CompanyTable title="MSC" data={mscData} isLoading={isLoading} />
     </PageLayout>
   );
 }
