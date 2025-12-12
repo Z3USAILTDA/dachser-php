@@ -23,7 +23,7 @@ export function PageCard({ children, className, padding = "md" }: PageCardProps)
       )}
       style={{
         background: 'rgba(5,6,18,.9)',
-        border: '1px solid rgba(255,255,255,.12)',
+        border: '1px solid rgba(255,255,255,.06)',
         boxShadow: '0 18px 40px rgba(0,0,0,.85)',
       }}
     >
