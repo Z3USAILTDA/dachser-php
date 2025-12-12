@@ -84,6 +84,11 @@ export function ChbAnalysisPanel({
     );
   }
 
+  // Count tags by variant for summary
+  const successCount = analysisResult.tags.filter(t => t.variant === 'success').length;
+  const warningCount = analysisResult.tags.filter(t => t.variant === 'warning').length;
+  const errorCount = analysisResult.tags.filter(t => t.variant === 'error').length;
+
   // Has analysis result
   return (
     <div className="space-y-6">
@@ -104,6 +109,35 @@ export function ChbAnalysisPanel({
         </div>
       </div>
 
+      {/* Summary card */}
+      <div className="grid grid-cols-4 gap-4">
+        <div className="p-4 rounded-xl bg-white/5 border border-white/10 text-center">
+          <FileText className="w-6 h-6 mx-auto mb-2 text-white/60" />
+          <p className="text-2xl font-bold text-white">{analysisResult.filesAnalyzed.length}</p>
+          <p className="text-xs text-white/50">Arquivos analisados</p>
+        </div>
+        <div className="p-4 rounded-xl bg-green-500/10 border border-green-500/20 text-center">
+          <CheckCircle className="w-6 h-6 mx-auto mb-2 text-green-400" />
+          <p className="text-2xl font-bold text-green-400">{successCount}</p>
+          <p className="text-xs text-white/50">Itens OK</p>
+        </div>
+        <div className="p-4 rounded-xl bg-amber-500/10 border border-amber-500/20 text-center">
+          <AlertTriangle className="w-6 h-6 mx-auto mb-2 text-amber-400" />
+          <p className="text-2xl font-bold text-amber-400">{warningCount}</p>
+          <p className="text-xs text-white/50">Alertas</p>
+        </div>
+        <div className="p-4 rounded-xl bg-red-500/10 border border-red-500/20 text-center">
+          <AlertTriangle className="w-6 h-6 mx-auto mb-2 text-red-400" />
+          <p className="text-2xl font-bold text-red-400">{errorCount}</p>
+          <p className="text-xs text-white/50">Erros</p>
+        </div>
+      </div>
+
+      {/* Files analyzed list */}
+      <div className="text-xs text-white/50">
+        <span className="font-medium">Arquivos:</span> {analysisResult.filesAnalyzed.join(', ')}
+      </div>
+
       {/* Tags summary */}
       <div className="flex flex-wrap gap-2">
         {analysisResult.tags.map((tag, index) => (
@@ -111,11 +145,6 @@ export function ChbAnalysisPanel({
             {tag.label}
           </Badge>
         ))}
-      </div>
-
-      {/* Files analyzed */}
-      <div className="text-xs text-white/50">
-        Arquivos analisados: {analysisResult.filesAnalyzed.join(', ')}
       </div>
 
       {/* Analysis HTML content */}

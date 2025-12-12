@@ -6,12 +6,13 @@ import { Badge } from '@/components/ui/badge';
 
 interface ChbDocumentsPanelProps {
   stepId: number;
-  documents: ChbDocument[];
+  documents: (ChbDocument & { file?: File })[];
   uploadedFiles: File[];
   onFilesChange: (files: File[]) => void;
   onStartAnalysis: () => void;
   onDeleteDocument?: (docId: string) => void;
   isAnalyzing: boolean;
+  hasAnalysisResult?: boolean;
 }
 
 const typeColors: Record<ChbDocument['type'], string> = {
@@ -30,7 +31,8 @@ export function ChbDocumentsPanel({
   onFilesChange, 
   onStartAnalysis,
   onDeleteDocument,
-  isAnalyzing 
+  isAnalyzing,
+  hasAnalysisResult 
 }: ChbDocumentsPanelProps) {
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -82,6 +84,9 @@ export function ChbDocumentsPanel({
 
       {documents.length > 0 && (
         <div className="space-y-3">
+          <p className="text-xs text-white/50 uppercase tracking-wider">
+            Documentos carregados ({documents.length})
+          </p>
           {documents.map((doc) => (
             <div
               key={doc.id}
@@ -95,6 +100,9 @@ export function ChbDocumentsPanel({
                   <p className="text-sm font-medium text-white">{doc.name}</p>
                   <p className="text-xs text-white/40">
                     {doc.uploadedAt} · {doc.size}
+                    {doc.stepId && doc.stepId !== stepId && (
+                      <span className="ml-2 text-amber-400/70">(Etapa {doc.stepId})</span>
+                    )}
                   </p>
                 </div>
               </div>
@@ -103,14 +111,28 @@ export function ChbDocumentsPanel({
                   {doc.type}
                 </Badge>
                 <button
-                  onClick={() => console.log('Abrir:', doc.name)}
+                  onClick={() => {
+                    if (doc.file) {
+                      const url = URL.createObjectURL(doc.file);
+                      window.open(url, '_blank');
+                    }
+                  }}
                   className="p-2 rounded-lg hover:bg-white/5 text-white/60 hover:text-white transition-colors"
                   title="Visualizar"
                 >
                   <Eye className="w-4 h-4" />
                 </button>
                 <button
-                  onClick={() => console.log('Baixar:', doc.name)}
+                  onClick={() => {
+                    if (doc.file) {
+                      const url = URL.createObjectURL(doc.file);
+                      const a = document.createElement('a');
+                      a.href = url;
+                      a.download = doc.name;
+                      a.click();
+                      URL.revokeObjectURL(url);
+                    }
+                  }}
                   className="p-2 rounded-lg hover:bg-white/5 text-white/60 hover:text-white transition-colors"
                   title="Baixar"
                 >
