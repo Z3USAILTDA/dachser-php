@@ -1,8 +1,7 @@
 import { useRef } from 'react';
 import { ChbDocument } from '@/types/chb';
 import { stepTitles } from '@/data/chbMocks';
-import { Upload, FileText, Eye, Download, X, Play, Loader2, Trash2 } from 'lucide-react';
-import { Badge } from '@/components/ui/badge';
+import { Upload, FileText, Download, X, Play, Loader2, Trash2 } from 'lucide-react';
 
 interface ChbDocumentsPanelProps {
   stepId: number;
@@ -14,15 +13,6 @@ interface ChbDocumentsPanelProps {
   isAnalyzing: boolean;
   hasAnalysisResult?: boolean;
 }
-
-const typeColors: Record<ChbDocument['type'], string> = {
-  HBL: 'bg-blue-500/20 text-blue-400 border-blue-500/30',
-  Invoice: 'bg-green-500/20 text-green-400 border-green-500/30',
-  'Packing List': 'bg-purple-500/20 text-purple-400 border-purple-500/30',
-  DI: 'bg-amber-500/20 text-amber-400 border-amber-500/30',
-  AWB: 'bg-cyan-500/20 text-cyan-400 border-cyan-500/30',
-  Certificado: 'bg-pink-500/20 text-pink-400 border-pink-500/30',
-};
 
 export function ChbDocumentsPanel({ 
   stepId, 
@@ -106,22 +96,7 @@ export function ChbDocumentsPanel({
                   </p>
                 </div>
               </div>
-              <div className="flex items-center gap-3">
-                <Badge className={`${typeColors[doc.type]} border`}>
-                  {doc.type}
-                </Badge>
-                <button
-                  onClick={() => {
-                    if (doc.file) {
-                      const url = URL.createObjectURL(doc.file);
-                      window.open(url, '_blank');
-                    }
-                  }}
-                  className="p-2 rounded-lg hover:bg-white/5 text-white/60 hover:text-white transition-colors"
-                  title="Visualizar"
-                >
-                  <Eye className="w-4 h-4" />
-                </button>
+              <div className="flex items-center gap-2">
                 <button
                   onClick={() => {
                     if (doc.file) {
