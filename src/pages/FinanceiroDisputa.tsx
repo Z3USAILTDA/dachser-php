@@ -78,6 +78,7 @@ export default function FinanceiroDisputa() {
   const [importModalOpen, setImportModalOpen] = useState(false);
   const [importLoading, setImportLoading] = useState(false);
   const [importFile, setImportFile] = useState<File | null>(null);
+  const [isDragging, setIsDragging] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Observações editing state
@@ -695,21 +696,35 @@ export default function FinanceiroDisputa() {
               onDragOver={(e) => {
                 e.preventDefault();
                 e.stopPropagation();
+                setIsDragging(true);
               }}
               onDragEnter={(e) => {
                 e.preventDefault();
                 e.stopPropagation();
+                setIsDragging(true);
+              }}
+              onDragLeave={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                setIsDragging(false);
               }}
               onDrop={(e) => {
                 e.preventDefault();
                 e.stopPropagation();
+                setIsDragging(false);
                 const file = e.dataTransfer.files?.[0];
-                if (file && (file.name.endsWith('.csv') || file.name.endsWith('.txt') || file.name.endsWith('.tsv'))) {
-                  setImportFile(file);
+                if (file) {
+                  const ext = file.name.toLowerCase();
+                  if (ext.endsWith('.csv') || ext.endsWith('.txt') || ext.endsWith('.tsv')) {
+                    setImportFile(file);
+                  } else {
+                    toast({ title: "Formato inválido", description: "Use arquivos CSV, TXT ou TSV", variant: "destructive" });
+                  }
                 }
               }}
               className={`
-                border-2 border-dashed rounded-xl p-6 text-center cursor-pointer transition-colors
+                border-2 border-dashed rounded-xl p-8 text-center cursor-pointer transition-all duration-200
+                ${isDragging ? 'border-primary bg-primary/10 scale-[1.02]' : ''}
                 ${importFile ? 'border-primary/50 bg-primary/5' : 'border-white/20 hover:border-primary/40 hover:bg-white/5'}
               `}
             >
@@ -735,9 +750,10 @@ export default function FinanceiroDisputa() {
                   </button>
                 </div>
               ) : (
-                <div className="text-muted-foreground">
-                  <Upload className="w-8 h-8 mx-auto mb-2 opacity-50" />
-                  <p>Clique ou arraste um arquivo CSV/TXT</p>
+                <div className={`text-muted-foreground ${isDragging ? 'text-primary' : ''}`}>
+                  <Upload className={`w-10 h-10 mx-auto mb-3 ${isDragging ? 'opacity-100 animate-bounce' : 'opacity-50'}`} />
+                  <p className="font-medium">{isDragging ? 'Solte o arquivo aqui' : 'Clique ou arraste um arquivo'}</p>
+                  <p className="text-xs mt-1 opacity-70">CSV, TXT ou TSV</p>
                 </div>
               )}
             </div>
