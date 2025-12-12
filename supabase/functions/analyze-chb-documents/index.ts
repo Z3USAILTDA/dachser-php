@@ -14,58 +14,52 @@ FORMATO DE SAÍDA — HTML ESTRITO
   ...conteúdo HTML...
   <<END_HTML>>
 
-- Antes do bloco, imprima SOMENTE:
-  1) "Olá, equipe."
-  2) "Fontes | ..." (em linha única).
-
 - Dentro do bloco gere SOMENTE HTML simples:
-  • <p> para a linha "Fontes | …" (opcional).
   • Um <table> com <thead> e <tbody> seguindo as colunas da ETAPA.
-  • (Opcional) <p> "Observações" + <ul><li>…</li></ul> (máx. 3 itens) apenas se houver 🟨/🔴.
-  • (Opcional) <p> "Parecer do Modelo" + <ul><li>…</li></ul> com até 3 linhas.
+    IMPORTANTE: Na coluna "Fonte" ou similar, use o NOME DO ARQUIVO (ex.: "invoice_123.pdf") em vez de referências genéricas como "Fonte A" ou "ab12cd".
+  • Após a tabela, uma seção <h4>Observações</h4> seguida de <p> com cada observação.
+    Use os emojis 🔴 para erros críticos e 🟨 para alertas/avisos no início de cada observação.
+    Formato: "🔴 [Título do campo]: [Descrição do problema]. [Ação necessária]."
+  • Após as observações, uma seção <h4>Parecer do Modelo</h4> com:
+    - <p><strong>Impedimento para registrar a DI:</strong> Sim/Não — [justificativa]</p>
+    - <p><strong>Nível de risco consolidado:</strong> 🔴 ou 🟨 ou ✅</p>
+    - <p><strong>Principal(ais) causa(s) crítica(s):</strong> [lista das causas]</p>
 
-- Proibido Markdown, <script>, estilos externos ou tags complexas. Use SOMENTE: p, table, thead, tbody, tr, th, td, ul, li.
+- Proibido Markdown, <script>, estilos externos. Use SOMENTE: h4, p, strong, table, thead, tbody, tr, th, td.
 `;
 
 const CHB_TABLE_SPEC = `
 REGRAS DE CONTEÚDO DA TABELA
 
 1) Colunas fixas e ordem obrigatória:
-   - Etapa 1: Campo | Fonte A | Fonte B | Fonte C | ... | Observação | Status
-   - Etapa 2: Campo | Pré-Alerta | Instrução | Observação | Status
-   - Etapa 3: Campo | Consolidação (PA+Instr.) | Rascunho DI | Observação | Status
+   - Todas as etapas: Campo | [Nome do Arquivo 1] | [Nome do Arquivo 2] | ... | Observação | Status
+   - Use o nome real do arquivo em cada coluna (ex.: "HBL_draft.pdf", "Invoice_123.pdf")
 
-2) Referência de fontes: Use apelidos curtos (ex.: ab12cd/p.4).
-
-3) Padronização:
+2) Padronização:
    - Números: vírgula decimal; milhar com ponto (ex.: 10.841,0).
-   - Datas: AAAA-MM-DD.
+   - Datas: DD/MM/AAAA.
    - CNPJ: apenas dígitos.
    - Ausência: ND (ou Ilegível).
    - Status: use SÓ os ícones: ✅, 🟨, 🔴.
 
-4) Larguras e corte: Mantenha células concisas. Se >~40 caracteres, encurte com "…".
+3) Larguras e corte: Mantenha células concisas. Se >~40 caracteres, encurte com "…".
 
-5) Regras de PESO (Gross/Net/tara):
+4) Regras de PESO (Gross/Net/tara):
    - Se Gross(BL) ≈ Net(PL) e Gross(PL)-Net(PL) ≈ tara, marcar 🟨 com nota.
    - Sem tara confiável ou divergência > tolerância → 🔴.
    - Tolerâncias: discrepância relevante se > 0,5 (absoluto) OU > 0,3%.
 
-6) NCM — Regra aduaneira:
+5) NCM — Regra aduaneira:
    - Validar RAIZ (4 dígitos) + compatibilidade da descrição técnica.
    - Divergência de raiz → 🔴. Divergência apenas no sufixo → 🟨.
 
-7) Incoterm × Condição de frete:
+6) Incoterm × Condição de frete:
    - Incoterm coerente mas rótulo ausente → 🟨.
    - Incoterms diferentes → 🔴.
-
-8) Gere colunas dinamicamente baseado na quantidade de arquivos fornecidos.
 `;
 
-function getPromptByStep(stepId: number, fileCount: number): string {
-  const dynamicColumns = fileCount > 3 
-    ? `Gere colunas dinâmicas para ${fileCount} fontes (Fonte A, Fonte B, Fonte C, Fonte D, etc.).`
-    : '';
+function getPromptByStep(stepId: number, fileNames: string[]): string {
+  const fileListText = fileNames.map((name, i) => `${i + 1}. ${name}`).join('\n');
 
   if (stepId === 1) {
     return `
@@ -74,11 +68,14 @@ Você é o CRONOS, auditor de logística (importação, Brasil).
 Objetivo: verificar consistência interna dos documentos do Pré-Alerta (entre si).
 Saída em pt-BR, **HTML simples**.
 
-${dynamicColumns}
+ARQUIVOS RECEBIDOS:
+${fileListText}
+
+Use os NOMES DOS ARQUIVOS acima como cabeçalhos das colunas da tabela.
 
 PADRÕES
 - Números: vírgula decimal; milhar com ponto.
-- Datas: AAAA-MM-DD.
+- Datas: DD/MM/AAAA.
 - CNPJ: apenas dígitos.
 - NCM: validar raiz (4 dígitos) + compatibilidade de descrição.
 - Unidades: peso em kg; volume em m³.
@@ -106,7 +103,10 @@ SISTEMA — CRONOS (Etapa 2: Pré-Alerta × Instrução)
 Objetivo: comparar Pré-Alerta (referência) com Instrução.
 Saída em pt-BR, **HTML simples**.
 
-${dynamicColumns}
+ARQUIVOS RECEBIDOS:
+${fileListText}
+
+Use os NOMES DOS ARQUIVOS acima como cabeçalhos das colunas da tabela.
 
 PADRÕES
 - Iguais à Etapa 1 (números, datas, CNPJ, NCM, tolerâncias).
@@ -127,7 +127,10 @@ SISTEMA — CRONOS (Etapa 3: DI × (Pré-Alerta + Instrução))
 Objetivo: confrontar Rascunho DI com a Consolidação (PA+Instr.).
 Saída em pt-BR, **HTML simples**.
 
-${dynamicColumns}
+ARQUIVOS RECEBIDOS:
+${fileListText}
+
+Use os NOMES DOS ARQUIVOS acima como cabeçalhos das colunas da tabela.
 
 PADRÕES
 - Iguais às Etapas 1 e 2; aplique a Regra de Peso quando aplicável.
@@ -331,7 +334,8 @@ serve(async (req) => {
 
     console.log(`Analyzing ${files.length} files for step ${stepId}`);
 
-    const prompt = getPromptByStep(stepId, files.length);
+    const fileNames = files.map((f: any) => f.name);
+    const prompt = getPromptByStep(stepId, fileNames);
     let responseText: string;
     let usedFallback = false;
 
