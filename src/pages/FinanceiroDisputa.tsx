@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
-import { Flag, Search, Filter, X, Plus, Check, Trash2, Clock, Scale, Upload, FileSpreadsheet, Loader2, RefreshCw } from "lucide-react";
+import { Flag, Search, Filter, X, Plus, Check, Trash2, Clock, Scale, Upload, FileSpreadsheet, Loader2 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -67,17 +67,6 @@ export default function FinanceiroDisputa() {
   const [addObservacoes, setAddObservacoes] = useState("");
   const [addError, setAddError] = useState("");
   const [addLoading, setAddLoading] = useState(false);
-  const [lookupLoading, setLookupLoading] = useState(false);
-  const [lookupData, setLookupData] = useState<{
-    doc_key: string;
-    cliente: string;
-    nf: string;
-    nd: string;
-    valor: number;
-    vencimento: string;
-    emissao: string;
-    tipo: string;
-  } | null>(null);
 
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [deleteDocKey, setDeleteDocKey] = useState<string | null>(null);
@@ -175,38 +164,6 @@ export default function FinanceiroDisputa() {
     }
   };
 
-  const handleLookupDocumento = async () => {
-    if (!addNf.trim()) {
-      setAddError("Informe o ND/NF/Documento para buscar.");
-      return;
-    }
-    setAddError("");
-    setLookupLoading(true);
-    setLookupData(null);
-
-    try {
-      const { data, error } = await supabase.functions.invoke("mariadb-proxy", {
-        body: { action: "lookup_documento", nd: addNf.trim() },
-      });
-
-      if (error) throw error;
-      if (data?.success && data.data) {
-        setLookupData(data.data);
-        if (data.data.responsavel) {
-          setAddResp(data.data.responsavel);
-        }
-        toast({ title: "Documento encontrado", description: `Cliente: ${data.data.cliente || 'N/A'}` });
-      } else {
-        setAddError(data?.error || "Documento não encontrado.");
-      }
-    } catch (err) {
-      console.error("Erro ao buscar documento:", err);
-      setAddError("Falha ao buscar documento.");
-    } finally {
-      setLookupLoading(false);
-    }
-  };
-
   const handleAddDispute = async () => {
     if (!addNf.trim()) {
       setAddError("Informe o documento/NF.");
@@ -232,7 +189,6 @@ export default function FinanceiroDisputa() {
         setAddNf("");
         setAddResp("");
         setAddObservacoes("");
-        setLookupData(null);
         fetchDisputas();
       } else {
         setAddError(data?.error || "Falha ao salvar.");
@@ -610,67 +566,24 @@ export default function FinanceiroDisputa() {
           setAddNf("");
           setAddResp("");
           setAddObservacoes("");
-          setLookupData(null);
           setAddError("");
         }
       }}>
-        <DialogContent className="bg-[rgba(4,5,15,0.98)] border-white/12 max-w-lg">
+        <DialogContent className="bg-[rgba(4,5,15,0.98)] border-white/12 max-w-md">
           <DialogHeader>
             <DialogTitle>Adicionar Disputa</DialogTitle>
           </DialogHeader>
           <div className="space-y-4 py-3">
-            {/* Search field */}
             <div>
               <Label className="text-sm text-muted-foreground">ND / NF / Documento</Label>
-              <div className="flex gap-2 mt-1">
-                <Input
-                  value={addNf}
-                  onChange={(e) => setAddNf(e.target.value)}
-                  placeholder="Ex: 12345"
-                  className="bg-[#13141a] border-white/20 flex-1"
-                  onKeyDown={(e) => e.key === 'Enter' && handleLookupDocumento()}
-                />
-                <Button 
-                  onClick={handleLookupDocumento} 
-                  disabled={lookupLoading}
-                  variant="outline"
-                  className="px-3"
-                >
-                  {lookupLoading ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Search className="w-4 h-4" />}
-                </Button>
-              </div>
+              <Input
+                value={addNf}
+                onChange={(e) => setAddNf(e.target.value)}
+                placeholder="Ex: 12345"
+                className="mt-1 bg-[#13141a] border-white/20"
+              />
             </div>
 
-            {/* Assimilated data display */}
-            {lookupData && (
-              <div className="bg-[#0a0b12] rounded-lg p-3 border border-white/10 space-y-2">
-                <p className="text-xs text-muted-foreground font-semibold uppercase tracking-wide">Dados do Documento</p>
-                <div className="grid grid-cols-2 gap-2 text-sm">
-                  <div>
-                    <span className="text-muted-foreground">Cliente:</span>{" "}
-                    <span className="text-white">{lookupData.cliente || '—'}</span>
-                  </div>
-                  <div>
-                    <span className="text-muted-foreground">Valor:</span>{" "}
-                    <span className="text-white">{lookupData.valor ? `R$ ${Number(lookupData.valor).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}` : '—'}</span>
-                  </div>
-                  <div>
-                    <span className="text-muted-foreground">Emissão:</span>{" "}
-                    <span className="text-white">{lookupData.emissao ? new Date(lookupData.emissao + 'T00:00:00').toLocaleDateString('pt-BR') : '—'}</span>
-                  </div>
-                  <div>
-                    <span className="text-muted-foreground">Vencimento:</span>{" "}
-                    <span className="text-white">{lookupData.vencimento ? new Date(lookupData.vencimento + 'T00:00:00').toLocaleDateString('pt-BR') : '—'}</span>
-                  </div>
-                  <div>
-                    <span className="text-muted-foreground">Tipo:</span>{" "}
-                    <span className="text-white">{lookupData.tipo || '—'}</span>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* Extra fields */}
             <div>
               <Label className="text-sm text-muted-foreground">Responsável</Label>
               <Input
@@ -697,7 +610,7 @@ export default function FinanceiroDisputa() {
             <Button variant="outline" onClick={() => setAddModalOpen(false)}>
               Cancelar
             </Button>
-            <Button onClick={handleAddDispute} disabled={addLoading || !lookupData} className="bg-primary text-primary-foreground">
+            <Button onClick={handleAddDispute} disabled={addLoading} className="bg-primary text-primary-foreground">
               {addLoading ? "Salvando..." : "Salvar"}
             </Button>
           </DialogFooter>
