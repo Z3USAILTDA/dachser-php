@@ -129,6 +129,7 @@ export default function FinanceiroDisputa() {
     if (!dateStr) return "-";
     try {
       const d = new Date(dateStr);
+      if (isNaN(d.getTime())) return "-";
       return d.toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" });
     } catch {
       return dateStr;
@@ -139,6 +140,7 @@ export default function FinanceiroDisputa() {
     if (!dateStr) return "-";
     try {
       const d = new Date(dateStr);
+      if (isNaN(d.getTime())) return "-";
       return d.toLocaleString("pt-BR", { 
         timeZone: "America/Sao_Paulo",
         day: "2-digit", 
@@ -156,23 +158,18 @@ export default function FinanceiroDisputa() {
     return "R$ " + val.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   };
 
-  // Get current time in São Paulo timezone
-  const getNowInSaoPaulo = () => {
-    const now = new Date();
-    // Get the offset for São Paulo (UTC-3 or UTC-2 depending on DST)
-    const saoPauloOffset = new Date().toLocaleString("en-US", { timeZone: "America/Sao_Paulo" });
-    return new Date(saoPauloOffset).getTime();
-  };
-
   const formatElapsed = (startDate: string) => {
     if (!startDate) return "—";
     try {
-      // Parse the start date and convert to São Paulo timezone
-      const startDateObj = new Date(startDate);
-      const startInSaoPaulo = new Date(startDateObj.toLocaleString("en-US", { timeZone: "America/Sao_Paulo" }));
-      const nowInSaoPaulo = new Date(new Date().toLocaleString("en-US", { timeZone: "America/Sao_Paulo" }));
+      const start = new Date(startDate);
+      if (isNaN(start.getTime())) return "—";
       
-      const ms = nowInSaoPaulo.getTime() - startInSaoPaulo.getTime();
+      // Use current time in São Paulo timezone for comparison
+      const now = new Date();
+      const ms = now.getTime() - start.getTime();
+      
+      if (ms < 0) return "—";
+      
       const s = Math.floor(ms / 1000);
       const d = Math.floor(s / 86400);
       const h = Math.floor((s % 86400) / 3600);
