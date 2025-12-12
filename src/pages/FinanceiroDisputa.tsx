@@ -76,7 +76,6 @@ export default function FinanceiroDisputa() {
   const [importModalOpen, setImportModalOpen] = useState(false);
   const [importLoading, setImportLoading] = useState(false);
   const [importFile, setImportFile] = useState<File | null>(null);
-  const [importResp, setImportResp] = useState("");
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Observações editing state
@@ -276,21 +275,40 @@ export default function FinanceiroDisputa() {
     }, 500);
   }, [toast]);
 
-  const parseSpreadsheet = async (file: File): Promise<Array<{ nf: string }>> => {
+  const parseSpreadsheet = async (file: File): Promise<Array<{
+    nd: string;
+    descricao: string;
+    departamento: string;
+    responsavel: string;
+    escalation: string;
+  }>> => {
     const text = await file.text();
     const lines = text.split(/\r?\n/).filter(line => line.trim());
     
     // Skip header if it looks like one
-    const startIdx = lines[0]?.toLowerCase().includes('documento') || 
-                     lines[0]?.toLowerCase().includes('nf') ||
-                     lines[0]?.toLowerCase().includes('numero') ? 1 : 0;
+    const startIdx = lines[0]?.toLowerCase().includes('nd') || 
+                     lines[0]?.toLowerCase().includes('cnpj') ||
+                     lines[0]?.toLowerCase().includes('documento') ? 1 : 0;
     
-    const items: Array<{ nf: string }> = [];
+    const items: Array<{
+      nd: string;
+      descricao: string;
+      departamento: string;
+      responsavel: string;
+      escalation: string;
+    }> = [];
+    
     for (let i = startIdx; i < lines.length; i++) {
       const cols = lines[i].split(/[,;\t]/);
-      const nf = cols[0]?.trim();
-      if (nf) {
-        items.push({ nf });
+      const nd = cols[0]?.trim();  // ND (coluna 0)
+      if (nd) {
+        items.push({
+          nd,
+          descricao: cols[8]?.trim() || '',      // DESCRIÇÃO/PENDÊNCIA (coluna 8) → observacoes
+          departamento: cols[9]?.trim() || '',   // DEPARTAMENTO (coluna 9)
+          responsavel: cols[10]?.trim() || '',   // RESPONSÁVEL (coluna 10)
+          escalation: cols[13]?.trim() || '',    // ESCALATION (coluna 13)
+        });
       }
     }
     return items;
@@ -312,14 +330,8 @@ export default function FinanceiroDisputa() {
         return;
       }
 
-      // Add responsavel to all items
-      const itemsWithResp = items.map(item => ({
-        ...item,
-        responsavel: importResp.trim() || undefined
-      }));
-
       const { data, error } = await supabase.functions.invoke("mariadb-proxy", {
-        body: { action: "import_disputas_planilha", items: itemsWithResp },
+        body: { action: "import_disputas_planilha", items },
       });
 
       if (error) throw error;
@@ -335,7 +347,6 @@ export default function FinanceiroDisputa() {
         
         setImportModalOpen(false);
         setImportFile(null);
-        setImportResp("");
         fetchDisputas();
       } else {
         toast({ title: "Erro", description: data?.error || "Falha na importação", variant: "destructive" });

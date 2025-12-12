@@ -1868,7 +1868,13 @@ serve(async (req) => {
       }
 
       case 'import_disputas_planilha': {
-        const { items } = body as { items?: Array<{ nf: string; responsavel?: string }> };
+        const { items } = body as { items?: Array<{
+          nd: string;
+          descricao?: string;
+          departamento?: string;
+          responsavel?: string;
+          escalation?: string;
+        }> };
         
         if (!items || !Array.isArray(items) || items.length === 0) {
           return new Response(
@@ -1882,24 +1888,27 @@ serve(async (req) => {
         const notFoundItems: string[] = [];
         
         for (const item of items) {
-          const nf = item.nf?.toString().trim();
-          if (!nf) continue;
+          const nd = item.nd?.toString().trim();
+          if (!nd) continue;
           
-          // Check if document exists
+          // Check if document exists and get doc_key
           const checkSql = `
-            SELECT id FROM dados_dachser.t_dados_financeiro_nfs 
+            SELECT COALESCE(NULLIF(documento,''), NULLIF(nd,''), NULLIF(numero_nf,'')) AS doc_key
+            FROM dados_dachser.t_dados_financeiro_nfs 
             WHERE documento = ? OR numero_nf = ? OR nd = ?
             LIMIT 1
           `;
-          const existingRows = await client.query(checkSql, [nf, nf, nf]);
+          const existingRows = await client.query(checkSql, [nd, nd, nd]);
           
           if (!existingRows || existingRows.length === 0) {
             notFoundCount++;
-            notFoundItems.push(nf);
+            notFoundItems.push(nd);
             continue;
           }
           
-          // Update to mark as disputa
+          const docKey = existingRows[0].doc_key;
+          
+          // Update to mark as disputa in t_dados_financeiro_nfs
           const updateSql = `
             UPDATE dados_dachser.t_dados_financeiro_nfs 
             SET disputa = 1, 
@@ -1907,7 +1916,25 @@ serve(async (req) => {
                 responsavel_disp = ?
             WHERE documento = ? OR numero_nf = ? OR nd = ?
           `;
-          await client.execute(updateSql, [item.responsavel || null, nf, nf, nf]);
+          await client.execute(updateSql, [item.responsavel || null, nd, nd, nd]);
+          
+          // Insert/update extra data in t_fin_disputas
+          const upsertSql = `
+            INSERT INTO ai_agente.t_fin_disputas (nf, departamento, observacoes, escalation, updated_at)
+            VALUES (?, ?, ?, ?, NOW())
+            ON DUPLICATE KEY UPDATE 
+              departamento = VALUES(departamento),
+              observacoes = VALUES(observacoes),
+              escalation = VALUES(escalation),
+              updated_at = NOW()
+          `;
+          await client.execute(upsertSql, [
+            docKey, 
+            item.departamento || null, 
+            item.descricao || null,  // descricao → observacoes
+            item.escalation || null
+          ]);
+          
           successCount++;
         }
         
