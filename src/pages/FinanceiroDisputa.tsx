@@ -668,16 +668,6 @@ export default function FinanceiroDisputa() {
                 </div>
               )}
             </div>
-
-            <div>
-              <Label className="text-sm text-muted-foreground">Responsável (opcional)</Label>
-              <Input
-                value={importResp}
-                onChange={(e) => setImportResp(e.target.value)}
-                placeholder="Nome do responsável para todas as disputas"
-                className="mt-1 bg-[#13141a] border-white/20"
-              />
-            </div>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => { setImportModalOpen(false); setImportFile(null); }}>
