@@ -17,14 +17,38 @@ const variantColors = {
 
 export function ChbHistoryPanel({ stepId, approvedHistory }: ChbHistoryPanelProps) {
   const copyResult = (entry: ChbApprovedHistory) => {
-    navigator.clipboard.writeText(entry.detailedSummary || entry.summary);
-    toast.success('Resultado copiado para a área de transferência');
+    // Extract only parecer text for copying
+    const parecerHtml = extractParecer(entry.detailedSummary || entry.summary);
+    const tempDiv = document.createElement('div');
+    tempDiv.innerHTML = parecerHtml;
+    navigator.clipboard.writeText(tempDiv.textContent || tempDiv.innerText || '');
+    toast.success('Parecer copiado para a área de transferência');
   };
 
   const stepNames: Record<number, string> = {
     1: 'Pré-Alerta',
     2: 'Instrução',
     3: 'DI/Fechamento',
+  };
+
+  // Extract only "Parecer do Modelo" section from HTML
+  const extractParecer = (html: string): string => {
+    if (!html) return '';
+    
+    // Try to find the Parecer section
+    const parecerMatch = html.match(/<h4[^>]*>.*?Parecer.*?<\/h4>([\s\S]*?)(?=<h4|$)/i);
+    if (parecerMatch) {
+      return `<div class="parecer-section">${parecerMatch[0]}</div>`;
+    }
+    
+    // Alternative: look for parecer-related content
+    const altMatch = html.match(/Parecer[\s\S]*?(?:Impedimento|Nível de risco|Principal)[\s\S]*?(?=<h4|<\/div>$|$)/i);
+    if (altMatch) {
+      return `<div class="parecer-section">${altMatch[0]}</div>`;
+    }
+    
+    // Fallback: return a summary if no parecer found
+    return html;
   };
 
   // Collect all history entries up to and including current step
@@ -36,10 +60,41 @@ export function ChbHistoryPanel({ stepId, approvedHistory }: ChbHistoryPanelProp
 
   // Sort by date descending (most recent first)
   allHistoryEntries.sort((a, b) => {
-    const dateA = new Date(a.date.split(' ')[0].split('/').reverse().join('-') + 'T' + a.date.split(' ')[1]);
-    const dateB = new Date(b.date.split(' ')[0].split('/').reverse().join('-') + 'T' + b.date.split(' ')[1]);
-    return dateB.getTime() - dateA.getTime();
+    try {
+      const parseDate = (dateStr: string) => {
+        // Handle ISO format
+        if (dateStr.includes('T')) {
+          return new Date(dateStr);
+        }
+        // Handle BR format: DD/MM/YYYY HH:mm
+        const parts = dateStr.split(' ');
+        if (parts.length >= 2) {
+          const [day, month, year] = parts[0].split('/');
+          return new Date(`${year}-${month}-${day}T${parts[1]}`);
+        }
+        return new Date(dateStr);
+      };
+      return parseDate(b.date).getTime() - parseDate(a.date).getTime();
+    } catch {
+      return 0;
+    }
   });
+
+  // Format date for display
+  const formatDate = (dateStr: string): string => {
+    try {
+      const date = dateStr.includes('T') ? new Date(dateStr) : new Date();
+      return date.toLocaleString('pt-BR', {
+        day: '2-digit',
+        month: '2-digit',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit'
+      });
+    } catch {
+      return dateStr;
+    }
+  };
 
   return (
     <div className="space-y-4">
@@ -69,40 +124,33 @@ export function ChbHistoryPanel({ stepId, approvedHistory }: ChbHistoryPanelProp
                 <div className="p-3 rounded-lg bg-black/30 border border-white/10">
                   <div className="flex items-start justify-between gap-3">
                     <div className="flex-1">
-                      <div className="flex items-center gap-2 mb-1.5">
+                      <div className="flex items-center gap-2 mb-2">
                         <span className="text-[0.65rem] px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-400 font-medium">
                           {stepNames[entry.stepId] || `Etapa ${entry.stepId}`}
                         </span>
                         <span className="text-[0.65rem] text-white/50 flex items-center gap-1">
                           <Clock className="w-2.5 h-2.5" />
-                          {entry.date}
+                          {formatDate(entry.date)}
                         </span>
-                        <span className="text-[0.65rem] text-amber-500 flex items-center gap-1">
-                          <User className="w-2.5 h-2.5" />
-                          {entry.user}
-                        </span>
+                        {entry.user && entry.user !== 'Usuário' && (
+                          <span className="text-[0.65rem] text-amber-500 flex items-center gap-1">
+                            <User className="w-2.5 h-2.5" />
+                            {entry.user}
+                          </span>
+                        )}
                       </div>
                       
-                      {/* Tags */}
-                      <div className="flex flex-wrap gap-1 mb-2">
-                        {entry.tags.map((tag, index) => (
-                          <Badge key={index} className={`${variantColors[tag.variant]} border text-[0.6rem] px-1.5 py-0`}>
-                            {tag.label}
-                          </Badge>
-                        ))}
-                      </div>
-                      
-                      {/* Detailed summary with parecer - render as HTML if available */}
+                      {/* Show only Parecer do Modelo */}
                       <div 
                         className="text-xs text-white/70 leading-relaxed bg-black/20 p-2 rounded border border-white/5 chb-analysis-content"
-                        dangerouslySetInnerHTML={{ __html: entry.detailedSummary || entry.summary }}
+                        dangerouslySetInnerHTML={{ __html: extractParecer(entry.detailedSummary || entry.summary) }}
                       />
                     </div>
                     
                     <button
                       onClick={() => copyResult(entry)}
                       className="p-1.5 rounded-md hover:bg-white/5 text-white/40 hover:text-white transition-colors"
-                      title="Copiar resultado"
+                      title="Copiar parecer"
                     >
                       <Copy className="w-3 h-3" />
                     </button>
