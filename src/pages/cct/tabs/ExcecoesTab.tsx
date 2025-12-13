@@ -82,35 +82,6 @@ export default function ExcecoesContent() {
       {/* Main Card */}
       <div className="rounded-2xl bg-[rgba(5,6,18,0.9)] border border-[rgba(255,255,255,0.12)] p-6 shadow-[0_18px_40px_rgba(0,0,0,0.85)]">
         <div className="space-y-6">
-
-      {/* Stats Cards */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <div className={cn("rounded-2xl bg-[rgba(5,6,18,0.9)] border border-[rgba(255,255,255,0.12)] p-4 cursor-pointer transition-all hover:scale-[1.02] shadow-[0_18px_40px_rgba(0,0,0,0.85)]", filterStatus === "ABERTA" && "ring-2 ring-red-500")} onClick={() => setFilterStatus(filterStatus === "ABERTA" ? "all" : "ABERTA")}>
-          <div className="flex items-center gap-4">
-            <div className="p-3 rounded-lg bg-red-500/20"><AlertTriangle className="h-6 w-6 text-red-400" /></div>
-            <div><p className="text-2xl font-bold text-[#f5f5f5]">{stats.abertas}</p><p className="text-sm text-[#aaaaaa]">Abertas</p></div>
-          </div>
-        </div>
-        <div className={cn("rounded-2xl bg-[rgba(5,6,18,0.9)] border border-[rgba(255,255,255,0.12)] p-4 cursor-pointer transition-all hover:scale-[1.02] shadow-[0_18px_40px_rgba(0,0,0,0.85)]", filterStatus === "EM_ANALISE" && "ring-2 ring-yellow-500")} onClick={() => setFilterStatus(filterStatus === "EM_ANALISE" ? "all" : "EM_ANALISE")}>
-          <div className="flex items-center gap-4">
-            <div className="p-3 rounded-lg bg-yellow-500/20"><Eye className="h-6 w-6 text-yellow-400" /></div>
-            <div><p className="text-2xl font-bold text-[#f5f5f5]">{stats.emAnalise}</p><p className="text-sm text-[#aaaaaa]">Em Análise</p></div>
-          </div>
-        </div>
-        <div className={cn("rounded-2xl bg-[rgba(5,6,18,0.9)] border border-[rgba(255,255,255,0.12)] p-4 cursor-pointer transition-all hover:scale-[1.02] shadow-[0_18px_40px_rgba(0,0,0,0.85)]", filterStatus === "RESOLVIDA" && "ring-2 ring-emerald-500")} onClick={() => setFilterStatus(filterStatus === "RESOLVIDA" ? "all" : "RESOLVIDA")}>
-          <div className="flex items-center gap-4">
-            <div className="p-3 rounded-lg bg-emerald-500/20"><CheckCircle className="h-6 w-6 text-emerald-400" /></div>
-            <div><p className="text-2xl font-bold text-[#f5f5f5]">{stats.resolvidas}</p><p className="text-sm text-[#aaaaaa]">Resolvidas</p></div>
-          </div>
-        </div>
-        <div className="rounded-2xl bg-[rgba(5,6,18,0.9)] border border-[rgba(255,255,255,0.12)] p-4 shadow-[0_18px_40px_rgba(0,0,0,0.85)]">
-          <div className="flex items-center gap-4">
-            <div className="p-3 rounded-lg bg-[rgba(255,255,255,0.1)]"><AlertCircle className="h-6 w-6 text-[#aaaaaa]" /></div>
-            <div><p className="text-2xl font-bold text-[#f5f5f5]">{stats.total}</p><p className="text-sm text-[#aaaaaa]">Total</p></div>
-          </div>
-        </div>
-      </div>
-
       {/* Filters */}
       <div className="rounded-2xl bg-[rgba(5,6,18,0.9)] border border-[rgba(255,255,255,0.12)] p-4 shadow-[0_18px_40px_rgba(0,0,0,0.85)]">
         <div className="flex flex-col md:flex-row gap-4">
