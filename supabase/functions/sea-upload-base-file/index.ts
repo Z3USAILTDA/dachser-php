@@ -1,24 +1,11 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { Client } from "https://deno.land/x/mysql@v2.12.1/mod.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
-
-// Convert ArrayBuffer to base64 in chunks to avoid stack overflow
-function arrayBufferToBase64(buffer: ArrayBuffer): string {
-  const bytes = new Uint8Array(buffer);
-  const chunkSize = 8192;
-  let binary = '';
-  
-  for (let i = 0; i < bytes.length; i += chunkSize) {
-    const chunk = bytes.slice(i, i + chunkSize);
-    binary += String.fromCharCode(...chunk);
-  }
-  
-  return btoa(binary);
-}
 
 // Extract container from filename as fallback
 function extractContainerFromFilename(fileName: string): string | null {
@@ -30,6 +17,8 @@ serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
+
+  let dbClient: Client | null = null;
 
   try {
     const supabaseUrl = Deno.env.get('SUPABASE_URL') ?? '';
@@ -49,69 +38,85 @@ serve(async (req) => {
 
     console.log(`[UPLOAD] Uploading base file: ${file.name}, type: ${analysisType}`);
 
-    // Read file buffer for both upload and AI extraction
+    // Read file buffer for upload
     const fileBuffer = await file.arrayBuffer();
 
     // Upload file to Supabase Storage
-    const fileName = `base-files/${Date.now()}-${file.name}`;
+    const storagePath = `base-files/${Date.now()}-${file.name}`;
     const { error: uploadError } = await supabase.storage
       .from('maritime-files')
-      .upload(fileName, fileBuffer, { contentType: file.type });
+      .upload(storagePath, fileBuffer, { contentType: file.type });
 
     if (uploadError) {
-      console.error('[UPLOAD] Upload error:', uploadError);
+      console.error('[UPLOAD] Storage upload error:', uploadError);
       throw uploadError;
     }
 
     const { data: { publicUrl } } = supabase.storage
       .from('maritime-files')
-      .getPublicUrl(fileName);
+      .getPublicUrl(storagePath);
 
-    console.log('[UPLOAD] File uploaded, extracting metadata...');
+    console.log('[UPLOAD] File uploaded to storage, saving to MariaDB...');
 
-    // Extract container from filename FIRST (fast, no CPU overhead)
+    // Extract container from filename
     const containerFromFilename = extractContainerFromFilename(file.name);
     console.log(`[UPLOAD] Container from filename: ${containerFromFilename || 'not found'}`);
-    
-    // Use filename extraction only - skip AI extraction to avoid CPU timeout
-    const metadata: { container: string | null; consignee: string | null } = {
-      container: containerFromFilename,
-      consignee: null
-    };
-    
-    console.log('[UPLOAD] Final metadata:', metadata);
 
-    // Create maritime item with extracted metadata
-    const { data: item, error: itemError } = await supabase
-      .from('maritime_items')
-      .insert({
-        base_file_name: file.name,
-        base_file_url: publicUrl,
-        analysis_type: analysisType as any,
-        status: 'pendente',
-        container: metadata.container,
-        consignee: metadata.consignee,
-      })
-      .select()
-      .single();
+    // Connect to MariaDB
+    const host = Deno.env.get('MARIADB_HOST');
+    const port = parseInt(Deno.env.get('MARIADB_PORT') || '3306');
+    const database = Deno.env.get('MARIADB_DATABASE');
+    const dbUser = Deno.env.get('MARIADB_USER');
+    const dbPassword = Deno.env.get('MARIADB_PASSWORD');
 
-    if (itemError) throw itemError;
+    if (!host || !database || !dbUser || !dbPassword) {
+      throw new Error('Database configuration error');
+    }
 
-    console.log(`[UPLOAD] Item created: ${item.id}, container: ${metadata.container}`);
+    dbClient = await new Client().connect({
+      hostname: host,
+      port: port,
+      db: database,
+      username: dbUser,
+      password: dbPassword,
+      charset: "utf8mb4",
+    });
+
+    // First create file record
+    const fileResult = await dbClient.execute(`
+      INSERT INTO ai_agente.t_dachser_sea_files 
+      (filename, mime, rel_path, url, size_bytes, created_at)
+      VALUES (?, ?, ?, ?, ?, NOW())
+    `, [file.name, file.type, storagePath, publicUrl, file.size]);
+
+    const arquivoId = fileResult.lastInsertId;
+
+    // Create item record linking to file
+    const itemResult = await dbClient.execute(`
+      INSERT INTO ai_agente.t_dachser_sea_items 
+      (view, arquivo_id, arquivo_label, container, status, active, created_at)
+      VALUES (?, ?, ?, ?, 'pendente', 1, NOW())
+    `, [analysisType, arquivoId, file.name, containerFromFilename]);
+
+    const itemId = itemResult.lastInsertId;
+
+    console.log(`[UPLOAD] Item created in MariaDB: id=${itemId}, arquivo_id=${arquivoId}, container=${containerFromFilename}`);
+
+    await dbClient.close();
 
     return new Response(
       JSON.stringify({ 
         success: true, 
         item: {
-          id: item.id,
+          id: String(itemId),
           base_file_name: file.name,
           base_file_url: publicUrl,
-          consignee: item.consignee,
-          container: item.container,
-          status: item.status,
+          consignee: null,
+          container: containerFromFilename,
+          status: 'pendente',
           analysis_type: analysisType,
-          created_at: item.created_at,
-          updated_at: item.updated_at,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
         },
         message: 'File uploaded successfully' 
       }),
@@ -120,6 +125,9 @@ serve(async (req) => {
 
   } catch (error: any) {
     console.error('[UPLOAD] Error:', error);
+    if (dbClient) {
+      try { await dbClient.close(); } catch (e) { /* ignore */ }
+    }
     return new Response(
       JSON.stringify({ error: error?.message || 'Unknown error' }),
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
