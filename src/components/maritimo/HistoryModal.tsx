@@ -7,6 +7,16 @@ import { Input } from "@/components/ui/input";
 import { toast } from "@/hooks/use-toast";
 import { useState, useMemo } from "react";
 
+interface HistoryRunFile {
+  id: string;
+  file_name: string;
+  file_url?: string;
+  file_type: string;
+  source?: string;
+  role?: string;
+  created_at?: string;
+}
+
 interface HistoryRun {
   id: string;
   status: string;
@@ -16,12 +26,8 @@ interface HistoryRun {
   created_at: string;
   updated_at?: string;
   created_by_email?: string;
-  files?: {
-    id: string;
-    file_name: string;
-    file_type: string;
-    role: string;
-  }[];
+  created_by?: string;
+  files?: HistoryRunFile[];
 }
 
 interface HistoryModalProps {

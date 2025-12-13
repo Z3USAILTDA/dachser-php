@@ -1,22 +1,5 @@
 import { useState, useCallback } from "react";
-import { maritimoApi } from "@/services/maritimoApi";
-
-interface HistoryRun {
-  id: string;
-  status: string;
-  result_text?: string;
-  result_html?: string;
-  json_result?: any;
-  created_at: string;
-  updated_at?: string;
-  created_by_email?: string;
-  files?: {
-    id: string;
-    file_name: string;
-    file_type: string;
-    role: string;
-  }[];
-}
+import { maritimoApi, HistoryRun } from "@/services/maritimoApi";
 
 interface HistoryData {
   item: {
