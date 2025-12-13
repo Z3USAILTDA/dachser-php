@@ -134,21 +134,15 @@ export default function ChbAnalises() {
     }
   };
 
-  const handleCopyResult = async (content: string) => {
-    try {
-      // Try to copy as rich HTML first
-      const blob = new Blob([content], { type: 'text/html' });
-      const clipboardItem = new ClipboardItem({
-        'text/html': blob,
-        'text/plain': new Blob([content], { type: 'text/plain' })
-      });
-      await navigator.clipboard.write([clipboardItem]);
-      toast.success("Resultado copiado com formatação!");
-    } catch {
-      // Fallback to plain text
-      navigator.clipboard.writeText(content);
-      toast.success("Resultado copiado!");
-    }
+  const handleCopyResult = (content: string) => {
+    const tempDiv = document.createElement('div');
+    tempDiv.innerHTML = content;
+    // Remove excessive whitespace
+    const text = (tempDiv.textContent || tempDiv.innerText || content)
+      .replace(/\n{3,}/g, '\n\n')
+      .trim();
+    navigator.clipboard.writeText(text);
+    toast.success("Resultado copiado!");
   };
 
   const handleDelete = async (itemId: number) => {
