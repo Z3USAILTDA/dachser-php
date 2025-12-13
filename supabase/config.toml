@@ -116,3 +116,30 @@ verify_jwt = false
 
 [functions.maritimo-analyze]
 verify_jwt = false
+
+[functions.sea-upload-base-file]
+verify_jwt = false
+
+[functions.sea-submit-analysis]
+verify_jwt = false
+
+[functions.sea-poll-analysis]
+verify_jwt = false
+
+[functions.sea-reextract-metadata]
+verify_jwt = false
+
+[functions.sea-get-items]
+verify_jwt = false
+
+[functions.sea-get-item]
+verify_jwt = false
+
+[functions.sea-get-history]
+verify_jwt = false
+
+[functions.sea-get-system-logs]
+verify_jwt = false
+
+[functions.sea-migrate-to-mariadb]
+verify_jwt = false
