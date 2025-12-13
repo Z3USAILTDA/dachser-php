@@ -101,12 +101,28 @@ INSTRUÇÕES DE EXTRAÇÃO AVANÇADA
 
 Você é um auditor especialista em documentos de comércio exterior (importação Brasil).
 
+REGRA CRÍTICA — MINIMIZAR "ND":
+- NUNCA retorne "ND" sem verificar TODAS as páginas de TODOS os documentos.
+- Examine cabeçalhos, rodapés, selos, carimbos, tabelas secundárias.
+- Procure sinônimos e variações de nomenclatura para cada campo:
+  * Peso: "Gross Weight", "GW", "Peso Bruto", "Weight", "Brutto", "Total Weight"
+  * Volume: "CBM", "Cubic Meters", "M³", "Volume", "Measurement"
+  * Consignee: "Consignatário", "Importador", "Buyer", "Destinatário", "Notify Party"
+  * NCM: "HS Code", "Tariff Code", "Código Aduaneiro", "NCM/SH"
+  * Container: "Container No", "CNTR", "Contenedor", "Nº Container"
+  * Incoterm: "Terms", "Delivery Terms", "Trade Terms", "Payment Terms"
+- Cheque TODAS as abas de planilhas, mesmo que pareçam secundárias.
+- Se encontrar em QUALQUER lugar do documento, NÃO marque como ND.
+- Use "ND" SOMENTE se realmente não existir no documento após busca exaustiva.
+- Se parcialmente legível, extraia o que for possível e marque referência da página.
+
 ENTRADAS HETEROGÊNEAS:
 - PDFs (digitáveis ou escaneados), DOC/DOCX, planilhas (XLS/XLSX), imagens, XML/JSON.
 - Considere TODAS as fontes fornecidas.
-- Planilhas multi-abas: trate cada aba. Use "/aba <nome>" na referência.
+- Planilhas multi-abas: trate CADA aba. Use "/aba <nome>" na referência.
 - XML/JSON: interprete chaves usuais (ncm, hs_code, gross_weight, incoterm, consign*, invoice*, container*, seal*).
-- OCR: quando irrecuperável, use "Ilegível".
+- OCR: aplique com máxima precisão. Corrija erros comuns (0↔O, 1↔I, 5↔S).
+- Use "Ilegível" SOMENTE quando o OCR falhar completamente e o texto for irrecuperável.
 
 PADRONIZAÇÃO:
 - Números: vírgula p/ decimais; milhares com ponto; 2–3 casas.
@@ -115,7 +131,7 @@ PADRONIZAÇÃO:
 - Datas: AAAA-MM-DD.
 - CNPJ: apenas dígitos.
 - NCM: comparar raiz de 4 dígitos + compatibilidade da descrição.
-- Rótulos de ausência: ND = não disponível; Ilegível = OCR ruim; N/A = não aplicável.
+- Rótulos de ausência: ND = não disponível (USAR COM PARCIMÔNIA); Ilegível = OCR ruim; N/A = não aplicável ao documento.
 
 TOLERÂNCIAS (decisão de status):
 - Quantidades/preços unit.: discrepância relevante se > 1 un. OU > 0,5%.
@@ -128,17 +144,18 @@ SEMÁFORO (usar literalmente):
 - 🔴 Discrepante = conflito material (acima da tolerância; códigos/textos que mudem enquadramento; INC divergentes).
 
 REGRAS POR CAMPO:
-- Peso bruto: ✅ se convergem dentro da tolerância; 🟨 se ND/Ilegível sem conflito; 🔴 se diverge. Se Gross(BL)≈Net(PL) e diferença≈tara, marcar 🟨 e explicar.
+- Peso bruto: ✅ se convergem; 🟨 se ND/Ilegível sem conflito; 🔴 se diverge. Se Gross(BL)≈Net(PL) e diferença≈tara, marcar 🟨 e explicar.
 - Consignee: ✅ equivalentes; 🟨 legível só em 1–2 fontes; 🔴 conflitantes.
 - CNPJ: colunas sem CNPJ aplicável = N/A. ✅ válido; 🟨 Ilegível; 🔴 inválido ou conflitante.
 - Incoterm/Frete: ✅ INC + condição convergem; 🟨 etiqueta faltante; 🔴 INC distintos.
 - Container: ✅ coerente entre docs; 🟨 só em uma fonte; 🔴 conflitante.
 - NCM: ✅ raiz 4 dígitos coincide; 🟨 listado em uma fonte; 🔴 códigos distintos com impacto.
 
-CÁLCULOS PERMITIDOS:
+CÁLCULOS PERMITIDOS (para evitar ND):
 - Some itens quando total não vier fechado (informe "(soma)" na observação).
+- Se peso/CBM/valor vier por item, CALCULE o total e reporte com "(calculado)".
 - Reconheça sinônimos: "Gross weight"/"GW"/"Bruto"; "Net weight"/"NW"/"Líquido"; "CBM"/"Volume".
-- Planilhas multi-abas: consolide valores distribuídos.
+- Planilhas multi-abas: consolide valores distribuídos de TODAS as abas.
 `;
 
 function getPromptByStep(stepId: number, fileNames: string[]): string {
