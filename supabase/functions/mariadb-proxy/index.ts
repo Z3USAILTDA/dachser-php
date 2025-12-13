@@ -2694,7 +2694,7 @@ serve(async (req) => {
           SELECT i.*, 
                  (SELECT COUNT(*) FROM ai_agente.t_dachser_sea_runs r WHERE r.item_id = i.id) as run_count
           FROM ai_agente.t_dachser_sea_items i
-          WHERE 1=1
+          WHERE i.active = 1
         `;
         const params: any[] = [];
         
@@ -2852,7 +2852,7 @@ serve(async (req) => {
         console.log('Soft-deleting SEA item:', itemId);
         
         await client.execute(`
-          UPDATE ai_agente.t_dachser_sea_items SET deleted_at = NOW() WHERE id = ?
+          UPDATE ai_agente.t_dachser_sea_items SET active = 0 WHERE id = ?
         `, [itemId]);
         
         result = { success: true };
