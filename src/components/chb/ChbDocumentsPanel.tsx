@@ -99,7 +99,10 @@ export function ChbDocumentsPanel({
               <div className="flex items-center gap-1">
                 <button
                   onClick={() => {
-                    if (doc.file) {
+                    // Try to download from URL first, then from file reference
+                    if (doc.url) {
+                      window.open(doc.url, '_blank');
+                    } else if (doc.file) {
                       const url = URL.createObjectURL(doc.file);
                       const a = document.createElement('a');
                       a.href = url;
@@ -108,8 +111,9 @@ export function ChbDocumentsPanel({
                       URL.revokeObjectURL(url);
                     }
                   }}
-                  className="p-1.5 rounded hover:bg-white/5 text-white/60 hover:text-white transition-colors"
-                  title="Baixar"
+                  disabled={!doc.url && !doc.file}
+                  className="p-1.5 rounded hover:bg-white/5 text-white/60 hover:text-white transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+                  title={doc.url || doc.file ? 'Baixar' : 'Arquivo não disponível'}
                 >
                   <Download className="w-3 h-3" />
                 </button>
