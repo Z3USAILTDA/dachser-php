@@ -2665,7 +2665,7 @@ serve(async (req) => {
           status || 'completed', 
           sanitizeForMariaDB(resultText), 
           sanitizeForMariaDB(resultHtml), 
-          resultJson || null, 
+          sanitizeForMariaDB(resultJson), // Also sanitize JSON 
           usedAsCtx ? 1 : 0,
           userId || null
         ]);
