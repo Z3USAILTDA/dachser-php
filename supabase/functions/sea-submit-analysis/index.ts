@@ -10,7 +10,7 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-// ============ INLINE LLM ANALYZER ============
+// ============ OPTIMIZED LLM ANALYZER ============
 
 interface AnalysisResult {
   result_text: string;
@@ -35,33 +35,94 @@ function arrayBufferToBase64Chunked(buffer: ArrayBuffer): string {
   return btoa(result);
 }
 
-async function fetchFileAsBase64(fileUrl: string): Promise<{ base64: string; size: number } | null> {
-  try {
-    const response = await fetch(fileUrl);
-    if (!response.ok) return null;
-    const buffer = await response.arrayBuffer();
-    if (buffer.byteLength < 100) return null;
-    return { base64: arrayBufferToBase64Chunked(buffer), size: buffer.byteLength };
-  } catch { return null; }
-}
+// ============ FAST TEXT EXTRACTION ============
 
 async function extractXlsxText(fileUrl: string, fileName: string): Promise<string> {
   try {
+    console.log(`📄 Extracting XLSX: ${fileName}`);
     const response = await fetch(fileUrl);
     if (!response.ok) return '';
     const arrayBuffer = await response.arrayBuffer();
     const XLSX = await import('https://esm.sh/xlsx@0.18.5');
-    const workbook = XLSX.read(arrayBuffer, { type: 'array', sheetRows: 2001 });
-    let fullText = '';
-    for (const sheetName of workbook.SheetNames.slice(0, 5)) {
+    const workbook = XLSX.read(arrayBuffer, { type: 'array', sheetRows: 3000 });
+    
+    let fullText = `\n=== FILE: ${fileName} ===\n`;
+    for (const sheetName of workbook.SheetNames.slice(0, 8)) {
       const sheet = workbook.Sheets[sheetName];
       if (sheet) {
-        const csv = XLSX.utils.sheet_to_csv(sheet);
-        fullText += `\n=== ${sheetName} ===\n${csv}`;
+        const csv = XLSX.utils.sheet_to_csv(sheet, { blankrows: false });
+        fullText += `\n--- Sheet: ${sheetName} ---\n${csv}\n`;
       }
     }
-    return fullText.substring(0, 150000);
-  } catch { return ''; }
+    console.log(`✅ XLSX extracted: ${fullText.length} chars`);
+    return fullText.substring(0, 200000);
+  } catch (e) { 
+    console.error(`❌ XLSX extraction failed: ${e}`);
+    return ''; 
+  }
+}
+
+// Fast PDF text extraction using Gemini Flash for OCR
+async function extractPdfTextWithAI(fileUrl: string, fileName: string): Promise<string> {
+  const lovableApiKey = Deno.env.get('LOVABLE_API_KEY');
+  if (!lovableApiKey) return '';
+
+  try {
+    console.log(`📄 Extracting PDF with AI: ${fileName}`);
+    
+    // Fetch PDF as base64
+    const response = await fetch(fileUrl);
+    if (!response.ok) return '';
+    const buffer = await response.arrayBuffer();
+    if (buffer.byteLength < 100) return '';
+    
+    const base64 = arrayBufferToBase64Chunked(buffer);
+    
+    // Use Gemini Flash (fast model) for text extraction only
+    const extractionPrompt = `Extract ALL text content from this PDF document. 
+Include ALL:
+- Weights (gross, net, chargeable)
+- NCM/HS codes (all 4, 6, or 8 digit codes)
+- Invoice numbers and references
+- Container numbers
+- Consignee/shipper names
+- CBM/measurement values
+- Descriptions of goods
+- Any numeric values
+
+Output the raw extracted text in a structured format. Do not summarize - extract EVERYTHING.`;
+
+    const aiResponse = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${lovableApiKey}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: 'google/gemini-2.5-flash', // Use Flash for speed
+        messages: [{ 
+          role: 'user', 
+          content: [
+            { type: 'text', text: extractionPrompt },
+            { type: 'image_url', image_url: { url: `data:application/pdf;base64,${base64}` } }
+          ]
+        }],
+        max_tokens: 8000,
+        temperature: 0,
+      }),
+    });
+    
+    if (!aiResponse.ok) {
+      console.error(`❌ PDF extraction API error: ${aiResponse.status}`);
+      return '';
+    }
+    
+    const data = await aiResponse.json();
+    const extractedText = data.choices?.[0]?.message?.content || '';
+    console.log(`✅ PDF extracted: ${extractedText.length} chars from ${fileName}`);
+    
+    return `\n=== FILE: ${fileName} ===\n${extractedText}\n`;
+  } catch (e) {
+    console.error(`❌ PDF extraction failed for ${fileName}:`, e);
+    return '';
+  }
 }
 
 async function extractTextFromFile(file: FileInfo): Promise<string> {
@@ -70,63 +131,64 @@ async function extractTextFromFile(file: FileInfo): Promise<string> {
     return await extractXlsxText(file.file_url, file.file_name);
   } else if (ext === 'csv') {
     const response = await fetch(file.file_url);
-    return await response.text();
+    const text = await response.text();
+    return `\n=== FILE: ${file.file_name} ===\n${text}\n`;
+  } else if (ext === 'pdf') {
+    return await extractPdfTextWithAI(file.file_url, file.file_name);
   }
   return '';
 }
 
 import { getPromptForAnalysisType } from "./prompts.ts";
 
+// Final analysis using extracted text only (no binary files)
 async function analyzeWithGemini(
-  prompt: string, manifestText: string, pdfFiles: FileInfo[], metadata: { consignee?: string; container?: string }
+  prompt: string, 
+  extractedTexts: string, 
+  metadata: { consignee?: string; container?: string }
 ): Promise<{ text: string; model: string }> {
   const lovableApiKey = Deno.env.get('LOVABLE_API_KEY');
   if (!lovableApiKey) throw new Error('LOVABLE_API_KEY not configured');
   
-  const contentParts: any[] = [];
   let fullPrompt = prompt;
   if (metadata.consignee) fullPrompt += `\n\nConsignee: ${metadata.consignee}`;
   if (metadata.container) fullPrompt += `\nContainer: ${metadata.container}`;
   
-  contentParts.push({ type: 'text', text: fullPrompt });
-  if (manifestText.length > 0) {
-    contentParts.push({ type: 'text', text: `\n\n=== MANIFEST DATA ===\n${manifestText}\n=== END MANIFEST ===\n` });
-  }
+  // Combine prompt with all extracted text
+  const combinedContent = `${fullPrompt}
+
+═══════════════════════════════════════════════════════════════════
+EXTRACTED DOCUMENT DATA (PRE-PROCESSED)
+═══════════════════════════════════════════════════════════════════
+
+${extractedTexts}
+
+═══════════════════════════════════════════════════════════════════
+END OF EXTRACTED DATA
+═══════════════════════════════════════════════════════════════════
+
+Now perform the complete analysis comparing all documents above following the specified format.
+IMPORTANT: All data has been extracted for you. Focus on comparison and generating the analysis report.`;
+
+  console.log(`📊 Sending ${combinedContent.length} chars to analysis LLM`);
   
-  for (const file of pdfFiles) {
-    const pdfData = await fetchFileAsBase64(file.file_url);
-    if (pdfData && pdfData.size >= 100) {
-      contentParts.push({ type: 'image_url', image_url: { url: `data:application/pdf;base64,${pdfData.base64}` } });
-      contentParts.push({ type: 'text', text: `[Document: ${file.file_name}]` });
-    }
-  }
-  
-  contentParts.push({ type: 'text', text: '\n\nProvide your complete analysis following the specified format.' });
-  
-  // 8 minute timeout for complex analysis
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 8 * 60 * 1000);
-  
+  // Use Gemini Pro for final analysis (better reasoning)
   const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
     method: 'POST',
     headers: { 'Authorization': `Bearer ${lovableApiKey}`, 'Content-Type': 'application/json' },
     body: JSON.stringify({
       model: 'google/gemini-2.5-pro',
-      messages: [{ role: 'user', content: contentParts }],
+      messages: [{ role: 'user', content: combinedContent }],
       max_tokens: 16000,
       temperature: 0.1,
     }),
-    signal: controller.signal,
   });
-  
-  clearTimeout(timeoutId);
   
   if (response.ok) {
     const data = await response.json();
     return { text: data.choices?.[0]?.message?.content || '', model: 'google/gemini-2.5-pro' };
   }
   
-  // Handle specific errors
   if (response.status === 429) {
     throw new Error('Limite de requisições excedido, tente novamente mais tarde');
   }
@@ -144,24 +206,33 @@ async function analyzeWithLLM(
   const basePrompt = getPromptForAnalysisType(analysisType);
   const startTime = Date.now();
   
-  const manifestFiles = files.filter(f => ['xlsx', 'xls', 'xlsm', 'csv'].includes(f.file_name.toLowerCase().split('.').pop() || ''));
-  const pdfFiles = files.filter(f => f.file_name.toLowerCase().endsWith('.pdf'));
+  console.log(`🚀 Starting optimized analysis for ${files.length} files`);
   
-  let manifestText = '';
-  for (const mf of manifestFiles) {
-    manifestText += await extractTextFromFile(mf);
+  // STEP 1: Extract text from ALL files in parallel
+  const extractionPromises = files.map(f => extractTextFromFile(f));
+  const extractedTexts = await Promise.all(extractionPromises);
+  
+  const combinedExtractedText = extractedTexts.filter(t => t.length > 0).join('\n');
+  console.log(`📝 Total extracted text: ${combinedExtractedText.length} chars`);
+  
+  if (combinedExtractedText.length < 100) {
+    throw new Error('Não foi possível extrair texto suficiente dos documentos');
   }
   
-  const result = await analyzeWithGemini(basePrompt, manifestText, pdfFiles, metadata);
+  // STEP 2: Send extracted TEXT (not binary files) for analysis
+  const result = await analyzeWithGemini(basePrompt, combinedExtractedText, metadata);
+  
+  const elapsed = Math.round((Date.now() - startTime) / 1000);
+  console.log(`✅ Analysis completed in ${elapsed}s`);
   
   return {
     result_text: result.text,
-    json_result: { status: 'completed', model: result.model, total_time_ms: Date.now() - startTime },
+    json_result: { status: 'completed', model: result.model, total_time_ms: Date.now() - startTime, extraction_chars: combinedExtractedText.length },
     model: result.model
   };
 }
 
-// ============ END INLINE LLM ANALYZER ============
+// ============ END OPTIMIZED LLM ANALYZER ============
 
 function extractContainerFromFilename(fileName: string): string | null {
   const match = fileName.match(/\b([A-Z]{4}\d{7})\b/);
@@ -203,7 +274,7 @@ async function getDbClient() {
 }
 
 serve(async (req) => {
-  console.log('🚀 SEA Submit Analysis - MariaDB Version');
+  console.log('🚀 SEA Submit Analysis - Optimized Text Extraction');
   
   if (req.method === 'OPTIONS') return new Response(null, { headers: corsHeaders });
 
@@ -308,8 +379,6 @@ serve(async (req) => {
       }
 
       // Create analysis run record in MariaDB
-      // Note: mode column is ENUM('manifest_hbl','hbl_mbl') - map invoices_hbl to hbl_mbl
-      // Note: status column is ENUM('pendente','analisando','realizado','erro')
       const modeValue = analysisType === 'invoices_hbl' ? 'hbl_mbl' : analysisType;
       const runResult = await dbClient.execute(`
         INSERT INTO ai_agente.t_dachser_sea_runs 
@@ -429,12 +498,12 @@ serve(async (req) => {
           
           bgClient = await getDbClient();
           
-          // Update status to analyzing (ENUM compatible)
+          // Update status to analyzing
           await bgClient.execute(`
             UPDATE ai_agente.t_dachser_sea_runs SET status = 'analisando' WHERE id = ?
           `, [runId]);
           
-          // Run LLM analysis (using inline function)
+          // Run optimized LLM analysis
           const result = await analyzeWithLLM(
             analysisType,
             allFiles.map(f => ({ file_name: f.name, file_type: f.file_type, file_url: f.url })), 
@@ -454,7 +523,7 @@ serve(async (req) => {
             finalStatus = 'error';
           }
 
-          // Update run with result (use 'realizado' for completed, 'erro' for error)
+          // Update run with result
           await bgClient.execute(`
             UPDATE ai_agente.t_dachser_sea_runs 
             SET status = ?, result_text = ?
