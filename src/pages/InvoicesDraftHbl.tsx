@@ -1,13 +1,14 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
-import { ArrowLeft, Info, Copy, Check, Upload, Download, X, Link as LinkIcon, FolderOpen, Loader2 } from "lucide-react";
+import { Info, Copy, Check, Upload, Download, X, Link as LinkIcon, FolderOpen, Loader2, FileText } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { toast } from "sonner";
 import { maritimoApi } from "@/services/maritimoApi";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import { faFileContract } from "@fortawesome/free-solid-svg-icons";
+import { PageLayout } from "@/components/layout/PageLayout";
+import { PageCard } from "@/components/layout/PageCard";
 import {
   Dialog,
   DialogContent,
@@ -843,274 +844,260 @@ export default function InvoicesDraftHbl() {
   };
 
   return (
-    <div 
-      className="min-h-screen text-white"
-      style={{
-        background: "linear-gradient(120deg, rgba(4, 17, 45, 0.92), rgba(26, 93, 173, 0.55)), url('https://www.dachser.com.br/images/Corporate/DGI_003215_rdax_65s.jpg') center/cover no-repeat"
-      }}
+    <PageLayout 
+      title="DACHSER" 
+      subtitle="Invoices × Draft HBL"
+      backTo="/maritimo"
+      pageIcon={FileText}
     >
-      <div className="min-h-screen bg-black/80 backdrop-blur-sm">
-        <div className="max-w-7xl mx-auto p-6">
-          <Button
-            variant="outline"
-            onClick={() => navigate("/maritimo")}
-            className="mb-6 rounded-full border-white/20 bg-black/40 hover:bg-black hover:border-amber-400/80"
-          >
-            <ArrowLeft className="w-4 h-4 mr-2" />
-            Voltar
-          </Button>
-
-          <h1 className="text-3xl font-bold text-white mb-8">Invoices × Draft HBL</h1>
-
-          <Card className="bg-black/40 border border-white/10 rounded-2xl shadow-[0_18px_40px_rgba(0,0,0,0.9)] p-8 mb-6">
-          {/* Upload and Options Grid */}
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
-            {/* Upload Zone - Takes 2 columns */}
-            <div className="lg:col-span-2">
-              <h3 className="text-sm font-medium text-white mb-4">
-                Arquivos de origem (arraste <span className="text-amber-400">.eml</span> / <span className="text-amber-400">.zip</span> e também <span className="text-amber-400">PDFs</span>)
-              </h3>
-              <div
-                onClick={handleFileInputClick}
-                onDrop={handleMainDrop}
-                onDragOver={handleMainDragOver}
-                onDragLeave={handleMainDragLeave}
-                className={`
-                  border-2 border-dashed rounded-xl p-12 text-center cursor-pointer
-                  transition-colors
-                  ${isDraggingOver ? 'border-amber-400 bg-amber-400/5' : 'border-white/10 hover:border-amber-400/50 bg-black/20'}
-                `}
-              >
-                <Upload className="w-12 h-12 mx-auto mb-4 text-neutral-400" />
-                <p className="text-sm font-medium text-white mb-2">
-                  📥 Solte aqui (ou clique)
-                </p>
-                <p className="text-xs text-neutral-400">
-                  Aceita .eml/.zip e PDFs. Você pode misturar os formatos.
-                </p>
-              </div>
-              {totalFiles > 0 && (
-                <p className="text-sm text-neutral-400 mt-4">
-                  Anexos detectados: {totalFiles}. Vincule invoices aos HBLs (opcional).
-                </p>
-              )}
-            </div>
-
-            {/* Options - Takes 1 column */}
-            <div>
-              <h3 className="text-sm font-semibold text-white mb-4">Opções</h3>
-              <ul className="text-xs text-neutral-400 space-y-3 leading-relaxed">
-                <li>• PDFs entram direto; o sistema tenta classificar em HBL/Invoice pelo nome.</li>
-                <li>• .eml/.zip passam pelo extrator de anexos; você pode mesclar com PDFs soltos.</li>
-                <li>• Vincule invoices dentro do(s) HBL(s) para melhor resultado.</li>
-                {itemId && (
-                  <li className="text-amber-400/80">• Processo existente: você pode carregar os arquivos usados na última análise.</li>
-                )}
-              </ul>
-              
-              {/* Load Previous Files Button - Only show for existing processes */}
-              {itemId && !previousFilesLoaded && (
-                <div className="mt-4 pt-4 border-t border-white/10">
-                  <Button
-                    onClick={handleLoadPreviousFiles}
-                    disabled={isLoadingPreviousFiles}
-                    variant="outline"
-                    className="w-full rounded-full border-amber-400/50 bg-amber-400/10 hover:bg-amber-400/20 text-amber-400"
-                  >
-                    {isLoadingPreviousFiles ? (
-                      <>
-                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                        Carregando...
-                      </>
-                    ) : (
-                      <>
-                        <FolderOpen className="w-4 h-4 mr-2" />
-                        Carregar arquivos anteriores
-                      </>
-                    )}
-                  </Button>
-                  {itemInfo && (
-                    <p className="text-xs text-neutral-500 mt-2 text-center">
-                      Processo: {itemInfo.base_file_name}
-                    </p>
-                  )}
-                </div>
-              )}
-              
-              {previousFilesLoaded && (
-                <div className="mt-4 pt-4 border-t border-white/10">
-                  <p className="text-xs text-success text-center">
-                    ✓ Arquivos anteriores carregados
-                  </p>
-                </div>
-              )}
-            </div>
-          </div>
-
-          {/* Three-column grid for classification */}
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
-            {/* Draft HBL Column */}
+      <PageCard>
+        {/* Upload and Options Grid */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
+          {/* Upload Zone - Takes 2 columns */}
+          <div className="lg:col-span-2">
+            <h3 className="text-sm font-medium text-foreground mb-4">
+              Arquivos de origem (arraste <span className="text-[#ffc800]">.eml</span> / <span className="text-[#ffc800]">.zip</span> e também <span className="text-[#ffc800]">PDFs</span>)
+            </h3>
             <div
-              onDrop={(e) => handleDrop(e, "hbl")}
-              onDragOver={handleDragOver}
-              className="min-h-[300px] border-2 border-white/5 rounded-xl p-4 bg-black/20"
+              onClick={handleFileInputClick}
+              onDrop={handleMainDrop}
+              onDragOver={handleMainDragOver}
+              onDragLeave={handleMainDragLeave}
+              className={`
+                border-2 border-dashed rounded-xl p-12 text-center cursor-pointer
+                transition-colors
+                ${isDraggingOver ? 'border-[#ffc800] bg-[#ffc800]/5' : 'border-border hover:border-[#ffc800]/50 bg-black/20'}
+              `}
             >
-              <div className="flex items-center gap-2 mb-4">
-                <h3 className="text-sm font-semibold text-white">Draft HBL</h3>
-                <span className="bg-black/30 text-neutral-400 text-xs font-medium px-2.5 py-0.5 rounded-full border border-white/10">
-                  {hblFiles.length}
-                </span>
-              </div>
-              <div className="space-y-3">
-                {hblFiles.map(f => renderHblWithPills(f))}
-              </div>
-            </div>
-
-            {/* Invoices Column */}
-            <div
-              onDrop={(e) => handleDrop(e, "invoice")}
-              onDragOver={handleDragOver}
-              className="min-h-[300px] border-2 border-white/5 rounded-xl p-4 bg-black/20"
-            >
-              <div className="flex items-center gap-2 mb-4">
-                <h3 className="text-sm font-semibold text-white">Invoices</h3>
-                <span className="bg-black/30 text-neutral-400 text-xs font-medium px-2.5 py-0.5 rounded-full border border-white/10">
-                  {invoiceFiles.length}
-                </span>
-              </div>
-              <div className="space-y-3">
-                {invoiceFiles.map(f => renderInvoiceCard(f))}
-              </div>
-            </div>
-
-            {/* Others Column */}
-            <div
-              onDrop={(e) => handleDrop(e, "other")}
-              onDragOver={handleDragOver}
-              className="min-h-[300px] border-2 border-white/5 rounded-xl p-4 bg-black/20"
-            >
-              <div className="flex items-center gap-2 mb-4">
-                <h3 className="text-sm font-semibold text-white">Outros</h3>
-                <span className="bg-black/30 text-neutral-400 text-xs font-medium px-2.5 py-0.5 rounded-full border border-white/10">
-                  {otherFiles.length}
-                </span>
-              </div>
-              <div className="space-y-3">
-                {otherFiles.map(f => renderOtherCard(f))}
-              </div>
-            </div>
-          </div>
-
-          {/* Analyze Button */}
-          {!analysisResult && (
-            <div className="mb-6">
-              <Button
-                onClick={handleAnalise}
-                disabled={!canAnalyze || isAnalyzing}
-                className="rounded-full bg-amber-400 text-black font-semibold hover:bg-amber-300 px-8 shadow-[0_0_22px_rgba(251,191,36,0.6)]"
-              >
-                <FontAwesomeIcon icon={faFileContract} className="w-4 h-4 mr-2" />
-                {isAnalyzing ? "Fazendo análise..." : "Fazer Análise"}
-              </Button>
-            </div>
-          )}
-        </Card>
-
-          {/* Bottom flow hint */}
-          <Card className="bg-black/40 border border-white/10 rounded-2xl p-4 mb-6">
-            <p className="text-sm text-neutral-400">
-              Fluxo: solte .eml/.zip e/ou PDFs → classificar/vincular → <span className="italic">Fazer Análise</span>.
-            </p>
-          </Card>
-
-        {/* Inline Status Messages - only show when NOT analyzing */}
-        {inlineStatus && !isAnalyzing && (
-          <div className={`mb-6 rounded-lg p-4 border ${
-            inlineStatus.type === 'success' ? 'bg-success/10 border-success/30 text-success' :
-            inlineStatus.type === 'error' ? 'bg-destructive/10 border-destructive/30 text-destructive' :
-            'bg-primary/10 border-primary/30 text-primary'
-          }`}>
-            <p className="text-sm font-medium">{inlineStatus.message}</p>
-          </div>
-        )}
-
-        {/* Progress Bar */}
-        {isAnalyzing && (
-          <Card className="p-4 border-2 border-primary/20 mb-6">
-            <div className="flex items-center gap-3 mb-3">
-              <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-primary"></div>
-              <span className="text-sm text-foreground font-medium">{analysisStep}</span>
-            </div>
-            <div className="flex items-center gap-3">
-              <Progress value={analysisProgress} className="h-2 flex-1" />
-              <span className="text-xs text-muted-foreground font-mono min-w-[3rem] text-right">
-                {analysisProgress}%
-              </span>
-            </div>
-          </Card>
-        )}
-
-          {/* Results Display */}
-          {analysisResult && (
-            <div id="analysis-results" className="space-y-6">
-              <Card className="p-6 bg-black/20 border border-white/5 rounded-2xl">
-                <pre className="text-sm text-neutral-200 whitespace-pre-wrap font-mono max-h-[600px] overflow-y-auto bg-black/30 p-4 rounded-lg">
-                  {analysisResult.text}
-                </pre>
-              </Card>
-
-              <div className="flex items-center gap-4">
-                <Button
-                  onClick={handleNewAnalysis}
-                  disabled={isAnalyzing}
-                  className="rounded-full bg-amber-400 text-black font-semibold hover:bg-amber-300 px-8 shadow-[0_0_22px_rgba(251,191,36,0.6)]"
-                >
-                  <FontAwesomeIcon icon={faFileContract} className="w-4 h-4 mr-2" />
-                  {isAnalyzing ? "Processando..." : "Fazer nova análise"}
-                </Button>
-                <Button
-                  onClick={handleComplete}
-                  variant="outline"
-                  className="rounded-full px-8 border-white/20 bg-black/40 hover:bg-black hover:border-amber-400/80"
-                >
-                  Concluir análise
-                </Button>
-              <Button
-                onClick={handleCopyResult}
-                variant="ghost"
-                size="icon"
-                className="rounded-full w-10 h-10"
-                title="Copiar resultado"
-              >
-                {copiedResult ? (
-                  <Check className="w-4 h-4" />
-                ) : (
-                  <Copy className="w-4 h-4" />
-                )}
-              </Button>
-            </div>
-          </div>
-        )}
-
-        {/* Info message */}
-        {!analysisResult && (
-          <div className="flex items-center justify-center">
-            <div className="flex items-start gap-3 text-xs text-muted-foreground bg-muted/20 p-4 rounded-lg max-w-2xl">
-              <Info className="w-4 h-4 flex-shrink-0 mt-0.5" />
-              <p>
-                As análises são geradas por um modelo de IA e podem conter imprecisões. Revise antes de concluir processos.
+              <Upload className="w-12 h-12 mx-auto mb-4 text-muted-foreground" />
+              <p className="text-sm font-medium text-foreground mb-2">
+                📥 Solte aqui (ou clique)
+              </p>
+              <p className="text-xs text-muted-foreground">
+                Aceita .eml/.zip e PDFs. Você pode misturar os formatos.
               </p>
             </div>
+            {totalFiles > 0 && (
+              <p className="text-sm text-muted-foreground mt-4">
+                Anexos detectados: {totalFiles}. Vincule invoices aos HBLs (opcional).
+              </p>
+            )}
+          </div>
+
+          {/* Options - Takes 1 column */}
+          <div>
+            <h3 className="text-sm font-semibold text-foreground mb-4">Opções</h3>
+            <ul className="text-xs text-muted-foreground space-y-3 leading-relaxed">
+              <li>• PDFs entram direto; o sistema tenta classificar em HBL/Invoice pelo nome.</li>
+              <li>• .eml/.zip passam pelo extrator de anexos; você pode mesclar com PDFs soltos.</li>
+              <li>• Vincule invoices dentro do(s) HBL(s) para melhor resultado.</li>
+              {itemId && (
+                <li className="text-[#ffc800]/80">• Processo existente: você pode carregar os arquivos usados na última análise.</li>
+              )}
+            </ul>
+            
+            {/* Load Previous Files Button - Only show for existing processes */}
+            {itemId && !previousFilesLoaded && (
+              <div className="mt-4 pt-4 border-t border-border">
+                <Button
+                  onClick={handleLoadPreviousFiles}
+                  disabled={isLoadingPreviousFiles}
+                  variant="outline"
+                  className="w-full rounded-full border-[#ffc800]/50 bg-[#ffc800]/10 hover:bg-[#ffc800]/20 text-[#ffc800]"
+                >
+                  {isLoadingPreviousFiles ? (
+                    <>
+                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                      Carregando...
+                    </>
+                  ) : (
+                    <>
+                      <FolderOpen className="w-4 h-4 mr-2" />
+                      Carregar arquivos anteriores
+                    </>
+                  )}
+                </Button>
+                {itemInfo && (
+                  <p className="text-xs text-muted-foreground mt-2 text-center">
+                    Processo: {itemInfo.base_file_name}
+                  </p>
+                )}
+              </div>
+            )}
+            
+            {previousFilesLoaded && (
+              <div className="mt-4 pt-4 border-t border-border">
+                <p className="text-xs text-success text-center">
+                  ✓ Arquivos anteriores carregados
+                </p>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Three-column grid for classification */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+          {/* Draft HBL Column */}
+          <div
+            onDrop={(e) => handleDrop(e, "hbl")}
+            onDragOver={handleDragOver}
+            className="min-h-[300px] border-2 border-border/50 rounded-xl p-4 bg-black/20"
+          >
+            <div className="flex items-center gap-2 mb-4">
+              <h3 className="text-sm font-semibold text-foreground">Draft HBL</h3>
+              <span className="bg-black/30 text-muted-foreground text-xs font-medium px-2.5 py-0.5 rounded-full border border-border">
+                {hblFiles.length}
+              </span>
+            </div>
+            <div className="space-y-3">
+              {hblFiles.map(f => renderHblWithPills(f))}
+            </div>
+          </div>
+
+          {/* Invoices Column */}
+          <div
+            onDrop={(e) => handleDrop(e, "invoice")}
+            onDragOver={handleDragOver}
+            className="min-h-[300px] border-2 border-border/50 rounded-xl p-4 bg-black/20"
+          >
+            <div className="flex items-center gap-2 mb-4">
+              <h3 className="text-sm font-semibold text-foreground">Invoices</h3>
+              <span className="bg-black/30 text-muted-foreground text-xs font-medium px-2.5 py-0.5 rounded-full border border-border">
+                {invoiceFiles.length}
+              </span>
+            </div>
+            <div className="space-y-3">
+              {invoiceFiles.map(f => renderInvoiceCard(f))}
+            </div>
+          </div>
+
+          {/* Others Column */}
+          <div
+            onDrop={(e) => handleDrop(e, "other")}
+            onDragOver={handleDragOver}
+            className="min-h-[300px] border-2 border-border/50 rounded-xl p-4 bg-black/20"
+          >
+            <div className="flex items-center gap-2 mb-4">
+              <h3 className="text-sm font-semibold text-foreground">Outros</h3>
+              <span className="bg-black/30 text-muted-foreground text-xs font-medium px-2.5 py-0.5 rounded-full border border-border">
+                {otherFiles.length}
+              </span>
+            </div>
+            <div className="space-y-3">
+              {otherFiles.map(f => renderOtherCard(f))}
+            </div>
+          </div>
+        </div>
+
+        {/* Analyze Button */}
+        {!analysisResult && (
+          <div className="mb-6">
+            <Button
+              onClick={handleAnalise}
+              disabled={!canAnalyze || isAnalyzing}
+              className="rounded-full bg-[#ffc800] text-black font-semibold hover:bg-[#ffc800]/80 px-8 shadow-[0_0_22px_rgba(255,200,0,0.6)]"
+            >
+              <FontAwesomeIcon icon={faFileContract} className="w-4 h-4 mr-2" />
+              {isAnalyzing ? "Fazendo análise..." : "Fazer Análise"}
+            </Button>
           </div>
         )}
-      </div>
+      </PageCard>
+
+      {/* Bottom flow hint */}
+      <PageCard className="mb-6">
+        <p className="text-sm text-muted-foreground">
+          Fluxo: solte .eml/.zip e/ou PDFs → classificar/vincular → <span className="italic">Fazer Análise</span>.
+        </p>
+      </PageCard>
+
+      {/* Inline Status Messages - only show when NOT analyzing */}
+      {inlineStatus && !isAnalyzing && (
+        <div className={`mb-6 rounded-lg p-4 border ${
+          inlineStatus.type === 'success' ? 'bg-success/10 border-success/30 text-success' :
+          inlineStatus.type === 'error' ? 'bg-destructive/10 border-destructive/30 text-destructive' :
+          'bg-[#ffc800]/10 border-[#ffc800]/30 text-[#ffc800]'
+        }`}>
+          <p className="text-sm font-medium">{inlineStatus.message}</p>
+        </div>
+      )}
+
+      {/* Progress Bar */}
+      {isAnalyzing && (
+        <PageCard className="mb-6">
+          <div className="flex items-center gap-3 mb-3">
+            <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-[#ffc800]"></div>
+            <span className="text-sm text-foreground font-medium">{analysisStep}</span>
+          </div>
+          <div className="flex items-center gap-3">
+            <Progress value={analysisProgress} className="h-2 flex-1" />
+            <span className="text-xs text-muted-foreground font-mono min-w-[3rem] text-right">
+              {analysisProgress}%
+            </span>
+          </div>
+        </PageCard>
+      )}
+
+      {/* Results Display */}
+      {analysisResult && (
+        <div id="analysis-results" className="space-y-6">
+          <PageCard>
+            <pre className="text-sm text-foreground whitespace-pre-wrap font-mono max-h-[600px] overflow-y-auto bg-black/30 p-4 rounded-lg">
+              {analysisResult.text}
+            </pre>
+          </PageCard>
+
+          <div className="flex items-center gap-4">
+            <Button
+              onClick={handleNewAnalysis}
+              disabled={isAnalyzing}
+              className="rounded-full bg-[#ffc800] text-black font-semibold hover:bg-[#ffc800]/80 px-8 shadow-[0_0_22px_rgba(255,200,0,0.6)]"
+            >
+              <FontAwesomeIcon icon={faFileContract} className="w-4 h-4 mr-2" />
+              {isAnalyzing ? "Processando..." : "Fazer nova análise"}
+            </Button>
+            <Button
+              onClick={handleComplete}
+              variant="outline"
+              className="rounded-full px-8 border-border bg-black/40 hover:bg-black hover:border-[#ffc800]/80"
+            >
+              Concluir análise
+            </Button>
+            <Button
+              onClick={handleCopyResult}
+              variant="ghost"
+              size="icon"
+              className="rounded-full w-10 h-10"
+              title="Copiar resultado"
+            >
+              {copiedResult ? (
+                <Check className="w-4 h-4" />
+              ) : (
+                <Copy className="w-4 h-4" />
+              )}
+            </Button>
+          </div>
+        </div>
+      )}
+
+      {/* Info message */}
+      {!analysisResult && (
+        <div className="flex items-center justify-center">
+          <div className="flex items-start gap-3 text-xs text-muted-foreground bg-muted/20 p-4 rounded-lg max-w-2xl">
+            <Info className="w-4 h-4 flex-shrink-0 mt-0.5" />
+            <p>
+              As análises são geradas por um modelo de IA e podem conter imprecisões. Revise antes de concluir processos.
+            </p>
+          </div>
+        </div>
+      )}
 
       {/* HBL Selection Modal */}
       <Dialog open={showHblModal} onOpenChange={setShowHblModal}>
         <DialogContent className="bg-card border-border">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              <LinkIcon className="w-4 h-4 text-primary" />
+              <LinkIcon className="w-4 h-4 text-[#ffc800]" />
               Escolher HBL de destino
             </DialogTitle>
             <DialogDescription>
@@ -1131,7 +1118,7 @@ export default function InvoicesDraftHbl() {
                 <Button
                   key={f.key}
                   variant="outline"
-                  className="w-full justify-start text-left hover:bg-primary/10"
+                  className="w-full justify-start text-left hover:bg-[#ffc800]/10"
                   onClick={() => handleLinkToHblFromModal(f.key)}
                 >
                   <span className="truncate">{f.file.name}</span>
@@ -1163,7 +1150,6 @@ export default function InvoicesDraftHbl() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-      </div>
-    </div>
+    </PageLayout>
   );
 }
