@@ -11,24 +11,61 @@ interface UploadBaseFileResult {
   error?: string;
 }
 
+interface SubmitAnalysisParams {
+  itemId?: string;
+  analysisType: 'manifest_hbl' | 'hbl_mbl' | 'invoices_hbl';
+  files?: File[];
+  fileUrls?: { url: string; filename: string; mimeType?: string }[];
+  links?: any;
+}
+
+interface SubmitAnalysisResult {
+  analysisId: string;
+  status?: string;
+  result_text?: string;
+  result_data?: any;
+  error?: string;
+}
+
+// Helper to convert File to base64
+async function fileToBase64(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const result = reader.result as string;
+      // Remove data URL prefix
+      const base64 = result.split(',')[1] || result;
+      resolve(base64);
+    };
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+
 export const maritimoApi = {
   async reextractMetadata(options: { forceAll: boolean }) {
-    return { processed: 0 };
+    try {
+      const { data, error } = await supabase.functions.invoke('mariadb-proxy', {
+        body: { action: 'reextract_maritimo_metadata', ...options }
+      });
+      if (error) throw error;
+      return { processed: data?.processed || 0 };
+    } catch (error) {
+      console.error('Error reextracting metadata:', error);
+      return { processed: 0 };
+    }
   },
 
   async uploadBaseFile(params: UploadBaseFileParams): Promise<UploadBaseFileResult> {
     try {
       const { file, analysisType } = params;
-      const arrayBuffer = await file.arrayBuffer();
-      const base64 = btoa(
-        new Uint8Array(arrayBuffer).reduce((data, byte) => data + String.fromCharCode(byte), '')
-      );
+      const base64Content = await fileToBase64(file);
 
-      const { data, error } = await supabase.functions.invoke('maritimo-upload', {
+      const { data, error } = await supabase.functions.invoke('mariadb-proxy', {
         body: {
-          action: 'upload_base_file',
+          action: 'upload_maritimo_base_file',
           fileName: file.name,
-          fileContent: base64,
+          fileContent: base64Content,
           fileType: file.type,
           analysisType
         }
@@ -74,18 +111,32 @@ export const maritimoApi = {
         body: { action: 'get_maritimo_history', itemId }
       });
       if (error) throw error;
-      return data || { runs: [] };
+      return data || { runs: [], item: {} };
     } catch (error) {
       console.error('Error fetching history:', error);
-      return { runs: [] };
+      return { runs: [], item: {} };
     }
   },
 
   async extractAttachments(formData: FormData) {
     try {
-      const { data, error } = await supabase.functions.invoke('maritimo-extract', {
-        body: formData
+      // Convert FormData to a format we can send
+      const file = formData.get('file') as File;
+      if (!file) {
+        return { success: false, extracted: [] };
+      }
+
+      const base64Content = await fileToBase64(file);
+      
+      const { data, error } = await supabase.functions.invoke('mariadb-proxy', {
+        body: {
+          action: 'extract_maritimo_attachments',
+          fileName: file.name,
+          fileContent: base64Content,
+          fileType: file.type
+        }
       });
+      
       if (error) throw error;
       return data || { success: false, extracted: [] };
     } catch (error) {
@@ -94,18 +145,36 @@ export const maritimoApi = {
     }
   },
 
-  async submitAnalysis(params: any): Promise<{
-    analysisId: string;
-    status?: string;
-    result_text?: string;
-    result_data?: any;
-    error?: string;
-  }> {
+  async submitAnalysis(params: SubmitAnalysisParams): Promise<SubmitAnalysisResult> {
     try {
+      const { itemId, analysisType, files, fileUrls, links } = params;
+      
+      // Convert files to base64
+      const processedFiles = [];
+      if (files && files.length > 0) {
+        for (const file of files) {
+          const base64Content = await fileToBase64(file);
+          processedFiles.push({
+            filename: file.name,
+            content: base64Content,
+            mimeType: file.type
+          });
+        }
+      }
+
+      // Call the maritimo-analyze edge function
       const { data, error } = await supabase.functions.invoke('maritimo-analyze', {
-        body: params
+        body: {
+          itemId,
+          analysisType,
+          files: processedFiles,
+          fileUrls,
+          links
+        }
       });
+
       if (error) throw error;
+      
       return {
         analysisId: data?.analysisId || '',
         status: data?.status,
@@ -122,13 +191,16 @@ export const maritimoApi = {
   async pollAnalysisUntilComplete(
     analysisId: string,
     onProgress: (percent: number, step: string) => void,
-    timeout: number = 1200000
+    timeout: number = 300000
   ) {
+    // For now, since analysis is synchronous, this is just a fallback
+    // In a real implementation, this would poll for status
     const startTime = Date.now();
     while (Date.now() - startTime < timeout) {
-      const { data, error } = await supabase.functions.invoke('maritimo-status', {
-        body: { analysisId }
+      const { data, error } = await supabase.functions.invoke('mariadb-proxy', {
+        body: { action: 'get_maritimo_analysis_status', analysisId }
       });
+      
       if (error) throw error;
       
       const status = data?.status || 'pending';
