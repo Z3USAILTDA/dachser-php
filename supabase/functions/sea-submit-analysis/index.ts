@@ -572,12 +572,12 @@ serve(async (req) => {
         
         uploadedFiles.push({ name: fileUrl.name, url: fileUrl.url, size: actualSize, type: fileUrl.type });
         
-        // Save file URL record to MariaDB
+        // Save file URL record to MariaDB (rel_path is required, use empty string for pre-uploaded files)
         await dbClient.execute(`
           INSERT INTO ai_agente.t_dachser_sea_files 
-          (filename, mime, size_bytes, url, created_at)
-          VALUES (?, ?, ?, ?, NOW())
-        `, [fileUrl.name, 'application/octet-stream', actualSize, fileUrl.url]);
+          (filename, mime, size_bytes, rel_path, url, created_at)
+          VALUES (?, ?, ?, ?, ?, NOW())
+        `, [fileUrl.name, 'application/octet-stream', actualSize, '', fileUrl.url]);
       }
 
       // Update item status
