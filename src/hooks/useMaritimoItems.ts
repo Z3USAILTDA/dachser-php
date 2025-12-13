@@ -1,53 +1,50 @@
-import { useState, useEffect, useCallback } from "react";
-import { maritimoApi } from "@/services/maritimoApi";
+import { useState, useEffect } from "react";
+import { maritimoApi, MaritimoItem as ApiMaritimoItem } from "@/services/maritimoApi";
+import { toast } from "sonner";
 
-export interface MaritimoItem {
-  id: string;
-  base_file_name: string;
-  consignee?: string;
-  container?: string;
-  status: string;
-  analysis_type?: string;
-  created_at: string;
-  updated_at?: string;
-  run_count?: number;
-}
+export type MaritimoItem = ApiMaritimoItem;
 
-export function useMaritimoItems(activeTab: string) {
+export const useMaritimoItems = (analysisType?: 'manifest_hbl' | 'hbl_mbl' | 'invoices_hbl') => {
   const [items, setItems] = useState<MaritimoItem[]>([]);
-  const [isLoading, setIsLoading] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  const fetchItems = useCallback(async () => {
-    setIsLoading(true);
+  const fetchItems = async () => {
     try {
-      const data = await maritimoApi.getItems({ analysisType: activeTab });
-      setItems(data || []);
-    } catch (error) {
-      console.error("Error fetching SEA items:", error);
-      setItems([]);
+      setIsLoading(true);
+      setError(null);
+      const data = await maritimoApi.getItems(analysisType ? { analysisType } : undefined);
+      setItems(data);
+    } catch (err: any) {
+      console.error('Error fetching items:', err);
+      setError(err.message || 'Failed to load items');
+      toast.error('Erro ao carregar itens');
     } finally {
       setIsLoading(false);
     }
-  }, [activeTab]);
+  };
+
+  const deleteItem = async (itemId: string) => {
+    try {
+      await maritimoApi.deleteItem(itemId);
+      toast.success('Item excluído com sucesso');
+      // Refresh list
+      await fetchItems();
+    } catch (err: any) {
+      console.error('Error deleting item:', err);
+      toast.error('Erro ao excluir item');
+    }
+  };
 
   useEffect(() => {
     fetchItems();
-  }, [fetchItems]);
-
-  const deleteItem = async (id: string) => {
-    try {
-      await maritimoApi.deleteItem(id);
-      setItems((prev) => prev.filter((item) => item.id !== id));
-    } catch (error) {
-      console.error("Error deleting SEA item:", error);
-      throw error;
-    }
-  };
+  }, [analysisType]);
 
   return {
     items,
     isLoading,
+    error,
     refetch: fetchItems,
     deleteItem,
   };
-}
+};
