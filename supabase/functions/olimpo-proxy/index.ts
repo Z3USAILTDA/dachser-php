@@ -124,12 +124,15 @@ serve(async (req) => {
 
     // ===== SEA SMART: Cache inteligente com atualização seletiva =====
     if (action === 'sea_seed_smart') {
+      // ⚠️ FLAG: Pausar chamadas JSONCargo - usar apenas cache
+      const SKIP_API_CALLS = true;
+      
       const mariadbHost = Deno.env.get('MARIADB_HOST');
       const mariadbPort = Deno.env.get('MARIADB_PORT') || '3306';
       const mariadbUser = Deno.env.get('MARIADB_USER');
       const mariadbPass = Deno.env.get('MARIADB_PASSWORD');
       const mariadbDb = Deno.env.get('MARIADB_DATABASE');
-      const apiKey = Deno.env.get('JSONCARGO_API_KEY');
+      const apiKey = SKIP_API_CALLS ? null : Deno.env.get('JSONCARGO_API_KEY');
 
       if (!mariadbHost || !mariadbUser || !mariadbPass || !mariadbDb) {
         return new Response(JSON.stringify({ error: 'MariaDB não configurado', data: [] }), {
