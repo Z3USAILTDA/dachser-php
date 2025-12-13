@@ -424,7 +424,12 @@ export default function ConferenciaChb() {
 
         {/* Tabs */}
         <div className="py-4 border-b border-[rgba(255,255,255,.10)]">
-          <ChbTabs activeTab={activeTab} onTabChange={setActiveTab} />
+          <ChbTabs 
+            activeTab={activeTab} 
+            onTabChange={setActiveTab}
+            isAnalyzing={isAnalyzing}
+            hasAnalysisResult={!!analysisResults[activeStep]}
+          />
         </div>
 
         {/* Content panel */}
