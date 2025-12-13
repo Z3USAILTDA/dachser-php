@@ -16,6 +16,8 @@ export interface ChbDocument {
   size: string;
   stepId?: number;
   file?: File;
+  dbId?: number;
+  url?: string;
 }
 
 export interface ChbAnalysis {

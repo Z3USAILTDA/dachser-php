@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { Upload, Clock, Copy, ClipboardList, Trash2, FileText, CheckCircle } from "lucide-react";
 import { PageLayout } from "@/components/layout/PageLayout";
@@ -11,26 +11,16 @@ import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
 import { format } from "date-fns";
 import { Filter as FilterIcon } from "lucide-react";
-
-interface ChbItem {
-  id: number;
-  reference: string;
-  consignee: string;
-  status_macro: 'pre_alerta_pendente' | 'instrucao_pendente' | 'di_pendente' | 'concluida';
-  step1_status: string;
-  step2_status: string;
-  step3_status: string;
-  last_run_at: string | null;
-  created_at: string | null;
-}
+import { useChbItems, ChbItem } from "@/hooks/useChbData";
+import { supabase } from "@/integrations/supabase/client";
 
 interface HistoryEntry {
   id: number;
-  etapa: number;
+  etapa: string;
   status: string;
   result_text: string;
   result_html: string;
-  user: string;
+  created_by_email: string;
   created_at: string;
 }
 
@@ -66,25 +56,28 @@ const getStatusColor = (macro: string) => {
   }
 };
 
-const stepNames: Record<number, string> = {
-  1: 'Pré-Alerta',
-  2: 'Instrução',
-  3: 'DI/Fechamento',
+const stepNames: Record<string, string> = {
+  '1': 'Pré-Alerta',
+  '2': 'Instrução',
+  '3': 'DI/Fechamento',
 };
 
 export default function ChbAnalises() {
   const navigate = useNavigate();
+  const { items, loading, fetchItems, createItem, deleteItem } = useChbItems();
+  
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("todos");
-  const [items, setItems] = useState<ChbItem[]>([]);
   const [historyModal, setHistoryModal] = useState<{
     open: boolean;
     itemId: number | null;
     history: HistoryEntry[];
+    loading: boolean;
   }>({
     open: false,
     itemId: null,
-    history: []
+    history: [],
+    loading: false
   });
   const [deleteDialog, setDeleteDialog] = useState<{
     open: boolean;
@@ -93,37 +86,49 @@ export default function ChbAnalises() {
     open: false,
     itemId: null
   });
-  const [isRefreshing, setIsRefreshing] = useState(false);
   const [novoProcessoModal, setNovoProcessoModal] = useState(false);
   const [novoProcessoForm, setNovoProcessoForm] = useState({
     reference: '',
     consignee: ''
   });
 
+  useEffect(() => {
+    fetchItems();
+  }, [fetchItems]);
+
   const pendingCount = items.filter(i => i.status_macro !== "concluida").length;
 
   const filteredItems = items.filter(item => {
-    const matchesSearch = search === "" || item.reference.toLowerCase().includes(search.toLowerCase()) || item.consignee.toLowerCase().includes(search.toLowerCase());
+    const matchesSearch = search === "" || 
+      (item.reference?.toLowerCase() || '').includes(search.toLowerCase()) || 
+      (item.consignee?.toLowerCase() || '').includes(search.toLowerCase());
     const matchesStatus = statusFilter === "todos" || item.status_macro === statusFilter;
     return matchesSearch && matchesStatus;
   });
 
   const handleRefresh = () => {
-    setIsRefreshing(true);
-    setTimeout(() => {
-      setIsRefreshing(false);
-      toast.success("Dados atualizados");
-    }, 800);
+    fetchItems();
   };
 
-  const handleOpenHistory = (itemId: number) => {
-    // TODO: Fetch real history from API
-    const history: HistoryEntry[] = [];
-    setHistoryModal({
-      open: true,
-      itemId,
-      history
-    });
+  const handleOpenHistory = async (itemId: number) => {
+    setHistoryModal({ open: true, itemId, history: [], loading: true });
+    
+    try {
+      const { data, error } = await supabase.functions.invoke('mariadb-proxy', {
+        body: { action: 'get_chb_runs', itemId }
+      });
+      
+      if (error) throw error;
+      
+      setHistoryModal(prev => ({
+        ...prev,
+        history: (data?.data || []).filter((r: any) => r.status === 'approved'),
+        loading: false
+      }));
+    } catch (error) {
+      console.error('Error fetching history:', error);
+      setHistoryModal(prev => ({ ...prev, loading: false }));
+    }
   };
 
   const handleCopyResult = (text: string) => {
@@ -131,41 +136,24 @@ export default function ChbAnalises() {
     toast.success("Resultado copiado!");
   };
 
-  const handleDelete = (itemId: number) => {
-    setItems(prev => prev.filter(i => i.id !== itemId));
-    setDeleteDialog({
-      open: false,
-      itemId: null
-    });
-    toast.success("Item removido com sucesso");
+  const handleDelete = async (itemId: number) => {
+    await deleteItem(itemId);
+    setDeleteDialog({ open: false, itemId: null });
   };
 
-  const handleCreateNovoProcesso = () => {
+  const handleCreateNovoProcesso = async () => {
     if (!novoProcessoForm.reference.trim() || !novoProcessoForm.consignee.trim()) {
       toast.error("Preencha todos os campos");
       return;
     }
 
-    const newId = Date.now();
-    const newItem: ChbItem = {
-      id: newId,
-      reference: novoProcessoForm.reference,
-      consignee: novoProcessoForm.consignee,
-      status_macro: 'pre_alerta_pendente',
-      step1_status: 'pendente',
-      step2_status: 'pendente',
-      step3_status: 'pendente',
-      last_run_at: null,
-      created_at: format(new Date(), "yyyy-MM-dd HH:mm")
-    };
-
-    setItems(prev => [newItem, ...prev]);
-    setNovoProcessoModal(false);
-    setNovoProcessoForm({ reference: '', consignee: '' });
-    toast.success("Processo criado com sucesso!");
+    const newId = await createItem(novoProcessoForm.reference, novoProcessoForm.consignee);
     
-    // Navigate to the new process
-    navigate(`/chb/conferences/${newId}`);
+    if (newId) {
+      setNovoProcessoModal(false);
+      setNovoProcessoForm({ reference: '', consignee: '' });
+      navigate(`/chb/conferences/${newId}`);
+    }
   };
 
   const rightContent = (
@@ -211,7 +199,7 @@ export default function ChbAnalises() {
           ]}
           showRefresh
           onRefresh={handleRefresh}
-          isRefreshing={isRefreshing}
+          isRefreshing={loading}
         />
       </FilterCard>
 
@@ -390,7 +378,7 @@ export default function ChbAnalises() {
                           {entry.created_at}
                         </span>
                         <span className="text-[0.72rem] text-amber-500">
-                          {entry.user}
+                          {entry.created_by_email || 'Usuário'}
                         </span>
                         <span className={`ml-auto text-[0.72rem] px-2 py-0.5 rounded-full ${
                           entry.status === 'aprovado' ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'
