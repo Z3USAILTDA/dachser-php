@@ -547,12 +547,21 @@ serve(async (req) => {
         const { data: { publicUrl } } = supabase.storage.from('maritime-files').getPublicUrl(storagePath);
         uploadedFiles.push({ name: file.name, url: publicUrl, size: file.size, type: file.type });
         
-        // Save file record to MariaDB
+        // Determine file_type for classification
+        const lowerName = file.name.toLowerCase();
+        let fileType = 'other';
+        if (lowerName.includes('hbl') || lowerName.includes('house') || lowerName.includes('draft')) {
+          fileType = 'hbl';
+        } else if (lowerName.includes('inv') || lowerName.includes('invoice') || lowerName.includes('fatura')) {
+          fileType = 'invoice';
+        }
+        
+        // Save file record to MariaDB with run_id
         await dbClient.execute(`
           INSERT INTO ai_agente.t_dachser_sea_files 
-          (filename, mime, size_bytes, rel_path, url, created_at)
-          VALUES (?, ?, ?, ?, ?, NOW())
-        `, [file.name, file.type, file.size, storagePath, publicUrl]);
+          (filename, mime, size_bytes, rel_path, url, run_id, file_type, created_at)
+          VALUES (?, ?, ?, ?, ?, ?, ?, NOW())
+        `, [file.name, file.type, file.size, storagePath, publicUrl, runId, fileType]);
       }
 
       // Record fileUrls
@@ -570,14 +579,25 @@ serve(async (req) => {
           }
         }
         
+        // Determine file_type for classification
+        const lowerName = fileUrl.name.toLowerCase();
+        let fileType = fileUrl.type || 'other';
+        if (fileType === 'application/octet-stream' || fileType === 'other') {
+          if (lowerName.includes('hbl') || lowerName.includes('house') || lowerName.includes('draft')) {
+            fileType = 'hbl';
+          } else if (lowerName.includes('inv') || lowerName.includes('invoice') || lowerName.includes('fatura')) {
+            fileType = 'invoice';
+          }
+        }
+        
         uploadedFiles.push({ name: fileUrl.name, url: fileUrl.url, size: actualSize, type: fileUrl.type });
         
-        // Save file URL record to MariaDB (rel_path is required, use empty string for pre-uploaded files)
+        // Save file URL record to MariaDB with run_id
         await dbClient.execute(`
           INSERT INTO ai_agente.t_dachser_sea_files 
-          (filename, mime, size_bytes, rel_path, url, created_at)
-          VALUES (?, ?, ?, ?, ?, NOW())
-        `, [fileUrl.name, 'application/octet-stream', actualSize, '', fileUrl.url]);
+          (filename, mime, size_bytes, rel_path, url, run_id, file_type, created_at)
+          VALUES (?, ?, ?, ?, ?, ?, ?, NOW())
+        `, [fileUrl.name, 'application/octet-stream', actualSize, '', fileUrl.url, runId, fileType]);
       }
 
       // Update item status

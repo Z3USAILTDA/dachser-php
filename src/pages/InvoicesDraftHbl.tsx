@@ -1,11 +1,10 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
-import { Info, Copy, Check, Upload, Download, X, Link as LinkIcon, FolderOpen, Loader2, FileBox } from "lucide-react";
+import { Info, Copy, Check, Upload, Download, X, Link as LinkIcon, FolderOpen, Loader2, FileBox, Send, FileText } from "lucide-react";
 import { PageLayout } from "@/components/layout/PageLayout";
+import { PageCard } from "@/components/layout/PageCard";
 import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
-import { toast } from "sonner";
 import { maritimoApi } from "@/services/maritimoApi";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import { faFileContract } from "@fortawesome/free-solid-svg-icons";
@@ -40,12 +39,14 @@ type ClassifiedFile = {
 export default function InvoicesDraftHbl() {
   const navigate = useNavigate();
   const location = useLocation();
-  const itemId = (location.state as { itemId?: string })?.itemId;
+  
+  // Get itemId from query params or location state
+  const searchParams = new URLSearchParams(location.search);
+  const itemId = searchParams.get('itemId') || (location.state as { itemId?: string })?.itemId;
   
   // File state
   const [files, setFiles] = useState<Map<string, ClassifiedFile>>(new Map());
   const [links, setLinks] = useState<Map<string, Set<string>>>(new Map());
-  const [emailText, setEmailText] = useState<string>("");
   
   // Previous files state
   const [isLoadingPreviousFiles, setIsLoadingPreviousFiles] = useState(false);
@@ -71,6 +72,7 @@ export default function InvoicesDraftHbl() {
   } | null>(null);
   const [copiedResult, setCopiedResult] = useState(false);
   const [inlineStatus, setInlineStatus] = useState<{ message: string; type: 'info' | 'success' | 'error' } | null>(null);
+  const [isCompletingAnalysis, setIsCompletingAnalysis] = useState(false);
 
   const showInlineStatus = (message: string, type: 'info' | 'success' | 'error' = 'info') => {
     setInlineStatus({ message, type });
@@ -104,7 +106,8 @@ export default function InvoicesDraftHbl() {
         const previousFiles = latestRun.files || [];
         
         if (previousFiles.length === 0) {
-          toast.info("Nenhum arquivo encontrado no histórico");
+          showInlineStatus("Nenhum arquivo encontrado no histórico", 'info');
+          setIsLoadingPreviousFiles(false);
           return;
         }
         
@@ -146,13 +149,13 @@ export default function InvoicesDraftHbl() {
         
         setFiles(processedFiles);
         setPreviousFilesLoaded(true);
-        toast.success(`${loadedCount} arquivo(s) carregado(s) do histórico`);
+        showInlineStatus(`${loadedCount} arquivo(s) carregado(s) do histórico`, 'success');
       } else {
-        toast.info("Nenhum histórico de análise encontrado");
+        showInlineStatus("Nenhum histórico de análise encontrado", 'info');
       }
     } catch (error: any) {
       console.error('Error loading previous files:', error);
-      toast.error("Erro ao carregar arquivos anteriores");
+      showInlineStatus("Erro ao carregar arquivos anteriores", 'error');
     } finally {
       setIsLoadingPreviousFiles(false);
     }
@@ -190,10 +193,8 @@ export default function InvoicesDraftHbl() {
   const handleFilesSelected = async (selectedFiles: FileList | File[]) => {
     const processedFiles = new Map(files);
     let pdfCount = 0;
-    let emlCount = 0;
-    let zipCount = 0;
-    let ignoredCount = 0;
     let extractedCount = 0;
+    let ignoredCount = 0;
 
     const fileArray = Array.from(selectedFiles);
     
@@ -205,10 +206,7 @@ export default function InvoicesDraftHbl() {
         setExtractingFiles(prev => new Set(prev).add(extractKey));
         
         try {
-          if (name.endsWith(".eml")) emlCount++;
-          if (name.endsWith(".zip")) zipCount++;
-          
-          const toastId = toast.loading(`Extraindo anexos de ${file.name}...`);
+          showInlineStatus(`Extraindo anexos de ${file.name}...`, 'info');
           
           const formData = new FormData();
           formData.append('file', file);
@@ -235,13 +233,13 @@ export default function InvoicesDraftHbl() {
               extractedCount++;
             }
             
-            toast.success(`${response.extracted.length} anexo(s) extraído(s) de ${file.name}`, { id: toastId });
+            showInlineStatus(`${response.extracted.length} anexo(s) extraído(s) de ${file.name}`, 'success');
           } else {
-            toast.error(`Falha na extração de ${file.name}`, { id: toastId });
+            showInlineStatus(`Falha na extração de ${file.name}`, 'error');
           }
         } catch (error) {
           console.error(`Failed to extract from ${file.name}:`, error);
-          toast.error(`Erro ao extrair anexos de ${file.name}`);
+          showInlineStatus(`Erro ao extrair anexos de ${file.name}`, 'error');
         } finally {
           setExtractingFiles(prev => {
             const next = new Set(prev);
@@ -325,7 +323,7 @@ export default function InvoicesDraftHbl() {
     updatedLinks.set(hblKey, currentLinks);
     setLinks(updatedLinks);
 
-    toast.success("Invoice vinculado ao HBL");
+    showInlineStatus("Invoice vinculado ao HBL", 'success');
     setShowHblModal(false);
     setFileToSend(null);
   };
@@ -337,7 +335,7 @@ export default function InvoicesDraftHbl() {
       currentLinks.delete(invoiceKey);
       updatedLinks.set(hblKey, currentLinks);
       setLinks(updatedLinks);
-      toast.info("Arquivo desvinculado e retornado à sua coluna original");
+      showInlineStatus("Arquivo desvinculado", 'info');
     }
   };
 
@@ -360,7 +358,7 @@ export default function InvoicesDraftHbl() {
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
     }
-    toast.success("Download iniciado");
+    showInlineStatus("Download iniciado", 'success');
   };
 
   // Drag and drop for main dropzone
@@ -449,25 +447,9 @@ export default function InvoicesDraftHbl() {
     setAnalysisProgress(5);
     setAnalysisStep("Enviando arquivos...");
     setInlineStatus(null);
-    showInlineStatus("Iniciando análise...", 'info');
+    showInlineStatus("Processando análise com IA...", 'info');
 
     try {
-      const drafts = hblFiles.map(f => ({
-        key: f.key,
-        filename: f.file.name,
-        invoice_keys: Array.from(links.get(f.key) || [])
-      }));
-
-      const invoices = invoiceFiles.map(f => ({
-        key: f.key,
-        filename: f.file.name
-      }));
-
-      const linksArray = Array.from(links.entries()).map(([hblKey, invoiceKeys]) => ({
-        draft_key: hblKey,
-        invoice_keys: Array.from(invoiceKeys)
-      }));
-
       const allFiles = Array.from(files.values()).map(f => ({
         field: f.classification === "hbl" ? "draft" : f.classification === "invoice" ? "invoice" : "other",
         file: f.storageUrl ? null : f.file,
@@ -486,6 +468,12 @@ export default function InvoicesDraftHbl() {
       }, 100);
 
       const hasLinks = Array.from(links.values()).some(set => set.size > 0);
+      const drafts = hblFiles.map(f => ({
+        key: f.key,
+        filename: f.file.name,
+        invoice_keys: Array.from(links.get(f.key) || [])
+      }));
+      
       const linkDataToSend = hasLinks ? {
         hblFileName: drafts[0]?.filename || "",
         invoiceFileNames: Array.from(links.get(drafts[0]?.key) || [])
@@ -507,12 +495,10 @@ export default function InvoicesDraftHbl() {
 
       clearInterval(uploadInterval);
       setAnalysisStep("Processando análise...");
-      showInlineStatus("Processando análise com IA...", 'info');
 
       const result = await maritimoApi.pollAnalysisUntilComplete(
         analysisId,
         (percent, step) => {
-          console.log(`Analysis progress: ${percent}% - ${step}`);
           setAnalysisProgress(Math.min(percent, 95));
           setAnalysisStep(step);
         },
@@ -554,7 +540,7 @@ export default function InvoicesDraftHbl() {
 
   const handleCopyResult = () => {
     if (!analysisResult?.text || analysisResult.text.trim().length === 0) {
-      toast.error("Não há conteúdo para copiar");
+      showInlineStatus("Não há conteúdo para copiar", 'error');
       return;
     }
 
@@ -571,19 +557,19 @@ export default function InvoicesDraftHbl() {
       
       if (successful) {
         setCopiedResult(true);
-        toast.success("Resultado copiado");
+        showInlineStatus("Resultado copiado", 'success');
         setTimeout(() => setCopiedResult(false), 2000);
       } else {
         throw new Error("execCommand failed");
       }
     } catch (err) {
       console.error('Copy error:', err);
-      toast.error("Não foi possível copiar. Selecione o texto manualmente.");
+      showInlineStatus("Não foi possível copiar. Selecione o texto manualmente.", 'error');
     }
   };
 
   const handleComplete = () => {
-    toast.success("Análise concluída!");
+    showInlineStatus("Análise concluída!", 'success');
     setTimeout(() => navigate("/maritimo"), 1000);
   };
 
@@ -815,310 +801,316 @@ export default function InvoicesDraftHbl() {
   };
 
   return (
-    <PageLayout title="DACHSER" subtitle="Invoices × Draft HBL" pageIcon={FileBox}>
-      <div className="max-w-7xl mx-auto">
+    <PageLayout title="DACHSER" subtitle="Submeter – Invoices × Draft HBL" pageIcon={FileBox}>
+      <PageCard className="max-w-7xl mx-auto">
+        <h1 className="text-2xl font-bold text-white mb-2">Submeter – Invoices × Draft HBL</h1>
+        <p className="text-sm text-neutral-400 mb-8">Adicione os arquivos para análise comparativa</p>
 
-          <Card className="bg-black/40 border border-white/10 rounded-2xl shadow-[0_18px_40px_rgba(0,0,0,0.9)] p-8 mb-6">
-            {/* Upload and Options Grid */}
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
-              {/* Upload Zone - Takes 2 columns */}
-              <div className="lg:col-span-2">
-                <h3 className="text-sm font-medium text-white mb-4">
-                  Arquivos de origem (arraste <span className="text-amber-400">.eml</span> / <span className="text-amber-400">.zip</span> e também <span className="text-amber-400">PDFs</span>)
-                </h3>
-                <div
-                  onClick={handleFileInputClick}
-                  onDrop={handleMainDrop}
-                  onDragOver={handleMainDragOver}
-                  onDragLeave={handleMainDragLeave}
-                  className={`
-                    border-2 border-dashed rounded-xl p-12 text-center cursor-pointer
-                    transition-colors
-                    ${isDraggingOver ? 'border-amber-400 bg-amber-400/5' : 'border-white/10 hover:border-amber-400/50 bg-black/20'}
-                  `}
-                >
-                  <Upload className="w-12 h-12 mx-auto mb-4 text-neutral-400" />
-                  <p className="text-sm font-medium text-white mb-2">
-                    📥 Solte aqui (ou clique)
-                  </p>
-                  <p className="text-xs text-neutral-400">
-                    Aceita .eml/.zip e PDFs. Você pode misturar os formatos.
-                  </p>
-                </div>
-                {totalFiles > 0 && (
-                  <p className="text-sm text-neutral-400 mt-4">
-                    Anexos detectados: {totalFiles}. Vincule invoices aos HBLs (opcional).
-                  </p>
-                )}
-              </div>
-
-              {/* Options - Takes 1 column */}
+        {/* Item Info Section - Only show for existing processes */}
+        {itemInfo && (
+          <div className="bg-black/20 border border-white/5 rounded-xl p-6 mb-8">
+            <h3 className="text-xs tracking-[0.22em] uppercase text-neutral-400 mb-4">Informações do processo:</h3>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div>
-                <h3 className="text-sm font-semibold text-white mb-4">Opções</h3>
-                <ul className="text-xs text-neutral-400 space-y-3 leading-relaxed">
-                  <li>• PDFs entram direto; o sistema tenta classificar em HBL/Invoice pelo nome.</li>
-                  <li>• .eml/.zip passam pelo extrator de anexos; você pode mesclar com PDFs soltos.</li>
-                  <li>• Vincule invoices dentro do(s) HBL(s) para melhor resultado.</li>
-                  {itemId && (
-                    <li className="text-amber-400/80">• Processo existente: você pode carregar os arquivos usados na última análise.</li>
-                  )}
-                </ul>
-                
-                {/* Load Previous Files Button - Only show for existing processes */}
-                {itemId && !previousFilesLoaded && (
-                  <div className="mt-4 pt-4 border-t border-white/10">
-                    <Button
-                      onClick={handleLoadPreviousFiles}
-                      disabled={isLoadingPreviousFiles}
-                      variant="outline"
-                      className="w-full rounded-full border-amber-400/50 bg-amber-400/10 hover:bg-amber-400/20 text-amber-400"
-                    >
-                      {isLoadingPreviousFiles ? (
-                        <>
-                          <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                          Carregando...
-                        </>
-                      ) : (
-                        <>
-                          <FolderOpen className="w-4 h-4 mr-2" />
-                          Carregar arquivos anteriores
-                        </>
-                      )}
-                    </Button>
-                    {itemInfo && (
-                      <p className="text-xs text-neutral-500 mt-2 text-center">
-                        Processo: {itemInfo.base_file_name}
-                      </p>
-                    )}
-                  </div>
-                )}
-                
-                {previousFilesLoaded && (
-                  <div className="mt-4 pt-4 border-t border-white/10">
-                    <p className="text-xs text-success text-center">
-                      ✓ Arquivos anteriores carregados
-                    </p>
-                  </div>
-                )}
+                <span className="text-xs text-neutral-500">Arquivo base:</span>
+                <div className="flex items-center gap-2 mt-1">
+                  <FileText className="w-4 h-4 text-amber-300" />
+                  <span className="text-white text-sm">{itemInfo.base_file_name}</span>
+                </div>
               </div>
+              {itemInfo.container && (
+                <div>
+                  <span className="text-xs text-neutral-500">Container:</span>
+                  <p className="text-white text-sm mt-1">{itemInfo.container}</p>
+                </div>
+              )}
+              {itemInfo.consignee && (
+                <div>
+                  <span className="text-xs text-neutral-500">Consignee:</span>
+                  <p className="text-white text-sm mt-1">{itemInfo.consignee}</p>
+                </div>
+              )}
             </div>
-
-            {/* Three-column grid for classification */}
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
-              {/* Draft HBL Column */}
-              <div
-                onDrop={(e) => handleDrop(e, "hbl")}
-                onDragOver={handleDragOver}
-                className="min-h-[300px] border-2 border-white/5 rounded-xl p-4 bg-black/20"
-              >
-                <div className="flex items-center gap-2 mb-4">
-                  <h3 className="text-sm font-semibold text-white">Draft HBL</h3>
-                  <span className="bg-black/30 text-neutral-400 text-xs font-medium px-2.5 py-0.5 rounded-full border border-white/10">
-                    {hblFiles.length}
-                  </span>
-                </div>
-                <div className="space-y-3">
-                  {hblFiles.map(f => renderHblWithPills(f))}
-                </div>
-              </div>
-
-              {/* Invoices Column */}
-              <div
-                onDrop={(e) => handleDrop(e, "invoice")}
-                onDragOver={handleDragOver}
-                className="min-h-[300px] border-2 border-white/5 rounded-xl p-4 bg-black/20"
-              >
-                <div className="flex items-center gap-2 mb-4">
-                  <h3 className="text-sm font-semibold text-white">Invoices</h3>
-                  <span className="bg-black/30 text-neutral-400 text-xs font-medium px-2.5 py-0.5 rounded-full border border-white/10">
-                    {invoiceFiles.length}
-                  </span>
-                </div>
-                <div className="space-y-3">
-                  {invoiceFiles.map(f => renderInvoiceCard(f))}
-                </div>
-              </div>
-
-              {/* Others Column */}
-              <div
-                onDrop={(e) => handleDrop(e, "other")}
-                onDragOver={handleDragOver}
-                className="min-h-[300px] border-2 border-white/5 rounded-xl p-4 bg-black/20"
-              >
-                <div className="flex items-center gap-2 mb-4">
-                  <h3 className="text-sm font-semibold text-white">Outros</h3>
-                  <span className="bg-black/30 text-neutral-400 text-xs font-medium px-2.5 py-0.5 rounded-full border border-white/10">
-                    {otherFiles.length}
-                  </span>
-                </div>
-                <div className="space-y-3">
-                  {otherFiles.map(f => renderOtherCard(f))}
-                </div>
-              </div>
-            </div>
-
-            {/* Analyze Button */}
-            {!analysisResult && (
-              <div className="mb-6">
+            
+            {/* Load Previous Files Button */}
+            {!previousFilesLoaded && (
+              <div className="mt-4 pt-4 border-t border-white/10">
                 <Button
-                  onClick={handleAnalise}
-                  disabled={!canAnalyze || isAnalyzing}
-                  className="rounded-full bg-amber-400 text-black font-semibold hover:bg-amber-300 px-8 shadow-[0_0_22px_rgba(251,191,36,0.6)]"
+                  onClick={handleLoadPreviousFiles}
+                  disabled={isLoadingPreviousFiles}
+                  variant="outline"
+                  className="rounded-full border-amber-400/50 bg-amber-400/10 hover:bg-amber-400/20 text-amber-400"
                 >
-                  <FontAwesomeIcon icon={faFileContract} className="w-4 h-4 mr-2" />
-                  {isAnalyzing ? "Fazendo análise..." : "Fazer Análise"}
+                  {isLoadingPreviousFiles ? (
+                    <>
+                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                      Carregando...
+                    </>
+                  ) : (
+                    <>
+                      <FolderOpen className="w-4 h-4 mr-2" />
+                      Carregar arquivos anteriores
+                    </>
+                  )}
                 </Button>
               </div>
             )}
-          </Card>
+            
+            {previousFilesLoaded && (
+              <div className="mt-4 pt-4 border-t border-white/10">
+                <p className="text-xs text-success">
+                  ✓ Arquivos anteriores carregados
+                </p>
+              </div>
+            )}
+          </div>
+        )}
 
-          {/* Bottom flow hint */}
-          <Card className="bg-black/40 border border-white/10 rounded-2xl p-4 mb-6">
-            <p className="text-sm text-neutral-400">
-              Fluxo: solte .eml/.zip e/ou PDFs → classificar/vincular → <span className="italic">Fazer Análise</span>.
-            </p>
-          </Card>
+        {/* Upload Zone */}
+        <h3 className="text-xs tracking-[0.22em] uppercase text-neutral-400 mb-4">
+          Envie os arquivos (arraste .eml / .zip e também PDFs):
+        </h3>
+        
+        <div
+          onClick={handleFileInputClick}
+          onDrop={handleMainDrop}
+          onDragOver={handleMainDragOver}
+          onDragLeave={handleMainDragLeave}
+          className={`
+            border-2 border-dashed rounded-xl p-12 text-center cursor-pointer mb-6
+            transition-colors
+            ${isDraggingOver ? 'border-amber-400 bg-amber-400/5' : 'border-white/10 hover:border-amber-400/50 bg-black/20'}
+          `}
+        >
+          <Upload className="w-12 h-12 mx-auto mb-4 text-neutral-400" />
+          <p className="text-sm font-medium text-white mb-2">
+            📥 Solte aqui (ou clique)
+          </p>
+          <p className="text-xs text-neutral-400">
+            Aceita .eml/.zip e PDFs. Você pode misturar os formatos.
+          </p>
+        </div>
+        
+        {totalFiles > 0 && (
+          <p className="text-sm text-neutral-400 mb-6">
+            Anexos detectados: {totalFiles}. Vincule invoices aos HBLs (opcional).
+          </p>
+        )}
 
-          {/* Inline Status Messages - only show when NOT analyzing */}
-          {inlineStatus && !isAnalyzing && (
-            <div className={`mb-6 rounded-lg p-4 border ${
-              inlineStatus.type === 'success' ? 'bg-success/10 border-success/30 text-success' :
-              inlineStatus.type === 'error' ? 'bg-destructive/10 border-destructive/30 text-destructive' :
-              'bg-primary/10 border-primary/30 text-primary'
-            }`}>
-              <p className="text-sm font-medium">{inlineStatus.message}</p>
-            </div>
-          )}
+        {/* Inline Status Messages */}
+        {inlineStatus && !isAnalyzing && (
+          <div className={`mb-6 rounded-xl p-4 border ${
+            inlineStatus.type === 'success' ? 'bg-emerald-500/15 border-emerald-500/40 text-emerald-300' :
+            inlineStatus.type === 'error' ? 'bg-rose-500/15 border-rose-500/40 text-rose-300' :
+            'bg-amber-500/15 border-amber-500/40 text-amber-300'
+          }`}>
+            <p className="text-sm font-medium">{inlineStatus.message}</p>
+          </div>
+        )}
 
-          {/* Progress Bar */}
-          {isAnalyzing && (
-            <Card className="p-4 border-2 border-primary/20 mb-6">
+        {/* Progress Bar */}
+        {isAnalyzing && (
+          <div className="mb-6">
+            <div className="bg-black/20 border border-white/5 rounded-xl p-4">
               <div className="flex items-center gap-3 mb-3">
-                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-primary"></div>
-                <span className="text-sm text-foreground font-medium">{analysisStep}</span>
+                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-amber-400"></div>
+                <span className="text-sm text-white font-medium">{analysisStep}</span>
               </div>
               <div className="flex items-center gap-3">
                 <Progress value={analysisProgress} className="h-2 flex-1" />
-                <span className="text-xs text-muted-foreground font-mono min-w-[3rem] text-right">
-                  {analysisProgress}%
-                </span>
-              </div>
-            </Card>
-          )}
-
-          {/* Results Display */}
-          {analysisResult && (
-            <div id="analysis-results" className="space-y-6">
-              <Card className="p-6 bg-black/20 border border-white/5 rounded-2xl">
-                <pre className="text-sm text-neutral-200 whitespace-pre-wrap font-mono max-h-[600px] overflow-y-auto bg-black/30 p-4 rounded-lg">
-                  {analysisResult.text}
-                </pre>
-              </Card>
-
-              <div className="flex items-center gap-4">
-                <Button
-                  onClick={handleNewAnalysis}
-                  disabled={isAnalyzing}
-                  className="rounded-full bg-amber-400 text-black font-semibold hover:bg-amber-300 px-8 shadow-[0_0_22px_rgba(251,191,36,0.6)]"
-                >
-                  <FontAwesomeIcon icon={faFileContract} className="w-4 h-4 mr-2" />
-                  {isAnalyzing ? "Processando..." : "Fazer nova análise"}
-                </Button>
-                <Button
-                  onClick={handleComplete}
-                  variant="outline"
-                  className="rounded-full px-8 border-white/20 bg-black/40 hover:bg-black hover:border-amber-400/80"
-                >
-                  Concluir análise
-                </Button>
-                <Button
-                  onClick={handleCopyResult}
-                  variant="ghost"
-                  size="icon"
-                  className="rounded-full w-10 h-10"
-                  title="Copiar resultado"
-                >
-                  {copiedResult ? (
-                    <Check className="w-4 h-4" />
-                  ) : (
-                    <Copy className="w-4 h-4" />
-                  )}
-                </Button>
+                <span className="text-xs text-neutral-400 font-mono min-w-[3rem] text-right">{analysisProgress}%</span>
               </div>
             </div>
-          )}
+          </div>
+        )}
 
-          {/* Info message */}
-          {!analysisResult && (
-            <div className="flex items-center justify-center">
-              <div className="flex items-start gap-3 text-xs text-muted-foreground bg-muted/20 p-4 rounded-lg max-w-2xl">
-                <Info className="w-4 h-4 flex-shrink-0 mt-0.5" />
-                <p>
-                  As análises são geradas por um modelo de IA e podem conter imprecisões. Revise antes de concluir processos.
-                </p>
-              </div>
+        {/* Three-column grid for classification */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+          {/* Draft HBL Column */}
+          <div
+            onDrop={(e) => handleDrop(e, "hbl")}
+            onDragOver={handleDragOver}
+            className="min-h-[300px] border-2 border-white/5 rounded-xl p-4 bg-black/20"
+          >
+            <div className="flex items-center gap-2 mb-4">
+              <h3 className="text-sm font-semibold text-white">Draft HBL</h3>
+              <span className="bg-black/30 text-neutral-400 text-xs font-medium px-2.5 py-0.5 rounded-full border border-white/10">
+                {hblFiles.length}
+              </span>
             </div>
-          )}
+            <div className="space-y-3">
+              {hblFiles.map(f => renderHblWithPills(f))}
+            </div>
+          </div>
+
+          {/* Invoices Column */}
+          <div
+            onDrop={(e) => handleDrop(e, "invoice")}
+            onDragOver={handleDragOver}
+            className="min-h-[300px] border-2 border-white/5 rounded-xl p-4 bg-black/20"
+          >
+            <div className="flex items-center gap-2 mb-4">
+              <h3 className="text-sm font-semibold text-white">Invoices</h3>
+              <span className="bg-black/30 text-neutral-400 text-xs font-medium px-2.5 py-0.5 rounded-full border border-white/10">
+                {invoiceFiles.length}
+              </span>
+            </div>
+            <div className="space-y-3">
+              {invoiceFiles.map(f => renderInvoiceCard(f))}
+            </div>
+          </div>
+
+          {/* Others Column */}
+          <div
+            onDrop={(e) => handleDrop(e, "other")}
+            onDragOver={handleDragOver}
+            className="min-h-[300px] border-2 border-white/5 rounded-xl p-4 bg-black/20"
+          >
+            <div className="flex items-center gap-2 mb-4">
+              <h3 className="text-sm font-semibold text-white">Outros</h3>
+              <span className="bg-black/30 text-neutral-400 text-xs font-medium px-2.5 py-0.5 rounded-full border border-white/10">
+                {otherFiles.length}
+              </span>
+            </div>
+            <div className="space-y-3">
+              {otherFiles.map(f => renderOtherCard(f))}
+            </div>
+          </div>
         </div>
 
-        {/* HBL Selection Modal */}
-        <Dialog open={showHblModal} onOpenChange={setShowHblModal}>
-          <DialogContent className="bg-card border-border">
-            <DialogHeader>
-              <DialogTitle className="flex items-center gap-2">
-                <LinkIcon className="w-4 h-4 text-primary" />
-                Escolher HBL de destino
-              </DialogTitle>
-              <DialogDescription>
-                {fileToSend && files.get(fileToSend) && (
-                  <>
-                    Enviar para HBL <span className="font-semibold text-foreground">{files.get(fileToSend)?.file.name}</span>
-                  </>
-                )}
-              </DialogDescription>
-            </DialogHeader>
-            <div className="space-y-2 max-h-[400px] overflow-y-auto">
-              {hblFiles.length === 0 ? (
-                <p className="text-sm text-muted-foreground text-center py-4">
-                  Nenhum HBL disponível
-                </p>
-              ) : (
-                hblFiles.map(f => (
-                  <Button
-                    key={f.key}
-                    variant="outline"
-                    className="w-full justify-start text-left hover:bg-primary/10"
-                    onClick={() => handleLinkToHblFromModal(f.key)}
-                  >
-                    <span className="truncate">{f.file.name}</span>
-                  </Button>
-                ))
-              )}
+        {/* Analyze Button - only show if no result */}
+        {!analysisResult && (
+          <div className="mb-6">
+            <Button
+              onClick={handleAnalise}
+              disabled={!canAnalyze || isAnalyzing}
+              className="h-10 rounded-full px-6 bg-amber-400 text-black font-semibold text-sm shadow-[0_0_22px_rgba(251,191,36,0.6)] hover:bg-amber-300"
+            >
+              <Send className="w-4 h-4 mr-2" />
+              {isAnalyzing ? "Fazendo análise..." : "Fazer Análise"}
+            </Button>
+          </div>
+        )}
+
+        {/* Results Display */}
+        {analysisResult?.text && (
+          <div id="analysis-results" className="mt-8 space-y-6">
+            <div className="flex items-center gap-2 text-emerald-300">
+              <div className="w-2 h-2 bg-emerald-400 rounded-full shadow-[0_0_10px_rgba(52,211,153,0.6)]" />
+              <span className="font-semibold text-sm">Análise concluída</span>
             </div>
-            <div className="flex justify-end mt-4">
-              <Button variant="ghost" onClick={() => setShowHblModal(false)} className="rounded-full">
-                Fechar
+
+            <div className="bg-black/20 border border-white/5 rounded-xl p-6">
+              <pre className="text-sm text-neutral-200 whitespace-pre-wrap font-mono bg-black/30 p-4 rounded-lg max-h-96 overflow-y-auto">
+                {analysisResult.text}
+              </pre>
+            </div>
+
+            <div className="flex items-center gap-4">
+              <Button
+                onClick={handleNewAnalysis}
+                disabled={isCompletingAnalysis || isAnalyzing}
+                className="h-10 rounded-full px-6 bg-amber-400 text-black font-semibold text-sm shadow-[0_0_22px_rgba(251,191,36,0.6)] hover:bg-amber-300"
+              >
+                <Send className="w-4 h-4 mr-2" />
+                {isAnalyzing ? "Processando..." : "Fazer nova análise"}
+              </Button>
+              <Button
+                onClick={handleComplete}
+                disabled={isCompletingAnalysis}
+                variant="outline"
+                className="h-10 rounded-full px-6 border-white/24 bg-black/40 text-white hover:border-amber-400/80 hover:bg-black"
+              >
+                Concluir análise
+              </Button>
+              <Button
+                onClick={handleCopyResult}
+                variant="ghost"
+                size="icon"
+                className="rounded-full w-10 h-10 text-white hover:bg-white/10"
+                title="Copiar resultado"
+              >
+                {copiedResult ? (
+                  <Check className="w-4 h-4" />
+                ) : (
+                  <Copy className="w-4 h-4" />
+                )}
               </Button>
             </div>
-          </DialogContent>
-        </Dialog>
+          </div>
+        )}
 
-        <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
-          <AlertDialogContent>
-            <AlertDialogHeader>
-              <AlertDialogTitle>Confirmar remoção</AlertDialogTitle>
-              <AlertDialogDescription>
-                Deseja remover o arquivo <strong>{fileToDelete?.name}</strong>?
-              </AlertDialogDescription>
-            </AlertDialogHeader>
-            <AlertDialogFooter>
-              <AlertDialogCancel>Cancelar</AlertDialogCancel>
-              <AlertDialogAction onClick={confirmDeleteFile}>
-                Remover
-              </AlertDialogAction>
-            </AlertDialogFooter>
-          </AlertDialogContent>
-        </AlertDialog>
+        {/* Info message */}
+        {!analysisResult && (
+          <div className="flex items-center justify-center mt-6">
+            <div className="flex items-start gap-3 text-xs text-neutral-400 bg-black/20 border border-white/5 p-4 rounded-xl">
+              <Info className="w-4 h-4 flex-shrink-0 mt-0.5 text-amber-300" />
+              <p>
+                As análises são geradas por um modelo de IA e podem conter imprecisões. Revise antes de concluir processos.
+              </p>
+            </div>
+          </div>
+        )}
+      </PageCard>
+
+      {/* HBL Selection Modal */}
+      <Dialog open={showHblModal} onOpenChange={setShowHblModal}>
+        <DialogContent className="bg-card border-border">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <LinkIcon className="w-4 h-4 text-primary" />
+              Escolher HBL de destino
+            </DialogTitle>
+            <DialogDescription>
+              {fileToSend && files.get(fileToSend) && (
+                <>
+                  Enviar para HBL <span className="font-semibold text-foreground">{files.get(fileToSend)?.file.name}</span>
+                </>
+              )}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-2 max-h-[400px] overflow-y-auto">
+            {hblFiles.length === 0 ? (
+              <p className="text-sm text-muted-foreground text-center py-4">
+                Nenhum HBL disponível
+              </p>
+            ) : (
+              hblFiles.map(f => (
+                <Button
+                  key={f.key}
+                  variant="outline"
+                  className="w-full justify-start text-left hover:bg-primary/10"
+                  onClick={() => handleLinkToHblFromModal(f.key)}
+                >
+                  <span className="truncate">{f.file.name}</span>
+                </Button>
+              ))
+            )}
+          </div>
+          <div className="flex justify-end mt-4">
+            <Button variant="ghost" onClick={() => setShowHblModal(false)} className="rounded-full">
+              Fechar
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Confirmar remoção</AlertDialogTitle>
+            <AlertDialogDescription>
+              Deseja remover o arquivo <strong>{fileToDelete?.name}</strong>?
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction onClick={confirmDeleteFile}>
+              Remover
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </PageLayout>
   );
 }
