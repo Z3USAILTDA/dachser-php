@@ -128,6 +128,15 @@ interface QueryRequest {
   resultHtml?: string;
   resultJson?: string;
   usedAsCtx?: boolean;
+  // SEA (Maritime) Module
+  analysisType?: string;
+  search?: string;
+  analysisId?: string;
+  completed?: boolean;
+  forceAll?: boolean;
+  fileContent?: string;
+  role?: string;
+  metadata?: any;
 }
 
 serve(async (req) => {
@@ -2673,6 +2682,289 @@ serve(async (req) => {
           UPDATE ai_agente.t_dachser_chb_runs SET used_as_ctx = ? WHERE id = ?
         `, [usedAsCtx ? 1 : 0, runId]);
         result = { success: true };
+        break;
+      }
+
+      // ==================== SEA (MARITIME) MODULE ====================
+      case 'get_maritimo_items': {
+        const { analysisType, status, search } = body;
+        console.log('Fetching SEA items:', { analysisType, status, search });
+        
+        let query = `
+          SELECT i.*, 
+                 (SELECT COUNT(*) FROM ai_agente.t_dachser_sea_runs r WHERE r.item_id = i.id) as run_count
+          FROM ai_agente.t_dachser_sea_items i
+          WHERE i.deleted_at IS NULL
+        `;
+        const params: any[] = [];
+        
+        if (analysisType) {
+          query += ` AND i.analysis_type = ?`;
+          params.push(analysisType);
+        }
+        
+        if (status && status !== 'todos') {
+          query += ` AND i.status = ?`;
+          params.push(status);
+        }
+        
+        if (search) {
+          query += ` AND (i.base_file_name LIKE ? OR i.consignee LIKE ? OR i.container LIKE ?)`;
+          const searchPattern = `%${search}%`;
+          params.push(searchPattern, searchPattern, searchPattern);
+        }
+        
+        query += ` ORDER BY i.created_at DESC`;
+        
+        const items = await client.query(query, params);
+        result = { success: true, items: items || [] };
+        break;
+      }
+
+      case 'get_maritimo_item': {
+        const { itemId } = body;
+        console.log('Fetching SEA item:', itemId);
+        
+        const items = await client.query(`
+          SELECT * FROM ai_agente.t_dachser_sea_items WHERE id = ?
+        `, [itemId]);
+        
+        result = { success: true, item: items?.[0] || null };
+        break;
+      }
+
+      case 'upload_maritimo_base_file': {
+        const { fileName, fileContent, fileType, analysisType } = body as any;
+        console.log('Uploading SEA base file:', fileName);
+        
+        // Create item record
+        const itemResult = await client.execute(`
+          INSERT INTO ai_agente.t_dachser_sea_items 
+          (base_file_name, analysis_type, status, created_at)
+          VALUES (?, ?, 'pendente', NOW())
+        `, [fileName, analysisType]);
+        
+        const itemId = itemResult.lastInsertId;
+        
+        // Store file reference
+        await client.execute(`
+          INSERT INTO ai_agente.t_dachser_sea_files 
+          (item_id, file_name, file_type, file_content_b64, role, created_at)
+          VALUES (?, ?, ?, ?, 'base', NOW())
+        `, [itemId, fileName, fileType, fileContent]);
+        
+        result = { success: true, itemId };
+        break;
+      }
+
+      case 'get_maritimo_history': {
+        const { itemId } = body;
+        console.log('Fetching SEA history for item:', itemId);
+        
+        const items = await client.query(`
+          SELECT base_file_name FROM ai_agente.t_dachser_sea_items WHERE id = ?
+        `, [itemId]);
+        
+        const runs = await client.query(`
+          SELECT r.*, u.email as created_by_email
+          FROM ai_agente.t_dachser_sea_runs r
+          LEFT JOIN ai_agente.t_users_dachser u ON u.id = r.created_by
+          WHERE r.item_id = ?
+          ORDER BY r.created_at DESC
+        `, [itemId]);
+        
+        // Get files for each run
+        for (const run of (runs || [])) {
+          const files = await client.query(`
+            SELECT id, file_name, file_type, role FROM ai_agente.t_dachser_sea_files 
+            WHERE run_id = ?
+          `, [run.id]);
+          run.files = files || [];
+        }
+        
+        result = { 
+          success: true, 
+          item: items?.[0] || { base_file_name: '' },
+          runs: runs || []
+        };
+        break;
+      }
+
+      case 'get_maritimo_files': {
+        const { itemId } = body;
+        console.log('Fetching SEA files for item:', itemId);
+        
+        const files = await client.query(`
+          SELECT f.*, r.status as run_status
+          FROM ai_agente.t_dachser_sea_files f
+          LEFT JOIN ai_agente.t_dachser_sea_runs r ON r.id = f.run_id
+          WHERE f.item_id = ?
+          ORDER BY f.created_at DESC
+        `, [itemId]);
+        
+        result = { success: true, files: files || [] };
+        break;
+      }
+
+      case 'create_maritimo_run': {
+        const { itemId, status, resultText, resultHtml, resultJson, analysisType, userId } = body as any;
+        console.log('Creating SEA run:', { itemId, status, analysisType });
+        
+        const insertResult = await client.execute(`
+          INSERT INTO ai_agente.t_dachser_sea_runs 
+          (item_id, status, result_text, result_html, result_json, analysis_type, created_by, created_at)
+          VALUES (?, ?, ?, ?, ?, ?, ?, NOW())
+        `, [
+          itemId, 
+          status || 'completed', 
+          resultText || null, 
+          resultHtml || null, 
+          resultJson ? JSON.stringify(resultJson) : null,
+          analysisType || null,
+          userId || null
+        ]);
+        
+        // Update item status
+        await client.execute(`
+          UPDATE ai_agente.t_dachser_sea_items SET status = 'realizado', updated_at = NOW() WHERE id = ?
+        `, [itemId]);
+        
+        result = { success: true, runId: insertResult.lastInsertId };
+        break;
+      }
+
+      case 'save_maritimo_file': {
+        const { itemId, runId, fileName, fileType, fileUrl, role } = body as any;
+        console.log('Saving SEA file:', { itemId, fileName, role });
+        
+        const insertResult = await client.execute(`
+          INSERT INTO ai_agente.t_dachser_sea_files 
+          (item_id, run_id, file_name, file_type, file_url, role, created_at)
+          VALUES (?, ?, ?, ?, ?, ?, NOW())
+        `, [itemId, runId || null, fileName, fileType, fileUrl || null, role || 'attachment']);
+        
+        result = { success: true, fileId: insertResult.lastInsertId };
+        break;
+      }
+
+      case 'delete_maritimo_item': {
+        const { itemId } = body;
+        console.log('Soft-deleting SEA item:', itemId);
+        
+        await client.execute(`
+          UPDATE ai_agente.t_dachser_sea_items SET deleted_at = NOW() WHERE id = ?
+        `, [itemId]);
+        
+        result = { success: true };
+        break;
+      }
+
+      case 'update_maritimo_item': {
+        const { itemId, consignee, container, status, metadata } = body as any;
+        console.log('Updating SEA item:', itemId);
+        
+        const updates: string[] = [];
+        const params: any[] = [];
+        
+        if (consignee !== undefined) { updates.push('consignee = ?'); params.push(consignee); }
+        if (container !== undefined) { updates.push('container = ?'); params.push(container); }
+        if (status !== undefined) { updates.push('status = ?'); params.push(status); }
+        if (metadata !== undefined) { updates.push('metadata = ?'); params.push(JSON.stringify(metadata)); }
+        
+        if (updates.length > 0) {
+          updates.push('updated_at = NOW()');
+          params.push(itemId);
+          await client.execute(`
+            UPDATE ai_agente.t_dachser_sea_items SET ${updates.join(', ')} WHERE id = ?
+          `, params);
+        }
+        
+        result = { success: true };
+        break;
+      }
+
+      case 'get_maritimo_analysis_status': {
+        const { analysisId } = body;
+        console.log('Fetching SEA analysis status:', analysisId);
+        
+        const runs = await client.query(`
+          SELECT * FROM ai_agente.t_dachser_sea_runs WHERE id = ?
+        `, [analysisId]);
+        
+        const run = runs?.[0];
+        result = { 
+          success: true, 
+          status: run?.status || 'pending',
+          progress: run?.status === 'completed' ? 100 : 50,
+          step: run?.status === 'completed' ? 'Concluído' : 'Processando...',
+          result_text: run?.result_text,
+          result_data: run?.result_json ? JSON.parse(run.result_json) : null
+        };
+        break;
+      }
+
+      case 'complete_maritimo_analysis': {
+        const { analysisId, itemId, completed } = body;
+        console.log('Completing SEA analysis:', { analysisId, itemId, completed });
+        
+        await client.execute(`
+          UPDATE ai_agente.t_dachser_sea_runs SET status = ? WHERE id = ?
+        `, [completed ? 'completed' : 'error', analysisId]);
+        
+        if (completed) {
+          await client.execute(`
+            UPDATE ai_agente.t_dachser_sea_items SET status = 'realizado', updated_at = NOW() WHERE id = ?
+          `, [itemId]);
+        }
+        
+        result = { success: true };
+        break;
+      }
+
+      case 'reextract_maritimo_metadata': {
+        const { forceAll } = body;
+        console.log('Reextracting SEA metadata, forceAll:', forceAll);
+        
+        // Get items to process
+        let query = `SELECT id, base_file_name FROM ai_agente.t_dachser_sea_items WHERE deleted_at IS NULL`;
+        if (!forceAll) {
+          query += ` AND (consignee IS NULL OR container IS NULL)`;
+        }
+        
+        const items = await client.query(query);
+        let processed = 0;
+        
+        // Simple extraction from filename patterns (can be enhanced)
+        for (const item of (items || [])) {
+          // Extract container pattern (e.g., MSKU1234567)
+          const containerMatch = item.base_file_name?.match(/([A-Z]{4}\d{7})/);
+          if (containerMatch) {
+            await client.execute(`
+              UPDATE ai_agente.t_dachser_sea_items SET container = ?, updated_at = NOW() WHERE id = ?
+            `, [containerMatch[1], item.id]);
+            processed++;
+          }
+        }
+        
+        result = { success: true, processed };
+        break;
+      }
+
+      case 'extract_maritimo_attachments': {
+        const { fileName, fileContent, fileType } = body as any;
+        console.log('Extracting attachments from:', fileName);
+        
+        // For now, return the file itself as an attachment
+        // In a real implementation, this would process EML/ZIP files
+        result = { 
+          success: true, 
+          extracted: [{
+            filename: fileName,
+            type: fileType,
+            size: fileContent?.length || 0,
+            category: 'document'
+          }]
+        };
         break;
       }
 

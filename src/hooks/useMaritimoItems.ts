@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
+import { maritimoApi } from "@/services/maritimoApi";
 
 export interface MaritimoItem {
   id: string;
@@ -6,7 +7,10 @@ export interface MaritimoItem {
   consignee?: string;
   container?: string;
   status: string;
+  analysis_type?: string;
   created_at: string;
+  updated_at?: string;
+  run_count?: number;
 }
 
 export function useMaritimoItems(activeTab: string) {
@@ -16,28 +20,11 @@ export function useMaritimoItems(activeTab: string) {
   const fetchItems = useCallback(async () => {
     setIsLoading(true);
     try {
-      // Placeholder - would fetch from API based on activeTab
-      // For now, return mock data
-      setItems([
-        {
-          id: "1",
-          base_file_name: "MANIFEST_001.pdf",
-          consignee: "EMPRESA ABC LTDA",
-          container: "MSKU1234567",
-          status: "pendente",
-          created_at: new Date().toISOString(),
-        },
-        {
-          id: "2",
-          base_file_name: "MANIFEST_002.pdf",
-          consignee: "INDUSTRIA XYZ SA",
-          container: "TCLU7654321",
-          status: "completed",
-          created_at: new Date(Date.now() - 86400000).toISOString(),
-        },
-      ]);
+      const data = await maritimoApi.getItems({ analysisType: activeTab });
+      setItems(data || []);
     } catch (error) {
-      console.error("Error fetching items:", error);
+      console.error("Error fetching SEA items:", error);
+      setItems([]);
     } finally {
       setIsLoading(false);
     }
@@ -48,7 +35,13 @@ export function useMaritimoItems(activeTab: string) {
   }, [fetchItems]);
 
   const deleteItem = async (id: string) => {
-    setItems((prev) => prev.filter((item) => item.id !== id));
+    try {
+      await maritimoApi.deleteItem(id);
+      setItems((prev) => prev.filter((item) => item.id !== id));
+    } catch (error) {
+      console.error("Error deleting SEA item:", error);
+      throw error;
+    }
   };
 
   return {
