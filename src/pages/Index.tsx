@@ -33,7 +33,7 @@ import { TablePagination } from "@/components/layout/TablePagination";
 import { Filter as FilterIcon } from "lucide-react";
 
 // TEMPORARIAMENTE DESATIVADO - Mudar para true para reativar envio de emails
-const EMAIL_SENDING_ENABLED = true;
+const EMAIL_SENDING_ENABLED = false;
 
 const airlines = [
   { code: "001", name: "American Airlines" },
