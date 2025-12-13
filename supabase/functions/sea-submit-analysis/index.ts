@@ -275,9 +275,9 @@ serve(async (req) => {
           
           bgClient = await getDbClient();
           
-          // Update status to processing
+          // Update status to analyzing (ENUM compatible)
           await bgClient.execute(`
-            UPDATE ai_agente.t_dachser_sea_runs SET status = 'processing' WHERE id = ?
+            UPDATE ai_agente.t_dachser_sea_runs SET status = 'analisando' WHERE id = ?
           `, [runId]);
           
           // Run LLM analysis
@@ -302,12 +302,12 @@ serve(async (req) => {
             finalStatus = 'error';
           }
 
-          // Update run with result
+          // Update run with result (use 'realizado' for completed, 'erro' for error)
           await bgClient.execute(`
             UPDATE ai_agente.t_dachser_sea_runs 
             SET status = ?, result_text = ?
             WHERE id = ?
-          `, [finalStatus === 'error' ? 'error' : 'pendente', result.result_text || '', runId]);
+          `, [finalStatus === 'error' ? 'erro' : 'realizado', result.result_text || '', runId]);
           
           // Update item status
           if (actualItemId) {
@@ -315,7 +315,7 @@ serve(async (req) => {
               UPDATE ai_agente.t_dachser_sea_items 
               SET status = ? 
               WHERE id = ?
-            `, [finalStatus === 'error' ? 'error' : 'pendente', actualItemId]);
+            `, [finalStatus === 'error' ? 'erro' : 'realizado', actualItemId]);
           }
           
           await bgClient.close();
@@ -329,13 +329,13 @@ serve(async (req) => {
             
             await bgClient.execute(`
               UPDATE ai_agente.t_dachser_sea_runs 
-              SET status = 'error', result_text = ?
+              SET status = 'erro', result_text = ?
               WHERE id = ?
             `, [`Error: ${error.message}`, runId]);
             
             if (actualItemId) {
               await bgClient.execute(`
-                UPDATE ai_agente.t_dachser_sea_items SET status = 'error' WHERE id = ?
+                UPDATE ai_agente.t_dachser_sea_items SET status = 'erro' WHERE id = ?
               `, [actualItemId]);
             }
             
