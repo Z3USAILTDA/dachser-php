@@ -111,7 +111,75 @@ async function extractXlsxTextViaGemini(fileUrl: string, fileName: string): Prom
   }
 }
 
-// ============ GEMINI ANALYSIS (TEXT + PDFs) ============
+// ============ ANTHROPIC CLAUDE (PRIMARY) ============
+
+async function analyzeWithAnthropic(
+  prompt: string, 
+  manifestText: string,
+  pdfFiles: Array<{ base64: string; name: string }>,
+  metadata: { consignee?: string; container?: string }
+): Promise<{ text: string; model: string }> {
+  const anthropicKey = Deno.env.get('ANTHROPIC_API_KEY');
+  if (!anthropicKey) throw new Error('ANTHROPIC_API_KEY not configured');
+  
+  let fullPrompt = prompt;
+  if (metadata.consignee) fullPrompt += `\n\nConsignee: ${metadata.consignee}`;
+  if (metadata.container) fullPrompt += `\nContainer: ${metadata.container}`;
+  
+  // Build content parts: prompt + manifest text + PDFs as base64 documents
+  const contentParts: any[] = [
+    { type: 'text', text: fullPrompt }
+  ];
+  
+  // Add manifest text if available
+  if (manifestText && manifestText.length > 0) {
+    contentParts.push({ type: 'text', text: `\n\n=== MANIFEST DATA ===\n${manifestText}` });
+  }
+  
+  // Add PDFs as base64 documents (Anthropic native PDF support)
+  for (const pdf of pdfFiles) {
+    contentParts.push({ 
+      type: 'document', 
+      source: { 
+        type: 'base64', 
+        media_type: 'application/pdf', 
+        data: pdf.base64 
+      } 
+    });
+    contentParts.push({ type: 'text', text: `[Document: ${pdf.name}]` });
+  }
+  
+  console.log(`🤖 Calling Anthropic Claude with ${manifestText.length} chars manifest + ${pdfFiles.length} PDFs`);
+  
+  const response = await fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST',
+    headers: {
+      'x-api-key': anthropicKey,
+      'anthropic-version': '2023-06-01',
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      model: 'claude-sonnet-4-20250514',
+      max_tokens: 8000,
+      temperature: 0.1,
+      messages: [{ role: 'user', content: contentParts }]
+    }),
+  });
+  
+  if (!response.ok) {
+    const errorText = await response.text().catch(() => '');
+    console.error(`❌ Anthropic API error: ${response.status} - ${errorText}`);
+    throw new Error(`Anthropic API error: ${response.status}`);
+  }
+  
+  const data = await response.json();
+  const resultText = data.content?.[0]?.text || '';
+  console.log(`✅ Anthropic response: ${resultText.length} chars`);
+  
+  return { text: resultText, model: 'claude-sonnet-4-20250514' };
+}
+
+// ============ GEMINI (FALLBACK) ============
 
 async function analyzeWithGemini(
   prompt: string, 
@@ -145,7 +213,7 @@ async function analyzeWithGemini(
     contentParts.push({ type: 'text', text: `[Document: ${pdf.name}]` });
   }
   
-  console.log(`🤖 Calling Gemini 2.5 Pro with ${manifestText.length} chars manifest + ${pdfFiles.length} PDFs`);
+  console.log(`🤖 Calling Gemini 2.5 Pro (fallback) with ${manifestText.length} chars manifest + ${pdfFiles.length} PDFs`);
   
   const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
     method: 'POST',
@@ -170,7 +238,6 @@ async function analyzeWithGemini(
   
   return { text: resultText, model: 'google/gemini-2.5-pro' };
 }
-
 
 // ============ MAIN LLM ANALYSIS FUNCTION ============
 
@@ -227,11 +294,16 @@ async function analyzeWithLLM(
     throw new Error('Não foi possível extrair dados suficientes dos documentos');
   }
   
-  // STEP 3: Call Gemini Pro for final analysis (text + PDFs)
+  // STEP 3: Try Anthropic first, fallback to Gemini
   let result: { text: string; model: string };
   
-  console.log('🎯 Using Gemini 2.5 Pro for analysis...');
-  result = await analyzeWithGemini(basePrompt, manifestText, validPdfData, metadata);
+  try {
+    console.log('🎯 Using Anthropic Claude (primary)...');
+    result = await analyzeWithAnthropic(basePrompt, manifestText, validPdfData, metadata);
+  } catch (anthropicError: any) {
+    console.error(`⚠️ Anthropic failed: ${anthropicError.message}, falling back to Gemini`);
+    result = await analyzeWithGemini(basePrompt, manifestText, validPdfData, metadata);
+  }
   
   const elapsed = Math.round((Date.now() - startTime) / 1000);
   console.log(`✅ Analysis completed in ${elapsed}s using ${result.model}`);
