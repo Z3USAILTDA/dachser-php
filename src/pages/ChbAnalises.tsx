@@ -131,8 +131,12 @@ export default function ChbAnalises() {
     }
   };
 
-  const handleCopyResult = (text: string) => {
-    navigator.clipboard.writeText(text);
+  const handleCopyResult = (content: string) => {
+    // Convert HTML to plain text for clipboard
+    const tempDiv = document.createElement('div');
+    tempDiv.innerHTML = content;
+    const plainText = tempDiv.textContent || tempDiv.innerText || content;
+    navigator.clipboard.writeText(plainText);
     toast.success("Resultado copiado!");
   };
 
@@ -377,7 +381,7 @@ export default function ChbAnalises() {
                         </span>
                       </div>
                       <button
-                        onClick={() => handleCopyResult(entry.result_text || entry.result_html)}
+                        onClick={() => handleCopyResult(entry.result_html || entry.result_text || '')}
                         className="inline-flex items-center gap-1 text-[0.72rem] text-white/50 hover:text-white transition-colors"
                         title="Copiar resultado"
                       >
