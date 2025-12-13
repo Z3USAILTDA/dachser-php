@@ -67,6 +67,9 @@ const App = () => (
           <Route path="/maritimo" element={<SeaAnalysis />} />
           <Route path="/sea/cadastro-hbl" element={<CadastroHbl />} />
           <Route path="/sea/cadastro-manifest" element={<CadastroManifest />} />
+          <Route path="/sea/submeter-hbl-mbl" element={<SubmeterHblMbl />} />
+          <Route path="/sea/submeter-manifest-hbl" element={<SubmeterManifestHbl />} />
+          <Route path="/sea/invoices-draft-hbl" element={<InvoicesDraftHbl />} />
           <Route path="/maritimo/cadastro-hbl" element={<CadastroHbl />} />
           <Route path="/maritimo/cadastro-manifest" element={<CadastroManifest />} />
           <Route path="/maritimo/submeter-hbl-mbl" element={<SubmeterHblMbl />} />
