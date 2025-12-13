@@ -78,13 +78,17 @@ export default function ConferenciaChb() {
     setDocuments(newDocs);
   }, [dbFiles]);
 
-  // Convert DB runs to approved history
+  // Convert DB runs to approved history and restore step state
   useEffect(() => {
     const newHistory: Record<number, ChbApprovedHistory[]> = { 1: [], 2: [], 3: [] };
+    let maxApprovedStep = 0;
+    
     dbRuns
       .filter((r: ChbRun) => r.status === 'approved')
       .forEach((r: ChbRun) => {
         const stepId = parseInt(r.etapa) as 1 | 2 | 3;
+        if (stepId > maxApprovedStep) maxApprovedStep = stepId;
+        
         newHistory[stepId].push({
           id: `run-${r.id}`,
           stepId,
@@ -96,6 +100,23 @@ export default function ConferenciaChb() {
         });
       });
     setApprovedHistory(newHistory);
+    
+    // Restore step states and active step based on approved runs
+    if (maxApprovedStep > 0) {
+      setSteps(prev => prev.map(step => {
+        if (step.id <= maxApprovedStep) {
+          return { ...step, status: 'completed' as const };
+        }
+        if (step.id === maxApprovedStep + 1) {
+          return { ...step, status: 'current' as const };
+        }
+        return { ...step, status: 'pending' as const };
+      }));
+      
+      // Set active step to next incomplete step (or last if all complete)
+      const nextStep = Math.min(maxApprovedStep + 1, 3);
+      setActiveStep(nextStep);
+    }
   }, [dbRuns]);
 
   // Get documents for current step (inherited from previous steps + current)
@@ -263,11 +284,26 @@ export default function ConferenciaChb() {
   };
 
 
-  const handleApproveAndAdvance = () => {
+  const handleApproveAndAdvance = async () => {
     const currentAnalysis = analysisResults[activeStep];
     
     if (!currentAnalysis) {
       toast.error('Nenhuma análise para aprovar');
+      return;
+    }
+
+    // Save to database with status 'approved'
+    try {
+      await createRun(
+        activeStep.toString() as '1' | '2' | '3',
+        'approved',
+        currentAnalysis.summary,
+        currentAnalysis.html,
+        currentAnalysis
+      );
+    } catch (error) {
+      console.error('Error saving run:', error);
+      toast.error('Erro ao salvar aprovação');
       return;
     }
 
