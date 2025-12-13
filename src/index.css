@@ -196,3 +196,28 @@
   box-shadow: 0 4px 24px -4px hsl(var(--primary) / 0.15), 
               0 0 0 1px hsl(var(--primary) / 0.3);
 }
+
+/* Leaflet tooltip styling for Olimpo */
+.leaflet-tooltip {
+  background: rgba(10, 10, 10, 0.95) !important;
+  border: 1px solid rgba(255, 255, 255, 0.2) !important;
+  border-radius: 8px !important;
+  padding: 8px 12px !important;
+  color: #fff !important;
+  font-family: inherit !important;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5) !important;
+}
+
+.leaflet-tooltip::before {
+  border-top-color: rgba(10, 10, 10, 0.95) !important;
+}
+
+/* Marker hover effect */
+.leaflet-marker-icon {
+  transition: transform 0.15s ease;
+}
+
+.leaflet-marker-icon:hover {
+  transform: scale(1.3) !important;
+  z-index: 10000 !important;
+}

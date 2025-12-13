@@ -184,10 +184,13 @@ export default function Olimpo() {
   const navigate = useNavigate();
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<L.Map | null>(null);
+  const activeRouteRef = useRef<L.Polyline | null>(null);
+  const activeMarkersRef = useRef<L.CircleMarker[]>([]);
 
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [data, setData] = useState<DataItem[]>([]);
+  const [selectedAsset, setSelectedAsset] = useState<string | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
   const pageSize = 10;
 
@@ -532,10 +535,90 @@ export default function Olimpo() {
 
     // Clear existing layers
     map.eachLayer((layer) => {
-      if (layer instanceof L.Marker || layer instanceof L.Polyline) {
+      if (layer instanceof L.Marker || layer instanceof L.Polyline || layer instanceof L.CircleMarker) {
         map.removeLayer(layer);
       }
     });
+    activeRouteRef.current = null;
+    activeMarkersRef.current = [];
+
+    // Helper function to build route line
+    const buildRouteLine = (item: DataItem, routeIndex: number): [number, number][] => {
+      let line: [number, number][] = [];
+      if (!item.orig || !item.dest) return line;
+      
+      if (item.mode === "sea") {
+        const way = maritimeWaypoints(item.orig, item.dest);
+        const seed = hashStr(String(item.asset || item.rota || "sea"));
+        const pts = [item.orig, ...way, item.dest];
+        for (let i = 1; i < pts.length; i++) {
+          const seg = bezierArc(pts[i - 1], pts[i], seed + i, 96, routeIndex);
+          if (i > 1) seg.shift();
+          line = line.concat(seg);
+        }
+      } else {
+        const seed = hashStr(String(item.asset || item.flight || item.rota || "air"));
+        line = bezierArc(item.orig, item.dest, seed, 100, routeIndex);
+      }
+      return line;
+    };
+
+    // Helper to show route for selected item
+    const showRoute = (item: DataItem, routeIndex: number) => {
+      // Clear previous route
+      if (activeRouteRef.current) {
+        map.removeLayer(activeRouteRef.current);
+      }
+      activeMarkersRef.current.forEach(m => map.removeLayer(m));
+      activeMarkersRef.current = [];
+
+      if (!item.orig || !item.dest) return;
+
+      const line = buildRouteLine(item, routeIndex);
+      const baseColor = item.mode === "air" ? "#7fd0ff" : "#ffc800";
+
+      if (line.length > 1) {
+        activeRouteRef.current = L.polyline(line, { 
+          color: baseColor, 
+          weight: 2.5, 
+          opacity: 0.85 
+        }).addTo(map);
+
+        // Add origin/destination markers
+        const originMarker = L.circleMarker(item.orig, {
+          radius: 6,
+          fillColor: "#22c55e",
+          fillOpacity: 0.9,
+          color: "#fff",
+          weight: 2,
+        }).addTo(map);
+
+        const destMarker = L.circleMarker(item.dest, {
+          radius: 6,
+          fillColor: "#ef4444",
+          fillOpacity: 0.9,
+          color: "#fff",
+          weight: 2,
+        }).addTo(map);
+
+        activeMarkersRef.current = [originMarker, destMarker];
+      }
+
+      setSelectedAsset(item.asset || item.id.toString());
+    };
+
+    // Clear route when clicking on map (not marker)
+    const clearRoute = () => {
+      if (activeRouteRef.current) {
+        map.removeLayer(activeRouteRef.current);
+        activeRouteRef.current = null;
+      }
+      activeMarkersRef.current.forEach(m => map.removeLayer(m));
+      activeMarkersRef.current = [];
+      setSelectedAsset(null);
+    };
+
+    map.on('click', clearRoute);
 
     // Group items by asset
     const groups = new Map<string, DataItem[]>();
@@ -561,35 +644,11 @@ export default function Olimpo() {
       const item = items[0];
       if (!item.orig || !item.dest) continue;
 
-      // Build route with route index for spreading
-      let line: [number, number][] = [];
-      if (item.mode === "sea") {
-        const way = maritimeWaypoints(item.orig, item.dest);
-        const seed = hashStr(String(item.asset || item.rota || "sea"));
-        const pts = [item.orig, ...way, item.dest];
-        for (let i = 1; i < pts.length; i++) {
-          const seg = bezierArc(pts[i - 1], pts[i], seed + i, 96, routeIndex);
-          if (i > 1) seg.shift();
-          line = line.concat(seg);
-        }
-      } else {
-        // For air routes, use bezier with spreading instead of great circle
-        const seed = hashStr(String(item.asset || item.flight || item.rota || "air"));
-        line = bezierArc(item.orig, item.dest, seed, 100, routeIndex);
-      }
-
+      const currentRouteIndex = routeIndex;
       routeIndex++;
 
-      // Draw route with varying opacity based on status
-      const baseColor = item.mode === "air" ? "#7fd0ff" : "#ffc800";
-      const opacity = item.status === "Atraso" ? 0.9 : 0.5;
-      const weight = item.status === "Atraso" ? 2.5 : 1.8;
-      
-      if (line.length > 1) {
-        L.polyline(line, { color: baseColor, weight, opacity }).addTo(map);
-      }
-
-      // Calculate position
+      // Calculate position along route
+      const line = buildRouteLine(item, currentRouteIndex);
       let pos = item.pos;
       if (!pos && line.length > 1) {
         pos = pointAtFraction(line, item.prog, map);
@@ -598,11 +657,34 @@ export default function Olimpo() {
       if (pos) {
         const icon = L.divIcon({
           html: item.mode === "air" ? "✈️" : "🚢",
-          className: "",
-          iconSize: [20, 20],
-          iconAnchor: [10, 10],
+          className: "cursor-pointer hover:scale-125 transition-transform",
+          iconSize: [22, 22],
+          iconAnchor: [11, 11],
         });
+        
         const marker = L.marker(pos, { icon }).addTo(map);
+        
+        // Show route on click
+        marker.on('click', (e) => {
+          L.DomEvent.stopPropagation(e);
+          showRoute(item, currentRouteIndex);
+        });
+
+        // Tooltip with info
+        marker.bindTooltip(
+          `<div class="text-xs">
+            <strong>${item.asset || item.tipo_label}</strong><br/>
+            ${item.cliente}<br/>
+            ${item.rota}<br/>
+            <span class="${item.status === 'Atraso' ? 'text-red-400' : 'text-green-400'}">${item.status}</span>
+          </div>`,
+          { 
+            direction: 'top', 
+            offset: [0, -10],
+            className: 'bg-[#0a0a0a] border border-white/20 rounded-lg shadow-lg'
+          }
+        );
+
         markers.push(marker);
       }
     }
@@ -612,6 +694,10 @@ export default function Olimpo() {
       const fg = L.featureGroup(markers);
       map.flyToBounds(fg.getBounds().pad(0.25), { maxZoom: 4, duration: 0.5 });
     }
+
+    return () => {
+      map.off('click', clearRoute);
+    };
   }, [filteredData]);
 
   // Resize map on fullscreen toggle or window resize
