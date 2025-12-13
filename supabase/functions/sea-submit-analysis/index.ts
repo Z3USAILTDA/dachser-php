@@ -685,12 +685,10 @@ serve(async (req) => {
             runId
           ]);
           
-          // Update item status
-          if (actualItemId) {
-            await bgClient.execute(`
-              UPDATE ai_agente.t_dachser_sea_items SET status = 'realizado' WHERE id = ?
-            `, [actualItemId]);
-          }
+          // NOTE: Item status is NOT updated here automatically.
+          // It will only be marked as 'realizado' when user clicks "Concluir Análise"
+          console.log(`📋 Item ${actualItemId} status unchanged - waiting for user to complete`);
+
           
           console.log(`✅ Run ${runId} completed successfully with ${result.model}`);
           
