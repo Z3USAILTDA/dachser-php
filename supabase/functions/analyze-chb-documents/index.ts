@@ -101,25 +101,44 @@ INSTRUÇÕES DE EXTRAÇÃO AVANÇADA
 
 Você é um auditor especialista em documentos de comércio exterior (importação Brasil).
 
-1) ANÁLISE VISUAL PROFUNDA:
-   - Examine CADA página completamente
-   - Identifique tabelas, totalizadores, valores
-   - NUNCA retorne ND se o valor estiver presente no documento
-   - Leia texto em qualquer orientação
+ENTRADAS HETEROGÊNEAS:
+- PDFs (digitáveis ou escaneados), DOC/DOCX, planilhas (XLS/XLSX), imagens, XML/JSON.
+- Considere TODAS as fontes fornecidas.
+- Planilhas multi-abas: trate cada aba. Use "/aba <nome>" na referência.
+- XML/JSON: interprete chaves usuais (ncm, hs_code, gross_weight, incoterm, consign*, invoice*, container*, seal*).
+- OCR: quando irrecuperável, use "Ilegível".
 
-2) OCR INTELIGENTE:
-   - Para documentos escaneados, aplique OCR com máxima precisão
-   - Corrija erros comuns (0 vs O, 1 vs I, 5 vs S)
+PADRONIZAÇÃO:
+- Números: vírgula p/ decimais; milhares com ponto; 2–3 casas.
+- Unidades: peso em kg; volume em m³; converter quando necessário.
+- Moeda: reporte moeda da fatura; normalize como "USD 12.345,67".
+- Datas: AAAA-MM-DD.
+- CNPJ: apenas dígitos.
+- NCM: comparar raiz de 4 dígitos + compatibilidade da descrição.
+- Rótulos de ausência: ND = não disponível; Ilegível = OCR ruim; N/A = não aplicável.
 
-3) EQUIVALÊNCIA DE VALORES:
-   - 97,3 = 97,30 = 97.30 (IGUAIS ✅)
-   - 10.841 = 10841 = 10.841,00 (IGUAIS ✅)
-   - Ignore diferenças de formatação
+TOLERÂNCIAS (decisão de status):
+- Quantidades/preços unit.: discrepância relevante se > 1 un. OU > 0,5%.
+- Totais (valor/peso/CBM): discrepância relevante se > 0,5 (absoluto) OU > 0,3%.
+- Equivalência: 97,3 = 97,30 = 97.30 (IGUAIS ✅); 10.841 = 10841 = 10.841,00 (IGUAIS ✅).
 
-4) CONTEXTO BRASILEIRO:
-   - Valide CNPJ (14 dígitos)
-   - Reconheça NCM (8 dígitos)
-   - Identifique portos/aeroportos brasileiros
+SEMÁFORO (usar literalmente):
+- ✅ Conforme = Consistente ou presente sem conflito entre as fontes.
+- 🟨 Parcial = falta em 1–2 fontes, baixa legibilidade ou pequena divergência dentro da margem.
+- 🔴 Discrepante = conflito material (acima da tolerância; códigos/textos que mudem enquadramento; INC divergentes).
+
+REGRAS POR CAMPO:
+- Peso bruto: ✅ se convergem dentro da tolerância; 🟨 se ND/Ilegível sem conflito; 🔴 se diverge. Se Gross(BL)≈Net(PL) e diferença≈tara, marcar 🟨 e explicar.
+- Consignee: ✅ equivalentes; 🟨 legível só em 1–2 fontes; 🔴 conflitantes.
+- CNPJ: colunas sem CNPJ aplicável = N/A. ✅ válido; 🟨 Ilegível; 🔴 inválido ou conflitante.
+- Incoterm/Frete: ✅ INC + condição convergem; 🟨 etiqueta faltante; 🔴 INC distintos.
+- Container: ✅ coerente entre docs; 🟨 só em uma fonte; 🔴 conflitante.
+- NCM: ✅ raiz 4 dígitos coincide; 🟨 listado em uma fonte; 🔴 códigos distintos com impacto.
+
+CÁLCULOS PERMITIDOS:
+- Some itens quando total não vier fechado (informe "(soma)" na observação).
+- Reconheça sinônimos: "Gross weight"/"GW"/"Bruto"; "Net weight"/"NW"/"Líquido"; "CBM"/"Volume".
+- Planilhas multi-abas: consolide valores distribuídos.
 `;
 
 function getPromptByStep(stepId: number, fileNames: string[]): string {
