@@ -2623,17 +2623,19 @@ serve(async (req) => {
         console.log('Fetching CHB runs for item:', itemId, 'etapa:', etapa);
         
         let query = `
-          SELECT * FROM ai_agente.t_dachser_chb_runs
-          WHERE item_id = ?
+          SELECT r.*, u.username as created_by_name, u.email as created_by_email
+          FROM ai_agente.t_dachser_chb_runs r
+          LEFT JOIN ai_agente.t_users_dachser u ON u.id = r.created_by
+          WHERE r.item_id = ?
         `;
         const params: any[] = [itemId];
         
         if (etapa !== undefined) {
-          query += ` AND etapa = ?`;
+          query += ` AND r.etapa = ?`;
           params.push(etapa);
         }
         
-        query += ` ORDER BY created_at DESC`;
+        query += ` ORDER BY r.created_at DESC`;
         
         const runs = await client.query(query, params);
         result = { success: true, data: runs || [] };
@@ -2641,13 +2643,13 @@ serve(async (req) => {
       }
 
       case 'create_chb_run': {
-        const { itemId, etapa, status, resultText, resultHtml, resultJson, usedAsCtx } = body as any;
-        console.log('Creating CHB run:', { itemId, etapa, status });
+        const { itemId, etapa, status, resultText, resultHtml, resultJson, usedAsCtx, userId } = body as any;
+        console.log('Creating CHB run:', { itemId, etapa, status, userId });
         
         const insertResult = await client.execute(`
           INSERT INTO ai_agente.t_dachser_chb_runs 
-          (item_id, etapa, status, result_text, result_html, result_json, used_as_ctx)
-          VALUES (?, ?, ?, ?, ?, ?, ?)
+          (item_id, etapa, status, result_text, result_html, result_json, used_as_ctx, created_by)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?)
         `, [
           itemId, 
           etapa || '1', 
@@ -2655,7 +2657,8 @@ serve(async (req) => {
           resultText || null, 
           resultHtml || null, 
           resultJson || null, 
-          usedAsCtx ? 1 : 0
+          usedAsCtx ? 1 : 0,
+          userId || null
         ]);
         
         result = { success: true, runId: insertResult.lastInsertId };
