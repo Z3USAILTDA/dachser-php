@@ -17,7 +17,12 @@ const stepNames: Record<string, string> = {
 };
 
 function generatePrintableHTML(history: HistoryEntry[], reference: string): string {
-  const entries = history.map(entry => {
+  // Sort by etapa (step order)
+  const sortedHistory = [...history].sort((a, b) => 
+    parseInt(a.etapa) - parseInt(b.etapa)
+  );
+
+  const entries = sortedHistory.map(entry => {
     const content = entry.result_html || entry.result_text || 'Sem conteúdo';
     
     return `
@@ -40,32 +45,31 @@ function generatePrintableHTML(history: HistoryEntry[], reference: string): stri
       <style>
         * { box-sizing: border-box; margin: 0; padding: 0; }
         body { 
-          font-family: 'Segoe UI', Roboto, Arial, sans-serif;
-          padding: 32px;
+          font-family: Arial, sans-serif;
+          padding: 20px;
           background: #fff;
           color: #1a1a1a;
-          line-height: 1.5;
+          font-size: 9px;
+          line-height: 1.3;
         }
         .header {
-          border-bottom: 3px solid #f5b843;
-          padding-bottom: 16px;
-          margin-bottom: 24px;
+          border-bottom: 2px solid #f5b843;
+          padding-bottom: 8px;
+          margin-bottom: 12px;
         }
         .header h1 {
-          font-size: 22px;
+          font-size: 14px;
           font-weight: 700;
-          color: #111;
-          margin-bottom: 6px;
+          margin-bottom: 2px;
         }
         .header p {
-          font-size: 13px;
+          font-size: 9px;
           color: #555;
         }
-        .header strong { color: #222; }
         .entry {
-          margin-bottom: 28px;
-          border: 1px solid #ddd;
-          border-radius: 6px;
+          margin-bottom: 14px;
+          border: 1px solid #ccc;
+          border-radius: 4px;
           overflow: hidden;
           page-break-inside: avoid;
         }
@@ -73,72 +77,73 @@ function generatePrintableHTML(history: HistoryEntry[], reference: string): stri
           display: flex;
           justify-content: space-between;
           align-items: center;
-          padding: 10px 14px;
-          background: #f8f8f8;
-          border-bottom: 1px solid #ddd;
+          padding: 4px 8px;
+          background: #f5f5f5;
+          border-bottom: 1px solid #ccc;
         }
         .step-badge {
           background: #f5b843;
           color: #000;
-          padding: 4px 10px;
-          border-radius: 4px;
-          font-size: 12px;
+          padding: 2px 6px;
+          border-radius: 3px;
+          font-size: 8px;
           font-weight: 600;
         }
         .date {
-          font-size: 12px;
+          font-size: 8px;
           color: #666;
         }
         .analysis-content {
-          padding: 14px;
-          font-size: 12px;
+          padding: 8px;
+          font-size: 9px;
         }
         table {
           width: 100%;
           border-collapse: collapse;
-          margin: 10px 0;
+          margin: 4px 0;
         }
         table th, table td {
-          border: 1px solid #ccc;
-          padding: 6px 8px;
+          border: 1px solid #bbb;
+          padding: 3px 5px;
           text-align: left;
-          font-size: 11px;
+          font-size: 8px;
+          white-space: nowrap;
         }
         table th {
-          background: #f0f0f0;
+          background: #eee;
           font-weight: 600;
         }
         table tr:nth-child(even) td {
           background: #fafafa;
         }
         h3, h4 {
-          margin: 12px 0 6px 0;
-          font-size: 13px;
+          margin: 6px 0 3px 0;
+          font-size: 10px;
         }
         ul, ol {
-          margin: 6px 0;
-          padding-left: 18px;
+          margin: 3px 0;
+          padding-left: 14px;
         }
-        li { margin: 2px 0; }
-        p { margin: 6px 0; }
+        li { margin: 1px 0; }
+        p { margin: 3px 0; }
         @media print {
-          body { padding: 16px; }
+          body { padding: 10px; }
           .no-print { display: none !important; }
           .entry { break-inside: avoid; }
         }
         .print-btn {
           position: fixed;
-          bottom: 24px;
-          right: 24px;
-          padding: 12px 24px;
+          bottom: 20px;
+          right: 20px;
+          padding: 10px 20px;
           background: #f5b843;
           color: #000;
           border: none;
-          border-radius: 6px;
+          border-radius: 5px;
           font-weight: 600;
           cursor: pointer;
-          font-size: 14px;
-          box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+          font-size: 12px;
+          box-shadow: 0 3px 10px rgba(0,0,0,0.15);
         }
         .print-btn:hover { background: #e5a833; }
       </style>
