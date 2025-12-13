@@ -66,12 +66,90 @@ async function fetchFileAsBase64(fileUrl: string, fileName: string): Promise<{ b
   }
 }
 
+// ============ XLSX TEXT EXTRACTION ============
 
-// ============ ANTHROPIC CLAUDE - ANALYSIS (ALL FILES) ============
+async function extractXlsxText(fileUrl: string, fileName: string): Promise<string> {
+  console.log(`📊 [XLSX] Extracting from: ${fileName}`);
+  
+  try {
+    const response = await fetch(fileUrl);
+    if (!response.ok) {
+      throw new Error(`Failed to fetch XLSX: ${response.statusText}`);
+    }
+    
+    const arrayBuffer = await response.arrayBuffer();
+    
+    // Import xlsx library
+    const XLSX = await import('https://esm.sh/xlsx@0.18.5');
+    
+    // Read workbook
+    const workbook = XLSX.read(arrayBuffer, { 
+      type: 'array',
+      sheetRows: 2001
+    });
+    
+    console.log(`📊 [XLSX] ${workbook.SheetNames.length} sheets found`);
+    
+    // Prioritize maritime-relevant sheets
+    const highPriority = ['ncm', 'container', 'package', 'supplier', 'resumo', 'summary', 'item', 'product', 'cargo'];
+    const skipPatterns = ['instruction', 'info', 'guide', 'readme', 'help', 'template'];
+    
+    const sortedSheets = workbook.SheetNames
+      .filter((name: string) => !skipPatterns.some(p => name.toLowerCase().includes(p)))
+      .sort((a: string, b: string) => {
+        const aHasPriority = highPriority.some(p => a.toLowerCase().includes(p));
+        const bHasPriority = highPriority.some(p => b.toLowerCase().includes(p));
+        if (aHasPriority && !bHasPriority) return -1;
+        if (!aHasPriority && bHasPriority) return 1;
+        return 0;
+      });
+    
+    const sheetsToProcess = sortedSheets.slice(0, 10);
+    console.log(`📊 [XLSX] Processing sheets: ${sheetsToProcess.join(', ')}`);
+    
+    let fullText = '';
+    let totalRows = 0;
+    const MAX_CHARS = 150000;
+    
+    for (const sheetName of sheetsToProcess) {
+      if (fullText.length >= MAX_CHARS) {
+        console.log(`📊 [XLSX] Char limit reached`);
+        break;
+      }
+      
+      const sheet = workbook.Sheets[sheetName];
+      if (sheet) {
+        const csv = XLSX.utils.sheet_to_csv(sheet);
+        const lines = csv.split('\n')
+          .filter((line: string) => line.trim().length > 0)
+          .slice(0, 2000);
+        
+        if (lines.length > 0) {
+          const sheetText = `\n=== ${sheetName} ===\n${lines.join('\n')}`;
+          const remainingChars = MAX_CHARS - fullText.length;
+          fullText += sheetText.substring(0, remainingChars);
+          totalRows += lines.length;
+        }
+        
+        console.log(`📊 [XLSX] "${sheetName}": ${lines.length} rows`);
+      }
+    }
+    
+    console.log(`📊 [XLSX] Done: ${fullText.length} chars, ${totalRows} rows`);
+    return fullText.trim();
+    
+  } catch (error) {
+    console.error(`📊 [XLSX] Error:`, error);
+    return '';
+  }
+}
+
+// ============ ANTHROPIC CLAUDE - ANALYSIS ============
 
 async function analyzeWithAnthropic(
   prompt: string, 
-  allFiles: Array<{ base64: string; name: string; mediaType: string }>,
+  manifestText: string,
+  pdfFiles: Array<{ base64: string; name: string }>,
   metadata: { consignee?: string; container?: string }
 ): Promise<{ text: string; model: string }> {
   const anthropicKey = Deno.env.get('ANTHROPIC_API_KEY');
@@ -81,29 +159,30 @@ async function analyzeWithAnthropic(
   if (metadata.consignee) fullPrompt += `\n\nConsignee: ${metadata.consignee}`;
   if (metadata.container) fullPrompt += `\nContainer: ${metadata.container}`;
   
-  // Build content parts: prompt + all files as documents
+  // Add extracted manifest text
+  if (manifestText && manifestText.length > 0) {
+    fullPrompt += `\n\n=== CONTEÚDO DO MANIFESTO (extraído do arquivo XLSX) ===\n${manifestText}\n=== FIM DO MANIFESTO ===`;
+  }
+  
+  // Build content parts: prompt + PDF documents
   const contentParts: any[] = [
     { type: 'text', text: fullPrompt }
   ];
   
-  // Add all files as base64 documents - Claude handles PDF natively
-  // For XLSX/CSV, we still send them but Claude may not parse them well
-  for (const file of allFiles) {
-    // Only send PDFs as documents (Claude's document type only supports PDF)
-    if (file.mediaType === 'application/pdf') {
-      contentParts.push({ 
-        type: 'document', 
-        source: { 
-          type: 'base64', 
-          media_type: 'application/pdf', 
-          data: file.base64 
-        } 
-      });
-      contentParts.push({ type: 'text', text: `[Arquivo PDF: ${file.name}]` });
-    }
+  // Add PDFs as base64 documents (Claude supports PDF natively)
+  for (const file of pdfFiles) {
+    contentParts.push({ 
+      type: 'document', 
+      source: { 
+        type: 'base64', 
+        media_type: 'application/pdf', 
+        data: file.base64 
+      } 
+    });
+    contentParts.push({ type: 'text', text: `[Arquivo PDF: ${file.name}]` });
   }
-  const pdfCount = allFiles.filter(f => f.mediaType === 'application/pdf').length;
-  console.log(`🤖 Calling Anthropic Claude with ${pdfCount} PDFs`);
+  
+  console.log(`🤖 Calling Anthropic Claude with ${pdfFiles.length} PDFs + manifest text (${manifestText.length} chars)`);
   
   const response = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
@@ -137,7 +216,8 @@ async function analyzeWithAnthropic(
 
 async function analyzeWithGeminiPro(
   prompt: string, 
-  allFiles: Array<{ base64: string; name: string }>,
+  manifestText: string,
+  pdfFiles: Array<{ base64: string; name: string }>,
   metadata: { consignee?: string; container?: string }
 ): Promise<{ text: string; model: string }> {
   const lovableKey = Deno.env.get('LOVABLE_API_KEY');
@@ -147,13 +227,18 @@ async function analyzeWithGeminiPro(
   if (metadata.consignee) fullPrompt += `\n\nConsignee: ${metadata.consignee}`;
   if (metadata.container) fullPrompt += `\nContainer: ${metadata.container}`;
   
-  console.log(`🔄 Fallback: Calling Gemini Pro with ${allFiles.length} files`);
+  // Add extracted manifest text
+  if (manifestText && manifestText.length > 0) {
+    fullPrompt += `\n\n=== CONTEÚDO DO MANIFESTO (extraído do arquivo XLSX) ===\n${manifestText}\n=== FIM DO MANIFESTO ===`;
+  }
+  
+  console.log(`🔄 Fallback: Calling Gemini Pro with ${pdfFiles.length} PDFs + manifest text (${manifestText.length} chars)`);
   
   // Build content parts for Gemini
   const contentParts: any[] = [{ type: 'text', text: fullPrompt }];
   
   // Add PDFs as base64 (Gemini accepts PDFs via image_url)
-  for (const file of allFiles) {
+  for (const file of pdfFiles) {
     contentParts.push({
       type: 'image_url',
       image_url: {
@@ -197,28 +282,55 @@ async function analyzeWithLLM(
   const basePrompt = getPromptForAnalysisType(analysisType);
   const startTime = Date.now();
   
-  console.log(`🚀 Starting 3-step analysis for ${files.length} files`);
+  console.log(`🚀 Starting analysis for ${files.length} files`);
   
-  // Fetch all files as base64
-  const filePromises = files.map(f => fetchFileAsBase64(f.file_url, f.file_name));
-  const fileResults = await Promise.all(filePromises);
-  const validFiles = fileResults.filter((f): f is { base64: string; name: string; mediaType: string; ext: string } => f !== null);
+  // Separate XLSX files from PDFs for special handling
+  const xlsxUrls = files.filter(f => {
+    const ext = f.file_name.toLowerCase().split('.').pop() || '';
+    return ['xlsx', 'xls', 'xlsm', 'csv'].includes(ext);
+  });
   
-  console.log(`📎 Files loaded: ${validFiles.length}`);
+  const pdfUrls = files.filter(f => {
+    const ext = f.file_name.toLowerCase().split('.').pop() || '';
+    return !['xlsx', 'xls', 'xlsm', 'csv'].includes(ext);
+  });
   
-  if (validFiles.length === 0) {
+  console.log(`📊 XLSX files: ${xlsxUrls.length}, PDF files: ${pdfUrls.length}`);
+  
+  // Step 1: Extract text from XLSX files
+  let manifestText = '';
+  for (const xlsxFile of xlsxUrls) {
+    try {
+      const extractedText = await extractXlsxText(xlsxFile.file_url, xlsxFile.file_name);
+      if (extractedText) {
+        manifestText += `\n\n=== ${xlsxFile.file_name} ===\n${extractedText}`;
+      }
+    } catch (e) {
+      console.error(`❌ Failed to extract XLSX: ${xlsxFile.file_name}`, e);
+    }
+  }
+  
+  console.log(`📊 Manifest text extracted: ${manifestText.length} chars`);
+  
+  // Step 2: Fetch PDFs as base64
+  const pdfPromises = pdfUrls.map(f => fetchFileAsBase64(f.file_url, f.file_name));
+  const pdfResults = await Promise.all(pdfPromises);
+  const validPdfs = pdfResults.filter((f): f is { base64: string; name: string; mediaType: string; ext: string } => f !== null);
+  
+  console.log(`📎 PDFs loaded: ${validPdfs.length}`);
+  
+  if (validPdfs.length === 0 && manifestText.length === 0) {
     throw new Error('Não foi possível carregar nenhum documento');
   }
   
-  console.log(`📊 Total files: ${validFiles.length}`);
-  
-  // Try Anthropic Claude (primary) - send all files directly
+  // Step 3: Try Anthropic Claude (primary)
   let result: { text: string; model: string };
   
   try {
     result = await analyzeWithAnthropic(
       basePrompt, 
-      validFiles.map(f => ({ base64: f.base64, name: f.name, mediaType: f.mediaType })),
+      manifestText,
+      validPdfs.map(f => ({ base64: f.base64, name: f.name })),
       metadata
     );
   } catch (anthropicError) {
@@ -227,7 +339,8 @@ async function analyzeWithLLM(
     // Fallback to Gemini Pro
     result = await analyzeWithGeminiPro(
       basePrompt, 
-      validFiles.map(f => ({ base64: f.base64, name: f.name })),
+      manifestText,
+      validPdfs.map(f => ({ base64: f.base64, name: f.name })),
       metadata
     );
   }
@@ -241,7 +354,7 @@ async function analyzeWithLLM(
       status: 'completed', 
       model: result.model, 
       total_time_ms: Date.now() - startTime,
-      file_count: validFiles.length
+      file_count: xlsxUrls.length + validPdfs.length
     },
     model: result.model
   };
