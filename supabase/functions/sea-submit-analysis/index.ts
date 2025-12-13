@@ -506,12 +506,12 @@ serve(async (req) => {
         }
         
         if (baseFileName) {
-          // Create file record
+          // Create file record (rel_path required, use empty string for base files)
           const fileResult = await dbClient.execute(`
             INSERT INTO ai_agente.t_dachser_sea_files 
-            (filename, mime, url, created_at)
-            VALUES (?, ?, ?, NOW())
-          `, [baseFileName, 'application/pdf', baseFileUrl || '']);
+            (filename, mime, size_bytes, rel_path, url, created_at)
+            VALUES (?, ?, ?, ?, ?, NOW())
+          `, [baseFileName, 'application/pdf', 0, '', baseFileUrl || '']);
           
           const arquivoId = fileResult.lastInsertId;
           
