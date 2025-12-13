@@ -487,8 +487,8 @@ export default function InvoicesDraftHbl() {
 
       const hasLinks = Array.from(links.values()).some(set => set.size > 0);
       const linkDataToSend = hasLinks ? {
-        hbl_id: drafts[0]?.key || "",
-        invoice_files: Array.from(links.get(drafts[0]?.key) || [])
+        hblFileName: drafts[0]?.filename || "",
+        invoiceFileNames: Array.from(links.get(drafts[0]?.key) || [])
           .map(key => files.get(key)?.file.name)
           .filter(Boolean) as string[]
       } : undefined;
