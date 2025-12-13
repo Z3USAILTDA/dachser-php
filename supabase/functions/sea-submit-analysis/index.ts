@@ -668,11 +668,13 @@ serve(async (req) => {
 
       return new Response(JSON.stringify({ 
         success: true, 
+        analysisId: String(runId),
         runId: Number(runId),
         itemId: actualItemId,
-        message: 'Analysis queued (3-step: Flash → Claude → Pro fallback)',
+        status: 'queued',
+        message: 'Análise iniciada em background',
         files: allFiles.length
-      }), { 
+      }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
       });
 
