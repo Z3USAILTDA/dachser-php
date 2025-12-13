@@ -78,28 +78,52 @@ export default function ConferenciaChb() {
     setDocuments(newDocs);
   }, [dbFiles]);
 
-  // Convert DB runs to approved history and restore step state
+  // Convert DB runs to approved history, restore step state, and populate analysis results
   useEffect(() => {
     const newHistory: Record<number, ChbApprovedHistory[]> = { 1: [], 2: [], 3: [] };
+    const restoredAnalysis: Record<number, ChbAnalysisResult | null> = { 1: null, 2: null, 3: null };
     let maxApprovedStep = 0;
     
-    dbRuns
+    // Sort runs by created_at to get the most recent per step
+    const sortedRuns = [...dbRuns]
       .filter((r: ChbRun) => r.status === 'approved')
-      .forEach((r: ChbRun) => {
-        const stepId = parseInt(r.etapa) as 1 | 2 | 3;
-        if (stepId > maxApprovedStep) maxApprovedStep = stepId;
-        
-        newHistory[stepId].push({
-          id: `run-${r.id}`,
-          stepId,
-          date: r.created_at,
-          user: r.created_by_email || r.created_by_name || 'Usuário',
-          summary: r.result_text || '',
-          detailedSummary: r.result_html || r.result_text || '',
-          tags: [],
-        });
+      .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+    
+    sortedRuns.forEach((r: ChbRun) => {
+      const stepId = parseInt(r.etapa) as 1 | 2 | 3;
+      if (stepId > maxApprovedStep) maxApprovedStep = stepId;
+      
+      newHistory[stepId].push({
+        id: `run-${r.id}`,
+        stepId,
+        date: r.created_at,
+        user: r.created_by_email || r.created_by_name || 'Usuário',
+        summary: r.result_text || '',
+        detailedSummary: r.result_html || r.result_text || '',
+        tags: [],
       });
+      
+      // Restore analysis result for completed steps (use the most recent run)
+      if (!restoredAnalysis[stepId] && r.result_html) {
+        restoredAnalysis[stepId] = {
+          id: `restored-${r.id}`,
+          stepId,
+          html: r.result_html,
+          summary: r.result_text || '',
+          generatedAt: new Date(r.created_at).toLocaleString('pt-BR'),
+          filesAnalyzed: [],
+          tags: [],
+        };
+      }
+    });
+    
     setApprovedHistory(newHistory);
+    setAnalysisResults(prev => ({
+      ...prev,
+      ...Object.fromEntries(
+        Object.entries(restoredAnalysis).filter(([_, v]) => v !== null)
+      ),
+    }));
     
     // Restore step states and active step based on approved runs
     if (maxApprovedStep > 0) {
@@ -374,6 +398,8 @@ export default function ConferenciaChb() {
           />
         );
       case 'analise':
+        const currentStepData = steps.find(s => s.id === activeStep);
+        const isStepCompleted = currentStepData?.status === 'completed';
         return (
           <ChbAnalysisPanel
             stepId={activeStep}
@@ -381,7 +407,8 @@ export default function ConferenciaChb() {
             onRunAnalysis={() => handleStartAnalysis(!!analysisResults[activeStep])}
             onApproveAndAdvance={handleApproveAndAdvance}
             isAnalyzing={isAnalyzing}
-            hasFiles={(uploadedFiles[activeStep] || []).length > 0 || getDocumentsForStep(activeStep).some(d => d.file)}
+            hasFiles={(uploadedFiles[activeStep] || []).length > 0 || getDocumentsForStep(activeStep).some(d => d.file || d.url)}
+            isStepCompleted={isStepCompleted}
           />
         );
       case 'historico':

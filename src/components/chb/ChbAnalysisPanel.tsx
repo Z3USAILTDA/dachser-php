@@ -10,6 +10,7 @@ interface ChbAnalysisPanelProps {
   onApproveAndAdvance: () => void;
   isAnalyzing: boolean;
   hasFiles: boolean;
+  isStepCompleted?: boolean;
 }
 
 const copyAnalysisResult = (html: string) => {
@@ -25,7 +26,8 @@ export function ChbAnalysisPanel({
   onRunAnalysis, 
   onApproveAndAdvance, 
   isAnalyzing,
-  hasFiles 
+  hasFiles,
+  isStepCompleted = false
 }: ChbAnalysisPanelProps) {
   // No files uploaded yet
   if (!hasFiles && !analysisResult) {
@@ -110,7 +112,7 @@ export function ChbAnalysisPanel({
         />
       </div>
 
-      {/* Action buttons */}
+      {/* Action buttons - only show if step is not completed */}
       <div className="flex gap-3 flex-wrap">
         <button
           onClick={() => copyAnalysisResult(analysisResult.html)}
@@ -121,34 +123,38 @@ export function ChbAnalysisPanel({
           Copiar Resultado
         </button>
 
-        <button
-          onClick={onRunAnalysis}
-          disabled={isAnalyzing}
-          className="flex items-center gap-1.5 px-4 py-2 rounded-full bg-white/10 border border-white/20
-            text-white text-xs font-medium hover:bg-white/20 transition-colors disabled:opacity-50"
-        >
-          {isAnalyzing ? (
-            <>
-              <Loader2 className="w-3 h-3 animate-spin" />
-              Analisando...
-            </>
-          ) : (
-            <>
-              <RefreshCw className="w-3 h-3" />
-              Fazer Análise Novamente
-            </>
-          )}
-        </button>
+        {!isStepCompleted && (
+          <>
+            <button
+              onClick={onRunAnalysis}
+              disabled={isAnalyzing}
+              className="flex items-center gap-1.5 px-4 py-2 rounded-full bg-white/10 border border-white/20
+                text-white text-xs font-medium hover:bg-white/20 transition-colors disabled:opacity-50"
+            >
+              {isAnalyzing ? (
+                <>
+                  <Loader2 className="w-3 h-3 animate-spin" />
+                  Analisando...
+                </>
+              ) : (
+                <>
+                  <RefreshCw className="w-3 h-3" />
+                  Fazer Análise Novamente
+                </>
+              )}
+            </button>
 
-        <button
-          onClick={onApproveAndAdvance}
-          disabled={isAnalyzing}
-          className="flex items-center gap-1.5 px-4 py-2 rounded-full bg-amber-500 text-black text-xs font-medium
-            hover:bg-amber-400 transition-colors disabled:opacity-50"
-        >
-          <CheckCircle className="w-3 h-3" />
-          Aprovar etapa & avançar
-        </button>
+            <button
+              onClick={onApproveAndAdvance}
+              disabled={isAnalyzing}
+              className="flex items-center gap-1.5 px-4 py-2 rounded-full bg-amber-500 text-black text-xs font-medium
+                hover:bg-amber-400 transition-colors disabled:opacity-50"
+            >
+              <CheckCircle className="w-3 h-3" />
+              Aprovar etapa & avançar
+            </button>
+          </>
+        )}
       </div>
     </div>
   );
