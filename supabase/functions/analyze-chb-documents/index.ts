@@ -5,7 +5,7 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-// Prompts por etapa (adaptados do chb.txt)
+// Formato de saída detalhado
 const CHB_FORMAT_HTML = `
 FORMATO DE SAÍDA — HTML ESTRITO
 
@@ -15,134 +15,201 @@ FORMATO DE SAÍDA — HTML ESTRITO
   <<END_HTML>>
 
 - Dentro do bloco gere SOMENTE HTML simples:
-  • Um <table> com <thead> e <tbody> seguindo as colunas da ETAPA.
-    IMPORTANTE: Na coluna "Fonte" ou similar, use o NOME DO ARQUIVO (ex.: "invoice_123.pdf") em vez de referências genéricas como "Fonte A" ou "ab12cd".
-  • Após a tabela, uma seção <h4>Observações</h4> seguida de <p> com cada observação.
-    Use os emojis 🔴 para erros críticos e 🟨 para alertas/avisos no início de cada observação.
-    Formato: "🔴 [Título do campo]: [Descrição do problema]. [Ação necessária]."
-  • Após as observações, uma seção <h4>Parecer do Modelo</h4> com:
-    - <p><strong>Impedimento para registrar a DI:</strong> Sim/Não — [justificativa]</p>
-    - <p><strong>Nível de risco consolidado:</strong> 🔴 ou 🟨 ou ✅</p>
-    - <p><strong>Principal(ais) causa(s) crítica(s):</strong> [lista das causas]</p>
 
-- Proibido Markdown, <script>, estilos externos. Use SOMENTE: h4, p, strong, table, thead, tbody, tr, th, td.
+1) Um <table> com <thead> e <tbody>:
+   - Primeira coluna: "Campo" (ex.: Consignee, CNPJ, Peso Bruto, NCM, etc.)
+   - Colunas seguintes: Use o NOME REAL DO ARQUIVO como cabeçalho (ex.: "Invoice_123.pdf", "HBL_draft.pdf")
+   - Última coluna: "Status" (✅, 🟨 ou 🔴)
+
+2) Após a tabela, uma seção <h4>Observações</h4> com parágrafos <p>:
+   - Formato obrigatório: "🔴 [Título do campo]: [Descrição detalhada do problema]. [Ação necessária ou impacto]."
+   - Ou: "🟨 [Título do campo]: [Descrição do alerta]. [Recomendação]."
+   - Cada observação em seu próprio <p>.
+
+3) Após observações, uma seção <h4>Parecer do Modelo</h4> com:
+   <p><strong>Impedimento para registrar a DI:</strong> Sim/Não — [justificativa detalhada explicando o motivo]</p>
+   <p><strong>Nível de risco consolidado:</strong> 🔴 ou 🟨 ou ✅</p>
+   <p><strong>Principal(ais) causa(s) crítica(s):</strong> [Lista detalhada das principais causas, separadas por ponto-e-vírgula se houver múltiplas]</p>
+
+- Proibido: Markdown, <script>, estilos inline, CSS externo.
+- Permitido SOMENTE: h4, p, strong, em, table, thead, tbody, tr, th, td, br, ul, li.
 `;
 
 const CHB_TABLE_SPEC = `
-REGRAS DE CONTEÚDO DA TABELA
+REGRAS DE CONTEÚDO E EXTRAÇÃO
 
-1) Colunas fixas e ordem obrigatória:
-   - Todas as etapas: Campo | [Nome do Arquivo 1] | [Nome do Arquivo 2] | ... | Observação | Status
-   - Use o nome real do arquivo em cada coluna (ex.: "HBL_draft.pdf", "Invoice_123.pdf")
+1) EXTRAÇÃO MÁXIMA DE DADOS:
+   - Leia CADA página de CADA documento com atenção máxima.
+   - Use OCR quando necessário para documentos escaneados ou com baixa qualidade.
+   - Extraia TODOS os campos relevantes, mesmo que parcialmente legíveis.
+   - Se um valor estiver parcialmente visível, extraia o que for possível e marque como "parcial".
 
-2) Padronização:
-   - Números: vírgula decimal; milhar com ponto (ex.: 10.841,0).
+2) COLUNAS DA TABELA:
+   - Campo | [Nome Arquivo 1] | [Nome Arquivo 2] | ... | Status
+   - Use o nome REAL do arquivo em cada coluna header.
+
+3) PADRONIZAÇÃO DE VALORES:
+   - Números: vírgula decimal; milhar com ponto (ex.: 10.841,00).
    - Datas: DD/MM/AAAA.
-   - CNPJ: apenas dígitos.
-   - Ausência: ND (ou Ilegível).
-   - Status: use SÓ os ícones: ✅, 🟨, 🔴.
+   - CNPJ: formatado XX.XXX.XXX/XXXX-XX.
+   - Ausência: "ND" (não disponível) ou "Ilegível".
+   - Status: SOMENTE ícones ✅, 🟨, 🔴.
 
-3) Larguras e corte: Mantenha células concisas. Se >~40 caracteres, encurte com "…".
+4) CAMPOS OBRIGATÓRIOS A VERIFICAR:
+   - Consignee / Razão Social
+   - CNPJ / Tax ID
+   - Incoterm e Condição de Frete
+   - Peso Bruto Total (kg)
+   - Peso Líquido (se disponível)
+   - Volume/CBM total
+   - Número e Tipo de Container
+   - Lacre(s)
+   - NCM (raiz 4 dígitos + descrição)
+   - Valor Total da Mercadoria (moeda)
+   - Porto/Aeroporto de Origem
+   - Porto/Aeroporto de Destino
+   - Número do Conhecimento (HBL/HAWB/BL)
+   - Datas principais (embarque, chegada)
+   - Referências / PO numbers
 
-4) Regras de PESO (Gross/Net/tara):
-   - Se Gross(BL) ≈ Net(PL) e Gross(PL)-Net(PL) ≈ tara, marcar 🟨 com nota.
-   - Sem tara confiável ou divergência > tolerância → 🔴.
-   - Tolerâncias: discrepância relevante se > 0,5 (absoluto) OU > 0,3%.
+5) REGRAS DE VALIDAÇÃO CRÍTICAS:
+   
+   a) PESO:
+      - Se Gross(BL) ≈ Net(PL) → 🟨 com nota explicativa
+      - Divergência > 0,5kg ou > 0,3% → 🔴
+      - Tara implausível ou ausente → 🟨
+   
+   b) NCM:
+      - Divergência na RAIZ (4 primeiros dígitos) → 🔴 CRÍTICO
+      - Divergência apenas no sufixo → 🟨
+      - Descrição incompatível com NCM → 🔴
+   
+   c) INCOTERM:
+      - Incoterms diferentes entre docs → 🔴
+      - Incoterm coerente mas sem rótulo explícito → 🟨
+   
+   d) CNPJ/CONSIGNEE:
+      - CNPJ divergente → 🔴 CRÍTICO
+      - Razão social diferente (mesmo CNPJ) → 🟨
+   
+   e) VALORES:
+      - Divergência > 0,5 (absoluto) ou > 0,3% → avaliar criticidade
+      - Moedas diferentes sem conversão → 🔴
 
-5) NCM — Regra aduaneira:
-   - Validar RAIZ (4 dígitos) + compatibilidade da descrição técnica.
-   - Divergência de raiz → 🔴. Divergência apenas no sufixo → 🟨.
+6) TOLERÂNCIAS:
+   - Quantidades/Preço unitário: > 1 unidade OU > 0,5%
+   - Totais: > 0,5 absoluto OU > 0,3%
+   - Pesos: > 0,5kg OU > 0,3%
+`;
 
-6) Incoterm × Condição de frete:
-   - Incoterm coerente mas rótulo ausente → 🟨.
-   - Incoterms diferentes → 🔴.
+const EXTRACTION_INSTRUCTIONS = `
+INSTRUÇÕES DE EXTRAÇÃO AVANÇADA
+
+Você é um auditor especialista em documentos de comércio exterior com capacidade de:
+
+1) ANÁLISE VISUAL PROFUNDA:
+   - Examine cada página completamente, incluindo cabeçalhos, rodapés, selos e carimbos.
+   - Identifique tabelas, listas de itens, totalizadores.
+   - Reconheça logos e identifique o tipo de documento.
+   - Leia texto em qualquer orientação (rotacionado, vertical).
+
+2) OCR INTELIGENTE:
+   - Para documentos escaneados, aplique OCR com máxima precisão.
+   - Corrija erros comuns de OCR (0 vs O, 1 vs I, etc.).
+   - Mantenha formatação de números e datas.
+
+3) CROSS-REFERENCE:
+   - Compare valores entre todos os documentos fornecidos.
+   - Identifique referências cruzadas (ex.: BL number mencionado em Invoice).
+   - Valide consistência de dados em múltiplas ocorrências.
+
+4) DETECÇÃO DE PROBLEMAS:
+   - Rasuras, correções manuais → 🟨 com nota
+   - Campos obrigatórios em branco → 🔴
+   - Inconsistências numéricas → calcule e reporte a diferença exata
+   - Formatação suspeita ou alterações → 🟨
+
+5) CONTEXTO BRASILEIRO:
+   - Valide formato de CNPJ brasileiro.
+   - Reconheça códigos NCM (8 dígitos, padrão brasileiro).
+   - Identifique portos/aeroportos brasileiros.
+   - Considere regras aduaneiras da Receita Federal.
 `;
 
 function getPromptByStep(stepId: number, fileNames: string[]): string {
   const fileListText = fileNames.map((name, i) => `${i + 1}. ${name}`).join('\n');
 
-  if (stepId === 1) {
-    return `
-SISTEMA — CRONOS (Etapa 1: Integridade do Pré-Alerta)
-Você é o CRONOS, auditor de logística (importação, Brasil).
-Objetivo: verificar consistência interna dos documentos do Pré-Alerta (entre si).
-Saída em pt-BR, **HTML simples**.
+  const basePrompt = `
+${EXTRACTION_INSTRUCTIONS}
 
-ARQUIVOS RECEBIDOS:
+ARQUIVOS PARA ANÁLISE:
 ${fileListText}
 
-Use os NOMES DOS ARQUIVOS acima como cabeçalhos das colunas da tabela.
-
-PADRÕES
-- Números: vírgula decimal; milhar com ponto.
-- Datas: DD/MM/AAAA.
-- CNPJ: apenas dígitos.
-- NCM: validar raiz (4 dígitos) + compatibilidade de descrição.
-- Unidades: peso em kg; volume em m³.
-- Ausência: ND / Ilegível / N/A.
-- Tolerâncias: Quant./preço unit. (> 1 un. OU > 0,5%); Totais (> 0,5 abs OU > 0,3%).
-
-ITENS A VERIFICAR
-- Consignee / CNPJ
-- Incoterm / condição de frete
-- Peso bruto total
-- Volume/CBM total
-- Dados de container (nº/tipo/lacre)
-- NCM (raiz + descrição)
-- Totais de mercadoria (moeda/valor)
-- Datas principais
+IMPORTANTE: Use os NOMES EXATOS DOS ARQUIVOS acima como cabeçalhos das colunas na tabela de resultados.
 
 ${CHB_FORMAT_HTML}
 ${CHB_TABLE_SPEC}
+`;
+
+  if (stepId === 1) {
+    return `
+SISTEMA — CRONOS (Etapa 1: Integridade do Pré-Alerta)
+
+Você é o CRONOS, auditor especialista em logística de importação brasileira.
+
+OBJETIVO: Verificar a consistência INTERNA dos documentos do Pré-Alerta (entre si).
+Analise se os dados estão coerentes dentro do mesmo conjunto documental.
+
+${basePrompt}
+
+FOCO DA ETAPA 1:
+- Verificar se todos os documentos referem-se ao mesmo embarque
+- Validar consistência de dados entre Invoice, Packing List, BL/AWB
+- Identificar campos faltantes ou ilegíveis
+- Reportar qualquer discrepância interna
 `;
   }
 
   if (stepId === 2) {
     return `
 SISTEMA — CRONOS (Etapa 2: Pré-Alerta × Instrução)
-Objetivo: comparar Pré-Alerta (referência) com Instrução.
-Saída em pt-BR, **HTML simples**.
 
-ARQUIVOS RECEBIDOS:
-${fileListText}
+Você é o CRONOS, auditor especialista em logística de importação brasileira.
 
-Use os NOMES DOS ARQUIVOS acima como cabeçalhos das colunas da tabela.
+OBJETIVO: Comparar os documentos do Pré-Alerta (referência) com a Instrução de Despacho.
+Os documentos de Pré-Alerta são a BASE; a Instrução deve ser CONFERIDA contra eles.
 
-PADRÕES
-- Iguais à Etapa 1 (números, datas, CNPJ, NCM, tolerâncias).
-- Quando houver múltiplas instruções, consolide a orientação prevalente.
+${basePrompt}
 
-CAMPOS A COMPARAR
-- Consignee/CNPJ; Incoterm/condição de frete; Peso bruto; Volume/CBM;
-  NCM (raiz+desc); Container (nº/tipo/lacre); Totais de mercadoria; Referências/PO; Datas principais.
-
-${CHB_FORMAT_HTML}
-${CHB_TABLE_SPEC}
+FOCO DA ETAPA 2:
+- Usar Pré-Alerta como fonte primária de verdade
+- Verificar se Instrução reflete corretamente os dados do Pré-Alerta
+- Identificar divergências entre o que foi instruído e o que consta nos documentos
+- Alertar sobre campos da Instrução que diferem do Pré-Alerta
+- Consolidar orientações quando houver múltiplas instruções
 `;
   }
 
   // stepId === 3
   return `
 SISTEMA — CRONOS (Etapa 3: DI × (Pré-Alerta + Instrução))
-Objetivo: confrontar Rascunho DI com a Consolidação (PA+Instr.).
-Saída em pt-BR, **HTML simples**.
 
-ARQUIVOS RECEBIDOS:
-${fileListText}
+Você é o CRONOS, auditor especialista em logística de importação brasileira.
 
-Use os NOMES DOS ARQUIVOS acima como cabeçalhos das colunas da tabela.
+OBJETIVO: Confrontar o Rascunho da DI com a Consolidação (Pré-Alerta + Instrução).
+Esta é a VALIDAÇÃO FINAL antes do registro da Declaração de Importação.
 
-PADRÕES
-- Iguais às Etapas 1 e 2; aplique a Regra de Peso quando aplicável.
-- Se Peso Bruto (DI) ≈ Peso Líquido (Packing), classifique 🔴.
+${basePrompt}
 
-CAMPOS A COMPARAR
-- Consignee/CNPJ; Incoterm/condição de frete; Peso bruto; Volume/CBM;
-  NCM (raiz+desc); Container (nº/tipo/lacre); Portos (origem/dest.); Datas principais;
-  Frete/Seguros/Despesas; Referências/PO.
+FOCO DA ETAPA 3 — CRÍTICO:
+- DI deve refletir EXATAMENTE os dados consolidados de PA + Instrução
+- Peso Bruto na DI ≈ Peso Líquido no Packing = ERRO GRAVE 🔴
+- NCM na DI deve coincidir com documentos comerciais
+- Valores na DI devem bater com Invoice/Consolidação
+- Qualquer divergência pode causar MULTA ou RETENÇÃO na RFB
+- Aplicar todas as validações com rigor máximo
 
-${CHB_FORMAT_HTML}
-${CHB_TABLE_SPEC}
+ATENÇÃO: O parecer final deve ser CONCLUSIVO sobre a viabilidade de registro.
 `;
 }
 
@@ -176,10 +243,17 @@ async function callAnthropicAPI(prompt: string, filesContent: { name: string; co
       });
     } else {
       // For other types, try to send as text
-      content.push({
-        type: 'text',
-        text: `[Arquivo: ${file.name}]\n${atob(file.content)}`,
-      });
+      try {
+        content.push({
+          type: 'text',
+          text: `[Arquivo: ${file.name}]\n${atob(file.content)}`,
+        });
+      } catch {
+        content.push({
+          type: 'text',
+          text: `[Arquivo: ${file.name}] - Conteúdo binário não legível como texto`,
+        });
+      }
     }
   }
 
@@ -188,6 +262,8 @@ async function callAnthropicAPI(prompt: string, filesContent: { name: string; co
     type: 'text',
     text: prompt,
   });
+
+  console.log(`Calling Anthropic API with ${filesContent.length} files...`);
 
   const response = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
@@ -198,7 +274,7 @@ async function callAnthropicAPI(prompt: string, filesContent: { name: string; co
     },
     body: JSON.stringify({
       model: 'claude-sonnet-4-20250514',
-      max_tokens: 8000,
+      max_tokens: 16000,
       messages: [
         {
           role: 'user',
@@ -233,13 +309,21 @@ async function callOpenAIAPI(prompt: string, filesContent: { name: string; conte
         type: 'image_url',
         image_url: {
           url: `data:${file.mimeType};base64,${file.content}`,
+          detail: 'high', // Use high detail for better extraction
         },
       });
     } else {
-      content.push({
-        type: 'text',
-        text: `[Arquivo: ${file.name}]\n${atob(file.content)}`,
-      });
+      try {
+        content.push({
+          type: 'text',
+          text: `[Arquivo: ${file.name}]\n${atob(file.content)}`,
+        });
+      } catch {
+        content.push({
+          type: 'text',
+          text: `[Arquivo: ${file.name}] - Conteúdo binário não legível como texto`,
+        });
+      }
     }
   }
 
@@ -249,6 +333,8 @@ async function callOpenAIAPI(prompt: string, filesContent: { name: string; conte
     text: prompt,
   });
 
+  console.log(`Calling OpenAI API with ${filesContent.length} files...`);
+
   const response = await fetch('https://api.openai.com/v1/chat/completions', {
     method: 'POST',
     headers: {
@@ -257,7 +343,7 @@ async function callOpenAIAPI(prompt: string, filesContent: { name: string; conte
     },
     body: JSON.stringify({
       model: 'gpt-4o',
-      max_tokens: 8000,
+      max_tokens: 16000,
       messages: [
         {
           role: 'user',
@@ -277,7 +363,12 @@ async function callOpenAIAPI(prompt: string, filesContent: { name: string; conte
   return data.choices[0].message.content;
 }
 
-function extractHtmlAndTags(response: string): { html: string; tags: { label: string; variant: 'success' | 'warning' | 'error' }[]; summary: string } {
+function extractHtmlAndTags(response: string, stepId: number): { 
+  html: string; 
+  tags: { label: string; variant: 'success' | 'warning' | 'error' }[]; 
+  summary: string;
+  detailedSummary: string;
+} {
   // Extract HTML between markers
   const htmlMatch = response.match(/<<BEGIN_HTML>>([\s\S]*?)<<END_HTML>>/);
   const html = htmlMatch ? htmlMatch[1].trim() : response;
@@ -293,19 +384,67 @@ function extractHtmlAndTags(response: string): { html: string; tags: { label: st
     tags.push({ label: `${successCount} Conforme`, variant: 'success' });
   }
   if (warningCount > 0) {
-    tags.push({ label: `${warningCount} Parcial`, variant: 'warning' });
+    tags.push({ label: `${warningCount} Alerta`, variant: 'warning' });
   }
   if (errorCount > 0) {
-    tags.push({ label: `${errorCount} Discrepante`, variant: 'error' });
+    tags.push({ label: `${errorCount} Crítico`, variant: 'error' });
   }
 
-  // Generate summary
+  // Extract key findings for detailed summary
+  const findings: string[] = [];
+  
+  // Extract impedimento
+  const impedimentoMatch = response.match(/Impedimento para registrar a DI:\s*(Sim|Não)\s*[—-]\s*([^<\n]+)/i);
+  if (impedimentoMatch) {
+    findings.push(`Impedimento: ${impedimentoMatch[1]} — ${impedimentoMatch[2].trim()}`);
+  }
+
+  // Extract nível de risco
+  const riscoMatch = response.match(/Nível de risco consolidado:\s*(🔴|🟨|✅)/);
+  if (riscoMatch) {
+    const riscoLabel = riscoMatch[1] === '🔴' ? 'Crítico' : riscoMatch[1] === '🟨' ? 'Alerta' : 'OK';
+    findings.push(`Risco: ${riscoMatch[1]} ${riscoLabel}`);
+  }
+
+  // Extract causas críticas
+  const causasMatch = response.match(/Principal\(ais\) causa\(s\) crítica\(s\):\s*([^<]+)/i);
+  if (causasMatch) {
+    findings.push(`Causas: ${causasMatch[1].trim().substring(0, 150)}${causasMatch[1].trim().length > 150 ? '...' : ''}`);
+  }
+
+  // Extract observações (first 2)
+  const obsMatches = response.match(/[🔴🟨]\s*[^:]+:\s*[^<\n]+/g);
+  if (obsMatches && obsMatches.length > 0) {
+    const topObs = obsMatches.slice(0, 2).map(o => o.trim());
+    findings.push(...topObs);
+  }
+
+  // Build detailed summary
+  const stepNames = { 1: 'Pré-Alerta', 2: 'Instrução', 3: 'DI' };
+  const stepName = stepNames[stepId as keyof typeof stepNames] || `Etapa ${stepId}`;
+  
+  let detailedSummary = `[${stepName}] `;
+  if (errorCount > 0) {
+    detailedSummary += `${errorCount} discrepância(s) crítica(s). `;
+  }
+  if (warningCount > 0) {
+    detailedSummary += `${warningCount} alerta(s). `;
+  }
+  if (successCount > 0) {
+    detailedSummary += `${successCount} item(ns) conforme(s). `;
+  }
+  
+  if (findings.length > 0) {
+    detailedSummary += '\n' + findings.join('\n');
+  }
+
+  // Simple summary for backward compatibility
   let summary = '';
   if (errorCount > 0) {
     summary = `${errorCount} discrepância(s) encontrada(s). `;
   }
   if (warningCount > 0) {
-    summary += `${warningCount} item(ns) parcial(is). `;
+    summary += `${warningCount} alerta(s). `;
   }
   if (successCount > 0) {
     summary += `${successCount} item(ns) conforme(s).`;
@@ -314,7 +453,7 @@ function extractHtmlAndTags(response: string): { html: string; tags: { label: st
     summary = 'Análise concluída.';
   }
 
-  return { html, tags, summary };
+  return { html, tags, summary, detailedSummary };
 }
 
 serve(async (req) => {
@@ -333,6 +472,7 @@ serve(async (req) => {
     }
 
     console.log(`Analyzing ${files.length} files for step ${stepId}`);
+    console.log('Files:', files.map((f: any) => `${f.name} (${f.mimeType})`).join(', '));
 
     const fileNames = files.map((f: any) => f.name);
     const prompt = getPromptByStep(stepId, fileNames);
@@ -358,7 +498,7 @@ serve(async (req) => {
       }
     }
 
-    const { html, tags, summary } = extractHtmlAndTags(responseText);
+    const { html, tags, summary, detailedSummary } = extractHtmlAndTags(responseText, stepId);
 
     return new Response(
       JSON.stringify({
@@ -367,6 +507,7 @@ serve(async (req) => {
         html,
         tags,
         summary,
+        detailedSummary,
         generatedAt: new Date().toLocaleString('pt-BR'),
         filesAnalyzed: files.map((f: any) => f.name),
         usedFallback,

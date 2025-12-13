@@ -94,26 +94,30 @@ export default function ConferenciaChb() {
     });
   };
 
-  const handleStartAnalysis = async () => {
+  const handleStartAnalysis = async (isRerun = false) => {
     // Get NEW files uploaded for current step only
     const currentStepFiles = uploadedFiles[activeStep] || [];
     
-    // Get documents from previous steps (already analyzed)
-    const previousStepDocs = activeStep > 1 
-      ? Array.from({ length: activeStep - 1 }, (_, i) => documents[i + 1] || []).flat()
-      : [];
+    // Get documents from current and all previous steps
+    const allDocs = Array.from({ length: activeStep }, (_, i) => documents[i + 1] || []).flat();
     
-    // For analysis, we need: new files from current step + documents from previous steps
+    // For re-run, use existing documents; for new analysis, need new files
     const hasNewFiles = currentStepFiles.length > 0;
-    const hasPreviousDocs = previousStepDocs.length > 0;
+    const hasExistingDocs = allDocs.length > 0;
     
-    if (!hasNewFiles && activeStep === 1) {
+    if (!isRerun && !hasNewFiles && activeStep === 1) {
       toast.error('Nenhum arquivo para analisar');
       return;
     }
     
-    if (!hasNewFiles && activeStep > 1) {
+    if (!isRerun && !hasNewFiles && activeStep > 1) {
       toast.error('Adicione os arquivos desta etapa para analisar');
+      return;
+    }
+    
+    // For re-run without new files, use existing docs
+    if (isRerun && !hasNewFiles && !hasExistingDocs) {
+      toast.error('Nenhum arquivo disponível para análise');
       return;
     }
 
@@ -131,9 +135,9 @@ export default function ConferenciaChb() {
         }))
       );
 
-      // Convert previous step documents (that have file reference) to base64
-      const previousDocsContent = await Promise.all(
-        previousStepDocs
+      // Convert existing documents (all steps) with file reference to base64
+      const existingDocsContent = await Promise.all(
+        allDocs
           .filter(doc => doc.file) // Only include docs with file reference
           .map(async (doc) => ({
             name: doc.name,
@@ -143,10 +147,12 @@ export default function ConferenciaChb() {
           }))
       );
 
-      // Combine: previous docs first, then new files
-      const allFilesContent = [...previousDocsContent, ...newFilesContent];
+      // Combine: existing docs first, then new files (avoiding duplicates)
+      const existingNames = new Set(existingDocsContent.map(d => d.name));
+      const uniqueNewFiles = newFilesContent.filter(f => !existingNames.has(f.name));
+      const allFilesContent = [...existingDocsContent, ...uniqueNewFiles];
 
-      console.log(`Sending ${allFilesContent.length} files for analysis (${previousDocsContent.length} from previous steps, ${newFilesContent.length} new)`);
+      console.log(`Sending ${allFilesContent.length} files for analysis (${existingDocsContent.length} existing, ${uniqueNewFiles.length} new)`);
 
       const { data, error } = await supabase.functions.invoke('analyze-chb-documents', {
         body: {
@@ -159,28 +165,30 @@ export default function ConferenciaChb() {
         throw new Error(error.message);
       }
 
-      // After successful analysis, convert ONLY NEW uploaded files to documents
-      const newDocs = currentStepFiles.map((file, idx) => ({
-        id: `doc-${activeStep}-${Date.now()}-${idx}`,
-        name: file.name,
-        type: detectDocumentType(file.name),
-        uploadedAt: new Date().toLocaleString('pt-BR'),
-        size: formatFileSize(file.size),
-        stepId: activeStep,
-        file: file, // Keep reference for download
-      }));
+      // Only add new documents if there are new files (not a re-run)
+      if (currentStepFiles.length > 0) {
+        const newDocs = currentStepFiles.map((file, idx) => ({
+          id: `doc-${activeStep}-${Date.now()}-${idx}`,
+          name: file.name,
+          type: detectDocumentType(file.name),
+          uploadedAt: new Date().toLocaleString('pt-BR'),
+          size: formatFileSize(file.size),
+          stepId: activeStep,
+          file: file, // Keep reference for download
+        }));
 
-      // Add new documents to current step only
-      setDocuments(prev => ({
-        ...prev,
-        [activeStep]: [...(prev[activeStep] || []), ...newDocs],
-      }));
+        // Add new documents to current step only
+        setDocuments(prev => ({
+          ...prev,
+          [activeStep]: [...(prev[activeStep] || []), ...newDocs],
+        }));
 
-      // Clear only current step uploaded files
-      setUploadedFiles(prev => ({
-        ...prev,
-        [activeStep]: [],
-      }));
+        // Clear only current step uploaded files
+        setUploadedFiles(prev => ({
+          ...prev,
+          [activeStep]: [],
+        }));
+      }
 
       setAnalysisResults(prev => ({
         ...prev,
@@ -223,21 +231,29 @@ export default function ConferenciaChb() {
       return;
     }
 
-    // Create history entry
+    // Create history entry with detailed summary
     const historyEntry: ChbApprovedHistory = {
       id: `h${Date.now()}`,
       stepId: activeStep,
       date: new Date().toLocaleString('pt-BR'),
       user: currentUser,
       summary: currentAnalysis.summary,
+      detailedSummary: currentAnalysis.detailedSummary || currentAnalysis.summary,
       tags: currentAnalysis.tags,
     };
 
-    // Add to history
-    setApprovedHistory(prev => ({
-      ...prev,
-      [activeStep]: [historyEntry, ...(prev[activeStep] || [])],
-    }));
+    // Add to history for current step, inheriting from previous steps
+    setApprovedHistory(prev => {
+      // Get history from all previous steps
+      const previousHistory = activeStep > 1
+        ? Array.from({ length: activeStep - 1 }, (_, i) => prev[i + 1] || []).flat()
+        : [];
+      
+      return {
+        ...prev,
+        [activeStep]: [historyEntry, ...previousHistory, ...(prev[activeStep] || [])],
+      };
+    });
 
     // Update step status
     setSteps((prev) =>
@@ -292,10 +308,10 @@ export default function ConferenciaChb() {
           <ChbAnalysisPanel
             stepId={activeStep}
             analysisResult={analysisResults[activeStep]}
-            onRunAnalysis={handleStartAnalysis}
+            onRunAnalysis={() => handleStartAnalysis(!!analysisResults[activeStep])}
             onApproveAndAdvance={handleApproveAndAdvance}
             isAnalyzing={isAnalyzing}
-            hasFiles={(uploadedFiles[activeStep] || []).length > 0}
+            hasFiles={(uploadedFiles[activeStep] || []).length > 0 || getDocumentsForStep(activeStep).some(d => d.file)}
           />
         );
       case 'historico':

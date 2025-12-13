@@ -9,7 +9,7 @@ interface ChbStepperProps {
 
 export function ChbStepper({ steps, activeStep, onStepClick }: ChbStepperProps) {
   return (
-    <div className="flex items-center justify-between w-full px-4 py-6">
+    <div className="flex items-center justify-between w-full px-3 py-3">
       {steps.map((step, index) => {
         const isCompleted = step.status === 'completed';
         const isCurrent = step.id === activeStep;
@@ -19,11 +19,11 @@ export function ChbStepper({ steps, activeStep, onStepClick }: ChbStepperProps) 
           <div key={step.id} className="flex items-center flex-1">
             <button
               onClick={() => onStepClick(step.id)}
-              className="flex flex-col items-center gap-2 group cursor-pointer"
+              className="flex flex-col items-center gap-1.5 group cursor-pointer"
             >
               <div
                 className={`
-                  w-10 h-10 rounded-full flex items-center justify-center text-sm font-semibold
+                  w-7 h-7 rounded-full flex items-center justify-center text-xs font-semibold
                   transition-all duration-300
                   ${isCompleted 
                     ? 'bg-amber-500 text-black' 
@@ -34,11 +34,11 @@ export function ChbStepper({ steps, activeStep, onStepClick }: ChbStepperProps) 
                   group-hover:scale-110
                 `}
               >
-                {isCompleted ? <Check className="w-5 h-5" /> : step.id}
+                {isCompleted ? <Check className="w-3.5 h-3.5" /> : step.id}
               </div>
               <span
                 className={`
-                  text-xs font-medium text-center whitespace-nowrap
+                  text-[0.65rem] font-medium text-center whitespace-nowrap
                   ${isCurrent ? 'text-amber-500' : isCompleted ? 'text-white/80' : 'text-white/40'}
                 `}
               >

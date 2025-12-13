@@ -7,20 +7,20 @@ interface ChbTabsProps {
 }
 
 const tabs: { id: TabType; label: string; icon: React.ReactNode }[] = [
-  { id: 'documentos', label: 'Documentos', icon: <FileText className="w-4 h-4" /> },
-  { id: 'analise', label: 'Análise da IA', icon: <Bot className="w-4 h-4" /> },
-  { id: 'historico', label: 'Histórico aprovado', icon: <History className="w-4 h-4" /> },
+  { id: 'documentos', label: 'Documentos', icon: <FileText className="w-3 h-3" /> },
+  { id: 'analise', label: 'Análise da IA', icon: <Bot className="w-3 h-3" /> },
+  { id: 'historico', label: 'Histórico aprovado', icon: <History className="w-3 h-3" /> },
 ];
 
 export function ChbTabs({ activeTab, onTabChange }: ChbTabsProps) {
   return (
-    <div className="flex gap-2 overflow-x-auto pb-2 px-4 scrollbar-thin">
+    <div className="flex gap-1.5 overflow-x-auto pb-1 px-3 scrollbar-thin">
       {tabs.map((tab) => (
         <button
           key={tab.id}
           onClick={() => onTabChange(tab.id)}
           className={`
-            flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium
+            flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[0.7rem] font-medium
             whitespace-nowrap transition-all duration-200
             ${activeTab === tab.id
               ? 'bg-amber-500 text-black'
