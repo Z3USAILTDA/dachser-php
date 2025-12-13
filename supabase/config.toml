@@ -143,3 +143,6 @@ verify_jwt = false
 
 [functions.sea-migrate-to-mariadb]
 verify_jwt = false
+
+[functions.sea-extract-attachments]
+verify_jwt = false
