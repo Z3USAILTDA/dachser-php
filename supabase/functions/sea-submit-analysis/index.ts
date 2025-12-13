@@ -66,7 +66,7 @@ async function fetchFileAsBase64(fileUrl: string, fileName: string): Promise<{ b
   }
 }
 
-// ============ XLSX TEXT EXTRACTION (ULTRA-OPTIMIZED FOR CPU) ============
+// ============ XLSX TEXT EXTRACTION (OPTIMIZED FOR MARITIME DATA) ============
 
 async function extractXlsxText(fileUrl: string, fileName: string): Promise<string> {
   console.log(`📊 [XLSX] Extracting from: ${fileName}`);
@@ -82,48 +82,54 @@ async function extractXlsxText(fileUrl: string, fileName: string): Promise<strin
     const fileSizeKB = Math.round(arrayBuffer.byteLength / 1024);
     console.log(`📊 [XLSX] File loaded: ${fileSizeKB} KB`);
     
-    // For very large files (>1MB), use even stricter limits
-    const isLargeFile = fileSizeKB > 1000;
+    // For very large files (>1.5MB), use stricter limits
+    const isLargeFile = fileSizeKB > 1500;
     
     // Import xlsx library
     const XLSX = await import('https://esm.sh/xlsx@0.18.5');
     
-    // Read workbook with ULTRA-OPTIMIZED settings
+    // Read workbook with OPTIMIZED settings - read more rows to capture summary data
     const workbook = XLSX.read(arrayBuffer, { 
       type: 'array',
-      sheetRows: isLargeFile ? 100 : 200,  // Very limited rows
+      sheetRows: isLargeFile ? 150 : 300,  // Need enough rows for summary/totals
       cellFormula: false,
       cellStyles: false,
       cellNF: false,
       cellDates: false,
-      dense: true,  // Use dense mode for memory efficiency
+      dense: true,
     });
     
     console.log(`📊 [XLSX] ${workbook.SheetNames.length} sheets found (large file: ${isLargeFile})`);
     
-    // Prioritize maritime-relevant sheets
-    const highPriority = ['ncm', 'container', 'package', 'resumo', 'summary', 'cargo'];
+    // Prioritize sheets with summary/total data first, then detail sheets
+    // "Resumo" and "Container List" usually have weight/CBM totals
+    const highPriority = ['resumo', 'summary', 'container', 'total', 'overview'];
+    const mediumPriority = ['ncm', 'package', 'cargo', 'item', 'supplier'];
     const skipPatterns = ['instruction', 'info', 'guide', 'readme', 'help', 'template'];
     
     const sortedSheets = workbook.SheetNames
       .filter((name: string) => !skipPatterns.some(p => name.toLowerCase().includes(p)))
       .sort((a: string, b: string) => {
-        const aHasPriority = highPriority.some(p => a.toLowerCase().includes(p));
-        const bHasPriority = highPriority.some(p => b.toLowerCase().includes(p));
-        if (aHasPriority && !bHasPriority) return -1;
-        if (!aHasPriority && bHasPriority) return 1;
+        const aHigh = highPriority.some(p => a.toLowerCase().includes(p));
+        const bHigh = highPriority.some(p => b.toLowerCase().includes(p));
+        const aMed = mediumPriority.some(p => a.toLowerCase().includes(p));
+        const bMed = mediumPriority.some(p => b.toLowerCase().includes(p));
+        
+        if (aHigh && !bHigh) return -1;
+        if (!aHigh && bHigh) return 1;
+        if (aMed && !bMed) return -1;
+        if (!aMed && bMed) return 1;
         return 0;
       });
     
-    // Process only 2 sheets for large files, 3 for normal
-    const maxSheets = isLargeFile ? 2 : 3;
+    // Process 4 sheets for large files, 5 for normal - need more to capture all data
+    const maxSheets = isLargeFile ? 4 : 5;
     const sheetsToProcess = sortedSheets.slice(0, maxSheets);
     console.log(`📊 [XLSX] Processing ${sheetsToProcess.length} sheets: ${sheetsToProcess.join(', ')}`);
     
     let fullText = '';
     let totalRows = 0;
-    const MAX_CHARS = isLargeFile ? 30000 : 50000;
-    const MAX_LINES = isLargeFile ? 100 : 150;
+    const MAX_CHARS = isLargeFile ? 45000 : 60000;
     
     for (const sheetName of sheetsToProcess) {
       if (fullText.length >= MAX_CHARS) break;
@@ -132,13 +138,17 @@ async function extractXlsxText(fileUrl: string, fileName: string): Promise<strin
       if (sheet) {
         const csv = XLSX.utils.sheet_to_csv(sheet, { blankrows: false });
         const lines = csv.split('\n')
-          .filter((line: string) => line.trim().length > 0)
-          .slice(0, MAX_LINES);
+          .filter((line: string) => line.trim().length > 0);
         
-        if (lines.length > 0) {
-          const sheetText = `\n=== ${sheetName} ===\n${lines.join('\n')}`;
+        // For summary sheets, take more lines; for detail sheets, limit more
+        const isSummarySheet = highPriority.some(p => sheetName.toLowerCase().includes(p));
+        const maxLines = isSummarySheet ? 200 : 120;
+        const linesToProcess = lines.slice(0, maxLines);
+        
+        if (linesToProcess.length > 0) {
+          const sheetText = `\n=== ${sheetName} (${linesToProcess.length} rows) ===\n${linesToProcess.join('\n')}`;
           fullText += sheetText.substring(0, MAX_CHARS - fullText.length);
-          totalRows += lines.length;
+          totalRows += linesToProcess.length;
         }
       }
     }
