@@ -155,11 +155,13 @@ serve(async (req) => {
       }
 
       // Create analysis run record in MariaDB
+      // Note: mode column is ENUM('manifest_hbl','hbl_mbl') - map invoices_hbl to hbl_mbl
+      const modeValue = analysisType === 'invoices_hbl' ? 'hbl_mbl' : analysisType;
       const runResult = await dbClient.execute(`
         INSERT INTO ai_agente.t_dachser_sea_runs 
         (item_id, mode, status, created_at)
-        VALUES (?, ?, 'queued', NOW())
-      `, [actualItemId, analysisType]);
+        VALUES (?, ?, 'pending', NOW())
+      `, [actualItemId, modeValue]);
       
       const runId = runResult.lastInsertId;
       console.log(`📝 Created analysis run: ${runId}`);
