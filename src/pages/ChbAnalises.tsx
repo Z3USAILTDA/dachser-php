@@ -348,63 +348,52 @@ export default function ChbAnalises() {
 
       {/* History Modal */}
       <Dialog open={historyModal.open} onOpenChange={(open) => setHistoryModal(prev => ({ ...prev, open }))}>
-        <DialogContent className="max-w-2xl bg-[rgba(5,6,18,.98)] border border-[rgba(255,255,255,.12)]">
+        <DialogContent className="max-w-3xl bg-[rgba(5,6,18,.98)] border border-[rgba(255,255,255,.12)]">
           <DialogHeader>
-            <DialogTitle className="text-[#f5f5f5]">Histórico de Análises</DialogTitle>
+            <DialogTitle className="text-[#f5f5f5] flex items-center gap-2">
+              <ClipboardList size={18} className="text-[#ffc800]" />
+              Histórico de Análises
+            </DialogTitle>
           </DialogHeader>
-          <div className="space-y-3 max-h-[500px] overflow-y-auto">
+          <div className="space-y-4 max-h-[600px] overflow-y-auto pr-2">
             {historyModal.history.length === 0 ? (
               <div className="p-6 text-center text-[#aaaaaa]">
-                <CheckCircle size={40} className="mx-auto mb-3 text-[#555]" />
+                <ClipboardList size={40} className="mx-auto mb-3 text-[#555]" />
                 <p>Nenhuma análise aprovada ainda.</p>
                 <p className="text-[0.75rem] text-[#777] mt-1">Execute análises na página de conferência para ver o histórico.</p>
               </div>
             ) : (
-              <div className="relative">
-                <div className="absolute left-4 top-0 bottom-0 w-0.5 bg-white/10" />
-                
+              <div className="space-y-4">
                 {historyModal.history.map((entry) => (
-                  <div key={entry.id} className="relative pl-10 mb-4">
-                    <div className="absolute left-2 top-2 w-3 h-3 rounded-full bg-amber-500 border-2 border-black flex items-center justify-center">
-                      <CheckCircle className="w-1.5 h-1.5 text-black" />
-                    </div>
-                    
-                    <div className="p-3 rounded-lg border border-[rgba(255,255,255,.12)] bg-[rgba(255,255,255,.03)]">
-                      <div className="flex items-center gap-2 mb-2">
+                  <div key={entry.id} className="p-4 rounded-lg border border-[rgba(255,255,255,.12)] bg-[rgba(255,255,255,.03)]">
+                    <div className="flex items-center justify-between gap-2 mb-3">
+                      <div className="flex items-center gap-2">
                         <span className="text-[0.65rem] px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-400 font-medium">
                           {stepNames[entry.etapa] || `Etapa ${entry.etapa}`}
                         </span>
-                        <span className="text-[0.72rem] text-[#aaaaaa]">
+                        <span className="text-[0.72rem] text-[#aaaaaa] flex items-center gap-1">
+                          <Clock size={12} />
                           {entry.created_at}
                         </span>
-                        <span className="text-[0.72rem] text-amber-500">
-                          {entry.created_by_email || 'Usuário'}
-                        </span>
-                        <span className={`ml-auto text-[0.72rem] px-2 py-0.5 rounded-full ${
-                          entry.status === 'aprovado' ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'
-                        }`}>
-                          {entry.status}
-                        </span>
                       </div>
-                      
-                      {/* Render HTML content if available */}
-                      {entry.result_html ? (
-                        <div 
-                          className="text-[0.85rem] text-[#f5f5f5] chb-analysis-content bg-black/20 p-3 rounded border border-white/5"
-                          dangerouslySetInnerHTML={{ __html: entry.result_html }}
-                        />
-                      ) : (
-                        <div className="text-[0.85rem] text-[#f5f5f5]">{entry.result_text}</div>
-                      )}
-                      
                       <button
                         onClick={() => handleCopyResult(entry.result_text || entry.result_html)}
-                        className="mt-2 inline-flex items-center gap-1 text-[0.72rem] text-[#ffc800] hover:underline"
+                        className="inline-flex items-center gap-1 text-[0.72rem] text-white/50 hover:text-white transition-colors"
+                        title="Copiar resultado"
                       >
-                        <Copy size={12} />
-                        Copiar resultado
+                        <Copy size={14} />
                       </button>
                     </div>
+                    
+                    {/* Render HTML content if available */}
+                    {entry.result_html ? (
+                      <div 
+                        className="text-[0.85rem] text-[#f5f5f5] chb-analysis-content bg-black/20 p-4 rounded border border-white/5"
+                        dangerouslySetInnerHTML={{ __html: entry.result_html }}
+                      />
+                    ) : (
+                      <div className="text-[0.85rem] text-[#f5f5f5] bg-black/20 p-4 rounded border border-white/5">{entry.result_text}</div>
+                    )}
                   </div>
                 ))}
               </div>
