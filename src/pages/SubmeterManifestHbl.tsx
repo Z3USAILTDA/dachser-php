@@ -321,7 +321,7 @@ export default function SubmeterManifestHbl() {
     return null;
   }
   const showManifestDiagnostic = analysisResult?.result_data?.manifest?.invoice_tokens?.length === 0 || analysisResult?.result_data?.manifest?.ncm8?.length === 0;
-  return <PageLayout title="DACHSER" subtitle="Submeter – Manifest/Pack List × Draft HBL" pageIcon={FileStack}>
+  return <PageLayout title="DACHSER" subtitle="Submeter – Manifest/Pack List × Draft HBL" pageIcon={FileStack} backTo="/maritimo">
       <PageCard className="max-w-4xl mx-auto">
             <h1 className="text-2xl font-bold text-white mb-2">Submeter – Manifest/Pack List × Draft HBL</h1>
             <p className="text-sm text-neutral-400 mb-8">Adicione os arquivos HBL para análise comparativa</p>

@@ -277,6 +277,7 @@ export default function SubmeterHblMbl() {
       title="DACHSER"
       subtitle="Submeter – HBL × MBL"
       pageIcon={GitCompare}
+      backTo="/maritimo"
     >
       <PageCard className="max-w-4xl mx-auto">
         <h1 className="text-2xl font-bold text-white mb-2">Submeter – HBL × MBL</h1>

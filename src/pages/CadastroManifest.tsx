@@ -61,6 +61,7 @@ export default function CadastroManifest() {
       title="DACHSER"
       subtitle="Cadastro – Manifest/Pack List"
       pageIcon={FileSpreadsheet}
+      backTo="/maritimo"
     >
       <PageCard className="max-w-4xl mx-auto">
         <h1 className="text-2xl font-bold text-white mb-2">Cadastro – Manifest/Pack List</h1>
