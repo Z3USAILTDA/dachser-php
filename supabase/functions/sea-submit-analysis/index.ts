@@ -10,6 +10,148 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
+// ============ INLINE LLM ANALYZER ============
+
+interface AnalysisResult {
+  result_text: string;
+  json_result: any;
+  model: string;
+}
+
+interface FileInfo {
+  file_name: string;
+  file_type: string;
+  file_url: string;
+}
+
+function arrayBufferToBase64Chunked(buffer: ArrayBuffer): string {
+  const bytes = new Uint8Array(buffer);
+  const chunkSize = 8192;
+  let result = '';
+  for (let i = 0; i < bytes.length; i += chunkSize) {
+    const chunk = bytes.slice(i, Math.min(i + chunkSize, bytes.length));
+    result += String.fromCharCode.apply(null, Array.from(chunk));
+  }
+  return btoa(result);
+}
+
+async function fetchFileAsBase64(fileUrl: string): Promise<{ base64: string; size: number } | null> {
+  try {
+    const response = await fetch(fileUrl);
+    if (!response.ok) return null;
+    const buffer = await response.arrayBuffer();
+    if (buffer.byteLength < 100) return null;
+    return { base64: arrayBufferToBase64Chunked(buffer), size: buffer.byteLength };
+  } catch { return null; }
+}
+
+async function extractXlsxText(fileUrl: string, fileName: string): Promise<string> {
+  try {
+    const response = await fetch(fileUrl);
+    if (!response.ok) return '';
+    const arrayBuffer = await response.arrayBuffer();
+    const XLSX = await import('https://esm.sh/xlsx@0.18.5');
+    const workbook = XLSX.read(arrayBuffer, { type: 'array', sheetRows: 2001 });
+    let fullText = '';
+    for (const sheetName of workbook.SheetNames.slice(0, 5)) {
+      const sheet = workbook.Sheets[sheetName];
+      if (sheet) {
+        const csv = XLSX.utils.sheet_to_csv(sheet);
+        fullText += `\n=== ${sheetName} ===\n${csv}`;
+      }
+    }
+    return fullText.substring(0, 150000);
+  } catch { return ''; }
+}
+
+async function extractTextFromFile(file: FileInfo): Promise<string> {
+  const ext = file.file_name.toLowerCase().split('.').pop();
+  if (['xlsx', 'xls', 'xlsm'].includes(ext || '')) {
+    return await extractXlsxText(file.file_url, file.file_name);
+  } else if (ext === 'csv') {
+    const response = await fetch(file.file_url);
+    return await response.text();
+  }
+  return '';
+}
+
+function getPromptForAnalysisType(analysisType: string): string {
+  // Simplified prompt for maritime analysis
+  const basePrompt = `You are CRONOS, a logistics auditor specialized in maritime Bills of Lading.
+Analyze the provided documents and identify discrepancies between the Manifest/Base document and the HBL/Draft documents.
+Output in plain text, email-ready format. List all required corrections clearly.`;
+  return basePrompt;
+}
+
+async function analyzeWithGemini(
+  prompt: string, manifestText: string, pdfFiles: FileInfo[], metadata: { consignee?: string; container?: string }
+): Promise<{ text: string; model: string }> {
+  const lovableApiKey = Deno.env.get('LOVABLE_API_KEY');
+  if (!lovableApiKey) throw new Error('LOVABLE_API_KEY not configured');
+  
+  const contentParts: any[] = [];
+  let fullPrompt = prompt;
+  if (metadata.consignee) fullPrompt += `\n\nConsignee: ${metadata.consignee}`;
+  if (metadata.container) fullPrompt += `\nContainer: ${metadata.container}`;
+  
+  contentParts.push({ type: 'text', text: fullPrompt });
+  if (manifestText.length > 0) {
+    contentParts.push({ type: 'text', text: `\n\n=== MANIFEST DATA ===\n${manifestText}\n=== END MANIFEST ===\n` });
+  }
+  
+  for (const file of pdfFiles) {
+    const pdfData = await fetchFileAsBase64(file.file_url);
+    if (pdfData && pdfData.size >= 100) {
+      contentParts.push({ type: 'image_url', image_url: { url: `data:application/pdf;base64,${pdfData.base64}` } });
+      contentParts.push({ type: 'text', text: `[Document: ${file.file_name}]` });
+    }
+  }
+  
+  contentParts.push({ type: 'text', text: '\n\nProvide your complete analysis following the specified format.' });
+  
+  const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
+    method: 'POST',
+    headers: { 'Authorization': `Bearer ${lovableApiKey}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      model: 'google/gemini-2.5-flash',
+      messages: [{ role: 'user', content: contentParts }],
+      max_tokens: 8000,
+      temperature: 0.1,
+    }),
+  });
+  
+  if (response.ok) {
+    const data = await response.json();
+    return { text: data.choices?.[0]?.message?.content || '', model: 'google/gemini-2.5-flash' };
+  }
+  throw new Error(`Gemini API error: ${response.status}`);
+}
+
+async function analyzeWithLLM(
+  analysisType: string, files: FileInfo[], metadata: { consignee?: string; container?: string }
+): Promise<AnalysisResult> {
+  const basePrompt = getPromptForAnalysisType(analysisType);
+  const startTime = Date.now();
+  
+  const manifestFiles = files.filter(f => ['xlsx', 'xls', 'xlsm', 'csv'].includes(f.file_name.toLowerCase().split('.').pop() || ''));
+  const pdfFiles = files.filter(f => f.file_name.toLowerCase().endsWith('.pdf'));
+  
+  let manifestText = '';
+  for (const mf of manifestFiles) {
+    manifestText += await extractTextFromFile(mf);
+  }
+  
+  const result = await analyzeWithGemini(basePrompt, manifestText, pdfFiles, metadata);
+  
+  return {
+    result_text: result.text,
+    json_result: { status: 'completed', model: result.model, total_time_ms: Date.now() - startTime },
+    model: result.model
+  };
+}
+
+// ============ END INLINE LLM ANALYZER ============
+
 function extractContainerFromFilename(fileName: string): string | null {
   const match = fileName.match(/\b([A-Z]{4}\d{7})\b/);
   return match?.[1] || null;
@@ -281,11 +423,9 @@ serve(async (req) => {
             UPDATE ai_agente.t_dachser_sea_runs SET status = 'analisando' WHERE id = ?
           `, [runId]);
           
-          // Run LLM analysis
-          const { analyzeWithLLM } = await import('../maritimo-analyze/llmAnalyzer.ts');
-          
+          // Run LLM analysis (using inline function)
           const result = await analyzeWithLLM(
-            analysisType, 
+            analysisType,
             allFiles.map(f => ({ file_name: f.name, file_type: f.file_type, file_url: f.url })), 
             { consignee, container }
           );
