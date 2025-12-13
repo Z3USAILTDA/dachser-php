@@ -221,7 +221,7 @@ export default function SubmeterManifestHbl() {
             setAnalysisProgress(Math.min(percent, 95));
             setAnalysisStep(step);
           },
-          300000
+          8 * 60 * 1000 // 8 minutes
         );
       }
 
