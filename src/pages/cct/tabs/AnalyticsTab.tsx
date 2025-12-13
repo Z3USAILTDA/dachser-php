@@ -168,65 +168,6 @@ export default function AnalyticsContent({ processos, isLoading }: AnalyticsCont
       <div className="rounded-2xl bg-[rgba(5,6,18,0.9)] border border-[rgba(255,255,255,0.12)] p-6 shadow-[0_18px_40px_rgba(0,0,0,0.85)]">
         <div className="space-y-6">
 
-      {/* KPIs */}
-      <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
-        <div className="rounded-2xl bg-[rgba(5,6,18,0.9)] border border-[rgba(255,255,255,0.12)] p-5 shadow-[0_18px_40px_rgba(0,0,0,0.85)]">
-          <div className="flex items-center gap-3">
-            <div className="p-2.5 rounded-lg bg-[rgba(255,200,0,0.15)]">
-              <Package className="h-5 w-5 text-[#ffc800]" />
-            </div>
-            <div>
-              <p className="text-2xl font-bold text-white">{kpis.total}</p>
-              <p className="text-xs text-[#888]">Processos Ativos</p>
-            </div>
-          </div>
-        </div>
-        <div className="rounded-2xl bg-[rgba(5,6,18,0.9)] border border-[rgba(255,255,255,0.12)] p-5 shadow-[0_18px_40px_rgba(0,0,0,0.85)]">
-          <div className="flex items-center gap-3">
-            <div className="p-2.5 rounded-lg bg-emerald-500/15">
-              <CheckCircle className="h-5 w-5 text-emerald-400" />
-            </div>
-            <div>
-              <p className="text-2xl font-bold text-white">{kpis.taxaSlaOk}%</p>
-              <p className="text-xs text-[#888]">SLA OK</p>
-            </div>
-          </div>
-        </div>
-        <div className="rounded-2xl bg-[rgba(5,6,18,0.9)] border border-[rgba(255,255,255,0.12)] p-5 shadow-[0_18px_40px_rgba(0,0,0,0.85)]">
-          <div className="flex items-center gap-3">
-            <div className="p-2.5 rounded-lg bg-yellow-500/15">
-              <AlertTriangle className="h-5 w-5 text-yellow-400" />
-            </div>
-            <div>
-              <p className="text-2xl font-bold text-white">{kpis.emAlerta}</p>
-              <p className="text-xs text-[#888]">Em Alerta</p>
-            </div>
-          </div>
-        </div>
-        <div className="rounded-2xl bg-[rgba(5,6,18,0.9)] border border-[rgba(255,255,255,0.12)] p-5 shadow-[0_18px_40px_rgba(0,0,0,0.85)]">
-          <div className="flex items-center gap-3">
-            <div className="p-2.5 rounded-lg bg-red-500/15">
-              <AlertTriangle className="h-5 w-5 text-red-400" />
-            </div>
-            <div>
-              <p className="text-2xl font-bold text-white">{kpis.criticos}</p>
-              <p className="text-xs text-[#888]">Críticos</p>
-            </div>
-          </div>
-        </div>
-        <div className="rounded-2xl bg-[rgba(5,6,18,0.9)] border border-[rgba(255,255,255,0.12)] p-5 shadow-[0_18px_40px_rgba(0,0,0,0.85)]">
-          <div className="flex items-center gap-3">
-            <div className="p-2.5 rounded-lg bg-blue-500/15">
-              <Clock className="h-5 w-5 text-blue-400" />
-            </div>
-            <div>
-              <p className="text-2xl font-bold text-white">{kpis.tempoMedio}d</p>
-              <p className="text-xs text-[#888]">Tempo Médio</p>
-            </div>
-          </div>
-        </div>
-      </div>
-
       {/* Charts Row 1 */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <div className="rounded-2xl bg-[rgba(5,6,18,0.9)] border border-[rgba(255,255,255,0.12)] p-5 shadow-[0_18px_40px_rgba(0,0,0,0.85)]">
