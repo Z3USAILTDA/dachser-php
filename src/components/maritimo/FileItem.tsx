@@ -1,45 +1,63 @@
-import { File, X } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { FileText, X, MoreVertical } from "lucide-react";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 interface FileItemProps {
-  file: File;
-  onRemove: () => void;
+  file: File | { name: string; type?: string };
+  onRemove?: () => void;
+  onMarkAsInvoice?: () => void;
+  draggable?: boolean;
+  onDragStart?: (e: React.DragEvent) => void;
 }
 
-export function FileItem({ file, onRemove }: FileItemProps) {
-  const formatFileSize = (bytes: number) => {
-    if (bytes === 0) return '0 Bytes';
-    const k = 1024;
-    const sizes = ['Bytes', 'KB', 'MB', 'GB'];
-    const i = Math.floor(Math.log(bytes) / Math.log(k));
-    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
-  };
-
-  const getFileExtension = (filename: string) => {
-    return filename.split('.').pop()?.toUpperCase() || 'FILE';
-  };
-
+export const FileItem = ({ file, onRemove, onMarkAsInvoice, draggable = false, onDragStart }: FileItemProps) => {
   return (
-    <div className="flex items-center justify-between p-3 rounded-lg bg-white/5 border border-white/10">
-      <div className="flex items-center gap-3">
-        <div className="w-10 h-10 rounded-lg bg-amber-400/20 flex items-center justify-center">
-          <File className="w-5 h-5 text-amber-400" />
-        </div>
-        <div>
-          <p className="text-sm font-medium text-white truncate max-w-[200px]">{file.name}</p>
-          <p className="text-xs text-neutral-500">
-            {getFileExtension(file.name)} • {formatFileSize(file.size)}
-          </p>
-        </div>
+    <div
+      draggable={draggable}
+      onDragStart={onDragStart}
+      className="flex items-center justify-between gap-3 p-3 bg-black/40 rounded-lg border border-white/10 hover:border-primary transition-all cursor-move"
+    >
+      <div className="flex items-center gap-3 flex-1 min-w-0">
+        <FileText className="w-5 h-5 text-primary flex-shrink-0" />
+        <span className="text-sm text-foreground truncate">{file.name}</span>
       </div>
-      <Button
-        variant="ghost"
-        size="icon"
-        onClick={onRemove}
-        className="h-8 w-8 rounded-full text-neutral-400 hover:text-rose-400 hover:bg-rose-400/10"
-      >
-        <X className="w-4 h-4" />
-      </Button>
+      <div className="flex items-center gap-1 flex-shrink-0">
+        {onMarkAsInvoice && (
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <button
+                onClick={(e) => e.stopPropagation()}
+                className="p-1 hover:bg-white/10 rounded transition-colors"
+              >
+                <MoreVertical className="w-4 h-4 text-neutral-400 hover:text-foreground" />
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="bg-black/90 border-white/10">
+              <DropdownMenuItem
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onMarkAsInvoice();
+                }}
+                className="cursor-pointer hover:bg-white/10 focus:bg-white/10"
+              >
+                Marcar como Invoice
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        )}
+        {onRemove && (
+          <button
+            onClick={onRemove}
+            className="p-1 hover:bg-white/10 rounded transition-colors"
+          >
+            <X className="w-4 h-4 text-neutral-400 hover:text-foreground" />
+          </button>
+        )}
+      </div>
     </div>
   );
-}
+};
