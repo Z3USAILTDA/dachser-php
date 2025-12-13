@@ -327,38 +327,53 @@ export const maritimoApi = {
   async pollAnalysisUntilComplete(
     analysisId: string, 
     onProgress?: (percent: number, step: string) => void,
-    timeoutMs: number = 1200000
+    timeoutMs: number = 8 * 60 * 1000 // 8 minutes
   ): Promise<any> {
     const startTime = Date.now();
-    const pollInterval = 2000;
+    const pollInterval = 3000;
     
     while (Date.now() - startTime < timeoutMs) {
       const status = await this.pollAnalysis(analysisId);
       
-      if (onProgress && status.progress_percent !== undefined) {
-        onProgress(status.progress_percent, status.progress_step || status.status);
+      // Map step to progress
+      let progressPercent = 50;
+      let progressStep = 'Analisando documentos...';
+      
+      if (status.status === 'pendente' || status.status === 'queued') {
+        progressPercent = 15;
+        progressStep = 'Aguardando processamento...';
+      } else if (status.status === 'analisando' || status.status === 'processing') {
+        progressPercent = 50;
+        progressStep = 'Analisando com IA...';
+      } else if (status.status === 'realizado' || status.status === 'completed') {
+        progressPercent = 100;
+        progressStep = 'Concluído';
+      }
+      
+      if (onProgress) {
+        onProgress(progressPercent, progressStep);
       }
 
-      // Check for completed states
-      if (status.status === 'completed' || status.status === 'pendente') {
+      // Check for completed states (MariaDB uses 'realizado', 'erro')
+      if (status.status === 'realizado' || status.status === 'completed') {
         return {
           success: true,
           result_text: status.result_text,
           result_data: status.result_data,
-          status: status.status,
+          status: 'completed',
           analysisId
         };
       }
 
-      if (status.status === 'error') {
-        throw new Error(status.error_message || 'Analysis failed');
+      if (status.status === 'erro' || status.status === 'error') {
+        throw new Error(status.error_message || 'Erro na análise');
       }
 
       await new Promise(resolve => setTimeout(resolve, pollInterval));
     }
     
     console.error(`Analysis timeout after ${timeoutMs/1000/60} minutes.`);
-    throw new Error(`Analysis timeout after ${timeoutMs/1000/60} minutes`);
+    throw new Error(`Tempo limite excedido (${Math.round(timeoutMs/1000/60)} minutos)`);
   },
 
   /**
