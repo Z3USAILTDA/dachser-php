@@ -2646,19 +2646,13 @@ serve(async (req) => {
         const { itemId, etapa, status, resultText, resultHtml, resultJson, usedAsCtx, userId } = body as any;
         console.log('Creating CHB run:', { itemId, etapa, status, userId });
         
-        // Sanitize text to replace emojis with HTML entities (MariaDB utf8 doesn't support 4-byte chars)
+        // Sanitize text to remove 4-byte UTF-8 chars (MariaDB utf8 doesn't support them)
         const sanitizeForMariaDB = (text: string | null): string | null => {
           if (!text) return null;
-          return text
-            .replace(/🟨/g, '&#x1F7E8;')
-            .replace(/🔴/g, '&#x1F534;')
-            .replace(/✅/g, '&#x2705;')
-            .replace(/🟢/g, '&#x1F7E2;')
-            .replace(/⚠️/g, '&#x26A0;')
-            .replace(/❌/g, '&#x274C;')
-            .replace(/[\u{1F300}-\u{1F9FF}]/gu, '') // Remove any other emojis
-            .replace(/[\u{2600}-\u{26FF}]/gu, '')   // Misc symbols
-            .replace(/[\u{2700}-\u{27BF}]/gu, '');  // Dingbats
+          // Remove all characters outside the BMP (Basic Multilingual Plane)
+          // This includes all emojis and other 4-byte UTF-8 characters
+          return text.replace(/[\uD800-\uDBFF][\uDC00-\uDFFF]/g, '')
+                     .replace(/[\u{10000}-\u{10FFFF}]/gu, '');
         };
         
         const insertResult = await client.execute(`
