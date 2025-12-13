@@ -10,7 +10,7 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-// ============ OPTIMIZED LLM ANALYZER ============
+// ============ LLM ANALYZER - ANTHROPIC PRIMARY, GEMINI FALLBACK ============
 
 interface AnalysisResult {
   result_text: string;
@@ -24,6 +24,7 @@ interface FileInfo {
   file_url: string;
 }
 
+// Chunked base64 encoding to avoid memory issues
 function arrayBufferToBase64Chunked(buffer: ArrayBuffer): string {
   const bytes = new Uint8Array(buffer);
   const chunkSize = 8192;
@@ -35,7 +36,7 @@ function arrayBufferToBase64Chunked(buffer: ArrayBuffer): string {
   return btoa(result);
 }
 
-// ============ FAST TEXT EXTRACTION ============
+// ============ XLSX TEXT EXTRACTION (LOCAL - NO API CALL) ============
 
 async function extractXlsxText(fileUrl: string, fileName: string): Promise<string> {
   try {
@@ -62,89 +63,100 @@ async function extractXlsxText(fileUrl: string, fileName: string): Promise<strin
   }
 }
 
-// Fast PDF text extraction using Gemini Flash for OCR
-async function extractPdfTextWithAI(fileUrl: string, fileName: string): Promise<string> {
-  const lovableApiKey = Deno.env.get('LOVABLE_API_KEY');
-  if (!lovableApiKey) return '';
-
+// Fetch PDF as base64 for direct API submission
+async function fetchPdfAsBase64(fileUrl: string, fileName: string): Promise<{ base64: string; name: string } | null> {
   try {
-    console.log(`📄 Extracting PDF with AI: ${fileName}`);
-    
-    // Fetch PDF as base64
+    console.log(`📄 Fetching PDF: ${fileName}`);
     const response = await fetch(fileUrl);
-    if (!response.ok) return '';
+    if (!response.ok) return null;
     const buffer = await response.arrayBuffer();
-    if (buffer.byteLength < 100) return '';
+    if (buffer.byteLength < 100) return null;
     
     const base64 = arrayBufferToBase64Chunked(buffer);
-    
-    // Use Gemini Flash (fast model) for text extraction only
-    const extractionPrompt = `Extract ALL text content from this PDF document. 
-Include ALL:
-- Weights (gross, net, chargeable)
-- NCM/HS codes (all 4, 6, or 8 digit codes)
-- Invoice numbers and references
-- Container numbers
-- Consignee/shipper names
-- CBM/measurement values
-- Descriptions of goods
-- Any numeric values
-
-Output the raw extracted text in a structured format. Do not summarize - extract EVERYTHING.`;
-
-    const aiResponse = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
-      method: 'POST',
-      headers: { 'Authorization': `Bearer ${lovableApiKey}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        model: 'google/gemini-2.5-flash', // Use Flash for speed
-        messages: [{ 
-          role: 'user', 
-          content: [
-            { type: 'text', text: extractionPrompt },
-            { type: 'image_url', image_url: { url: `data:application/pdf;base64,${base64}` } }
-          ]
-        }],
-        max_tokens: 8000,
-        temperature: 0,
-      }),
-    });
-    
-    if (!aiResponse.ok) {
-      console.error(`❌ PDF extraction API error: ${aiResponse.status}`);
-      return '';
-    }
-    
-    const data = await aiResponse.json();
-    const extractedText = data.choices?.[0]?.message?.content || '';
-    console.log(`✅ PDF extracted: ${extractedText.length} chars from ${fileName}`);
-    
-    return `\n=== FILE: ${fileName} ===\n${extractedText}\n`;
+    console.log(`✅ PDF loaded: ${fileName} (${Math.round(buffer.byteLength / 1024)} KB)`);
+    return { base64, name: fileName };
   } catch (e) {
-    console.error(`❌ PDF extraction failed for ${fileName}:`, e);
-    return '';
+    console.error(`❌ PDF fetch failed: ${fileName}`, e);
+    return null;
   }
-}
-
-async function extractTextFromFile(file: FileInfo): Promise<string> {
-  const ext = file.file_name.toLowerCase().split('.').pop();
-  if (['xlsx', 'xls', 'xlsm'].includes(ext || '')) {
-    return await extractXlsxText(file.file_url, file.file_name);
-  } else if (ext === 'csv') {
-    const response = await fetch(file.file_url);
-    const text = await response.text();
-    return `\n=== FILE: ${file.file_name} ===\n${text}\n`;
-  } else if (ext === 'pdf') {
-    return await extractPdfTextWithAI(file.file_url, file.file_name);
-  }
-  return '';
 }
 
 import { getPromptForAnalysisType } from "./prompts.ts";
 
-// Final analysis using extracted text only (no binary files)
+// ============ ANTHROPIC CLAUDE (PRIMARY) ============
+
+async function analyzeWithAnthropic(
+  prompt: string, 
+  manifestText: string, 
+  pdfFiles: Array<{ base64: string; name: string }>,
+  metadata: { consignee?: string; container?: string }
+): Promise<{ text: string; model: string }> {
+  const anthropicKey = Deno.env.get('ANTHROPIC_API_KEY');
+  if (!anthropicKey) throw new Error('ANTHROPIC_API_KEY not configured');
+  
+  let fullPrompt = prompt;
+  if (metadata.consignee) fullPrompt += `\n\nConsignee: ${metadata.consignee}`;
+  if (metadata.container) fullPrompt += `\nContainer: ${metadata.container}`;
+  
+  // Build content parts: prompt + manifest text + PDFs as base64 documents
+  const contentParts: any[] = [
+    { type: 'text', text: fullPrompt }
+  ];
+  
+  // Add manifest text if available
+  if (manifestText && manifestText.length > 0) {
+    contentParts.push({ type: 'text', text: `\n\n=== MANIFEST DATA ===\n${manifestText}` });
+  }
+  
+  // Add PDFs as base64 documents (Anthropic native PDF support)
+  for (const pdf of pdfFiles) {
+    contentParts.push({ 
+      type: 'document', 
+      source: { 
+        type: 'base64', 
+        media_type: 'application/pdf', 
+        data: pdf.base64 
+      } 
+    });
+    contentParts.push({ type: 'text', text: `[Document: ${pdf.name}]` });
+  }
+  
+  console.log(`🤖 Calling Anthropic Claude with ${pdfFiles.length} PDFs and ${manifestText.length} chars of manifest text`);
+  
+  const response = await fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST',
+    headers: {
+      'x-api-key': anthropicKey,
+      'anthropic-version': '2023-06-01',
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      model: 'claude-sonnet-4-20250514',
+      max_tokens: 8000,
+      temperature: 0.1,
+      messages: [{ role: 'user', content: contentParts }]
+    }),
+  });
+  
+  if (!response.ok) {
+    const errorText = await response.text().catch(() => '');
+    console.error(`❌ Anthropic API error: ${response.status} - ${errorText}`);
+    throw new Error(`Anthropic API error: ${response.status}`);
+  }
+  
+  const data = await response.json();
+  const resultText = data.content?.[0]?.text || '';
+  console.log(`✅ Anthropic response: ${resultText.length} chars`);
+  
+  return { text: resultText, model: 'claude-sonnet-4-20250514' };
+}
+
+// ============ GEMINI (FALLBACK) ============
+
 async function analyzeWithGemini(
   prompt: string, 
-  extractedTexts: string, 
+  manifestText: string, 
+  pdfFiles: Array<{ base64: string; name: string }>,
   metadata: { consignee?: string; container?: string }
 ): Promise<{ text: string; model: string }> {
   const lovableApiKey = Deno.env.get('LOVABLE_API_KEY');
@@ -154,85 +166,136 @@ async function analyzeWithGemini(
   if (metadata.consignee) fullPrompt += `\n\nConsignee: ${metadata.consignee}`;
   if (metadata.container) fullPrompt += `\nContainer: ${metadata.container}`;
   
-  // Combine prompt with all extracted text
-  const combinedContent = `${fullPrompt}
-
-═══════════════════════════════════════════════════════════════════
-EXTRACTED DOCUMENT DATA (PRE-PROCESSED)
-═══════════════════════════════════════════════════════════════════
-
-${extractedTexts}
-
-═══════════════════════════════════════════════════════════════════
-END OF EXTRACTED DATA
-═══════════════════════════════════════════════════════════════════
-
-Now perform the complete analysis comparing all documents above following the specified format.
-IMPORTANT: All data has been extracted for you. Focus on comparison and generating the analysis report.`;
-
-  console.log(`📊 Sending ${combinedContent.length} chars to analysis LLM`);
+  // Build content parts for Gemini
+  const contentParts: any[] = [
+    { type: 'text', text: fullPrompt }
+  ];
   
-  // Use Gemini Pro for final analysis (better reasoning)
+  if (manifestText && manifestText.length > 0) {
+    contentParts.push({ type: 'text', text: `\n\n=== MANIFEST DATA ===\n${manifestText}` });
+  }
+  
+  // Add PDFs as base64 images (Gemini accepts PDFs as image_url)
+  for (const pdf of pdfFiles) {
+    contentParts.push({ 
+      type: 'image_url', 
+      image_url: { url: `data:application/pdf;base64,${pdf.base64}` } 
+    });
+    contentParts.push({ type: 'text', text: `[Document: ${pdf.name}]` });
+  }
+  
+  console.log(`🤖 Calling Gemini (fallback) with ${pdfFiles.length} PDFs`);
+  
   const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
     method: 'POST',
     headers: { 'Authorization': `Bearer ${lovableApiKey}`, 'Content-Type': 'application/json' },
     body: JSON.stringify({
       model: 'google/gemini-2.5-pro',
-      messages: [{ role: 'user', content: combinedContent }],
+      messages: [{ role: 'user', content: contentParts }],
       max_tokens: 16000,
       temperature: 0.1,
     }),
   });
   
-  if (response.ok) {
-    const data = await response.json();
-    return { text: data.choices?.[0]?.message?.content || '', model: 'google/gemini-2.5-pro' };
+  if (!response.ok) {
+    const errorText = await response.text().catch(() => '');
+    console.error(`❌ Gemini API error: ${response.status} - ${errorText}`);
+    throw new Error(`Gemini API error: ${response.status}`);
   }
   
-  if (response.status === 429) {
-    throw new Error('Limite de requisições excedido, tente novamente mais tarde');
-  }
-  if (response.status === 402) {
-    throw new Error('Créditos esgotados, adicione créditos ao workspace');
-  }
+  const data = await response.json();
+  const resultText = data.choices?.[0]?.message?.content || '';
+  console.log(`✅ Gemini response: ${resultText.length} chars`);
   
-  const errorText = await response.text().catch(() => '');
-  throw new Error(`Erro na API de IA: ${response.status} - ${errorText}`);
+  return { text: resultText, model: 'google/gemini-2.5-pro' };
 }
 
+// ============ MAIN LLM ANALYSIS FUNCTION ============
+
 async function analyzeWithLLM(
-  analysisType: string, files: FileInfo[], metadata: { consignee?: string; container?: string }
+  analysisType: string, 
+  files: FileInfo[], 
+  metadata: { consignee?: string; container?: string }
 ): Promise<AnalysisResult> {
   const basePrompt = getPromptForAnalysisType(analysisType);
   const startTime = Date.now();
   
-  console.log(`🚀 Starting optimized analysis for ${files.length} files`);
+  console.log(`🚀 Starting analysis for ${files.length} files`);
   
-  // STEP 1: Extract text from ALL files in parallel
-  const extractionPromises = files.map(f => extractTextFromFile(f));
-  const extractedTexts = await Promise.all(extractionPromises);
+  // Separate XLSX/CSV (local extraction) from PDFs (send to LLM)
+  const manifestFiles = files.filter(f => {
+    const ext = f.file_name.toLowerCase().split('.').pop();
+    return ['xlsx', 'xls', 'xlsm', 'csv'].includes(ext || '');
+  });
   
-  const combinedExtractedText = extractedTexts.filter(t => t.length > 0).join('\n');
-  console.log(`📝 Total extracted text: ${combinedExtractedText.length} chars`);
+  const pdfFiles = files.filter(f => {
+    const ext = f.file_name.toLowerCase().split('.').pop();
+    return ext === 'pdf';
+  });
   
-  if (combinedExtractedText.length < 100) {
-    throw new Error('Não foi possível extrair texto suficiente dos documentos');
+  console.log(`📊 Files: ${manifestFiles.length} spreadsheets, ${pdfFiles.length} PDFs`);
+  
+  // STEP 1: Extract text from spreadsheets locally (no API call)
+  let manifestText = '';
+  for (const manifestFile of manifestFiles) {
+    const ext = manifestFile.file_name.toLowerCase().split('.').pop();
+    if (['xlsx', 'xls', 'xlsm'].includes(ext || '')) {
+      manifestText += await extractXlsxText(manifestFile.file_url, manifestFile.file_name);
+    } else if (ext === 'csv') {
+      const response = await fetch(manifestFile.file_url);
+      const csvText = await response.text();
+      manifestText += `\n=== FILE: ${manifestFile.file_name} ===\n${csvText}\n`;
+    }
   }
   
-  // STEP 2: Send extracted TEXT (not binary files) for analysis
-  const result = await analyzeWithGemini(basePrompt, combinedExtractedText, metadata);
+  console.log(`📝 Manifest text extracted: ${manifestText.length} chars`);
+  
+  // STEP 2: Fetch PDFs as base64 for direct LLM submission
+  const pdfDataPromises = pdfFiles.map(f => fetchPdfAsBase64(f.file_url, f.file_name));
+  const pdfDataResults = await Promise.all(pdfDataPromises);
+  const validPdfData = pdfDataResults.filter((p): p is { base64: string; name: string } => p !== null);
+  
+  console.log(`📎 PDFs loaded: ${validPdfData.length}`);
+  
+  if (manifestText.length < 100 && validPdfData.length === 0) {
+    throw new Error('Não foi possível extrair dados suficientes dos documentos');
+  }
+  
+  // STEP 3: Try Anthropic first, fallback to Gemini
+  let result: { text: string; model: string };
+  
+  const anthropicKey = Deno.env.get('ANTHROPIC_API_KEY');
+  
+  if (anthropicKey) {
+    try {
+      console.log('🎯 Trying Anthropic Claude (primary)...');
+      result = await analyzeWithAnthropic(basePrompt, manifestText, validPdfData, metadata);
+    } catch (anthropicError: any) {
+      console.error(`⚠️ Anthropic failed: ${anthropicError.message}, falling back to Gemini`);
+      result = await analyzeWithGemini(basePrompt, manifestText, validPdfData, metadata);
+    }
+  } else {
+    console.log('🎯 Using Gemini (no Anthropic key)...');
+    result = await analyzeWithGemini(basePrompt, manifestText, validPdfData, metadata);
+  }
   
   const elapsed = Math.round((Date.now() - startTime) / 1000);
-  console.log(`✅ Analysis completed in ${elapsed}s`);
+  console.log(`✅ Analysis completed in ${elapsed}s using ${result.model}`);
   
   return {
     result_text: result.text,
-    json_result: { status: 'completed', model: result.model, total_time_ms: Date.now() - startTime, extraction_chars: combinedExtractedText.length },
+    json_result: { 
+      status: 'completed', 
+      model: result.model, 
+      total_time_ms: Date.now() - startTime,
+      manifest_chars: manifestText.length,
+      pdf_count: validPdfData.length
+    },
     model: result.model
   };
 }
 
-// ============ END OPTIMIZED LLM ANALYZER ============
+// ============ HELPER FUNCTIONS ============
 
 function extractContainerFromFilename(fileName: string): string | null {
   const match = fileName.match(/\b([A-Z]{4}\d{7})\b/);
@@ -273,8 +336,10 @@ async function getDbClient() {
   });
 }
 
+// ============ MAIN SERVER ============
+
 serve(async (req) => {
-  console.log('🚀 SEA Submit Analysis - Optimized Text Extraction');
+  console.log('🚀 SEA Submit Analysis - Anthropic Primary, Gemini Fallback');
   
   if (req.method === 'OPTIONS') return new Response(null, { headers: corsHeaders });
 
@@ -503,7 +568,7 @@ serve(async (req) => {
             UPDATE ai_agente.t_dachser_sea_runs SET status = 'analisando' WHERE id = ?
           `, [runId]);
           
-          // Run optimized LLM analysis
+          // Run LLM analysis with Anthropic primary, Gemini fallback
           const result = await analyzeWithLLM(
             analysisType,
             allFiles.map(f => ({ file_name: f.name, file_type: f.file_type, file_url: f.url })), 
