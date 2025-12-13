@@ -66,10 +66,11 @@ async function fetchFileAsBase64(fileUrl: string, fileName: string): Promise<{ b
   }
 }
 
-// ============ XLSX TEXT EXTRACTION ============
+// ============ XLSX TEXT EXTRACTION (OPTIMIZED FOR CPU) ============
 
 async function extractXlsxText(fileUrl: string, fileName: string): Promise<string> {
   console.log(`📊 [XLSX] Extracting from: ${fileName}`);
+  const startTime = Date.now();
   
   try {
     const response = await fetch(fileUrl);
@@ -78,19 +79,24 @@ async function extractXlsxText(fileUrl: string, fileName: string): Promise<strin
     }
     
     const arrayBuffer = await response.arrayBuffer();
+    console.log(`📊 [XLSX] File loaded: ${Math.round(arrayBuffer.byteLength / 1024)} KB`);
     
     // Import xlsx library
     const XLSX = await import('https://esm.sh/xlsx@0.18.5');
     
-    // Read workbook
+    // Read workbook with OPTIMIZED settings to reduce CPU usage
     const workbook = XLSX.read(arrayBuffer, { 
       type: 'array',
-      sheetRows: 2001
+      sheetRows: 500,      // Reduced from 2001 - process fewer rows per sheet
+      cellFormula: false,  // Skip formula parsing
+      cellStyles: false,   // Skip style parsing
+      cellNF: false,       // Skip number format parsing
+      cellDates: false,    // Skip date parsing
     });
     
     console.log(`📊 [XLSX] ${workbook.SheetNames.length} sheets found`);
     
-    // Prioritize maritime-relevant sheets
+    // Prioritize maritime-relevant sheets - only process top 4 sheets
     const highPriority = ['ncm', 'container', 'package', 'supplier', 'resumo', 'summary', 'item', 'product', 'cargo'];
     const skipPatterns = ['instruction', 'info', 'guide', 'readme', 'help', 'template'];
     
@@ -104,38 +110,34 @@ async function extractXlsxText(fileUrl: string, fileName: string): Promise<strin
         return 0;
       });
     
-    const sheetsToProcess = sortedSheets.slice(0, 10);
-    console.log(`📊 [XLSX] Processing sheets: ${sheetsToProcess.join(', ')}`);
+    // REDUCED: Process only top 4 priority sheets to minimize CPU
+    const sheetsToProcess = sortedSheets.slice(0, 4);
+    console.log(`📊 [XLSX] Processing ${sheetsToProcess.length} sheets: ${sheetsToProcess.join(', ')}`);
     
     let fullText = '';
     let totalRows = 0;
-    const MAX_CHARS = 150000;
+    const MAX_CHARS = 80000; // Reduced from 150000
     
     for (const sheetName of sheetsToProcess) {
-      if (fullText.length >= MAX_CHARS) {
-        console.log(`📊 [XLSX] Char limit reached`);
-        break;
-      }
+      if (fullText.length >= MAX_CHARS) break;
       
       const sheet = workbook.Sheets[sheetName];
       if (sheet) {
-        const csv = XLSX.utils.sheet_to_csv(sheet);
+        const csv = XLSX.utils.sheet_to_csv(sheet, { blankrows: false });
         const lines = csv.split('\n')
           .filter((line: string) => line.trim().length > 0)
-          .slice(0, 2000);
+          .slice(0, 300); // Reduced from 2000
         
         if (lines.length > 0) {
           const sheetText = `\n=== ${sheetName} ===\n${lines.join('\n')}`;
-          const remainingChars = MAX_CHARS - fullText.length;
-          fullText += sheetText.substring(0, remainingChars);
+          fullText += sheetText.substring(0, MAX_CHARS - fullText.length);
           totalRows += lines.length;
         }
-        
-        console.log(`📊 [XLSX] "${sheetName}": ${lines.length} rows`);
       }
     }
     
-    console.log(`📊 [XLSX] Done: ${fullText.length} chars, ${totalRows} rows`);
+    const elapsed = Date.now() - startTime;
+    console.log(`📊 [XLSX] Done: ${fullText.length} chars, ${totalRows} rows in ${elapsed}ms`);
     return fullText.trim();
     
   } catch (error) {
