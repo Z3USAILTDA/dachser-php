@@ -163,6 +163,7 @@ serve(async (req) => {
       db: database,
       username: dbUser,
       password: dbPassword,
+      charset: "utf8mb4",
     });
 
     let result;
