@@ -66,6 +66,10 @@ export default function SubmeterManifestHbl() {
   const location = useLocation();
   const params = useParams();
   
+  // Read itemId from query params, location state, or route params
+  const searchParams = new URLSearchParams(location.search);
+  const itemId = searchParams.get('itemId') || location.state?.itemId || params.id;
+  
   const [hblFiles, setHblFiles] = useState<File[]>([]);
   const [baseInfo, setBaseInfo] = useState<BaseInfo | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -77,8 +81,6 @@ export default function SubmeterManifestHbl() {
   const [isCompletingAnalysis, setIsCompletingAnalysis] = useState(false);
   const [copiedResult, setCopiedResult] = useState(false);
   const [inlineStatus, setInlineStatus] = useState<{ message: string; type: 'info' | 'success' | 'error' } | null>(null);
-
-  const itemId = location.state?.itemId || params.id;
 
   useEffect(() => {
     setHblFiles([]);
