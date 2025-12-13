@@ -43,6 +43,10 @@ import RegrasNotificacao from "./pages/cct/RegrasNotificacao";
 import AnalyticsDashboard from "./pages/cct/AnalyticsDashboard";
 import ProcessoTimeline from "./pages/cct/ProcessoTimeline";
 
+// AWB Pages
+import AWBList from "./pages/AWBList";
+import StatusAereoList from "./pages/StatusAereoList";
+
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -101,6 +105,10 @@ const App = () => (
           <Route path="/air/cct/console" element={<ConsoleTecnico />} />
           <Route path="/air/cct/manual" element={<ManualUsuario />} />
           <Route path="/air/cct/processo/:id" element={<ProcessoTimeline />} />
+          
+          {/* AWB Tracking Pages */}
+          <Route path="/air/awb-list" element={<AWBList />} />
+          <Route path="/air/status-aereo" element={<StatusAereoList />} />
           
           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
           <Route path="*" element={<NotFound />} />
