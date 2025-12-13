@@ -110,6 +110,15 @@ export default function ConsoleContent() {
   const filteredUsers = users.filter(user => user.nome?.toLowerCase().includes(userSearch.toLowerCase()) || user.email?.toLowerCase().includes(userSearch.toLowerCase()));
 
   return (
+    <div className="space-y-6">
+      {/* Header with icon and title */}
+      <div className="flex items-center gap-3">
+        <Settings className="h-5 w-5 text-[#ffc800]" />
+        <h3 className="text-lg font-semibold text-white">Console Técnico</h3>
+      </div>
+
+      {/* Main Card */}
+      <div className="rounded-2xl bg-[rgba(5,6,18,0.9)] border border-[rgba(255,255,255,0.12)] p-6 shadow-[0_18px_40px_rgba(0,0,0,0.85)]">
     <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
       <TabsList className="bg-white/5 border border-white/10">
         <TabsTrigger value="status" className="data-[state=active]:bg-amber-500 data-[state=active]:text-black"><Activity className="h-4 w-4 mr-2" />Status</TabsTrigger>
@@ -215,5 +224,7 @@ export default function ConsoleContent() {
         </Card>
       </TabsContent>
     </Tabs>
+      </div>
+    </div>
   );
 }

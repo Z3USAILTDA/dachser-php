@@ -143,8 +143,14 @@ export default function AnalyticsContent({ processos, isLoading }: AnalyticsCont
 
   return (
     <div className="space-y-6">
-      {/* Period selector */}
-      <div className="flex justify-end">
+      {/* Header with icon and title */}
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <BarChart3 className="h-5 w-5 text-[#ffc800]" />
+          <h3 className="text-lg font-semibold text-white">Analytics CCT</h3>
+        </div>
+        {/* Period selector */}
+        <div className="flex items-center gap-3">
         <Select value={periodo} onValueChange={setPeriodo}>
           <SelectTrigger className="w-[140px] h-9 bg-[rgba(0,0,0,0.5)] border-[rgba(255,255,255,0.12)] text-white">
             <SelectValue />
@@ -155,7 +161,12 @@ export default function AnalyticsContent({ processos, isLoading }: AnalyticsCont
             <SelectItem value="30">Últimos 30 dias</SelectItem>
           </SelectContent>
         </Select>
+        </div>
       </div>
+
+      {/* Main Card with all analytics content */}
+      <div className="rounded-2xl bg-[rgba(5,6,18,0.9)] border border-[rgba(255,255,255,0.12)] p-6 shadow-[0_18px_40px_rgba(0,0,0,0.85)]">
+        <div className="space-y-6">
 
       {/* KPIs */}
       <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
@@ -307,6 +318,9 @@ export default function AnalyticsContent({ processos, isLoading }: AnalyticsCont
               </BarChart>
             </ResponsiveContainer>
           </div>
+        </div>
+      </div>
+
         </div>
       </div>
     </div>

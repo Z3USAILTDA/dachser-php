@@ -73,6 +73,16 @@ export default function ExcecoesContent() {
 
   return (
     <div className="space-y-6">
+      {/* Header with icon and title */}
+      <div className="flex items-center gap-3">
+        <AlertTriangle className="h-5 w-5 text-[#ffc800]" />
+        <h3 className="text-lg font-semibold text-white">Gestão de Exceções</h3>
+      </div>
+
+      {/* Main Card */}
+      <div className="rounded-2xl bg-[rgba(5,6,18,0.9)] border border-[rgba(255,255,255,0.12)] p-6 shadow-[0_18px_40px_rgba(0,0,0,0.85)]">
+        <div className="space-y-6">
+
       {/* Stats Cards */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <div className={cn("rounded-2xl bg-[rgba(5,6,18,0.9)] border border-[rgba(255,255,255,0.12)] p-4 cursor-pointer transition-all hover:scale-[1.02] shadow-[0_18px_40px_rgba(0,0,0,0.85)]", filterStatus === "ABERTA" && "ring-2 ring-red-500")} onClick={() => setFilterStatus(filterStatus === "ABERTA" ? "all" : "ABERTA")}>
@@ -187,6 +197,9 @@ export default function ExcecoesContent() {
             <div className="p-4 border-t border-[rgba(255,255,255,0.08)]"><TablePagination currentPage={currentPage} totalPages={totalPages} onPageChange={setCurrentPage} /></div>
           </>
         )}
+      </div>
+
+        </div>
       </div>
     </div>
   );
