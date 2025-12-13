@@ -11,69 +11,67 @@ serve(async (req) => {
     return new Response(null, { headers: corsHeaders });
   }
 
-  let client: Client | null = null;
-
   try {
-    const host = Deno.env.get('MARIADB_HOST');
-    const port = parseInt(Deno.env.get('MARIADB_PORT') || '3306');
-    const database = Deno.env.get('MARIADB_DATABASE');
-    const dbUser = Deno.env.get('MARIADB_USER');
-    const dbPassword = Deno.env.get('MARIADB_PASSWORD');
+    console.log('Adding email_cliente column to t_status_aereo');
 
-    if (!host || !database || !dbUser || !dbPassword) {
-      console.error('Missing database credentials');
-      return new Response(
-        JSON.stringify({ success: false, error: 'Database configuration error' }),
-        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    }
-
-    console.log(`Connecting to MariaDB for add-email-cliente-column`);
-    
-    client = await new Client().connect({
-      hostname: host,
-      port: port,
-      db: database,
-      username: dbUser,
-      password: dbPassword,
+    const client = await new Client().connect({
+      hostname: Deno.env.get('MARIADB_HOST') || '',
+      port: parseInt(Deno.env.get('MARIADB_PORT') || '3306'),
+      username: Deno.env.get('MARIADB_USER') || '',
+      password: Deno.env.get('MARIADB_PASSWORD') || '',
+      db: Deno.env.get('MARIADB_DATABASE') || '',
     });
 
-    // Check if email_cliente column exists
-    const columns = await client.query(
+    console.log('Connected to MariaDB');
+
+    // Check if column already exists
+    const checkColumns = await client.query(
       `SELECT COLUMN_NAME 
        FROM INFORMATION_SCHEMA.COLUMNS 
-       WHERE TABLE_SCHEMA = ? AND TABLE_NAME = 't_status_aereo' AND COLUMN_NAME = 'email_cliente'`,
-      [database]
+       WHERE TABLE_SCHEMA = ? AND TABLE_NAME = 't_status_aereo' 
+       AND COLUMN_NAME = 'email_cliente'`,
+      [Deno.env.get('MARIADB_DATABASE')]
     );
 
-    if (!columns || columns.length === 0) {
-      // Add email_cliente column if it doesn't exist
+    const columnExists = checkColumns.length > 0;
+    
+    // Add email_cliente column if it doesn't exist
+    if (!columnExists) {
+      console.log('Adding email_cliente column...');
       await client.execute(
-        `ALTER TABLE ${database}.t_status_aereo ADD COLUMN email_cliente VARCHAR(255) DEFAULT NULL`
+        `ALTER TABLE t_status_aereo ADD COLUMN email_cliente VARCHAR(255) DEFAULT NULL AFTER nome_analista`
       );
-      console.log('Added email_cliente column to t_status_aereo');
-      return new Response(
-        JSON.stringify({ success: true, message: 'Column email_cliente added' }),
-        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
+      console.log('Column email_cliente added successfully');
+    } else {
+      console.log('Column email_cliente already exists');
     }
 
-    console.log('email_cliente column already exists');
-    return new Response(
-      JSON.stringify({ success: true, message: 'Column email_cliente already exists' }),
-      { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-    );
+    await client.close();
 
-  } catch (error: unknown) {
-    const errorMessage = error instanceof Error ? error.message : String(error);
-    console.error('Error in add-email-cliente-column:', errorMessage);
     return new Response(
-      JSON.stringify({ success: false, error: errorMessage }),
-      { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      JSON.stringify({ 
+        success: true, 
+        message: columnExists ? 'Column already exists' : 'Column added successfully',
+        added: !columnExists
+      }),
+      {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        status: 200,
+      }
     );
-  } finally {
-    if (client) {
-      await client.close();
-    }
+  } catch (error) {
+    console.error('Error adding column:', error);
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
+    
+    return new Response(
+      JSON.stringify({ 
+        success: false, 
+        error: errorMessage
+      }),
+      {
+        status: 500,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      }
+    );
   }
 });

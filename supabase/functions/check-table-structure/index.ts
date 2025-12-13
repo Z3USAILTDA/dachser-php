@@ -11,96 +11,68 @@ serve(async (req) => {
     return new Response(null, { headers: corsHeaders });
   }
 
-  let client: Client | null = null;
-
+  let client;
   try {
-    const body = await req.json().catch(() => ({}));
-    const { table_name } = body;
-
-    const host = Deno.env.get('MARIADB_HOST');
-    const port = parseInt(Deno.env.get('MARIADB_PORT') || '3306');
-    const database = Deno.env.get('MARIADB_DATABASE');
-    const dbUser = Deno.env.get('MARIADB_USER');
-    const dbPassword = Deno.env.get('MARIADB_PASSWORD');
-
-    if (!host || !database || !dbUser || !dbPassword) {
-      console.error('Missing database credentials');
-      return new Response(
-        JSON.stringify({ success: false, error: 'Database configuration error' }),
-        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    }
+    console.log('Checking table structure...');
 
     client = await new Client().connect({
-      hostname: host,
-      port: port,
-      db: database,
-      username: dbUser,
-      password: dbPassword,
+      hostname: Deno.env.get('MARIADB_HOST') || '',
+      port: parseInt(Deno.env.get('MARIADB_PORT') || '3306'),
+      username: Deno.env.get('MARIADB_USER') || '',
+      password: Deno.env.get('MARIADB_PASSWORD') || '',
+      db: Deno.env.get('MARIADB_DATABASE') || '',
     });
 
-    const tables: Record<string, unknown> = {};
+    console.log('Connected to MariaDB');
 
-    // If specific table requested, only check that one
-    const tablesToCheck = table_name 
-      ? [table_name] 
-      : ['t_status_aereo', 't_dados_master', 't_awb_processing_queue'];
+    // Get column names from t_dados_master
+    const masterColumns = await client.query(`
+      SHOW COLUMNS FROM t_dados_master
+    `);
 
-    for (const tbl of tablesToCheck) {
-      try {
-        const columns = await client.query(`
-          SELECT 
-            COLUMN_NAME as column_name,
-            DATA_TYPE as data_type,
-            IS_NULLABLE as is_nullable,
-            COLUMN_DEFAULT as column_default,
-            CHARACTER_MAXIMUM_LENGTH as max_length,
-            COLUMN_KEY as column_key
-          FROM INFORMATION_SCHEMA.COLUMNS 
-          WHERE TABLE_SCHEMA = ? AND TABLE_NAME = ?
-          ORDER BY ORDINAL_POSITION
-        `, [database, tbl]);
+    // Get column names from t_status_aereo
+    const statusColumns = await client.query(`
+      SHOW COLUMNS FROM t_status_aereo
+    `);
 
-        tables[tbl] = columns || [];
-        console.log(`Table ${tbl}: ${columns?.length || 0} columns`);
-      } catch (err) {
-        tables[tbl] = { error: `Table not found or error: ${err}` };
-      }
-    }
+    // Get sample data from t_dados_master
+    const masterSample = await client.query(`
+      SELECT * FROM t_dados_master 
+      WHERE tipo_processo IN ('AIR IMPORT', 'AIR EXPORT')
+      LIMIT 1
+    `);
 
-    // Also get row counts
-    const counts: Record<string, number> = {};
-    for (const tbl of tablesToCheck) {
-      try {
-        const countResult = await client.query(
-          `SELECT COUNT(*) as cnt FROM ${database}.${tbl}`
-        );
-        counts[tbl] = countResult[0]?.cnt || 0;
-      } catch {
-        counts[tbl] = -1; // Error indicator
-      }
-    }
+    await client.close();
 
     return new Response(
-      JSON.stringify({ 
-        success: true, 
-        database: database,
-        tables: tables,
-        rowCounts: counts
-      }),
-      { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      JSON.stringify({
+        t_dados_master: {
+          columns: masterColumns,
+          sample: masterSample[0] || null
+        },
+        t_status_aereo: {
+          columns: statusColumns
+        }
+      }, null, 2),
+      {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      }
     );
-
-  } catch (error: unknown) {
-    const errorMessage = error instanceof Error ? error.message : String(error);
-    console.error('Error in check-table-structure:', errorMessage);
-    return new Response(
-      JSON.stringify({ success: false, error: errorMessage }),
-      { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-    );
-  } finally {
+  } catch (error) {
+    console.error('Error checking structure:', error);
     if (client) {
-      await client.close();
+      try {
+        await client.close();
+      } catch (closeError) {
+        console.error('Error closing connection:', closeError);
+      }
     }
+    return new Response(
+      JSON.stringify({ error: error instanceof Error ? error.message : 'Unknown error' }),
+      {
+        status: 500,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      }
+    );
   }
 });
