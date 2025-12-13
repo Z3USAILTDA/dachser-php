@@ -63,7 +63,7 @@ export default function ConferenciaChb() {
   };
   const [isAnalyzing, setIsAnalyzing] = useState(false);
 
-  const currentUser = localStorage.getItem('user_email') || '@usuario.chb';
+  const currentUser = localStorage.getItem('user_email') || localStorage.getItem('username') || 'Usuário';
 
   const handleStepClick = (stepId: number) => {
     setActiveStep(stepId);
@@ -228,14 +228,14 @@ export default function ConferenciaChb() {
       return;
     }
 
-    // Create history entry with detailed summary and parecer
+    // Create history entry with HTML content from analysis
     const historyEntry: ChbApprovedHistory = {
       id: `h${Date.now()}`,
       stepId: activeStep,
       date: new Date().toLocaleString('pt-BR'),
       user: currentUser,
       summary: currentAnalysis.summary,
-      detailedSummary: currentAnalysis.detailedSummary || currentAnalysis.summary,
+      detailedSummary: currentAnalysis.html, // Use HTML content for proper formatting
       parecer: (currentAnalysis as any).parecer,
       tags: currentAnalysis.tags,
     };
