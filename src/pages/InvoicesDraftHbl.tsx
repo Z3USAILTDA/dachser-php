@@ -1,10 +1,10 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
-import { Info, Copy, Check, Upload, Download, X, Link as LinkIcon, FolderOpen, Loader2, FileBox, Send, FileText } from "lucide-react";
-import { PageLayout } from "@/components/layout/PageLayout";
-import { PageCard } from "@/components/layout/PageCard";
+import { ArrowLeft, Info, Copy, Check, Upload, Download, X, Link as LinkIcon, FolderOpen, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
+import { toast } from "sonner";
 import { maritimoApi } from "@/services/maritimoApi";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import { faFileContract } from "@fortawesome/free-solid-svg-icons";
@@ -33,20 +33,18 @@ type ClassifiedFile = {
   key: string;
   file: File;
   classification: FileClassification;
-  storageUrl?: string;
+  storageUrl?: string; // URL if file is already in storage (from extraction)
 };
 
 export default function InvoicesDraftHbl() {
   const navigate = useNavigate();
   const location = useLocation();
-  
-  // Get itemId from query params or location state
-  const searchParams = new URLSearchParams(location.search);
-  const itemId = searchParams.get('itemId') || (location.state as { itemId?: string })?.itemId;
+  const itemId = (location.state as { itemId?: string })?.itemId;
   
   // File state
   const [files, setFiles] = useState<Map<string, ClassifiedFile>>(new Map());
   const [links, setLinks] = useState<Map<string, Set<string>>>(new Map());
+  const [emailText, setEmailText] = useState<string>("");
   
   // Previous files state
   const [isLoadingPreviousFiles, setIsLoadingPreviousFiles] = useState(false);
@@ -72,7 +70,6 @@ export default function InvoicesDraftHbl() {
   } | null>(null);
   const [copiedResult, setCopiedResult] = useState(false);
   const [inlineStatus, setInlineStatus] = useState<{ message: string; type: 'info' | 'success' | 'error' } | null>(null);
-  const [isCompletingAnalysis, setIsCompletingAnalysis] = useState(false);
 
   const showInlineStatus = (message: string, type: 'info' | 'success' | 'error' = 'info') => {
     setInlineStatus({ message, type });
@@ -102,12 +99,12 @@ export default function InvoicesDraftHbl() {
       const historyData = await maritimoApi.getHistory(itemId);
       
       if (historyData.runs && historyData.runs.length > 0) {
+        // Get files from the most recent run
         const latestRun = historyData.runs[0];
         const previousFiles = latestRun.files || [];
         
         if (previousFiles.length === 0) {
-          showInlineStatus("Nenhum arquivo encontrado no histórico", 'info');
-          setIsLoadingPreviousFiles(false);
+          toast.info("Nenhum arquivo encontrado no histórico");
           return;
         }
         
@@ -117,12 +114,14 @@ export default function InvoicesDraftHbl() {
         for (const fileInfo of previousFiles) {
           const key = `prev_${Date.now()}_${Math.random()}_${fileInfo.file_name}`;
           
+          // Classify based on file_type from history or filename
           let classification: FileClassification = "other";
           if (fileInfo.file_type === 'hbl' || fileInfo.file_type === 'draft') {
             classification = "hbl";
           } else if (fileInfo.file_type === 'invoice') {
             classification = "invoice";
           } else {
+            // Try to classify by name
             const lowerName = fileInfo.file_name.toLowerCase();
             if (lowerName.includes('hbl') || lowerName.includes('house')) {
               classification = "hbl";
@@ -131,6 +130,7 @@ export default function InvoicesDraftHbl() {
             }
           }
           
+          // Create a reference file object
           const referenceFile = new File(
             [new Uint8Array(0)], 
             fileInfo.file_name, 
@@ -149,13 +149,13 @@ export default function InvoicesDraftHbl() {
         
         setFiles(processedFiles);
         setPreviousFilesLoaded(true);
-        showInlineStatus(`${loadedCount} arquivo(s) carregado(s) do histórico`, 'success');
+        toast.success(`${loadedCount} arquivo(s) carregado(s) do histórico`);
       } else {
-        showInlineStatus("Nenhum histórico de análise encontrado", 'info');
+        toast.info("Nenhum histórico de análise encontrado");
       }
     } catch (error: any) {
       console.error('Error loading previous files:', error);
-      showInlineStatus("Erro ao carregar arquivos anteriores", 'error');
+      toast.error("Erro ao carregar arquivos anteriores");
     } finally {
       setIsLoadingPreviousFiles(false);
     }
@@ -168,6 +168,7 @@ export default function InvoicesDraftHbl() {
     
     if (!isPdf) return "other";
     
+    // HBL detection
     const hblIndicators = ["hbl", "hb/l", "hb-l", "house bill", "house-bill"];
     const draftIndicators = ["draft", "rascunho", "prealert", "pre-alerta", "prealerta"];
     const invoiceIndicators = ["invoice", "fatura", "nota", "proforma", "pro forma"];
@@ -176,12 +177,17 @@ export default function InvoicesDraftHbl() {
     const hasDraft = draftIndicators.some(ind => name.includes(ind));
     const hasInvoice = invoiceIndicators.some(ind => name.includes(ind));
     
+    // Strong invoice indication overrides HBL
     if (hasInvoice) return "invoice";
+    
+    // HBL with draft indication
     if (hasHbl && (hasDraft || !hasInvoice)) return "hbl";
     
+    // Invoice detection
     const invIndicators = ["inv", "invoice", "fatura", "nota", "proforma"];
     if (invIndicators.some(ind => name.includes(ind))) return "invoice";
     
+    // Spreadsheets are invoices
     if (name.endsWith(".xlsx") || name.endsWith(".xls") || name.endsWith(".csv") || name.endsWith(".xml")) {
       return "invoice";
     }
@@ -193,8 +199,10 @@ export default function InvoicesDraftHbl() {
   const handleFilesSelected = async (selectedFiles: FileList | File[]) => {
     const processedFiles = new Map(files);
     let pdfCount = 0;
-    let extractedCount = 0;
+    let emlCount = 0;
+    let zipCount = 0;
     let ignoredCount = 0;
+    let extractedCount = 0;
 
     const fileArray = Array.from(selectedFiles);
     
@@ -202,11 +210,15 @@ export default function InvoicesDraftHbl() {
       const name = file.name.toLowerCase();
 
       if (name.endsWith(".eml") || name.endsWith(".zip")) {
+        // Extract attachments from EML/ZIP files
         const extractKey = `extracting_${Date.now()}_${file.name}`;
         setExtractingFiles(prev => new Set(prev).add(extractKey));
         
         try {
-          showInlineStatus(`Extraindo anexos de ${file.name}...`, 'info');
+          if (name.endsWith(".eml")) emlCount++;
+          if (name.endsWith(".zip")) zipCount++;
+          
+          const toastId = toast.loading(`Extraindo anexos de ${file.name}...`);
           
           const formData = new FormData();
           formData.append('file', file);
@@ -214,9 +226,11 @@ export default function InvoicesDraftHbl() {
           const response = await maritimoApi.extractAttachments(formData);
           
           if (response.success && response.extracted) {
+            // Add extracted files to the map with storage URLs
             for (const extracted of response.extracted) {
               const extractedKey = `${Date.now()}_${Math.random()}_${extracted.name}`;
               
+              // Create a reference file object with the actual size from backend
               const referenceFile = new File(
                 [new Uint8Array(extracted.size)], 
                 extracted.name, 
@@ -227,19 +241,19 @@ export default function InvoicesDraftHbl() {
                 key: extractedKey,
                 file: referenceFile,
                 classification: extracted.classification as FileClassification,
-                storageUrl: extracted.url
+                storageUrl: extracted.url // Store the URL from the backend
               });
               
               extractedCount++;
             }
             
-            showInlineStatus(`${response.extracted.length} anexo(s) extraído(s) de ${file.name}`, 'success');
+            toast.success(`${response.extracted.length} anexo(s) extraído(s) de ${file.name}`, { id: toastId });
           } else {
-            showInlineStatus(`Falha na extração de ${file.name}`, 'error');
+            toast.error(`Falha na extração de ${file.name}`, { id: toastId });
           }
         } catch (error) {
           console.error(`Failed to extract from ${file.name}:`, error);
-          showInlineStatus(`Erro ao extrair anexos de ${file.name}`, 'error');
+          toast.error(`Erro ao extrair anexos de ${file.name}`);
         } finally {
           setExtractingFiles(prev => {
             const next = new Set(prev);
@@ -262,6 +276,7 @@ export default function InvoicesDraftHbl() {
 
     setFiles(processedFiles);
 
+    // Show appropriate status
     if (pdfCount > 0) showInlineStatus(`${pdfCount} PDF(s) cadastrado(s)`, 'success');
     if (extractedCount > 0) showInlineStatus(`${extractedCount} arquivo(s) extraído(s)`, 'success');
     if (ignoredCount > 0) showInlineStatus(`${ignoredCount} arquivo(s) ignorados`, 'info');
@@ -290,6 +305,7 @@ export default function InvoicesDraftHbl() {
     updated.delete(fileToDelete.key);
     setFiles(updated);
 
+    // Clean up links
     const updatedLinks = new Map(links);
     updatedLinks.delete(fileToDelete.key);
     updatedLinks.forEach((set, hblKey) => {
@@ -323,7 +339,7 @@ export default function InvoicesDraftHbl() {
     updatedLinks.set(hblKey, currentLinks);
     setLinks(updatedLinks);
 
-    showInlineStatus("Invoice vinculado ao HBL", 'success');
+    toast.success("Invoice vinculado ao HBL");
     setShowHblModal(false);
     setFileToSend(null);
   };
@@ -335,12 +351,13 @@ export default function InvoicesDraftHbl() {
       currentLinks.delete(invoiceKey);
       updatedLinks.set(hblKey, currentLinks);
       setLinks(updatedLinks);
-      showInlineStatus("Arquivo desvinculado", 'info');
+      toast.info("Arquivo desvinculado e retornado à sua coluna original");
     }
   };
 
   const handleDownload = (classifiedFile: ClassifiedFile) => {
     if (classifiedFile.storageUrl) {
+      // File is already in storage, download from URL
       const a = document.createElement('a');
       a.href = classifiedFile.storageUrl;
       a.download = classifiedFile.file.name;
@@ -349,6 +366,7 @@ export default function InvoicesDraftHbl() {
       a.click();
       document.body.removeChild(a);
     } else {
+      // Regular file, create object URL
       const url = URL.createObjectURL(classifiedFile.file);
       const a = document.createElement('a');
       a.href = url;
@@ -358,7 +376,7 @@ export default function InvoicesDraftHbl() {
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
     }
-    showInlineStatus("Download iniciado", 'success');
+    toast.success("Download iniciado");
   };
 
   // Drag and drop for main dropzone
@@ -413,48 +431,44 @@ export default function InvoicesDraftHbl() {
     input.click();
   };
 
-  // Computed values
-  const allLinkedFileKeys = new Set<string>();
-  links.forEach((fileSet) => {
-    fileSet.forEach(key => allLinkedFileKeys.add(key));
-  });
-  
-  const hblFiles = Array.from(files.values()).filter(f => f.classification === "hbl");
-  const invoiceFiles = Array.from(files.values()).filter(f => 
-    f.classification === "invoice" && !allLinkedFileKeys.has(f.key)
-  );
-  const otherFiles = Array.from(files.values()).filter(f => 
-    f.classification === "other" && !allLinkedFileKeys.has(f.key)
-  );
-  
-  const hasHbl = hblFiles.length > 0;
-  const hasInvoiceOrOther = invoiceFiles.length > 0 || otherFiles.length > 0;
-  const hasHblWithLinks = hblFiles.some(hbl => {
-    const linkedFiles = links.get(hbl.key);
-    return linkedFiles && linkedFiles.size > 0;
-  });
-  const canAnalyze = hasHbl && (hasInvoiceOrOther || hasHblWithLinks);
-  const totalFiles = files.size;
-
   // Analysis
   const handleAnalise = async () => {
+    const hblFiles = Array.from(files.values()).filter(f => f.classification === "hbl");
+
     if (hblFiles.length === 0) {
       showInlineStatus("Adicione pelo menos um arquivo Draft HBL", 'error');
       return;
     }
 
+
     setIsAnalyzing(true);
     setAnalysisProgress(5);
     setAnalysisStep("Enviando arquivos...");
     setInlineStatus(null);
-    showInlineStatus("Processando análise com IA...", 'info');
+    showInlineStatus("Iniciando análise...", 'info');
 
     try {
+      const drafts = hblFiles.map(f => ({
+        key: f.key,
+        filename: f.file.name,
+        invoice_keys: Array.from(links.get(f.key) || [])
+      }));
+
+      const invoices = invoiceFiles.map(f => ({
+        key: f.key,
+        filename: f.file.name
+      }));
+
+      const linksArray = Array.from(links.entries()).map(([hblKey, invoiceKeys]) => ({
+        draft_key: hblKey,
+        invoice_keys: Array.from(invoiceKeys)
+      }));
+
       const allFiles = Array.from(files.values()).map(f => ({
         field: f.classification === "hbl" ? "draft" : f.classification === "invoice" ? "invoice" : "other",
-        file: f.storageUrl ? null : f.file,
+        file: f.storageUrl ? null : f.file, // Don't send file if already in storage
         filename: f.file.name,
-        storageUrl: f.storageUrl
+        storageUrl: f.storageUrl // Include storage URL if file is already uploaded
       }));
 
       const uploadInterval = setInterval(() => {
@@ -467,51 +481,49 @@ export default function InvoicesDraftHbl() {
         });
       }, 100);
 
+      // Only send linkData if there are actual links
       const hasLinks = Array.from(links.values()).some(set => set.size > 0);
-      const drafts = hblFiles.map(f => ({
-        key: f.key,
-        filename: f.file.name,
-        invoice_keys: Array.from(links.get(f.key) || [])
-      }));
-      
       const linkDataToSend = hasLinks ? {
-        hblFileName: drafts[0]?.filename || "",
+        hblFileName: drafts[0] ? files.get(drafts[0].key)?.file.name : undefined,
         invoiceFileNames: Array.from(links.get(drafts[0]?.key) || [])
           .map(key => files.get(key)?.file.name)
           .filter(Boolean) as string[]
       } : undefined;
 
       const { analysisId } = await maritimoApi.submitAnalysis({
-        itemId: itemId || '',
+        itemId: itemId || '', // Use existing itemId if available, otherwise empty for new process
         analysisType: 'invoices_hbl',
-        files: allFiles.filter(f => f.file).map(f => f.file!),
+        files: allFiles.filter(f => f.file).map(f => f.file!), // Only send files that need upload
         fileUrls: allFiles.filter(f => f.storageUrl).map(f => ({
           name: f.filename,
           url: f.storageUrl!,
-          type: 'application/pdf'
+          type: f.field
         })),
         linkData: linkDataToSend
       });
 
       clearInterval(uploadInterval);
       setAnalysisStep("Processando análise...");
+      showInlineStatus("Processando análise com IA...", 'info');
 
       const result = await maritimoApi.pollAnalysisUntilComplete(
         analysisId,
         (percent, step) => {
+          console.log(`Analysis progress: ${percent}% - ${step}`);
           setAnalysisProgress(Math.min(percent, 95));
           setAnalysisStep(step);
         },
-        1200000
+        1200000 // 20 minutes timeout
       );
 
       setAnalysisProgress(100);
       await new Promise(resolve => setTimeout(resolve, 300));
 
+      // Clear analyzing state and inline status before showing results
       setIsAnalyzing(false);
       setAnalysisProgress(0);
       setAnalysisStep("");
-      setInlineStatus(null);
+      setInlineStatus(null); // Clear inline status
 
       if (result.status === 'error') {
         showInlineStatus("Erro na análise. Verifique os arquivos e tente novamente.", 'error');
@@ -540,11 +552,12 @@ export default function InvoicesDraftHbl() {
 
   const handleCopyResult = () => {
     if (!analysisResult?.text || analysisResult.text.trim().length === 0) {
-      showInlineStatus("Não há conteúdo para copiar", 'error');
+      toast.error("Não há conteúdo para copiar");
       return;
     }
 
     try {
+      // Use textarea with execCommand (works better in restricted environments)
       const textarea = document.createElement('textarea');
       textarea.value = analysisResult.text;
       textarea.style.position = 'fixed';
@@ -557,27 +570,56 @@ export default function InvoicesDraftHbl() {
       
       if (successful) {
         setCopiedResult(true);
-        showInlineStatus("Resultado copiado", 'success');
+        toast.success("Resultado copiado");
         setTimeout(() => setCopiedResult(false), 2000);
       } else {
         throw new Error("execCommand failed");
       }
     } catch (err) {
       console.error('Copy error:', err);
-      showInlineStatus("Não foi possível copiar. Selecione o texto manualmente.", 'error');
+      toast.error("Não foi possível copiar. Selecione o texto manualmente.");
     }
   };
 
   const handleComplete = () => {
-    showInlineStatus("Análise concluída!", 'success');
+    toast.success("Análise concluída!");
     setTimeout(() => navigate("/maritimo"), 1000);
   };
 
   const handleNewAnalysis = async () => {
+    // Keep existing files and links, clear results and run analysis again
     setAnalysisResult(null);
     window.scrollTo({ top: 0, behavior: 'smooth' });
+    
+    // Automatically trigger analysis with existing files
     await handleAnalise();
   };
+
+  // Computed values
+  // Get all linked file keys across all HBLs
+  const allLinkedFileKeys = new Set<string>();
+  links.forEach((fileSet) => {
+    fileSet.forEach(key => allLinkedFileKeys.add(key));
+  });
+  
+  // Filter files: any file that is linked should not appear in its original column
+  const hblFiles = Array.from(files.values()).filter(f => f.classification === "hbl");
+  const invoiceFiles = Array.from(files.values()).filter(f => 
+    f.classification === "invoice" && !allLinkedFileKeys.has(f.key)
+  );
+  const otherFiles = Array.from(files.values()).filter(f => 
+    f.classification === "other" && !allLinkedFileKeys.has(f.key)
+  );
+  
+  // For analysis validation: require at least 1 HBL AND (at least 1 invoice/other OR HBL with links)
+  const hasHbl = hblFiles.length > 0;
+  const hasInvoiceOrOther = invoiceFiles.length > 0 || otherFiles.length > 0;
+  const hasHblWithLinks = hblFiles.some(hbl => {
+    const linkedFiles = links.get(hbl.key);
+    return linkedFiles && linkedFiles.size > 0;
+  });
+  const canAnalyze = hasHbl && (hasInvoiceOrOther || hasHblWithLinks);
+  const totalFiles = files.size;
 
   // Render HBL with pills
   const renderHblWithPills = (classifiedFile: ClassifiedFile) => {
@@ -589,14 +631,14 @@ export default function InvoicesDraftHbl() {
     return (
       <div key={classifiedFile.key} className="bg-card border border-border rounded-xl p-4">
         <div className="flex items-start justify-between gap-3 mb-2">
-          <div className="flex-1 min-w-0">
-            <p className="text-sm font-medium text-white break-words">
-              {classifiedFile.file.name}
-            </p>
-            <p className="text-xs text-neutral-400 mt-1">
-              Draft HBL • {sizeInKB}
-            </p>
-          </div>
+      <div className="flex-1 min-w-0">
+        <p className="text-sm font-medium text-white break-words">
+          {classifiedFile.file.name}
+        </p>
+        <p className="text-xs text-neutral-400 mt-1">
+          Draft HBL • {sizeInKB}
+        </p>
+      </div>
           <div className="flex items-center gap-1 flex-shrink-0">
             <Button
               size="sm"
@@ -678,14 +720,14 @@ export default function InvoicesDraftHbl() {
         className="bg-card border border-border rounded-xl p-4 cursor-move hover:border-success/50 transition-colors"
       >
         <div className="flex items-start justify-between gap-3 mb-2">
-          <div className="flex-1 min-w-0">
-            <p className="text-sm font-medium text-white break-words">
-              {classifiedFile.file.name}
-            </p>
-            <p className="text-xs text-neutral-400 mt-1">
-              Invoice • {sizeInKB}
-            </p>
-          </div>
+      <div className="flex-1 min-w-0">
+        <p className="text-sm font-medium text-white break-words">
+          {classifiedFile.file.name}
+        </p>
+        <p className="text-xs text-neutral-400 mt-1">
+          Invoice • {sizeInKB}
+        </p>
+      </div>
           <div className="flex items-center gap-1 flex-shrink-0">
             <Button
               size="sm"
@@ -742,14 +784,14 @@ export default function InvoicesDraftHbl() {
         className="bg-card border border-border rounded-xl p-4 cursor-move hover:border-muted-foreground/50 transition-colors"
       >
         <div className="flex items-start justify-between gap-3 mb-2">
-          <div className="flex-1 min-w-0">
-            <p className="text-sm font-medium text-white break-words">
-              {classifiedFile.file.name}
-            </p>
-            <p className="text-xs text-neutral-400 mt-1">
-              Outros • {sizeInKB}
-            </p>
-          </div>
+      <div className="flex-1 min-w-0">
+        <p className="text-sm font-medium text-white break-words">
+          {classifiedFile.file.name}
+        </p>
+        <p className="text-xs text-neutral-400 mt-1">
+          Outros • {sizeInKB}
+        </p>
+      </div>
           <div className="flex items-center gap-1 flex-shrink-0">
             <Button
               size="sm"
@@ -801,108 +843,192 @@ export default function InvoicesDraftHbl() {
   };
 
   return (
-    <PageLayout title="DACHSER" subtitle="Submeter – Invoices × Draft HBL" pageIcon={FileBox}>
-      <PageCard className="max-w-7xl mx-auto">
-        <h1 className="text-2xl font-bold text-white mb-2">Submeter – Invoices × Draft HBL</h1>
-        <p className="text-sm text-neutral-400 mb-8">Adicione os arquivos para análise comparativa</p>
+    <div 
+      className="min-h-screen text-white"
+      style={{
+        background: "linear-gradient(120deg, rgba(4, 17, 45, 0.92), rgba(26, 93, 173, 0.55)), url('https://www.dachser.com.br/images/Corporate/DGI_003215_rdax_65s.jpg') center/cover no-repeat"
+      }}
+    >
+      <div className="min-h-screen bg-black/80 backdrop-blur-sm">
+        <div className="max-w-7xl mx-auto p-6">
+          <Button
+            variant="outline"
+            onClick={() => navigate("/maritimo")}
+            className="mb-6 rounded-full border-white/20 bg-black/40 hover:bg-black hover:border-amber-400/80"
+          >
+            <ArrowLeft className="w-4 h-4 mr-2" />
+            Voltar
+          </Button>
 
-        {/* Item Info Section - Only show for existing processes */}
-        {itemInfo && (
-          <div className="bg-black/20 border border-white/5 rounded-xl p-6 mb-8">
-            <h3 className="text-xs tracking-[0.22em] uppercase text-neutral-400 mb-4">Informações do processo:</h3>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <div>
-                <span className="text-xs text-neutral-500">Arquivo base:</span>
-                <div className="flex items-center gap-2 mt-1">
-                  <FileText className="w-4 h-4 text-amber-300" />
-                  <span className="text-white text-sm">{itemInfo.base_file_name}</span>
-                </div>
+          <h1 className="text-3xl font-bold text-white mb-8">Invoices × Draft HBL</h1>
+
+          <Card className="bg-black/40 border border-white/10 rounded-2xl shadow-[0_18px_40px_rgba(0,0,0,0.9)] p-8 mb-6">
+          {/* Upload and Options Grid */}
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
+            {/* Upload Zone - Takes 2 columns */}
+            <div className="lg:col-span-2">
+              <h3 className="text-sm font-medium text-white mb-4">
+                Arquivos de origem (arraste <span className="text-amber-400">.eml</span> / <span className="text-amber-400">.zip</span> e também <span className="text-amber-400">PDFs</span>)
+              </h3>
+              <div
+                onClick={handleFileInputClick}
+                onDrop={handleMainDrop}
+                onDragOver={handleMainDragOver}
+                onDragLeave={handleMainDragLeave}
+                className={`
+                  border-2 border-dashed rounded-xl p-12 text-center cursor-pointer
+                  transition-colors
+                  ${isDraggingOver ? 'border-amber-400 bg-amber-400/5' : 'border-white/10 hover:border-amber-400/50 bg-black/20'}
+                `}
+              >
+                <Upload className="w-12 h-12 mx-auto mb-4 text-neutral-400" />
+                <p className="text-sm font-medium text-white mb-2">
+                  📥 Solte aqui (ou clique)
+                </p>
+                <p className="text-xs text-neutral-400">
+                  Aceita .eml/.zip e PDFs. Você pode misturar os formatos.
+                </p>
               </div>
-              {itemInfo.container && (
-                <div>
-                  <span className="text-xs text-neutral-500">Container:</span>
-                  <p className="text-white text-sm mt-1">{itemInfo.container}</p>
+              {totalFiles > 0 && (
+                <p className="text-sm text-neutral-400 mt-4">
+                  Anexos detectados: {totalFiles}. Vincule invoices aos HBLs (opcional).
+                </p>
+              )}
+            </div>
+
+            {/* Options - Takes 1 column */}
+            <div>
+              <h3 className="text-sm font-semibold text-white mb-4">Opções</h3>
+              <ul className="text-xs text-neutral-400 space-y-3 leading-relaxed">
+                <li>• PDFs entram direto; o sistema tenta classificar em HBL/Invoice pelo nome.</li>
+                <li>• .eml/.zip passam pelo extrator de anexos; você pode mesclar com PDFs soltos.</li>
+                <li>• Vincule invoices dentro do(s) HBL(s) para melhor resultado.</li>
+                {itemId && (
+                  <li className="text-amber-400/80">• Processo existente: você pode carregar os arquivos usados na última análise.</li>
+                )}
+              </ul>
+              
+              {/* Load Previous Files Button - Only show for existing processes */}
+              {itemId && !previousFilesLoaded && (
+                <div className="mt-4 pt-4 border-t border-white/10">
+                  <Button
+                    onClick={handleLoadPreviousFiles}
+                    disabled={isLoadingPreviousFiles}
+                    variant="outline"
+                    className="w-full rounded-full border-amber-400/50 bg-amber-400/10 hover:bg-amber-400/20 text-amber-400"
+                  >
+                    {isLoadingPreviousFiles ? (
+                      <>
+                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                        Carregando...
+                      </>
+                    ) : (
+                      <>
+                        <FolderOpen className="w-4 h-4 mr-2" />
+                        Carregar arquivos anteriores
+                      </>
+                    )}
+                  </Button>
+                  {itemInfo && (
+                    <p className="text-xs text-neutral-500 mt-2 text-center">
+                      Processo: {itemInfo.base_file_name}
+                    </p>
+                  )}
                 </div>
               )}
-              {itemInfo.consignee && (
-                <div>
-                  <span className="text-xs text-neutral-500">Consignee:</span>
-                  <p className="text-white text-sm mt-1">{itemInfo.consignee}</p>
+              
+              {previousFilesLoaded && (
+                <div className="mt-4 pt-4 border-t border-white/10">
+                  <p className="text-xs text-success text-center">
+                    ✓ Arquivos anteriores carregados
+                  </p>
                 </div>
               )}
             </div>
-            
-            {/* Load Previous Files Button */}
-            {!previousFilesLoaded && (
-              <div className="mt-4 pt-4 border-t border-white/10">
-                <Button
-                  onClick={handleLoadPreviousFiles}
-                  disabled={isLoadingPreviousFiles}
-                  variant="outline"
-                  className="rounded-full border-amber-400/50 bg-amber-400/10 hover:bg-amber-400/20 text-amber-400"
-                >
-                  {isLoadingPreviousFiles ? (
-                    <>
-                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                      Carregando...
-                    </>
-                  ) : (
-                    <>
-                      <FolderOpen className="w-4 h-4 mr-2" />
-                      Carregar arquivos anteriores
-                    </>
-                  )}
-                </Button>
-              </div>
-            )}
-            
-            {previousFilesLoaded && (
-              <div className="mt-4 pt-4 border-t border-white/10">
-                <p className="text-xs text-success">
-                  ✓ Arquivos anteriores carregados
-                </p>
-              </div>
-            )}
           </div>
-        )}
 
-        {/* Upload Zone */}
-        <h3 className="text-xs tracking-[0.22em] uppercase text-neutral-400 mb-4">
-          Envie os arquivos (arraste .eml / .zip e também PDFs):
-        </h3>
-        
-        <div
-          onClick={handleFileInputClick}
-          onDrop={handleMainDrop}
-          onDragOver={handleMainDragOver}
-          onDragLeave={handleMainDragLeave}
-          className={`
-            border-2 border-dashed rounded-xl p-12 text-center cursor-pointer mb-6
-            transition-colors
-            ${isDraggingOver ? 'border-amber-400 bg-amber-400/5' : 'border-white/10 hover:border-amber-400/50 bg-black/20'}
-          `}
-        >
-          <Upload className="w-12 h-12 mx-auto mb-4 text-neutral-400" />
-          <p className="text-sm font-medium text-white mb-2">
-            📥 Solte aqui (ou clique)
-          </p>
-          <p className="text-xs text-neutral-400">
-            Aceita .eml/.zip e PDFs. Você pode misturar os formatos.
-          </p>
-        </div>
-        
-        {totalFiles > 0 && (
-          <p className="text-sm text-neutral-400 mb-6">
-            Anexos detectados: {totalFiles}. Vincule invoices aos HBLs (opcional).
-          </p>
-        )}
+          {/* Three-column grid for classification */}
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+            {/* Draft HBL Column */}
+            <div
+              onDrop={(e) => handleDrop(e, "hbl")}
+              onDragOver={handleDragOver}
+              className="min-h-[300px] border-2 border-white/5 rounded-xl p-4 bg-black/20"
+            >
+              <div className="flex items-center gap-2 mb-4">
+                <h3 className="text-sm font-semibold text-white">Draft HBL</h3>
+                <span className="bg-black/30 text-neutral-400 text-xs font-medium px-2.5 py-0.5 rounded-full border border-white/10">
+                  {hblFiles.length}
+                </span>
+              </div>
+              <div className="space-y-3">
+                {hblFiles.map(f => renderHblWithPills(f))}
+              </div>
+            </div>
 
-        {/* Inline Status Messages */}
+            {/* Invoices Column */}
+            <div
+              onDrop={(e) => handleDrop(e, "invoice")}
+              onDragOver={handleDragOver}
+              className="min-h-[300px] border-2 border-white/5 rounded-xl p-4 bg-black/20"
+            >
+              <div className="flex items-center gap-2 mb-4">
+                <h3 className="text-sm font-semibold text-white">Invoices</h3>
+                <span className="bg-black/30 text-neutral-400 text-xs font-medium px-2.5 py-0.5 rounded-full border border-white/10">
+                  {invoiceFiles.length}
+                </span>
+              </div>
+              <div className="space-y-3">
+                {invoiceFiles.map(f => renderInvoiceCard(f))}
+              </div>
+            </div>
+
+            {/* Others Column */}
+            <div
+              onDrop={(e) => handleDrop(e, "other")}
+              onDragOver={handleDragOver}
+              className="min-h-[300px] border-2 border-white/5 rounded-xl p-4 bg-black/20"
+            >
+              <div className="flex items-center gap-2 mb-4">
+                <h3 className="text-sm font-semibold text-white">Outros</h3>
+                <span className="bg-black/30 text-neutral-400 text-xs font-medium px-2.5 py-0.5 rounded-full border border-white/10">
+                  {otherFiles.length}
+                </span>
+              </div>
+              <div className="space-y-3">
+                {otherFiles.map(f => renderOtherCard(f))}
+              </div>
+            </div>
+          </div>
+
+          {/* Analyze Button */}
+          {!analysisResult && (
+            <div className="mb-6">
+              <Button
+                onClick={handleAnalise}
+                disabled={!canAnalyze || isAnalyzing}
+                className="rounded-full bg-amber-400 text-black font-semibold hover:bg-amber-300 px-8 shadow-[0_0_22px_rgba(251,191,36,0.6)]"
+              >
+                <FontAwesomeIcon icon={faFileContract} className="w-4 h-4 mr-2" />
+                {isAnalyzing ? "Fazendo análise..." : "Fazer Análise"}
+              </Button>
+            </div>
+          )}
+        </Card>
+
+          {/* Bottom flow hint */}
+          <Card className="bg-black/40 border border-white/10 rounded-2xl p-4 mb-6">
+            <p className="text-sm text-neutral-400">
+              Fluxo: solte .eml/.zip e/ou PDFs → classificar/vincular → <span className="italic">Fazer Análise</span>.
+            </p>
+          </Card>
+
+        {/* Inline Status Messages - only show when NOT analyzing */}
         {inlineStatus && !isAnalyzing && (
-          <div className={`mb-6 rounded-xl p-4 border ${
-            inlineStatus.type === 'success' ? 'bg-emerald-500/15 border-emerald-500/40 text-emerald-300' :
-            inlineStatus.type === 'error' ? 'bg-rose-500/15 border-rose-500/40 text-rose-300' :
-            'bg-amber-500/15 border-amber-500/40 text-amber-300'
+          <div className={`mb-6 rounded-lg p-4 border ${
+            inlineStatus.type === 'success' ? 'bg-success/10 border-success/30 text-success' :
+            inlineStatus.type === 'error' ? 'bg-destructive/10 border-destructive/30 text-destructive' :
+            'bg-primary/10 border-primary/30 text-primary'
           }`}>
             <p className="text-sm font-medium">{inlineStatus.message}</p>
           </div>
@@ -910,124 +1036,50 @@ export default function InvoicesDraftHbl() {
 
         {/* Progress Bar */}
         {isAnalyzing && (
-          <div className="mb-6">
-            <div className="bg-black/20 border border-white/5 rounded-xl p-4">
-              <div className="flex items-center gap-3 mb-3">
-                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-amber-400"></div>
-                <span className="text-sm text-white font-medium">{analysisStep}</span>
-              </div>
-              <div className="flex items-center gap-3">
-                <Progress value={analysisProgress} className="h-2 flex-1" />
-                <span className="text-xs text-neutral-400 font-mono min-w-[3rem] text-right">{analysisProgress}%</span>
-              </div>
+          <Card className="p-4 border-2 border-primary/20 mb-6">
+            <div className="flex items-center gap-3 mb-3">
+              <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-primary"></div>
+              <span className="text-sm text-foreground font-medium">{analysisStep}</span>
             </div>
-          </div>
+            <div className="flex items-center gap-3">
+              <Progress value={analysisProgress} className="h-2 flex-1" />
+              <span className="text-xs text-muted-foreground font-mono min-w-[3rem] text-right">
+                {analysisProgress}%
+              </span>
+            </div>
+          </Card>
         )}
 
-        {/* Three-column grid for classification */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
-          {/* Draft HBL Column */}
-          <div
-            onDrop={(e) => handleDrop(e, "hbl")}
-            onDragOver={handleDragOver}
-            className="min-h-[300px] border-2 border-white/5 rounded-xl p-4 bg-black/20"
-          >
-            <div className="flex items-center gap-2 mb-4">
-              <h3 className="text-sm font-semibold text-white">Draft HBL</h3>
-              <span className="bg-black/30 text-neutral-400 text-xs font-medium px-2.5 py-0.5 rounded-full border border-white/10">
-                {hblFiles.length}
-              </span>
-            </div>
-            <div className="space-y-3">
-              {hblFiles.map(f => renderHblWithPills(f))}
-            </div>
-          </div>
+          {/* Results Display */}
+          {analysisResult && (
+            <div id="analysis-results" className="space-y-6">
+              <Card className="p-6 bg-black/20 border border-white/5 rounded-2xl">
+                <pre className="text-sm text-neutral-200 whitespace-pre-wrap font-mono max-h-[600px] overflow-y-auto bg-black/30 p-4 rounded-lg">
+                  {analysisResult.text}
+                </pre>
+              </Card>
 
-          {/* Invoices Column */}
-          <div
-            onDrop={(e) => handleDrop(e, "invoice")}
-            onDragOver={handleDragOver}
-            className="min-h-[300px] border-2 border-white/5 rounded-xl p-4 bg-black/20"
-          >
-            <div className="flex items-center gap-2 mb-4">
-              <h3 className="text-sm font-semibold text-white">Invoices</h3>
-              <span className="bg-black/30 text-neutral-400 text-xs font-medium px-2.5 py-0.5 rounded-full border border-white/10">
-                {invoiceFiles.length}
-              </span>
-            </div>
-            <div className="space-y-3">
-              {invoiceFiles.map(f => renderInvoiceCard(f))}
-            </div>
-          </div>
-
-          {/* Others Column */}
-          <div
-            onDrop={(e) => handleDrop(e, "other")}
-            onDragOver={handleDragOver}
-            className="min-h-[300px] border-2 border-white/5 rounded-xl p-4 bg-black/20"
-          >
-            <div className="flex items-center gap-2 mb-4">
-              <h3 className="text-sm font-semibold text-white">Outros</h3>
-              <span className="bg-black/30 text-neutral-400 text-xs font-medium px-2.5 py-0.5 rounded-full border border-white/10">
-                {otherFiles.length}
-              </span>
-            </div>
-            <div className="space-y-3">
-              {otherFiles.map(f => renderOtherCard(f))}
-            </div>
-          </div>
-        </div>
-
-        {/* Analyze Button - only show if no result */}
-        {!analysisResult && (
-          <div className="mb-6">
-            <Button
-              onClick={handleAnalise}
-              disabled={!canAnalyze || isAnalyzing}
-              className="h-10 rounded-full px-6 bg-amber-400 text-black font-semibold text-sm shadow-[0_0_22px_rgba(251,191,36,0.6)] hover:bg-amber-300"
-            >
-              <Send className="w-4 h-4 mr-2" />
-              {isAnalyzing ? "Fazendo análise..." : "Fazer Análise"}
-            </Button>
-          </div>
-        )}
-
-        {/* Results Display */}
-        {analysisResult?.text && (
-          <div id="analysis-results" className="mt-8 space-y-6">
-            <div className="flex items-center gap-2 text-emerald-300">
-              <div className="w-2 h-2 bg-emerald-400 rounded-full shadow-[0_0_10px_rgba(52,211,153,0.6)]" />
-              <span className="font-semibold text-sm">Análise concluída</span>
-            </div>
-
-            <div className="bg-black/20 border border-white/5 rounded-xl p-6">
-              <pre className="text-sm text-neutral-200 whitespace-pre-wrap font-mono bg-black/30 p-4 rounded-lg max-h-96 overflow-y-auto">
-                {analysisResult.text}
-              </pre>
-            </div>
-
-            <div className="flex items-center gap-4">
-              <Button
-                onClick={handleNewAnalysis}
-                disabled={isCompletingAnalysis || isAnalyzing}
-                className="h-10 rounded-full px-6 bg-amber-400 text-black font-semibold text-sm shadow-[0_0_22px_rgba(251,191,36,0.6)] hover:bg-amber-300"
-              >
-                <Send className="w-4 h-4 mr-2" />
-                {isAnalyzing ? "Processando..." : "Fazer nova análise"}
-              </Button>
-              <Button
-                onClick={handleComplete}
-                disabled={isCompletingAnalysis}
-                variant="outline"
-                className="h-10 rounded-full px-6 border-white/24 bg-black/40 text-white hover:border-amber-400/80 hover:bg-black"
-              >
-                Concluir análise
-              </Button>
+              <div className="flex items-center gap-4">
+                <Button
+                  onClick={handleNewAnalysis}
+                  disabled={isAnalyzing}
+                  className="rounded-full bg-amber-400 text-black font-semibold hover:bg-amber-300 px-8 shadow-[0_0_22px_rgba(251,191,36,0.6)]"
+                >
+                  <FontAwesomeIcon icon={faFileContract} className="w-4 h-4 mr-2" />
+                  {isAnalyzing ? "Processando..." : "Fazer nova análise"}
+                </Button>
+                <Button
+                  onClick={handleComplete}
+                  variant="outline"
+                  className="rounded-full px-8 border-white/20 bg-black/40 hover:bg-black hover:border-amber-400/80"
+                >
+                  Concluir análise
+                </Button>
               <Button
                 onClick={handleCopyResult}
                 variant="ghost"
                 size="icon"
-                className="rounded-full w-10 h-10 text-white hover:bg-white/10"
+                className="rounded-full w-10 h-10"
                 title="Copiar resultado"
               >
                 {copiedResult ? (
@@ -1042,16 +1094,16 @@ export default function InvoicesDraftHbl() {
 
         {/* Info message */}
         {!analysisResult && (
-          <div className="flex items-center justify-center mt-6">
-            <div className="flex items-start gap-3 text-xs text-neutral-400 bg-black/20 border border-white/5 p-4 rounded-xl">
-              <Info className="w-4 h-4 flex-shrink-0 mt-0.5 text-amber-300" />
+          <div className="flex items-center justify-center">
+            <div className="flex items-start gap-3 text-xs text-muted-foreground bg-muted/20 p-4 rounded-lg max-w-2xl">
+              <Info className="w-4 h-4 flex-shrink-0 mt-0.5" />
               <p>
                 As análises são geradas por um modelo de IA e podem conter imprecisões. Revise antes de concluir processos.
               </p>
             </div>
           </div>
         )}
-      </PageCard>
+      </div>
 
       {/* HBL Selection Modal */}
       <Dialog open={showHblModal} onOpenChange={setShowHblModal}>
@@ -1111,6 +1163,7 @@ export default function InvoicesDraftHbl() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-    </PageLayout>
+      </div>
+    </div>
   );
 }
