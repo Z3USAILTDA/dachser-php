@@ -2646,15 +2646,6 @@ serve(async (req) => {
         const { itemId, etapa, status, resultText, resultHtml, resultJson, usedAsCtx, userId } = body as any;
         console.log('Creating CHB run:', { itemId, etapa, status, userId });
         
-        // Sanitize text to remove 4-byte UTF-8 chars (MariaDB utf8 doesn't support them)
-        const sanitizeForMariaDB = (text: string | null): string | null => {
-          if (!text) return null;
-          // Remove all characters outside the BMP (Basic Multilingual Plane)
-          // This includes all emojis and other 4-byte UTF-8 characters
-          return text.replace(/[\uD800-\uDBFF][\uDC00-\uDFFF]/g, '')
-                     .replace(/[\u{10000}-\u{10FFFF}]/gu, '');
-        };
-        
         const insertResult = await client.execute(`
           INSERT INTO ai_agente.t_dachser_chb_runs 
           (item_id, etapa, status, result_text, result_html, result_json, used_as_ctx, created_by)
@@ -2663,9 +2654,9 @@ serve(async (req) => {
           itemId, 
           etapa || '1', 
           status || 'completed', 
-          sanitizeForMariaDB(resultText), 
-          sanitizeForMariaDB(resultHtml), 
-          sanitizeForMariaDB(resultJson), // Also sanitize JSON 
+          resultText || null, 
+          resultHtml || null, 
+          resultJson || null, 
           usedAsCtx ? 1 : 0,
           userId || null
         ]);
