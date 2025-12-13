@@ -2690,11 +2690,58 @@ serve(async (req) => {
         const { analysisType, status, search } = body;
         console.log('Fetching SEA items:', { analysisType, status, search });
         
+        // First, ensure tables exist (create if not)
+        await client.execute(`
+          CREATE TABLE IF NOT EXISTS ai_agente.t_dachser_sea_items (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            base_file_name VARCHAR(500),
+            analysis_type VARCHAR(50),
+            consignee VARCHAR(500),
+            container VARCHAR(100),
+            status VARCHAR(50) DEFAULT 'pendente',
+            metadata JSON,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            deleted_at DATETIME
+          ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+        `);
+        
+        await client.execute(`
+          CREATE TABLE IF NOT EXISTS ai_agente.t_dachser_sea_runs (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            item_id INT,
+            analysis_type VARCHAR(50),
+            status VARCHAR(50) DEFAULT 'pending',
+            result_text LONGTEXT,
+            result_html LONGTEXT,
+            result_json LONGTEXT,
+            created_by INT,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            FOREIGN KEY (item_id) REFERENCES ai_agente.t_dachser_sea_items(id) ON DELETE CASCADE
+          ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+        `);
+        
+        await client.execute(`
+          CREATE TABLE IF NOT EXISTS ai_agente.t_dachser_sea_files (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            item_id INT,
+            run_id INT,
+            file_name VARCHAR(500),
+            file_type VARCHAR(100),
+            file_url TEXT,
+            file_content_b64 LONGTEXT,
+            role VARCHAR(50) DEFAULT 'attachment',
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (item_id) REFERENCES ai_agente.t_dachser_sea_items(id) ON DELETE CASCADE
+          ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+        `);
+        
         let query = `
           SELECT i.*, 
                  (SELECT COUNT(*) FROM ai_agente.t_dachser_sea_runs r WHERE r.item_id = i.id) as run_count
           FROM ai_agente.t_dachser_sea_items i
-          WHERE i.deleted_at IS NULL
+          WHERE (i.deleted_at IS NULL OR i.deleted_at = '0000-00-00 00:00:00')
         `;
         const params: any[] = [];
         
