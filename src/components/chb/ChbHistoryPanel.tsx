@@ -6,7 +6,7 @@ import { toast } from 'sonner';
 
 interface ChbHistoryPanelProps {
   stepId: number;
-  approvedHistory: ChbApprovedHistory[];
+  approvedHistory: Record<number, ChbApprovedHistory[]>;
 }
 
 const variantColors = {
@@ -27,13 +27,27 @@ export function ChbHistoryPanel({ stepId, approvedHistory }: ChbHistoryPanelProp
     3: 'DI/Fechamento',
   };
 
+  // Collect all history entries up to and including current step
+  const allHistoryEntries: ChbApprovedHistory[] = [];
+  for (let i = 1; i <= stepId; i++) {
+    const stepHistory = approvedHistory[i] || [];
+    allHistoryEntries.push(...stepHistory);
+  }
+
+  // Sort by date descending (most recent first)
+  allHistoryEntries.sort((a, b) => {
+    const dateA = new Date(a.date.split(' ')[0].split('/').reverse().join('-') + 'T' + a.date.split(' ')[1]);
+    const dateB = new Date(b.date.split(' ')[0].split('/').reverse().join('-') + 'T' + b.date.split(' ')[1]);
+    return dateB.getTime() - dateA.getTime();
+  });
+
   return (
     <div className="space-y-4">
       <h3 className="text-sm font-semibold text-white">
         Histórico aprovado — {stepTitles[stepId]}
       </h3>
 
-      {approvedHistory.length === 0 ? (
+      {allHistoryEntries.length === 0 ? (
         <div className="p-6 text-center rounded-xl bg-black/30 border border-white/10">
           <Clock className="w-10 h-10 text-white/20 mx-auto mb-3" />
           <p className="text-white/40 text-sm">Nenhum histórico aprovado para esta etapa.</p>
@@ -46,7 +60,7 @@ export function ChbHistoryPanel({ stepId, approvedHistory }: ChbHistoryPanelProp
           <div className="absolute left-4 top-0 bottom-0 w-0.5 bg-white/10" />
           
           <div className="space-y-4">
-            {approvedHistory.map((entry) => (
+            {allHistoryEntries.map((entry) => (
               <div key={entry.id} className="relative pl-10">
                 <div className="absolute left-2 top-2 w-3 h-3 rounded-full bg-amber-500 border-2 border-black flex items-center justify-center">
                   <CheckCircle className="w-1.5 h-1.5 text-black" />
@@ -78,10 +92,11 @@ export function ChbHistoryPanel({ stepId, approvedHistory }: ChbHistoryPanelProp
                         ))}
                       </div>
                       
-                      {/* Detailed summary with parecer */}
-                      <div className="text-xs text-white/70 whitespace-pre-line leading-relaxed font-mono bg-black/20 p-2 rounded border border-white/5">
-                        {entry.detailedSummary || entry.summary}
-                      </div>
+                      {/* Detailed summary with parecer - render as HTML if available */}
+                      <div 
+                        className="text-xs text-white/70 leading-relaxed bg-black/20 p-2 rounded border border-white/5 chb-analysis-content"
+                        dangerouslySetInnerHTML={{ __html: entry.detailedSummary || entry.summary }}
+                      />
                     </div>
                     
                     <button

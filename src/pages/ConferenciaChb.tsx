@@ -3,11 +3,8 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { FileCheck } from 'lucide-react';
 import { PageLayout } from '@/components/layout/PageLayout';
 import { PageCard } from '@/components/layout/PageCard';
-import { ChbStep, TabType, ChbAnalysisResult, ChbApprovedHistory } from '@/types/chb';
-import { 
-  initialSteps, 
-  documentsByStep
-} from '@/data/chbMocks';
+import { ChbStep, TabType, ChbAnalysisResult, ChbApprovedHistory, ChbDocument } from '@/types/chb';
+import { initialSteps } from '@/data/chbMocks';
 import { ChbStepper } from '@/components/chb/ChbStepper';
 import { ChbTabs } from '@/components/chb/ChbTabs';
 import { ChbDocumentsPanel } from '@/components/chb/ChbDocumentsPanel';
@@ -23,8 +20,8 @@ export default function ConferenciaChb() {
   const [steps, setSteps] = useState<ChbStep[]>(initialSteps);
   const [activeStep, setActiveStep] = useState(1);
   const [activeTab, setActiveTab] = useState<TabType>('documentos');
-  const [documents, setDocuments] = useState<Record<number, typeof documentsByStep[1]>>({
-    1: documentsByStep[1] || [],
+  const [documents, setDocuments] = useState<Record<number, ChbDocument[]>>({
+    1: [],
     2: [],
     3: [],
   });
@@ -48,7 +45,7 @@ export default function ConferenciaChb() {
 
   // Get documents for current step (inherited from previous steps + current)
   const getDocumentsForStep = (stepId: number) => {
-    const allDocs: typeof documentsByStep[1] = [];
+    const allDocs: ChbDocument[] = [];
     // Inherit documents from all previous steps
     for (let i = 1; i <= stepId; i++) {
       allDocs.push(...(documents[i] || []));
@@ -243,18 +240,11 @@ export default function ConferenciaChb() {
       tags: currentAnalysis.tags,
     };
 
-    // Add to history for current step, inheriting from previous steps
-    setApprovedHistory(prev => {
-      // Get history from all previous steps
-      const previousHistory = activeStep > 1
-        ? Array.from({ length: activeStep - 1 }, (_, i) => prev[i + 1] || []).flat()
-        : [];
-      
-      return {
-        ...prev,
-        [activeStep]: [historyEntry, ...previousHistory, ...(prev[activeStep] || [])],
-      };
-    });
+    // Add to history for current step only (no duplicates)
+    setApprovedHistory(prev => ({
+      ...prev,
+      [activeStep]: [historyEntry, ...(prev[activeStep] || [])],
+    }));
 
     // Update step status
     setSteps((prev) =>
@@ -319,7 +309,7 @@ export default function ConferenciaChb() {
         return (
           <ChbHistoryPanel
             stepId={activeStep}
-            approvedHistory={approvedHistory[activeStep] || []}
+            approvedHistory={approvedHistory}
           />
         );
       default:

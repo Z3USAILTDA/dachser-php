@@ -1,11 +1,13 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Upload, Clock, Copy, FileText, Trash2, ClipboardList } from "lucide-react";
+import { Upload, Clock, Copy, ClipboardList, Trash2, FileText, CheckCircle } from "lucide-react";
 import { PageLayout } from "@/components/layout/PageLayout";
-import { PageCard, FilterCard, TableCard } from "@/components/layout/PageCard";
-import { FilterBar, FilterOption } from "@/components/layout/FilterBar";
+import { FilterCard, TableCard } from "@/components/layout/PageCard";
+import { FilterBar } from "@/components/layout/FilterBar";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
 import { format } from "date-fns";
 import { Filter as FilterIcon } from "lucide-react";
@@ -28,110 +30,9 @@ interface HistoryEntry {
   status: string;
   result_text: string;
   result_html: string;
+  user: string;
   created_at: string;
 }
-
-const mockItems: ChbItem[] = [{
-  id: 1,
-  reference: "CHB-2025-001",
-  consignee: "Empresa ABC Ltda",
-  status_macro: "pre_alerta_pendente",
-  step1_status: "pendente",
-  step2_status: "pendente",
-  step3_status: "pendente",
-  last_run_at: "2025-01-10 14:30",
-  created_at: "2025-01-05 10:00"
-}, {
-  id: 2,
-  reference: "CHB-2025-002",
-  consignee: "Indústria XYZ S.A.",
-  status_macro: "instrucao_pendente",
-  step1_status: "aprovado",
-  step2_status: "pendente",
-  step3_status: "pendente",
-  last_run_at: "2025-01-09 10:15",
-  created_at: "2025-01-04 09:30"
-}, {
-  id: 3,
-  reference: "CHB-2025-003",
-  consignee: "Comércio Delta",
-  status_macro: "di_pendente",
-  step1_status: "aprovado",
-  step2_status: "aprovado",
-  step3_status: "pendente",
-  last_run_at: "2025-01-08 16:45",
-  created_at: "2025-01-03 14:00"
-}, {
-  id: 4,
-  reference: "CHB-2025-004",
-  consignee: "Tech Solutions",
-  status_macro: "concluida",
-  step1_status: "aprovado",
-  step2_status: "aprovado",
-  step3_status: "aprovado",
-  last_run_at: "2025-01-07 09:20",
-  created_at: "2025-01-02 11:00"
-}, {
-  id: 5,
-  reference: "CHB-2025-005",
-  consignee: "Global Imports",
-  status_macro: "pre_alerta_pendente",
-  step1_status: "pendente",
-  step2_status: "pendente",
-  step3_status: "pendente",
-  last_run_at: null,
-  created_at: "2025-01-06 08:45"
-}];
-
-const mockHistory: Record<number, HistoryEntry[]> = {
-  1: [],
-  2: [{
-    id: 1,
-    etapa: 1,
-    status: "aprovado",
-    result_text: "Pré-Alerta conferido. Documentos OK.",
-    result_html: "",
-    created_at: "2025-01-08 11:30"
-  }],
-  3: [{
-    id: 1,
-    etapa: 1,
-    status: "aprovado",
-    result_text: "Pré-Alerta conferido. Sem divergências.",
-    result_html: "",
-    created_at: "2025-01-06 14:20"
-  }, {
-    id: 2,
-    etapa: 2,
-    status: "aprovado",
-    result_text: "Instrução validada. Tokens conferidos.",
-    result_html: "",
-    created_at: "2025-01-07 10:45"
-  }],
-  4: [{
-    id: 1,
-    etapa: 1,
-    status: "aprovado",
-    result_text: "Pré-Alerta OK.",
-    result_html: "",
-    created_at: "2025-01-05 09:00"
-  }, {
-    id: 2,
-    etapa: 2,
-    status: "aprovado",
-    result_text: "Instrução OK.",
-    result_html: "",
-    created_at: "2025-01-06 11:00"
-  }, {
-    id: 3,
-    etapa: 3,
-    status: "aprovado",
-    result_text: "DI finalizada com sucesso.",
-    result_html: "",
-    created_at: "2025-01-07 09:20"
-  }],
-  5: []
-};
 
 const statusLabels: Record<string, string> = {
   pre_alerta_pendente: "Análise de Pré-Alerta Pendente",
@@ -165,11 +66,17 @@ const getStatusColor = (macro: string) => {
   }
 };
 
+const stepNames: Record<number, string> = {
+  1: 'Pré-Alerta',
+  2: 'Instrução',
+  3: 'DI/Fechamento',
+};
+
 export default function ChbAnalises() {
   const navigate = useNavigate();
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("todos");
-  const [items, setItems] = useState<ChbItem[]>(mockItems);
+  const [items, setItems] = useState<ChbItem[]>([]);
   const [historyModal, setHistoryModal] = useState<{
     open: boolean;
     itemId: number | null;
@@ -187,6 +94,11 @@ export default function ChbAnalises() {
     itemId: null
   });
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [novoProcessoModal, setNovoProcessoModal] = useState(false);
+  const [novoProcessoForm, setNovoProcessoForm] = useState({
+    reference: '',
+    consignee: ''
+  });
 
   const pendingCount = items.filter(i => i.status_macro !== "concluida").length;
 
@@ -205,7 +117,8 @@ export default function ChbAnalises() {
   };
 
   const handleOpenHistory = (itemId: number) => {
-    const history = mockHistory[itemId] || [];
+    // TODO: Fetch real history from API
+    const history: HistoryEntry[] = [];
     setHistoryModal({
       open: true,
       itemId,
@@ -227,9 +140,37 @@ export default function ChbAnalises() {
     toast.success("Item removido com sucesso");
   };
 
+  const handleCreateNovoProcesso = () => {
+    if (!novoProcessoForm.reference.trim() || !novoProcessoForm.consignee.trim()) {
+      toast.error("Preencha todos os campos");
+      return;
+    }
+
+    const newId = Date.now();
+    const newItem: ChbItem = {
+      id: newId,
+      reference: novoProcessoForm.reference,
+      consignee: novoProcessoForm.consignee,
+      status_macro: 'pre_alerta_pendente',
+      step1_status: 'pendente',
+      step2_status: 'pendente',
+      step3_status: 'pendente',
+      last_run_at: null,
+      created_at: format(new Date(), "yyyy-MM-dd HH:mm")
+    };
+
+    setItems(prev => [newItem, ...prev]);
+    setNovoProcessoModal(false);
+    setNovoProcessoForm({ reference: '', consignee: '' });
+    toast.success("Processo criado com sucesso!");
+    
+    // Navigate to the new process
+    navigate(`/chb/conferences/${newId}`);
+  };
+
   const rightContent = (
     <button
-      onClick={() => navigate("/chb/cadastro-pre-alerta")}
+      onClick={() => setNovoProcessoModal(true)}
       className="h-8 rounded-full px-4 flex items-center gap-1.5 bg-[#ffc800] text-black font-semibold text-[0.78rem] shadow-[0_0_22px_rgba(255,200,0,.6)] hover:bg-[#f5b843]"
     >
       <Upload className="h-4 w-4" />
@@ -297,8 +238,10 @@ export default function ChbAnalises() {
           </div>
 
           {filteredItems.length === 0 ? (
-            <div className="mt-4 p-3 rounded-xl border border-[rgba(255,255,255,.25)] bg-[rgba(255,255,255,.06)] text-[0.85rem] text-[#aaaaaa]">
-              Nenhum processo encontrado.
+            <div className="mt-4 p-6 rounded-xl border border-[rgba(255,255,255,.25)] bg-[rgba(255,255,255,.06)] text-center">
+              <ClipboardList size={40} className="mx-auto mb-3 text-[#aaaaaa]" />
+              <p className="text-[0.85rem] text-[#aaaaaa]">Nenhum processo encontrado.</p>
+              <p className="text-[0.75rem] text-[#777] mt-1">Clique em "Novo Processo" para começar.</p>
             </div>
           ) : (
             <div
@@ -352,7 +295,7 @@ export default function ChbAnalises() {
                             className="w-7 h-7 rounded-full border border-[rgba(255,255,255,.25)] flex items-center justify-center text-[#aaaaaa] hover:text-white hover:border-[rgba(255,255,255,.45)] transition-colors"
                             title="Ver histórico"
                           >
-                            <Clock size={14} />
+                            <CheckCircle size={14} />
                           </button>
                           <button
                             onClick={() => setDeleteDialog({ open: true, itemId: item.id })}
@@ -372,40 +315,111 @@ export default function ChbAnalises() {
         </div>
       </TableCard>
 
+      {/* Novo Processo Modal */}
+      <Dialog open={novoProcessoModal} onOpenChange={setNovoProcessoModal}>
+        <DialogContent className="max-w-md bg-[rgba(5,6,18,.98)] border border-[rgba(255,255,255,.12)]">
+          <DialogHeader>
+            <DialogTitle className="text-[#f5f5f5]">Novo Processo CHB</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 mt-2">
+            <div className="space-y-2">
+              <Label className="text-[#aaaaaa]">Referência</Label>
+              <Input
+                placeholder="Ex: CHB-2025-001"
+                value={novoProcessoForm.reference}
+                onChange={(e) => setNovoProcessoForm(prev => ({ ...prev, reference: e.target.value }))}
+                className="bg-[rgba(255,255,255,.05)] border-[rgba(255,255,255,.15)] text-white"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label className="text-[#aaaaaa]">Consignee</Label>
+              <Input
+                placeholder="Nome do consignatário"
+                value={novoProcessoForm.consignee}
+                onChange={(e) => setNovoProcessoForm(prev => ({ ...prev, consignee: e.target.value }))}
+                className="bg-[rgba(255,255,255,.05)] border-[rgba(255,255,255,.15)] text-white"
+              />
+            </div>
+            <div className="flex justify-end gap-2 pt-2">
+              <button
+                onClick={() => setNovoProcessoModal(false)}
+                className="h-8 px-4 rounded-full border border-[rgba(255,255,255,.25)] text-[#aaaaaa] text-[0.78rem] hover:bg-[rgba(255,255,255,.05)]"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={handleCreateNovoProcesso}
+                className="h-8 px-4 rounded-full bg-[#ffc800] text-black font-semibold text-[0.78rem] hover:bg-[#f5b843]"
+              >
+                Criar Processo
+              </button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
       {/* History Modal */}
       <Dialog open={historyModal.open} onOpenChange={(open) => setHistoryModal(prev => ({ ...prev, open }))}>
-        <DialogContent className="max-w-lg bg-[rgba(5,6,18,.98)] border border-[rgba(255,255,255,.12)]">
+        <DialogContent className="max-w-2xl bg-[rgba(5,6,18,.98)] border border-[rgba(255,255,255,.12)]">
           <DialogHeader>
             <DialogTitle className="text-[#f5f5f5]">Histórico de Análises</DialogTitle>
           </DialogHeader>
-          <div className="space-y-3 max-h-[400px] overflow-y-auto">
+          <div className="space-y-3 max-h-[500px] overflow-y-auto">
             {historyModal.history.length === 0 ? (
-              <div className="p-4 text-center text-[#aaaaaa]">
-                Nenhuma análise realizada ainda.
+              <div className="p-6 text-center text-[#aaaaaa]">
+                <CheckCircle size={40} className="mx-auto mb-3 text-[#555]" />
+                <p>Nenhuma análise aprovada ainda.</p>
+                <p className="text-[0.75rem] text-[#777] mt-1">Execute análises na página de conferência para ver o histórico.</p>
               </div>
             ) : (
-              historyModal.history.map((entry) => (
-                <div key={entry.id} className="p-3 rounded-lg border border-[rgba(255,255,255,.12)] bg-[rgba(255,255,255,.03)]">
-                  <div className="flex items-center justify-between mb-2">
-                    <span className="text-[0.75rem] text-[#aaaaaa]">
-                      Etapa {entry.etapa} • {entry.created_at}
-                    </span>
-                    <span className={`text-[0.72rem] px-2 py-0.5 rounded-full ${
-                      entry.status === 'aprovado' ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'
-                    }`}>
-                      {entry.status}
-                    </span>
+              <div className="relative">
+                <div className="absolute left-4 top-0 bottom-0 w-0.5 bg-white/10" />
+                
+                {historyModal.history.map((entry) => (
+                  <div key={entry.id} className="relative pl-10 mb-4">
+                    <div className="absolute left-2 top-2 w-3 h-3 rounded-full bg-amber-500 border-2 border-black flex items-center justify-center">
+                      <CheckCircle className="w-1.5 h-1.5 text-black" />
+                    </div>
+                    
+                    <div className="p-3 rounded-lg border border-[rgba(255,255,255,.12)] bg-[rgba(255,255,255,.03)]">
+                      <div className="flex items-center gap-2 mb-2">
+                        <span className="text-[0.65rem] px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-400 font-medium">
+                          {stepNames[entry.etapa] || `Etapa ${entry.etapa}`}
+                        </span>
+                        <span className="text-[0.72rem] text-[#aaaaaa]">
+                          {entry.created_at}
+                        </span>
+                        <span className="text-[0.72rem] text-amber-500">
+                          {entry.user}
+                        </span>
+                        <span className={`ml-auto text-[0.72rem] px-2 py-0.5 rounded-full ${
+                          entry.status === 'aprovado' ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'
+                        }`}>
+                          {entry.status}
+                        </span>
+                      </div>
+                      
+                      {/* Render HTML content if available */}
+                      {entry.result_html ? (
+                        <div 
+                          className="text-[0.85rem] text-[#f5f5f5] chb-analysis-content bg-black/20 p-3 rounded border border-white/5"
+                          dangerouslySetInnerHTML={{ __html: entry.result_html }}
+                        />
+                      ) : (
+                        <div className="text-[0.85rem] text-[#f5f5f5]">{entry.result_text}</div>
+                      )}
+                      
+                      <button
+                        onClick={() => handleCopyResult(entry.result_text || entry.result_html)}
+                        className="mt-2 inline-flex items-center gap-1 text-[0.72rem] text-[#ffc800] hover:underline"
+                      >
+                        <Copy size={12} />
+                        Copiar resultado
+                      </button>
+                    </div>
                   </div>
-                  <div className="text-[0.85rem] text-[#f5f5f5]">{entry.result_text}</div>
-                  <button
-                    onClick={() => handleCopyResult(entry.result_text)}
-                    className="mt-2 inline-flex items-center gap-1 text-[0.72rem] text-[#ffc800] hover:underline"
-                  >
-                    <Copy size={12} />
-                    Copiar resultado
-                  </button>
-                </div>
-              ))
+                ))}
+              </div>
             )}
           </div>
         </DialogContent>
@@ -433,6 +447,44 @@ export default function ChbAnalises() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* CSS for analysis table styling */}
+      <style>{`
+        .chb-analysis-content table {
+          width: 100%;
+          border-collapse: collapse;
+          margin: 0.5rem 0;
+          font-size: 0.8rem;
+        }
+        .chb-analysis-content thead {
+          background: rgba(255, 255, 255, 0.05);
+        }
+        .chb-analysis-content th,
+        .chb-analysis-content td {
+          padding: 0.5rem 0.75rem;
+          text-align: left;
+          border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        .chb-analysis-content th {
+          font-weight: 600;
+          color: rgba(255, 255, 255, 0.9);
+        }
+        .chb-analysis-content td {
+          color: rgba(255, 255, 255, 0.7);
+        }
+        .chb-analysis-content p {
+          margin: 0.5rem 0;
+          color: rgba(255, 255, 255, 0.8);
+        }
+        .chb-analysis-content ul {
+          margin: 0.5rem 0;
+          padding-left: 1.5rem;
+        }
+        .chb-analysis-content li {
+          margin: 0.25rem 0;
+          color: rgba(255, 255, 255, 0.7);
+        }
+      `}</style>
     </PageLayout>
   );
 }
