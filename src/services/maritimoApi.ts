@@ -377,28 +377,27 @@ export const maritimoApi = {
   },
 
   /**
-   * Extract attachments from EML or ZIP files
+   * Extract attachments from EML or ZIP files - uses dedicated edge function
    */
   async extractAttachments(formData: FormData): Promise<ExtractAttachmentsResponse> {
     try {
-      const file = formData.get('file') as File;
-      if (!file) {
-        return { success: false, extracted: [], source: '' };
+      const response = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/sea-extract-attachments`,
+        {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
+          },
+          body: formData
+        }
+      );
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error || `HTTP error ${response.status}`);
       }
 
-      // Use mariadb-proxy for now since extract_maritimo_attachments action exists there
-      const base64Content = await fileToBase64(file);
-      
-      const { data, error } = await supabase.functions.invoke('mariadb-proxy', {
-        body: {
-          action: 'extract_maritimo_attachments',
-          fileName: file.name,
-          fileContent: base64Content,
-          fileType: file.type
-        }
-      });
-      
-      if (error) throw error;
+      const data = await response.json();
       return data || { success: false, extracted: [], source: '' };
     } catch (error) {
       console.error('Error extracting attachments:', error);
