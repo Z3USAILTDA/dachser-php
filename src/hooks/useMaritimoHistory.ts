@@ -1,13 +1,21 @@
 import { useState, useCallback } from "react";
+import { maritimoApi } from "@/services/maritimoApi";
 
 interface HistoryRun {
   id: string;
   status: string;
   result_text?: string;
+  result_html?: string;
   json_result?: any;
   created_at: string;
   updated_at?: string;
-  files?: any[];
+  created_by_email?: string;
+  files?: {
+    id: string;
+    file_name: string;
+    file_type: string;
+    role: string;
+  }[];
 }
 
 interface HistoryData {
@@ -24,13 +32,14 @@ export function useMaritimoHistory() {
   const fetchHistory = useCallback(async (itemId: string) => {
     setIsLoading(true);
     try {
-      // Placeholder - would fetch from API
+      const data = await maritimoApi.getHistory(itemId);
       setHistory({
-        item: { base_file_name: "MANIFEST_001.pdf" },
-        runs: [],
+        item: data.item || { base_file_name: '' },
+        runs: data.runs || [],
       });
     } catch (error) {
-      console.error("Error fetching history:", error);
+      console.error("Error fetching SEA history:", error);
+      setHistory({ item: { base_file_name: '' }, runs: [] });
     } finally {
       setIsLoading(false);
     }
