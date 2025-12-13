@@ -84,7 +84,6 @@ serve(async (req) => {
         });
       }
 
-      // Import mysql dynamically
       const { Client } = await import("https://deno.land/x/mysql@v2.12.1/mod.ts");
       const client = await new Client().connect({
         hostname: mariadbHost,
@@ -117,6 +116,344 @@ serve(async (req) => {
         await client.close();
         console.error('[sea_seed] Error:', e);
         return new Response(JSON.stringify({ error: 'Falha sea_seed', detail: e.message, data: [] }), {
+          status: 500,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      }
+    }
+
+    // ===== SEA SMART: Cache inteligente com atualização seletiva =====
+    if (action === 'sea_seed_smart') {
+      const mariadbHost = Deno.env.get('MARIADB_HOST');
+      const mariadbPort = Deno.env.get('MARIADB_PORT') || '3306';
+      const mariadbUser = Deno.env.get('MARIADB_USER');
+      const mariadbPass = Deno.env.get('MARIADB_PASSWORD');
+      const mariadbDb = Deno.env.get('MARIADB_DATABASE');
+      const apiKey = Deno.env.get('JSONCARGO_API_KEY');
+
+      if (!mariadbHost || !mariadbUser || !mariadbPass || !mariadbDb) {
+        return new Response(JSON.stringify({ error: 'MariaDB não configurado', data: [] }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      }
+
+      const { Client } = await import("https://deno.land/x/mysql@v2.12.1/mod.ts");
+      const client = await new Client().connect({
+        hostname: mariadbHost,
+        port: parseInt(mariadbPort, 10),
+        username: mariadbUser,
+        password: mariadbPass,
+        db: mariadbDb,
+      });
+
+      try {
+        // Criar tabela de cache se não existir
+        await client.execute(`
+          CREATE TABLE IF NOT EXISTS ai_agente.t_dachser_sea_tracking_cache (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            container VARCHAR(20) NOT NULL UNIQUE,
+            consignee VARCHAR(255),
+            loading_port VARCHAR(100),
+            discharging_port VARCHAR(100),
+            container_status VARCHAR(100),
+            eta_final_destination DATETIME,
+            atd_origin DATETIME,
+            last_movement_timestamp DATETIME,
+            origin_lat DECIMAL(10,6),
+            origin_lon DECIMAL(10,6),
+            origin_unlocode VARCHAR(10),
+            dest_lat DECIMAL(10,6),
+            dest_lon DECIMAL(10,6),
+            dest_unlocode VARCHAR(10),
+            vessel_name VARCHAR(100),
+            vessel_lat DECIMAL(10,6),
+            vessel_lon DECIMAL(10,6),
+            last_api_update DATETIME,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+          )
+        `);
+
+        // Buscar containers ativos
+        const containers = await client.query(
+          `SELECT DISTINCT container, consignee FROM ai_agente.t_dachser_sea_items WHERE TRIM(container) <> '' AND active = 1`
+        );
+
+        const nowTs = Date.now();
+        const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
+        const ONE_DAY_MS = 24 * 60 * 60 * 1000;
+        const results: any[] = [];
+        let apiCallCount = 0;
+        let cacheHitCount = 0;
+
+        for (const row of containers) {
+          const containerId = String(row.container || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+          if (containerId.length < 7) continue;
+
+          let consignee = String(row.consignee || '');
+          consignee = consignee.split('(')[0].trim().replace(/\d+/g, '').trim();
+
+          // Verificar cache
+          const cached = await client.query(
+            `SELECT * FROM ai_agente.t_dachser_sea_tracking_cache WHERE container = ?`,
+            [containerId]
+          );
+
+          let useCache = false;
+          let cacheRow = cached[0] || null;
+
+          if (cacheRow) {
+            const etaTs = cacheRow.eta_final_destination ? new Date(cacheRow.eta_final_destination).getTime() : null;
+            const lastApiTs = cacheRow.last_api_update ? new Date(cacheRow.last_api_update).getTime() : 0;
+            const statusLower = (cacheRow.container_status || '').toLowerCase();
+            const isDelivered = /delivered|gate out|empty received/.test(statusLower);
+
+            // Regras de cache:
+            // 1. Status "Entregue" há mais de 24h → usar cache permanente
+            // 2. ETA > 7 dias do futuro → usar cache
+            // 3. ETA entre 1-7 dias → atualizar 1x por dia
+            // 4. ETA < 24h → sempre atualizar
+            if (isDelivered && lastApiTs && (nowTs - lastApiTs > ONE_DAY_MS)) {
+              useCache = true; // Entregue há mais de 1 dia, cache permanente
+            } else if (etaTs && (etaTs - nowTs > SEVEN_DAYS_MS)) {
+              useCache = true; // ETA > 7 dias, usar cache
+            } else if (etaTs && (etaTs - nowTs > ONE_DAY_MS) && (nowTs - lastApiTs < ONE_DAY_MS)) {
+              useCache = true; // ETA entre 1-7 dias e já atualizou hoje
+            }
+            // Se ETA < 24h, sempre atualiza (useCache = false)
+          }
+
+          if (useCache && cacheRow) {
+            cacheHitCount++;
+            results.push({
+              container: containerId,
+              cliente: consignee,
+              loading_port: cacheRow.loading_port,
+              discharging_port: cacheRow.discharging_port,
+              container_status: cacheRow.container_status,
+              eta_final_destination: cacheRow.eta_final_destination,
+              atd_origin: cacheRow.atd_origin,
+              last_movement_timestamp: cacheRow.last_movement_timestamp,
+              origin_lat: cacheRow.origin_lat ? Number(cacheRow.origin_lat) : null,
+              origin_lon: cacheRow.origin_lon ? Number(cacheRow.origin_lon) : null,
+              origin_unlocode: cacheRow.origin_unlocode,
+              dest_lat: cacheRow.dest_lat ? Number(cacheRow.dest_lat) : null,
+              dest_lon: cacheRow.dest_lon ? Number(cacheRow.dest_lon) : null,
+              dest_unlocode: cacheRow.dest_unlocode,
+              vessel_name: cacheRow.vessel_name,
+              vessel_lat: cacheRow.vessel_lat ? Number(cacheRow.vessel_lat) : null,
+              vessel_lon: cacheRow.vessel_lon ? Number(cacheRow.vessel_lon) : null,
+              from_cache: true,
+              last_api_update: cacheRow.last_api_update
+            });
+            continue;
+          }
+
+          // Se não usar cache ou não existir, chamar API (com limite de rate)
+          if (!apiKey) {
+            // Sem API key, usar dados básicos do cache ou retornar sem tracking
+            results.push({
+              container: containerId,
+              cliente: consignee,
+              loading_port: cacheRow?.loading_port || null,
+              discharging_port: cacheRow?.discharging_port || null,
+              container_status: cacheRow?.container_status || 'Sem tracking',
+              eta_final_destination: cacheRow?.eta_final_destination || null,
+              atd_origin: null,
+              last_movement_timestamp: null,
+              origin_lat: cacheRow?.origin_lat ? Number(cacheRow.origin_lat) : null,
+              origin_lon: cacheRow?.origin_lon ? Number(cacheRow.origin_lon) : null,
+              origin_unlocode: cacheRow?.origin_unlocode || null,
+              dest_lat: cacheRow?.dest_lat ? Number(cacheRow.dest_lat) : null,
+              dest_lon: cacheRow?.dest_lon ? Number(cacheRow.dest_lon) : null,
+              dest_unlocode: cacheRow?.dest_unlocode || null,
+              vessel_name: null,
+              vessel_lat: null,
+              vessel_lon: null,
+              from_cache: !!cacheRow,
+              no_api_key: true
+            });
+            continue;
+          }
+
+          // Limitar chamadas de API para evitar rate limit
+          if (apiCallCount >= 5) {
+            // Já atingiu limite, usar cache ou dados básicos
+            results.push({
+              container: containerId,
+              cliente: consignee,
+              loading_port: cacheRow?.loading_port || null,
+              discharging_port: cacheRow?.discharging_port || null,
+              container_status: cacheRow?.container_status || 'Aguardando',
+              eta_final_destination: cacheRow?.eta_final_destination || null,
+              atd_origin: cacheRow?.atd_origin || null,
+              last_movement_timestamp: cacheRow?.last_movement_timestamp || null,
+              origin_lat: cacheRow?.origin_lat ? Number(cacheRow.origin_lat) : null,
+              origin_lon: cacheRow?.origin_lon ? Number(cacheRow.origin_lon) : null,
+              origin_unlocode: cacheRow?.origin_unlocode || null,
+              dest_lat: cacheRow?.dest_lat ? Number(cacheRow.dest_lat) : null,
+              dest_lon: cacheRow?.dest_lon ? Number(cacheRow.dest_lon) : null,
+              dest_unlocode: cacheRow?.dest_unlocode || null,
+              vessel_name: cacheRow?.vessel_name || null,
+              vessel_lat: cacheRow?.vessel_lat ? Number(cacheRow.vessel_lat) : null,
+              vessel_lon: cacheRow?.vessel_lon ? Number(cacheRow.vessel_lon) : null,
+              from_cache: !!cacheRow,
+              rate_limited: true
+            });
+            continue;
+          }
+
+          // Chamar API JSONCargo
+          apiCallCount++;
+          const cdetRes = await jcJson(`http://api.jsoncargo.com/api/v1/containers/${encodeURIComponent(containerId)}`, {}, 15000);
+          
+          if (cdetRes.__curl_error || cdetRes.__status === 429) {
+            // Rate limit ou erro, usar cache se disponível
+            results.push({
+              container: containerId,
+              cliente: consignee,
+              loading_port: cacheRow?.loading_port || null,
+              discharging_port: cacheRow?.discharging_port || null,
+              container_status: cacheRow?.container_status || 'Erro API',
+              eta_final_destination: cacheRow?.eta_final_destination || null,
+              atd_origin: cacheRow?.atd_origin || null,
+              last_movement_timestamp: cacheRow?.last_movement_timestamp || null,
+              origin_lat: cacheRow?.origin_lat ? Number(cacheRow.origin_lat) : null,
+              origin_lon: cacheRow?.origin_lon ? Number(cacheRow.origin_lon) : null,
+              origin_unlocode: cacheRow?.origin_unlocode || null,
+              dest_lat: cacheRow?.dest_lat ? Number(cacheRow.dest_lat) : null,
+              dest_lon: cacheRow?.dest_lon ? Number(cacheRow.dest_lon) : null,
+              dest_unlocode: cacheRow?.dest_unlocode || null,
+              vessel_name: cacheRow?.vessel_name || null,
+              vessel_lat: cacheRow?.vessel_lat ? Number(cacheRow.vessel_lat) : null,
+              vessel_lon: cacheRow?.vessel_lon ? Number(cacheRow.vessel_lon) : null,
+              from_cache: !!cacheRow,
+              api_error: cdetRes.__curl_error || 'rate_limit'
+            });
+            continue;
+          }
+
+          const cdet = cdetRes?.data || cdetRes;
+          const loadingPort = cdet?.loading_port || cdet?.shipped_from || null;
+          const dischargingPort = cdet?.discharging_port || cdet?.shipped_to || null;
+          const containerStatus = cdet?.container_status || null;
+          const etaFinal = cdet?.eta_final_destination || null;
+          const atdOrigin = cdet?.atd_origin || null;
+          const lastMovement = cdet?.last_movement_timestamp || null;
+          const vesselName = cdet?.current_vessel_name || cdet?.last_vessel_name || null;
+
+          // Buscar coordenadas de portos
+          let originLat: number | null = null, originLon: number | null = null, originUnlocode: string | null = null;
+          let destLat: number | null = null, destLon: number | null = null, destUnlocode: string | null = null;
+
+          if (loadingPort) {
+            const prRes = await jcJson('http://api.jsoncargo.com/api/v1/port/find', { name: loadingPort, fuzzy: '1' }, 10000);
+            const p = Array.isArray(prRes?.data) ? prRes.data[0] : null;
+            if (p) {
+              originLat = +p.lat || null;
+              originLon = +p.lon || null;
+              originUnlocode = p.unlocode || p.port_code || null;
+            }
+          }
+
+          if (dischargingPort) {
+            const prRes = await jcJson('http://api.jsoncargo.com/api/v1/port/find', { name: dischargingPort, fuzzy: '1' }, 10000);
+            const p = Array.isArray(prRes?.data) ? prRes.data[0] : null;
+            if (p) {
+              destLat = +p.lat || null;
+              destLon = +p.lon || null;
+              destUnlocode = p.unlocode || p.port_code || null;
+            }
+          }
+
+          // Buscar posição do navio
+          let vesselLat: number | null = null, vesselLon: number | null = null;
+          if (vesselName) {
+            const vfRes = await jcJson('http://api.jsoncargo.com/api/v1/vessel/finder', { name: vesselName, fuzzy: '1' }, 10000);
+            const vRow = Array.isArray(vfRes?.data) ? vfRes.data[0] : null;
+            if (vRow?.uuid) {
+              const vbRes = await jcJson('http://api.jsoncargo.com/api/v1/vessel/basic', { uuid: vRow.uuid }, 10000);
+              const vd = vbRes?.data;
+              if (vd && Number.isFinite(+vd.lat) && Number.isFinite(+vd.lon)) {
+                vesselLat = +vd.lat;
+                vesselLon = +vd.lon;
+              }
+            }
+          }
+
+          // Salvar no cache
+          await client.execute(`
+            INSERT INTO ai_agente.t_dachser_sea_tracking_cache 
+              (container, consignee, loading_port, discharging_port, container_status, 
+               eta_final_destination, atd_origin, last_movement_timestamp,
+               origin_lat, origin_lon, origin_unlocode, dest_lat, dest_lon, dest_unlocode,
+               vessel_name, vessel_lat, vessel_lon, last_api_update)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())
+            ON DUPLICATE KEY UPDATE
+              consignee = VALUES(consignee),
+              loading_port = VALUES(loading_port),
+              discharging_port = VALUES(discharging_port),
+              container_status = VALUES(container_status),
+              eta_final_destination = VALUES(eta_final_destination),
+              atd_origin = VALUES(atd_origin),
+              last_movement_timestamp = VALUES(last_movement_timestamp),
+              origin_lat = VALUES(origin_lat),
+              origin_lon = VALUES(origin_lon),
+              origin_unlocode = VALUES(origin_unlocode),
+              dest_lat = VALUES(dest_lat),
+              dest_lon = VALUES(dest_lon),
+              dest_unlocode = VALUES(dest_unlocode),
+              vessel_name = VALUES(vessel_name),
+              vessel_lat = VALUES(vessel_lat),
+              vessel_lon = VALUES(vessel_lon),
+              last_api_update = NOW()
+          `, [
+            containerId, consignee, loadingPort, dischargingPort, containerStatus,
+            etaFinal ? new Date(etaFinal) : null, 
+            atdOrigin ? new Date(atdOrigin) : null, 
+            lastMovement ? new Date(lastMovement) : null,
+            originLat, originLon, originUnlocode, destLat, destLon, destUnlocode,
+            vesselName, vesselLat, vesselLon
+          ]);
+
+          results.push({
+            container: containerId,
+            cliente: consignee,
+            loading_port: loadingPort,
+            discharging_port: dischargingPort,
+            container_status: containerStatus,
+            eta_final_destination: etaFinal,
+            atd_origin: atdOrigin,
+            last_movement_timestamp: lastMovement,
+            origin_lat: originLat,
+            origin_lon: originLon,
+            origin_unlocode: originUnlocode,
+            dest_lat: destLat,
+            dest_lon: destLon,
+            dest_unlocode: destUnlocode,
+            vessel_name: vesselName,
+            vessel_lat: vesselLat,
+            vessel_lon: vesselLon,
+            from_cache: false,
+            last_api_update: new Date().toISOString()
+          });
+
+          // Pequeno delay entre chamadas de API
+          await new Promise(r => setTimeout(r, 200));
+        }
+
+        await client.close();
+        console.log(`[sea_seed_smart] Processed ${results.length} containers. API calls: ${apiCallCount}, Cache hits: ${cacheHitCount}`);
+        return new Response(JSON.stringify({ 
+          data: results, 
+          stats: { total: results.length, api_calls: apiCallCount, cache_hits: cacheHitCount }
+        }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      } catch (e: any) {
+        await client.close();
+        console.error('[sea_seed_smart] Error:', e);
+        return new Response(JSON.stringify({ error: 'Falha sea_seed_smart', detail: e.message, data: [] }), {
           status: 500,
           headers: { ...corsHeaders, 'Content-Type': 'application/json' }
         });
