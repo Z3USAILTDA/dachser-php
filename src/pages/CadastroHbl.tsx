@@ -60,6 +60,7 @@ export default function CadastroHbl() {
       title="DACHSER"
       subtitle="Cadastro – HBL"
       pageIcon={FileText}
+      backTo="/maritimo"
     >
       <PageCard className="max-w-4xl mx-auto">
         <h1 className="text-2xl font-bold text-white mb-2">Cadastro – HBL</h1>
