@@ -2646,6 +2646,21 @@ serve(async (req) => {
         const { itemId, etapa, status, resultText, resultHtml, resultJson, usedAsCtx, userId } = body as any;
         console.log('Creating CHB run:', { itemId, etapa, status, userId });
         
+        // Sanitize text to replace emojis with HTML entities (MariaDB utf8 doesn't support 4-byte chars)
+        const sanitizeForMariaDB = (text: string | null): string | null => {
+          if (!text) return null;
+          return text
+            .replace(/🟨/g, '&#x1F7E8;')
+            .replace(/🔴/g, '&#x1F534;')
+            .replace(/✅/g, '&#x2705;')
+            .replace(/🟢/g, '&#x1F7E2;')
+            .replace(/⚠️/g, '&#x26A0;')
+            .replace(/❌/g, '&#x274C;')
+            .replace(/[\u{1F300}-\u{1F9FF}]/gu, '') // Remove any other emojis
+            .replace(/[\u{2600}-\u{26FF}]/gu, '')   // Misc symbols
+            .replace(/[\u{2700}-\u{27BF}]/gu, '');  // Dingbats
+        };
+        
         const insertResult = await client.execute(`
           INSERT INTO ai_agente.t_dachser_chb_runs 
           (item_id, etapa, status, result_text, result_html, result_json, used_as_ctx, created_by)
@@ -2654,8 +2669,8 @@ serve(async (req) => {
           itemId, 
           etapa || '1', 
           status || 'completed', 
-          resultText || null, 
-          resultHtml || null, 
+          sanitizeForMariaDB(resultText), 
+          sanitizeForMariaDB(resultHtml), 
           resultJson || null, 
           usedAsCtx ? 1 : 0,
           userId || null
