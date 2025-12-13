@@ -66,59 +66,12 @@ async function fetchFileAsBase64(fileUrl: string, fileName: string): Promise<{ b
   }
 }
 
-// ============ STEP 1: GEMINI FLASH - XLSX TEXT EXTRACTION ============
 
-async function extractTextWithGeminiFlash(base64: string, fileName: string): Promise<string> {
-  const lovableKey = Deno.env.get('LOVABLE_API_KEY');
-  if (!lovableKey) throw new Error('LOVABLE_API_KEY not configured');
-  
-  console.log(`📊 Extracting text from XLSX: ${fileName} with Gemini Flash`);
-  
-  const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
-    method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${lovableKey}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      model: 'google/gemini-2.5-flash',
-      messages: [{
-        role: 'user',
-        content: [
-          { 
-            type: 'text', 
-            text: `Extraia TODO o conteúdo textual deste arquivo Excel/planilha. Retorne o texto completo preservando a estrutura de colunas e linhas. Inclua todos os dados de todas as abas/sheets. Retorne apenas o conteúdo extraído, sem comentários.` 
-          },
-          {
-            type: 'image_url',
-            image_url: {
-              url: `data:application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;base64,${base64}`
-            }
-          }
-        ]
-      }]
-    }),
-  });
-  
-  if (!response.ok) {
-    const errorText = await response.text().catch(() => '');
-    console.error(`❌ Gemini Flash extraction error: ${response.status} - ${errorText}`);
-    throw new Error(`Gemini Flash error: ${response.status}`);
-  }
-  
-  const data = await response.json();
-  const extractedText = data.choices?.[0]?.message?.content || '';
-  console.log(`✅ Extracted ${extractedText.length} chars from ${fileName}`);
-  
-  return extractedText;
-}
-
-// ============ STEP 2: ANTHROPIC CLAUDE - PRIMARY ANALYSIS ============
+// ============ ANTHROPIC CLAUDE - ANALYSIS (ALL FILES) ============
 
 async function analyzeWithAnthropic(
   prompt: string, 
-  manifestText: string,
-  pdfFiles: Array<{ base64: string; name: string }>,
+  allFiles: Array<{ base64: string; name: string; mediaType: string }>,
   metadata: { consignee?: string; container?: string }
 ): Promise<{ text: string; model: string }> {
   const anthropicKey = Deno.env.get('ANTHROPIC_API_KEY');
@@ -128,30 +81,29 @@ async function analyzeWithAnthropic(
   if (metadata.consignee) fullPrompt += `\n\nConsignee: ${metadata.consignee}`;
   if (metadata.container) fullPrompt += `\nContainer: ${metadata.container}`;
   
-  // Add extracted manifest text
-  if (manifestText) {
-    fullPrompt += `\n\n=== CONTEÚDO DO MANIFESTO (extraído) ===\n${manifestText}\n=== FIM DO MANIFESTO ===`;
-  }
-  
-  // Build content parts: prompt + PDF documents only
+  // Build content parts: prompt + all files as documents
   const contentParts: any[] = [
     { type: 'text', text: fullPrompt }
   ];
   
-  // Add PDFs as base64 documents (Anthropic supports PDF natively)
-  for (const file of pdfFiles) {
-    contentParts.push({ 
-      type: 'document', 
-      source: { 
-        type: 'base64', 
-        media_type: 'application/pdf', 
-        data: file.base64 
-      } 
-    });
-    contentParts.push({ type: 'text', text: `[Arquivo PDF: ${file.name}]` });
+  // Add all files as base64 documents - Claude handles PDF natively
+  // For XLSX/CSV, we still send them but Claude may not parse them well
+  for (const file of allFiles) {
+    // Only send PDFs as documents (Claude's document type only supports PDF)
+    if (file.mediaType === 'application/pdf') {
+      contentParts.push({ 
+        type: 'document', 
+        source: { 
+          type: 'base64', 
+          media_type: 'application/pdf', 
+          data: file.base64 
+        } 
+      });
+      contentParts.push({ type: 'text', text: `[Arquivo PDF: ${file.name}]` });
+    }
   }
-  
-  console.log(`🤖 Calling Anthropic Claude with ${pdfFiles.length} PDFs + manifest text (${manifestText.length} chars)`);
+  const pdfCount = allFiles.filter(f => f.mediaType === 'application/pdf').length;
+  console.log(`🤖 Calling Anthropic Claude with ${pdfCount} PDFs`);
   
   const response = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
@@ -185,8 +137,7 @@ async function analyzeWithAnthropic(
 
 async function analyzeWithGeminiPro(
   prompt: string, 
-  manifestText: string,
-  pdfFiles: Array<{ base64: string; name: string }>,
+  allFiles: Array<{ base64: string; name: string }>,
   metadata: { consignee?: string; container?: string }
 ): Promise<{ text: string; model: string }> {
   const lovableKey = Deno.env.get('LOVABLE_API_KEY');
@@ -196,18 +147,13 @@ async function analyzeWithGeminiPro(
   if (metadata.consignee) fullPrompt += `\n\nConsignee: ${metadata.consignee}`;
   if (metadata.container) fullPrompt += `\nContainer: ${metadata.container}`;
   
-  // Add extracted manifest text
-  if (manifestText) {
-    fullPrompt += `\n\n=== CONTEÚDO DO MANIFESTO (extraído) ===\n${manifestText}\n=== FIM DO MANIFESTO ===`;
-  }
-  
-  console.log(`🔄 Fallback: Calling Gemini Pro with ${pdfFiles.length} PDFs + manifest text`);
+  console.log(`🔄 Fallback: Calling Gemini Pro with ${allFiles.length} files`);
   
   // Build content parts for Gemini
   const contentParts: any[] = [{ type: 'text', text: fullPrompt }];
   
-  // Add PDFs as base64 images (Gemini accepts PDFs via image_url)
-  for (const file of pdfFiles) {
+  // Add PDFs as base64 (Gemini accepts PDFs via image_url)
+  for (const file of allFiles) {
     contentParts.push({
       type: 'image_url',
       image_url: {
@@ -264,42 +210,24 @@ async function analyzeWithLLM(
     throw new Error('Não foi possível carregar nenhum documento');
   }
   
-  // STEP 1: Separate XLSX files from PDFs
-  const xlsxFiles = validFiles.filter(f => ['xlsx', 'xls', 'xlsm', 'csv'].includes(f.ext));
-  const pdfFiles = validFiles.filter(f => f.ext === 'pdf' || !['xlsx', 'xls', 'xlsm', 'csv'].includes(f.ext));
+  console.log(`📊 Total files: ${validFiles.length}`);
   
-  console.log(`📊 XLSX files: ${xlsxFiles.length}, PDF files: ${pdfFiles.length}`);
-  
-  // STEP 1: Extract text from XLSX files using Gemini Flash
-  let manifestText = '';
-  for (const xlsxFile of xlsxFiles) {
-    try {
-      const extractedText = await extractTextWithGeminiFlash(xlsxFile.base64, xlsxFile.name);
-      manifestText += `\n\n=== ${xlsxFile.name} ===\n${extractedText}`;
-    } catch (e) {
-      console.error(`❌ Failed to extract text from ${xlsxFile.name}:`, e);
-      // Continue with other files
-    }
-  }
-  
-  // STEP 2: Try Anthropic Claude (primary)
+  // Try Anthropic Claude (primary) - send all files directly
   let result: { text: string; model: string };
   
   try {
     result = await analyzeWithAnthropic(
       basePrompt, 
-      manifestText, 
-      pdfFiles.map(f => ({ base64: f.base64, name: f.name })),
+      validFiles.map(f => ({ base64: f.base64, name: f.name, mediaType: f.mediaType })),
       metadata
     );
   } catch (anthropicError) {
     console.error(`❌ Anthropic failed, falling back to Gemini Pro:`, anthropicError);
     
-    // STEP 3: Fallback to Gemini Pro
+    // Fallback to Gemini Pro
     result = await analyzeWithGeminiPro(
       basePrompt, 
-      manifestText, 
-      pdfFiles.map(f => ({ base64: f.base64, name: f.name })),
+      validFiles.map(f => ({ base64: f.base64, name: f.name })),
       metadata
     );
   }
@@ -313,9 +241,7 @@ async function analyzeWithLLM(
       status: 'completed', 
       model: result.model, 
       total_time_ms: Date.now() - startTime,
-      file_count: validFiles.length,
-      xlsx_count: xlsxFiles.length,
-      pdf_count: pdfFiles.length
+      file_count: validFiles.length
     },
     model: result.model
   };
@@ -614,19 +540,16 @@ serve(async (req) => {
             finalStatus = 'error';
           }
 
-          // Update run with result
+          // Update run with result (using only existing columns)
           await bgClient.execute(`
             UPDATE ai_agente.t_dachser_sea_runs 
             SET status = 'realizado',
                 result_text = ?,
-                result_json = ?,
-                model = ?,
-                updated_at = NOW()
+                result_json = ?
             WHERE id = ?
           `, [
             result.result_text || '',
             JSON.stringify(result.json_result || {}),
-            result.model || '',
             runId
           ]);
           
