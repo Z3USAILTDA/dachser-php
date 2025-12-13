@@ -690,6 +690,14 @@ export default function Olimpo() {
       }
 
       if (pos) {
+        // Add small random offset for air markers to avoid overlap
+        let offsetPos = pos;
+        if (item.mode === "air") {
+          const latOffset = (Math.random() - 0.5) * 3; // +/- 1.5 degrees
+          const lngOffset = (Math.random() - 0.5) * 3;
+          offsetPos = [pos[0] + latOffset, pos[1] + lngOffset];
+        }
+
         const icon = L.divIcon({
           html: item.mode === "air" ? "✈️" : "🚢",
           className: "cursor-pointer hover:scale-125 transition-transform",
@@ -697,7 +705,7 @@ export default function Olimpo() {
           iconAnchor: [11, 11],
         });
         
-        const marker = L.marker(pos, { icon }).addTo(map);
+        const marker = L.marker(offsetPos, { icon }).addTo(map);
         
         // Show route on click
         marker.on('click', (e) => {
@@ -841,23 +849,27 @@ export default function Olimpo() {
           </button>
         </div>
 
-        {/* Row 2: KPI cards */}
+        {/* Row 2: KPI cards - same as side card */}
         <div className="flex items-stretch gap-3">
           <div className="flex-1 px-3 py-2 rounded-lg bg-white/[0.03] border-r border-white/10">
-            <p className="text-xs text-muted-foreground">Soma</p>
-            <p className="text-lg font-semibold">{filteredData.length}</p>
+            <p className="text-xs text-muted-foreground">Containers</p>
+            <p className="text-lg font-semibold">{kpis.seaTransit}</p>
+            <p className="text-[9px] text-[#7fd0ff]">Em trânsito</p>
           </div>
           <div className="flex-1 px-3 py-2 rounded-lg bg-white/[0.03] border-r border-white/10">
-            <p className="text-xs text-muted-foreground">Em trânsito</p>
-            <p className="text-lg font-semibold">{filteredData.filter(i => i.status === 'Em trânsito').length}</p>
+            <p className="text-xs text-muted-foreground">Voos</p>
+            <p className="text-lg font-semibold">{kpis.airActive}</p>
+            <p className="text-[9px] text-[#7fd0ff]">Ativos</p>
           </div>
           <div className="flex-1 px-3 py-2 rounded-lg bg-white/[0.03] border-r border-white/10">
-            <p className="text-xs text-muted-foreground">Atrasados</p>
-            <p className="text-lg font-semibold">{kpis.delayed}</p>
+            <p className="text-xs text-muted-foreground">Total</p>
+            <p className="text-lg font-semibold">{kpis.seaTransit + kpis.airActive}</p>
+            <p className="text-[9px] text-[#7fd0ff]">SEA + AIR</p>
           </div>
           <div className="flex-1 px-3 py-2 rounded-lg bg-white/[0.03]">
-            <p className="text-xs text-muted-foreground">Entregues</p>
-            <p className="text-lg font-semibold">{filteredData.filter(i => i.status === 'Entregue').length}</p>
+            <p className="text-xs text-muted-foreground">Atrasos</p>
+            <p className="text-lg font-semibold">{kpis.delayed}</p>
+            <p className="text-[9px] text-[#ff8b8b]">Impacto</p>
           </div>
         </div>
 
@@ -1280,9 +1292,9 @@ export default function Olimpo() {
                 <p className="text-[9px] md:text-xs text-[#7fd0ff]">Ativos</p>
               </div>
               <div className="bg-[#151515] rounded-xl p-2 md:p-3 border border-white/[0.06]">
-                <p className="text-[9px] md:text-[0.72rem] text-muted-foreground uppercase tracking-[0.14em]">On-time</p>
-                <p className="text-base md:text-lg font-semibold">{kpis.onTime}%</p>
-                <p className="text-[9px] md:text-xs text-[#7fd0ff]">Delivery</p>
+                <p className="text-[9px] md:text-[0.72rem] text-muted-foreground uppercase tracking-[0.14em]">Total</p>
+                <p className="text-base md:text-lg font-semibold">{kpis.seaTransit + kpis.airActive}</p>
+                <p className="text-[9px] md:text-xs text-[#7fd0ff]">SEA + AIR</p>
               </div>
               <div className="bg-[#151515] rounded-xl p-2 md:p-3 border border-white/[0.06]">
                 <p className="text-[9px] md:text-[0.72rem] text-muted-foreground uppercase tracking-[0.14em]">Atrasos</p>
@@ -1312,7 +1324,7 @@ export default function Olimpo() {
                 <thead className="bg-white/[0.02]">
                   <tr>
                     <th className="p-2 px-3 text-left text-xs uppercase tracking-[0.12em] text-muted-foreground border-b border-white/[0.06] sticky top-0 bg-[rgba(5,6,8,0.98)]">
-                      Shipment
+                      Cliente
                     </th>
                     <th className="p-2 px-3 text-left text-xs uppercase tracking-[0.12em] text-muted-foreground border-b border-white/[0.06] sticky top-0 bg-[rgba(5,6,8,0.98)]">
                       Modal
@@ -1334,7 +1346,7 @@ export default function Olimpo() {
                 <tbody>
                   {paginatedData.map((row, i) => (
                     <tr key={row.key} className={`border-b border-white/[0.04] ${i % 2 === 0 ? "" : "bg-white/[0.01]"} hover:bg-white/[0.03] transition-colors`}>
-                      <td className="p-2 px-3">{row.tipo_label}</td>
+                      <td className="p-2 px-3">{row.cliente}</td>
                       <td className="p-2 px-3">
                         <Badge variant="outline" className={`text-[10px] ${row.mode === "air" ? "border-[#7fd0ff]/60 text-[#b7e2ff]" : "border-primary/60 text-primary"}`}>
                           {row.mode === "air" ? "AIR" : "SEA"}
