@@ -498,11 +498,11 @@ export default function InvoicesDraftHbl() {
         analysisType: 'invoices_hbl',
         files: allFiles.filter(f => f.file).map(f => f.file!),
         fileUrls: allFiles.filter(f => f.storageUrl).map(f => ({
-          filename: f.filename,
+          name: f.filename,
           url: f.storageUrl!,
-          mimeType: 'application/pdf'
+          type: 'application/pdf'
         })),
-        links: linkDataToSend
+        linkData: linkDataToSend
       });
 
       clearInterval(uploadInterval);

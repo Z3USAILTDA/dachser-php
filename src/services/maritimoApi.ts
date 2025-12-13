@@ -46,6 +46,7 @@ export interface SubmitAnalysisParams {
     hbl_id: string;
     invoice_files: string[];
   };
+  links?: Array<{ hblFileId: string; invoiceFileIds: string[] }>;
 }
 
 export interface AnalysisStatus {

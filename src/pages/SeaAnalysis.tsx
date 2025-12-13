@@ -344,13 +344,19 @@ export default function SeaAnalysis() {
         analyses={history?.runs.map(run => ({
           id: run.id,
           status: run.status,
-          progress_step: run.status,
           result_text: run.result_text,
+          result_html: run.result_html,
           json_result: run.json_result,
-          error_message: run.json_result?.error_message,
           created_at: run.created_at,
-          completed_at: run.updated_at,
-          files: run.files
+          updated_at: run.updated_at,
+          created_by: run.created_by,
+          files: run.files?.map(f => ({
+            id: f.id,
+            file_name: f.file_name,
+            file_type: f.file_type,
+            file_url: f.file_url,
+            source: f.source
+          }))
         })) || []}
         itemName={history?.item.base_file_name || ''}
       />
