@@ -187,7 +187,7 @@ export default function SeaAnalysis() {
   );
 
   return (
-    <PageLayout title="DACHSER" subtitle="Maritime Analysis" rightContent={rightContent} pageIcon={Ship}>
+    <PageLayout title="DACHSER" subtitle="Conferências SEA" rightContent={rightContent} pageIcon={Ship}>
       {/* Card de Filtros */}
       <PageCard>
         <FilterBar
