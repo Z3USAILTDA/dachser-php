@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
-import { ArrowLeft, Maximize2, Minimize2, Globe } from "lucide-react";
+import { ArrowLeft, Maximize2, Minimize2, Globe, X, Plane, Ship } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { supabase } from "@/integrations/supabase/client";
@@ -41,6 +41,18 @@ interface GroupedItem {
   count: number;
   mode: string;
   asset: string | null;
+}
+
+interface SelectedAssetDetails {
+  mode: "air" | "sea";
+  asset: string | null;
+  flight: string | null;
+  tipo_label: string;
+  cliente: string;
+  rota: string;
+  eta_api: string;
+  status: string;
+  processos: string[];
 }
 
 // Helpers
@@ -190,7 +202,7 @@ export default function Olimpo() {
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [data, setData] = useState<DataItem[]>([]);
-  const [selectedAsset, setSelectedAsset] = useState<string | null>(null);
+  const [selectedAssetDetails, setSelectedAssetDetails] = useState<SelectedAssetDetails | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
   const pageSize = 10;
 
@@ -564,7 +576,7 @@ export default function Olimpo() {
     };
 
     // Helper to show route for selected item
-    const showRoute = (item: DataItem, routeIndex: number) => {
+    const showRoute = (item: DataItem, routeIndex: number, allGroups: Map<string, DataItem[]>) => {
       // Clear previous route
       if (activeRouteRef.current) {
         map.removeLayer(activeRouteRef.current);
@@ -604,7 +616,22 @@ export default function Olimpo() {
         activeMarkersRef.current = [originMarker, destMarker];
       }
 
-      setSelectedAsset(item.asset || item.id.toString());
+      // Collect all AWBs/containers in this group
+      const groupKey = item.asset || `${item.mode}|${item.rota}`;
+      const groupItems = allGroups.get(groupKey) || [item];
+      const processos = groupItems.map(it => it.asset).filter(Boolean) as string[];
+
+      setSelectedAssetDetails({
+        mode: item.mode,
+        asset: item.asset,
+        flight: item.flight,
+        tipo_label: item.tipo_label,
+        cliente: item.cliente,
+        rota: item.rota,
+        eta_api: item.eta_api,
+        status: item.status,
+        processos: [...new Set(processos)],
+      });
     };
 
     // Clear route when clicking on map (not marker)
@@ -615,7 +642,7 @@ export default function Olimpo() {
       }
       activeMarkersRef.current.forEach(m => map.removeLayer(m));
       activeMarkersRef.current = [];
-      setSelectedAsset(null);
+      setSelectedAssetDetails(null);
     };
 
     map.on('click', clearRoute);
@@ -667,7 +694,7 @@ export default function Olimpo() {
         // Show route on click
         marker.on('click', (e) => {
           L.DomEvent.stopPropagation(e);
-          showRoute(item, currentRouteIndex);
+          showRoute(item, currentRouteIndex, groups);
         });
 
         // Tooltip with info
@@ -846,8 +873,8 @@ export default function Olimpo() {
             </div>
           </div>
 
-          {/* Side Card (Filters + KPIs) - consistente com PageCard */}
-          {!isFullscreen && (
+          {/* Side Card (Filters + KPIs) - show only when no asset selected */}
+          {!isFullscreen && !selectedAssetDetails && (
             <div 
               className="rounded-2xl flex flex-col shrink-0 lg:w-80 xl:w-96"
               style={{
@@ -925,54 +952,145 @@ export default function Olimpo() {
             </div>
           )}
 
-          {/* Fullscreen side panel */}
+          {/* Fullscreen floating filters bar */}
           {isFullscreen && (
             <div 
-              className="absolute right-4 md:right-8 top-20 md:top-24 w-64 md:w-80 max-h-[calc(100vh-160px)] z-[1000] rounded-2xl flex flex-col overflow-hidden"
+              className="absolute left-4 right-4 top-4 z-[1000] flex flex-wrap items-center gap-2 p-2 rounded-full"
+              style={{
+                background: 'rgba(5,6,18,.9)',
+                border: '1px solid rgba(255,255,255,.12)',
+                boxShadow: '0 8px 24px rgba(0,0,0,.6)',
+              }}
+            >
+              <Input
+                placeholder="Buscar..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="w-40 rounded-full bg-[rgba(14,14,14,0.96)] border-white/20 text-xs h-7"
+              />
+              <button
+                onClick={() => setModeFilter(modeFilter === "air" ? null : "air")}
+                className={`px-2 py-1 rounded-full text-[10px] border transition-all ${modeFilter === "air" ? "border-primary bg-[rgba(30,30,30,0.98)] text-amber-200" : "border-white/10 bg-[rgba(14,14,14,0.95)]"}`}
+              >
+                AIR
+              </button>
+              <button
+                onClick={() => setModeFilter(modeFilter === "sea" ? null : "sea")}
+                className={`px-2 py-1 rounded-full text-[10px] border transition-all ${modeFilter === "sea" ? "border-primary bg-[rgba(30,30,30,0.98)] text-amber-200" : "border-white/10 bg-[rgba(14,14,14,0.95)]"}`}
+              >
+                SEA
+              </button>
+              <button
+                onClick={() => setStatusFilter(statusFilter === "Atraso" ? null : "Atraso")}
+                className={`px-2 py-1 rounded-full text-[10px] border transition-all ${statusFilter === "Atraso" ? "border-primary bg-[rgba(30,30,30,0.98)] text-amber-200" : "border-white/10 bg-[rgba(14,14,14,0.95)]"}`}
+              >
+                Atraso
+              </button>
+              <div className="flex-1" />
+              <Badge variant="outline" className="border-[#7fd0ff]/50 text-[#b7e2ff] text-[10px]">
+                Voos: {kpis.airActive}
+              </Badge>
+              <Badge variant="outline" className="border-primary/50 text-primary text-[10px]">
+                Containers: {kpis.seaTransit}
+              </Badge>
+              <button
+                onClick={() => setIsFullscreen(false)}
+                className="w-7 h-7 rounded-full border border-white/20 flex items-center justify-center bg-black/70 text-primary hover:bg-black/90 transition-all"
+              >
+                <Minimize2 size={12} />
+              </button>
+            </div>
+          )}
+
+          {/* Asset Details Panel (both modes) */}
+          {selectedAssetDetails && (
+            <div 
+              className={`rounded-2xl flex flex-col overflow-hidden ${isFullscreen ? "absolute right-4 top-16 w-80 max-h-[calc(100vh-100px)] z-[1000]" : "shrink-0 lg:w-80 xl:w-96"}`}
               style={{
                 background: 'rgba(5,6,18,.95)',
                 border: '1px solid rgba(255,255,255,.12)',
                 boxShadow: '0 18px 40px rgba(0,0,0,.85)',
               }}
             >
-              <div className="p-3 border-b border-white/[0.08]">
-                <h2 className="text-xs tracking-[0.16em] uppercase text-white/90">Filtros</h2>
-              </div>
-              <div className="p-2 flex flex-wrap gap-1.5">
-                <Input
-                  placeholder="Buscar..."
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  className="w-full rounded-full bg-[rgba(14,14,14,0.96)] border-white/20 text-xs h-8"
-                />
+              {/* Header */}
+              <div className="flex items-center justify-between p-3 border-b border-white/[0.08]">
+                <div className="flex items-center gap-2">
+                  <div className={`w-8 h-8 rounded-full flex items-center justify-center ${selectedAssetDetails.mode === 'air' ? 'bg-[#7fd0ff]/20' : 'bg-primary/20'}`}>
+                    {selectedAssetDetails.mode === 'air' ? (
+                      <Plane size={16} className="text-[#7fd0ff]" />
+                    ) : (
+                      <Ship size={16} className="text-primary" />
+                    )}
+                  </div>
+                  <div>
+                    <p className="text-xs text-muted-foreground uppercase tracking-wider">
+                      {selectedAssetDetails.mode === 'air' ? 'Avião' : 'Navio'}
+                    </p>
+                    <p className="font-semibold text-sm">
+                      {selectedAssetDetails.flight || selectedAssetDetails.asset || 'N/A'}
+                    </p>
+                  </div>
+                </div>
                 <button
-                  onClick={() => setModeFilter(modeFilter === "air" ? null : "air")}
-                  className={`px-2 py-1 rounded-full text-[10px] border transition-all ${modeFilter === "air" ? "border-primary bg-[rgba(30,30,30,0.98)] text-amber-200" : "border-white/10 bg-[rgba(14,14,14,0.95)]"}`}
+                  onClick={() => setSelectedAssetDetails(null)}
+                  className="w-6 h-6 rounded-full border border-white/20 flex items-center justify-center bg-black/50 text-muted-foreground hover:text-white transition-all"
                 >
-                  AIR
-                </button>
-                <button
-                  onClick={() => setModeFilter(modeFilter === "sea" ? null : "sea")}
-                  className={`px-2 py-1 rounded-full text-[10px] border transition-all ${modeFilter === "sea" ? "border-primary bg-[rgba(30,30,30,0.98)] text-amber-200" : "border-white/10 bg-[rgba(14,14,14,0.95)]"}`}
-                >
-                  SEA
-                </button>
-                <button
-                  onClick={() => setStatusFilter(statusFilter === "Atraso" ? null : "Atraso")}
-                  className={`px-2 py-1 rounded-full text-[10px] border transition-all ${statusFilter === "Atraso" ? "border-primary bg-[rgba(30,30,30,0.98)] text-amber-200" : "border-white/10 bg-[rgba(14,14,14,0.95)]"}`}
-                >
-                  Atraso
+                  <X size={12} />
                 </button>
               </div>
-              <div className="grid grid-cols-2 gap-2 p-3">
-                <div className="bg-[#151515] rounded-xl p-2 border border-white/[0.06]">
-                  <p className="text-[9px] text-muted-foreground uppercase">Containers</p>
-                  <p className="text-sm font-semibold">{kpis.seaTransit}</p>
+
+              {/* Badge */}
+              <div className="px-3 pt-3">
+                <Badge 
+                  variant="outline" 
+                  className={`${selectedAssetDetails.mode === 'air' ? 'border-[#7fd0ff]/70 text-[#b7e2ff]' : 'border-primary/70 text-primary'}`}
+                >
+                  {selectedAssetDetails.tipo_label} • {selectedAssetDetails.flight || selectedAssetDetails.asset || 'N/A'}
+                </Badge>
+              </div>
+
+              {/* Details */}
+              <div className="p-3 space-y-2 text-sm">
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Rota</span>
+                  <span className="font-medium">{selectedAssetDetails.rota}</span>
                 </div>
-                <div className="bg-[#151515] rounded-xl p-2 border border-white/[0.06]">
-                  <p className="text-[9px] text-muted-foreground uppercase">Voos</p>
-                  <p className="text-sm font-semibold">{kpis.airActive}</p>
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Previsão</span>
+                  <span className="font-medium">{selectedAssetDetails.eta_api}</span>
                 </div>
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Status</span>
+                  <span className={`px-2 py-0.5 rounded-lg text-xs ${selectedAssetDetails.status === 'Atraso' ? 'bg-red-500/20 text-red-400' : selectedAssetDetails.status === 'Entregue' ? 'bg-green-500/20 text-green-400' : 'bg-blue-500/20 text-blue-400'}`}>
+                    {selectedAssetDetails.status}
+                  </span>
+                </div>
+              </div>
+
+              {/* Processos (AWBs) */}
+              <div className="p-3 border-t border-white/[0.05]">
+                <p className="text-xs text-muted-foreground uppercase tracking-wider mb-2">
+                  Processos ({selectedAssetDetails.processos.length})
+                </p>
+                <div className="max-h-32 overflow-y-auto space-y-1">
+                  {selectedAssetDetails.processos.length > 0 ? (
+                    selectedAssetDetails.processos.map((awb, idx) => (
+                      <div key={idx} className="text-xs px-2 py-1.5 bg-white/[0.03] rounded-lg border border-white/[0.06]">
+                        {awb}
+                      </div>
+                    ))
+                  ) : (
+                    <p className="text-xs text-muted-foreground italic">Nenhum processo associado</p>
+                  )}
+                </div>
+              </div>
+
+              {/* Faturamento (empty placeholder) */}
+              <div className="p-3 border-t border-white/[0.05]">
+                <p className="text-xs text-muted-foreground uppercase tracking-wider mb-2">
+                  Faturamento
+                </p>
+                <p className="text-xs text-muted-foreground italic">Em desenvolvimento...</p>
               </div>
             </div>
           )}
