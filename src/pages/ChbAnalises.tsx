@@ -359,22 +359,20 @@ export default function ChbAnalises() {
       <Dialog open={historyModal.open} onOpenChange={(open) => setHistoryModal(prev => ({ ...prev, open }))}>
         <DialogContent className="max-w-3xl bg-[rgba(5,6,18,.98)] border border-[rgba(255,255,255,.12)]">
           <DialogHeader>
-            <div className="flex items-center justify-between">
-              <DialogTitle className="text-[#f5f5f5] flex items-center gap-2">
-                <ClipboardList size={18} className="text-[#ffc800]" />
-                Histórico de Análises
-              </DialogTitle>
+            <DialogTitle className="text-[#f5f5f5] flex items-center gap-3">
+              <ClipboardList size={18} className="text-[#ffc800]" />
+              Histórico de Análises
               {historyModal.history.length > 0 && (
                 <button
                   onClick={() => exportChbHistoryToPDF(historyModal.history, historyModal.reference)}
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-[#ffc800] text-black text-[0.75rem] font-medium hover:bg-[#f5b843] transition-colors"
+                  className="flex items-center gap-1 px-2.5 py-1 rounded-full bg-[#ffc800] text-black text-[0.7rem] font-medium hover:bg-[#f5b843] transition-colors"
                   title="Exportar para PDF"
                 >
-                  <FileDown size={14} />
-                  Exportar PDF
+                  <FileDown size={12} />
+                  PDF
                 </button>
               )}
-            </div>
+            </DialogTitle>
           </DialogHeader>
           <div className="space-y-4 max-h-[600px] overflow-y-auto pr-2">
             {historyModal.history.length === 0 ? (
