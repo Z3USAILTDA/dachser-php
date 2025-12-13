@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { FileCheck } from 'lucide-react';
 import { PageLayout } from '@/components/layout/PageLayout';
@@ -12,10 +12,15 @@ import { ChbAnalysisPanel } from '@/components/chb/ChbAnalysisPanel';
 import { ChbHistoryPanel } from '@/components/chb/ChbHistoryPanel';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
+import { useChbFiles, useChbRuns, ChbFile, ChbRun } from '@/hooks/useChbData';
 
 export default function ConferenciaChb() {
   const navigate = useNavigate();
   const { id } = useParams();
+  const itemId = id ? parseInt(id) : null;
+  
+  const { files: dbFiles, fetchFiles, createFile, deleteFile } = useChbFiles(itemId);
+  const { runs: dbRuns, fetchRuns, createRun } = useChbRuns(itemId);
   
   const [steps, setSteps] = useState<ChbStep[]>(initialSteps);
   const [activeStep, setActiveStep] = useState(1);
@@ -42,28 +47,72 @@ export default function ConferenciaChb() {
     2: [],
     3: [],
   });
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
+
+  const currentUser = localStorage.getItem('user_email') || localStorage.getItem('username') || 'Usuário';
+
+  // Load data from database
+  useEffect(() => {
+    if (itemId) {
+      fetchFiles();
+      fetchRuns();
+    }
+  }, [itemId, fetchFiles, fetchRuns]);
+
+  // Convert DB files to documents
+  useEffect(() => {
+    const newDocs: Record<number, ChbDocument[]> = { 1: [], 2: [], 3: [] };
+    dbFiles.forEach((f: ChbFile) => {
+      const stepId = parseInt(f.etapa) as 1 | 2 | 3;
+      newDocs[stepId].push({
+        id: `db-${f.id}`,
+        name: f.filename,
+        type: 'Invoice',
+        uploadedAt: f.created_at,
+        size: f.size_bytes ? formatFileSize(f.size_bytes) : '',
+        stepId,
+        dbId: f.id,
+        url: f.url || undefined,
+      });
+    });
+    setDocuments(newDocs);
+  }, [dbFiles]);
+
+  // Convert DB runs to approved history
+  useEffect(() => {
+    const newHistory: Record<number, ChbApprovedHistory[]> = { 1: [], 2: [], 3: [] };
+    dbRuns
+      .filter((r: ChbRun) => r.status === 'approved')
+      .forEach((r: ChbRun) => {
+        const stepId = parseInt(r.etapa) as 1 | 2 | 3;
+        newHistory[stepId].push({
+          id: `run-${r.id}`,
+          stepId,
+          date: r.created_at,
+          user: r.created_by_email || r.created_by_name || 'Usuário',
+          summary: r.result_text || '',
+          detailedSummary: r.result_html || r.result_text || '',
+          tags: [],
+        });
+      });
+    setApprovedHistory(newHistory);
+  }, [dbRuns]);
 
   // Get documents for current step (inherited from previous steps + current)
-  const getDocumentsForStep = (stepId: number) => {
+  const getDocumentsForStep = useCallback((stepId: number) => {
     const allDocs: ChbDocument[] = [];
-    // Inherit documents from all previous steps
     for (let i = 1; i <= stepId; i++) {
       allDocs.push(...(documents[i] || []));
     }
     return allDocs;
-  };
+  }, [documents]);
 
-  // Get uploaded files for current step (inherited from previous steps + current)
-  const getUploadedFilesForStep = (stepId: number) => {
-    const allFiles: File[] = [];
-    for (let i = 1; i <= stepId; i++) {
-      allFiles.push(...(uploadedFiles[i] || []));
-    }
-    return allFiles;
+  // Helper to format file size
+  const formatFileSize = (bytes: number): string => {
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
   };
-  const [isAnalyzing, setIsAnalyzing] = useState(false);
-
-  const currentUser = localStorage.getItem('user_email') || localStorage.getItem('username') || 'Usuário';
 
   const handleStepClick = (stepId: number) => {
     setActiveStep(stepId);
@@ -213,12 +262,6 @@ export default function ConferenciaChb() {
     return 'Invoice'; // default
   };
 
-  // Helper to format file size
-  const formatFileSize = (bytes: number): string => {
-    if (bytes < 1024) return `${bytes} B`;
-    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-  };
 
   const handleApproveAndAdvance = () => {
     const currentAnalysis = analysisResults[activeStep];

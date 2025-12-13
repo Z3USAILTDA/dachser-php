@@ -107,6 +107,27 @@ interface QueryRequest {
   canais?: string;
   template_id?: string;
   ativo?: boolean;
+  // CHB Module
+  itemId?: number;
+  reference?: string;
+  status_macro?: string;
+  step1_status?: string;
+  step2_status?: string;
+  step3_status?: string;
+  fileId?: number;
+  filename?: string;
+  mime?: string;
+  sizeBytes?: number;
+  sha256?: string;
+  relPath?: string;
+  url?: string;
+  etapa?: string;
+  docRole?: string;
+  runId?: number;
+  resultText?: string;
+  resultHtml?: string;
+  resultJson?: string;
+  usedAsCtx?: boolean;
 }
 
 serve(async (req) => {
@@ -2476,6 +2497,181 @@ serve(async (req) => {
         `, [id]);
 
         result = { success: true, message: 'Regra excluída com sucesso' };
+        break;
+      }
+
+      // ==================== CHB MODULE ====================
+      case 'get_chb_items': {
+        console.log('Fetching CHB items');
+        const items = await client.query(`
+          SELECT i.*, 
+            (SELECT MAX(r.created_at) FROM ai_agente.t_dachser_chb_runs r WHERE r.item_id = i.id) as last_run_at
+          FROM ai_agente.t_dachser_chb_items i 
+          WHERE i.active = 1 
+          ORDER BY i.created_at DESC
+        `);
+        result = { success: true, data: items || [] };
+        break;
+      }
+
+      case 'get_chb_item': {
+        const { id: itemId } = body;
+        console.log('Fetching CHB item:', itemId);
+        const items = await client.query(`
+          SELECT * FROM ai_agente.t_dachser_chb_items WHERE id = ?
+        `, [itemId]);
+        result = { success: true, data: items?.[0] || null };
+        break;
+      }
+
+      case 'create_chb_item': {
+        const { reference, consignee, userId } = body as { reference?: string; consignee?: string; userId?: number };
+        console.log('Creating CHB item:', { reference, consignee });
+        
+        const insertResult = await client.execute(`
+          INSERT INTO ai_agente.t_dachser_chb_items 
+          (reference, consignee, status_macro, step1_status, step2_status, step3_status, active, created_by)
+          VALUES (?, ?, 'pre_alerta_pendente', 'pendente', 'pendente', 'pendente', 1, ?)
+        `, [reference || null, consignee || null, userId || null]);
+        
+        result = { success: true, id: insertResult.lastInsertId };
+        break;
+      }
+
+      case 'update_chb_item': {
+        const { id: itemId, status_macro, step1_status, step2_status, step3_status } = body;
+        console.log('Updating CHB item:', itemId);
+        
+        const fields: string[] = [];
+        const values: any[] = [];
+        if (status_macro !== undefined) { fields.push('status_macro = ?'); values.push(status_macro); }
+        if (step1_status !== undefined) { fields.push('step1_status = ?'); values.push(step1_status); }
+        if (step2_status !== undefined) { fields.push('step2_status = ?'); values.push(step2_status); }
+        if (step3_status !== undefined) { fields.push('step3_status = ?'); values.push(step3_status); }
+        
+        if (fields.length > 0) {
+          values.push(itemId);
+          await client.execute(`
+            UPDATE ai_agente.t_dachser_chb_items SET ${fields.join(', ')} WHERE id = ?
+          `, values);
+        }
+        
+        result = { success: true };
+        break;
+      }
+
+      case 'delete_chb_item': {
+        const { id: itemId } = body;
+        console.log('Soft-deleting CHB item:', itemId);
+        await client.execute(`
+          UPDATE ai_agente.t_dachser_chb_items SET active = 0 WHERE id = ?
+        `, [itemId]);
+        result = { success: true };
+        break;
+      }
+
+      case 'get_chb_files': {
+        const { itemId } = body;
+        console.log('Fetching CHB files for item:', itemId);
+        const files = await client.query(`
+          SELECT f.*, d.etapa, d.doc_role, d.is_active as doc_active
+          FROM ai_agente.t_dachser_chb_files f
+          INNER JOIN ai_agente.t_dachser_chb_docs d ON d.file_id = f.id
+          WHERE d.item_id = ? AND d.is_active = 1
+          ORDER BY d.etapa, f.created_at
+        `, [itemId]);
+        result = { success: true, data: files || [] };
+        break;
+      }
+
+      case 'create_chb_file': {
+        const { itemId, filename, mime, sizeBytes, sha256, relPath, url, etapa, docRole, userId } = body as any;
+        console.log('Creating CHB file:', { filename, itemId, etapa });
+        
+        // Insert file
+        const fileResult = await client.execute(`
+          INSERT INTO ai_agente.t_dachser_chb_files 
+          (filename, mime, size_bytes, sha256, rel_path, url, created_by)
+          VALUES (?, ?, ?, ?, ?, ?, ?)
+        `, [filename, mime || null, sizeBytes || null, sha256 || null, relPath || null, url || null, userId || null]);
+        
+        const fileId = fileResult.lastInsertId;
+        
+        // Link file to item
+        await client.execute(`
+          INSERT INTO ai_agente.t_dachser_chb_docs 
+          (item_id, file_id, etapa, doc_role, version, is_active, created_by)
+          VALUES (?, ?, ?, ?, 1, 1, ?)
+        `, [itemId, fileId, etapa || '1', docRole || 'pre_alert', userId || null]);
+        
+        result = { success: true, fileId };
+        break;
+      }
+
+      case 'delete_chb_doc': {
+        const { fileId, itemId } = body;
+        console.log('Soft-deleting CHB doc:', { fileId, itemId });
+        await client.execute(`
+          UPDATE ai_agente.t_dachser_chb_docs SET is_active = 0 WHERE file_id = ? AND item_id = ?
+        `, [fileId, itemId]);
+        result = { success: true };
+        break;
+      }
+
+      case 'get_chb_runs': {
+        const { itemId, etapa } = body;
+        console.log('Fetching CHB runs for item:', itemId, 'etapa:', etapa);
+        
+        let query = `
+          SELECT r.*, u.username as created_by_name, u.email as created_by_email
+          FROM ai_agente.t_dachser_chb_runs r
+          LEFT JOIN ai_agente.t_users_dachser u ON u.id = r.created_by
+          WHERE r.item_id = ?
+        `;
+        const params: any[] = [itemId];
+        
+        if (etapa !== undefined) {
+          query += ` AND r.etapa = ?`;
+          params.push(etapa);
+        }
+        
+        query += ` ORDER BY r.created_at DESC`;
+        
+        const runs = await client.query(query, params);
+        result = { success: true, data: runs || [] };
+        break;
+      }
+
+      case 'create_chb_run': {
+        const { itemId, etapa, status, resultText, resultHtml, resultJson, usedAsCtx, userId } = body as any;
+        console.log('Creating CHB run:', { itemId, etapa, status });
+        
+        const insertResult = await client.execute(`
+          INSERT INTO ai_agente.t_dachser_chb_runs 
+          (item_id, etapa, status, result_text, result_html, result_json, used_as_ctx, created_by)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        `, [
+          itemId, 
+          etapa || '1', 
+          status || 'completed', 
+          resultText || null, 
+          resultHtml || null, 
+          resultJson || null, 
+          usedAsCtx ? 1 : 0, 
+          userId || null
+        ]);
+        
+        result = { success: true, runId: insertResult.lastInsertId };
+        break;
+      }
+
+      case 'update_chb_run_ctx': {
+        const { runId, usedAsCtx } = body;
+        console.log('Updating CHB run context flag:', runId);
+        await client.execute(`
+          UPDATE ai_agente.t_dachser_chb_runs SET used_as_ctx = ? WHERE id = ?
+        `, [usedAsCtx ? 1 : 0, runId]);
+        result = { success: true };
         break;
       }
 
