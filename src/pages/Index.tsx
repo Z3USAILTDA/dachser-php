@@ -313,8 +313,6 @@ const Index = () => {
   const [isLoadingStatusAereo, setIsLoadingStatusAereo] = useState(false);
   const [retrackingAwbs, setRetrackingAwbs] = useState<Set<string>>(new Set());
   const [showCompletionPopup, setShowCompletionPopup] = useState(false);
-  const [customerEmailEnabled, setCustomerEmailEnabled] = useState<Record<string, boolean>>({});
-  const [customerEmails, setCustomerEmails] = useState<Record<string, string>>({});
   const [cardFilter, setCardFilter] = useState<CardFilterType>("all");
   const isPausedRef = useRef(false);
   const shouldSendEmailsRef = useRef(false); // Only send emails when user explicitly clicks button
@@ -606,14 +604,11 @@ const Index = () => {
                       // Mark as sent BEFORE sending to prevent race conditions
                       emailsSentRef.current.add(emailKey);
                       
-                      // Check if customer email is enabled for this AWB (default is disabled)
-                      const isCustomerEmailEnabled = customerEmailEnabled[awbNumber] === true;
-                      const customerEmail = isCustomerEmailEnabled
-                        ? (customerEmails[awbNumber] ?? itemEmailCliente)
-                        : undefined;
+                      // Use email_cliente directly from the item
+                      const customerEmail = itemEmailCliente || undefined;
 
                       console.log(
-                        `[EMAIL SENDING] Customer email for ${awbNumber}: enabled=${isCustomerEmailEnabled}, email=${customerEmail}`,
+                        `[EMAIL SENDING] Customer email for ${awbNumber}: email=${customerEmail}`,
                       );
 
                       try {
@@ -1894,9 +1889,6 @@ const Index = () => {
                       <th className="px-4 py-3 text-center text-[#aaaaaa] uppercase text-[0.68rem] tracking-[0.1em] font-medium">
                         Abrir rastreio
                       </th>
-                      <th className="px-4 py-3 text-center text-[#aaaaaa] uppercase text-[0.68rem] tracking-[0.1em] font-medium">
-                        Email Cliente
-                      </th>
                     </tr>
                   </thead>
                   <tbody>
@@ -2173,10 +2165,7 @@ const Index = () => {
                                   size="sm"
                                   onClick={async () => {
                                     try {
-                                      const customerEmail =
-                                        customerEmailEnabled[awb.awb] === true
-                                          ? (customerEmails[awb.awb] ?? awb.email_cliente)
-                                          : undefined;
+                                      const customerEmail = awb.email_cliente || undefined;
 
                                       if (!EMAIL_SENDING_ENABLED) {
                                         toast({
@@ -2235,20 +2224,6 @@ const Index = () => {
                                 >
                                   <Mail className="w-4 h-4" />
                                 </Button>
-                              </div>
-                            </td>
-                            <td className="px-3 py-3">
-                              <div className="flex items-center justify-center">
-                                <Checkbox
-                                  id={`email-enabled-${awb.awb}`}
-                                  checked={customerEmailEnabled[awb.awb] === true}
-                                  onCheckedChange={(checked) => {
-                                    setCustomerEmailEnabled((prev) => ({
-                                      ...prev,
-                                      [awb.awb]: checked === true,
-                                    }));
-                                  }}
-                                />
                               </div>
                             </td>
                           </tr>
