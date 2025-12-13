@@ -1,37 +1,36 @@
-import { cn } from "@/lib/utils";
+import { Badge } from "@/components/ui/badge";
 
 interface BadgeStatusProps {
   status: string;
 }
 
-export function BadgeStatus({ status }: BadgeStatusProps) {
+export const BadgeStatus = ({ status }: BadgeStatusProps) => {
   const getStatusConfig = (status: string) => {
-    switch (status?.toLowerCase()) {
-      case "completed":
-      case "realizado":
-        return { label: "Realizado", className: "bg-emerald-500/20 text-emerald-400 border-emerald-500/30" };
-      case "processing":
-        return { label: "Processando", className: "bg-blue-500/20 text-blue-400 border-blue-500/30" };
-      case "queued":
-        return { label: "Na fila", className: "bg-amber-500/20 text-amber-400 border-amber-500/30" };
-      case "error":
-      case "failed":
-        return { label: "Erro", className: "bg-rose-500/20 text-rose-400 border-rose-500/30" };
-      default:
-        return { label: "Pendente", className: "bg-neutral-500/20 text-neutral-400 border-neutral-500/30" };
+    // Map all statuses to either "REALIZADO" or "PENDENTE"
+    if (status === 'completed' || status === 'realizado') {
+      return {
+        label: 'REALIZADO',
+        variant: 'default' as const,
+        className: 'bg-emerald-500/15 text-emerald-300 border-emerald-500/40 px-3 py-1 rounded-full text-xs font-semibold'
+      };
     }
+    
+    // All other statuses show as "PENDENTE"
+    return {
+      label: 'PENDENTE',
+      variant: 'secondary' as const,
+      className: 'bg-amber-500/15 text-amber-300 border-amber-500/40 px-3 py-1 rounded-full text-xs font-semibold'
+    };
   };
 
   const config = getStatusConfig(status);
 
   return (
-    <span
-      className={cn(
-        "inline-flex items-center px-2.5 py-1 rounded-full text-[10px] font-medium uppercase tracking-wider border",
-        config.className
-      )}
+    <Badge
+      variant={config.variant}
+      className={config.className}
     >
       {config.label}
-    </span>
+    </Badge>
   );
-}
+};

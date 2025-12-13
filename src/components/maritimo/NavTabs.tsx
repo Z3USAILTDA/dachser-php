@@ -1,33 +1,36 @@
-import { cn } from "@/lib/utils";
+import { FileText, ArrowRightLeft, Receipt } from "lucide-react";
 
 interface NavTabsProps {
   activeTab: string;
-  onTabChange: (value: string) => void;
+  onTabChange: (tab: string) => void;
 }
 
-export function NavTabs({ activeTab, onTabChange }: NavTabsProps) {
+export const NavTabs = ({ activeTab, onTabChange }: NavTabsProps) => {
   const tabs = [
-    { value: "manifest", label: "Manifest → HBL" },
-    { value: "hbl", label: "HBL → MBL" },
-    { value: "invoices", label: "Invoices → HBL" },
+    { id: "manifest", label: "Manifest/Pack List × Draft HBL", icon: FileText },
+    { id: "hbl", label: "HBL × MBL", icon: ArrowRightLeft },
+    { id: "invoices", label: "Invoices × Draft HBL", icon: Receipt }
   ];
 
   return (
-    <div className="flex gap-1 p-1 rounded-full bg-black/60 border border-white/10">
-      {tabs.map((tab) => (
-        <button
-          key={tab.value}
-          onClick={() => onTabChange(tab.value)}
-          className={cn(
-            "px-4 py-2 rounded-full text-xs font-medium transition-all",
-            activeTab === tab.value
-              ? "bg-primary text-primary-foreground shadow-[0_0_12px_hsl(var(--primary)/0.5)]"
-              : "text-muted-foreground hover:text-foreground hover:bg-white/5"
-          )}
-        >
-          {tab.label}
-        </button>
-      ))}
+    <div className="flex gap-2">
+      {tabs.map((tab) => {
+        const Icon = tab.icon;
+        return (
+          <button
+            key={tab.id}
+            onClick={() => onTabChange(tab.id)}
+            className={`flex items-center gap-2 px-4 py-2 rounded-full font-medium transition-all text-xs ${
+              activeTab === tab.id
+                ? "bg-black/86 text-white border border-amber-400/60 shadow-[0_0_15px_rgba(251,191,36,0.3)]"
+                : "bg-transparent text-neutral-400 hover:text-white hover:bg-black/60 border border-white/10"
+            }`}
+          >
+            <Icon className="w-4 h-4" />
+            {tab.label}
+          </button>
+        );
+      })}
     </div>
   );
-}
+};
