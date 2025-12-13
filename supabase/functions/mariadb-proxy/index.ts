@@ -2698,11 +2698,6 @@ serve(async (req) => {
         `;
         const params: any[] = [];
         
-        if (analysisType) {
-          query += ` AND i.analysis_type = ?`;
-          params.push(analysisType);
-        }
-        
         if (status && status !== 'todos') {
           query += ` AND i.status = ?`;
           params.push(status);
