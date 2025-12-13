@@ -22,15 +22,15 @@ export function ChbAnalysisPanel({
   // No files uploaded yet
   if (!hasFiles && !analysisResult) {
     return (
-      <div className="space-y-6">
-        <h3 className="text-lg font-semibold text-white">
+      <div className="space-y-4">
+        <h3 className="text-sm font-semibold text-white">
           Análise automatizada — {stepTitles[stepId]}
         </h3>
         
-        <div className="p-12 text-center rounded-xl bg-black/30 border border-white/10">
-          <FileText className="w-16 h-16 text-white/20 mx-auto mb-4" />
-          <p className="text-white/60 mb-2">Nenhum documento para analisar</p>
-          <p className="text-sm text-white/40">
+        <div className="p-8 text-center rounded-lg bg-black/30 border border-white/10">
+          <FileText className="w-12 h-12 text-white/20 mx-auto mb-3" />
+          <p className="text-white/60 text-xs mb-1">Nenhum documento para analisar</p>
+          <p className="text-[0.65rem] text-white/40">
             Vá para a aba "Documentos" e faça upload dos arquivos para iniciar a análise.
           </p>
         </div>
@@ -41,14 +41,14 @@ export function ChbAnalysisPanel({
   // Has files but no analysis yet
   if (!analysisResult) {
     return (
-      <div className="space-y-6">
-        <h3 className="text-lg font-semibold text-white">
+      <div className="space-y-4">
+        <h3 className="text-sm font-semibold text-white">
           Análise automatizada — {stepTitles[stepId]}
         </h3>
         
-        <div className="p-12 text-center rounded-xl bg-black/30 border border-white/10">
-          <FileText className="w-16 h-16 text-amber-500/40 mx-auto mb-4" />
-          <p className="text-white/60 mb-4">
+        <div className="p-8 text-center rounded-lg bg-black/30 border border-white/10">
+          <FileText className="w-12 h-12 text-amber-500/40 mx-auto mb-3" />
+          <p className="text-white/60 text-xs mb-3">
             {isAnalyzing 
               ? 'Processando documentos com IA...' 
               : 'Clique para iniciar a análise dos documentos.'}
@@ -79,23 +79,23 @@ export function ChbAnalysisPanel({
 
   // Has analysis result
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <h3 className="text-lg font-semibold text-white">
+        <h3 className="text-sm font-semibold text-white">
           Análise automatizada — {stepTitles[stepId]}
         </h3>
-        <span className="text-xs text-white/40">
+        <span className="text-[0.65rem] text-white/40">
           Gerado em: {analysisResult.generatedAt}
         </span>
       </div>
 
       {/* Files analyzed list */}
-      <div className="text-xs text-white/50">
+      <div className="text-[0.65rem] text-white/50">
         <span className="font-medium">Arquivos analisados:</span> {analysisResult.filesAnalyzed.join(', ')}
       </div>
 
       {/* Analysis HTML content - table and observations */}
-      <div className="p-6 rounded-xl bg-black/30 border border-white/10 overflow-auto">
+      <div className="p-4 rounded-lg bg-black/30 border border-white/10 overflow-auto">
         <div 
           className="prose prose-invert prose-sm max-w-none chb-analysis-content"
           dangerouslySetInnerHTML={{ __html: analysisResult.html }}
