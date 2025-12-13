@@ -75,13 +75,7 @@ async function extractTextFromFile(file: FileInfo): Promise<string> {
   return '';
 }
 
-function getPromptForAnalysisType(analysisType: string): string {
-  // Simplified prompt for maritime analysis
-  const basePrompt = `You are CRONOS, a logistics auditor specialized in maritime Bills of Lading.
-Analyze the provided documents and identify discrepancies between the Manifest/Base document and the HBL/Draft documents.
-Output in plain text, email-ready format. List all required corrections clearly.`;
-  return basePrompt;
-}
+import { getPromptForAnalysisType } from "./prompts.ts";
 
 async function analyzeWithGemini(
   prompt: string, manifestText: string, pdfFiles: FileInfo[], metadata: { consignee?: string; container?: string }
@@ -109,22 +103,39 @@ async function analyzeWithGemini(
   
   contentParts.push({ type: 'text', text: '\n\nProvide your complete analysis following the specified format.' });
   
+  // 8 minute timeout for complex analysis
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 8 * 60 * 1000);
+  
   const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
     method: 'POST',
     headers: { 'Authorization': `Bearer ${lovableApiKey}`, 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      model: 'google/gemini-2.5-flash',
+      model: 'google/gemini-2.5-pro',
       messages: [{ role: 'user', content: contentParts }],
-      max_tokens: 8000,
+      max_tokens: 16000,
       temperature: 0.1,
     }),
+    signal: controller.signal,
   });
+  
+  clearTimeout(timeoutId);
   
   if (response.ok) {
     const data = await response.json();
-    return { text: data.choices?.[0]?.message?.content || '', model: 'google/gemini-2.5-flash' };
+    return { text: data.choices?.[0]?.message?.content || '', model: 'google/gemini-2.5-pro' };
   }
-  throw new Error(`Gemini API error: ${response.status}`);
+  
+  // Handle specific errors
+  if (response.status === 429) {
+    throw new Error('Limite de requisições excedido, tente novamente mais tarde');
+  }
+  if (response.status === 402) {
+    throw new Error('Créditos esgotados, adicione créditos ao workspace');
+  }
+  
+  const errorText = await response.text().catch(() => '');
+  throw new Error(`Erro na API de IA: ${response.status} - ${errorText}`);
 }
 
 async function analyzeWithLLM(
