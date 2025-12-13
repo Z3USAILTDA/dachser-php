@@ -1,9 +1,10 @@
 import React, { useState, useEffect, useRef, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
-import { Card } from "@/components/ui/card";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
+import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import {
@@ -20,7 +21,7 @@ import {
   Check,
   ArrowLeft,
   User as UserIcon,
-  Filter as FilterIcon,
+  Loader2,
 } from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
 import { useToast } from "@/hooks/use-toast";
@@ -29,18 +30,28 @@ import type { User, Session } from "@supabase/supabase-js";
 import DashboardCards, { CardFilterType } from "@/components/DashboardCards";
 import dachserBg from "@/assets/dachser-background.jpg";
 import { TablePagination } from "@/components/layout/TablePagination";
+import { Filter as FilterIcon } from "lucide-react";
+import { z } from "zod";
+
+const loginSchema = z.object({
+  email: z.string().email({ message: "Email inválido" }),
+  password: z.string().min(1, { message: "Senha é obrigatória" }),
+});
 
 // TEMPORARIAMENTE DESATIVADO - Mudar para true para reativar envio de emails
 const EMAIL_SENDING_ENABLED = true;
 
 const airlines = [
+  { code: "001", name: "American Airlines" },
   { code: "006", name: "Delta Cargo" },
   { code: "020", name: "Lufthansa Cargo" },
   { code: "074", name: "KLM Cargo" },
+  { code: "075", name: "IAG Cargo" },
   { code: "369", name: "Atlas Air Cargo" },
   { code: "577", name: "Azul Cargo" },
   { code: "057", name: "Air France Cargo" },
   { code: "045", name: "LATAM Cargo" },
+  { code: "549", name: "LATAM Cargo" },
   { code: "047", name: "TAP Cargo" },
   { code: "055", name: "ITA Cargo" },
 ];
@@ -54,10 +65,13 @@ const getTrackingUrl = (airlineCode: string, fullAwb: string): string | null => 
     .trim();
 
   const urlBuilders: Record<string, (iata: string, awb: string) => string> = {
+    "001": (iata, awb) => `https://www.aacargo.com/tracking?awb=${iata}${awb}`,
     "045": (iata, awb) => `https://www.latamcargo.com/en/trackshipment?docNumber=${awb}&docPrefix=${iata}&soType=MAWB`,
+    "549": (iata, awb) => `https://www.latamcargo.com/en/trackshipment?docNumber=${awb}&docPrefix=${iata}&soType=MAWB`,
     "577": (iata, awb) => `https://azulcargoexpress.smartkargo.com/FrmAWBTracking.aspx?AWBPrefix=${iata}&AWBno=${awb}`,
     "057": (iata, awb) => `https://www.afklcargo.com/mycargo/shipment/detail/${iata}-${awb}`,
     "074": (iata, awb) => `https://www.afklcargo.com/mycargo/shipment/detail/${iata}-${awb}`,
+    "075": (iata, awb) => `https://api.tracking.iagcargo.com/tracking/${iata}-${awb}`,
     "369": (iata, awb) => `https://jumpseat.atlasair.com/aa/tracktracehtml/TrackTrace.html?pe=${iata}&se=${awb}`,
     "020": (iata, awb) => `https://www.lufthansa-cargo.com/en/eservices/etracking/tracking/-/awb/${iata}/${awb}`,
     "006": (iata, awb) =>
@@ -276,6 +290,7 @@ interface AWBData {
   destino?: string;
   fromStatusAereo?: boolean;
   data_atraso?: string | null;
+  tipo_servico?: string;
 }
 
 const STORAGE_KEY = "tracked-awbs";
@@ -285,6 +300,11 @@ const Index = () => {
   const [user, setUser] = useState<User | null>(null);
   const [session, setSession] = useState<Session | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [isLoginLoading, setIsLoginLoading] = useState(false);
+  const [loginForm, setLoginForm] = useState({ 
+    email: "rastreio.aereo@dachser.com", 
+    password: ""
+  });
   const [awbNumber, setAwbNumber] = useState("");
   const [selectedAirline, setSelectedAirline] = useState("");
   const [consigneeName, setConsigneeName] = useState("");
@@ -348,6 +368,52 @@ const Index = () => {
     return () => subscription.unsubscribe();
   }, []);
 
+  const handleLogin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsLoginLoading(true);
+
+    try {
+      const validatedData = loginSchema.parse(loginForm);
+      
+      const { error: authError } = await supabase.auth.signInWithPassword({
+        email: validatedData.email,
+        password: validatedData.password,
+      });
+
+      if (authError) {
+        console.error('Auth error:', authError);
+        toast({
+          title: "Erro ao fazer login",
+          description: "Email ou senha inválidos",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      toast({
+        title: "Login realizado com sucesso!",
+        description: "Bem-vindo ao sistema de rastreio",
+      });
+    } catch (error) {
+      console.error('Login error:', error);
+      if (error instanceof z.ZodError) {
+        toast({
+          title: "Erro de validação",
+          description: error.errors[0].message,
+          variant: "destructive",
+        });
+      } else {
+        toast({
+          title: "Erro ao fazer login",
+          description: "Ocorreu um erro inesperado",
+          variant: "destructive",
+        });
+      }
+    } finally {
+      setIsLoginLoading(false);
+    }
+  };
+
   const handleLogout = async () => {
     await supabase.auth.signOut();
     toast({
@@ -403,6 +469,7 @@ const Index = () => {
             : new Date().toISOString(),
           fromStatusAereo: true,
           data_atraso: item.data_atraso || null,
+          tipo_servico: item.tipo_servico || "N/A",
         }));
 
         setStatusAereoData(convertedData);
@@ -1608,8 +1675,61 @@ const Index = () => {
 
   if (isLoading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-background">
-        <p className="text-foreground">Carregando...</p>
+      <div className="min-h-screen bg-black flex items-center justify-center">
+        <p className="text-white">Carregando...</p>
+      </div>
+    );
+  }
+
+  // Show login form if not authenticated
+  if (!session) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-background via-background to-muted/20 p-4">
+        <Card className="w-full max-w-md">
+          <CardHeader>
+            <CardTitle className="text-2xl font-bold text-center">Sistema de Rastreio</CardTitle>
+            <CardDescription className="text-center">
+              Faça login para acessar o sistema
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <form onSubmit={handleLogin} className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="login-email">Username</Label>
+                <Input
+                  id="login-email"
+                  type="email"
+                  placeholder="rastreio.aereo@dachser.com"
+                  value={loginForm.email}
+                  onChange={(e) => setLoginForm({ ...loginForm, email: e.target.value })}
+                  required
+                  disabled={isLoginLoading}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="login-password">Senha</Label>
+                <Input
+                  id="login-password"
+                  type="password"
+                  placeholder="••••••••"
+                  value={loginForm.password}
+                  onChange={(e) => setLoginForm({ ...loginForm, password: e.target.value })}
+                  disabled={isLoginLoading}
+                />
+              </div>
+              <Button type="submit" className="w-full" disabled={isLoginLoading}>
+                {isLoginLoading ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Entrando...
+                  </>
+                ) : (
+                  "Entrar"
+                )}
+              </Button>
+            </form>
+          </CardContent>
+        </Card>
       </div>
     );
   }
@@ -1878,6 +1998,7 @@ const Index = () => {
                           {sortAnalyst === "desc" && <span className="text-[#ffc800]">↓</span>}
                         </span>
                       </th>
+                      <th className="px-4 py-3 text-left text-[#aaaaaa] uppercase text-[0.68rem] tracking-[0.1em] font-medium">Serviço</th>
                       <th className="px-4 py-3 text-center text-[#aaaaaa] uppercase text-[0.68rem] tracking-[0.1em] font-medium">
                         Abrir rastreio
                       </th>
@@ -2065,6 +2186,7 @@ const Index = () => {
                               })()}
                             </td>
                             <td className="px-3 py-3 text-[#aaaaaa] text-sm uppercase">{awb.nome_analista || "-"}</td>
+                            <td className="px-3 py-3 text-[#aaaaaa] text-sm">{awb.tipo_servico || "N/A"}</td>
                             <td className="px-4 py-3 text-center">
                               <div className="flex items-center justify-center gap-1">
                                 <Button
