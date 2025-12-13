@@ -13,7 +13,7 @@ interface ExtractAttachmentsResponse {
   source: string;
 }
 
-// Marítimo API Client - Uses Supabase Edge Functions via mariadb-proxy
+// Marítimo API Client - Uses dedicated SEA Edge Functions
 export interface MaritimoItem {
   id: string;
   base_file_name: string;
@@ -38,15 +38,14 @@ export interface UploadBaseFileParams {
 }
 
 export interface SubmitAnalysisParams {
-  itemId: string;
+  itemId?: string;
   analysisType: 'manifest_hbl' | 'hbl_mbl' | 'invoices_hbl';
   files: File[];
-  fileUrls?: Array<{ name: string; url: string; type: string }>;
+  fileUrls?: Array<{ name: string; url: string; type: string; size?: number }>;
   linkData?: {
-    hbl_id: string;
-    invoice_files: string[];
+    hblFileName?: string;
+    invoiceFileNames?: string[];
   };
-  links?: Array<{ hblFileId: string; invoiceFileIds: string[] }>;
 }
 
 export interface AnalysisStatus {
@@ -99,28 +98,14 @@ export interface HistoryResponse {
   runs: HistoryRun[];
 }
 
-// Helper to convert File to base64
-async function fileToBase64(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => {
-      const result = reader.result as string;
-      const base64 = result.split(',')[1] || result;
-      resolve(base64);
-    };
-    reader.onerror = reject;
-    reader.readAsDataURL(file);
-  });
-}
-
 export const maritimoApi = {
   /**
    * Get all maritime items with optional filtering by analysis type
    */
   async getItems(params: { analysisType?: string; status?: string; search?: string } = {}): Promise<MaritimoItem[]> {
     try {
-      const { data, error } = await supabase.functions.invoke('mariadb-proxy', {
-        body: { action: 'get_maritimo_items', ...params }
+      const { data, error } = await supabase.functions.invoke('sea-get-items', {
+        body: params
       });
       if (error) throw error;
       return data?.items || [];
@@ -134,8 +119,8 @@ export const maritimoApi = {
    * Get a single maritime item by ID
    */
   async getItem(itemId: string): Promise<MaritimoItem> {
-    const { data, error } = await supabase.functions.invoke('mariadb-proxy', {
-      body: { action: 'get_maritimo_item', itemId }
+    const { data, error } = await supabase.functions.invoke('sea-get-item', {
+      body: { id: itemId }
     });
     
     if (error) throw error;
@@ -147,8 +132,8 @@ export const maritimoApi = {
    * Get history for a specific item
    */
   async getHistory(itemId: string): Promise<HistoryResponse> {
-    const { data, error } = await supabase.functions.invoke('mariadb-proxy', {
-      body: { action: 'get_maritimo_history', itemId }
+    const { data, error } = await supabase.functions.invoke('sea-get-history', {
+      body: { itemId }
     });
     
     if (error) throw error;
@@ -163,22 +148,23 @@ export const maritimoApi = {
    * Poll analysis status
    */
   async pollAnalysis(analysisId: string): Promise<AnalysisStatus> {
-    const { data, error } = await supabase.functions.invoke('mariadb-proxy', {
-      body: { action: 'get_maritimo_analysis_status', analysisId }
+    const { data, error } = await supabase.functions.invoke('sea-poll-analysis', {
+      body: { id: analysisId }
     });
     
     if (error) throw error;
-    return data;
+    return data?.analysis || data;
   },
 
   /**
-   * Delete an item (soft delete)
+   * Delete an item via edge function
    */
   async deleteItem(itemId: string): Promise<{ success: boolean; error?: string }> {
     try {
       const { data, error } = await supabase.functions.invoke('mariadb-proxy', {
         body: { action: 'delete_maritimo_item', itemId }
       });
+      
       if (error) throw error;
       return { success: true };
     } catch (error: any) {
@@ -192,31 +178,44 @@ export const maritimoApi = {
    */
   async completeAnalysis(analysisId: string, itemId: string, shouldComplete: boolean): Promise<void> {
     const { error } = await supabase.functions.invoke('mariadb-proxy', {
-      body: { action: 'complete_maritimo_analysis', analysisId, itemId, completed: shouldComplete }
+      body: { 
+        action: 'complete_maritimo_analysis', 
+        analysisId, 
+        itemId, 
+        completed: shouldComplete 
+      }
     });
     
     if (error) throw error;
   },
 
   /**
-   * Upload base file (manifest or HBL)
+   * Upload base file (manifest or HBL) - uses dedicated edge function
    */
-  async uploadBaseFile({ file, analysisType }: UploadBaseFileParams): Promise<{ success: boolean; itemId?: string; error?: string }> {
+  async uploadBaseFile({ file, analysisType }: UploadBaseFileParams): Promise<{ success: boolean; itemId?: string; item?: MaritimoItem; error?: string }> {
     try {
-      const base64Content = await fileToBase64(file);
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('analysisType', analysisType);
 
-      const { data, error } = await supabase.functions.invoke('mariadb-proxy', {
-        body: {
-          action: 'upload_maritimo_base_file',
-          fileName: file.name,
-          fileContent: base64Content,
-          fileType: file.type,
-          analysisType
+      const response = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/sea-upload-base-file`,
+        {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
+          },
+          body: formData
         }
-      });
+      );
 
-      if (error) throw error;
-      return { success: true, itemId: data?.itemId };
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error || `HTTP error ${response.status}`);
+      }
+
+      const data = await response.json();
+      return { success: true, itemId: data?.item?.id, item: data?.item };
     } catch (error: any) {
       console.error('Upload error:', error);
       return { success: false, error: error.message || 'Erro ao fazer upload' };
@@ -224,7 +223,7 @@ export const maritimoApi = {
   },
 
   /**
-   * Submit analysis - returns direct result (synchronous) or analysisId for polling
+   * Submit analysis - uses dedicated edge function with FormData
    */
   async submitAnalysis(params: SubmitAnalysisParams): Promise<{ 
     analysisId: string; 
@@ -233,43 +232,56 @@ export const maritimoApi = {
     result_data?: any;
     error?: string;
   }> {
-    // Convert files to base64
-    const processedFiles = [];
+    const formData = new FormData();
+    
+    if (params.itemId) {
+      formData.append('itemId', params.itemId);
+    }
+    formData.append('analysisType', params.analysisType);
+    
+    // Add files
     if (params.files && params.files.length > 0) {
       for (const file of params.files) {
-        const base64Content = await fileToBase64(file);
-        processedFiles.push({
-          filename: file.name,
-          content: base64Content,
-          mimeType: file.type
-        });
+        formData.append('files', file);
       }
     }
+    
+    // Add fileUrls (pre-uploaded files)
+    if (params.fileUrls && params.fileUrls.length > 0) {
+      formData.append('fileUrls', JSON.stringify(params.fileUrls));
+    }
+    
+    // Add link data for invoices_hbl
+    if (params.linkData) {
+      formData.append('linkData', JSON.stringify(params.linkData));
+    }
 
-    // Call the maritimo-analyze edge function
-    const { data, error } = await supabase.functions.invoke('maritimo-analyze', {
-      body: {
-        itemId: params.itemId,
-        analysisType: params.analysisType,
-        files: processedFiles,
-        fileUrls: params.fileUrls,
-        links: params.linkData
+    const response = await fetch(
+      `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/sea-submit-analysis`,
+      {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
+        },
+        body: formData
       }
-    });
+    );
 
-    if (error) {
-      console.error('Edge Function Error Details:', error);
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
       
-      if ((error as any).status === 413) {
+      if (response.status === 413) {
         throw new Error('Arquivos muito grandes. Reduza o tamanho total dos arquivos.');
-      } else if ((error as any).status === 504 || (error as any).status === 502) {
+      } else if (response.status === 504 || response.status === 502) {
         throw new Error('Tempo limite excedido. Tente novamente com menos arquivos.');
-      } else if ((error as any).status >= 500) {
+      } else if (response.status >= 500) {
         throw new Error('Erro no servidor. Tente novamente em alguns instantes.');
       }
       
-      throw new Error(error.message || 'Erro ao conectar com o servidor');
+      throw new Error(errorData.error || 'Erro ao conectar com o servidor');
     }
+
+    const data = await response.json();
     
     return {
       analysisId: data?.analysisId || '',
@@ -284,7 +296,7 @@ export const maritimoApi = {
    * Poll analysis status with timeout
    */
   async pollAnalysisUntilComplete(
-    jobId: string, 
+    analysisId: string, 
     onProgress?: (percent: number, step: string) => void,
     timeoutMs: number = 1200000
   ): Promise<any> {
@@ -292,19 +304,20 @@ export const maritimoApi = {
     const pollInterval = 2000;
     
     while (Date.now() - startTime < timeoutMs) {
-      const status = await this.pollAnalysis(jobId);
+      const status = await this.pollAnalysis(analysisId);
       
       if (onProgress && status.progress_percent !== undefined) {
         onProgress(status.progress_percent, status.progress_step || status.status);
       }
 
-      if (status.status === 'comparing' || status.status === 'completed') {
+      // Check for completed states
+      if (status.status === 'completed' || status.status === 'pendente') {
         return {
           success: true,
           result_text: status.result_text,
           result_data: status.result_data,
           status: status.status,
-          analysisId: jobId
+          analysisId
         };
       }
 
@@ -329,6 +342,7 @@ export const maritimoApi = {
         return { success: false, extracted: [], source: '' };
       }
 
+      // Use mariadb-proxy for now since extract_maritimo_attachments action exists there
       const base64Content = await fileToBase64(file);
       
       const { data, error } = await supabase.functions.invoke('mariadb-proxy', {
@@ -351,16 +365,54 @@ export const maritimoApi = {
   /**
    * Re-extract metadata (consignee, container) for items with missing data
    */
-  async reextractMetadata(options: { forceAll?: boolean }): Promise<{ processed: number }> {
+  async reextractMetadata(options: { forceAll?: boolean; itemId?: string }): Promise<{ processed: number; updated?: number }> {
     try {
-      const { data, error } = await supabase.functions.invoke('mariadb-proxy', {
-        body: { action: 'reextract_maritimo_metadata', ...options }
+      const { data, error } = await supabase.functions.invoke('sea-reextract-metadata', {
+        body: options
       });
       if (error) throw error;
-      return { processed: data?.processed || 0 };
+      return { processed: data?.processed || 0, updated: data?.updated || 0 };
     } catch (error) {
       console.error('Error reextracting metadata:', error);
       return { processed: 0 };
     }
+  },
+
+  /**
+   * Get system logs (admin only)
+   */
+  async getSystemLogs(params: { functionName?: string; logType?: string; limit?: number } = {}): Promise<any> {
+    const { data, error } = await supabase.functions.invoke('sea-get-system-logs', {
+      body: params
+    });
+    
+    if (error) throw error;
+    return data;
+  },
+
+  /**
+   * Migrate data to MariaDB (admin only)
+   */
+  async migrateToMariaDB(): Promise<any> {
+    const { data, error } = await supabase.functions.invoke('sea-migrate-to-mariadb', {
+      body: {}
+    });
+    
+    if (error) throw error;
+    return data;
   }
 };
+
+// Helper to convert File to base64
+async function fileToBase64(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const result = reader.result as string;
+      const base64 = result.split(',')[1] || result;
+      resolve(base64);
+    };
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
