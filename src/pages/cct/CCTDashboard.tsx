@@ -1,6 +1,6 @@
 import { useState, useMemo, useCallback, useEffect } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
-import { ArrowLeft, LayoutDashboard, BarChart3, AlertTriangle, Bell, Settings, HelpCircle, LogOut, Radio, RefreshCw, Database, Package, AlertCircle, Clock, Plane, List } from "lucide-react";
+import { ArrowLeft, LayoutDashboard, BarChart3, AlertTriangle, Bell, Settings, HelpCircle, LogOut, Radio, RefreshCw, Database, Package, AlertCircle, Clock, Plane, List, CheckCircle2 } from "lucide-react";
 import dachserBg from "@/assets/dachser-background.jpg";
 
 // Components
@@ -229,7 +229,7 @@ export default function CCTDashboard() {
             </div>
           )}
           
-          {/* Metric Cards - Only show on Dashboard tab */}
+          {/* Metric Cards - Show on Dashboard tab */}
           {activeTab === "dashboard" && (
             <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
               {isLoading ? (
@@ -245,6 +245,29 @@ export default function CCTDashboard() {
                   <MetricCard title="Em Alerta" value={metrics.alerta} icon={AlertTriangle} variant="warning" subtitle="Atenção necessária" onClick={() => handleMetricClick("alerta")} active={metricFilter === "alerta"} />
                   <MetricCard title="Críticos" value={metrics.critico} icon={AlertCircle} variant="critical" subtitle="Ação imediata" onClick={() => handleMetricClick("critico")} active={metricFilter === "critico"} />
                   <MetricCard title="Eventos 24h" value={metrics.eventos24h} icon={Clock} variant="success" subtitle="Últimas 24 horas" onClick={() => handleMetricClick("eventos24h")} active={metricFilter === "eventos24h"} />
+                </>
+              )}
+            </div>
+          )}
+
+          {/* Analytics KPI Cards - Show on Analytics tab */}
+          {activeTab === "analytics" && (
+            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
+              {isLoading ? (
+                <>
+                  <div className="h-28 rounded-2xl bg-[rgba(5,6,18,0.9)] border border-[rgba(255,255,255,0.12)] animate-pulse" />
+                  <div className="h-28 rounded-2xl bg-[rgba(5,6,18,0.9)] border border-[rgba(255,255,255,0.12)] animate-pulse" />
+                  <div className="h-28 rounded-2xl bg-[rgba(5,6,18,0.9)] border border-[rgba(255,255,255,0.12)] animate-pulse" />
+                  <div className="h-28 rounded-2xl bg-[rgba(5,6,18,0.9)] border border-[rgba(255,255,255,0.12)] animate-pulse" />
+                  <div className="h-28 rounded-2xl bg-[rgba(5,6,18,0.9)] border border-[rgba(255,255,255,0.12)] animate-pulse" />
+                </>
+              ) : (
+                <>
+                  <MetricCard title="Processos Ativos" value={metrics.total} icon={Package} subtitle="Total monitorados" />
+                  <MetricCard title="SLA OK" value={`${metrics.total > 0 ? Math.round(((metrics.total - metrics.alerta - metrics.critico) / metrics.total) * 100) : 0}%`} icon={CheckCircle2} variant="success" subtitle="Dentro do prazo" />
+                  <MetricCard title="Em Alerta" value={metrics.alerta} icon={AlertTriangle} variant="warning" subtitle="Atenção necessária" />
+                  <MetricCard title="Críticos" value={metrics.critico} icon={AlertCircle} variant="critical" subtitle="Ação imediata" />
+                  <MetricCard title="Tempo Médio" value="2.3d" icon={Clock} subtitle="Transit time" />
                 </>
               )}
             </div>
