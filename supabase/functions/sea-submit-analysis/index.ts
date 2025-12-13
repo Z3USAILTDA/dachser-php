@@ -11,7 +11,7 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-// ============ LLM ANALYZER - ALL FILES TO LLM (NO LOCAL XLSX PROCESSING) ============
+// ============ LLM ANALYZER - XLSX TEXT EXTRACTION + PDF ANALYSIS ============
 
 interface AnalysisResult {
   result_text: string;
@@ -37,36 +37,86 @@ function arrayBufferToBase64Chunked(buffer: ArrayBuffer): string {
   return btoa(result);
 }
 
-// Fetch any file as base64 for direct LLM submission
-async function fetchFileAsBase64(fileUrl: string, fileName: string): Promise<{ base64: string; name: string; mimeType: string } | null> {
+// Fetch PDF as base64 for direct LLM submission
+async function fetchPdfAsBase64(fileUrl: string, fileName: string): Promise<{ base64: string; name: string } | null> {
   try {
-    console.log(`📄 Fetching file: ${fileName}`);
+    console.log(`📄 Fetching PDF: ${fileName}`);
     const response = await fetch(fileUrl);
     if (!response.ok) return null;
     const buffer = await response.arrayBuffer();
     if (buffer.byteLength < 100) return null;
     
     const base64 = arrayBufferToBase64Chunked(buffer);
-    const ext = fileName.toLowerCase().split('.').pop() || '';
-    
-    let mimeType = 'application/octet-stream';
-    if (ext === 'pdf') mimeType = 'application/pdf';
-    else if (['xlsx', 'xls', 'xlsm'].includes(ext)) mimeType = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
-    else if (ext === 'csv') mimeType = 'text/csv';
-    
-    console.log(`✅ File loaded: ${fileName} (${Math.round(buffer.byteLength / 1024)} KB, ${mimeType})`);
-    return { base64, name: fileName, mimeType };
+    console.log(`✅ PDF loaded: ${fileName} (${Math.round(buffer.byteLength / 1024)} KB)`);
+    return { base64, name: fileName };
   } catch (e) {
-    console.error(`❌ File fetch failed: ${fileName}`, e);
+    console.error(`❌ PDF fetch failed: ${fileName}`, e);
     return null;
   }
 }
 
-// ============ GEMINI ANALYSIS (PRIMARY - ALL FILES SENT DIRECTLY) ============
+// ============ XLSX TEXT EXTRACTION VIA GEMINI FLASH (FAST) ============
+
+async function extractXlsxTextViaGemini(fileUrl: string, fileName: string): Promise<string> {
+  try {
+    console.log(`📊 Extracting XLSX via Gemini Flash: ${fileName}`);
+    
+    const lovableApiKey = Deno.env.get('LOVABLE_API_KEY');
+    if (!lovableApiKey) return '';
+    
+    const response = await fetch(fileUrl);
+    if (!response.ok) return '';
+    const buffer = await response.arrayBuffer();
+    const base64 = arrayBufferToBase64Chunked(buffer);
+    
+    console.log(`📤 Sending XLSX to Gemini Flash for extraction (${Math.round(buffer.byteLength / 1024)} KB)`);
+    
+    const extractResponse = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${lovableApiKey}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: 'google/gemini-2.5-flash',
+        messages: [{
+          role: 'user',
+          content: [
+            { 
+              type: 'image_url', 
+              image_url: { url: `data:application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;base64,${base64}` }
+            },
+            { 
+              type: 'text', 
+              text: `Extract ALL data from this spreadsheet as plain text CSV format. Include ALL rows and columns. Output ONLY the raw data, no explanations. Format: one row per line, columns separated by commas.` 
+            }
+          ]
+        }],
+        max_tokens: 32000,
+        temperature: 0,
+      }),
+    });
+    
+    if (!extractResponse.ok) {
+      const errorText = await extractResponse.text();
+      console.error(`❌ Gemini Flash extraction failed: ${extractResponse.status} - ${errorText}`);
+      return '';
+    }
+    
+    const data = await extractResponse.json();
+    const extractedText = data.choices?.[0]?.message?.content || '';
+    console.log(`✅ XLSX extracted via Gemini Flash: ${extractedText.length} chars`);
+    
+    return `\n=== FILE: ${fileName} ===\n${extractedText}\n`;
+  } catch (e) {
+    console.error(`❌ XLSX extraction error: ${e}`);
+    return '';
+  }
+}
+
+// ============ GEMINI ANALYSIS (TEXT + PDFs) ============
 
 async function analyzeWithGemini(
   prompt: string, 
-  files: Array<{ base64: string; name: string; mimeType: string }>,
+  manifestText: string,
+  pdfFiles: Array<{ base64: string; name: string }>,
   metadata: { consignee?: string; container?: string }
 ): Promise<{ text: string; model: string }> {
   const lovableApiKey = Deno.env.get('LOVABLE_API_KEY');
@@ -76,21 +126,26 @@ async function analyzeWithGemini(
   if (metadata.consignee) fullPrompt += `\n\nConsignee: ${metadata.consignee}`;
   if (metadata.container) fullPrompt += `\nContainer: ${metadata.container}`;
   
-  // Build content parts - all files go directly to Gemini
+  // Build content parts - text first, then PDFs
   const contentParts: any[] = [
     { type: 'text', text: fullPrompt }
   ];
   
-  // Add ALL files as base64 (Gemini Pro can process PDFs and spreadsheets)
-  for (const file of files) {
-    contentParts.push({ 
-      type: 'image_url', 
-      image_url: { url: `data:${file.mimeType};base64,${file.base64}` } 
-    });
-    contentParts.push({ type: 'text', text: `[Document: ${file.name}]` });
+  // Add manifest text if available
+  if (manifestText && manifestText.length > 0) {
+    contentParts.push({ type: 'text', text: `\n\n=== MANIFEST DATA ===\n${manifestText}` });
   }
   
-  console.log(`🤖 Calling Gemini 2.5 Pro with ${files.length} files`);
+  // Add PDFs as base64 (Gemini supports PDFs)
+  for (const pdf of pdfFiles) {
+    contentParts.push({ 
+      type: 'image_url', 
+      image_url: { url: `data:application/pdf;base64,${pdf.base64}` } 
+    });
+    contentParts.push({ type: 'text', text: `[Document: ${pdf.name}]` });
+  }
+  
+  console.log(`🤖 Calling Gemini 2.5 Pro with ${manifestText.length} chars manifest + ${pdfFiles.length} PDFs`);
   
   const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
     method: 'POST',
@@ -116,68 +171,6 @@ async function analyzeWithGemini(
   return { text: resultText, model: 'google/gemini-2.5-pro' };
 }
 
-// ============ ANTHROPIC CLAUDE (FALLBACK - PDF ONLY) ============
-
-async function analyzeWithAnthropic(
-  prompt: string, 
-  pdfFiles: Array<{ base64: string; name: string; mimeType: string }>,
-  metadata: { consignee?: string; container?: string }
-): Promise<{ text: string; model: string }> {
-  const anthropicKey = Deno.env.get('ANTHROPIC_API_KEY');
-  if (!anthropicKey) throw new Error('ANTHROPIC_API_KEY not configured');
-  
-  let fullPrompt = prompt;
-  if (metadata.consignee) fullPrompt += `\n\nConsignee: ${metadata.consignee}`;
-  if (metadata.container) fullPrompt += `\nContainer: ${metadata.container}`;
-  
-  // Build content parts - only PDFs for Anthropic (no XLSX support)
-  const contentParts: any[] = [
-    { type: 'text', text: fullPrompt }
-  ];
-  
-  const pdfs = pdfFiles.filter(f => f.mimeType === 'application/pdf');
-  
-  for (const pdf of pdfs) {
-    contentParts.push({ 
-      type: 'document', 
-      source: { 
-        type: 'base64', 
-        media_type: 'application/pdf', 
-        data: pdf.base64 
-      } 
-    });
-    contentParts.push({ type: 'text', text: `[Document: ${pdf.name}]` });
-  }
-  
-  console.log(`🤖 Calling Anthropic Claude with ${pdfs.length} PDFs`);
-  
-  const response = await fetch('https://api.anthropic.com/v1/messages', {
-    method: 'POST',
-    headers: {
-      'x-api-key': anthropicKey,
-      'anthropic-version': '2023-06-01',
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      model: 'claude-sonnet-4-20250514',
-      max_tokens: 8000,
-      temperature: 0.1,
-      messages: [{ role: 'user', content: contentParts }]
-    }),
-  });
-  
-  if (!response.ok) {
-    const errorText = await response.text().catch(() => '');
-    console.error(`❌ Anthropic API error: ${response.status} - ${errorText}`);
-    throw new Error(`Anthropic API error: ${response.status}`);
-  }
-  
-  const data = await response.json();
-  const resultText = data.content?.[0]?.text || '';
-  console.log(`✅ Anthropic response: ${resultText.length} chars`);
-  
-  return { text: resultText, model: 'claude-sonnet-4-20250514' };
-}
 
 // ============ MAIN LLM ANALYSIS FUNCTION ============
 
@@ -191,35 +184,54 @@ async function analyzeWithLLM(
   
   console.log(`🚀 Starting analysis for ${files.length} files`);
   
-  // Fetch ALL files as base64 in parallel
-  const fileDataPromises = files.map(f => fetchFileAsBase64(f.file_url, f.file_name));
-  const fileDataResults = await Promise.all(fileDataPromises);
-  const validFiles = fileDataResults.filter((f): f is { base64: string; name: string; mimeType: string } => f !== null);
+  // Separate XLSX files (need text extraction) from PDFs (send directly)
+  const xlsxFiles = files.filter(f => {
+    const ext = f.file_name.toLowerCase().split('.').pop();
+    return ['xlsx', 'xls', 'xlsm', 'csv'].includes(ext || '');
+  });
   
-  console.log(`📎 Files loaded: ${validFiles.length}`);
+  const pdfFiles = files.filter(f => {
+    const ext = f.file_name.toLowerCase().split('.').pop();
+    return ext === 'pdf';
+  });
   
-  if (validFiles.length === 0) {
-    throw new Error('Não foi possível carregar nenhum arquivo');
-  }
+  console.log(`📊 Files: ${xlsxFiles.length} spreadsheets, ${pdfFiles.length} PDFs`);
   
-  // Use Gemini as primary (supports all file types including XLSX)
-  // Fallback to Anthropic only for PDFs
-  let result: { text: string; model: string };
-  
-  try {
-    console.log('🎯 Using Gemini 2.5 Pro (primary - supports all file types)...');
-    result = await analyzeWithGemini(basePrompt, validFiles, metadata);
-  } catch (geminiError: any) {
-    console.error(`⚠️ Gemini failed: ${geminiError.message}`);
-    
-    const anthropicKey = Deno.env.get('ANTHROPIC_API_KEY');
-    if (anthropicKey) {
-      console.log('🎯 Falling back to Anthropic Claude (PDFs only)...');
-      result = await analyzeWithAnthropic(basePrompt, validFiles, metadata);
-    } else {
-      throw geminiError;
+  // STEP 1: Extract text from XLSX via Gemini Flash (fast)
+  let manifestText = '';
+  for (const xlsxFile of xlsxFiles) {
+    const ext = xlsxFile.file_name.toLowerCase().split('.').pop();
+    if (['xlsx', 'xls', 'xlsm'].includes(ext || '')) {
+      manifestText += await extractXlsxTextViaGemini(xlsxFile.file_url, xlsxFile.file_name);
+    } else if (ext === 'csv') {
+      try {
+        const response = await fetch(xlsxFile.file_url);
+        const csvText = await response.text();
+        manifestText += `\n=== FILE: ${xlsxFile.file_name} ===\n${csvText}\n`;
+      } catch (e) {
+        console.error(`❌ CSV fetch failed: ${xlsxFile.file_name}`);
+      }
     }
   }
+  
+  console.log(`📝 Manifest text extracted: ${manifestText.length} chars`);
+  
+  // STEP 2: Fetch PDFs as base64
+  const pdfDataPromises = pdfFiles.map(f => fetchPdfAsBase64(f.file_url, f.file_name));
+  const pdfDataResults = await Promise.all(pdfDataPromises);
+  const validPdfData = pdfDataResults.filter((p): p is { base64: string; name: string } => p !== null);
+  
+  console.log(`📎 PDFs loaded: ${validPdfData.length}`);
+  
+  if (manifestText.length < 100 && validPdfData.length === 0) {
+    throw new Error('Não foi possível extrair dados suficientes dos documentos');
+  }
+  
+  // STEP 3: Call Gemini Pro for final analysis (text + PDFs)
+  let result: { text: string; model: string };
+  
+  console.log('🎯 Using Gemini 2.5 Pro for analysis...');
+  result = await analyzeWithGemini(basePrompt, manifestText, validPdfData, metadata);
   
   const elapsed = Math.round((Date.now() - startTime) / 1000);
   console.log(`✅ Analysis completed in ${elapsed}s using ${result.model}`);
@@ -230,7 +242,8 @@ async function analyzeWithLLM(
       status: 'completed', 
       model: result.model, 
       total_time_ms: Date.now() - startTime,
-      file_count: validFiles.length
+      manifest_chars: manifestText.length,
+      pdf_count: validPdfData.length
     },
     model: result.model
   };
