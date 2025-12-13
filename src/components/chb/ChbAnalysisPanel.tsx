@@ -1,6 +1,7 @@
 import { ChbAnalysisResult } from '@/types/chb';
 import { stepTitles } from '@/data/chbMocks';
-import { Play, CheckCircle, Loader2, RefreshCw, FileText } from 'lucide-react';
+import { Play, CheckCircle, Loader2, RefreshCw, FileText, Copy } from 'lucide-react';
+import { toast } from 'sonner';
 
 interface ChbAnalysisPanelProps {
   stepId: number;
@@ -10,6 +11,13 @@ interface ChbAnalysisPanelProps {
   isAnalyzing: boolean;
   hasFiles: boolean;
 }
+
+const copyAnalysisResult = (html: string) => {
+  const tempDiv = document.createElement('div');
+  tempDiv.innerHTML = html;
+  navigator.clipboard.writeText(tempDiv.textContent || tempDiv.innerText || '');
+  toast.success('Resultado copiado para a área de transferência');
+};
 
 export function ChbAnalysisPanel({ 
   stepId, 
@@ -103,7 +111,16 @@ export function ChbAnalysisPanel({
       </div>
 
       {/* Action buttons */}
-      <div className="flex gap-3">
+      <div className="flex gap-3 flex-wrap">
+        <button
+          onClick={() => copyAnalysisResult(analysisResult.html)}
+          className="flex items-center gap-1.5 px-4 py-2 rounded-full bg-white/10 border border-white/20
+            text-white text-xs font-medium hover:bg-white/20 transition-colors"
+        >
+          <Copy className="w-3 h-3" />
+          Copiar Resultado
+        </button>
+
         <button
           onClick={onRunAnalysis}
           disabled={isAnalyzing}
