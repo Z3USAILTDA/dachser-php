@@ -870,11 +870,102 @@ export default function Olimpo() {
                 <span className="w-2 h-2 rounded-full bg-primary" /> SEA
                 <span className="w-2 h-2 rounded-full bg-[#7fd0ff]" /> AIR
               </div>
+
+              {/* Asset Details Panel - floating on map */}
+              {selectedAssetDetails && !isFullscreen && (
+                <div 
+                  className="absolute right-3 top-3 w-72 max-h-[calc(100%-24px)] z-[1000] rounded-xl flex flex-col overflow-hidden"
+                  style={{
+                    background: 'rgba(5,6,18,.95)',
+                    border: '1px solid rgba(255,255,255,.15)',
+                    boxShadow: '0 12px 32px rgba(0,0,0,.7)',
+                  }}
+                >
+                  {/* Header */}
+                  <div className="flex items-center justify-between p-2.5 border-b border-white/[0.08]">
+                    <div className="flex items-center gap-2">
+                      <div className={`w-7 h-7 rounded-full flex items-center justify-center ${selectedAssetDetails.mode === 'air' ? 'bg-[#7fd0ff]/20' : 'bg-primary/20'}`}>
+                        {selectedAssetDetails.mode === 'air' ? (
+                          <Plane size={14} className="text-[#7fd0ff]" />
+                        ) : (
+                          <Ship size={14} className="text-primary" />
+                        )}
+                      </div>
+                      <div>
+                        <p className="text-[10px] text-muted-foreground uppercase tracking-wider">
+                          {selectedAssetDetails.mode === 'air' ? 'Avião' : 'Navio'}
+                        </p>
+                        <p className="font-semibold text-xs">
+                          {selectedAssetDetails.flight || selectedAssetDetails.asset || 'N/A'}
+                        </p>
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => setSelectedAssetDetails(null)}
+                      className="w-5 h-5 rounded-full border border-white/20 flex items-center justify-center bg-black/50 text-muted-foreground hover:text-white transition-all"
+                    >
+                      <X size={10} />
+                    </button>
+                  </div>
+
+                  {/* Badge */}
+                  <div className="px-2.5 pt-2">
+                    <Badge 
+                      variant="outline" 
+                      className={`text-[10px] ${selectedAssetDetails.mode === 'air' ? 'border-[#7fd0ff]/70 text-[#b7e2ff]' : 'border-primary/70 text-primary'}`}
+                    >
+                      {selectedAssetDetails.tipo_label} • {selectedAssetDetails.flight || selectedAssetDetails.asset || 'N/A'}
+                    </Badge>
+                  </div>
+
+                  {/* Details */}
+                  <div className="p-2.5 space-y-1.5 text-xs">
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">Rota</span>
+                      <span className="font-medium">{selectedAssetDetails.rota}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">Previsão</span>
+                      <span className="font-medium">{selectedAssetDetails.eta_api}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">Status</span>
+                      <span className={`px-1.5 py-0.5 rounded text-[10px] ${selectedAssetDetails.status === 'Atraso' ? 'bg-red-500/20 text-red-400' : selectedAssetDetails.status === 'Entregue' ? 'bg-green-500/20 text-green-400' : 'bg-blue-500/20 text-blue-400'}`}>
+                        {selectedAssetDetails.status}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Processos (AWBs) */}
+                  <div className="p-2.5 border-t border-white/[0.05]">
+                    <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1.5">
+                      Processos ({selectedAssetDetails.processos.length})
+                    </p>
+                    <div className="max-h-24 overflow-y-auto space-y-1">
+                      {selectedAssetDetails.processos.length > 0 ? (
+                        selectedAssetDetails.processos.map((awb, idx) => (
+                          <div key={idx} className="text-[10px] px-1.5 py-1 bg-white/[0.03] rounded border border-white/[0.06]">
+                            {awb}
+                          </div>
+                        ))
+                      ) : (
+                        <p className="text-[10px] text-muted-foreground italic">Nenhum processo</p>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Faturamento */}
+                  <div className="p-2.5 border-t border-white/[0.05]">
+                    <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1">Faturamento</p>
+                    <p className="text-[10px] text-muted-foreground italic">Em desenvolvimento...</p>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
 
-          {/* Side Card (Filters + KPIs) - show only when no asset selected */}
-          {!isFullscreen && !selectedAssetDetails && (
+          {/* Side Card (Filters + KPIs) - always visible when not fullscreen */}
+          {!isFullscreen && (
             <div 
               className="rounded-2xl flex flex-col shrink-0 lg:w-80 xl:w-96"
               style={{
@@ -1002,10 +1093,10 @@ export default function Olimpo() {
             </div>
           )}
 
-          {/* Asset Details Panel (both modes) */}
-          {selectedAssetDetails && (
+          {/* Asset Details Panel - fullscreen only */}
+          {selectedAssetDetails && isFullscreen && (
             <div 
-              className={`rounded-2xl flex flex-col overflow-hidden ${isFullscreen ? "absolute right-4 top-16 w-80 max-h-[calc(100vh-100px)] z-[1000]" : "shrink-0 lg:w-80 xl:w-96"}`}
+              className="absolute right-4 top-16 w-80 max-h-[calc(100vh-100px)] z-[1000] rounded-2xl flex flex-col overflow-hidden"
               style={{
                 background: 'rgba(5,6,18,.95)',
                 border: '1px solid rgba(255,255,255,.12)',
@@ -1085,11 +1176,9 @@ export default function Olimpo() {
                 </div>
               </div>
 
-              {/* Faturamento (empty placeholder) */}
+              {/* Faturamento */}
               <div className="p-3 border-t border-white/[0.05]">
-                <p className="text-xs text-muted-foreground uppercase tracking-wider mb-2">
-                  Faturamento
-                </p>
+                <p className="text-xs text-muted-foreground uppercase tracking-wider mb-2">Faturamento</p>
                 <p className="text-xs text-muted-foreground italic">Em desenvolvimento...</p>
               </div>
             </div>
