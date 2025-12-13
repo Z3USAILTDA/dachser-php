@@ -89,14 +89,14 @@ export default function ConferenciaChb() {
           id: `run-${r.id}`,
           stepId,
           date: r.created_at,
-          user: r.created_by_email || r.created_by_name || 'Usuário',
+          user: currentUser,
           summary: r.result_text || '',
           detailedSummary: r.result_html || r.result_text || '',
           tags: [],
         });
       });
     setApprovedHistory(newHistory);
-  }, [dbRuns]);
+  }, [dbRuns, currentUser]);
 
   // Get documents for current step (inherited from previous steps + current)
   const getDocumentsForStep = useCallback((stepId: number) => {

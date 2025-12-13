@@ -41,9 +41,6 @@ export interface ChbRun {
   result_json: string | null;
   used_as_ctx: number;
   created_at: string;
-  created_by: number | null;
-  created_by_name: string | null;
-  created_by_email: string | null;
 }
 
 async function callMariaDB<T>(action: string, params: Record<string, any> = {}): Promise<T> {
@@ -207,7 +204,6 @@ export function useChbRuns(itemId: number | null) {
   ): Promise<number | null> => {
     if (!itemId) return null;
     try {
-      const userId = localStorage.getItem('user_id');
       const response = await callMariaDB<{ success: boolean; runId: number }>('create_chb_run', {
         itemId,
         etapa,
@@ -216,7 +212,6 @@ export function useChbRuns(itemId: number | null) {
         resultHtml,
         resultJson: resultJson ? JSON.stringify(resultJson) : null,
         usedAsCtx: false,
-        userId: userId ? parseInt(userId) : null,
       });
       await fetchRuns();
       return response.runId;
