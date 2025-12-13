@@ -482,7 +482,7 @@ export default function Olimpo() {
     if (!mapContainerRef.current || mapRef.current) return;
 
     const map = L.map(mapContainerRef.current, {
-      worldCopyJump: false,
+      worldCopyJump: true,
       zoomSnap: 0.25,
       zoomDelta: 0.5,
       zoomAnimation: true,
@@ -490,19 +490,24 @@ export default function Olimpo() {
       fadeAnimation: true,
       doubleClickZoom: false,
       scrollWheelZoom: true,
+      maxBoundsViscosity: 1.0,
     });
 
     L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png", {
       attribution: "&copy; OpenStreetMap, &copy; CARTO",
       subdomains: "abcd",
-      noWrap: true,
+      noWrap: false,
     }).addTo(map);
 
-    const WORLD_BOUNDS = L.latLngBounds([[-85, -180], [85, 180]]);
-    map.fitBounds(WORLD_BOUNDS, { animate: false, padding: [0, 0] });
-    map.setMaxBounds(WORLD_BOUNDS);
+    // Set initial view to show the world
+    map.setView([20, 0], 2);
 
     mapRef.current = map;
+
+    // Force invalidateSize after a short delay to ensure proper rendering
+    setTimeout(() => {
+      map.invalidateSize();
+    }, 100);
 
     return () => {
       map.remove();
@@ -582,11 +587,18 @@ export default function Olimpo() {
     }
   }, [filteredData]);
 
-  // Resize map on fullscreen toggle
+  // Resize map on fullscreen toggle or window resize
   useEffect(() => {
-    setTimeout(() => {
-      mapRef.current?.invalidateSize();
-    }, 300);
+    const handleResize = () => {
+      setTimeout(() => {
+        mapRef.current?.invalidateSize();
+      }, 100);
+    };
+    
+    handleResize();
+    window.addEventListener('resize', handleResize);
+    
+    return () => window.removeEventListener('resize', handleResize);
   }, [isFullscreen]);
 
   // Load data on mount
