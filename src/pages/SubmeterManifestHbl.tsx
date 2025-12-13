@@ -12,16 +12,29 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { toast } from "sonner";
 import { maritimoApi } from "@/services/maritimoApi";
-
 type AnalysisDiagnostics = {
-  manifest?: { sheets_processed?: number; rows_found?: number; pages_processed?: number; };
-  hbl?: { pages_processed?: number; ocr_quality?: string; };
-  chars_useful?: { manifest?: number; hbl?: number; };
+  manifest?: {
+    sheets_processed?: number;
+    rows_found?: number;
+    pages_processed?: number;
+  };
+  hbl?: {
+    pages_processed?: number;
+    ocr_quality?: string;
+  };
+  chars_useful?: {
+    manifest?: number;
+    hbl?: number;
+  };
 };
-
-type RejectedToken = { token?: string; reason?: string; };
-type RejectedNcm = { code?: string; reason?: string; };
-
+type RejectedToken = {
+  token?: string;
+  reason?: string;
+};
+type RejectedNcm = {
+  code?: string;
+  reason?: string;
+};
 type AnalysisDebugInfo = {
   rejected_tokens?: {
     [filename: string]: {
@@ -30,11 +43,21 @@ type AnalysisDebugInfo = {
     };
   };
 };
-
 type AnalysisResultData = {
-  files?: { manifest_name?: string; hbl_name?: string; };
-  manifest?: { invoice_tokens?: string[]; ncm8?: string[]; ncm_chapters_4d?: string[]; };
-  hbl?: { invoice_tokens?: string[]; ncm8?: string[]; ncm_chapters_4d?: string[]; };
+  files?: {
+    manifest_name?: string;
+    hbl_name?: string;
+  };
+  manifest?: {
+    invoice_tokens?: string[];
+    ncm8?: string[];
+    ncm_chapters_4d?: string[];
+  };
+  hbl?: {
+    invoice_tokens?: string[];
+    ncm8?: string[];
+    ncm_chapters_4d?: string[];
+  };
   diff?: {
     missing_in_hbl_invoices?: string[];
     extra_in_hbl_invoices?: string[];
@@ -45,13 +68,11 @@ type AnalysisResultData = {
   debug_info?: AnalysisDebugInfo;
   used_ocr?: boolean;
 };
-
-type AnalysisPayload = { 
-  result_text?: string; 
+type AnalysisPayload = {
+  result_text?: string;
   result_data?: AnalysisResultData;
   status?: string;
 };
-
 type BaseInfo = {
   id: string;
   base_file_name: string;
@@ -60,16 +81,14 @@ type BaseInfo = {
   consignee?: string;
   view?: string;
 };
-
 export default function SubmeterManifestHbl() {
   const navigate = useNavigate();
   const location = useLocation();
   const params = useParams();
-  
+
   // Read itemId from query params, location state, or route params
   const searchParams = new URLSearchParams(location.search);
   const itemId = searchParams.get('itemId') || location.state?.itemId || params.id;
-  
   const [hblFiles, setHblFiles] = useState<File[]>([]);
   const [baseInfo, setBaseInfo] = useState<BaseInfo | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -80,8 +99,10 @@ export default function SubmeterManifestHbl() {
   const [analysisStep, setAnalysisStep] = useState("");
   const [isCompletingAnalysis, setIsCompletingAnalysis] = useState(false);
   const [copiedResult, setCopiedResult] = useState(false);
-  const [inlineStatus, setInlineStatus] = useState<{ message: string; type: 'info' | 'success' | 'error' } | null>(null);
-
+  const [inlineStatus, setInlineStatus] = useState<{
+    message: string;
+    type: 'info' | 'success' | 'error';
+  } | null>(null);
   useEffect(() => {
     setHblFiles([]);
     setAnalysisResult(null);
@@ -92,11 +113,12 @@ export default function SubmeterManifestHbl() {
     setIsCompletingAnalysis(false);
     setInlineStatus(null);
   }, [itemId]);
-
   const showInlineStatus = (message: string, type: 'info' | 'success' | 'error' = 'info') => {
-    setInlineStatus({ message, type });
+    setInlineStatus({
+      message,
+      type
+    });
   };
-
   useEffect(() => {
     const loadItemInfo = async () => {
       if (!itemId) {
@@ -104,17 +126,15 @@ export default function SubmeterManifestHbl() {
         navigate("/maritimo");
         return;
       }
-
       try {
         setIsLoading(true);
         const item = await maritimoApi.getItem(itemId);
-
         setBaseInfo({
           id: item.id,
           base_file_name: item.base_file_name,
           base_file_url: item.base_file_url,
           container: item.container || 'N/A',
-          consignee: item.consignee || 'N/A',
+          consignee: item.consignee || 'N/A'
         });
       } catch (error: any) {
         console.error('Error loading item:', error);
@@ -124,63 +144,49 @@ export default function SubmeterManifestHbl() {
         setIsLoading(false);
       }
     };
-
     loadItemInfo();
   }, [itemId, navigate]);
-
   const handleFilesSelected = (files: File[]) => {
-    const pdfFiles = files.filter(file => 
-      file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf")
-    );
-    
+    const pdfFiles = files.filter(file => file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf"));
     if (pdfFiles.length === 0) {
       showInlineStatus("Envie apenas arquivos PDF", 'error');
       return;
     }
-
     if (hblFiles.length + pdfFiles.length > 10) {
       showInlineStatus("Máximo de 10 arquivos permitidos", 'error');
       return;
     }
-
     const oversizedFiles = pdfFiles.filter(f => f.size > 20 * 1024 * 1024);
     if (oversizedFiles.length > 0) {
       showInlineStatus("Arquivos não podem exceder 20MB cada", 'error');
       return;
     }
-
     setHblFiles(prev => [...prev, ...pdfFiles]);
     showInlineStatus(`${pdfFiles.length} arquivo(s) cadastrado(s)`, 'success');
   };
-
   const handleRemoveFile = (index: number) => {
     setHblFiles(prev => prev.filter((_, i) => i !== index));
   };
-
   const handleAnalise = async () => {
     if (hblFiles.length === 0) {
       showInlineStatus("Adicione pelo menos um arquivo HBL", 'error');
       return;
     }
-
     if (!itemId) {
       showInlineStatus("Item ID não encontrado", 'error');
       return;
     }
-
     const totalSize = hblFiles.reduce((sum, file) => sum + file.size, 0);
     const maxTotalSize = 100 * 1024 * 1024;
     if (totalSize > maxTotalSize) {
       showInlineStatus(`Tamanho total dos arquivos (${(totalSize / 1024 / 1024).toFixed(1)}MB) excede o limite de 100MB`, 'error');
       return;
     }
-
     setIsAnalyzing(true);
     setAnalysisProgress(5);
     setAnalysisStep("Enviando arquivos...");
     setInlineStatus(null);
     showInlineStatus("Processando análise com IA...", 'info');
-
     try {
       const progressInterval = setInterval(() => {
         setAnalysisProgress(prev => {
@@ -191,18 +197,18 @@ export default function SubmeterManifestHbl() {
           return prev + 2;
         });
       }, 500);
-
       const response = await maritimoApi.submitAnalysis({
         itemId,
         analysisType: 'manifest_hbl',
         files: hblFiles
       });
-
       clearInterval(progressInterval);
       setAnalysisId(response.analysisId);
-      
-      let result: { status: string; result_text?: string; result_data?: any };
-      
+      let result: {
+        status: string;
+        result_text?: string;
+        result_data?: any;
+      };
       if (response.result_text || response.status === 'completed' || response.status === 'error') {
         console.log('Analysis completed synchronously');
         result = {
@@ -210,42 +216,34 @@ export default function SubmeterManifestHbl() {
           result_text: response.result_text,
           result_data: response.result_data
         };
-        
         if (response.error) {
           throw new Error(response.error);
         }
       } else {
         console.log('Falling back to polling mode');
         setAnalysisStep("Aguardando resultado...");
-        result = await maritimoApi.pollAnalysisUntilComplete(
-          response.analysisId,
-          (percent, step) => {
-            setAnalysisProgress(Math.min(percent, 95));
-            setAnalysisStep(step);
-          },
-          8 * 60 * 1000 // 8 minutes
+        result = await maritimoApi.pollAnalysisUntilComplete(response.analysisId, (percent, step) => {
+          setAnalysisProgress(Math.min(percent, 95));
+          setAnalysisStep(step);
+        }, 8 * 60 * 1000 // 8 minutes
         );
       }
-
       setAnalysisProgress(100);
       await new Promise(resolve => setTimeout(resolve, 300));
-      
       setIsAnalyzing(false);
       setAnalysisProgress(0);
       setAnalysisStep("");
       setInlineStatus(null);
-      
       if (result.status === 'error') {
         showInlineStatus("Erro na análise. Verifique os arquivos e tente novamente.", 'error');
       } else {
         setTimeout(() => {
-          document.getElementById('analysis-results')?.scrollIntoView({ 
-            behavior: 'smooth', 
-            block: 'start' 
+          document.getElementById('analysis-results')?.scrollIntoView({
+            behavior: 'smooth',
+            block: 'start'
           });
         }, 100);
       }
-      
       setAnalysisResult({
         status: result.status,
         result_text: result.result_text,
@@ -259,21 +257,17 @@ export default function SubmeterManifestHbl() {
       setAnalysisStep("");
     }
   };
-
   const handleCompleteAnalysis = async () => {
     if (!analysisId || !itemId) {
       toast.error("Informações da análise não encontradas");
       return;
     }
-
     setIsCompletingAnalysis(true);
     const loadingToast = toast.loading("Concluindo análise...");
-
     try {
       await maritimoApi.completeAnalysis(analysisId, itemId, true);
       toast.dismiss(loadingToast);
       toast.success("Análise concluída com sucesso!");
-      
       setTimeout(() => navigate("/maritimo"), 1000);
     } catch (error: any) {
       console.error('Complete analysis error:', error);
@@ -283,20 +277,20 @@ export default function SubmeterManifestHbl() {
       setIsCompletingAnalysis(false);
     }
   };
-
   const handleNewAnalysis = async () => {
     setAnalysisResult(null);
     setAnalysisId(null);
-    window.scrollTo({ top: 0, behavior: 'smooth' });
+    window.scrollTo({
+      top: 0,
+      behavior: 'smooth'
+    });
     await handleAnalise();
   };
-
   const handleCopyResult = () => {
     if (!analysisResult?.result_text || analysisResult.result_text.trim().length === 0) {
       toast.error("Não há conteúdo para copiar");
       return;
     }
-
     try {
       const textarea = document.createElement('textarea');
       textarea.value = analysisResult.result_text;
@@ -304,10 +298,8 @@ export default function SubmeterManifestHbl() {
       textarea.style.opacity = '0';
       document.body.appendChild(textarea);
       textarea.select();
-      
       const successful = document.execCommand('copy');
       document.body.removeChild(textarea);
-      
       if (successful) {
         setCopiedResult(true);
         toast.success("Resultado copiado");
@@ -320,25 +312,16 @@ export default function SubmeterManifestHbl() {
       toast.error("Não foi possível copiar. Selecione o texto manualmente.");
     }
   };
-
   if (isLoading) {
-    return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
+    return <div className="min-h-screen bg-background flex items-center justify-center">
         <div className="text-neutral-400">Carregando...</div>
-      </div>
-    );
+      </div>;
   }
-
   if (!baseInfo) {
     return null;
   }
-
-  const showManifestDiagnostic = 
-    analysisResult?.result_data?.manifest?.invoice_tokens?.length === 0 ||
-    analysisResult?.result_data?.manifest?.ncm8?.length === 0;
-
-  return (
-    <PageLayout title="DACHSER" subtitle="Submeter – Manifest/Pack List × Draft HBL" pageIcon={FileStack}>
+  const showManifestDiagnostic = analysisResult?.result_data?.manifest?.invoice_tokens?.length === 0 || analysisResult?.result_data?.manifest?.ncm8?.length === 0;
+  return <PageLayout title="DACHSER" subtitle="Submeter – Manifest/Pack List × Draft HBL" pageIcon={FileStack}>
       <PageCard className="max-w-4xl mx-auto">
             <h1 className="text-2xl font-bold text-white mb-2">Submeter – Manifest/Pack List × Draft HBL</h1>
             <p className="text-sm text-neutral-400 mb-8">Adicione os arquivos HBL para análise comparativa</p>
@@ -366,43 +349,22 @@ export default function SubmeterManifestHbl() {
 
             <h3 className="text-xs tracking-[0.22em] uppercase text-neutral-400 mb-4">Envie os arquivos Draft HBL (múltiplos PDFs):</h3>
           
-            <UploadZone
-              onFilesSelected={handleFilesSelected}
-              accept=".pdf"
-              multiple={true}
-              label="Arraste e solte ou clique para enviar"
-              description="Aceito apenas: PDF (máx. 10 arquivos, 20MB cada)"
-            />
+            <UploadZone onFilesSelected={handleFilesSelected} accept=".pdf" multiple={true} label="Arraste e solte ou clique para enviar" description="Aceito apenas: PDF (máx. 10 arquivos, 20MB cada)" />
 
-            {hblFiles.length > 0 && (
-              <div className="mt-6">
+            {hblFiles.length > 0 && <div className="mt-6">
                 <h3 className="text-xs tracking-[0.22em] uppercase text-neutral-400 mb-3">
                   Arquivos HBL adicionados ({hblFiles.length}):
                 </h3>
                 <div className="space-y-2">
-                  {hblFiles.map((file, index) => (
-                    <FileItem
-                      key={index}
-                      file={file}
-                      onRemove={() => handleRemoveFile(index)}
-                    />
-                  ))}
+                  {hblFiles.map((file, index) => <FileItem key={index} file={file} onRemove={() => handleRemoveFile(index)} />)}
                 </div>
-              </div>
-            )}
+              </div>}
 
-            {inlineStatus && !isAnalyzing && (
-              <div className={`mt-6 rounded-xl p-4 border ${
-                inlineStatus.type === 'success' ? 'bg-emerald-500/15 border-emerald-500/40 text-emerald-300' :
-                inlineStatus.type === 'error' ? 'bg-rose-500/15 border-rose-500/40 text-rose-300' :
-                'bg-amber-500/15 border-amber-500/40 text-amber-300'
-              }`}>
+            {inlineStatus && !isAnalyzing && <div className={`mt-6 rounded-xl p-4 border ${inlineStatus.type === 'success' ? 'bg-emerald-500/15 border-emerald-500/40 text-emerald-300' : inlineStatus.type === 'error' ? 'bg-rose-500/15 border-rose-500/40 text-rose-300' : 'bg-amber-500/15 border-amber-500/40 text-amber-300'}`}>
                 <p className="text-sm font-medium">{inlineStatus.message}</p>
-              </div>
-            )}
+              </div>}
 
-            {isAnalyzing && (
-              <div className="mt-6">
+            {isAnalyzing && <div className="mt-6">
                 <div className="bg-black/20 border border-white/5 rounded-xl p-4">
                   <div className="flex items-center gap-3 mb-3">
                     <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-amber-400"></div>
@@ -413,26 +375,17 @@ export default function SubmeterManifestHbl() {
                     <span className="text-xs text-neutral-400 font-mono min-w-[3rem] text-right">{analysisProgress}%</span>
                   </div>
                 </div>
-              </div>
-            )}
+              </div>}
 
-            {analysisResult?.result_text && (
-              <div id="analysis-results" className="mt-8 space-y-6">
+            {analysisResult?.result_text && <div id="analysis-results" className="mt-8 space-y-6">
                 <div className="flex items-center gap-2 text-emerald-300">
                   <div className="w-2 h-2 bg-emerald-400 rounded-full shadow-[0_0_10px_rgba(52,211,153,0.6)]" />
                   <span className="font-semibold text-sm">Análise concluída</span>
                 </div>
 
-                {analysisResult.result_data?.files?.manifest_name?.match(/\.(xlsx?|xls)$/i) && 
-                 analysisResult.result_data?.diagnostics?.manifest && (
-                  <XlsxDebugPanel 
-                    diagnostics={analysisResult.result_data.diagnostics.manifest}
-                    fileName={analysisResult.result_data.files.manifest_name}
-                  />
-                )}
+                {analysisResult.result_data?.files?.manifest_name?.match(/\.(xlsx?|xls)$/i) && analysisResult.result_data?.diagnostics?.manifest && <XlsxDebugPanel diagnostics={analysisResult.result_data.diagnostics.manifest} fileName={analysisResult.result_data.files.manifest_name} />}
 
-                {showManifestDiagnostic && analysisResult.result_data && (
-                  <Card className="bg-amber-950/20 border-amber-700">
+                {showManifestDiagnostic && analysisResult.result_data && <Card className="bg-amber-950/20 border-amber-700">
                     <CardHeader>
                       <CardTitle className="text-amber-400 flex items-center gap-2">
                         <AlertCircle className="w-5 h-5" />
@@ -443,8 +396,7 @@ export default function SubmeterManifestHbl() {
                       <p className="text-neutral-400">
                         <strong>Arquivo:</strong> {analysisResult.result_data.files?.manifest_name}
                       </p>
-                      {analysisResult.result_data.diagnostics?.manifest && (
-                        <>
+                      {analysisResult.result_data.diagnostics?.manifest && <>
                           <p className="text-neutral-400">
                             <strong>Planilhas processadas:</strong>{" "}
                             {analysisResult.result_data.diagnostics.manifest.sheets_processed || 0}
@@ -453,8 +405,7 @@ export default function SubmeterManifestHbl() {
                             <strong>Linhas encontradas:</strong>{" "}
                             {analysisResult.result_data.diagnostics.manifest.rows_found || 0}
                           </p>
-                        </>
-                      )}
+                        </>}
                       <p className="text-neutral-400">
                         <strong>OCR utilizado:</strong>{" "}
                         {analysisResult.result_data.used_ocr ? "Sim" : "Não"}
@@ -464,8 +415,7 @@ export default function SubmeterManifestHbl() {
                         (INVOICE, INV, NCM, HS CODE, etc.).
                       </p>
                     </CardContent>
-                  </Card>
-                )}
+                  </Card>}
 
                 <RejectedTokensDebug debugInfo={analysisResult.result_data?.debug_info} />
 
@@ -476,76 +426,38 @@ export default function SubmeterManifestHbl() {
                 </div>
 
                 <div className="flex items-center gap-4">
-                  <Button
-                    onClick={handleNewAnalysis}
-                    disabled={isCompletingAnalysis || isAnalyzing}
-                    className="h-10 rounded-full px-6 bg-amber-400 text-black font-semibold text-sm shadow-[0_0_22px_rgba(251,191,36,0.6)] hover:bg-amber-300"
-                  >
+                  <Button onClick={handleNewAnalysis} disabled={isCompletingAnalysis || isAnalyzing} className="h-10 rounded-full px-6 bg-amber-400 text-black font-semibold text-sm shadow-[0_0_22px_rgba(251,191,36,0.6)] hover:bg-amber-300">
                     <Send className="w-4 h-4 mr-2" />
                     {isAnalyzing ? "Processando..." : "Fazer nova análise"}
                   </Button>
-                  <Button
-                    onClick={handleCompleteAnalysis}
-                    disabled={isCompletingAnalysis}
-                    variant="outline"
-                    className="h-10 rounded-full px-6 border-white/24 bg-black/40 text-white hover:border-amber-400/80 hover:bg-black"
-                  >
+                  <Button onClick={handleCompleteAnalysis} disabled={isCompletingAnalysis} variant="outline" className="h-10 rounded-full px-6 border-white/24 bg-black/40 text-white hover:border-amber-400/80 hover:bg-black">
                     Concluir análise
                   </Button>
-                  <Button
-                    onClick={handleCopyResult}
-                    variant="ghost"
-                    size="icon"
-                    className="rounded-full w-10 h-10 text-white hover:bg-white/10"
-                    title="Copiar resultado"
-                  >
-                    {copiedResult ? (
-                      <Check className="w-4 h-4" />
-                    ) : (
-                      <Copy className="w-4 h-4" />
-                    )}
+                  <Button onClick={handleCopyResult} variant="ghost" size="icon" className="rounded-full w-10 h-10 text-white hover:bg-white/10" title="Copiar resultado">
+                    {copiedResult ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
                   </Button>
                 </div>
-              </div>
-            )}
+              </div>}
 
-            {!analysisResult && (
-              <div className="mt-8 flex justify-start">
-                <Button
-                  onClick={handleAnalise}
-                  disabled={!hblFiles.length || isAnalyzing}
-                  className="h-10 rounded-full px-6 bg-amber-400 text-black font-semibold text-sm shadow-[0_0_22px_rgba(251,191,36,0.6)] hover:bg-amber-300"
-                >
+            {!analysisResult && <div className="mt-8 flex justify-start">
+                
+              </div>}
+
+            {!analysisResult && <div className="mt-8 flex justify-start">
+                <Button onClick={handleAnalise} disabled={!hblFiles.length || isAnalyzing} className="h-10 rounded-full px-6 bg-amber-400 text-black font-semibold text-sm shadow-[0_0_22px_rgba(251,191,36,0.6)] hover:bg-amber-300">
                   <Send className="w-4 h-4 mr-2" />
                   {isAnalyzing ? "Processando..." : "Fazer análise"}
                 </Button>
-              </div>
-            )}
-
-            {!analysisResult && (
-              <div className="mt-8 flex justify-start">
-                <Button
-                  onClick={handleAnalise}
-                  disabled={!hblFiles.length || isAnalyzing}
-                  className="h-10 rounded-full px-6 bg-amber-400 text-black font-semibold text-sm shadow-[0_0_22px_rgba(251,191,36,0.6)] hover:bg-amber-300"
-                >
-                  <Send className="w-4 h-4 mr-2" />
-                  {isAnalyzing ? "Processando..." : "Fazer análise"}
-                </Button>
-              </div>
-            )}
+              </div>}
       </PageCard>
 
-      {!analysisResult && (
-        <div className="flex items-center justify-center mt-6 max-w-4xl mx-auto">
+      {!analysisResult && <div className="flex items-center justify-center mt-6 max-w-4xl mx-auto">
           <div className="flex items-start gap-3 text-xs text-neutral-400 bg-black/20 border border-white/5 p-4 rounded-xl">
             <Info className="w-4 h-4 flex-shrink-0 mt-0.5 text-amber-300" />
             <p>
               As análises são geradas por um modelo de IA e podem conter imprecisões. Revise antes de concluir processos.
             </p>
           </div>
-        </div>
-      )}
-    </PageLayout>
-  );
+        </div>}
+    </PageLayout>;
 }
