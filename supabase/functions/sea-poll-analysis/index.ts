@@ -1,5 +1,5 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { Client } from "https://deno.land/x/mysql@v2.12.1/mod.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -11,46 +11,51 @@ serve(async (req) => {
     return new Response(null, { headers: corsHeaders });
   }
 
-  try {
-    const supabase = createClient(
-      Deno.env.get('SUPABASE_URL') ?? '',
-      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
-    );
+  let dbClient: Client | null = null;
 
+  try {
     const { id: analysisId } = await req.json();
 
     console.log(`Polling analysis ${analysisId}`);
 
-    const { data: analysis, error } = await supabase
-      .from('maritime_analyses')
-      .select('*')
-      .eq('id', analysisId)
-      .single();
+    // Connect to MariaDB
+    const host = Deno.env.get('MARIADB_HOST');
+    const port = parseInt(Deno.env.get('MARIADB_PORT') || '3306');
+    const database = Deno.env.get('MARIADB_DATABASE');
+    const dbUser = Deno.env.get('MARIADB_USER');
+    const dbPassword = Deno.env.get('MARIADB_PASSWORD');
 
-    if (error) {
-      console.error('Analysis not found:', error);
+    if (!host || !database || !dbUser || !dbPassword) {
+      throw new Error('Database configuration error');
+    }
+
+    dbClient = await new Client().connect({
+      hostname: host,
+      port: port,
+      db: database,
+      username: dbUser,
+      password: dbPassword,
+      charset: "utf8mb4",
+    });
+
+    // Query run from MariaDB
+    const runs = await dbClient.query(`
+      SELECT id, item_id, mode, thread_id, run_id, status, result_text, created_at
+      FROM ai_agente.t_dachser_sea_runs 
+      WHERE id = ?
+    `, [analysisId]);
+
+    await dbClient.close();
+
+    if (!runs || runs.length === 0) {
+      console.error('Analysis not found:', analysisId);
       return new Response(
         JSON.stringify({ error: 'Analysis not found' }),
         { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
-    // Parse result_data if it's a string
-    let resultData = analysis.result_data;
-    if (typeof resultData === 'string') {
-      try {
-        resultData = JSON.parse(resultData);
-      } catch (e) {
-        console.error('Failed to parse result_data:', e);
-      }
-    }
-
-    // Extract progress information
-    const progress = {
-      step: analysis.progress_step || 'queued',
-      message: analysis.progress_step || 'Analysis queued',
-      percent: 0,
-    };
+    const run = runs[0];
 
     // Calculate percentage based on status
     const statusPercentMap: Record<string, number> = {
@@ -63,22 +68,28 @@ serve(async (req) => {
       'error': 0,
     };
 
-    progress.percent = statusPercentMap[analysis.status || 'queued'] || 0;
+    const progress = {
+      step: run.status || 'queued',
+      message: run.status === 'completed' || run.status === 'pendente' ? 'Análise concluída' : 
+               run.status === 'error' ? 'Erro na análise' :
+               run.status === 'processing' ? 'Analisando documentos...' : 'Aguardando processamento',
+      percent: statusPercentMap[run.status || 'queued'] || 0,
+    };
 
-    console.log(`Analysis ${analysisId} status: ${analysis.status}`);
+    console.log(`Analysis ${analysisId} status: ${run.status}`);
 
     return new Response(
       JSON.stringify({
         analysis: {
-          id: analysis.id,
-          status: analysis.status,
+          id: String(run.id),
+          status: run.status,
           progress_step: progress.step,
           progress_message: progress.message,
           progress_percent: progress.percent,
-          result_text: resultData?.result_text || null,
-          result_data: resultData,
-          error_message: analysis.error_message,
-          completed_at: analysis.completed_at,
+          result_text: run.result_text || null,
+          result_data: run.result_text ? { result_text: run.result_text } : null,
+          error_message: run.status === 'error' ? run.result_text : null,
+          completed_at: run.status === 'completed' || run.status === 'pendente' ? run.created_at : null,
         }
       }),
       { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
@@ -86,6 +97,9 @@ serve(async (req) => {
 
   } catch (error: any) {
     console.error('Error:', error);
+    if (dbClient) {
+      try { await dbClient.close(); } catch (e) { /* ignore */ }
+    }
     return new Response(
       JSON.stringify({ error: error?.message || 'Unknown error' }),
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }

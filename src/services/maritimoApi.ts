@@ -150,20 +150,38 @@ export const maritimoApi = {
   },
 
   /**
-   * Poll analysis status
+   * Poll analysis status - uses dedicated edge function
    */
   async pollAnalysis(analysisId: string): Promise<AnalysisStatus> {
-    const { data, error } = await supabase.functions.invoke('mariadb-proxy', {
-      body: { action: 'get_maritimo_analysis_status', analysisId }
-    });
+    const response = await fetch(
+      `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/sea-poll-analysis`,
+      {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ id: analysisId })
+      }
+    );
     
-    if (error) throw error;
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(errorData.error || `HTTP error ${response.status}`);
+    }
+    
+    const data = await response.json();
+    const analysis = data?.analysis || {};
+    
     return {
       id: analysisId,
-      status: data?.status || 'pending',
-      progress_percent: data?.progress,
-      progress_step: data?.step,
-      result_text: data?.result_text
+      status: analysis.status || 'pending',
+      progress_percent: analysis.progress_percent,
+      progress_step: analysis.progress_step,
+      progress_message: analysis.progress_message,
+      result_text: analysis.result_text,
+      result_data: analysis.result_data,
+      error_message: analysis.error_message
     };
   },
 
