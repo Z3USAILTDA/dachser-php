@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { Upload, Clock, Copy, ClipboardList, Trash2, FileText, CheckCircle } from "lucide-react";
+import { Upload, Clock, Copy, ClipboardList, Trash2, FileText, CheckCircle, FileDown } from "lucide-react";
 import { PageLayout } from "@/components/layout/PageLayout";
 import { FilterCard, TableCard } from "@/components/layout/PageCard";
 import { FilterBar } from "@/components/layout/FilterBar";
@@ -13,6 +13,7 @@ import { format } from "date-fns";
 import { Filter as FilterIcon } from "lucide-react";
 import { useChbItems, ChbItem } from "@/hooks/useChbData";
 import { supabase } from "@/integrations/supabase/client";
+import { exportChbHistoryToPDF } from "@/utils/chbPdfExport";
 
 interface HistoryEntry {
   id: number;
@@ -71,11 +72,13 @@ export default function ChbAnalises() {
   const [historyModal, setHistoryModal] = useState<{
     open: boolean;
     itemId: number | null;
+    reference: string;
     history: HistoryEntry[];
     loading: boolean;
   }>({
     open: false,
     itemId: null,
+    reference: '',
     history: [],
     loading: false
   });
@@ -110,8 +113,8 @@ export default function ChbAnalises() {
     fetchItems();
   };
 
-  const handleOpenHistory = async (itemId: number) => {
-    setHistoryModal({ open: true, itemId, history: [], loading: true });
+  const handleOpenHistory = async (itemId: number, reference: string) => {
+    setHistoryModal({ open: true, itemId, reference, history: [], loading: true });
     
     try {
       const { data, error } = await supabase.functions.invoke('mariadb-proxy', {
@@ -283,7 +286,7 @@ export default function ChbAnalises() {
                       <td className="px-[10px] py-[9px] whitespace-nowrap text-right">
                         <div className="flex items-center justify-end gap-2">
                           <button
-                            onClick={() => handleOpenHistory(item.id)}
+                            onClick={() => handleOpenHistory(item.id, item.reference)}
                             className="w-7 h-7 rounded-full border border-[rgba(255,255,255,.25)] flex items-center justify-center text-[#aaaaaa] hover:text-white hover:border-[rgba(255,255,255,.45)] transition-colors"
                             title="Ver histórico"
                           >
@@ -354,10 +357,22 @@ export default function ChbAnalises() {
       <Dialog open={historyModal.open} onOpenChange={(open) => setHistoryModal(prev => ({ ...prev, open }))}>
         <DialogContent className="max-w-3xl bg-[rgba(5,6,18,.98)] border border-[rgba(255,255,255,.12)]">
           <DialogHeader>
-            <DialogTitle className="text-[#f5f5f5] flex items-center gap-2">
-              <ClipboardList size={18} className="text-[#ffc800]" />
-              Histórico de Análises
-            </DialogTitle>
+            <div className="flex items-center justify-between">
+              <DialogTitle className="text-[#f5f5f5] flex items-center gap-2">
+                <ClipboardList size={18} className="text-[#ffc800]" />
+                Histórico de Análises
+              </DialogTitle>
+              {historyModal.history.length > 0 && (
+                <button
+                  onClick={() => exportChbHistoryToPDF(historyModal.history, historyModal.reference)}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-[#ffc800] text-black text-[0.75rem] font-medium hover:bg-[#f5b843] transition-colors"
+                  title="Exportar para PDF"
+                >
+                  <FileDown size={14} />
+                  Exportar PDF
+                </button>
+              )}
+            </div>
           </DialogHeader>
           <div className="space-y-4 max-h-[600px] overflow-y-auto pr-2">
             {historyModal.history.length === 0 ? (
