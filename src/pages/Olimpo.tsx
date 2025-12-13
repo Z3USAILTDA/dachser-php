@@ -502,9 +502,15 @@ export default function Olimpo() {
     setIsLoading(false);
   }, []);
 
-  // Initialize map
+  // Initialize map - recreate when switching fullscreen mode
   useEffect(() => {
-    if (!mapContainerRef.current || mapRef.current) return;
+    // Cleanup previous map if exists
+    if (mapRef.current) {
+      mapRef.current.remove();
+      mapRef.current = null;
+    }
+
+    if (!mapContainerRef.current) return;
 
     const map = L.map(mapContainerRef.current, {
       worldCopyJump: true,
@@ -535,10 +541,12 @@ export default function Olimpo() {
     }, 100);
 
     return () => {
-      map.remove();
-      mapRef.current = null;
+      if (mapRef.current) {
+        mapRef.current.remove();
+        mapRef.current = null;
+      }
     };
-  }, []);
+  }, [isFullscreen]);
 
   // Update map markers
   useEffect(() => {
@@ -747,156 +755,243 @@ export default function Olimpo() {
   }, [loadData]);
 
   // Fullscreen mode - map takes entire screen
+  // Fullscreen overlay content (renders inside portal-like structure)
+  const fullscreenOverlay = isFullscreen ? (
+    <>
+      {/* Floating panel - filters + KPIs at top center */}
+      <div 
+        className="absolute top-4 left-1/2 -translate-x-1/2 z-[1000] rounded-xl p-3 flex flex-col gap-2"
+        style={{
+          background: 'rgba(5,6,18,.92)',
+          border: '1px solid rgba(255,255,255,.12)',
+          boxShadow: '0 12px 32px rgba(0,0,0,.7)',
+          minWidth: '700px',
+          maxWidth: '90vw',
+        }}
+      >
+        {/* Row 1: Filter controls */}
+        <div className="flex items-center gap-2 flex-wrap">
+          <div className="flex items-center gap-1.5 px-2 py-1 rounded-full bg-white/5 border border-white/10 text-xs text-muted-foreground">
+            <span>Período:</span>
+            <select 
+              value={daysFilter || ""}
+              onChange={(e) => setDaysFilter(e.target.value ? Number(e.target.value) : null)}
+              className="bg-transparent border-none text-white text-xs focus:outline-none cursor-pointer"
+            >
+              <option value="7" className="bg-[#0a0a0a]">Últimos 7 dias</option>
+              <option value="15" className="bg-[#0a0a0a]">Últimos 15 dias</option>
+              <option value="30" className="bg-[#0a0a0a]">Últimos 30 dias</option>
+              <option value="" className="bg-[#0a0a0a]">Todos</option>
+            </select>
+          </div>
+          
+          <div className="flex items-center gap-1.5 px-2 py-1 rounded-full bg-white/5 border border-white/10 text-xs text-muted-foreground">
+            <span>Tipo:</span>
+            <select 
+              value={modeFilter || ""}
+              onChange={(e) => setModeFilter(e.target.value as "air" | "sea" | null || null)}
+              className="bg-transparent border-none text-white text-xs focus:outline-none cursor-pointer"
+            >
+              <option value="" className="bg-[#0a0a0a]">Todos</option>
+              <option value="air" className="bg-[#0a0a0a]">AIR</option>
+              <option value="sea" className="bg-[#0a0a0a]">SEA</option>
+            </select>
+          </div>
+
+          <div className="flex items-center gap-1.5 px-2 py-1 rounded-full bg-white/5 border border-white/10 text-xs text-muted-foreground">
+            <span>Status:</span>
+            <select 
+              value={statusFilter || ""}
+              onChange={(e) => setStatusFilter(e.target.value || null)}
+              className="bg-transparent border-none text-white text-xs focus:outline-none cursor-pointer"
+            >
+              <option value="" className="bg-[#0a0a0a]">Todos</option>
+              <option value="Em trânsito" className="bg-[#0a0a0a]">Em trânsito</option>
+              <option value="Atraso" className="bg-[#0a0a0a]">Atraso</option>
+              <option value="Entregue" className="bg-[#0a0a0a]">Entregue</option>
+            </select>
+          </div>
+
+          <button
+            onClick={loadData}
+            className="flex items-center gap-1.5 px-2 py-1 rounded-full bg-white/5 border border-white/10 text-xs text-muted-foreground hover:bg-white/10 transition-all"
+          >
+            <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M23 4v6h-6M1 20v-6h6M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15" />
+            </svg>
+            Atualizar
+          </button>
+
+          <div className="flex-1" />
+
+          {/* Right side buttons */}
+          <button
+            className="flex items-center gap-1.5 px-2 py-1 rounded-full bg-white/5 border border-white/10 text-xs text-muted-foreground hover:bg-white/10 transition-all"
+          >
+            <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3" />
+            </svg>
+            Filtros
+          </button>
+          <button
+            onClick={() => setIsFullscreen(false)}
+            className="w-7 h-7 rounded-full border border-white/20 flex items-center justify-center bg-black/50 text-white hover:bg-black/70 transition-all"
+          >
+            <Minimize2 size={14} />
+          </button>
+        </div>
+
+        {/* Row 2: KPI cards */}
+        <div className="flex items-stretch gap-3">
+          <div className="flex-1 px-3 py-2 rounded-lg bg-white/[0.03] border-r border-white/10">
+            <p className="text-xs text-muted-foreground">Soma</p>
+            <p className="text-lg font-semibold">{filteredData.length}</p>
+          </div>
+          <div className="flex-1 px-3 py-2 rounded-lg bg-white/[0.03] border-r border-white/10">
+            <p className="text-xs text-muted-foreground">Em trânsito</p>
+            <p className="text-lg font-semibold">{filteredData.filter(i => i.status === 'Em trânsito').length}</p>
+          </div>
+          <div className="flex-1 px-3 py-2 rounded-lg bg-white/[0.03] border-r border-white/10">
+            <p className="text-xs text-muted-foreground">Atrasados</p>
+            <p className="text-lg font-semibold">{kpis.delayed}</p>
+          </div>
+          <div className="flex-1 px-3 py-2 rounded-lg bg-white/[0.03]">
+            <p className="text-xs text-muted-foreground">Entregues</p>
+            <p className="text-lg font-semibold">{filteredData.filter(i => i.status === 'Entregue').length}</p>
+          </div>
+        </div>
+
+        {/* Row 3: Search */}
+        <div className="flex items-center gap-2">
+          <Input
+            placeholder="Buscar por cliente, rota, tipo, status ou ETA..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className="flex-1 rounded-full bg-[rgba(14,14,14,0.96)] border-white/10 text-xs h-8"
+          />
+          <button
+            onClick={() => {
+              setSearchTerm("");
+              setDaysFilter(7);
+              setModeFilter(null);
+              setStatusFilter(null);
+            }}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white/5 border border-white/10 text-xs text-muted-foreground hover:bg-white/10 transition-all"
+          >
+            <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <circle cx="12" cy="12" r="10" />
+              <path d="m4.93 4.93 14.14 14.14" />
+            </svg>
+            Limpar filtros
+          </button>
+        </div>
+      </div>
+
+      {/* Legend */}
+      <div className="absolute bottom-4 left-4 flex items-center gap-2 text-[10px] text-muted-foreground px-2 py-1 rounded-full bg-black/85 border border-white/10 z-[1000]">
+        <span className="w-2 h-2 rounded-full bg-primary" /> SEA
+        <span className="w-2 h-2 rounded-full bg-[#7fd0ff]" /> AIR
+      </div>
+
+      {/* Asset Details Panel - fullscreen */}
+      {selectedAssetDetails && (
+        <div 
+          className="absolute right-4 top-1/2 -translate-y-1/2 w-72 max-h-[70vh] z-[1000] rounded-2xl flex flex-col overflow-hidden"
+          style={{
+            background: 'rgba(5,6,18,.95)',
+            border: '1px solid rgba(255,255,255,.12)',
+            boxShadow: '0 18px 40px rgba(0,0,0,.85)',
+          }}
+        >
+          {/* Header */}
+          <div className="flex items-center justify-between p-3 border-b border-white/[0.08]">
+            <div className="flex items-center gap-2">
+              <div className={`w-8 h-8 rounded-full flex items-center justify-center ${selectedAssetDetails.mode === 'air' ? 'bg-[#7fd0ff]/20' : 'bg-primary/20'}`}>
+                {selectedAssetDetails.mode === 'air' ? (
+                  <Plane size={16} className="text-[#7fd0ff]" />
+                ) : (
+                  <Ship size={16} className="text-primary" />
+                )}
+              </div>
+              <div>
+                <p className="text-xs text-muted-foreground uppercase tracking-wider">
+                  {selectedAssetDetails.mode === 'air' ? 'Avião' : 'Navio'}
+                </p>
+                <p className="font-semibold text-sm">
+                  {selectedAssetDetails.flight || selectedAssetDetails.asset || 'N/A'}
+                </p>
+              </div>
+            </div>
+            <button
+              onClick={() => setSelectedAssetDetails(null)}
+              className="w-6 h-6 rounded-full border border-white/20 flex items-center justify-center bg-black/50 text-muted-foreground hover:text-white transition-all"
+            >
+              <X size={12} />
+            </button>
+          </div>
+
+          {/* Badge */}
+          <div className="px-3 pt-3">
+            <Badge 
+              variant="outline" 
+              className={`${selectedAssetDetails.mode === 'air' ? 'border-[#7fd0ff]/70 text-[#b7e2ff]' : 'border-primary/70 text-primary'}`}
+            >
+              {selectedAssetDetails.tipo_label} • {selectedAssetDetails.flight || selectedAssetDetails.asset || 'N/A'}
+            </Badge>
+          </div>
+
+          {/* Details */}
+          <div className="p-3 space-y-2 text-sm">
+            <div className="flex justify-between">
+              <span className="text-muted-foreground">Rota</span>
+              <span className="font-medium">{selectedAssetDetails.rota}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-muted-foreground">Previsão</span>
+              <span className="font-medium">{selectedAssetDetails.eta_api}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-muted-foreground">Status</span>
+              <span className={`px-2 py-0.5 rounded-lg text-xs ${selectedAssetDetails.status === 'Atraso' ? 'bg-red-500/20 text-red-400' : selectedAssetDetails.status === 'Entregue' ? 'bg-green-500/20 text-green-400' : 'bg-blue-500/20 text-blue-400'}`}>
+                {selectedAssetDetails.status}
+              </span>
+            </div>
+          </div>
+
+          {/* Processos */}
+          <div className="p-3 border-t border-white/[0.05]">
+            <p className="text-xs text-muted-foreground uppercase tracking-wider mb-2">
+              Processos ({selectedAssetDetails.processos.length})
+            </p>
+            <div className="max-h-32 overflow-y-auto space-y-1">
+              {selectedAssetDetails.processos.length > 0 ? (
+                selectedAssetDetails.processos.map((awb, idx) => (
+                  <div key={idx} className="text-xs px-2 py-1.5 bg-white/[0.03] rounded-lg border border-white/[0.06]">
+                    {awb}
+                  </div>
+                ))
+              ) : (
+                <p className="text-xs text-muted-foreground italic">Nenhum processo</p>
+              )}
+            </div>
+          </div>
+
+          {/* Faturamento */}
+          <div className="p-3 border-t border-white/[0.05]">
+            <p className="text-xs text-muted-foreground uppercase tracking-wider mb-2">Faturamento</p>
+            <p className="text-xs text-muted-foreground italic">Em desenvolvimento...</p>
+          </div>
+        </div>
+      )}
+    </>
+  ) : null;
+
+  // Fullscreen mode - map takes entire screen
   if (isFullscreen) {
     return (
       <div className="fixed inset-0 z-50 bg-[#02040a]">
-        {/* Full screen map */}
         <div ref={mapContainerRef} className="absolute inset-0" />
-
-        {/* Floating filters bar at top */}
-        <div 
-          className="absolute left-4 right-4 top-4 z-[1000] flex flex-wrap items-center gap-2 p-2 rounded-full"
-          style={{
-            background: 'rgba(5,6,18,.9)',
-            border: '1px solid rgba(255,255,255,.12)',
-            boxShadow: '0 8px 24px rgba(0,0,0,.6)',
-          }}
-        >
-          <Input
-            placeholder="Buscar..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-40 rounded-full bg-[rgba(14,14,14,0.96)] border-white/20 text-xs h-7"
-          />
-          <button
-            onClick={() => setModeFilter(modeFilter === "air" ? null : "air")}
-            className={`px-2 py-1 rounded-full text-[10px] border transition-all ${modeFilter === "air" ? "border-primary bg-[rgba(30,30,30,0.98)] text-amber-200" : "border-white/10 bg-[rgba(14,14,14,0.95)]"}`}
-          >
-            AIR
-          </button>
-          <button
-            onClick={() => setModeFilter(modeFilter === "sea" ? null : "sea")}
-            className={`px-2 py-1 rounded-full text-[10px] border transition-all ${modeFilter === "sea" ? "border-primary bg-[rgba(30,30,30,0.98)] text-amber-200" : "border-white/10 bg-[rgba(14,14,14,0.95)]"}`}
-          >
-            SEA
-          </button>
-          <button
-            onClick={() => setStatusFilter(statusFilter === "Atraso" ? null : "Atraso")}
-            className={`px-2 py-1 rounded-full text-[10px] border transition-all ${statusFilter === "Atraso" ? "border-primary bg-[rgba(30,30,30,0.98)] text-amber-200" : "border-white/10 bg-[rgba(14,14,14,0.95)]"}`}
-          >
-            Atraso
-          </button>
-          <div className="flex-1" />
-          <Badge variant="outline" className="border-[#7fd0ff]/50 text-[#b7e2ff] text-[10px]">
-            Voos: {kpis.airActive}
-          </Badge>
-          <Badge variant="outline" className="border-primary/50 text-primary text-[10px]">
-            Containers: {kpis.seaTransit}
-          </Badge>
-          <button
-            onClick={() => setIsFullscreen(false)}
-            className="w-7 h-7 rounded-full border border-white/20 flex items-center justify-center bg-black/70 text-primary hover:bg-black/90 transition-all"
-          >
-            <Minimize2 size={12} />
-          </button>
-        </div>
-
-        {/* Legend */}
-        <div className="absolute bottom-4 left-4 flex items-center gap-2 text-[10px] text-muted-foreground px-2 py-1 rounded-full bg-black/85 border border-white/10 z-[1000]">
-          <span className="w-2 h-2 rounded-full bg-primary" /> SEA
-          <span className="w-2 h-2 rounded-full bg-[#7fd0ff]" /> AIR
-        </div>
-
-        {/* Asset Details Panel - fullscreen */}
-        {selectedAssetDetails && (
-          <div 
-            className="absolute right-4 top-16 w-80 max-h-[calc(100vh-100px)] z-[1000] rounded-2xl flex flex-col overflow-hidden"
-            style={{
-              background: 'rgba(5,6,18,.95)',
-              border: '1px solid rgba(255,255,255,.12)',
-              boxShadow: '0 18px 40px rgba(0,0,0,.85)',
-            }}
-          >
-            {/* Header */}
-            <div className="flex items-center justify-between p-3 border-b border-white/[0.08]">
-              <div className="flex items-center gap-2">
-                <div className={`w-8 h-8 rounded-full flex items-center justify-center ${selectedAssetDetails.mode === 'air' ? 'bg-[#7fd0ff]/20' : 'bg-primary/20'}`}>
-                  {selectedAssetDetails.mode === 'air' ? (
-                    <Plane size={16} className="text-[#7fd0ff]" />
-                  ) : (
-                    <Ship size={16} className="text-primary" />
-                  )}
-                </div>
-                <div>
-                  <p className="text-xs text-muted-foreground uppercase tracking-wider">
-                    {selectedAssetDetails.mode === 'air' ? 'Avião' : 'Navio'}
-                  </p>
-                  <p className="font-semibold text-sm">
-                    {selectedAssetDetails.flight || selectedAssetDetails.asset || 'N/A'}
-                  </p>
-                </div>
-              </div>
-              <button
-                onClick={() => setSelectedAssetDetails(null)}
-                className="w-6 h-6 rounded-full border border-white/20 flex items-center justify-center bg-black/50 text-muted-foreground hover:text-white transition-all"
-              >
-                <X size={12} />
-              </button>
-            </div>
-
-            {/* Badge */}
-            <div className="px-3 pt-3">
-              <Badge 
-                variant="outline" 
-                className={`${selectedAssetDetails.mode === 'air' ? 'border-[#7fd0ff]/70 text-[#b7e2ff]' : 'border-primary/70 text-primary'}`}
-              >
-                {selectedAssetDetails.tipo_label} • {selectedAssetDetails.flight || selectedAssetDetails.asset || 'N/A'}
-              </Badge>
-            </div>
-
-            {/* Details */}
-            <div className="p-3 space-y-2 text-sm">
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">Rota</span>
-                <span className="font-medium">{selectedAssetDetails.rota}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">Previsão</span>
-                <span className="font-medium">{selectedAssetDetails.eta_api}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">Status</span>
-                <span className={`px-2 py-0.5 rounded-lg text-xs ${selectedAssetDetails.status === 'Atraso' ? 'bg-red-500/20 text-red-400' : selectedAssetDetails.status === 'Entregue' ? 'bg-green-500/20 text-green-400' : 'bg-blue-500/20 text-blue-400'}`}>
-                  {selectedAssetDetails.status}
-                </span>
-              </div>
-            </div>
-
-            {/* Processos */}
-            <div className="p-3 border-t border-white/[0.05]">
-              <p className="text-xs text-muted-foreground uppercase tracking-wider mb-2">
-                Processos ({selectedAssetDetails.processos.length})
-              </p>
-              <div className="max-h-32 overflow-y-auto space-y-1">
-                {selectedAssetDetails.processos.length > 0 ? (
-                  selectedAssetDetails.processos.map((awb, idx) => (
-                    <div key={idx} className="text-xs px-2 py-1.5 bg-white/[0.03] rounded-lg border border-white/[0.06]">
-                      {awb}
-                    </div>
-                  ))
-                ) : (
-                  <p className="text-xs text-muted-foreground italic">Nenhum processo</p>
-                )}
-              </div>
-            </div>
-
-            {/* Faturamento */}
-            <div className="p-3 border-t border-white/[0.05]">
-              <p className="text-xs text-muted-foreground uppercase tracking-wider mb-2">Faturamento</p>
-              <p className="text-xs text-muted-foreground italic">Em desenvolvimento...</p>
-            </div>
-          </div>
-        )}
+        {fullscreenOverlay}
       </div>
     );
   }
@@ -990,10 +1085,10 @@ export default function Olimpo() {
         </header>
 
         {/* Content */}
-        <div className={`flex-1 flex flex-col lg:flex-row gap-4 min-h-0 ${isFullscreen ? "" : ""}`}>
-          {/* Map Card - consistente com PageCard */}
+        <div className="flex-1 flex flex-col lg:flex-row gap-4 min-h-0">
+          {/* Map Card */}
           <div 
-            className={`rounded-2xl flex flex-col overflow-hidden ${isFullscreen ? "flex-1" : "flex-1 min-h-[300px] lg:min-h-0"}`}
+            className="rounded-2xl flex flex-col overflow-hidden flex-1 min-h-[300px] lg:min-h-0"
             style={{
               background: 'rgba(5,6,18,.9)',
               border: '1px solid rgba(255,255,255,.12)',
@@ -1013,10 +1108,10 @@ export default function Olimpo() {
                   SEA
                 </Badge>
                 <button
-                  onClick={() => setIsFullscreen(!isFullscreen)}
+                  onClick={() => setIsFullscreen(true)}
                   className="w-7 h-7 md:w-8 md:h-8 rounded-full border border-white/20 flex items-center justify-center bg-black/70 text-primary hover:bg-black/90 transition-all"
                 >
-                  {isFullscreen ? <Minimize2 size={14} /> : <Maximize2 size={14} />}
+                  <Maximize2 size={14} />
                 </button>
               </div>
             </div>
@@ -1028,7 +1123,7 @@ export default function Olimpo() {
               </div>
 
               {/* Asset Details Panel - floating on map */}
-              {selectedAssetDetails && !isFullscreen && (
+              {selectedAssetDetails && (
                 <div 
                   className="absolute right-3 top-3 w-72 max-h-[calc(100%-24px)] z-[1000] rounded-xl flex flex-col overflow-hidden"
                   style={{
@@ -1223,88 +1318,71 @@ export default function Olimpo() {
                       Modal
                     </th>
                     <th className="p-2 px-3 text-left text-xs uppercase tracking-[0.12em] text-muted-foreground border-b border-white/[0.06] sticky top-0 bg-[rgba(5,6,8,0.98)]">
-                      Origem
+                      Origem → Destino
                     </th>
                     <th className="p-2 px-3 text-left text-xs uppercase tracking-[0.12em] text-muted-foreground border-b border-white/[0.06] sticky top-0 bg-[rgba(5,6,8,0.98)]">
-                      Destino
-                    </th>
-                    <th className="p-2 px-3 text-left text-xs uppercase tracking-[0.12em] text-muted-foreground border-b border-white/[0.06] sticky top-0 bg-[rgba(5,6,8,0.98)]">
-                      ETA/API
+                      ETA
                     </th>
                     <th className="p-2 px-3 text-left text-xs uppercase tracking-[0.12em] text-muted-foreground border-b border-white/[0.06] sticky top-0 bg-[rgba(5,6,8,0.98)]">
                       Status
                     </th>
+                    <th className="p-2 px-3 text-left text-xs uppercase tracking-[0.12em] text-muted-foreground border-b border-white/[0.06] sticky top-0 bg-[rgba(5,6,8,0.98)]">
+                      Processos
+                    </th>
                   </tr>
                 </thead>
                 <tbody>
-                  {isLoading ? (
-                    <tr>
-                      <td colSpan={6} className="p-4 text-center text-muted-foreground">
-                        Carregando...
+                  {paginatedData.map((row, i) => (
+                    <tr key={row.key} className={`border-b border-white/[0.04] ${i % 2 === 0 ? "" : "bg-white/[0.01]"} hover:bg-white/[0.03] transition-colors`}>
+                      <td className="p-2 px-3">{row.tipo_label}</td>
+                      <td className="p-2 px-3">
+                        <Badge variant="outline" className={`text-[10px] ${row.mode === "air" ? "border-[#7fd0ff]/60 text-[#b7e2ff]" : "border-primary/60 text-primary"}`}>
+                          {row.mode === "air" ? "AIR" : "SEA"}
+                        </Badge>
                       </td>
-                    </tr>
-                  ) : paginatedData.length === 0 ? (
-                    <tr>
-                      <td colSpan={6} className="p-4 text-center text-muted-foreground">
-                        Sem dados para exibir.
+                      <td className="p-2 px-3">{row.rota}</td>
+                      <td className="p-2 px-3 text-muted-foreground">{row.eta_api || "—"}</td>
+                      <td className="p-2 px-3">
+                        <Badge
+                          variant="outline"
+                          className={
+                            row.status === "Atraso"
+                              ? "border-red-500/60 text-red-400"
+                              : row.status === "Entregue"
+                              ? "border-green-500/60 text-green-400"
+                              : "border-blue-500/60 text-blue-400"
+                          }
+                        >
+                          {row.status}
+                        </Badge>
                       </td>
+                      <td className="p-2 px-3">{row.count}</td>
                     </tr>
-                  ) : (
-                    paginatedData.map((g, idx) => {
-                      const parts = (g.rota || "— → —").split("→");
-                      const orig = (parts[0] || "—").trim();
-                      const dest = (parts[1] || "—").trim();
-
-                      return (
-                        <tr key={idx} className="hover:bg-white/[0.04] odd:bg-white/[0.01]">
-                          <td className="p-2 px-3 whitespace-nowrap">{g.asset || g.tipo_label || "N/A"}</td>
-                          <td className="p-2 px-3 whitespace-nowrap">
-                            <span
-                              className={`inline-flex px-2 py-0.5 rounded-full text-xs uppercase tracking-[0.08em] border ${g.mode === "air" ? "border-[rgba(127,208,255,0.9)] text-[#c9ecff]" : "border-[rgba(255,200,0,0.9)] text-[#ffe7a8]"}`}
-                            >
-                              {g.mode?.toUpperCase() || "N/A"}
-                            </span>
-                          </td>
-                          <td className="p-2 px-3 whitespace-nowrap">{orig}</td>
-                          <td className="p-2 px-3 whitespace-nowrap">{dest}</td>
-                          <td className="p-2 px-3 whitespace-nowrap">{g.eta_api}</td>
-                          <td className="p-2 px-3 whitespace-nowrap">
-                            <span
-                              className={`text-xs px-2 py-0.5 rounded-lg border ${g.status === "Atraso" ? "bg-[rgba(255,139,139,0.18)] text-[#ffb4b4] border-[rgba(255,139,139,0.8)]" : "bg-[rgba(49,203,112,0.16)] text-[#7ef7b2] border-[rgba(49,203,112,0.6)]"}`}
-                            >
-                              {g.status}
-                            </span>
-                          </td>
-                        </tr>
-                      );
-                    })
-                  )}
+                  ))}
                 </tbody>
               </table>
             </div>
 
             {/* Pagination */}
-            {aggregatedData.length > pageSize && (
-              <div className="flex justify-end p-2 border-t border-white/[0.05]">
-                <div className="flex items-center gap-2 bg-black/85 border border-white/10 px-3 py-1.5 rounded-full text-xs">
-                  <button
-                    onClick={() => setCurrentPage(Math.max(1, currentPage - 1))}
-                    disabled={currentPage === 1}
-                    className="px-2 py-1 rounded-full border border-white/20 bg-[#101010] disabled:opacity-40"
-                  >
-                    « Anterior
-                  </button>
-                  <span className="text-muted-foreground mx-2">
-                    Página {currentPage}/{totalPages}
-                  </span>
-                  <button
-                    onClick={() => setCurrentPage(Math.min(totalPages, currentPage + 1))}
-                    disabled={currentPage === totalPages}
-                    className="px-2 py-1 rounded-full border border-white/20 bg-[#101010] disabled:opacity-40"
-                  >
-                    Próxima »
-                  </button>
-                </div>
+            {totalPages > 1 && (
+              <div className="flex items-center justify-center gap-1.5 p-2 border-t border-white/[0.05]">
+                <button
+                  onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                  disabled={currentPage === 1}
+                  className="px-2 py-1 text-[10px] rounded border border-white/10 bg-black/50 disabled:opacity-50"
+                >
+                  ←
+                </button>
+                <span className="px-2 text-xs text-muted-foreground">
+                  {currentPage} / {totalPages}
+                </span>
+                <button
+                  onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                  disabled={currentPage === totalPages}
+                  className="px-2 py-1 text-[10px] rounded border border-white/10 bg-black/50 disabled:opacity-50"
+                >
+                  →
+                </button>
               </div>
             )}
           </div>
