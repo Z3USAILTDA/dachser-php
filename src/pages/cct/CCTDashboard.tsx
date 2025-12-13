@@ -1,6 +1,6 @@
 import { useState, useMemo, useCallback, useEffect } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
-import { ArrowLeft, LayoutDashboard, BarChart3, AlertTriangle, Bell, Settings, HelpCircle, LogOut, Radio, RefreshCw, Database, Package, AlertCircle, Clock, Plane, List, CheckCircle2 } from "lucide-react";
+import { ArrowLeft, LayoutDashboard, BarChart3, AlertTriangle, Bell, Settings, HelpCircle, LogOut, Radio, RefreshCw, Database, Package, AlertCircle, Clock, Plane, List, CheckCircle2, Eye, CheckCircle } from "lucide-react";
 import dachserBg from "@/assets/dachser-background.jpg";
 
 // Components
@@ -10,7 +10,7 @@ import { AssignAnalistaDialog } from "@/components/cct/AssignAnalistaDialog";
 import { NovoShipmentDialog } from "@/components/cct/NovoShipmentDialog";
 
 // Hooks
-import { useProfiles, useProcessosCCT } from "@/hooks/useCCTData";
+import { useProfiles, useProcessosCCT, useExcecoes } from "@/hooks/useCCTData";
 
 // Types
 import { ProcessoCCT } from "@/types/cct";
@@ -54,6 +54,7 @@ export default function CCTDashboard() {
   } = useProcessosCCT();
   
   const { data: profiles = [] } = useProfiles();
+  const { data: excecoes = [] } = useExcecoes();
   
   const [assignDialogOpen, setAssignDialogOpen] = useState(false);
   const [selectedProcesso, setSelectedProcesso] = useState<ProcessoCCT | null>(null);
@@ -74,6 +75,13 @@ export default function CCTDashboard() {
     }, 0);
     return { total, emTransito, alerta, critico, eventos24h };
   }, [processos]);
+
+  const excecoesStats = useMemo(() => ({
+    abertas: excecoes.filter(e => e.status_excecao === "ABERTA").length,
+    emAnalise: excecoes.filter(e => e.status_excecao === "EM_ANALISE").length,
+    resolvidas: excecoes.filter(e => e.status_excecao === "RESOLVIDA").length,
+    total: excecoes.length,
+  }), [excecoes]);
   
   const handleOpenAssignDialog = useCallback((processo: ProcessoCCT) => {
     setSelectedProcesso(processo);
@@ -270,6 +278,16 @@ export default function CCTDashboard() {
                   <MetricCard title="Tempo Médio" value="2.3d" icon={Clock} subtitle="Transit time" />
                 </>
               )}
+            </div>
+          )}
+
+          {/* Exceções KPI Cards - Show on Exceções tab */}
+          {activeTab === "excecoes" && (
+            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+              <MetricCard title="Abertas" value={excecoesStats.abertas} icon={AlertTriangle} variant="critical" subtitle="Pendentes de ação" />
+              <MetricCard title="Em Análise" value={excecoesStats.emAnalise} icon={Eye} variant="warning" subtitle="Sendo tratadas" />
+              <MetricCard title="Resolvidas" value={excecoesStats.resolvidas} icon={CheckCircle} variant="success" subtitle="Concluídas" />
+              <MetricCard title="Total" value={excecoesStats.total} icon={AlertCircle} subtitle="Todas exceções" />
             </div>
           )}
 
