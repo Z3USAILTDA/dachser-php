@@ -746,8 +746,164 @@ export default function Olimpo() {
     loadData();
   }, [loadData]);
 
+  // Fullscreen mode - map takes entire screen
+  if (isFullscreen) {
+    return (
+      <div className="fixed inset-0 z-50 bg-[#02040a]">
+        {/* Full screen map */}
+        <div ref={mapContainerRef} className="absolute inset-0" />
+
+        {/* Floating filters bar at top */}
+        <div 
+          className="absolute left-4 right-4 top-4 z-[1000] flex flex-wrap items-center gap-2 p-2 rounded-full"
+          style={{
+            background: 'rgba(5,6,18,.9)',
+            border: '1px solid rgba(255,255,255,.12)',
+            boxShadow: '0 8px 24px rgba(0,0,0,.6)',
+          }}
+        >
+          <Input
+            placeholder="Buscar..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className="w-40 rounded-full bg-[rgba(14,14,14,0.96)] border-white/20 text-xs h-7"
+          />
+          <button
+            onClick={() => setModeFilter(modeFilter === "air" ? null : "air")}
+            className={`px-2 py-1 rounded-full text-[10px] border transition-all ${modeFilter === "air" ? "border-primary bg-[rgba(30,30,30,0.98)] text-amber-200" : "border-white/10 bg-[rgba(14,14,14,0.95)]"}`}
+          >
+            AIR
+          </button>
+          <button
+            onClick={() => setModeFilter(modeFilter === "sea" ? null : "sea")}
+            className={`px-2 py-1 rounded-full text-[10px] border transition-all ${modeFilter === "sea" ? "border-primary bg-[rgba(30,30,30,0.98)] text-amber-200" : "border-white/10 bg-[rgba(14,14,14,0.95)]"}`}
+          >
+            SEA
+          </button>
+          <button
+            onClick={() => setStatusFilter(statusFilter === "Atraso" ? null : "Atraso")}
+            className={`px-2 py-1 rounded-full text-[10px] border transition-all ${statusFilter === "Atraso" ? "border-primary bg-[rgba(30,30,30,0.98)] text-amber-200" : "border-white/10 bg-[rgba(14,14,14,0.95)]"}`}
+          >
+            Atraso
+          </button>
+          <div className="flex-1" />
+          <Badge variant="outline" className="border-[#7fd0ff]/50 text-[#b7e2ff] text-[10px]">
+            Voos: {kpis.airActive}
+          </Badge>
+          <Badge variant="outline" className="border-primary/50 text-primary text-[10px]">
+            Containers: {kpis.seaTransit}
+          </Badge>
+          <button
+            onClick={() => setIsFullscreen(false)}
+            className="w-7 h-7 rounded-full border border-white/20 flex items-center justify-center bg-black/70 text-primary hover:bg-black/90 transition-all"
+          >
+            <Minimize2 size={12} />
+          </button>
+        </div>
+
+        {/* Legend */}
+        <div className="absolute bottom-4 left-4 flex items-center gap-2 text-[10px] text-muted-foreground px-2 py-1 rounded-full bg-black/85 border border-white/10 z-[1000]">
+          <span className="w-2 h-2 rounded-full bg-primary" /> SEA
+          <span className="w-2 h-2 rounded-full bg-[#7fd0ff]" /> AIR
+        </div>
+
+        {/* Asset Details Panel - fullscreen */}
+        {selectedAssetDetails && (
+          <div 
+            className="absolute right-4 top-16 w-80 max-h-[calc(100vh-100px)] z-[1000] rounded-2xl flex flex-col overflow-hidden"
+            style={{
+              background: 'rgba(5,6,18,.95)',
+              border: '1px solid rgba(255,255,255,.12)',
+              boxShadow: '0 18px 40px rgba(0,0,0,.85)',
+            }}
+          >
+            {/* Header */}
+            <div className="flex items-center justify-between p-3 border-b border-white/[0.08]">
+              <div className="flex items-center gap-2">
+                <div className={`w-8 h-8 rounded-full flex items-center justify-center ${selectedAssetDetails.mode === 'air' ? 'bg-[#7fd0ff]/20' : 'bg-primary/20'}`}>
+                  {selectedAssetDetails.mode === 'air' ? (
+                    <Plane size={16} className="text-[#7fd0ff]" />
+                  ) : (
+                    <Ship size={16} className="text-primary" />
+                  )}
+                </div>
+                <div>
+                  <p className="text-xs text-muted-foreground uppercase tracking-wider">
+                    {selectedAssetDetails.mode === 'air' ? 'Avião' : 'Navio'}
+                  </p>
+                  <p className="font-semibold text-sm">
+                    {selectedAssetDetails.flight || selectedAssetDetails.asset || 'N/A'}
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setSelectedAssetDetails(null)}
+                className="w-6 h-6 rounded-full border border-white/20 flex items-center justify-center bg-black/50 text-muted-foreground hover:text-white transition-all"
+              >
+                <X size={12} />
+              </button>
+            </div>
+
+            {/* Badge */}
+            <div className="px-3 pt-3">
+              <Badge 
+                variant="outline" 
+                className={`${selectedAssetDetails.mode === 'air' ? 'border-[#7fd0ff]/70 text-[#b7e2ff]' : 'border-primary/70 text-primary'}`}
+              >
+                {selectedAssetDetails.tipo_label} • {selectedAssetDetails.flight || selectedAssetDetails.asset || 'N/A'}
+              </Badge>
+            </div>
+
+            {/* Details */}
+            <div className="p-3 space-y-2 text-sm">
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Rota</span>
+                <span className="font-medium">{selectedAssetDetails.rota}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Previsão</span>
+                <span className="font-medium">{selectedAssetDetails.eta_api}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Status</span>
+                <span className={`px-2 py-0.5 rounded-lg text-xs ${selectedAssetDetails.status === 'Atraso' ? 'bg-red-500/20 text-red-400' : selectedAssetDetails.status === 'Entregue' ? 'bg-green-500/20 text-green-400' : 'bg-blue-500/20 text-blue-400'}`}>
+                  {selectedAssetDetails.status}
+                </span>
+              </div>
+            </div>
+
+            {/* Processos */}
+            <div className="p-3 border-t border-white/[0.05]">
+              <p className="text-xs text-muted-foreground uppercase tracking-wider mb-2">
+                Processos ({selectedAssetDetails.processos.length})
+              </p>
+              <div className="max-h-32 overflow-y-auto space-y-1">
+                {selectedAssetDetails.processos.length > 0 ? (
+                  selectedAssetDetails.processos.map((awb, idx) => (
+                    <div key={idx} className="text-xs px-2 py-1.5 bg-white/[0.03] rounded-lg border border-white/[0.06]">
+                      {awb}
+                    </div>
+                  ))
+                ) : (
+                  <p className="text-xs text-muted-foreground italic">Nenhum processo</p>
+                )}
+              </div>
+            </div>
+
+            {/* Faturamento */}
+            <div className="p-3 border-t border-white/[0.05]">
+              <p className="text-xs text-muted-foreground uppercase tracking-wider mb-2">Faturamento</p>
+              <p className="text-xs text-muted-foreground italic">Em desenvolvimento...</p>
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  // Normal mode
   return (
-    <div className={`min-h-screen relative ${isFullscreen ? "fixed inset-0 z-50" : ""}`}>
+    <div className="min-h-screen relative">
       {/* Background - consistente com PageLayout */}
       <div className="fixed inset-0 z-0">
         <div
@@ -964,237 +1120,93 @@ export default function Olimpo() {
             </div>
           </div>
 
-          {/* Side Card (Filters + KPIs) - always visible when not fullscreen */}
-          {!isFullscreen && (
-            <div 
-              className="rounded-2xl flex flex-col shrink-0 lg:w-80 xl:w-96"
-              style={{
-                background: 'rgba(5,6,18,.9)',
-                border: '1px solid rgba(255,255,255,.12)',
-                boxShadow: '0 18px 40px rgba(0,0,0,.85)',
-              }}
-            >
-              <div className="p-3 md:p-4 border-b border-white/[0.08]">
-                <h2 className="text-xs md:text-sm tracking-[0.16em] uppercase text-white/90">Visão de Filtros</h2>
-                <p className="text-[10px] md:text-xs text-muted-foreground">Refine a visualização do mapa e do resumo</p>
-              </div>
-
-              <div className="p-2 md:p-3 flex flex-wrap gap-1.5 md:gap-2 border-b border-white/[0.05]">
-                <Input
-                  placeholder="Buscar..."
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  className="flex-1 min-w-[140px] rounded-full bg-[rgba(14,14,14,0.96)] border-white/20 text-xs md:text-sm h-8"
-                />
-                <button
-                  onClick={() => setDaysFilter(daysFilter === 7 ? null : 7)}
-                  className={`px-2 md:px-3 py-1 md:py-1.5 rounded-full text-[10px] md:text-xs border transition-all flex items-center gap-1 ${daysFilter === 7 ? "border-primary bg-[rgba(30,30,30,0.98)] text-amber-200" : "border-white/10 bg-[rgba(14,14,14,0.95)]"}`}
-                >
-                  <span className="w-1.5 h-1.5 rounded-full bg-primary" /> 7d
-                </button>
-                <button
-                  onClick={() => setDaysFilter(daysFilter === 30 ? null : 30)}
-                  className={`px-2 md:px-3 py-1 md:py-1.5 rounded-full text-[10px] md:text-xs border transition-all flex items-center gap-1 ${daysFilter === 30 ? "border-primary bg-[rgba(30,30,30,0.98)] text-amber-200" : "border-white/10 bg-[rgba(14,14,14,0.95)]"}`}
-                >
-                  <span className="w-1.5 h-1.5 rounded-full bg-primary" /> 30d
-                </button>
-                <button
-                  onClick={() => setModeFilter(modeFilter === "air" ? null : "air")}
-                  className={`px-2 md:px-3 py-1 md:py-1.5 rounded-full text-[10px] md:text-xs border transition-all flex items-center gap-1 ${modeFilter === "air" ? "border-primary bg-[rgba(30,30,30,0.98)] text-amber-200" : "border-white/10 bg-[rgba(14,14,14,0.95)]"}`}
-                >
-                  <span className="w-1.5 h-1.5 rounded-full bg-primary" /> AIR
-                </button>
-                <button
-                  onClick={() => setModeFilter(modeFilter === "sea" ? null : "sea")}
-                  className={`px-2 md:px-3 py-1 md:py-1.5 rounded-full text-[10px] md:text-xs border transition-all flex items-center gap-1 ${modeFilter === "sea" ? "border-primary bg-[rgba(30,30,30,0.98)] text-amber-200" : "border-white/10 bg-[rgba(14,14,14,0.95)]"}`}
-                >
-                  <span className="w-1.5 h-1.5 rounded-full bg-primary" /> SEA
-                </button>
-                <button
-                  onClick={() => setStatusFilter(statusFilter === "Atraso" ? null : "Atraso")}
-                  className={`px-2 md:px-3 py-1 md:py-1.5 rounded-full text-[10px] md:text-xs border transition-all flex items-center gap-1 ${statusFilter === "Atraso" ? "border-primary bg-[rgba(30,30,30,0.98)] text-amber-200" : "border-white/10 bg-[rgba(14,14,14,0.95)]"}`}
-                >
-                  <span className="w-1.5 h-1.5 rounded-full bg-primary" /> Atraso
-                </button>
-              </div>
-
-              <div className="grid grid-cols-2 gap-2 md:gap-3 p-3 md:p-4">
-                <div className="bg-[#151515] rounded-xl p-2 md:p-3 border border-white/[0.06]">
-                  <p className="text-[9px] md:text-[0.72rem] text-muted-foreground uppercase tracking-[0.14em]">Containers</p>
-                  <p className="text-base md:text-lg font-semibold">{kpis.seaTransit}</p>
-                  <p className="text-[9px] md:text-xs text-[#7fd0ff]">Em trânsito</p>
-                </div>
-                <div className="bg-[#151515] rounded-xl p-2 md:p-3 border border-white/[0.06]">
-                  <p className="text-[9px] md:text-[0.72rem] text-muted-foreground uppercase tracking-[0.14em]">Voos</p>
-                  <p className="text-base md:text-lg font-semibold">{kpis.airActive}</p>
-                  <p className="text-[9px] md:text-xs text-[#7fd0ff]">Ativos</p>
-                </div>
-                <div className="bg-[#151515] rounded-xl p-2 md:p-3 border border-white/[0.06]">
-                  <p className="text-[9px] md:text-[0.72rem] text-muted-foreground uppercase tracking-[0.14em]">On-time</p>
-                  <p className="text-base md:text-lg font-semibold">{kpis.onTime}%</p>
-                  <p className="text-[9px] md:text-xs text-[#7fd0ff]">Delivery</p>
-                </div>
-                <div className="bg-[#151515] rounded-xl p-2 md:p-3 border border-white/[0.06]">
-                  <p className="text-[9px] md:text-[0.72rem] text-muted-foreground uppercase tracking-[0.14em]">Atrasos</p>
-                  <p className="text-base md:text-lg font-semibold">{kpis.delayed}</p>
-                  <p className="text-[9px] md:text-xs text-[#ff8b8b]">Impacto</p>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* Fullscreen floating filters bar */}
-          {isFullscreen && (
-            <div 
-              className="absolute left-4 right-4 top-4 z-[1000] flex flex-wrap items-center gap-2 p-2 rounded-full"
-              style={{
-                background: 'rgba(5,6,18,.9)',
-                border: '1px solid rgba(255,255,255,.12)',
-                boxShadow: '0 8px 24px rgba(0,0,0,.6)',
-              }}
-            >
-              <Input
-                placeholder="Buscar..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-40 rounded-full bg-[rgba(14,14,14,0.96)] border-white/20 text-xs h-7"
-              />
-              <button
-                onClick={() => setModeFilter(modeFilter === "air" ? null : "air")}
-                className={`px-2 py-1 rounded-full text-[10px] border transition-all ${modeFilter === "air" ? "border-primary bg-[rgba(30,30,30,0.98)] text-amber-200" : "border-white/10 bg-[rgba(14,14,14,0.95)]"}`}
-              >
-                AIR
-              </button>
-              <button
-                onClick={() => setModeFilter(modeFilter === "sea" ? null : "sea")}
-                className={`px-2 py-1 rounded-full text-[10px] border transition-all ${modeFilter === "sea" ? "border-primary bg-[rgba(30,30,30,0.98)] text-amber-200" : "border-white/10 bg-[rgba(14,14,14,0.95)]"}`}
-              >
-                SEA
-              </button>
-              <button
-                onClick={() => setStatusFilter(statusFilter === "Atraso" ? null : "Atraso")}
-                className={`px-2 py-1 rounded-full text-[10px] border transition-all ${statusFilter === "Atraso" ? "border-primary bg-[rgba(30,30,30,0.98)] text-amber-200" : "border-white/10 bg-[rgba(14,14,14,0.95)]"}`}
-              >
-                Atraso
-              </button>
-              <div className="flex-1" />
-              <Badge variant="outline" className="border-[#7fd0ff]/50 text-[#b7e2ff] text-[10px]">
-                Voos: {kpis.airActive}
-              </Badge>
-              <Badge variant="outline" className="border-primary/50 text-primary text-[10px]">
-                Containers: {kpis.seaTransit}
-              </Badge>
-              <button
-                onClick={() => setIsFullscreen(false)}
-                className="w-7 h-7 rounded-full border border-white/20 flex items-center justify-center bg-black/70 text-primary hover:bg-black/90 transition-all"
-              >
-                <Minimize2 size={12} />
-              </button>
-            </div>
-          )}
-
-          {/* Asset Details Panel - fullscreen only */}
-          {selectedAssetDetails && isFullscreen && (
-            <div 
-              className="absolute right-4 top-16 w-80 max-h-[calc(100vh-100px)] z-[1000] rounded-2xl flex flex-col overflow-hidden"
-              style={{
-                background: 'rgba(5,6,18,.95)',
-                border: '1px solid rgba(255,255,255,.12)',
-                boxShadow: '0 18px 40px rgba(0,0,0,.85)',
-              }}
-            >
-              {/* Header */}
-              <div className="flex items-center justify-between p-3 border-b border-white/[0.08]">
-                <div className="flex items-center gap-2">
-                  <div className={`w-8 h-8 rounded-full flex items-center justify-center ${selectedAssetDetails.mode === 'air' ? 'bg-[#7fd0ff]/20' : 'bg-primary/20'}`}>
-                    {selectedAssetDetails.mode === 'air' ? (
-                      <Plane size={16} className="text-[#7fd0ff]" />
-                    ) : (
-                      <Ship size={16} className="text-primary" />
-                    )}
-                  </div>
-                  <div>
-                    <p className="text-xs text-muted-foreground uppercase tracking-wider">
-                      {selectedAssetDetails.mode === 'air' ? 'Avião' : 'Navio'}
-                    </p>
-                    <p className="font-semibold text-sm">
-                      {selectedAssetDetails.flight || selectedAssetDetails.asset || 'N/A'}
-                    </p>
-                  </div>
-                </div>
-                <button
-                  onClick={() => setSelectedAssetDetails(null)}
-                  className="w-6 h-6 rounded-full border border-white/20 flex items-center justify-center bg-black/50 text-muted-foreground hover:text-white transition-all"
-                >
-                  <X size={12} />
-                </button>
-              </div>
-
-              {/* Badge */}
-              <div className="px-3 pt-3">
-                <Badge 
-                  variant="outline" 
-                  className={`${selectedAssetDetails.mode === 'air' ? 'border-[#7fd0ff]/70 text-[#b7e2ff]' : 'border-primary/70 text-primary'}`}
-                >
-                  {selectedAssetDetails.tipo_label} • {selectedAssetDetails.flight || selectedAssetDetails.asset || 'N/A'}
-                </Badge>
-              </div>
-
-              {/* Details */}
-              <div className="p-3 space-y-2 text-sm">
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Rota</span>
-                  <span className="font-medium">{selectedAssetDetails.rota}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Previsão</span>
-                  <span className="font-medium">{selectedAssetDetails.eta_api}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Status</span>
-                  <span className={`px-2 py-0.5 rounded-lg text-xs ${selectedAssetDetails.status === 'Atraso' ? 'bg-red-500/20 text-red-400' : selectedAssetDetails.status === 'Entregue' ? 'bg-green-500/20 text-green-400' : 'bg-blue-500/20 text-blue-400'}`}>
-                    {selectedAssetDetails.status}
-                  </span>
-                </div>
-              </div>
-
-              {/* Processos (AWBs) */}
-              <div className="p-3 border-t border-white/[0.05]">
-                <p className="text-xs text-muted-foreground uppercase tracking-wider mb-2">
-                  Processos ({selectedAssetDetails.processos.length})
-                </p>
-                <div className="max-h-32 overflow-y-auto space-y-1">
-                  {selectedAssetDetails.processos.length > 0 ? (
-                    selectedAssetDetails.processos.map((awb, idx) => (
-                      <div key={idx} className="text-xs px-2 py-1.5 bg-white/[0.03] rounded-lg border border-white/[0.06]">
-                        {awb}
-                      </div>
-                    ))
-                  ) : (
-                    <p className="text-xs text-muted-foreground italic">Nenhum processo associado</p>
-                  )}
-                </div>
-              </div>
-
-              {/* Faturamento */}
-              <div className="p-3 border-t border-white/[0.05]">
-                <p className="text-xs text-muted-foreground uppercase tracking-wider mb-2">Faturamento</p>
-                <p className="text-xs text-muted-foreground italic">Em desenvolvimento...</p>
-              </div>
-            </div>
-          )}
-        </div>
-
-        {/* Bottom Table - consistente com PageCard */}
-        {!isFullscreen && (
+          {/* Side Card (Filters + KPIs) */}
           <div 
-            className="rounded-2xl h-[28vh] md:h-[32vh] min-h-[180px] md:min-h-[210px] flex flex-col shrink-0"
+            className="rounded-2xl flex flex-col shrink-0 lg:w-80 xl:w-96"
             style={{
               background: 'rgba(5,6,18,.9)',
               border: '1px solid rgba(255,255,255,.12)',
               boxShadow: '0 18px 40px rgba(0,0,0,.85)',
             }}
           >
+            <div className="p-3 md:p-4 border-b border-white/[0.08]">
+              <h2 className="text-xs md:text-sm tracking-[0.16em] uppercase text-white/90">Visão de Filtros</h2>
+              <p className="text-[10px] md:text-xs text-muted-foreground">Refine a visualização do mapa e do resumo</p>
+            </div>
+
+            <div className="p-2 md:p-3 flex flex-wrap gap-1.5 md:gap-2 border-b border-white/[0.05]">
+              <Input
+                placeholder="Buscar..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="flex-1 min-w-[140px] rounded-full bg-[rgba(14,14,14,0.96)] border-white/20 text-xs md:text-sm h-8"
+              />
+              <button
+                onClick={() => setDaysFilter(daysFilter === 7 ? null : 7)}
+                className={`px-2 md:px-3 py-1 md:py-1.5 rounded-full text-[10px] md:text-xs border transition-all flex items-center gap-1 ${daysFilter === 7 ? "border-primary bg-[rgba(30,30,30,0.98)] text-amber-200" : "border-white/10 bg-[rgba(14,14,14,0.95)]"}`}
+              >
+                <span className="w-1.5 h-1.5 rounded-full bg-primary" /> 7d
+              </button>
+              <button
+                onClick={() => setDaysFilter(daysFilter === 30 ? null : 30)}
+                className={`px-2 md:px-3 py-1 md:py-1.5 rounded-full text-[10px] md:text-xs border transition-all flex items-center gap-1 ${daysFilter === 30 ? "border-primary bg-[rgba(30,30,30,0.98)] text-amber-200" : "border-white/10 bg-[rgba(14,14,14,0.95)]"}`}
+              >
+                <span className="w-1.5 h-1.5 rounded-full bg-primary" /> 30d
+              </button>
+              <button
+                onClick={() => setModeFilter(modeFilter === "air" ? null : "air")}
+                className={`px-2 md:px-3 py-1 md:py-1.5 rounded-full text-[10px] md:text-xs border transition-all flex items-center gap-1 ${modeFilter === "air" ? "border-primary bg-[rgba(30,30,30,0.98)] text-amber-200" : "border-white/10 bg-[rgba(14,14,14,0.95)]"}`}
+              >
+                <span className="w-1.5 h-1.5 rounded-full bg-primary" /> AIR
+              </button>
+              <button
+                onClick={() => setModeFilter(modeFilter === "sea" ? null : "sea")}
+                className={`px-2 md:px-3 py-1 md:py-1.5 rounded-full text-[10px] md:text-xs border transition-all flex items-center gap-1 ${modeFilter === "sea" ? "border-primary bg-[rgba(30,30,30,0.98)] text-amber-200" : "border-white/10 bg-[rgba(14,14,14,0.95)]"}`}
+              >
+                <span className="w-1.5 h-1.5 rounded-full bg-primary" /> SEA
+              </button>
+              <button
+                onClick={() => setStatusFilter(statusFilter === "Atraso" ? null : "Atraso")}
+                className={`px-2 md:px-3 py-1 md:py-1.5 rounded-full text-[10px] md:text-xs border transition-all flex items-center gap-1 ${statusFilter === "Atraso" ? "border-primary bg-[rgba(30,30,30,0.98)] text-amber-200" : "border-white/10 bg-[rgba(14,14,14,0.95)]"}`}
+              >
+                <span className="w-1.5 h-1.5 rounded-full bg-primary" /> Atraso
+              </button>
+            </div>
+
+            <div className="grid grid-cols-2 gap-2 md:gap-3 p-3 md:p-4">
+              <div className="bg-[#151515] rounded-xl p-2 md:p-3 border border-white/[0.06]">
+                <p className="text-[9px] md:text-[0.72rem] text-muted-foreground uppercase tracking-[0.14em]">Containers</p>
+                <p className="text-base md:text-lg font-semibold">{kpis.seaTransit}</p>
+                <p className="text-[9px] md:text-xs text-[#7fd0ff]">Em trânsito</p>
+              </div>
+              <div className="bg-[#151515] rounded-xl p-2 md:p-3 border border-white/[0.06]">
+                <p className="text-[9px] md:text-[0.72rem] text-muted-foreground uppercase tracking-[0.14em]">Voos</p>
+                <p className="text-base md:text-lg font-semibold">{kpis.airActive}</p>
+                <p className="text-[9px] md:text-xs text-[#7fd0ff]">Ativos</p>
+              </div>
+              <div className="bg-[#151515] rounded-xl p-2 md:p-3 border border-white/[0.06]">
+                <p className="text-[9px] md:text-[0.72rem] text-muted-foreground uppercase tracking-[0.14em]">On-time</p>
+                <p className="text-base md:text-lg font-semibold">{kpis.onTime}%</p>
+                <p className="text-[9px] md:text-xs text-[#7fd0ff]">Delivery</p>
+              </div>
+              <div className="bg-[#151515] rounded-xl p-2 md:p-3 border border-white/[0.06]">
+                <p className="text-[9px] md:text-[0.72rem] text-muted-foreground uppercase tracking-[0.14em]">Atrasos</p>
+                <p className="text-base md:text-lg font-semibold">{kpis.delayed}</p>
+                <p className="text-[9px] md:text-xs text-[#ff8b8b]">Impacto</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Bottom Table */}
+        <div 
+          className="rounded-2xl h-[28vh] md:h-[32vh] min-h-[180px] md:min-h-[210px] flex flex-col shrink-0"
+          style={{
+            background: 'rgba(5,6,18,.9)',
+            border: '1px solid rgba(255,255,255,.12)',
+            boxShadow: '0 18px 40px rgba(0,0,0,.85)',
+          }}
+        >
             <div className="p-4 border-b border-white/[0.08]">
               <h2 className="text-sm tracking-[0.16em] uppercase text-white/90">Resumo de Movimentações</h2>
               <p className="text-xs text-muted-foreground">Principais embarques por origem, destino, modal e status</p>
@@ -1296,7 +1308,6 @@ export default function Olimpo() {
               </div>
             )}
           </div>
-        )}
 
         {/* Footer */}
         <div className="text-center text-xs text-muted-foreground tracking-[0.18em] uppercase">
