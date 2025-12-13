@@ -94,7 +94,7 @@ export function ChbHistoryPanel({ stepId, approvedHistory }: ChbHistoryPanelProp
           </p>
         </div>
       ) : (
-        <div className="grid gap-3">
+        <div className="space-y-4">
           {allHistoryEntries.map((entry) => (
             <div key={entry.id} className="p-4 rounded-lg bg-black/30 border border-white/10">
               <div className="flex items-start justify-between gap-3">
@@ -110,7 +110,7 @@ export function ChbHistoryPanel({ stepId, approvedHistory }: ChbHistoryPanelProp
                   </div>
                   
                   <div 
-                    className="text-xs text-white/70 leading-relaxed bg-black/20 p-3 rounded border border-white/5 chb-analysis-content max-h-none overflow-visible"
+                    className="text-xs text-white/70 leading-relaxed bg-black/20 p-4 rounded border border-white/5 chb-analysis-content"
                     dangerouslySetInnerHTML={{ __html: extractParecer(entry.detailedSummary || entry.summary) }}
                   />
                 </div>
