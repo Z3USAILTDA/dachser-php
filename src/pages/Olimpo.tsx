@@ -94,7 +94,7 @@ function hashStr(s: string): number {
   return Math.abs(h);
 }
 
-function bezierArc(a: [number, number], b: [number, number], seed = 0, samples = 80): [number, number][] {
+function bezierArc(a: [number, number], b: [number, number], seed = 0, samples = 80, routeIndex = 0): [number, number][] {
   const A = { lat: a[0], lng: a[1] };
   const B = { lat: b[0], lng: b[1] };
   const mx = (A.lat + B.lat) / 2;
@@ -105,11 +105,21 @@ function bezierArc(a: [number, number], b: [number, number], seed = 0, samples =
   const ux = -dy / len;
   const uy = dx / len;
 
-  const base = Math.min(25, Math.max(6, Math.abs(dx) * 0.25 + Math.abs(dy) * 0.35));
-  const jitter = ((seed % 1000) / 1000 - 0.5) * base * 0.6;
-  const mag = base + jitter;
+  // Base curve height depends on distance
+  const distFactor = Math.min(1, len / 100);
+  const base = Math.min(20, Math.max(4, distFactor * 15 + 5));
+  
+  // Add significant variation based on route index to spread out overlapping routes
+  const indexOffset = (routeIndex % 7) * 2.5 - 7.5; // Range: -7.5 to +10
+  const seedJitter = ((seed % 1000) / 1000 - 0.5) * 4;
+  const mag = base + indexOffset + seedJitter;
 
-  const sign = ((seed & 1) ? 1 : -1) * (A.lat + B.lat >= 0 ? 1 : -1);
+  // Alternate direction based on both seed and index for more variety
+  const signFromSeed = (seed & 1) ? 1 : -1;
+  const signFromIndex = (routeIndex % 3 === 0) ? 1 : (routeIndex % 3 === 1) ? -1 : 1;
+  const hemisphereSign = (A.lat + B.lat >= 0 ? 1 : -1);
+  const sign = signFromSeed * signFromIndex * hemisphereSign;
+  
   const C = { lat: mx + uy * mag * sign, lng: my + ux * mag * sign };
 
   const pts: [number, number][] = [];
@@ -536,30 +546,47 @@ export default function Olimpo() {
     }
 
     const markers: L.Marker[] = [];
+    let routeIndex = 0;
 
-    for (const [, items] of groups) {
+    // Sort groups by destination to cluster similar routes
+    const sortedGroups = Array.from(groups.entries()).sort((a, b) => {
+      const aItem = a[1][0];
+      const bItem = b[1][0];
+      const aDest = aItem.dest ? aItem.dest[0] * 1000 + aItem.dest[1] : 0;
+      const bDest = bItem.dest ? bItem.dest[0] * 1000 + bItem.dest[1] : 0;
+      return aDest - bDest;
+    });
+
+    for (const [, items] of sortedGroups) {
       const item = items[0];
       if (!item.orig || !item.dest) continue;
 
-      // Build route
+      // Build route with route index for spreading
       let line: [number, number][] = [];
       if (item.mode === "sea") {
         const way = maritimeWaypoints(item.orig, item.dest);
         const seed = hashStr(String(item.asset || item.rota || "sea"));
         const pts = [item.orig, ...way, item.dest];
         for (let i = 1; i < pts.length; i++) {
-          const seg = bezierArc(pts[i - 1], pts[i], seed + i, 96);
+          const seg = bezierArc(pts[i - 1], pts[i], seed + i, 96, routeIndex);
           if (i > 1) seg.shift();
           line = line.concat(seg);
         }
       } else {
-        line = greatCircle(item.orig, item.dest, 128);
+        // For air routes, use bezier with spreading instead of great circle
+        const seed = hashStr(String(item.asset || item.flight || item.rota || "air"));
+        line = bezierArc(item.orig, item.dest, seed, 100, routeIndex);
       }
 
-      // Draw route
-      const color = item.mode === "air" ? "#7fd0ff" : "#ffc800";
+      routeIndex++;
+
+      // Draw route with varying opacity based on status
+      const baseColor = item.mode === "air" ? "#7fd0ff" : "#ffc800";
+      const opacity = item.status === "Atraso" ? 0.9 : 0.5;
+      const weight = item.status === "Atraso" ? 2.5 : 1.8;
+      
       if (line.length > 1) {
-        L.polyline(line, { color, weight: 2, opacity: 0.6 }).addTo(map);
+        L.polyline(line, { color: baseColor, weight, opacity }).addTo(map);
       }
 
       // Calculate position
@@ -572,18 +599,18 @@ export default function Olimpo() {
         const icon = L.divIcon({
           html: item.mode === "air" ? "✈️" : "🚢",
           className: "",
-          iconSize: [24, 24],
-          iconAnchor: [12, 12],
+          iconSize: [20, 20],
+          iconAnchor: [10, 10],
         });
         const marker = L.marker(pos, { icon }).addTo(map);
         markers.push(marker);
       }
     }
 
-    // Fit bounds
+    // Fit bounds with better padding
     if (markers.length > 0) {
       const fg = L.featureGroup(markers);
-      map.flyToBounds(fg.getBounds().pad(0.35), { maxZoom: 3.5, duration: 0.6 });
+      map.flyToBounds(fg.getBounds().pad(0.25), { maxZoom: 4, duration: 0.5 });
     }
   }, [filteredData]);
 
