@@ -231,7 +231,7 @@ export default function ConferenciaChb() {
       return;
     }
 
-    // Create history entry with detailed summary
+    // Create history entry with detailed summary and parecer
     const historyEntry: ChbApprovedHistory = {
       id: `h${Date.now()}`,
       stepId: activeStep,
@@ -239,6 +239,7 @@ export default function ConferenciaChb() {
       user: currentUser,
       summary: currentAnalysis.summary,
       detailedSummary: currentAnalysis.detailedSummary || currentAnalysis.summary,
+      parecer: (currentAnalysis as any).parecer,
       tags: currentAnalysis.tags,
     };
 

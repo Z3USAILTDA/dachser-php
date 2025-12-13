@@ -78,8 +78,8 @@ export function ChbHistoryPanel({ stepId, approvedHistory }: ChbHistoryPanelProp
                         ))}
                       </div>
                       
-                      {/* Detailed summary */}
-                      <div className="text-xs text-white/70 whitespace-pre-line leading-relaxed">
+                      {/* Detailed summary with parecer */}
+                      <div className="text-xs text-white/70 whitespace-pre-line leading-relaxed font-mono bg-black/20 p-2 rounded border border-white/5">
                         {entry.detailedSummary || entry.summary}
                       </div>
                     </div>

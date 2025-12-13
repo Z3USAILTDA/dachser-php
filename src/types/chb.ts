@@ -45,6 +45,7 @@ export interface ChbApprovedHistory {
   user: string;
   summary: string;
   detailedSummary?: string;
+  parecer?: string;
   tags: { label: string; variant: 'success' | 'warning' | 'error' }[];
 }
 
