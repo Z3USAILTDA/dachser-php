@@ -17,67 +17,79 @@ const variantColors = {
 
 export function ChbHistoryPanel({ stepId, approvedHistory }: ChbHistoryPanelProps) {
   const copyResult = (entry: ChbApprovedHistory) => {
-    navigator.clipboard.writeText(entry.summary);
+    navigator.clipboard.writeText(entry.detailedSummary || entry.summary);
     toast.success('Resultado copiado para a área de transferência');
   };
 
+  const stepNames: Record<number, string> = {
+    1: 'Pré-Alerta',
+    2: 'Instrução',
+    3: 'DI/Fechamento',
+  };
+
   return (
-    <div className="space-y-6">
-      <h3 className="text-lg font-semibold text-white">
+    <div className="space-y-4">
+      <h3 className="text-sm font-semibold text-white">
         Histórico aprovado — {stepTitles[stepId]}
       </h3>
 
       {approvedHistory.length === 0 ? (
-        <div className="p-8 text-center rounded-xl bg-black/30 border border-white/10">
-          <Clock className="w-12 h-12 text-white/20 mx-auto mb-4" />
-          <p className="text-white/40">Nenhum histórico aprovado para esta etapa.</p>
-          <p className="text-sm text-white/30 mt-2">
+        <div className="p-6 text-center rounded-xl bg-black/30 border border-white/10">
+          <Clock className="w-10 h-10 text-white/20 mx-auto mb-3" />
+          <p className="text-white/40 text-sm">Nenhum histórico aprovado para esta etapa.</p>
+          <p className="text-xs text-white/30 mt-1">
             Execute uma análise e aprove para criar um registro no histórico.
           </p>
         </div>
       ) : (
         <div className="relative">
-          <div className="absolute left-5 top-0 bottom-0 w-0.5 bg-white/10" />
+          <div className="absolute left-4 top-0 bottom-0 w-0.5 bg-white/10" />
           
-          <div className="space-y-6">
+          <div className="space-y-4">
             {approvedHistory.map((entry) => (
-              <div key={entry.id} className="relative pl-12">
-                <div className="absolute left-3 top-2 w-4 h-4 rounded-full bg-amber-500 border-4 border-black flex items-center justify-center">
-                  <CheckCircle className="w-2 h-2 text-black" />
+              <div key={entry.id} className="relative pl-10">
+                <div className="absolute left-2 top-2 w-3 h-3 rounded-full bg-amber-500 border-2 border-black flex items-center justify-center">
+                  <CheckCircle className="w-1.5 h-1.5 text-black" />
                 </div>
                 
-                <div className="p-4 rounded-xl bg-black/30 border border-white/10">
-                  <div className="flex items-start justify-between gap-4">
+                <div className="p-3 rounded-lg bg-black/30 border border-white/10">
+                  <div className="flex items-start justify-between gap-3">
                     <div className="flex-1">
-                      <div className="flex items-center gap-3 mb-2">
-                        <span className="text-xs text-white/60 flex items-center gap-1">
-                          <Clock className="w-3 h-3" />
+                      <div className="flex items-center gap-2 mb-1.5">
+                        <span className="text-[0.65rem] px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-400 font-medium">
+                          {stepNames[entry.stepId] || `Etapa ${entry.stepId}`}
+                        </span>
+                        <span className="text-[0.65rem] text-white/50 flex items-center gap-1">
+                          <Clock className="w-2.5 h-2.5" />
                           {entry.date}
                         </span>
-                        <span className="text-xs text-amber-500 flex items-center gap-1">
-                          <User className="w-3 h-3" />
+                        <span className="text-[0.65rem] text-amber-500 flex items-center gap-1">
+                          <User className="w-2.5 h-2.5" />
                           {entry.user}
                         </span>
                       </div>
                       
                       {/* Tags */}
-                      <div className="flex flex-wrap gap-1.5 mb-3">
+                      <div className="flex flex-wrap gap-1 mb-2">
                         {entry.tags.map((tag, index) => (
-                          <Badge key={index} className={`${variantColors[tag.variant]} border text-xs`}>
+                          <Badge key={index} className={`${variantColors[tag.variant]} border text-[0.6rem] px-1.5 py-0`}>
                             {tag.label}
                           </Badge>
                         ))}
                       </div>
                       
-                      <p className="text-sm text-white/80">{entry.summary}</p>
+                      {/* Detailed summary */}
+                      <div className="text-xs text-white/70 whitespace-pre-line leading-relaxed">
+                        {entry.detailedSummary || entry.summary}
+                      </div>
                     </div>
                     
                     <button
                       onClick={() => copyResult(entry)}
-                      className="p-2 rounded-lg hover:bg-white/5 text-white/40 hover:text-white transition-colors"
+                      className="p-1.5 rounded-md hover:bg-white/5 text-white/40 hover:text-white transition-colors"
                       title="Copiar resultado"
                     >
-                      <Copy className="w-4 h-4" />
+                      <Copy className="w-3 h-3" />
                     </button>
                   </div>
                 </div>

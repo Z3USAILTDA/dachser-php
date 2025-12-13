@@ -32,6 +32,7 @@ export interface ChbAnalysisResult {
   html: string;
   tags: { label: string; variant: 'success' | 'warning' | 'error' }[];
   summary: string;
+  detailedSummary?: string;
   generatedAt: string;
   filesAnalyzed: string[];
   usedFallback?: boolean;
@@ -43,6 +44,7 @@ export interface ChbApprovedHistory {
   date: string;
   user: string;
   summary: string;
+  detailedSummary?: string;
   tags: { label: string; variant: 'success' | 'warning' | 'error' }[];
 }
 
