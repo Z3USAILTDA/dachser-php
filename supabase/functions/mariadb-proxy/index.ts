@@ -2625,7 +2625,7 @@ serve(async (req) => {
         let query = `
           SELECT r.*, u.username as created_by_name, u.email as created_by_email
           FROM ai_agente.t_dachser_chb_runs r
-          LEFT JOIN ai_agente.t_users_dachser u ON u.id = r.created_by
+          LEFT JOIN dados_dachser.t_users_dachser u ON u.id = r.created_by
           WHERE r.item_id = ?
         `;
         const params: any[] = [itemId];
