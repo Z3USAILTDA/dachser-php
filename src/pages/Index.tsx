@@ -31,12 +31,6 @@ import DashboardCards, { CardFilterType } from "@/components/DashboardCards";
 import dachserBg from "@/assets/dachser-background.jpg";
 import { TablePagination } from "@/components/layout/TablePagination";
 import { Filter as FilterIcon } from "lucide-react";
-import { z } from "zod";
-
-const loginSchema = z.object({
-  email: z.string().email({ message: "Email inválido" }),
-  password: z.string().min(1, { message: "Senha é obrigatória" }),
-});
 
 // TEMPORARIAMENTE DESATIVADO - Mudar para true para reativar envio de emails
 const EMAIL_SENDING_ENABLED = true;
@@ -300,11 +294,6 @@ const Index = () => {
   const [user, setUser] = useState<User | null>(null);
   const [session, setSession] = useState<Session | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const [isLoginLoading, setIsLoginLoading] = useState(false);
-  const [loginForm, setLoginForm] = useState({ 
-    email: "rastreio.aereo@dachser.com", 
-    password: ""
-  });
   const [awbNumber, setAwbNumber] = useState("");
   const [selectedAirline, setSelectedAirline] = useState("");
   const [consigneeName, setConsigneeName] = useState("");
@@ -368,51 +357,6 @@ const Index = () => {
     return () => subscription.unsubscribe();
   }, []);
 
-  const handleLogin = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setIsLoginLoading(true);
-
-    try {
-      const validatedData = loginSchema.parse(loginForm);
-      
-      const { error: authError } = await supabase.auth.signInWithPassword({
-        email: validatedData.email,
-        password: validatedData.password,
-      });
-
-      if (authError) {
-        console.error('Auth error:', authError);
-        toast({
-          title: "Erro ao fazer login",
-          description: "Email ou senha inválidos",
-          variant: "destructive",
-        });
-        return;
-      }
-
-      toast({
-        title: "Login realizado com sucesso!",
-        description: "Bem-vindo ao sistema de rastreio",
-      });
-    } catch (error) {
-      console.error('Login error:', error);
-      if (error instanceof z.ZodError) {
-        toast({
-          title: "Erro de validação",
-          description: error.errors[0].message,
-          variant: "destructive",
-        });
-      } else {
-        toast({
-          title: "Erro ao fazer login",
-          description: "Ocorreu um erro inesperado",
-          variant: "destructive",
-        });
-      }
-    } finally {
-      setIsLoginLoading(false);
-    }
-  };
 
   const handleLogout = async () => {
     await supabase.auth.signOut();
@@ -1681,58 +1625,6 @@ const Index = () => {
     );
   }
 
-  // Show login form if not authenticated
-  if (!session) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-background via-background to-muted/20 p-4">
-        <Card className="w-full max-w-md">
-          <CardHeader>
-            <CardTitle className="text-2xl font-bold text-center">Sistema de Rastreio</CardTitle>
-            <CardDescription className="text-center">
-              Faça login para acessar o sistema
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <form onSubmit={handleLogin} className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="login-email">Username</Label>
-                <Input
-                  id="login-email"
-                  type="email"
-                  placeholder="rastreio.aereo@dachser.com"
-                  value={loginForm.email}
-                  onChange={(e) => setLoginForm({ ...loginForm, email: e.target.value })}
-                  required
-                  disabled={isLoginLoading}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="login-password">Senha</Label>
-                <Input
-                  id="login-password"
-                  type="password"
-                  placeholder="••••••••"
-                  value={loginForm.password}
-                  onChange={(e) => setLoginForm({ ...loginForm, password: e.target.value })}
-                  disabled={isLoginLoading}
-                />
-              </div>
-              <Button type="submit" className="w-full" disabled={isLoginLoading}>
-                {isLoginLoading ? (
-                  <>
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    Entrando...
-                  </>
-                ) : (
-                  "Entrar"
-                )}
-              </Button>
-            </form>
-          </CardContent>
-        </Card>
-      </div>
-    );
-  }
 
   return (
     <div className="min-h-screen relative overflow-x-hidden">
