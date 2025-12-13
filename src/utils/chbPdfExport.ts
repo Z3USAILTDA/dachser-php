@@ -98,16 +98,21 @@ function generatePrintableHTML(history: HistoryEntry[], reference: string): stri
           font-size: 9px;
         }
         table {
-          width: 100%;
+          width: auto;
+          max-width: 100%;
           border-collapse: collapse;
           margin: 4px 0;
+          table-layout: auto;
         }
         table th, table td {
           border: 1px solid #bbb;
-          padding: 3px 5px;
+          padding: 2px 3px;
           text-align: left;
-          font-size: 8px;
+          font-size: 7px;
           white-space: nowrap;
+          max-width: 120px;
+          overflow: hidden;
+          text-overflow: ellipsis;
         }
         table th {
           background: #eee;
