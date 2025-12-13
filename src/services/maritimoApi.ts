@@ -104,8 +104,13 @@ export const maritimoApi = {
    */
   async getItems(params: { analysisType?: string; status?: string; search?: string } = {}): Promise<MaritimoItem[]> {
     try {
-      const { data, error } = await supabase.functions.invoke('sea-get-items', {
-        body: params
+      const { data, error } = await supabase.functions.invoke('mariadb-proxy', {
+        body: { 
+          action: 'get_maritimo_items',
+          analysisType: params.analysisType,
+          status: params.status,
+          search: params.search
+        }
       });
       if (error) throw error;
       return data?.items || [];
@@ -119,8 +124,8 @@ export const maritimoApi = {
    * Get a single maritime item by ID
    */
   async getItem(itemId: string): Promise<MaritimoItem> {
-    const { data, error } = await supabase.functions.invoke('sea-get-item', {
-      body: { id: itemId }
+    const { data, error } = await supabase.functions.invoke('mariadb-proxy', {
+      body: { action: 'get_maritimo_item', itemId }
     });
     
     if (error) throw error;
@@ -132,8 +137,8 @@ export const maritimoApi = {
    * Get history for a specific item
    */
   async getHistory(itemId: string): Promise<HistoryResponse> {
-    const { data, error } = await supabase.functions.invoke('sea-get-history', {
-      body: { itemId }
+    const { data, error } = await supabase.functions.invoke('mariadb-proxy', {
+      body: { action: 'get_maritimo_history', itemId }
     });
     
     if (error) throw error;
@@ -148,12 +153,18 @@ export const maritimoApi = {
    * Poll analysis status
    */
   async pollAnalysis(analysisId: string): Promise<AnalysisStatus> {
-    const { data, error } = await supabase.functions.invoke('sea-poll-analysis', {
-      body: { id: analysisId }
+    const { data, error } = await supabase.functions.invoke('mariadb-proxy', {
+      body: { action: 'get_maritimo_analysis_status', analysisId }
     });
     
     if (error) throw error;
-    return data?.analysis || data;
+    return {
+      id: analysisId,
+      status: data?.status || 'pending',
+      progress_percent: data?.progress,
+      progress_step: data?.step,
+      result_text: data?.result_text
+    };
   },
 
   /**
@@ -367,8 +378,8 @@ export const maritimoApi = {
    */
   async reextractMetadata(options: { forceAll?: boolean; itemId?: string }): Promise<{ processed: number; updated?: number }> {
     try {
-      const { data, error } = await supabase.functions.invoke('sea-reextract-metadata', {
-        body: options
+      const { data, error } = await supabase.functions.invoke('mariadb-proxy', {
+        body: { action: 'reextract_maritimo_metadata', ...options }
       });
       if (error) throw error;
       return { processed: data?.processed || 0, updated: data?.updated || 0 };
@@ -382,24 +393,23 @@ export const maritimoApi = {
    * Get system logs (admin only)
    */
   async getSystemLogs(params: { functionName?: string; logType?: string; limit?: number } = {}): Promise<any> {
-    const { data, error } = await supabase.functions.invoke('sea-get-system-logs', {
-      body: params
+    const { data, error } = await supabase.functions.invoke('mariadb-proxy', {
+      body: { 
+        action: 'raw_query',
+        query: `SELECT * FROM ai_agente.t_dachser_sea_runs ORDER BY created_at DESC LIMIT ${params.limit || 100}`
+      }
     });
     
     if (error) throw error;
-    return data;
+    return { logs: data?.data || [] };
   },
 
   /**
    * Migrate data to MariaDB (admin only)
    */
   async migrateToMariaDB(): Promise<any> {
-    const { data, error } = await supabase.functions.invoke('sea-migrate-to-mariadb', {
-      body: {}
-    });
-    
-    if (error) throw error;
-    return data;
+    // Already using MariaDB, no migration needed
+    return { success: true, message: 'Já está usando MariaDB' };
   }
 };
 
