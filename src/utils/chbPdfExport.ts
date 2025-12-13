@@ -46,30 +46,30 @@ function generatePrintableHTML(history: HistoryEntry[], reference: string): stri
         * { box-sizing: border-box; margin: 0; padding: 0; }
         body { 
           font-family: Arial, sans-serif;
-          padding: 20px;
+          padding: 12px;
           background: #fff;
           color: #1a1a1a;
-          font-size: 9px;
-          line-height: 1.3;
+          font-size: 7px;
+          line-height: 1.2;
         }
         .header {
           border-bottom: 2px solid #f5b843;
-          padding-bottom: 8px;
-          margin-bottom: 12px;
+          padding-bottom: 6px;
+          margin-bottom: 10px;
         }
         .header h1 {
-          font-size: 14px;
+          font-size: 12px;
           font-weight: 700;
           margin-bottom: 2px;
         }
         .header p {
-          font-size: 9px;
+          font-size: 8px;
           color: #555;
         }
         .entry {
-          margin-bottom: 14px;
+          margin-bottom: 10px;
           border: 1px solid #ccc;
-          border-radius: 4px;
+          border-radius: 3px;
           overflow: hidden;
           page-break-inside: avoid;
         }
@@ -77,73 +77,78 @@ function generatePrintableHTML(history: HistoryEntry[], reference: string): stri
           display: flex;
           justify-content: space-between;
           align-items: center;
-          padding: 4px 8px;
+          padding: 3px 6px;
           background: #f5f5f5;
           border-bottom: 1px solid #ccc;
         }
         .step-badge {
           background: #f5b843;
           color: #000;
-          padding: 2px 6px;
-          border-radius: 3px;
-          font-size: 8px;
+          padding: 1px 5px;
+          border-radius: 2px;
+          font-size: 7px;
           font-weight: 600;
         }
         .date {
-          font-size: 8px;
+          font-size: 7px;
           color: #666;
         }
         .analysis-content {
-          padding: 8px;
-          font-size: 9px;
+          padding: 6px;
+          font-size: 7px;
         }
         table {
           width: 100%;
           border-collapse: collapse;
-          margin: 4px 0;
+          margin: 3px 0;
+          table-layout: fixed;
         }
         table th, table td {
-          border: 1px solid #bbb;
-          padding: 3px 5px;
+          border: 1px solid #aaa;
+          padding: 2px 3px;
           text-align: left;
-          font-size: 8px;
-          white-space: nowrap;
+          font-size: 6px;
+          word-wrap: break-word;
+          overflow-wrap: break-word;
+          vertical-align: top;
         }
         table th {
-          background: #eee;
+          background: #e8e8e8;
           font-weight: 600;
+          font-size: 6px;
         }
         table tr:nth-child(even) td {
-          background: #fafafa;
+          background: #f9f9f9;
         }
         h3, h4 {
-          margin: 6px 0 3px 0;
-          font-size: 10px;
+          margin: 5px 0 2px 0;
+          font-size: 8px;
         }
         ul, ol {
-          margin: 3px 0;
-          padding-left: 14px;
+          margin: 2px 0;
+          padding-left: 12px;
         }
-        li { margin: 1px 0; }
-        p { margin: 3px 0; }
+        li { margin: 1px 0; font-size: 7px; }
+        p { margin: 2px 0; }
         @media print {
-          body { padding: 10px; }
+          @page { margin: 8mm; size: A4 landscape; }
+          body { padding: 0; }
           .no-print { display: none !important; }
           .entry { break-inside: avoid; }
         }
         .print-btn {
           position: fixed;
-          bottom: 20px;
-          right: 20px;
-          padding: 10px 20px;
+          bottom: 16px;
+          right: 16px;
+          padding: 8px 16px;
           background: #f5b843;
           color: #000;
           border: none;
-          border-radius: 5px;
+          border-radius: 4px;
           font-weight: 600;
           cursor: pointer;
-          font-size: 12px;
-          box-shadow: 0 3px 10px rgba(0,0,0,0.15);
+          font-size: 11px;
+          box-shadow: 0 2px 8px rgba(0,0,0,0.15);
         }
         .print-btn:hover { background: #e5a833; }
       </style>
