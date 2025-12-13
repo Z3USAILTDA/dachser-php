@@ -11,7 +11,7 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-// ============ ANTHROPIC CLAUDE - SINGLE LLM FOR ALL ANALYSIS ============
+// ============ INTERFACES ============
 
 interface AnalysisResult {
   result_text: string;
@@ -24,6 +24,8 @@ interface FileInfo {
   file_type: string;
   file_url: string;
 }
+
+// ============ UTILITY FUNCTIONS ============
 
 // Chunked base64 encoding to avoid memory issues
 function arrayBufferToBase64Chunked(buffer: ArrayBuffer): string {
@@ -38,7 +40,7 @@ function arrayBufferToBase64Chunked(buffer: ArrayBuffer): string {
 }
 
 // Fetch file as base64
-async function fetchFileAsBase64(fileUrl: string, fileName: string): Promise<{ base64: string; name: string; mediaType: string } | null> {
+async function fetchFileAsBase64(fileUrl: string, fileName: string): Promise<{ base64: string; name: string; mediaType: string; ext: string } | null> {
   try {
     console.log(`📄 Fetching: ${fileName}`);
     const response = await fetch(fileUrl);
@@ -57,18 +59,66 @@ async function fetchFileAsBase64(fileUrl: string, fileName: string): Promise<{ b
     }
     
     console.log(`✅ Loaded: ${fileName} (${Math.round(buffer.byteLength / 1024)} KB)`);
-    return { base64, name: fileName, mediaType };
+    return { base64, name: fileName, mediaType, ext };
   } catch (e) {
     console.error(`❌ Fetch failed: ${fileName}`, e);
     return null;
   }
 }
 
-// ============ ANTHROPIC CLAUDE - ALL-IN-ONE ANALYSIS ============
+// ============ STEP 1: GEMINI FLASH - XLSX TEXT EXTRACTION ============
+
+async function extractTextWithGeminiFlash(base64: string, fileName: string): Promise<string> {
+  const lovableKey = Deno.env.get('LOVABLE_API_KEY');
+  if (!lovableKey) throw new Error('LOVABLE_API_KEY not configured');
+  
+  console.log(`📊 Extracting text from XLSX: ${fileName} with Gemini Flash`);
+  
+  const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${lovableKey}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      model: 'google/gemini-2.5-flash',
+      messages: [{
+        role: 'user',
+        content: [
+          { 
+            type: 'text', 
+            text: `Extraia TODO o conteúdo textual deste arquivo Excel/planilha. Retorne o texto completo preservando a estrutura de colunas e linhas. Inclua todos os dados de todas as abas/sheets. Retorne apenas o conteúdo extraído, sem comentários.` 
+          },
+          {
+            type: 'image_url',
+            image_url: {
+              url: `data:application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;base64,${base64}`
+            }
+          }
+        ]
+      }]
+    }),
+  });
+  
+  if (!response.ok) {
+    const errorText = await response.text().catch(() => '');
+    console.error(`❌ Gemini Flash extraction error: ${response.status} - ${errorText}`);
+    throw new Error(`Gemini Flash error: ${response.status}`);
+  }
+  
+  const data = await response.json();
+  const extractedText = data.choices?.[0]?.message?.content || '';
+  console.log(`✅ Extracted ${extractedText.length} chars from ${fileName}`);
+  
+  return extractedText;
+}
+
+// ============ STEP 2: ANTHROPIC CLAUDE - PRIMARY ANALYSIS ============
 
 async function analyzeWithAnthropic(
   prompt: string, 
-  files: Array<{ base64: string; name: string; mediaType: string }>,
+  manifestText: string,
+  pdfFiles: Array<{ base64: string; name: string }>,
   metadata: { consignee?: string; container?: string }
 ): Promise<{ text: string; model: string }> {
   const anthropicKey = Deno.env.get('ANTHROPIC_API_KEY');
@@ -78,25 +128,30 @@ async function analyzeWithAnthropic(
   if (metadata.consignee) fullPrompt += `\n\nConsignee: ${metadata.consignee}`;
   if (metadata.container) fullPrompt += `\nContainer: ${metadata.container}`;
   
-  // Build content parts: prompt + all files as documents
+  // Add extracted manifest text
+  if (manifestText) {
+    fullPrompt += `\n\n=== CONTEÚDO DO MANIFESTO (extraído) ===\n${manifestText}\n=== FIM DO MANIFESTO ===`;
+  }
+  
+  // Build content parts: prompt + PDF documents only
   const contentParts: any[] = [
     { type: 'text', text: fullPrompt }
   ];
   
-  // Add all files as base64 documents
-  for (const file of files) {
+  // Add PDFs as base64 documents (Anthropic supports PDF natively)
+  for (const file of pdfFiles) {
     contentParts.push({ 
       type: 'document', 
       source: { 
         type: 'base64', 
-        media_type: file.mediaType, 
+        media_type: 'application/pdf', 
         data: file.base64 
       } 
     });
-    contentParts.push({ type: 'text', text: `[Arquivo: ${file.name}]` });
+    contentParts.push({ type: 'text', text: `[Arquivo PDF: ${file.name}]` });
   }
   
-  console.log(`🤖 Calling Anthropic Claude with ${files.length} files`);
+  console.log(`🤖 Calling Anthropic Claude with ${pdfFiles.length} PDFs + manifest text (${manifestText.length} chars)`);
   
   const response = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
@@ -126,6 +181,66 @@ async function analyzeWithAnthropic(
   return { text: resultText, model: 'claude-sonnet-4-20250514' };
 }
 
+// ============ STEP 3: GEMINI PRO - FALLBACK ANALYSIS ============
+
+async function analyzeWithGeminiPro(
+  prompt: string, 
+  manifestText: string,
+  pdfFiles: Array<{ base64: string; name: string }>,
+  metadata: { consignee?: string; container?: string }
+): Promise<{ text: string; model: string }> {
+  const lovableKey = Deno.env.get('LOVABLE_API_KEY');
+  if (!lovableKey) throw new Error('LOVABLE_API_KEY not configured');
+  
+  let fullPrompt = prompt;
+  if (metadata.consignee) fullPrompt += `\n\nConsignee: ${metadata.consignee}`;
+  if (metadata.container) fullPrompt += `\nContainer: ${metadata.container}`;
+  
+  // Add extracted manifest text
+  if (manifestText) {
+    fullPrompt += `\n\n=== CONTEÚDO DO MANIFESTO (extraído) ===\n${manifestText}\n=== FIM DO MANIFESTO ===`;
+  }
+  
+  console.log(`🔄 Fallback: Calling Gemini Pro with ${pdfFiles.length} PDFs + manifest text`);
+  
+  // Build content parts for Gemini
+  const contentParts: any[] = [{ type: 'text', text: fullPrompt }];
+  
+  // Add PDFs as base64 images (Gemini accepts PDFs via image_url)
+  for (const file of pdfFiles) {
+    contentParts.push({
+      type: 'image_url',
+      image_url: {
+        url: `data:application/pdf;base64,${file.base64}`
+      }
+    });
+  }
+  
+  const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${lovableKey}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      model: 'google/gemini-2.5-pro',
+      messages: [{ role: 'user', content: contentParts }]
+    }),
+  });
+  
+  if (!response.ok) {
+    const errorText = await response.text().catch(() => '');
+    console.error(`❌ Gemini Pro error: ${response.status} - ${errorText}`);
+    throw new Error(`Gemini Pro error: ${response.status}`);
+  }
+  
+  const data = await response.json();
+  const resultText = data.choices?.[0]?.message?.content || '';
+  console.log(`✅ Gemini Pro response: ${resultText.length} chars`);
+  
+  return { text: resultText, model: 'gemini-2.5-pro' };
+}
+
 // ============ MAIN LLM ANALYSIS FUNCTION ============
 
 async function analyzeWithLLM(
@@ -136,12 +251,12 @@ async function analyzeWithLLM(
   const basePrompt = getPromptForAnalysisType(analysisType);
   const startTime = Date.now();
   
-  console.log(`🚀 Starting analysis for ${files.length} files (Anthropic only)`);
+  console.log(`🚀 Starting 3-step analysis for ${files.length} files`);
   
   // Fetch all files as base64
   const filePromises = files.map(f => fetchFileAsBase64(f.file_url, f.file_name));
   const fileResults = await Promise.all(filePromises);
-  const validFiles = fileResults.filter((f): f is { base64: string; name: string; mediaType: string } => f !== null);
+  const validFiles = fileResults.filter((f): f is { base64: string; name: string; mediaType: string; ext: string } => f !== null);
   
   console.log(`📎 Files loaded: ${validFiles.length}`);
   
@@ -149,8 +264,45 @@ async function analyzeWithLLM(
     throw new Error('Não foi possível carregar nenhum documento');
   }
   
-  // Single call to Anthropic with all files
-  const result = await analyzeWithAnthropic(basePrompt, validFiles, metadata);
+  // STEP 1: Separate XLSX files from PDFs
+  const xlsxFiles = validFiles.filter(f => ['xlsx', 'xls', 'xlsm', 'csv'].includes(f.ext));
+  const pdfFiles = validFiles.filter(f => f.ext === 'pdf' || !['xlsx', 'xls', 'xlsm', 'csv'].includes(f.ext));
+  
+  console.log(`📊 XLSX files: ${xlsxFiles.length}, PDF files: ${pdfFiles.length}`);
+  
+  // STEP 1: Extract text from XLSX files using Gemini Flash
+  let manifestText = '';
+  for (const xlsxFile of xlsxFiles) {
+    try {
+      const extractedText = await extractTextWithGeminiFlash(xlsxFile.base64, xlsxFile.name);
+      manifestText += `\n\n=== ${xlsxFile.name} ===\n${extractedText}`;
+    } catch (e) {
+      console.error(`❌ Failed to extract text from ${xlsxFile.name}:`, e);
+      // Continue with other files
+    }
+  }
+  
+  // STEP 2: Try Anthropic Claude (primary)
+  let result: { text: string; model: string };
+  
+  try {
+    result = await analyzeWithAnthropic(
+      basePrompt, 
+      manifestText, 
+      pdfFiles.map(f => ({ base64: f.base64, name: f.name })),
+      metadata
+    );
+  } catch (anthropicError) {
+    console.error(`❌ Anthropic failed, falling back to Gemini Pro:`, anthropicError);
+    
+    // STEP 3: Fallback to Gemini Pro
+    result = await analyzeWithGeminiPro(
+      basePrompt, 
+      manifestText, 
+      pdfFiles.map(f => ({ base64: f.base64, name: f.name })),
+      metadata
+    );
+  }
   
   const elapsed = Math.round((Date.now() - startTime) / 1000);
   console.log(`✅ Analysis completed in ${elapsed}s using ${result.model}`);
@@ -161,7 +313,9 @@ async function analyzeWithLLM(
       status: 'completed', 
       model: result.model, 
       total_time_ms: Date.now() - startTime,
-      file_count: validFiles.length
+      file_count: validFiles.length,
+      xlsx_count: xlsxFiles.length,
+      pdf_count: pdfFiles.length
     },
     model: result.model
   };
@@ -211,7 +365,7 @@ async function getDbClient() {
 // ============ MAIN SERVER ============
 
 serve(async (req) => {
-  console.log('🚀 SEA Submit Analysis - Anthropic Only');
+  console.log('🚀 SEA Submit Analysis - 3-Step Pipeline (Flash → Claude → Pro)');
   
   if (req.method === 'OPTIONS') return new Response(null, { headers: corsHeaders });
 
@@ -440,7 +594,7 @@ serve(async (req) => {
             UPDATE ai_agente.t_dachser_sea_runs SET status = 'analisando' WHERE id = ?
           `, [runId]);
           
-          // Run LLM analysis with Anthropic primary, Gemini fallback
+          // Run 3-step LLM analysis
           const result = await analyzeWithLLM(
             analysisType,
             allFiles.map(f => ({ file_name: f.name, file_type: f.file_type, file_url: f.url })), 
@@ -463,66 +617,77 @@ serve(async (req) => {
           // Update run with result
           await bgClient.execute(`
             UPDATE ai_agente.t_dachser_sea_runs 
-            SET status = ?, result_text = ?
+            SET status = 'realizado',
+                result_text = ?,
+                result_json = ?,
+                model = ?,
+                updated_at = NOW()
             WHERE id = ?
-          `, [finalStatus === 'error' ? 'erro' : 'realizado', result.result_text || '', runId]);
+          `, [
+            result.result_text || '',
+            JSON.stringify(result.json_result || {}),
+            result.model || '',
+            runId
+          ]);
           
           // Update item status
           if (actualItemId) {
             await bgClient.execute(`
-              UPDATE ai_agente.t_dachser_sea_items 
-              SET status = ? 
-              WHERE id = ?
-            `, [finalStatus === 'error' ? 'erro' : 'realizado', actualItemId]);
+              UPDATE ai_agente.t_dachser_sea_items SET status = 'realizado' WHERE id = ?
+            `, [actualItemId]);
           }
           
-          await bgClient.close();
+          console.log(`✅ Run ${runId} completed successfully with ${result.model}`);
           
-        } catch (error: any) {
+        } catch (err) {
           const elapsed = Math.round((Date.now() - startTime) / 1000);
-          console.error(`❌ Analysis error after ${elapsed}s:`, error.message);
+          console.error(`❌ Analysis error after ${elapsed}s:`, err);
           
-          try {
-            if (!bgClient) bgClient = await getDbClient();
-            
+          if (!bgClient) bgClient = await getDbClient();
+          
+          await bgClient.execute(`
+            UPDATE ai_agente.t_dachser_sea_runs 
+            SET status = 'erro',
+                result_text = ?,
+                updated_at = NOW()
+            WHERE id = ?
+          `, [err instanceof Error ? err.message : 'Unknown error', runId]);
+          
+          if (actualItemId) {
             await bgClient.execute(`
-              UPDATE ai_agente.t_dachser_sea_runs 
-              SET status = 'erro', result_text = ?
-              WHERE id = ?
-            `, [`Error: ${error.message}`, runId]);
-            
-            if (actualItemId) {
-              await bgClient.execute(`
-                UPDATE ai_agente.t_dachser_sea_items SET status = 'erro' WHERE id = ?
-              `, [actualItemId]);
-            }
-            
-            await bgClient.close();
-          } catch (dbError) {
-            console.error('Failed to update error status:', dbError);
+              UPDATE ai_agente.t_dachser_sea_items SET status = 'erro' WHERE id = ?
+            `, [actualItemId]);
           }
+        } finally {
+          if (bgClient) await bgClient.close();
         }
       };
-      
+
+      // Start background processing
       EdgeRuntime.waitUntil(processAnalysis());
-      
-      return new Response(
-        JSON.stringify({ 
-          success: true, 
-          analysisId: String(runId),
-          status: 'queued',
-          message: 'Análise iniciada em background'
-        }),
-        { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
+
+      return new Response(JSON.stringify({ 
+        success: true, 
+        runId: Number(runId),
+        itemId: actualItemId,
+        message: 'Analysis queued (3-step: Flash → Claude → Pro fallback)',
+        files: allFiles.length
+      }), { 
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+      });
 
     } catch (innerError) {
       await dbClient.close();
       throw innerError;
     }
 
-  } catch (error: any) {
-    console.error('Error:', error);
-    return new Response(JSON.stringify({ success: false, error: error?.message || 'Unknown error' }), { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+  } catch (error) {
+    console.error('🔴 Request error:', error);
+    return new Response(JSON.stringify({ 
+      error: error instanceof Error ? error.message : 'Unknown error' 
+    }), { 
+      status: 500, 
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+    });
   }
 });
