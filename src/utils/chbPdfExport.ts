@@ -26,21 +26,20 @@ function htmlToText(html: string): string {
 // Generate printable HTML content
 function generatePrintableHTML(history: HistoryEntry[], reference: string): string {
   const entries = history.map(entry => {
-    const content = entry.result_html 
-      ? htmlToText(entry.result_html) 
-      : entry.result_text || 'Sem conteúdo';
+    // Use HTML directly to preserve table formatting
+    const content = entry.result_html || entry.result_text || 'Sem conteúdo';
     
     return `
-      <div style="margin-bottom: 24px; padding: 16px; border: 1px solid #ddd; border-radius: 8px; page-break-inside: avoid;">
-        <div style="display: flex; justify-content: space-between; margin-bottom: 12px; border-bottom: 1px solid #eee; padding-bottom: 8px;">
+      <div style="margin-bottom: 32px; padding: 20px; border: 1px solid #ddd; border-radius: 8px; page-break-inside: avoid;">
+        <div style="display: flex; justify-content: space-between; margin-bottom: 16px; border-bottom: 1px solid #eee; padding-bottom: 12px;">
           <div>
-            <span style="background: #f5b843; color: #000; padding: 4px 8px; border-radius: 4px; font-size: 12px; font-weight: 600;">
+            <span style="background: #f5b843; color: #000; padding: 6px 12px; border-radius: 4px; font-size: 13px; font-weight: 600;">
               ${stepNames[entry.etapa] || `Etapa ${entry.etapa}`}
             </span>
           </div>
-          <span style="color: #666; font-size: 12px;">${entry.created_at}</span>
+          <span style="color: #666; font-size: 13px;">${entry.created_at}</span>
         </div>
-        <div style="font-size: 13px; line-height: 1.6; white-space: pre-wrap; color: #333;">
+        <div class="analysis-content" style="font-size: 13px; line-height: 1.6; color: #333;">
           ${content}
         </div>
       </div>
@@ -61,6 +60,35 @@ function generatePrintableHTML(history: HistoryEntry[], reference: string): stri
           padding: 24px;
           background: #fff;
           color: #333;
+        }
+        table {
+          width: 100%;
+          border-collapse: collapse;
+          margin: 16px 0;
+          font-size: 12px;
+        }
+        table th, table td {
+          border: 1px solid #ddd;
+          padding: 8px 10px;
+          text-align: left;
+        }
+        table th {
+          background: #f5f5f5;
+          font-weight: 600;
+        }
+        table tr:nth-child(even) {
+          background: #fafafa;
+        }
+        .analysis-content h3, .analysis-content h4 {
+          margin: 16px 0 8px 0;
+          color: #333;
+        }
+        .analysis-content ul, .analysis-content ol {
+          margin: 8px 0;
+          padding-left: 20px;
+        }
+        .analysis-content li {
+          margin: 4px 0;
         }
         @media print {
           body { padding: 0; }
