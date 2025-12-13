@@ -415,67 +415,32 @@ export default function Olimpo() {
         }
       }
 
-      // Load SEA data
-      const seaSeedRes = await fetch(`${baseUrl}?action=sea_seed`);
+      // Load SEA data with smart cache
+      const seaSeedRes = await fetch(`${baseUrl}?action=sea_seed_smart`);
       const seaSeedJson = await seaSeedRes.json();
       const seedSea = Array.isArray(seaSeedJson?.data) ? seaSeedJson.data : [];
 
       for (const s of seedSea) {
         const containerId = s.container;
+        const etaIso = s.eta_final_destination ? new Date(s.eta_final_destination).toISOString() : null;
         
-        // Get container details
-        const cdetRes = await fetch(`${baseUrl}?action=jc_container&id=${encodeURIComponent(containerId)}`);
-        const cdetJson = await cdetRes.json();
-        const cdet = cdetJson?.data || null;
-
-        const portNameOrig = cdet?.loading_port || cdet?.shipped_from || "";
-        const portNameDest = cdet?.discharging_port || cdet?.shipped_to || "";
-        let orig: [number, number] | null = null;
-        let dest: [number, number] | null = null;
-        let oCode = "—";
-        let dCode = "—";
-
-        if (portNameOrig) {
-          const prRes = await fetch(`${baseUrl}?action=jc_port_find&name=${encodeURIComponent(portNameOrig)}`);
-          const prJson = await prRes.json();
-          const p = Array.isArray(prJson?.data) ? prJson.data[0] : null;
-          if (p) {
-            orig = [+p.lat, +p.lon];
-            oCode = p.unlocode || p.port_code || "—";
-          }
-        }
-        if (portNameDest) {
-          const prRes = await fetch(`${baseUrl}?action=jc_port_find&name=${encodeURIComponent(portNameDest)}`);
-          const prJson = await prRes.json();
-          const p = Array.isArray(prJson?.data) ? prJson.data[0] : null;
-          if (p) {
-            dest = [+p.lat, +p.lon];
-            dCode = p.unlocode || p.port_code || "—";
-          }
-        }
-
-        const etaIso = cdet?.eta_final_destination ? new Date(cdet.eta_final_destination).toISOString() : null;
         let status: "Em trânsito" | "Atraso" | "Entregue" = "Em trânsito";
-        const stText = (cdet?.container_status || "").toLowerCase();
+        const stText = (s.container_status || "").toLowerCase();
         if (/delivered|gate out|empty received/.test(stText)) status = "Entregue";
         else if (etaIso && Date.now() > new Date(etaIso).getTime()) status = "Atraso";
 
-        const lastMovIso = cdet?.last_movement_timestamp ? new Date(cdet.last_movement_timestamp).toISOString() : null;
+        const lastMovIso = s.last_movement_timestamp ? new Date(s.last_movement_timestamp).toISOString() : null;
         const deliveredUntilTs = status === "Entregue" && lastMovIso ? new Date(lastMovIso).getTime() + 24 * 60 * 60 * 1000 : null;
 
-        let pos: [number, number] | null = null;
-        const vesselName = cdet?.current_vessel_name || cdet?.last_vessel_name || null;
-        if (vesselName) {
-          const vfRes = await fetch(`${baseUrl}?action=jc_vessel_find&name=${encodeURIComponent(vesselName)}`);
-          const vfJson = await vfRes.json();
-          const vRow = Array.isArray(vfJson?.data) ? vfJson.data[0] : null;
-          if (vRow) {
-            const vbRes = await fetch(`${baseUrl}?action=jc_vessel_basic&uuid=${encodeURIComponent(vRow.uuid || "")}`);
-            const vbJson = await vbRes.json();
-            const vd = vbJson?.data;
-            if (vd && Number.isFinite(+vd.lat) && Number.isFinite(+vd.lon)) pos = [+vd.lat, +vd.lon];
-          }
-        }
+        const orig: [number, number] | null = 
+          s.origin_lat && s.origin_lon ? [Number(s.origin_lat), Number(s.origin_lon)] : null;
+        const dest: [number, number] | null = 
+          s.dest_lat && s.dest_lon ? [Number(s.dest_lat), Number(s.dest_lon)] : null;
+        const pos: [number, number] | null = 
+          s.vessel_lat && s.vessel_lon && status !== "Entregue" ? [Number(s.vessel_lat), Number(s.vessel_lon)] : null;
+
+        const oCode = s.origin_unlocode || "—";
+        const dCode = s.dest_unlocode || "—";
 
         newData.push({
           id: `sea:${containerId}`,
@@ -491,7 +456,7 @@ export default function Olimpo() {
           orig,
           dest,
           prog: (() => {
-            const atdIso = cdet?.atd_origin ? new Date(cdet.atd_origin).toISOString() : null;
+            const atdIso = s.atd_origin ? new Date(s.atd_origin).toISOString() : null;
             if (!(atdIso && etaIso)) return 0.5;
             const now = Date.now();
             const t0 = new Date(atdIso).getTime();
