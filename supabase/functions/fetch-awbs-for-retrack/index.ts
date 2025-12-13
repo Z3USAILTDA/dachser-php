@@ -6,111 +6,87 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-// Status codes that indicate a shipment is complete and shouldn't be retracked
-const FINAL_STATUSES = ['DLV', 'POD', 'DELIVERED', 'ENTREGUE'];
-
 serve(async (req) => {
+  // Handle CORS preflight requests
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
 
-  let client: Client | null = null;
-
   try {
-    const body = await req.json();
-    const { limit = 100, offset = 0, exclude_final = true } = body;
+    const { limit = 10, offset = 0 } = await req.json();
+    
+    console.log(`Fetching AWBs for re-tracking from t_status_aereo (limit: ${limit}, offset: ${offset})`);
 
-    const host = Deno.env.get('MARIADB_HOST');
-    const port = parseInt(Deno.env.get('MARIADB_PORT') || '3306');
-    const database = Deno.env.get('MARIADB_DATABASE');
-    const dbUser = Deno.env.get('MARIADB_USER');
-    const dbPassword = Deno.env.get('MARIADB_PASSWORD');
-
-    if (!host || !database || !dbUser || !dbPassword) {
-      console.error('Missing database credentials');
-      return new Response(
-        JSON.stringify({ success: false, error: 'Database configuration error' }),
-        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    }
-
-    client = await new Client().connect({
-      hostname: host,
-      port: port,
-      db: database,
-      username: dbUser,
-      password: dbPassword,
+    const client = await new Client().connect({
+      hostname: Deno.env.get('MARIADB_HOST') || '',
+      port: parseInt(Deno.env.get('MARIADB_PORT') || '3306'),
+      username: Deno.env.get('MARIADB_USER') || '',
+      password: Deno.env.get('MARIADB_PASSWORD') || '',
+      db: Deno.env.get('MARIADB_DATABASE') || '',
     });
 
-    // Build query with optional exclusion of final statuses
-    let query = `
-      SELECT 
-        id,
-        TRIM(awb) as awb,
-        TRIM(hawb) as hawb,
-        destinatário as destinatario,
-        último_status as ultimo_status,
-        origem,
-        destino,
-        nome_analista,
-        email_analista,
-        email_cliente,
-        \`última atualização\` as ultima_atualizacao,
-        data_atraso
-      FROM ${database}.t_status_aereo
-    `;
+    console.log('Connected to MariaDB');
 
-    const params: (string | number)[] = [];
+    // Fetch AWBs from t_status_aereo excluding final statuses (ERRO is included for reprocessing)
+    // Apply TRIM to AWB data to prevent whitespace issues
+    const result = await client.query(
+      `SELECT TRIM(awb) as awb, TRIM(destinatário) as destinatário, TRIM(último_status) as último_status, \`última atualização\`, TRIM(hawb) as hawb, TRIM(nome_analista) as nome_analista, TRIM(email_analista) as email_analista, TRIM(origem) as origem, TRIM(destino) as destino, TRIM(email_cliente) as email_cliente
+       FROM t_status_aereo 
+       WHERE TRIM(último_status) NOT IN ('DLV', 'COMPANY_NOT_REGISTERED', 'NOT_FOUND', 'INFO', 'Em Processamento')
+       ORDER BY TRIM(awb) ASC
+       LIMIT ? OFFSET ?`,
+      [limit, offset]
+    );
 
-    if (exclude_final) {
-      const placeholders = FINAL_STATUSES.map(() => '?').join(', ');
-      query += ` WHERE UPPER(TRIM(último_status)) NOT IN (${placeholders})`;
-      params.push(...FINAL_STATUSES);
-    }
-
-    query += ` ORDER BY \`última atualização\` ASC LIMIT ? OFFSET ?`;
-    params.push(limit, offset);
-
-    console.log(`Fetching AWBs for retrack with limit=${limit}, offset=${offset}, exclude_final=${exclude_final}`);
-
-    const rows = await client.query(query, params);
+    await client.close();
+    console.log(`Fetched ${result.length} AWBs for re-tracking`);
     
-    // Get total count for pagination
-    let countQuery = `SELECT COUNT(*) as total FROM ${database}.t_status_aereo`;
-    const countParams: string[] = [];
+    // Explicitly map the results to ensure consistent property names and apply trim
+    const mappedResults = result.map((row: any) => {
+      const mapped = {
+        awb: (row.awb || '').toString().trim(),
+        destinatário: (row.destinatário || row['destinatário'] || 'N/A').toString().trim(),
+        último_status: (row.último_status || row['último_status'] || 'N/A').toString().trim(),
+        'última atualização': row['última atualização'] || row.última_atualização || new Date().toISOString(),
+        hawb: (row.hawb || row['hawb'] || row.HAWB || row['HAWB'] || 'N/A').toString().trim(),
+        nome_analista: (row.nome_analista || row['nome_analista'] || 'N/A').toString().trim(),
+        email_analista: row.email_analista ? row.email_analista.toString().trim() : null,
+        origem: (row.origem || row['origem'] || 'N/A').toString().trim(),
+        destino: (row.destino || row['destino'] || 'N/A').toString().trim(),
+        email_cliente: row.email_cliente ? row.email_cliente.toString().trim() : null
+      };
+      console.log(`Mapped AWB ${mapped.awb}: hawb="${mapped.hawb}", email_analista="${mapped.email_analista}", email_cliente="${mapped.email_cliente}"`);
+      return mapped;
+    });
     
-    if (exclude_final) {
-      const placeholders = FINAL_STATUSES.map(() => '?').join(', ');
-      countQuery += ` WHERE UPPER(TRIM(último_status)) NOT IN (${placeholders})`;
-      countParams.push(...FINAL_STATUSES);
+    if (mappedResults[0]) {
+      console.log('First mapped AWB full object:', JSON.stringify(mappedResults[0]));
     }
-
-    const countResult = await client.query(countQuery, countParams);
-    const total = countResult[0]?.total || 0;
-
-    console.log(`Fetched ${Array.isArray(rows) ? rows.length : 0} of ${total} AWBs for retracking`);
-
+    
     return new Response(
       JSON.stringify({ 
-        success: true, 
-        data: rows,
-        total: total,
-        limit: limit,
-        offset: offset
+        success: true,
+        data: mappedResults,
+        count: mappedResults.length
       }),
-      { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        status: 200,
+      }
     );
-
-  } catch (error: unknown) {
-    const errorMessage = error instanceof Error ? error.message : String(error);
-    console.error('Error in fetch-awbs-for-retrack:', errorMessage);
+  } catch (error) {
+    console.error('Error fetching AWBs for re-tracking:', error);
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
+    
     return new Response(
-      JSON.stringify({ success: false, error: errorMessage }),
-      { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      JSON.stringify({ 
+        success: false, 
+        error: errorMessage
+      }),
+      {
+        status: 500,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      }
     );
-  } finally {
-    if (client) {
-      await client.close();
-    }
   }
 });

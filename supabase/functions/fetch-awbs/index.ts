@@ -7,130 +7,70 @@ const corsHeaders = {
 };
 
 serve(async (req) => {
+  // Handle CORS preflight requests
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
 
-  let client: Client | null = null;
-
   try {
-    const body = await req.json();
-    const { search, status, limit = 100, offset = 0 } = body;
-
-    const host = Deno.env.get('MARIADB_HOST');
-    const port = parseInt(Deno.env.get('MARIADB_PORT') || '3306');
-    const database = Deno.env.get('MARIADB_DATABASE');
-    const dbUser = Deno.env.get('MARIADB_USER');
-    const dbPassword = Deno.env.get('MARIADB_PASSWORD');
-
-    if (!host || !database || !dbUser || !dbPassword) {
-      console.error('Missing database credentials');
-      return new Response(
-        JSON.stringify({ success: false, error: 'Database configuration error' }),
-        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    }
-
-    client = await new Client().connect({
-      hostname: host,
-      port: port,
-      db: database,
-      username: dbUser,
-      password: dbPassword,
+    console.log('Connecting to MariaDB...');
+    
+    const client = await new Client().connect({
+      hostname: Deno.env.get('MARIADB_HOST') || '',
+      port: parseInt(Deno.env.get('MARIADB_PORT') || '3306'),
+      username: Deno.env.get('MARIADB_USER') || '',
+      password: Deno.env.get('MARIADB_PASSWORD') || '',
+      db: Deno.env.get('MARIADB_DATABASE') || '',
     });
 
-    // Build dynamic query with filters
-    let query = `
-      SELECT 
-        id,
-        TRIM(awb) as awb,
-        TRIM(hawb) as hawb,
-        destinatário as destinatario,
-        último_status as ultimo_status,
-        origem,
-        destino,
-        nome_analista,
-        email_analista,
-        email_cliente,
-        \`última atualização\` as ultima_atualizacao,
-        data_atraso
-      FROM ${database}.t_status_aereo
-      WHERE 1=1
-    `;
+    console.log('Connected to MariaDB successfully');
 
-    const params: (string | number)[] = [];
+    const { search = '', status = '' } = await req.json().catch(() => ({}));
 
-    // Add search filter
-    if (search && search.trim() !== '') {
-      query += ` AND (
-        awb LIKE ? OR 
-        hawb LIKE ? OR 
-        destinatário LIKE ? OR
-        nome_analista LIKE ?
-      )`;
-      const searchPattern = `%${search.trim()}%`;
-      params.push(searchPattern, searchPattern, searchPattern, searchPattern);
+    let query = 'SELECT * FROM t_tracked_awbs WHERE 1=1';
+    const params: any[] = [];
+
+    if (search) {
+      query += ' AND (awb LIKE ? OR consignee_name LIKE ? OR airline_code LIKE ?)';
+      const searchParam = `%${search}%`;
+      params.push(searchParam, searchParam, searchParam);
     }
 
-    // Add status filter
-    if (status && status.trim() !== '') {
-      query += ` AND UPPER(TRIM(último_status)) = ?`;
-      params.push(status.toUpperCase().trim());
+    if (status) {
+      query += ' AND status = ?';
+      params.push(status);
     }
 
-    query += ` ORDER BY id DESC LIMIT ? OFFSET ?`;
-    params.push(limit, offset);
+    query += ' ORDER BY created_at DESC LIMIT 100';
 
-    console.log(`Fetching AWBs with search="${search || ''}", status="${status || ''}", limit=${limit}, offset=${offset}`);
-
-    const rows = await client.query(query, params);
-
-    // Get total count with same filters
-    let countQuery = `SELECT COUNT(*) as total FROM ${database}.t_status_aereo WHERE 1=1`;
-    const countParams: (string | number)[] = [];
-
-    if (search && search.trim() !== '') {
-      countQuery += ` AND (
-        awb LIKE ? OR 
-        hawb LIKE ? OR 
-        destinatário LIKE ? OR
-        nome_analista LIKE ?
-      )`;
-      const searchPattern = `%${search.trim()}%`;
-      countParams.push(searchPattern, searchPattern, searchPattern, searchPattern);
-    }
-
-    if (status && status.trim() !== '') {
-      countQuery += ` AND UPPER(TRIM(último_status)) = ?`;
-      countParams.push(status.toUpperCase().trim());
-    }
-
-    const countResult = await client.query(countQuery, countParams);
-    const total = countResult[0]?.total || 0;
-
-    console.log(`Fetched ${Array.isArray(rows) ? rows.length : 0} of ${total} AWBs`);
+    console.log('Executing query:', query);
+    const result = await client.execute(query, params);
+    
+    await client.close();
+    console.log(`Query executed successfully, found ${result.rows?.length || 0} records`);
 
     return new Response(
       JSON.stringify({ 
         success: true, 
-        data: rows,
-        total: total,
-        limit: limit,
-        offset: offset
+        data: result.rows || [] 
       }),
-      { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        status: 200,
+      }
     );
-
-  } catch (error: unknown) {
-    const errorMessage = error instanceof Error ? error.message : String(error);
-    console.error('Error in fetch-awbs:', errorMessage);
+  } catch (error) {
+    console.error('Error fetching AWBs from MariaDB:', error);
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
     return new Response(
-      JSON.stringify({ success: false, error: errorMessage }),
-      { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      JSON.stringify({ 
+        success: false, 
+        error: errorMessage 
+      }),
+      {
+        status: 500,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      }
     );
-  } finally {
-    if (client) {
-      await client.close();
-    }
   }
 });

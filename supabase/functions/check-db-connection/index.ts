@@ -7,86 +7,40 @@ const corsHeaders = {
 };
 
 serve(async (req) => {
+  // Handle CORS preflight requests
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
 
-  let client: Client | null = null;
-
   try {
-    const host = Deno.env.get('MARIADB_HOST');
-    const port = parseInt(Deno.env.get('MARIADB_PORT') || '3306');
-    const database = Deno.env.get('MARIADB_DATABASE');
-    const dbUser = Deno.env.get('MARIADB_USER');
-    const dbPassword = Deno.env.get('MARIADB_PASSWORD');
-
-    // Check if credentials are configured
-    const configStatus = {
-      host: !!host,
-      port: !!port,
-      database: !!database,
-      user: !!dbUser,
-      password: !!dbPassword,
-    };
-
-    if (!host || !database || !dbUser || !dbPassword) {
-      console.error('Missing database credentials');
-      return new Response(
-        JSON.stringify({ 
-          success: false, 
-          connected: false,
-          error: 'Database credentials not fully configured',
-          config: configStatus
-        }),
-        { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    }
-
-    console.log(`Attempting to connect to MariaDB at ${host}:${port}/${database}`);
+    console.log('Database queries disabled - returning disconnected status');
     
-    const startTime = Date.now();
-    
-    client = await new Client().connect({
-      hostname: host,
-      port: port,
-      db: database,
-      username: dbUser,
-      password: dbPassword,
-    });
-
-    // Test the connection with a simple query
-    const result = await client.query('SELECT 1 as test');
-    
-    const connectionTime = Date.now() - startTime;
-    
-    console.log(`Successfully connected to MariaDB in ${connectionTime}ms`);
-
     return new Response(
       JSON.stringify({ 
         success: true, 
-        connected: true,
-        connectionTimeMs: connectionTime,
-        database: database,
-        host: host,
-        port: port
+        connected: false,
+        timestamp: new Date().toISOString()
       }),
-      { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        status: 200,
+      }
     );
-
-  } catch (error: unknown) {
-    const errorMessage = error instanceof Error ? error.message : String(error);
-    console.error('Error connecting to database:', errorMessage);
+  } catch (error) {
+    console.error('MariaDB connection failed:', error);
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
+    
     return new Response(
       JSON.stringify({ 
         success: false, 
         connected: false,
-        error: errorMessage
+        error: errorMessage,
+        timestamp: new Date().toISOString()
       }),
-      { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      {
+        status: 200, // Return 200 so we can handle the disconnected state in UI
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      }
     );
-  } finally {
-    if (client) {
-      await client.close();
-    }
   }
 });

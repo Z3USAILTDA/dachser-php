@@ -11,69 +11,79 @@ serve(async (req) => {
     return new Response(null, { headers: corsHeaders });
   }
 
-  let client: Client | null = null;
-
   try {
-    const host = Deno.env.get('MARIADB_HOST');
-    const port = parseInt(Deno.env.get('MARIADB_PORT') || '3306');
-    const database = Deno.env.get('MARIADB_DATABASE');
-    const dbUser = Deno.env.get('MARIADB_USER');
-    const dbPassword = Deno.env.get('MARIADB_PASSWORD');
-
-    if (!host || !database || !dbUser || !dbPassword) {
-      console.error('Missing database credentials');
-      return new Response(
-        JSON.stringify({ success: false, error: 'Database configuration error' }),
-        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    }
-
-    console.log(`Connecting to MariaDB for add-alert-status-column`);
+    console.log('Connecting to MariaDB to manage data_atraso column...');
     
-    client = await new Client().connect({
-      hostname: host,
-      port: port,
-      db: database,
-      username: dbUser,
-      password: dbPassword,
+    const client = await new Client().connect({
+      hostname: Deno.env.get('MARIADB_HOST') || '',
+      port: parseInt(Deno.env.get('MARIADB_PORT') || '3306'),
+      username: Deno.env.get('MARIADB_USER') || '',
+      password: Deno.env.get('MARIADB_PASSWORD') || '',
+      db: Deno.env.get('MARIADB_DATABASE') || '',
     });
 
-    // Check if alert_status column exists
-    const columns = await client.query(
-      `SELECT COLUMN_NAME 
+    console.log('Connected to MariaDB');
+
+    // Check if old column exists and rename/change type
+    const checkOldColumn = await client.query(
+      `SELECT COLUMN_NAME, DATA_TYPE
        FROM INFORMATION_SCHEMA.COLUMNS 
-       WHERE TABLE_SCHEMA = ? AND TABLE_NAME = 't_status_aereo' AND COLUMN_NAME = 'alert_status'`,
-      [database]
+       WHERE TABLE_SCHEMA = ? AND TABLE_NAME = 't_status_aereo' 
+       AND COLUMN_NAME = 'had_alert_status'`,
+      [Deno.env.get('MARIADB_DATABASE')]
     );
 
-    if (!columns || columns.length === 0) {
-      // Add alert_status column if it doesn't exist
+    if (checkOldColumn.length > 0) {
+      console.log('Renaming had_alert_status to data_atraso and changing type to DATETIME...');
       await client.execute(
-        `ALTER TABLE ${database}.t_status_aereo ADD COLUMN alert_status VARCHAR(50) DEFAULT NULL`
+        `ALTER TABLE t_status_aereo CHANGE COLUMN had_alert_status data_atraso DATETIME DEFAULT NULL`
       );
-      console.log('Added alert_status column to t_status_aereo');
-      return new Response(
-        JSON.stringify({ success: true, message: 'Column added' }),
-        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      console.log('Column renamed and type changed successfully');
+    } else {
+      // Check if new column already exists
+      const checkNewColumn = await client.query(
+        `SELECT COLUMN_NAME 
+         FROM INFORMATION_SCHEMA.COLUMNS 
+         WHERE TABLE_SCHEMA = ? AND TABLE_NAME = 't_status_aereo' 
+         AND COLUMN_NAME = 'data_atraso'`,
+        [Deno.env.get('MARIADB_DATABASE')]
       );
+
+      if (checkNewColumn.length === 0) {
+        console.log('Adding data_atraso column to t_status_aereo...');
+        await client.execute(
+          `ALTER TABLE t_status_aereo ADD COLUMN data_atraso DATETIME DEFAULT NULL AFTER email_cliente`
+        );
+        console.log('Column data_atraso added successfully');
+      } else {
+        console.log('Column data_atraso already exists');
+      }
     }
 
-    console.log('alert_status column already exists');
-    return new Response(
-      JSON.stringify({ success: true, message: 'Column already exists' }),
-      { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-    );
+    await client.close();
 
-  } catch (error: unknown) {
-    const errorMessage = error instanceof Error ? error.message : String(error);
-    console.error('Error in add-alert-status-column:', errorMessage);
     return new Response(
-      JSON.stringify({ success: false, error: errorMessage }),
-      { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      JSON.stringify({ 
+        success: true, 
+        message: 'Column data_atraso verified/added'
+      }),
+      {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        status: 200,
+      }
     );
-  } finally {
-    if (client) {
-      await client.close();
-    }
+  } catch (error) {
+    console.error('Error managing data_atraso column:', error);
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
+    return new Response(
+      JSON.stringify({ 
+        success: false, 
+        error: errorMessage 
+      }),
+      {
+        status: 500,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      }
+    );
   }
 });
