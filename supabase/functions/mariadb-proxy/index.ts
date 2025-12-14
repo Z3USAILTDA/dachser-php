@@ -2510,6 +2510,27 @@ serve(async (req) => {
         break;
       }
 
+      // ==================== SEA CONTAINER COUNT ====================
+      case 'get_sea_container_count': {
+        console.log('Fetching sea container count from t_dados_master...');
+        
+        // Count distinct containers from t_dados_master with SEA imports
+        const countResult = await client.query(`
+          SELECT COUNT(DISTINCT container) as count 
+          FROM ${database}.t_dados_master 
+          WHERE container IS NOT NULL 
+            AND container != '' 
+            AND TRIM(container) != ''
+            AND tipo_servico LIKE '%SEA%'
+        `);
+        
+        const count = countResult?.[0]?.count || 0;
+        console.log('Sea container count:', count);
+        
+        result = { success: true, count };
+        break;
+      }
+
       // ==================== CHB MODULE ====================
       case 'get_chb_items': {
         console.log('Fetching CHB items');
