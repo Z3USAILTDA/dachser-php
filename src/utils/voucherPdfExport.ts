@@ -2,25 +2,9 @@ import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
+import { Voucher } from "@/types/voucher";
 
-interface VoucherData {
-  numero_spo: string;
-  vencimento: string;
-  cobranca_em_nome_de: string;
-  forma_pagamento: string;
-  remessa: string;
-  urgente: boolean;
-  etapa_atual: string;
-  status_baixa: string;
-  criado_por?: { name: string };
-  responsavel_operacao?: { name: string };
-  responsavel_fiscal?: { name: string };
-  responsavel_financeiro?: { name: string };
-  created_at: string;
-  updated_at: string;
-}
-
-export const exportVouchersToPDF = (data: VoucherData[]) => {
+export const exportVouchersToPDF = (data: Voucher[]) => {
   // Criar documento PDF em modo paisagem
   const doc = new jsPDF({
     orientation: "landscape",
@@ -47,16 +31,16 @@ export const exportVouchersToPDF = (data: VoucherData[]) => {
 
   // Preparar dados para tabela
   const tableData = data.map((v) => [
-    v.numero_spo,
+    v.numeroSPO,
     format(new Date(v.vencimento), "dd/MM/yyyy", { locale: ptBR }),
-    v.cobranca_em_nome_de === "DACHSER" ? "Dachser" : "Cliente",
-    v.forma_pagamento,
+    v.cobrancaEmNomeDe === "DACHSER" ? "Dachser" : "Cliente",
+    v.formaPagamento,
     v.urgente ? "Sim" : "Não",
-    v.etapa_atual,
-    v.status_baixa,
-    v.criado_por?.name || "-",
-    v.responsavel_operacao?.name || "-",
-    format(new Date(v.created_at), "dd/MM/yyyy", { locale: ptBR }),
+    v.etapaAtual,
+    v.statusBaixa || "PENDENTE",
+    v.criadoPorUserName || "-",
+    v.responsavelOperacaoUserName || "-",
+    format(new Date(v.createdAt), "dd/MM/yyyy", { locale: ptBR }),
   ]);
 
   // Criar tabela
@@ -104,17 +88,17 @@ export const exportVouchersToPDF = (data: VoucherData[]) => {
       8: { cellWidth: 30 }, // Resp. Operação
       9: { cellWidth: 22, halign: "center" }, // Data Criação
     },
-    didParseCell: (data) => {
+    didParseCell: (cellData) => {
       // Destacar linhas urgentes
-      if (data.section === "body") {
-        const rowIndex = data.row.index;
-        if (tableData[rowIndex] && data.row.raw[4] === "Sim") {
-          data.cell.styles.fillColor = [255, 229, 229]; // Vermelho claro
-          data.cell.styles.fontStyle = "bold";
+      if (cellData.section === "body") {
+        const rowIndex = cellData.row.index;
+        if (data[rowIndex]?.urgente) {
+          cellData.cell.styles.fillColor = [255, 229, 229]; // Vermelho claro
+          cellData.cell.styles.fontStyle = "bold";
         }
       }
     },
-    didDrawPage: (data) => {
+    didDrawPage: (pageData) => {
       // Adicionar rodapé
       const pageCount = doc.getNumberOfPages();
       const pageSize = doc.internal.pageSize;
@@ -123,7 +107,7 @@ export const exportVouchersToPDF = (data: VoucherData[]) => {
       doc.setFontSize(8);
       doc.setTextColor(128, 128, 128);
       doc.text(
-        `Página ${data.pageNumber} de ${pageCount}`,
+        `Página ${pageData.pageNumber} de ${pageCount}`,
         pageSize.width / 2,
         pageHeight - 10,
         { align: "center" }
@@ -158,11 +142,12 @@ export const exportVouchersToPDF = (data: VoucherData[]) => {
       total: data.length,
       urgentes: data.filter((v) => v.urgente).length,
       porEtapa: data.reduce((acc, v) => {
-        acc[v.etapa_atual] = (acc[v.etapa_atual] || 0) + 1;
+        acc[v.etapaAtual] = (acc[v.etapaAtual] || 0) + 1;
         return acc;
       }, {} as Record<string, number>),
       porStatus: data.reduce((acc, v) => {
-        acc[v.status_baixa] = (acc[v.status_baixa] || 0) + 1;
+        const status = v.statusBaixa || "PENDENTE";
+        acc[status] = (acc[status] || 0) + 1;
         return acc;
       }, {} as Record<string, number>),
     };
