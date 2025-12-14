@@ -58,17 +58,21 @@ export default function VoucherRules() {
   const loadSLAConfigs = async () => {
     try {
       setLoading(true);
-      // Default SLA configs (tabela sla_config precisa ser criada)
-      const defaultConfigs = [
-        { id: "1", etapa: "OPERACAO", horasLimite: 24, ativo: true },
-        { id: "2", etapa: "FISCAL", horasLimite: 48, ativo: true },
-        { id: "3", etapa: "SUPERVISOR", horasLimite: 24, ativo: true },
-        { id: "4", etapa: "FINANCEIRO", horasLimite: 24, ativo: true },
-        { id: "5", etapa: "ROBO", horasLimite: 4, ativo: true },
-        { id: "6", etapa: "AJUSTE_OPERACAO", horasLimite: 24, ativo: true },
-        { id: "7", etapa: "AJUSTE_FISCAL", horasLimite: 24, ativo: true },
-      ];
-      setSlaConfigs(defaultConfigs);
+      const { data, error } = await supabase
+        .from("sla_config")
+        .select("*")
+        .order("etapa");
+
+      if (error) throw error;
+
+      if (data && data.length > 0) {
+        setSlaConfigs(data.map(d => ({
+          id: d.id,
+          etapa: d.etapa,
+          horasLimite: d.horas_limite,
+          ativo: d.ativo
+        })));
+      }
     } catch (error: any) {
       toast({
         title: "Erro ao carregar configurações",
@@ -95,8 +99,16 @@ export default function VoucherRules() {
   const saveSLAConfigs = async () => {
     try {
       setSaving(true);
-      // TODO: Tabela sla_config precisa ser criada
-      console.log("Saving configs:", slaConfigs);
+      
+      for (const config of slaConfigs) {
+        const { error } = await supabase
+          .from("sla_config")
+          .update({ horas_limite: config.horasLimite, ativo: config.ativo } as any)
+          .eq("id", config.id);
+        
+        if (error) throw error;
+      }
+
       toast({
         title: "Configurações salvas",
         description: "As configurações de SLA foram atualizadas com sucesso.",

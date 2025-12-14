@@ -14,6 +14,39 @@ export type Database = {
   }
   public: {
     Tables: {
+      accrual_entries: {
+        Row: {
+          created_at: string
+          data_upload: string
+          fornecedor: string
+          id: string
+          shared_code: string | null
+          status_accrual: string
+          uploaded_by_user_id: string | null
+          valor: number
+        }
+        Insert: {
+          created_at?: string
+          data_upload?: string
+          fornecedor: string
+          id?: string
+          shared_code?: string | null
+          status_accrual?: string
+          uploaded_by_user_id?: string | null
+          valor: number
+        }
+        Update: {
+          created_at?: string
+          data_upload?: string
+          fornecedor?: string
+          id?: string
+          shared_code?: string | null
+          status_accrual?: string
+          uploaded_by_user_id?: string | null
+          valor?: number
+        }
+        Relationships: []
+      }
       cct_evento_normalizado: {
         Row: {
           aeroporto: string | null
@@ -281,6 +314,33 @@ export type Database = {
           updated_at?: string
           volume_constatado?: number | null
           volume_declarado?: number | null
+        }
+        Relationships: []
+      }
+      sla_config: {
+        Row: {
+          ativo: boolean
+          created_at: string
+          etapa: string
+          horas_limite: number
+          id: string
+          updated_at: string
+        }
+        Insert: {
+          ativo?: boolean
+          created_at?: string
+          etapa: string
+          horas_limite?: number
+          id?: string
+          updated_at?: string
+        }
+        Update: {
+          ativo?: boolean
+          created_at?: string
+          etapa?: string
+          horas_limite?: number
+          id?: string
+          updated_at?: string
         }
         Relationships: []
       }
