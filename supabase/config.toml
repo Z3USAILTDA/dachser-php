@@ -146,3 +146,18 @@ verify_jwt = false
 
 [functions.sea-extract-attachments]
 verify_jwt = false
+
+[functions.voucher-mariadb-sync]
+verify_jwt = false
+
+[functions.voucher-mariadb-setup]
+verify_jwt = false
+
+[functions.voucher-mariadb-migrate]
+verify_jwt = false
+
+[functions.voucher-integrate-rm]
+verify_jwt = false
+
+[functions.voucher-check-sla-alerts]
+verify_jwt = false
