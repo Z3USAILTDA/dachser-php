@@ -768,33 +768,31 @@ export default function Olimpo() {
     <>
       {/* Floating panel - filters + KPIs at top center */}
       <div 
-        className="absolute top-4 left-1/2 -translate-x-1/2 z-[1000] rounded-xl p-3 flex flex-col gap-2"
+        className="absolute top-4 left-1/2 -translate-x-1/2 z-[1000] rounded-xl p-3 flex flex-col gap-2 w-[95vw] max-w-[800px]"
         style={{
           background: 'rgba(5,6,18,.92)',
           border: '1px solid rgba(255,255,255,.12)',
           boxShadow: '0 12px 32px rgba(0,0,0,.7)',
-          minWidth: '700px',
-          maxWidth: '90vw',
         }}
       >
         {/* Row 1: Filter controls */}
         <div className="flex items-center gap-2 flex-wrap">
           <div className="flex items-center gap-1.5 px-2 py-1 rounded-full bg-white/5 border border-white/10 text-xs text-muted-foreground">
-            <span>Período:</span>
+            <span className="hidden sm:inline">Período:</span>
             <select 
               value={daysFilter || ""}
               onChange={(e) => setDaysFilter(e.target.value ? Number(e.target.value) : null)}
               className="bg-transparent border-none text-white text-xs focus:outline-none cursor-pointer"
             >
-              <option value="7" className="bg-[#0a0a0a]">Últimos 7 dias</option>
-              <option value="15" className="bg-[#0a0a0a]">Últimos 15 dias</option>
-              <option value="30" className="bg-[#0a0a0a]">Últimos 30 dias</option>
+              <option value="7" className="bg-[#0a0a0a]">7 dias</option>
+              <option value="15" className="bg-[#0a0a0a]">15 dias</option>
+              <option value="30" className="bg-[#0a0a0a]">30 dias</option>
               <option value="" className="bg-[#0a0a0a]">Todos</option>
             </select>
           </div>
           
           <div className="flex items-center gap-1.5 px-2 py-1 rounded-full bg-white/5 border border-white/10 text-xs text-muted-foreground">
-            <span>Tipo:</span>
+            <span className="hidden sm:inline">Tipo:</span>
             <select 
               value={modeFilter || ""}
               onChange={(e) => setModeFilter(e.target.value as "air" | "sea" | null || null)}
@@ -807,7 +805,7 @@ export default function Olimpo() {
           </div>
 
           <div className="flex items-center gap-1.5 px-2 py-1 rounded-full bg-white/5 border border-white/10 text-xs text-muted-foreground">
-            <span>Status:</span>
+            <span className="hidden sm:inline">Status:</span>
             <select 
               value={statusFilter || ""}
               onChange={(e) => setStatusFilter(e.target.value || null)}
@@ -827,59 +825,51 @@ export default function Olimpo() {
             <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <path d="M23 4v6h-6M1 20v-6h6M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15" />
             </svg>
-            Atualizar
+            <span className="hidden sm:inline">Atualizar</span>
           </button>
 
-          <div className="flex-1" />
+          <div className="flex-1 min-w-0" />
 
           {/* Right side buttons */}
           <button
-            className="flex items-center gap-1.5 px-2 py-1 rounded-full bg-white/5 border border-white/10 text-xs text-muted-foreground hover:bg-white/10 transition-all"
-          >
-            <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3" />
-            </svg>
-            Filtros
-          </button>
-          <button
             onClick={() => setIsFullscreen(false)}
-            className="w-7 h-7 rounded-full border border-white/20 flex items-center justify-center bg-black/50 text-white hover:bg-black/70 transition-all"
+            className="w-7 h-7 rounded-full border border-white/20 flex items-center justify-center bg-black/50 text-white hover:bg-black/70 transition-all shrink-0"
           >
             <Minimize2 size={14} />
           </button>
         </div>
 
-        {/* Row 2: KPI cards - same as side card */}
-        <div className="flex items-stretch gap-3">
-          <div className="flex-1 px-3 py-2 rounded-lg bg-white/[0.03] border-r border-white/10">
-            <p className="text-xs text-muted-foreground">Containers</p>
-            <p className="text-lg font-semibold">{kpis.seaTransit}</p>
-            <p className="text-[9px] text-[#7fd0ff]">Em trânsito</p>
+        {/* Row 2: KPI cards - responsive grid */}
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+          <div className="px-3 py-2 rounded-lg bg-white/[0.03] border border-white/5">
+            <p className="text-[10px] sm:text-xs text-muted-foreground">Containers</p>
+            <p className="text-base sm:text-lg font-semibold">{kpis.seaTransit}</p>
+            <p className="text-[8px] sm:text-[9px] text-[#7fd0ff]">Em trânsito</p>
           </div>
-          <div className="flex-1 px-3 py-2 rounded-lg bg-white/[0.03] border-r border-white/10">
-            <p className="text-xs text-muted-foreground">Voos</p>
-            <p className="text-lg font-semibold">{kpis.airActive}</p>
-            <p className="text-[9px] text-[#7fd0ff]">Ativos</p>
+          <div className="px-3 py-2 rounded-lg bg-white/[0.03] border border-white/5">
+            <p className="text-[10px] sm:text-xs text-muted-foreground">Voos</p>
+            <p className="text-base sm:text-lg font-semibold">{kpis.airActive}</p>
+            <p className="text-[8px] sm:text-[9px] text-[#7fd0ff]">Ativos</p>
           </div>
-          <div className="flex-1 px-3 py-2 rounded-lg bg-white/[0.03] border-r border-white/10">
-            <p className="text-xs text-muted-foreground">Total</p>
-            <p className="text-lg font-semibold">{kpis.seaTransit + kpis.airActive}</p>
-            <p className="text-[9px] text-[#7fd0ff]">SEA + AIR</p>
+          <div className="px-3 py-2 rounded-lg bg-white/[0.03] border border-white/5">
+            <p className="text-[10px] sm:text-xs text-muted-foreground">Total</p>
+            <p className="text-base sm:text-lg font-semibold">{kpis.seaTransit + kpis.airActive}</p>
+            <p className="text-[8px] sm:text-[9px] text-[#7fd0ff]">SEA + AIR</p>
           </div>
-          <div className="flex-1 px-3 py-2 rounded-lg bg-white/[0.03]">
-            <p className="text-xs text-muted-foreground">Atrasos</p>
-            <p className="text-lg font-semibold">{kpis.delayed}</p>
-            <p className="text-[9px] text-[#ff8b8b]">Impacto</p>
+          <div className="px-3 py-2 rounded-lg bg-white/[0.03] border border-white/5">
+            <p className="text-[10px] sm:text-xs text-muted-foreground">Atrasos</p>
+            <p className="text-base sm:text-lg font-semibold">{kpis.delayed}</p>
+            <p className="text-[8px] sm:text-[9px] text-[#ff8b8b]">Impacto</p>
           </div>
         </div>
 
-        {/* Row 3: Search */}
+        {/* Row 3: Search - responsive */}
         <div className="flex items-center gap-2">
           <Input
-            placeholder="Buscar por cliente, rota, tipo, status ou ETA..."
+            placeholder="Buscar..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            className="flex-1 rounded-full bg-[rgba(14,14,14,0.96)] border-white/10 text-xs h-8"
+            className="flex-1 min-w-0 rounded-full bg-[rgba(14,14,14,0.96)] border-white/10 text-xs h-8"
           />
           <button
             onClick={() => {
@@ -888,13 +878,10 @@ export default function Olimpo() {
               setModeFilter(null);
               setStatusFilter(null);
             }}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white/5 border border-white/10 text-xs text-muted-foreground hover:bg-white/10 transition-all"
+            className="flex items-center gap-1 px-2 sm:px-3 py-1.5 rounded-full bg-white/5 border border-white/10 text-xs text-muted-foreground hover:bg-white/10 transition-all shrink-0"
           >
-            <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <circle cx="12" cy="12" r="10" />
-              <path d="m4.93 4.93 14.14 14.14" />
-            </svg>
-            Limpar filtros
+            <X className="w-3 h-3" />
+            <span className="hidden sm:inline">Limpar</span>
           </button>
         </div>
       </div>
