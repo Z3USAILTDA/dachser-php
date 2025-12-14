@@ -223,6 +223,11 @@ export default function Olimpo() {
   const filteredData = data.filter((item) => {
     const now = Date.now();
 
+    // Filter items without complete route or ETA
+    const hasValidRoute = item.rota && !item.rota.includes("—") && item.rota.includes("→");
+    const hasValidEta = item.eta_api && item.eta_api !== "—" && item.eta_api.trim() !== "";
+    if (!hasValidRoute || !hasValidEta) return false;
+
     // Filter delivered items that are too old
     if (item.status === "Entregue") {
       if (item.delivered_until_ts && now > item.delivered_until_ts) return false;
@@ -690,13 +695,12 @@ export default function Olimpo() {
       }
 
       if (pos) {
-        // Add small random offset for air markers to avoid overlap
-        let offsetPos = pos;
-        if (item.mode === "air") {
-          const latOffset = (Math.random() - 0.5) * 3; // +/- 1.5 degrees
-          const lngOffset = (Math.random() - 0.5) * 3;
-          offsetPos = [pos[0] + latOffset, pos[1] + lngOffset];
-        }
+        // Use deterministic offset based on route index to spread overlapping markers
+        const offsetAngle = (currentRouteIndex * 45) * (Math.PI / 180); // 45 degrees per route
+        const offsetDistance = 0.8 + (currentRouteIndex % 5) * 0.3; // 0.8 to 2.0 degrees
+        const latOffset = item.mode === "air" ? Math.sin(offsetAngle) * offsetDistance : 0;
+        const lngOffset = item.mode === "air" ? Math.cos(offsetAngle) * offsetDistance : 0;
+        const offsetPos: [number, number] = [pos[0] + latOffset, pos[1] + lngOffset];
 
         const icon = L.divIcon({
           html: item.mode === "air" ? "✈️" : "🚢",
@@ -766,123 +770,92 @@ export default function Olimpo() {
   // Fullscreen overlay content (renders inside portal-like structure)
   const fullscreenOverlay = isFullscreen ? (
     <>
-      {/* Floating panel - filters + KPIs at top center */}
+      {/* Floating panel - filters + KPIs at top left - same as normal mode */}
       <div 
-        className="absolute top-4 left-1/2 -translate-x-1/2 z-[1000] rounded-xl p-3 flex flex-col gap-2 w-[95vw] max-w-[800px]"
+        className="absolute top-4 left-4 z-[1000] rounded-xl flex flex-col w-80 max-h-[50vh]"
         style={{
           background: 'rgba(5,6,18,.92)',
           border: '1px solid rgba(255,255,255,.12)',
           boxShadow: '0 12px 32px rgba(0,0,0,.7)',
         }}
       >
-        {/* Row 1: Filter controls */}
-        <div className="flex items-center gap-2 flex-wrap">
-          <div className="flex items-center gap-1.5 px-2 py-1 rounded-full bg-white/5 border border-white/10 text-xs text-muted-foreground">
-            <span className="hidden sm:inline">Período:</span>
-            <select 
-              value={daysFilter || ""}
-              onChange={(e) => setDaysFilter(e.target.value ? Number(e.target.value) : null)}
-              className="bg-transparent border-none text-white text-xs focus:outline-none cursor-pointer"
-            >
-              <option value="7" className="bg-[#0a0a0a]">7 dias</option>
-              <option value="15" className="bg-[#0a0a0a]">15 dias</option>
-              <option value="30" className="bg-[#0a0a0a]">30 dias</option>
-              <option value="" className="bg-[#0a0a0a]">Todos</option>
-            </select>
+        <div className="p-3 border-b border-white/[0.08] flex items-center justify-between">
+          <div>
+            <h2 className="text-xs tracking-[0.16em] uppercase text-white/90">Visão de Filtros</h2>
+            <p className="text-[10px] text-muted-foreground">Refine a visualização</p>
           </div>
-          
-          <div className="flex items-center gap-1.5 px-2 py-1 rounded-full bg-white/5 border border-white/10 text-xs text-muted-foreground">
-            <span className="hidden sm:inline">Tipo:</span>
-            <select 
-              value={modeFilter || ""}
-              onChange={(e) => setModeFilter(e.target.value as "air" | "sea" | null || null)}
-              className="bg-transparent border-none text-white text-xs focus:outline-none cursor-pointer"
-            >
-              <option value="" className="bg-[#0a0a0a]">Todos</option>
-              <option value="air" className="bg-[#0a0a0a]">AIR</option>
-              <option value="sea" className="bg-[#0a0a0a]">SEA</option>
-            </select>
-          </div>
-
-          <div className="flex items-center gap-1.5 px-2 py-1 rounded-full bg-white/5 border border-white/10 text-xs text-muted-foreground">
-            <span className="hidden sm:inline">Status:</span>
-            <select 
-              value={statusFilter || ""}
-              onChange={(e) => setStatusFilter(e.target.value || null)}
-              className="bg-transparent border-none text-white text-xs focus:outline-none cursor-pointer"
-            >
-              <option value="" className="bg-[#0a0a0a]">Todos</option>
-              <option value="Em trânsito" className="bg-[#0a0a0a]">Em trânsito</option>
-              <option value="Atraso" className="bg-[#0a0a0a]">Atraso</option>
-              <option value="Entregue" className="bg-[#0a0a0a]">Entregue</option>
-            </select>
-          </div>
-
-          <button
-            onClick={loadData}
-            className="flex items-center gap-1.5 px-2 py-1 rounded-full bg-white/5 border border-white/10 text-xs text-muted-foreground hover:bg-white/10 transition-all"
-          >
-            <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <path d="M23 4v6h-6M1 20v-6h6M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15" />
-            </svg>
-            <span className="hidden sm:inline">Atualizar</span>
-          </button>
-
-          <div className="flex-1 min-w-0" />
-
-          {/* Right side buttons */}
           <button
             onClick={() => setIsFullscreen(false)}
-            className="w-7 h-7 rounded-full border border-white/20 flex items-center justify-center bg-black/50 text-white hover:bg-black/70 transition-all shrink-0"
+            className="w-7 h-7 rounded-full border border-white/20 flex items-center justify-center bg-black/50 text-white hover:bg-black/70 transition-all"
           >
             <Minimize2 size={14} />
           </button>
         </div>
 
-        {/* Row 2: KPI cards - responsive grid */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-          <div className="px-3 py-2 rounded-lg bg-white/[0.03] border border-white/5">
-            <p className="text-[10px] sm:text-xs text-muted-foreground">Containers</p>
-            <p className="text-base sm:text-lg font-semibold">{kpis.seaTransit}</p>
-            <p className="text-[8px] sm:text-[9px] text-[#7fd0ff]">Em trânsito</p>
+        <div className="flex-1 overflow-y-auto">
+          {/* Filter buttons */}
+          <div className="p-2 flex flex-wrap gap-1.5 border-b border-white/[0.05]">
+            <Input
+              placeholder="Buscar..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="flex-1 min-w-[100px] rounded-full bg-[rgba(14,14,14,0.96)] border-white/20 text-xs h-8"
+            />
+            <button
+              onClick={() => setDaysFilter(daysFilter === 7 ? null : 7)}
+              className={`px-2 py-1 rounded-full text-[10px] border transition-all flex items-center gap-1 ${daysFilter === 7 ? "border-primary bg-[rgba(30,30,30,0.98)] text-amber-200" : "border-white/10 bg-[rgba(14,14,14,0.95)]"}`}
+            >
+              <span className="w-1.5 h-1.5 rounded-full bg-primary" /> 7d
+            </button>
+            <button
+              onClick={() => setDaysFilter(daysFilter === 30 ? null : 30)}
+              className={`px-2 py-1 rounded-full text-[10px] border transition-all flex items-center gap-1 ${daysFilter === 30 ? "border-primary bg-[rgba(30,30,30,0.98)] text-amber-200" : "border-white/10 bg-[rgba(14,14,14,0.95)]"}`}
+            >
+              <span className="w-1.5 h-1.5 rounded-full bg-primary" /> 30d
+            </button>
+            <button
+              onClick={() => setModeFilter(modeFilter === "air" ? null : "air")}
+              className={`px-2 py-1 rounded-full text-[10px] border transition-all flex items-center gap-1 ${modeFilter === "air" ? "border-primary bg-[rgba(30,30,30,0.98)] text-amber-200" : "border-white/10 bg-[rgba(14,14,14,0.95)]"}`}
+            >
+              <span className="w-1.5 h-1.5 rounded-full bg-primary" /> AIR
+            </button>
+            <button
+              onClick={() => setModeFilter(modeFilter === "sea" ? null : "sea")}
+              className={`px-2 py-1 rounded-full text-[10px] border transition-all flex items-center gap-1 ${modeFilter === "sea" ? "border-primary bg-[rgba(30,30,30,0.98)] text-amber-200" : "border-white/10 bg-[rgba(14,14,14,0.95)]"}`}
+            >
+              <span className="w-1.5 h-1.5 rounded-full bg-primary" /> SEA
+            </button>
+            <button
+              onClick={() => setStatusFilter(statusFilter === "Atraso" ? null : "Atraso")}
+              className={`px-2 py-1 rounded-full text-[10px] border transition-all flex items-center gap-1 ${statusFilter === "Atraso" ? "border-primary bg-[rgba(30,30,30,0.98)] text-amber-200" : "border-white/10 bg-[rgba(14,14,14,0.95)]"}`}
+            >
+              <span className="w-1.5 h-1.5 rounded-full bg-primary" /> Atraso
+            </button>
           </div>
-          <div className="px-3 py-2 rounded-lg bg-white/[0.03] border border-white/5">
-            <p className="text-[10px] sm:text-xs text-muted-foreground">Voos</p>
-            <p className="text-base sm:text-lg font-semibold">{kpis.airActive}</p>
-            <p className="text-[8px] sm:text-[9px] text-[#7fd0ff]">Ativos</p>
-          </div>
-          <div className="px-3 py-2 rounded-lg bg-white/[0.03] border border-white/5">
-            <p className="text-[10px] sm:text-xs text-muted-foreground">Total</p>
-            <p className="text-base sm:text-lg font-semibold">{kpis.seaTransit + kpis.airActive}</p>
-            <p className="text-[8px] sm:text-[9px] text-[#7fd0ff]">SEA + AIR</p>
-          </div>
-          <div className="px-3 py-2 rounded-lg bg-white/[0.03] border border-white/5">
-            <p className="text-[10px] sm:text-xs text-muted-foreground">Atrasos</p>
-            <p className="text-base sm:text-lg font-semibold">{kpis.delayed}</p>
-            <p className="text-[8px] sm:text-[9px] text-[#ff8b8b]">Impacto</p>
-          </div>
-        </div>
 
-        {/* Row 3: Search - responsive */}
-        <div className="flex items-center gap-2">
-          <Input
-            placeholder="Buscar..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="flex-1 min-w-0 rounded-full bg-[rgba(14,14,14,0.96)] border-white/10 text-xs h-8"
-          />
-          <button
-            onClick={() => {
-              setSearchTerm("");
-              setDaysFilter(7);
-              setModeFilter(null);
-              setStatusFilter(null);
-            }}
-            className="flex items-center gap-1 px-2 sm:px-3 py-1.5 rounded-full bg-white/5 border border-white/10 text-xs text-muted-foreground hover:bg-white/10 transition-all shrink-0"
-          >
-            <X className="w-3 h-3" />
-            <span className="hidden sm:inline">Limpar</span>
-          </button>
+          {/* KPI cards */}
+          <div className="grid grid-cols-2 gap-2 p-3">
+            <div className="bg-[#151515] rounded-xl p-2 border border-white/[0.06]">
+              <p className="text-[9px] text-muted-foreground uppercase tracking-[0.14em]">Containers</p>
+              <p className="text-base font-semibold">{kpis.seaTransit}</p>
+              <p className="text-[9px] text-[#7fd0ff]">Em trânsito</p>
+            </div>
+            <div className="bg-[#151515] rounded-xl p-2 border border-white/[0.06]">
+              <p className="text-[9px] text-muted-foreground uppercase tracking-[0.14em]">Voos</p>
+              <p className="text-base font-semibold">{kpis.airActive}</p>
+              <p className="text-[9px] text-[#7fd0ff]">Ativos</p>
+            </div>
+            <div className="bg-[#151515] rounded-xl p-2 border border-white/[0.06]">
+              <p className="text-[9px] text-muted-foreground uppercase tracking-[0.14em]">Total</p>
+              <p className="text-base font-semibold">{kpis.seaTransit + kpis.airActive}</p>
+              <p className="text-[9px] text-[#7fd0ff]">SEA + AIR</p>
+            </div>
+            <div className="bg-[#151515] rounded-xl p-2 border border-white/[0.06]">
+              <p className="text-[9px] text-muted-foreground uppercase tracking-[0.14em]">Atrasos</p>
+              <p className="text-base font-semibold">{kpis.delayed}</p>
+              <p className="text-[9px] text-[#ff8b8b]">Impacto</p>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -892,10 +865,10 @@ export default function Olimpo() {
         <span className="w-2 h-2 rounded-full bg-[#7fd0ff]" /> AIR
       </div>
 
-      {/* Asset Details Panel - fullscreen */}
+      {/* Asset Details Panel - fullscreen - aligned top right */}
       {selectedAssetDetails && (
         <div 
-          className="absolute right-4 top-1/2 -translate-y-1/2 w-72 max-h-[70vh] z-[1000] rounded-2xl flex flex-col overflow-hidden"
+          className="absolute right-4 top-4 w-72 max-h-[50vh] z-[1000] rounded-xl flex flex-col overflow-hidden"
           style={{
             background: 'rgba(5,6,18,.95)',
             border: '1px solid rgba(255,255,255,.12)',
@@ -1121,7 +1094,7 @@ export default function Olimpo() {
                 <span className="w-2 h-2 rounded-full bg-[#7fd0ff]" /> AIR
               </div>
 
-              {/* Asset Details Panel - floating on map */}
+              {/* Asset Details Panel - floating on map with scroll */}
               {selectedAssetDetails && (
                 <div 
                   className="absolute right-3 top-3 w-72 max-h-[calc(100%-24px)] z-[1000] rounded-xl flex flex-col overflow-hidden"
@@ -1158,56 +1131,59 @@ export default function Olimpo() {
                     </button>
                   </div>
 
-                  {/* Badge */}
-                  <div className="px-2.5 pt-2">
-                    <Badge 
-                      variant="outline" 
-                      className={`text-[10px] ${selectedAssetDetails.mode === 'air' ? 'border-[#7fd0ff]/70 text-[#b7e2ff]' : 'border-primary/70 text-primary'}`}
-                    >
-                      {selectedAssetDetails.tipo_label} • {selectedAssetDetails.flight || selectedAssetDetails.asset || 'N/A'}
-                    </Badge>
-                  </div>
+                  {/* Scrollable content */}
+                  <div className="flex-1 overflow-y-auto">
+                    {/* Badge */}
+                    <div className="px-2.5 pt-2">
+                      <Badge 
+                        variant="outline" 
+                        className={`text-[10px] ${selectedAssetDetails.mode === 'air' ? 'border-[#7fd0ff]/70 text-[#b7e2ff]' : 'border-primary/70 text-primary'}`}
+                      >
+                        {selectedAssetDetails.tipo_label} • {selectedAssetDetails.flight || selectedAssetDetails.asset || 'N/A'}
+                      </Badge>
+                    </div>
 
-                  {/* Details */}
-                  <div className="p-2.5 space-y-1.5 text-xs">
-                    <div className="flex justify-between">
-                      <span className="text-muted-foreground">Rota</span>
-                      <span className="font-medium">{selectedAssetDetails.rota}</span>
+                    {/* Details */}
+                    <div className="p-2.5 space-y-1.5 text-xs">
+                      <div className="flex justify-between">
+                        <span className="text-muted-foreground">Rota</span>
+                        <span className="font-medium">{selectedAssetDetails.rota}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-muted-foreground">Previsão</span>
+                        <span className="font-medium">{selectedAssetDetails.eta_api}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-muted-foreground">Status</span>
+                        <span className={`px-1.5 py-0.5 rounded text-[10px] ${selectedAssetDetails.status === 'Atraso' ? 'bg-red-500/20 text-red-400' : selectedAssetDetails.status === 'Entregue' ? 'bg-green-500/20 text-green-400' : 'bg-blue-500/20 text-blue-400'}`}>
+                          {selectedAssetDetails.status}
+                        </span>
+                      </div>
                     </div>
-                    <div className="flex justify-between">
-                      <span className="text-muted-foreground">Previsão</span>
-                      <span className="font-medium">{selectedAssetDetails.eta_api}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-muted-foreground">Status</span>
-                      <span className={`px-1.5 py-0.5 rounded text-[10px] ${selectedAssetDetails.status === 'Atraso' ? 'bg-red-500/20 text-red-400' : selectedAssetDetails.status === 'Entregue' ? 'bg-green-500/20 text-green-400' : 'bg-blue-500/20 text-blue-400'}`}>
-                        {selectedAssetDetails.status}
-                      </span>
-                    </div>
-                  </div>
 
-                  {/* Processos (AWBs) */}
-                  <div className="p-2.5 border-t border-white/[0.05]">
-                    <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1.5">
-                      Processos ({selectedAssetDetails.processos.length})
-                    </p>
-                    <div className="max-h-24 overflow-y-auto space-y-1">
-                      {selectedAssetDetails.processos.length > 0 ? (
-                        selectedAssetDetails.processos.map((awb, idx) => (
-                          <div key={idx} className="text-[10px] px-1.5 py-1 bg-white/[0.03] rounded border border-white/[0.06]">
-                            {awb}
-                          </div>
-                        ))
-                      ) : (
-                        <p className="text-[10px] text-muted-foreground italic">Nenhum processo</p>
-                      )}
+                    {/* Processos (AWBs) */}
+                    <div className="p-2.5 border-t border-white/[0.05]">
+                      <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1.5">
+                        Processos ({selectedAssetDetails.processos.length})
+                      </p>
+                      <div className="space-y-1">
+                        {selectedAssetDetails.processos.length > 0 ? (
+                          selectedAssetDetails.processos.map((awb, idx) => (
+                            <div key={idx} className="text-[10px] px-1.5 py-1 bg-white/[0.03] rounded border border-white/[0.06]">
+                              {awb}
+                            </div>
+                          ))
+                        ) : (
+                          <p className="text-[10px] text-muted-foreground italic">Nenhum processo</p>
+                        )}
+                      </div>
                     </div>
-                  </div>
 
-                  {/* Faturamento */}
-                  <div className="p-2.5 border-t border-white/[0.05]">
-                    <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1">Faturamento</p>
-                    <p className="text-[10px] text-muted-foreground italic">Em desenvolvimento...</p>
+                    {/* Faturamento */}
+                    <div className="p-2.5 border-t border-white/[0.05]">
+                      <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1">Faturamento</p>
+                      <p className="text-[10px] text-muted-foreground italic">Em desenvolvimento...</p>
+                    </div>
                   </div>
                 </div>
               )}
@@ -1328,9 +1304,6 @@ export default function Olimpo() {
                     <th className="p-2 px-3 text-left text-xs uppercase tracking-[0.12em] text-muted-foreground border-b border-white/[0.06] sticky top-0 bg-[rgba(5,6,8,0.98)]">
                       Status
                     </th>
-                    <th className="p-2 px-3 text-left text-xs uppercase tracking-[0.12em] text-muted-foreground border-b border-white/[0.06] sticky top-0 bg-[rgba(5,6,8,0.98)]">
-                      Processos
-                    </th>
                   </tr>
                 </thead>
                 <tbody>
@@ -1343,7 +1316,7 @@ export default function Olimpo() {
                         </Badge>
                       </td>
                       <td className="p-2 px-3">{row.rota}</td>
-                      <td className="p-2 px-3 text-muted-foreground">{row.eta_api || "—"}</td>
+                      <td className="p-2 px-3 text-muted-foreground">{row.eta_api}</td>
                       <td className="p-2 px-3">
                         <Badge
                           variant="outline"
@@ -1358,7 +1331,6 @@ export default function Olimpo() {
                           {row.status}
                         </Badge>
                       </td>
-                      <td className="p-2 px-3">{row.count}</td>
                     </tr>
                   ))}
                 </tbody>
