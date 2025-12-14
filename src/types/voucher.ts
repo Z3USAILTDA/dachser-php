@@ -20,6 +20,10 @@ export type StatusFinanceiro = "PENDENTE" | "PROCESSANDO" | "CONCLUIDO";
 
 export type StatusEnvioCliente = "PENDENTE" | "ENVIADO" | "NAO_APLICAVEL";
 
+export type StatusComprovante = "PENDENTE" | "ANEXADO" | "VALIDADO";
+
+export type AccrualStatus = "MATCH_OK" | "MATCH_PARCIAL" | "SEM_ACCRUAL";
+
 export type FormaPagamento = 
   | "BOLETO" 
   | "TED" 
@@ -71,6 +75,29 @@ export type UserRole =
   | "SUPERVISOR"
   | "FINANCEIRO";
 
+// Labels e SLAs configuráveis
+export const ETAPA_LABELS: Record<EtapaAtual, string> = {
+  OPERACAO: "Voucher",
+  FISCAL: "Fiscal",
+  SUPERVISOR: "Supervisor",
+  FINANCEIRO: "Financeiro",
+  ROBO: "Robô",
+  CONCLUIDO: "Concluído",
+  AJUSTE_OPERACAO: "Ajuste Voucher",
+  AJUSTE_FISCAL: "Ajuste Fiscal",
+};
+
+export const SLA_POR_ETAPA: Record<EtapaAtual, number> = {
+  OPERACAO: 24,
+  FISCAL: 48,
+  SUPERVISOR: 24,
+  FINANCEIRO: 24,
+  ROBO: 4,
+  CONCLUIDO: 0,
+  AJUSTE_OPERACAO: 24,
+  AJUSTE_FISCAL: 24,
+};
+
 export interface Anexo {
   id: string;
   voucherId: string;
@@ -118,6 +145,8 @@ export interface Voucher {
   statusBaixa: StatusBaixa;
   statusFinanceiro: StatusFinanceiro;
   statusEnvioCliente?: StatusEnvioCliente;
+  statusComprovante?: StatusComprovante;
+  accrualStatus?: AccrualStatus;
   criadoPorUserId?: string;
   criadoPorUserName?: string;
   responsavelOperacaoUserId?: string;
