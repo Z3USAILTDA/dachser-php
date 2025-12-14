@@ -16,9 +16,9 @@ export type StatusBaixa =
   | "BAIXA_REMESSA" 
   | "BAIXADO_RM";
 
-export type StatusFinanceiro = "PENDENTE" | "PROCESSANDO" | "CONCLUIDO";
+export type StatusFinanceiro = "PENDENTE" | "PROCESSANDO" | "CONCLUIDO" | "APROVADO" | "REJEITADO";
 
-export type StatusEnvioCliente = "PENDENTE" | "ENVIADO" | "NAO_APLICAVEL";
+export type StatusEnvioCliente = "PENDENTE" | "ENVIADO" | "NAO_APLICAVEL" | "AGUARDANDO_CLIENTE" | "NAO_APLICA";
 
 export type StatusComprovante = "PENDENTE" | "ANEXADO" | "VALIDADO";
 
@@ -37,7 +37,7 @@ export type FormaPagamento =
   | "CAMBIO"
   | "ADF";
 
-export type Remessa = "NENHUM" | "REMESSA_12H" | "REMESSA_15H";
+export type Remessa = "NENHUM" | "REMESSA_12H" | "REMESSA_15H" | "REMESSA_SIMPLES";
 
 export type CobrancaEmNomeDe = "DACHSER" | "CLIENTE";
 
@@ -50,6 +50,7 @@ export type TipoDocumento =
   | "NF_SERVICO"
   | "NF_DEBITO"
   | "BOLETO"
+  | "ADF"
   | "OUTROS";
 
 export type UrgenciaTipo = "NORMAL" | "URGENTE_REAL" | "URGENTE_AUTOMATICO";
@@ -98,6 +99,28 @@ export const SLA_POR_ETAPA: Record<EtapaAtual, number> = {
   AJUSTE_FISCAL: 24,
 };
 
+// Calcular tempo na etapa em horas
+export const calcularTempoNaEtapa = (voucher: Voucher): number => {
+  const agora = new Date();
+  const ultimaAtualizacao = new Date(voucher.updatedAt);
+  const diffMs = agora.getTime() - ultimaAtualizacao.getTime();
+  return diffMs / (1000 * 60 * 60); // Converter para horas
+};
+
+// Formatar tempo na etapa
+export const formatarTempoNaEtapa = (horas: number): string => {
+  if (horas < 1) {
+    const minutos = Math.round(horas * 60);
+    return `${minutos}min`;
+  }
+  if (horas < 24) {
+    return `${Math.round(horas)}h`;
+  }
+  const dias = Math.floor(horas / 24);
+  const horasRestantes = Math.round(horas % 24);
+  return `${dias}d ${horasRestantes}h`;
+};
+
 export interface Anexo {
   id: string;
   voucherId: string;
@@ -136,6 +159,7 @@ export interface Voucher {
   urgente: boolean;
   urgenciaTipo: UrgenciaTipo;
   urgenciaAutorizacaoAnexoId?: string;
+  urgenciaMotivo?: string;
   comentariosOperacao?: string;
   comentariosFiscal?: string;
   comentariosFinanceiro?: string;
@@ -147,6 +171,14 @@ export interface Voucher {
   statusEnvioCliente?: StatusEnvioCliente;
   statusComprovante?: StatusComprovante;
   accrualStatus?: AccrualStatus;
+  accrualValor?: number;
+  accrualDiferenca?: number;
+  processoId?: string;
+  origemProcesso?: string;
+  clienteNome?: string;
+  centroCusto?: string;
+  tipoOperacao?: string;
+  fonteDados?: string;
   criadoPorUserId?: string;
   criadoPorUserName?: string;
   responsavelOperacaoUserId?: string;
