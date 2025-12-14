@@ -24,23 +24,23 @@ export function useUserRole() {
         }
 
         // Try to get role from user_roles table first
-        const { data: roleData } = await (supabase as any)
+        const { data: roleData } = await supabase
           .from("user_roles")
           .select("role")
           .eq("user_id", user.id)
-          .single();
+          .maybeSingle();
 
         if (roleData?.role) {
           setRole(roleData.role as UserRole);
         } else {
           // Fallback to profiles table
-          const { data: profile } = await (supabase as any)
+          const { data: profile } = await supabase
             .from("profiles")
-            .select("role")
-            .eq("id", user.id)
-            .single();
+            .select("*")
+            .eq("user_id", user.id)
+            .maybeSingle();
 
-          setRole((profile?.role as UserRole) || "OPERACAO");
+          setRole("OPERACAO");
         }
       } catch (error) {
         console.error("Error fetching user role:", error);
@@ -61,7 +61,28 @@ export function useUserRole() {
   }, []);
 
   const isAdmin = role === "ADMIN";
+  const isFiscal = role === "FISCAL";
+  const isSupervisor = role === "SUPERVISOR";
+  const isFinanceiro = role === "FINANCEIRO";
+  const isOperacao = role === "OPERACAO";
+  const isGestorOperacao = role === "GESTOR_OPERACAO";
+  const isGestorFiscal = role === "GESTOR_FISCAL";
+  const isGestorSupervisor = role === "GESTOR_SUPERVISOR";
+  const isGestorFinanceiro = role === "GESTOR_FINANCEIRO";
   const isGestor = role?.startsWith("GESTOR_") || false;
 
-  return { role, loading, isAdmin, isGestor };
+  return { 
+    role, 
+    loading, 
+    isAdmin,
+    isFiscal,
+    isSupervisor,
+    isFinanceiro,
+    isOperacao,
+    isGestorOperacao,
+    isGestorFiscal,
+    isGestorSupervisor,
+    isGestorFinanceiro,
+    isGestor 
+  };
 }
