@@ -221,3 +221,21 @@
   transform: scale(1.3) !important;
   z-index: 10000 !important;
 }
+
+/* Animated route line for Olimpo */
+@keyframes route-flow {
+  0% {
+    stroke-dashoffset: 0;
+  }
+  100% {
+    stroke-dashoffset: -40;
+  }
+}
+
+.animated-route-line {
+  animation: route-flow 1s linear infinite;
+}
+
+.leaflet-interactive.animated-route-line {
+  animation: route-flow 1s linear infinite;
+}
