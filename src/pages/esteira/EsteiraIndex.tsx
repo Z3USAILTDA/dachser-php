@@ -429,19 +429,8 @@ const EsteiraIndex = () => {
       setLoading(true);
       const { data, error } = await (supabase as any).from("vouchers").select(`
           *,
-          criado_por:profiles!criado_por_user_id(name),
-          responsavel_operacao:profiles!responsavel_operacao_user_id(name),
-          responsavel_fiscal:profiles!responsavel_fiscal_user_id(name),
-          responsavel_supervisor:profiles!responsavel_supervisor_user_id(name),
-          responsavel_financeiro:profiles!responsavel_financeiro_user_id(name),
           anexos:voucher_anexos(id, tipo, file_name, file_url, file_size),
-          logs:voucher_logs(
-            id,
-            data_hora,
-            acao,
-            detalhe,
-            user:profiles!user_id(name)
-          )
+          logs:voucher_logs(id, data_hora, acao, detalhe, user_id)
         `).order("created_at", { ascending: false });
 
       if (error) throw error;

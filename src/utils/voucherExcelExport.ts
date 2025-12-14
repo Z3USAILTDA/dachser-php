@@ -1,26 +1,7 @@
 import * as XLSX from "xlsx-js-style";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
-
-interface VoucherData {
-  numero_spo: string;
-  vencimento: string;
-  cobranca_em_nome_de: string;
-  forma_pagamento: string;
-  remessa: string;
-  urgente: boolean;
-  etapa_atual: string;
-  status_baixa: string;
-  criado_por?: { name: string };
-  responsavel_operacao?: { name: string };
-  responsavel_fiscal?: { name: string };
-  responsavel_financeiro?: { name: string };
-  comentarios_operacao?: string;
-  comentarios_fiscal?: string;
-  comentarios_financeiro?: string;
-  created_at: string;
-  updated_at: string;
-}
+import { Voucher } from "@/types/voucher";
 
 const COLORS = {
   header: { fgColor: { rgb: "D4AF37" } }, // Dourado
@@ -35,28 +16,28 @@ const COLORS = {
   },
 };
 
-export const exportVouchersToExcel = (data: VoucherData[]) => {
+export const exportVouchersToExcel = (data: Voucher[]) => {
   // Preparar dados
   const excelData = data.map((v) => ({
-    "Número SPO": v.numero_spo,
+    "Número SPO": v.numeroSPO,
     Vencimento: format(new Date(v.vencimento), "dd/MM/yyyy", { locale: ptBR }),
-    Cobrança: v.cobranca_em_nome_de === "DACHSER" ? "Dachser" : "Cliente",
-    "Forma Pagamento": v.forma_pagamento,
-    Remessa: v.remessa,
+    Cobrança: v.cobrancaEmNomeDe === "DACHSER" ? "Dachser" : "Cliente",
+    "Forma Pagamento": v.formaPagamento,
+    Remessa: v.remessa || "NENHUM",
     Urgente: v.urgente ? "Sim" : "Não",
-    "Etapa Atual": v.etapa_atual,
-    "Status Baixa": v.status_baixa,
-    "Criado Por": v.criado_por?.name || "-",
-    "Resp. Operação": v.responsavel_operacao?.name || "-",
-    "Resp. Fiscal": v.responsavel_fiscal?.name || "-",
-    "Resp. Financeiro": v.responsavel_financeiro?.name || "-",
-    "Comentários Operação": v.comentarios_operacao || "-",
-    "Comentários Fiscal": v.comentarios_fiscal || "-",
-    "Comentários Financeiro": v.comentarios_financeiro || "-",
-    "Data Criação": format(new Date(v.created_at), "dd/MM/yyyy HH:mm", {
+    "Etapa Atual": v.etapaAtual,
+    "Status Baixa": v.statusBaixa || "PENDENTE",
+    "Criado Por": v.criadoPorUserName || "-",
+    "Resp. Operação": v.responsavelOperacaoUserName || "-",
+    "Resp. Fiscal": v.responsavelFiscalUserName || "-",
+    "Resp. Financeiro": v.responsavelFinanceiroUserName || "-",
+    "Comentários Operação": v.comentariosOperacao || "-",
+    "Comentários Fiscal": v.comentariosFiscal || "-",
+    "Comentários Financeiro": v.comentariosFinanceiro || "-",
+    "Data Criação": format(new Date(v.createdAt), "dd/MM/yyyy HH:mm", {
       locale: ptBR,
     }),
-    "Última Atualização": format(new Date(v.updated_at), "dd/MM/yyyy HH:mm", {
+    "Última Atualização": format(new Date(v.updatedAt), "dd/MM/yyyy HH:mm", {
       locale: ptBR,
     }),
   }));

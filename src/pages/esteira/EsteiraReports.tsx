@@ -13,8 +13,9 @@ import { Loader2, Download, FileSpreadsheet, CalendarIcon, FileText } from "luci
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { cn } from "@/lib/utils";
-import { exportToStyledExcel } from "@/utils/excelExport";
-import { exportToPDF } from "@/utils/pdfExport";
+import { exportVouchersToExcel } from "@/utils/voucherExcelExport";
+import { exportVouchersToPDF } from "@/utils/voucherPdfExport";
+import { Voucher } from "@/types/voucher";
 
 interface ReportFilters {
   etapa: string;
@@ -84,16 +85,57 @@ export default function EsteiraReports() {
         return;
       }
 
+      // Map data to Voucher type
+      const mappedVouchers: Voucher[] = data.map((v: any) => ({
+        id: v.id,
+        numeroSPO: v.numero_spo,
+        fornecedor: v.fornecedor,
+        cnpjFornecedor: v.cnpj_fornecedor,
+        valor: v.valor,
+        moeda: v.moeda || "BRL",
+        vencimento: new Date(v.vencimento),
+        dataEmissaoDocumento: v.data_emissao_documento ? new Date(v.data_emissao_documento) : undefined,
+        cobrancaEmNomeDe: v.cobranca_em_nome_de,
+        formaPagamento: v.forma_pagamento,
+        tipoDocumento: v.tipo_documento,
+        filial: v.filial,
+        remessa: v.remessa,
+        urgente: v.urgencia_tipo !== "NORMAL",
+        urgenciaTipo: v.urgencia_tipo || "NORMAL",
+        comentariosOperacao: v.comentarios_operacao,
+        comentariosFiscal: v.comentarios_fiscal,
+        comentariosFinanceiro: v.comentarios_financeiro,
+        ajusteOperacao: v.ajuste_operacao,
+        ajusteFiscal: v.ajuste_fiscal,
+        etapaAtual: v.etapa_atual,
+        statusBaixa: v.status_baixa || "PENDENTE",
+        statusFinanceiro: v.status_financeiro || "PENDENTE",
+        statusEnvioCliente: v.status_envio_cliente,
+        criadoPorUserId: v.criado_por_user_id,
+        criadoPorUserName: v.criado_por?.name,
+        responsavelOperacaoUserId: v.responsavel_operacao_user_id,
+        responsavelOperacaoUserName: v.responsavel_operacao?.name,
+        responsavelFiscalUserId: v.responsavel_fiscal_user_id,
+        responsavelFiscalUserName: v.responsavel_fiscal?.name,
+        responsavelFinanceiroUserId: v.responsavel_financeiro_user_id,
+        responsavelFinanceiroUserName: v.responsavel_financeiro?.name,
+        clienteEmail: v.cliente_email,
+        createdAt: new Date(v.created_at),
+        updatedAt: new Date(v.updated_at),
+        anexos: [],
+        logs: [],
+      }));
+
       let fileName: string;
       if (exportType === "excel") {
-        fileName = exportToStyledExcel(data);
+        fileName = exportVouchersToExcel(mappedVouchers);
       } else {
-        fileName = exportToPDF(data);
+        fileName = exportVouchersToPDF(mappedVouchers);
       }
 
       toast({
         title: "Exportação concluída!",
-        description: `${data.length} vouchers exportados para ${fileName}`,
+        description: `${mappedVouchers.length} vouchers exportados para ${fileName}`,
       });
     } catch (error: any) {
       console.error("Erro ao exportar:", error);
