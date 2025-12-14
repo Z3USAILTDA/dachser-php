@@ -3,7 +3,8 @@ import { useNavigate } from "react-router-dom";
 import { ArrowLeft, Maximize2, Minimize2, Globe, X, Plane, Ship } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { supabase } from "@/integrations/supabase/client";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { TablePagination } from "@/components/layout/TablePagination";
 import dachserBg from "@/assets/dachser-background.jpg";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
@@ -204,6 +205,7 @@ export default function Olimpo() {
   const [data, setData] = useState<DataItem[]>([]);
   const [selectedAssetDetails, setSelectedAssetDetails] = useState<SelectedAssetDetails | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
+  const [masterContainerCount, setMasterContainerCount] = useState<number>(0);
   const pageSize = 10;
 
   // Filters
@@ -282,9 +284,10 @@ export default function Olimpo() {
     return Array.from(mapAgg.values());
   })();
 
-  // KPIs
+  // KPIs - usar masterContainerCount como fallback quando API SEA está pausada
+  const seaTransitFromData = filteredData.filter((i) => i.mode === "sea" && i.status === "Em trânsito").length;
   const kpis = {
-    seaTransit: filteredData.filter((i) => i.mode === "sea" && i.status === "Em trânsito").length,
+    seaTransit: seaTransitFromData > 0 ? seaTransitFromData : masterContainerCount,
     airActive: filteredData.filter((i) => i.mode === "air" && i.status !== "Entregue").length,
     delayed: filteredData.filter((i) => i.status === "Atraso").length,
     onTime: filteredData.length
@@ -295,6 +298,24 @@ export default function Olimpo() {
   // Pagination
   const totalPages = Math.max(1, Math.ceil(aggregatedData.length / pageSize));
   const paginatedData = aggregatedData.slice((currentPage - 1) * pageSize, currentPage * pageSize);
+
+  // Load container count from master table (fallback when API is paused)
+  const loadMasterContainerCount = useCallback(async () => {
+    try {
+      const baseUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/mariadb-proxy`;
+      const res = await fetch(baseUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'get_sea_container_count' }),
+      });
+      const json = await res.json();
+      if (json?.count !== undefined) {
+        setMasterContainerCount(json.count);
+      }
+    } catch (err) {
+      console.error('Error loading container count from master:', err);
+    }
+  }, []);
 
   // Load data from API
   const loadData = useCallback(async () => {
@@ -784,7 +805,8 @@ export default function Olimpo() {
   // Load data on mount
   useEffect(() => {
     loadData();
-  }, [loadData]);
+    loadMasterContainerCount();
+  }, [loadData, loadMasterContainerCount]);
 
   // Fullscreen mode - map takes entire screen
   // Fullscreen overlay content (renders inside portal-like structure)
@@ -1288,86 +1310,73 @@ export default function Olimpo() {
             boxShadow: '0 18px 40px rgba(0,0,0,.85)',
           }}
         >
-            <div className="p-4 border-b border-white/[0.08]">
-              <h2 className="text-sm tracking-[0.16em] uppercase text-white/90">Resumo de Movimentações</h2>
-              <p className="text-xs text-muted-foreground">Principais embarques por origem, destino, modal e status</p>
-            </div>
-
-            <div className="flex-1 overflow-auto">
-              <table className="w-full text-sm">
-                <thead className="bg-white/[0.02]">
-                  <tr>
-                    <th className="p-2 px-3 text-left text-xs uppercase tracking-[0.12em] text-muted-foreground border-b border-white/[0.06] sticky top-0 bg-[rgba(5,6,8,0.98)]">
-                      Cliente
-                    </th>
-                    <th className="p-2 px-3 text-left text-xs uppercase tracking-[0.12em] text-muted-foreground border-b border-white/[0.06] sticky top-0 bg-[rgba(5,6,8,0.98)]">
-                      Modal
-                    </th>
-                    <th className="p-2 px-3 text-left text-xs uppercase tracking-[0.12em] text-muted-foreground border-b border-white/[0.06] sticky top-0 bg-[rgba(5,6,8,0.98)]">
-                      Origem → Destino
-                    </th>
-                    <th className="p-2 px-3 text-left text-xs uppercase tracking-[0.12em] text-muted-foreground border-b border-white/[0.06] sticky top-0 bg-[rgba(5,6,8,0.98)]">
-                      ETA
-                    </th>
-                    <th className="p-2 px-3 text-left text-xs uppercase tracking-[0.12em] text-muted-foreground border-b border-white/[0.06] sticky top-0 bg-[rgba(5,6,8,0.98)]">
-                      Status
-                    </th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {paginatedData.map((row, i) => (
-                    <tr key={row.key} className={`border-b border-white/[0.04] ${i % 2 === 0 ? "" : "bg-white/[0.01]"} hover:bg-white/[0.03] transition-colors`}>
-                      <td className="p-2 px-3">{row.cliente}</td>
-                      <td className="p-2 px-3">
-                        <Badge variant="outline" className={`text-[10px] ${row.mode === "air" ? "border-[#7fd0ff]/60 text-[#b7e2ff]" : "border-primary/60 text-primary"}`}>
-                          {row.mode === "air" ? "AIR" : "SEA"}
-                        </Badge>
-                      </td>
-                      <td className="p-2 px-3">{row.rota}</td>
-                      <td className="p-2 px-3 text-muted-foreground">{row.eta_api}</td>
-                      <td className="p-2 px-3">
-                        <Badge
-                          variant="outline"
-                          className={
-                            row.status === "Atraso"
-                              ? "border-red-500/60 text-red-400"
-                              : row.status === "Entregue"
-                              ? "border-green-500/60 text-green-400"
-                              : "border-blue-500/60 text-blue-400"
-                          }
-                        >
-                          {row.status}
-                        </Badge>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-
-            {/* Pagination */}
-            {totalPages > 1 && (
-              <div className="flex items-center justify-center gap-1.5 p-2 border-t border-white/[0.05]">
-                <button
-                  onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
-                  disabled={currentPage === 1}
-                  className="px-2 py-1 text-[10px] rounded border border-white/10 bg-black/50 disabled:opacity-50"
-                >
-                  ←
-                </button>
-                <span className="px-2 text-xs text-muted-foreground">
-                  {currentPage} / {totalPages}
-                </span>
-                <button
-                  onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
-                  disabled={currentPage === totalPages}
-                  className="px-2 py-1 text-[10px] rounded border border-white/10 bg-black/50 disabled:opacity-50"
-                >
-                  →
-                </button>
-              </div>
-            )}
+          <div className="p-4 border-b border-white/[0.08]">
+            <h2 className="text-sm tracking-[0.16em] uppercase text-white/90">Resumo de Movimentações</h2>
+            <p className="text-xs text-muted-foreground">Principais embarques por origem, destino, modal e status</p>
           </div>
+
+          <div className="flex-1 overflow-auto">
+            <Table>
+              <TableHeader>
+                <TableRow className="border-b border-white/[0.06] hover:bg-transparent">
+                  <TableHead className="text-xs uppercase tracking-[0.12em] text-muted-foreground sticky top-0 bg-card">
+                    Cliente
+                  </TableHead>
+                  <TableHead className="text-xs uppercase tracking-[0.12em] text-muted-foreground sticky top-0 bg-card">
+                    Modal
+                  </TableHead>
+                  <TableHead className="text-xs uppercase tracking-[0.12em] text-muted-foreground sticky top-0 bg-card">
+                    Origem → Destino
+                  </TableHead>
+                  <TableHead className="text-xs uppercase tracking-[0.12em] text-muted-foreground sticky top-0 bg-card">
+                    ETA
+                  </TableHead>
+                  <TableHead className="text-xs uppercase tracking-[0.12em] text-muted-foreground sticky top-0 bg-card">
+                    Status
+                  </TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {paginatedData.map((row) => (
+                  <TableRow key={row.key} className="border-b border-white/[0.04] hover:bg-white/[0.03]">
+                    <TableCell className="py-2">{row.cliente}</TableCell>
+                    <TableCell className="py-2">
+                      <Badge variant="outline" className={`text-[10px] ${row.mode === "air" ? "border-[#7fd0ff]/60 text-[#b7e2ff]" : "border-primary/60 text-primary"}`}>
+                        {row.mode === "air" ? "AIR" : "SEA"}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="py-2">{row.rota}</TableCell>
+                    <TableCell className="py-2 text-muted-foreground">{row.eta_api}</TableCell>
+                    <TableCell className="py-2">
+                      <Badge
+                        variant="outline"
+                        className={
+                          row.status === "Atraso"
+                            ? "border-red-500/60 text-red-400"
+                            : row.status === "Entregue"
+                            ? "border-green-500/60 text-green-400"
+                            : "border-blue-500/60 text-blue-400"
+                        }
+                      >
+                        {row.status}
+                      </Badge>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+
+          {/* Pagination */}
+          <div className="p-2 border-t border-white/[0.05]">
+            <TablePagination
+              currentPage={currentPage}
+              totalPages={totalPages}
+              onPageChange={setCurrentPage}
+              maxVisiblePages={5}
+            />
+          </div>
+        </div>
 
         {/* Footer */}
         <div className="text-center text-xs text-muted-foreground tracking-[0.18em] uppercase">
