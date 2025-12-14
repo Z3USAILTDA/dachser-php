@@ -772,11 +772,45 @@ export default function Olimpo() {
           boxShadow: '0 12px 32px rgba(0,0,0,.7)',
         }}
       >
-        <div className="p-3 border-b border-white/[0.08] flex items-center justify-between">
-          <div>
-            <h2 className="text-xs tracking-[0.16em] uppercase text-white/90">Visão de Filtros</h2>
-            <p className="text-[10px] text-muted-foreground">Refine a visualização do mapa e do resumo</p>
-          </div>
+        {/* Filters row */}
+        <div className="flex flex-wrap items-center gap-2 p-3 border-b border-white/[0.08]">
+          <Input
+            placeholder="Buscar..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className="w-44 rounded-full bg-[rgba(14,14,14,0.96)] border-white/20 text-xs h-8"
+          />
+          <button
+            onClick={() => setDaysFilter(daysFilter === 7 ? null : 7)}
+            className={`px-3 py-1.5 rounded-full text-[10px] border transition-all flex items-center gap-1.5 ${daysFilter === 7 ? "border-primary bg-[rgba(30,30,30,0.98)] text-amber-200" : "border-white/10 bg-[rgba(14,14,14,0.95)]"}`}
+          >
+            <span className="w-1.5 h-1.5 rounded-full bg-primary" /> 7d
+          </button>
+          <button
+            onClick={() => setDaysFilter(daysFilter === 30 ? null : 30)}
+            className={`px-3 py-1.5 rounded-full text-[10px] border transition-all flex items-center gap-1.5 ${daysFilter === 30 ? "border-primary bg-[rgba(30,30,30,0.98)] text-amber-200" : "border-white/10 bg-[rgba(14,14,14,0.95)]"}`}
+          >
+            <span className="w-1.5 h-1.5 rounded-full bg-primary" /> 30d
+          </button>
+          <button
+            onClick={() => setModeFilter(modeFilter === "air" ? null : "air")}
+            className={`px-3 py-1.5 rounded-full text-[10px] border transition-all flex items-center gap-1.5 ${modeFilter === "air" ? "border-primary bg-[rgba(30,30,30,0.98)] text-amber-200" : "border-white/10 bg-[rgba(14,14,14,0.95)]"}`}
+          >
+            <span className="w-1.5 h-1.5 rounded-full bg-primary" /> AIR
+          </button>
+          <button
+            onClick={() => setModeFilter(modeFilter === "sea" ? null : "sea")}
+            className={`px-3 py-1.5 rounded-full text-[10px] border transition-all flex items-center gap-1.5 ${modeFilter === "sea" ? "border-primary bg-[rgba(30,30,30,0.98)] text-amber-200" : "border-white/10 bg-[rgba(14,14,14,0.95)]"}`}
+          >
+            <span className="w-1.5 h-1.5 rounded-full bg-primary" /> SEA
+          </button>
+          <button
+            onClick={() => setStatusFilter(statusFilter === "Atraso" ? null : "Atraso")}
+            className={`px-3 py-1.5 rounded-full text-[10px] border transition-all flex items-center gap-1.5 ${statusFilter === "Atraso" ? "border-primary bg-[rgba(30,30,30,0.98)] text-amber-200" : "border-white/10 bg-[rgba(14,14,14,0.95)]"}`}
+          >
+            <span className="w-1.5 h-1.5 rounded-full bg-primary" /> Atraso
+          </button>
+          <div className="flex-1" />
           <button
             onClick={() => setIsFullscreen(false)}
             className="w-7 h-7 rounded-full border border-white/20 flex items-center justify-center bg-black/50 text-white hover:bg-black/70 transition-all"
@@ -785,66 +819,23 @@ export default function Olimpo() {
           </button>
         </div>
 
-        {/* Horizontal layout: Filters + KPIs side by side */}
-        <div className="flex flex-wrap items-start gap-3 p-3">
-          {/* Filters section */}
-          <div className="flex flex-wrap gap-1.5 flex-1 min-w-[200px]">
-            <Input
-              placeholder="Buscar..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-40 rounded-full bg-[rgba(14,14,14,0.96)] border-white/20 text-xs h-8"
-            />
-            <button
-              onClick={() => setDaysFilter(daysFilter === 7 ? null : 7)}
-              className={`px-2 py-1 rounded-full text-[10px] border transition-all flex items-center gap-1 ${daysFilter === 7 ? "border-primary bg-[rgba(30,30,30,0.98)] text-amber-200" : "border-white/10 bg-[rgba(14,14,14,0.95)]"}`}
-            >
-              <span className="w-1.5 h-1.5 rounded-full bg-primary" /> 7d
-            </button>
-            <button
-              onClick={() => setDaysFilter(daysFilter === 30 ? null : 30)}
-              className={`px-2 py-1 rounded-full text-[10px] border transition-all flex items-center gap-1 ${daysFilter === 30 ? "border-primary bg-[rgba(30,30,30,0.98)] text-amber-200" : "border-white/10 bg-[rgba(14,14,14,0.95)]"}`}
-            >
-              <span className="w-1.5 h-1.5 rounded-full bg-primary" /> 30d
-            </button>
-            <button
-              onClick={() => setModeFilter(modeFilter === "air" ? null : "air")}
-              className={`px-2 py-1 rounded-full text-[10px] border transition-all flex items-center gap-1 ${modeFilter === "air" ? "border-primary bg-[rgba(30,30,30,0.98)] text-amber-200" : "border-white/10 bg-[rgba(14,14,14,0.95)]"}`}
-            >
-              <span className="w-1.5 h-1.5 rounded-full bg-primary" /> AIR
-            </button>
-            <button
-              onClick={() => setModeFilter(modeFilter === "sea" ? null : "sea")}
-              className={`px-2 py-1 rounded-full text-[10px] border transition-all flex items-center gap-1 ${modeFilter === "sea" ? "border-primary bg-[rgba(30,30,30,0.98)] text-amber-200" : "border-white/10 bg-[rgba(14,14,14,0.95)]"}`}
-            >
-              <span className="w-1.5 h-1.5 rounded-full bg-primary" /> SEA
-            </button>
-            <button
-              onClick={() => setStatusFilter(statusFilter === "Atraso" ? null : "Atraso")}
-              className={`px-2 py-1 rounded-full text-[10px] border transition-all flex items-center gap-1 ${statusFilter === "Atraso" ? "border-primary bg-[rgba(30,30,30,0.98)] text-amber-200" : "border-white/10 bg-[rgba(14,14,14,0.95)]"}`}
-            >
-              <span className="w-1.5 h-1.5 rounded-full bg-primary" /> Atraso
-            </button>
+        {/* KPI cards row - larger */}
+        <div className="flex gap-3 p-3">
+          <div className="bg-[#151515] rounded-lg px-4 py-3 border border-white/[0.06] flex-1">
+            <p className="text-[10px] text-muted-foreground uppercase tracking-[0.14em]">Containers</p>
+            <p className="text-xl font-semibold">{kpis.seaTransit}</p>
           </div>
-
-          {/* KPI cards - horizontal */}
-          <div className="flex gap-2 shrink-0">
-            <div className="bg-[#151515] rounded-lg px-3 py-2 border border-white/[0.06] min-w-[80px]">
-              <p className="text-[9px] text-muted-foreground uppercase tracking-[0.14em]">Containers</p>
-              <p className="text-lg font-semibold">{kpis.seaTransit}</p>
-            </div>
-            <div className="bg-[#151515] rounded-lg px-3 py-2 border border-white/[0.06] min-w-[80px]">
-              <p className="text-[9px] text-muted-foreground uppercase tracking-[0.14em]">Voos</p>
-              <p className="text-lg font-semibold">{kpis.airActive}</p>
-            </div>
-            <div className="bg-[#151515] rounded-lg px-3 py-2 border border-white/[0.06] min-w-[80px]">
-              <p className="text-[9px] text-muted-foreground uppercase tracking-[0.14em]">Total</p>
-              <p className="text-lg font-semibold">{kpis.seaTransit + kpis.airActive}</p>
-            </div>
-            <div className="bg-[#151515] rounded-lg px-3 py-2 border border-white/[0.06] min-w-[80px]">
-              <p className="text-[9px] text-muted-foreground uppercase tracking-[0.14em]">Atrasos</p>
-              <p className="text-lg font-semibold text-[#ff8b8b]">{kpis.delayed}</p>
-            </div>
+          <div className="bg-[#151515] rounded-lg px-4 py-3 border border-white/[0.06] flex-1">
+            <p className="text-[10px] text-muted-foreground uppercase tracking-[0.14em]">Voos</p>
+            <p className="text-xl font-semibold">{kpis.airActive}</p>
+          </div>
+          <div className="bg-[#151515] rounded-lg px-4 py-3 border border-white/[0.06] flex-1">
+            <p className="text-[10px] text-muted-foreground uppercase tracking-[0.14em]">Total</p>
+            <p className="text-xl font-semibold">{kpis.seaTransit + kpis.airActive}</p>
+          </div>
+          <div className="bg-[#151515] rounded-lg px-4 py-3 border border-white/[0.06] flex-1">
+            <p className="text-[10px] text-muted-foreground uppercase tracking-[0.14em]">Atrasos</p>
+            <p className="text-xl font-semibold text-[#ff8b8b]">{kpis.delayed}</p>
           </div>
         </div>
       </div>
