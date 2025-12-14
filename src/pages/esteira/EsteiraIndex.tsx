@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { PageLayout } from "@/components/layout/PageLayout";
 import { Button } from "@/components/ui/button";
-import { Plus, Package, AlertTriangle, AlertCircle, Clock, List, BarChart3, RefreshCw, TrendingUp, DollarSign, Calendar, LayoutDashboard, Bot, FileText, HelpCircle } from "lucide-react";
+import { Plus, Package, AlertTriangle, AlertCircle, Clock, List, BarChart3, RefreshCw, TrendingUp, DollarSign, Calendar, Bot, HelpCircle, Settings, Users } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { Voucher, EtapaAtual } from "@/types/voucher";
@@ -11,6 +11,7 @@ import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContaine
 import { VoucherTable, FilterValues } from "@/components/esteira/VoucherTable";
 import { CreateVoucherDialog } from "@/components/esteira/CreateVoucherDialog";
 import { EditVoucherDialog } from "@/components/esteira/EditVoucherDialog";
+import { RoboTab } from "@/components/tabs/RoboTab";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -399,7 +400,7 @@ const AnalyticsDashboard = ({ vouchers }: { vouchers: Voucher[] }) => {
 const EsteiraIndex = () => {
   const [vouchers, setVouchers] = useState<Voucher[]>([]);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<"processos" | "analytics">("processos");
+  const [activeTab, setActiveTab] = useState<"processos" | "analytics" | "robo">("processos");
   const [filters, setFilters] = useState<FilterValues>({
     search: "",
     etapa: "all",
@@ -691,29 +692,20 @@ const EsteiraIndex = () => {
             <Button
               variant="ghost"
               size="sm"
-              onClick={() => navigate("/fin/esteira/dashboard")}
+              onClick={() => navigate("/fin/esteira/rules")}
               className="gap-2 text-muted-foreground hover:text-foreground"
             >
-              <LayoutDashboard className="h-4 w-4" />
-              Dashboard
+              <Settings className="h-4 w-4" />
+              Regras SLA
             </Button>
             <Button
               variant="ghost"
               size="sm"
-              onClick={() => navigate("/fin/esteira/robot")}
+              onClick={() => navigate("/fin/esteira/user-management")}
               className="gap-2 text-muted-foreground hover:text-foreground"
             >
-              <Bot className="h-4 w-4" />
-              Robô
-            </Button>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => navigate("/fin/esteira/reports")}
-              className="gap-2 text-muted-foreground hover:text-foreground"
-            >
-              <FileText className="h-4 w-4" />
-              Relatórios
+              <Users className="h-4 w-4" />
+              Usuários
             </Button>
             <Button
               variant="ghost"
@@ -790,6 +782,18 @@ const EsteiraIndex = () => {
               <BarChart3 className="h-4 w-4" />
               Analytics
             </button>
+            <button
+              onClick={() => setActiveTab("robo")}
+              className={cn(
+                "flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-all",
+                activeTab === "robo"
+                  ? "bg-card text-foreground border border-border/50"
+                  : "text-muted-foreground hover:text-foreground"
+              )}
+            >
+              <Bot className="h-4 w-4" />
+              Robô
+            </button>
           </div>
 
           <div className="flex items-center gap-2">
@@ -808,7 +812,7 @@ const EsteiraIndex = () => {
               onClick={() => setShowCreateDialog(true)}
             >
               <Plus className="h-4 w-4" />
-              Novo Voucher
+              Enviar Voucher
             </Button>
           </div>
         </div>
@@ -826,8 +830,10 @@ const EsteiraIndex = () => {
             filters={filters}
             onFilterChange={setFilters}
           />
-        ) : (
+        ) : activeTab === "analytics" ? (
           <AnalyticsDashboard vouchers={vouchers} />
+        ) : (
+          <RoboTab />
         )}
       </main>
 

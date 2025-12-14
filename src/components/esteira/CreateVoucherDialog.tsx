@@ -52,6 +52,8 @@ import {
 
 const formSchema = z.object({
   numeroSPO: z.string().min(1, "Número SPO é obrigatório"),
+  processoId: z.string().optional(),
+  origemProcesso: z.enum(["AIR", "SEA", "CHB"]).optional(),
   fornecedor: z.string().min(1, "Fornecedor é obrigatório"),
   cnpjFornecedor: z.string().optional(),
   valor: z.string().optional(),
@@ -64,6 +66,7 @@ const formSchema = z.object({
   filial: z.string().optional(),
   remessa: z.string().default("NENHUM"),
   urgente: z.boolean().default(false),
+  urgenciaMotivo: z.string().optional(),
   comentariosOperacao: z.string().optional(),
   clienteEmail: z.string().email().optional().or(z.literal("")),
 });
@@ -153,7 +156,7 @@ export const CreateVoucherDialog = ({
         urgencia_tipo: urgenciaTipo,
         comentarios_operacao: values.comentariosOperacao || null,
         cliente_email: values.clienteEmail || null,
-        etapa_atual: "OPERACAO",
+        etapa_atual: values.tipoDocumento === "ADF" ? "FINANCEIRO" : "OPERACAO",
         status_baixa: "PENDENTE",
         status_financeiro: "PENDENTE",
         criado_por_user_id: userData.user.id,
@@ -250,9 +253,47 @@ export const CreateVoucherDialog = ({
                 name="numeroSPO"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Número SPO *</FormLabel>
+                    <FormLabel>Número Voucher (SPO) *</FormLabel>
                     <FormControl>
                       <Input placeholder="Ex: SPO-2024-001" {...field} />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="origemProcesso"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Origem do Processo</FormLabel>
+                    <Select onValueChange={field.onChange} defaultValue={field.value}>
+                      <FormControl>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Selecione" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        <SelectItem value="AIR">Aéreo (AIR)</SelectItem>
+                        <SelectItem value="SEA">Marítimo (SEA)</SelectItem>
+                        <SelectItem value="CHB">Desembaraço (CHB)</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <FormField
+                control={form.control}
+                name="processoId"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Nº do Processo</FormLabel>
+                    <FormControl>
+                      <Input placeholder="Ex: AWB, BL, Referência" {...field} />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -394,14 +435,15 @@ export const CreateVoucherDialog = ({
                         </SelectTrigger>
                       </FormControl>
                       <SelectContent>
+                        <SelectItem value="VOUCHER">Voucher</SelectItem>
+                        <SelectItem value="SPO">SPO</SelectItem>
+                        <SelectItem value="ICMS">ICMS</SelectItem>
+                        <SelectItem value="ARMAZENAGEM">Armazenagem</SelectItem>
+                        <SelectItem value="ADMINISTRATIVO">Administrativo</SelectItem>
+                        <SelectItem value="ADF">ADF</SelectItem>
                         <SelectItem value="FATURA">Fatura</SelectItem>
                         <SelectItem value="NOTA_FISCAL">Nota Fiscal</SelectItem>
                         <SelectItem value="DEMONSTRATIVO">Demonstrativo</SelectItem>
-                        <SelectItem value="ICMS">ICMS</SelectItem>
-                        <SelectItem value="ARMAZENAGEM">Armazenagem</SelectItem>
-                        <SelectItem value="NF_SERVICO">NF Serviço</SelectItem>
-                        <SelectItem value="NF_DEBITO">NF Débito</SelectItem>
-                        <SelectItem value="BOLETO">Boleto</SelectItem>
                         <SelectItem value="OUTROS">Outros</SelectItem>
                       </SelectContent>
                     </Select>
@@ -492,7 +534,7 @@ export const CreateVoucherDialog = ({
                 render={({ field }) => (
                   <FormItem className="flex items-center justify-between rounded-lg border p-3">
                     <div className="space-y-0.5">
-                      <FormLabel>Urgente</FormLabel>
+                      <FormLabel>Urgente Real</FormLabel>
                       <p className="text-xs text-muted-foreground">
                         Requer aprovação do supervisor
                       </p>
@@ -507,6 +549,27 @@ export const CreateVoucherDialog = ({
                 )}
               />
             </div>
+
+            {/* Urgency Reason (only if urgent) */}
+            {form.watch("urgente") && (
+              <FormField
+                control={form.control}
+                name="urgenciaMotivo"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Motivo da Urgência *</FormLabel>
+                    <FormControl>
+                      <Textarea
+                        placeholder="Descreva o motivo da urgência..."
+                        className="min-h-[60px]"
+                        {...field}
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            )}
 
             {/* Comments and Email */}
             <FormField
@@ -546,9 +609,14 @@ export const CreateVoucherDialog = ({
             />
 
             {/* File Upload */}
-            <div className="space-y-2">
-              <Label>Anexos</Label>
-              <div className="border-2 border-dashed rounded-lg p-4 text-center">
+            <div className="space-y-3">
+              <div>
+                <Label className="text-sm font-medium">Anexos Obrigatórios</Label>
+                <p className="text-xs text-muted-foreground mt-1">
+                  Fatura/Demonstrativo e Boleto/Instruções são obrigatórios
+                </p>
+              </div>
+              <div className="border-2 border-dashed rounded-lg p-4 text-center hover:border-primary/50 transition-colors">
                 <input
                   type="file"
                   multiple
@@ -598,8 +666,8 @@ export const CreateVoucherDialog = ({
               >
                 Cancelar
               </Button>
-              <Button type="submit" disabled={isSubmitting}>
-                {isSubmitting ? "Criando..." : "Criar Voucher"}
+              <Button type="submit" disabled={isSubmitting} className="bg-primary text-primary-foreground hover:bg-primary/90">
+                {isSubmitting ? "Enviando..." : "Enviar Voucher"}
               </Button>
             </div>
           </form>
