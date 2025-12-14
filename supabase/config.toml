@@ -161,3 +161,15 @@ verify_jwt = false
 
 [functions.voucher-check-sla-alerts]
 verify_jwt = false
+
+[functions.voucher-notify-rm-pending]
+verify_jwt = false
+
+[functions.voucher-send-daily-report]
+verify_jwt = false
+
+[functions.voucher-othello-webhook]
+verify_jwt = false
+
+[functions.voucher-sync-rm-pending]
+verify_jwt = false

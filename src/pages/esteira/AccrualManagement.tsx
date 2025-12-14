@@ -35,8 +35,13 @@ const AccrualManagement = () => {
   const loadEntries = async () => {
     try {
       setLoading(true);
-      // TODO: Tabela accrual_entries precisa ser criada
-      setEntries([]);
+      const { data, error } = await supabase
+        .from("accrual_entries")
+        .select("*")
+        .order("created_at", { ascending: false });
+
+      if (error) throw error;
+      setEntries(data || []);
     } catch (error: any) {
       toast({
         title: "Erro ao carregar accruals",
@@ -111,8 +116,11 @@ const AccrualManagement = () => {
         return;
       }
 
-      // TODO: Tabela accrual_entries precisa ser criada
-      console.log("Entries to insert:", validEntries);
+      const { error: insertError } = await supabase
+        .from("accrual_entries")
+        .insert(validEntries as any);
+
+      if (insertError) throw insertError;
 
       toast({
         title: "Upload concluído!",
@@ -138,7 +146,12 @@ const AccrualManagement = () => {
     if (!confirm("Tem certeza que deseja excluir este registro?")) return;
 
     try {
-      // TODO: Tabela accrual_entries precisa ser criada
+      const { error } = await supabase
+        .from("accrual_entries")
+        .delete()
+        .eq("id", id);
+
+      if (error) throw error;
       setEntries(prev => prev.filter(e => e.id !== id));
       toast({ title: "Registro excluído!" });
     } catch (error: any) {
@@ -154,7 +167,12 @@ const AccrualManagement = () => {
     if (!confirm("Tem certeza que deseja excluir TODOS os registros de accrual?")) return;
 
     try {
-      // TODO: Tabela accrual_entries precisa ser criada
+      const { error } = await supabase
+        .from("accrual_entries")
+        .delete()
+        .neq("id", "00000000-0000-0000-0000-000000000000"); // Delete all
+
+      if (error) throw error;
       setEntries([]);
       toast({ title: "Todos os registros foram excluídos!" });
     } catch (error: any) {
