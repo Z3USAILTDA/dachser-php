@@ -282,35 +282,15 @@ export default function Olimpo() {
     return Array.from(mapAgg.values());
   })();
 
-  // KPIs - count unique containers and flights
-  const kpis = (() => {
-    // Get unique containers (SEA)
-    const uniqueSeaContainers = new Set(
-      filteredData.filter(i => i.mode === "sea").map(i => i.asset)
-    );
-    const uniqueSeaInTransit = new Set(
-      filteredData.filter(i => i.mode === "sea" && i.status === "Em trânsito").map(i => i.asset)
-    );
-    
-    // Get unique flights/AWBs (AIR)
-    const uniqueAirActive = new Set(
-      filteredData.filter(i => i.mode === "air" && i.status !== "Entregue").map(i => i.asset || i.flight)
-    );
-    
-    // Count unique delayed items
-    const uniqueDelayed = new Set(
-      filteredData.filter(i => i.status === "Atraso").map(i => i.asset || i.flight)
-    );
-    
-    const totalUnique = uniqueSeaContainers.size + uniqueAirActive.size;
-    
-    return {
-      seaTransit: uniqueSeaInTransit.size,
-      airActive: uniqueAirActive.size,
-      delayed: uniqueDelayed.size,
-      onTime: totalUnique ? Math.round(((totalUnique - uniqueDelayed.size) / totalUnique) * 100) : 0,
-    };
-  })();
+  // KPIs
+  const kpis = {
+    seaTransit: filteredData.filter((i) => i.mode === "sea" && i.status === "Em trânsito").length,
+    airActive: filteredData.filter((i) => i.mode === "air" && i.status !== "Entregue").length,
+    delayed: filteredData.filter((i) => i.status === "Atraso").length,
+    onTime: filteredData.length
+      ? Math.round(((filteredData.length - filteredData.filter((i) => i.status === "Atraso").length) / filteredData.length) * 100)
+      : 0,
+  };
 
   // Pagination
   const totalPages = Math.max(1, Math.ceil(aggregatedData.length / pageSize));
