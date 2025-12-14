@@ -1216,77 +1216,80 @@ export default function Olimpo() {
 
           {/* Side Card (Filters + KPIs) */}
           <div 
-            className="rounded-2xl flex flex-col shrink-0 lg:w-80 xl:w-96"
+            className="rounded-2xl flex flex-col shrink-0 lg:w-80 xl:w-96 overflow-hidden max-h-full"
             style={{
               background: 'rgba(5,6,18,.9)',
               border: '1px solid rgba(255,255,255,.12)',
               boxShadow: '0 18px 40px rgba(0,0,0,.85)',
             }}
           >
-            <div className="p-3 md:p-4 border-b border-white/[0.08]">
+            <div className="p-3 md:p-4 border-b border-white/[0.08] shrink-0">
               <h2 className="text-xs md:text-sm tracking-[0.16em] uppercase text-white/90">Visão de Filtros</h2>
               <p className="text-[10px] md:text-xs text-muted-foreground">Refine a visualização do mapa e do resumo</p>
             </div>
 
-            <div className="p-2 md:p-3 flex flex-wrap gap-1.5 md:gap-2 border-b border-white/[0.05]">
-              <Input
-                placeholder="Buscar..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="flex-1 min-w-[140px] rounded-full bg-[rgba(14,14,14,0.96)] border-white/20 text-xs md:text-sm h-8"
-              />
-              <button
-                onClick={() => setDaysFilter(daysFilter === 7 ? null : 7)}
-                className={`px-2 md:px-3 py-1 md:py-1.5 rounded-full text-[10px] md:text-xs border transition-all flex items-center gap-1 ${daysFilter === 7 ? "border-primary bg-[rgba(30,30,30,0.98)] text-amber-200" : "border-white/10 bg-[rgba(14,14,14,0.95)]"}`}
-              >
-                <span className="w-1.5 h-1.5 rounded-full bg-primary" /> 7d
-              </button>
-              <button
-                onClick={() => setDaysFilter(daysFilter === 30 ? null : 30)}
-                className={`px-2 md:px-3 py-1 md:py-1.5 rounded-full text-[10px] md:text-xs border transition-all flex items-center gap-1 ${daysFilter === 30 ? "border-primary bg-[rgba(30,30,30,0.98)] text-amber-200" : "border-white/10 bg-[rgba(14,14,14,0.95)]"}`}
-              >
-                <span className="w-1.5 h-1.5 rounded-full bg-primary" /> 30d
-              </button>
-              <button
-                onClick={() => setModeFilter(modeFilter === "air" ? null : "air")}
-                className={`px-2 md:px-3 py-1 md:py-1.5 rounded-full text-[10px] md:text-xs border transition-all flex items-center gap-1 ${modeFilter === "air" ? "border-primary bg-[rgba(30,30,30,0.98)] text-amber-200" : "border-white/10 bg-[rgba(14,14,14,0.95)]"}`}
-              >
-                <span className="w-1.5 h-1.5 rounded-full bg-primary" /> AIR
-              </button>
-              <button
-                onClick={() => setModeFilter(modeFilter === "sea" ? null : "sea")}
-                className={`px-2 md:px-3 py-1 md:py-1.5 rounded-full text-[10px] md:text-xs border transition-all flex items-center gap-1 ${modeFilter === "sea" ? "border-primary bg-[rgba(30,30,30,0.98)] text-amber-200" : "border-white/10 bg-[rgba(14,14,14,0.95)]"}`}
-              >
-                <span className="w-1.5 h-1.5 rounded-full bg-primary" /> SEA
-              </button>
-              <button
-                onClick={() => setStatusFilter(statusFilter === "Atraso" ? null : "Atraso")}
-                className={`px-2 md:px-3 py-1 md:py-1.5 rounded-full text-[10px] md:text-xs border transition-all flex items-center gap-1 ${statusFilter === "Atraso" ? "border-primary bg-[rgba(30,30,30,0.98)] text-amber-200" : "border-white/10 bg-[rgba(14,14,14,0.95)]"}`}
-              >
-                <span className="w-1.5 h-1.5 rounded-full bg-primary" /> Atraso
-              </button>
-            </div>
+            {/* Scrollable content area */}
+            <div className="flex-1 overflow-y-auto min-h-0">
+              <div className="p-2 md:p-3 flex flex-wrap gap-1.5 md:gap-2 border-b border-white/[0.05]">
+                <Input
+                  placeholder="Buscar..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="flex-1 min-w-[100px] rounded-full bg-[rgba(14,14,14,0.96)] border-white/20 text-xs md:text-sm h-8"
+                />
+                <button
+                  onClick={() => setDaysFilter(daysFilter === 7 ? null : 7)}
+                  className={`px-2 md:px-3 py-1 md:py-1.5 rounded-full text-[10px] md:text-xs border transition-all flex items-center gap-1 ${daysFilter === 7 ? "border-primary bg-[rgba(30,30,30,0.98)] text-amber-200" : "border-white/10 bg-[rgba(14,14,14,0.95)]"}`}
+                >
+                  <span className="w-1.5 h-1.5 rounded-full bg-primary" /> 7d
+                </button>
+                <button
+                  onClick={() => setDaysFilter(daysFilter === 30 ? null : 30)}
+                  className={`px-2 md:px-3 py-1 md:py-1.5 rounded-full text-[10px] md:text-xs border transition-all flex items-center gap-1 ${daysFilter === 30 ? "border-primary bg-[rgba(30,30,30,0.98)] text-amber-200" : "border-white/10 bg-[rgba(14,14,14,0.95)]"}`}
+                >
+                  <span className="w-1.5 h-1.5 rounded-full bg-primary" /> 30d
+                </button>
+                <button
+                  onClick={() => setModeFilter(modeFilter === "air" ? null : "air")}
+                  className={`px-2 md:px-3 py-1 md:py-1.5 rounded-full text-[10px] md:text-xs border transition-all flex items-center gap-1 ${modeFilter === "air" ? "border-primary bg-[rgba(30,30,30,0.98)] text-amber-200" : "border-white/10 bg-[rgba(14,14,14,0.95)]"}`}
+                >
+                  <span className="w-1.5 h-1.5 rounded-full bg-primary" /> AIR
+                </button>
+                <button
+                  onClick={() => setModeFilter(modeFilter === "sea" ? null : "sea")}
+                  className={`px-2 md:px-3 py-1 md:py-1.5 rounded-full text-[10px] md:text-xs border transition-all flex items-center gap-1 ${modeFilter === "sea" ? "border-primary bg-[rgba(30,30,30,0.98)] text-amber-200" : "border-white/10 bg-[rgba(14,14,14,0.95)]"}`}
+                >
+                  <span className="w-1.5 h-1.5 rounded-full bg-primary" /> SEA
+                </button>
+                <button
+                  onClick={() => setStatusFilter(statusFilter === "Atraso" ? null : "Atraso")}
+                  className={`px-2 md:px-3 py-1 md:py-1.5 rounded-full text-[10px] md:text-xs border transition-all flex items-center gap-1 ${statusFilter === "Atraso" ? "border-primary bg-[rgba(30,30,30,0.98)] text-amber-200" : "border-white/10 bg-[rgba(14,14,14,0.95)]"}`}
+                >
+                  <span className="w-1.5 h-1.5 rounded-full bg-primary" /> Atraso
+                </button>
+              </div>
 
-            <div className="grid grid-cols-2 gap-2 md:gap-3 p-3 md:p-4">
-              <div className="bg-[#151515] rounded-xl p-2 md:p-3 border border-white/[0.06]">
-                <p className="text-[9px] md:text-[0.72rem] text-muted-foreground uppercase tracking-[0.14em]">Containers</p>
-                <p className="text-base md:text-lg font-semibold">{kpis.seaTransit}</p>
-                <p className="text-[9px] md:text-xs text-[#7fd0ff]">Em trânsito</p>
-              </div>
-              <div className="bg-[#151515] rounded-xl p-2 md:p-3 border border-white/[0.06]">
-                <p className="text-[9px] md:text-[0.72rem] text-muted-foreground uppercase tracking-[0.14em]">Voos</p>
-                <p className="text-base md:text-lg font-semibold">{kpis.airActive}</p>
-                <p className="text-[9px] md:text-xs text-[#7fd0ff]">Ativos</p>
-              </div>
-              <div className="bg-[#151515] rounded-xl p-2 md:p-3 border border-white/[0.06]">
-                <p className="text-[9px] md:text-[0.72rem] text-muted-foreground uppercase tracking-[0.14em]">Total</p>
-                <p className="text-base md:text-lg font-semibold">{kpis.seaTransit + kpis.airActive}</p>
-                <p className="text-[9px] md:text-xs text-[#7fd0ff]">SEA + AIR</p>
-              </div>
-              <div className="bg-[#151515] rounded-xl p-2 md:p-3 border border-white/[0.06]">
-                <p className="text-[9px] md:text-[0.72rem] text-muted-foreground uppercase tracking-[0.14em]">Atrasos</p>
-                <p className="text-base md:text-lg font-semibold">{kpis.delayed}</p>
-                <p className="text-[9px] md:text-xs text-[#ff8b8b]">Impacto</p>
+              <div className="grid grid-cols-2 gap-2 md:gap-3 p-3 md:p-4">
+                <div className="bg-[#151515] rounded-xl p-2 md:p-3 border border-white/[0.06]">
+                  <p className="text-[9px] md:text-[0.72rem] text-muted-foreground uppercase tracking-[0.14em]">Containers</p>
+                  <p className="text-base md:text-lg font-semibold">{kpis.seaTransit}</p>
+                  <p className="text-[9px] md:text-xs text-[#7fd0ff]">Em trânsito</p>
+                </div>
+                <div className="bg-[#151515] rounded-xl p-2 md:p-3 border border-white/[0.06]">
+                  <p className="text-[9px] md:text-[0.72rem] text-muted-foreground uppercase tracking-[0.14em]">Voos</p>
+                  <p className="text-base md:text-lg font-semibold">{kpis.airActive}</p>
+                  <p className="text-[9px] md:text-xs text-[#7fd0ff]">Ativos</p>
+                </div>
+                <div className="bg-[#151515] rounded-xl p-2 md:p-3 border border-white/[0.06]">
+                  <p className="text-[9px] md:text-[0.72rem] text-muted-foreground uppercase tracking-[0.14em]">Total</p>
+                  <p className="text-base md:text-lg font-semibold">{kpis.seaTransit + kpis.airActive}</p>
+                  <p className="text-[9px] md:text-xs text-[#7fd0ff]">SEA + AIR</p>
+                </div>
+                <div className="bg-[#151515] rounded-xl p-2 md:p-3 border border-white/[0.06]">
+                  <p className="text-[9px] md:text-[0.72rem] text-muted-foreground uppercase tracking-[0.14em]">Atrasos</p>
+                  <p className="text-base md:text-lg font-semibold">{kpis.delayed}</p>
+                  <p className="text-[9px] md:text-xs text-[#ff8b8b]">Impacto</p>
+                </div>
               </div>
             </div>
           </div>
