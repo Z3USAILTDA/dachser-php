@@ -319,24 +319,29 @@ export default function Olimpo() {
         ).join(",");
 
         if (flightsCsv) {
-          // Get live positions
+          // Get live positions - this endpoint returns: lat, lon, orig_iata, dest_iata, eta
           const fullRes = await fetch(`${baseUrl}?action=fr24_full&flights=${encodeURIComponent(flightsCsv)}&batch=12&retries=3`);
           const fullJson = await fullRes.json();
           const fullArr = Array.isArray(fullJson?.data) ? fullJson.data : [];
 
+          // Build index from fr24_full response - this has all the data we need
           const idxFull = new Map<string, any>();
           for (const f of fullArr) {
-            const k = normFlight(f.flight || f.number || f?.identification?.number?.default || f.callsign || "");
+            const flightNum = f.flight || f.number || f?.identification?.number?.default || f.callsign || "";
+            const k = normFlight(flightNum);
             if (!k) continue;
+            
             idxFull.set(k, {
               oCode: (f.orig_iata || f.origin_iata || f?.origin?.iata || "").toUpperCase(),
               dCode: (f.dest_iata || f.destination_iata || f?.destination?.iata || "").toUpperCase(),
               lat: typeof f.lat === "number" ? f.lat : null,
               lon: typeof f.lon === "number" ? f.lon : null,
+              eta: f.eta || null, // ETA from fr24_full
+              timestamp: f.timestamp || null,
             });
           }
 
-          // Get airports
+          // Get airports for coordinates
           const codesFull = Array.from(
             new Set([...idxFull.values()].flatMap((x) => [x.oCode, x.dCode]).filter(Boolean))
           );
@@ -347,55 +352,30 @@ export default function Olimpo() {
             airports = apJson?.data || {};
           }
 
-          // Get summary
-          const sumRes = await fetch(`${baseUrl}?action=fr24_summary&flights=${encodeURIComponent(flightsCsv)}&batch=12&retries=3`);
-          const sumJson = await sumRes.json();
-          const sumArr = Array.isArray(sumJson?.data) ? sumJson.data : [];
-
-          const idxSum = new Map<string, any>();
-          for (const s of sumArr) {
-            const baseCode = s.flight || s.flight_number || s?.identification?.number?.default || s.number || "";
-            const k = normFlight(baseCode);
-            if (!k) continue;
-
-            const depIata = s?.departure?.airport?.iata || s?.departure?.iata || s?.origin_iata || "";
-            const arrIata = s?.arrival?.airport?.iata || s?.arrival?.iata || s?.destination_iata || "";
-
-            const etaIso = s?.arrival?.estimated_time_utc || s?.eta || s?.arrival?.scheduled_time_utc || null;
-            const ataIso = s?.arrival?.actual_time_utc || s?.ata || null;
-            const atdIso = s?.departure?.actual_time_utc || s?.atd || null;
-
-            idxSum.set(k, {
-              atd: atdIso,
-              eta: etaIso,
-              ata: ataIso,
-              flight_ended: !!s.flight_ended,
-              oCode: depIata?.toUpperCase() || null,
-              dCode: arrIata?.toUpperCase() || null,
-            });
-          }
-
-          // Missing airports
-          const missingCodes = Array.from(
-            new Set([...idxFull.values(), ...idxSum.values()].flatMap((x) => [x.oCode, x.dCode]).filter((c) => c && !(c in airports)))
-          );
-          if (missingCodes.length) {
-            const ap2Res = await fetch(`${baseUrl}?action=airports_public&codes=${encodeURIComponent(missingCodes.join(","))}`);
-            const ap2Json = await ap2Res.json();
-            airports = { ...airports, ...(ap2Json?.data || {}) };
-          }
-
           const nowTs = Date.now();
-          const calcProg = (atdIso: string | null, etaIso: string | null) => {
-            const t0 = atdIso ? new Date(atdIso).getTime() : NaN;
-            const t1 = etaIso ? new Date(etaIso).getTime() : NaN;
-            if (!isFinite(t0) || !isFinite(t1) || t1 <= t0) return 0.5;
-            return Math.max(0, Math.min(1, (nowTs - t0) / (t1 - t0)));
+          
+          // Calculate progress based on timestamp and eta
+          const calcProg = (eta: string | null): number => {
+            if (!eta) return 0.5;
+            const etaTs = new Date(eta).getTime();
+            if (!isFinite(etaTs)) return 0.5;
+            // Assume flight started ~8h before ETA for international flights
+            const estimatedDuration = 8 * 60 * 60 * 1000; // 8 hours default
+            const startTs = etaTs - estimatedDuration;
+            if (nowTs <= startTs) return 0;
+            if (nowTs >= etaTs) return 1;
+            return (nowTs - startTs) / (etaTs - startTs);
           };
-          const calcStatus = (etaIso: string | null, ended: boolean): "Em trânsito" | "Atraso" | "Entregue" => {
-            if (ended) return "Entregue";
-            const t1 = etaIso ? new Date(etaIso).getTime() : NaN;
-            if (isFinite(t1) && nowTs > t1) return "Atraso";
+          
+          // Calculate status based on ETA
+          const calcStatus = (etaIso: string | null, hasPosition: boolean): "Em trânsito" | "Atraso" | "Entregue" => {
+            if (!etaIso) return "Em trânsito";
+            const etaTs = new Date(etaIso).getTime();
+            if (!isFinite(etaTs)) return "Em trânsito";
+            // If past ETA and still has position, it's delayed
+            if (nowTs > etaTs && hasPosition) return "Atraso";
+            // If past ETA and no position, likely delivered
+            if (nowTs > etaTs + 2 * 60 * 60 * 1000 && !hasPosition) return "Entregue";
             return "Em trânsito";
           };
 
@@ -403,22 +383,35 @@ export default function Olimpo() {
             const s = seedAir[i];
             const k = normFlight(s.flight);
             const f = idxFull.get(k) || {};
-            const sum = idxSum.get(k) || {};
 
-            const oCode = (f.oCode || sum.oCode || "").toUpperCase() || "—";
-            const dCode = (f.dCode || sum.dCode || "").toUpperCase() || "—";
+            const oCode = (f.oCode || "").toUpperCase();
+            const dCode = (f.dCode || "").toUpperCase();
+
+            // Skip if no route data
+            if (!oCode || !dCode) continue;
 
             const o = airports[oCode] || null;
             const d = airports[dCode] || null;
 
-            const etaIso = sum.eta || null;
-            const ataIso = sum.ata || null;
-            const etaApiHuman = fmtLocalBRDateTime(ataIso || etaIso) || "—";
+            // Skip if no airport coordinates
+            if (!o || !d) continue;
 
-            const deliveredUntilTs = ataIso ? new Date(ataIso).getTime() + 24 * 60 * 60 * 1000 : null;
-            const status = calcStatus(etaIso, !!sum.flight_ended);
-            const pos: [number, number] | null =
-              status !== "Entregue" && Number.isFinite(f.lat) && Number.isFinite(f.lon) ? [Number(f.lat), Number(f.lon)] : null;
+            const etaIso = f.eta || null;
+            const etaApiHuman = fmtLocalBRDateTime(etaIso) || "";
+            
+            // Skip if no ETA
+            if (!etaApiHuman) continue;
+
+            const hasPosition = Number.isFinite(f.lat) && Number.isFinite(f.lon);
+            const status = calcStatus(etaIso, hasPosition);
+            
+            // Skip delivered items older than 24h
+            if (status === "Entregue") {
+              const etaTs = etaIso ? new Date(etaIso).getTime() : 0;
+              if (nowTs > etaTs + 24 * 60 * 60 * 1000) continue;
+            }
+            
+            const pos: [number, number] | null = hasPosition ? [Number(f.lat), Number(f.lon)] : null;
 
             const rawCliente = s.cliente || "";
             const clienteCorto = String(rawCliente).split(" - ")[0].trim() || rawCliente;
@@ -431,12 +424,12 @@ export default function Olimpo() {
               rota: `${oCode} → ${dCode}`,
               eta_iso: etaIso,
               eta_api: etaApiHuman,
-              ata_iso: ataIso,
-              delivered_until_ts: deliveredUntilTs,
+              ata_iso: status === "Entregue" ? etaIso : null,
+              delivered_until_ts: status === "Entregue" && etaIso ? new Date(etaIso).getTime() + 24 * 60 * 60 * 1000 : null,
               status,
               orig: o && Number.isFinite(+o.lat) && Number.isFinite(+o.lon) ? [Number(o.lat), Number(o.lon)] : null,
               dest: d && Number.isFinite(+d.lat) && Number.isFinite(+d.lon) ? [Number(d.lat), Number(d.lon)] : null,
-              prog: calcProg(sum.atd || null, etaIso),
+              prog: calcProg(etaIso),
               pos,
               flight: k,
               asset: s.awb || null,
@@ -770,9 +763,9 @@ export default function Olimpo() {
   // Fullscreen overlay content (renders inside portal-like structure)
   const fullscreenOverlay = isFullscreen ? (
     <>
-      {/* Floating panel - filters + KPIs at top left - same as normal mode */}
+      {/* Floating panel - filters + KPIs at top center - wide rectangle */}
       <div 
-        className="absolute top-4 left-4 z-[1000] rounded-xl flex flex-col w-80 max-h-[50vh]"
+        className="absolute top-4 left-1/2 -translate-x-1/2 z-[1000] rounded-xl flex flex-col w-[95vw] max-w-[900px]"
         style={{
           background: 'rgba(5,6,18,.92)',
           border: '1px solid rgba(255,255,255,.12)',
@@ -782,7 +775,7 @@ export default function Olimpo() {
         <div className="p-3 border-b border-white/[0.08] flex items-center justify-between">
           <div>
             <h2 className="text-xs tracking-[0.16em] uppercase text-white/90">Visão de Filtros</h2>
-            <p className="text-[10px] text-muted-foreground">Refine a visualização</p>
+            <p className="text-[10px] text-muted-foreground">Refine a visualização do mapa e do resumo</p>
           </div>
           <button
             onClick={() => setIsFullscreen(false)}
@@ -792,14 +785,15 @@ export default function Olimpo() {
           </button>
         </div>
 
-        <div className="flex-1 overflow-y-auto">
-          {/* Filter buttons */}
-          <div className="p-2 flex flex-wrap gap-1.5 border-b border-white/[0.05]">
+        {/* Horizontal layout: Filters + KPIs side by side */}
+        <div className="flex flex-wrap items-start gap-3 p-3">
+          {/* Filters section */}
+          <div className="flex flex-wrap gap-1.5 flex-1 min-w-[200px]">
             <Input
               placeholder="Buscar..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="flex-1 min-w-[100px] rounded-full bg-[rgba(14,14,14,0.96)] border-white/20 text-xs h-8"
+              className="w-40 rounded-full bg-[rgba(14,14,14,0.96)] border-white/20 text-xs h-8"
             />
             <button
               onClick={() => setDaysFilter(daysFilter === 7 ? null : 7)}
@@ -833,27 +827,23 @@ export default function Olimpo() {
             </button>
           </div>
 
-          {/* KPI cards */}
-          <div className="grid grid-cols-2 gap-2 p-3">
-            <div className="bg-[#151515] rounded-xl p-2 border border-white/[0.06]">
+          {/* KPI cards - horizontal */}
+          <div className="flex gap-2 shrink-0">
+            <div className="bg-[#151515] rounded-lg px-3 py-2 border border-white/[0.06] min-w-[80px]">
               <p className="text-[9px] text-muted-foreground uppercase tracking-[0.14em]">Containers</p>
-              <p className="text-base font-semibold">{kpis.seaTransit}</p>
-              <p className="text-[9px] text-[#7fd0ff]">Em trânsito</p>
+              <p className="text-lg font-semibold">{kpis.seaTransit}</p>
             </div>
-            <div className="bg-[#151515] rounded-xl p-2 border border-white/[0.06]">
+            <div className="bg-[#151515] rounded-lg px-3 py-2 border border-white/[0.06] min-w-[80px]">
               <p className="text-[9px] text-muted-foreground uppercase tracking-[0.14em]">Voos</p>
-              <p className="text-base font-semibold">{kpis.airActive}</p>
-              <p className="text-[9px] text-[#7fd0ff]">Ativos</p>
+              <p className="text-lg font-semibold">{kpis.airActive}</p>
             </div>
-            <div className="bg-[#151515] rounded-xl p-2 border border-white/[0.06]">
+            <div className="bg-[#151515] rounded-lg px-3 py-2 border border-white/[0.06] min-w-[80px]">
               <p className="text-[9px] text-muted-foreground uppercase tracking-[0.14em]">Total</p>
-              <p className="text-base font-semibold">{kpis.seaTransit + kpis.airActive}</p>
-              <p className="text-[9px] text-[#7fd0ff]">SEA + AIR</p>
+              <p className="text-lg font-semibold">{kpis.seaTransit + kpis.airActive}</p>
             </div>
-            <div className="bg-[#151515] rounded-xl p-2 border border-white/[0.06]">
+            <div className="bg-[#151515] rounded-lg px-3 py-2 border border-white/[0.06] min-w-[80px]">
               <p className="text-[9px] text-muted-foreground uppercase tracking-[0.14em]">Atrasos</p>
-              <p className="text-base font-semibold">{kpis.delayed}</p>
-              <p className="text-[9px] text-[#ff8b8b]">Impacto</p>
+              <p className="text-lg font-semibold text-[#ff8b8b]">{kpis.delayed}</p>
             </div>
           </div>
         </div>
