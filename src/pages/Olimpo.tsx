@@ -596,14 +596,30 @@ export default function Olimpo() {
       const baseColor = item.mode === "air" ? "#7fd0ff" : "#ffc800";
 
       if (line.length > 1) {
-        // Draw route line with glow effect
-        activeRouteRef.current = L.polyline(line, { 
+        // Draw base route line (solid, subtle)
+        const baseLine = L.polyline(line, { 
           color: baseColor, 
-          weight: 3.5, 
-          opacity: 0.9,
+          weight: 2, 
+          opacity: 0.3,
           lineCap: 'round',
           lineJoin: 'round'
         }).addTo(map);
+
+        // Draw animated dashed line on top
+        const animatedLine = L.polyline(line, { 
+          color: baseColor, 
+          weight: 3, 
+          opacity: 0.9,
+          lineCap: 'round',
+          lineJoin: 'round',
+          dashArray: '12, 8',
+          className: 'animated-route-line'
+        }).addTo(map);
+
+        // Store both lines for cleanup
+        activeRouteRef.current = baseLine;
+        // Store animated line in markers array for cleanup
+        const animatedMarker = animatedLine as unknown as L.CircleMarker;
 
         // Add origin marker (green)
         const originMarker = L.circleMarker(item.orig, {
@@ -623,7 +639,7 @@ export default function Olimpo() {
           weight: 2,
         }).addTo(map);
 
-        activeMarkersRef.current = [originMarker, destMarker];
+        activeMarkersRef.current = [originMarker, destMarker, animatedMarker];
         
         // Pan to fit the route in view
         const bounds = L.latLngBounds([item.orig, item.dest]);
