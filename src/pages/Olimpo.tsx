@@ -688,21 +688,24 @@ export default function Olimpo() {
       }
 
       if (pos) {
-        // Use deterministic offset based on route index to spread overlapping markers
-        const offsetAngle = (currentRouteIndex * 45) * (Math.PI / 180); // 45 degrees per route
-        const offsetDistance = 0.8 + (currentRouteIndex % 5) * 0.3; // 0.8 to 2.0 degrees
+        // Use deterministic offset based on route index to spread overlapping markers significantly
+        // Use golden angle (137.5°) for better distribution across the circle
+        const goldenAngle = 137.508 * (Math.PI / 180);
+        const offsetAngle = currentRouteIndex * goldenAngle;
+        // Spiral outward with each marker - minimum 2 degrees, max ~6 degrees
+        const offsetDistance = 2.0 + (currentRouteIndex % 8) * 0.5;
         const latOffset = item.mode === "air" ? Math.sin(offsetAngle) * offsetDistance : 0;
         const lngOffset = item.mode === "air" ? Math.cos(offsetAngle) * offsetDistance : 0;
         const offsetPos: [number, number] = [pos[0] + latOffset, pos[1] + lngOffset];
 
         const icon = L.divIcon({
           html: item.mode === "air" ? "✈️" : "🚢",
-          className: "cursor-pointer hover:scale-125 transition-transform",
-          iconSize: [22, 22],
-          iconAnchor: [11, 11],
+          className: "cursor-pointer",
+          iconSize: [24, 24],
+          iconAnchor: [12, 12],
         });
         
-        const marker = L.marker(offsetPos, { icon }).addTo(map);
+        const marker = L.marker(offsetPos, { icon, zIndexOffset: currentRouteIndex * 10 }).addTo(map);
         
         // Show route on click
         marker.on('click', (e) => {
