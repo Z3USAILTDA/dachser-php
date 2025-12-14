@@ -1,237 +1,311 @@
-import { useState, useEffect } from "react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { useState } from "react";
 import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Progress } from "@/components/ui/progress";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
-import { Bot, RefreshCw, Clock, CheckCircle, AlertCircle, Upload } from "lucide-react";
-import { format } from "date-fns";
-import { ptBR } from "date-fns/locale";
+import { Bot, Upload, CheckCircle2, XCircle, AlertCircle, FileText } from "lucide-react";
+import { TipoAnexo } from "@/types/voucher";
 
-interface RoboSyncStatus {
-  ultimaSincronizacao: Date | null;
-  pendentes: number;
-  sincronizados: number;
-  erros: number;
+interface FileMatch {
+  file: File;
+  fileName: string;
+  numeroSPO: string | null;
+  voucherId: string | null;
+  status: "pending" | "processing" | "success" | "error";
+  error?: string;
 }
 
-interface VoucherPendente {
-  id: string;
-  numeroSPO: string;
-  fornecedor: string;
-  valor: number;
-  vencimento: Date;
-  statusComprovante: string;
-}
-
-export const RoboTab = () => {
-  const [status, setStatus] = useState<RoboSyncStatus>({
-    ultimaSincronizacao: null,
-    pendentes: 0,
-    sincronizados: 0,
-    erros: 0,
-  });
-  const [vouchersPendentes, setVouchersPendentes] = useState<VoucherPendente[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [syncing, setSyncing] = useState(false);
+export function RoboTab() {
   const { toast } = useToast();
+  const [files, setFiles] = useState<FileMatch[]>([]);
+  const [processing, setProcessing] = useState(false);
+  const [progress, setProgress] = useState(0);
 
-  const loadData = async () => {
-    try {
-      setLoading(true);
-      
-      // Fetch vouchers in ROBO stage
-      const { data, error } = await supabase
-        .from("vouchers")
-        .select("*")
-        .eq("etapa_atual", "ROBO");
+  const extractSPOFromFilename = (filename: string): string | null => {
+    const patterns = [
+      /^(\d{5,})[-_]/,
+      /SPO[-_]?(\d{5,})/i,
+      /[-_](\d{5,})\./,
+    ];
 
-      if (error) throw error;
-
-      const mapped = (data || []).map((v: any) => ({
-        id: v.id,
-        numeroSPO: v.numero_spo,
-        fornecedor: v.fornecedor || "N/A",
-        valor: v.valor || 0,
-        vencimento: new Date(v.vencimento),
-        statusComprovante: v.status_comprovante || "PENDENTE",
-      }));
-
-      setVouchersPendentes(mapped);
-      
-      setStatus({
-        ultimaSincronizacao: new Date(),
-        pendentes: mapped.filter(v => v.statusComprovante === "PENDENTE").length,
-        sincronizados: mapped.filter(v => v.statusComprovante === "VALIDADO").length,
-        erros: 0,
-      });
-    } catch (error: any) {
-      toast({
-        title: "Erro ao carregar dados",
-        description: error.message,
-        variant: "destructive",
-      });
-    } finally {
-      setLoading(false);
+    for (const pattern of patterns) {
+      const match = filename.match(pattern);
+      if (match && match[1]) {
+        return match[1];
+      }
     }
+
+    return null;
   };
 
-  useEffect(() => {
-    loadData();
-  }, []);
+  const handleFileSelect = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const selectedFiles = Array.from(event.target.files || []);
+    
+    if (selectedFiles.length === 0) return;
 
-  const handleSync = async () => {
-    setSyncing(true);
-    // Simulate sync process
-    await new Promise(resolve => setTimeout(resolve, 2000));
-    await loadData();
-    setSyncing(false);
+    const fileMatches: FileMatch[] = await Promise.all(
+      selectedFiles.map(async (file) => {
+        const numeroSPO = extractSPOFromFilename(file.name);
+        let voucherId = null;
+
+        if (numeroSPO) {
+          const { data } = await supabase
+            .from("vouchers")
+            .select("id, numero_spo, etapa_atual")
+            .eq("numero_spo", numeroSPO)
+            .eq("etapa_atual", "ROBO")
+            .maybeSingle();
+
+          if (data) {
+            voucherId = data.id;
+          }
+        }
+
+        return {
+          file,
+          fileName: file.name,
+          numeroSPO,
+          voucherId,
+          status: "pending" as const,
+        };
+      })
+    );
+
+    setFiles(fileMatches);
+
     toast({
-      title: "Sincronização concluída",
-      description: "Dados atualizados com sucesso",
+      title: "Arquivos carregados",
+      description: `${selectedFiles.length} arquivo(s) prontos para processamento`,
     });
   };
 
-  const getStatusBadge = (status: string) => {
-    switch (status) {
-      case "VALIDADO":
-        return <Badge className="bg-green-500 text-white">Validado</Badge>;
-      case "ANEXADO":
-        return <Badge className="bg-info text-info-foreground">Anexado</Badge>;
-      default:
-        return <Badge className="bg-warning text-warning-foreground">Pendente</Badge>;
+  const processFiles = async () => {
+    setProcessing(true);
+    setProgress(0);
+
+    const { data: userData } = await supabase.auth.getUser();
+    let processed = 0;
+
+    for (const fileMatch of files) {
+      setFiles((prev) =>
+        prev.map((f) =>
+          f.fileName === fileMatch.fileName
+            ? { ...f, status: "processing" }
+            : f
+        )
+      );
+
+      try {
+        if (!fileMatch.voucherId) {
+          throw new Error("Voucher não encontrado ou não está na etapa ROBO");
+        }
+
+        const fileExt = fileMatch.file.name.split(".").pop();
+        const fileName = `${Math.random()}.${fileExt}`;
+        const filePath = `${fileName}`;
+
+        const { error: uploadError } = await supabase.storage
+          .from("voucher-anexos")
+          .upload(filePath, fileMatch.file);
+
+        if (uploadError) throw uploadError;
+
+        const { data: { publicUrl } } = supabase.storage
+          .from("voucher-anexos")
+          .getPublicUrl(filePath);
+
+        const { error: attachmentError } = await supabase
+          .from("voucher_anexos")
+          .insert({
+            voucher_id: fileMatch.voucherId,
+            tipo: "COMPROVANTE" as TipoAnexo,
+            file_url: publicUrl,
+            file_name: fileMatch.file.name,
+            file_size: fileMatch.file.size,
+            uploaded_by_user_id: userData.user?.id,
+          });
+
+        if (attachmentError) throw attachmentError;
+
+        await supabase.from("voucher_logs").insert({
+          voucher_id: fileMatch.voucherId,
+          user_id: userData.user?.id,
+          acao: "COMPROVANTE_ANEXADO",
+          detalhe: `Comprovante ${fileMatch.file.name} anexado automaticamente pelo robô`,
+        });
+
+        setFiles((prev) =>
+          prev.map((f) =>
+            f.fileName === fileMatch.fileName
+              ? { ...f, status: "success" }
+              : f
+          )
+        );
+      } catch (error: any) {
+        console.error("Erro ao processar arquivo:", error);
+        
+        setFiles((prev) =>
+          prev.map((f) =>
+            f.fileName === fileMatch.fileName
+              ? { ...f, status: "error", error: error.message }
+              : f
+          )
+        );
+      }
+
+      processed++;
+      setProgress((processed / files.length) * 100);
     }
+
+    setProcessing(false);
+
+    const successCount = files.filter((f) => f.status === "success").length;
+    const errorCount = files.filter((f) => f.status === "error").length;
+
+    toast({
+      title: "Processamento concluído",
+      description: `${successCount} arquivo(s) enviado(s) com sucesso. ${errorCount} erro(s).`,
+      variant: errorCount > 0 ? "destructive" : "default",
+    });
+  };
+
+  const getStatusIcon = (status: FileMatch["status"]) => {
+    switch (status) {
+      case "success":
+        return <CheckCircle2 className="h-5 w-5 text-green-500" />;
+      case "error":
+        return <XCircle className="h-5 w-5 text-destructive" />;
+      case "processing":
+        return <div className="h-5 w-5 animate-spin rounded-full border-2 border-primary border-t-transparent" />;
+      default:
+        return <AlertCircle className="h-5 w-5 text-muted-foreground" />;
+    }
+  };
+
+  const getStatusBadge = (fileMatch: FileMatch) => {
+    if (!fileMatch.numeroSPO) {
+      return <Badge className="bg-destructive text-destructive-foreground">SPO não identificado</Badge>;
+    }
+    if (!fileMatch.voucherId) {
+      return <Badge variant="secondary">Voucher não encontrado</Badge>;
+    }
+    return <Badge className="bg-primary text-primary-foreground">SPO {fileMatch.numeroSPO}</Badge>;
   };
 
   return (
     <div className="space-y-6 animate-fade-in">
-      {/* Status Cards */}
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <Card className="bg-card/60 backdrop-blur-sm border-border/50">
-          <CardContent className="pt-6">
-            <div className="flex items-center gap-3">
-              <div className="p-3 rounded-full bg-primary/20">
-                <Bot className="h-5 w-5 text-primary" />
-              </div>
-              <div>
-                <p className="text-xs text-muted-foreground uppercase">Status Robô</p>
-                <p className="text-lg font-bold text-green-500">Ativo</p>
-              </div>
+      <Card className="bg-card/80 backdrop-blur-sm border-border/50">
+        <CardHeader>
+          <div className="flex items-center gap-3">
+            <div className="p-2 rounded-lg bg-primary/10">
+              <Bot className="h-6 w-6 text-primary" />
             </div>
-          </CardContent>
-        </Card>
-
-        <Card className="bg-card/60 backdrop-blur-sm border-border/50">
-          <CardContent className="pt-6">
-            <div className="flex items-center gap-3">
-              <div className="p-3 rounded-full bg-warning/20">
-                <Clock className="h-5 w-5 text-warning" />
-              </div>
-              <div>
-                <p className="text-xs text-muted-foreground uppercase">Pendentes</p>
-                <p className="text-lg font-bold">{status.pendentes}</p>
-              </div>
+            <div>
+              <CardTitle>Upload em Lote</CardTitle>
+              <CardDescription>
+                Selecione múltiplos arquivos de comprovantes. O sistema identificará automaticamente 
+                o número SPO no nome do arquivo.
+              </CardDescription>
             </div>
-          </CardContent>
-        </Card>
-
-        <Card className="bg-card/60 backdrop-blur-sm border-border/50">
-          <CardContent className="pt-6">
-            <div className="flex items-center gap-3">
-              <div className="p-3 rounded-full bg-green-500/20">
-                <CheckCircle className="h-5 w-5 text-green-500" />
-              </div>
-              <div>
-                <p className="text-xs text-muted-foreground uppercase">Sincronizados</p>
-                <p className="text-lg font-bold">{status.sincronizados}</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card className="bg-card/60 backdrop-blur-sm border-border/50">
-          <CardContent className="pt-6">
-            <div className="flex items-center gap-3">
-              <div className="p-3 rounded-full bg-destructive/20">
-                <AlertCircle className="h-5 w-5 text-destructive" />
-              </div>
-              <div>
-                <p className="text-xs text-muted-foreground uppercase">Erros</p>
-                <p className="text-lg font-bold">{status.erros}</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Actions */}
-      <Card className="bg-card/60 backdrop-blur-sm border-border/50">
-        <CardHeader className="flex flex-row items-center justify-between">
-          <CardTitle className="text-lg flex items-center gap-2">
-            <Bot className="h-5 w-5 text-primary" />
-            Sincronização de Comprovantes
-          </CardTitle>
-          <div className="flex gap-2">
-            <Button variant="outline" onClick={loadData} disabled={loading}>
-              <RefreshCw className={`h-4 w-4 mr-2 ${loading ? "animate-spin" : ""}`} />
-              Atualizar
-            </Button>
-            <Button onClick={handleSync} disabled={syncing}>
-              {syncing ? (
-                <>
-                  <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
-                  Sincronizando...
-                </>
-              ) : (
-                <>
-                  <Upload className="h-4 w-4 mr-2" />
-                  Sincronizar RM
-                </>
-              )}
-            </Button>
           </div>
         </CardHeader>
-        <CardContent>
-          {status.ultimaSincronizacao && (
-            <p className="text-sm text-muted-foreground mb-4">
-              Última sincronização: {format(status.ultimaSincronizacao, "dd/MM/yyyy HH:mm", { locale: ptBR })}
-            </p>
-          )}
-          
-          {loading ? (
-            <div className="text-center py-8 text-muted-foreground">Carregando...</div>
-          ) : vouchersPendentes.length === 0 ? (
-            <div className="text-center py-8 text-muted-foreground">
-              <CheckCircle className="h-12 w-12 mx-auto mb-4 text-green-500" />
-              <p>Nenhum voucher aguardando comprovante</p>
+
+        <CardContent className="space-y-6">
+          <div className="space-y-2">
+            <Label htmlFor="files">Selecionar Comprovantes</Label>
+            <div className="flex gap-3">
+              <Input
+                id="files"
+                type="file"
+                multiple
+                accept=".pdf,.jpg,.jpeg,.png"
+                onChange={handleFileSelect}
+                disabled={processing}
+                className="flex-1 bg-input/50 border-border/50"
+              />
+              <Button
+                onClick={processFiles}
+                disabled={files.length === 0 || processing}
+                className="gap-2 bg-primary text-primary-foreground hover:bg-primary/90 shadow-lg shadow-primary/20"
+              >
+                {processing ? (
+                  <>
+                    <div className="h-4 w-4 animate-spin rounded-full border-2 border-primary-foreground border-t-transparent" />
+                    Processando...
+                  </>
+                ) : (
+                  <>
+                    <Upload className="h-4 w-4" />
+                    Processar {files.length > 0 && `(${files.length})`}
+                  </>
+                )}
+              </Button>
             </div>
-          ) : (
-            <Table>
-              <TableHeader>
-                <TableRow className="bg-muted/30">
-                  <TableHead>SPO</TableHead>
-                  <TableHead>Fornecedor</TableHead>
-                  <TableHead>Valor</TableHead>
-                  <TableHead>Vencimento</TableHead>
-                  <TableHead>Status Comprovante</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {vouchersPendentes.map((v) => (
-                  <TableRow key={v.id}>
-                    <TableCell className="font-mono">{v.numeroSPO}</TableCell>
-                    <TableCell>{v.fornecedor}</TableCell>
-                    <TableCell>R$ {v.valor.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</TableCell>
-                    <TableCell>{format(v.vencimento, "dd/MM/yyyy", { locale: ptBR })}</TableCell>
-                    <TableCell>{getStatusBadge(v.statusComprovante)}</TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+          </div>
+
+          {processing && (
+            <div className="space-y-2">
+              <div className="flex justify-between text-sm">
+                <span className="text-muted-foreground">Progresso</span>
+                <span className="text-primary font-medium">{Math.round(progress)}%</span>
+              </div>
+              <Progress value={progress} className="h-2" />
+            </div>
           )}
+
+          {files.length > 0 && (
+            <div className="space-y-3">
+              <h3 className="font-semibold text-foreground">Arquivos ({files.length})</h3>
+              <div className="space-y-2 max-h-96 overflow-y-auto">
+                {files.map((fileMatch, index) => (
+                  <div
+                    key={index}
+                    className="flex items-center gap-3 p-3 border border-border/50 rounded-lg bg-muted/30 hover:bg-muted/50 transition-colors animate-fade-in"
+                    style={{ animationDelay: `${index * 50}ms` }}
+                  >
+                    <FileText className="h-5 w-5 text-muted-foreground flex-shrink-0" />
+                    <div className="flex-1 min-w-0">
+                      <p className="font-medium text-sm truncate text-foreground">
+                        {fileMatch.fileName}
+                      </p>
+                      <div className="flex items-center gap-2 mt-1">
+                        {getStatusBadge(fileMatch)}
+                        {fileMatch.error && (
+                          <span className="text-xs text-destructive">{fileMatch.error}</span>
+                        )}
+                      </div>
+                    </div>
+                    {getStatusIcon(fileMatch.status)}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          <div className="p-4 bg-muted/30 rounded-lg border border-border/30">
+            <h4 className="font-semibold mb-2 flex items-center gap-2 text-foreground">
+              <AlertCircle className="h-4 w-4 text-primary" />
+              Padrões de Nome Aceitos
+            </h4>
+            <ul className="text-sm text-muted-foreground space-y-1 ml-6">
+              <li>• <code className="bg-muted px-1 rounded">12345_comprovante.pdf</code> - SPO no início</li>
+              <li>• <code className="bg-muted px-1 rounded">SPO12345.pdf</code> ou <code className="bg-muted px-1 rounded">SPO-12345.pdf</code> - Com prefixo SPO</li>
+              <li>• <code className="bg-muted px-1 rounded">comprovante_12345.pdf</code> - SPO no meio/fim</li>
+            </ul>
+            <p className="text-sm text-muted-foreground mt-3 flex items-center gap-1">
+              <AlertCircle className="h-3 w-3 text-warning" />
+              O voucher deve estar na etapa <strong className="text-foreground">ROBO</strong> para receber comprovantes automaticamente.
+            </p>
+          </div>
         </CardContent>
       </Card>
     </div>
   );
-};
+}
+
+// Named export for backward compatibility
+export { RoboTab as default };
