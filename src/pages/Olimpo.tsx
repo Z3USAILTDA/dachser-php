@@ -596,30 +596,38 @@ export default function Olimpo() {
       const baseColor = item.mode === "air" ? "#7fd0ff" : "#ffc800";
 
       if (line.length > 1) {
+        // Draw route line with glow effect
         activeRouteRef.current = L.polyline(line, { 
           color: baseColor, 
-          weight: 2.5, 
-          opacity: 0.85 
+          weight: 3.5, 
+          opacity: 0.9,
+          lineCap: 'round',
+          lineJoin: 'round'
         }).addTo(map);
 
-        // Add origin/destination markers
+        // Add origin marker (green)
         const originMarker = L.circleMarker(item.orig, {
-          radius: 6,
+          radius: 8,
           fillColor: "#22c55e",
-          fillOpacity: 0.9,
+          fillOpacity: 1,
           color: "#fff",
           weight: 2,
         }).addTo(map);
 
+        // Add destination marker (red)
         const destMarker = L.circleMarker(item.dest, {
-          radius: 6,
+          radius: 8,
           fillColor: "#ef4444",
-          fillOpacity: 0.9,
+          fillOpacity: 1,
           color: "#fff",
           weight: 2,
         }).addTo(map);
 
         activeMarkersRef.current = [originMarker, destMarker];
+        
+        // Pan to fit the route in view
+        const bounds = L.latLngBounds([item.orig, item.dest]);
+        map.flyToBounds(bounds.pad(0.3), { duration: 0.5, maxZoom: 5 });
       }
 
       // Collect all AWBs/containers in this group
