@@ -71,6 +71,85 @@ const handler = async (req: Request): Promise<Response> => {
       try {
         mariaClient = await getMariaDBClient();
         
+        // First, check if the tables exist
+        const tablesCheck = await mariaClient.query(
+          `SELECT TABLE_NAME FROM INFORMATION_SCHEMA.TABLES 
+           WHERE TABLE_SCHEMA = 'dados_dachser' 
+           AND TABLE_NAME IN ('t_spovoucher', 't_baixas', 't_dados_financeiro_nfs', 't_vouchers')
+           ORDER BY TABLE_NAME`
+        );
+        
+        const existingTables = (tablesCheck || []).map((t: any) => t.TABLE_NAME);
+        console.log("[voucher-integrate-rm] Tabelas encontradas:", existingTables);
+        
+        // If t_spovoucher doesn't exist, try using t_vouchers directly
+        if (!existingTables.includes('t_spovoucher')) {
+          console.log("[voucher-integrate-rm] t_spovoucher não existe, tentando t_vouchers...");
+          
+          // Try to fetch from t_vouchers instead
+          if (existingTables.includes('t_vouchers')) {
+            const voucherResult = await mariaClient.query(
+              `SELECT 
+                id AS IdLanRM,
+                numero_spo,
+                vencimento,
+                fornecedor,
+                fornecedor AS beneficiario,
+                forma_pagamento,
+                valor,
+                status_baixa,
+                cnpj_fornecedor
+              FROM dados_dachser.t_vouchers
+              WHERE numero_spo = ? OR id = ?
+              LIMIT 1`,
+              [numeroVoucherRM, numeroVoucherRM]
+            );
+            
+            if (voucherResult && voucherResult.length > 0) {
+              const rmData = voucherResult[0] as any;
+              console.log("[voucher-integrate-rm] Dados encontrados em t_vouchers:", rmData);
+              
+              await mariaClient.close();
+              
+              return new Response(
+                JSON.stringify({
+                  success: true,
+                  data: {
+                    idMovRM: null,
+                    idLanRM: rmData.IdLanRM,
+                    fornecedor: rmData.fornecedor || "",
+                    beneficiario: rmData.beneficiario || "",
+                    vencimento: rmData.vencimento ? new Date(rmData.vencimento).toISOString().split('T')[0] : null,
+                    formaPagamento: mapFormaPagamento(rmData.forma_pagamento),
+                    formaPagamentoOriginal: rmData.forma_pagamento,
+                    valor: rmData.valor,
+                    dataBaixa: null,
+                    statusLan: rmData.status_baixa === 'BAIXADO_RM' ? 1 : 0,
+                    cnpjFornecedor: rmData.cnpj_fornecedor,
+                  },
+                }),
+                {
+                  status: 200,
+                  headers: { "Content-Type": "application/json", ...corsHeaders },
+                }
+              );
+            }
+          }
+          
+          await mariaClient.close();
+          return new Response(
+            JSON.stringify({
+              success: false,
+              error: `Tabela t_spovoucher não encontrada no banco dados_dachser. Tabelas disponíveis: ${existingTables.join(', ') || 'nenhuma'}`,
+              availableTables: existingTables,
+            }),
+            {
+              status: 404,
+              headers: { "Content-Type": "application/json", ...corsHeaders },
+            }
+          );
+        }
+        
         // Buscar dados do voucher em t_spovoucher JOIN t_baixas
         const result = await mariaClient.query(
           `SELECT 
@@ -125,7 +204,7 @@ const handler = async (req: Request): Promise<Response> => {
 
         // Buscar CNPJ via t_dados_financeiro_nfs (comparando razao_social com fornecedor)
         let cnpjFornecedor: string | null = null;
-        if (rmData.fornecedor) {
+        if (rmData.fornecedor && existingTables.includes('t_dados_financeiro_nfs')) {
           const cnpjResult = await mariaClient.query(
             `SELECT cnpj, razao_social
              FROM dados_dachser.t_dados_financeiro_nfs
