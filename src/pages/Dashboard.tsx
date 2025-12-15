@@ -328,11 +328,11 @@ const Dashboard = () => {
 
     {/* Children Row */}
     <div className="relative flex gap-8 justify-center">
-      {/* Linha horizontal – ocupa toda a linha dos filhos */}
+      {/* Linha horizontal – conecta centro do primeiro ao centro do último filho */}
       {item.children.length > 1 && (
         <div
           className="absolute top-0 h-0.5 bg-primary"
-          style={{ left: 0, right: 0 }}
+          style={{ left: 'calc(50% / ' + item.children.length + ')', right: 'calc(50% / ' + item.children.length + ')' }}
         />
       )}
 
@@ -388,7 +388,7 @@ const Dashboard = () => {
                       {child.subChildren.length > 1 && (
                         <div
                           className="absolute top-0 h-0.5 bg-primary"
-                          style={{ left: 0, right: 0 }} // mesma correção nas linhas de nível 3
+                          style={{ left: 'calc(50% / ' + child.subChildren.length + ')', right: 'calc(50% / ' + child.subChildren.length + ')' }}
                         />
                       )}
 
