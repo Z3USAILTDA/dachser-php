@@ -297,7 +297,7 @@ const Dashboard = () => {
                                   </div>
                                 </>}
                             </div>
-                          </div> : <button onClick={() => child.href && navigate(child.href)} className="mt-2 min-w-[220px] px-5 py-2.5 rounded-full text-foreground text-sm font-medium hover:-translate-y-0.5 transition-all duration-200 text-center" style={{
+                          </div> : <button onClick={() => child.href && navigate(child.href)} className="mt-2 px-5 py-2.5 rounded-full text-foreground text-sm font-medium hover:-translate-y-0.5 transition-all duration-200 text-center whitespace-nowrap" style={{
                   background: 'rgba(4, 10, 30, 0.75)',
                   boxShadow: '0 12px 30px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(255, 255, 255, 0.08)',
                   backdropFilter: 'blur(18px)',
