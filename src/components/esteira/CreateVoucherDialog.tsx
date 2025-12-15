@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { Plus, Upload, X, Search, FileText, RefreshCw, Plane, Ship, FileCheck, AlertCircle, Loader2 } from "lucide-react";
+import { Plus, Upload, X, Search, FileText, RefreshCw, Plane, Ship, FileCheck, AlertCircle, Loader2, Check } from "lucide-react";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import {
@@ -169,9 +169,8 @@ export const CreateVoucherDialog = ({
     const numeroRM = form.getValues("numeroRM");
     if (!numeroRM || numeroRM.trim() === "") {
       toast({
-        title: "Número RM obrigatório",
-        description: "Digite o número do voucher no RM para buscar",
-        variant: "destructive",
+        title: "💡 Digite o número do voucher",
+        description: "Informe o número do voucher no RM para buscar os dados automaticamente.",
       });
       return;
     }
@@ -187,14 +186,13 @@ export const CreateVoucherDialog = ({
       if (!data.success) {
         if (data.alreadyProcessed) {
           toast({
-            title: "⚠️ Voucher já processado",
-            description: "Este voucher já possui baixa registrada no RM. Tente outro número de voucher.",
+            title: "ℹ️ Voucher já baixado",
+            description: "Este voucher já possui baixa registrada. Informe outro número ou use a entrada manual.",
           });
         } else {
           toast({
-            title: "Voucher não encontrado",
-            description: data.error || "Não foi possível localizar o voucher no RM",
-            variant: "destructive",
+            title: "🔍 Voucher não localizado",
+            description: "Não encontramos este voucher no RM. Verifique o número ou use a entrada manual.",
           });
         }
         setIsSearchingRM(false);
@@ -208,7 +206,6 @@ export const CreateVoucherDialog = ({
       form.setValue("beneficiario", rmData.beneficiario || "");
       form.setValue("formaPagamento", rmData.formaPagamento);
       
-      // CNPJ - se não encontrado, habilitar campo para preenchimento manual
       if (rmData.cnpjFornecedor) {
         form.setValue("cnpjFornecedor", rmData.cnpjFornecedor);
         setCnpjNotFound(false);
@@ -216,8 +213,8 @@ export const CreateVoucherDialog = ({
         form.setValue("cnpjFornecedor", "");
         setCnpjNotFound(true);
         toast({
-          title: "CNPJ não encontrado",
-          description: "O CNPJ do fornecedor não foi encontrado. Preencha manualmente.",
+          title: "📝 CNPJ não encontrado",
+          description: "Preencha o CNPJ do fornecedor manualmente no campo abaixo.",
         });
       }
       
@@ -503,11 +500,14 @@ export const CreateVoucherDialog = ({
           </Button>
         </DialogTrigger>
       )}
-      <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto bg-card border-border">
+      <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto bg-[rgba(5,6,18,0.95)] border-border/50 backdrop-blur-xl shadow-[0_18px_40px_rgba(0,0,0,.85)]">
         <DialogHeader>
-          <DialogTitle className="text-xl font-semibold text-foreground">Novo Voucher</DialogTitle>
+          <DialogTitle className="text-xl font-semibold text-foreground flex items-center gap-2">
+            <FileText className="h-5 w-5 text-primary" />
+            Novo Voucher
+          </DialogTitle>
           <DialogDescription className="text-muted-foreground">
-            Informe o número do voucher no RM para preencher automaticamente
+            Busque os dados do voucher no RM ou preencha manualmente
           </DialogDescription>
         </DialogHeader>
         
@@ -515,13 +515,13 @@ export const CreateVoucherDialog = ({
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
             
             {/* Mode Toggle - Tab style */}
-            <div className="flex gap-2 p-1 bg-background/50 rounded-lg border border-border">
+            <div className="flex gap-2 p-1 bg-background/30 rounded-xl border border-border/50">
               <Button
                 type="button"
                 variant={isRmMode ? "default" : "ghost"}
                 className={cn(
-                  "flex-1 gap-2",
-                  isRmMode && "bg-primary text-primary-foreground"
+                  "flex-1 gap-2 rounded-lg",
+                  isRmMode && "bg-primary text-primary-foreground shadow-lg"
                 )}
                 onClick={() => handleModeChange("rm")}
               >
@@ -532,8 +532,8 @@ export const CreateVoucherDialog = ({
                 type="button"
                 variant={!isRmMode ? "default" : "ghost"}
                 className={cn(
-                  "flex-1 gap-2",
-                  !isRmMode && "bg-primary text-primary-foreground"
+                  "flex-1 gap-2 rounded-lg",
+                  !isRmMode && "bg-primary text-primary-foreground shadow-lg"
                 )}
                 onClick={() => handleModeChange("manual")}
               >
@@ -544,12 +544,12 @@ export const CreateVoucherDialog = ({
 
             {/* Manual Mode Alert */}
             {!isRmMode && (
-              <div className="flex items-start gap-3 p-4 rounded-lg border border-amber-500/30 bg-amber-500/10">
-                <AlertCircle className="h-5 w-5 text-amber-500 flex-shrink-0 mt-0.5" />
+              <div className="flex items-start gap-3 p-4 rounded-xl border border-amber-500/20 bg-amber-500/5 backdrop-blur-sm">
+                <AlertCircle className="h-5 w-5 text-amber-400 flex-shrink-0 mt-0.5" />
                 <div>
-                  <p className="font-medium text-amber-500">Entrada Manual</p>
+                  <p className="font-medium text-amber-400">Modo de Entrada Manual</p>
                   <p className="text-sm text-muted-foreground">
-                    Preencha todos os campos manualmente. Use apenas quando o voucher não existe no RM.
+                    Preencha todos os campos manualmente. Use este modo quando o voucher não estiver cadastrado no RM.
                   </p>
                 </div>
               </div>
@@ -557,14 +557,15 @@ export const CreateVoucherDialog = ({
 
             {/* RM Number Section - Only in RM mode */}
             {isRmMode && (
-              <div className="p-4 rounded-lg border border-primary/30 bg-primary/5">
+              <div className="p-4 rounded-xl border border-primary/20 bg-primary/5 backdrop-blur-sm">
                 <div className="flex items-center gap-2 mb-3">
                   <Search className="h-4 w-4 text-primary" />
-                  <span className="text-sm font-medium text-primary">Número do Voucher no RM</span>
+                  <span className="text-sm font-medium text-primary">Buscar Voucher no RM</span>
                   <span className="text-destructive">*</span>
                   {rmDataLoaded && (
-                    <Badge className="ml-2 bg-green-500/20 text-green-500 border-green-500/30">
-                      ✓ Dados carregados
+                    <Badge className="ml-2 bg-green-500/10 text-green-400 border-green-500/20">
+                      <Check className="h-3 w-3 mr-1" />
+                      Dados carregados
                     </Badge>
                   )}
                 </div>
@@ -614,11 +615,11 @@ export const CreateVoucherDialog = ({
             )}
 
             {/* Vinculação ao Processo Logístico */}
-            <div className="p-4 rounded-lg border border-border bg-background/30">
+            <div className="p-4 rounded-xl border border-border/30 bg-background/20 backdrop-blur-sm">
               <div className="flex items-center gap-2 mb-4">
                 <FileText className="h-4 w-4 text-primary" />
-                <span className="text-sm font-medium text-primary">Vinculação ao Processo Logístico</span>
-                <span className="text-destructive">*</span>
+                <span className="text-sm font-medium text-primary">Vinculação ao Processo</span>
+                <span className="text-destructive text-xs">obrigatório</span>
               </div>
               
               <div className="grid grid-cols-2 gap-4">
@@ -627,13 +628,13 @@ export const CreateVoucherDialog = ({
                   name="processoId"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel className="flex items-center gap-1.5 text-sm">
-                        Nº do Processo <span className="text-destructive">*</span>
+                      <FormLabel className="flex items-center gap-1.5 text-sm text-muted-foreground">
+                        Nº do Processo
                       </FormLabel>
                       <FormControl>
                         <Input 
                           placeholder="Ex: AIR-2024-001234"
-                          className="bg-background/50 border-border"
+                          className="bg-background/30 border-border/50 focus:border-primary/50"
                           {...field} 
                         />
                       </FormControl>
@@ -643,8 +644,8 @@ export const CreateVoucherDialog = ({
                 />
                 
                 <div>
-                  <Label className="flex items-center gap-1.5 text-sm mb-2">
-                    Origem do Processo <span className="text-destructive">*</span>
+                  <Label className="flex items-center gap-1.5 text-sm text-muted-foreground mb-2">
+                    Origem do Processo
                   </Label>
                   <div className="flex gap-2">
                     {(["AIR", "SEA", "CHB"] as OrigemProcesso[]).map((tipo) => (
@@ -653,10 +654,10 @@ export const CreateVoucherDialog = ({
                         type="button"
                         variant={origemProcesso === tipo ? "default" : "outline"}
                         className={cn(
-                          "flex-1 gap-2",
+                          "flex-1 gap-1.5 rounded-lg",
                           origemProcesso === tipo 
-                            ? "bg-primary text-primary-foreground" 
-                            : "bg-background/50 border-border hover:bg-background"
+                            ? "bg-primary text-primary-foreground shadow-md" 
+                            : "bg-background/30 border-border/50 hover:bg-background/50 hover:border-primary/30"
                         )}
                         onClick={() => setOrigemProcesso(tipo)}
                       >
@@ -672,26 +673,22 @@ export const CreateVoucherDialog = ({
             </div>
 
             {/* Dados do Voucher */}
-            <div className="p-4 rounded-lg border border-border bg-background/30">
+            <div className="p-4 rounded-xl border border-border/30 bg-background/20 backdrop-blur-sm">
               <div className="flex items-center justify-between mb-4">
                 <div className="flex items-center gap-2">
                   <span className="text-sm font-medium text-foreground">Dados do Voucher</span>
-                  {isRmMode ? (
-                    <Badge variant="outline" className="text-xs border-primary/50 text-primary">
+                  {isRmMode && rmDataLoaded && (
+                    <Badge variant="outline" className="text-xs border-primary/30 bg-primary/5 text-primary">
                       <RefreshCw className="h-3 w-3 mr-1" />
                       Sincronizado via RM
                     </Badge>
-                  ) : (
-                    <Badge variant="secondary" className="text-xs">
-                      Manual
+                  )}
+                  {!isRmMode && (
+                    <Badge variant="secondary" className="text-xs bg-muted/50">
+                      Preenchimento manual
                     </Badge>
                   )}
                 </div>
-                {isRmMode && (
-                  <span className="text-xs text-primary italic">
-                    Campos preenchidos automaticamente pelo RM
-                  </span>
-                )}
               </div>
               
               <div className="space-y-4">
