@@ -588,7 +588,7 @@ const EsteiraIndex = () => {
         }
       });
       if (error) throw error;
-      const mappedVouchers: Voucher[] = (data?.vouchers || []).map((v: any) => ({
+      const mappedVouchers: Voucher[] = (data?.data || []).map((v: any) => ({
         id: v.id,
         numeroSPO: v.numero_spo,
         fornecedor: v.fornecedor,
