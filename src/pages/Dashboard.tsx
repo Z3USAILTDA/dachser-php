@@ -327,20 +327,19 @@ const Dashboard = () => {
     <div className="w-0.5 h-5 bg-primary" />
 
     {/* Children Row */}
-    <div className="relative flex gap-8 justify-center">
-      {/* Linha horizontal contínua */}
+    <div className="relative flex justify-center">
+      {/* Linha horizontal única conectando todos os filhos */}
       {item.children.length > 1 && (
-        <div
-          className="absolute top-0 h-0.5 bg-primary"
+        <div 
+          className="absolute top-0 h-0.5 bg-primary pointer-events-none"
           style={{ 
-            left: `calc(100% / ${item.children.length} / 2 + 25px)`, 
-            right: `calc(100% / ${item.children.length} / 2 + 25px)` 
+            left: `calc(50% / ${item.children.length})`,
+            right: `calc(50% / ${item.children.length})`
           }}
         />
       )}
-
       {item.children.map((child, idx) => (
-        <div key={idx} className="relative flex flex-col items-center">
+        <div key={idx} className="relative flex flex-col items-center" style={{ marginLeft: idx > 0 ? '32px' : '0' }}>
           {/* Vertical connector */}
           <div className="w-0.5 h-3 bg-primary" />
           <div className="w-1.5 h-1.5 rounded-full bg-primary -mt-0.5" />
@@ -387,22 +386,22 @@ const Dashboard = () => {
                     <div className="w-0.5 h-5 bg-primary" />
 
                     {/* Sub-children Row */}
-                    <div className="relative flex gap-8 justify-center">
-                      {/* Linha horizontal contínua */}
+                    <div className="relative flex justify-center">
+                      {/* Linha horizontal única conectando todos os sub-filhos */}
                       {child.subChildren.length > 1 && (
-                        <div
-                          className="absolute top-0 h-0.5 bg-primary"
+                        <div 
+                          className="absolute top-0 h-0.5 bg-primary pointer-events-none"
                           style={{ 
-                            left: `calc(100% / ${child.subChildren.length} / 2 + 25px)`, 
-                            right: `calc(100% / ${child.subChildren.length} / 2 + 25px)` 
+                            left: `calc(50% / ${child.subChildren.length})`,
+                            right: `calc(50% / ${child.subChildren.length})`
                           }}
                         />
                       )}
-
                       {child.subChildren.map((subChild, subIdx) => (
                         <div
                           key={subIdx}
                           className="relative flex flex-col items-center"
+                          style={{ marginLeft: subIdx > 0 ? '32px' : '0' }}
                         >
                           <div className="w-0.5 h-3 bg-primary" />
                           <div className="w-1.5 h-1.5 rounded-full bg-primary -mt-0.5" />
