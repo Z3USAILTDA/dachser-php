@@ -1010,17 +1010,11 @@ const EsteiraIndex = () => {
             </div>}
 
           {/* Tab Content */}
-          {activeTab === "processos" && <>
-              <div className="flex items-center gap-3">
-                
-                
-                
-              </div>
-
+          {activeTab === "processos" && <div className="mt-3">
               {loading ? <div className="h-96 rounded-2xl bg-[rgba(5,6,18,0.9)] border border-[rgba(255,255,255,0.12)] animate-pulse" /> : <div className="rounded-2xl bg-[rgba(5,6,18,0.9)] border border-[rgba(255,255,255,0.12)] backdrop-blur-[18px] shadow-[0_18px_40px_rgba(0,0,0,0.85)] overflow-hidden">
                   <VoucherTable vouchers={filteredVouchers} onViewDetails={handleViewDetails} onEdit={handleEdit} onDelete={handleDelete} onGoBack={handleGoBack} filters={filters} onFilterChange={setFilters} />
                 </div>}
-            </>}
+            </div>}
 
           {activeTab === "dashboard" && <DashboardTab vouchers={vouchers} />}
           {activeTab === "analytics" && <AnalyticsDashboard vouchers={vouchers} />}
