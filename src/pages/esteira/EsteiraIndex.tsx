@@ -1014,9 +1014,7 @@ const EsteiraIndex = () => {
               <div className="flex items-center gap-3">
                 <Receipt className="h-5 w-5 text-[#ffc800]" />
                 <h3 className="text-lg font-semibold text-white">Vouchers</h3>
-                <span className="px-3 py-1 rounded-full bg-primary/15 text-primary border border-primary/40 text-[0.75rem] font-mono">
-                  {filteredVouchers.length} registros • Fonte: MariaDB
-                </span>
+                
               </div>
 
               {loading ? <div className="h-96 rounded-2xl bg-[rgba(5,6,18,0.9)] border border-[rgba(255,255,255,0.12)] animate-pulse" /> : <div className="rounded-2xl bg-[rgba(5,6,18,0.9)] border border-[rgba(255,255,255,0.12)] backdrop-blur-[18px] shadow-[0_18px_40px_rgba(0,0,0,0.85)] overflow-hidden">
