@@ -8,6 +8,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { Voucher, EtapaAtual, ETAPA_LABELS, SLA_POR_ETAPA } from "@/types/voucher";
 import { useUserRole } from "@/hooks/useUserRole";
+import { useVoucherSync } from "@/hooks/useVoucherSync";
 import { cn } from "@/lib/utils";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, AreaChart, Area, Legend } from "recharts";
 import { VoucherTable, FilterValues } from "@/components/esteira/VoucherTable";
@@ -639,6 +640,9 @@ const EsteiraIndex = () => {
   const { toast } = useToast();
   const navigate = useNavigate();
   const { role, isOperacao, isFiscal, isFinanceiro, isAdmin, isGestor } = useUserRole();
+  
+  // Enable automatic sync of voucher updates to MariaDB
+  useVoucherSync();
 
   // Get current user ID
   useEffect(() => {
