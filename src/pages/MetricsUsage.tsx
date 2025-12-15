@@ -1,10 +1,15 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { ChartLine, RotateCcw } from "lucide-react";
+import { ChartLine, RotateCcw, Download, FileText } from "lucide-react";
+import * as XLSX from "xlsx";
+import jsPDF from "jspdf";
+import autoTable from "jspdf-autotable";
 import { TablePagination } from "@/components/layout/TablePagination";
 import { supabase } from "@/integrations/supabase/client";
 import { PageLayout } from "@/components/layout/PageLayout";
 import { PageCard } from "@/components/layout/PageCard";
+import { Button } from "@/components/ui/button";
+import { useToast } from "@/hooks/use-toast";
 import {
   LineChart,
   Line,
@@ -46,6 +51,7 @@ interface EndpointData {
 
 const MetricsUsage = () => {
   const navigate = useNavigate();
+  const { toast } = useToast();
   const [user, setUser] = useState<{ id: number; username: string; is_admin: number } | null>(null);
   const [loading, setLoading] = useState(true);
   const [logs, setLogs] = useState<LogEntry[]>([]);
@@ -164,7 +170,75 @@ const MetricsUsage = () => {
     return date.toLocaleDateString("pt-BR") + " " + date.toLocaleTimeString("pt-BR");
   };
 
-  if (!user) return null;
+  const handleExportExcel = () => {
+    if (logs.length === 0) {
+      toast({ title: "Aviso", description: "Nenhum dado para exportar", variant: "destructive" });
+      return;
+    }
+
+    const exportData = logs.map(log => ({
+      "Data/Hora": formatDate(log.event_time),
+      "Usuário": log.username,
+      "Método": log.method,
+      "Endpoint": log.endpoint,
+    }));
+
+    const worksheet = XLSX.utils.json_to_sheet(exportData);
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, "Logs");
+    
+    // Auto-size columns
+    const colWidths = Object.keys(exportData[0] || {}).map(key => ({
+      wch: Math.max(key.length, ...exportData.map(row => String(row[key as keyof typeof row] || "").length))
+    }));
+    worksheet["!cols"] = colWidths;
+
+    const fileName = `metricas_${dateFrom}_${dateTo}.xlsx`;
+    XLSX.writeFile(workbook, fileName);
+    
+    toast({ title: "Exportado", description: `${logs.length} registro(s) exportado(s) para Excel` });
+  };
+
+  const handleExportPDF = () => {
+    if (logs.length === 0) {
+      toast({ title: "Aviso", description: "Nenhum dado para exportar", variant: "destructive" });
+      return;
+    }
+
+    const doc = new jsPDF();
+    
+    // Header
+    doc.setFontSize(16);
+    doc.setTextColor(40);
+    doc.text("DACHSER - Métricas de Uso", 14, 20);
+    
+    doc.setFontSize(10);
+    doc.setTextColor(100);
+    doc.text(`Período: ${new Date(dateFrom).toLocaleDateString("pt-BR")} - ${new Date(dateTo).toLocaleDateString("pt-BR")}`, 14, 28);
+    doc.text(`Total de logs: ${stats.total} | Usuários: ${stats.distinctUsers} | Endpoints: ${stats.distinctEndpoints}`, 14, 34);
+    
+    // Table
+    const tableData = logs.map(log => [
+      formatDate(log.event_time),
+      log.username,
+      log.method,
+      log.endpoint,
+    ]);
+
+    autoTable(doc, {
+      head: [["Data/Hora", "Usuário", "Método", "Endpoint"]],
+      body: tableData,
+      startY: 42,
+      styles: { fontSize: 8, cellPadding: 2 },
+      headStyles: { fillColor: [245, 184, 67], textColor: [0, 0, 0] },
+      alternateRowStyles: { fillColor: [245, 245, 245] },
+    });
+
+    const fileName = `metricas_${dateFrom}_${dateTo}.pdf`;
+    doc.save(fileName);
+    
+    toast({ title: "Exportado", description: `${logs.length} registro(s) exportado(s) para PDF` });
+  };
 
   const rightContent = (
     <div className="w-8 h-8 rounded-full border border-white/25 flex items-center justify-center bg-black/70 text-primary">
@@ -346,9 +420,29 @@ const MetricsUsage = () => {
             <div className="text-sm uppercase tracking-[0.18em] font-semibold">Resumo de Logs</div>
             <p className="text-xs text-muted-foreground">Eventos individuais de consumo por usuário, método e endpoint.</p>
           </div>
-          <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/5 border border-white/12 text-xs">
-            <span className="w-2 h-2 rounded-full bg-primary" />
-            {stats.total} logs encontrados
+          <div className="flex items-center gap-3">
+            <Button
+              onClick={handleExportExcel}
+              variant="outline"
+              size="sm"
+              className="h-8 rounded-full"
+              disabled={logs.length === 0}
+            >
+              <Download className="w-4 h-4 mr-1" /> Excel
+            </Button>
+            <Button
+              onClick={handleExportPDF}
+              variant="outline"
+              size="sm"
+              className="h-8 rounded-full"
+              disabled={logs.length === 0}
+            >
+              <FileText className="w-4 h-4 mr-1" /> PDF
+            </Button>
+            <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/5 border border-white/12 text-xs">
+              <span className="w-2 h-2 rounded-full bg-primary" />
+              {stats.total} logs encontrados
+            </div>
           </div>
         </div>
 
