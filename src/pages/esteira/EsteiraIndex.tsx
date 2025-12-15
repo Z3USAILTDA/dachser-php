@@ -1012,8 +1012,8 @@ const EsteiraIndex = () => {
           {/* Tab Content */}
           {activeTab === "processos" && <>
               <div className="flex items-center gap-3">
-                <Receipt className="h-5 w-5 text-[#ffc800]" />
-                <h3 className="text-lg font-semibold text-white">Vouchers</h3>
+                
+                
                 
               </div>
 
