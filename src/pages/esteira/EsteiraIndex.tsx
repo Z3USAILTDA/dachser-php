@@ -886,10 +886,7 @@ const EsteiraIndex = () => {
         {/* Right - Actions and user */}
         <div className="flex items-center gap-2.5 text-[0.85rem]">
           {/* Data Source Label */}
-          <div className="px-3 py-1.5 rounded-full bg-[rgba(0,0,0,.7)] border border-[rgba(255,255,255,.25)] flex items-center gap-2">
-            <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
-            <span className="text-[0.75rem] text-[#aaaaaa]">MariaDB</span>
-          </div>
+          
           
           <button onClick={() => loadVouchers()} disabled={isRefetching} className="flex items-center gap-2 px-4 py-2 rounded-full border border-[rgba(255,255,255,.25)] bg-[rgba(0,0,0,.7)] text-[#aaaaaa] hover:text-white hover:bg-[rgba(0,0,0,.9)] transition disabled:opacity-50 text-[0.8rem]">
             <RefreshCw className={`h-4 w-4 ${isRefetching ? "animate-spin" : ""}`} />
