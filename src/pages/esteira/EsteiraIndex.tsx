@@ -766,12 +766,13 @@ const EsteiraIndex = () => {
   };
   const handleDelete = async (voucher: Voucher) => {
     try {
-      await (supabase as any).from("voucher_logs").delete().eq("voucher_id", voucher.id);
-      await (supabase as any).from("voucher_anexos").delete().eq("voucher_id", voucher.id);
-      const {
-        error
-      } = await (supabase as any).from("vouchers").delete().eq("id", voucher.id);
-      if (error) throw error;
+      const { data, error } = await supabase.functions.invoke("mariadb-proxy", {
+        body: {
+          action: "delete_voucher_esteira",
+          voucher_id: voucher.id
+        }
+      });
+      if (error || !data?.success) throw new Error(data?.error || error?.message || "Erro ao excluir");
       toast({
         title: "Voucher excluído",
         description: `Voucher ${voucher.numeroSPO} foi excluído com sucesso`
