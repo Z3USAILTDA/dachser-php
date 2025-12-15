@@ -109,6 +109,33 @@ serve(async (req) => {
 
     console.log(`User created successfully: ${email}`);
 
+    // Send welcome email with credentials
+    try {
+      const welcomeResponse = await fetch(
+        `${supabaseUrl}/functions/v1/send-welcome-email`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${supabaseAnonKey}`,
+          },
+          body: JSON.stringify({
+            email,
+            username: nome,
+            password,
+          }),
+        }
+      );
+
+      if (!welcomeResponse.ok) {
+        console.error("Failed to send welcome email:", await welcomeResponse.text());
+      } else {
+        console.log(`Welcome email sent to ${email}`);
+      }
+    } catch (emailError) {
+      console.error("Error sending welcome email:", emailError);
+    }
+
     return new Response(
       JSON.stringify({ 
         success: true, 
