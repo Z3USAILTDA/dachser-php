@@ -323,27 +323,31 @@ const Dashboard = () => {
               {/* Children Menu - Below Parent */}
 {item.children && activeMenu === item.id && (
   <div className="flex flex-col items-center mt-6 animate-in fade-in duration-300">
-    {/* Vertical Line */}
+    {/* Vertical Line from parent */}
     <div className="w-0.5 h-5 bg-primary" />
 
     {/* Children Row */}
-    <div className="relative flex justify-center">
-      {/* Linha horizontal única conectando todos os filhos */}
+    <div className="relative flex items-start">
+      {/* Horizontal connector line - spans from center of first to center of last child */}
       {item.children.length > 1 && (
         <div 
-          className="absolute top-0 h-0.5 bg-primary pointer-events-none"
+          className="absolute h-0.5 bg-primary pointer-events-none"
           style={{ 
-            width: `${(item.children.length - 1) * 32 + (item.children.length - 1) * 140}px`,
-            left: '50%',
-            transform: 'translateX(-50%)'
+            top: 0,
+            left: 'calc(50% / ' + item.children.length + ')',
+            right: 'calc(50% / ' + item.children.length + ')',
           }}
         />
       )}
       {item.children.map((child, idx) => (
-        <div key={idx} className="relative flex flex-col items-center" style={{ marginLeft: idx > 0 ? '32px' : '0' }}>
-          {/* Vertical connector */}
+        <div 
+          key={idx} 
+          className="relative flex flex-col items-center flex-1"
+          style={{ minWidth: '160px' }}
+        >
+          {/* Vertical connector to this child */}
           <div className="w-0.5 h-3 bg-primary" />
-          <div className="w-1.5 h-1.5 rounded-full bg-primary -mt-0.5" />
+          <div className="w-2 h-2 rounded-full bg-primary -mt-1 border-2 border-background" />
 
           {child.expandableId ? (
             <div className="relative mt-2 flex flex-col items-center">
@@ -359,8 +363,7 @@ const Dashboard = () => {
                     : 'text-foreground hover:-translate-y-0.5'
                 }`}
                 style={{
-                  // aumenta largura do card "Voucher"
-                  ...(child.label === 'Voucher' && { minWidth: '220px' }),
+                  ...(child.label === 'Voucher' && { minWidth: '200px' }),
                   ...(expandedChild !== child.expandableId && {
                     background: 'rgba(4, 10, 30, 0.75)',
                     boxShadow:
@@ -374,63 +377,53 @@ const Dashboard = () => {
               </button>
 
               {/* Sub Children */}
-              <div
-                className={`absolute top-full left-1/2 -translate-x-1/2 z-20 flex flex-col items-center mt-8 transition-all duration-300 ${
-                  expandedChild === child.expandableId && child.subChildren
-                    ? 'opacity-100 translate-y-0'
-                    : 'opacity-0 -translate-y-2 pointer-events-none'
-                }`}
-              >
-                {child.subChildren && (
-                  <>
-                    {/* Vertical Line */}
-                    <div className="w-0.5 h-5 bg-primary" />
+              {expandedChild === child.expandableId && child.subChildren && (
+                <div className="flex flex-col items-center mt-4 animate-in fade-in duration-300">
+                  {/* Vertical line from parent to sub-children */}
+                  <div className="w-0.5 h-5 bg-primary" />
 
-                    {/* Sub-children Row */}
-                    <div className="relative flex justify-center">
-                      {/* Linha horizontal única conectando todos os sub-filhos */}
-                      {child.subChildren.length > 1 && (
-                        <div 
-                          className="absolute top-0 h-0.5 bg-primary pointer-events-none"
-                          style={{ 
-                            width: `${(child.subChildren.length - 1) * 32 + (child.subChildren.length - 1) * 140}px`,
-                            left: '50%',
-                            transform: 'translateX(-50%)'
+                  {/* Sub-children Row */}
+                  <div className="relative flex items-start">
+                    {/* Horizontal connector for sub-children */}
+                    {child.subChildren.length > 1 && (
+                      <div 
+                        className="absolute h-0.5 bg-primary pointer-events-none"
+                        style={{ 
+                          top: 0,
+                          left: 'calc(50% / ' + child.subChildren.length + ')',
+                          right: 'calc(50% / ' + child.subChildren.length + ')',
+                        }}
+                      />
+                    )}
+                    {child.subChildren.map((subChild, subIdx) => (
+                      <div
+                        key={subIdx}
+                        className="relative flex flex-col items-center flex-1"
+                        style={{ minWidth: '160px' }}
+                      >
+                        {/* Vertical connector */}
+                        <div className="w-0.5 h-3 bg-primary" />
+                        <div className="w-2 h-2 rounded-full bg-primary -mt-1 border-2 border-background" />
+
+                        <button
+                          onClick={() => navigate(subChild.href)}
+                          className="mt-2 px-5 py-2.5 rounded-full text-foreground text-sm font-medium hover:-translate-y-0.5 transition-all duration-200 whitespace-nowrap text-center"
+                          style={{
+                            ...(subChild.label === 'Esteira' && { minWidth: '200px' }),
+                            background: 'rgba(4, 10, 30, 0.75)',
+                            boxShadow:
+                              '0 12px 30px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(255, 255, 255, 0.08)',
+                            backdropFilter: 'blur(18px)',
+                            border: '1px solid rgba(255, 255, 255, 0.08)'
                           }}
-                        />
-                      )}
-                      {child.subChildren.map((subChild, subIdx) => (
-                        <div
-                          key={subIdx}
-                          className="relative flex flex-col items-center"
-                          style={{ marginLeft: subIdx > 0 ? '32px' : '0' }}
                         >
-                          <div className="w-0.5 h-3 bg-primary" />
-                          <div className="w-1.5 h-1.5 rounded-full bg-primary -mt-0.5" />
-
-                          <button
-                            onClick={() => navigate(subChild.href)}
-                            className="mt-2 px-5 py-2.5 rounded-full text-foreground text-sm font-medium hover:-translate-y-0.5 transition-all duration-200 whitespace-nowrap text-center"
-                            style={{
-                              // aumenta largura do card "Esteira"
-                              ...(subChild.label === 'Esteira' && {
-                                minWidth: '220px'
-                              }),
-                              background: 'rgba(4, 10, 30, 0.75)',
-                              boxShadow:
-                                '0 12px 30px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(255, 255, 255, 0.08)',
-                              backdropFilter: 'blur(18px)',
-                              border: '1px solid rgba(255, 255, 255, 0.08)'
-                            }}
-                          >
-                            {subChild.label}
-                          </button>
-                        </div>
-                      ))}
-                    </div>
-                  </>
-                )}
-              </div>
+                          {subChild.label}
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           ) : (
             <button
