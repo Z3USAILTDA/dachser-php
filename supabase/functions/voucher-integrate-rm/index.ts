@@ -11,7 +11,7 @@ const corsHeaders = {
 interface IntegrateRMRequest {
   voucherId?: string;
   numeroVoucherRM?: string;
-  action: "fetch" | "integrate";
+  action: "fetch" | "integrate" | "list";
 }
 
 interface RMVoucherData {
@@ -62,6 +62,46 @@ const handler = async (req: Request): Promise<Response> => {
     const { voucherId, numeroVoucherRM, action }: IntegrateRMRequest = await req.json();
 
     console.log(`[voucher-integrate-rm] Action: ${action}, VoucherID: ${voucherId}, RM Number: ${numeroVoucherRM}`);
+
+    // ACTION: LIST - Listar vouchers disponíveis no RM
+    if (action === "list") {
+      console.log("[voucher-integrate-rm] Listando vouchers disponíveis no RM");
+      
+      let mariaClient: Client | null = null;
+      try {
+        mariaClient = await getMariaDBClient();
+        
+        const result = await mariaClient.query(
+          `SELECT v.IdMovRM, v.IdLanRM, v.NomeDaCobranca, v.DataVencimento, b.StatusLan
+           FROM dados_dachser.tspovoucher v
+           LEFT JOIN dados_dachser.tbaixas b ON v.IdLanRM = b.IdLancamentoRM
+           ORDER BY v.IdLanRM DESC
+           LIMIT 20`
+        );
+        
+        await mariaClient.close();
+        
+        console.log("[voucher-integrate-rm] Vouchers encontrados:", result?.length || 0);
+        
+        return new Response(
+          JSON.stringify({
+            success: true,
+            data: result || [],
+          }),
+          {
+            status: 200,
+            headers: { "Content-Type": "application/json", ...corsHeaders },
+          }
+        );
+      } catch (error: any) {
+        console.error("[voucher-integrate-rm] Erro ao listar vouchers:", error);
+        if (mariaClient) await mariaClient.close();
+        return new Response(
+          JSON.stringify({ success: false, error: error.message }),
+          { status: 500, headers: { "Content-Type": "application/json", ...corsHeaders } }
+        );
+      }
+    }
 
     // ACTION: FETCH - Buscar dados do voucher no RM/MariaDB
     if (action === "fetch" && numeroVoucherRM) {
