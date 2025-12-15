@@ -412,45 +412,36 @@ export const CreateVoucherDialog = ({
         detalhe: `Voucher criado via ${entryMode === "rm" ? "RM" : "entrada manual"}`,
       });
 
-      // Save copy to MariaDB t_vouchers_esteira
+      // Save copy to MariaDB dados_dachser.t_vouchers
       try {
-        const faturaFilesList = faturaFiles.map(f => ({ name: f.name, size: f.size }));
-        const boletoFilesList = boletoFiles.map(f => ({ name: f.name, size: f.size }));
-        
         await supabase.functions.invoke("mariadb-proxy", {
           body: {
             action: "save_voucher_esteira",
-            supabase_voucher_id: voucher.id,
-            id_lan_rm: entryMode === "rm" ? values.numeroRM : null,
+            id: voucher.id, // Use same UUID as Supabase
             numero_spo: voucherData.numero_spo,
-            fornecedor: values.fornecedor,
-            beneficiario: values.beneficiario,
-            cnpj_fornecedor: values.cnpjFornecedor,
-            valor: voucherData.valor,
-            moeda: values.moeda,
-            vencimento: values.vencimento?.toISOString().split('T')[0],
-            data_emissao_documento: values.dataEmissaoDocumento?.toISOString().split('T')[0],
+            vencimento: values.vencimento?.toISOString(),
             cobranca_em_nome_de: values.cobrancaEmNomeDe,
             forma_pagamento: values.formaPagamento,
-            tipo_documento: values.tipoDocumento,
-            filial: values.filial,
+            remessa: "NENHUM", // Default value
+            urgente: values.urgente ? 1 : 0,
             urgencia_tipo: urgenciaTipo,
             etapa_atual: voucherData.etapa_atual,
             status_baixa: voucherData.status_baixa,
+            status_envio_cliente: "NAO_APLICA",
             status_financeiro: voucherData.status_financeiro,
-            processo_id: values.processoId,
-            origem_processo: origemProcesso,
+            tipo_documento: values.tipoDocumento,
+            valor: voucherData.valor,
+            moeda: values.moeda,
+            fornecedor: values.fornecedor,
+            cnpj_fornecedor: values.cnpjFornecedor,
+            cliente_email: null,
+            filial: values.filial,
+            data_emissao_documento: values.dataEmissaoDocumento?.toISOString().split('T')[0],
             comentarios_operacao: values.comentariosOperacao,
-            motivo_urgencia: null, // Not implemented in form yet
-            rm_data_json: rmDataLoaded ? { numeroRM: values.numeroRM } : null,
-            fatura_files_json: faturaFilesList,
-            boleto_files_json: boletoFilesList,
             criado_por_user_id: userData.user.id,
-            criado_por_email: userData.user.email,
-            modo_entrada: entryMode,
           },
         });
-        console.log("Voucher saved to MariaDB t_vouchers_esteira");
+        console.log("Voucher saved to MariaDB dados_dachser.t_vouchers");
       } catch (mariaErr) {
         console.error("Error saving to MariaDB:", mariaErr);
         // Don't fail the main operation, just log the error
