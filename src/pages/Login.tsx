@@ -54,8 +54,11 @@ const Login = () => {
           title: "Login realizado com sucesso!",
           description: `Bem-vindo, ${data.user.username}!`,
         });
-        // Redirecionar baseado no tipo de usuário
-        if (data.user.olimpo_only === 1) {
+        
+        // Check if user must change password
+        if (data.user.must_change_password === 1) {
+          navigate("/change-password");
+        } else if (data.user.olimpo_only === 1) {
           navigate("/olimpo");
         } else if (data.user.metrics_only === 1) {
           navigate("/admin/metrics");
