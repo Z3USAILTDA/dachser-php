@@ -321,7 +321,7 @@ const Dashboard = () => {
               {/* Children Menu - Positioned relative to parent card */}
               {item.children && activeMenu === item.id && (
                 <div 
-                  className="absolute flex flex-col items-center animate-in fade-in duration-300"
+                  className="absolute flex flex-col items-center animate-in fade-in slide-in-from-top-4 duration-500 ease-out"
                   style={{
                     top: '100%',
                     left: '50%',
