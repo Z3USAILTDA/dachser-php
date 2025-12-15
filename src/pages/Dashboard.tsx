@@ -332,7 +332,7 @@ const Dashboard = () => {
       {item.children.length > 1 && (
         <div
           className="absolute top-0 h-0.5 bg-primary"
-          style={{ left: '90px', right: '90px' }}
+          style={{ left: '105px', right: '130px' }}
         />
       )}
 
