@@ -24,37 +24,6 @@ interface AnaliseProcess {
   created_at: string;
   created_by?: string;
 }
-const mockProcesses: AnaliseProcess[] = [{
-  id: "1",
-  pdf_name: "fatura_janeiro_2024.pdf",
-  excel_name: "planilha_janeiro.xlsx",
-  status: "realizado",
-  success_count: 12,
-  warning_count: 2,
-  error_count: 0,
-  created_at: new Date().toISOString(),
-  created_by: "usuario@dachser.com"
-}, {
-  id: "2",
-  pdf_name: "invoice_fev_2024.pdf",
-  excel_name: "controle_fev.xlsx",
-  status: "realizado",
-  success_count: 8,
-  warning_count: 0,
-  error_count: 3,
-  created_at: new Date(Date.now() - 86400000).toISOString(),
-  created_by: "usuario@dachser.com"
-}, {
-  id: "3",
-  pdf_name: "nf_servicos_marco.pdf",
-  excel_name: "base_marco.xlsx",
-  status: "pendente",
-  success_count: 0,
-  warning_count: 0,
-  error_count: 0,
-  created_at: new Date(Date.now() - 172800000).toISOString(),
-  created_by: "admin@dachser.com"
-}];
 const AnaliseDocumental = () => {
   useUsageLog({ endpoint: "/fin/analise-documental" });
   const navigate = useNavigate();
@@ -62,7 +31,7 @@ const AnaliseDocumental = () => {
     user,
     isLoading: authLoading
   } = useAuth();
-  const [processes, setProcesses] = useState<AnaliseProcess[]>(mockProcesses);
+  const [processes, setProcesses] = useState<AnaliseProcess[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState("todos");
