@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { Plus, Upload, X, Search, FileText, RefreshCw, Plane, Ship, FileCheck, AlertCircle } from "lucide-react";
+import { Plus, Upload, X, Search, FileText, RefreshCw, Plane, Ship, FileCheck, AlertCircle, Loader2 } from "lucide-react";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import {
@@ -53,6 +53,7 @@ const formSchema = z.object({
   processoId: z.string().optional(),
   origemProcesso: z.enum(["AIR", "SEA", "CHB"]).optional(),
   fornecedor: z.string().optional(),
+  beneficiario: z.string().optional(),
   cnpjFornecedor: z.string().optional(),
   valor: z.string().optional(),
   moeda: z.string().default("BRL"),
@@ -67,6 +68,20 @@ const formSchema = z.object({
 });
 
 type FormValues = z.infer<typeof formSchema>;
+
+interface RMData {
+  idMovRM: number;
+  idLanRM: number;
+  fornecedor: string;
+  beneficiario: string;
+  vencimento: string | null;
+  formaPagamento: string;
+  formaPagamentoOriginal: string | null;
+  valor: number | null;
+  dataBaixa: string | null;
+  statusLan: number | null;
+  cnpjFornecedor: string | null;
+}
 
 interface CreateVoucherDialogProps {
   open?: boolean;
@@ -97,6 +112,8 @@ export const CreateVoucherDialog = ({
   };
   
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isSearchingRM, setIsSearchingRM] = useState(false);
+  const [rmDataLoaded, setRmDataLoaded] = useState(false);
   const [entryMode, setEntryMode] = useState<EntryMode>("rm");
   const [origemProcesso, setOrigemProcesso] = useState<OrigemProcesso | null>(null);
   const [faturaFiles, setFaturaFiles] = useState<File[]>([]);
@@ -113,9 +130,92 @@ export const CreateVoucherDialog = ({
     },
   });
 
+  const handleSearchRM = async () => {
+    const numeroRM = form.getValues("numeroRM");
+    if (!numeroRM || numeroRM.trim() === "") {
+      toast({
+        title: "Número RM obrigatório",
+        description: "Digite o número do voucher no RM para buscar",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setIsSearchingRM(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("voucher-integrate-rm", {
+        body: { action: "fetch", numeroVoucherRM: numeroRM.trim() },
+      });
+
+      if (error) throw error;
+
+      if (!data.success) {
+        if (data.alreadyProcessed) {
+          toast({
+            title: "Voucher já processado",
+            description: data.error,
+            variant: "destructive",
+          });
+        } else {
+          toast({
+            title: "Voucher não encontrado",
+            description: data.error,
+            variant: "destructive",
+          });
+        }
+        return;
+      }
+
+      const rmData: RMData = data.data;
+      
+      // Fill form with RM data
+      form.setValue("fornecedor", rmData.fornecedor || "");
+      form.setValue("beneficiario", rmData.beneficiario || "");
+      form.setValue("cnpjFornecedor", rmData.cnpjFornecedor || "");
+      form.setValue("formaPagamento", rmData.formaPagamento);
+      
+      if (rmData.valor) {
+        form.setValue("valor", rmData.valor.toFixed(2).replace(".", ","));
+      }
+      
+      if (rmData.vencimento) {
+        form.setValue("vencimento", new Date(rmData.vencimento));
+      }
+
+      setRmDataLoaded(true);
+      
+      toast({
+        title: "Dados carregados",
+        description: `Voucher RM ${numeroRM} encontrado. Dados preenchidos automaticamente.`,
+      });
+    } catch (error: any) {
+      console.error("Erro ao buscar RM:", error);
+      toast({
+        title: "Erro ao buscar voucher",
+        description: error.message || "Não foi possível buscar os dados do RM",
+        variant: "destructive",
+      });
+    } finally {
+      setIsSearchingRM(false);
+    }
+  };
   const handleFaturaChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files) {
       setFaturaFiles(prev => [...prev, ...Array.from(e.target.files!)]);
+    }
+  };
+
+  const handleModeChange = (mode: EntryMode) => {
+    if (mode !== entryMode) {
+      setEntryMode(mode);
+      setRmDataLoaded(false);
+      // Reset RM-related fields when switching modes
+      form.setValue("numeroRM", "");
+      form.setValue("fornecedor", "");
+      form.setValue("beneficiario", "");
+      form.setValue("cnpjFornecedor", "");
+      form.setValue("valor", "");
+      form.setValue("vencimento", undefined);
     }
   };
 
@@ -288,6 +388,7 @@ export const CreateVoucherDialog = ({
       setBoletoFiles([]);
       setOrigemProcesso(null);
       setEntryMode("rm");
+      setRmDataLoaded(false);
       setOpen(false);
       onSuccess?.();
       onVoucherCreated?.();
@@ -339,7 +440,7 @@ export const CreateVoucherDialog = ({
                   "flex-1 gap-2",
                   isRmMode && "bg-primary text-primary-foreground"
                 )}
-                onClick={() => setEntryMode("rm")}
+                onClick={() => handleModeChange("rm")}
               >
                 <Search className="h-4 w-4" />
                 Criar a partir do RM
@@ -351,7 +452,7 @@ export const CreateVoucherDialog = ({
                   "flex-1 gap-2",
                   !isRmMode && "bg-primary text-primary-foreground"
                 )}
-                onClick={() => setEntryMode("manual")}
+                onClick={() => handleModeChange("manual")}
               >
                 <FileText className="h-4 w-4" />
                 Entrada Manual
@@ -378,23 +479,54 @@ export const CreateVoucherDialog = ({
                   <Search className="h-4 w-4 text-primary" />
                   <span className="text-sm font-medium text-primary">Número do Voucher no RM</span>
                   <span className="text-destructive">*</span>
-                </div>
-                <FormField
-                  control={form.control}
-                  name="numeroRM"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormControl>
-                        <Input 
-                          placeholder="Ex: 8647525655" 
-                          className="bg-background/50 border-border"
-                          {...field} 
-                        />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
+                  {rmDataLoaded && (
+                    <Badge className="ml-2 bg-green-500/20 text-green-500 border-green-500/30">
+                      ✓ Dados carregados
+                    </Badge>
                   )}
-                />
+                </div>
+                <div className="flex gap-2">
+                  <FormField
+                    control={form.control}
+                    name="numeroRM"
+                    render={({ field }) => (
+                      <FormItem className="flex-1">
+                        <FormControl>
+                          <Input 
+                            placeholder="Ex: 8647525655" 
+                            className="bg-background/50 border-border"
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter") {
+                                e.preventDefault();
+                                handleSearchRM();
+                              }
+                            }}
+                            {...field} 
+                          />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <Button
+                    type="button"
+                    onClick={handleSearchRM}
+                    disabled={isSearchingRM}
+                    className="bg-primary text-primary-foreground hover:bg-primary/90 gap-2"
+                  >
+                    {isSearchingRM ? (
+                      <>
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                        Buscando...
+                      </>
+                    ) : (
+                      <>
+                        <Search className="h-4 w-4" />
+                        Buscar
+                      </>
+                    )}
+                  </Button>
+                </div>
               </div>
             )}
 
@@ -533,6 +665,30 @@ export const CreateVoucherDialog = ({
                     )}
                   />
                 </div>
+
+                {/* Row 1.5: Beneficiário (only when RM data loaded) */}
+                {isRmMode && rmDataLoaded && form.getValues("beneficiario") && (
+                  <FormField
+                    control={form.control}
+                    name="beneficiario"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel className="flex items-center gap-1.5 text-sm">
+                          Beneficiário {isRmMode && <SyncIcon />}
+                        </FormLabel>
+                        <FormControl>
+                          <Input 
+                            placeholder="Preenchido pelo RM"
+                            className="bg-background/50 border-border"
+                            disabled={true}
+                            {...field} 
+                          />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                )}
 
                 {/* Row 2: Valor, Moeda, Tipo Documento */}
                 <div className="grid grid-cols-3 gap-4">
