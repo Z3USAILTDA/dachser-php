@@ -48,13 +48,47 @@ import {
 } from "@/types/voucher";
 import { Badge } from "@/components/ui/badge";
 
+// CNPJ formatting and validation utilities
+const formatCNPJ = (value: string): string => {
+  const digits = value.replace(/\D/g, "").slice(0, 14);
+  if (digits.length <= 2) return digits;
+  if (digits.length <= 5) return `${digits.slice(0, 2)}.${digits.slice(2)}`;
+  if (digits.length <= 8) return `${digits.slice(0, 2)}.${digits.slice(2, 5)}.${digits.slice(5)}`;
+  if (digits.length <= 12) return `${digits.slice(0, 2)}.${digits.slice(2, 5)}.${digits.slice(5, 8)}/${digits.slice(8)}`;
+  return `${digits.slice(0, 2)}.${digits.slice(2, 5)}.${digits.slice(5, 8)}/${digits.slice(8, 12)}-${digits.slice(12)}`;
+};
+
+const validateCNPJ = (cnpj: string): boolean => {
+  const digits = cnpj.replace(/\D/g, "");
+  if (digits.length !== 14) return false;
+  if (/^(\d)\1+$/.test(digits)) return false; // All same digits
+  
+  // Calculate verification digits
+  const calcDigit = (base: string, weights: number[]): number => {
+    const sum = base.split("").reduce((acc, digit, i) => acc + parseInt(digit) * weights[i], 0);
+    const remainder = sum % 11;
+    return remainder < 2 ? 0 : 11 - remainder;
+  };
+  
+  const weights1 = [5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2];
+  const weights2 = [6, 5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2];
+  
+  const digit1 = calcDigit(digits.slice(0, 12), weights1);
+  const digit2 = calcDigit(digits.slice(0, 12) + digit1, weights2);
+  
+  return digits.slice(12) === `${digit1}${digit2}`;
+};
+
 const formSchema = z.object({
   numeroRM: z.string().optional(),
   processoId: z.string().optional(),
   origemProcesso: z.enum(["AIR", "SEA", "CHB"]).optional(),
   fornecedor: z.string().optional(),
   beneficiario: z.string().optional(),
-  cnpjFornecedor: z.string().optional(),
+  cnpjFornecedor: z.string().optional().refine(
+    (val) => !val || val.replace(/\D/g, "").length === 0 || validateCNPJ(val),
+    { message: "CNPJ inválido" }
+  ),
   valor: z.string().optional(),
   moeda: z.string().default("BRL"),
   vencimento: z.date().optional(),
@@ -657,7 +691,12 @@ export const CreateVoucherDialog = ({
                             placeholder={isRmMode ? "Preenchido pelo RM" : "00.000.000/0000-00"}
                             className="bg-background/50 border-border"
                             disabled={isRmMode}
-                            {...field} 
+                            maxLength={18}
+                            value={field.value || ""}
+                            onChange={(e) => {
+                              const formatted = formatCNPJ(e.target.value);
+                              field.onChange(formatted);
+                            }}
                           />
                         </FormControl>
                         <FormMessage />
