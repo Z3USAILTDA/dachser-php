@@ -158,10 +158,19 @@ export const CreateVoucherDialog = ({
   const form = useForm<FormValues>({
     resolver: zodResolver(formSchema),
     defaultValues: {
+      numeroRM: "",
+      processoId: "",
+      fornecedor: "",
+      beneficiario: "",
+      cnpjFornecedor: "",
+      valor: "",
       moeda: "BRL",
       cobrancaEmNomeDe: "DACHSER",
       formaPagamento: "TRANSFERENCIA_PIX",
+      tipoDocumento: "",
+      filial: "",
       urgente: false,
+      comentariosOperacao: "",
     },
   });
 
