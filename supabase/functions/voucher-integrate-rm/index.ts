@@ -75,16 +75,16 @@ const handler = async (req: Request): Promise<Response> => {
         const tablesCheck = await mariaClient.query(
           `SELECT TABLE_NAME FROM INFORMATION_SCHEMA.TABLES 
            WHERE TABLE_SCHEMA = 'dados_dachser' 
-           AND TABLE_NAME IN ('t_spovoucher', 't_baixas', 't_dados_financeiro_nfs', 't_vouchers')
+           AND TABLE_NAME IN ('tspovoucher', 'tbaixas', 't_dados_financeiro_nfs', 't_vouchers')
            ORDER BY TABLE_NAME`
         );
         
         const existingTables = (tablesCheck || []).map((t: any) => t.TABLE_NAME);
         console.log("[voucher-integrate-rm] Tabelas encontradas:", existingTables);
         
-        // If t_spovoucher doesn't exist, try using t_vouchers directly
-        if (!existingTables.includes('t_spovoucher')) {
-          console.log("[voucher-integrate-rm] t_spovoucher não existe, tentando t_vouchers...");
+        // If tspovoucher doesn't exist, try using t_vouchers directly
+        if (!existingTables.includes('tspovoucher')) {
+          console.log("[voucher-integrate-rm] tspovoucher não existe, tentando t_vouchers...");
           
           // Try to fetch from t_vouchers instead
           if (existingTables.includes('t_vouchers')) {
@@ -140,7 +140,7 @@ const handler = async (req: Request): Promise<Response> => {
           return new Response(
             JSON.stringify({
               success: false,
-              error: `Tabela t_spovoucher não encontrada no banco dados_dachser. Tabelas disponíveis: ${existingTables.join(', ') || 'nenhuma'}`,
+              error: `Tabela tspovoucher não encontrada no banco dados_dachser. Tabelas disponíveis: ${existingTables.join(', ') || 'nenhuma'}`,
               availableTables: existingTables,
             }),
             {
@@ -150,7 +150,7 @@ const handler = async (req: Request): Promise<Response> => {
           );
         }
         
-        // Buscar dados do voucher em t_spovoucher JOIN t_baixas
+        // Buscar dados do voucher em tspovoucher JOIN tbaixas
         const result = await mariaClient.query(
           `SELECT 
             v.IdMovRM,
@@ -162,8 +162,8 @@ const handler = async (req: Request): Promise<Response> => {
             b.ValorBaixado AS valor,
             b.DataDaBaixa AS data_baixa,
             b.StatusLan AS status_lan
-          FROM dados_dachser.t_spovoucher v
-          LEFT JOIN dados_dachser.t_baixas b ON v.IdLanRM = b.IdLancamentoRM
+          FROM dados_dachser.tspovoucher v
+          LEFT JOIN dados_dachser.tbaixas b ON v.IdLanRM = b.IdLancamentoRM
           WHERE v.IdLanRM = ? OR v.IdMovRM = ?
           LIMIT 1`,
           [numeroVoucherRM, numeroVoucherRM]
