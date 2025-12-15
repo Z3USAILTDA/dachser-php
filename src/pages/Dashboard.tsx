@@ -276,8 +276,8 @@ const Dashboard = () => {
                                   <div className="relative flex gap-6">
                                     {/* Horizontal line spanning from first to last child center */}
                                     {child.subChildren.length > 1 && <div className="absolute top-0 h-0.5 bg-primary" style={{
-                          left: '90px',
-                          right: '90px'
+                          left: 'calc(50% / ' + child.subChildren.length + ')',
+                          right: 'calc(50% / ' + child.subChildren.length + ')'
                         }} />}
                                     
                                     {child.subChildren.map((subChild, subIdx) => <div key={subIdx} className="relative flex flex-col items-center pt-0 w-[180px]">
