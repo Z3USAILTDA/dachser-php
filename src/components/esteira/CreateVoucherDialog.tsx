@@ -186,17 +186,17 @@ export const CreateVoucherDialog = ({
       if (!data.success) {
         if (data.alreadyProcessed) {
           toast({
-            title: "Voucher já processado",
-            description: data.error,
-            variant: "destructive",
+            title: "⚠️ Voucher já processado",
+            description: "Este voucher já possui baixa registrada no RM. Tente outro número de voucher.",
           });
         } else {
           toast({
             title: "Voucher não encontrado",
-            description: data.error,
+            description: data.error || "Não foi possível localizar o voucher no RM",
             variant: "destructive",
           });
         }
+        setIsSearchingRM(false);
         return;
       }
 
