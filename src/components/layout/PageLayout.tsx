@@ -11,6 +11,7 @@ interface PageLayoutProps {
   rightContent?: ReactNode;
   backTo?: string;
   pageIcon?: LucideIcon;
+  exclusiveAccess?: boolean; // For olimpo_only or metrics_only users
 }
 
 export function PageLayout({ 
@@ -20,13 +21,22 @@ export function PageLayout({
   showLogout = true,
   rightContent,
   backTo = "/dashboard",
-  pageIcon: PageIcon
+  pageIcon: PageIcon,
+  exclusiveAccess = false
 }: PageLayoutProps) {
   const navigate = useNavigate();
 
   const handleLogout = () => {
     localStorage.removeItem("user");
     navigate("/");
+  };
+
+  const handleBack = () => {
+    if (exclusiveAccess) {
+      handleLogout();
+    } else {
+      navigate(backTo);
+    }
   };
 
   const user = JSON.parse(localStorage.getItem("user") || "{}");
@@ -95,10 +105,11 @@ export function PageLayout({
         {/* Left - Back + Header */}
         <div className="flex items-center gap-[18px]">
           <button
-            onClick={() => navigate(backTo)}
+            onClick={handleBack}
             className="w-8 h-8 rounded-full border border-[rgba(255,255,255,.12)] bg-[rgba(5,6,18,0.9)] text-[#aaaaaa] flex items-center justify-center backdrop-blur-sm hover:bg-[rgba(5,6,18,1)] hover:text-white transition-all"
+            title={exclusiveAccess ? "Sair" : "Voltar"}
           >
-            <ArrowLeft size={16} />
+            {exclusiveAccess ? <LogOut size={16} /> : <ArrowLeft size={16} />}
           </button>
 
           <header>

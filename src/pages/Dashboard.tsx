@@ -135,6 +135,7 @@ const Dashboard = () => {
     username: string;
     is_admin: number;
     olimpo_only?: number;
+    metrics_only?: number;
   } | null>(null);
   useEffect(() => {
     const storedUser = localStorage.getItem("user");
@@ -143,6 +144,11 @@ const Dashboard = () => {
       // Usuários olimpo_only não podem acessar o Dashboard
       if (parsed.olimpo_only === 1) {
         navigate("/olimpo");
+        return;
+      }
+      // Usuários metrics_only não podem acessar o Dashboard
+      if (parsed.metrics_only === 1) {
+        navigate("/admin/metrics");
         return;
       }
       setUser(parsed);
@@ -437,6 +443,13 @@ const Dashboard = () => {
       ))}
     </div>
   </div>
-)
+)}
+            </div>
+          ))}
+        </div>
+      </main>
+    </div>
+  );
 };
+
 export default Dashboard;

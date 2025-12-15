@@ -52,7 +52,8 @@ interface EndpointData {
 const MetricsUsage = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
-  const [user, setUser] = useState<{ id: number; username: string; is_admin: number } | null>(null);
+  const [user, setUser] = useState<{ id: number; username: string; is_admin: number; metrics_only?: number } | null>(null);
+  const [isMetricsOnly, setIsMetricsOnly] = useState(false);
   const [loading, setLoading] = useState(true);
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const [stats, setStats] = useState<MetricsStats>({
@@ -82,18 +83,20 @@ const MetricsUsage = () => {
     const storedUser = localStorage.getItem("user");
     if (storedUser) {
       const parsedUser = JSON.parse(storedUser);
-      if (parsedUser.is_admin !== 1) {
+      // Permitir acesso se is_admin=1 OU metrics_only=1
+      if (parsedUser.is_admin !== 1 && parsedUser.metrics_only !== 1) {
         navigate("/dashboard");
         return;
       }
       setUser(parsedUser);
+      setIsMetricsOnly(parsedUser.metrics_only === 1);
     } else {
       navigate("/");
     }
   }, [navigate]);
 
   useEffect(() => {
-    if (user?.is_admin === 1) {
+    if (user?.is_admin === 1 || user?.metrics_only === 1) {
       fetchMetrics();
     }
   }, [user, dateFrom, dateTo, usernameFilter, moduleFilter, perPage, currentPage]);
@@ -247,7 +250,7 @@ const MetricsUsage = () => {
   );
 
   return (
-    <PageLayout title="DACHSER" subtitle="Métricas de Uso" pageIcon={ChartLine} backTo="/dashboard">
+    <PageLayout title="DACHSER" subtitle="Métricas de Uso" pageIcon={ChartLine} backTo="/dashboard" exclusiveAccess={isMetricsOnly}>
       {/* Grid: Stats + Filters */}
       <div className="grid grid-cols-1 lg:grid-cols-[2.2fr_1.2fr] gap-5">
         {/* Stats Panel */}

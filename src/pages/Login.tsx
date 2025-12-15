@@ -57,6 +57,8 @@ const Login = () => {
         // Redirecionar baseado no tipo de usuário
         if (data.user.olimpo_only === 1) {
           navigate("/olimpo");
+        } else if (data.user.metrics_only === 1) {
+          navigate("/admin/metrics");
         } else {
           navigate("/dashboard");
         }
