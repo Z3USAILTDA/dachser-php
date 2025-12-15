@@ -80,7 +80,7 @@ const generateEmailHtml = (username: string, password: string, forceTheme: strin
           <h1 style="margin:8px 0 4px;font-family:Arial,Helvetica,sans-serif;font-size:22px;line-height:1.3">Bem-vindo(a), ${username}!</h1>
           <p style="margin:0 0 12px;font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.5" class="muted">
             Sua conta foi criada com sucesso no <span style="color:inherit;text-decoration:none">${brandPlain}</span> @ Dachser
-            (<a href="${hostHref}" target="_blank" rel="noopener" style="color:#ffa500;text-decoration:none">dachser.z3us.ai</a>).
+            (<a href="${hostHref}" target="_blank" rel="noopener" style="color:#ffa500;text-decoration:none">dachser.z3us.app</a>).
             Seguem seus dados iniciais de acesso:
           </p>
         </td></tr>
