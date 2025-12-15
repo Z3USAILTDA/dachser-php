@@ -1,176 +1,123 @@
 import { useState, useEffect } from "react";
-import { useForm } from "react-hook-form";
-import { zodResolver } from "@hookform/resolvers/zod";
-import { z } from "zod";
-import { format } from "date-fns";
-import { ptBR } from "date-fns/locale";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
-import { Calendar } from "@/components/ui/calendar";
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import {
-  Form,
-  FormControl,
-  FormField,
-  FormItem,
-  FormLabel,
-  FormMessage,
-} from "@/components/ui/form";
-import { useToast } from "@/hooks/use-toast";
+import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Switch } from "@/components/ui/switch";
 import { supabase } from "@/integrations/supabase/client";
-import { cn } from "@/lib/utils";
-import { CalendarIcon } from "lucide-react";
+import { useToast } from "@/hooks/use-toast";
 import { Voucher } from "@/types/voucher";
-
-const formSchema = z.object({
-  numeroSPO: z.string().min(1, "Número SPO é obrigatório"),
-  fornecedor: z.string().min(1, "Fornecedor é obrigatório"),
-  cnpjFornecedor: z.string().optional(),
-  valor: z.string().optional(),
-  moeda: z.string().default("BRL"),
-  vencimento: z.date({ required_error: "Data de vencimento é obrigatória" }),
-  dataEmissaoDocumento: z.date().optional().nullable(),
-  cobrancaEmNomeDe: z.enum(["DACHSER", "CLIENTE"]),
-  formaPagamento: z.string(),
-  tipoDocumento: z.string(),
-  filial: z.string().optional(),
-  remessa: z.string().default("NENHUM"),
-  comentariosOperacao: z.string().optional(),
-  clienteEmail: z.string().email().optional().or(z.literal("")),
-});
-
-type FormValues = z.infer<typeof formSchema>;
+import { Loader2 } from "lucide-react";
 
 interface EditVoucherDialogProps {
-  voucher: Voucher | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onVoucherUpdated?: () => void;
-  onSuccess?: () => void;
+  onSuccess: () => void;
+  voucher: Voucher | null;
 }
 
-export const EditVoucherDialog = ({
-  voucher,
-  open,
-  onOpenChange,
-  onVoucherUpdated,
-  onSuccess,
-}: EditVoucherDialogProps) => {
-  const [isSubmitting, setIsSubmitting] = useState(false);
+export const EditVoucherDialog = ({ open, onOpenChange, onSuccess, voucher }: EditVoucherDialogProps) => {
+  const [loading, setLoading] = useState(false);
   const { toast } = useToast();
 
-  const form = useForm<FormValues>({
-    resolver: zodResolver(formSchema),
-    defaultValues: {
-      moeda: "BRL",
-      cobrancaEmNomeDe: "DACHSER",
-      formaPagamento: "BOLETO",
-      tipoDocumento: "FATURA",
-      remessa: "NENHUM",
-    },
+  const [formData, setFormData] = useState({
+    numeroSPO: "",
+    fornecedor: "",
+    cnpjFornecedor: "",
+    valor: "",
+    moeda: "BRL",
+    vencimento: "",
+    dataEmissaoDocumento: "",
+    cobrancaEmNomeDe: "DACHSER" as "DACHSER" | "CLIENTE",
+    formaPagamento: "BOLETO",
+    tipoDocumento: "",
+    filial: "",
+    urgente: false,
   });
 
+  // Update form data when voucher changes
   useEffect(() => {
     if (voucher) {
-      form.reset({
-        numeroSPO: voucher.numeroSPO,
-        fornecedor: voucher.fornecedor,
+      setFormData({
+        numeroSPO: voucher.numeroSPO || "",
+        fornecedor: voucher.fornecedor || "",
         cnpjFornecedor: voucher.cnpjFornecedor || "",
         valor: voucher.valor?.toString() || "",
-        moeda: voucher.moeda,
-        vencimento: new Date(voucher.vencimento),
-        dataEmissaoDocumento: voucher.dataEmissaoDocumento 
-          ? new Date(voucher.dataEmissaoDocumento) 
-          : null,
-        cobrancaEmNomeDe: voucher.cobrancaEmNomeDe,
-        formaPagamento: voucher.formaPagamento,
-        tipoDocumento: voucher.tipoDocumento,
+        moeda: voucher.moeda || "BRL",
+        vencimento: voucher.vencimento ? new Date(voucher.vencimento).toISOString().split("T")[0] : "",
+        dataEmissaoDocumento: voucher.dataEmissaoDocumento ? new Date(voucher.dataEmissaoDocumento).toISOString().split("T")[0] : "",
+        cobrancaEmNomeDe: (voucher.cobrancaEmNomeDe || "DACHSER") as "DACHSER" | "CLIENTE",
+        formaPagamento: voucher.formaPagamento || "BOLETO",
+        tipoDocumento: voucher.tipoDocumento || "",
         filial: voucher.filial || "",
-        remessa: voucher.remessa,
-        comentariosOperacao: voucher.comentariosOperacao || "",
-        clienteEmail: voucher.clienteEmail || "",
+        urgente: voucher.urgenciaTipo === "URGENTE_REAL",
       });
     }
-  }, [voucher, form]);
+  }, [voucher]);
 
-  const onSubmit = async (values: FormValues) => {
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
     if (!voucher) return;
-    
-    setIsSubmitting(true);
+
+    setLoading(true);
     try {
       const { data: userData } = await supabase.auth.getUser();
-      if (!userData?.user) {
-        throw new Error("Usuário não autenticado");
+      
+      // Determine urgencia_tipo based on tipoDocumento and urgente flag
+      let urgenciaTipo = "NORMAL";
+      if (formData.tipoDocumento === "ARMAZENAGEM" || formData.tipoDocumento === "ICMS") {
+        urgenciaTipo = "URGENTE_AUTOMATICO";
+      } else if (formData.urgente) {
+        urgenciaTipo = "URGENTE_REAL";
       }
 
-      const updateData = {
-        numero_spo: values.numeroSPO,
-        fornecedor: values.fornecedor,
-        cnpj_fornecedor: values.cnpjFornecedor || null,
-        valor: values.valor ? parseFloat(values.valor.replace(",", ".")) : null,
-        moeda: values.moeda,
-        vencimento: values.vencimento.toISOString(),
-        data_emissao_documento: values.dataEmissaoDocumento?.toISOString() || null,
-        cobranca_em_nome_de: values.cobrancaEmNomeDe,
-        forma_pagamento: values.formaPagamento,
-        tipo_documento: values.tipoDocumento,
-        filial: values.filial || null,
-        remessa: values.remessa,
-        comentarios_operacao: values.comentariosOperacao || null,
-        cliente_email: values.clienteEmail || null,
-        updated_at: new Date().toISOString(),
-      };
-
-      const { error: updateError } = await (supabase as any)
+      const { error } = await (supabase as any)
         .from("vouchers")
-        .update(updateData)
+        .update({
+          numero_spo: formData.numeroSPO,
+          fornecedor: formData.fornecedor || null,
+          cnpj_fornecedor: formData.cnpjFornecedor || null,
+          valor: formData.valor ? parseFloat(formData.valor.replace(",", ".")) : null,
+          moeda: formData.moeda,
+          vencimento: new Date(formData.vencimento).toISOString(),
+          data_emissao_documento: formData.dataEmissaoDocumento ? new Date(formData.dataEmissaoDocumento).toISOString() : null,
+          cobranca_em_nome_de: formData.cobrancaEmNomeDe,
+          forma_pagamento: formData.formaPagamento,
+          tipo_documento: formData.tipoDocumento || null,
+          filial: formData.filial || null,
+          urgencia_tipo: urgenciaTipo,
+          updated_at: new Date().toISOString(),
+        })
         .eq("id", voucher.id);
 
-      if (updateError) throw updateError;
+      if (error) throw error;
 
       // Log update
-      await (supabase as any).from("voucher_logs").insert({
-        voucher_id: voucher.id,
-        user_id: userData.user.id,
-        acao: "VOUCHER_EDITADO",
-        detalhe: `Voucher ${values.numeroSPO} editado`,
-      });
+      if (userData?.user) {
+        await (supabase as any).from("voucher_logs").insert({
+          voucher_id: voucher.id,
+          user_id: userData.user.id,
+          acao: "VOUCHER_EDITADO",
+          detalhe: `Voucher ${formData.numeroSPO} editado`,
+        });
+      }
 
       toast({
-        title: "Voucher atualizado",
-        description: `O voucher ${values.numeroSPO} foi atualizado com sucesso.`,
+        title: "Voucher atualizado!",
+        description: "As alterações foram salvas com sucesso.",
       });
 
+      onSuccess();
       onOpenChange(false);
-      onVoucherUpdated?.();
-      onSuccess?.();
     } catch (error: any) {
-      console.error("Erro ao atualizar voucher:", error);
       toast({
         title: "Erro ao atualizar voucher",
-        description: error.message || "Ocorreu um erro ao atualizar o voucher",
+        description: error.message,
         variant: "destructive",
       });
     } finally {
-      setIsSubmitting(false);
+      setLoading(false);
     }
   };
 
@@ -180,303 +127,210 @@ export const EditVoucherDialog = ({
         <DialogHeader>
           <DialogTitle>Editar Voucher</DialogTitle>
         </DialogHeader>
-        <Form {...form}>
-          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
-            {/* Basic Info */}
-            <div className="grid grid-cols-2 gap-4">
-              <FormField
-                control={form.control}
-                name="numeroSPO"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Número SPO *</FormLabel>
-                    <FormControl>
-                      <Input placeholder="Ex: SPO-2024-001" {...field} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <FormField
-                control={form.control}
-                name="fornecedor"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Fornecedor *</FormLabel>
-                    <FormControl>
-                      <Input placeholder="Nome do fornecedor" {...field} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
+
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label htmlFor="edit-numeroSPO">Nº SPO/Voucher *</Label>
+              <Input
+                id="edit-numeroSPO"
+                value={formData.numeroSPO}
+                onChange={(e) => setFormData({ ...formData, numeroSPO: e.target.value })}
+                placeholder="Ex: SPO12345"
+                required
               />
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
-              <FormField
-                control={form.control}
-                name="cnpjFornecedor"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>CNPJ Fornecedor</FormLabel>
-                    <FormControl>
-                      <Input placeholder="00.000.000/0000-00" {...field} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
+            <div className="space-y-2">
+              <Label htmlFor="edit-fornecedor">Fornecedor</Label>
+              <Input
+                id="edit-fornecedor"
+                value={formData.fornecedor}
+                onChange={(e) => setFormData({ ...formData, fornecedor: e.target.value })}
+                placeholder="Nome do fornecedor"
               />
-              <FormField
-                control={form.control}
-                name="filial"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Filial</FormLabel>
-                    <FormControl>
-                      <Input placeholder="Código da filial" {...field} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
+            </div>
+          </div>
+
+          <div className="grid grid-cols-3 gap-4">
+            <div className="space-y-2">
+              <Label htmlFor="edit-cnpj">CNPJ Fornecedor</Label>
+              <Input
+                id="edit-cnpj"
+                value={formData.cnpjFornecedor}
+                onChange={(e) => setFormData({ ...formData, cnpjFornecedor: e.target.value })}
+                placeholder="00.000.000/0000-00"
               />
             </div>
 
-            {/* Value and Dates */}
-            <div className="grid grid-cols-3 gap-4">
-              <FormField
-                control={form.control}
-                name="valor"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Valor</FormLabel>
-                    <FormControl>
-                      <Input placeholder="0,00" {...field} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <FormField
-                control={form.control}
-                name="moeda"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Moeda</FormLabel>
-                    <Select onValueChange={field.onChange} value={field.value}>
-                      <FormControl>
-                        <SelectTrigger>
-                          <SelectValue />
-                        </SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
-                        <SelectItem value="BRL">BRL</SelectItem>
-                        <SelectItem value="USD">USD</SelectItem>
-                        <SelectItem value="EUR">EUR</SelectItem>
-                      </SelectContent>
-                    </Select>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <FormField
-                control={form.control}
-                name="vencimento"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Vencimento *</FormLabel>
-                    <Popover>
-                      <PopoverTrigger asChild>
-                        <FormControl>
-                          <Button
-                            variant="outline"
-                            className={cn(
-                              "w-full pl-3 text-left font-normal",
-                              !field.value && "text-muted-foreground"
-                            )}
-                          >
-                            {field.value ? (
-                              format(field.value, "dd/MM/yyyy", { locale: ptBR })
-                            ) : (
-                              <span>Selecione</span>
-                            )}
-                            <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
-                          </Button>
-                        </FormControl>
-                      </PopoverTrigger>
-                      <PopoverContent className="w-auto p-0" align="start">
-                        <Calendar
-                          mode="single"
-                          selected={field.value}
-                          onSelect={field.onChange}
-                          locale={ptBR}
-                        />
-                      </PopoverContent>
-                    </Popover>
-                    <FormMessage />
-                  </FormItem>
-                )}
+            <div className="space-y-2">
+              <Label htmlFor="edit-valor">Valor</Label>
+              <Input
+                id="edit-valor"
+                type="number"
+                step="0.01"
+                value={formData.valor}
+                onChange={(e) => setFormData({ ...formData, valor: e.target.value })}
+                placeholder="0.00"
               />
             </div>
 
-            {/* Document Type and Payment */}
-            <div className="grid grid-cols-3 gap-4">
-              <FormField
-                control={form.control}
-                name="tipoDocumento"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Tipo Documento</FormLabel>
-                    <Select onValueChange={field.onChange} value={field.value}>
-                      <FormControl>
-                        <SelectTrigger>
-                          <SelectValue />
-                        </SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
-                        <SelectItem value="FATURA">Fatura</SelectItem>
-                        <SelectItem value="NOTA_FISCAL">Nota Fiscal</SelectItem>
-                        <SelectItem value="DEMONSTRATIVO">Demonstrativo</SelectItem>
-                        <SelectItem value="ICMS">ICMS</SelectItem>
-                        <SelectItem value="ARMAZENAGEM">Armazenagem</SelectItem>
-                        <SelectItem value="NF_SERVICO">NF Serviço</SelectItem>
-                        <SelectItem value="NF_DEBITO">NF Débito</SelectItem>
-                        <SelectItem value="BOLETO">Boleto</SelectItem>
-                        <SelectItem value="OUTROS">Outros</SelectItem>
-                      </SelectContent>
-                    </Select>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <FormField
-                control={form.control}
-                name="formaPagamento"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Forma Pagamento</FormLabel>
-                    <Select onValueChange={field.onChange} value={field.value}>
-                      <FormControl>
-                        <SelectTrigger>
-                          <SelectValue />
-                        </SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
-                        <SelectItem value="BOLETO">Boleto</SelectItem>
-                        <SelectItem value="TED">TED</SelectItem>
-                        <SelectItem value="PIX">PIX</SelectItem>
-                        <SelectItem value="CARTAO">Cartão</SelectItem>
-                        <SelectItem value="DEPOSITO">Depósito</SelectItem>
-                        <SelectItem value="DARF">DARF</SelectItem>
-                        <SelectItem value="GPS">GPS</SelectItem>
-                        <SelectItem value="TRANSFERENCIA_PIX">Transferência PIX</SelectItem>
-                        <SelectItem value="DEBITO">Débito</SelectItem>
-                        <SelectItem value="CAMBIO">Câmbio</SelectItem>
-                        <SelectItem value="ADF">ADF</SelectItem>
-                      </SelectContent>
-                    </Select>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <FormField
-                control={form.control}
-                name="cobrancaEmNomeDe"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Cobrança em nome de</FormLabel>
-                    <Select onValueChange={field.onChange} value={field.value}>
-                      <FormControl>
-                        <SelectTrigger>
-                          <SelectValue />
-                        </SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
-                        <SelectItem value="DACHSER">DACHSER</SelectItem>
-                        <SelectItem value="CLIENTE">Cliente</SelectItem>
-                      </SelectContent>
-                    </Select>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-            </div>
-
-            {/* Remessa */}
-            <FormField
-              control={form.control}
-              name="remessa"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Remessa</FormLabel>
-                  <Select onValueChange={field.onChange} value={field.value}>
-                    <FormControl>
-                      <SelectTrigger className="w-[200px]">
-                        <SelectValue />
-                      </SelectTrigger>
-                    </FormControl>
-                    <SelectContent>
-                      <SelectItem value="NENHUM">Nenhum</SelectItem>
-                      <SelectItem value="REMESSA_12H">Remessa 12h</SelectItem>
-                      <SelectItem value="REMESSA_15H">Remessa 15h</SelectItem>
-                    </SelectContent>
-                  </Select>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-
-            {/* Comments and Email */}
-            <FormField
-              control={form.control}
-              name="comentariosOperacao"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Comentários</FormLabel>
-                  <FormControl>
-                    <Textarea
-                      placeholder="Observações sobre o voucher..."
-                      className="min-h-[80px]"
-                      {...field}
-                    />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-
-            <FormField
-              control={form.control}
-              name="clienteEmail"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Email do Cliente</FormLabel>
-                  <FormControl>
-                    <Input
-                      type="email"
-                      placeholder="cliente@exemplo.com"
-                      {...field}
-                    />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-
-            {/* Submit */}
-            <div className="flex justify-end gap-3">
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => onOpenChange(false)}
+            <div className="space-y-2">
+              <Label htmlFor="edit-moeda">Moeda</Label>
+              <Select
+                value={formData.moeda}
+                onValueChange={(value) => setFormData({ ...formData, moeda: value })}
               >
-                Cancelar
-              </Button>
-              <Button type="submit" disabled={isSubmitting}>
-                {isSubmitting ? "Salvando..." : "Salvar Alterações"}
-              </Button>
+                <SelectTrigger id="edit-moeda">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="BRL">BRL</SelectItem>
+                  <SelectItem value="USD">USD</SelectItem>
+                  <SelectItem value="EUR">EUR</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
-          </form>
-        </Form>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label htmlFor="edit-vencimento">Vencimento *</Label>
+              <Input
+                id="edit-vencimento"
+                type="date"
+                value={formData.vencimento}
+                onChange={(e) => setFormData({ ...formData, vencimento: e.target.value })}
+                required
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="edit-dataEmissao">Data de Emissão</Label>
+              <Input
+                id="edit-dataEmissao"
+                type="date"
+                value={formData.dataEmissaoDocumento}
+                onChange={(e) => setFormData({ ...formData, dataEmissaoDocumento: e.target.value })}
+              />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label htmlFor="edit-tipoDocumento">Tipo de Documento *</Label>
+              <Select
+                value={formData.tipoDocumento}
+                onValueChange={(value) => {
+                  // Se Armazenagem ou ICMS, força urgência automática
+                  const forcarUrgencia = value === "ARMAZENAGEM" || value === "ICMS";
+                  setFormData({ 
+                    ...formData, 
+                    tipoDocumento: value,
+                    urgente: forcarUrgencia ? true : formData.urgente
+                  });
+                }}
+              >
+                <SelectTrigger id="edit-tipoDocumento">
+                  <SelectValue placeholder="Selecione..." />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="VOUCHER">Voucher</SelectItem>
+                  <SelectItem value="SPO">SPO</SelectItem>
+                  <SelectItem value="FATURA">Fatura</SelectItem>
+                  <SelectItem value="NOTA_FISCAL">Nota Fiscal</SelectItem>
+                  <SelectItem value="DEMONSTRATIVO">Demonstrativo</SelectItem>
+                  <SelectItem value="ICMS">ICMS (urgente)</SelectItem>
+                  <SelectItem value="ARMAZENAGEM">Armazenagem (urgente)</SelectItem>
+                  <SelectItem value="NF_SERVICO">NF Serviço</SelectItem>
+                  <SelectItem value="NF_DEBITO">NF Débito</SelectItem>
+                  <SelectItem value="BOLETO">Boleto</SelectItem>
+                  <SelectItem value="ADMINISTRATIVO">Administrativo</SelectItem>
+                  <SelectItem value="ADF">ADF</SelectItem>
+                  <SelectItem value="OUTROS">Outros</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="edit-filial">Filial</Label>
+              <Input
+                id="edit-filial"
+                value={formData.filial}
+                onChange={(e) => setFormData({ ...formData, filial: e.target.value })}
+                placeholder="Ex: SP01"
+              />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label htmlFor="edit-cobranca">Cobrança em nome de *</Label>
+              <Select
+                value={formData.cobrancaEmNomeDe}
+                onValueChange={(value) => setFormData({ ...formData, cobrancaEmNomeDe: value as "DACHSER" | "CLIENTE" })}
+              >
+                <SelectTrigger id="edit-cobranca">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="DACHSER">Dachser</SelectItem>
+                  <SelectItem value="CLIENTE">Cliente</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="edit-forma">Forma de Pagamento *</Label>
+              <Select
+                value={formData.formaPagamento}
+                onValueChange={(value) => setFormData({ ...formData, formaPagamento: value })}
+              >
+                <SelectTrigger id="edit-forma">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="BOLETO">Boleto</SelectItem>
+                  <SelectItem value="TED">TED</SelectItem>
+                  <SelectItem value="PIX">PIX</SelectItem>
+                  <SelectItem value="TRANSFERENCIA_PIX">Transferência/Pix</SelectItem>
+                  <SelectItem value="CARTAO">Cartão</SelectItem>
+                  <SelectItem value="DEPOSITO">Depósito</SelectItem>
+                  <SelectItem value="DARF">DARF</SelectItem>
+                  <SelectItem value="GPS">GPS</SelectItem>
+                  <SelectItem value="DEBITO">Débito</SelectItem>
+                  <SelectItem value="CAMBIO">Câmbio</SelectItem>
+                  <SelectItem value="ADF">ADF</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+
+          <div className="flex items-center space-x-2">
+            <Switch
+              id="edit-urgente"
+              checked={formData.urgente}
+              onCheckedChange={(checked) => setFormData({ ...formData, urgente: checked })}
+              disabled={formData.tipoDocumento === "ARMAZENAGEM" || formData.tipoDocumento === "ICMS"}
+            />
+            <Label htmlFor="edit-urgente" className="cursor-pointer">
+              Marcar como urgente
+              {(formData.tipoDocumento === "ARMAZENAGEM" || formData.tipoDocumento === "ICMS") && (
+                <span className="text-xs text-muted-foreground ml-2">(automático para este tipo)</span>
+              )}
+            </Label>
+          </div>
+
+          <div className="flex justify-end gap-3 pt-4">
+            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+              Cancelar
+            </Button>
+            <Button type="submit" disabled={loading}>
+              {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              Salvar Alterações
+            </Button>
+          </div>
+        </form>
       </DialogContent>
     </Dialog>
   );
