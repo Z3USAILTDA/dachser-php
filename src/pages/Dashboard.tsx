@@ -237,132 +237,124 @@ const Dashboard = () => {
               </div>
 
               {/* Children Menu - Below Parent */}
-              {item.children && activeMenu === item.id && (
-                <div className="flex flex-col items-center mt-6 animate-in fade-in duration-300">
-                  {/* Vertical Line */}
-                  <div className="w-0.5 h-5 bg-primary" />
+{item.children && activeMenu === item.id && (
+  <div className="flex flex-col items-center mt-6 animate-in fade-in duration-300">
+    {/* Vertical Line */}
+    <div className="w-0.5 h-5 bg-primary" />
 
-                  {/* Children Row */}
-                  <div className="relative flex gap-8 justify-center">
-                    {/* Horizontal line - spans from first child center to last child center */}
-                    {item.children.length > 1 && (
-                      <div 
-                        className="absolute top-0 h-0.5 bg-primary"
-                        style={{
-                          left: 'calc(50% / ' + item.children.length + ')',
-                          right: 'calc(50% / ' + item.children.length + ')'
-                        }}
-                      />
-                    )}
+    {/* Children Row */}
+    <div className="relative flex gap-8 justify-center mt-1">
+      {/* Linha horizontal ligando do primeiro ao último filho */}
+      {item.children.length > 1 && (
+        <div className="absolute top-0 left-0 right-0 mx-6 h-0.5 bg-primary" />
+      )}
 
-                    {item.children.map((child, idx) => (
-                      <div key={idx} className="relative flex flex-col items-center">
-                        {/* Vertical connector */}
-                        <div className="w-0.5 h-3 bg-primary" />
-                        <div className="w-1.5 h-1.5 rounded-full bg-primary -mt-0.5" />
+      {item.children.map((child, idx) => (
+        <div key={idx} className="relative flex flex-col items-center pt-3">
+          {/* Vertical connector */}
+          <div className="w-0.5 h-3 bg-primary" />
+          <div className="w-1.5 h-1.5 rounded-full bg-primary -mt-0.5" />
 
-                        {child.expandableId ? (
-                          <div className="relative mt-2 flex flex-col items-center">
-                            <button
-                              onClick={() =>
-                                setExpandedChild(
-                                  expandedChild === child.expandableId ? null : child.expandableId!
-                                )
-                              }
-                              className={`px-5 py-2.5 rounded-full text-sm font-medium transition-all duration-200 cursor-pointer whitespace-nowrap text-center ${
-                                expandedChild === child.expandableId
-                                  ? 'bg-primary text-primary-foreground border border-primary shadow-[0_0_14px_hsl(var(--primary)/0.7)]'
-                                  : 'text-foreground hover:-translate-y-0.5'
-                              }`}
-                              style={{
-                                ...(expandedChild !== child.expandableId && {
-                                  background: 'rgba(4, 10, 30, 0.75)',
-                                  boxShadow:
-                                    '0 12px 30px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(255, 255, 255, 0.08)',
-                                  backdropFilter: 'blur(18px)',
-                                  border: '1px solid rgba(255, 255, 255, 0.08)'
-                                })
-                              }}
-                            >
-                              {child.label}
-                            </button>
+          {child.expandableId ? (
+            <div className="relative mt-2 flex flex-col items-center">
+              <button
+                onClick={() =>
+                  setExpandedChild(
+                    expandedChild === child.expandableId ? null : child.expandableId!
+                  )
+                }
+                className={`px-5 py-2.5 rounded-full text-sm font-medium transition-all duration-200 cursor-pointer whitespace-nowrap text-center ${
+                  expandedChild === child.expandableId
+                    ? 'bg-primary text-primary-foreground border border-primary shadow-[0_0_14px_hsl(var(--primary)/0.7)]'
+                    : 'text-foreground hover:-translate-y-0.5'
+                }`}
+                style={{
+                  ...(expandedChild !== child.expandableId && {
+                    background: 'rgba(4, 10, 30, 0.75)',
+                    boxShadow:
+                      '0 12px 30px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(255, 255, 255, 0.08)',
+                    backdropFilter: 'blur(18px)',
+                    border: '1px solid rgba(255, 255, 255, 0.08)',
+                  }),
+                  // 🔸 aumenta a largura do card Voucher
+                  ...(child.expandableId === 'voucher' && {
+                    minWidth: '230px',
+                  }),
+                }}
+              >
+                {child.label}
+              </button>
 
-                            {/* Sub Children */}
-                            <div
-                              className={`absolute top-full left-1/2 -translate-x-1/2 z-20 flex flex-col items-center mt-8 transition-all duration-300 ${
-                                expandedChild === child.expandableId && child.subChildren
-                                  ? 'opacity-100 translate-y-0'
-                                  : 'opacity-0 -translate-y-2 pointer-events-none'
-                              }`}
-                            >
-                              {child.subChildren && (
-                                <>
-                                  {/* Vertical Line */}
-                                  <div className="w-0.5 h-5 bg-primary" />
+              {/* Sub Children */}
+              <div
+                className={`absolute top-full left-1/2 -translate-x-1/2 z-20 flex flex-col items-center mt-8 transition-all duration-300 ${
+                  expandedChild === child.expandableId && child.subChildren
+                    ? 'opacity-100 translate-y-0'
+                    : 'opacity-0 -translate-y-2 pointer-events-none'
+                }`}
+              >
+                {child.subChildren && (
+                  <>
+                    {/* Vertical Line */}
+                    <div className="w-0.5 h-5 bg-primary" />
 
-                                  {/* Sub-children Row */}
-                                  <div className="relative flex gap-8 justify-center">
-                                    {child.subChildren.length > 1 && (
-                                      <div 
-                                        className="absolute top-0 h-0.5 bg-primary"
-                                        style={{
-                                          left: 'calc(50% / ' + child.subChildren.length + ')',
-                                          right: 'calc(50% / ' + child.subChildren.length + ')'
-                                        }}
-                                      />
-                                    )}
+                    {/* Sub-children Row */}
+                    <div className="relative flex gap-8 justify-center mt-1">
+                      {child.subChildren.length > 1 && (
+                        <div className="absolute top-0 left-0 right-0 mx-6 h-0.5 bg-primary" />
+                      )}
 
-                                    {child.subChildren.map((subChild, subIdx) => (
-                                      <div
-                                        key={subIdx}
-                                        className="relative flex flex-col items-center"
-                                      >
-                                        <div className="w-0.5 h-3 bg-primary" />
-                                        <div className="w-1.5 h-1.5 rounded-full bg-primary -mt-0.5" />
+                      {child.subChildren.map((subChild, subIdx) => (
+                        <div
+                          key={subIdx}
+                          className="relative flex flex-col items-center pt-3"
+                        >
+                          <div className="w-0.5 h-3 bg-primary" />
+                          <div className="w-1.5 h-1.5 rounded-full bg-primary -mt-0.5" />
 
-                                        <button
-                                          onClick={() => navigate(subChild.href)}
-                                          className="mt-2 px-5 py-2.5 rounded-full text-foreground text-sm font-medium hover:-translate-y-0.5 transition-all duration-200 whitespace-nowrap text-center"
-                                          style={{
-                                            background: 'rgba(4, 10, 30, 0.75)',
-                                            boxShadow:
-                                              '0 12px 30px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(255, 255, 255, 0.08)',
-                                            backdropFilter: 'blur(18px)',
-                                            border: '1px solid rgba(255, 255, 255, 0.08)'
-                                          }}
-                                        >
-                                          {subChild.label}
-                                        </button>
-                                      </div>
-                                    ))}
-                                  </div>
-                                </>
-                              )}
-                            </div>
-                          </div>
-                        ) : (
                           <button
-                            onClick={() => child.href && navigate(child.href)}
-                            className="mt-2 px-5 py-2.5 rounded-full text-foreground text-sm font-medium hover:-translate-y-0.5 transition-all duration-200 text-center whitespace-nowrap"
+                            onClick={() => navigate(subChild.href)}
+                            className="mt-2 px-5 py-2.5 rounded-full text-foreground text-sm font-medium hover:-translate-y-0.5 transition-all duration-200 whitespace-nowrap text-center"
                             style={{
                               background: 'rgba(4, 10, 30, 0.75)',
                               boxShadow:
                                 '0 12px 30px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(255, 255, 255, 0.08)',
                               backdropFilter: 'blur(18px)',
-                              border: '1px solid rgba(255, 255, 255, 0.08)'
+                              border: '1px solid rgba(255, 255, 255, 0.08)',
+                              // 🔸 aumenta a largura do card Esteira
+                              ...(subChild.label === 'Esteira' && {
+                                minWidth: '230px',
+                              }),
                             }}
                           >
-                            {child.label}
+                            {subChild.label}
                           </button>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </div>)}
+                        </div>
+                      ))}
+                    </div>
+                  </>
+                )}
+              </div>
+            </div>
+          ) : (
+            <button
+              onClick={() => child.href && navigate(child.href)}
+              className="mt-2 px-5 py-2.5 rounded-full text-foreground text-sm font-medium hover:-translate-y-0.5 transition-all duration-200 text-center whitespace-nowrap"
+              style={{
+                background: 'rgba(4, 10, 30, 0.75)',
+                boxShadow:
+                  '0 12px 30px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(255, 255, 255, 0.08)',
+                backdropFilter: 'blur(18px)',
+                border: '1px solid rgba(255, 255, 255, 0.08)',
+              }}
+            >
+              {child.label}
+            </button>
+          )}
         </div>
-      </main>
-    </div>;
-};
+      ))}
+    </div>
+  </div>
+)}
+
 export default Dashboard;
