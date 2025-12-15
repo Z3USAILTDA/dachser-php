@@ -228,7 +228,8 @@ serve(async (req) => {
             username: user.username,
             email: user.email,
             is_admin: user.is_admin,
-            olimpo_only: user.olimpo_only || 0
+            olimpo_only: user.olimpo_only || 0,
+            metrics_only: user.metrics_only || 0
           }
         };
         console.log(`Login successful for user: ${user.username}`);
