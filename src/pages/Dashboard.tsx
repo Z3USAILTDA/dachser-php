@@ -352,12 +352,14 @@ const Dashboard = () => {
                     expandedChild === child.expandableId ? null : child.expandableId!
                   )
                 }
-                className={`px-5 py-2.5 rounded-full text-sm font-medium transition-all duration-200 cursor-pointer text-center min-w-[140px] max-w-[160px] ${
+                className={`px-5 py-2.5 rounded-full text-sm font-medium transition-all duration-200 cursor-pointer whitespace-nowrap text-center ${
                   expandedChild === child.expandableId
                     ? 'bg-primary text-primary-foreground border border-primary shadow-[0_0_14px_hsl(var(--primary)/0.7)]'
                     : 'text-foreground hover:-translate-y-0.5'
                 }`}
                 style={{
+                  // aumenta largura do card "Voucher"
+                  ...(child.label === 'Voucher' && { minWidth: '220px' }),
                   ...(expandedChild !== child.expandableId && {
                     background: 'rgba(4, 10, 30, 0.75)',
                     boxShadow:
@@ -406,8 +408,12 @@ const Dashboard = () => {
 
                           <button
                             onClick={() => navigate(subChild.href)}
-                            className="mt-2 px-5 py-2.5 rounded-full text-foreground text-sm font-medium hover:-translate-y-0.5 transition-all duration-200 text-center min-w-[140px] max-w-[160px]"
+                            className="mt-2 px-5 py-2.5 rounded-full text-foreground text-sm font-medium hover:-translate-y-0.5 transition-all duration-200 whitespace-nowrap text-center"
                             style={{
+                              // aumenta largura do card "Esteira"
+                              ...(subChild.label === 'Esteira' && {
+                                minWidth: '220px'
+                              }),
                               background: 'rgba(4, 10, 30, 0.75)',
                               boxShadow:
                                 '0 12px 30px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(255, 255, 255, 0.08)',
@@ -427,7 +433,7 @@ const Dashboard = () => {
           ) : (
             <button
               onClick={() => child.href && navigate(child.href)}
-              className="mt-2 px-5 py-2.5 rounded-full text-foreground text-sm font-medium hover:-translate-y-0.5 transition-all duration-200 text-center min-w-[140px] max-w-[160px]"
+              className="mt-2 px-5 py-2.5 rounded-full text-foreground text-sm font-medium hover:-translate-y-0.5 transition-all duration-200 text-center whitespace-nowrap"
               style={{
                 background: 'rgba(4, 10, 30, 0.75)',
                 boxShadow:
