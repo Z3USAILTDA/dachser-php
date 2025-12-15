@@ -333,8 +333,9 @@ const Dashboard = () => {
         <div 
           className="absolute top-0 h-0.5 bg-primary pointer-events-none"
           style={{ 
-            left: `calc(50% / ${item.children.length})`,
-            right: `calc(50% / ${item.children.length})`
+            width: `${(item.children.length - 1) * 32 + (item.children.length - 1) * 140}px`,
+            left: '50%',
+            transform: 'translateX(-50%)'
           }}
         />
       )}
@@ -392,8 +393,9 @@ const Dashboard = () => {
                         <div 
                           className="absolute top-0 h-0.5 bg-primary pointer-events-none"
                           style={{ 
-                            left: `calc(50% / ${child.subChildren.length})`,
-                            right: `calc(50% / ${child.subChildren.length})`
+                            width: `${(child.subChildren.length - 1) * 32 + (child.subChildren.length - 1) * 140}px`,
+                            left: '50%',
+                            transform: 'translateX(-50%)'
                           }}
                         />
                       )}
