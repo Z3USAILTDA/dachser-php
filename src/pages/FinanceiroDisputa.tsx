@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import * as XLSX from "xlsx";
-import { Flag, Search, Filter, X, Plus, Check, Trash2, Clock, Scale, Upload, FileSpreadsheet, Loader2 } from "lucide-react";
+import { Flag, Search, Filter, X, Plus, Check, Trash2, Clock, Scale, Upload, FileSpreadsheet, Loader2, Download } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -459,8 +459,50 @@ export default function FinanceiroDisputa() {
     }
   };
 
+  const handleExport = () => {
+    if (filteredRows.length === 0) {
+      toast({ title: "Aviso", description: "Nenhum dado para exportar", variant: "destructive" });
+      return;
+    }
+
+    const exportData = filteredRows.map(r => ({
+      "Cliente": r.cliente || r.razao_base || "-",
+      "Documento/NF": r.nf || r.nd || "-",
+      "Emissão": formatDate(r.emissao),
+      "Vencimento": formatDate(r.vencimento),
+      "Tempo em Disputa": formatElapsed(r.created_at),
+      "Responsável": r.responsavel || "-",
+      "Valor": r.valor ? formatMoney(r.valor) : "-",
+      "Tipo": r.tipo || "-",
+      "Observações": r.observacoes || "-",
+    }));
+
+    const worksheet = XLSX.utils.json_to_sheet(exportData);
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, "Disputas");
+    
+    // Auto-size columns
+    const colWidths = Object.keys(exportData[0] || {}).map(key => ({
+      wch: Math.max(key.length, ...exportData.map(row => String(row[key as keyof typeof row] || "").length))
+    }));
+    worksheet["!cols"] = colWidths;
+
+    const fileName = `disputas_${new Date().toISOString().split("T")[0]}.xlsx`;
+    XLSX.writeFile(workbook, fileName);
+    
+    toast({ title: "Exportado", description: `${filteredRows.length} registro(s) exportado(s)` });
+  };
+
   const rightContent = (
     <div className="flex gap-2">
+      <Button
+        onClick={handleExport}
+        variant="outline"
+        className="h-8 rounded-full font-bold text-[0.85rem]"
+        disabled={filteredRows.length === 0}
+      >
+        <Download className="w-4 h-4 mr-1" /> Exportar
+      </Button>
       <Button
         onClick={() => setImportModalOpen(true)}
         variant="outline"
