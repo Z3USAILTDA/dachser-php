@@ -1538,6 +1538,9 @@ const Index = () => {
 
   // Always use data from t_status_aereo
   const filteredAwbs = React.useMemo(() => {
+    // Separate COMPANY_NOT_REGISTERED AWBs to append at the end
+    const companyNotRegisteredAwbs: AWBData[] = [];
+    
     let awbs = statusAereoData.filter((awb) => {
       const searchLower = searchTerm.toLowerCase();
       const matchesSearch =
@@ -1550,15 +1553,24 @@ const Index = () => {
       const matchesAirline = filterAirline === "all" || awb.airline_code === filterAirline;
       const matchesAnalyst = filterAnalyst === "all" || awb.nome_analista === filterAnalyst;
 
-      // Exclude AWBs with specific status values
-      const excludedStatuses = ["COMPANY_NOT_REGISTERED", "ERRO", "INFO", "Em Processamento", "NOT_FOUND", "DLV"];
+      // Exclude AWBs with specific status values (except COMPANY_NOT_REGISTERED which we handle separately)
+      const excludedStatuses = ["ERRO", "INFO", "Em Processamento", "NOT_FOUND", "DLV"];
       const statusToCheck = awb.status || "";
+      
+      // Collect COMPANY_NOT_REGISTERED AWBs separately
+      if (statusToCheck === "COMPANY_NOT_REGISTERED") {
+        if (matchesSearch && matchesAirline && matchesAnalyst && cardFilter === "all") {
+          companyNotRegisteredAwbs.push(awb);
+        }
+        return false; // Don't include in main list yet
+      }
+      
       const isNotExcluded = !excludedStatuses.includes(statusToCheck);
 
       return matchesSearch && matchesAirline && matchesAnalyst && isNotExcluded;
     });
 
-    // Apply card filter
+    // Apply card filter (don't include COMPANY_NOT_REGISTERED in filtered results)
     if (cardFilter !== "all") {
       awbs = awbs.filter((awb) => {
         const status = getStatusCode(awb.last_event).toUpperCase();
@@ -1604,6 +1616,11 @@ const Index = () => {
         const comparison = dateA - dateB;
         return sortLastCheck === "asc" ? comparison : -comparison;
       });
+    }
+
+    // Append COMPANY_NOT_REGISTERED AWBs at the end (only when no card filter is active)
+    if (cardFilter === "all") {
+      awbs = [...awbs, ...companyNotRegisteredAwbs];
     }
 
     return awbs;
@@ -1898,18 +1915,20 @@ const Index = () => {
                       const status = getStatusFromEvent(awb.last_event);
                       const isDelivered = status === "Chegou em seu destino final";
                       const isRetracking = retrackingAwbs.has(awb.awb);
-
                       const isNilStatus = awb.last_event === "NIL" || awb.last_event === "NIF";
+                      const isCompanyNotRegistered = awb.status === "COMPANY_NOT_REGISTERED";
 
                       return (
                         <React.Fragment key={awb.id || index}>
                           <tr
                             className={`border-b border-[rgba(255,255,255,.06)] transition-all duration-300 ${
-                              isNilStatus
+                              isCompanyNotRegistered
+                                ? "bg-slate-500/10 border-l-4 border-l-slate-400/50 opacity-70"
+                                : isNilStatus
                                 ? "bg-red-500/20 border-red-500 border-2 animate-pulse shadow-[0_0_20px_rgba(255,0,0,0.3)]"
                                 : "hover:bg-[rgba(255,255,255,.03)]"
-                            } ${isDelivered && !isNilStatus ? "bg-emerald-500/10" : ""} ${
-                              isRetracking && !isNilStatus ? "bg-blue-500/20 animate-pulse" : ""
+                            } ${isDelivered && !isNilStatus && !isCompanyNotRegistered ? "bg-emerald-500/10" : ""} ${
+                              isRetracking && !isNilStatus && !isCompanyNotRegistered ? "bg-blue-500/20 animate-pulse" : ""
                             }`}
                           >
                             <td className="px-4 py-3 whitespace-nowrap">
@@ -2056,6 +2075,14 @@ const Index = () => {
                             </td>
                             <td className="px-3 py-3 text-center">
                               {(() => {
+                                if (isCompanyNotRegistered) {
+                                  return (
+                                    <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-semibold bg-slate-500/20 text-slate-400 border border-slate-500/30">
+                                      <span className="w-1.5 h-1.5 rounded-full bg-slate-400"></span>
+                                      Pendente Cadastro
+                                    </span>
+                                  );
+                                }
                                 const statusCode = getStatusCode(awb.last_event).toUpperCase();
                                 const isDelayed = awb.data_atraso !== null || statusCode === "DIS" || statusCode === "OFLD";
                                 return isDelayed ? (
