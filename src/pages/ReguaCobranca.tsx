@@ -190,6 +190,7 @@ export default function ReguaCobranca() {
       subtitle="Régua de cobrança – títulos em aberto"
       rightContent={rightContent}
       pageIcon={CalendarRange}
+      backTo="/dashboard"
     >
       {/* Meta pills */}
       <div className="flex flex-wrap gap-[10px] mb-[18px]">

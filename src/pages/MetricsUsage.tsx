@@ -247,7 +247,7 @@ const MetricsUsage = () => {
   );
 
   return (
-    <PageLayout title="DACHSER" subtitle="Métricas de Uso" pageIcon={ChartLine}>
+    <PageLayout title="DACHSER" subtitle="Métricas de Uso" pageIcon={ChartLine} backTo="/dashboard">
       {/* Grid: Stats + Filters */}
       <div className="grid grid-cols-1 lg:grid-cols-[2.2fr_1.2fr] gap-5">
         {/* Stats Panel */}

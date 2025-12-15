@@ -150,7 +150,7 @@ export default function EsteiraReports() {
   };
 
   return (
-    <PageLayout>
+    <PageLayout backTo="/fin/esteira">
       <PageHeader 
         title="Relatórios"
         subtitle="Exporte dados de vouchers para análise"

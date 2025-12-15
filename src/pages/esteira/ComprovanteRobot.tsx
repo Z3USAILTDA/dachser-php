@@ -201,7 +201,7 @@ export default function ComprovanteRobot() {
   };
 
   return (
-    <PageLayout>
+    <PageLayout backTo="/fin/esteira">
       <PageHeader 
         title="Robô de Comprovantes"
         subtitle="Upload em lote de comprovantes com associação automática"

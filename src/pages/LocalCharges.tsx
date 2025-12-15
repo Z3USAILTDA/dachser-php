@@ -309,6 +309,7 @@ export default function LocalCharges() {
       subtitle="Local Charges – Tabelas consolidadas"
       rightContent={rightContent}
       pageIcon={Receipt}
+      backTo="/dashboard"
     >
       <CompanyTable title="HAPAG-LLOYD" data={hapagData} isLoading={isLoading} />
       <CompanyTable title="CMA" data={cmaData} isLoading={isLoading} />

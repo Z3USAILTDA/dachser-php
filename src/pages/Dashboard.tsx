@@ -43,13 +43,13 @@ const menuItems: MenuItem[] = [{
   label: "AIR",
   subtitle: "Operações Aéreas",
   children: [{
-    label: "Rastreio Aéreo",
-    href: "/air/tracking"
-  }, {
     label: "Check AWB x CNPJ",
     href: "/air/check"
   }, {
-    label: "Robô CCT",
+    label: "Monitoramento Pré-Embarque",
+    href: "/air/tracking"
+  }, {
+    label: "Monitoramento Pós-Embarque",
     href: "/air/cct"
   }]
 }, {
@@ -58,7 +58,7 @@ const menuItems: MenuItem[] = [{
   label: "SEA",
   subtitle: "Operações Marítimas",
   children: [{
-    label: "Conferências SEA",
+    label: "Análise Documental SEA",
     href: "/sea/analysis"
   }, {
     label: "Local Charges",
@@ -89,7 +89,7 @@ const menuItems: MenuItem[] = [{
   label: "CHB",
   subtitle: "Customs House Brokerage",
   children: [{
-    label: "Conferências CHB",
+    label: "Análise Documental CHB",
     href: "/chb/conferences"
   }]
 }, {

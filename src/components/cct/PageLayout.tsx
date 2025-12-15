@@ -41,7 +41,7 @@ export function PageLayout({
 
   const handleLogout = () => {
     localStorage.removeItem("user");
-    navigate("/login");
+    navigate("/");
   };
 
   return (

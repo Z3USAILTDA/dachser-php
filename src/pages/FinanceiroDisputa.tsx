@@ -527,6 +527,7 @@ export default function FinanceiroDisputa() {
       subtitle="NFs em disputa"
       rightContent={rightContent}
       pageIcon={Scale}
+      backTo="/dashboard"
     >
       {/* Filter Card */}
       <FilterCard>
