@@ -3025,6 +3025,182 @@ serve(async (req) => {
         break;
       }
 
+      // ==================== VOUCHER ESTEIRA ====================
+      case 'save_voucher_esteira': {
+        const voucherData = body as any;
+        console.log('Saving voucher to t_vouchers_esteira:', voucherData.supabase_voucher_id);
+        
+        // Create table if not exists
+        await client.execute(`
+          CREATE TABLE IF NOT EXISTS dados_dachser.t_vouchers_esteira (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            supabase_voucher_id VARCHAR(255),
+            id_lan_rm VARCHAR(100),
+            id_mov_rm VARCHAR(100),
+            numero_spo VARCHAR(100),
+            fornecedor VARCHAR(255),
+            beneficiario VARCHAR(255),
+            cnpj_fornecedor VARCHAR(20),
+            valor DECIMAL(15,2),
+            moeda VARCHAR(10) DEFAULT 'BRL',
+            vencimento DATE,
+            data_emissao_documento DATE,
+            cobranca_em_nome_de VARCHAR(50),
+            forma_pagamento VARCHAR(50),
+            tipo_documento VARCHAR(50),
+            filial VARCHAR(100),
+            urgencia_tipo VARCHAR(50),
+            etapa_atual VARCHAR(50),
+            status_baixa VARCHAR(50),
+            status_financeiro VARCHAR(50),
+            status_envio_cliente VARCHAR(50),
+            processo_id VARCHAR(100),
+            origem_processo VARCHAR(20),
+            comentarios_operacao TEXT,
+            comentarios_fiscal TEXT,
+            comentarios_financeiro TEXT,
+            ajuste_operacao TEXT,
+            ajuste_fiscal TEXT,
+            cliente_email VARCHAR(255),
+            motivo_urgencia TEXT,
+            rm_data_json LONGTEXT,
+            fatura_files_json LONGTEXT,
+            boleto_files_json LONGTEXT,
+            criado_por_user_id VARCHAR(255),
+            criado_por_email VARCHAR(255),
+            modo_entrada VARCHAR(20) DEFAULT 'manual',
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            INDEX idx_supabase_id (supabase_voucher_id),
+            INDEX idx_numero_spo (numero_spo),
+            INDEX idx_id_lan_rm (id_lan_rm),
+            INDEX idx_cnpj (cnpj_fornecedor),
+            INDEX idx_etapa (etapa_atual),
+            INDEX idx_created_at (created_at)
+          ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+        `);
+        
+        // Insert voucher data
+        const insertResult = await client.execute(`
+          INSERT INTO dados_dachser.t_vouchers_esteira (
+            supabase_voucher_id, id_lan_rm, id_mov_rm, numero_spo,
+            fornecedor, beneficiario, cnpj_fornecedor, valor, moeda,
+            vencimento, data_emissao_documento, cobranca_em_nome_de,
+            forma_pagamento, tipo_documento, filial, urgencia_tipo,
+            etapa_atual, status_baixa, status_financeiro, status_envio_cliente,
+            processo_id, origem_processo, comentarios_operacao,
+            comentarios_fiscal, comentarios_financeiro, ajuste_operacao,
+            ajuste_fiscal, cliente_email, motivo_urgencia, rm_data_json,
+            fatura_files_json, boleto_files_json, criado_por_user_id,
+            criado_por_email, modo_entrada
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `, [
+          voucherData.supabase_voucher_id || null,
+          voucherData.id_lan_rm || null,
+          voucherData.id_mov_rm || null,
+          voucherData.numero_spo || null,
+          voucherData.fornecedor || null,
+          voucherData.beneficiario || null,
+          voucherData.cnpj_fornecedor?.replace(/\D/g, '') || null,
+          voucherData.valor || null,
+          voucherData.moeda || 'BRL',
+          voucherData.vencimento || null,
+          voucherData.data_emissao_documento || null,
+          voucherData.cobranca_em_nome_de || null,
+          voucherData.forma_pagamento || null,
+          voucherData.tipo_documento || null,
+          voucherData.filial || null,
+          voucherData.urgencia_tipo || null,
+          voucherData.etapa_atual || null,
+          voucherData.status_baixa || null,
+          voucherData.status_financeiro || null,
+          voucherData.status_envio_cliente || null,
+          voucherData.processo_id || null,
+          voucherData.origem_processo || null,
+          voucherData.comentarios_operacao || null,
+          voucherData.comentarios_fiscal || null,
+          voucherData.comentarios_financeiro || null,
+          voucherData.ajuste_operacao || null,
+          voucherData.ajuste_fiscal || null,
+          voucherData.cliente_email || null,
+          voucherData.motivo_urgencia || null,
+          voucherData.rm_data_json ? JSON.stringify(voucherData.rm_data_json) : null,
+          voucherData.fatura_files_json ? JSON.stringify(voucherData.fatura_files_json) : null,
+          voucherData.boleto_files_json ? JSON.stringify(voucherData.boleto_files_json) : null,
+          voucherData.criado_por_user_id || null,
+          voucherData.criado_por_email || null,
+          voucherData.modo_entrada || 'manual'
+        ]);
+        
+        console.log('Voucher saved to MariaDB, ID:', insertResult.lastInsertId);
+        result = { success: true, mariadbId: insertResult.lastInsertId };
+        break;
+      }
+
+      case 'update_voucher_esteira': {
+        const { supabase_voucher_id, ...updateData } = body as any;
+        console.log('Updating voucher in t_vouchers_esteira:', supabase_voucher_id);
+        
+        const updates: string[] = [];
+        const params: any[] = [];
+        
+        const fieldMapping: Record<string, string> = {
+          etapa_atual: 'etapa_atual',
+          status_baixa: 'status_baixa',
+          status_financeiro: 'status_financeiro',
+          status_envio_cliente: 'status_envio_cliente',
+          comentarios_operacao: 'comentarios_operacao',
+          comentarios_fiscal: 'comentarios_fiscal',
+          comentarios_financeiro: 'comentarios_financeiro',
+          ajuste_operacao: 'ajuste_operacao',
+          ajuste_fiscal: 'ajuste_fiscal',
+        };
+        
+        for (const [key, dbField] of Object.entries(fieldMapping)) {
+          if (updateData[key] !== undefined) {
+            updates.push(`${dbField} = ?`);
+            params.push(updateData[key]);
+          }
+        }
+        
+        if (updates.length > 0) {
+          params.push(supabase_voucher_id);
+          await client.execute(`
+            UPDATE dados_dachser.t_vouchers_esteira SET ${updates.join(', ')} WHERE supabase_voucher_id = ?
+          `, params);
+        }
+        
+        result = { success: true };
+        break;
+      }
+
+      case 'get_vouchers_esteira': {
+        const { search, etapa, limit = 100, offset = 0 } = body as any;
+        console.log('Fetching vouchers from t_vouchers_esteira');
+        
+        let whereConditions: string[] = [];
+        let params: any[] = [];
+        
+        if (search) {
+          whereConditions.push('(numero_spo LIKE ? OR fornecedor LIKE ? OR cnpj_fornecedor LIKE ?)');
+          params.push(`%${search}%`, `%${search}%`, `%${search}%`);
+        }
+        
+        if (etapa) {
+          whereConditions.push('etapa_atual = ?');
+          params.push(etapa);
+        }
+        
+        const whereClause = whereConditions.length > 0 ? `WHERE ${whereConditions.join(' AND ')}` : '';
+        
+        const vouchers = await client.query(`
+          SELECT * FROM dados_dachser.t_vouchers_esteira ${whereClause} ORDER BY created_at DESC LIMIT ? OFFSET ?
+        `, [...params, limit, offset]);
+        
+        result = { success: true, data: vouchers };
+        break;
+      }
+
       // ==================== RAW QUERY (ADMIN) ====================
       case 'raw_query': {
         const { query, params: queryParams } = body as { query?: string; params?: any[] };
