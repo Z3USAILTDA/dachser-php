@@ -327,23 +327,22 @@ const Dashboard = () => {
     <div className="w-0.5 h-5 bg-primary" />
 
     {/* Children Row */}
-    <div className="relative flex items-start">
-      {/* Horizontal connector line - spans from center of first to center of last child */}
+    <div className="relative flex items-start gap-4">
+      {/* Horizontal connector line */}
       {item.children.length > 1 && (
         <div 
           className="absolute h-0.5 bg-primary pointer-events-none"
           style={{ 
             top: 0,
-            left: 'calc(50% / ' + item.children.length + ')',
-            right: 'calc(50% / ' + item.children.length + ')',
+            left: 0,
+            right: 0,
           }}
         />
       )}
       {item.children.map((child, idx) => (
         <div 
           key={idx} 
-          className="relative flex flex-col items-center flex-1"
-          style={{ minWidth: '160px' }}
+          className="relative flex flex-col items-center"
         >
           {/* Vertical connector to this child */}
           <div className="w-0.5 h-3 bg-primary" />
@@ -383,23 +382,22 @@ const Dashboard = () => {
                   <div className="w-0.5 h-5 bg-primary" />
 
                   {/* Sub-children Row */}
-                  <div className="relative flex items-start">
+                  <div className="relative flex items-start gap-4">
                     {/* Horizontal connector for sub-children */}
                     {child.subChildren.length > 1 && (
                       <div 
                         className="absolute h-0.5 bg-primary pointer-events-none"
                         style={{ 
                           top: 0,
-                          left: 'calc(50% / ' + child.subChildren.length + ')',
-                          right: 'calc(50% / ' + child.subChildren.length + ')',
+                          left: 0,
+                          right: 0,
                         }}
                       />
                     )}
                     {child.subChildren.map((subChild, subIdx) => (
                       <div
                         key={subIdx}
-                        className="relative flex flex-col items-center flex-1"
-                        style={{ minWidth: '160px' }}
+                        className="relative flex flex-col items-center"
                       >
                         {/* Vertical connector */}
                         <div className="w-0.5 h-3 bg-primary" />
