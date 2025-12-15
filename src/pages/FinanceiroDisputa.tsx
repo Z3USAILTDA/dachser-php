@@ -522,7 +522,7 @@ export default function FinanceiroDisputa() {
   return (
     <PageLayout 
       title="DACHSER" 
-      subtitle="Financeiro — NFs em disputa"
+      subtitle="NFs em disputa"
       rightContent={rightContent}
       pageIcon={Scale}
     >
