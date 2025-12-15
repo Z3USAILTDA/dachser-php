@@ -26,7 +26,7 @@ interface DashboardMetrics {
 }
 
 type DrillDownFilter = "all" | "ativos" | "sla" | "pendencias" | "atividade";
-type DataSource = "supabase" | "mariadb";
+
 
 
 const CHART_COLORS = {
@@ -538,7 +538,7 @@ const EsteiraIndex = () => {
   const [loading, setLoading] = useState(true);
   const [isRefetching, setIsRefetching] = useState(false);
   const [activeTab, setActiveTab] = useState<"processos" | "dashboard" | "analytics" | "robo" | "relatorios">("processos");
-  const [dataSource, setDataSource] = useState<DataSource>("supabase");
+  
   const [filters, setFilters] = useState<FilterValues>({
     search: "",
     etapa: "all",
@@ -585,124 +585,55 @@ const EsteiraIndex = () => {
     getCurrentUser();
   }, []);
 
-  const loadVouchers = async (source?: DataSource) => {
-    const currentSource = source || dataSource;
+  const loadVouchers = async () => {
     try {
       setLoading(true);
       setIsRefetching(true);
       
-      let mappedVouchers: Voucher[] = [];
+      // Load from MariaDB t_vouchers exclusively
+      const { data, error } = await supabase.functions.invoke("mariadb-proxy", {
+        body: { action: "get_vouchers_esteira", limit: 500 }
+      });
       
-      if (currentSource === "mariadb") {
-        // Load from MariaDB t_vouchers
-        const { data, error } = await supabase.functions.invoke("mariadb-proxy", {
-          body: { action: "get_vouchers_esteira", limit: 500 }
-        });
-        
-        if (error) throw error;
-        
-        mappedVouchers = (data?.vouchers || []).map((v: any) => ({
-          id: v.id,
-          numeroSPO: v.numero_spo,
-          fornecedor: v.fornecedor,
-          cnpjFornecedor: v.cnpj_fornecedor,
-          valor: v.valor ? parseFloat(v.valor) : null,
-          moeda: v.moeda || "BRL",
-          vencimento: new Date(v.vencimento),
-          dataEmissaoDocumento: v.data_emissao_documento ? new Date(v.data_emissao_documento) : undefined,
-          cobrancaEmNomeDe: v.cobranca_em_nome_de || "DACHSER",
-          formaPagamento: v.forma_pagamento || "BOLETO",
-          tipoDocumento: v.tipo_documento,
-          filial: v.filial,
-          remessa: v.remessa,
-          urgente: v.urgente === 1 || v.urgencia_tipo !== "NORMAL",
-          urgenciaTipo: v.urgencia_tipo || "NORMAL",
-          comentariosOperacao: v.comentarios_operacao,
-          comentariosFiscal: v.comentarios_fiscal,
-          comentariosFinanceiro: v.comentarios_financeiro,
-          ajusteOperacao: v.ajuste_operacao,
-          ajusteFiscal: v.ajuste_fiscal,
-          etapaAtual: v.etapa_atual || "OPERACAO",
-          statusBaixa: v.status_baixa || "PENDENTE",
-          statusFinanceiro: v.status_financeiro || "PENDENTE",
-          statusEnvioCliente: v.status_envio_cliente,
-          criadoPorUserId: v.criado_por_user_id,
-          responsavelOperacaoUserId: v.responsavel_operacao_user_id,
-          responsavelFiscalUserId: v.responsavel_fiscal_user_id,
-          responsavelSupervisorUserId: v.responsavel_supervisor_user_id,
-          responsavelFinanceiroUserId: v.responsavel_financeiro_user_id,
-          aprovadoPorUserId: v.aprovado_por_user_id,
-          clienteEmail: v.cliente_email,
-          createdAt: new Date(v.created_at),
-          updatedAt: new Date(v.updated_at || v.created_at),
-          anexos: [],
-          logs: []
-        }));
-        
-      } else {
-        // Load from Supabase vouchers table
-        const { data, error } = await (supabase as any).from("vouchers").select(`
-            *,
-            anexos:voucher_anexos(id, tipo, file_name, file_url, file_size),
-            logs:voucher_logs(id, data_hora, acao, detalhe, user_id)
-          `).order("created_at", { ascending: false });
-
-        if (error) throw error;
-
-        mappedVouchers = (data || []).map((v: any) => ({
-          id: v.id,
-          numeroSPO: v.numero_spo,
-          fornecedor: v.fornecedor,
-          cnpjFornecedor: v.cnpj_fornecedor,
-          valor: v.valor,
-          moeda: v.moeda || "BRL",
-          vencimento: new Date(v.vencimento),
-          dataEmissaoDocumento: v.data_emissao_documento ? new Date(v.data_emissao_documento) : undefined,
-          cobrancaEmNomeDe: v.cobranca_em_nome_de,
-          formaPagamento: v.forma_pagamento,
-          tipoDocumento: v.tipo_documento,
-          filial: v.filial,
-          remessa: v.remessa,
-          urgente: v.urgencia_tipo !== "NORMAL",
-          urgenciaTipo: v.urgencia_tipo || "NORMAL",
-          comentariosOperacao: v.comentarios_operacao,
-          comentariosFiscal: v.comentarios_fiscal,
-          comentariosFinanceiro: v.comentarios_financeiro,
-          ajusteOperacao: v.ajuste_operacao,
-          ajusteFiscal: v.ajuste_fiscal,
-          etapaAtual: v.etapa_atual,
-          statusBaixa: v.status_baixa || "PENDENTE",
-          statusFinanceiro: v.status_financeiro || "PENDENTE",
-          statusEnvioCliente: v.status_envio_cliente,
-          criadoPorUserId: v.criado_por_user_id,
-          responsavelOperacaoUserId: v.responsavel_operacao_user_id,
-          responsavelFiscalUserId: v.responsavel_fiscal_user_id,
-          responsavelSupervisorUserId: v.responsavel_supervisor_user_id,
-          responsavelFinanceiroUserId: v.responsavel_financeiro_user_id,
-          aprovadoPorUserId: v.aprovado_por_user_id,
-          clienteEmail: v.cliente_email,
-          createdAt: new Date(v.created_at),
-          updatedAt: new Date(v.updated_at),
-          anexos: (v.anexos || []).map((a: any) => ({
-            id: a.id,
-            voucherId: v.id,
-            tipo: a.tipo,
-            fileName: a.file_name,
-            fileUrl: a.file_url,
-            fileSize: a.file_size,
-            uploadedByUserId: v.criado_por_user_id,
-            createdAt: new Date()
-          })),
-          logs: (v.logs || []).map((l: any) => ({
-            id: l.id,
-            voucherId: v.id,
-            dataHora: new Date(l.data_hora),
-            userId: l.user_id,
-            acao: l.acao,
-            detalhe: l.detalhe
-          }))
-        }));
-      }
+      if (error) throw error;
+      
+      const mappedVouchers: Voucher[] = (data?.vouchers || []).map((v: any) => ({
+        id: v.id,
+        numeroSPO: v.numero_spo,
+        fornecedor: v.fornecedor,
+        cnpjFornecedor: v.cnpj_fornecedor,
+        valor: v.valor ? parseFloat(v.valor) : null,
+        moeda: v.moeda || "BRL",
+        vencimento: new Date(v.vencimento),
+        dataEmissaoDocumento: v.data_emissao_documento ? new Date(v.data_emissao_documento) : undefined,
+        cobrancaEmNomeDe: v.cobranca_em_nome_de || "DACHSER",
+        formaPagamento: v.forma_pagamento || "BOLETO",
+        tipoDocumento: v.tipo_documento,
+        filial: v.filial,
+        remessa: v.remessa,
+        urgente: v.urgente === 1 || v.urgencia_tipo !== "NORMAL",
+        urgenciaTipo: v.urgencia_tipo || "NORMAL",
+        comentariosOperacao: v.comentarios_operacao,
+        comentariosFiscal: v.comentarios_fiscal,
+        comentariosFinanceiro: v.comentarios_financeiro,
+        ajusteOperacao: v.ajuste_operacao,
+        ajusteFiscal: v.ajuste_fiscal,
+        etapaAtual: v.etapa_atual || "OPERACAO",
+        statusBaixa: v.status_baixa || "PENDENTE",
+        statusFinanceiro: v.status_financeiro || "PENDENTE",
+        statusEnvioCliente: v.status_envio_cliente,
+        criadoPorUserId: v.criado_por_user_id,
+        responsavelOperacaoUserId: v.responsavel_operacao_user_id,
+        responsavelFiscalUserId: v.responsavel_fiscal_user_id,
+        responsavelSupervisorUserId: v.responsavel_supervisor_user_id,
+        responsavelFinanceiroUserId: v.responsavel_financeiro_user_id,
+        aprovadoPorUserId: v.aprovado_por_user_id,
+        clienteEmail: v.cliente_email,
+        createdAt: new Date(v.created_at),
+        updatedAt: new Date(v.updated_at || v.created_at),
+        anexos: [],
+        logs: []
+      }));
       
       setVouchers(mappedVouchers);
       
@@ -1025,30 +956,10 @@ const EsteiraIndex = () => {
 
         {/* Right - Actions and user */}
         <div className="flex items-center gap-2.5 text-[0.85rem]">
-          {/* Data Source Toggle */}
-          <div className="flex items-center gap-1 px-2 py-1 rounded-full bg-[rgba(0,0,0,.7)] border border-[rgba(255,255,255,.25)]">
-            <button
-              onClick={() => { setDataSource("supabase"); loadVouchers("supabase"); }}
-              className={cn(
-                "px-3 py-1 rounded-full text-[0.75rem] transition-all",
-                dataSource === "supabase" 
-                  ? "bg-primary/20 text-primary border border-primary/30" 
-                  : "text-[#aaaaaa] hover:text-white"
-              )}
-            >
-              Supabase
-            </button>
-            <button
-              onClick={() => { setDataSource("mariadb"); loadVouchers("mariadb"); }}
-              className={cn(
-                "px-3 py-1 rounded-full text-[0.75rem] transition-all",
-                dataSource === "mariadb" 
-                  ? "bg-primary/20 text-primary border border-primary/30" 
-                  : "text-[#aaaaaa] hover:text-white"
-              )}
-            >
-              MariaDB
-            </button>
+          {/* Data Source Label */}
+          <div className="px-3 py-1.5 rounded-full bg-[rgba(0,0,0,.7)] border border-[rgba(255,255,255,.25)] flex items-center gap-2">
+            <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
+            <span className="text-[0.75rem] text-[#aaaaaa]">MariaDB</span>
           </div>
           
           <button 
@@ -1237,7 +1148,7 @@ const EsteiraIndex = () => {
                 <Receipt className="h-5 w-5 text-[#ffc800]" />
                 <h3 className="text-lg font-semibold text-white">Vouchers</h3>
                 <span className="px-3 py-1 rounded-full bg-primary/15 text-primary border border-primary/40 text-[0.75rem] font-mono">
-                  {filteredVouchers.length} registros • Fonte: {dataSource === "mariadb" ? "MariaDB" : "Supabase"}
+                  {filteredVouchers.length} registros • Fonte: MariaDB
                 </span>
               </div>
 
