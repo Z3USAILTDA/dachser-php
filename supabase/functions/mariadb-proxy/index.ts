@@ -2865,37 +2865,19 @@ serve(async (req) => {
           ORDER BY r.created_at DESC
         `, [itemId]);
         
-        // Get files for each run
-        const runsWithFiles = [];
-        for (const run of (runs || [])) {
-          const files = await client.query(`
-            SELECT f.id, f.filename as file_name, f.url as file_url, f.mime as file_type, f.size_bytes, f.created_at
-            FROM ai_agente.t_dachser_sea_files f
-            WHERE f.run_id = ?
-            ORDER BY f.created_at ASC
-          `, [run.id]);
-          
-          runsWithFiles.push({
-            ...run,
-            files: files || []
-          });
-        }
+        // Get all files for this item (files are linked to items via item_id, not to runs)
+        const itemFiles = await client.query(`
+          SELECT f.id, f.filename as file_name, f.url as file_url, f.mime as file_type, f.size_bytes, f.created_at
+          FROM ai_agente.t_dachser_sea_files f
+          WHERE f.item_id = ?
+          ORDER BY f.created_at ASC
+        `, [itemId]);
         
-        // If no files found via run_id, try to get the last files created around the same time as the run
-        if (runsWithFiles.length > 0 && runsWithFiles[0].files.length === 0) {
-          const recentFiles = await client.query(`
-            SELECT f.id, f.filename as file_name, f.url as file_url, f.mime as file_type, f.size_bytes, f.created_at
-            FROM ai_agente.t_dachser_sea_files f
-            WHERE f.url IS NOT NULL AND f.url != ''
-            ORDER BY f.created_at DESC
-            LIMIT 20
-          `);
-          
-          // Assign files to the latest run if no run_id association exists
-          if (recentFiles && recentFiles.length > 0) {
-            runsWithFiles[0].files = recentFiles;
-          }
-        }
+        // Attach files to runs - assign all item files to each run for context
+        const runsWithFiles = (runs || []).map((run: any) => ({
+          ...run,
+          files: itemFiles || []
+        }));
         
         result = { 
           success: true, 
