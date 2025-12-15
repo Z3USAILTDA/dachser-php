@@ -54,7 +54,12 @@ const Login = () => {
           title: "Login realizado com sucesso!",
           description: `Bem-vindo, ${data.user.username}!`,
         });
-        navigate("/dashboard");
+        // Redirecionar baseado no tipo de usuário
+        if (data.user.olimpo_only === 1) {
+          navigate("/olimpo");
+        } else {
+          navigate("/dashboard");
+        }
       }
     } catch (error) {
       console.error('Login error:', error);

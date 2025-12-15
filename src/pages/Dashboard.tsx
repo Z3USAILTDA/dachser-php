@@ -134,11 +134,18 @@ const Dashboard = () => {
     email: string;
     username: string;
     is_admin: number;
+    olimpo_only?: number;
   } | null>(null);
   useEffect(() => {
     const storedUser = localStorage.getItem("user");
     if (storedUser) {
-      setUser(JSON.parse(storedUser));
+      const parsed = JSON.parse(storedUser);
+      // Usuários olimpo_only não podem acessar o Dashboard
+      if (parsed.olimpo_only === 1) {
+        navigate("/olimpo");
+        return;
+      }
+      setUser(parsed);
     } else {
       navigate("/");
     }

@@ -193,7 +193,7 @@ serve(async (req) => {
         console.log(`Attempting login for: ${username}`);
         
         const users = await client.query(
-          'SELECT id, username, email, is_admin, password_hash FROM ai_agente.t_users_dachser WHERE username = ?',
+          'SELECT id, username, email, is_admin, olimpo_only, password_hash FROM ai_agente.t_users_dachser WHERE username = ?',
           [username]
         );
 
@@ -227,7 +227,8 @@ serve(async (req) => {
             id: user.id,
             username: user.username,
             email: user.email,
-            is_admin: user.is_admin
+            is_admin: user.is_admin,
+            olimpo_only: user.olimpo_only || 0
           }
         };
         console.log(`Login successful for user: ${user.username}`);
