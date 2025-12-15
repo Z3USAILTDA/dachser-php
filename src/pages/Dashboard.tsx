@@ -273,27 +273,32 @@ const Dashboard = () => {
                                   <div className="w-0.5 h-5 bg-primary" />
                                   
                                   {/* Children Row */}
-                                  <div className="relative flex gap-6">
-                                    {/* Horizontal line spanning from first to last child center */}
-                                    {child.subChildren.length > 1 && <div className="absolute top-0 h-0.5 bg-primary" style={{
-                          left: 'calc(50% / ' + child.subChildren.length + ')',
-                          right: 'calc(50% / ' + child.subChildren.length + ')'
-                        }} />}
+                                  <div className="relative flex gap-6 overflow-x-auto px-2 pb-2">
+                                    {/* Horizontal line spanning across the row */}
+                                    {child.subChildren.length > 1 && (
+                                      <div className="absolute top-0 left-2 right-2 h-0.5 bg-primary" />
+                                    )}
                                     
-                                    {child.subChildren.map((subChild, subIdx) => <div key={subIdx} className="relative flex flex-col items-center pt-0 w-[180px]">
+                                    {child.subChildren.map((subChild, subIdx) => (
+                                      <div key={subIdx} className="relative flex flex-col items-center pt-0 flex-shrink-0">
                                         {/* Vertical connector */}
                                         <div className="w-0.5 h-3 bg-primary" />
                                         <div className="w-1.5 h-1.5 rounded-full bg-primary -mt-0.5" />
                                         
-                                        <button onClick={() => navigate(subChild.href)} className="mt-2 min-w-[180px] px-5 py-2.5 rounded-full text-foreground text-sm font-medium hover:-translate-y-0.5 transition-all duration-200" style={{
-                            background: 'rgba(4, 10, 30, 0.75)',
-                            boxShadow: '0 12px 30px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(255, 255, 255, 0.08)',
-                            backdropFilter: 'blur(18px)',
-                            border: '1px solid rgba(255, 255, 255, 0.08)'
-                          }}>
+                                        <button
+                                          onClick={() => navigate(subChild.href)}
+                                          className="mt-2 px-5 py-2.5 rounded-full text-foreground text-sm font-medium hover:-translate-y-0.5 transition-all duration-200 whitespace-nowrap text-center flex-shrink-0"
+                                          style={{
+                                            background: 'rgba(4, 10, 30, 0.75)',
+                                            boxShadow: '0 12px 30px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(255, 255, 255, 0.08)',
+                                            backdropFilter: 'blur(18px)',
+                                            border: '1px solid rgba(255, 255, 255, 0.08)'
+                                          }}
+                                        >
                                           {subChild.label}
                                         </button>
-                                      </div>)}
+                                      </div>
+                                    ))}
                                   </div>
                                 </>}
                             </div>
