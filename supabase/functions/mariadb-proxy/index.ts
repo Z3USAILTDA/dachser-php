@@ -193,7 +193,7 @@ serve(async (req) => {
         console.log(`Attempting login for: ${username}`);
         
         const users = await client.query(
-          'SELECT id, username, email, is_admin, olimpo_only, password_hash FROM ai_agente.t_users_dachser WHERE username = ?',
+          'SELECT id, username, email, is_admin, olimpo_only, metrics_only, must_change_password, password_hash FROM ai_agente.t_users_dachser WHERE username = ?',
           [username]
         );
 
@@ -229,7 +229,8 @@ serve(async (req) => {
             email: user.email,
             is_admin: user.is_admin,
             olimpo_only: user.olimpo_only || 0,
-            metrics_only: user.metrics_only || 0
+            metrics_only: user.metrics_only || 0,
+            must_change_password: user.must_change_password || 0
           }
         };
         console.log(`Login successful for user: ${user.username}`);
@@ -2145,10 +2146,10 @@ serve(async (req) => {
         // Hash password with bcrypt (using sync method to avoid Worker issues in Edge Functions)
         const passwordHash = bcrypt.hashSync(password);
 
-        // Insert new user
+        // Insert new user with must_change_password = 1
         const insertResult = await client.execute(
-          `INSERT INTO ai_agente.t_users_dachser (username, email, password_hash, is_admin) 
-           VALUES (?, ?, ?, 0)`,
+          `INSERT INTO ai_agente.t_users_dachser (username, email, password_hash, is_admin, must_change_password) 
+           VALUES (?, ?, ?, 0, 1)`,
           [username, email, passwordHash]
         );
 
@@ -2157,6 +2158,42 @@ serve(async (req) => {
           success: true, 
           userId: insertResult.lastInsertId,
           message: 'Usuário cadastrado com sucesso'
+        };
+        break;
+      }
+
+      case 'change_password': {
+        const { userId, password: newPassword } = body as { userId?: number; password?: string };
+        
+        if (!userId || !newPassword) {
+          return new Response(
+            JSON.stringify({ error: 'userId e password são obrigatórios', success: false }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+
+        if (newPassword.length < 6) {
+          return new Response(
+            JSON.stringify({ error: 'A senha deve ter pelo menos 6 caracteres', success: false }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+
+        // Hash new password
+        const newPasswordHash = bcrypt.hashSync(newPassword);
+
+        // Update password and set must_change_password = 0
+        await client.execute(
+          `UPDATE ai_agente.t_users_dachser 
+           SET password_hash = ?, must_change_password = 0 
+           WHERE id = ?`,
+          [newPasswordHash, userId]
+        );
+
+        console.log(`Password changed for user ID: ${userId}`);
+        result = { 
+          success: true, 
+          message: 'Senha alterada com sucesso'
         };
         break;
       }
