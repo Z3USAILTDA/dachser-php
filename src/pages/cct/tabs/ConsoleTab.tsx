@@ -65,19 +65,47 @@ export default function ConsoleContent() {
     setSyncStatuses(prev => prev.map(s => s.name === serviceName ? { ...s, status: 'syncing' } : s));
     addLog('info', serviceName, `Iniciando sincronização manual...`);
     try {
-      await new Promise(resolve => setTimeout(resolve, 2000));
       if (serviceName === 'MariaDB') {
         const { data, error } = await (supabase as any).functions.invoke('mariadb-proxy', { body: { action: 'get_cct_shipments' } });
         if (error) throw error;
         setSyncStatuses(prev => prev.map(s => s.name === serviceName ? { ...s, status: 'online', lastSync: new Date().toISOString(), recordCount: data?.data?.length || 0 } : s));
-      } else {
-        setSyncStatuses(prev => prev.map(s => s.name === serviceName ? { ...s, status: 'online', lastSync: new Date().toISOString() } : s));
+        addLog('info', serviceName, `${data?.data?.length || 0} processos carregados`);
+      } else if (serviceName === 'LeadComex') {
+        // Chama a edge function leadcomex-sync para enriquecer os shipments
+        const { data, error } = await (supabase as any).functions.invoke('leadcomex-sync', { 
+          body: { action: 'enrich', daysBack: 14, limit: 500 } 
+        });
+        if (error) throw error;
+        const stats = data?.stats || {};
+        setSyncStatuses(prev => prev.map(s => s.name === serviceName ? { 
+          ...s, 
+          status: 'online', 
+          lastSync: new Date().toISOString(), 
+          recordCount: stats.matched || 0 
+        } : s));
+        addLog('info', serviceName, `Enrich: ${stats.matched || 0} matches, ${stats.updated || 0} atualizados, ${stats.events || 0} eventos criados`);
+        if (stats.bloqueios > 0) addLog('warn', serviceName, `${stats.bloqueios} bloqueio(s) ativo(s) detectado(s)`);
+        if (stats.divergencias > 0) addLog('warn', serviceName, `${stats.divergencias} divergência(s) detectada(s)`);
+      } else if (serviceName === 'RFB') {
+        // Health check da API LeadComex (que é integrador RFB)
+        const { data, error } = await (supabase as any).functions.invoke('leadcomex-sync', { 
+          body: { action: 'health' } 
+        });
+        if (error) throw error;
+        setSyncStatuses(prev => prev.map(s => s.name === serviceName ? { 
+          ...s, 
+          status: data?.status === 'online' ? 'online' : 'error', 
+          lastSync: new Date().toISOString(),
+          errorMessage: data?.error
+        } : s));
+        if (data?.latency) addLog('info', serviceName, `Conexão OK - Latência: ${data.latency}ms`);
       }
       addLog('info', serviceName, `Sincronização concluída com sucesso`);
       toast.success(`${serviceName} sincronizado com sucesso`);
     } catch (err: any) {
-      setSyncStatuses(prev => prev.map(s => s.name === serviceName ? { ...s, status: 'error', errorMessage: err.message } : s));
-      addLog('error', serviceName, `Falha na sincronização: ${err.message}`);
+      const errorMsg = err?.message || 'Erro desconhecido';
+      setSyncStatuses(prev => prev.map(s => s.name === serviceName ? { ...s, status: 'error', errorMessage: errorMsg } : s));
+      addLog('error', serviceName, `Falha na sincronização: ${errorMsg}`);
       toast.error(`Erro ao sincronizar ${serviceName}`);
     } finally { setSyncing(null); }
   };
