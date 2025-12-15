@@ -18,12 +18,14 @@ interface QueryRequest {
   userId?: number;
   // Batch rules
   rules?: Array<{cnpj: string; airportCode?: string; notes?: string; emailDespachante?: string; enderecoCompleto?: string}>;
-  // Metrics
+  // Metrics / Usage Log
   dateFrom?: string;
   dateTo?: string;
   module?: string;
   perPage?: number;
   page?: number;
+  endpoint?: string;
+  method?: string;
   // Rule Matrix
   matrixId?: number;
   customer?: string;
@@ -258,6 +260,26 @@ serve(async (req) => {
       }
 
       // ==================== METRICS ====================
+      case 'log_usage': {
+        const { username: logUsername, endpoint: logEndpoint, method: logMethod } = body;
+        if (!logUsername || !logEndpoint) {
+          return new Response(
+            JSON.stringify({ error: 'Username e endpoint são obrigatórios' }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+        
+        await client.query(
+          `INSERT INTO ai_agente.t_dachser_usage_logs (username, endpoint, method, event_time)
+           VALUES (?, ?, ?, NOW())`,
+          [logUsername, logEndpoint, logMethod || 'GET']
+        );
+        
+        console.log(`Usage logged: ${logUsername} -> ${logMethod || 'GET'} ${logEndpoint}`);
+        result = { success: true };
+        break;
+      }
+
       case 'get_metrics': {
         const { username, dateFrom: reqDateFrom, dateTo: reqDateTo, module: reqModule, perPage: reqPerPage, page: reqPage } = body;
         const dateFrom = reqDateFrom || new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];

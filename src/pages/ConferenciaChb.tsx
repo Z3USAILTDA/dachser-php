@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { FileCheck } from 'lucide-react';
+import { useUsageLog } from "@/hooks/useUsageLog";
 import { PageLayout } from '@/components/layout/PageLayout';
 import { PageCard } from '@/components/layout/PageCard';
 import { ChbStep, TabType, ChbAnalysisResult, ChbApprovedHistory, ChbDocument } from '@/types/chb';
@@ -15,6 +16,7 @@ import { toast } from 'sonner';
 import { useChbFiles, useChbRuns, ChbFile, ChbRun } from '@/hooks/useChbData';
 
 export default function ConferenciaChb() {
+  useUsageLog({ endpoint: "/chb/conferencia" });
   const navigate = useNavigate();
   const { id } = useParams();
   const itemId = id ? parseInt(id) : null;

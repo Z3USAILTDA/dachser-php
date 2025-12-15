@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo } from "react";
 import { Search, RefreshCw, TrendingUp, Receipt } from "lucide-react";
 import { useNavigate } from "react-router-dom";
+import { useUsageLog } from "@/hooks/useUsageLog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -242,6 +243,7 @@ function CompanyTable({ title, data, isLoading }: CompanyTableProps) {
 
 // Main Component
 export default function LocalCharges() {
+  useUsageLog({ endpoint: "/sea/local-charges" });
   const navigate = useNavigate();
   const [isLoading, setIsLoading] = useState(true);
   

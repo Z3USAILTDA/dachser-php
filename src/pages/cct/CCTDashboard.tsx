@@ -2,6 +2,7 @@ import { useState, useMemo, useCallback, useEffect } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { ArrowLeft, LayoutDashboard, BarChart3, AlertTriangle, Bell, Settings, HelpCircle, LogOut, Radio, RefreshCw, Database, Package, AlertCircle, Clock, Plane, List, CheckCircle2, Eye, CheckCircle } from "lucide-react";
 import dachserBg from "@/assets/dachser-background.jpg";
+import { useUsageLog } from "@/hooks/useUsageLog";
 
 // Components
 import { MetricCard } from "@/components/cct/MetricCard";
@@ -38,6 +39,7 @@ const navTabs: NavTab[] = [
 ];
 
 export default function CCTDashboard() {
+  useUsageLog({ endpoint: "/air/robo-cct" });
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState<TabType>("dashboard");
   

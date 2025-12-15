@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { ArrowLeft, Maximize2, Minimize2, Globe, X, Plane, Ship } from "lucide-react";
+import { useUsageLog } from "@/hooks/useUsageLog";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -194,6 +195,7 @@ function pointAtFraction(line: [number, number][], t: number, map: L.Map): [numb
 }
 
 export default function Olimpo() {
+  useUsageLog({ endpoint: "/olimpo" });
   const navigate = useNavigate();
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<L.Map | null>(null);
