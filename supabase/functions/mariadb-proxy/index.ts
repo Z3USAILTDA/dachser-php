@@ -2853,7 +2853,7 @@ serve(async (req) => {
         console.log('Fetching SEA history for item:', itemId);
         
         const items = await client.query(`
-          SELECT i.id, i.arquivo_label as base_file_name, i.consignee, i.container, i.status, i.view as analysis_type, i.created_at, i.updated_at
+          SELECT i.id, i.arquivo_id, i.arquivo_label as base_file_name, i.consignee, i.container, i.status, i.view as analysis_type, i.created_at, i.updated_at
           FROM ai_agente.t_dachser_sea_items i
           WHERE i.id = ?
         `, [itemId]);
@@ -2865,18 +2865,22 @@ serve(async (req) => {
           ORDER BY r.created_at DESC
         `, [itemId]);
         
-        // Get all files for this item (files are linked to items via item_id, not to runs)
-        const itemFiles = await client.query(`
-          SELECT f.id, f.filename as file_name, f.url as file_url, f.mime as file_type, f.size_bytes, f.created_at
-          FROM ai_agente.t_dachser_sea_files f
-          WHERE f.item_id = ?
-          ORDER BY f.created_at ASC
-        `, [itemId]);
+        // Get files via arquivo_id from items table (items.arquivo_id -> files.id)
+        const arquivoId = items?.[0]?.arquivo_id;
+        let itemFiles: any[] = [];
+        if (arquivoId) {
+          itemFiles = await client.query(`
+            SELECT f.id, f.filename as file_name, f.url as file_url, f.mime as file_type, f.size_bytes, f.created_at
+            FROM ai_agente.t_dachser_sea_files f
+            WHERE f.id = ?
+            ORDER BY f.created_at ASC
+          `, [arquivoId]) || [];
+        }
         
-        // Attach files to runs - assign all item files to each run for context
+        // Attach files to runs
         const runsWithFiles = (runs || []).map((run: any) => ({
           ...run,
-          files: itemFiles || []
+          files: itemFiles
         }));
         
         result = { 
