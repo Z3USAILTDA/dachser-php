@@ -148,6 +148,7 @@ export const CreateVoucherDialog = ({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSearchingRM, setIsSearchingRM] = useState(false);
   const [rmDataLoaded, setRmDataLoaded] = useState(false);
+  const [cnpjNotFound, setCnpjNotFound] = useState(false); // CNPJ não encontrado via RM
   const [entryMode, setEntryMode] = useState<EntryMode>("rm");
   const [origemProcesso, setOrigemProcesso] = useState<OrigemProcesso | null>(null);
   const [faturaFiles, setFaturaFiles] = useState<File[]>([]);
@@ -205,8 +206,20 @@ export const CreateVoucherDialog = ({
       // Fill form with RM data
       form.setValue("fornecedor", rmData.fornecedor || "");
       form.setValue("beneficiario", rmData.beneficiario || "");
-      form.setValue("cnpjFornecedor", rmData.cnpjFornecedor || "");
       form.setValue("formaPagamento", rmData.formaPagamento);
+      
+      // CNPJ - se não encontrado, habilitar campo para preenchimento manual
+      if (rmData.cnpjFornecedor) {
+        form.setValue("cnpjFornecedor", rmData.cnpjFornecedor);
+        setCnpjNotFound(false);
+      } else {
+        form.setValue("cnpjFornecedor", "");
+        setCnpjNotFound(true);
+        toast({
+          title: "CNPJ não encontrado",
+          description: "O CNPJ do fornecedor não foi encontrado. Preencha manualmente.",
+        });
+      }
       
       if (rmData.valor) {
         form.setValue("valor", rmData.valor.toFixed(2).replace(".", ","));
@@ -243,6 +256,7 @@ export const CreateVoucherDialog = ({
     if (mode !== entryMode) {
       setEntryMode(mode);
       setRmDataLoaded(false);
+      setCnpjNotFound(false);
       // Reset RM-related fields when switching modes
       form.setValue("numeroRM", "");
       form.setValue("fornecedor", "");
@@ -605,12 +619,6 @@ export const CreateVoucherDialog = ({
                 <FileText className="h-4 w-4 text-primary" />
                 <span className="text-sm font-medium text-primary">Vinculação ao Processo Logístico</span>
                 <span className="text-destructive">*</span>
-                {isRmMode && (
-                  <Badge variant="outline" className="ml-2 text-xs border-primary/50 text-primary">
-                    <RefreshCw className="h-3 w-3 mr-1" />
-                    Sincronizado via RM
-                  </Badge>
-                )}
               </div>
               
               <div className="grid grid-cols-2 gap-4">
@@ -621,13 +629,11 @@ export const CreateVoucherDialog = ({
                     <FormItem>
                       <FormLabel className="flex items-center gap-1.5 text-sm">
                         Nº do Processo <span className="text-destructive">*</span>
-                        {isRmMode && <SyncIcon />}
                       </FormLabel>
                       <FormControl>
                         <Input 
-                          placeholder={isRmMode ? "Preenchido pelo RM" : "Ex: AIR-2024-001234"}
+                          placeholder="Ex: AIR-2024-001234"
                           className="bg-background/50 border-border"
-                          disabled={isRmMode}
                           {...field} 
                         />
                       </FormControl>
@@ -639,7 +645,6 @@ export const CreateVoucherDialog = ({
                 <div>
                   <Label className="flex items-center gap-1.5 text-sm mb-2">
                     Origem do Processo <span className="text-destructive">*</span>
-                    {isRmMode && <SyncIcon />}
                   </Label>
                   <div className="flex gap-2">
                     {(["AIR", "SEA", "CHB"] as OrigemProcesso[]).map((tipo) => (
@@ -653,8 +658,7 @@ export const CreateVoucherDialog = ({
                             ? "bg-primary text-primary-foreground" 
                             : "bg-background/50 border-border hover:bg-background"
                         )}
-                        onClick={() => !isRmMode && setOrigemProcesso(tipo)}
-                        disabled={isRmMode}
+                        onClick={() => setOrigemProcesso(tipo)}
                       >
                         {tipo === "AIR" && <Plane className="h-4 w-4" />}
                         {tipo === "SEA" && <Ship className="h-4 w-4" />}
@@ -719,13 +723,19 @@ export const CreateVoucherDialog = ({
                     render={({ field }) => (
                       <FormItem>
                         <FormLabel className="flex items-center gap-1.5 text-sm">
-                          CNPJ Fornecedor {isRmMode && <SyncIcon />}
+                          CNPJ Fornecedor 
+                          {isRmMode && !cnpjNotFound && <SyncIcon />}
+                          {cnpjNotFound && (
+                            <Badge variant="outline" className="ml-1 text-xs border-amber-500/50 text-amber-500">
+                              Não encontrado
+                            </Badge>
+                          )}
                         </FormLabel>
                         <FormControl>
                           <Input 
-                            placeholder={isRmMode ? "Preenchido pelo RM" : "00.000.000/0000-00"}
+                            placeholder="00.000.000/0000-00"
                             className="bg-background/50 border-border"
-                            disabled={isRmMode}
+                            disabled={isRmMode && !cnpjNotFound}
                             maxLength={18}
                             value={field.value || ""}
                             onChange={(e) => {
@@ -772,13 +782,12 @@ export const CreateVoucherDialog = ({
                     render={({ field }) => (
                       <FormItem>
                         <FormLabel className="flex items-center gap-1.5 text-sm">
-                          Valor {isRmMode && <SyncIcon />}
+                          Valor
                         </FormLabel>
                         <FormControl>
                           <Input 
-                            placeholder={isRmMode ? "Via RM" : "0.00"}
+                            placeholder="0.00"
                             className="bg-background/50 border-border"
-                            disabled={isRmMode}
                             {...field} 
                           />
                         </FormControl>
@@ -792,12 +801,11 @@ export const CreateVoucherDialog = ({
                     render={({ field }) => (
                       <FormItem>
                         <FormLabel className="flex items-center gap-1.5 text-sm">
-                          Moeda {isRmMode && <SyncIcon />}
+                          Moeda
                         </FormLabel>
                         <Select 
                           onValueChange={field.onChange} 
                           defaultValue={field.value}
-                          disabled={isRmMode}
                         >
                           <FormControl>
                             <SelectTrigger className="bg-background/50 border-border">
@@ -820,7 +828,7 @@ export const CreateVoucherDialog = ({
                     render={({ field }) => (
                       <FormItem>
                         <FormLabel className="flex items-center gap-1.5 text-sm">
-                          Tipo de Documento <span className="text-destructive">*</span> {isRmMode && <SyncIcon />}
+                          Tipo de Documento <span className="text-destructive">*</span>
                         </FormLabel>
                         <Select 
                           onValueChange={field.onChange} 
@@ -899,14 +907,13 @@ export const CreateVoucherDialog = ({
                     render={({ field }) => (
                       <FormItem>
                         <FormLabel className="flex items-center gap-1.5 text-sm">
-                          Data de Emissão {isRmMode && <SyncIcon />}
+                          Data de Emissão
                         </FormLabel>
                         <Popover>
                           <PopoverTrigger asChild>
                             <FormControl>
                               <Button
                                 variant="outline"
-                                disabled={isRmMode}
                                 className={cn(
                                   "w-full pl-3 text-left font-normal bg-background/50 border-border",
                                   !field.value && "text-muted-foreground"
