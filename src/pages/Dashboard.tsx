@@ -243,21 +243,20 @@ const Dashboard = () => {
                   <div className="w-0.5 h-5 bg-primary" />
 
                   {/* Children Row */}
-                  <div className="flex justify-center">
-                    <div className="relative inline-flex gap-8 [--nodew:260px]">
-                      {/* Horizontal line - spans from first child center to last child center */}
-                      {item.children.length > 1 && (
-                        <div
-                          className="absolute top-0 h-0.5 bg-primary"
-                          style={{
-                            left: "calc(var(--nodew) / 2)",
-                            right: "calc(var(--nodew) / 2)"
-                          }}
-                        />
-                      )}
+                  <div className="relative flex gap-8 justify-center">
+                    {/* Horizontal line - spans from first child center to last child center */}
+                    {item.children.length > 1 && (
+                      <div 
+                        className="absolute top-0 h-0.5 bg-primary"
+                        style={{
+                          left: 'calc(50% / ' + item.children.length + ')',
+                          right: 'calc(50% / ' + item.children.length + ')'
+                        }}
+                      />
+                    )}
 
-                      {item.children.map((child, idx) => (
-                        <div key={idx} className="relative flex flex-col items-center w-[var(--nodew)]">
+                    {item.children.map((child, idx) => (
+                      <div key={idx} className="relative flex flex-col items-center">
                         {/* Vertical connector */}
                         <div className="w-0.5 h-3 bg-primary" />
                         <div className="w-1.5 h-1.5 rounded-full bg-primary -mt-0.5" />
@@ -270,7 +269,7 @@ const Dashboard = () => {
                                   expandedChild === child.expandableId ? null : child.expandableId!
                                 )
                               }
-                              className={`w-full px-5 py-2.5 rounded-full text-sm font-medium transition-all duration-200 cursor-pointer whitespace-nowrap text-center ${
+                              className={`px-5 py-2.5 rounded-full text-sm font-medium transition-all duration-200 cursor-pointer whitespace-nowrap text-center ${
                                 expandedChild === child.expandableId
                                   ? 'bg-primary text-primary-foreground border border-primary shadow-[0_0_14px_hsl(var(--primary)/0.7)]'
                                   : 'text-foreground hover:-translate-y-0.5'
@@ -301,52 +300,50 @@ const Dashboard = () => {
                                   {/* Vertical Line */}
                                   <div className="w-0.5 h-5 bg-primary" />
 
-                                   {/* Sub-children Row */}
-                                   <div className="flex justify-center">
-                                     <div className="relative inline-flex gap-8 [--nodew:260px]">
-                                       {child.subChildren.length > 1 && (
-                                         <div
-                                           className="absolute top-0 h-0.5 bg-primary"
-                                           style={{
-                                             left: "calc(var(--nodew) / 2)",
-                                             right: "calc(var(--nodew) / 2)"
-                                           }}
-                                         />
-                                       )}
+                                  {/* Sub-children Row */}
+                                  <div className="relative flex gap-8 justify-center">
+                                    {child.subChildren.length > 1 && (
+                                      <div 
+                                        className="absolute top-0 h-0.5 bg-primary"
+                                        style={{
+                                          left: 'calc(50% / ' + child.subChildren.length + ')',
+                                          right: 'calc(50% / ' + child.subChildren.length + ')'
+                                        }}
+                                      />
+                                    )}
 
-                                       {child.subChildren.map((subChild, subIdx) => (
-                                         <div
-                                           key={subIdx}
-                                           className="relative flex flex-col items-center w-[var(--nodew)]"
-                                         >
-                                           <div className="w-0.5 h-3 bg-primary" />
-                                           <div className="w-1.5 h-1.5 rounded-full bg-primary -mt-0.5" />
+                                    {child.subChildren.map((subChild, subIdx) => (
+                                      <div
+                                        key={subIdx}
+                                        className="relative flex flex-col items-center"
+                                      >
+                                        <div className="w-0.5 h-3 bg-primary" />
+                                        <div className="w-1.5 h-1.5 rounded-full bg-primary -mt-0.5" />
 
-                                           <button
-                                             onClick={() => navigate(subChild.href)}
-                                             className="mt-2 w-full px-5 py-2.5 rounded-full text-foreground text-sm font-medium hover:-translate-y-0.5 transition-all duration-200 whitespace-nowrap text-center"
-                                             style={{
-                                               background: 'rgba(4, 10, 30, 0.75)',
-                                               boxShadow:
-                                                 '0 12px 30px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(255, 255, 255, 0.08)',
-                                               backdropFilter: 'blur(18px)',
-                                               border: '1px solid rgba(255, 255, 255, 0.08)'
-                                             }}
-                                           >
-                                             {subChild.label}
-                                           </button>
-                                         </div>
-                                       ))}
-                                     </div>
-                                   </div>
-                                 </>
+                                        <button
+                                          onClick={() => navigate(subChild.href)}
+                                          className="mt-2 px-5 py-2.5 rounded-full text-foreground text-sm font-medium hover:-translate-y-0.5 transition-all duration-200 whitespace-nowrap text-center"
+                                          style={{
+                                            background: 'rgba(4, 10, 30, 0.75)',
+                                            boxShadow:
+                                              '0 12px 30px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(255, 255, 255, 0.08)',
+                                            backdropFilter: 'blur(18px)',
+                                            border: '1px solid rgba(255, 255, 255, 0.08)'
+                                          }}
+                                        >
+                                          {subChild.label}
+                                        </button>
+                                      </div>
+                                    ))}
+                                  </div>
+                                </>
                               )}
                             </div>
                           </div>
                         ) : (
                           <button
                             onClick={() => child.href && navigate(child.href)}
-                            className="mt-2 w-full px-5 py-2.5 rounded-full text-foreground text-sm font-medium hover:-translate-y-0.5 transition-all duration-200 text-center whitespace-nowrap"
+                            className="mt-2 px-5 py-2.5 rounded-full text-foreground text-sm font-medium hover:-translate-y-0.5 transition-all duration-200 text-center whitespace-nowrap"
                             style={{
                               background: 'rgba(4, 10, 30, 0.75)',
                               boxShadow:
@@ -359,9 +356,9 @@ const Dashboard = () => {
                           </button>
                         )}
                       </div>
-                     ))}
-                    </div>
+                    ))}
                   </div>
+                </div>
               )}
             </div>)}
         </div>
