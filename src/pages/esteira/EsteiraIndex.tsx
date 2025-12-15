@@ -614,7 +614,9 @@ const EsteiraIndex = () => {
     etapa: "all",
     cobrancaEmNomeDe: "all",
     formaPagamento: "all",
-    urgente: "all"
+    urgente: "all",
+    statusBaixa: "all",
+    statusComprovante: "all"
   });
   const [metrics, setMetrics] = useState<DashboardMetrics>({
     ativos: 0,
