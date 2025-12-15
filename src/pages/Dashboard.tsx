@@ -328,18 +328,22 @@ const Dashboard = () => {
 
     {/* Children Row */}
     <div className="relative flex gap-8 justify-center">
+      {/* Linha horizontal contínua */}
+      {item.children.length > 1 && (
+        <div
+          className="absolute top-0 h-0.5 bg-primary"
+          style={{ 
+            left: `calc(100% / ${item.children.length} / 2)`, 
+            right: `calc(100% / ${item.children.length} / 2)` 
+          }}
+        />
+      )}
+
       {item.children.map((child, idx) => (
         <div key={idx} className="relative flex flex-col items-center">
-          {/* Horizontal connector to next sibling - each child except last draws line to right */}
-          {idx < item.children.length - 1 && (
-            <div
-              className="absolute top-0 left-1/2 h-0.5 bg-primary z-0"
-              style={{ width: 'calc(100% + 32px)' }}
-            />
-          )}
           {/* Vertical connector */}
-          <div className="w-0.5 h-3 bg-primary z-10" />
-          <div className="w-1.5 h-1.5 rounded-full bg-primary -mt-0.5 z-10" />
+          <div className="w-0.5 h-3 bg-primary" />
+          <div className="w-1.5 h-1.5 rounded-full bg-primary -mt-0.5" />
 
           {child.expandableId ? (
             <div className="relative mt-2 flex flex-col items-center">
@@ -384,20 +388,24 @@ const Dashboard = () => {
 
                     {/* Sub-children Row */}
                     <div className="relative flex gap-8 justify-center">
+                      {/* Linha horizontal contínua */}
+                      {child.subChildren.length > 1 && (
+                        <div
+                          className="absolute top-0 h-0.5 bg-primary"
+                          style={{ 
+                            left: `calc(100% / ${child.subChildren.length} / 2)`, 
+                            right: `calc(100% / ${child.subChildren.length} / 2)` 
+                          }}
+                        />
+                      )}
+
                       {child.subChildren.map((subChild, subIdx) => (
                         <div
                           key={subIdx}
                           className="relative flex flex-col items-center"
                         >
-                          {/* Horizontal connector to next sibling */}
-                          {subIdx < child.subChildren.length - 1 && (
-                            <div
-                              className="absolute top-0 left-1/2 h-0.5 bg-primary z-0"
-                              style={{ width: 'calc(100% + 32px)' }}
-                            />
-                          )}
-                          <div className="w-0.5 h-3 bg-primary z-10" />
-                          <div className="w-1.5 h-1.5 rounded-full bg-primary -mt-0.5 z-10" />
+                          <div className="w-0.5 h-3 bg-primary" />
+                          <div className="w-1.5 h-1.5 rounded-full bg-primary -mt-0.5" />
 
                           <button
                             onClick={() => navigate(subChild.href)}
