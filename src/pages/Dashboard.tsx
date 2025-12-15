@@ -267,13 +267,13 @@ const Dashboard = () => {
                             </button>
                             
                             {/* Sub Children - Positioned absolutely to not affect parent layout */}
-                            <div className={`absolute top-full left-1/2 -translate-x-1/2 flex flex-col items-center mt-6 transition-all duration-300 ${expandedChild === child.expandableId && child.subChildren ? 'opacity-100 translate-y-0' : 'opacity-0 -translate-y-2 pointer-events-none'}`}>
+                            <div className={`absolute top-full left-1/2 -translate-x-1/2 z-20 flex flex-col items-center mt-10 w-[min(980px,92vw)] transition-all duration-300 ${expandedChild === child.expandableId && child.subChildren ? 'opacity-100 translate-y-0' : 'opacity-0 -translate-y-2 pointer-events-none'}`}>
                               {child.subChildren && <>
                                   {/* Vertical Line */}
                                   <div className="w-0.5 h-5 bg-primary" />
                                   
                                   {/* Children Row */}
-                                  <div className="relative flex gap-6 overflow-x-auto px-2 pb-2">
+                                  <div className="relative flex w-full gap-6 overflow-x-auto px-4 pb-3">
                                     {/* Horizontal line spanning across the row */}
                                     {child.subChildren.length > 1 && (
                                       <div className="absolute top-0 left-2 right-2 h-0.5 bg-primary" />
