@@ -220,7 +220,7 @@ export default function Olimpo() {
 
   const handleLogout = () => {
     localStorage.removeItem("user");
-    navigate("/login");
+    navigate("/");
   };
 
   // Filter data

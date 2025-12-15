@@ -152,7 +152,7 @@ const EsteiraVoucherDetails = () => {
 
   if (loading) {
     return (
-      <PageLayout>
+      <PageLayout backTo="/fin/esteira">
         <div className="flex-1 flex items-center justify-center min-h-[60vh]">
           <Loader2 className="h-8 w-8 animate-spin text-primary" />
         </div>
@@ -162,7 +162,7 @@ const EsteiraVoucherDetails = () => {
 
   if (!voucher) {
     return (
-      <PageLayout>
+      <PageLayout backTo="/fin/esteira">
         <div className="flex-1 flex items-center justify-center min-h-[60vh]">
           <p className="text-muted-foreground">Voucher não encontrado</p>
         </div>
@@ -185,7 +185,7 @@ const EsteiraVoucherDetails = () => {
   };
 
   return (
-    <PageLayout>
+    <PageLayout backTo="/fin/esteira">
       <PageHeader 
         title={`Voucher ${voucher.numeroSPO}`}
         subtitle={

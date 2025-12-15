@@ -141,6 +141,7 @@ export default function EsteiraManual() {
       title="DACHSER" 
       subtitle="Manual do Usuário"
       rightContent={rightContent}
+      backTo="/fin/esteira"
     >
       <div className="flex gap-4">
         {/* Sidebar */}
