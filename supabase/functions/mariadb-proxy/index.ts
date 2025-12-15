@@ -3181,6 +3181,24 @@ serve(async (req) => {
         break;
       }
 
+      case 'delete_voucher_esteira': {
+        const { voucher_id } = body as any;
+        console.log('Deleting voucher from dados_dachser.t_vouchers:', voucher_id);
+        
+        if (!voucher_id) {
+          result = { success: false, error: 'voucher_id is required' };
+          break;
+        }
+        
+        await client.execute(`
+          DELETE FROM dados_dachser.t_vouchers WHERE id = ?
+        `, [voucher_id]);
+        
+        console.log('Voucher deleted successfully:', voucher_id);
+        result = { success: true };
+        break;
+      }
+
       // ==================== ESTEIRA USER MANAGEMENT ====================
       case 'get_esteira_users': {
         console.log('Fetching all users for Esteira management');
