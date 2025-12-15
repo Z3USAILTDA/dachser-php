@@ -2050,7 +2050,7 @@ const Index = () => {
                                     {/* Ícone de avião minimalista na posição do progresso */}
                                     <div
                                       className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 transition-all duration-700 ease-out z-20"
-                                      style={{ left: `${getTimelineProgress(awb.last_event)}%` }}
+                                      style={{ left: `${isCompanyNotRegistered ? 0 : getTimelineProgress(awb.last_event)}%` }}
                                     >
                                       <div className="relative">
                                         <Plane
