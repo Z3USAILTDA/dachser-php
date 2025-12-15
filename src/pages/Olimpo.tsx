@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
-import { ArrowLeft, Maximize2, Minimize2, Globe, X, Plane, Ship } from "lucide-react";
+import { ArrowLeft, Maximize2, Minimize2, Globe, X, Plane, Ship, LogOut } from "lucide-react";
 import { useUsageLog } from "@/hooks/useUsageLog";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -217,10 +217,19 @@ export default function Olimpo() {
   const [searchTerm, setSearchTerm] = useState("");
 
   const user = JSON.parse(localStorage.getItem("user") || "{}");
+  const isOlimpoOnly = user?.olimpo_only === 1;
 
   const handleLogout = () => {
     localStorage.removeItem("user");
     navigate("/");
+  };
+
+  const handleBack = () => {
+    if (isOlimpoOnly) {
+      handleLogout();
+    } else {
+      navigate("/dashboard");
+    }
   };
 
   // Filter data
@@ -1059,8 +1068,9 @@ export default function Olimpo() {
         <header className="flex items-center justify-between shrink-0">
           <div className="flex items-center gap-2 md:gap-4">
             <button
-              onClick={() => navigate("/dashboard")}
+              onClick={handleBack}
               className="w-7 h-7 md:w-8 md:h-8 rounded-full border border-[rgba(255,255,255,.12)] bg-[rgba(5,6,18,0.9)] text-[#aaaaaa] flex items-center justify-center backdrop-blur-sm hover:bg-[rgba(5,6,18,1)] hover:text-white transition-all"
+              title={isOlimpoOnly ? "Sair" : "Voltar"}
             >
               <ArrowLeft size={14} />
             </button>
@@ -1079,12 +1089,22 @@ export default function Olimpo() {
             <div className="px-2 md:px-4 py-1 md:py-1.5 rounded-full bg-background/65 border border-border/30 text-muted-foreground text-[10px] md:text-sm">
               @{user?.username || "usuario"}
             </div>
-            <div
-              className="w-7 h-7 md:w-9 md:h-9 rounded-full border border-border/50 flex items-center justify-center bg-background/70 text-primary"
-              title="Movimentação Global"
-            >
-              <Globe size={14} />
-            </div>
+            {isOlimpoOnly ? (
+              <button
+                onClick={handleLogout}
+                className="w-7 h-7 md:w-9 md:h-9 rounded-full border border-border/50 flex items-center justify-center bg-background/70 text-primary hover:bg-background hover:shadow-[0_0_12px_hsl(var(--primary)/0.6)] transition-all duration-200"
+                title="Sair"
+              >
+                <LogOut size={14} />
+              </button>
+            ) : (
+              <div
+                className="w-7 h-7 md:w-9 md:h-9 rounded-full border border-border/50 flex items-center justify-center bg-background/70 text-primary"
+                title="Movimentação Global"
+              >
+                <Globe size={14} />
+              </div>
+            )}
           </div>
         </header>
 
