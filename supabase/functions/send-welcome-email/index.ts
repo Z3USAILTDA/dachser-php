@@ -12,31 +12,39 @@ interface WelcomeEmailRequest {
   password: string;
 }
 
-const generateEmailHtml = (username: string, password: string, forceTheme: string = 'auto'): string => {
-  const logoLight = 'https://i.ibb.co/TgXzCqz/logo-preto.png';
-  const logoDark = 'https://i.ibb.co/sJkY7y5/logo-branco.png';
-  const accessUrl = 'https://dachser.z3us.ai/change_password.php';
-  const hostHref = 'https://dachser.z3us.ai/';
-  const brand = 'Z3US';
-  
+const generateEmailHtml = (username: string, password: string, forceTheme: string = "auto"): string => {
+  const logoLight = "https://i.ibb.co/TgXzCqz/logo-preto.png";
+  const logoDark = "https://i.ibb.co/sJkY7y5/logo-branco.png";
+  const accessUrl = "https://dachser.z3us.app/";
+  const hostHref = "https://dachser.z3us.app/";
+  const brand = "Z3US";
+
   // Use ZWSP to prevent auto-linking of "Z3US.AI"
-  const brandPlain = 'Z3US&#8203;.AI';
-  
+  const brandPlain = "Z3US&#8203;.AI";
+
   // Inline default + overrides de tema
-  let lightInline = 'display:block;';
-  let darkInline = 'display:none;';
-  if (forceTheme === 'dark') { lightInline = 'display:none;'; darkInline = 'display:block;'; }
-  if (forceTheme === 'light') { lightInline = 'display:block;'; darkInline = 'display:none;'; }
-  
-  let forceCss = '';
-  if (forceTheme === 'dark') {
-    forceCss = '.logo-light{display:none!important}.logo-dark{display:block!important}'
-      + '.bg{background:#0b0b0b!important}.panel{background:#141414!important;border-color:#262626!important}'
-      + '.text{color:#ededed!important}.muted{color:#bdbdbd!important}';
-  } else if (forceTheme === 'light') {
-    forceCss = '.logo-dark{display:none!important}.logo-light{display:block!important}'
-      + '.bg{background:#ffffff!important}.panel{background:#ffffff!important;border-color:#e8e8e8!important}'
-      + '.text{color:#111!important}.muted{color:#666!important}';
+  let lightInline = "display:block;";
+  let darkInline = "display:none;";
+  if (forceTheme === "dark") {
+    lightInline = "display:none;";
+    darkInline = "display:block;";
+  }
+  if (forceTheme === "light") {
+    lightInline = "display:block;";
+    darkInline = "display:none;";
+  }
+
+  let forceCss = "";
+  if (forceTheme === "dark") {
+    forceCss =
+      ".logo-light{display:none!important}.logo-dark{display:block!important}" +
+      ".bg{background:#0b0b0b!important}.panel{background:#141414!important;border-color:#262626!important}" +
+      ".text{color:#ededed!important}.muted{color:#bdbdbd!important}";
+  } else if (forceTheme === "light") {
+    forceCss =
+      ".logo-dark{display:none!important}.logo-light{display:block!important}" +
+      ".bg{background:#ffffff!important}.panel{background:#ffffff!important;border-color:#e8e8e8!important}" +
+      ".text{color:#111!important}.muted{color:#666!important}";
   }
 
   return `<!doctype html>
@@ -125,20 +133,20 @@ const handler = async (req: Request): Promise<Response> => {
     const { email, username, password }: WelcomeEmailRequest = await req.json();
 
     if (!email || !username || !password) {
-      return new Response(
-        JSON.stringify({ error: "Email, username e password são obrigatórios", success: false }),
-        { status: 400, headers: { "Content-Type": "application/json", ...corsHeaders } }
-      );
+      return new Response(JSON.stringify({ error: "Email, username e password são obrigatórios", success: false }), {
+        status: 400,
+        headers: { "Content-Type": "application/json", ...corsHeaders },
+      });
     }
 
     const resendApiKey = Deno.env.get("RESEND_API_KEY");
 
     if (!resendApiKey) {
       console.error("Missing RESEND_API_KEY");
-      return new Response(
-        JSON.stringify({ error: "Configuração Resend incompleta", success: false }),
-        { status: 500, headers: { "Content-Type": "application/json", ...corsHeaders } }
-      );
+      return new Response(JSON.stringify({ error: "Configuração Resend incompleta", success: false }), {
+        status: 500,
+        headers: { "Content-Type": "application/json", ...corsHeaders },
+      });
     }
 
     console.log(`Sending welcome email to: ${email} (user: ${username})`);
@@ -155,25 +163,25 @@ const handler = async (req: Request): Promise<Response> => {
 
     if (error) {
       console.error("Resend error:", error);
-      return new Response(
-        JSON.stringify({ error: "Erro ao enviar e-mail", details: error.message, success: false }),
-        { status: 500, headers: { "Content-Type": "application/json", ...corsHeaders } }
-      );
+      return new Response(JSON.stringify({ error: "Erro ao enviar e-mail", details: error.message, success: false }), {
+        status: 500,
+        headers: { "Content-Type": "application/json", ...corsHeaders },
+      });
     }
 
     console.log(`Welcome email sent successfully to: ${email}, id: ${data?.id}`);
 
-    return new Response(
-      JSON.stringify({ success: true, message: "E-mail enviado com sucesso", emailId: data?.id }),
-      { status: 200, headers: { "Content-Type": "application/json", ...corsHeaders } }
-    );
+    return new Response(JSON.stringify({ success: true, message: "E-mail enviado com sucesso", emailId: data?.id }), {
+      status: 200,
+      headers: { "Content-Type": "application/json", ...corsHeaders },
+    });
   } catch (error: unknown) {
     console.error("Error in send-welcome-email:", error);
     const errorMessage = error instanceof Error ? error.message : "Unknown error";
-    return new Response(
-      JSON.stringify({ error: "Erro ao enviar e-mail", details: errorMessage, success: false }),
-      { status: 500, headers: { "Content-Type": "application/json", ...corsHeaders } }
-    );
+    return new Response(JSON.stringify({ error: "Erro ao enviar e-mail", details: errorMessage, success: false }), {
+      status: 500,
+      headers: { "Content-Type": "application/json", ...corsHeaders },
+    });
   }
 };
 
