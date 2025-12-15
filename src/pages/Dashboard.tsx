@@ -327,117 +327,97 @@ const Dashboard = () => {
     <div className="w-0.5 h-5 bg-primary" />
 
     {/* Children Row */}
-    <div className="relative flex items-start gap-4">
-      {/* Horizontal connector line */}
-      {item.children.length > 1 && (
-        <div 
-          className="absolute h-0.5 bg-primary pointer-events-none"
-          style={{ 
-            top: 0,
-            left: 0,
-            right: 0,
-          }}
-        />
-      )}
+    <div className="flex items-start">
       {item.children.map((child, idx) => (
-        <div 
-          key={idx} 
-          className="relative flex flex-col items-center"
-        >
-          {/* Vertical connector to this child */}
-          <div className="w-0.5 h-3 bg-primary" />
-          <div className="w-2 h-2 rounded-full bg-primary -mt-1 border-2 border-background" />
+        <div key={idx} className="flex items-start">
+          {/* Horizontal connector to previous (not for first item) */}
+          {idx > 0 && <div className="h-0.5 w-8 bg-primary mt-[5px]" />}
+          
+          {/* Child item */}
+          <div className="flex flex-col items-center">
+            {/* Vertical connector to this child */}
+            <div className="w-0.5 h-3 bg-primary" />
+            <div className="w-2 h-2 rounded-full bg-primary -mt-1 border-2 border-background" />
 
-          {child.expandableId ? (
-            <div className="relative mt-2 flex flex-col items-center">
+            {child.expandableId ? (
+              <div className="mt-2 flex flex-col items-center">
+                <button
+                  onClick={() =>
+                    setExpandedChild(
+                      expandedChild === child.expandableId ? null : child.expandableId!
+                    )
+                  }
+                  className={`px-5 py-2.5 rounded-full text-sm font-medium transition-all duration-200 cursor-pointer whitespace-nowrap text-center ${
+                    expandedChild === child.expandableId
+                      ? 'bg-primary text-primary-foreground border border-primary shadow-[0_0_14px_hsl(var(--primary)/0.7)]'
+                      : 'text-foreground hover:-translate-y-0.5'
+                  }`}
+                  style={{
+                    ...(child.label === 'Voucher' && { minWidth: '200px' }),
+                    ...(expandedChild !== child.expandableId && {
+                      background: 'rgba(4, 10, 30, 0.75)',
+                      boxShadow: '0 12px 30px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(255, 255, 255, 0.08)',
+                      backdropFilter: 'blur(18px)',
+                      border: '1px solid rgba(255, 255, 255, 0.08)'
+                    })
+                  }}
+                >
+                  {child.label}
+                </button>
+
+                {/* Sub Children */}
+                {expandedChild === child.expandableId && child.subChildren && (
+                  <div className="flex flex-col items-center mt-4 animate-in fade-in duration-300">
+                    {/* Vertical line from parent to sub-children */}
+                    <div className="w-0.5 h-5 bg-primary" />
+
+                    {/* Sub-children Row */}
+                    <div className="flex items-start">
+                      {child.subChildren.map((subChild, subIdx) => (
+                        <div key={subIdx} className="flex items-start">
+                          {/* Horizontal connector (not for first) */}
+                          {subIdx > 0 && <div className="h-0.5 w-8 bg-primary mt-[5px]" />}
+                          
+                          <div className="flex flex-col items-center">
+                            {/* Vertical connector */}
+                            <div className="w-0.5 h-3 bg-primary" />
+                            <div className="w-2 h-2 rounded-full bg-primary -mt-1 border-2 border-background" />
+
+                            <button
+                              onClick={() => navigate(subChild.href)}
+                              className="mt-2 px-5 py-2.5 rounded-full text-foreground text-sm font-medium hover:-translate-y-0.5 transition-all duration-200 whitespace-nowrap text-center"
+                              style={{
+                                ...(subChild.label === 'Esteira' && { minWidth: '200px' }),
+                                background: 'rgba(4, 10, 30, 0.75)',
+                                boxShadow: '0 12px 30px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(255, 255, 255, 0.08)',
+                                backdropFilter: 'blur(18px)',
+                                border: '1px solid rgba(255, 255, 255, 0.08)'
+                              }}
+                            >
+                              {subChild.label}
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            ) : (
               <button
-                onClick={() =>
-                  setExpandedChild(
-                    expandedChild === child.expandableId ? null : child.expandableId!
-                  )
-                }
-                className={`px-5 py-2.5 rounded-full text-sm font-medium transition-all duration-200 cursor-pointer whitespace-nowrap text-center ${
-                  expandedChild === child.expandableId
-                    ? 'bg-primary text-primary-foreground border border-primary shadow-[0_0_14px_hsl(var(--primary)/0.7)]'
-                    : 'text-foreground hover:-translate-y-0.5'
-                }`}
+                onClick={() => child.href && navigate(child.href)}
+                className="mt-2 px-5 py-2.5 rounded-full text-foreground text-sm font-medium hover:-translate-y-0.5 transition-all duration-200 text-center whitespace-nowrap"
                 style={{
-                  ...(child.label === 'Voucher' && { minWidth: '200px' }),
-                  ...(expandedChild !== child.expandableId && {
-                    background: 'rgba(4, 10, 30, 0.75)',
-                    boxShadow:
-                      '0 12px 30px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(255, 255, 255, 0.08)',
-                    backdropFilter: 'blur(18px)',
-                    border: '1px solid rgba(255, 255, 255, 0.08)'
-                  })
+                  background: 'rgba(4, 10, 30, 0.75)',
+                  boxShadow: '0 12px 30px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(255, 255, 255, 0.08)',
+                  backdropFilter: 'blur(18px)',
+                  border: '1px solid rgba(255, 255, 255, 0.08)'
                 }}
               >
                 {child.label}
               </button>
-
-              {/* Sub Children */}
-              {expandedChild === child.expandableId && child.subChildren && (
-                <div className="flex flex-col items-center mt-4 animate-in fade-in duration-300">
-                  {/* Vertical line from parent to sub-children */}
-                  <div className="w-0.5 h-5 bg-primary" />
-
-                  {/* Sub-children Row */}
-                  <div className="relative flex items-start gap-4">
-                    {/* Horizontal connector for sub-children */}
-                    {child.subChildren.length > 1 && (
-                      <div 
-                        className="absolute h-0.5 bg-primary pointer-events-none"
-                        style={{ 
-                          top: 0,
-                          left: 0,
-                          right: 0,
-                        }}
-                      />
-                    )}
-                    {child.subChildren.map((subChild, subIdx) => (
-                      <div
-                        key={subIdx}
-                        className="relative flex flex-col items-center"
-                      >
-                        {/* Vertical connector */}
-                        <div className="w-0.5 h-3 bg-primary" />
-                        <div className="w-2 h-2 rounded-full bg-primary -mt-1 border-2 border-background" />
-
-                        <button
-                          onClick={() => navigate(subChild.href)}
-                          className="mt-2 px-5 py-2.5 rounded-full text-foreground text-sm font-medium hover:-translate-y-0.5 transition-all duration-200 whitespace-nowrap text-center"
-                          style={{
-                            ...(subChild.label === 'Esteira' && { minWidth: '200px' }),
-                            background: 'rgba(4, 10, 30, 0.75)',
-                            boxShadow:
-                              '0 12px 30px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(255, 255, 255, 0.08)',
-                            backdropFilter: 'blur(18px)',
-                            border: '1px solid rgba(255, 255, 255, 0.08)'
-                          }}
-                        >
-                          {subChild.label}
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </div>
-          ) : (
-            <button
-              onClick={() => child.href && navigate(child.href)}
-              className="mt-2 px-5 py-2.5 rounded-full text-foreground text-sm font-medium hover:-translate-y-0.5 transition-all duration-200 text-center whitespace-nowrap"
-              style={{
-                background: 'rgba(4, 10, 30, 0.75)',
-                boxShadow:
-                  '0 12px 30px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(255, 255, 255, 0.08)',
-                backdropFilter: 'blur(18px)',
-                border: '1px solid rgba(255, 255, 255, 0.08)'
-              }}
-            >
-              {child.label}
-            </button>
-          )}
+            )}
+          </div>
         </div>
       ))}
     </div>
