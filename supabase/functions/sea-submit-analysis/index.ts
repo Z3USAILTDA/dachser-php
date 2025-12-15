@@ -556,12 +556,12 @@ serve(async (req) => {
           fileType = 'invoice';
         }
         
-        // Save file record to MariaDB with run_id
+        // Save file record to MariaDB with item_id
         await dbClient.execute(`
           INSERT INTO ai_agente.t_dachser_sea_files 
-          (filename, mime, size_bytes, rel_path, url, run_id, file_type, created_at)
+          (filename, mime, size_bytes, rel_path, url, item_id, file_type, created_at)
           VALUES (?, ?, ?, ?, ?, ?, ?, NOW())
-        `, [file.name, file.type, file.size, storagePath, publicUrl, runId, fileType]);
+        `, [file.name, file.type, file.size, storagePath, publicUrl, actualItemId, fileType]);
       }
 
       // Record fileUrls
@@ -592,12 +592,12 @@ serve(async (req) => {
         
         uploadedFiles.push({ name: fileUrl.name, url: fileUrl.url, size: actualSize, type: fileUrl.type });
         
-        // Save file URL record to MariaDB with run_id
+        // Save file URL record to MariaDB with item_id
         await dbClient.execute(`
           INSERT INTO ai_agente.t_dachser_sea_files 
-          (filename, mime, size_bytes, rel_path, url, run_id, file_type, created_at)
+          (filename, mime, size_bytes, rel_path, url, item_id, file_type, created_at)
           VALUES (?, ?, ?, ?, ?, ?, ?, NOW())
-        `, [fileUrl.name, 'application/octet-stream', actualSize, '', fileUrl.url, runId, fileType]);
+        `, [fileUrl.name, 'application/octet-stream', actualSize, '', fileUrl.url, actualItemId, fileType]);
       }
 
       // Update item status
