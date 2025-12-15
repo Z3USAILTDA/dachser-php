@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
+import { useUsageLog } from "@/hooks/useUsageLog";
 import * as XLSX from "xlsx";
 import { Flag, Search, Filter, X, Plus, Check, Trash2, Clock, Scale, Upload, FileSpreadsheet, Loader2, Download } from "lucide-react";
 import { Input } from "@/components/ui/input";
@@ -55,6 +56,7 @@ interface DisputaRow {
 }
 
 export default function FinanceiroDisputa() {
+  useUsageLog({ endpoint: "/fin/disputas" });
   const navigate = useNavigate();
   const { toast } = useToast();
 

@@ -308,7 +308,10 @@ const MetricsUsage = () => {
                 <option value="">(todos)</option>
                 <option value="air">AIR</option>
                 <option value="chb">CHB</option>
-                <option value="maritime">MARITIME</option>
+                <option value="maritimo">SEA</option>
+                <option value="fin">FIN</option>
+                <option value="olimpo">OLIMPO</option>
+                <option value="admin">ADMIN</option>
               </select>
             </div>
             <div>

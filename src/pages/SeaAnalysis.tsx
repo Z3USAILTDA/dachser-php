@@ -1,5 +1,6 @@
 import { useState, useMemo } from "react";
 import { RefreshCw, Trash2, Play, FileText, ArrowRightLeft, Download, FolderOpen, Ship } from "lucide-react";
+import { useUsageLog } from "@/hooks/useUsageLog";
 import { NavTabs } from "@/components/maritimo/NavTabs";
 import { BadgeStatus } from "@/components/maritimo/BadgeStatus";
 import { HistoryModal } from "@/components/maritimo/HistoryModal";
@@ -30,6 +31,7 @@ import { TablePagination } from "@/components/layout/TablePagination";
 import { Clock } from "lucide-react";
 
 export default function SeaAnalysis() {
+  useUsageLog({ endpoint: "/maritimo" });
   const navigate = useNavigate();
   const { user } = useAuth();
   const { isDevOrAdmin, isLoading: devAccessLoading } = useDevAccess();

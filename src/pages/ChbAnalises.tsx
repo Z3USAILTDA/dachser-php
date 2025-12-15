@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
+import { useUsageLog } from "@/hooks/useUsageLog";
 import { Upload, Clock, Copy, ClipboardList, Trash2, FileText, CheckCircle, FileDown } from "lucide-react";
 import { PageLayout } from "@/components/layout/PageLayout";
 import { FilterCard, TableCard } from "@/components/layout/PageCard";
@@ -64,6 +65,7 @@ const stepNames: Record<string, string> = {
 };
 
 export default function ChbAnalises() {
+  useUsageLog({ endpoint: "/chb/conferences" });
   const navigate = useNavigate();
   const { items, loading, fetchItems, createItem, deleteItem } = useChbItems();
   

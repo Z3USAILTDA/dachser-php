@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { Info, Copy, Check, Upload, Download, X, Link as LinkIcon, FolderOpen, Loader2, FileText } from "lucide-react";
+import { useUsageLog } from "@/hooks/useUsageLog";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { toast } from "sonner";
@@ -38,6 +39,7 @@ type ClassifiedFile = {
 };
 
 export default function InvoicesDraftHbl() {
+  useUsageLog({ endpoint: "/maritimo/invoices-draft-hbl" });
   const navigate = useNavigate();
   const location = useLocation();
   const itemId = (location.state as { itemId?: string })?.itemId;

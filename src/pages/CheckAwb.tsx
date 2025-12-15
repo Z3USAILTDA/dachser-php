@@ -2,6 +2,7 @@
 import { useEffect, useState, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
+import { useUsageLog } from "@/hooks/useUsageLog";
 
 // Type assertion to bypass strict typing (DB schema not in sync)
 const db = supabase as any;
@@ -69,6 +70,7 @@ interface User {
 }
 
 const CheckAwb = () => {
+  useUsageLog({ endpoint: "/air/check-awb" });
   const navigate = useNavigate();
   const [user, setUser] = useState<User | null>(null);
   const [userRole, setUserRole] = useState<string | null>(null);

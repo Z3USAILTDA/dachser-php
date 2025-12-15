@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo } from "react";
 import { CalendarRange } from "lucide-react";
+import { useUsageLog } from "@/hooks/useUsageLog";
 import { FileText, Clock, Flag, Search, X, RefreshCw } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -64,6 +65,7 @@ const STAGE_POSITIONS: Record<string, number> = {
 const PAGE_SIZE = 15;
 
 export default function ReguaCobranca() {
+  useUsageLog({ endpoint: "/fin/regua-cobranca" });
   const { toast } = useToast();
 
   const [counts, setCounts] = useState<StageCounts>({

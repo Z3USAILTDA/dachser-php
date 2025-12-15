@@ -1,12 +1,14 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { ArrowLeft, UserPlus, LogIn } from "lucide-react";
+import { useUsageLog } from "@/hooks/useUsageLog";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import logoZ3us from "@/assets/logo-z3us.png";
 import dachserBackground from "@/assets/dachser-background.jpg";
 
 const Register = () => {
+  useUsageLog({ endpoint: "/admin/register" });
   const navigate = useNavigate();
   const { toast } = useToast();
   const [isLoading, setIsLoading] = useState(false);

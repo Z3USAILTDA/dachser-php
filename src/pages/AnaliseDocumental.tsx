@@ -1,6 +1,7 @@
 import { useState, useMemo, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { FileSearch, Play, Trash2, FileText, RefreshCw, Clock } from "lucide-react";
+import { useUsageLog } from "@/hooks/useUsageLog";
 import { useAuth } from "@/hooks/useAuth";
 import { PageLayout } from "@/components/layout/PageLayout";
 import { PageCard } from "@/components/layout/PageCard";
@@ -55,6 +56,7 @@ const mockProcesses: AnaliseProcess[] = [{
   created_by: "admin@dachser.com"
 }];
 const AnaliseDocumental = () => {
+  useUsageLog({ endpoint: "/fin/analise-documental" });
   const navigate = useNavigate();
   const {
     user,
