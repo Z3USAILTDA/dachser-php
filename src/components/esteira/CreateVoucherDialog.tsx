@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { Plus, Upload, X } from "lucide-react";
+import { Plus, Upload, X, Search, FileText, RefreshCw, Plane, Ship, FileCheck, AlertCircle } from "lucide-react";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import {
@@ -11,12 +11,13 @@ import {
   DialogHeader,
   DialogTitle,
   DialogTrigger,
+  DialogDescription,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
-import { Switch } from "@/components/ui/switch";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Calendar } from "@/components/ui/calendar";
 import {
   Popover,
@@ -43,32 +44,26 @@ import { supabase } from "@/integrations/supabase/client";
 import { cn } from "@/lib/utils";
 import { CalendarIcon } from "lucide-react";
 import { 
-  FormaPagamento, 
-  TipoDocumento, 
-  CobrancaEmNomeDe,
   TipoAnexo,
-  Remessa
 } from "@/types/voucher";
+import { Badge } from "@/components/ui/badge";
 
 const formSchema = z.object({
-  numeroSPO: z.string().min(1, "Número SPO é obrigatório"),
+  numeroRM: z.string().optional(),
   processoId: z.string().optional(),
   origemProcesso: z.enum(["AIR", "SEA", "CHB"]).optional(),
-  fornecedor: z.string().min(1, "Fornecedor é obrigatório"),
+  fornecedor: z.string().optional(),
   cnpjFornecedor: z.string().optional(),
   valor: z.string().optional(),
   moeda: z.string().default("BRL"),
-  vencimento: z.date({ required_error: "Data de vencimento é obrigatória" }),
+  vencimento: z.date().optional(),
   dataEmissaoDocumento: z.date().optional(),
   cobrancaEmNomeDe: z.enum(["DACHSER", "CLIENTE"]),
   formaPagamento: z.string(),
-  tipoDocumento: z.string(),
+  tipoDocumento: z.string().optional(),
   filial: z.string().optional(),
-  remessa: z.string().default("NENHUM"),
   urgente: z.boolean().default(false),
-  urgenciaMotivo: z.string().optional(),
   comentariosOperacao: z.string().optional(),
-  clienteEmail: z.string().email().optional().or(z.literal("")),
 });
 
 type FormValues = z.infer<typeof formSchema>;
@@ -79,6 +74,9 @@ interface CreateVoucherDialogProps {
   onSuccess?: () => void;
   onVoucherCreated?: () => void;
 }
+
+type EntryMode = "rm" | "manual";
+type OrigemProcesso = "AIR" | "SEA" | "CHB";
 
 export const CreateVoucherDialog = ({ 
   open: controlledOpen, 
@@ -97,8 +95,12 @@ export const CreateVoucherDialog = ({
       setInternalOpen(value);
     }
   };
+  
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
+  const [entryMode, setEntryMode] = useState<EntryMode>("rm");
+  const [origemProcesso, setOrigemProcesso] = useState<OrigemProcesso | null>(null);
+  const [faturaFiles, setFaturaFiles] = useState<File[]>([]);
+  const [boletoFiles, setBoletoFiles] = useState<File[]>([]);
   const { toast } = useToast();
 
   const form = useForm<FormValues>({
@@ -106,24 +108,69 @@ export const CreateVoucherDialog = ({
     defaultValues: {
       moeda: "BRL",
       cobrancaEmNomeDe: "DACHSER",
-      formaPagamento: "BOLETO",
-      tipoDocumento: "FATURA",
-      remessa: "NENHUM",
+      formaPagamento: "TRANSFERENCIA_PIX",
       urgente: false,
     },
   });
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFaturaChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files) {
-      setSelectedFiles(prev => [...prev, ...Array.from(e.target.files!)]);
+      setFaturaFiles(prev => [...prev, ...Array.from(e.target.files!)]);
     }
   };
 
-  const removeFile = (index: number) => {
-    setSelectedFiles(prev => prev.filter((_, i) => i !== index));
+  const handleBoletoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files) {
+      setBoletoFiles(prev => [...prev, ...Array.from(e.target.files!)]);
+    }
+  };
+
+  const removeFaturaFile = (index: number) => {
+    setFaturaFiles(prev => prev.filter((_, i) => i !== index));
+  };
+
+  const removeBoletoFile = (index: number) => {
+    setBoletoFiles(prev => prev.filter((_, i) => i !== index));
   };
 
   const onSubmit = async (values: FormValues) => {
+    // Validation
+    if (entryMode === "manual" && !values.fornecedor) {
+      toast({
+        title: "Erro de validação",
+        description: "Fornecedor é obrigatório no modo manual",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (!values.vencimento) {
+      toast({
+        title: "Erro de validação",
+        description: "Data de vencimento é obrigatória",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (faturaFiles.length === 0) {
+      toast({
+        title: "Erro de validação",
+        description: "Fatura e Demonstrativo é obrigatório",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (boletoFiles.length === 0) {
+      toast({
+        title: "Erro de validação",
+        description: "Boleto ou Instruções de Pagamento é obrigatório",
+        variant: "destructive",
+      });
+      return;
+    }
+
     setIsSubmitting(true);
     try {
       const { data: userData } = await supabase.auth.getUser();
@@ -132,7 +179,7 @@ export const CreateVoucherDialog = ({
       }
 
       // Check if tipoDocumento triggers auto-urgency
-      const autoUrgent = ["ICMS", "ARMAZENAGEM"].includes(values.tipoDocumento);
+      const autoUrgent = values.tipoDocumento ? ["ICMS", "ARMAZENAGEM"].includes(values.tipoDocumento) : false;
       const urgenciaTipo = values.urgente 
         ? "URGENTE_REAL" 
         : autoUrgent 
@@ -140,8 +187,8 @@ export const CreateVoucherDialog = ({
           : "NORMAL";
 
       const voucherData = {
-        numero_spo: values.numeroSPO,
-        fornecedor: values.fornecedor,
+        numero_spo: values.numeroRM || `MANUAL-${Date.now()}`,
+        fornecedor: values.fornecedor || null,
         cnpj_fornecedor: values.cnpjFornecedor || null,
         valor: values.valor ? parseFloat(values.valor.replace(",", ".")) : null,
         moeda: values.moeda,
@@ -149,13 +196,10 @@ export const CreateVoucherDialog = ({
         data_emissao_documento: values.dataEmissaoDocumento?.toISOString() || null,
         cobranca_em_nome_de: values.cobrancaEmNomeDe,
         forma_pagamento: values.formaPagamento,
-        tipo_documento: values.tipoDocumento,
+        tipo_documento: values.tipoDocumento || null,
         filial: values.filial || null,
-        remessa: values.remessa,
-        urgente: values.urgente || autoUrgent,
         urgencia_tipo: urgenciaTipo,
         comentarios_operacao: values.comentariosOperacao || null,
-        cliente_email: values.clienteEmail || null,
         etapa_atual: values.tipoDocumento === "ADF" ? "FINANCEIRO" : "OPERACAO",
         status_baixa: "PENDENTE",
         status_financeiro: "PENDENTE",
@@ -170,34 +214,60 @@ export const CreateVoucherDialog = ({
 
       if (voucherError) throw voucherError;
 
-      // Upload files if any
-      if (selectedFiles.length > 0 && voucher) {
-        for (const file of selectedFiles) {
-          const fileExt = file.name.split(".").pop();
-          const filePath = `${voucher.id}/${Date.now()}.${fileExt}`;
+      // Upload fatura files
+      for (const file of faturaFiles) {
+        const fileExt = file.name.split(".").pop();
+        const filePath = `${voucher.id}/${Date.now()}-fatura.${fileExt}`;
 
-          const { error: uploadError } = await supabase.storage
-            .from("voucher-anexos")
-            .upload(filePath, file);
+        const { error: uploadError } = await supabase.storage
+          .from("voucher-anexos")
+          .upload(filePath, file);
 
-          if (uploadError) {
-            console.error("Erro ao fazer upload:", uploadError);
-            continue;
-          }
-
-          const { data: publicUrl } = supabase.storage
-            .from("voucher-anexos")
-            .getPublicUrl(filePath);
-
-          await (supabase as any).from("voucher_anexos").insert({
-            voucher_id: voucher.id,
-            tipo: "FATURA" as TipoAnexo,
-            file_name: file.name,
-            file_url: publicUrl.publicUrl,
-            file_size: file.size,
-            uploaded_by_user_id: userData.user.id,
-          });
+        if (uploadError) {
+          console.error("Erro ao fazer upload:", uploadError);
+          continue;
         }
+
+        const { data: publicUrl } = supabase.storage
+          .from("voucher-anexos")
+          .getPublicUrl(filePath);
+
+        await (supabase as any).from("voucher_anexos").insert({
+          voucher_id: voucher.id,
+          tipo: "FATURA" as TipoAnexo,
+          file_name: file.name,
+          file_url: publicUrl.publicUrl,
+          file_size: file.size,
+          uploaded_by_user_id: userData.user.id,
+        });
+      }
+
+      // Upload boleto files
+      for (const file of boletoFiles) {
+        const fileExt = file.name.split(".").pop();
+        const filePath = `${voucher.id}/${Date.now()}-boleto.${fileExt}`;
+
+        const { error: uploadError } = await supabase.storage
+          .from("voucher-anexos")
+          .upload(filePath, file);
+
+        if (uploadError) {
+          console.error("Erro ao fazer upload:", uploadError);
+          continue;
+        }
+
+        const { data: publicUrl } = supabase.storage
+          .from("voucher-anexos")
+          .getPublicUrl(filePath);
+
+        await (supabase as any).from("voucher_anexos").insert({
+          voucher_id: voucher.id,
+          tipo: "BOLETO" as TipoAnexo,
+          file_name: file.name,
+          file_url: publicUrl.publicUrl,
+          file_size: file.size,
+          uploaded_by_user_id: userData.user.id,
+        });
       }
 
       // Log creation
@@ -205,16 +275,19 @@ export const CreateVoucherDialog = ({
         voucher_id: voucher.id,
         user_id: userData.user.id,
         acao: "VOUCHER_CRIADO",
-        detalhe: `Voucher ${values.numeroSPO} criado`,
+        detalhe: `Voucher criado via ${entryMode === "rm" ? "RM" : "entrada manual"}`,
       });
 
       toast({
         title: "Voucher criado",
-        description: `O voucher ${values.numeroSPO} foi criado com sucesso.`,
+        description: `O voucher foi criado com sucesso.`,
       });
 
       form.reset();
-      setSelectedFiles([]);
+      setFaturaFiles([]);
+      setBoletoFiles([]);
+      setOrigemProcesso(null);
+      setEntryMode("rm");
       setOpen(false);
       onSuccess?.();
       onVoucherCreated?.();
@@ -230,358 +303,518 @@ export const CreateVoucherDialog = ({
     }
   };
 
+  const SyncIcon = () => (
+    <RefreshCw className="h-3 w-3 text-primary" />
+  );
+
+  const isRmMode = entryMode === "rm";
+
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       {!isControlled && (
         <DialogTrigger asChild>
-          <Button className="gap-2">
+          <Button className="gap-2 bg-primary text-primary-foreground hover:bg-primary/90">
             <Plus className="h-4 w-4" />
             Novo Voucher
           </Button>
         </DialogTrigger>
       )}
-      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+      <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto bg-card border-border">
         <DialogHeader>
-          <DialogTitle>Criar Novo Voucher</DialogTitle>
+          <DialogTitle className="text-xl font-semibold text-foreground">Novo Voucher</DialogTitle>
+          <DialogDescription className="text-muted-foreground">
+            Informe o número do voucher no RM para preencher automaticamente
+          </DialogDescription>
         </DialogHeader>
+        
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
-            {/* Basic Info */}
-            <div className="grid grid-cols-2 gap-4">
-              <FormField
-                control={form.control}
-                name="numeroSPO"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Número Voucher (SPO) *</FormLabel>
-                    <FormControl>
-                      <Input placeholder="Ex: SPO-2024-001" {...field} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
+            
+            {/* Mode Toggle - Tab style */}
+            <div className="flex gap-2 p-1 bg-background/50 rounded-lg border border-border">
+              <Button
+                type="button"
+                variant={isRmMode ? "default" : "ghost"}
+                className={cn(
+                  "flex-1 gap-2",
+                  isRmMode && "bg-primary text-primary-foreground"
                 )}
-              />
-              <FormField
-                control={form.control}
-                name="origemProcesso"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Origem do Processo</FormLabel>
-                    <Select onValueChange={field.onChange} defaultValue={field.value}>
-                      <FormControl>
-                        <SelectTrigger>
-                          <SelectValue placeholder="Selecione" />
-                        </SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
-                        <SelectItem value="AIR">Aéreo (AIR)</SelectItem>
-                        <SelectItem value="SEA">Marítimo (SEA)</SelectItem>
-                        <SelectItem value="CHB">Desembaraço (CHB)</SelectItem>
-                      </SelectContent>
-                    </Select>
-                    <FormMessage />
-                  </FormItem>
+                onClick={() => setEntryMode("rm")}
+              >
+                <Search className="h-4 w-4" />
+                Criar a partir do RM
+              </Button>
+              <Button
+                type="button"
+                variant={!isRmMode ? "default" : "ghost"}
+                className={cn(
+                  "flex-1 gap-2",
+                  !isRmMode && "bg-primary text-primary-foreground"
                 )}
-              />
+                onClick={() => setEntryMode("manual")}
+              >
+                <FileText className="h-4 w-4" />
+                Entrada Manual
+              </Button>
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
-              <FormField
-                control={form.control}
-                name="processoId"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Nº do Processo</FormLabel>
-                    <FormControl>
-                      <Input placeholder="Ex: AWB, BL, Referência" {...field} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <FormField
-                control={form.control}
-                name="fornecedor"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Fornecedor *</FormLabel>
-                    <FormControl>
-                      <Input placeholder="Nome do fornecedor" {...field} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-            </div>
-
-            <div className="grid grid-cols-2 gap-4">
-              <FormField
-                control={form.control}
-                name="cnpjFornecedor"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>CNPJ Fornecedor</FormLabel>
-                    <FormControl>
-                      <Input placeholder="00.000.000/0000-00" {...field} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <FormField
-                control={form.control}
-                name="filial"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Filial</FormLabel>
-                    <FormControl>
-                      <Input placeholder="Código da filial" {...field} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-            </div>
-
-            {/* Value and Dates */}
-            <div className="grid grid-cols-3 gap-4">
-              <FormField
-                control={form.control}
-                name="valor"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Valor</FormLabel>
-                    <FormControl>
-                      <Input placeholder="0,00" {...field} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <FormField
-                control={form.control}
-                name="moeda"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Moeda</FormLabel>
-                    <Select onValueChange={field.onChange} defaultValue={field.value}>
-                      <FormControl>
-                        <SelectTrigger>
-                          <SelectValue />
-                        </SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
-                        <SelectItem value="BRL">BRL</SelectItem>
-                        <SelectItem value="USD">USD</SelectItem>
-                        <SelectItem value="EUR">EUR</SelectItem>
-                      </SelectContent>
-                    </Select>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <FormField
-                control={form.control}
-                name="vencimento"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Vencimento *</FormLabel>
-                    <Popover>
-                      <PopoverTrigger asChild>
-                        <FormControl>
-                          <Button
-                            variant="outline"
-                            className={cn(
-                              "w-full pl-3 text-left font-normal",
-                              !field.value && "text-muted-foreground"
-                            )}
-                          >
-                            {field.value ? (
-                              format(field.value, "dd/MM/yyyy", { locale: ptBR })
-                            ) : (
-                              <span>Selecione</span>
-                            )}
-                            <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
-                          </Button>
-                        </FormControl>
-                      </PopoverTrigger>
-                      <PopoverContent className="w-auto p-0" align="start">
-                        <Calendar
-                          mode="single"
-                          selected={field.value}
-                          onSelect={field.onChange}
-                          locale={ptBR}
-                        />
-                      </PopoverContent>
-                    </Popover>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-            </div>
-
-            {/* Document Type and Payment */}
-            <div className="grid grid-cols-3 gap-4">
-              <FormField
-                control={form.control}
-                name="tipoDocumento"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Tipo Documento</FormLabel>
-                    <Select onValueChange={field.onChange} defaultValue={field.value}>
-                      <FormControl>
-                        <SelectTrigger>
-                          <SelectValue />
-                        </SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
-                        <SelectItem value="VOUCHER">Voucher</SelectItem>
-                        <SelectItem value="SPO">SPO</SelectItem>
-                        <SelectItem value="ICMS">ICMS</SelectItem>
-                        <SelectItem value="ARMAZENAGEM">Armazenagem</SelectItem>
-                        <SelectItem value="ADMINISTRATIVO">Administrativo</SelectItem>
-                        <SelectItem value="ADF">ADF</SelectItem>
-                        <SelectItem value="FATURA">Fatura</SelectItem>
-                        <SelectItem value="NOTA_FISCAL">Nota Fiscal</SelectItem>
-                        <SelectItem value="DEMONSTRATIVO">Demonstrativo</SelectItem>
-                        <SelectItem value="OUTROS">Outros</SelectItem>
-                      </SelectContent>
-                    </Select>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <FormField
-                control={form.control}
-                name="formaPagamento"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Forma Pagamento</FormLabel>
-                    <Select onValueChange={field.onChange} defaultValue={field.value}>
-                      <FormControl>
-                        <SelectTrigger>
-                          <SelectValue />
-                        </SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
-                        <SelectItem value="BOLETO">Boleto</SelectItem>
-                        <SelectItem value="TED">TED</SelectItem>
-                        <SelectItem value="PIX">PIX</SelectItem>
-                        <SelectItem value="CARTAO">Cartão</SelectItem>
-                        <SelectItem value="DEPOSITO">Depósito</SelectItem>
-                        <SelectItem value="DARF">DARF</SelectItem>
-                        <SelectItem value="GPS">GPS</SelectItem>
-                        <SelectItem value="TRANSFERENCIA_PIX">Transferência PIX</SelectItem>
-                        <SelectItem value="DEBITO">Débito</SelectItem>
-                        <SelectItem value="CAMBIO">Câmbio</SelectItem>
-                        <SelectItem value="ADF">ADF</SelectItem>
-                      </SelectContent>
-                    </Select>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <FormField
-                control={form.control}
-                name="cobrancaEmNomeDe"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Cobrança em nome de</FormLabel>
-                    <Select onValueChange={field.onChange} defaultValue={field.value}>
-                      <FormControl>
-                        <SelectTrigger>
-                          <SelectValue />
-                        </SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
-                        <SelectItem value="DACHSER">DACHSER</SelectItem>
-                        <SelectItem value="CLIENTE">Cliente</SelectItem>
-                      </SelectContent>
-                    </Select>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-            </div>
-
-            {/* Remessa and Urgency */}
-            <div className="grid grid-cols-2 gap-4">
-              <FormField
-                control={form.control}
-                name="remessa"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Remessa</FormLabel>
-                    <Select onValueChange={field.onChange} defaultValue={field.value}>
-                      <FormControl>
-                        <SelectTrigger>
-                          <SelectValue />
-                        </SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
-                        <SelectItem value="NENHUM">Nenhum</SelectItem>
-                        <SelectItem value="REMESSA_12H">Remessa 12h</SelectItem>
-                        <SelectItem value="REMESSA_15H">Remessa 15h</SelectItem>
-                      </SelectContent>
-                    </Select>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <FormField
-                control={form.control}
-                name="urgente"
-                render={({ field }) => (
-                  <FormItem className="flex items-center justify-between rounded-lg border p-3">
-                    <div className="space-y-0.5">
-                      <FormLabel>Urgente Real</FormLabel>
-                      <p className="text-xs text-muted-foreground">
-                        Requer aprovação do supervisor
-                      </p>
-                    </div>
-                    <FormControl>
-                      <Switch
-                        checked={field.value}
-                        onCheckedChange={field.onChange}
-                      />
-                    </FormControl>
-                  </FormItem>
-                )}
-              />
-            </div>
-
-            {/* Urgency Reason (only if urgent) */}
-            {form.watch("urgente") && (
-              <FormField
-                control={form.control}
-                name="urgenciaMotivo"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Motivo da Urgência *</FormLabel>
-                    <FormControl>
-                      <Textarea
-                        placeholder="Descreva o motivo da urgência..."
-                        className="min-h-[60px]"
-                        {...field}
-                      />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
+            {/* Manual Mode Alert */}
+            {!isRmMode && (
+              <div className="flex items-start gap-3 p-4 rounded-lg border border-amber-500/30 bg-amber-500/10">
+                <AlertCircle className="h-5 w-5 text-amber-500 flex-shrink-0 mt-0.5" />
+                <div>
+                  <p className="font-medium text-amber-500">Entrada Manual</p>
+                  <p className="text-sm text-muted-foreground">
+                    Preencha todos os campos manualmente. Use apenas quando o voucher não existe no RM.
+                  </p>
+                </div>
+              </div>
             )}
 
-            {/* Comments and Email */}
+            {/* RM Number Section - Only in RM mode */}
+            {isRmMode && (
+              <div className="p-4 rounded-lg border border-primary/30 bg-primary/5">
+                <div className="flex items-center gap-2 mb-3">
+                  <Search className="h-4 w-4 text-primary" />
+                  <span className="text-sm font-medium text-primary">Número do Voucher no RM</span>
+                  <span className="text-destructive">*</span>
+                </div>
+                <FormField
+                  control={form.control}
+                  name="numeroRM"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormControl>
+                        <Input 
+                          placeholder="Ex: 8647525655" 
+                          className="bg-background/50 border-border"
+                          {...field} 
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
+            )}
+
+            {/* Vinculação ao Processo Logístico */}
+            <div className="p-4 rounded-lg border border-border bg-background/30">
+              <div className="flex items-center gap-2 mb-4">
+                <FileText className="h-4 w-4 text-primary" />
+                <span className="text-sm font-medium text-primary">Vinculação ao Processo Logístico</span>
+                <span className="text-destructive">*</span>
+                {isRmMode && (
+                  <Badge variant="outline" className="ml-2 text-xs border-primary/50 text-primary">
+                    <RefreshCw className="h-3 w-3 mr-1" />
+                    Sincronizado via RM
+                  </Badge>
+                )}
+              </div>
+              
+              <div className="grid grid-cols-2 gap-4">
+                <FormField
+                  control={form.control}
+                  name="processoId"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel className="flex items-center gap-1.5 text-sm">
+                        Nº do Processo <span className="text-destructive">*</span>
+                        {isRmMode && <SyncIcon />}
+                      </FormLabel>
+                      <FormControl>
+                        <Input 
+                          placeholder={isRmMode ? "Preenchido pelo RM" : "Ex: AIR-2024-001234"}
+                          className="bg-background/50 border-border"
+                          disabled={isRmMode}
+                          {...field} 
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                
+                <div>
+                  <Label className="flex items-center gap-1.5 text-sm mb-2">
+                    Origem do Processo <span className="text-destructive">*</span>
+                    {isRmMode && <SyncIcon />}
+                  </Label>
+                  <div className="flex gap-2">
+                    {(["AIR", "SEA", "CHB"] as OrigemProcesso[]).map((tipo) => (
+                      <Button
+                        key={tipo}
+                        type="button"
+                        variant={origemProcesso === tipo ? "default" : "outline"}
+                        className={cn(
+                          "flex-1 gap-2",
+                          origemProcesso === tipo 
+                            ? "bg-primary text-primary-foreground" 
+                            : "bg-background/50 border-border hover:bg-background"
+                        )}
+                        onClick={() => !isRmMode && setOrigemProcesso(tipo)}
+                        disabled={isRmMode}
+                      >
+                        {tipo === "AIR" && <Plane className="h-4 w-4" />}
+                        {tipo === "SEA" && <Ship className="h-4 w-4" />}
+                        {tipo === "CHB" && <FileCheck className="h-4 w-4" />}
+                        {tipo}
+                      </Button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Dados do Voucher */}
+            <div className="p-4 rounded-lg border border-border bg-background/30">
+              <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center gap-2">
+                  <span className="text-sm font-medium text-foreground">Dados do Voucher</span>
+                  {isRmMode ? (
+                    <Badge variant="outline" className="text-xs border-primary/50 text-primary">
+                      <RefreshCw className="h-3 w-3 mr-1" />
+                      Sincronizado via RM
+                    </Badge>
+                  ) : (
+                    <Badge variant="secondary" className="text-xs">
+                      Manual
+                    </Badge>
+                  )}
+                </div>
+                {isRmMode && (
+                  <span className="text-xs text-primary italic">
+                    Campos preenchidos automaticamente pelo RM
+                  </span>
+                )}
+              </div>
+              
+              <div className="space-y-4">
+                {/* Row 1: Fornecedor, CNPJ */}
+                <div className="grid grid-cols-2 gap-4">
+                  <FormField
+                    control={form.control}
+                    name="fornecedor"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel className="flex items-center gap-1.5 text-sm">
+                          Fornecedor {isRmMode && <SyncIcon />}
+                        </FormLabel>
+                        <FormControl>
+                          <Input 
+                            placeholder={isRmMode ? "Preenchido pelo RM" : "Nome do fornecedor"}
+                            className="bg-background/50 border-border"
+                            disabled={isRmMode}
+                            {...field} 
+                          />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name="cnpjFornecedor"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel className="flex items-center gap-1.5 text-sm">
+                          CNPJ Fornecedor {isRmMode && <SyncIcon />}
+                        </FormLabel>
+                        <FormControl>
+                          <Input 
+                            placeholder={isRmMode ? "Preenchido pelo RM" : "00.000.000/0000-00"}
+                            className="bg-background/50 border-border"
+                            disabled={isRmMode}
+                            {...field} 
+                          />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                </div>
+
+                {/* Row 2: Valor, Moeda, Tipo Documento */}
+                <div className="grid grid-cols-3 gap-4">
+                  <FormField
+                    control={form.control}
+                    name="valor"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel className="flex items-center gap-1.5 text-sm">
+                          Valor {isRmMode && <SyncIcon />}
+                        </FormLabel>
+                        <FormControl>
+                          <Input 
+                            placeholder={isRmMode ? "Via RM" : "0.00"}
+                            className="bg-background/50 border-border"
+                            disabled={isRmMode}
+                            {...field} 
+                          />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name="moeda"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel className="flex items-center gap-1.5 text-sm">
+                          Moeda {isRmMode && <SyncIcon />}
+                        </FormLabel>
+                        <Select 
+                          onValueChange={field.onChange} 
+                          defaultValue={field.value}
+                          disabled={isRmMode}
+                        >
+                          <FormControl>
+                            <SelectTrigger className="bg-background/50 border-border">
+                              <SelectValue />
+                            </SelectTrigger>
+                          </FormControl>
+                          <SelectContent>
+                            <SelectItem value="BRL">BRL</SelectItem>
+                            <SelectItem value="USD">USD</SelectItem>
+                            <SelectItem value="EUR">EUR</SelectItem>
+                          </SelectContent>
+                        </Select>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name="tipoDocumento"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel className="flex items-center gap-1.5 text-sm">
+                          Tipo de Documento <span className="text-destructive">*</span> {isRmMode && <SyncIcon />}
+                        </FormLabel>
+                        <Select 
+                          onValueChange={field.onChange} 
+                          defaultValue={field.value}
+                        >
+                          <FormControl>
+                            <SelectTrigger className="bg-background/50 border-border">
+                              <SelectValue placeholder="Selecione o tipo..." />
+                            </SelectTrigger>
+                          </FormControl>
+                          <SelectContent>
+                            <SelectItem value="VOUCHER">Voucher</SelectItem>
+                            <SelectItem value="SPO">SPO</SelectItem>
+                            <SelectItem value="ICMS">ICMS</SelectItem>
+                            <SelectItem value="ARMAZENAGEM">Armazenagem</SelectItem>
+                            <SelectItem value="ADMINISTRATIVO">Administrativo</SelectItem>
+                            <SelectItem value="ADF">ADF</SelectItem>
+                            <SelectItem value="FATURA">Fatura</SelectItem>
+                            <SelectItem value="NOTA_FISCAL">Nota Fiscal</SelectItem>
+                            <SelectItem value="DEMONSTRATIVO">Demonstrativo</SelectItem>
+                            <SelectItem value="OUTROS">Outros</SelectItem>
+                          </SelectContent>
+                        </Select>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                </div>
+
+                {/* Row 3: Data Vencimento, Data Emissão */}
+                <div className="grid grid-cols-2 gap-4">
+                  <FormField
+                    control={form.control}
+                    name="vencimento"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel className="flex items-center gap-1.5 text-sm">
+                          Data de Vencimento <span className="text-destructive">*</span> {isRmMode && <SyncIcon />}
+                        </FormLabel>
+                        <Popover>
+                          <PopoverTrigger asChild>
+                            <FormControl>
+                              <Button
+                                variant="outline"
+                                disabled={isRmMode}
+                                className={cn(
+                                  "w-full pl-3 text-left font-normal bg-background/50 border-border",
+                                  !field.value && "text-muted-foreground"
+                                )}
+                              >
+                                {field.value ? (
+                                  format(field.value, "dd/MM/yyyy", { locale: ptBR })
+                                ) : (
+                                  <span>dd/mm/aaaa</span>
+                                )}
+                                <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
+                              </Button>
+                            </FormControl>
+                          </PopoverTrigger>
+                          <PopoverContent className="w-auto p-0" align="start">
+                            <Calendar
+                              mode="single"
+                              selected={field.value}
+                              onSelect={field.onChange}
+                              locale={ptBR}
+                            />
+                          </PopoverContent>
+                        </Popover>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name="dataEmissaoDocumento"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel className="flex items-center gap-1.5 text-sm">
+                          Data de Emissão {isRmMode && <SyncIcon />}
+                        </FormLabel>
+                        <Popover>
+                          <PopoverTrigger asChild>
+                            <FormControl>
+                              <Button
+                                variant="outline"
+                                disabled={isRmMode}
+                                className={cn(
+                                  "w-full pl-3 text-left font-normal bg-background/50 border-border",
+                                  !field.value && "text-muted-foreground"
+                                )}
+                              >
+                                {field.value ? (
+                                  format(field.value, "dd/MM/yyyy", { locale: ptBR })
+                                ) : (
+                                  <span>dd/mm/aaaa</span>
+                                )}
+                                <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
+                              </Button>
+                            </FormControl>
+                          </PopoverTrigger>
+                          <PopoverContent className="w-auto p-0" align="start">
+                            <Calendar
+                              mode="single"
+                              selected={field.value}
+                              onSelect={field.onChange}
+                              locale={ptBR}
+                            />
+                          </PopoverContent>
+                        </Popover>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Campos Adicionais (não do RM) */}
+            <div className="space-y-4">
+              <Label className="text-sm text-muted-foreground">Campos Adicionais (não do RM)</Label>
+              
+              <div className="grid grid-cols-3 gap-4">
+                <FormField
+                  control={form.control}
+                  name="filial"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel className="text-sm">Filial</FormLabel>
+                      <FormControl>
+                        <Input 
+                          placeholder="Ex: SP01" 
+                          className="bg-background/50 border-border"
+                          {...field} 
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="cobrancaEmNomeDe"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel className="text-sm">
+                        Cobrança em nome de <span className="text-destructive">*</span>
+                      </FormLabel>
+                      <Select onValueChange={field.onChange} defaultValue={field.value}>
+                        <FormControl>
+                          <SelectTrigger className="bg-background/50 border-border">
+                            <SelectValue />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          <SelectItem value="DACHSER">Dachser</SelectItem>
+                          <SelectItem value="CLIENTE">Cliente</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="formaPagamento"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel className="text-sm">
+                        Forma de Pagamento <span className="text-destructive">*</span>
+                      </FormLabel>
+                      <Select onValueChange={field.onChange} defaultValue={field.value}>
+                        <FormControl>
+                          <SelectTrigger className="bg-background/50 border-border">
+                            <SelectValue />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          <SelectItem value="TRANSFERENCIA_PIX">Transferência/Pix</SelectItem>
+                          <SelectItem value="BOLETO">Boleto</SelectItem>
+                          <SelectItem value="TED">TED</SelectItem>
+                          <SelectItem value="DARF">DARF</SelectItem>
+                          <SelectItem value="GPS">GPS</SelectItem>
+                          <SelectItem value="DEBITO">Débito</SelectItem>
+                          <SelectItem value="CAMBIO">Câmbio</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
+            </div>
+
+            {/* Urgency Checkbox */}
+            <FormField
+              control={form.control}
+              name="urgente"
+              render={({ field }) => (
+                <FormItem className="flex items-center gap-3">
+                  <FormControl>
+                    <Checkbox
+                      checked={field.value}
+                      onCheckedChange={field.onChange}
+                      className="border-primary data-[state=checked]:bg-primary"
+                    />
+                  </FormControl>
+                  <FormLabel className="text-sm font-normal cursor-pointer !mt-0">
+                    Pagamento Urgente (Urgência Real - Requer Aprovação)
+                  </FormLabel>
+                </FormItem>
+              )}
+            />
+
+            {/* Comentários */}
             <FormField
               control={form.control}
               name="comentariosOperacao"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Comentários</FormLabel>
+                  <FormLabel className="text-sm">Comentários</FormLabel>
                   <FormControl>
                     <Textarea
-                      placeholder="Observações sobre o voucher..."
-                      className="min-h-[80px]"
+                      placeholder="Informações adicionais..."
+                      className="min-h-[80px] bg-background/50 border-border resize-y"
                       {...field}
                     />
                   </FormControl>
@@ -590,83 +823,100 @@ export const CreateVoucherDialog = ({
               )}
             />
 
-            <FormField
-              control={form.control}
-              name="clienteEmail"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Email do Cliente</FormLabel>
-                  <FormControl>
-                    <Input
-                      type="email"
-                      placeholder="cliente@exemplo.com"
-                      {...field}
-                    />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-
-            {/* File Upload */}
-            <div className="space-y-3">
+            {/* File Upload Areas */}
+            <div className="space-y-4">
+              {/* Fatura e Demonstrativo */}
               <div>
-                <Label className="text-sm font-medium">Anexos Obrigatórios</Label>
-                <p className="text-xs text-muted-foreground mt-1">
-                  Fatura/Demonstrativo e Boleto/Instruções são obrigatórios
-                </p>
-              </div>
-              <div className="border-2 border-dashed rounded-lg p-4 text-center hover:border-primary/50 transition-colors">
-                <input
-                  type="file"
-                  multiple
-                  onChange={handleFileChange}
-                  className="hidden"
-                  id="file-upload"
-                  accept=".pdf,.jpg,.jpeg,.png,.doc,.docx,.xls,.xlsx"
-                />
-                <label
-                  htmlFor="file-upload"
-                  className="cursor-pointer flex flex-col items-center gap-2"
-                >
-                  <Upload className="h-8 w-8 text-muted-foreground" />
-                  <span className="text-sm text-muted-foreground">
-                    Clique para selecionar ou arraste arquivos
-                  </span>
-                </label>
-              </div>
-              {selectedFiles.length > 0 && (
-                <div className="space-y-2 mt-3">
-                  {selectedFiles.map((file, index) => (
-                    <div
-                      key={index}
-                      className="flex items-center justify-between p-2 bg-secondary/30 rounded"
-                    >
-                      <span className="text-sm truncate">{file.name}</span>
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => removeFile(index)}
-                      >
-                        <X className="h-4 w-4" />
-                      </Button>
-                    </div>
-                  ))}
+                <Label className="text-sm font-medium">
+                  Fatura e Demonstrativo <span className="text-destructive">*</span>
+                </Label>
+                <div className="mt-2 border-2 border-dashed border-border rounded-lg p-6 text-center hover:border-primary/50 transition-colors bg-background/30">
+                  <input
+                    type="file"
+                    multiple
+                    onChange={handleFaturaChange}
+                    className="hidden"
+                    id="fatura-upload"
+                    accept=".pdf,.jpg,.jpeg,.png,.doc,.docx,.xls,.xlsx,.xml"
+                  />
+                  <label htmlFor="fatura-upload" className="cursor-pointer flex flex-col items-center gap-2">
+                    <Upload className="h-8 w-8 text-muted-foreground" />
+                    <span className="text-sm text-muted-foreground">
+                      Arraste o arquivo ou clique para selecionar
+                    </span>
+                    <span className="text-xs text-muted-foreground">
+                      Formatos: PDF, JPG, PNG, Excel, Word, XML (máx. 50MB)
+                    </span>
+                  </label>
                 </div>
-              )}
+                {faturaFiles.length > 0 && (
+                  <div className="space-y-2 mt-3">
+                    {faturaFiles.map((file, index) => (
+                      <div key={index} className="flex items-center justify-between p-2 bg-secondary/30 rounded">
+                        <span className="text-sm truncate">{file.name}</span>
+                        <Button type="button" variant="ghost" size="sm" onClick={() => removeFaturaFile(index)}>
+                          <X className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Boleto ou Instruções */}
+              <div>
+                <Label className="text-sm font-medium">
+                  Boleto ou Instruções de Pagamento <span className="text-destructive">*</span>
+                </Label>
+                <div className="mt-2 border-2 border-dashed border-border rounded-lg p-6 text-center hover:border-primary/50 transition-colors bg-background/30">
+                  <input
+                    type="file"
+                    multiple
+                    onChange={handleBoletoChange}
+                    className="hidden"
+                    id="boleto-upload"
+                    accept=".pdf,.jpg,.jpeg,.png,.doc,.docx,.xls,.xlsx,.xml"
+                  />
+                  <label htmlFor="boleto-upload" className="cursor-pointer flex flex-col items-center gap-2">
+                    <Upload className="h-8 w-8 text-muted-foreground" />
+                    <span className="text-sm text-muted-foreground">
+                      Arraste o arquivo ou clique para selecionar
+                    </span>
+                    <span className="text-xs text-muted-foreground">
+                      Formatos: PDF, JPG, PNG, Excel, Word, XML (máx. 50MB)
+                    </span>
+                  </label>
+                </div>
+                {boletoFiles.length > 0 && (
+                  <div className="space-y-2 mt-3">
+                    {boletoFiles.map((file, index) => (
+                      <div key={index} className="flex items-center justify-between p-2 bg-secondary/30 rounded">
+                        <span className="text-sm truncate">{file.name}</span>
+                        <Button type="button" variant="ghost" size="sm" onClick={() => removeBoletoFile(index)}>
+                          <X className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
             </div>
 
-            {/* Submit */}
-            <div className="flex justify-end gap-3">
+            {/* Submit Buttons */}
+            <div className="flex justify-end gap-3 pt-4 border-t border-border">
               <Button
                 type="button"
                 variant="outline"
                 onClick={() => setOpen(false)}
+                className="border-border"
               >
                 Cancelar
               </Button>
-              <Button type="submit" disabled={isSubmitting} className="bg-primary text-primary-foreground hover:bg-primary/90">
+              <Button 
+                type="submit" 
+                disabled={isSubmitting} 
+                className="bg-primary text-primary-foreground hover:bg-primary/90"
+              >
                 {isSubmitting ? "Enviando..." : "Enviar Voucher"}
               </Button>
             </div>
