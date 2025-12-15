@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { PageLayout } from "@/components/layout/PageLayout";
+import { PageCard } from "@/components/layout/PageCard";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Plus, Package, AlertTriangle, AlertCircle, Clock, List, BarChart3, RefreshCw, TrendingUp, DollarSign, Calendar, Bot, FileSpreadsheet, Filter, Building2, Users, LayoutDashboard, CheckCircle2, FileWarning } from "lucide-react";
@@ -52,38 +53,34 @@ const MetricCard = ({
     info: "text-info",
   };
 
-  const iconBgClasses = {
-    default: "bg-primary/20",
-    warning: "bg-warning/20",
-    critical: "bg-destructive/20",
-    info: "bg-info/20",
-  };
-
   return (
     <div 
       className={cn(
-        "bg-card/60 backdrop-blur-sm border rounded-lg p-4 sm:p-5 relative overflow-hidden cursor-pointer min-w-0",
-        "hover:border-primary/30 transition-all duration-300 hover:shadow-lg hover:shadow-primary/5",
-        "animate-fade-in",
+        "p-4 rounded-xl bg-[#0a0b10] border cursor-pointer transition-all",
+        "hover:border-primary/40",
         isActive 
-          ? "border-primary ring-2 ring-primary/30 shadow-lg shadow-primary/10" 
-          : "border-border/30"
+          ? "border-primary ring-2 ring-primary/30" 
+          : "border-white/10"
       )}
       style={{ animationDelay: `${delay}ms` }}
       onClick={onClick}
     >
-      <div className="flex items-start justify-between gap-2">
-        <div className="space-y-1 min-w-0 flex-1">
-          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider truncate">{title}</p>
-          <p className={cn("text-2xl sm:text-4xl font-bold", colorClasses[variant])}>{value}</p>
-          <p className="text-xs sm:text-sm text-muted-foreground truncate">{subtitle}</p>
+      <div className="flex items-center gap-3">
+        <div className={cn("p-2.5 rounded-full", 
+          variant === "default" ? "bg-primary/20" :
+          variant === "warning" ? "bg-warning/20" :
+          variant === "critical" ? "bg-destructive/20" : "bg-info/20"
+        )}>
+          <Icon className={cn("h-4 w-4", colorClasses[variant])} />
         </div>
-        <div className={cn("p-2 sm:p-3 rounded-full shrink-0", iconBgClasses[variant])}>
-          <Icon className={cn("h-4 w-4 sm:h-5 sm:w-5", colorClasses[variant])} />
+        <div className="flex-1 min-w-0">
+          <div className="text-[10px] uppercase tracking-[0.15em] text-muted-foreground">{title}</div>
+          <div className={cn("text-xl font-bold mt-0.5", colorClasses[variant])}>{value}</div>
+          <div className="text-[10px] text-muted-foreground mt-0.5 truncate">{subtitle}</div>
         </div>
       </div>
       {isActive && (
-        <div className="absolute bottom-0 left-0 right-0 h-1 bg-primary animate-pulse" />
+        <div className="mt-3 h-0.5 bg-primary rounded-full" />
       )}
     </div>
   );
@@ -221,59 +218,36 @@ const AnalyticsDashboard = ({ vouchers }: { vouchers: Voucher[] }) => {
   };
 
   return (
-    <div className="space-y-6 animate-fade-in">
+    <div className="space-y-5 animate-fade-in">
       {/* KPIs Row */}
-      <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-4">
-        <div className="bg-card/60 backdrop-blur-sm border border-border/30 rounded-lg p-5 hover:border-primary/30 transition-all">
-          <div className="flex items-center gap-3">
-            <div className="p-3 rounded-full bg-primary/20">
-              <DollarSign className="h-5 w-5 text-primary" />
-            </div>
-            <div>
-              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Valor Total</p>
-              <p className="text-2xl font-bold text-foreground">R$ {totalValor.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
-            </div>
-          </div>
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <div className="p-3 rounded-xl bg-[#0a0b10] border border-white/10">
+          <div className="text-[10px] uppercase tracking-[0.15em] text-muted-foreground">Valor Total</div>
+          <div className="text-xl font-bold mt-1">R$ {totalValor.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</div>
+          <div className="text-[10px] text-muted-foreground mt-0.5">Soma de todos os vouchers</div>
         </div>
-        <div className="bg-card/60 backdrop-blur-sm border border-border/30 rounded-lg p-5 hover:border-info/30 transition-all">
-          <div className="flex items-center gap-3">
-            <div className="p-3 rounded-full bg-info/20">
-              <TrendingUp className="h-5 w-5 text-info" />
-            </div>
-            <div>
-              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Valor Médio</p>
-              <p className="text-2xl font-bold text-foreground">R$ {mediaValor.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
-            </div>
-          </div>
+        <div className="p-3 rounded-xl bg-[#0a0b10] border border-white/10">
+          <div className="text-[10px] uppercase tracking-[0.15em] text-muted-foreground">Valor Médio</div>
+          <div className="text-xl font-bold mt-1">R$ {mediaValor.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</div>
+          <div className="text-[10px] text-muted-foreground mt-0.5">Média por voucher</div>
         </div>
-        <div className="bg-card/60 backdrop-blur-sm border border-border/30 rounded-lg p-5 hover:border-success/30 transition-all">
-          <div className="flex items-center gap-3">
-            <div className="p-3 rounded-full bg-green-500/20">
-              <TrendingUp className="h-5 w-5 text-green-500" />
-            </div>
-            <div>
-              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Taxa Conclusão</p>
-              <p className="text-2xl font-bold text-foreground">{taxaConclusao}%</p>
-            </div>
-          </div>
+        <div className="p-3 rounded-xl bg-[#0a0b10] border border-white/10">
+          <div className="text-[10px] uppercase tracking-[0.15em] text-muted-foreground">Taxa Conclusão</div>
+          <div className="text-xl font-bold mt-1">{taxaConclusao}%</div>
+          <div className="text-[10px] text-muted-foreground mt-0.5">Finalizados / Total</div>
         </div>
-        <div className="bg-card/60 backdrop-blur-sm border border-border/30 rounded-lg p-5 hover:border-warning/30 transition-all">
-          <div className="flex items-center gap-3">
-            <div className="p-3 rounded-full bg-warning/20">
-              <Calendar className="h-5 w-5 text-warning" />
-            </div>
-            <div>
-              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Total Vouchers</p>
-              <p className="text-2xl font-bold text-foreground">{vouchers.length}</p>
-            </div>
-          </div>
+        <div className="p-3 rounded-xl bg-[#0a0b10] border border-white/10">
+          <div className="text-[10px] uppercase tracking-[0.15em] text-muted-foreground">Total Vouchers</div>
+          <div className="text-xl font-bold mt-1">{vouchers.length}</div>
+          <div className="text-[10px] text-muted-foreground mt-0.5">Cadastrados no sistema</div>
         </div>
       </div>
 
       {/* Charts Row 1 */}
-      <div className="grid gap-6 grid-cols-1 lg:grid-cols-2">
-        <div className="bg-card/60 backdrop-blur-sm border border-border/30 rounded-xl p-6">
-          <h3 className="text-sm font-semibold text-foreground mb-4 uppercase tracking-wider">Vouchers por Mês</h3>
+      <div className="grid gap-5 grid-cols-1 lg:grid-cols-2">
+        <div className="rounded-xl bg-[#05060c] border border-white/10 p-4">
+          <div className="text-[11px] uppercase tracking-[0.15em] text-muted-foreground mb-1">Vouchers por Mês</div>
+          <div className="text-[10px] text-muted-foreground mb-3">Volume mensal de vouchers criados e finalizados.</div>
           <ResponsiveContainer width="100%" height={250}>
             <AreaChart data={vouchersPorMes}>
               <defs>
@@ -297,8 +271,9 @@ const AnalyticsDashboard = ({ vouchers }: { vouchers: Voucher[] }) => {
           </ResponsiveContainer>
         </div>
 
-        <div className="bg-card/60 backdrop-blur-sm border border-border/30 rounded-xl p-6">
-          <h3 className="text-sm font-semibold text-foreground mb-4 uppercase tracking-wider">Distribuição por Etapa</h3>
+        <div className="rounded-xl bg-[#05060c] border border-white/10 p-4">
+          <div className="text-[11px] uppercase tracking-[0.15em] text-muted-foreground mb-1">Distribuição por Etapa</div>
+          <div className="text-[10px] text-muted-foreground mb-3">Vouchers em cada etapa do workflow.</div>
           <ResponsiveContainer width="100%" height={250}>
             <PieChart>
               <Pie
@@ -323,9 +298,10 @@ const AnalyticsDashboard = ({ vouchers }: { vouchers: Voucher[] }) => {
       </div>
 
       {/* Charts Row 2 */}
-      <div className="grid gap-6 grid-cols-1 lg:grid-cols-3">
-        <div className="bg-card/60 backdrop-blur-sm border border-border/30 rounded-xl p-6 lg:col-span-2">
-          <h3 className="text-sm font-semibold text-foreground mb-4 uppercase tracking-wider">Valor por Etapa (R$)</h3>
+      <div className="grid gap-5 grid-cols-1 lg:grid-cols-3">
+        <div className="rounded-xl bg-[#05060c] border border-white/10 p-4 lg:col-span-2">
+          <div className="text-[11px] uppercase tracking-[0.15em] text-muted-foreground mb-1">Valor por Etapa (R$)</div>
+          <div className="text-[10px] text-muted-foreground mb-3">Valor total acumulado em cada etapa.</div>
           <ResponsiveContainer width="100%" height={220}>
             <BarChart data={valorPorEtapa} layout="vertical">
               <CartesianGrid strokeDasharray="3 3" stroke="hsl(240, 5%, 20%)" />
@@ -337,8 +313,9 @@ const AnalyticsDashboard = ({ vouchers }: { vouchers: Voucher[] }) => {
           </ResponsiveContainer>
         </div>
 
-        <div className="bg-card/60 backdrop-blur-sm border border-border/30 rounded-xl p-6">
-          <h3 className="text-sm font-semibold text-foreground mb-4 uppercase tracking-wider">Classificação Urgência</h3>
+        <div className="rounded-xl bg-[#05060c] border border-white/10 p-4">
+          <div className="text-[11px] uppercase tracking-[0.15em] text-muted-foreground mb-1">Classificação Urgência</div>
+          <div className="text-[10px] text-muted-foreground mb-3">Por tipo de urgência.</div>
           <ResponsiveContainer width="100%" height={220}>
             <PieChart>
               <Pie
@@ -362,9 +339,10 @@ const AnalyticsDashboard = ({ vouchers }: { vouchers: Voucher[] }) => {
       </div>
 
       {/* Summary */}
-      <div className="grid gap-6 grid-cols-1 lg:grid-cols-2">
-        <div className="bg-card/60 backdrop-blur-sm border border-border/30 rounded-xl p-6">
-          <h3 className="text-sm font-semibold text-foreground mb-4 uppercase tracking-wider">Forma de Pagamento</h3>
+      <div className="grid gap-5 grid-cols-1 lg:grid-cols-2">
+        <div className="rounded-xl bg-[#05060c] border border-white/10 p-4">
+          <div className="text-[11px] uppercase tracking-[0.15em] text-muted-foreground mb-1">Forma de Pagamento</div>
+          <div className="text-[10px] text-muted-foreground mb-3">Distribuição por forma de pagamento.</div>
           <ResponsiveContainer width="100%" height={200}>
             <BarChart data={formaPagamentoData}>
               <CartesianGrid strokeDasharray="3 3" stroke="hsl(240, 5%, 20%)" />
@@ -380,9 +358,9 @@ const AnalyticsDashboard = ({ vouchers }: { vouchers: Voucher[] }) => {
           </ResponsiveContainer>
         </div>
 
-        <div className="bg-card/60 backdrop-blur-sm border border-border/30 rounded-xl p-6">
-          <h3 className="text-sm font-semibold text-foreground mb-4 uppercase tracking-wider">Resumo por Status</h3>
-          <div className="space-y-3">
+        <div className="rounded-xl bg-[#05060c] border border-white/10 p-4">
+          <div className="text-[11px] uppercase tracking-[0.15em] text-muted-foreground mb-3">Resumo por Status</div>
+          <div className="space-y-2.5">
             {etapaData.map((item, index) => (
               <div key={index} className="flex items-center justify-between">
                 <div className="flex items-center gap-3">
@@ -461,18 +439,23 @@ const DashboardTab = ({ vouchers }: { vouchers: Voucher[] }) => {
   }: { 
     title: string; value: number; icon: any; variant?: "default" | "warning" | "destructive" | "success"; delay?: number;
   }) => {
-    const colorClasses = { default: "text-primary", warning: "text-warning", destructive: "text-destructive", success: "text-success" };
-    const bgClasses = { default: "bg-primary/10", warning: "bg-warning/10", destructive: "bg-destructive/10", success: "bg-success/10" };
+    const colorClasses = { default: "text-primary", warning: "text-warning", destructive: "text-destructive", success: "text-green-500" };
 
     return (
-      <div className={cn("bg-card/80 backdrop-blur-sm border border-border/50 rounded-lg p-4 hover:border-primary/30 transition-all animate-fade-in")} style={{ animationDelay: `${delay}ms` }}>
-        <div className="flex items-center justify-between mb-2">
-          <span className="text-sm font-medium text-muted-foreground">{title}</span>
-          <div className={cn("p-2 rounded-lg", bgClasses[variant])}>
+      <div className="p-3 rounded-xl bg-[#0a0b10] border border-white/10 hover:border-primary/30 transition-all" style={{ animationDelay: `${delay}ms` }}>
+        <div className="flex items-center gap-3">
+          <div className={cn("p-2 rounded-full", 
+            variant === "default" ? "bg-primary/20" :
+            variant === "warning" ? "bg-warning/20" :
+            variant === "destructive" ? "bg-destructive/20" : "bg-green-500/20"
+          )}>
             <Icon className={cn("h-4 w-4", colorClasses[variant])} />
           </div>
+          <div>
+            <div className="text-[10px] uppercase tracking-[0.15em] text-muted-foreground">{title}</div>
+            <div className={cn("text-xl font-bold mt-0.5", colorClasses[variant])}>{value}</div>
+          </div>
         </div>
-        <div className={cn("text-3xl font-bold", colorClasses[variant])}>{value}</div>
       </div>
     );
   };
@@ -498,30 +481,30 @@ const DashboardTab = ({ vouchers }: { vouchers: Voucher[] }) => {
   };
 
   return (
-    <div className="space-y-8 animate-fade-in">
+    <div className="space-y-5 animate-fade-in">
       {/* Vouchers por Etapa */}
-      <section>
-        <h2 className="text-lg font-semibold mb-4 flex items-center gap-2 text-foreground/90">
-          <Users className="h-5 w-5 text-primary" />
+      <PageCard>
+        <div className="text-sm uppercase tracking-[0.18em] font-semibold mb-3 flex items-center gap-2">
+          <Users className="h-4 w-4 text-primary" />
           Vouchers por Etapa
-        </h2>
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        </div>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
           <DashboardMetricCard title="Pendentes - Voucher" value={dashboardMetrics.pendentesOperacao} icon={Clock} variant="default" delay={0} />
           <DashboardMetricCard title="Pendentes - Fiscal" value={dashboardMetrics.pendentesFiscal} icon={Clock} variant="default" delay={50} />
           <DashboardMetricCard title="Pendentes - Supervisor" value={dashboardMetrics.pendentesSupervisor} icon={AlertCircle} variant="warning" delay={100} />
           <DashboardMetricCard title="Pendentes - Financeiro" value={dashboardMetrics.pendentesFinanceiro} icon={Clock} variant="default" delay={150} />
         </div>
-      </section>
+      </PageCard>
 
       {/* Gargalos */}
-      <section>
-        <h2 className="text-lg font-semibold mb-4 flex items-center gap-2 text-foreground/90">
-          <AlertTriangle className="h-5 w-5 text-warning" />
+      <PageCard>
+        <div className="text-sm uppercase tracking-[0.18em] font-semibold mb-3 flex items-center gap-2">
+          <AlertTriangle className="h-4 w-4 text-warning" />
           Gargalos - Vouchers Acima do SLA
-        </h2>
+        </div>
         {bottleneckData.length > 0 ? (
-          <div className="bg-card/80 backdrop-blur-sm border border-border/50 rounded-xl p-6 animate-fade-in">
-            <ResponsiveContainer width="100%" height={250}>
+          <div className="rounded-xl bg-[#05060c] border border-white/10 p-4">
+            <ResponsiveContainer width="100%" height={220}>
               <BarChart data={bottleneckData} layout="vertical">
                 <CartesianGrid strokeDasharray="3 3" stroke="hsl(240, 5%, 20%)" />
                 <XAxis type="number" stroke="hsl(240, 5%, 50%)" fontSize={12} />
@@ -534,73 +517,74 @@ const DashboardTab = ({ vouchers }: { vouchers: Voucher[] }) => {
                 </Bar>
               </BarChart>
             </ResponsiveContainer>
-            <div className="flex justify-center gap-6 mt-4 text-xs">
-              <div className="flex items-center gap-2"><div className="w-3 h-3 rounded bg-green-500" /><span className="text-muted-foreground">&lt; 25% acima SLA</span></div>
-              <div className="flex items-center gap-2"><div className="w-3 h-3 rounded bg-warning" /><span className="text-muted-foreground">25-50% acima SLA</span></div>
-              <div className="flex items-center gap-2"><div className="w-3 h-3 rounded bg-destructive" /><span className="text-muted-foreground">&gt; 50% acima SLA</span></div>
+            <div className="flex justify-center gap-4 mt-3 text-[10px]">
+              <div className="flex items-center gap-1.5"><div className="w-2.5 h-2.5 rounded bg-green-500" /><span className="text-muted-foreground">&lt; 25%</span></div>
+              <div className="flex items-center gap-1.5"><div className="w-2.5 h-2.5 rounded bg-warning" /><span className="text-muted-foreground">25-50%</span></div>
+              <div className="flex items-center gap-1.5"><div className="w-2.5 h-2.5 rounded bg-destructive" /><span className="text-muted-foreground">&gt; 50%</span></div>
             </div>
           </div>
         ) : (
-          <div className="bg-card/80 backdrop-blur-sm border border-border/50 rounded-xl p-8 text-center text-muted-foreground animate-fade-in">
-            <CheckCircle2 className="h-8 w-8 mx-auto mb-2 text-green-500" />
-            Nenhum voucher acima do SLA no momento
+          <div className="rounded-xl bg-[#05060c] border border-white/10 p-6 text-center text-muted-foreground">
+            <CheckCircle2 className="h-6 w-6 mx-auto mb-2 text-green-500" />
+            <span className="text-sm">Nenhum voucher acima do SLA</span>
           </div>
         )}
-      </section>
+      </PageCard>
 
-      {/* Urgências */}
-      <section>
-        <h2 className="text-lg font-semibold mb-4 flex items-center gap-2 text-foreground/90">
-          <AlertCircle className="h-5 w-5 text-destructive" />
-          Vouchers Urgentes
-        </h2>
-        <div className="grid gap-4 sm:grid-cols-2">
-          <DashboardMetricCard title="Urgentes Real (Aprovação Manual)" value={dashboardMetrics.urgentesReal} icon={FileWarning} variant="destructive" delay={300} />
-          <DashboardMetricCard title="Urgentes Automático (ICMS/Armazenagem)" value={dashboardMetrics.urgentesAutomatico} icon={TrendingUp} variant="warning" delay={350} />
-        </div>
-      </section>
+      {/* Urgências e Vencimentos */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+        <PageCard>
+          <div className="text-sm uppercase tracking-[0.18em] font-semibold mb-3 flex items-center gap-2">
+            <AlertCircle className="h-4 w-4 text-destructive" />
+            Vouchers Urgentes
+          </div>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <DashboardMetricCard title="Urgentes Real" value={dashboardMetrics.urgentesReal} icon={FileWarning} variant="destructive" delay={300} />
+            <DashboardMetricCard title="Urgentes Automático" value={dashboardMetrics.urgentesAutomatico} icon={TrendingUp} variant="warning" delay={350} />
+          </div>
+        </PageCard>
 
-      {/* Vencimentos */}
-      <section>
-        <h2 className="text-lg font-semibold mb-4 flex items-center gap-2 text-foreground/90">
-          <Clock className="h-5 w-5 text-info" />
-          Vencimentos e Status
-        </h2>
-        <div className="grid gap-4 sm:grid-cols-3">
-          <DashboardMetricCard title="Vencendo em 24h" value={dashboardMetrics.vencendo24h} icon={Clock} variant="warning" delay={400} />
-          <DashboardMetricCard title="Vencidos" value={dashboardMetrics.vencidos} icon={AlertCircle} variant="destructive" delay={450} />
-          <DashboardMetricCard title="Baixados" value={dashboardMetrics.baixados} icon={CheckCircle2} variant="success" delay={500} />
-        </div>
-      </section>
+        <PageCard>
+          <div className="text-sm uppercase tracking-[0.18em] font-semibold mb-3 flex items-center gap-2">
+            <Clock className="h-4 w-4 text-info" />
+            Vencimentos e Status
+          </div>
+          <div className="grid gap-3 sm:grid-cols-3">
+            <DashboardMetricCard title="Vencendo 24h" value={dashboardMetrics.vencendo24h} icon={Clock} variant="warning" delay={400} />
+            <DashboardMetricCard title="Vencidos" value={dashboardMetrics.vencidos} icon={AlertCircle} variant="destructive" delay={450} />
+            <DashboardMetricCard title="Baixados" value={dashboardMetrics.baixados} icon={CheckCircle2} variant="success" delay={500} />
+          </div>
+        </PageCard>
+      </div>
 
       {/* Alertas de SLA */}
       {(dashboardMetrics.vencidos > 0 || dashboardMetrics.vencendo24h > 0) && (
-        <div className="border border-warning/30 bg-warning/5 backdrop-blur-sm rounded-xl p-6 animate-fade-in">
-          <h3 className="text-warning flex items-center gap-2 font-semibold mb-4">
-            <AlertCircle className="h-5 w-5" />
+        <PageCard>
+          <div className="text-sm uppercase tracking-[0.18em] font-semibold mb-3 flex items-center gap-2 text-warning">
+            <AlertCircle className="h-4 w-4" />
             Alertas de SLA
-          </h3>
-          <div className="space-y-3">
+          </div>
+          <div className="space-y-2">
             {dashboardMetrics.vencidos > 0 && (
-              <div className="flex items-center justify-between p-4 bg-destructive/10 border border-destructive/20 rounded-lg">
+              <div className="flex items-center justify-between p-3 bg-destructive/10 border border-destructive/20 rounded-lg">
                 <div>
-                  <p className="font-medium text-destructive">Vouchers Vencidos</p>
-                  <p className="text-sm text-muted-foreground">{dashboardMetrics.vencidos} voucher(s) já passaram do vencimento</p>
+                  <p className="text-sm font-medium text-destructive">Vouchers Vencidos</p>
+                  <p className="text-xs text-muted-foreground">{dashboardMetrics.vencidos} voucher(s) já passaram do vencimento</p>
                 </div>
-                <span className="bg-destructive text-destructive-foreground px-3 py-1 rounded-full text-sm font-medium">{dashboardMetrics.vencidos}</span>
+                <span className="bg-destructive text-destructive-foreground px-2.5 py-1 rounded-full text-xs font-medium">{dashboardMetrics.vencidos}</span>
               </div>
             )}
             {dashboardMetrics.vencendo24h > 0 && (
-              <div className="flex items-center justify-between p-4 bg-warning/10 border border-warning/20 rounded-lg">
+              <div className="flex items-center justify-between p-3 bg-warning/10 border border-warning/20 rounded-lg">
                 <div>
-                  <p className="font-medium text-warning">Atenção: Vencimento Próximo</p>
-                  <p className="text-sm text-muted-foreground">{dashboardMetrics.vencendo24h} voucher(s) vencem nas próximas 24 horas</p>
+                  <p className="text-sm font-medium text-warning">Atenção: Vencimento Próximo</p>
+                  <p className="text-xs text-muted-foreground">{dashboardMetrics.vencendo24h} voucher(s) vencem nas próximas 24 horas</p>
                 </div>
-                <span className="bg-warning text-warning-foreground px-3 py-1 rounded-full text-sm font-medium">{dashboardMetrics.vencendo24h}</span>
+                <span className="bg-warning text-warning-foreground px-2.5 py-1 rounded-full text-xs font-medium">{dashboardMetrics.vencendo24h}</span>
               </div>
             )}
           </div>
-        </div>
+        </PageCard>
       )}
     </div>
   );
@@ -955,10 +939,17 @@ const EsteiraIndex = () => {
   };
 
   return (
-    <PageLayout>
-      <main className="container mx-auto px-4 py-6 space-y-6 overflow-x-hidden">
-        {/* Metric Cards Row - Consolidated with drill-down */}
-        <div className="grid gap-3 sm:gap-4 grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 w-full overflow-hidden">
+    <PageLayout title="DACHSER" subtitle="Esteira de Vouchers">
+      {/* Metric Cards Row */}
+      <PageCard>
+        <div className="flex items-center justify-between mb-3">
+          <div className="text-sm uppercase tracking-[0.18em] font-semibold">Visão Geral</div>
+          <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/5 border border-white/12 text-xs">
+            <span className="w-2 h-2 rounded-full bg-primary" />
+            {vouchers.length} vouchers
+          </div>
+        </div>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
           <MetricCard
             title="EM ANDAMENTO"
             value={metrics.ativos}
@@ -1000,10 +991,10 @@ const EsteiraIndex = () => {
             onClick={() => setDrillDownFilter(drillDownFilter === "atividade" ? "all" : "atividade")}
           />
         </div>
-
+        
         {/* Active drill-down indicator */}
         {drillDownFilter !== "all" && (
-          <div className="flex items-center gap-2 text-sm text-muted-foreground bg-primary/10 border border-primary/20 rounded-lg px-4 py-2">
+          <div className="flex items-center gap-2 text-sm text-muted-foreground bg-primary/10 border border-primary/20 rounded-lg px-4 py-2 mt-3">
             <Filter className="h-4 w-4 text-primary" />
             <span>Filtrando por: <strong className="text-primary">
               {drillDownFilter === "ativos" && "Em Andamento"}
@@ -1021,19 +1012,20 @@ const EsteiraIndex = () => {
             </Button>
           </div>
         )}
+      </PageCard>
 
-        {/* Quick Filters Row */}
-        <div className="flex items-center gap-4 flex-wrap bg-card/40 backdrop-blur-sm border border-border/30 rounded-lg p-4">
+      {/* Quick Filters */}
+      <PageCard>
+        <div className="flex items-center gap-4 flex-wrap">
           <div className="flex items-center gap-2">
             <Filter className="h-4 w-4 text-muted-foreground" />
             <span className="text-sm font-medium text-muted-foreground">Filtros Rápidos:</span>
           </div>
           
-          {/* Filtro por Fornecedor */}
           <div className="flex items-center gap-2">
             <Building2 className="h-4 w-4 text-muted-foreground" />
             <Select value={quickFilterFornecedor} onValueChange={setQuickFilterFornecedor}>
-              <SelectTrigger className="w-[180px] bg-background/50 border-border/50">
+              <SelectTrigger className="w-[180px] bg-[#0a0b10] border-white/10">
                 <SelectValue placeholder="Fornecedor" />
               </SelectTrigger>
               <SelectContent>
@@ -1047,11 +1039,10 @@ const EsteiraIndex = () => {
             </Select>
           </div>
 
-          {/* Filtro por Cobrança */}
           <div className="flex items-center gap-2">
             <Users className="h-4 w-4 text-muted-foreground" />
             <Select value={quickFilterCobranca} onValueChange={setQuickFilterCobranca}>
-              <SelectTrigger className="w-[160px] bg-background/50 border-border/50">
+              <SelectTrigger className="w-[160px] bg-[#0a0b10] border-white/10">
                 <SelectValue placeholder="Cobrança" />
               </SelectTrigger>
               <SelectContent>
@@ -1062,7 +1053,6 @@ const EsteiraIndex = () => {
             </Select>
           </div>
 
-          {/* Clear filters */}
           {(quickFilterFornecedor !== "all" || quickFilterCobranca !== "all") && (
             <Button
               variant="ghost"
@@ -1077,119 +1067,124 @@ const EsteiraIndex = () => {
             </Button>
           )}
         </div>
+      </PageCard>
 
-        {/* Tabs and Actions Row */}
-        <div className="flex items-center justify-between gap-4 flex-wrap">
-          {/* Left: Tabs */}
-          <div className="flex items-center gap-1 bg-background/50 backdrop-blur-sm border border-border/30 rounded-lg p-1">
-            <button
-              onClick={() => setActiveTab("processos")}
-              className={cn(
-                "flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-all",
-                activeTab === "processos"
-                  ? "bg-card text-foreground border border-border/50"
-                  : "text-muted-foreground hover:text-foreground"
-              )}
-            >
-              <List className="h-4 w-4" />
-              Processos
-            </button>
-            <button
-              onClick={() => setActiveTab("dashboard")}
-              className={cn(
-                "flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-all",
-                activeTab === "dashboard"
-                  ? "bg-card text-foreground border border-border/50"
-                  : "text-muted-foreground hover:text-foreground"
-              )}
-            >
-              <LayoutDashboard className="h-4 w-4" />
-              Dashboard
-            </button>
-            <button
-              onClick={() => setActiveTab("analytics")}
-              className={cn(
-                "flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-all",
-                activeTab === "analytics"
-                  ? "bg-card text-foreground border border-border/50"
-                  : "text-muted-foreground hover:text-foreground"
-              )}
-            >
-              <BarChart3 className="h-4 w-4" />
-              Analytics
-            </button>
-            <button
-              onClick={() => setActiveTab("robo")}
-              className={cn(
-                "flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-all",
-                activeTab === "robo"
-                  ? "bg-card text-foreground border border-border/50"
-                  : "text-muted-foreground hover:text-foreground"
-              )}
-            >
-              <Bot className="h-4 w-4" />
-              Robô
-            </button>
-            <button
-              onClick={() => setActiveTab("relatorios")}
-              className={cn(
-                "flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-all",
-                activeTab === "relatorios"
-                  ? "bg-card text-foreground border border-border/50"
-                  : "text-muted-foreground hover:text-foreground"
-              )}
-            >
-              <FileSpreadsheet className="h-4 w-4" />
-              Relatórios
-            </button>
-          </div>
-
-          {/* Right: Actions */}
-          <div className="flex items-center gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => loadVouchers()}
-              className="gap-2 border-border/50 hover:border-primary/50"
-            >
-              <RefreshCw className="h-4 w-4" />
-              Atualizar
-            </Button>
-            <Button 
-              className="gap-2 bg-primary text-primary-foreground hover:bg-primary/90 shadow-lg shadow-primary/20" 
-              onClick={() => setShowCreateDialog(true)}
-            >
-              <Plus className="h-4 w-4" />
-              Enviar Voucher
-            </Button>
-          </div>
+      {/* Tabs and Actions Row */}
+      <div className="flex items-center justify-between gap-4 flex-wrap">
+        <div className="flex items-center gap-1 bg-[#0a0b10] border border-white/10 rounded-lg p-1">
+          <button
+            onClick={() => setActiveTab("processos")}
+            className={cn(
+              "flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-all",
+              activeTab === "processos"
+                ? "bg-primary/20 text-primary border border-primary/30"
+                : "text-muted-foreground hover:text-foreground"
+            )}
+          >
+            <List className="h-4 w-4" />
+            Processos
+          </button>
+          <button
+            onClick={() => setActiveTab("dashboard")}
+            className={cn(
+              "flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-all",
+              activeTab === "dashboard"
+                ? "bg-primary/20 text-primary border border-primary/30"
+                : "text-muted-foreground hover:text-foreground"
+            )}
+          >
+            <LayoutDashboard className="h-4 w-4" />
+            Dashboard
+          </button>
+          <button
+            onClick={() => setActiveTab("analytics")}
+            className={cn(
+              "flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-all",
+              activeTab === "analytics"
+                ? "bg-primary/20 text-primary border border-primary/30"
+                : "text-muted-foreground hover:text-foreground"
+            )}
+          >
+            <BarChart3 className="h-4 w-4" />
+            Analytics
+          </button>
+          <button
+            onClick={() => setActiveTab("robo")}
+            className={cn(
+              "flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-all",
+              activeTab === "robo"
+                ? "bg-primary/20 text-primary border border-primary/30"
+                : "text-muted-foreground hover:text-foreground"
+            )}
+          >
+            <Bot className="h-4 w-4" />
+            Robô
+          </button>
+          <button
+            onClick={() => setActiveTab("relatorios")}
+            className={cn(
+              "flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-all",
+              activeTab === "relatorios"
+                ? "bg-primary/20 text-primary border border-primary/30"
+                : "text-muted-foreground hover:text-foreground"
+            )}
+          >
+            <FileSpreadsheet className="h-4 w-4" />
+            Relatórios
+          </button>
         </div>
 
-        {/* Content Area */}
-        {loading ? (
+        <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => loadVouchers()}
+            className="gap-2 border-white/10 hover:border-primary/50"
+          >
+            <RefreshCw className="h-4 w-4" />
+            Atualizar
+          </Button>
+          <Button 
+            className="gap-2 bg-primary text-primary-foreground hover:bg-primary/90 shadow-lg shadow-primary/20" 
+            onClick={() => setShowCreateDialog(true)}
+          >
+            <Plus className="h-4 w-4" />
+            Enviar Voucher
+          </Button>
+        </div>
+      </div>
+
+      {/* Content Area */}
+      {loading ? (
+        <PageCard>
           <div className="text-center py-8 text-muted-foreground">Carregando...</div>
-        ) : activeTab === "processos" ? (
-          <div className="bg-card/60 backdrop-blur-sm border border-border/30 rounded-xl overflow-hidden shadow-lg animate-fade-in">
-            <VoucherTable 
-              vouchers={filteredVouchers} 
-              onViewDetails={handleViewDetails}
-              onEdit={handleEdit}
-              onDelete={handleDelete}
-              onGoBack={handleGoBack}
-              filters={filters}
-              onFilterChange={setFilters}
-            />
-          </div>
-        ) : activeTab === "dashboard" ? (
-          <DashboardTab vouchers={vouchers} />
-        ) : activeTab === "robo" ? (
-          <RoboTab />
-        ) : activeTab === "relatorios" ? (
-          <ReportsTab />
-        ) : (
-          <AnalyticsDashboard vouchers={vouchers} />
-        )}
-      </main>
+        </PageCard>
+      ) : activeTab === "processos" ? (
+        <PageCard padding="sm">
+          <VoucherTable 
+            vouchers={filteredVouchers} 
+            onViewDetails={handleViewDetails}
+            onEdit={handleEdit}
+            onDelete={handleDelete}
+            onGoBack={handleGoBack}
+            filters={filters}
+            onFilterChange={setFilters}
+          />
+        </PageCard>
+      ) : activeTab === "dashboard" ? (
+        <DashboardTab vouchers={vouchers} />
+      ) : activeTab === "robo" ? (
+        <RoboTab />
+      ) : activeTab === "relatorios" ? (
+        <ReportsTab />
+      ) : (
+        <AnalyticsDashboard vouchers={vouchers} />
+      )}
+
+      {/* Footer */}
+      <div className="text-center text-[10px] text-muted-foreground uppercase tracking-[0.16em]">
+        Z3US.AI • For Logistics
+      </div>
 
       <CreateVoucherDialog open={showCreateDialog} onOpenChange={setShowCreateDialog} onSuccess={loadVouchers} />
       <EditVoucherDialog 
