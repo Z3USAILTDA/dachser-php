@@ -3,26 +3,26 @@ import { useNavigate } from "react-router-dom";
 import { PageLayout } from "@/components/layout/PageLayout";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { supabase } from "@/integrations/supabase/client";
-import { useUserRole } from "@/hooks/useUserRole";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
-import { Loader2, Users } from "lucide-react";
+import { Loader2, Users, ShieldCheck, ShieldX } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { UserRole } from "@/types/voucher";
 
-interface UserWithRole {
-  id: string;
-  name: string;
+interface MariaDBUser {
+  id: number;
+  username: string;
   email: string;
-  active: boolean;
-  role: UserRole;
-  created_at: string;
+  is_admin: number;
+  esteira_role: string | null;
+  esteira_active: number | null;
 }
 
-const roleLabels: Record<UserRole, string> = {
+const roleLabels: Record<UserRole | "SEM_ACESSO", string> = {
+  SEM_ACESSO: "Sem Acesso",
   ADMIN: "Administrador",
   GESTOR_OPERACAO: "Gestor Operação",
   GESTOR_FISCAL: "Gestor Fiscal",
@@ -34,7 +34,8 @@ const roleLabels: Record<UserRole, string> = {
   FINANCEIRO: "Financeiro",
 };
 
-const roleColors: Record<UserRole, string> = {
+const roleColors: Record<UserRole | "SEM_ACESSO", string> = {
+  SEM_ACESSO: "bg-muted text-muted-foreground",
   ADMIN: "bg-destructive text-destructive-foreground",
   GESTOR_OPERACAO: "bg-primary/80 text-primary-foreground",
   GESTOR_FISCAL: "bg-primary/70 text-primary-foreground",
@@ -48,13 +49,28 @@ const roleColors: Record<UserRole, string> = {
 
 export default function EsteiraUserManagement() {
   const navigate = useNavigate();
-  const { role, loading: roleLoading, isAdmin } = useUserRole();
-  const [users, setUsers] = useState<UserWithRole[]>([]);
+  const [users, setUsers] = useState<MariaDBUser[]>([]);
   const [loading, setLoading] = useState(true);
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [checkingAdmin, setCheckingAdmin] = useState(true);
   const { toast } = useToast();
 
+  // Check if current user is admin from localStorage
   useEffect(() => {
-    if (!roleLoading && !isAdmin) {
+    const userData = localStorage.getItem("dachser_user");
+    if (userData) {
+      try {
+        const user = JSON.parse(userData);
+        setIsAdmin(user.is_admin === 1 || user.is_admin === true);
+      } catch {
+        setIsAdmin(false);
+      }
+    }
+    setCheckingAdmin(false);
+  }, []);
+
+  useEffect(() => {
+    if (!checkingAdmin && !isAdmin) {
       toast({
         title: "Acesso negado",
         description: "Você não tem permissão para acessar esta página",
@@ -62,52 +78,28 @@ export default function EsteiraUserManagement() {
       });
       navigate("/fin/esteira");
     }
-  }, [isAdmin, roleLoading, navigate, toast]);
+  }, [isAdmin, checkingAdmin, navigate, toast]);
 
   useEffect(() => {
-    if (isAdmin) {
+    if (isAdmin && !checkingAdmin) {
       fetchUsers();
     }
-  }, [isAdmin]);
+  }, [isAdmin, checkingAdmin]);
 
   const fetchUsers = async () => {
     try {
       setLoading(true);
       
-      const { data: profilesData, error: profilesError } = await (supabase as any)
-        .from("profiles")
-        .select("*")
-        .order("created_at", { ascending: false });
-
-      if (profilesError) throw profilesError;
-
-      const { data: rolesData, error: rolesError } = await (supabase as any)
-        .from("user_roles")
-        .select("*");
-
-      if (rolesError) throw rolesError;
-
-      const usersWithRoles = (profilesData || []).map((profile: any) => {
-        const userRole = (rolesData || []).find((r: any) => r.user_id === profile.id);
-        const rawRole = userRole?.role || profile.role;
-        
-        let validRole: UserRole = rawRole as UserRole;
-        if (rawRole === "GESTOR") {
-          validRole = "GESTOR_OPERACAO";
-        }
-        
-        return {
-          id: profile.id,
-          name: profile.name || profile.email || "Usuário",
-          email: profile.email || "",
-          active: profile.active !== false,
-          role: validRole || "OPERACAO",
-          created_at: profile.created_at,
-        };
+      const { data, error } = await supabase.functions.invoke("mariadb-proxy", {
+        body: { action: "get_esteira_users" },
       });
 
-      setUsers(usersWithRoles);
+      if (error) throw error;
+      if (!data.success) throw new Error(data.error || "Erro ao carregar usuários");
+
+      setUsers(data.users || []);
     } catch (error: any) {
+      console.error("Erro ao carregar usuários:", error);
       toast({
         title: "Erro ao carregar usuários",
         description: error.message,
@@ -118,49 +110,51 @@ export default function EsteiraUserManagement() {
     }
   };
 
-  const handleRoleChange = async (userId: string, newRole: UserRole) => {
+  const handleRoleChange = async (userId: number, newRole: string) => {
     try {
-      const { error: roleError } = await (supabase as any)
-        .from("user_roles")
-        .update({ role: newRole })
-        .eq("user_id", userId);
+      const { data, error } = await supabase.functions.invoke("mariadb-proxy", {
+        body: { 
+          action: "update_esteira_role",
+          userId,
+          esteira_role: newRole === "SEM_ACESSO" ? null : newRole,
+        },
+      });
 
-      if (roleError) throw roleError;
-
-      const { error: profileError } = await (supabase as any)
-        .from("profiles")
-        .update({ role: newRole })
-        .eq("id", userId);
-
-      if (profileError) throw profileError;
+      if (error) throw error;
+      if (!data.success) throw new Error(data.error || "Erro ao atualizar role");
 
       toast({
-        title: "Role atualizado",
-        description: "O papel do usuário foi alterado com sucesso",
+        title: "Função atualizada",
+        description: `A função do usuário foi alterada para ${roleLabels[newRole as UserRole | "SEM_ACESSO"]}`,
       });
 
       fetchUsers();
     } catch (error: any) {
       toast({
-        title: "Erro ao atualizar role",
+        title: "Erro ao atualizar função",
         description: error.message,
         variant: "destructive",
       });
     }
   };
 
-  const handleToggleActive = async (userId: string, currentActive: boolean) => {
+  const handleToggleActive = async (userId: number, currentActive: number | null) => {
+    const newActive = currentActive !== 1;
     try {
-      const { error } = await (supabase as any)
-        .from("profiles")
-        .update({ active: !currentActive })
-        .eq("id", userId);
+      const { data, error } = await supabase.functions.invoke("mariadb-proxy", {
+        body: { 
+          action: "toggle_esteira_active",
+          userId,
+          esteira_active: newActive,
+        },
+      });
 
       if (error) throw error;
+      if (!data.success) throw new Error(data.error || "Erro ao alterar status");
 
       toast({
-        title: currentActive ? "Usuário desativado" : "Usuário ativado",
-        description: `O usuário foi ${currentActive ? "desativado" : "ativado"} com sucesso`,
+        title: newActive ? "Usuário ativado" : "Usuário desativado",
+        description: `O usuário foi ${newActive ? "ativado" : "desativado"} na Esteira`,
       });
 
       fetchUsers();
@@ -173,7 +167,7 @@ export default function EsteiraUserManagement() {
     }
   };
 
-  if (roleLoading || !isAdmin) {
+  if (checkingAdmin || !isAdmin) {
     return (
       <PageLayout>
         <div className="flex-1 flex items-center justify-center min-h-[60vh]">
@@ -183,11 +177,20 @@ export default function EsteiraUserManagement() {
     );
   }
 
+  const getUserRole = (user: MariaDBUser): UserRole | "SEM_ACESSO" => {
+    if (!user.esteira_role) return "SEM_ACESSO";
+    return user.esteira_role as UserRole;
+  };
+
+  const isUserActive = (user: MariaDBUser): boolean => {
+    return user.esteira_active === 1;
+  };
+
   return (
     <PageLayout>
       <PageHeader 
-        title="Gestão de Usuários"
-        subtitle="Gerencie usuários e suas permissões no sistema"
+        title="Gestão de Usuários - Esteira"
+        subtitle="Gerencie usuários e suas permissões no sistema de vouchers"
       />
       
       <main className="container mx-auto px-4 py-6">
@@ -199,9 +202,9 @@ export default function EsteiraUserManagement() {
                   <Users className="h-6 w-6 text-primary" />
                 </div>
                 <div>
-                  <CardTitle>Usuários do Sistema</CardTitle>
+                  <CardTitle>Usuários do Sistema DACHSER</CardTitle>
                   <CardDescription>
-                    Gerencie permissões dos usuários
+                    Defina a função de cada usuário para acesso à Esteira de Vouchers
                   </CardDescription>
                 </div>
               </div>
@@ -218,11 +221,11 @@ export default function EsteiraUserManagement() {
                 <Table>
                   <TableHeader>
                     <TableRow className="bg-muted/30 hover:bg-muted/30">
-                      <TableHead>Nome</TableHead>
+                      <TableHead>Usuário</TableHead>
                       <TableHead>Email</TableHead>
-                      <TableHead>Role</TableHead>
-                      <TableHead>Status</TableHead>
-                      <TableHead>Data Criação</TableHead>
+                      <TableHead>Admin Sistema</TableHead>
+                      <TableHead>Função Esteira</TableHead>
+                      <TableHead>Status Esteira</TableHead>
                       <TableHead className="text-right">Ações</TableHead>
                     </TableRow>
                   </TableHeader>
@@ -234,58 +237,90 @@ export default function EsteiraUserManagement() {
                         </TableCell>
                       </TableRow>
                     ) : (
-                      users.map((user, index) => (
-                        <TableRow 
-                          key={user.id} 
-                          className="even:bg-muted/20 hover:bg-muted/30 transition-colors animate-fade-in"
-                          style={{ animationDelay: `${index * 50}ms` }}
-                        >
-                          <TableCell className="font-medium">{user.name}</TableCell>
-                          <TableCell className="text-muted-foreground">{user.email}</TableCell>
-                          <TableCell>
-                            <Badge className={roleColors[user.role]}>
-                              {roleLabels[user.role]}
-                            </Badge>
-                          </TableCell>
-                          <TableCell>
-                            <Badge variant={user.active ? "default" : "secondary"} className={user.active ? "bg-success text-success-foreground" : ""}>
-                              {user.active ? "Ativo" : "Inativo"}
-                            </Badge>
-                          </TableCell>
-                          <TableCell className="text-muted-foreground">
-                            {user.created_at ? new Date(user.created_at).toLocaleDateString("pt-BR") : "-"}
-                          </TableCell>
-                          <TableCell className="text-right space-x-2">
-                            <Select
-                              value={user.role}
-                              onValueChange={(value: UserRole) => handleRoleChange(user.id, value)}
-                            >
-                              <SelectTrigger className="w-[140px] inline-flex bg-input/50 border-border/50">
-                                <SelectValue />
-                              </SelectTrigger>
-                              <SelectContent className="bg-card border-border/50">
-                                <SelectItem value="OPERACAO">Operação</SelectItem>
-                                <SelectItem value="FISCAL">Fiscal</SelectItem>
-                                <SelectItem value="SUPERVISOR">Supervisor</SelectItem>
-                                <SelectItem value="FINANCEIRO">Financeiro</SelectItem>
-                                <SelectItem value="GESTOR_OPERACAO">Gestor Operação</SelectItem>
-                                <SelectItem value="GESTOR_FISCAL">Gestor Fiscal</SelectItem>
-                                <SelectItem value="GESTOR_SUPERVISOR">Gestor Supervisor</SelectItem>
-                                <SelectItem value="GESTOR_FINANCEIRO">Gestor Financeiro</SelectItem>
-                                <SelectItem value="ADMIN">Admin</SelectItem>
-                              </SelectContent>
-                            </Select>
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={() => handleToggleActive(user.id, user.active)}
-                              className="border-border/50 hover:bg-muted/50"
-                            >
-                              {user.active ? "Desativar" : "Ativar"}
-                            </Button>
-                          </TableCell>
-                        </TableRow>
-                      ))
+                      users.map((user, index) => {
+                        const userRole = getUserRole(user);
+                        const userActive = isUserActive(user);
+                        
+                        return (
+                          <TableRow 
+                            key={user.id} 
+                            className="even:bg-muted/20 hover:bg-muted/30 transition-colors animate-fade-in"
+                            style={{ animationDelay: `${index * 50}ms` }}
+                          >
+                            <TableCell className="font-medium">{user.username}</TableCell>
+                            <TableCell className="text-muted-foreground">{user.email || "-"}</TableCell>
+                            <TableCell>
+                              {user.is_admin === 1 ? (
+                                <Badge className="bg-destructive text-destructive-foreground">
+                                  <ShieldCheck className="h-3 w-3 mr-1" />
+                                  Admin
+                                </Badge>
+                              ) : (
+                                <span className="text-muted-foreground text-sm">-</span>
+                              )}
+                            </TableCell>
+                            <TableCell>
+                              <Badge className={roleColors[userRole]}>
+                                {roleLabels[userRole]}
+                              </Badge>
+                            </TableCell>
+                            <TableCell>
+                              {userRole === "SEM_ACESSO" ? (
+                                <span className="text-muted-foreground text-sm">-</span>
+                              ) : (
+                                <Badge 
+                                  variant={userActive ? "default" : "secondary"} 
+                                  className={userActive ? "bg-success text-success-foreground" : ""}
+                                >
+                                  {userActive ? "Ativo" : "Inativo"}
+                                </Badge>
+                              )}
+                            </TableCell>
+                            <TableCell className="text-right space-x-2">
+                              <Select
+                                value={userRole}
+                                onValueChange={(value) => handleRoleChange(user.id, value)}
+                              >
+                                <SelectTrigger className="w-[160px] inline-flex bg-input/50 border-border/50">
+                                  <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent className="bg-card border-border/50">
+                                  <SelectItem value="SEM_ACESSO">Sem Acesso</SelectItem>
+                                  <SelectItem value="OPERACAO">Operação</SelectItem>
+                                  <SelectItem value="FISCAL">Fiscal</SelectItem>
+                                  <SelectItem value="SUPERVISOR">Supervisor</SelectItem>
+                                  <SelectItem value="FINANCEIRO">Financeiro</SelectItem>
+                                  <SelectItem value="GESTOR_OPERACAO">Gestor Operação</SelectItem>
+                                  <SelectItem value="GESTOR_FISCAL">Gestor Fiscal</SelectItem>
+                                  <SelectItem value="GESTOR_SUPERVISOR">Gestor Supervisor</SelectItem>
+                                  <SelectItem value="GESTOR_FINANCEIRO">Gestor Financeiro</SelectItem>
+                                  <SelectItem value="ADMIN">Admin</SelectItem>
+                                </SelectContent>
+                              </Select>
+                              {userRole !== "SEM_ACESSO" && (
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => handleToggleActive(user.id, user.esteira_active)}
+                                  className="border-border/50 hover:bg-muted/50"
+                                >
+                                  {userActive ? (
+                                    <>
+                                      <ShieldX className="h-3 w-3 mr-1" />
+                                      Desativar
+                                    </>
+                                  ) : (
+                                    <>
+                                      <ShieldCheck className="h-3 w-3 mr-1" />
+                                      Ativar
+                                    </>
+                                  )}
+                                </Button>
+                              )}
+                            </TableCell>
+                          </TableRow>
+                        );
+                      })
                     )}
                   </TableBody>
                 </Table>
