@@ -150,39 +150,28 @@ const handler = async (req: Request): Promise<Response> => {
           );
         }
         
-        // Get column names from tspovoucher to build dynamic query
-        const columnsResult = await mariaClient.query(
-          `SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS 
-           WHERE TABLE_SCHEMA = 'dados_dachser' AND TABLE_NAME = 'tspovoucher'`
-        );
-        const availableColumns = (columnsResult || []).map((c: any) => c.COLUMN_NAME);
-        console.log("[voucher-integrate-rm] Colunas disponíveis em tspovoucher:", availableColumns);
-        
-        // Build SELECT clause based on available columns
-        const selectFields = [
-          availableColumns.includes('IdMovRM') ? 'v.IdMovRM' : 'NULL AS IdMovRM',
-          availableColumns.includes('IdLanRM') ? 'v.IdLanRM' : 'NULL AS IdLanRM',
-          availableColumns.includes('DataVencimento') ? 'v.DataVencimento AS vencimento' : 'NULL AS vencimento',
-          availableColumns.includes('NomeDaCobranca') ? 'v.NomeDaCobranca AS fornecedor' : 
-            (availableColumns.includes('Fornecedor') ? 'v.Fornecedor AS fornecedor' : 'NULL AS fornecedor'),
-          availableColumns.includes('NomeDoBeneficiario') ? 'v.NomeDoBeneficiario AS beneficiario' : 
-            (availableColumns.includes('Beneficiario') ? 'v.Beneficiario AS beneficiario' : 'v.NomeDaCobranca AS beneficiario'),
-          availableColumns.includes('FormaDePagamento') ? 'v.FormaDePagamento AS forma_pagamento' : 
-            (availableColumns.includes('TipoPagamento') ? 'v.TipoPagamento AS forma_pagamento' : 'NULL AS forma_pagamento'),
-          'b.ValorBaixado AS valor',
-          'b.DataDaBaixa AS data_baixa',
-          'b.StatusLan AS status_lan'
-        ];
-        
         // Buscar dados do voucher em tspovoucher JOIN tbaixas
+        // Colunas tspovoucher: IdMovRM, IdLanRM, DataVencimento, HashComprovante, NomeDaCobranca, NomeDoBeneficiarioPag, FormaDePagamento
+        // Colunas tbaixas: IdLancamentoRM, TipoPagRec, IdBaixa, ValorBaixado, DataDaBaixa, UsuarioBaixa, StatusLan
         const result = await mariaClient.query(
-          `SELECT ${selectFields.join(', ')}
+          `SELECT 
+            v.IdMovRM,
+            v.IdLanRM,
+            v.DataVencimento AS vencimento,
+            v.NomeDaCobranca AS fornecedor,
+            v.NomeDoBeneficiarioPag AS beneficiario,
+            v.FormaDePagamento AS forma_pagamento,
+            b.ValorBaixado AS valor,
+            b.DataDaBaixa AS data_baixa,
+            b.StatusLan AS status_lan
           FROM dados_dachser.tspovoucher v
           LEFT JOIN dados_dachser.tbaixas b ON v.IdLanRM = b.IdLancamentoRM
           WHERE v.IdLanRM = ? OR v.IdMovRM = ?
           LIMIT 1`,
           [numeroVoucherRM, numeroVoucherRM]
         );
+        
+        console.log("[voucher-integrate-rm] Query result:", result);
 
         if (!result || result.length === 0) {
           await mariaClient.close();
