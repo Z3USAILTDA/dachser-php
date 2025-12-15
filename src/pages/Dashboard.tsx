@@ -237,82 +237,121 @@ const Dashboard = () => {
               </div>
 
               {/* Children Menu - Below Parent */}
-              {item.children && activeMenu === item.id && <div className="flex flex-col items-center mt-6 animate-in fade-in duration-300">
+              {item.children && activeMenu === item.id && (
+                <div className="flex flex-col items-center mt-6 animate-in fade-in duration-300">
                   {/* Vertical Line */}
                   <div className="w-0.5 h-5 bg-primary" />
-                  
+
                   {/* Children Row */}
-                  <div className="relative flex gap-6">
-                    {/* Horizontal line spanning from first to last child center */}
-                    {item.children.length > 1 && <div className="absolute top-0 h-0.5 bg-primary" style={{
-                left: '90px',
-                right: '90px'
-              }} />}
-                    
-                    {item.children.map((child, idx) => <div key={idx} className="relative flex flex-col items-center pt-0 w-[180px]">
-                        {/* Vertical connector */}
-                        <div className="w-0.5 h-3 bg-primary" />
-                        <div className="w-1.5 h-1.5 rounded-full bg-primary -mt-0.5" />
-                        
-                        {child.expandableId ? <div className="relative mt-2 flex flex-col items-center">
-                            <button onClick={() => setExpandedChild(expandedChild === child.expandableId ? null : child.expandableId!)} className={`min-w-[180px] px-5 py-2.5 rounded-full text-sm font-medium transition-all duration-200 cursor-pointer ${expandedChild === child.expandableId ? 'bg-primary text-primary-foreground border border-primary shadow-[0_0_14px_hsl(var(--primary)/0.7)]' : 'text-foreground hover:-translate-y-0.5'}`} style={{
-                    ...(expandedChild !== child.expandableId && {
-                      background: 'rgba(4, 10, 30, 0.75)',
-                      boxShadow: '0 12px 30px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(255, 255, 255, 0.08)',
-                      backdropFilter: 'blur(18px)',
-                      border: '1px solid rgba(255, 255, 255, 0.08)'
-                    })
-                  }}>
+                  <div className="relative w-[min(980px,92vw)] overflow-x-auto px-4 pb-3">
+                    <div className="relative flex gap-10 min-w-max mx-auto">
+                      {/* Horizontal line spanning across the row */}
+                      {item.children.length > 1 && (
+                        <div className="absolute top-0 left-0 right-0 h-0.5 bg-primary" />
+                      )}
+
+                      {item.children.map((child, idx) => (
+                        <div key={idx} className="relative flex flex-col items-center pt-0 flex-shrink-0 min-w-max">
+                          {/* Vertical connector */}
+                          <div className="w-0.5 h-3 bg-primary" />
+                          <div className="w-1.5 h-1.5 rounded-full bg-primary -mt-0.5" />
+
+                          {child.expandableId ? (
+                            <div className="relative mt-2 flex flex-col items-center">
+                              <button
+                                onClick={() =>
+                                  setExpandedChild(
+                                    expandedChild === child.expandableId ? null : child.expandableId!
+                                  )
+                                }
+                                className={`px-5 py-2.5 rounded-full text-sm font-medium transition-all duration-200 cursor-pointer whitespace-nowrap text-center min-w-max ${
+                                  expandedChild === child.expandableId
+                                    ? 'bg-primary text-primary-foreground border border-primary shadow-[0_0_14px_hsl(var(--primary)/0.7)]'
+                                    : 'text-foreground hover:-translate-y-0.5'
+                                }`}
+                                style={{
+                                  ...(expandedChild !== child.expandableId && {
+                                    background: 'rgba(4, 10, 30, 0.75)',
+                                    boxShadow:
+                                      '0 12px 30px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(255, 255, 255, 0.08)',
+                                    backdropFilter: 'blur(18px)',
+                                    border: '1px solid rgba(255, 255, 255, 0.08)'
+                                  })
+                                }}
+                              >
+                                {child.label}
+                              </button>
+
+                              {/* Sub Children */}
+                              <div
+                                className={`absolute top-full left-1/2 -translate-x-1/2 z-20 flex flex-col items-center mt-10 w-[min(980px,92vw)] transition-all duration-300 ${
+                                  expandedChild === child.expandableId && child.subChildren
+                                    ? 'opacity-100 translate-y-0'
+                                    : 'opacity-0 -translate-y-2 pointer-events-none'
+                                }`}
+                              >
+                                {child.subChildren && (
+                                  <>
+                                    {/* Vertical Line */}
+                                    <div className="w-0.5 h-5 bg-primary" />
+
+                                    {/* Sub-children Row */}
+                                    <div className="relative w-full overflow-x-auto px-4 pb-3">
+                                      <div className="relative flex gap-10 min-w-max mx-auto">
+                                        {child.subChildren.length > 1 && (
+                                          <div className="absolute top-0 left-0 right-0 h-0.5 bg-primary" />
+                                        )}
+
+                                        {child.subChildren.map((subChild, subIdx) => (
+                                          <div
+                                            key={subIdx}
+                                            className="relative flex flex-col items-center pt-0 flex-shrink-0 min-w-max"
+                                          >
+                                            <div className="w-0.5 h-3 bg-primary" />
+                                            <div className="w-1.5 h-1.5 rounded-full bg-primary -mt-0.5" />
+
+                                            <button
+                                              onClick={() => navigate(subChild.href)}
+                                              className="mt-2 px-5 py-2.5 rounded-full text-foreground text-sm font-medium hover:-translate-y-0.5 transition-all duration-200 whitespace-nowrap text-center flex-shrink-0 min-w-max"
+                                              style={{
+                                                background: 'rgba(4, 10, 30, 0.75)',
+                                                boxShadow:
+                                                  '0 12px 30px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(255, 255, 255, 0.08)',
+                                                backdropFilter: 'blur(18px)',
+                                                border: '1px solid rgba(255, 255, 255, 0.08)'
+                                              }}
+                                            >
+                                              {subChild.label}
+                                            </button>
+                                          </div>
+                                        ))}
+                                      </div>
+                                    </div>
+                                  </>
+                                )}
+                              </div>
+                            </div>
+                          ) : (
+                            <button
+                              onClick={() => child.href && navigate(child.href)}
+                              className="mt-2 px-5 py-2.5 rounded-full text-foreground text-sm font-medium hover:-translate-y-0.5 transition-all duration-200 text-center whitespace-nowrap"
+                              style={{
+                                background: 'rgba(4, 10, 30, 0.75)',
+                                boxShadow:
+                                  '0 12px 30px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(255, 255, 255, 0.08)',
+                                backdropFilter: 'blur(18px)',
+                                border: '1px solid rgba(255, 255, 255, 0.08)'
+                              }}
+                            >
                               {child.label}
                             </button>
-                            
-                            {/* Sub Children - Positioned absolutely to not affect parent layout */}
-                            <div className={`absolute top-full left-1/2 -translate-x-1/2 z-20 flex flex-col items-center mt-10 w-[min(980px,92vw)] transition-all duration-300 ${expandedChild === child.expandableId && child.subChildren ? 'opacity-100 translate-y-0' : 'opacity-0 -translate-y-2 pointer-events-none'}`}>
-                              {child.subChildren && <>
-                                  {/* Vertical Line */}
-                                  <div className="w-0.5 h-5 bg-primary" />
-                                  
-                                  {/* Children Row */}
-                                  <div className="relative flex w-full gap-6 overflow-x-auto px-4 pb-3">
-                                    {/* Horizontal line spanning across the row */}
-                                    {child.subChildren.length > 1 && (
-                                      <div className="absolute top-0 left-2 right-2 h-0.5 bg-primary" />
-                                    )}
-                                    
-                                    {child.subChildren.map((subChild, subIdx) => (
-                                      <div key={subIdx} className="relative flex flex-col items-center pt-0 flex-shrink-0">
-                                        {/* Vertical connector */}
-                                        <div className="w-0.5 h-3 bg-primary" />
-                                        <div className="w-1.5 h-1.5 rounded-full bg-primary -mt-0.5" />
-                                        
-                                        <button
-                                          onClick={() => navigate(subChild.href)}
-                                          className="mt-2 px-5 py-2.5 rounded-full text-foreground text-sm font-medium hover:-translate-y-0.5 transition-all duration-200 whitespace-nowrap text-center flex-shrink-0"
-                                          style={{
-                                            background: 'rgba(4, 10, 30, 0.75)',
-                                            boxShadow: '0 12px 30px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(255, 255, 255, 0.08)',
-                                            backdropFilter: 'blur(18px)',
-                                            border: '1px solid rgba(255, 255, 255, 0.08)'
-                                          }}
-                                        >
-                                          {subChild.label}
-                                        </button>
-                                      </div>
-                                    ))}
-                                  </div>
-                                </>}
-                            </div>
-                          </div> : <button onClick={() => child.href && navigate(child.href)} className="mt-2 px-5 py-2.5 rounded-full text-foreground text-sm font-medium hover:-translate-y-0.5 transition-all duration-200 text-center whitespace-nowrap" style={{
-                  background: 'rgba(4, 10, 30, 0.75)',
-                  boxShadow: '0 12px 30px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(255, 255, 255, 0.08)',
-                  backdropFilter: 'blur(18px)',
-                  border: '1px solid rgba(255, 255, 255, 0.08)'
-                }}>
-                            {child.label}
-                          </button>}
-                      </div>)}
+                          )}
+                        </div>
+                      ))}
+                    </div>
                   </div>
-                </div>}
+                </div>
+              )}
             </div>)}
         </div>
       </main>
