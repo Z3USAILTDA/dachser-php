@@ -1979,7 +1979,7 @@ const Index = () => {
                                     <div
                                       className="absolute left-0 h-full rounded-l-full transition-all duration-700 ease-out"
                                       style={{
-                                        width: `${getTimelineProgress(awb.last_event)}%`,
+                                        width: `${isCompanyNotRegistered ? 0 : getTimelineProgress(awb.last_event)}%`,
                                         background: progressGradient,
                                         borderTopRightRadius:
                                           getTimelineProgress(awb.last_event) === 100 ? "9999px" : "0",
