@@ -1,7 +1,6 @@
 import { useState, useEffect } from "react";
 import { User, Session } from "@supabase/supabase-js";
 import { supabase } from "@/integrations/supabase/client";
-import { useNavigate } from "react-router-dom";
 
 interface MariaDBUser {
   id: number;
@@ -16,7 +15,21 @@ export function useAuth() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // Set up auth state listener for Supabase
+    // First, check localStorage for MariaDB users (primary auth method)
+    const storedUser = localStorage.getItem("user");
+    if (storedUser) {
+      try {
+        const parsedUser = JSON.parse(storedUser);
+        setUser(parsedUser);
+        setLoading(false);
+        return; // MariaDB user found, no need to check Supabase
+      } catch (e) {
+        console.warn("Failed to parse stored user:", e);
+        localStorage.removeItem("user");
+      }
+    }
+
+    // Set up auth state listener for Supabase (fallback)
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       (event, session) => {
         setSession(session);
@@ -32,12 +45,6 @@ export function useAuth() {
       setSession(session);
       if (session?.user) {
         setUser(session.user);
-      } else {
-        // Fallback to localStorage for MariaDB users
-        const storedUser = localStorage.getItem("user");
-        if (storedUser) {
-          setUser(JSON.parse(storedUser));
-        }
       }
       setLoading(false);
     });
