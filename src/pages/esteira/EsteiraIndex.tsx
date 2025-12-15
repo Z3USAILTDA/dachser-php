@@ -1,10 +1,8 @@
 import { useState, useEffect, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
-import { PageLayout } from "@/components/layout/PageLayout";
-import { PageCard } from "@/components/layout/PageCard";
+import { ArrowLeft, Plus, Package, AlertTriangle, AlertCircle, Clock, List, BarChart3, RefreshCw, TrendingUp, DollarSign, Calendar, Bot, FileSpreadsheet, Filter, Building2, Users, LayoutDashboard, CheckCircle2, FileWarning, HelpCircle, Receipt } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Plus, Package, AlertTriangle, AlertCircle, Clock, List, BarChart3, RefreshCw, TrendingUp, DollarSign, Calendar, Bot, FileSpreadsheet, Filter, Building2, Users, LayoutDashboard, CheckCircle2, FileWarning } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { Voucher, EtapaAtual, ETAPA_LABELS, SLA_POR_ETAPA } from "@/types/voucher";
@@ -17,6 +15,8 @@ import { CreateVoucherDialog } from "@/components/esteira/CreateVoucherDialog";
 import { EditVoucherDialog } from "@/components/esteira/EditVoucherDialog";
 import { RoboTab } from "@/components/tabs/RoboTab";
 import { ReportsTab } from "@/components/tabs/ReportsTab";
+import { MetricCard } from "@/components/cct/MetricCard";
+import dachserBg from "@/assets/dachser-background.jpg";
 
 interface DashboardMetrics {
   ativos: number;
@@ -26,65 +26,8 @@ interface DashboardMetrics {
 }
 
 type DrillDownFilter = "all" | "ativos" | "sla" | "pendencias" | "atividade";
+type DataSource = "supabase" | "mariadb";
 
-const MetricCard = ({ 
-  title, 
-  value, 
-  subtitle,
-  icon: Icon, 
-  variant = "default",
-  delay = 0,
-  isActive = false,
-  onClick
-}: { 
-  title: string; 
-  value: number; 
-  subtitle: string;
-  icon: React.ElementType; 
-  variant?: "default" | "warning" | "critical" | "info";
-  delay?: number;
-  isActive?: boolean;
-  onClick?: () => void;
-}) => {
-  const colorClasses = {
-    default: "text-primary",
-    warning: "text-warning",
-    critical: "text-destructive",
-    info: "text-info",
-  };
-
-  return (
-    <div 
-      className={cn(
-        "p-4 rounded-xl bg-[#0a0b10] border cursor-pointer transition-all",
-        "hover:border-primary/40",
-        isActive 
-          ? "border-primary ring-2 ring-primary/30" 
-          : "border-white/10"
-      )}
-      style={{ animationDelay: `${delay}ms` }}
-      onClick={onClick}
-    >
-      <div className="flex items-center gap-3">
-        <div className={cn("p-2.5 rounded-full", 
-          variant === "default" ? "bg-primary/20" :
-          variant === "warning" ? "bg-warning/20" :
-          variant === "critical" ? "bg-destructive/20" : "bg-info/20"
-        )}>
-          <Icon className={cn("h-4 w-4", colorClasses[variant])} />
-        </div>
-        <div className="flex-1 min-w-0">
-          <div className="text-[10px] uppercase tracking-[0.15em] text-muted-foreground">{title}</div>
-          <div className={cn("text-xl font-bold mt-0.5", colorClasses[variant])}>{value}</div>
-          <div className="text-[10px] text-muted-foreground mt-0.5 truncate">{subtitle}</div>
-        </div>
-      </div>
-      {isActive && (
-        <div className="mt-3 h-0.5 bg-primary rounded-full" />
-      )}
-    </div>
-  );
-};
 
 const CHART_COLORS = {
   primary: "hsl(38, 92%, 50%)",
@@ -481,25 +424,25 @@ const DashboardTab = ({ vouchers }: { vouchers: Voucher[] }) => {
   };
 
   return (
-    <div className="space-y-5 animate-fade-in">
+    <div className="space-y-6 animate-fade-in">
       {/* Vouchers por Etapa */}
-      <PageCard>
-        <div className="text-sm uppercase tracking-[0.18em] font-semibold mb-3 flex items-center gap-2">
+      <div className="rounded-2xl p-5 bg-[rgba(5,6,18,0.9)] border border-[rgba(255,255,255,0.12)] backdrop-blur-[18px] shadow-[0_18px_40px_rgba(0,0,0,0.85)]">
+        <div className="text-[0.75rem] uppercase tracking-wider text-[#aaaaaa] mb-4 flex items-center gap-2">
           <Users className="h-4 w-4 text-primary" />
           Vouchers por Etapa
         </div>
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-          <DashboardMetricCard title="Pendentes - Voucher" value={dashboardMetrics.pendentesOperacao} icon={Clock} variant="default" delay={0} />
-          <DashboardMetricCard title="Pendentes - Fiscal" value={dashboardMetrics.pendentesFiscal} icon={Clock} variant="default" delay={50} />
-          <DashboardMetricCard title="Pendentes - Supervisor" value={dashboardMetrics.pendentesSupervisor} icon={AlertCircle} variant="warning" delay={100} />
-          <DashboardMetricCard title="Pendentes - Financeiro" value={dashboardMetrics.pendentesFinanceiro} icon={Clock} variant="default" delay={150} />
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <MetricCard title="Pendentes - Voucher" value={dashboardMetrics.pendentesOperacao} icon={Clock} subtitle="Etapa OPERACAO" />
+          <MetricCard title="Pendentes - Fiscal" value={dashboardMetrics.pendentesFiscal} icon={Clock} subtitle="Etapa FISCAL" />
+          <MetricCard title="Pendentes - Supervisor" value={dashboardMetrics.pendentesSupervisor} icon={AlertCircle} variant="warning" subtitle="Etapa SUPERVISOR" />
+          <MetricCard title="Pendentes - Financeiro" value={dashboardMetrics.pendentesFinanceiro} icon={Clock} subtitle="Etapa FINANCEIRO" />
         </div>
-      </PageCard>
+      </div>
 
       {/* Gargalos */}
-      <PageCard>
-        <div className="text-sm uppercase tracking-[0.18em] font-semibold mb-3 flex items-center gap-2">
-          <AlertTriangle className="h-4 w-4 text-warning" />
+      <div className="rounded-2xl p-5 bg-[rgba(5,6,18,0.9)] border border-[rgba(255,255,255,0.12)] backdrop-blur-[18px] shadow-[0_18px_40px_rgba(0,0,0,0.85)]">
+        <div className="text-[0.75rem] uppercase tracking-wider text-[#aaaaaa] mb-4 flex items-center gap-2">
+          <AlertTriangle className="h-4 w-4 text-yellow-400" />
           Gargalos - Vouchers Acima do SLA
         </div>
         {bottleneckData.length > 0 ? (
@@ -518,73 +461,73 @@ const DashboardTab = ({ vouchers }: { vouchers: Voucher[] }) => {
               </BarChart>
             </ResponsiveContainer>
             <div className="flex justify-center gap-4 mt-3 text-[10px]">
-              <div className="flex items-center gap-1.5"><div className="w-2.5 h-2.5 rounded bg-green-500" /><span className="text-muted-foreground">&lt; 25%</span></div>
-              <div className="flex items-center gap-1.5"><div className="w-2.5 h-2.5 rounded bg-warning" /><span className="text-muted-foreground">25-50%</span></div>
-              <div className="flex items-center gap-1.5"><div className="w-2.5 h-2.5 rounded bg-destructive" /><span className="text-muted-foreground">&gt; 50%</span></div>
+              <div className="flex items-center gap-1.5"><div className="w-2.5 h-2.5 rounded bg-emerald-500" /><span className="text-[#888888]">&lt; 25%</span></div>
+              <div className="flex items-center gap-1.5"><div className="w-2.5 h-2.5 rounded bg-yellow-400" /><span className="text-[#888888]">25-50%</span></div>
+              <div className="flex items-center gap-1.5"><div className="w-2.5 h-2.5 rounded bg-rose-500" /><span className="text-[#888888]">&gt; 50%</span></div>
             </div>
           </div>
         ) : (
-          <div className="rounded-xl bg-[#05060c] border border-white/10 p-6 text-center text-muted-foreground">
-            <CheckCircle2 className="h-6 w-6 mx-auto mb-2 text-green-500" />
+          <div className="rounded-xl bg-[#05060c] border border-white/10 p-6 text-center text-[#888888]">
+            <CheckCircle2 className="h-6 w-6 mx-auto mb-2 text-emerald-400" />
             <span className="text-sm">Nenhum voucher acima do SLA</span>
           </div>
         )}
-      </PageCard>
+      </div>
 
       {/* Urgências e Vencimentos */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
-        <PageCard>
-          <div className="text-sm uppercase tracking-[0.18em] font-semibold mb-3 flex items-center gap-2">
-            <AlertCircle className="h-4 w-4 text-destructive" />
+        <div className="rounded-2xl p-5 bg-[rgba(5,6,18,0.9)] border border-[rgba(255,255,255,0.12)] backdrop-blur-[18px] shadow-[0_18px_40px_rgba(0,0,0,0.85)]">
+          <div className="text-[0.75rem] uppercase tracking-wider text-[#aaaaaa] mb-4 flex items-center gap-2">
+            <AlertCircle className="h-4 w-4 text-rose-400" />
             Vouchers Urgentes
           </div>
-          <div className="grid gap-3 sm:grid-cols-2">
-            <DashboardMetricCard title="Urgentes Real" value={dashboardMetrics.urgentesReal} icon={FileWarning} variant="destructive" delay={300} />
-            <DashboardMetricCard title="Urgentes Automático" value={dashboardMetrics.urgentesAutomatico} icon={TrendingUp} variant="warning" delay={350} />
+          <div className="grid gap-4 sm:grid-cols-2">
+            <MetricCard title="Urgentes Real" value={dashboardMetrics.urgentesReal} icon={FileWarning} variant="critical" subtitle="Aprovação manual" />
+            <MetricCard title="Urgentes Automático" value={dashboardMetrics.urgentesAutomatico} icon={TrendingUp} variant="warning" subtitle="ICMS/Armazenagem" />
           </div>
-        </PageCard>
+        </div>
 
-        <PageCard>
-          <div className="text-sm uppercase tracking-[0.18em] font-semibold mb-3 flex items-center gap-2">
-            <Clock className="h-4 w-4 text-info" />
+        <div className="rounded-2xl p-5 bg-[rgba(5,6,18,0.9)] border border-[rgba(255,255,255,0.12)] backdrop-blur-[18px] shadow-[0_18px_40px_rgba(0,0,0,0.85)]">
+          <div className="text-[0.75rem] uppercase tracking-wider text-[#aaaaaa] mb-4 flex items-center gap-2">
+            <Clock className="h-4 w-4 text-blue-400" />
             Vencimentos e Status
           </div>
-          <div className="grid gap-3 sm:grid-cols-3">
-            <DashboardMetricCard title="Vencendo 24h" value={dashboardMetrics.vencendo24h} icon={Clock} variant="warning" delay={400} />
-            <DashboardMetricCard title="Vencidos" value={dashboardMetrics.vencidos} icon={AlertCircle} variant="destructive" delay={450} />
-            <DashboardMetricCard title="Baixados" value={dashboardMetrics.baixados} icon={CheckCircle2} variant="success" delay={500} />
+          <div className="grid gap-4 sm:grid-cols-3">
+            <MetricCard title="Vencendo 24h" value={dashboardMetrics.vencendo24h} icon={Clock} variant="warning" subtitle="Atenção" />
+            <MetricCard title="Vencidos" value={dashboardMetrics.vencidos} icon={AlertCircle} variant="critical" subtitle="Atrasados" />
+            <MetricCard title="Baixados" value={dashboardMetrics.baixados} icon={CheckCircle2} variant="success" subtitle="Finalizados" />
           </div>
-        </PageCard>
+        </div>
       </div>
 
       {/* Alertas de SLA */}
       {(dashboardMetrics.vencidos > 0 || dashboardMetrics.vencendo24h > 0) && (
-        <PageCard>
-          <div className="text-sm uppercase tracking-[0.18em] font-semibold mb-3 flex items-center gap-2 text-warning">
+        <div className="rounded-2xl p-5 bg-[rgba(5,6,18,0.9)] border border-yellow-500/30 backdrop-blur-[18px] shadow-[0_18px_40px_rgba(0,0,0,0.85)]">
+          <div className="text-[0.75rem] uppercase tracking-wider text-yellow-400 mb-4 flex items-center gap-2">
             <AlertCircle className="h-4 w-4" />
             Alertas de SLA
           </div>
           <div className="space-y-2">
             {dashboardMetrics.vencidos > 0 && (
-              <div className="flex items-center justify-between p-3 bg-destructive/10 border border-destructive/20 rounded-lg">
+              <div className="flex items-center justify-between p-3 bg-rose-500/10 border border-rose-500/30 rounded-lg">
                 <div>
-                  <p className="text-sm font-medium text-destructive">Vouchers Vencidos</p>
-                  <p className="text-xs text-muted-foreground">{dashboardMetrics.vencidos} voucher(s) já passaram do vencimento</p>
+                  <p className="text-sm font-medium text-rose-400">Vouchers Vencidos</p>
+                  <p className="text-xs text-[#888888]">{dashboardMetrics.vencidos} voucher(s) já passaram do vencimento</p>
                 </div>
-                <span className="bg-destructive text-destructive-foreground px-2.5 py-1 rounded-full text-xs font-medium">{dashboardMetrics.vencidos}</span>
+                <span className="bg-rose-500 text-white px-2.5 py-1 rounded-full text-xs font-medium">{dashboardMetrics.vencidos}</span>
               </div>
             )}
             {dashboardMetrics.vencendo24h > 0 && (
-              <div className="flex items-center justify-between p-3 bg-warning/10 border border-warning/20 rounded-lg">
+              <div className="flex items-center justify-between p-3 bg-yellow-500/10 border border-yellow-500/30 rounded-lg">
                 <div>
-                  <p className="text-sm font-medium text-warning">Atenção: Vencimento Próximo</p>
-                  <p className="text-xs text-muted-foreground">{dashboardMetrics.vencendo24h} voucher(s) vencem nas próximas 24 horas</p>
+                  <p className="text-sm font-medium text-yellow-400">Atenção: Vencimento Próximo</p>
+                  <p className="text-xs text-[#888888]">{dashboardMetrics.vencendo24h} voucher(s) vencem nas próximas 24 horas</p>
                 </div>
-                <span className="bg-warning text-warning-foreground px-2.5 py-1 rounded-full text-xs font-medium">{dashboardMetrics.vencendo24h}</span>
+                <span className="bg-yellow-500 text-black px-2.5 py-1 rounded-full text-xs font-medium">{dashboardMetrics.vencendo24h}</span>
               </div>
             )}
           </div>
-        </PageCard>
+        </div>
       )}
     </div>
   );
@@ -593,7 +536,9 @@ const DashboardTab = ({ vouchers }: { vouchers: Voucher[] }) => {
 const EsteiraIndex = () => {
   const [vouchers, setVouchers] = useState<Voucher[]>([]);
   const [loading, setLoading] = useState(true);
+  const [isRefetching, setIsRefetching] = useState(false);
   const [activeTab, setActiveTab] = useState<"processos" | "dashboard" | "analytics" | "robo" | "relatorios">("processos");
+  const [dataSource, setDataSource] = useState<DataSource>("supabase");
   const [filters, setFilters] = useState<FilterValues>({
     search: "",
     etapa: "all",
@@ -625,6 +570,9 @@ const EsteiraIndex = () => {
   const navigate = useNavigate();
   const { role, isOperacao, isFiscal, isFinanceiro, isAdmin, isGestor } = useUserRole();
   
+  const storedUser = localStorage.getItem("user");
+  const user = storedUser ? JSON.parse(storedUser) : null;
+  
   // Enable automatic sync of voucher updates to MariaDB
   useVoucherSync();
 
@@ -637,70 +585,125 @@ const EsteiraIndex = () => {
     getCurrentUser();
   }, []);
 
-  const loadVouchers = async () => {
+  const loadVouchers = async (source?: DataSource) => {
+    const currentSource = source || dataSource;
     try {
       setLoading(true);
-      const { data, error } = await (supabase as any).from("vouchers").select(`
-          *,
-          anexos:voucher_anexos(id, tipo, file_name, file_url, file_size),
-          logs:voucher_logs(id, data_hora, acao, detalhe, user_id)
-        `).order("created_at", { ascending: false });
+      setIsRefetching(true);
+      
+      let mappedVouchers: Voucher[] = [];
+      
+      if (currentSource === "mariadb") {
+        // Load from MariaDB t_vouchers
+        const { data, error } = await supabase.functions.invoke("mariadb-proxy", {
+          body: { action: "get_vouchers_esteira", limit: 500 }
+        });
+        
+        if (error) throw error;
+        
+        mappedVouchers = (data?.vouchers || []).map((v: any) => ({
+          id: v.id,
+          numeroSPO: v.numero_spo,
+          fornecedor: v.fornecedor,
+          cnpjFornecedor: v.cnpj_fornecedor,
+          valor: v.valor ? parseFloat(v.valor) : null,
+          moeda: v.moeda || "BRL",
+          vencimento: new Date(v.vencimento),
+          dataEmissaoDocumento: v.data_emissao_documento ? new Date(v.data_emissao_documento) : undefined,
+          cobrancaEmNomeDe: v.cobranca_em_nome_de || "DACHSER",
+          formaPagamento: v.forma_pagamento || "BOLETO",
+          tipoDocumento: v.tipo_documento,
+          filial: v.filial,
+          remessa: v.remessa,
+          urgente: v.urgente === 1 || v.urgencia_tipo !== "NORMAL",
+          urgenciaTipo: v.urgencia_tipo || "NORMAL",
+          comentariosOperacao: v.comentarios_operacao,
+          comentariosFiscal: v.comentarios_fiscal,
+          comentariosFinanceiro: v.comentarios_financeiro,
+          ajusteOperacao: v.ajuste_operacao,
+          ajusteFiscal: v.ajuste_fiscal,
+          etapaAtual: v.etapa_atual || "OPERACAO",
+          statusBaixa: v.status_baixa || "PENDENTE",
+          statusFinanceiro: v.status_financeiro || "PENDENTE",
+          statusEnvioCliente: v.status_envio_cliente,
+          criadoPorUserId: v.criado_por_user_id,
+          responsavelOperacaoUserId: v.responsavel_operacao_user_id,
+          responsavelFiscalUserId: v.responsavel_fiscal_user_id,
+          responsavelSupervisorUserId: v.responsavel_supervisor_user_id,
+          responsavelFinanceiroUserId: v.responsavel_financeiro_user_id,
+          aprovadoPorUserId: v.aprovado_por_user_id,
+          clienteEmail: v.cliente_email,
+          createdAt: new Date(v.created_at),
+          updatedAt: new Date(v.updated_at || v.created_at),
+          anexos: [],
+          logs: []
+        }));
+        
+      } else {
+        // Load from Supabase vouchers table
+        const { data, error } = await (supabase as any).from("vouchers").select(`
+            *,
+            anexos:voucher_anexos(id, tipo, file_name, file_url, file_size),
+            logs:voucher_logs(id, data_hora, acao, detalhe, user_id)
+          `).order("created_at", { ascending: false });
 
-      if (error) throw error;
+        if (error) throw error;
 
-      const mappedVouchers: Voucher[] = (data || []).map((v: any) => ({
-        id: v.id,
-        numeroSPO: v.numero_spo,
-        fornecedor: v.fornecedor,
-        cnpjFornecedor: v.cnpj_fornecedor,
-        valor: v.valor,
-        moeda: v.moeda || "BRL",
-        vencimento: new Date(v.vencimento),
-        dataEmissaoDocumento: v.data_emissao_documento ? new Date(v.data_emissao_documento) : undefined,
-        cobrancaEmNomeDe: v.cobranca_em_nome_de,
-        formaPagamento: v.forma_pagamento,
-        tipoDocumento: v.tipo_documento,
-        filial: v.filial,
-        remessa: v.remessa,
-        urgente: v.urgencia_tipo !== "NORMAL",
-        urgenciaTipo: v.urgencia_tipo || "NORMAL",
-        comentariosOperacao: v.comentarios_operacao,
-        comentariosFiscal: v.comentarios_fiscal,
-        comentariosFinanceiro: v.comentarios_financeiro,
-        ajusteOperacao: v.ajuste_operacao,
-        ajusteFiscal: v.ajuste_fiscal,
-        etapaAtual: v.etapa_atual,
-        statusBaixa: v.status_baixa || "PENDENTE",
-        statusFinanceiro: v.status_financeiro || "PENDENTE",
-        statusEnvioCliente: v.status_envio_cliente,
-        criadoPorUserId: v.criado_por_user_id,
-        responsavelOperacaoUserId: v.responsavel_operacao_user_id,
-        responsavelFiscalUserId: v.responsavel_fiscal_user_id,
-        responsavelSupervisorUserId: v.responsavel_supervisor_user_id,
-        responsavelFinanceiroUserId: v.responsavel_financeiro_user_id,
-        aprovadoPorUserId: v.aprovado_por_user_id,
-        clienteEmail: v.cliente_email,
-        createdAt: new Date(v.created_at),
-        updatedAt: new Date(v.updated_at),
-        anexos: (v.anexos || []).map((a: any) => ({
-          id: a.id,
-          voucherId: v.id,
-          tipo: a.tipo,
-          fileName: a.file_name,
-          fileUrl: a.file_url,
-          fileSize: a.file_size,
-          uploadedByUserId: v.criado_por_user_id,
-          createdAt: new Date()
-        })),
-        logs: (v.logs || []).map((l: any) => ({
-          id: l.id,
-          voucherId: v.id,
-          dataHora: new Date(l.data_hora),
-          userId: l.user_id,
-          acao: l.acao,
-          detalhe: l.detalhe
-        }))
-      }));
+        mappedVouchers = (data || []).map((v: any) => ({
+          id: v.id,
+          numeroSPO: v.numero_spo,
+          fornecedor: v.fornecedor,
+          cnpjFornecedor: v.cnpj_fornecedor,
+          valor: v.valor,
+          moeda: v.moeda || "BRL",
+          vencimento: new Date(v.vencimento),
+          dataEmissaoDocumento: v.data_emissao_documento ? new Date(v.data_emissao_documento) : undefined,
+          cobrancaEmNomeDe: v.cobranca_em_nome_de,
+          formaPagamento: v.forma_pagamento,
+          tipoDocumento: v.tipo_documento,
+          filial: v.filial,
+          remessa: v.remessa,
+          urgente: v.urgencia_tipo !== "NORMAL",
+          urgenciaTipo: v.urgencia_tipo || "NORMAL",
+          comentariosOperacao: v.comentarios_operacao,
+          comentariosFiscal: v.comentarios_fiscal,
+          comentariosFinanceiro: v.comentarios_financeiro,
+          ajusteOperacao: v.ajuste_operacao,
+          ajusteFiscal: v.ajuste_fiscal,
+          etapaAtual: v.etapa_atual,
+          statusBaixa: v.status_baixa || "PENDENTE",
+          statusFinanceiro: v.status_financeiro || "PENDENTE",
+          statusEnvioCliente: v.status_envio_cliente,
+          criadoPorUserId: v.criado_por_user_id,
+          responsavelOperacaoUserId: v.responsavel_operacao_user_id,
+          responsavelFiscalUserId: v.responsavel_fiscal_user_id,
+          responsavelSupervisorUserId: v.responsavel_supervisor_user_id,
+          responsavelFinanceiroUserId: v.responsavel_financeiro_user_id,
+          aprovadoPorUserId: v.aprovado_por_user_id,
+          clienteEmail: v.cliente_email,
+          createdAt: new Date(v.created_at),
+          updatedAt: new Date(v.updated_at),
+          anexos: (v.anexos || []).map((a: any) => ({
+            id: a.id,
+            voucherId: v.id,
+            tipo: a.tipo,
+            fileName: a.file_name,
+            fileUrl: a.file_url,
+            fileSize: a.file_size,
+            uploadedByUserId: v.criado_por_user_id,
+            createdAt: new Date()
+          })),
+          logs: (v.logs || []).map((l: any) => ({
+            id: l.id,
+            voucherId: v.id,
+            dataHora: new Date(l.data_hora),
+            userId: l.user_id,
+            acao: l.acao,
+            detalhe: l.detalhe
+          }))
+        }));
+      }
+      
       setVouchers(mappedVouchers);
       
       // Calculate metrics (consolidated)
@@ -746,6 +749,7 @@ const EsteiraIndex = () => {
       });
     } finally {
       setLoading(false);
+      setIsRefetching(false);
     }
   };
 
@@ -939,250 +943,331 @@ const EsteiraIndex = () => {
   };
 
   return (
-    <PageLayout title="DACHSER" subtitle="Esteira de Vouchers">
-      {/* Metric Cards Row */}
-      <PageCard>
-        <div className="flex items-center justify-between mb-3">
-          <div className="text-sm uppercase tracking-[0.18em] font-semibold">Visão Geral</div>
-          <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/5 border border-white/12 text-xs">
-            <span className="w-2 h-2 rounded-full bg-primary" />
-            {vouchers.length} vouchers
-          </div>
-        </div>
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-          <MetricCard
-            title="EM ANDAMENTO"
-            value={metrics.ativos}
-            subtitle="Vouchers ativos"
-            icon={Package}
-            variant="default"
-            delay={0}
-            isActive={drillDownFilter === "ativos"}
-            onClick={() => setDrillDownFilter(drillDownFilter === "ativos" ? "all" : "ativos")}
-          />
-          <MetricCard
-            title="SLA"
-            value={metrics.slaAtencao}
-            subtitle="Vencendo/Vencidos"
-            icon={AlertTriangle}
-            variant={metrics.slaAtencao > 0 ? "critical" : "warning"}
-            delay={50}
-            isActive={drillDownFilter === "sla"}
-            onClick={() => setDrillDownFilter(drillDownFilter === "sla" ? "all" : "sla")}
-          />
-          <MetricCard
-            title="PENDÊNCIAS"
-            value={metrics.pendenciasFinanceiras}
-            subtitle="Accrual/Comprovante/Exceção"
-            icon={FileWarning}
-            variant={metrics.pendenciasFinanceiras > 0 ? "warning" : "info"}
-            delay={100}
-            isActive={drillDownFilter === "pendencias"}
-            onClick={() => setDrillDownFilter(drillDownFilter === "pendencias" ? "all" : "pendencias")}
-          />
-          <MetricCard
-            title="ATIVIDADE"
-            value={metrics.eventos24h}
-            subtitle="Últimas 24h"
-            icon={Clock}
-            variant="info"
-            delay={150}
-            isActive={drillDownFilter === "atividade"}
-            onClick={() => setDrillDownFilter(drillDownFilter === "atividade" ? "all" : "atividade")}
-          />
-        </div>
+    <div className="min-h-screen relative overflow-x-hidden">
+      {/* Background with image and gradient overlay */}
+      <div className="fixed inset-0 z-0">
+        <div 
+          className="absolute inset-0"
+          style={{
+            backgroundImage: `url(${dachserBg})`,
+            backgroundSize: 'cover',
+            backgroundPosition: 'center',
+          }}
+        />
+        <div 
+          className="absolute inset-0"
+          style={{
+            background: 'linear-gradient(120deg, rgba(4, 17, 45, 0.92), rgba(26, 93, 173, 0.55))',
+          }}
+        />
         
-        {/* Active drill-down indicator */}
-        {drillDownFilter !== "all" && (
-          <div className="flex items-center gap-2 text-sm text-muted-foreground bg-primary/10 border border-primary/20 rounded-lg px-4 py-2 mt-3">
-            <Filter className="h-4 w-4 text-primary" />
-            <span>Filtrando por: <strong className="text-primary">
-              {drillDownFilter === "ativos" && "Em Andamento"}
-              {drillDownFilter === "sla" && "SLA (Vencendo/Vencidos)"}
-              {drillDownFilter === "pendencias" && "Pendências Financeiras"}
-              {drillDownFilter === "atividade" && "Atividade 24h"}
-            </strong></span>
-            <Button 
-              variant="ghost" 
-              size="sm" 
-              className="ml-auto h-6 px-2 text-xs"
-              onClick={() => setDrillDownFilter("all")}
-            >
-              Limpar
-            </Button>
-          </div>
-        )}
-      </PageCard>
+        {/* Radial gradient overlay */}
+        <div 
+          className="absolute inset-0"
+          style={{
+            background: `
+              radial-gradient(ellipse at 20% 20%, rgba(245, 184, 67, 0.12) 0%, transparent 50%),
+              radial-gradient(ellipse at 80% 80%, rgba(245, 184, 67, 0.08) 0%, transparent 50%)
+            `
+          }}
+        />
+        
+        {/* Animated Lines */}
+        <div className="absolute inset-0 opacity-20">
+          {[...Array(6)].map((_, i) => (
+            <div
+              key={`line-${i}`}
+              className="absolute h-full w-px bg-gradient-to-b from-primary/70 to-primary/10"
+              style={{
+                left: `${15 + i * 14}%`,
+                transform: `skewX(${-20 + i * 8}deg)`,
+              }}
+            />
+          ))}
+        </div>
 
-      {/* Quick Filters */}
-      <PageCard>
-        <div className="flex items-center gap-4 flex-wrap">
-          <div className="flex items-center gap-2">
-            <Filter className="h-4 w-4 text-muted-foreground" />
-            <span className="text-sm font-medium text-muted-foreground">Filtros Rápidos:</span>
+        {/* Floating Particles */}
+        {[...Array(20)].map((_, i) => (
+          <div
+            key={`particle-${i}`}
+            className="absolute w-1 h-1 rounded-full bg-primary/40 animate-float"
+            style={{
+              left: `${Math.random() * 100}%`,
+              top: `${Math.random() * 100}%`,
+              animationDelay: `${Math.random() * 5}s`,
+              animationDuration: `${4 + Math.random() * 4}s`,
+            }}
+          />
+        ))}
+      </div>
+
+      {/* Top Header Bar */}
+      <div className="relative z-10 max-w-[95%] mx-auto px-2 pt-5 pb-4 flex items-center justify-between">
+        {/* Left - Back + Header */}
+        <div className="flex items-center gap-[18px]">
+          <button
+            onClick={() => navigate("/dashboard")}
+            className="w-8 h-8 rounded-full border border-white/12 bg-[rgba(5,6,18,0.9)] text-white/80 flex items-center justify-center backdrop-blur-sm hover:bg-[rgba(5,6,18,1)] hover:text-white transition-all"
+          >
+            <ArrowLeft size={16} />
+          </button>
+
+          <header>
+            <h1 className="text-[1.6rem] tracking-[0.24em] uppercase text-[#f5f5f5]">DACHSER</h1>
+            <p className="text-[0.9rem] text-[#aaaaaa] mt-0.5">Esteira de Vouchers — Gestão Financeira</p>
+            <div className="flex gap-1.5 mt-1.5">
+              <span className="w-1.5 h-1.5 rounded-full bg-[#ffc800] shadow-[0_0_10px_rgba(255,200,0,.9)]" />
+              <span className="w-1.5 h-1.5 rounded-full bg-[#ffc800] shadow-[0_0_10px_rgba(255,200,0,.9)]" />
+              <span className="w-1.5 h-1.5 rounded-full bg-[#ffc800] shadow-[0_0_10px_rgba(255,200,0,.9)]" />
+            </div>
+          </header>
+        </div>
+
+        {/* Right - Actions and user */}
+        <div className="flex items-center gap-2.5 text-[0.85rem]">
+          {/* Data Source Toggle */}
+          <div className="flex items-center gap-1 px-2 py-1 rounded-full bg-[rgba(0,0,0,.7)] border border-[rgba(255,255,255,.25)]">
+            <button
+              onClick={() => { setDataSource("supabase"); loadVouchers("supabase"); }}
+              className={cn(
+                "px-3 py-1 rounded-full text-[0.75rem] transition-all",
+                dataSource === "supabase" 
+                  ? "bg-primary/20 text-primary border border-primary/30" 
+                  : "text-[#aaaaaa] hover:text-white"
+              )}
+            >
+              Supabase
+            </button>
+            <button
+              onClick={() => { setDataSource("mariadb"); loadVouchers("mariadb"); }}
+              className={cn(
+                "px-3 py-1 rounded-full text-[0.75rem] transition-all",
+                dataSource === "mariadb" 
+                  ? "bg-primary/20 text-primary border border-primary/30" 
+                  : "text-[#aaaaaa] hover:text-white"
+              )}
+            >
+              MariaDB
+            </button>
           </div>
           
-          <div className="flex items-center gap-2">
-            <Building2 className="h-4 w-4 text-muted-foreground" />
-            <Select value={quickFilterFornecedor} onValueChange={setQuickFilterFornecedor}>
-              <SelectTrigger className="w-[180px] bg-[#0a0b10] border-white/10">
-                <SelectValue placeholder="Fornecedor" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Todos Fornecedores</SelectItem>
-                {uniqueFornecedores.map((fornecedor) => (
-                  <SelectItem key={fornecedor} value={fornecedor}>
-                    {fornecedor}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-
-          <div className="flex items-center gap-2">
-            <Users className="h-4 w-4 text-muted-foreground" />
-            <Select value={quickFilterCobranca} onValueChange={setQuickFilterCobranca}>
-              <SelectTrigger className="w-[160px] bg-[#0a0b10] border-white/10">
-                <SelectValue placeholder="Cobrança" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Todas Cobranças</SelectItem>
-                <SelectItem value="DACHSER">DACHSER</SelectItem>
-                <SelectItem value="CLIENTE">CLIENTE</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-
-          {(quickFilterFornecedor !== "all" || quickFilterCobranca !== "all") && (
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => {
-                setQuickFilterFornecedor("all");
-                setQuickFilterCobranca("all");
-              }}
-              className="text-muted-foreground hover:text-foreground"
-            >
-              Limpar filtros
-            </Button>
-          )}
-        </div>
-      </PageCard>
-
-      {/* Tabs and Actions Row */}
-      <div className="flex items-center justify-between gap-4 flex-wrap">
-        <div className="flex items-center gap-1 bg-[#0a0b10] border border-white/10 rounded-lg p-1">
-          <button
-            onClick={() => setActiveTab("processos")}
-            className={cn(
-              "flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-all",
-              activeTab === "processos"
-                ? "bg-primary/20 text-primary border border-primary/30"
-                : "text-muted-foreground hover:text-foreground"
-            )}
+          <button 
+            onClick={() => loadVouchers()} 
+            disabled={isRefetching} 
+            className="flex items-center gap-2 px-4 py-2 rounded-full border border-[rgba(255,255,255,.25)] bg-[rgba(0,0,0,.7)] text-[#aaaaaa] hover:text-white hover:bg-[rgba(0,0,0,.9)] transition disabled:opacity-50 text-[0.8rem]"
           >
-            <List className="h-4 w-4" />
-            Processos
-          </button>
-          <button
-            onClick={() => setActiveTab("dashboard")}
-            className={cn(
-              "flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-all",
-              activeTab === "dashboard"
-                ? "bg-primary/20 text-primary border border-primary/30"
-                : "text-muted-foreground hover:text-foreground"
-            )}
-          >
-            <LayoutDashboard className="h-4 w-4" />
-            Dashboard
-          </button>
-          <button
-            onClick={() => setActiveTab("analytics")}
-            className={cn(
-              "flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-all",
-              activeTab === "analytics"
-                ? "bg-primary/20 text-primary border border-primary/30"
-                : "text-muted-foreground hover:text-foreground"
-            )}
-          >
-            <BarChart3 className="h-4 w-4" />
-            Analytics
-          </button>
-          <button
-            onClick={() => setActiveTab("robo")}
-            className={cn(
-              "flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-all",
-              activeTab === "robo"
-                ? "bg-primary/20 text-primary border border-primary/30"
-                : "text-muted-foreground hover:text-foreground"
-            )}
-          >
-            <Bot className="h-4 w-4" />
-            Robô
-          </button>
-          <button
-            onClick={() => setActiveTab("relatorios")}
-            className={cn(
-              "flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-all",
-              activeTab === "relatorios"
-                ? "bg-primary/20 text-primary border border-primary/30"
-                : "text-muted-foreground hover:text-foreground"
-            )}
-          >
-            <FileSpreadsheet className="h-4 w-4" />
-            Relatórios
-          </button>
-        </div>
-
-        <div className="flex items-center gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => loadVouchers()}
-            className="gap-2 border-white/10 hover:border-primary/50"
-          >
-            <RefreshCw className="h-4 w-4" />
+            <RefreshCw className={`h-4 w-4 ${isRefetching ? "animate-spin" : ""}`} />
             Atualizar
-          </Button>
+          </button>
+          
           <Button 
-            className="gap-2 bg-primary text-primary-foreground hover:bg-primary/90 shadow-lg shadow-primary/20" 
+            className="gap-2 bg-primary text-primary-foreground hover:bg-primary/90 shadow-lg shadow-primary/20 rounded-full px-4" 
             onClick={() => setShowCreateDialog(true)}
           >
             <Plus className="h-4 w-4" />
             Enviar Voucher
           </Button>
+
+          {user && (
+            <div className="px-[14px] py-1.5 rounded-full bg-[rgba(0,0,0,.70)] border border-[rgba(255,255,255,.18)] text-[#aaaaaa] max-w-[180px] truncate">
+              @{user.username || user.email}
+            </div>
+          )}
+
+          <div
+            className="w-8 h-8 rounded-full border border-[rgba(255,255,255,.25)] flex items-center justify-center bg-[rgba(0,0,0,.7)] text-[#ffc800]"
+            title="Esteira de Vouchers"
+          >
+            <Receipt size={16} />
+          </div>
         </div>
       </div>
 
-      {/* Content Area */}
-      {loading ? (
-        <PageCard>
-          <div className="text-center py-8 text-muted-foreground">Carregando...</div>
-        </PageCard>
-      ) : activeTab === "processos" ? (
-        <PageCard padding="sm">
-          <VoucherTable 
-            vouchers={filteredVouchers} 
-            onViewDetails={handleViewDetails}
-            onEdit={handleEdit}
-            onDelete={handleDelete}
-            onGoBack={handleGoBack}
-            filters={filters}
-            onFilterChange={setFilters}
-          />
-        </PageCard>
-      ) : activeTab === "dashboard" ? (
-        <DashboardTab vouchers={vouchers} />
-      ) : activeTab === "robo" ? (
-        <RoboTab />
-      ) : activeTab === "relatorios" ? (
-        <ReportsTab />
-      ) : (
-        <AnalyticsDashboard vouchers={vouchers} />
-      )}
+      {/* Main Content */}
+      <main className="relative z-10 max-w-[95%] mx-auto px-2 pb-8">
+        <div className="space-y-6">
+          {/* Metric Cards */}
+          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+            {loading ? (
+              <>
+                <div className="h-28 rounded-2xl bg-[rgba(5,6,18,0.9)] border border-[rgba(255,255,255,0.12)] animate-pulse" />
+                <div className="h-28 rounded-2xl bg-[rgba(5,6,18,0.9)] border border-[rgba(255,255,255,0.12)] animate-pulse" />
+                <div className="h-28 rounded-2xl bg-[rgba(5,6,18,0.9)] border border-[rgba(255,255,255,0.12)] animate-pulse" />
+                <div className="h-28 rounded-2xl bg-[rgba(5,6,18,0.9)] border border-[rgba(255,255,255,0.12)] animate-pulse" />
+              </>
+            ) : (
+              <>
+                <MetricCard 
+                  title="Em Andamento" 
+                  value={metrics.ativos} 
+                  icon={Package} 
+                  subtitle="Vouchers ativos" 
+                  onClick={() => setDrillDownFilter(drillDownFilter === "ativos" ? "all" : "ativos")} 
+                  active={drillDownFilter === "ativos"} 
+                />
+                <MetricCard 
+                  title="SLA" 
+                  value={metrics.slaAtencao} 
+                  icon={AlertTriangle} 
+                  variant={metrics.slaAtencao > 0 ? "critical" : "warning"} 
+                  subtitle="Vencendo/Vencidos" 
+                  onClick={() => setDrillDownFilter(drillDownFilter === "sla" ? "all" : "sla")} 
+                  active={drillDownFilter === "sla"} 
+                />
+                <MetricCard 
+                  title="Pendências" 
+                  value={metrics.pendenciasFinanceiras} 
+                  icon={FileWarning} 
+                  variant={metrics.pendenciasFinanceiras > 0 ? "warning" : "info"} 
+                  subtitle="Accrual/Comprovante" 
+                  onClick={() => setDrillDownFilter(drillDownFilter === "pendencias" ? "all" : "pendencias")} 
+                  active={drillDownFilter === "pendencias"} 
+                />
+                <MetricCard 
+                  title="Atividade 24h" 
+                  value={metrics.eventos24h} 
+                  icon={Clock} 
+                  variant="info" 
+                  subtitle="Últimas 24 horas" 
+                  onClick={() => setDrillDownFilter(drillDownFilter === "atividade" ? "all" : "atividade")} 
+                  active={drillDownFilter === "atividade"} 
+                />
+              </>
+            )}
+          </div>
+
+          {/* Active filter indicator */}
+          {drillDownFilter !== "all" && (
+            <span 
+              className="px-3 py-1 rounded-full bg-[rgba(255,200,0,0.15)] text-[#ffc800] border border-[#ffc800]/40 text-[0.75rem] font-mono cursor-pointer hover:bg-[rgba(255,200,0,0.25)] transition inline-flex items-center gap-2" 
+              onClick={() => setDrillDownFilter("all")}
+            >
+              Filtro: {drillDownFilter === "ativos" ? "Em Andamento" : drillDownFilter === "sla" ? "SLA" : drillDownFilter === "pendencias" ? "Pendências" : "Atividade 24h"} ✕
+            </span>
+          )}
+
+          {/* Navigation Tabs */}
+          <nav className="flex items-center gap-1 px-2 py-1.5 rounded-full bg-[rgba(5,6,18,0.85)] border border-white/10 backdrop-blur-sm w-fit">
+            {[
+              { id: "processos" as const, label: "Processos", icon: List },
+              { id: "dashboard" as const, label: "Dashboard", icon: LayoutDashboard },
+              { id: "analytics" as const, label: "Analytics", icon: BarChart3 },
+              { id: "robo" as const, label: "Robô", icon: Bot },
+              { id: "relatorios" as const, label: "Relatórios", icon: FileSpreadsheet },
+            ].map((tab) => {
+              const Icon = tab.icon;
+              const isActive = activeTab === tab.id;
+              return (
+                <button
+                  key={tab.id}
+                  onClick={() => setActiveTab(tab.id)}
+                  className={cn(
+                    "flex items-center gap-2 px-4 py-2 rounded-full text-[0.8rem] font-medium transition-all duration-200",
+                    isActive 
+                      ? 'bg-[rgba(255,200,0,0.15)] text-[#ffc800] border border-[#ffc800]/40 shadow-[0_0_12px_rgba(255,200,0,0.3)]' 
+                      : 'text-[#aaaaaa] hover:text-white hover:bg-white/5'
+                  )}
+                >
+                  <Icon className="h-4 w-4" />
+                  {tab.label}
+                </button>
+              );
+            })}
+          </nav>
+
+          {/* Quick Filters */}
+          {activeTab === "processos" && (
+            <div className="rounded-2xl p-4 bg-[rgba(5,6,18,0.9)] border border-[rgba(255,255,255,0.12)] backdrop-blur-[18px]">
+              <div className="flex items-center gap-4 flex-wrap">
+                <div className="flex items-center gap-2">
+                  <Filter className="h-4 w-4 text-[#aaaaaa]" />
+                  <span className="text-[0.75rem] font-medium text-[#aaaaaa] uppercase tracking-wider">Filtros Rápidos:</span>
+                </div>
+                
+                <div className="flex items-center gap-2">
+                  <Building2 className="h-4 w-4 text-[#888888]" />
+                  <Select value={quickFilterFornecedor} onValueChange={setQuickFilterFornecedor}>
+                    <SelectTrigger className="w-[180px] bg-[#0a0b10] border-white/10 rounded-full">
+                      <SelectValue placeholder="Fornecedor" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">Todos Fornecedores</SelectItem>
+                      {uniqueFornecedores.map((fornecedor) => (
+                        <SelectItem key={fornecedor} value={fornecedor}>
+                          {fornecedor}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <Users className="h-4 w-4 text-[#888888]" />
+                  <Select value={quickFilterCobranca} onValueChange={setQuickFilterCobranca}>
+                    <SelectTrigger className="w-[160px] bg-[#0a0b10] border-white/10 rounded-full">
+                      <SelectValue placeholder="Cobrança" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">Todas Cobranças</SelectItem>
+                      <SelectItem value="DACHSER">DACHSER</SelectItem>
+                      <SelectItem value="CLIENTE">CLIENTE</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {(quickFilterFornecedor !== "all" || quickFilterCobranca !== "all") && (
+                  <button
+                    onClick={() => {
+                      setQuickFilterFornecedor("all");
+                      setQuickFilterCobranca("all");
+                    }}
+                    className="text-[#aaaaaa] hover:text-white text-[0.8rem]"
+                  >
+                    Limpar filtros
+                  </button>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Tab Content */}
+          {activeTab === "processos" && (
+            <>
+              <div className="flex items-center gap-3">
+                <Receipt className="h-5 w-5 text-[#ffc800]" />
+                <h3 className="text-lg font-semibold text-white">Vouchers</h3>
+                <span className="px-3 py-1 rounded-full bg-primary/15 text-primary border border-primary/40 text-[0.75rem] font-mono">
+                  {filteredVouchers.length} registros • Fonte: {dataSource === "mariadb" ? "MariaDB" : "Supabase"}
+                </span>
+              </div>
+
+              {loading ? (
+                <div className="h-96 rounded-2xl bg-[rgba(5,6,18,0.9)] border border-[rgba(255,255,255,0.12)] animate-pulse" />
+              ) : (
+                <div className="rounded-2xl bg-[rgba(5,6,18,0.9)] border border-[rgba(255,255,255,0.12)] backdrop-blur-[18px] shadow-[0_18px_40px_rgba(0,0,0,0.85)] overflow-hidden">
+                  <VoucherTable 
+                    vouchers={filteredVouchers} 
+                    onViewDetails={handleViewDetails}
+                    onEdit={handleEdit}
+                    onDelete={handleDelete}
+                    onGoBack={handleGoBack}
+                    filters={filters}
+                    onFilterChange={setFilters}
+                  />
+                </div>
+              )}
+            </>
+          )}
+
+          {activeTab === "dashboard" && <DashboardTab vouchers={vouchers} />}
+          {activeTab === "analytics" && <AnalyticsDashboard vouchers={vouchers} />}
+          {activeTab === "robo" && <RoboTab />}
+          {activeTab === "relatorios" && <ReportsTab />}
+        </div>
+      </main>
 
       {/* Footer */}
-      <div className="text-center text-[10px] text-muted-foreground uppercase tracking-[0.16em]">
+      <div className="relative z-10 text-center text-[10px] text-[#888888] uppercase tracking-[0.16em] pb-6">
         Z3US.AI • For Logistics
       </div>
 
@@ -1193,7 +1278,7 @@ const EsteiraIndex = () => {
         onSuccess={loadVouchers}
         voucher={selectedVoucher}
       />
-    </PageLayout>
+    </div>
   );
 };
 
