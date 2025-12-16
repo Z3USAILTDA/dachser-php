@@ -1345,36 +1345,85 @@ serve(async (req) => {
             }
           }
           
-          const qs: Record<string, string> = {};
-          if (shippingLine) qs['shipping_line'] = shippingLine;
+          // For SOC containers or unknown prefixes, we'll try multiple shipping lines
+          const allShippingLines = ['MAERSK', 'MSC', 'CMA_CGM', 'HAPAG_LLOYD', 'ONE', 'HMM', 'EVERGREEN', 'COSCO', 'ZIM', 'YANG_MING'];
           
-          console.log(`[refresh_all] Calling JSONCargo for ${containerId} with shipping_line: ${shippingLine || 'auto'}`);
-          const apiRes = await jcJson(`http://api.jsoncargo.com/api/v1/containers/${encodeURIComponent(containerId)}`, qs, 15000);
+          // Build list of shipping lines to try
+          let shippingLinesToTry: string[] = [];
+          if (shippingLine) {
+            // Start with detected/stored shipping line
+            shippingLinesToTry.push(shippingLine);
+          }
           
-          console.log(`[refresh_all] JSONCargo response for ${containerId}:`, JSON.stringify(apiRes).substring(0, 500));
-
-          if (!apiRes.__curl_error && !apiRes.error && apiRes.data) {
-            // JSONCargo wraps response in 'data' object
-            const data = apiRes.data;
-            
-            // Extract last event from events array if available
-            let lastEventDescription = data.container_status || null;
-            if (data.events && Array.isArray(data.events) && data.events.length > 0) {
-              const latestEvent = data.events[0];
-              lastEventDescription = latestEvent.description || latestEvent.event_type || latestEvent.status || lastEventDescription;
-            } else if (data.last_movement?.description) {
-              lastEventDescription = data.last_movement.description;
+          // Check if this is a third-party/SOC prefix (not directly owned by any carrier)
+          const prefix = containerId.substring(0, 4).toUpperCase();
+          const isThirdPartyPrefix = !['CMAU', 'CCLU', 'CXDU', 'MSCU', 'MEDU', 'MAEU', 'MRKU', 'MSKU', 
+            'HLCU', 'HLXU', 'ONEY', 'ONEU', 'HDMU', 'HMMU', 'EISU', 'EITU', 'EGSU', 'EGHU',
+            'YMLU', 'YMMU', 'COSU', 'CSNU', 'ZIMU', 'ZCSU'].includes(prefix);
+          
+          // For third-party prefixes, add all shipping lines as fallbacks
+          if (isThirdPartyPrefix) {
+            for (const sl of allShippingLines) {
+              if (!shippingLinesToTry.includes(sl)) {
+                shippingLinesToTry.push(sl);
+              }
             }
+            console.log(`[refresh_all] Container ${containerId} has third-party prefix ${prefix}, will try ${shippingLinesToTry.length} shipping lines`);
+          }
+          
+          // If no shipping line detected at all, try all
+          if (shippingLinesToTry.length === 0) {
+            shippingLinesToTry = [...allShippingLines];
+            console.log(`[refresh_all] Container ${containerId} has no detected shipping line, will try all ${shippingLinesToTry.length}`);
+          }
+          
+          let successfulShippingLine: string | null = null;
+          let trackingData: any = null;
+          
+          // Try each shipping line until one works
+          for (const tryShippingLine of shippingLinesToTry) {
+            const qs: Record<string, string> = { 'shipping_line': tryShippingLine };
             
-            const trackingData = {
-              container_status: data.container_status || null,
-              loading_port: data.loading_port || data.shipped_from || null,
-              discharging_port: data.discharging_port || data.shipped_to || null,
-              eta: data.eta_final_destination || data.eta || null,
-              vessel: data.current_vessel_name || data.last_vessel_name || row.vessel || null,
-              last_event: lastEventDescription,
-            };
+            console.log(`[refresh_all] Trying JSONCargo for ${containerId} with shipping_line: ${tryShippingLine}`);
+            const apiRes = await jcJson(`http://api.jsoncargo.com/api/v1/containers/${encodeURIComponent(containerId)}`, qs, 15000);
             
+            // Check if we got a valid response
+            if (!apiRes.__curl_error && !apiRes.error && apiRes.data) {
+              console.log(`[refresh_all] SUCCESS! Container ${containerId} found with ${tryShippingLine}`);
+              
+              // JSONCargo wraps response in 'data' object
+              const data = apiRes.data;
+              
+              // Extract last event from events array if available
+              let lastEventDescription = data.container_status || null;
+              if (data.events && Array.isArray(data.events) && data.events.length > 0) {
+                const latestEvent = data.events[0];
+                lastEventDescription = latestEvent.description || latestEvent.event_type || latestEvent.status || lastEventDescription;
+              } else if (data.last_movement?.description) {
+                lastEventDescription = data.last_movement.description;
+              }
+              
+              trackingData = {
+                container_status: data.container_status || null,
+                loading_port: data.loading_port || data.shipped_from || null,
+                discharging_port: data.discharging_port || data.shipped_to || null,
+                eta: data.eta_final_destination || data.eta || null,
+                vessel: data.current_vessel_name || data.last_vessel_name || row.vessel || null,
+                last_event: lastEventDescription,
+              };
+              
+              successfulShippingLine = tryShippingLine;
+              break; // Found it, stop trying
+            } else {
+              const errorMsg = apiRes.error?.title || apiRes.__curl_error || 'Unknown error';
+              console.log(`[refresh_all] ${containerId} not found with ${tryShippingLine}: ${errorMsg}`);
+              
+              // Small delay between attempts to avoid rate limiting
+              await new Promise(r => setTimeout(r, 100));
+            }
+          }
+          
+          if (trackingData && successfulShippingLine) {
             console.log(`[refresh_all] Parsed data for ${containerId}:`, JSON.stringify(trackingData));
 
             await client.execute(`
@@ -1386,7 +1435,7 @@ serve(async (req) => {
                 eta = ?,
                 vessel = COALESCE(?, vessel),
                 last_event = ?,
-                shipping_line = COALESCE(?, shipping_line),
+                shipping_line = ?,
                 last_check = NOW(),
                 updated_at = NOW()
               WHERE container = ?
@@ -1397,12 +1446,12 @@ serve(async (req) => {
               trackingData.eta ? new Date(trackingData.eta) : null,
               trackingData.vessel,
               trackingData.last_event,
-              shippingLine || null,
+              successfulShippingLine,
               containerId
             ]);
             updated++;
           } else {
-            console.error(`[refresh_all] Error for ${containerId}:`, apiRes.__curl_error || apiRes.error || 'Unknown error');
+            console.error(`[refresh_all] Container ${containerId} not found in any shipping line after trying ${shippingLinesToTry.length} carriers`);
             errors++;
           }
 
