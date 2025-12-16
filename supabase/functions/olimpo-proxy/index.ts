@@ -1086,25 +1086,30 @@ serve(async (req) => {
       }
 
       // Detect shipping_line from container PREFIX first (most accurate)
+      // JSONCargo API uses specific codes: MAERSK, MSC, CMA_CGM, HAPAG_LLOYD, ONE, HMM, EVERGREEN, COSCO, ZIM, YANG_MING
       if (!shippingLine) {
         const prefix = containerId.substring(0, 4).toUpperCase();
-        // Direct carrier-owned containers
+        // Direct carrier-owned containers - using JSONCargo API codes
         if (prefix === 'CMAU' || prefix === 'CCLU' || prefix === 'CXDU') {
-          shippingLine = 'CMAU'; // CMA CGM
+          shippingLine = 'CMA_CGM';
         } else if (prefix === 'MSCU' || prefix === 'MEDU') {
-          shippingLine = 'MSCU'; // MSC
+          shippingLine = 'MSC';
         } else if (prefix === 'MAEU' || prefix === 'MRKU' || prefix === 'MSKU') {
-          shippingLine = 'MAEU'; // Maersk
+          shippingLine = 'MAERSK';
         } else if (prefix === 'HLCU' || prefix === 'HLXU') {
-          shippingLine = 'HLCU'; // Hapag-Lloyd
+          shippingLine = 'HAPAG_LLOYD';
         } else if (prefix === 'ONEY' || prefix === 'ONEU') {
-          shippingLine = 'ONEY'; // ONE
+          shippingLine = 'ONE';
         } else if (prefix === 'HDMU' || prefix === 'HMMU') {
-          shippingLine = 'HDMU'; // HMM
+          shippingLine = 'HMM';
         } else if (prefix === 'EISU' || prefix === 'EITU' || prefix === 'EGSU' || prefix === 'EGHU') {
-          shippingLine = 'EGLV'; // Evergreen
+          shippingLine = 'EVERGREEN';
         } else if (prefix === 'YMLU' || prefix === 'YMMU') {
-          shippingLine = 'YMLU'; // Yang Ming
+          shippingLine = 'YANG_MING';
+        } else if (prefix === 'COSU' || prefix === 'CSNU') {
+          shippingLine = 'COSCO';
+        } else if (prefix === 'ZIMU' || prefix === 'ZCSU') {
+          shippingLine = 'ZIM';
         }
         
         if (shippingLine) {
@@ -1135,18 +1140,27 @@ serve(async (req) => {
               
               if (rows.length > 0 && rows[0].vessel) {
                 const vessel = (rows[0].vessel || '').toUpperCase();
+                // SOC fallback - using JSONCargo API codes
                 if (vessel.includes('MAERSK') || vessel.includes('SEALAND') || vessel.includes('SAFMARINE')) {
-                  shippingLine = 'MAEU';
+                  shippingLine = 'MAERSK';
                 } else if (vessel.includes('MSC ') || vessel.startsWith('MSC')) {
-                  shippingLine = 'MSCU';
+                  shippingLine = 'MSC';
                 } else if (vessel.includes('CMA') || vessel.includes('CGM') || vessel.includes('APL')) {
-                  shippingLine = 'CMAU';
+                  shippingLine = 'CMA_CGM';
                 } else if (vessel.includes('HAPAG') || vessel.includes('LLOYD')) {
-                  shippingLine = 'HLCU';
+                  shippingLine = 'HAPAG_LLOYD';
                 } else if (vessel.includes('ONE ') || vessel.includes('OCEAN NETWORK')) {
-                  shippingLine = 'ONEY';
+                  shippingLine = 'ONE';
                 } else if (vessel.includes('HMM') || vessel.includes('HYUNDAI')) {
-                  shippingLine = 'HDMU';
+                  shippingLine = 'HMM';
+                } else if (vessel.includes('EVERGREEN') || vessel.includes('EVER ')) {
+                  shippingLine = 'EVERGREEN';
+                } else if (vessel.includes('COSCO') || vessel.includes('OOCL')) {
+                  shippingLine = 'COSCO';
+                } else if (vessel.includes('ZIM') || vessel.includes('GOLD STAR')) {
+                  shippingLine = 'ZIM';
+                } else if (vessel.includes('YANG MING') || vessel.includes('YM ')) {
+                  shippingLine = 'YANG_MING';
                 }
                 console.log(`[track_container] SOC detected ${shippingLine} from vessel "${rows[0].vessel}"`);
               }
@@ -1272,43 +1286,56 @@ serve(async (req) => {
           const containerId = row.container;
           let shippingLine = row.shipping_line || '';
           
-          // Detect shipping_line from container PREFIX (first 4 chars) - this is the correct way
+          // Detect shipping_line from container PREFIX (first 4 chars)
+          // JSONCargo API uses specific codes: MAERSK, MSC, CMA_CGM, HAPAG_LLOYD, ONE, HMM, EVERGREEN, COSCO, ZIM, YANG_MING
           if (!shippingLine && containerId) {
             const prefix = containerId.substring(0, 4).toUpperCase();
-            // Direct carrier-owned containers
+            // Direct carrier-owned containers - using JSONCargo API codes
             if (prefix === 'CMAU' || prefix === 'CCLU' || prefix === 'CXDU') {
-              shippingLine = 'CMAU'; // CMA CGM
-            } else if (prefix === 'MSCU' || prefix === 'MEDU' || prefix === 'MSKU') {
-              shippingLine = 'MSCU'; // MSC
+              shippingLine = 'CMA_CGM';
+            } else if (prefix === 'MSCU' || prefix === 'MEDU') {
+              shippingLine = 'MSC';
             } else if (prefix === 'MAEU' || prefix === 'MRKU' || prefix === 'MSKU') {
-              shippingLine = 'MAEU'; // Maersk
+              shippingLine = 'MAERSK';
             } else if (prefix === 'HLCU' || prefix === 'HLXU') {
-              shippingLine = 'HLCU'; // Hapag-Lloyd
+              shippingLine = 'HAPAG_LLOYD';
             } else if (prefix === 'ONEY' || prefix === 'ONEU') {
-              shippingLine = 'ONEY'; // ONE
+              shippingLine = 'ONE';
             } else if (prefix === 'HDMU' || prefix === 'HMMU') {
-              shippingLine = 'HDMU'; // HMM
+              shippingLine = 'HMM';
             } else if (prefix === 'EISU' || prefix === 'EITU' || prefix === 'EGSU' || prefix === 'EGHU') {
-              shippingLine = 'EGLV'; // Evergreen
+              shippingLine = 'EVERGREEN';
             } else if (prefix === 'YMLU' || prefix === 'YMMU') {
-              shippingLine = 'YMLU'; // Yang Ming
+              shippingLine = 'YANG_MING';
+            } else if (prefix === 'COSU' || prefix === 'CSNU') {
+              shippingLine = 'COSCO';
+            } else if (prefix === 'ZIMU' || prefix === 'ZCSU') {
+              shippingLine = 'ZIM';
             } else {
               // SOC (Shipper-Owned Container) - use vessel name as fallback
               // Common SOC prefixes: TCNU, TCKU, TRHU, TXGU, SEGU, SEKU, TLLU, TTNU, etc.
               if (row.vessel) {
                 const vessel = (row.vessel || '').toUpperCase();
                 if (vessel.includes('MAERSK') || vessel.includes('SEALAND') || vessel.includes('SAFMARINE')) {
-                  shippingLine = 'MAEU';
+                  shippingLine = 'MAERSK';
                 } else if (vessel.includes('MSC ') || vessel.startsWith('MSC')) {
-                  shippingLine = 'MSCU';
+                  shippingLine = 'MSC';
                 } else if (vessel.includes('CMA') || vessel.includes('CGM') || vessel.includes('APL')) {
-                  shippingLine = 'CMAU';
+                  shippingLine = 'CMA_CGM';
                 } else if (vessel.includes('HAPAG') || vessel.includes('LLOYD')) {
-                  shippingLine = 'HLCU';
+                  shippingLine = 'HAPAG_LLOYD';
                 } else if (vessel.includes('ONE ') || vessel.includes('OCEAN NETWORK')) {
-                  shippingLine = 'ONEY';
+                  shippingLine = 'ONE';
                 } else if (vessel.includes('HMM') || vessel.includes('HYUNDAI')) {
-                  shippingLine = 'HDMU';
+                  shippingLine = 'HMM';
+                } else if (vessel.includes('EVERGREEN') || vessel.includes('EVER ')) {
+                  shippingLine = 'EVERGREEN';
+                } else if (vessel.includes('COSCO') || vessel.includes('OOCL')) {
+                  shippingLine = 'COSCO';
+                } else if (vessel.includes('ZIM') || vessel.includes('GOLD STAR')) {
+                  shippingLine = 'ZIM';
+                } else if (vessel.includes('YANG MING') || vessel.includes('YM ')) {
+                  shippingLine = 'YANG_MING';
                 }
                 console.log(`[refresh_all] SOC Container ${containerId} (prefix ${prefix}): detected ${shippingLine} from vessel "${row.vessel}"`);
               }
