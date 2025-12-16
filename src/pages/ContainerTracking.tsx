@@ -47,62 +47,131 @@ const shippingLines = [
   { code: "ZIMU", name: "ZIM" },
 ];
 
-// Status mapping for containers
+// Status mapping for containers (JSONCargo events)
 const containerStatusMap: Record<string, string> = {
-  "GATE_OUT_EMPTY": "Gate Out Vazio",
+  // Pre-shipment
+  "EMPTY_TO_SHIPPER": "Container Vazio p/ Exportador",
+  "GATE_OUT_EMPTY": "Saída Vazio do Terminal",
+  "EMPTY_PICK_UP": "Coleta do Container Vazio",
+  // Loading
   "LOADED": "Carregado",
-  "VESSEL_DEPARTED": "Navio Partiu",
-  "IN_TRANSIT": "Em Trânsito",
-  "TRANSSHIPMENT": "Transbordo",
-  "VESSEL_ARRIVED": "Navio Chegou",
-  "DISCHARGED": "Descarregado",
+  "LOAD": "Carregado",
+  "FULL_IN": "Entrada Cheio no Terminal",
   "GATE_IN_FULL": "Gate In Cheio",
+  // Departure  
+  "VESSEL_DEPARTED": "Navio Partiu",
+  "DEPARTURE": "Partida",
+  "DEPARTED": "Partiu",
+  // Transit
+  "IN_TRANSIT": "Em Trânsito",
+  "ON_RAIL": "Em Trânsito Ferroviário",
+  // Transshipment
+  "TRANSSHIPMENT": "Transbordo",
+  "TRANSSHIPMENT_DISCHARGED": "Descarregado p/ Transbordo",
+  "TRANSSHIPMENT_LOADED": "Carregado p/ Transbordo",
+  // Arrival
+  "VESSEL_ARRIVED": "Navio Chegou",
+  "ARRIVAL": "Chegada",
+  "ARRIVED": "Chegou",
+  // Discharge
+  "DISCHARGED": "Descarregado",
+  "DISCHARGE": "Descarregado",
+  "FULL_OUT": "Saída Cheio do Terminal",
+  // Delivery
+  "GATE_OUT_FULL": "Gate Out Cheio",
   "DELIVERED": "Entregue",
+  "DELIVERY": "Entrega",
+  "EMPTY_RETURN": "Devolução Vazio",
+  // Pending
   "PENDING": "Pendente",
+  "BOOKED": "Reservado",
+  "BOOKING": "Reserva Confirmada",
 };
 
-// Get status code from event
+// Get status code from JSONCargo event
 const getStatusCode = (lastEvent: string | null): string => {
-  if (!lastEvent) return "AGUARDANDO";
+  if (!lastEvent) return "AGD"; // Aguardando
   
-  const upperEvent = lastEvent.toUpperCase();
+  const upperEvent = lastEvent.toUpperCase().replace(/[_\s-]/g, "");
   
-  if (upperEvent.includes("DELIVERED") || upperEvent.includes("ENTREGUE")) return "DLV";
-  if (upperEvent.includes("GATE_IN") || upperEvent.includes("GATE IN")) return "GIN";
-  if (upperEvent.includes("DISCHARGED") || upperEvent.includes("DESCARREGADO")) return "DCH";
-  if (upperEvent.includes("ARRIVED") || upperEvent.includes("CHEGOU")) return "ARR";
-  if (upperEvent.includes("TRANSIT") || upperEvent.includes("TRÂNSITO")) return "TRA";
-  if (upperEvent.includes("TRANSSHIPMENT") || upperEvent.includes("TRANSBORDO")) return "TSP";
-  if (upperEvent.includes("DEPARTED") || upperEvent.includes("PARTIU")) return "DEP";
-  if (upperEvent.includes("LOADED") || upperEvent.includes("CARREGADO")) return "LOD";
-  if (upperEvent.includes("GATE_OUT") || upperEvent.includes("GATE OUT")) return "GOT";
-  if (upperEvent.includes("BOOKING")) return "BKD";
+  // Delivery statuses
+  if (upperEvent.includes("DELIVERED") || upperEvent.includes("DELIVERY") || upperEvent.includes("EMPTYRETURN")) return "DLV";
+  // Gate out full (customs cleared, ready for delivery)
+  if (upperEvent.includes("GATEOUTFULL") || upperEvent.includes("FULLOUT")) return "GOF";
+  // Discharge
+  if (upperEvent.includes("DISCHARGED") || upperEvent.includes("DISCHARGE")) return "DCH";
+  // Arrival
+  if (upperEvent.includes("ARRIVED") || upperEvent.includes("ARRIVAL") || upperEvent.includes("VESSELARRIVED")) return "ARR";
+  // Transshipment
+  if (upperEvent.includes("TRANSSHIPMENT")) return "TSP";
+  // In transit
+  if (upperEvent.includes("TRANSIT") || upperEvent.includes("ONRAIL")) return "TRA";
+  // Departure
+  if (upperEvent.includes("DEPARTED") || upperEvent.includes("DEPARTURE") || upperEvent.includes("VESSELDEPARTED")) return "DEP";
+  // Loaded
+  if (upperEvent.includes("LOADED") || upperEvent.includes("LOAD") || upperEvent.includes("FULLIN") || upperEvent.includes("GATEINFULL")) return "LOD";
+  // Gate out empty (container picked up)
+  if (upperEvent.includes("GATEOUTEMPTY") || upperEvent.includes("EMPTYPICKUP") || upperEvent.includes("EMPTYTOSHIPPER")) return "GOE";
+  // Booked
+  if (upperEvent.includes("BOOKED") || upperEvent.includes("BOOKING")) return "BKD";
+  // Pending
+  if (upperEvent.includes("PENDING")) return "AGD";
   
   return lastEvent.substring(0, 3).toUpperCase();
 };
 
-// Timeline progress for container tracking
-// Stages: BKD → GOT → LOD → DEP → TRA → ARR → DCH → GIN → DLV
+// Timeline progress for container tracking (JSONCargo stages)
+// Stages: BKD → GOE → LOD → DEP → TRA → ARR → DCH → DLV
 const getTimelineProgress = (lastEvent: string | null): number => {
   if (!lastEvent) return 0;
   
   const statusCode = getStatusCode(lastEvent);
   
   const progressMap: Record<string, number> = {
+    // Booking/Start
     BKD: 0,
-    GOT: 12,
+    AGD: 0,
+    // Gate Out Empty
+    GOE: 12,
+    // Loaded
     LOD: 25,
-    DEP: 37,
-    TRA: 50,
-    TSP: 60,
+    // Departed
+    DEP: 40,
+    // In Transit
+    TRA: 55,
+    // Transshipment
+    TSP: 65,
+    // Arrived
     ARR: 75,
-    DCH: 85,
-    GIN: 92,
+    // Discharged
+    DCH: 87,
+    // Gate Out Full
+    GOF: 94,
+    // Delivered
     DLV: 100,
-    AGUARDANDO: 0,
   };
   
   return progressMap[statusCode] || 10;
+};
+
+// Get human-readable status description
+const getStatusDescription = (lastEvent: string | null): string => {
+  if (!lastEvent) return "Aguardando rastreio";
+  
+  // Check if we have a direct mapping
+  const normalizedEvent = lastEvent.toUpperCase().replace(/\s+/g, "_");
+  if (containerStatusMap[normalizedEvent]) {
+    return containerStatusMap[normalizedEvent];
+  }
+  
+  // Try to find partial match
+  for (const [key, value] of Object.entries(containerStatusMap)) {
+    if (normalizedEvent.includes(key.replace(/_/g, ""))) {
+      return value;
+    }
+  }
+  
+  return lastEvent;
 };
 
 interface ContainerData {
@@ -533,15 +602,15 @@ const ContainerTracking = () => {
     const total = containersList.length;
     const emTransito = containersList.filter((c) => {
       const status = getStatusCode(c.last_event);
-      return ["DEP", "TRA", "TSP"].includes(status);
+      return ["DEP", "TRA", "TSP", "LOD", "GOE"].includes(status);
     }).length;
     const chegando = containersList.filter((c) => {
       const status = getStatusCode(c.last_event);
-      return ["ARR", "DCH"].includes(status);
+      return ["ARR", "DCH", "GOF"].includes(status);
     }).length;
     const entregues = containersList.filter((c) => {
       const status = getStatusCode(c.last_event);
-      return ["DLV", "GIN"].includes(status);
+      return ["DLV"].includes(status);
     }).length;
 
     return { total, emTransito, chegando, entregues };
@@ -878,15 +947,23 @@ const ContainerTracking = () => {
                       const progress = getTimelineProgress(container.last_event);
                       
                       // Timeline colors based on status
-                      let progressColor = "hsl(45 100% 50%)"; // gold
+                      let progressColor = "hsl(45 100% 50%)"; // gold - default/in transit
                       let shipColor = "#ffc800";
                       
-                      if (["DLV", "GIN"].includes(statusCode)) {
+                      // Delivered - green
+                      if (statusCode === "DLV") {
                         progressColor = "hsl(120 100% 35%)";
                         shipColor = "#22c55e";
-                      } else if (["ARR", "DCH"].includes(statusCode)) {
+                      }
+                      // Arrived/Discharged/Gate Out Full - blue (near destination)
+                      else if (["ARR", "DCH", "GOF"].includes(statusCode)) {
                         progressColor = "hsl(200 100% 50%)";
                         shipColor = "#3b82f6";
+                      }
+                      // Transshipment - amber/orange
+                      else if (statusCode === "TSP") {
+                        progressColor = "hsl(30 100% 50%)";
+                        shipColor = "#f97316";
                       }
 
                       return (
@@ -919,57 +996,62 @@ const ContainerTracking = () => {
                           </td>
                           <td className="px-4 py-3 text-[#aaaaaa] text-sm">{container.origem || "-"}</td>
                           <td className="px-4 py-3 text-[#aaaaaa] text-sm">{container.destino || "-"}</td>
-                          <td className="px-3 py-3">
+                          <td className="px-3 py-3 min-w-[280px]">
                             {/* Timeline visualization */}
-                            <div className="relative h-2 w-full rounded-full bg-[rgba(255,255,255,.1)]">
+                            <div className="relative h-1.5 w-full flex items-center">
+                              {/* Background bar */}
+                              <div className="absolute inset-0 bg-gray-800/50 rounded-full" />
+
                               {/* Progress bar */}
                               <div
-                                className="absolute left-0 top-0 h-full rounded-full transition-all duration-700"
+                                className="absolute left-0 h-full rounded-l-full transition-all duration-700 ease-out"
                                 style={{
                                   width: `${progress}%`,
                                   background: `linear-gradient(90deg, ${progressColor}80 0%, ${progressColor} 100%)`,
-                                  boxShadow: `0 0 8px ${progressColor}60`,
+                                  borderTopRightRadius: progress === 100 ? "9999px" : "0",
+                                  borderBottomRightRadius: progress === 100 ? "9999px" : "0",
+                                  boxShadow: `0 0 12px ${progressColor}60`,
                                 }}
                               />
 
-                              {/* Timeline dots */}
+                              {/* Timeline dots - 5 stages: BKD → LOD → DEP → ARR → DLV */}
                               <TooltipProvider>
                                 {/* BKD - 0% */}
                                 <Tooltip>
                                   <TooltipTrigger asChild>
-                                    <div className="absolute left-0 w-1.5 h-1.5 rounded-full bg-[#ffc800] shadow-sm z-10 cursor-pointer hover:scale-150 transition-transform" />
+                                    <div className="absolute left-0 w-1.5 h-1.5 rounded-full bg-white/90 shadow-sm z-10 cursor-pointer hover:scale-150 transition-transform" />
                                   </TooltipTrigger>
-                                  <TooltipContent><p className="text-xs">BKD - Booking</p></TooltipContent>
+                                  <TooltipContent><p className="text-xs">BKD - Reservado</p></TooltipContent>
                                 </Tooltip>
 
                                 {/* LOD - 25% */}
                                 <Tooltip>
                                   <TooltipTrigger asChild>
-                                    <div className="absolute left-1/4 -translate-x-1/2 w-1.5 h-1.5 rounded-full bg-[#666] shadow-sm z-10 cursor-pointer hover:scale-150 transition-transform" />
+                                    <div className="absolute left-1/4 -translate-x-1/2 w-1.5 h-1.5 rounded-full bg-white/70 shadow-sm z-10 cursor-pointer hover:scale-150 transition-transform" />
                                   </TooltipTrigger>
                                   <TooltipContent><p className="text-xs">LOD - Carregado</p></TooltipContent>
                                 </Tooltip>
 
-                                {/* TRA - 50% */}
+                                {/* DEP - 50% */}
                                 <Tooltip>
                                   <TooltipTrigger asChild>
-                                    <div className="absolute left-1/2 -translate-x-1/2 w-1.5 h-1.5 rounded-full bg-[#666] shadow-sm z-10 cursor-pointer hover:scale-150 transition-transform" />
+                                    <div className="absolute left-1/2 -translate-x-1/2 w-1.5 h-1.5 rounded-full bg-white/70 shadow-sm z-10 cursor-pointer hover:scale-150 transition-transform" />
                                   </TooltipTrigger>
-                                  <TooltipContent><p className="text-xs">TRA - Em Trânsito</p></TooltipContent>
+                                  <TooltipContent><p className="text-xs">DEP - Navio Partiu</p></TooltipContent>
                                 </Tooltip>
 
                                 {/* ARR - 75% */}
                                 <Tooltip>
                                   <TooltipTrigger asChild>
-                                    <div className="absolute left-3/4 -translate-x-1/2 w-1.5 h-1.5 rounded-full bg-[#666] shadow-sm z-10 cursor-pointer hover:scale-150 transition-transform" />
+                                    <div className="absolute left-3/4 -translate-x-1/2 w-1.5 h-1.5 rounded-full bg-white/70 shadow-sm z-10 cursor-pointer hover:scale-150 transition-transform" />
                                   </TooltipTrigger>
-                                  <TooltipContent><p className="text-xs">ARR - Chegou</p></TooltipContent>
+                                  <TooltipContent><p className="text-xs">ARR - Navio Chegou</p></TooltipContent>
                                 </Tooltip>
 
                                 {/* DLV - 100% */}
                                 <Tooltip>
                                   <TooltipTrigger asChild>
-                                    <div className="absolute right-0 w-1.5 h-1.5 rounded-full bg-[#ffc800] shadow-sm z-10 cursor-pointer hover:scale-150 transition-transform" />
+                                    <div className="absolute right-0 w-1.5 h-1.5 rounded-full bg-white/90 shadow-sm z-10 cursor-pointer hover:scale-150 transition-transform" />
                                   </TooltipTrigger>
                                   <TooltipContent><p className="text-xs">DLV - Entregue</p></TooltipContent>
                                 </Tooltip>
@@ -995,28 +1077,63 @@ const ContainerTracking = () => {
                                   </TooltipTrigger>
                                   <TooltipContent>
                                     <p className="text-xs font-medium">{statusCode}</p>
-                                    <p className="text-xs text-muted-foreground">{containerStatusMap[container.status] || container.last_event}</p>
+                                    <p className="text-xs text-muted-foreground">{getStatusDescription(container.last_event)}</p>
                                   </TooltipContent>
                                 </Tooltip>
                               </TooltipProvider>
                             </div>
                           </td>
                           <td className="px-3 py-3">
-                            <span className="text-sm font-bold" style={{ color: "hsl(120 100% 35%)" }}>
+                            <span 
+                              className="text-sm font-bold px-2 py-1 rounded-md"
+                              style={{ 
+                                color: shipColor,
+                                backgroundColor: `${shipColor}20`,
+                              }}
+                            >
                               {statusCode}
                             </span>
                           </td>
                           <td className="px-4 py-3 text-[#aaaaaa] text-sm">{container.eta || "-"}</td>
                           <td className="px-3 py-3 text-[#aaaaaa] text-sm uppercase">{container.nome_analista || "-"}</td>
                           <td className="px-4 py-3 text-center">
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => handleDeleteContainer(container.id, container.container)}
-                              className="gap-1.5 text-red-400 hover:text-red-300 h-8 px-2"
-                            >
-                              <Trash2 className="w-4 h-4" />
-                            </Button>
+                            <div className="flex items-center justify-center gap-1">
+                              <TooltipProvider>
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <Button
+                                      variant="ghost"
+                                      size="sm"
+                                      onClick={() => handleTrackContainer(container.container, container.shipping_line)}
+                                      disabled={trackingContainer === container.container}
+                                      className="gap-1 text-[#ffc800] hover:text-[#ffdc50] h-8 px-2"
+                                    >
+                                      {trackingContainer === container.container ? (
+                                        <Loader2 className="w-4 h-4 animate-spin" />
+                                      ) : (
+                                        <RefreshCw className="w-4 h-4" />
+                                      )}
+                                    </Button>
+                                  </TooltipTrigger>
+                                  <TooltipContent><p className="text-xs">Rastrear Container</p></TooltipContent>
+                                </Tooltip>
+                              </TooltipProvider>
+                              <TooltipProvider>
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <Button
+                                      variant="ghost"
+                                      size="sm"
+                                      onClick={() => handleDeleteContainer(container.id, container.container)}
+                                      className="gap-1.5 text-red-400 hover:text-red-300 h-8 px-2"
+                                    >
+                                      <Trash2 className="w-4 h-4" />
+                                    </Button>
+                                  </TooltipTrigger>
+                                  <TooltipContent><p className="text-xs">Remover</p></TooltipContent>
+                                </Tooltip>
+                              </TooltipProvider>
+                            </div>
                           </td>
                         </tr>
                       );
