@@ -1259,26 +1259,22 @@ serve(async (req) => {
       });
 
       try {
-        // Fetch containers from t_dachser_sea_items that are not yet being tracked
-        // Note: t_dachser_sea_items only has container column, other data (vessel, voyage) is in t_dachser_container
+        // Fetch containers from t_dachser_container that are not yet being tracked
         const containers = await client.query(`
           SELECT DISTINCT 
-            si.container,
+            dc.container,
             dc.vessel,
             dc.voyage,
             dc.origem,
-            dc.destino,
-            si.consignee
-          FROM ai_agente.t_dachser_sea_items si
-          LEFT JOIN ai_agente.t_dachser_container dc ON dc.container = si.container
-          WHERE si.container IS NOT NULL 
-            AND TRIM(si.container) != ''
-            AND si.active = 1
+            dc.destino
+          FROM ai_agente.t_dachser_container dc
+          WHERE dc.container IS NOT NULL 
+            AND TRIM(dc.container) != ''
             AND NOT EXISTS (
               SELECT 1 FROM ai_agente.t_dachser_container_tracking ct 
-              WHERE ct.container = si.container AND ct.active = 1
+              WHERE ct.container = dc.container AND ct.active = 1
             )
-          ORDER BY si.id DESC
+          ORDER BY dc.id DESC
           LIMIT 100
         `);
 
@@ -1301,7 +1297,7 @@ serve(async (req) => {
               updated_at = NOW()
           `, [
             c.container.toString().toUpperCase().trim(),
-            c.consignee || null,
+            null, // consignee not in t_dachser_container
             c.origem || null,
             c.destino || null,
             c.vessel || null
