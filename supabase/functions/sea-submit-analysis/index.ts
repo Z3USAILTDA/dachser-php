@@ -640,12 +640,12 @@ serve(async (req) => {
         const { data: { publicUrl } } = supabase.storage.from('maritime-files').getPublicUrl(storagePath);
         uploadedFiles.push({ name: file.name, url: publicUrl, size: file.size, type: file.type });
         
-        // Save file record to MariaDB (table only has: filename, mime, rel_path, url, size_bytes, created_at)
+        // Save file record to MariaDB with item_id for linking
         await dbClient.execute(`
           INSERT INTO ai_agente.t_dachser_sea_files 
-          (filename, mime, size_bytes, rel_path, url, created_at)
-          VALUES (?, ?, ?, ?, ?, NOW())
-        `, [file.name, file.type, file.size, storagePath, publicUrl]);
+          (filename, mime, size_bytes, rel_path, url, item_id, created_at)
+          VALUES (?, ?, ?, ?, ?, ?, NOW())
+        `, [file.name, file.type, file.size, storagePath, publicUrl, actualItemId || null]);
       }
 
       // Record fileUrls
@@ -665,12 +665,12 @@ serve(async (req) => {
         
         uploadedFiles.push({ name: fileUrl.name, url: fileUrl.url, size: actualSize, type: fileUrl.type });
         
-        // Save file URL record to MariaDB (table only has: filename, mime, rel_path, url, size_bytes, created_at)
+        // Save file URL record to MariaDB with item_id for linking
         await dbClient.execute(`
           INSERT INTO ai_agente.t_dachser_sea_files 
-          (filename, mime, size_bytes, rel_path, url, created_at)
-          VALUES (?, ?, ?, ?, ?, NOW())
-        `, [fileUrl.name, 'application/octet-stream', actualSize, '', fileUrl.url]);
+          (filename, mime, size_bytes, rel_path, url, item_id, created_at)
+          VALUES (?, ?, ?, ?, ?, ?, NOW())
+        `, [fileUrl.name, 'application/octet-stream', actualSize, '', fileUrl.url, actualItemId || null]);
       }
 
       // Update item status
