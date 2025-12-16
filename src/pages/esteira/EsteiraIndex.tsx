@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { useUsageLog } from "@/hooks/useUsageLog";
-import { ArrowLeft, Plus, Package, AlertTriangle, AlertCircle, Clock, List, BarChart3, RefreshCw, TrendingUp, DollarSign, Calendar, Bot, FileSpreadsheet, Filter, Building2, Users, LayoutDashboard, CheckCircle2, FileWarning, HelpCircle, Receipt } from "lucide-react";
+import { ArrowLeft, Plus, Package, AlertTriangle, AlertCircle, Clock, List, BarChart3, RefreshCw, TrendingUp, DollarSign, Calendar, Bot, FileSpreadsheet, Filter, Building2, Users, LayoutDashboard, CheckCircle2, FileWarning, HelpCircle, Receipt, ShieldX } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { supabase } from "@/integrations/supabase/client";
@@ -548,13 +548,15 @@ const EsteiraIndex = () => {
   const navigate = useNavigate();
   const {
     role,
+    loading: roleLoading,
     isOperacao,
     isFiscal,
     isFinanceiro,
     isAdmin,
-    isGestor
+    isGestor,
+    hasEsteiraAccess
   } = useUserRole();
-  const storedUser = localStorage.getItem("user");
+  const storedUser = localStorage.getItem("user") || localStorage.getItem("dachser_user");
   const user = storedUser ? JSON.parse(storedUser) : null;
 
   // Enable automatic sync of voucher updates to MariaDB
@@ -672,8 +674,49 @@ const EsteiraIndex = () => {
     }
   };
   useEffect(() => {
-    loadVouchers();
-  }, []);
+    if (hasEsteiraAccess) {
+      loadVouchers();
+    }
+  }, [hasEsteiraAccess]);
+
+  // Block access for users without role
+  if (roleLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-[#050608]">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+      </div>
+    );
+  }
+
+  if (!hasEsteiraAccess) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-[#050608] relative overflow-hidden">
+        {/* Background */}
+        <div className="absolute inset-0">
+          <img src={dachserBg} alt="" className="w-full h-full object-cover opacity-[0.14]" />
+          <div className="absolute inset-0 bg-gradient-to-b from-[#050608]/90 via-[#050608]/70 to-[#050608]" />
+        </div>
+        
+        <div className="relative z-10 text-center max-w-md mx-auto px-6">
+          <div className="w-20 h-20 mx-auto mb-6 rounded-full bg-destructive/10 border border-destructive/30 flex items-center justify-center">
+            <ShieldX className="h-10 w-10 text-destructive" />
+          </div>
+          <h1 className="text-2xl font-bold text-foreground mb-3">Acesso Não Autorizado</h1>
+          <p className="text-muted-foreground mb-6">
+            Você não possui permissão para acessar a Esteira de Vouchers. 
+            Entre em contato com um administrador para solicitar acesso.
+          </p>
+          <Button
+            onClick={() => navigate("/dashboard")}
+            className="gap-2"
+          >
+            <ArrowLeft className="h-4 w-4" />
+            Voltar ao Dashboard
+          </Button>
+        </div>
+      </div>
+    );
+  }
 
   // Apply role-based filtering first
   const roleFilteredVouchers = useMemo(() => {
