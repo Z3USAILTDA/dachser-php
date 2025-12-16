@@ -114,14 +114,17 @@ serve(async (req) => {
     console.log('Connected to MariaDB');
 
     // Insert AWB into t_status_aereo with correct column names
-    // Columns: id, awb, destinatário, última atualização, último_status, origem, destino, hawb, nome_analista, email_analista, email_cliente, data_atraso, tipo_servico
+    // Columns: id, awb, destinatário, última atualização, último_status, origem, destino, hawb, nome_analista, email_analista, email_cliente, data_atraso, tipo_servico, arr_check_count
     // During INSERT: use provided values, set data_atraso to NOW() if DIS/OFLD
     // During UPDATE: only update hawb/nome_analista/email_analista/email_cliente/tipo_servico if they are NOT 'N/A' or NULL (preserve existing values)
     // data_atraso: set to NOW() when DIS/OFLD first occurs, reset to NULL when status becomes DLV
+    // arr_check_count: increment when status is ARR, reset to 0 when status changes from ARR
     // Use sanitized AWB for insert - TRIM applied to prevent whitespace issues
+    const isArrStatus = finalLastEvent === 'ARR';
+    
     await client.execute(
-      `INSERT INTO t_status_aereo (awb, destinatário, \`última atualização\`, último_status, origem, destino, hawb, nome_analista, email_analista, email_cliente, data_atraso, tipo_servico) 
-       VALUES (TRIM(?), TRIM(?), NOW(), TRIM(?), TRIM(?), TRIM(?), TRIM(?), TRIM(?), TRIM(?), TRIM(?), ${isAlertStatus ? 'NOW()' : 'NULL'}, TRIM(?))
+      `INSERT INTO t_status_aereo (awb, destinatário, \`última atualização\`, último_status, origem, destino, hawb, nome_analista, email_analista, email_cliente, data_atraso, tipo_servico, arr_check_count) 
+       VALUES (TRIM(?), TRIM(?), NOW(), TRIM(?), TRIM(?), TRIM(?), TRIM(?), TRIM(?), TRIM(?), TRIM(?), ${isAlertStatus ? 'NOW()' : 'NULL'}, TRIM(?), ${isArrStatus ? '1' : '0'})
        ON DUPLICATE KEY UPDATE 
          destinatário = TRIM(?),
          \`última atualização\` = NOW(),
@@ -133,7 +136,8 @@ serve(async (req) => {
          email_analista = IF(? IS NOT NULL AND TRIM(?) != '', TRIM(?), email_analista),
          email_cliente = IF(? IS NOT NULL AND TRIM(?) != '', TRIM(?), email_cliente),
          data_atraso = IF(TRIM(?) = 'DLV', NULL, IF(? = 1 AND data_atraso IS NULL, NOW(), data_atraso)),
-         tipo_servico = IF(TRIM(?) != 'N/A', TRIM(?), tipo_servico)`,
+         tipo_servico = IF(TRIM(?) != 'N/A', TRIM(?), tipo_servico),
+         arr_check_count = IF(? = 1, COALESCE(arr_check_count, 0) + 1, 0)`,
       [
         sanitizedMawb, finalConsigneeName, finalLastEvent, finalOrigin, finalDestination, finalHawb, finalNomeAnalista, finalEmailAnalista, finalEmailCliente, finalTipoServico,
         finalConsigneeName, finalLastEvent, 
@@ -144,7 +148,8 @@ serve(async (req) => {
         finalEmailAnalista, finalEmailAnalista, finalEmailAnalista,
         finalEmailCliente, finalEmailCliente, finalEmailCliente,
         finalLastEvent, isAlertStatus ? 1 : 0,
-        finalTipoServico, finalTipoServico
+        finalTipoServico, finalTipoServico,
+        isArrStatus ? 1 : 0
       ]
     );
 

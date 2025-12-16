@@ -14,9 +14,6 @@ serve(async (req) => {
   let client: Client | null = null;
 
   try {
-    const body = await req.json();
-    const { search } = body;
-
     const host = Deno.env.get('MARIADB_HOST');
     const port = parseInt(Deno.env.get('MARIADB_PORT') || '3306');
     const database = Deno.env.get('MARIADB_DATABASE');
@@ -24,15 +21,12 @@ serve(async (req) => {
     const dbPassword = Deno.env.get('MARIADB_PASSWORD');
 
     if (!host || !database || !dbUser || !dbPassword) {
-      console.error('Missing database credentials');
       return new Response(
         JSON.stringify({ success: false, error: 'Database configuration error' }),
         { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
-    console.log(`Connecting to MariaDB at ${host}:${port}/${database} for fetch-status-aereo`);
-    
     client = await new Client().connect({
       hostname: host,
       port: port,
@@ -41,31 +35,25 @@ serve(async (req) => {
       password: dbPassword,
     });
 
-    // Include arr_check_count column (default 0 if column doesn't exist yet)
-    let query = `SELECT *, COALESCE(arr_check_count, 0) as arr_check_count FROM ${database}.t_status_aereo ORDER BY id DESC`;
-    let params: string[] = [];
-
-    if (search && search.trim() !== '') {
-      query = `SELECT *, COALESCE(arr_check_count, 0) as arr_check_count FROM ${database}.t_status_aereo 
-               WHERE awb LIKE ? OR hawb LIKE ? OR destinatário LIKE ? 
-               ORDER BY id DESC`;
-      const searchPattern = `%${search.trim()}%`;
-      params = [searchPattern, searchPattern, searchPattern];
+    // Add arr_check_count column if it doesn't exist
+    try {
+      await client.execute(
+        `ALTER TABLE ${database}.t_status_aereo ADD COLUMN arr_check_count INT DEFAULT 0`
+      );
+      console.log('Added arr_check_count column');
+    } catch (e) {
+      // Column might already exist
+      console.log('Column arr_check_count may already exist:', e);
     }
 
-    console.log(`Executing query: ${query}`);
-    const rows = await client.query(query, params);
-    
-    console.log(`Fetched ${Array.isArray(rows) ? rows.length : 0} records from t_status_aereo`);
-
     return new Response(
-      JSON.stringify({ success: true, data: rows }),
+      JSON.stringify({ success: true, message: 'arr_check_count column ready' }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
 
   } catch (error: unknown) {
     const errorMessage = error instanceof Error ? error.message : String(error);
-    console.error('Error in fetch-status-aereo:', errorMessage);
+    console.error('Error:', errorMessage);
     return new Response(
       JSON.stringify({ success: false, error: errorMessage }),
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
