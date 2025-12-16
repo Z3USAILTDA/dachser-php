@@ -1353,23 +1353,25 @@ serve(async (req) => {
           
           console.log(`[refresh_all] JSONCargo response for ${containerId}:`, JSON.stringify(apiRes).substring(0, 500));
 
-          if (!apiRes.__curl_error && !apiRes.error) {
+          if (!apiRes.__curl_error && !apiRes.error && apiRes.data) {
+            // JSONCargo wraps response in 'data' object
+            const data = apiRes.data;
+            
             // Extract last event from events array if available
-            let lastEventDescription = apiRes.container_status || null;
-            if (apiRes.events && Array.isArray(apiRes.events) && apiRes.events.length > 0) {
-              // Get the most recent event (usually first in array or last depending on API)
-              const latestEvent = apiRes.events[0];
+            let lastEventDescription = data.container_status || null;
+            if (data.events && Array.isArray(data.events) && data.events.length > 0) {
+              const latestEvent = data.events[0];
               lastEventDescription = latestEvent.description || latestEvent.event_type || latestEvent.status || lastEventDescription;
-            } else if (apiRes.last_movement?.description) {
-              lastEventDescription = apiRes.last_movement.description;
+            } else if (data.last_movement?.description) {
+              lastEventDescription = data.last_movement.description;
             }
             
             const trackingData = {
-              container_status: apiRes.container_status || apiRes.status || null,
-              loading_port: apiRes.loading_port?.name || apiRes.pol || apiRes.origin?.name || null,
-              discharging_port: apiRes.discharging_port?.name || apiRes.pod || apiRes.destination?.name || null,
-              eta: apiRes.eta_final_destination || apiRes.eta || apiRes.arrival_date || null,
-              vessel: apiRes.vessel?.name || apiRes.current_vessel_name || apiRes.vessel_name || row.vessel || null,
+              container_status: data.container_status || null,
+              loading_port: data.loading_port || data.shipped_from || null,
+              discharging_port: data.discharging_port || data.shipped_to || null,
+              eta: data.eta_final_destination || data.eta || null,
+              vessel: data.current_vessel_name || data.last_vessel_name || row.vessel || null,
               last_event: lastEventDescription,
             };
             
