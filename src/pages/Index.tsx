@@ -169,85 +169,81 @@ const getStatusCode = (lastEvent: string | null): string => {
 };
 
 // Função para calcular a posição do avião na timeline (0-100%)
-// Ordem dos status conforme sequência de emissão:
-// BKD, BKF, AWB, RCS, MAN, DEP, FOH, TFD, RCT, RCP, PRE, LOF, ARRT, TDE, ARR, RCF, NFD, AWD, CCD, ASN, MIS, TFS, DLV, POD
+// Nova ordem da régua: BKD → RCF → MAN → DEP → ARR
+// Pontos visuais em: 0% (BKD), 25% (RCF), 50% (MAN), 75% (DEP), 100% (ARR)
 const getTimelineProgress = (lastEvent: string | null): number => {
   if (!lastEvent) return 0;
 
   const statusCode = getStatusCode(lastEvent).toUpperCase();
   const lowerEvent = lastEvent.toLowerCase();
 
-  // Mapeamento de status conforme ordem cronológica de emissão (24 status):
-  // BKD, BKF, AWB, RCS, MAN, DEP, FOH, TFD, RCT, RCP, PRE, LOF, ARRT, TDE, ARR, RCF, NFD, AWD, CCD, ASN, MIS, TFS, DLV, POD
-  // Os pontos visuais estão em: 0% (BKD), 25% (MAN), 50% (RCT/TFD), 75% (RCF), 100% (DLV)
+  // Mapeamento de status para a nova régua: BKD → RCF → MAN → DEP → ARR
   const progressMap: Record<string, number> = {
-    // 1-4: BKD, BKF, AWB, RCS (0-25%)
+    // BKD e variações (0%)
     BKD: 0,
     BOOKED: 0,
     BOOKING: 0,
-    KK: 0, // Reserva confirmada TAP
-    BKF: 6,
-    AWB: 12,
-    FWB: 12,
-    RCS: 18,
-    "RECEIVED FROM SHIPPER": 18,
+    KK: 0,
+    BKF: 5,
+    AWB: 8,
+    FWB: 8,
+    RCS: 15,
+    "RECEIVED FROM SHIPPER": 15,
 
-    // 5: MAN em 25%
-    MAN: 25,
-    MANIFESTED: 25,
-    MANIFEST: 25,
-    MNF: 25,
+    // RCF e variações (25%)
+    RCF: 25,
+    "RECEIVED FROM FLIGHT": 25,
+    RECEIVED: 25,
+    FOH: 20,
+    "FREIGHT ON HAND": 20,
 
-    // 6-7: DEP, FOH (25-50%)
-    DEP: 32,
-    DEPARTED: 32,
-    DEPARTURE: 32,
-    FOH: 40,
-    "FREIGHT ON HAND": 40,
+    // MAN e variações (50%)
+    MAN: 50,
+    MANIFESTED: 50,
+    MANIFEST: 50,
+    MNF: 50,
 
-    // 8-9: TFD, RCT em 50%
-    TFD: 50,
-    "TRANSFERRED TO ANOTHER AIRLINE": 50,
-    RCT: 50,
-    "RECEIVED FROM ANOTHER AIRLINE": 50,
-
-    // 10-15: RCP, PRE, LOF, ARRT, TDE, ARR (50-75%)
+    // DEP e variações (75%)
+    DEP: 75,
+    DEPARTED: 75,
+    DEPARTURE: 75,
+    TFD: 65,
+    "TRANSFERRED TO ANOTHER AIRLINE": 65,
+    RCT: 60,
+    "RECEIVED FROM ANOTHER AIRLINE": 60,
     RCP: 55,
     PRE: 58,
-    LOF: 61,
-    ARRT: 64,
-    TDE: 67,
-    ARR: 70,
-    ARRIVED: 70,
-    ARRIVAL: 70,
+    LOF: 62,
 
-    // 16: RCF em 75%
-    RCF: 75,
-    "RECEIVED FROM FLIGHT": 75,
-    RECEIVED: 75,
-
-    // 17-24: NFD, AWD, CCD, ASN, MIS, TFS, DLV, POD (75-100%)
-    NFD: 80,
-    NOTIFIED: 80,
-    AWD: 84,
-    "DOCUMENT DELIVERED": 84,
-    CCD: 88,
-    ASN: 90,
-    MIS: 92,
-    TFS: 95,
+    // ARR e variações (100%)
+    ARR: 100,
+    ARRIVED: 100,
+    ARRIVAL: 100,
+    ARRT: 95,
+    TDE: 90,
+    
+    // Status finais pós-ARR (mantém em 100%)
+    NFD: 100,
+    NOTIFIED: 100,
+    AWD: 100,
+    "DOCUMENT DELIVERED": 100,
+    CCD: 100,
+    ASN: 100,
+    MIS: 100,
+    TFS: 100,
     DLV: 100,
     DELIVERED: 100,
     POD: 100,
     "PROOF OF DELIVERY": 100,
 
-    // Status de alerta (mantém posição intermediária)
-    DIS: 49,
-    DISCREPANCY: 49,
-    OFLD: 49,
-    OFFLOADED: 49,
-    NIL: 40,
-    NIF: 40,
-    TRM: 35,
+    // Status de alerta (posição intermediária)
+    DIS: 80,
+    DISCREPANCY: 80,
+    OFLD: 80,
+    OFFLOADED: 80,
+    NIL: 60,
+    NIF: 60,
+    TRM: 55,
   };
 
   // Tenta encontrar por código exato
@@ -265,7 +261,7 @@ const getTimelineProgress = (lastEvent: string | null): number => {
   // Status desconhecido ou aguardando - início da timeline
   if (statusCode === "AGUARDANDO CONSULTA") return 0;
 
-  return 15; // Status desconhecido assume posição no primeiro segmento
+  return 10; // Status desconhecido assume posição no primeiro segmento
 };
 
 interface AWBData {
@@ -1567,6 +1563,16 @@ const Index = () => {
       
       const isNotExcluded = !excludedStatuses.includes(statusToCheck);
 
+      // Regra: AWB que chegou em ARR e não tem alerta (DIS/OFLD) deve sair da tabela
+      const lastEventCode = getStatusCode(awb.last_event).toUpperCase();
+      const isAtARRWithoutAlert = lastEventCode === "ARR" && 
+        awb.data_atraso === null && 
+        !["DIS", "OFLD", "NIL", "NIF"].includes(lastEventCode);
+      
+      if (isAtARRWithoutAlert) {
+        return false; // Remove AWBs que chegaram em ARR sem alerta
+      }
+
       return matchesSearch && matchesAirline && matchesAnalyst && isNotExcluded;
     });
 
@@ -1989,8 +1995,9 @@ const Index = () => {
                                       }}
                                     />
 
-                                    {/* Pontos minimalistas ao longo da barra com tooltips */}
+                                    {/* Pontos da régua: BKD → RCF → MAN → DEP → ARR */}
                                     <TooltipProvider>
+                                      {/* BKD - 0% */}
                                       <Tooltip>
                                         <TooltipTrigger asChild>
                                           <div
@@ -1998,10 +2005,11 @@ const Index = () => {
                                           />
                                         </TooltipTrigger>
                                         <TooltipContent>
-                                          <p className="text-xs">Inicio</p>
+                                          <p className="text-xs">BKD - Reserva Confirmada</p>
                                         </TooltipContent>
                                       </Tooltip>
 
+                                      {/* RCF - 25% */}
                                       <Tooltip>
                                         <TooltipTrigger asChild>
                                           <div
@@ -2009,10 +2017,11 @@ const Index = () => {
                                           />
                                         </TooltipTrigger>
                                         <TooltipContent>
-                                          <p className="text-xs">BKD - Reserva Confirmada</p>
+                                          <p className="text-xs">RCF - Recebida pela Cia Aérea</p>
                                         </TooltipContent>
                                       </Tooltip>
 
+                                      {/* MAN - 50% */}
                                       <Tooltip>
                                         <TooltipTrigger asChild>
                                           <div
@@ -2020,10 +2029,11 @@ const Index = () => {
                                           />
                                         </TooltipTrigger>
                                         <TooltipContent>
-                                          <p className="text-xs">RCF - Recebida pela Cia Aérea</p>
+                                          <p className="text-xs">MAN - Manifestada</p>
                                         </TooltipContent>
                                       </Tooltip>
 
+                                      {/* DEP - 75% */}
                                       <Tooltip>
                                         <TooltipTrigger asChild>
                                           <div
@@ -2031,10 +2041,11 @@ const Index = () => {
                                           />
                                         </TooltipTrigger>
                                         <TooltipContent>
-                                          <p className="text-xs">MNF - Manifestada</p>
+                                          <p className="text-xs">DEP - Partida Confirmada</p>
                                         </TooltipContent>
                                       </Tooltip>
 
+                                      {/* ARR - 100% */}
                                       <Tooltip>
                                         <TooltipTrigger asChild>
                                           <div
@@ -2042,28 +2053,38 @@ const Index = () => {
                                           />
                                         </TooltipTrigger>
                                         <TooltipContent>
-                                          <p className="text-xs">DLV - Entregue</p>
+                                          <p className="text-xs">ARR - Chegada no Destino</p>
                                         </TooltipContent>
                                       </Tooltip>
                                     </TooltipProvider>
 
-                                    {/* Ícone de avião minimalista na posição do progresso */}
-                                    <div
-                                      className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 transition-all duration-700 ease-out z-20"
-                                      style={{ left: `${isCompanyNotRegistered ? 0 : getTimelineProgress(awb.last_event)}%` }}
-                                    >
-                                      <div className="relative">
-                                        <Plane
-                                          className="w-4 h-4"
-                                          style={{
-                                            transform: "rotate(90deg)",
-                                            color: planeColor,
-                                            fill: planeColor,
-                                            filter: `drop-shadow(0 0 4px ${shadowColor}) drop-shadow(0 2px 6px rgba(0, 0, 0, 0.6))`,
-                                          }}
-                                        />
-                                      </div>
-                                    </div>
+                                    {/* Ícone de avião minimalista na posição do progresso com tooltip */}
+                                    <TooltipProvider>
+                                      <Tooltip>
+                                        <TooltipTrigger asChild>
+                                          <div
+                                            className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 transition-all duration-700 ease-out z-20 cursor-pointer"
+                                            style={{ left: `${isCompanyNotRegistered ? 0 : getTimelineProgress(awb.last_event)}%` }}
+                                          >
+                                            <div className="relative">
+                                              <Plane
+                                                className="w-4 h-4"
+                                                style={{
+                                                  transform: "rotate(90deg)",
+                                                  color: planeColor,
+                                                  fill: planeColor,
+                                                  filter: `drop-shadow(0 0 4px ${shadowColor}) drop-shadow(0 2px 6px rgba(0, 0, 0, 0.6))`,
+                                                }}
+                                              />
+                                            </div>
+                                          </div>
+                                        </TooltipTrigger>
+                                        <TooltipContent>
+                                          <p className="text-xs font-medium">{getStatusCode(awb.last_event)}</p>
+                                          <p className="text-xs text-muted-foreground">{getStatusFromEvent(awb.last_event)}</p>
+                                        </TooltipContent>
+                                      </Tooltip>
+                                    </TooltipProvider>
                                   </div>
                                 );
                               })()}
