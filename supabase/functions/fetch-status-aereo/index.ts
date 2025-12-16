@@ -41,19 +41,35 @@ serve(async (req) => {
       password: dbPassword,
     });
 
-    // Include arr_check_count column (default 0 if column doesn't exist yet)
-    let query = `SELECT *, COALESCE(arr_check_count, 0) as arr_check_count FROM ${database}.t_status_aereo ORDER BY id DESC`;
+    // Check if arr_check_count column exists
+    let hasArrCheckColumn = false;
+    try {
+      const colCheck = await client.query(
+        `SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS 
+         WHERE TABLE_SCHEMA = ? AND TABLE_NAME = 't_status_aereo' AND COLUMN_NAME = 'arr_check_count'`,
+        [database]
+      );
+      hasArrCheckColumn = Array.isArray(colCheck) && colCheck.length > 0;
+    } catch (e) {
+      console.log('Column check failed, assuming column does not exist');
+    }
+
+    const selectFields = hasArrCheckColumn 
+      ? `*, arr_check_count` 
+      : `*, 0 as arr_check_count`;
+
+    let query = `SELECT ${selectFields} FROM ${database}.t_status_aereo ORDER BY id DESC`;
     let params: string[] = [];
 
     if (search && search.trim() !== '') {
-      query = `SELECT *, COALESCE(arr_check_count, 0) as arr_check_count FROM ${database}.t_status_aereo 
+      query = `SELECT ${selectFields} FROM ${database}.t_status_aereo 
                WHERE awb LIKE ? OR hawb LIKE ? OR destinatário LIKE ? 
                ORDER BY id DESC`;
       const searchPattern = `%${search.trim()}%`;
       params = [searchPattern, searchPattern, searchPattern];
     }
 
-    console.log(`Executing query: ${query}`);
+    console.log(`Executing query: ${query} (hasArrCheckColumn: ${hasArrCheckColumn})`);
     const rows = await client.query(query, params);
     
     console.log(`Fetched ${Array.isArray(rows) ? rows.length : 0} records from t_status_aereo`);
