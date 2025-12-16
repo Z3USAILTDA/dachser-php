@@ -214,6 +214,7 @@ const ContainerTracking = () => {
   const [trackingContainer, setTrackingContainer] = useState<string | null>(null);
   const [isLoadingData, setIsLoadingData] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [isLoadingSeaItems, setIsLoadingSeaItems] = useState(false);
   const { toast } = useToast();
 
   const itemsPerPage = 10;
@@ -351,6 +352,53 @@ const ContainerTracking = () => {
       });
     } finally {
       setIsRefreshing(false);
+    }
+  };
+
+  // Load containers from t_dachser_sea_items
+  const handleLoadFromSeaItems = async () => {
+    setIsLoadingSeaItems(true);
+    toast({
+      title: "Carregando containers",
+      description: "Buscando containers das análises SEA...",
+    });
+    
+    try {
+      const res = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/olimpo-proxy?action=load_containers_from_sea_items`,
+        {
+          method: 'GET',
+          headers: {
+            'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
+            'Content-Type': 'application/json',
+          }
+        }
+      );
+      
+      const result = await res.json();
+      
+      if (result.success) {
+        toast({
+          title: "Containers carregados",
+          description: result.message || `${result.added} container(s) adicionado(s)`,
+        });
+        await fetchContainersData();
+      } else {
+        toast({
+          title: "Erro ao carregar",
+          description: result.error || "Falha ao carregar containers",
+          variant: "destructive",
+        });
+      }
+    } catch (error) {
+      console.error("Error loading from sea items:", error);
+      toast({
+        title: "Erro",
+        description: "Falha ao carregar containers das análises SEA",
+        variant: "destructive",
+      });
+    } finally {
+      setIsLoadingSeaItems(false);
     }
   };
 
@@ -875,13 +923,42 @@ const ContainerTracking = () => {
                 </div>
               </div>
 
-              <button
-                onClick={handleRefresh}
-                className="h-8 px-4 rounded-full bg-[#ffc800] text-[#000] text-[0.75rem] font-medium flex items-center gap-1.5 hover:bg-[#ffdc50] transition shadow-[0_0_20px_rgba(255,200,0,.3)]"
-              >
-                <RefreshCw className="w-3.5 h-3.5" />
-                Atualizar
-              </button>
+              <div className="flex items-center gap-2">
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <button
+                        onClick={handleLoadFromSeaItems}
+                        disabled={isLoadingSeaItems}
+                        className="h-8 px-4 rounded-full bg-blue-600 text-white text-[0.75rem] font-medium flex items-center gap-1.5 hover:bg-blue-500 transition shadow-[0_0_20px_rgba(59,130,246,.3)] disabled:opacity-50"
+                      >
+                        {isLoadingSeaItems ? (
+                          <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                        ) : (
+                          <Database className="w-3.5 h-3.5" />
+                        )}
+                        Carregar SEA
+                      </button>
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      <p className="text-xs">Carregar containers das análises HBL</p>
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+                
+                <button
+                  onClick={handleRefresh}
+                  disabled={isRefreshing}
+                  className="h-8 px-4 rounded-full bg-[#ffc800] text-[#000] text-[0.75rem] font-medium flex items-center gap-1.5 hover:bg-[#ffdc50] transition shadow-[0_0_20px_rgba(255,200,0,.3)] disabled:opacity-50"
+                >
+                  {isRefreshing ? (
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  ) : (
+                    <RefreshCw className="w-3.5 h-3.5" />
+                  )}
+                  Atualizar
+                </button>
+              </div>
             </div>
           </div>
         </section>

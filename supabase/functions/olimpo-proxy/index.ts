@@ -1234,6 +1234,157 @@ serve(async (req) => {
       }
     }
 
+    // ===== SEA TRACKING: Load containers from t_dachser_sea_items =====
+    if (action === 'load_containers_from_sea_items') {
+      const mariadbHost = Deno.env.get('MARIADB_HOST');
+      const mariadbPort = Deno.env.get('MARIADB_PORT') || '3306';
+      const mariadbUser = Deno.env.get('MARIADB_USER');
+      const mariadbPass = Deno.env.get('MARIADB_PASSWORD');
+      const mariadbDb = Deno.env.get('MARIADB_DATABASE');
+
+      if (!mariadbHost || !mariadbUser || !mariadbPass || !mariadbDb) {
+        return new Response(JSON.stringify({ error: 'MariaDB não configurado' }), {
+          status: 500,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      }
+
+      const { Client } = await import("https://deno.land/x/mysql@v2.12.1/mod.ts");
+      const client = await new Client().connect({
+        hostname: mariadbHost,
+        port: parseInt(mariadbPort, 10),
+        username: mariadbUser,
+        password: mariadbPass,
+        db: mariadbDb,
+      });
+
+      try {
+        // Fetch containers from t_dachser_sea_items that are not yet being tracked
+        const containers = await client.query(`
+          SELECT DISTINCT 
+            si.container,
+            si.vessel,
+            si.voyage,
+            si.origem,
+            si.destino,
+            si.consignee
+          FROM ai_agente.t_dachser_sea_items si
+          WHERE si.container IS NOT NULL 
+            AND TRIM(si.container) != ''
+            AND si.active = 1
+            AND NOT EXISTS (
+              SELECT 1 FROM ai_agente.t_dachser_container_tracking ct 
+              WHERE ct.container = si.container AND ct.active = 1
+            )
+          ORDER BY si.created_at DESC
+          LIMIT 100
+        `);
+
+        console.log(`[load_containers_from_sea_items] Found ${containers.length} new containers to track`);
+
+        let added = 0;
+        for (const c of containers) {
+          if (!c.container) continue;
+          
+          await client.execute(`
+            INSERT INTO ai_agente.t_dachser_container_tracking 
+            (container, consignee_name, origem, destino, vessel, last_event, container_status)
+            VALUES (?, ?, ?, ?, ?, 'Aguardando rastreio...', 'PENDING')
+            ON DUPLICATE KEY UPDATE
+              consignee_name = COALESCE(VALUES(consignee_name), consignee_name),
+              origem = COALESCE(VALUES(origem), origem),
+              destino = COALESCE(VALUES(destino), destino),
+              vessel = COALESCE(VALUES(vessel), vessel),
+              active = 1,
+              updated_at = NOW()
+          `, [
+            c.container.toString().toUpperCase().trim(),
+            c.consignee || null,
+            c.origem || null,
+            c.destino || null,
+            c.vessel || null
+          ]);
+          added++;
+        }
+
+        await client.close();
+        return new Response(JSON.stringify({ 
+          success: true, 
+          added, 
+          total: containers.length,
+          message: `${added} container(s) adicionado(s) ao monitoramento`
+        }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      } catch (e: any) {
+        await client.close();
+        console.error('[load_containers_from_sea_items] Error:', e);
+        return new Response(JSON.stringify({ error: e.message }), {
+          status: 500,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      }
+    }
+
+    // ===== SEA TRACKING: Get available containers from sea_items (not yet tracked) =====
+    if (action === 'get_available_containers') {
+      const mariadbHost = Deno.env.get('MARIADB_HOST');
+      const mariadbPort = Deno.env.get('MARIADB_PORT') || '3306';
+      const mariadbUser = Deno.env.get('MARIADB_USER');
+      const mariadbPass = Deno.env.get('MARIADB_PASSWORD');
+      const mariadbDb = Deno.env.get('MARIADB_DATABASE');
+
+      if (!mariadbHost || !mariadbUser || !mariadbPass || !mariadbDb) {
+        return new Response(JSON.stringify({ error: 'MariaDB não configurado', data: [] }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      }
+
+      const { Client } = await import("https://deno.land/x/mysql@v2.12.1/mod.ts");
+      const client = await new Client().connect({
+        hostname: mariadbHost,
+        port: parseInt(mariadbPort, 10),
+        username: mariadbUser,
+        password: mariadbPass,
+        db: mariadbDb,
+      });
+
+      try {
+        const containers = await client.query(`
+          SELECT DISTINCT 
+            si.container,
+            si.vessel,
+            si.voyage,
+            si.origem,
+            si.destino,
+            si.consignee,
+            si.created_at
+          FROM ai_agente.t_dachser_sea_items si
+          WHERE si.container IS NOT NULL 
+            AND TRIM(si.container) != ''
+            AND si.active = 1
+            AND NOT EXISTS (
+              SELECT 1 FROM ai_agente.t_dachser_container_tracking ct 
+              WHERE ct.container = si.container AND ct.active = 1
+            )
+          ORDER BY si.created_at DESC
+          LIMIT 100
+        `);
+
+        await client.close();
+        return new Response(JSON.stringify({ success: true, data: containers }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      } catch (e: any) {
+        await client.close();
+        console.error('[get_available_containers] Error:', e);
+        return new Response(JSON.stringify({ error: e.message, data: [] }), {
+          status: 500,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      }
+    }
+
     return new Response(JSON.stringify({ error: 'Ação não reconhecida' }), {
       status: 400,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' }
