@@ -33,19 +33,46 @@ import dachserBg from "@/assets/dachser-background.jpg";
 import { TablePagination } from "@/components/layout/TablePagination";
 import { Filter as FilterIcon } from "lucide-react";
 
-// Shipping lines
+// Shipping lines - only 5 approved carriers
 const shippingLines = [
-  { code: "MAEU", name: "Maersk" },
-  { code: "MSCU", name: "MSC" },
-  { code: "CMAU", name: "CMA CGM" },
-  { code: "COSU", name: "COSCO" },
-  { code: "EGLV", name: "Evergreen" },
-  { code: "HLCU", name: "Hapag-Lloyd" },
-  { code: "ONEY", name: "ONE" },
-  { code: "YMLU", name: "Yang Ming" },
+  { code: "HLCU", name: "HAPAG-LLOYD" },
+  { code: "CMAU", name: "CMA" },
   { code: "HDMU", name: "HMM" },
-  { code: "ZIMU", name: "ZIM" },
+  { code: "ONEY", name: "ONE" },
+  { code: "MSCU", name: "MSC" },
 ];
+
+// Detect armador from vessel name
+const detectArmadorFromVessel = (vessel: string | null | undefined): string => {
+  if (!vessel) return "-";
+  const upperVessel = vessel.toUpperCase();
+  
+  // HAPAG-LLOYD patterns
+  if (upperVessel.includes("HAPAG") || upperVessel.includes("LLOYD") || 
+      upperVessel.includes("HAMBURG") || upperVessel.includes("HLCU")) {
+    return "HAPAG-LLOYD";
+  }
+  // CMA CGM patterns
+  if (upperVessel.includes("CMA") || upperVessel.includes("CGM") || 
+      upperVessel.includes("APL") || upperVessel.includes("ANL")) {
+    return "CMA";
+  }
+  // HMM patterns
+  if (upperVessel.includes("HMM") || upperVessel.includes("HYUNDAI")) {
+    return "HMM";
+  }
+  // ONE patterns
+  if (upperVessel.includes("ONE ") || upperVessel.startsWith("ONE") ||
+      upperVessel.includes("OCEAN NETWORK")) {
+    return "ONE";
+  }
+  // MSC patterns
+  if (upperVessel.includes("MSC")) {
+    return "MSC";
+  }
+  
+  return "-";
+};
 
 // Status mapping for containers (JSONCargo events)
 const containerStatusMap: Record<string, string> = {
@@ -982,13 +1009,12 @@ const ContainerTracking = () => {
                           {sortContainer === "desc" && <span className="text-[#ffc800]">↓</span>}
                         </span>
                       </th>
-                      <th className="px-4 py-3 text-left text-[#aaaaaa] uppercase text-[0.68rem] tracking-[0.1em] font-medium">BL</th>
                       <th
                         className="px-4 py-3 text-left text-[#aaaaaa] uppercase text-[0.68rem] tracking-[0.1em] font-medium cursor-pointer select-none hover:text-[#ffc800] transition"
                         onClick={handleClientSort}
                       >
                         <span className="flex items-center gap-1">
-                          Cliente
+                          Consignee
                           {sortClient === "asc" && <span className="text-[#ffc800]">↑</span>}
                           {sortClient === "desc" && <span className="text-[#ffc800]">↓</span>}
                         </span>
@@ -998,18 +1024,6 @@ const ContainerTracking = () => {
                       <th className="px-4 py-3 text-left text-[#aaaaaa] uppercase text-[0.68rem] tracking-[0.1em] font-medium">Destino</th>
                       <th className="px-4 py-3 text-center text-[#aaaaaa] uppercase text-[0.68rem] tracking-[0.1em] font-medium min-w-[180px]">Timeline</th>
                       <th className="px-4 py-3 text-left text-[#aaaaaa] uppercase text-[0.68rem] tracking-[0.1em] font-medium">Status</th>
-                      <th className="px-4 py-3 text-left text-[#aaaaaa] uppercase text-[0.68rem] tracking-[0.1em] font-medium">ETA</th>
-                      <th
-                        className="px-4 py-3 text-left text-[#aaaaaa] uppercase text-[0.68rem] tracking-[0.1em] font-medium cursor-pointer select-none hover:text-[#ffc800] transition"
-                        onClick={handleAnalystSort}
-                      >
-                        <span className="flex items-center gap-1">
-                          Analista
-                          {sortAnalyst === "asc" && <span className="text-[#ffc800]">↑</span>}
-                          {sortAnalyst === "desc" && <span className="text-[#ffc800]">↓</span>}
-                        </span>
-                      </th>
-                      <th className="px-4 py-3 text-center text-[#aaaaaa] uppercase text-[0.68rem] tracking-[0.1em] font-medium">Ações</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -1045,7 +1059,6 @@ const ContainerTracking = () => {
                           <td className="px-4 py-3">
                             <span className="text-[#f5f5f5] font-mono text-sm">{container.container}</span>
                           </td>
-                          <td className="px-4 py-3 text-[#aaaaaa] text-sm">{container.bl || "-"}</td>
                           <td className="px-4 py-3">
                             <TooltipProvider>
                               <Tooltip>
@@ -1062,7 +1075,7 @@ const ContainerTracking = () => {
                           </td>
                           <td className="px-4 py-3">
                             <span className="px-2 py-1 rounded-full text-xs font-medium bg-[rgba(255,200,0,.15)] text-[#ffc800] border border-[rgba(255,200,0,.3)]">
-                              {container.shipping_line}
+                              {detectArmadorFromVessel(container.vessel)}
                             </span>
                           </td>
                           <td className="px-4 py-3 text-[#aaaaaa] text-sm">{container.origem || "-"}</td>
@@ -1164,47 +1177,6 @@ const ContainerTracking = () => {
                             >
                               {statusCode}
                             </span>
-                          </td>
-                          <td className="px-4 py-3 text-[#aaaaaa] text-sm">{container.eta || "-"}</td>
-                          <td className="px-3 py-3 text-[#aaaaaa] text-sm uppercase">{container.nome_analista || "-"}</td>
-                          <td className="px-4 py-3 text-center">
-                            <div className="flex items-center justify-center gap-1">
-                              <TooltipProvider>
-                                <Tooltip>
-                                  <TooltipTrigger asChild>
-                                    <Button
-                                      variant="ghost"
-                                      size="sm"
-                                      onClick={() => handleTrackContainer(container.container, container.shipping_line)}
-                                      disabled={trackingContainer === container.container}
-                                      className="gap-1 text-[#ffc800] hover:text-[#ffdc50] h-8 px-2"
-                                    >
-                                      {trackingContainer === container.container ? (
-                                        <Loader2 className="w-4 h-4 animate-spin" />
-                                      ) : (
-                                        <RefreshCw className="w-4 h-4" />
-                                      )}
-                                    </Button>
-                                  </TooltipTrigger>
-                                  <TooltipContent><p className="text-xs">Rastrear Container</p></TooltipContent>
-                                </Tooltip>
-                              </TooltipProvider>
-                              <TooltipProvider>
-                                <Tooltip>
-                                  <TooltipTrigger asChild>
-                                    <Button
-                                      variant="ghost"
-                                      size="sm"
-                                      onClick={() => handleDeleteContainer(container.id, container.container)}
-                                      className="gap-1.5 text-red-400 hover:text-red-300 h-8 px-2"
-                                    >
-                                      <Trash2 className="w-4 h-4" />
-                                    </Button>
-                                  </TooltipTrigger>
-                                  <TooltipContent><p className="text-xs">Remover</p></TooltipContent>
-                                </Tooltip>
-                              </TooltipProvider>
-                            </div>
                           </td>
                         </tr>
                       );
