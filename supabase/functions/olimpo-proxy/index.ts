@@ -1076,7 +1076,7 @@ serve(async (req) => {
     // ===== SEA TRACKING: Track container via JSONCargo API =====
     if (action === 'track_container') {
       const containerId = url.searchParams.get('container') || '';
-      const shippingLine = url.searchParams.get('shipping_line') || '';
+      let shippingLine = url.searchParams.get('shipping_line') || '';
 
       if (!containerId) {
         return new Response(JSON.stringify({ error: 'container obrigatório' }), {
@@ -1085,10 +1085,66 @@ serve(async (req) => {
         });
       }
 
+      // If no shipping_line provided, try to detect from vessel in database
+      if (!shippingLine) {
+        const mariadbHost = Deno.env.get('MARIADB_HOST');
+        const mariadbUser = Deno.env.get('MARIADB_USER');
+        const mariadbPass = Deno.env.get('MARIADB_PASSWORD');
+        const mariadbDb = Deno.env.get('MARIADB_DATABASE');
+        
+        if (mariadbHost && mariadbUser && mariadbPass) {
+          const { Client } = await import("https://deno.land/x/mysql@v2.12.1/mod.ts");
+          const client = await new Client().connect({
+            hostname: mariadbHost,
+            port: parseInt(Deno.env.get('MARIADB_PORT') || '3306', 10),
+            username: mariadbUser,
+            password: mariadbPass,
+            db: mariadbDb,
+          });
+          
+          try {
+            console.log(`[track_container] Querying vessel for container: ${containerId.toUpperCase().trim()}`);
+            const rows = await client.query(`
+              SELECT vessel FROM ai_agente.t_dachser_container_tracking 
+              WHERE TRIM(container) = ? LIMIT 1
+            `, [containerId.toUpperCase().trim()]);
+            
+            console.log(`[track_container] Query returned ${rows.length} rows:`, JSON.stringify(rows));
+            
+            if (rows.length > 0 && rows[0].vessel) {
+              const vessel = (rows[0].vessel || '').toUpperCase();
+              console.log(`[track_container] Found vessel: "${vessel}"`);
+              // Detect carrier from vessel name
+              if (vessel.includes('MAERSK') || vessel.includes('SEALAND') || vessel.includes('SAFMARINE')) {
+                shippingLine = 'MAEU';
+              } else if (vessel.includes('MSC')) {
+                shippingLine = 'MSCU';
+              } else if (vessel.includes('CMA') || vessel.includes('CGM') || vessel.includes('APL')) {
+                shippingLine = 'CMAU';
+              } else if (vessel.includes('HAPAG') || vessel.includes('LLOYD')) {
+                shippingLine = 'HLCU';
+              } else if (vessel.includes('ONE') || vessel.includes('OCEAN NETWORK')) {
+                shippingLine = 'ONEY';
+              } else if (vessel.includes('HMM') || vessel.includes('HYUNDAI')) {
+                shippingLine = 'HDMU';
+              }
+              console.log(`[track_container] Detected shipping line: ${shippingLine} from vessel "${rows[0].vessel}"`);
+            } else {
+              console.log(`[track_container] No vessel found for container ${containerId}`);
+            }
+            await client.close();
+          } catch (e: any) {
+            console.error('[track_container] Error detecting shipping line:', e.message);
+            try { await client.close(); } catch (_) {}
+          }
+        }
+      }
+
       // Call JSONCargo API
       const qs: Record<string, string> = {};
       if (shippingLine) qs['shipping_line'] = shippingLine;
       
+      console.log(`[track_container] Calling JSONCargo API for ${containerId} with shipping_line: ${shippingLine || 'auto'}`);
       const apiRes = await jcJson(`http://api.jsoncargo.com/api/v1/containers/${encodeURIComponent(containerId)}`, qs);
 
       if (apiRes.__curl_error) {
