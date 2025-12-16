@@ -1085,57 +1085,76 @@ serve(async (req) => {
         });
       }
 
-      // If no shipping_line provided, try to detect from vessel in database
+      // Detect shipping_line from container PREFIX first (most accurate)
       if (!shippingLine) {
-        const mariadbHost = Deno.env.get('MARIADB_HOST');
-        const mariadbUser = Deno.env.get('MARIADB_USER');
-        const mariadbPass = Deno.env.get('MARIADB_PASSWORD');
-        const mariadbDb = Deno.env.get('MARIADB_DATABASE');
+        const prefix = containerId.substring(0, 4).toUpperCase();
+        // Direct carrier-owned containers
+        if (prefix === 'CMAU' || prefix === 'CCLU' || prefix === 'CXDU') {
+          shippingLine = 'CMAU'; // CMA CGM
+        } else if (prefix === 'MSCU' || prefix === 'MEDU') {
+          shippingLine = 'MSCU'; // MSC
+        } else if (prefix === 'MAEU' || prefix === 'MRKU' || prefix === 'MSKU') {
+          shippingLine = 'MAEU'; // Maersk
+        } else if (prefix === 'HLCU' || prefix === 'HLXU') {
+          shippingLine = 'HLCU'; // Hapag-Lloyd
+        } else if (prefix === 'ONEY' || prefix === 'ONEU') {
+          shippingLine = 'ONEY'; // ONE
+        } else if (prefix === 'HDMU' || prefix === 'HMMU') {
+          shippingLine = 'HDMU'; // HMM
+        } else if (prefix === 'EISU' || prefix === 'EITU' || prefix === 'EGSU' || prefix === 'EGHU') {
+          shippingLine = 'EGLV'; // Evergreen
+        } else if (prefix === 'YMLU' || prefix === 'YMMU') {
+          shippingLine = 'YMLU'; // Yang Ming
+        }
         
-        if (mariadbHost && mariadbUser && mariadbPass) {
-          const { Client } = await import("https://deno.land/x/mysql@v2.12.1/mod.ts");
-          const client = await new Client().connect({
-            hostname: mariadbHost,
-            port: parseInt(Deno.env.get('MARIADB_PORT') || '3306', 10),
-            username: mariadbUser,
-            password: mariadbPass,
-            db: mariadbDb,
-          });
+        if (shippingLine) {
+          console.log(`[track_container] Container ${containerId}: using shipping_line ${shippingLine} from prefix ${prefix}`);
+        } else {
+          // SOC container - try to get vessel from database
+          const mariadbHost = Deno.env.get('MARIADB_HOST');
+          const mariadbUser = Deno.env.get('MARIADB_USER');
+          const mariadbPass = Deno.env.get('MARIADB_PASSWORD');
+          const mariadbDb = Deno.env.get('MARIADB_DATABASE');
           
-          try {
-            console.log(`[track_container] Querying vessel for container: ${containerId.toUpperCase().trim()}`);
-            const rows = await client.query(`
-              SELECT vessel FROM ai_agente.t_dachser_container_tracking 
-              WHERE TRIM(container) = ? LIMIT 1
-            `, [containerId.toUpperCase().trim()]);
+          if (mariadbHost && mariadbUser && mariadbPass) {
+            const { Client } = await import("https://deno.land/x/mysql@v2.12.1/mod.ts");
+            const client = await new Client().connect({
+              hostname: mariadbHost,
+              port: parseInt(Deno.env.get('MARIADB_PORT') || '3306', 10),
+              username: mariadbUser,
+              password: mariadbPass,
+              db: mariadbDb,
+            });
             
-            console.log(`[track_container] Query returned ${rows.length} rows:`, JSON.stringify(rows));
-            
-            if (rows.length > 0 && rows[0].vessel) {
-              const vessel = (rows[0].vessel || '').toUpperCase();
-              console.log(`[track_container] Found vessel: "${vessel}"`);
-              // Detect carrier from vessel name
-              if (vessel.includes('MAERSK') || vessel.includes('SEALAND') || vessel.includes('SAFMARINE')) {
-                shippingLine = 'MAEU';
-              } else if (vessel.includes('MSC')) {
-                shippingLine = 'MSCU';
-              } else if (vessel.includes('CMA') || vessel.includes('CGM') || vessel.includes('APL')) {
-                shippingLine = 'CMAU';
-              } else if (vessel.includes('HAPAG') || vessel.includes('LLOYD')) {
-                shippingLine = 'HLCU';
-              } else if (vessel.includes('ONE') || vessel.includes('OCEAN NETWORK')) {
-                shippingLine = 'ONEY';
-              } else if (vessel.includes('HMM') || vessel.includes('HYUNDAI')) {
-                shippingLine = 'HDMU';
+            try {
+              console.log(`[track_container] SOC container (prefix ${prefix}), querying vessel for: ${containerId.toUpperCase().trim()}`);
+              const rows = await client.query(`
+                SELECT vessel FROM ai_agente.t_dachser_container_tracking 
+                WHERE TRIM(container) = ? LIMIT 1
+              `, [containerId.toUpperCase().trim()]);
+              
+              if (rows.length > 0 && rows[0].vessel) {
+                const vessel = (rows[0].vessel || '').toUpperCase();
+                if (vessel.includes('MAERSK') || vessel.includes('SEALAND') || vessel.includes('SAFMARINE')) {
+                  shippingLine = 'MAEU';
+                } else if (vessel.includes('MSC ') || vessel.startsWith('MSC')) {
+                  shippingLine = 'MSCU';
+                } else if (vessel.includes('CMA') || vessel.includes('CGM') || vessel.includes('APL')) {
+                  shippingLine = 'CMAU';
+                } else if (vessel.includes('HAPAG') || vessel.includes('LLOYD')) {
+                  shippingLine = 'HLCU';
+                } else if (vessel.includes('ONE ') || vessel.includes('OCEAN NETWORK')) {
+                  shippingLine = 'ONEY';
+                } else if (vessel.includes('HMM') || vessel.includes('HYUNDAI')) {
+                  shippingLine = 'HDMU';
+                }
+                console.log(`[track_container] SOC detected ${shippingLine} from vessel "${rows[0].vessel}"`);
               }
-              console.log(`[track_container] Detected shipping line: ${shippingLine} from vessel "${rows[0].vessel}"`);
-            } else {
-              console.log(`[track_container] No vessel found for container ${containerId}`);
+              await client.close();
+            } catch (e: any) {
+              console.error('[track_container] Error detecting shipping line:', e.message);
+              try { await client.close(); } catch (_) {}
             }
-            await client.close();
-          } catch (e: any) {
-            console.error('[track_container] Error detecting shipping line:', e.message);
-            try { await client.close(); } catch (_) {}
           }
         }
       }
@@ -1253,23 +1272,50 @@ serve(async (req) => {
           const containerId = row.container;
           let shippingLine = row.shipping_line || '';
           
-          // Detect shipping_line from vessel name if not provided
-          if (!shippingLine && row.vessel) {
-            const vessel = (row.vessel || '').toUpperCase();
-            if (vessel.includes('MAERSK') || vessel.includes('SEALAND') || vessel.includes('SAFMARINE')) {
-              shippingLine = 'MAEU';
-            } else if (vessel.includes('MSC')) {
-              shippingLine = 'MSCU';
-            } else if (vessel.includes('CMA') || vessel.includes('CGM') || vessel.includes('APL')) {
-              shippingLine = 'CMAU';
-            } else if (vessel.includes('HAPAG') || vessel.includes('LLOYD')) {
-              shippingLine = 'HLCU';
-            } else if (vessel.includes('ONE') || vessel.includes('OCEAN NETWORK')) {
-              shippingLine = 'ONEY';
-            } else if (vessel.includes('HMM') || vessel.includes('HYUNDAI')) {
-              shippingLine = 'HDMU';
+          // Detect shipping_line from container PREFIX (first 4 chars) - this is the correct way
+          if (!shippingLine && containerId) {
+            const prefix = containerId.substring(0, 4).toUpperCase();
+            // Direct carrier-owned containers
+            if (prefix === 'CMAU' || prefix === 'CCLU' || prefix === 'CXDU') {
+              shippingLine = 'CMAU'; // CMA CGM
+            } else if (prefix === 'MSCU' || prefix === 'MEDU' || prefix === 'MSKU') {
+              shippingLine = 'MSCU'; // MSC
+            } else if (prefix === 'MAEU' || prefix === 'MRKU' || prefix === 'MSKU') {
+              shippingLine = 'MAEU'; // Maersk
+            } else if (prefix === 'HLCU' || prefix === 'HLXU') {
+              shippingLine = 'HLCU'; // Hapag-Lloyd
+            } else if (prefix === 'ONEY' || prefix === 'ONEU') {
+              shippingLine = 'ONEY'; // ONE
+            } else if (prefix === 'HDMU' || prefix === 'HMMU') {
+              shippingLine = 'HDMU'; // HMM
+            } else if (prefix === 'EISU' || prefix === 'EITU' || prefix === 'EGSU' || prefix === 'EGHU') {
+              shippingLine = 'EGLV'; // Evergreen
+            } else if (prefix === 'YMLU' || prefix === 'YMMU') {
+              shippingLine = 'YMLU'; // Yang Ming
+            } else {
+              // SOC (Shipper-Owned Container) - use vessel name as fallback
+              // Common SOC prefixes: TCNU, TCKU, TRHU, TXGU, SEGU, SEKU, TLLU, TTNU, etc.
+              if (row.vessel) {
+                const vessel = (row.vessel || '').toUpperCase();
+                if (vessel.includes('MAERSK') || vessel.includes('SEALAND') || vessel.includes('SAFMARINE')) {
+                  shippingLine = 'MAEU';
+                } else if (vessel.includes('MSC ') || vessel.startsWith('MSC')) {
+                  shippingLine = 'MSCU';
+                } else if (vessel.includes('CMA') || vessel.includes('CGM') || vessel.includes('APL')) {
+                  shippingLine = 'CMAU';
+                } else if (vessel.includes('HAPAG') || vessel.includes('LLOYD')) {
+                  shippingLine = 'HLCU';
+                } else if (vessel.includes('ONE ') || vessel.includes('OCEAN NETWORK')) {
+                  shippingLine = 'ONEY';
+                } else if (vessel.includes('HMM') || vessel.includes('HYUNDAI')) {
+                  shippingLine = 'HDMU';
+                }
+                console.log(`[refresh_all] SOC Container ${containerId} (prefix ${prefix}): detected ${shippingLine} from vessel "${row.vessel}"`);
+              }
             }
-            console.log(`[refresh_all] Container ${containerId}: detected ${shippingLine} from vessel "${row.vessel}"`);
+            if (shippingLine) {
+              console.log(`[refresh_all] Container ${containerId}: using shipping_line ${shippingLine} (prefix: ${prefix})`);
+            }
           }
           
           const qs: Record<string, string> = {};
