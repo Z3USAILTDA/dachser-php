@@ -15,6 +15,12 @@ verify_jwt = false
 [functions.add-alert-status-column]
 verify_jwt = false
 
+[functions.add-arr-check-column]
+verify_jwt = false
+
+[functions.add-arr-datetime-column]
+verify_jwt = false
+
 [functions.send-voucher-notification]
 verify_jwt = false
 
