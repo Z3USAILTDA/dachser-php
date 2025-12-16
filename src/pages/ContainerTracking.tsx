@@ -122,69 +122,59 @@ const containerStatusMap: Record<string, string> = {
 };
 
 // Get status code from JSONCargo event
+// Stages: L/C → ATD → AT SEA → ATA → T/S → ATA (final)
 const getStatusCode = (lastEvent: string | null): string => {
   if (!lastEvent) return "AGD"; // Aguardando
   
   const upperEvent = lastEvent.toUpperCase().replace(/[_\s-]/g, "");
   
-  // Delivery statuses
-  if (upperEvent.includes("DELIVERED") || upperEvent.includes("DELIVERY") || upperEvent.includes("EMPTYRETURN")) return "DLV";
-  // Gate out full (customs cleared, ready for delivery)
-  if (upperEvent.includes("GATEOUTFULL") || upperEvent.includes("FULLOUT")) return "GOF";
-  // Discharge
-  if (upperEvent.includes("DISCHARGED") || upperEvent.includes("DISCHARGE")) return "DCH";
-  // Arrival
-  if (upperEvent.includes("ARRIVED") || upperEvent.includes("ARRIVAL") || upperEvent.includes("VESSELARRIVED")) return "ARR";
+  // Delivery/Final (after final arrival)
+  if (upperEvent.includes("DELIVERED") || upperEvent.includes("DELIVERY") || upperEvent.includes("EMPTYRETURN") ||
+      upperEvent.includes("GATEOUTFULL") || upperEvent.includes("FULLOUT") ||
+      upperEvent.includes("DISCHARGED") || upperEvent.includes("DISCHARGE")) return "ATA2";
   // Transshipment
-  if (upperEvent.includes("TRANSSHIPMENT")) return "TSP";
-  // In transit
-  if (upperEvent.includes("TRANSIT") || upperEvent.includes("ONRAIL")) return "TRA";
+  if (upperEvent.includes("TRANSSHIPMENT")) return "T/S";
+  // Arrival (first arrival / intermediate)
+  if (upperEvent.includes("ARRIVED") || upperEvent.includes("ARRIVAL") || upperEvent.includes("VESSELARRIVED")) return "ATA";
+  // In transit / At Sea
+  if (upperEvent.includes("TRANSIT") || upperEvent.includes("ONRAIL") || upperEvent.includes("ATSEA")) return "SEA";
   // Departure
-  if (upperEvent.includes("DEPARTED") || upperEvent.includes("DEPARTURE") || upperEvent.includes("VESSELDEPARTED")) return "DEP";
+  if (upperEvent.includes("DEPARTED") || upperEvent.includes("DEPARTURE") || upperEvent.includes("VESSELDEPARTED")) return "ATD";
   // Loaded
-  if (upperEvent.includes("LOADED") || upperEvent.includes("LOAD") || upperEvent.includes("FULLIN") || upperEvent.includes("GATEINFULL")) return "LOD";
-  // Gate out empty (container picked up)
-  if (upperEvent.includes("GATEOUTEMPTY") || upperEvent.includes("EMPTYPICKUP") || upperEvent.includes("EMPTYTOSHIPPER")) return "GOE";
-  // Booked
-  if (upperEvent.includes("BOOKED") || upperEvent.includes("BOOKING")) return "BKD";
-  // Pending
-  if (upperEvent.includes("PENDING")) return "AGD";
+  if (upperEvent.includes("LOADED") || upperEvent.includes("LOAD") || upperEvent.includes("FULLIN") || upperEvent.includes("GATEINFULL")) return "L/C";
+  // Pre-loading statuses
+  if (upperEvent.includes("GATEOUTEMPTY") || upperEvent.includes("EMPTYPICKUP") || 
+      upperEvent.includes("EMPTYTOSHIPPER") || upperEvent.includes("BOOKED") || upperEvent.includes("BOOKING") ||
+      upperEvent.includes("PENDING")) return "AGD";
   
-  return lastEvent.substring(0, 3).toUpperCase();
+  return "AGD";
 };
 
 // Timeline progress for container tracking (JSONCargo stages)
-// Stages: BKD → GOE → LOD → DEP → TRA → ARR → DCH → DLV
+// Stages: L/C → ATD → AT SEA → ATA → T/S → ATA (final)
 const getTimelineProgress = (lastEvent: string | null): number => {
   if (!lastEvent) return 0;
   
   const statusCode = getStatusCode(lastEvent);
   
   const progressMap: Record<string, number> = {
-    // Booking/Start
-    BKD: 0,
+    // Aguardando (pre-load)
     AGD: 0,
-    // Gate Out Empty
-    GOE: 12,
-    // Loaded
-    LOD: 25,
-    // Departed
-    DEP: 40,
-    // In Transit
-    TRA: 55,
-    // Transshipment
-    TSP: 65,
-    // Arrived
-    ARR: 75,
-    // Discharged
-    DCH: 87,
-    // Gate Out Full
-    GOF: 94,
-    // Delivered
-    DLV: 100,
+    // L/C - Loaded
+    "L/C": 0,
+    // ATD - Departed
+    ATD: 20,
+    // AT SEA - In Transit
+    SEA: 40,
+    // ATA - Arrived (first/intermediate)
+    ATA: 60,
+    // T/S - Transshiped
+    "T/S": 80,
+    // ATA2 - Final Arrival
+    ATA2: 100,
   };
   
-  return progressMap[statusCode] || 10;
+  return progressMap[statusCode] ?? 0;
 };
 
 // Get human-readable status description
@@ -1104,46 +1094,54 @@ const ContainerTracking = () => {
                                 }}
                               />
 
-                              {/* Timeline dots - 5 stages: BKD → LOD → DEP → ARR → DLV */}
+                              {/* Timeline dots - 6 stages: L/C → ATD → AT SEA → ATA → T/S → ATA */}
                               <TooltipProvider>
-                                {/* BKD - 0% */}
+                                {/* L/C - 0% (LOADED) */}
                                 <Tooltip>
                                   <TooltipTrigger asChild>
                                     <div className="absolute left-0 w-1.5 h-1.5 rounded-full bg-white/90 shadow-sm z-10 cursor-pointer hover:scale-150 transition-transform" />
                                   </TooltipTrigger>
-                                  <TooltipContent><p className="text-xs">BKD - Reservado</p></TooltipContent>
+                                  <TooltipContent><p className="text-xs">L/C - LOADED</p></TooltipContent>
                                 </Tooltip>
 
-                                {/* LOD - 25% */}
+                                {/* ATD - 20% (DEPARTED) */}
                                 <Tooltip>
                                   <TooltipTrigger asChild>
-                                    <div className="absolute left-1/4 -translate-x-1/2 w-1.5 h-1.5 rounded-full bg-white/70 shadow-sm z-10 cursor-pointer hover:scale-150 transition-transform" />
+                                    <div className="absolute w-1.5 h-1.5 rounded-full bg-white/70 shadow-sm z-10 cursor-pointer hover:scale-150 transition-transform" style={{ left: '20%' }} />
                                   </TooltipTrigger>
-                                  <TooltipContent><p className="text-xs">LOD - Carregado</p></TooltipContent>
+                                  <TooltipContent><p className="text-xs">ATD - DEPARTED</p></TooltipContent>
                                 </Tooltip>
 
-                                {/* DEP - 50% */}
+                                {/* AT SEA - 40% (IN_TRANSIT) */}
                                 <Tooltip>
                                   <TooltipTrigger asChild>
-                                    <div className="absolute left-1/2 -translate-x-1/2 w-1.5 h-1.5 rounded-full bg-white/70 shadow-sm z-10 cursor-pointer hover:scale-150 transition-transform" />
+                                    <div className="absolute w-1.5 h-1.5 rounded-full bg-white/70 shadow-sm z-10 cursor-pointer hover:scale-150 transition-transform" style={{ left: '40%' }} />
                                   </TooltipTrigger>
-                                  <TooltipContent><p className="text-xs">DEP - Navio Partiu</p></TooltipContent>
+                                  <TooltipContent><p className="text-xs">AT SEA - IN_TRANSIT</p></TooltipContent>
                                 </Tooltip>
 
-                                {/* ARR - 75% */}
+                                {/* ATA - 60% (ARRIVED) */}
                                 <Tooltip>
                                   <TooltipTrigger asChild>
-                                    <div className="absolute left-3/4 -translate-x-1/2 w-1.5 h-1.5 rounded-full bg-white/70 shadow-sm z-10 cursor-pointer hover:scale-150 transition-transform" />
+                                    <div className="absolute w-1.5 h-1.5 rounded-full bg-white/70 shadow-sm z-10 cursor-pointer hover:scale-150 transition-transform" style={{ left: '60%' }} />
                                   </TooltipTrigger>
-                                  <TooltipContent><p className="text-xs">ARR - Navio Chegou</p></TooltipContent>
+                                  <TooltipContent><p className="text-xs">ATA - ARRIVED</p></TooltipContent>
                                 </Tooltip>
 
-                                {/* DLV - 100% */}
+                                {/* T/S - 80% (TRANSSHIPED) */}
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <div className="absolute w-1.5 h-1.5 rounded-full bg-white/70 shadow-sm z-10 cursor-pointer hover:scale-150 transition-transform" style={{ left: '80%' }} />
+                                  </TooltipTrigger>
+                                  <TooltipContent><p className="text-xs">T/S - TRANSSHIPED</p></TooltipContent>
+                                </Tooltip>
+
+                                {/* ATA - 100% (ARRIVED Final) */}
                                 <Tooltip>
                                   <TooltipTrigger asChild>
                                     <div className="absolute right-0 w-1.5 h-1.5 rounded-full bg-white/90 shadow-sm z-10 cursor-pointer hover:scale-150 transition-transform" />
                                   </TooltipTrigger>
-                                  <TooltipContent><p className="text-xs">DLV - Entregue</p></TooltipContent>
+                                  <TooltipContent><p className="text-xs">ATA - ARRIVED</p></TooltipContent>
                                 </Tooltip>
                               </TooltipProvider>
 
