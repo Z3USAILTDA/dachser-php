@@ -24,6 +24,7 @@ import {
   User as UserIcon,
   Loader2,
   Anchor,
+  AlertTriangle,
 } from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
 import { useToast } from "@/hooks/use-toast";
@@ -228,6 +229,7 @@ const ContainerTracking = () => {
   const [searchTerm, setSearchTerm] = useState("");
   const [filterLine, setFilterLine] = useState("all");
   const [filterAnalyst, setFilterAnalyst] = useState("all");
+  const [activeCardFilter, setActiveCardFilter] = useState<"all" | "transito" | "alerta" | "entregues">("all");
   const [sortAnalyst, setSortAnalyst] = useState<"asc" | "desc" | null>(null);
   const [sortContainer, setSortContainer] = useState<"asc" | "desc" | null>(null);
   const [sortClient, setSortClient] = useState<"asc" | "desc" | null>(null);
@@ -241,6 +243,35 @@ const ContainerTracking = () => {
   const { toast } = useToast();
 
   const itemsPerPage = 10;
+
+  // Helper functions for status categorization
+  const isEmTransito = (lastEvent: string | null): boolean => {
+    if (!lastEvent) return false;
+    const upper = lastEvent.toUpperCase().replace(/[_\s-]/g, "");
+    return upper.includes("LOADED") || upper.includes("LOAD") || upper.includes("FULLIN") ||
+           upper.includes("DEPARTED") || upper.includes("DEPARTURE") || upper.includes("VESSELDEPARTED") ||
+           upper.includes("TRANSIT") || upper.includes("ATSEA") || upper.includes("ONRAIL") ||
+           upper.includes("TRANSSHIPMENT") ||
+           upper.includes("ARRIVED") || upper.includes("ARRIVAL") || upper.includes("VESSELARRIVED");
+  };
+
+  const isEmAlerta = (lastEvent: string | null): boolean => {
+    if (!lastEvent) return false;
+    const upper = lastEvent.toUpperCase().replace(/[_\s-]/g, "");
+    return upper.includes("DELAYED") || upper.includes("DELAY") ||
+           upper.includes("CANCELLED") || upper.includes("CANCEL") ||
+           upper.includes("CUSTOMSHOLD") || upper.includes("CUSTOMS") || upper.includes("HOLD") ||
+           upper.includes("MISSEDCONNECTION") || upper.includes("MISSED");
+  };
+
+  const isEntregue = (lastEvent: string | null): boolean => {
+    if (!lastEvent) return false;
+    const upper = lastEvent.toUpperCase().replace(/[_\s-]/g, "");
+    return upper.includes("DISCHARGED") || upper.includes("DISCHARGE") ||
+           upper.includes("DELIVERED") || upper.includes("DELIVERY") ||
+           upper.includes("AVAILABLE") || upper.includes("FULLOUT") ||
+           upper.includes("GATEOUTFULL") || upper.includes("EMPTYRETURN");
+  };
 
   // Check admin access from localStorage
   useEffect(() => {
@@ -619,8 +650,18 @@ const ContainerTracking = () => {
         (c.nome_analista && c.nome_analista.toLowerCase().includes(searchLower));
       const matchesLine = filterLine === "all" || c.shipping_line === filterLine;
       const matchesAnalyst = filterAnalyst === "all" || c.nome_analista === filterAnalyst;
+      
+      // Card filter
+      let matchesCardFilter = true;
+      if (activeCardFilter === "transito") {
+        matchesCardFilter = isEmTransito(c.last_event) && !isEntregue(c.last_event) && !isEmAlerta(c.last_event);
+      } else if (activeCardFilter === "alerta") {
+        matchesCardFilter = isEmAlerta(c.last_event);
+      } else if (activeCardFilter === "entregues") {
+        matchesCardFilter = isEntregue(c.last_event);
+      }
 
-      return matchesSearch && matchesLine && matchesAnalyst;
+      return matchesSearch && matchesLine && matchesAnalyst && matchesCardFilter;
     });
 
     // Apply sorting
@@ -655,30 +696,21 @@ const ContainerTracking = () => {
     }
 
     return containers;
-  }, [containersList, searchTerm, filterLine, filterAnalyst, sortAnalyst, sortContainer, sortClient, sortLastCheck]);
+  }, [containersList, searchTerm, filterLine, filterAnalyst, activeCardFilter, sortAnalyst, sortContainer, sortClient, sortLastCheck]);
 
   const totalPages = Math.ceil(filteredContainers.length / itemsPerPage);
   const startIndex = (currentPage - 1) * itemsPerPage;
   const endIndex = startIndex + itemsPerPage;
   const currentContainers = filteredContainers.slice(startIndex, endIndex);
 
-  // Dashboard stats
+  // Dashboard stats with new categories
   const stats = useMemo(() => {
     const total = containersList.length;
-    const emTransito = containersList.filter((c) => {
-      const status = getStatusCode(c.last_event);
-      return ["DEP", "TRA", "TSP", "LOD", "GOE"].includes(status);
-    }).length;
-    const chegando = containersList.filter((c) => {
-      const status = getStatusCode(c.last_event);
-      return ["ARR", "DCH", "GOF"].includes(status);
-    }).length;
-    const entregues = containersList.filter((c) => {
-      const status = getStatusCode(c.last_event);
-      return ["DLV"].includes(status);
-    }).length;
+    const emTransito = containersList.filter((c) => isEmTransito(c.last_event) && !isEntregue(c.last_event) && !isEmAlerta(c.last_event)).length;
+    const emAlerta = containersList.filter((c) => isEmAlerta(c.last_event)).length;
+    const entregues = containersList.filter((c) => isEntregue(c.last_event)).length;
 
-    return { total, emTransito, chegando, entregues };
+    return { total, emTransito, emAlerta, entregues };
   }, [containersList]);
 
   if (isLoading) {
@@ -789,84 +821,100 @@ const ContainerTracking = () => {
       {/* Main Content */}
       <main className="relative z-10 max-w-[95%] mx-auto mb-12 px-2 space-y-[18px]">
 
-        {/* Dashboard Cards */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-          <div 
-            className="p-4 rounded-2xl cursor-pointer transition-all hover:-translate-y-0.5"
-            style={{
-              background: 'rgba(5,6,18,.9)',
-              border: '1px solid rgba(255,255,255,.12)',
-              boxShadow: '0 18px 40px rgba(0,0,0,.85)',
-            }}
+        {/* Dashboard Cards - AWB Style */}
+        <section className="grid grid-cols-1 md:grid-cols-4 gap-4">
+          {/* Total Monitorados */}
+          <Card 
+            className={`bg-card/90 border-border backdrop-blur-sm shadow-lg cursor-pointer transition-all hover:scale-[1.02] ${activeCardFilter === "all" ? "ring-2 ring-primary" : ""}`}
+            onClick={() => { setActiveCardFilter("all"); setCurrentPage(1); }}
           >
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-primary/20 flex items-center justify-center">
-                <Anchor className="w-5 h-5 text-primary" />
+            <div className="p-4 flex flex-col h-full">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-xs uppercase tracking-wide text-muted-foreground">
+                  Total Monitorados
+                </span>
+                <span className="inline-flex items-center justify-center w-8 h-8 rounded-full bg-muted text-primary">
+                  <Anchor className="w-4 h-4" />
+                </span>
               </div>
-              <div>
-                <p className="text-2xl font-bold text-foreground">{stats.total}</p>
-                <p className="text-xs text-muted-foreground uppercase tracking-wide">Total Monitorados</p>
+              <div className="flex items-end justify-between mt-auto">
+                <span className="text-3xl font-semibold text-foreground">
+                  {stats.total}
+                </span>
+                <span className="text-xs text-muted-foreground">Containers ativos</span>
               </div>
             </div>
-          </div>
+          </Card>
 
-          <div 
-            className="p-4 rounded-2xl cursor-pointer transition-all hover:-translate-y-0.5"
-            style={{
-              background: 'rgba(5,6,18,.9)',
-              border: '1px solid rgba(255,255,255,.12)',
-              boxShadow: '0 18px 40px rgba(0,0,0,.85)',
-            }}
+          {/* Em Trânsito */}
+          <Card 
+            className={`bg-gradient-to-br from-blue-900/40 via-blue-900/10 to-card border-blue-700/50 shadow-lg cursor-pointer transition-all hover:scale-[1.02] ${activeCardFilter === "transito" ? "ring-2 ring-blue-400" : ""}`}
+            onClick={() => { setActiveCardFilter("transito"); setCurrentPage(1); }}
           >
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-blue-500/20 flex items-center justify-center">
-                <Ship className="w-5 h-5 text-blue-400" />
+            <div className="p-4 flex flex-col h-full">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-xs uppercase tracking-wide text-blue-200">
+                  Em Trânsito
+                </span>
+                <span className="inline-flex items-center justify-center w-8 h-8 rounded-full bg-blue-900/60 text-blue-300">
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                </span>
               </div>
-              <div>
-                <p className="text-2xl font-bold text-foreground">{stats.emTransito}</p>
-                <p className="text-xs text-muted-foreground uppercase tracking-wide">Em Trânsito</p>
+              <div className="flex items-end justify-between mt-auto">
+                <span className="text-3xl font-semibold text-blue-300">
+                  {stats.emTransito}
+                </span>
+                <span className="text-xs text-blue-200/80">LOADED, DEPARTED, IN_TRANSIT</span>
               </div>
             </div>
-          </div>
+          </Card>
 
-          <div 
-            className="p-4 rounded-2xl cursor-pointer transition-all hover:-translate-y-0.5"
-            style={{
-              background: 'rgba(5,6,18,.9)',
-              border: '1px solid rgba(255,255,255,.12)',
-              boxShadow: '0 18px 40px rgba(0,0,0,.85)',
-            }}
+          {/* Em Alerta */}
+          <Card 
+            className={`bg-gradient-to-br from-primary/30 via-primary/10 to-card border-primary/50 shadow-lg cursor-pointer transition-all hover:scale-[1.02] ${activeCardFilter === "alerta" ? "ring-2 ring-primary" : ""}`}
+            onClick={() => { setActiveCardFilter("alerta"); setCurrentPage(1); }}
           >
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-amber-500/20 flex items-center justify-center">
-                <Anchor className="w-5 h-5 text-amber-400" />
+            <div className="p-4 flex flex-col h-full">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-xs uppercase tracking-wide text-primary">
+                  Em Alerta
+                </span>
+                <span className="inline-flex items-center justify-center w-8 h-8 rounded-full bg-primary/30 text-primary">
+                  <AlertTriangle className="w-4 h-4" />
+                </span>
               </div>
-              <div>
-                <p className="text-2xl font-bold text-foreground">{stats.chegando}</p>
-                <p className="text-xs text-muted-foreground uppercase tracking-wide">Chegando</p>
+              <div className="flex items-end justify-between mt-auto">
+                <span className="text-3xl font-semibold text-primary">
+                  {stats.emAlerta}
+                </span>
+                <span className="text-xs text-primary/80">DELAYED, HOLD, CANCELLED</span>
               </div>
             </div>
-          </div>
+          </Card>
 
-          <div 
-            className="p-4 rounded-2xl cursor-pointer transition-all hover:-translate-y-0.5"
-            style={{
-              background: 'rgba(5,6,18,.9)',
-              border: '1px solid rgba(255,255,255,.12)',
-              boxShadow: '0 18px 40px rgba(0,0,0,.85)',
-            }}
+          {/* Entregues */}
+          <Card 
+            className={`bg-gradient-to-br from-green-900/40 via-green-900/10 to-card border-green-700/50 shadow-lg cursor-pointer transition-all hover:scale-[1.02] ${activeCardFilter === "entregues" ? "ring-2 ring-green-400" : ""}`}
+            onClick={() => { setActiveCardFilter("entregues"); setCurrentPage(1); }}
           >
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-green-500/20 flex items-center justify-center">
-                <Check className="w-5 h-5 text-green-400" />
+            <div className="p-4 flex flex-col h-full">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-xs uppercase tracking-wide text-green-200">
+                  Entregues
+                </span>
+                <span className="inline-flex items-center justify-center w-8 h-8 rounded-full bg-green-900/60 text-green-300">
+                  <Check className="w-4 h-4" />
+                </span>
               </div>
-              <div>
-                <p className="text-2xl font-bold text-foreground">{stats.entregues}</p>
-                <p className="text-xs text-muted-foreground uppercase tracking-wide">Entregues</p>
+              <div className="flex items-end justify-between mt-auto">
+                <span className="text-3xl font-semibold text-green-300">
+                  {stats.entregues}
+                </span>
+                <span className="text-xs text-green-200/80">DISCHARGED, AVAILABLE</span>
               </div>
             </div>
-          </div>
-        </div>
+          </Card>
+        </section>
 
         {/* Search and Filter Bar */}
         <section 
