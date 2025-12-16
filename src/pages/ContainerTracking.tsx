@@ -124,8 +124,6 @@ interface ContainerData {
   eta?: string;
 }
 
-const STORAGE_KEY = "tracked-containers";
-
 const ContainerTracking = () => {
   useUsageLog({ endpoint: "/sea/tracking" });
   const navigate = useNavigate();
@@ -146,6 +144,7 @@ const ContainerTracking = () => {
   const [currentPage, setCurrentPage] = useState(1);
   const [trackingContainer, setTrackingContainer] = useState<string | null>(null);
   const [isLoadingData, setIsLoadingData] = useState(false);
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const { toast } = useToast();
 
   const itemsPerPage = 10;
@@ -156,22 +155,14 @@ const ContainerTracking = () => {
     if (storedUser) {
       const parsed = JSON.parse(storedUser);
       if (parsed.is_admin !== 1) {
-        // Non-admin users are redirected to dashboard
         navigate("/dashboard");
         return;
       }
     } else {
-      // No user logged in
       navigate("/");
       return;
     }
   }, [navigate]);
-
-  // Save containers to localStorage
-  const saveToStorage = React.useCallback((containers: ContainerData[]) => {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(containers));
-    setContainersList(containers);
-  }, []);
 
   // Check authentication
   useEffect(() => {
@@ -192,28 +183,49 @@ const ContainerTracking = () => {
     return () => subscription.unsubscribe();
   }, []);
 
-  // Load containers from localStorage
-  useEffect(() => {
-    const stored = localStorage.getItem(STORAGE_KEY);
-    if (stored) {
-      try {
-        const parsed = JSON.parse(stored);
-        setContainersList(parsed);
-      } catch (e) {
-        console.error("Error loading containers:", e);
-      }
-    }
-  }, []);
-
-  // Fetch containers data (placeholder - to be connected to actual data source)
+  // Fetch containers from MariaDB via olimpo-proxy
   const fetchContainersData = React.useCallback(async () => {
     setIsLoadingData(true);
     try {
-      // TODO: Implement actual data fetching from MariaDB
-      // For now, using localStorage data
-      const stored = localStorage.getItem(STORAGE_KEY);
-      if (stored) {
-        setContainersList(JSON.parse(stored));
+      const { data, error } = await supabase.functions.invoke('olimpo-proxy', {
+        body: null,
+        headers: { 'Content-Type': 'application/json' },
+      });
+      
+      // Use query params for action
+      const res = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/olimpo-proxy?action=get_tracked_containers`,
+        {
+          method: 'GET',
+          headers: {
+            'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
+            'Content-Type': 'application/json',
+          }
+        }
+      );
+      
+      const result = await res.json();
+      
+      if (result.success && result.data) {
+        const mapped = result.data.map((row: any) => ({
+          id: String(row.id),
+          container: row.container,
+          bl: row.bl,
+          shipping_line: row.shipping_line || '',
+          consignee_name: row.consignee_name || '',
+          last_event: row.last_event || 'Aguardando rastreio...',
+          status: row.container_status || 'PENDING',
+          created_at: row.created_at,
+          last_check: row.last_check,
+          nome_analista: row.nome_analista,
+          email_analista: row.email_analista,
+          email_cliente: row.email_cliente,
+          origem: row.origem,
+          destino: row.destino,
+          vessel: row.vessel,
+          eta: row.eta,
+        }));
+        setContainersList(mapped);
       }
     } catch (error) {
       console.error("Error fetching containers:", error);
@@ -224,22 +236,93 @@ const ContainerTracking = () => {
 
   useEffect(() => {
     fetchContainersData();
-    const interval = setInterval(fetchContainersData, 30000);
-    return () => clearInterval(interval);
   }, [fetchContainersData]);
 
+  // Refresh all containers via JSONCargo API
   const handleRefresh = async () => {
+    setIsRefreshing(true);
     toast({
       title: "Atualizando dados",
-      description: "Buscando status dos containers...",
+      description: "Consultando status via JSONCargo API...",
     });
-    await fetchContainersData();
-    toast({
-      title: "Dados atualizados",
-      description: "Status dos containers atualizado com sucesso.",
-    });
+    
+    try {
+      const res = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/olimpo-proxy?action=refresh_all_containers`,
+        {
+          method: 'GET',
+          headers: {
+            'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
+            'Content-Type': 'application/json',
+          }
+        }
+      );
+      
+      const result = await res.json();
+      
+      if (result.success) {
+        toast({
+          title: "Dados atualizados",
+          description: `${result.updated} containers atualizados${result.errors > 0 ? `, ${result.errors} com erro` : ''}.`,
+        });
+        await fetchContainersData();
+      } else {
+        toast({
+          title: "Erro ao atualizar",
+          description: result.error || "Falha na atualização",
+          variant: "destructive",
+        });
+      }
+    } catch (error) {
+      console.error("Error refreshing:", error);
+      toast({
+        title: "Erro",
+        description: "Falha ao atualizar containers",
+        variant: "destructive",
+      });
+    } finally {
+      setIsRefreshing(false);
+    }
   };
 
+  // Track single container
+  const handleTrackContainer = async (containerId: string, shippingLine: string) => {
+    setTrackingContainer(containerId);
+    try {
+      const res = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/olimpo-proxy?action=track_container&container=${encodeURIComponent(containerId)}&shipping_line=${encodeURIComponent(shippingLine)}`,
+        {
+          method: 'GET',
+          headers: {
+            'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
+            'Content-Type': 'application/json',
+          }
+        }
+      );
+      
+      const result = await res.json();
+      
+      if (result.success) {
+        toast({
+          title: "Container rastreado",
+          description: `Status: ${result.data.container_status || 'N/A'}`,
+        });
+        await fetchContainersData();
+      } else {
+        toast({
+          title: "Erro no rastreio",
+          description: result.error || "Falha ao rastrear container",
+          variant: "destructive",
+        });
+      }
+    } catch (error) {
+      console.error("Error tracking:", error);
+    } finally {
+      setTrackingContainer(null);
+    }
+  };
+
+  // Add container to tracking
   const handleAddContainer = async () => {
     if (!containerNumber || !selectedLine || !consigneeName) {
       toast({
@@ -250,38 +333,84 @@ const ContainerTracking = () => {
       return;
     }
 
-    const newContainer: ContainerData = {
-      id: Date.now().toString(),
-      container: containerNumber.toUpperCase(),
-      shipping_line: selectedLine,
-      consignee_name: consigneeName,
-      last_event: "Container cadastrado - Aguardando rastreio...",
-      status: "PENDING",
-      created_at: new Date().toISOString(),
-    };
-
-    const updatedList = [newContainer, ...containersList];
-    saveToStorage(updatedList);
-
-    toast({
-      title: "Container cadastrado",
-      description: "Container adicionado à lista de monitoramento.",
-    });
-
-    setContainerNumber("");
-    setSelectedLine("");
-    setConsigneeName("");
+    try {
+      const res = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/olimpo-proxy?action=add_tracked_container`,
+        {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            container: containerNumber.toUpperCase(),
+            shipping_line: selectedLine,
+            consignee_name: consigneeName,
+          })
+        }
+      );
+      
+      const result = await res.json();
+      
+      if (result.success) {
+        toast({
+          title: "Container cadastrado",
+          description: "Container adicionado à lista de monitoramento.",
+        });
+        
+        // Track container immediately after adding
+        await handleTrackContainer(containerNumber.toUpperCase(), selectedLine);
+        
+        setContainerNumber("");
+        setSelectedLine("");
+        setConsigneeName("");
+        await fetchContainersData();
+      } else {
+        toast({
+          title: "Erro ao cadastrar",
+          description: result.error || "Falha ao cadastrar container",
+          variant: "destructive",
+        });
+      }
+    } catch (error) {
+      console.error("Error adding container:", error);
+      toast({
+        title: "Erro",
+        description: "Falha ao cadastrar container",
+        variant: "destructive",
+      });
+    }
   };
 
-  const handleDeleteContainer = (id: string) => {
-    const updatedList = containersList.filter((c) => c.id !== id);
-    saveToStorage(updatedList);
-
-    toast({
-      title: "Container removido",
-      description: "Container removido da lista de monitoramento.",
-    });
+  // Delete container from tracking
+  const handleDeleteContainer = async (containerId: string, containerNumber: string) => {
+    try {
+      const res = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/olimpo-proxy?action=delete_tracked_container`,
+        {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ container: containerNumber })
+        }
+      );
+      
+      const result = await res.json();
+      
+      if (result.success) {
+        toast({
+          title: "Container removido",
+          description: "Container removido da lista de monitoramento.",
+        });
+        await fetchContainersData();
+      }
+    } catch (error) {
+      console.error("Error deleting container:", error);
+    }
   };
+
 
   const abbreviateName = (name: string): string => {
     if (!name || name === "-") return "-";
@@ -883,7 +1012,7 @@ const ContainerTracking = () => {
                             <Button
                               variant="ghost"
                               size="sm"
-                              onClick={() => handleDeleteContainer(container.id)}
+                              onClick={() => handleDeleteContainer(container.id, container.container)}
                               className="gap-1.5 text-red-400 hover:text-red-300 h-8 px-2"
                             >
                               <Trash2 className="w-4 h-4" />
