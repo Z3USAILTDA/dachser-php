@@ -41,22 +41,28 @@ serve(async (req) => {
       password: dbPassword,
     });
 
-    // Check if arr_check_count column exists
+    // Check if arr_check_count and arr_datetime columns exist
     let hasArrCheckColumn = false;
+    let hasArrDatetimeColumn = false;
     try {
       const colCheck = await client.query(
         `SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS 
-         WHERE TABLE_SCHEMA = ? AND TABLE_NAME = 't_status_aereo' AND COLUMN_NAME = 'arr_check_count'`,
+         WHERE TABLE_SCHEMA = ? AND TABLE_NAME = 't_status_aereo' AND COLUMN_NAME IN ('arr_check_count', 'arr_datetime')`,
         [database]
       );
-      hasArrCheckColumn = Array.isArray(colCheck) && colCheck.length > 0;
+      if (Array.isArray(colCheck)) {
+        hasArrCheckColumn = colCheck.some((r: any) => r.COLUMN_NAME === 'arr_check_count');
+        hasArrDatetimeColumn = colCheck.some((r: any) => r.COLUMN_NAME === 'arr_datetime');
+      }
     } catch (e) {
-      console.log('Column check failed, assuming column does not exist');
+      console.log('Column check failed, assuming columns do not exist');
     }
 
-    const selectFields = hasArrCheckColumn 
-      ? `*, arr_check_count` 
-      : `*, 0 as arr_check_count`;
+    let selectFields = '*';
+    if (hasArrCheckColumn) selectFields += ', arr_check_count';
+    else selectFields += ', 0 as arr_check_count';
+    if (hasArrDatetimeColumn) selectFields += ', arr_datetime';
+    else selectFields += ', NULL as arr_datetime';
 
     let query = `SELECT ${selectFields} FROM ${database}.t_status_aereo ORDER BY id DESC`;
     let params: string[] = [];
