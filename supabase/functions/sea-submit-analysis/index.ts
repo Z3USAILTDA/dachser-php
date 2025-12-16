@@ -399,6 +399,99 @@ function determineFileType(analysisType: string, isBase: boolean, fileName: stri
   return 'outro';
 }
 
+/**
+ * Extract HBL shipping data JSON from analysis result text
+ */
+function extractHblShippingData(resultText: string): { container: string; vessel: string; voyage: string; origem: string; destino: string } | null {
+  try {
+    // Look for JSON block between ```json and ``` markers
+    const jsonMatch = resultText.match(/```json\s*(\{[^`]+\})\s*```/);
+    if (jsonMatch && jsonMatch[1]) {
+      const parsed = JSON.parse(jsonMatch[1]);
+      if (parsed.hbl_shipping_data) {
+        return {
+          container: parsed.hbl_shipping_data.container || '',
+          vessel: parsed.hbl_shipping_data.vessel || '',
+          voyage: parsed.hbl_shipping_data.voyage || '',
+          origem: parsed.hbl_shipping_data.origem || '',
+          destino: parsed.hbl_shipping_data.destino || ''
+        };
+      }
+    }
+    
+    // Fallback: try to find the JSON object directly
+    const directMatch = resultText.match(/\{"hbl_shipping_data":\s*\{[^}]+\}\}/);
+    if (directMatch) {
+      const parsed = JSON.parse(directMatch[0]);
+      if (parsed.hbl_shipping_data) {
+        return {
+          container: parsed.hbl_shipping_data.container || '',
+          vessel: parsed.hbl_shipping_data.vessel || '',
+          voyage: parsed.hbl_shipping_data.voyage || '',
+          origem: parsed.hbl_shipping_data.origem || '',
+          destino: parsed.hbl_shipping_data.destino || ''
+        };
+      }
+    }
+    
+    return null;
+  } catch (e) {
+    console.error('Failed to extract HBL shipping data:', e);
+    return null;
+  }
+}
+
+/**
+ * Save container data to MariaDB via mariadb-proxy
+ */
+async function saveContainerData(data: { container: string; vessel: string; voyage: string; origem: string; destino: string }): Promise<boolean> {
+  try {
+    if (!data.container || data.container.trim() === '') {
+      console.log('⚠️ No container data to save');
+      return false;
+    }
+    
+    const supabaseUrl = Deno.env.get('SUPABASE_URL');
+    const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+    
+    if (!supabaseUrl || !supabaseKey) {
+      console.error('Missing Supabase credentials for container save');
+      return false;
+    }
+    
+    console.log(`📦 Saving container data: ${data.container}`);
+    
+    const response = await fetch(`${supabaseUrl}/functions/v1/mariadb-proxy`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${supabaseKey}`
+      },
+      body: JSON.stringify({
+        action: 'save_container_data',
+        container: data.container,
+        vessel: data.vessel,
+        voyage: data.voyage,
+        origem: data.origem,
+        destino: data.destino
+      })
+    });
+    
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error(`❌ Failed to save container data: ${response.status} - ${errorText}`);
+      return false;
+    }
+    
+    const result = await response.json();
+    console.log(`✅ Container data saved: ${result.action} (id: ${result.id})`);
+    return true;
+  } catch (e) {
+    console.error('Error saving container data:', e);
+    return false;
+  }
+}
+
 async function getDbClient() {
   const host = Deno.env.get('MARIADB_HOST');
   const port = parseInt(Deno.env.get('MARIADB_PORT') || '3306');
@@ -547,12 +640,12 @@ serve(async (req) => {
         const { data: { publicUrl } } = supabase.storage.from('maritime-files').getPublicUrl(storagePath);
         uploadedFiles.push({ name: file.name, url: publicUrl, size: file.size, type: file.type });
         
-        // Save file record to MariaDB (table only has: filename, mime, rel_path, url, size_bytes, created_at)
+        // Save file record to MariaDB with item_id for linking
         await dbClient.execute(`
           INSERT INTO ai_agente.t_dachser_sea_files 
-          (filename, mime, size_bytes, rel_path, url, created_at)
-          VALUES (?, ?, ?, ?, ?, NOW())
-        `, [file.name, file.type, file.size, storagePath, publicUrl]);
+          (filename, mime, size_bytes, rel_path, url, item_id, created_at)
+          VALUES (?, ?, ?, ?, ?, ?, NOW())
+        `, [file.name, file.type, file.size, storagePath, publicUrl, actualItemId || null]);
       }
 
       // Record fileUrls
@@ -572,12 +665,12 @@ serve(async (req) => {
         
         uploadedFiles.push({ name: fileUrl.name, url: fileUrl.url, size: actualSize, type: fileUrl.type });
         
-        // Save file URL record to MariaDB (table only has: filename, mime, rel_path, url, size_bytes, created_at)
+        // Save file URL record to MariaDB with item_id for linking
         await dbClient.execute(`
           INSERT INTO ai_agente.t_dachser_sea_files 
-          (filename, mime, size_bytes, rel_path, url, created_at)
-          VALUES (?, ?, ?, ?, ?, NOW())
-        `, [fileUrl.name, 'application/octet-stream', actualSize, '', fileUrl.url]);
+          (filename, mime, size_bytes, rel_path, url, item_id, created_at)
+          VALUES (?, ?, ?, ?, ?, ?, NOW())
+        `, [fileUrl.name, 'application/octet-stream', actualSize, '', fileUrl.url, actualItemId || null]);
       }
 
       // Update item status
@@ -684,6 +777,15 @@ serve(async (req) => {
             JSON.stringify(result.json_result || {}),
             runId
           ]);
+          
+          // Extract and save HBL shipping data (container, vessel, voyage, origem, destino)
+          const hblShippingData = extractHblShippingData(result.result_text || '');
+          if (hblShippingData && hblShippingData.container) {
+            console.log(`📦 Extracted HBL shipping data:`, hblShippingData);
+            await saveContainerData(hblShippingData);
+          } else {
+            console.log(`⚠️ No HBL shipping data found in analysis result`);
+          }
           
           // NOTE: Item status is NOT updated here automatically.
           // It will only be marked as 'realizado' when user clicks "Concluir Análise"
