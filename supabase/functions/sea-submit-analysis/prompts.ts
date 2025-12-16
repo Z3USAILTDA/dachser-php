@@ -1043,5 +1043,33 @@ export function buildFullPrompt(
   fullPrompt += "INSTRUCTIONS:\n";
   fullPrompt += "Analyze the attached documents and provide only the necessary corrections in plain text format.\n";
   
+  // Add HBL shipping data extraction instruction
+  fullPrompt += `
+███████████████████████████████████████████████████████████████████████████████
+███ MANDATORY: HBL SHIPPING DATA EXTRACTION                                  ███
+███████████████████████████████████████████████████████████████████████████████
+
+At the VERY END of your analysis, after all discrepancy analysis is complete, you MUST output a JSON block with the following shipping data extracted from the HBL document(s):
+
+EXTRACTION SOURCES FROM HBL:
+- container: Extract from "Marks and Numbers" section (e.g., "GLDU9941805" from "GLDU9941805 / 40' HC/HIGH CUBE")
+- vessel: Extract from "Vessel / Voyage-No." field, BEFORE the "/" (e.g., "MAERSK LETICIA" from "MAERSK LETICIA / 0EWMHS1MA")
+- voyage: Extract from "Vessel / Voyage-No." field, AFTER the "/" (e.g., "0EWMHS1MA" from "MAERSK LETICIA / 0EWMHS1MA")
+- origem: Extract from "Port of Loading" field (e.g., "HAMBURG")
+- destino: Extract from "Port of Discharge" field (e.g., "SANTOS")
+
+OUTPUT FORMAT (MANDATORY - ADD THIS BLOCK AT THE END):
+\`\`\`json
+{"hbl_shipping_data": {"container": "XXXX1234567", "vessel": "VESSEL NAME", "voyage": "VOYAGE_CODE", "origem": "PORT_OF_LOADING", "destino": "PORT_OF_DISCHARGE"}}
+\`\`\`
+
+RULES:
+- If multiple HBLs are analyzed, use data from the FIRST HBL file
+- Container format: 4 letters + 7 digits (ISO 6346), e.g., "GLDU9941805"
+- If any field cannot be extracted, use empty string ""
+- Always output this JSON block, even if analysis has errors
+- The JSON must be on a single line between the \`\`\`json and \`\`\` markers
+`;
+  
   return fullPrompt;
 }
