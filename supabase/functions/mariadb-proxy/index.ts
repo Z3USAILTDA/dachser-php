@@ -3324,6 +3324,62 @@ serve(async (req) => {
         break;
       }
 
+      // ==================== SEA CONTAINER DATA ====================
+      case 'save_container_data': {
+        const { container, vessel, voyage, origem, destino } = body as any;
+        console.log('Saving container data:', { container, vessel, voyage, origem, destino });
+        
+        if (!container) {
+          return new Response(
+            JSON.stringify({ error: 'Container é obrigatório' }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+        
+        // Check if container already exists
+        const existing = await client.query(`
+          SELECT id FROM ai_agente.t_dachser_container WHERE container = ?
+        `, [container.trim()]);
+        
+        if (existing && existing.length > 0) {
+          // Update existing record
+          await client.execute(`
+            UPDATE ai_agente.t_dachser_container 
+            SET vessel = ?, voyage = ?, origem = ?, destino = ?
+            WHERE container = ?
+          `, [vessel || '', voyage || '', origem || '', destino || '', container.trim()]);
+          result = { success: true, action: 'updated', id: existing[0].id };
+        } else {
+          // Insert new record
+          const insertResult = await client.execute(`
+            INSERT INTO ai_agente.t_dachser_container 
+            (container, vessel, voyage, origem, destino)
+            VALUES (?, ?, ?, ?, ?)
+          `, [container.trim(), vessel || '', voyage || '', origem || '', destino || '']);
+          result = { success: true, action: 'inserted', id: insertResult.lastInsertId };
+        }
+        break;
+      }
+
+      case 'get_container_data': {
+        const { container } = body as any;
+        console.log('Getting container data:', container);
+        
+        let query = `SELECT * FROM ai_agente.t_dachser_container`;
+        const params: any[] = [];
+        
+        if (container) {
+          query += ` WHERE container = ?`;
+          params.push(container.trim());
+        }
+        
+        query += ` ORDER BY created_at DESC`;
+        
+        const containers = await client.query(query, params);
+        result = { success: true, data: containers || [] };
+        break;
+      }
+
       default:
         return new Response(
           JSON.stringify({ error: `Ação não suportada: ${action}` }),
