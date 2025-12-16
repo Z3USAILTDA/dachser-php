@@ -1556,8 +1556,11 @@ const Index = () => {
       const matchesAirline = filterAirline === "all" || awb.airline_code === filterAirline;
       const matchesAnalyst = filterAnalyst === "all" || awb.nome_analista === filterAnalyst;
 
-      // Collect COMPANY_NOT_REGISTERED AWBs separately (mantém na visualização)
+      // Exclude AWBs with specific status values (except COMPANY_NOT_REGISTERED which we handle separately)
+      const excludedStatuses = ["ERRO", "INFO", "Em Processamento", "NOT_FOUND", "DLV"];
       const statusToCheck = awb.status || "";
+      
+      // Collect COMPANY_NOT_REGISTERED AWBs separately
       if (statusToCheck === "COMPANY_NOT_REGISTERED") {
         if (matchesSearch && matchesAirline && matchesAnalyst && cardFilter === "all") {
           companyNotRegisteredAwbs.push(awb);
@@ -1565,18 +1568,18 @@ const Index = () => {
         return false; // Don't include in main list yet
       }
       
-      // Apenas mostrar AWBs com status permitidos
-      const allowedStatuses = ["DEP", "MAN", "RCF", "ARR", "DIS", "OFLD", "NIL", "NIF"];
+      const isNotExcluded = !excludedStatuses.includes(statusToCheck);
+
+      // AWBs com status ARR (chegaram) são removidos da tabela, mas permanecem no banco
       const lastEventCode = getStatusCode(awb.last_event).toUpperCase();
-      const isAllowedStatus = allowedStatuses.includes(lastEventCode);
-      
-      // AWBs com status ARR (chegaram) sem alerta são removidos da tabela
       const hasAlert = awb.data_atraso !== null || ["DIS", "OFLD", "NIL", "NIF"].includes(lastEventCode);
+      
+      // Se está em ARR e não tem alerta, remove da tabela (mas mantém no banco com arr_datetime registrado)
       if (lastEventCode === "ARR" && !hasAlert) {
         return false;
       }
 
-      return matchesSearch && matchesAirline && matchesAnalyst && isAllowedStatus;
+      return matchesSearch && matchesAirline && matchesAnalyst && isNotExcluded;
     });
 
     // Apply card filter (don't include COMPANY_NOT_REGISTERED in filtered results)
