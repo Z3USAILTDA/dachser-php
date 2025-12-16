@@ -2895,22 +2895,22 @@ serve(async (req) => {
         const { itemId } = body;
         console.log('Fetching SEA files for item:', itemId);
         
-        // Get arquivo_id (base file) from item
+        // Get arquivo_id from item and fetch related files
         const items = await client.query(`
           SELECT arquivo_id FROM ai_agente.t_dachser_sea_items WHERE id = ?
         `, [itemId]);
         
         const arquivoId = items?.[0]?.arquivo_id;
-        
-        // Fetch base file (arquivo_id) + all files linked to this item via item_id column
-        const files = await client.query(`
-          SELECT DISTINCT id, filename as file_name, mime as file_type, size_bytes, url, rel_path, created_at
-          FROM ai_agente.t_dachser_sea_files
-          WHERE id = ? OR item_id = ?
-          ORDER BY created_at ASC
-        `, [arquivoId || 0, itemId]);
-        
-        result = { success: true, files: files || [] };
+        if (arquivoId) {
+          const files = await client.query(`
+            SELECT id, filename as file_name, mime as file_type, size_bytes, url, rel_path, created_at
+            FROM ai_agente.t_dachser_sea_files
+            WHERE id = ?
+          `, [arquivoId]);
+          result = { success: true, files: files || [] };
+        } else {
+          result = { success: true, files: [] };
+        }
         break;
       }
 
@@ -3321,62 +3321,6 @@ serve(async (req) => {
           };
         }
         console.log('Raw query executed successfully');
-        break;
-      }
-
-      // ==================== SEA CONTAINER DATA ====================
-      case 'save_container_data': {
-        const { container, vessel, voyage, origem, destino } = body as any;
-        console.log('Saving container data:', { container, vessel, voyage, origem, destino });
-        
-        if (!container) {
-          return new Response(
-            JSON.stringify({ error: 'Container é obrigatório' }),
-            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-          );
-        }
-        
-        // Check if container already exists
-        const existing = await client.query(`
-          SELECT id FROM ai_agente.t_dachser_container WHERE container = ?
-        `, [container.trim()]);
-        
-        if (existing && existing.length > 0) {
-          // Update existing record
-          await client.execute(`
-            UPDATE ai_agente.t_dachser_container 
-            SET vessel = ?, voyage = ?, origem = ?, destino = ?
-            WHERE container = ?
-          `, [vessel || '', voyage || '', origem || '', destino || '', container.trim()]);
-          result = { success: true, action: 'updated', id: existing[0].id };
-        } else {
-          // Insert new record
-          const insertResult = await client.execute(`
-            INSERT INTO ai_agente.t_dachser_container 
-            (container, vessel, voyage, origem, destino)
-            VALUES (?, ?, ?, ?, ?)
-          `, [container.trim(), vessel || '', voyage || '', origem || '', destino || '']);
-          result = { success: true, action: 'inserted', id: insertResult.lastInsertId };
-        }
-        break;
-      }
-
-      case 'get_container_data': {
-        const { container } = body as any;
-        console.log('Getting container data:', container);
-        
-        let query = `SELECT * FROM ai_agente.t_dachser_container`;
-        const params: any[] = [];
-        
-        if (container) {
-          query += ` WHERE container = ?`;
-          params.push(container.trim());
-        }
-        
-        query += ` ORDER BY created_at DESC`;
-        
-        const containers = await client.query(query, params);
-        result = { success: true, data: containers || [] };
         break;
       }
 

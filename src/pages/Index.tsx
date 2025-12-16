@@ -1556,14 +1556,9 @@ const Index = () => {
       const matchesAirline = filterAirline === "all" || awb.airline_code === filterAirline;
       const matchesAnalyst = filterAnalyst === "all" || awb.nome_analista === filterAnalyst;
 
-      // Only show AWBs with these specific status codes
-      const allowedStatuses = [
-        "BKD", "BKF", "AWB", "RCS", "MAN", "DEP", "FOH", "TFD", 
-        "RCT", "RCP", "PRE", "LOF", "ARRT", "TDE", "ARR", "RCF",
-        "COMPANY_NOT_REGISTERED"
-      ];
-      const statusToCheck = (awb.status || "").toUpperCase();
-      const lastEventCode = getStatusCode(awb.last_event).toUpperCase();
+      // Exclude AWBs with specific status values (except COMPANY_NOT_REGISTERED which we handle separately)
+      const excludedStatuses = ["ERRO", "INFO", "Em Processamento", "NOT_FOUND", "DLV"];
+      const statusToCheck = awb.status || "";
       
       // Collect COMPANY_NOT_REGISTERED AWBs separately
       if (statusToCheck === "COMPANY_NOT_REGISTERED") {
@@ -1573,10 +1568,10 @@ const Index = () => {
         return false; // Don't include in main list yet
       }
       
-      // Check if status or last event code is in allowed list
-      const isAllowed = allowedStatuses.includes(statusToCheck) || allowedStatuses.includes(lastEventCode);
+      const isNotExcluded = !excludedStatuses.includes(statusToCheck);
 
       // AWBs com status ARR (chegaram) são removidos da tabela, mas permanecem no banco
+      const lastEventCode = getStatusCode(awb.last_event).toUpperCase();
       const hasAlert = awb.data_atraso !== null || ["DIS", "OFLD", "NIL", "NIF"].includes(lastEventCode);
       
       // Se está em ARR e não tem alerta, remove da tabela (mas mantém no banco com arr_datetime registrado)
@@ -1584,7 +1579,7 @@ const Index = () => {
         return false;
       }
 
-      return matchesSearch && matchesAirline && matchesAnalyst && isAllowed;
+      return matchesSearch && matchesAirline && matchesAnalyst && isNotExcluded;
     });
 
     // Apply card filter (don't include COMPANY_NOT_REGISTERED in filtered results)

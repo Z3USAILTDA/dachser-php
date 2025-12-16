@@ -14,7 +14,6 @@ interface ChildItem {
   href?: string;
   expandableId?: string;
   subChildren?: SubChild[];
-  adminOnly?: boolean;
 }
 interface MenuItem {
   id: string;
@@ -76,11 +75,6 @@ const menuItems: MenuItem[] = [
       {
         label: "Local Charges",
         href: "/sea/local-charges",
-      },
-      {
-        label: "Monitoramento",
-        href: "/sea/tracking",
-        adminOnly: true,
       },
     ],
   },
@@ -341,24 +335,21 @@ const Dashboard = () => {
                   {/* Subcards Container */}
                   <div className="relative flex flex-col items-center">
                     {/* Horizontal connector line */}
-                    {(() => {
-                      const visibleChildren = item.children.filter(child => !child.adminOnly || isAdmin);
-                      return visibleChildren.length > 1 && (
-                        <div 
-                          className="absolute h-0.5 bg-primary"
-                          style={{ 
-                            top: 0,
-                            width: `calc(${(visibleChildren.length - 1) * 260}px + ${(visibleChildren.length - 1) * 32}px)`,
-                            left: '50%',
-                            transform: 'translateX(-50%)',
-                          }}
-                        />
-                      );
-                    })()}
+                    {item.children.length > 1 && (
+                      <div 
+                        className="absolute h-0.5 bg-primary"
+                        style={{ 
+                          top: 0,
+                          width: `calc(${(item.children.length - 1) * 260}px + ${(item.children.length - 1) * 32}px)`,
+                          left: '50%',
+                          transform: 'translateX(-50%)',
+                        }}
+                      />
+                    )}
 
                     {/* Vertical pins container */}
                     <div className="flex justify-center" style={{ gap: '32px' }}>
-                      {item.children.filter(child => !child.adminOnly || isAdmin).map((child, idx) => (
+                      {item.children.map((child, idx) => (
                         <div 
                           key={idx} 
                           className="flex flex-col items-center"
