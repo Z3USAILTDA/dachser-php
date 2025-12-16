@@ -257,12 +257,6 @@ const ContainerTracking = () => {
   const fetchContainersData = React.useCallback(async () => {
     setIsLoadingData(true);
     try {
-      const { data, error } = await supabase.functions.invoke('olimpo-proxy', {
-        body: null,
-        headers: { 'Content-Type': 'application/json' },
-      });
-      
-      // Use query params for action
       const res = await fetch(
         `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/olimpo-proxy?action=get_tracked_containers`,
         {
