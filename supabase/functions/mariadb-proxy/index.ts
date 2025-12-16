@@ -2895,22 +2895,22 @@ serve(async (req) => {
         const { itemId } = body;
         console.log('Fetching SEA files for item:', itemId);
         
-        // Get arquivo_id from item and fetch related files
+        // Get arquivo_id (base file) from item
         const items = await client.query(`
           SELECT arquivo_id FROM ai_agente.t_dachser_sea_items WHERE id = ?
         `, [itemId]);
         
         const arquivoId = items?.[0]?.arquivo_id;
-        if (arquivoId) {
-          const files = await client.query(`
-            SELECT id, filename as file_name, mime as file_type, size_bytes, url, rel_path, created_at
-            FROM ai_agente.t_dachser_sea_files
-            WHERE id = ?
-          `, [arquivoId]);
-          result = { success: true, files: files || [] };
-        } else {
-          result = { success: true, files: [] };
-        }
+        
+        // Fetch base file (arquivo_id) + all files linked to this item via item_id column
+        const files = await client.query(`
+          SELECT DISTINCT id, filename as file_name, mime as file_type, size_bytes, url, rel_path, created_at
+          FROM ai_agente.t_dachser_sea_files
+          WHERE id = ? OR item_id = ?
+          ORDER BY created_at ASC
+        `, [arquivoId || 0, itemId]);
+        
+        result = { success: true, files: files || [] };
         break;
       }
 
