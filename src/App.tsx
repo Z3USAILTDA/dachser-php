@@ -12,6 +12,7 @@ import CheckAwb from "./pages/CheckAwb";
 import Logs from "./pages/Logs";
 import Index from "./pages/Index";
 import SeaAnalysis from "./pages/SeaAnalysis";
+import ContainerTracking from "./pages/ContainerTracking";
 import CadastroHbl from "./pages/CadastroHbl";
 import CadastroManifest from "./pages/CadastroManifest";
 import SubmeterHblMbl from "./pages/SubmeterHblMbl";
@@ -72,6 +73,7 @@ const App = () => (
           <Route path="/admin/logs" element={<Logs />} />
           <Route path="/air/check" element={<CheckAwb />} />
           <Route path="/sea/analysis" element={<SeaAnalysis />} />
+          <Route path="/sea/tracking" element={<ContainerTracking />} />
           <Route path="/maritimo" element={<SeaAnalysis />} />
           <Route path="/sea/cadastro-hbl" element={<CadastroHbl />} />
           <Route path="/sea/cadastro-manifest" element={<CadastroManifest />} />
