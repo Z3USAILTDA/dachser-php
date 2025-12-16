@@ -922,8 +922,30 @@ serve(async (req) => {
           )
         `);
 
+        // First, update tracking records with data from t_dachser_container if missing
+        await client.execute(`
+          UPDATE ai_agente.t_dachser_container_tracking ct
+          JOIN ai_agente.t_dachser_container dc ON TRIM(ct.container) = TRIM(dc.container)
+          SET 
+            ct.consignee_name = COALESCE(ct.consignee_name, dc.consignee),
+            ct.origem = COALESCE(ct.origem, dc.origem),
+            ct.destino = COALESCE(ct.destino, dc.destino),
+            ct.vessel = COALESCE(ct.vessel, dc.vessel)
+          WHERE ct.active = 1
+            AND (ct.consignee_name IS NULL OR ct.origem IS NULL OR ct.destino IS NULL OR ct.vessel IS NULL)
+        `);
+
         const rows = await client.query(`
-          SELECT * FROM ai_agente.t_dachser_container_tracking WHERE active = 1 ORDER BY created_at DESC
+          SELECT 
+            ct.*,
+            COALESCE(ct.consignee_name, dc.consignee) as consignee_name,
+            COALESCE(ct.origem, dc.origem) as origem,
+            COALESCE(ct.destino, dc.destino) as destino,
+            COALESCE(ct.vessel, dc.vessel) as vessel
+          FROM ai_agente.t_dachser_container_tracking ct
+          LEFT JOIN ai_agente.t_dachser_container dc ON TRIM(ct.container) = TRIM(dc.container)
+          WHERE ct.active = 1 
+          ORDER BY ct.created_at DESC
         `);
 
         await client.close();
@@ -1266,7 +1288,8 @@ serve(async (req) => {
             dc.vessel,
             dc.voyage,
             dc.origem,
-            dc.destino
+            dc.destino,
+            dc.consignee
           FROM ai_agente.t_dachser_container dc
           WHERE dc.container IS NOT NULL 
             AND TRIM(dc.container) != ''
@@ -1297,7 +1320,7 @@ serve(async (req) => {
               updated_at = NOW()
           `, [
             c.container.toString().toUpperCase().trim(),
-            null, // consignee not in t_dachser_container
+            c.consignee || null,
             c.origem || null,
             c.destino || null,
             c.vessel || null
