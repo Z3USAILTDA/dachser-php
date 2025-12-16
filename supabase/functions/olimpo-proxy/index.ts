@@ -1243,7 +1243,7 @@ serve(async (req) => {
 
       try {
         const containers = await client.query(`
-          SELECT container, shipping_line FROM ai_agente.t_dachser_container_tracking WHERE active = 1
+          SELECT container, shipping_line, vessel FROM ai_agente.t_dachser_container_tracking WHERE active = 1
         `);
 
         let updated = 0;
@@ -1251,32 +1251,67 @@ serve(async (req) => {
 
         for (const row of containers) {
           const containerId = row.container;
-          const shippingLine = row.shipping_line || '';
+          let shippingLine = row.shipping_line || '';
+          
+          // Detect shipping_line from vessel name if not provided
+          if (!shippingLine && row.vessel) {
+            const vessel = (row.vessel || '').toUpperCase();
+            if (vessel.includes('MAERSK') || vessel.includes('SEALAND') || vessel.includes('SAFMARINE')) {
+              shippingLine = 'MAEU';
+            } else if (vessel.includes('MSC')) {
+              shippingLine = 'MSCU';
+            } else if (vessel.includes('CMA') || vessel.includes('CGM') || vessel.includes('APL')) {
+              shippingLine = 'CMAU';
+            } else if (vessel.includes('HAPAG') || vessel.includes('LLOYD')) {
+              shippingLine = 'HLCU';
+            } else if (vessel.includes('ONE') || vessel.includes('OCEAN NETWORK')) {
+              shippingLine = 'ONEY';
+            } else if (vessel.includes('HMM') || vessel.includes('HYUNDAI')) {
+              shippingLine = 'HDMU';
+            }
+            console.log(`[refresh_all] Container ${containerId}: detected ${shippingLine} from vessel "${row.vessel}"`);
+          }
           
           const qs: Record<string, string> = {};
           if (shippingLine) qs['shipping_line'] = shippingLine;
           
+          console.log(`[refresh_all] Calling JSONCargo for ${containerId} with shipping_line: ${shippingLine || 'auto'}`);
           const apiRes = await jcJson(`http://api.jsoncargo.com/api/v1/containers/${encodeURIComponent(containerId)}`, qs, 15000);
+          
+          console.log(`[refresh_all] JSONCargo response for ${containerId}:`, JSON.stringify(apiRes).substring(0, 500));
 
-          if (!apiRes.__curl_error) {
+          if (!apiRes.__curl_error && !apiRes.error) {
+            // Extract last event from events array if available
+            let lastEventDescription = apiRes.container_status || null;
+            if (apiRes.events && Array.isArray(apiRes.events) && apiRes.events.length > 0) {
+              // Get the most recent event (usually first in array or last depending on API)
+              const latestEvent = apiRes.events[0];
+              lastEventDescription = latestEvent.description || latestEvent.event_type || latestEvent.status || lastEventDescription;
+            } else if (apiRes.last_movement?.description) {
+              lastEventDescription = apiRes.last_movement.description;
+            }
+            
             const trackingData = {
               container_status: apiRes.container_status || apiRes.status || null,
-              loading_port: apiRes.loading_port?.name || apiRes.pol || null,
-              discharging_port: apiRes.discharging_port?.name || apiRes.pod || null,
-              eta: apiRes.eta_final_destination || apiRes.eta || null,
-              vessel: apiRes.vessel?.name || apiRes.current_vessel_name || null,
-              last_event: apiRes.last_movement?.description || apiRes.container_status || null,
+              loading_port: apiRes.loading_port?.name || apiRes.pol || apiRes.origin?.name || null,
+              discharging_port: apiRes.discharging_port?.name || apiRes.pod || apiRes.destination?.name || null,
+              eta: apiRes.eta_final_destination || apiRes.eta || apiRes.arrival_date || null,
+              vessel: apiRes.vessel?.name || apiRes.current_vessel_name || apiRes.vessel_name || row.vessel || null,
+              last_event: lastEventDescription,
             };
+            
+            console.log(`[refresh_all] Parsed data for ${containerId}:`, JSON.stringify(trackingData));
 
             await client.execute(`
               UPDATE ai_agente.t_dachser_container_tracking 
               SET 
                 container_status = ?,
-                origem = ?,
-                destino = ?,
+                origem = COALESCE(?, origem),
+                destino = COALESCE(?, destino),
                 eta = ?,
-                vessel = ?,
+                vessel = COALESCE(?, vessel),
                 last_event = ?,
+                shipping_line = COALESCE(?, shipping_line),
                 last_check = NOW(),
                 updated_at = NOW()
               WHERE container = ?
@@ -1287,15 +1322,17 @@ serve(async (req) => {
               trackingData.eta ? new Date(trackingData.eta) : null,
               trackingData.vessel,
               trackingData.last_event,
+              shippingLine || null,
               containerId
             ]);
             updated++;
           } else {
+            console.error(`[refresh_all] Error for ${containerId}:`, apiRes.__curl_error || apiRes.error || 'Unknown error');
             errors++;
           }
 
-          // Rate limit: 200ms between calls
-          await new Promise(r => setTimeout(r, 200));
+          // Rate limit: 300ms between calls
+          await new Promise(r => setTimeout(r, 300));
         }
 
         await client.close();
