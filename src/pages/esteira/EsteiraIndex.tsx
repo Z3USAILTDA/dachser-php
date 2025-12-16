@@ -679,45 +679,6 @@ const EsteiraIndex = () => {
     }
   }, [hasEsteiraAccess]);
 
-  // Block access for users without role
-  if (roleLoading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-[#050608]">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
-      </div>
-    );
-  }
-
-  if (!hasEsteiraAccess) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-[#050608] relative overflow-hidden">
-        {/* Background */}
-        <div className="absolute inset-0">
-          <img src={dachserBg} alt="" className="w-full h-full object-cover opacity-[0.14]" />
-          <div className="absolute inset-0 bg-gradient-to-b from-[#050608]/90 via-[#050608]/70 to-[#050608]" />
-        </div>
-        
-        <div className="relative z-10 text-center max-w-md mx-auto px-6">
-          <div className="w-20 h-20 mx-auto mb-6 rounded-full bg-destructive/10 border border-destructive/30 flex items-center justify-center">
-            <ShieldX className="h-10 w-10 text-destructive" />
-          </div>
-          <h1 className="text-2xl font-bold text-foreground mb-3">Acesso Não Autorizado</h1>
-          <p className="text-muted-foreground mb-6">
-            Você não possui permissão para acessar a Esteira de Vouchers. 
-            Entre em contato com um administrador para solicitar acesso.
-          </p>
-          <Button
-            onClick={() => navigate("/dashboard")}
-            className="gap-2"
-          >
-            <ArrowLeft className="h-4 w-4" />
-            Voltar ao Dashboard
-          </Button>
-        </div>
-      </div>
-    );
-  }
-
   // Apply role-based filtering first
   const roleFilteredVouchers = useMemo(() => {
     if (isAdmin || isGestor) {
@@ -734,6 +695,7 @@ const EsteiraIndex = () => {
     }
     return vouchers;
   }, [vouchers, role, currentUserId, isAdmin, isGestor, isOperacao, isFiscal, isFinanceiro]);
+
   const filterVouchers = (vouchersList: Voucher[]) => {
     const now = new Date();
     const tomorrow = new Date(now);
@@ -800,6 +762,45 @@ const EsteiraIndex = () => {
     const fornecedores = vouchers.map(v => v.fornecedor).filter((f): f is string => !!f);
     return [...new Set(fornecedores)].sort();
   }, [vouchers]);
+
+  // Block access for users without role - MUST be after all hooks
+  if (roleLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-[#050608]">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+      </div>
+    );
+  }
+
+  if (!hasEsteiraAccess) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-[#050608] relative overflow-hidden">
+        {/* Background */}
+        <div className="absolute inset-0">
+          <img src={dachserBg} alt="" className="w-full h-full object-cover opacity-[0.14]" />
+          <div className="absolute inset-0 bg-gradient-to-b from-[#050608]/90 via-[#050608]/70 to-[#050608]" />
+        </div>
+        
+        <div className="relative z-10 text-center max-w-md mx-auto px-6">
+          <div className="w-20 h-20 mx-auto mb-6 rounded-full bg-destructive/10 border border-destructive/30 flex items-center justify-center">
+            <ShieldX className="h-10 w-10 text-destructive" />
+          </div>
+          <h1 className="text-2xl font-bold text-foreground mb-3">Acesso Não Autorizado</h1>
+          <p className="text-muted-foreground mb-6">
+            Você não possui permissão para acessar a Esteira de Vouchers. 
+            Entre em contato com um administrador para solicitar acesso.
+          </p>
+          <Button
+            onClick={() => navigate("/dashboard")}
+            className="gap-2"
+          >
+            <ArrowLeft className="h-4 w-4" />
+            Voltar ao Dashboard
+          </Button>
+        </div>
+      </div>
+    );
+  }
   const handleViewDetails = (voucher: Voucher) => {
     navigate(`/fin/esteira/voucher/${voucher.id}`);
   };
