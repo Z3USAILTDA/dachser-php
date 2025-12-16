@@ -282,6 +282,7 @@ interface AWBData {
   fromStatusAereo?: boolean;
   data_atraso?: string | null;
   tipo_servico?: string;
+  arr_check_count?: number; // Contador de verificações em ARR
 }
 
 const STORAGE_KEY = "tracked-awbs";
@@ -410,6 +411,7 @@ const Index = () => {
           fromStatusAereo: true,
           data_atraso: item.data_atraso || null,
           tipo_servico: item.tipo_servico || "N/A",
+          arr_check_count: item.arr_check_count || 0,
         }));
 
         setStatusAereoData(convertedData);
@@ -423,15 +425,20 @@ const Index = () => {
 
   // Load status aereo data on mount
   useEffect(() => {
-    // Initialize alert status column if needed
-    const initAlertColumn = async () => {
+    // Initialize database columns if needed
+    const initColumns = async () => {
       try {
         await supabase.functions.invoke("add-alert-status-column", { body: {} });
       } catch (e) {
         console.log("Alert column already exists or initialization skipped");
       }
+      try {
+        await supabase.functions.invoke("add-arr-check-column", { body: {} });
+      } catch (e) {
+        console.log("arr_check_count column already exists or initialization skipped");
+      }
     };
-    initAlertColumn();
+    initColumns();
 
     fetchStatusAereoData();
     const interval = setInterval(fetchStatusAereoData, 30000); // Refresh every 30s
@@ -1563,14 +1570,14 @@ const Index = () => {
       
       const isNotExcluded = !excludedStatuses.includes(statusToCheck);
 
-      // Regra: AWB que chegou em ARR e não tem alerta (DIS/OFLD) deve sair da tabela
+      // Regra: AWB que chegou em ARR sem alerta só sai após 2 verificações
       const lastEventCode = getStatusCode(awb.last_event).toUpperCase();
-      const isAtARRWithoutAlert = lastEventCode === "ARR" && 
-        awb.data_atraso === null && 
-        !["DIS", "OFLD", "NIL", "NIF"].includes(lastEventCode);
+      const hasAlert = awb.data_atraso !== null || ["DIS", "OFLD", "NIL", "NIF"].includes(lastEventCode);
+      const arrCheckCount = awb.arr_check_count || 0;
       
-      if (isAtARRWithoutAlert) {
-        return false; // Remove AWBs que chegaram em ARR sem alerta
+      // Se está em ARR, não tem alerta, e já foi verificado 2+ vezes, remove da tabela
+      if (lastEventCode === "ARR" && !hasAlert && arrCheckCount >= 2) {
+        return false;
       }
 
       return matchesSearch && matchesAirline && matchesAnalyst && isNotExcluded;
