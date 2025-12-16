@@ -150,6 +150,23 @@ const ContainerTracking = () => {
 
   const itemsPerPage = 10;
 
+  // Check admin access from localStorage
+  useEffect(() => {
+    const storedUser = localStorage.getItem("user");
+    if (storedUser) {
+      const parsed = JSON.parse(storedUser);
+      if (parsed.is_admin !== 1) {
+        // Non-admin users are redirected to dashboard
+        navigate("/dashboard");
+        return;
+      }
+    } else {
+      // No user logged in
+      navigate("/");
+      return;
+    }
+  }, [navigate]);
+
   // Save containers to localStorage
   const saveToStorage = React.useCallback((containers: ContainerData[]) => {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(containers));
