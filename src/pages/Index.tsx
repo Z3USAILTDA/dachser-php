@@ -1570,13 +1570,12 @@ const Index = () => {
       
       const isNotExcluded = !excludedStatuses.includes(statusToCheck);
 
-      // Regra: AWB que chegou em ARR sem alerta só sai após 2 verificações
+      // AWBs com status ARR (chegaram) são removidos da tabela, mas permanecem no banco
       const lastEventCode = getStatusCode(awb.last_event).toUpperCase();
       const hasAlert = awb.data_atraso !== null || ["DIS", "OFLD", "NIL", "NIF"].includes(lastEventCode);
-      const arrCheckCount = awb.arr_check_count || 0;
       
-      // Se está em ARR, não tem alerta, e já foi verificado 2+ vezes, remove da tabela
-      if (lastEventCode === "ARR" && !hasAlert && arrCheckCount >= 2) {
+      // Se está em ARR e não tem alerta, remove da tabela (mas mantém no banco com arr_datetime registrado)
+      if (lastEventCode === "ARR" && !hasAlert) {
         return false;
       }
 
