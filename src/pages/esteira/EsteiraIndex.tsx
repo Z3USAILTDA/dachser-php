@@ -932,8 +932,8 @@ const EsteiraIndex = () => {
 
         {/* Right - Actions and user */}
         <div className="flex items-center gap-2.5 text-[0.85rem]">
-          {/* Admin: User Management */}
-          {isAdmin && (
+          {/* Admin: User Management - check both esteira role and system is_admin */}
+          {(isAdmin || user?.is_admin === 1 || user?.is_admin === true) && (
             <button 
               onClick={() => navigate("/fin/esteira/users")} 
               className="flex items-center gap-2 px-4 py-2 rounded-full border border-[rgba(255,255,255,.25)] bg-[rgba(0,0,0,.7)] text-[#aaaaaa] hover:text-white hover:bg-[rgba(0,0,0,.9)] transition text-[0.8rem]"
