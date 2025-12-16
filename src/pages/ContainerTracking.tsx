@@ -33,13 +33,14 @@ import dachserBg from "@/assets/dachser-background.jpg";
 import { TablePagination } from "@/components/layout/TablePagination";
 import { Filter as FilterIcon } from "lucide-react";
 
-// Shipping lines - only 5 approved carriers
+// Shipping lines - only 6 approved carriers
 const shippingLines = [
   { code: "HLCU", name: "HAPAG-LLOYD" },
   { code: "CMAU", name: "CMA" },
   { code: "HDMU", name: "HMM" },
   { code: "ONEY", name: "ONE" },
   { code: "MSCU", name: "MSC" },
+  { code: "MAEU", name: "MAERSK" },
 ];
 
 // Detect armador from vessel name
@@ -47,6 +48,11 @@ const detectArmadorFromVessel = (vessel: string | null | undefined): string => {
   if (!vessel) return "-";
   const upperVessel = vessel.toUpperCase();
   
+  // MAERSK patterns
+  if (upperVessel.includes("MAERSK") || upperVessel.includes("MAEU") || 
+      upperVessel.includes("SEALAND") || upperVessel.includes("SAFMARINE")) {
+    return "MAERSK";
+  }
   // HAPAG-LLOYD patterns
   if (upperVessel.includes("HAPAG") || upperVessel.includes("LLOYD") || 
       upperVessel.includes("HAMBURG") || upperVessel.includes("HLCU")) {
