@@ -22,7 +22,7 @@ const EsteiraVoucherDetails = () => {
   const { id } = useParams();
   const navigate = useNavigate();
   const { toast } = useToast();
-  const { role, isAdmin } = useUserRole();
+  const { role, isAdmin, hasRole } = useUserRole();
   const [voucher, setVoucher] = useState<Voucher | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -117,37 +117,37 @@ const EsteiraVoucherDetails = () => {
   const canShowOperacaoActions = () => {
     if (!voucher || !role) return false;
     const isOperacaoEtapa = voucher.etapaAtual === "OPERACAO" || voucher.etapaAtual === "AJUSTE_OPERACAO";
-    const hasRole = role === "OPERACAO" || role === "GESTOR_OPERACAO" || isAdmin;
-    return isOperacaoEtapa && hasRole;
+    const canAct = hasRole("OPERACAO") || hasRole("GESTOR_OPERACAO");
+    return isOperacaoEtapa && canAct;
   };
 
   const canShowFiscalActions = () => {
     if (!voucher || !role) return false;
     const isFiscalEtapa = voucher.etapaAtual === "FISCAL" || voucher.etapaAtual === "AJUSTE_FISCAL";
     const isDachser = voucher.cobrancaEmNomeDe === "DACHSER";
-    const hasRole = role === "FISCAL" || role === "GESTOR_FISCAL" || isAdmin;
-    return isFiscalEtapa && isDachser && hasRole;
+    const canAct = hasRole("FISCAL") || hasRole("GESTOR_FISCAL");
+    return isFiscalEtapa && isDachser && canAct;
   };
 
   const canShowSupervisorActions = () => {
     if (!voucher || !role) return false;
     const isSupervisorEtapa = voucher.etapaAtual === "SUPERVISOR";
-    const hasRole = role === "SUPERVISOR" || role === "GESTOR_SUPERVISOR" || isAdmin;
-    return isSupervisorEtapa && hasRole;
+    const canAct = hasRole("SUPERVISOR") || hasRole("GESTOR_SUPERVISOR");
+    return isSupervisorEtapa && canAct;
   };
 
   const canShowFinanceiroActions = () => {
     if (!voucher || !role) return false;
     const isFinanceiroEtapa = voucher.etapaAtual === "FINANCEIRO";
-    const hasRole = role === "FINANCEIRO" || role === "GESTOR_FINANCEIRO" || isAdmin;
-    return isFinanceiroEtapa && hasRole;
+    const canAct = hasRole("FINANCEIRO") || hasRole("GESTOR_FINANCEIRO");
+    return isFinanceiroEtapa && canAct;
   };
 
   const canShowRoboActions = () => {
     if (!voucher || !role) return false;
     const isRoboEtapa = voucher.etapaAtual === "ROBO";
-    const hasRole = role === "FINANCEIRO" || role === "GESTOR_FINANCEIRO" || isAdmin;
-    return isRoboEtapa && hasRole;
+    const canAct = hasRole("FINANCEIRO") || hasRole("GESTOR_FINANCEIRO");
+    return isRoboEtapa && canAct;
   };
 
   if (loading) {

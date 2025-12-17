@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { Users, Shield, UserCheck, UserX, Search, RefreshCw } from "lucide-react";
+import { Users, Shield, UserCheck, UserX, Search, RefreshCw, Check } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { PageLayout } from "@/components/layout/PageLayout";
@@ -17,25 +17,27 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import { Checkbox } from "@/components/ui/checkbox";
+import { cn } from "@/lib/utils";
 
-type EsteiraRole = "OPERACAO" | "FISCAL" | "SUPERVISOR" | "FINANCEIRO" | "ADMIN" | "SEM_ACESSO";
+type EsteiraRole = "OPERACAO" | "FISCAL" | "SUPERVISOR" | "FINANCEIRO" | "ADMIN";
 
 interface MariaDBUser {
   id: number;
   username: string;
   email: string;
   is_admin: number;
-  esteira_role: EsteiraRole | null;
+  esteira_role: string | null; // Can be comma-separated: "SUPERVISOR,FINANCEIRO"
   esteira_active: number;
 }
 
-const roleLabels: Record<EsteiraRole, string> = {
+const AVAILABLE_ROLES: EsteiraRole[] = ["OPERACAO", "FISCAL", "SUPERVISOR", "FINANCEIRO", "ADMIN"];
+
+const roleLabels: Record<EsteiraRole | "SEM_ACESSO", string> = {
   OPERACAO: "Operação",
   FISCAL: "Fiscal",
   SUPERVISOR: "Supervisor",
@@ -44,7 +46,7 @@ const roleLabels: Record<EsteiraRole, string> = {
   SEM_ACESSO: "Sem Acesso",
 };
 
-const roleColors: Record<EsteiraRole, string> = {
+const roleColors: Record<EsteiraRole | "SEM_ACESSO", string> = {
   OPERACAO: "bg-blue-500/20 text-blue-400 border-blue-500/30",
   FISCAL: "bg-purple-500/20 text-purple-400 border-purple-500/30",
   SUPERVISOR: "bg-amber-500/20 text-amber-400 border-amber-500/30",
@@ -100,13 +102,30 @@ const UserManagement = () => {
     }
   };
 
-  const handleRoleChange = async (userId: number, newRole: EsteiraRole) => {
+  const parseUserRoles = (roleString: string | null): EsteiraRole[] => {
+    if (!roleString) return [];
+    return roleString.split(",").map(r => r.trim()).filter(Boolean) as EsteiraRole[];
+  };
+
+  const handleRoleToggle = async (userId: number, toggleRole: EsteiraRole, currentRoles: EsteiraRole[]) => {
+    let newRoles: EsteiraRole[];
+    
+    if (currentRoles.includes(toggleRole)) {
+      // Remove role
+      newRoles = currentRoles.filter(r => r !== toggleRole);
+    } else {
+      // Add role
+      newRoles = [...currentRoles, toggleRole];
+    }
+
+    const newRoleString = newRoles.length > 0 ? newRoles.join(",") : null;
+
     try {
       const { error } = await supabase.functions.invoke("mariadb-proxy", {
         body: {
           action: "update_user_esteira_role",
           userId,
-          esteira_role: newRole === "SEM_ACESSO" ? null : newRole,
+          esteira_role: newRoleString,
         },
       });
 
@@ -115,14 +134,14 @@ const UserManagement = () => {
       setUsers((prev) =>
         prev.map((u) =>
           u.id === userId
-            ? { ...u, esteira_role: newRole === "SEM_ACESSO" ? null : newRole }
+            ? { ...u, esteira_role: newRoleString }
             : u
         )
       );
-      toast.success("Função atualizada com sucesso");
+      toast.success("Funções atualizadas com sucesso");
     } catch (err: any) {
-      console.error("Error updating role:", err);
-      toast.error("Erro ao atualizar função");
+      console.error("Error updating roles:", err);
+      toast.error("Erro ao atualizar funções");
     }
   };
 
@@ -147,10 +166,6 @@ const UserManagement = () => {
       console.error("Error toggling active:", err);
       toast.error("Erro ao alterar status");
     }
-  };
-
-  const getUserRole = (user: MariaDBUser): EsteiraRole => {
-    return user.esteira_role || "SEM_ACESSO";
   };
 
   const filteredUsers = users.filter(
@@ -247,13 +262,13 @@ const UserManagement = () => {
                   <TableHead className="text-muted-foreground">Usuário</TableHead>
                   <TableHead className="text-muted-foreground">Email</TableHead>
                   <TableHead className="text-muted-foreground">Admin Sistema</TableHead>
-                  <TableHead className="text-muted-foreground">Função Esteira</TableHead>
+                  <TableHead className="text-muted-foreground">Funções Esteira</TableHead>
                   <TableHead className="text-muted-foreground">Status Esteira</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {filteredUsers.map((user) => {
-                  const currentRole = getUserRole(user);
+                  const userRoles = parseUserRoles(user.esteira_role);
                   return (
                     <TableRow key={user.id} className="border-border/20">
                       <TableCell className="font-medium text-foreground">
@@ -272,52 +287,56 @@ const UserManagement = () => {
                         )}
                       </TableCell>
                       <TableCell>
-                        <Select
-                          value={currentRole}
-                          onValueChange={(value) =>
-                            handleRoleChange(user.id, value as EsteiraRole)
-                          }
-                        >
-                          <SelectTrigger className="w-[160px] bg-background/50 border-border/50">
-                            <SelectValue>
-                              <Badge className={`${roleColors[currentRole]} border`}>
-                                {roleLabels[currentRole]}
-                              </Badge>
-                            </SelectValue>
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="SEM_ACESSO">
-                              <Badge className={`${roleColors.SEM_ACESSO} border`}>
-                                Sem Acesso
-                              </Badge>
-                            </SelectItem>
-                            <SelectItem value="OPERACAO">
-                              <Badge className={`${roleColors.OPERACAO} border`}>
-                                Operação
-                              </Badge>
-                            </SelectItem>
-                            <SelectItem value="FISCAL">
-                              <Badge className={`${roleColors.FISCAL} border`}>
-                                Fiscal
-                              </Badge>
-                            </SelectItem>
-                            <SelectItem value="SUPERVISOR">
-                              <Badge className={`${roleColors.SUPERVISOR} border`}>
-                                Supervisor
-                              </Badge>
-                            </SelectItem>
-                            <SelectItem value="FINANCEIRO">
-                              <Badge className={`${roleColors.FINANCEIRO} border`}>
-                                Financeiro
-                              </Badge>
-                            </SelectItem>
-                            <SelectItem value="ADMIN">
-                              <Badge className={`${roleColors.ADMIN} border`}>
-                                Administrador
-                              </Badge>
-                            </SelectItem>
-                          </SelectContent>
-                        </Select>
+                        <Popover>
+                          <PopoverTrigger asChild>
+                            <Button
+                              variant="outline"
+                              className="w-[200px] justify-start text-left font-normal bg-background/50 border-border/50"
+                            >
+                              {userRoles.length === 0 ? (
+                                <Badge className={`${roleColors.SEM_ACESSO} border`}>
+                                  Sem Acesso
+                                </Badge>
+                              ) : (
+                                <div className="flex flex-wrap gap-1">
+                                  {userRoles.map((r) => (
+                                    <Badge key={r} className={`${roleColors[r]} border text-xs`}>
+                                      {roleLabels[r]}
+                                    </Badge>
+                                  ))}
+                                </div>
+                              )}
+                            </Button>
+                          </PopoverTrigger>
+                          <PopoverContent className="w-56 p-2" align="start">
+                            <div className="space-y-2">
+                              <p className="text-sm font-medium text-foreground mb-2">
+                                Selecione as funções
+                              </p>
+                              {AVAILABLE_ROLES.map((roleOption) => {
+                                const isChecked = userRoles.includes(roleOption);
+                                return (
+                                  <div
+                                    key={roleOption}
+                                    className={cn(
+                                      "flex items-center gap-2 p-2 rounded-md cursor-pointer hover:bg-accent/50 transition-colors",
+                                      isChecked && "bg-accent/30"
+                                    )}
+                                    onClick={() => handleRoleToggle(user.id, roleOption, userRoles)}
+                                  >
+                                    <Checkbox
+                                      checked={isChecked}
+                                      className="pointer-events-none"
+                                    />
+                                    <Badge className={`${roleColors[roleOption]} border`}>
+                                      {roleLabels[roleOption]}
+                                    </Badge>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </PopoverContent>
+                        </Popover>
                       </TableCell>
                       <TableCell>
                         <Button
@@ -361,6 +380,9 @@ const UserManagement = () => {
         {/* Info Card */}
         <PageCard className="p-4">
           <h3 className="text-sm font-semibold text-foreground mb-3">Funções da Esteira de Vouchers</h3>
+          <p className="text-xs text-muted-foreground mb-3">
+            Você pode atribuir múltiplas funções a um usuário (ex: Supervisor + Financeiro)
+          </p>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 text-xs">
             <div className="p-3 rounded-lg bg-blue-500/10 border border-blue-500/20">
               <span className="font-medium text-blue-400">Operação:</span>
