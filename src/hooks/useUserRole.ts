@@ -10,10 +10,11 @@ export function useUserRole() {
   useEffect(() => {
     const fetchRole = async () => {
       try {
-        // First check if user is logged in via DACHSER (MariaDB)
-        const dachserUser = localStorage.getItem("dachser_user");
-        if (dachserUser) {
-          const parsed = JSON.parse(dachserUser);
+        // Check if user is logged in via DACHSER (MariaDB) - check both keys
+        const storedUser = localStorage.getItem("user") || localStorage.getItem("dachser_user");
+        if (storedUser) {
+          const parsed = JSON.parse(storedUser);
+          const isAdminUser = parsed.is_admin === 1 || parsed.is_admin === "1" || parsed.is_admin === true;
           
           // Fetch esteira role from MariaDB
           try {
@@ -26,7 +27,7 @@ export function useUserRole() {
               if (data.user.esteira_role) {
                 setRole(data.user.esteira_role as UserRole);
                 setEsteiraActive(data.user.esteira_active === 1);
-              } else if (parsed.is_admin === 1 || parsed.is_admin === true) {
+              } else if (isAdminUser) {
                 // Admin system users get ADMIN role
                 setRole("ADMIN");
                 setEsteiraActive(true);
@@ -37,7 +38,7 @@ export function useUserRole() {
               }
             } else {
               // Fallback to is_admin check
-              if (parsed.is_admin === 1 || parsed.is_admin === true) {
+              if (isAdminUser) {
                 setRole("ADMIN");
               } else {
                 setRole(null);
@@ -46,7 +47,7 @@ export function useUserRole() {
           } catch (apiError) {
             console.error("Error fetching esteira role from MariaDB:", apiError);
             // Fallback: admin users get ADMIN, others get null
-            if (parsed.is_admin === 1 || parsed.is_admin === true) {
+            if (isAdminUser) {
               setRole("ADMIN");
             } else {
               setRole(null);
