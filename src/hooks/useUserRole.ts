@@ -137,9 +137,9 @@ export function useUserRole() {
     fetchRole();
   }, []);
 
-  // Check if user has a specific role (supports multiple roles)
-  const hasRole = (checkRole: UserRole): boolean => {
-    return roles.includes(checkRole) || roles.includes("ADMIN");
+  // All permissions granted - no authentication required
+  const hasRole = (_checkRole: UserRole): boolean => {
+    return true;
   };
 
   const isAdmin = hasRole("ADMIN");
