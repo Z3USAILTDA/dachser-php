@@ -3185,6 +3185,16 @@ serve(async (req) => {
         // Generate UUID for id
         const voucherId = voucherData.id || crypto.randomUUID();
         
+        // Helper to convert ISO date to MySQL format (YYYY-MM-DD)
+        const toMySQLDate = (isoDate: string | null): string | null => {
+          if (!isoDate) return null;
+          try {
+            return isoDate.split('T')[0];
+          } catch {
+            return null;
+          }
+        };
+        
         // Insert voucher data into existing t_vouchers table
         const insertResult = await client.execute(`
           INSERT INTO dados_dachser.t_vouchers (
@@ -3199,7 +3209,7 @@ serve(async (req) => {
         `, [
           voucherId,
           voucherData.numero_spo || null,
-          voucherData.vencimento || null,
+          toMySQLDate(voucherData.vencimento),
           voucherData.cobranca_em_nome_de || 'DACHSER',
           voucherData.forma_pagamento || 'BOLETO',
           voucherData.remessa || 'NENHUM',
@@ -3216,7 +3226,7 @@ serve(async (req) => {
           voucherData.cnpj_fornecedor?.replace(/\D/g, '') || null,
           voucherData.cliente_email || null,
           voucherData.filial || null,
-          voucherData.data_emissao_documento || null,
+          toMySQLDate(voucherData.data_emissao_documento),
           voucherData.comentarios_operacao || null,
           voucherData.comentarios_fiscal || null,
           voucherData.comentarios_financeiro || null,
