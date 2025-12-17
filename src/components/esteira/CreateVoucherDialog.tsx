@@ -289,6 +289,15 @@ export const CreateVoucherDialog = ({
 
   const onSubmit = async (values: FormValues) => {
     // Validation
+    if (entryMode === "manual" && !values.numeroRM?.trim()) {
+      toast({
+        title: "Erro de validação",
+        description: "Nº do Voucher é obrigatório",
+        variant: "destructive",
+      });
+      return;
+    }
+
     if (entryMode === "manual" && !values.fornecedor) {
       toast({
         title: "Erro de validação",
@@ -551,17 +560,44 @@ export const CreateVoucherDialog = ({
               </Button>
             </div>
 
-            {/* Manual Mode Alert */}
+            {/* Manual Mode Alert + Voucher Number Field */}
             {!isRmMode && (
-              <div className="flex items-start gap-3 p-4 rounded-xl border border-amber-500/20 bg-amber-500/5 backdrop-blur-sm">
-                <AlertCircle className="h-5 w-5 text-amber-400 flex-shrink-0 mt-0.5" />
-                <div>
-                  <p className="font-medium text-amber-400">Modo de Entrada Manual</p>
-                  <p className="text-sm text-muted-foreground">
-                    Preencha todos os campos manualmente. Use este modo quando o voucher não estiver cadastrado no RM.
-                  </p>
+              <>
+                <div className="flex items-start gap-3 p-4 rounded-xl border border-amber-500/20 bg-amber-500/5 backdrop-blur-sm">
+                  <AlertCircle className="h-5 w-5 text-amber-400 flex-shrink-0 mt-0.5" />
+                  <div>
+                    <p className="font-medium text-amber-400">Modo de Entrada Manual</p>
+                    <p className="text-sm text-muted-foreground">
+                      Preencha todos os campos manualmente. Use este modo quando o voucher não estiver cadastrado no RM.
+                    </p>
+                  </div>
                 </div>
-              </div>
+                
+                {/* Voucher Number - Manual Entry */}
+                <div className="p-4 rounded-xl border border-primary/20 bg-primary/5 backdrop-blur-sm">
+                  <div className="flex items-center gap-2 mb-3">
+                    <FileText className="h-4 w-4 text-primary" />
+                    <span className="text-sm font-medium text-primary">Nº do Voucher</span>
+                    <span className="text-destructive">*</span>
+                  </div>
+                  <FormField
+                    control={form.control}
+                    name="numeroRM"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormControl>
+                          <Input 
+                            placeholder="Ex: 8647525655" 
+                            className="bg-background/50 border-border"
+                            {...field} 
+                          />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                </div>
+              </>
             )}
 
             {/* RM Number Section - Only in RM mode */}
