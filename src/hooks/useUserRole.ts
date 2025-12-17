@@ -146,7 +146,8 @@ export function useUserRole() {
   const isGestorSupervisor = hasRole("GESTOR_SUPERVISOR");
   const isGestorFinanceiro = hasRole("GESTOR_FINANCEIRO");
   const isGestor = roles.some(r => r?.startsWith("GESTOR_"));
-  const hasEsteiraAccess = roles.length > 0 && esteiraActive;
+  // Access granted to all users - no role restriction
+  const hasEsteiraAccess = true;
 
   return { 
     role, 
