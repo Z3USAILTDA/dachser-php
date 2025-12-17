@@ -946,10 +946,14 @@ const EsteiraIndex = () => {
       );
     }
     if (isFinanceiro) {
-      return vouchers.filter(
-        (v) =>
-          v.etapaAtual === "FINANCEIRO" || v.etapaAtual === "ROBO" || v.responsavelFinanceiroUserId === currentUserId,
-      );
+      // FINANCEIRO can see ALL vouchers, but their stage comes first
+      return [...vouchers].sort((a, b) => {
+        const aIsFinanceiro = a.etapaAtual === "FINANCEIRO" || a.etapaAtual === "ROBO";
+        const bIsFinanceiro = b.etapaAtual === "FINANCEIRO" || b.etapaAtual === "ROBO";
+        if (aIsFinanceiro && !bIsFinanceiro) return -1;
+        if (!aIsFinanceiro && bIsFinanceiro) return 1;
+        return 0;
+      });
     }
     return vouchers;
   }, [vouchers, role, currentUserId, isAdmin, isGestor, isOperacao, isFiscal, isFinanceiro]);
