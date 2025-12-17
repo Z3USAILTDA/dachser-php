@@ -41,6 +41,10 @@ const menuItems: MenuItem[] = [
         label: "Métricas de Uso",
         href: "/admin/metrics",
       },
+      {
+        label: "Gerenciamento de Usuários",
+        href: "/admin/users",
+      },
     ],
   },
   {

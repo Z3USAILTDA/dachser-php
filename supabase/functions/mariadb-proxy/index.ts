@@ -139,6 +139,9 @@ interface QueryRequest {
   fileContent?: string;
   role?: string;
   metadata?: any;
+  // User Esteira Management
+  esteira_role?: string;
+  esteira_active?: number;
 }
 
 serve(async (req) => {
@@ -259,6 +262,108 @@ serve(async (req) => {
         }
 
         result = { success: true, user: users[0] };
+        break;
+      }
+
+      case 'get_all_users_esteira': {
+        // First, ensure the columns exist (add them if they don't)
+        try {
+          await client.query(`
+            ALTER TABLE ai_agente.t_users_dachser 
+            ADD COLUMN IF NOT EXISTS esteira_role VARCHAR(50) NULL,
+            ADD COLUMN IF NOT EXISTS esteira_active TINYINT(1) DEFAULT 1
+          `);
+        } catch (alterErr) {
+          // Columns might already exist or different MySQL version
+          console.log('Note: ALTER TABLE might have failed (columns may already exist):', alterErr);
+        }
+
+        const users = await client.query(
+          `SELECT id, username, email, is_admin, 
+                  COALESCE(esteira_role, NULL) as esteira_role, 
+                  COALESCE(esteira_active, 1) as esteira_active 
+           FROM ai_agente.t_users_dachser 
+           ORDER BY username ASC`
+        );
+        
+        result = { success: true, users };
+        break;
+      }
+
+      case 'update_user_esteira_role': {
+        const { userId, esteira_role } = body;
+        if (!userId) {
+          return new Response(
+            JSON.stringify({ error: 'User ID é obrigatório' }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+
+        await client.query(
+          `UPDATE ai_agente.t_users_dachser SET esteira_role = ? WHERE id = ?`,
+          [esteira_role || null, userId]
+        );
+        
+        console.log(`Updated esteira_role for user ${userId} to ${esteira_role}`);
+        result = { success: true };
+        break;
+      }
+
+      case 'update_user_esteira_active': {
+        const { userId, esteira_active } = body;
+        if (!userId) {
+          return new Response(
+            JSON.stringify({ error: 'User ID é obrigatório' }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+
+        await client.query(
+          `UPDATE ai_agente.t_users_dachser SET esteira_active = ? WHERE id = ?`,
+          [esteira_active ? 1 : 0, userId]
+        );
+        
+        console.log(`Updated esteira_active for user ${userId} to ${esteira_active}`);
+        result = { success: true };
+        break;
+      }
+
+      case 'get_user_esteira_role': {
+        const { userId } = body;
+        if (!userId) {
+          return new Response(
+            JSON.stringify({ error: 'User ID é obrigatório' }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+
+        // First, try to ensure columns exist
+        try {
+          await client.query(`
+            ALTER TABLE ai_agente.t_users_dachser 
+            ADD COLUMN IF NOT EXISTS esteira_role VARCHAR(50) NULL,
+            ADD COLUMN IF NOT EXISTS esteira_active TINYINT(1) DEFAULT 1
+          `);
+        } catch (alterErr) {
+          // Columns might already exist
+        }
+
+        const users = await client.query(
+          `SELECT COALESCE(esteira_role, NULL) as esteira_role, 
+                  COALESCE(esteira_active, 1) as esteira_active 
+           FROM ai_agente.t_users_dachser WHERE id = ?`,
+          [userId]
+        );
+
+        if (!users || users.length === 0) {
+          result = { success: true, esteira_role: null, esteira_active: 0 };
+        } else {
+          result = { 
+            success: true, 
+            esteira_role: users[0].esteira_role, 
+            esteira_active: users[0].esteira_active 
+          };
+        }
         break;
       }
 
