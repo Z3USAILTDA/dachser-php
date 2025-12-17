@@ -247,7 +247,7 @@ serve(async (req) => {
         }
 
         const users = await client.query(
-          'SELECT id, username, email, is_admin, esteira_role, esteira_active FROM ai_agente.t_users_dachser WHERE id = ?',
+          'SELECT id, username, email, is_admin FROM ai_agente.t_users_dachser WHERE id = ?',
           [userId]
         );
 

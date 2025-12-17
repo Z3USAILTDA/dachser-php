@@ -16,42 +16,14 @@ export function useUserRole() {
           const parsed = JSON.parse(storedUser);
           const isAdminUser = parsed.is_admin === 1 || parsed.is_admin === "1" || parsed.is_admin === true;
           
-          // Fetch esteira role from MariaDB
-          try {
-            const { data, error } = await supabase.functions.invoke("mariadb-proxy", {
-              body: { action: "get_user", userId: parsed.id },
-            });
-            
-            if (data?.success && data.user) {
-              // Check if user has esteira_role set
-              if (data.user.esteira_role) {
-                setRole(data.user.esteira_role as UserRole);
-                setEsteiraActive(data.user.esteira_active === 1);
-              } else if (isAdminUser) {
-                // Admin system users get ADMIN role
-                setRole("ADMIN");
-                setEsteiraActive(true);
-              } else {
-                // No esteira role assigned
-                setRole(null);
-                setEsteiraActive(false);
-              }
-            } else {
-              // Fallback to is_admin check
-              if (isAdminUser) {
-                setRole("ADMIN");
-              } else {
-                setRole(null);
-              }
-            }
-          } catch (apiError) {
-            console.error("Error fetching esteira role from MariaDB:", apiError);
-            // Fallback: admin users get ADMIN, others get null
-            if (isAdminUser) {
-              setRole("ADMIN");
-            } else {
-              setRole(null);
-            }
+          // For MariaDB users, use is_admin to determine role
+          if (isAdminUser) {
+            setRole("ADMIN");
+            setEsteiraActive(true);
+          } else {
+            // Non-admin users get OPERACAO role by default
+            setRole("OPERACAO");
+            setEsteiraActive(true);
           }
           setLoading(false);
           return;
