@@ -12,15 +12,23 @@ export function useUserRole() {
       try {
         // Check if user is logged in via DACHSER (MariaDB) - check both keys
         const storedUser = localStorage.getItem("user") || localStorage.getItem("dachser_user");
+        console.log("[useUserRole] storedUser:", storedUser);
+        
         if (storedUser) {
           const parsed = JSON.parse(storedUser);
+          console.log("[useUserRole] parsed user:", parsed);
+          console.log("[useUserRole] is_admin:", parsed.is_admin, "type:", typeof parsed.is_admin);
+          
           const isAdminUser = parsed.is_admin === 1 || parsed.is_admin === "1" || parsed.is_admin === true;
+          console.log("[useUserRole] isAdminUser:", isAdminUser);
           
           // For MariaDB users, use is_admin to determine role
           if (isAdminUser) {
+            console.log("[useUserRole] Setting role to ADMIN");
             setRole("ADMIN");
             setEsteiraActive(true);
           } else {
+            console.log("[useUserRole] Setting role to OPERACAO");
             // Non-admin users get OPERACAO role by default
             setRole("OPERACAO");
             setEsteiraActive(true);
@@ -28,6 +36,8 @@ export function useUserRole() {
           setLoading(false);
           return;
         }
+        
+        console.log("[useUserRole] No storedUser found, checking Supabase auth");
 
         // Check Supabase auth
         const { data: { user } } = await supabase.auth.getUser();
