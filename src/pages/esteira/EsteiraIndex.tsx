@@ -964,18 +964,6 @@ const EsteiraIndex = () => {
             Atualizar
           </button>
           
-          {/* Settings Button */}
-          <button 
-            onClick={() => {
-              loadEsteiraUsers();
-              setShowUsersDialog(true);
-            }}
-            className="w-9 h-9 rounded-full border border-[rgba(255,255,255,.25)] bg-[rgba(0,0,0,.7)] text-[#aaaaaa] hover:text-white hover:bg-[rgba(0,0,0,.9)] transition flex items-center justify-center"
-            title="Configurações"
-          >
-            <Settings className="h-4 w-4" />
-          </button>
-          
           <Button className="gap-2 bg-primary text-primary-foreground hover:bg-primary/90 shadow-lg shadow-primary/20 rounded-full px-4" onClick={() => setShowCreateDialog(true)}>
             <Plus className="h-4 w-4" />
             Enviar Voucher
@@ -988,6 +976,18 @@ const EsteiraIndex = () => {
           <div className="w-8 h-8 rounded-full border border-[rgba(255,255,255,.25)] flex items-center justify-center bg-[rgba(0,0,0,.7)] text-[#ffc800]" title="Esteira de Vouchers">
             <Receipt size={16} />
           </div>
+          
+          {/* Settings Button */}
+          <button 
+            onClick={() => {
+              loadEsteiraUsers();
+              setShowUsersDialog(true);
+            }}
+            className="w-9 h-9 rounded-full border border-[rgba(255,255,255,.25)] bg-[rgba(0,0,0,.7)] text-[#aaaaaa] hover:text-white hover:bg-[rgba(0,0,0,.9)] transition flex items-center justify-center"
+            title="Configurações"
+          >
+            <Settings className="h-4 w-4" />
+          </button>
         </div>
       </div>
 
