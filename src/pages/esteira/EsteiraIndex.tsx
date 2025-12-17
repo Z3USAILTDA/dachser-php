@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { useUsageLog } from "@/hooks/useUsageLog";
-import { ArrowLeft, Plus, Package, AlertTriangle, AlertCircle, Clock, List, BarChart3, RefreshCw, TrendingUp, DollarSign, Calendar, Bot, FileSpreadsheet, Filter, Building2, Users, LayoutDashboard, CheckCircle2, FileWarning, HelpCircle, Receipt, ShieldX } from "lucide-react";
+import { ArrowLeft, Plus, Package, AlertTriangle, AlertCircle, Clock, List, BarChart3, RefreshCw, TrendingUp, DollarSign, Calendar, Bot, FileSpreadsheet, Filter, Building2, Users, LayoutDashboard, CheckCircle2, FileWarning, HelpCircle, Receipt, ShieldX, Settings, Eye } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { supabase } from "@/integrations/supabase/client";
@@ -17,6 +17,10 @@ import { EditVoucherDialog } from "@/components/esteira/EditVoucherDialog";
 import { RoboTab } from "@/components/tabs/RoboTab";
 import { ReportsTab } from "@/components/tabs/ReportsTab";
 import { MetricCard } from "@/components/cct/MetricCard";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Badge } from "@/components/ui/badge";
 import dachserBg from "@/assets/dachser-background.jpg";
 interface DashboardMetrics {
   ativos: number;
@@ -542,6 +546,8 @@ const EsteiraIndex = () => {
   const [showCreateDialog, setShowCreateDialog] = useState(false);
   const [showEditDialog, setShowEditDialog] = useState(false);
   const [selectedVoucher, setSelectedVoucher] = useState<Voucher | null>(null);
+  const [showUsersDialog, setShowUsersDialog] = useState(false);
+  const [esteiraUsers, setEsteiraUsers] = useState<Array<{id: number; username: string; email: string; esteira_role: string | null;}>>([]);
   const {
     toast
   } = useToast();
@@ -675,6 +681,22 @@ const EsteiraIndex = () => {
       setIsRefetching(false);
     }
   };
+
+  const loadEsteiraUsers = async () => {
+    try {
+      const { data, error } = await supabase.functions.invoke("mariadb-proxy", {
+        body: { action: "get_all_users_esteira" },
+      });
+      if (!error && data?.users) {
+        // Filter only users with esteira_role assigned
+        const usersWithRole = data.users.filter((u: any) => u.esteira_role);
+        setEsteiraUsers(usersWithRole);
+      }
+    } catch (err) {
+      console.error("Error loading esteira users:", err);
+    }
+  };
+
   useEffect(() => {
     if (hasEsteiraAccess) {
       loadVouchers();
@@ -934,22 +956,41 @@ const EsteiraIndex = () => {
 
         {/* Right - Actions and user */}
         <div className="flex items-center gap-2.5 text-[0.85rem]">
-          {/* Admin: User Management - check both esteira role and system is_admin */}
-          {(isAdmin || isSystemAdmin) && (
-            <button 
-              onClick={() => navigate("/fin/esteira/users")} 
-              className="flex items-center gap-2 px-4 py-2 rounded-full border border-[rgba(255,255,255,.25)] bg-[rgba(0,0,0,.7)] text-[#aaaaaa] hover:text-white hover:bg-[rgba(0,0,0,.9)] transition text-[0.8rem]"
-              title="Gerenciar Usuários"
-            >
-              <Users className="h-4 w-4" />
-              Usuários
-            </button>
-          )}
-          
           <button onClick={() => loadVouchers()} disabled={isRefetching} className="flex items-center gap-2 px-4 py-2 rounded-full border border-[rgba(255,255,255,.25)] bg-[rgba(0,0,0,.7)] text-[#aaaaaa] hover:text-white hover:bg-[rgba(0,0,0,.9)] transition disabled:opacity-50 text-[0.8rem]">
             <RefreshCw className={`h-4 w-4 ${isRefetching ? "animate-spin" : ""}`} />
             Atualizar
           </button>
+          
+          {/* Settings Dropdown */}
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <button className="flex items-center gap-2 px-4 py-2 rounded-full border border-[rgba(255,255,255,.25)] bg-[rgba(0,0,0,.7)] text-[#aaaaaa] hover:text-white hover:bg-[rgba(0,0,0,.9)] transition text-[0.8rem]">
+                <Settings className="h-4 w-4" />
+                Configurações
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="bg-[rgba(5,6,18,0.95)] border-white/10 backdrop-blur-xl">
+              <DropdownMenuItem 
+                onClick={() => {
+                  loadEsteiraUsers();
+                  setShowUsersDialog(true);
+                }}
+                className="text-muted-foreground hover:text-foreground cursor-pointer gap-2"
+              >
+                <Eye className="h-4 w-4" />
+                Visualizar Usuários
+              </DropdownMenuItem>
+              {(isAdmin || isSystemAdmin) && (
+                <DropdownMenuItem 
+                  onClick={() => navigate("/admin/users")}
+                  className="text-muted-foreground hover:text-foreground cursor-pointer gap-2"
+                >
+                  <Users className="h-4 w-4" />
+                  Gerenciar Usuários
+                </DropdownMenuItem>
+              )}
+            </DropdownMenuContent>
+          </DropdownMenu>
           
           <Button className="gap-2 bg-primary text-primary-foreground hover:bg-primary/90 shadow-lg shadow-primary/20 rounded-full px-4" onClick={() => setShowCreateDialog(true)}>
             <Plus className="h-4 w-4" />
@@ -1088,6 +1129,59 @@ const EsteiraIndex = () => {
 
       <CreateVoucherDialog open={showCreateDialog} onOpenChange={setShowCreateDialog} onSuccess={loadVouchers} />
       <EditVoucherDialog open={showEditDialog} onOpenChange={setShowEditDialog} onSuccess={loadVouchers} voucher={selectedVoucher} />
+      
+      {/* Read-only Users Dialog */}
+      <Dialog open={showUsersDialog} onOpenChange={setShowUsersDialog}>
+        <DialogContent className="max-w-2xl bg-[rgba(5,6,18,0.98)] border-white/10 backdrop-blur-xl">
+          <DialogHeader>
+            <DialogTitle className="text-foreground flex items-center gap-2">
+              <Users className="h-5 w-5 text-primary" />
+              Usuários da Esteira
+            </DialogTitle>
+          </DialogHeader>
+          <div className="max-h-[60vh] overflow-auto">
+            {esteiraUsers.length === 0 ? (
+              <div className="text-center py-8 text-muted-foreground">
+                Nenhum usuário com função na Esteira
+              </div>
+            ) : (
+              <Table>
+                <TableHeader>
+                  <TableRow className="border-white/10 hover:bg-transparent">
+                    <TableHead className="text-muted-foreground">Usuário</TableHead>
+                    <TableHead className="text-muted-foreground">Email</TableHead>
+                    <TableHead className="text-muted-foreground">Função</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {esteiraUsers.map((u) => (
+                    <TableRow key={u.id} className="border-white/5">
+                      <TableCell className="font-medium text-foreground">@{u.username}</TableCell>
+                      <TableCell className="text-muted-foreground">{u.email || "-"}</TableCell>
+                      <TableCell>
+                        <Badge className={cn(
+                          "border",
+                          u.esteira_role === "ADMIN" && "bg-red-500/20 text-red-400 border-red-500/30",
+                          u.esteira_role === "OPERACAO" && "bg-blue-500/20 text-blue-400 border-blue-500/30",
+                          u.esteira_role === "FISCAL" && "bg-purple-500/20 text-purple-400 border-purple-500/30",
+                          u.esteira_role === "SUPERVISOR" && "bg-amber-500/20 text-amber-400 border-amber-500/30",
+                          u.esteira_role === "FINANCEIRO" && "bg-green-500/20 text-green-400 border-green-500/30"
+                        )}>
+                          {u.esteira_role === "ADMIN" ? "Administrador" :
+                           u.esteira_role === "OPERACAO" ? "Operação" :
+                           u.esteira_role === "FISCAL" ? "Fiscal" :
+                           u.esteira_role === "SUPERVISOR" ? "Supervisor" :
+                           u.esteira_role === "FINANCEIRO" ? "Financeiro" : u.esteira_role}
+                        </Badge>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>;
 };
 export default EsteiraIndex;
