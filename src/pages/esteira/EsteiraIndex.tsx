@@ -788,6 +788,7 @@ const EsteiraIndex = () => {
     loading: roleLoading,
     isOperacao,
     isFiscal,
+    isSupervisor,
     isFinanceiro,
     isAdmin,
     isGestor,
@@ -934,6 +935,32 @@ const EsteiraIndex = () => {
     if (isAdmin || isGestor) {
       return vouchers;
     }
+    
+    // Users with FINANCEIRO role (even with other roles) can see ALL vouchers
+    // FINANCEIRO stage vouchers come first
+    if (isFinanceiro) {
+      return [...vouchers].sort((a, b) => {
+        const aIsFinanceiro = a.etapaAtual === "FINANCEIRO" || a.etapaAtual === "ROBO";
+        const bIsFinanceiro = b.etapaAtual === "FINANCEIRO" || b.etapaAtual === "ROBO";
+        // If user also has SUPERVISOR role, prioritize SUPERVISOR stage too
+        const aIsSupervisor = isSupervisor && a.etapaAtual === "SUPERVISOR";
+        const bIsSupervisor = isSupervisor && b.etapaAtual === "SUPERVISOR";
+        const aPriority = aIsFinanceiro || aIsSupervisor;
+        const bPriority = bIsFinanceiro || bIsSupervisor;
+        if (aPriority && !bPriority) return -1;
+        if (!aPriority && bPriority) return 1;
+        return 0;
+      });
+    }
+    
+    // Users with only SUPERVISOR role
+    if (isSupervisor) {
+      return vouchers.filter(
+        (v) =>
+          v.etapaAtual === "SUPERVISOR" || v.responsavelSupervisorUserId === currentUserId,
+      );
+    }
+    
     if (isOperacao) {
       return vouchers.filter(
         (v) => v.criadoPorUserId === currentUserId || v.responsavelOperacaoUserId === currentUserId,
@@ -945,18 +972,8 @@ const EsteiraIndex = () => {
           v.etapaAtual === "FISCAL" || v.etapaAtual === "AJUSTE_FISCAL" || v.responsavelFiscalUserId === currentUserId,
       );
     }
-    if (isFinanceiro) {
-      // FINANCEIRO can see ALL vouchers, but their stage comes first
-      return [...vouchers].sort((a, b) => {
-        const aIsFinanceiro = a.etapaAtual === "FINANCEIRO" || a.etapaAtual === "ROBO";
-        const bIsFinanceiro = b.etapaAtual === "FINANCEIRO" || b.etapaAtual === "ROBO";
-        if (aIsFinanceiro && !bIsFinanceiro) return -1;
-        if (!aIsFinanceiro && bIsFinanceiro) return 1;
-        return 0;
-      });
-    }
     return vouchers;
-  }, [vouchers, role, currentUserId, isAdmin, isGestor, isOperacao, isFiscal, isFinanceiro]);
+  }, [vouchers, role, currentUserId, isAdmin, isGestor, isOperacao, isFiscal, isSupervisor, isFinanceiro]);
 
   const filterVouchers = (vouchersList: Voucher[]) => {
     const now = new Date();

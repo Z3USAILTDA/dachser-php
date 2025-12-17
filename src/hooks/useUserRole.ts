@@ -4,6 +4,7 @@ import { UserRole } from "@/types/voucher";
 
 export function useUserRole() {
   const [role, setRole] = useState<UserRole | null>(null);
+  const [roles, setRoles] = useState<UserRole[]>([]);
   const [loading, setLoading] = useState(true);
   const [esteiraActive, setEsteiraActive] = useState<boolean>(false);
 
@@ -25,27 +26,35 @@ export function useUserRole() {
             });
             
             if (!error && data?.success) {
-              const esteiraRole = data.esteira_role as UserRole | null;
+              const esteiraRoleRaw = data.esteira_role as string | null;
               const active = data.esteira_active === 1;
               
-              if (esteiraRole) {
-                setRole(esteiraRole);
+              if (esteiraRoleRaw) {
+                // Parse comma-separated roles (e.g., "SUPERVISOR,FINANCEIRO")
+                const parsedRoles = esteiraRoleRaw.split(",").map(r => r.trim()).filter(Boolean) as UserRole[];
+                setRoles(parsedRoles);
+                // Set primary role as the first one
+                setRole(parsedRoles[0] || null);
                 setEsteiraActive(active);
               } else if (isAdminUser) {
                 // Admin users always have access even without explicit esteira_role
                 setRole("ADMIN");
+                setRoles(["ADMIN"]);
                 setEsteiraActive(true);
               } else {
                 setRole(null);
+                setRoles([]);
                 setEsteiraActive(false);
               }
             } else {
               // If fetch fails, fallback to is_admin check
               if (isAdminUser) {
                 setRole("ADMIN");
+                setRoles(["ADMIN"]);
                 setEsteiraActive(true);
               } else {
                 setRole(null);
+                setRoles([]);
                 setEsteiraActive(false);
               }
             }
@@ -54,9 +63,11 @@ export function useUserRole() {
             // Fallback to is_admin
             if (isAdminUser) {
               setRole("ADMIN");
+              setRoles(["ADMIN"]);
               setEsteiraActive(true);
             } else {
               setRole(null);
+              setRoles([]);
               setEsteiraActive(false);
             }
           }
@@ -69,6 +80,7 @@ export function useUserRole() {
         
         if (!user) {
           setRole(null);
+          setRoles([]);
           setEsteiraActive(false);
           setLoading(false);
           return;
@@ -83,9 +95,11 @@ export function useUserRole() {
 
         if (roleData?.role) {
           setRole(roleData.role as UserRole);
+          setRoles([roleData.role as UserRole]);
           setEsteiraActive(true);
         } else {
           setRole("OPERACAO");
+          setRoles(["OPERACAO"]);
           setEsteiraActive(true);
         }
       } catch (error) {
@@ -97,13 +111,16 @@ export function useUserRole() {
           const isAdminUser = parsed.is_admin === 1 || parsed.is_admin === true;
           if (isAdminUser) {
             setRole("ADMIN");
+            setRoles(["ADMIN"]);
             setEsteiraActive(true);
           } else {
             setRole(null);
+            setRoles([]);
             setEsteiraActive(false);
           }
         } else {
           setRole(null);
+          setRoles([]);
           setEsteiraActive(false);
         }
       } finally {
@@ -114,20 +131,26 @@ export function useUserRole() {
     fetchRole();
   }, []);
 
-  const isAdmin = role === "ADMIN";
-  const isFiscal = role === "FISCAL";
-  const isSupervisor = role === "SUPERVISOR";
-  const isFinanceiro = role === "FINANCEIRO";
-  const isOperacao = role === "OPERACAO";
-  const isGestorOperacao = role === "GESTOR_OPERACAO";
-  const isGestorFiscal = role === "GESTOR_FISCAL";
-  const isGestorSupervisor = role === "GESTOR_SUPERVISOR";
-  const isGestorFinanceiro = role === "GESTOR_FINANCEIRO";
-  const isGestor = role?.startsWith("GESTOR_") || false;
-  const hasEsteiraAccess = role !== null && esteiraActive;
+  // Check if user has a specific role (supports multiple roles)
+  const hasRole = (checkRole: UserRole): boolean => {
+    return roles.includes(checkRole) || roles.includes("ADMIN");
+  };
+
+  const isAdmin = hasRole("ADMIN");
+  const isFiscal = hasRole("FISCAL");
+  const isSupervisor = hasRole("SUPERVISOR");
+  const isFinanceiro = hasRole("FINANCEIRO");
+  const isOperacao = hasRole("OPERACAO");
+  const isGestorOperacao = hasRole("GESTOR_OPERACAO");
+  const isGestorFiscal = hasRole("GESTOR_FISCAL");
+  const isGestorSupervisor = hasRole("GESTOR_SUPERVISOR");
+  const isGestorFinanceiro = hasRole("GESTOR_FINANCEIRO");
+  const isGestor = roles.some(r => r?.startsWith("GESTOR_"));
+  const hasEsteiraAccess = roles.length > 0 && esteiraActive;
 
   return { 
     role, 
+    roles,
     loading, 
     isAdmin,
     isFiscal,
@@ -140,6 +163,7 @@ export function useUserRole() {
     isGestorFinanceiro,
     isGestor,
     hasEsteiraAccess,
-    esteiraActive
+    esteiraActive,
+    hasRole
   };
 }
