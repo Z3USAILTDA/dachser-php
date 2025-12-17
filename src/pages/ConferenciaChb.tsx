@@ -386,7 +386,7 @@ export default function ConferenciaChb() {
       // Update step status in database
       if (itemId) {
         const stepStatusField = `step${activeStep}_status` as 'step1_status' | 'step2_status' | 'step3_status';
-        const stepStatusUpdate: Record<string, string> = { [stepStatusField]: 'approved' };
+        const stepStatusUpdate: Record<string, string> = { [stepStatusField]: 'realizado' };
         
         // Determine new macro status based on which step was approved
         let newMacroStatus: 'pre_alerta_pendente' | 'instrucao_pendente' | 'di_pendente' | 'concluida';
