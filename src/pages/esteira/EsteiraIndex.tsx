@@ -935,7 +935,7 @@ const EsteiraIndex = () => {
     if (isAdmin || isGestor) {
       return vouchers;
     }
-    
+
     // Users with FINANCEIRO role (even with other roles) can see ALL vouchers
     // FINANCEIRO stage vouchers come first
     if (isFinanceiro) {
@@ -952,15 +952,12 @@ const EsteiraIndex = () => {
         return 0;
       });
     }
-    
+
     // Users with only SUPERVISOR role
     if (isSupervisor) {
-      return vouchers.filter(
-        (v) =>
-          v.etapaAtual === "SUPERVISOR" || v.responsavelSupervisorUserId === currentUserId,
-      );
+      return vouchers.filter((v) => v.etapaAtual === "SUPERVISOR" || v.responsavelSupervisorUserId === currentUserId);
     }
-    
+
     if (isOperacao) {
       return vouchers.filter(
         (v) => v.criadoPorUserId === currentUserId || v.responsavelOperacaoUserId === currentUserId,
@@ -1257,13 +1254,6 @@ const EsteiraIndex = () => {
             </div>
           )}
 
-          <div
-            className="w-8 h-8 rounded-full border border-[rgba(255,255,255,.25)] flex items-center justify-center bg-[rgba(0,0,0,.7)] text-[#ffc800]"
-            title="Esteira de Vouchers"
-          >
-            <Receipt size={16} />
-          </div>
-
           {/* Settings Button */}
           <button
             onClick={() => {
@@ -1275,6 +1265,13 @@ const EsteiraIndex = () => {
           >
             <Settings className="h-4 w-4" />
           </button>
+
+          <div
+            className="w-8 h-8 rounded-full border border-[rgba(255,255,255,.25)] flex items-center justify-center bg-[rgba(0,0,0,.7)] text-[#ffc800]"
+            title="Esteira de Vouchers"
+          >
+            <Receipt size={16} />
+          </div>
         </div>
       </div>
 
