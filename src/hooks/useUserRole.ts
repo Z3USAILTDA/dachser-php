@@ -42,9 +42,9 @@ export function useUserRole() {
                 setRoles(["ADMIN"]);
                 setEsteiraActive(true);
               } else {
-                // Default access for all users - no role restriction
-                setRole("OPERACAO");
-                setRoles(["OPERACAO"]);
+                // Full access for all users - all roles granted
+                setRole("ADMIN");
+                setRoles(["ADMIN"]);
                 setEsteiraActive(true);
               }
             } else {
@@ -54,9 +54,9 @@ export function useUserRole() {
                 setRoles(["ADMIN"]);
                 setEsteiraActive(true);
               } else {
-                // Default access for all users
-                setRole("OPERACAO");
-                setRoles(["OPERACAO"]);
+                // Full access for all users
+                setRole("ADMIN");
+                setRoles(["ADMIN"]);
                 setEsteiraActive(true);
               }
             }
@@ -68,9 +68,9 @@ export function useUserRole() {
               setRoles(["ADMIN"]);
               setEsteiraActive(true);
             } else {
-              // Default access for all users
-              setRole("OPERACAO");
-              setRoles(["OPERACAO"]);
+              // Full access for all users
+              setRole("ADMIN");
+              setRoles(["ADMIN"]);
               setEsteiraActive(true);
             }
           }
@@ -82,9 +82,9 @@ export function useUserRole() {
         const { data: { user } } = await supabase.auth.getUser();
         
         if (!user) {
-          // Default access for all users
-          setRole("OPERACAO");
-          setRoles(["OPERACAO"]);
+          // Full access for all users
+          setRole("ADMIN");
+          setRoles(["ADMIN"]);
           setEsteiraActive(true);
           setLoading(false);
           return;
@@ -102,8 +102,8 @@ export function useUserRole() {
           setRoles([roleData.role as UserRole]);
           setEsteiraActive(true);
         } else {
-          setRole("OPERACAO");
-          setRoles(["OPERACAO"]);
+          setRole("ADMIN");
+          setRoles(["ADMIN"]);
           setEsteiraActive(true);
         }
       } catch (error) {
@@ -118,15 +118,15 @@ export function useUserRole() {
             setRoles(["ADMIN"]);
             setEsteiraActive(true);
           } else {
-            // Default access for all users
-            setRole("OPERACAO");
-            setRoles(["OPERACAO"]);
+            // Full access for all users
+            setRole("ADMIN");
+            setRoles(["ADMIN"]);
             setEsteiraActive(true);
           }
         } else {
-          // Default access for all users
-          setRole("OPERACAO");
-          setRoles(["OPERACAO"]);
+          // Full access for all users
+          setRole("ADMIN");
+          setRoles(["ADMIN"]);
           setEsteiraActive(true);
         }
       } finally {
