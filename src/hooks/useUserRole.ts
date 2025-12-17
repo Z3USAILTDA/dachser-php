@@ -5,57 +5,76 @@ import { UserRole } from "@/types/voucher";
 export function useUserRole() {
   const [role, setRole] = useState<UserRole | null>(null);
   const [loading, setLoading] = useState(true);
-  const [esteiraActive, setEsteiraActive] = useState<boolean>(true);
+  const [esteiraActive, setEsteiraActive] = useState<boolean>(false);
 
   useEffect(() => {
     const fetchRole = async () => {
       try {
-        // Check if user is logged in via DACHSER (MariaDB) - check both keys
+        // Check if user is logged in via DACHSER (MariaDB)
         const storedUser = localStorage.getItem("user") || localStorage.getItem("dachser_user");
-        console.log("[useUserRole] storedUser:", storedUser);
         
         if (storedUser) {
           const parsed = JSON.parse(storedUser);
-          console.log("[useUserRole] parsed user:", parsed);
-          console.log("[useUserRole] is_admin:", parsed.is_admin, "type:", typeof parsed.is_admin);
-          
+          const userId = parsed.id;
           const isAdminUser = parsed.is_admin === 1 || parsed.is_admin === "1" || parsed.is_admin === true;
-          console.log("[useUserRole] isAdminUser:", isAdminUser);
           
-          // For MariaDB users, use is_admin to determine role
-          if (isAdminUser) {
-            console.log("[useUserRole] Setting role to ADMIN");
-            setRole("ADMIN");
-            setEsteiraActive(true);
-          } else {
-            console.log("[useUserRole] Setting role to OPERACAO");
-            // Non-admin users get OPERACAO role by default
-            setRole("OPERACAO");
-            setEsteiraActive(true);
+          // Fetch esteira role from database
+          try {
+            const { data, error } = await supabase.functions.invoke("mariadb-proxy", {
+              body: { action: "get_user_esteira_role", userId },
+            });
+            
+            if (!error && data?.success) {
+              const esteiraRole = data.esteira_role as UserRole | null;
+              const active = data.esteira_active === 1;
+              
+              if (esteiraRole) {
+                setRole(esteiraRole);
+                setEsteiraActive(active);
+              } else if (isAdminUser) {
+                // Admin users always have access even without explicit esteira_role
+                setRole("ADMIN");
+                setEsteiraActive(true);
+              } else {
+                setRole(null);
+                setEsteiraActive(false);
+              }
+            } else {
+              // If fetch fails, fallback to is_admin check
+              if (isAdminUser) {
+                setRole("ADMIN");
+                setEsteiraActive(true);
+              } else {
+                setRole(null);
+                setEsteiraActive(false);
+              }
+            }
+          } catch (fetchErr) {
+            console.error("Error fetching esteira role:", fetchErr);
+            // Fallback to is_admin
+            if (isAdminUser) {
+              setRole("ADMIN");
+              setEsteiraActive(true);
+            } else {
+              setRole(null);
+              setEsteiraActive(false);
+            }
           }
           setLoading(false);
           return;
         }
-        
-        console.log("[useUserRole] No storedUser found, checking Supabase auth");
 
-        // Check Supabase auth
+        // Check Supabase auth (fallback)
         const { data: { user } } = await supabase.auth.getUser();
         
         if (!user) {
-          // Try localStorage fallback for older sessions
-          const storedUser = localStorage.getItem("user");
-          if (storedUser) {
-            const parsed = JSON.parse(storedUser);
-            setRole(parsed.is_admin === 1 ? "ADMIN" : "OPERACAO");
-          } else {
-            setRole(null);
-          }
+          setRole(null);
+          setEsteiraActive(false);
           setLoading(false);
           return;
         }
 
-        // Try to get role from user_roles table first
+        // Try to get role from user_roles table
         const { data: roleData } = await supabase
           .from("user_roles")
           .select("role")
@@ -64,26 +83,28 @@ export function useUserRole() {
 
         if (roleData?.role) {
           setRole(roleData.role as UserRole);
+          setEsteiraActive(true);
         } else {
-          // Fallback to profiles table
-          const { data: profile } = await supabase
-            .from("profiles")
-            .select("*")
-            .eq("user_id", user.id)
-            .maybeSingle();
-
           setRole("OPERACAO");
+          setEsteiraActive(true);
         }
       } catch (error) {
         console.error("Error fetching user role:", error);
-        // Fallback to localStorage
+        // Fallback to localStorage check for admin
         const storedUser = localStorage.getItem("user") || localStorage.getItem("dachser_user");
         if (storedUser) {
           const parsed = JSON.parse(storedUser);
           const isAdminUser = parsed.is_admin === 1 || parsed.is_admin === true;
-          setRole(isAdminUser ? "ADMIN" : null);
+          if (isAdminUser) {
+            setRole("ADMIN");
+            setEsteiraActive(true);
+          } else {
+            setRole(null);
+            setEsteiraActive(false);
+          }
         } else {
           setRole(null);
+          setEsteiraActive(false);
         }
       } finally {
         setLoading(false);
