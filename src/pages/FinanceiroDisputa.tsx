@@ -439,12 +439,16 @@ export default function FinanceiroDisputa() {
       if (error) throw error;
       
       if (data?.success) {
-        const msg = `${data.imported} disputa(s) importada(s)` + 
-          (data.notFound > 0 ? `, ${data.notFound} não encontrado(s)` : '');
-        toast({ title: "Importação concluída", description: msg });
+        const parts = [`${data.imported} disputa(s) importada(s)`];
+        if (data.skipped > 0) parts.push(`${data.skipped} ignorada(s) (já em disputa)`);
+        if (data.notFound > 0) parts.push(`${data.notFound} não encontrada(s)`);
+        toast({ title: "Importação concluída", description: parts.join(', ') });
         
         if (data.notFoundItems?.length > 0) {
           console.log("Documentos não encontrados:", data.notFoundItems);
+        }
+        if (data.skippedItems?.length > 0) {
+          console.log("Documentos ignorados (já em disputa):", data.skippedItems);
         }
         
         setImportModalOpen(false);
