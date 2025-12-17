@@ -261,6 +261,25 @@ export default function ConferenciaChb() {
 
       // Only add new documents if there are new files (not a re-run)
       if (currentStepFiles.length > 0) {
+        // Save files to database for persistence
+        for (const file of currentStepFiles) {
+          try {
+            // Upload file to storage first (if storage is available)
+            // For now, just save the metadata to MariaDB
+            await createFile(
+              file.name,
+              activeStep.toString() as '1' | '2' | '3',
+              detectDocumentType(file.name),
+              {
+                mime: file.type,
+                sizeBytes: file.size,
+              }
+            );
+          } catch (err) {
+            console.error('Error saving file to database:', err);
+          }
+        }
+
         const newDocs = currentStepFiles.map((file, idx) => ({
           id: `doc-${activeStep}-${Date.now()}-${idx}`,
           name: file.name,
@@ -276,6 +295,9 @@ export default function ConferenciaChb() {
           ...prev,
           [activeStep]: [...(prev[activeStep] || []), ...newDocs],
         }));
+
+        // Refresh files from database to get IDs
+        await fetchFiles();
 
         // Clear only current step uploaded files
         setUploadedFiles(prev => ({
