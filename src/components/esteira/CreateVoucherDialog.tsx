@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -148,12 +148,15 @@ export const CreateVoucherDialog = ({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSearchingRM, setIsSearchingRM] = useState(false);
   const [rmDataLoaded, setRmDataLoaded] = useState(false);
-  const [cnpjNotFound, setCnpjNotFound] = useState(false); // CNPJ não encontrado via RM
+  const [cnpjNotFound, setCnpjNotFound] = useState(false);
   const [entryMode, setEntryMode] = useState<EntryMode>("rm");
   const [origemProcesso, setOrigemProcesso] = useState<OrigemProcesso | null>(null);
   const [faturaFiles, setFaturaFiles] = useState<File[]>([]);
   const [boletoFiles, setBoletoFiles] = useState<File[]>([]);
+  const [hasDraft, setHasDraft] = useState(false);
   const { toast } = useToast();
+
+  const DRAFT_KEY = "voucher_draft";
 
   const form = useForm<FormValues>({
     resolver: zodResolver(formSchema),
@@ -173,6 +176,97 @@ export const CreateVoucherDialog = ({
       comentariosOperacao: "",
     },
   });
+
+  // Load draft from localStorage when dialog opens
+  useEffect(() => {
+    if (open) {
+      const savedDraft = localStorage.getItem(DRAFT_KEY);
+      if (savedDraft) {
+        try {
+          const draft = JSON.parse(savedDraft);
+          setHasDraft(true);
+          
+          // Restore form values
+          if (draft.formValues) {
+            Object.entries(draft.formValues).forEach(([key, value]) => {
+              if (key === "vencimento" || key === "dataEmissaoDocumento") {
+                if (value) {
+                  form.setValue(key as keyof FormValues, new Date(value as string));
+                }
+              } else {
+                form.setValue(key as keyof FormValues, value as any);
+              }
+            });
+          }
+          
+          // Restore other state
+          if (draft.entryMode) setEntryMode(draft.entryMode);
+          if (draft.origemProcesso) setOrigemProcesso(draft.origemProcesso);
+          if (draft.rmDataLoaded) setRmDataLoaded(draft.rmDataLoaded);
+          
+          toast({
+            title: "📝 Rascunho recuperado",
+            description: "Os dados do voucher foram restaurados automaticamente.",
+          });
+        } catch (e) {
+          console.error("Erro ao carregar rascunho:", e);
+          localStorage.removeItem(DRAFT_KEY);
+        }
+      }
+    }
+  }, [open]);
+
+  // Auto-save draft when form values change
+  const saveDraft = useCallback(() => {
+    const formValues = form.getValues();
+    const draft = {
+      formValues: {
+        ...formValues,
+        vencimento: formValues.vencimento?.toISOString(),
+        dataEmissaoDocumento: formValues.dataEmissaoDocumento?.toISOString(),
+      },
+      entryMode,
+      origemProcesso,
+      rmDataLoaded,
+      savedAt: new Date().toISOString(),
+    };
+    localStorage.setItem(DRAFT_KEY, JSON.stringify(draft));
+    setHasDraft(true);
+  }, [form, entryMode, origemProcesso, rmDataLoaded]);
+
+  // Watch form changes and auto-save
+  useEffect(() => {
+    const subscription = form.watch(() => {
+      if (open) {
+        saveDraft();
+      }
+    });
+    return () => subscription.unsubscribe();
+  }, [form, open, saveDraft]);
+
+  // Also save when entryMode or origemProcesso changes
+  useEffect(() => {
+    if (open) {
+      saveDraft();
+    }
+  }, [entryMode, origemProcesso, open, saveDraft]);
+
+  // Clear draft function
+  const clearDraft = () => {
+    localStorage.removeItem(DRAFT_KEY);
+    setHasDraft(false);
+    form.reset();
+    setFaturaFiles([]);
+    setBoletoFiles([]);
+    setOrigemProcesso(null);
+    setEntryMode("rm");
+    setRmDataLoaded(false);
+    setCnpjNotFound(false);
+    toast({
+      title: "🗑️ Rascunho limpo",
+      description: "Os dados do rascunho foram removidos.",
+    });
+  };
 
   const handleSearchRM = async () => {
     const numeroRM = form.getValues("numeroRM");
@@ -480,6 +574,10 @@ export const CreateVoucherDialog = ({
         description: `O voucher foi criado com sucesso.`,
       });
 
+      // Clear draft on success
+      localStorage.removeItem(DRAFT_KEY);
+      setHasDraft(false);
+      
       form.reset();
       setFaturaFiles([]);
       setBoletoFiles([]);
@@ -519,10 +617,29 @@ export const CreateVoucherDialog = ({
       )}
       <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto bg-[rgba(5,6,18,0.95)] border-border/50 backdrop-blur-xl shadow-[0_18px_40px_rgba(0,0,0,.85)]">
         <DialogHeader>
-          <DialogTitle className="text-xl font-semibold text-foreground flex items-center gap-2">
-            <FileText className="h-5 w-5 text-primary" />
-            Novo Voucher
-          </DialogTitle>
+          <div className="flex items-center justify-between">
+            <DialogTitle className="text-xl font-semibold text-foreground flex items-center gap-2">
+              <FileText className="h-5 w-5 text-primary" />
+              Novo Voucher
+            </DialogTitle>
+            {hasDraft && (
+              <div className="flex items-center gap-2">
+                <Badge variant="outline" className="bg-amber-500/10 text-amber-400 border-amber-500/30">
+                  📝 Rascunho salvo
+                </Badge>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={clearDraft}
+                  className="text-muted-foreground hover:text-destructive h-7 px-2"
+                >
+                  <X className="h-3 w-3 mr-1" />
+                  Limpar
+                </Button>
+              </div>
+            )}
+          </div>
           <DialogDescription className="text-muted-foreground">
             Busque os dados do voucher no RM ou preencha manualmente
           </DialogDescription>
