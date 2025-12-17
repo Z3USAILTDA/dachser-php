@@ -2133,7 +2133,9 @@ serve(async (req) => {
         
         let successCount = 0;
         let notFoundCount = 0;
+        let skippedCount = 0;
         const notFoundItems: string[] = [];
+        const skippedItems: string[] = [];
         
         for (const item of items) {
           const nd = item.nd?.toString().trim();
@@ -2163,6 +2165,19 @@ serve(async (req) => {
           const docData = existingRows[0];
           const docKey = docData.doc_key;
           
+          // Check if already exists in t_fin_disputas (skip if exists)
+          const checkDisputaSql = `
+            SELECT id FROM ai_agente.t_fin_disputas WHERE nf = ? LIMIT 1
+          `;
+          const existingDisputa = await client.query(checkDisputaSql, [docKey]);
+          
+          if (existingDisputa && existingDisputa.length > 0) {
+            // Already in dispute, skip without overwriting
+            skippedCount++;
+            skippedItems.push(nd);
+            continue;
+          }
+          
           // Update to mark as disputa in t_dados_financeiro_nfs
           const updateSql = `
             UPDATE dados_dachser.t_dados_financeiro_nfs 
@@ -2173,22 +2188,12 @@ serve(async (req) => {
           `;
           await client.execute(updateSql, [item.responsavel || null, nd, nd, nd]);
           
-          // Insert/update extra data in t_fin_disputas with all required fields
-          const upsertSql = `
+          // Insert new disputa (only if not exists)
+          const insertSql = `
             INSERT INTO ai_agente.t_fin_disputas (nf, cliente, vencimento, valor, tipo, responsavel, departamento, observacoes, escalation, is_disputa, created_at, updated_at)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, NOW(), NOW())
-            ON DUPLICATE KEY UPDATE 
-              cliente = VALUES(cliente),
-              vencimento = VALUES(vencimento),
-              valor = VALUES(valor),
-              tipo = VALUES(tipo),
-              responsavel = VALUES(responsavel),
-              departamento = VALUES(departamento),
-              observacoes = VALUES(observacoes),
-              escalation = VALUES(escalation),
-              updated_at = NOW()
           `;
-          await client.execute(upsertSql, [
+          await client.execute(insertSql, [
             docKey, 
             docData.cliente || 'N/A',
             docData.vencimento || null,
@@ -2203,12 +2208,14 @@ serve(async (req) => {
           successCount++;
         }
         
-        console.log(`Disputas import: ${successCount} success, ${notFoundCount} not found`);
+        console.log(`Disputas import: ${successCount} success, ${skippedCount} skipped (already in dispute), ${notFoundCount} not found`);
         result = { 
           success: true, 
           imported: successCount, 
+          skipped: skippedCount,
           notFound: notFoundCount,
-          notFoundItems: notFoundItems.slice(0, 10) // Return first 10 not found items
+          notFoundItems: notFoundItems.slice(0, 10),
+          skippedItems: skippedItems.slice(0, 10)
         };
         break;
       }
