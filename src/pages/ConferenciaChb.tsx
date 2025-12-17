@@ -13,7 +13,7 @@ import { ChbAnalysisPanel } from '@/components/chb/ChbAnalysisPanel';
 import { ChbHistoryPanel } from '@/components/chb/ChbHistoryPanel';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
-import { useChbFiles, useChbRuns, ChbFile, ChbRun } from '@/hooks/useChbData';
+import { useChbFiles, useChbRuns, useChbItems, ChbFile, ChbRun } from '@/hooks/useChbData';
 
 export default function ConferenciaChb() {
   useUsageLog({ endpoint: "/chb/conferencia" });
@@ -23,6 +23,7 @@ export default function ConferenciaChb() {
   
   const { files: dbFiles, fetchFiles, createFile, deleteFile } = useChbFiles(itemId);
   const { runs: dbRuns, fetchRuns, createRun } = useChbRuns(itemId);
+  const { updateItem } = useChbItems();
   
   const [steps, setSteps] = useState<ChbStep[]>(initialSteps);
   const [activeStep, setActiveStep] = useState(1);
@@ -327,6 +328,27 @@ export default function ConferenciaChb() {
         currentAnalysis.html,
         currentAnalysis
       );
+
+      // Update step status in database
+      if (itemId) {
+        const stepStatusField = `step${activeStep}_status` as 'step1_status' | 'step2_status' | 'step3_status';
+        const stepStatusUpdate: Record<string, string> = { [stepStatusField]: 'approved' };
+        
+        // Determine new macro status based on which step was approved
+        let newMacroStatus: 'pre_alerta_pendente' | 'instrucao_pendente' | 'di_pendente' | 'concluida';
+        if (activeStep === 1) {
+          newMacroStatus = 'instrucao_pendente'; // Move to next step
+        } else if (activeStep === 2) {
+          newMacroStatus = 'di_pendente'; // Move to next step
+        } else {
+          newMacroStatus = 'concluida'; // All steps completed
+        }
+        
+        await updateItem(itemId, {
+          ...stepStatusUpdate,
+          status_macro: newMacroStatus,
+        } as Partial<Pick<import('@/hooks/useChbData').ChbItem, 'status_macro' | 'step1_status' | 'step2_status' | 'step3_status'>>);
+      }
     } catch (error) {
       console.error('Error saving run:', error);
       toast.error('Erro ao salvar aprovação');
