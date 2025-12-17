@@ -365,7 +365,7 @@ export const CreateVoucherDialog = ({
         etapa_atual: values.tipoDocumento === "ADF" ? "FINANCEIRO" : "OPERACAO",
         status_baixa: "PENDENTE",
         status_financeiro: "PENDENTE",
-        criado_por_user_id: userData.id,
+        criado_por_user_id: null, // MariaDB user ID is integer, not UUID
       };
 
       const { data: voucher, error: voucherError } = await (supabase as any)
@@ -400,7 +400,7 @@ export const CreateVoucherDialog = ({
           file_name: file.name,
           file_url: publicUrl.publicUrl,
           file_size: file.size,
-          uploaded_by_user_id: userData.id,
+          uploaded_by_user_id: null, // MariaDB user ID is integer, not UUID
         });
       }
 
@@ -428,14 +428,14 @@ export const CreateVoucherDialog = ({
           file_name: file.name,
           file_url: publicUrl.publicUrl,
           file_size: file.size,
-          uploaded_by_user_id: userData.id,
+          uploaded_by_user_id: null, // MariaDB user ID is integer, not UUID
         });
       }
 
       // Log creation
       await (supabase as any).from("voucher_logs").insert({
         voucher_id: voucher.id,
-        user_id: userData.id,
+        user_id: null, // MariaDB user ID is integer, not UUID
         acao: "VOUCHER_CRIADO",
         detalhe: `Voucher criado via ${entryMode === "rm" ? "RM" : "entrada manual"}`,
       });
