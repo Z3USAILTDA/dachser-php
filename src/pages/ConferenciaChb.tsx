@@ -261,11 +261,38 @@ export default function ConferenciaChb() {
 
       // Only add new documents if there are new files (not a re-run)
       if (currentStepFiles.length > 0) {
-        // Save files to database for persistence
+        const savedDocs: typeof documents[number] = [];
+        
+        // Upload files to Supabase storage and save metadata to MariaDB
         for (const file of currentStepFiles) {
           try {
-            // Upload file to storage first (if storage is available)
-            // For now, just save the metadata to MariaDB
+            // Generate unique file path
+            const timestamp = Date.now();
+            const safeName = file.name.replace(/[^a-zA-Z0-9.-]/g, '_');
+            const filePath = `${itemId}/${activeStep}/${timestamp}_${safeName}`;
+            
+            // Upload to Supabase storage
+            const { data: uploadData, error: uploadError } = await supabase.storage
+              .from('chb-documents')
+              .upload(filePath, file, {
+                cacheControl: '3600',
+                upsert: false,
+              });
+            
+            if (uploadError) {
+              console.error('Error uploading file:', uploadError);
+              toast.error(`Erro ao enviar ${file.name}`);
+              continue;
+            }
+            
+            // Get public URL
+            const { data: urlData } = supabase.storage
+              .from('chb-documents')
+              .getPublicUrl(filePath);
+            
+            const publicUrl = urlData?.publicUrl;
+            
+            // Save metadata to MariaDB with storage URL
             await createFile(
               file.name,
               activeStep.toString() as '1' | '2' | '3',
@@ -273,28 +300,33 @@ export default function ConferenciaChb() {
               {
                 mime: file.type,
                 sizeBytes: file.size,
+                url: publicUrl,
               }
             );
+            
+            savedDocs.push({
+              id: `doc-${activeStep}-${timestamp}`,
+              name: file.name,
+              type: detectDocumentType(file.name),
+              uploadedAt: new Date().toLocaleString('pt-BR'),
+              size: formatFileSize(file.size),
+              stepId: activeStep,
+              file: file,
+              url: publicUrl,
+            });
           } catch (err) {
-            console.error('Error saving file to database:', err);
+            console.error('Error saving file:', err);
+            toast.error(`Erro ao salvar ${file.name}`);
           }
         }
 
-        const newDocs = currentStepFiles.map((file, idx) => ({
-          id: `doc-${activeStep}-${Date.now()}-${idx}`,
-          name: file.name,
-          type: detectDocumentType(file.name),
-          uploadedAt: new Date().toLocaleString('pt-BR'),
-          size: formatFileSize(file.size),
-          stepId: activeStep,
-          file: file, // Keep reference for download
-        }));
-
         // Add new documents to current step only
-        setDocuments(prev => ({
-          ...prev,
-          [activeStep]: [...(prev[activeStep] || []), ...newDocs],
-        }));
+        if (savedDocs.length > 0) {
+          setDocuments(prev => ({
+            ...prev,
+            [activeStep]: [...(prev[activeStep] || []), ...savedDocs],
+          }));
+        }
 
         // Refresh files from database to get IDs
         await fetchFiles();
