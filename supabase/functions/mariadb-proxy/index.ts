@@ -3195,6 +3195,12 @@ serve(async (req) => {
           }
         };
         
+        // Helper to convert empty strings to null (for ENUM fields)
+        const emptyToNull = (val: any): any => {
+          if (val === '' || val === undefined) return null;
+          return val;
+        };
+        
         // Insert voucher data into existing t_vouchers table
         const insertResult = await client.execute(`
           INSERT INTO dados_dachser.t_vouchers (
@@ -3208,31 +3214,31 @@ serve(async (req) => {
           ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `, [
           voucherId,
-          voucherData.numero_spo || null,
+          emptyToNull(voucherData.numero_spo),
           toMySQLDate(voucherData.vencimento),
-          voucherData.cobranca_em_nome_de || 'DACHSER',
-          voucherData.forma_pagamento || 'BOLETO',
-          voucherData.remessa || 'NENHUM',
+          emptyToNull(voucherData.cobranca_em_nome_de) || 'DACHSER',
+          emptyToNull(voucherData.forma_pagamento) || 'BOLETO',
+          emptyToNull(voucherData.remessa) || 'NENHUM',
           voucherData.urgente ? 1 : 0,
-          voucherData.urgencia_tipo || 'NORMAL',
-          voucherData.etapa_atual || 'OPERACAO',
-          voucherData.status_baixa || 'PENDENTE',
-          voucherData.status_envio_cliente || 'NAO_APLICA',
-          voucherData.status_financeiro || 'PENDENTE',
-          voucherData.tipo_documento || null,
-          voucherData.valor || null,
-          voucherData.moeda || 'BRL',
-          voucherData.fornecedor || null,
+          emptyToNull(voucherData.urgencia_tipo) || 'NORMAL',
+          emptyToNull(voucherData.etapa_atual) || 'OPERACAO',
+          emptyToNull(voucherData.status_baixa) || 'PENDENTE',
+          emptyToNull(voucherData.status_envio_cliente) || 'NAO_APLICA',
+          emptyToNull(voucherData.status_financeiro) || 'PENDENTE',
+          emptyToNull(voucherData.tipo_documento),
+          emptyToNull(voucherData.valor),
+          emptyToNull(voucherData.moeda) || 'BRL',
+          emptyToNull(voucherData.fornecedor),
           voucherData.cnpj_fornecedor?.replace(/\D/g, '') || null,
-          voucherData.cliente_email || null,
-          voucherData.filial || null,
+          emptyToNull(voucherData.cliente_email),
+          emptyToNull(voucherData.filial),
           toMySQLDate(voucherData.data_emissao_documento),
-          voucherData.comentarios_operacao || null,
-          voucherData.comentarios_fiscal || null,
-          voucherData.comentarios_financeiro || null,
-          voucherData.ajuste_operacao || null,
-          voucherData.ajuste_fiscal || null,
-          voucherData.criado_por_user_id || null
+          emptyToNull(voucherData.comentarios_operacao),
+          emptyToNull(voucherData.comentarios_fiscal),
+          emptyToNull(voucherData.comentarios_financeiro),
+          emptyToNull(voucherData.ajuste_operacao),
+          emptyToNull(voucherData.ajuste_fiscal),
+          emptyToNull(voucherData.criado_por_user_id)
         ]);
         
         console.log('Voucher saved to MariaDB t_vouchers, ID:', voucherId);
