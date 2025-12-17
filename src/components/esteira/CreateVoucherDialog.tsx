@@ -336,10 +336,9 @@ export const CreateVoucherDialog = ({
 
     setIsSubmitting(true);
     try {
-      const { data: userData } = await supabase.auth.getUser();
-      if (!userData?.user) {
-        throw new Error("Usuário não autenticado");
-      }
+      // Get user from localStorage (MariaDB auth) - no authentication required
+      const storedUser = localStorage.getItem("user") || localStorage.getItem("dachser_user");
+      const userData = storedUser ? JSON.parse(storedUser) : { id: 0, username: "sistema" };
 
       // Check if tipoDocumento triggers auto-urgency
       const autoUrgent = values.tipoDocumento ? ["ICMS", "ARMAZENAGEM"].includes(values.tipoDocumento) : false;
@@ -366,7 +365,7 @@ export const CreateVoucherDialog = ({
         etapa_atual: values.tipoDocumento === "ADF" ? "FINANCEIRO" : "OPERACAO",
         status_baixa: "PENDENTE",
         status_financeiro: "PENDENTE",
-        criado_por_user_id: userData.user.id,
+        criado_por_user_id: userData.id,
       };
 
       const { data: voucher, error: voucherError } = await (supabase as any)
@@ -401,7 +400,7 @@ export const CreateVoucherDialog = ({
           file_name: file.name,
           file_url: publicUrl.publicUrl,
           file_size: file.size,
-          uploaded_by_user_id: userData.user.id,
+          uploaded_by_user_id: userData.id,
         });
       }
 
@@ -429,14 +428,14 @@ export const CreateVoucherDialog = ({
           file_name: file.name,
           file_url: publicUrl.publicUrl,
           file_size: file.size,
-          uploaded_by_user_id: userData.user.id,
+          uploaded_by_user_id: userData.id,
         });
       }
 
       // Log creation
       await (supabase as any).from("voucher_logs").insert({
         voucher_id: voucher.id,
-        user_id: userData.user.id,
+        user_id: userData.id,
         acao: "VOUCHER_CRIADO",
         detalhe: `Voucher criado via ${entryMode === "rm" ? "RM" : "entrada manual"}`,
       });
@@ -467,7 +466,7 @@ export const CreateVoucherDialog = ({
             filial: values.filial,
             data_emissao_documento: values.dataEmissaoDocumento?.toISOString().split('T')[0],
             comentarios_operacao: values.comentariosOperacao,
-            criado_por_user_id: userData.user.id,
+            criado_por_user_id: userData.id,
           },
         });
         console.log("Voucher saved to MariaDB dados_dachser.t_vouchers");
