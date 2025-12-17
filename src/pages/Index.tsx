@@ -1560,7 +1560,9 @@ const Index = () => {
       const allowedStatuses = [
         "BKD", "BKF", "AWB", "RCS", "MAN", "DEP", "FOH", "TFD", 
         "RCT", "RCP", "PRE", "LOF", "ARRT", "TDE", "ARR", "RCF",
-        "COMPANY_NOT_REGISTERED"
+        "COMPANY_NOT_REGISTERED",
+        // Status de alerta e críticos
+        "DIS", "OFLD", "NIL", "NIF"
       ];
       const statusToCheck = (awb.status || "").toUpperCase();
       const lastEventCode = getStatusCode(awb.last_event).toUpperCase();
