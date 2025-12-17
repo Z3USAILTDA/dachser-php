@@ -558,17 +558,7 @@ const EsteiraIndex = () => {
   } = useUserRole();
   const storedUser = localStorage.getItem("user") || localStorage.getItem("dachser_user");
   const user = storedUser ? JSON.parse(storedUser) : null;
-  
-  // Debug: log admin status
   const isSystemAdmin = user?.is_admin === 1 || user?.is_admin === true;
-  console.log("[DEBUG EsteiraIndex] Admin check:", { 
-    isAdmin, 
-    role,
-    userFromStorage: user, 
-    isSystemAdmin,
-    is_admin_value: user?.is_admin,
-    is_admin_type: typeof user?.is_admin
-  });
 
   // Enable automatic sync of voucher updates to MariaDB
   useVoucherSync();
