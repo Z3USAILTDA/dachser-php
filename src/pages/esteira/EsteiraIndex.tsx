@@ -1,7 +1,8 @@
 import { useState, useEffect, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { useUsageLog } from "@/hooks/useUsageLog";
-import { ArrowLeft, Plus, Package, AlertTriangle, AlertCircle, Clock, List, BarChart3, RefreshCw, TrendingUp, DollarSign, Calendar, Bot, FileSpreadsheet, Filter, Building2, Users, LayoutDashboard, CheckCircle2, FileWarning, HelpCircle, Receipt, ShieldX, Settings, Eye } from "lucide-react";
+import { ArrowLeft, Plus, Package, AlertTriangle, AlertCircle, Clock, List, BarChart3, RefreshCw, TrendingUp, DollarSign, Calendar, Bot, FileSpreadsheet, Filter, Building2, Users, LayoutDashboard, CheckCircle2, FileWarning, HelpCircle, Receipt, ShieldX, Settings, Search } from "lucide-react";
+import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { supabase } from "@/integrations/supabase/client";
@@ -548,6 +549,8 @@ const EsteiraIndex = () => {
   const [selectedVoucher, setSelectedVoucher] = useState<Voucher | null>(null);
   const [showUsersDialog, setShowUsersDialog] = useState(false);
   const [esteiraUsers, setEsteiraUsers] = useState<Array<{id: number; username: string; email: string; esteira_role: string | null;}>>([]);
+  const [userFilterRole, setUserFilterRole] = useState<string>("all");
+  const [userSearchQuery, setUserSearchQuery] = useState("");
   const {
     toast
   } = useToast();
@@ -961,36 +964,17 @@ const EsteiraIndex = () => {
             Atualizar
           </button>
           
-          {/* Settings Dropdown */}
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <button className="flex items-center gap-2 px-4 py-2 rounded-full border border-[rgba(255,255,255,.25)] bg-[rgba(0,0,0,.7)] text-[#aaaaaa] hover:text-white hover:bg-[rgba(0,0,0,.9)] transition text-[0.8rem]">
-                <Settings className="h-4 w-4" />
-                Configurações
-              </button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="bg-[rgba(5,6,18,0.95)] border-white/10 backdrop-blur-xl">
-              <DropdownMenuItem 
-                onClick={() => {
-                  loadEsteiraUsers();
-                  setShowUsersDialog(true);
-                }}
-                className="text-muted-foreground hover:text-foreground cursor-pointer gap-2"
-              >
-                <Eye className="h-4 w-4" />
-                Visualizar Usuários
-              </DropdownMenuItem>
-              {(isAdmin || isSystemAdmin) && (
-                <DropdownMenuItem 
-                  onClick={() => navigate("/admin/users")}
-                  className="text-muted-foreground hover:text-foreground cursor-pointer gap-2"
-                >
-                  <Users className="h-4 w-4" />
-                  Gerenciar Usuários
-                </DropdownMenuItem>
-              )}
-            </DropdownMenuContent>
-          </DropdownMenu>
+          {/* Settings Button */}
+          <button 
+            onClick={() => {
+              loadEsteiraUsers();
+              setShowUsersDialog(true);
+            }}
+            className="w-9 h-9 rounded-full border border-[rgba(255,255,255,.25)] bg-[rgba(0,0,0,.7)] text-[#aaaaaa] hover:text-white hover:bg-[rgba(0,0,0,.9)] transition flex items-center justify-center"
+            title="Configurações"
+          >
+            <Settings className="h-4 w-4" />
+          </button>
           
           <Button className="gap-2 bg-primary text-primary-foreground hover:bg-primary/90 shadow-lg shadow-primary/20 rounded-full px-4" onClick={() => setShowCreateDialog(true)}>
             <Plus className="h-4 w-4" />
@@ -1131,7 +1115,13 @@ const EsteiraIndex = () => {
       <EditVoucherDialog open={showEditDialog} onOpenChange={setShowEditDialog} onSuccess={loadVouchers} voucher={selectedVoucher} />
       
       {/* Read-only Users Dialog */}
-      <Dialog open={showUsersDialog} onOpenChange={setShowUsersDialog}>
+      <Dialog open={showUsersDialog} onOpenChange={(open) => {
+        setShowUsersDialog(open);
+        if (!open) {
+          setUserFilterRole("all");
+          setUserSearchQuery("");
+        }
+      }}>
         <DialogContent className="max-w-2xl bg-[rgba(5,6,18,0.98)] border-white/10 backdrop-blur-xl">
           <DialogHeader>
             <DialogTitle className="text-foreground flex items-center gap-2">
@@ -1139,46 +1129,91 @@ const EsteiraIndex = () => {
               Usuários da Esteira
             </DialogTitle>
           </DialogHeader>
-          <div className="max-h-[60vh] overflow-auto">
-            {esteiraUsers.length === 0 ? (
-              <div className="text-center py-8 text-muted-foreground">
-                Nenhum usuário com função na Esteira
-              </div>
-            ) : (
-              <Table>
-                <TableHeader>
-                  <TableRow className="border-white/10 hover:bg-transparent">
-                    <TableHead className="text-muted-foreground">Usuário</TableHead>
-                    <TableHead className="text-muted-foreground">Email</TableHead>
-                    <TableHead className="text-muted-foreground">Função</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {esteiraUsers.map((u) => (
-                    <TableRow key={u.id} className="border-white/5">
-                      <TableCell className="font-medium text-foreground">@{u.username}</TableCell>
-                      <TableCell className="text-muted-foreground">{u.email || "-"}</TableCell>
-                      <TableCell>
-                        <Badge className={cn(
-                          "border",
-                          u.esteira_role === "ADMIN" && "bg-red-500/20 text-red-400 border-red-500/30",
-                          u.esteira_role === "OPERACAO" && "bg-blue-500/20 text-blue-400 border-blue-500/30",
-                          u.esteira_role === "FISCAL" && "bg-purple-500/20 text-purple-400 border-purple-500/30",
-                          u.esteira_role === "SUPERVISOR" && "bg-amber-500/20 text-amber-400 border-amber-500/30",
-                          u.esteira_role === "FINANCEIRO" && "bg-green-500/20 text-green-400 border-green-500/30"
-                        )}>
-                          {u.esteira_role === "ADMIN" ? "Administrador" :
-                           u.esteira_role === "OPERACAO" ? "Operação" :
-                           u.esteira_role === "FISCAL" ? "Fiscal" :
-                           u.esteira_role === "SUPERVISOR" ? "Supervisor" :
-                           u.esteira_role === "FINANCEIRO" ? "Financeiro" : u.esteira_role}
-                        </Badge>
-                      </TableCell>
+          
+          {/* Filters */}
+          <div className="flex items-center gap-3 pb-2 border-b border-white/10">
+            <div className="relative flex-1">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Input
+                placeholder="Buscar por nome ou email..."
+                value={userSearchQuery}
+                onChange={(e) => setUserSearchQuery(e.target.value)}
+                className="pl-9 bg-[#0a0b10] border-white/10 rounded-full"
+              />
+            </div>
+            <Select value={userFilterRole} onValueChange={setUserFilterRole}>
+              <SelectTrigger className="w-[160px] bg-[#0a0b10] border-white/10 rounded-full">
+                <SelectValue placeholder="Função" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Todas Funções</SelectItem>
+                <SelectItem value="ADMIN">Administrador</SelectItem>
+                <SelectItem value="OPERACAO">Operação</SelectItem>
+                <SelectItem value="FISCAL">Fiscal</SelectItem>
+                <SelectItem value="SUPERVISOR">Supervisor</SelectItem>
+                <SelectItem value="FINANCEIRO">Financeiro</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          
+          <div className="max-h-[50vh] overflow-auto">
+            {(() => {
+              const filteredUsers = esteiraUsers.filter((u) => {
+                const matchesSearch = userSearchQuery === "" || 
+                  u.username?.toLowerCase().includes(userSearchQuery.toLowerCase()) ||
+                  u.email?.toLowerCase().includes(userSearchQuery.toLowerCase());
+                const matchesRole = userFilterRole === "all" || u.esteira_role === userFilterRole;
+                return matchesSearch && matchesRole;
+              });
+              
+              if (filteredUsers.length === 0) {
+                return (
+                  <div className="text-center py-8 text-muted-foreground">
+                    {esteiraUsers.length === 0 ? "Nenhum usuário com função na Esteira" : "Nenhum usuário encontrado com os filtros aplicados"}
+                  </div>
+                );
+              }
+              
+              return (
+                <Table>
+                  <TableHeader>
+                    <TableRow className="border-white/10 hover:bg-transparent">
+                      <TableHead className="text-muted-foreground">Usuário</TableHead>
+                      <TableHead className="text-muted-foreground">Email</TableHead>
+                      <TableHead className="text-muted-foreground">Função</TableHead>
                     </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            )}
+                  </TableHeader>
+                  <TableBody>
+                    {filteredUsers.map((u) => (
+                      <TableRow key={u.id} className="border-white/5">
+                        <TableCell className="font-medium text-foreground">@{u.username}</TableCell>
+                        <TableCell className="text-muted-foreground">{u.email || "-"}</TableCell>
+                        <TableCell>
+                          <Badge className={cn(
+                            "border",
+                            u.esteira_role === "ADMIN" && "bg-red-500/20 text-red-400 border-red-500/30",
+                            u.esteira_role === "OPERACAO" && "bg-blue-500/20 text-blue-400 border-blue-500/30",
+                            u.esteira_role === "FISCAL" && "bg-purple-500/20 text-purple-400 border-purple-500/30",
+                            u.esteira_role === "SUPERVISOR" && "bg-amber-500/20 text-amber-400 border-amber-500/30",
+                            u.esteira_role === "FINANCEIRO" && "bg-green-500/20 text-green-400 border-green-500/30"
+                          )}>
+                            {u.esteira_role === "ADMIN" ? "Administrador" :
+                             u.esteira_role === "OPERACAO" ? "Operação" :
+                             u.esteira_role === "FISCAL" ? "Fiscal" :
+                             u.esteira_role === "SUPERVISOR" ? "Supervisor" :
+                             u.esteira_role === "FINANCEIRO" ? "Financeiro" : u.esteira_role}
+                          </Badge>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              );
+            })()}
+          </div>
+          
+          <div className="pt-2 border-t border-white/10 text-xs text-muted-foreground">
+            {esteiraUsers.length} usuário(s) com função na Esteira
           </div>
         </DialogContent>
       </Dialog>
