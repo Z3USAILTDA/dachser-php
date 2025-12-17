@@ -150,9 +150,9 @@ export const VoucherOperacaoActions = ({ voucher, onUpdate }: VoucherOperacaoAct
         return;
       }
 
-      // Verificar anexos obrigatórios
-      const hasFatura = voucher.anexos.some(a => a.tipo === "FATURA_DEMONSTRATIVO");
-      const hasBoleto = voucher.anexos.some(a => a.tipo === "BOLETO_INSTRUCOES");
+      // Verificar anexos obrigatórios (aceita ambas nomenclaturas: FATURA/FATURA_DEMONSTRATIVO e BOLETO/BOLETO_INSTRUCOES)
+      const hasFatura = voucher.anexos.some(a => a.tipo === "FATURA_DEMONSTRATIVO" || a.tipo === "FATURA");
+      const hasBoleto = voucher.anexos.some(a => a.tipo === "BOLETO_INSTRUCOES" || a.tipo === "BOLETO");
 
       if (!hasFatura || !hasBoleto) {
         toast({
