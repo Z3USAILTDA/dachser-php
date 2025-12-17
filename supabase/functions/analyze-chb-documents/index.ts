@@ -368,25 +368,48 @@ async function callAnthropicAPI(prompt: string, filesContent: { name: string; co
   return data.content[0].text;
 }
 
-async function callOpenAIAPI(prompt: string, filesContent: { name: string; content: string; mimeType: string }[]): Promise<string> {
-  const apiKey = Deno.env.get('CHB_OPENAI_API_KEY');
+async function callLovableAI(prompt: string, filesContent: { name: string; content: string; mimeType: string }[]): Promise<string> {
+  const apiKey = Deno.env.get('LOVABLE_API_KEY');
   if (!apiKey) {
-    throw new Error('CHB_OPENAI_API_KEY not configured');
+    throw new Error('LOVABLE_API_KEY not configured');
   }
 
   const content: any[] = [];
 
-  // Add files as images
+  // Add files - Gemini supports PDFs, images and documents via inline_data
   for (const file of filesContent) {
-    if (file.mimeType.startsWith('image/') || file.mimeType === 'application/pdf') {
+    if (file.mimeType.startsWith('image/')) {
       content.push({
         type: 'image_url',
         image_url: {
           url: `data:${file.mimeType};base64,${file.content}`,
-          detail: 'high',
         },
       });
+    } else if (file.mimeType === 'application/pdf') {
+      // Gemini supports PDFs via inline_data with application/pdf mime type
+      content.push({
+        type: 'image_url',
+        image_url: {
+          url: `data:${file.mimeType};base64,${file.content}`,
+        },
+      });
+    } else if (file.mimeType.includes('spreadsheet') || file.mimeType.includes('excel') || file.name.endsWith('.xlsx') || file.name.endsWith('.xls')) {
+      // For spreadsheets, try to decode as text or mark as binary
+      try {
+        const decoded = atob(file.content);
+        // XLSX files are binary, so we'll note this
+        content.push({
+          type: 'text',
+          text: `[Arquivo: ${file.name}] - Planilha Excel (dados binários). Por favor, analise baseado nos outros documentos disponíveis.`,
+        });
+      } catch {
+        content.push({
+          type: 'text',
+          text: `[Arquivo: ${file.name}] - Planilha Excel não legível diretamente.`,
+        });
+      }
     } else {
+      // For other types, try to decode as text
       try {
         content.push({
           type: 'text',
@@ -407,17 +430,16 @@ async function callOpenAIAPI(prompt: string, filesContent: { name: string; conte
     text: prompt,
   });
 
-  console.log(`Calling OpenAI API with ${filesContent.length} files...`);
+  console.log(`Calling Lovable AI (Gemini) with ${filesContent.length} files...`);
 
-  const response = await fetch('https://api.openai.com/v1/chat/completions', {
+  const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
       'Authorization': `Bearer ${apiKey}`,
     },
     body: JSON.stringify({
-      model: 'gpt-4o',
-      max_tokens: 16000,
+      model: 'google/gemini-2.5-pro',
       messages: [
         {
           role: 'user',
@@ -429,8 +451,17 @@ async function callOpenAIAPI(prompt: string, filesContent: { name: string; conte
 
   if (!response.ok) {
     const errorText = await response.text();
-    console.error('OpenAI API error:', response.status, errorText);
-    throw new Error(`OpenAI API error: ${response.status}`);
+    console.error('Lovable AI error:', response.status, errorText);
+    
+    // Check for specific rate limit errors
+    if (response.status === 429) {
+      throw new Error('Rate limit exceeded - tente novamente em alguns minutos');
+    }
+    if (response.status === 402) {
+      throw new Error('Créditos insuficientes - adicione créditos ao workspace');
+    }
+    
+    throw new Error(`Lovable AI error: ${response.status}`);
   }
 
   const data = await response.json();
@@ -566,16 +597,16 @@ serve(async (req) => {
       responseText = await callAnthropicAPI(prompt, files);
       console.log('Anthropic API succeeded');
     } catch (anthropicError) {
-      console.error('Anthropic API failed, trying OpenAI fallback:', anthropicError);
+      console.error('Anthropic API failed, trying Lovable AI (Gemini) fallback:', anthropicError);
       usedFallback = true;
       
       try {
-        console.log('Attempting OpenAI API fallback...');
-        responseText = await callOpenAIAPI(prompt, files);
-        console.log('OpenAI API succeeded');
-      } catch (openaiError) {
-        console.error('OpenAI API also failed:', openaiError);
-        throw new Error('Ambas as APIs (Anthropic e OpenAI) falharam');
+        console.log('Attempting Lovable AI (Gemini) fallback...');
+        responseText = await callLovableAI(prompt, files);
+        console.log('Lovable AI succeeded');
+      } catch (geminiError) {
+        console.error('Lovable AI also failed:', geminiError);
+        throw new Error('Ambas as APIs (Anthropic e Gemini) falharam');
       }
     }
 
