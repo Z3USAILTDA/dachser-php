@@ -6,7 +6,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { StatusBadge, SLABadge } from "@/components/cct/StatusBadge";
-import { useProcessosCCT, useRegistrarPeso, useUpdateTratamentos, useUpdateDecolagem } from "@/hooks/useCCTData";
+import { EventTimeline } from "@/components/cct/EventTimeline";
+import { useProcessosCCT, useRegistrarPeso, useUpdateTratamentos, useUpdateDecolagem, useCCTEvents } from "@/hooks/useCCTData";
 import { toast } from "sonner";
 import {
   Clock,
@@ -50,6 +51,14 @@ export default function ProcessoTimeline() {
   const updateTratamentos = useUpdateTratamentos();
   const updateDecolagem = useUpdateDecolagem();
 
+  // Find the processo to get the AWB for events query
+  const processo = useMemo(() => {
+    return processos.find(p => p.shipment.id === id);
+  }, [processos, id]);
+
+  // Fetch events from history table using the AWB (master)
+  const { data: eventosHistorico = [], isLoading: isLoadingEvents } = useCCTEvents(processo?.shipment.master || '');
+
   const [activeTab, setActiveTab] = useState("timeline");
   const [editingPeso, setEditingPeso] = useState(false);
   const [editingDecolagem, setEditingDecolagem] = useState(false);
@@ -61,9 +70,7 @@ export default function ProcessoTimeline() {
   const [dataDecolagem, setDataDecolagem] = useState("");
   const [tratamentosSelecionados, setTratamentosSelecionados] = useState<string[]>([]);
 
-  const processo = useMemo(() => {
-    return processos.find(p => p.shipment.id === id);
-  }, [processos, id]);
+  // Combine historic events with fallback evento from processo
 
   // Initialize form values when processo loads
   useMemo(() => {
@@ -167,7 +174,10 @@ export default function ProcessoTimeline() {
     );
   }
 
-  const { shipment, status_atual, eventos, excecoes } = processo;
+  const { shipment, status_atual, eventos: eventosFallback, excecoes } = processo;
+
+  // Use historic events if available, otherwise fallback to processo.eventos
+  const allEventos = eventosHistorico.length > 0 ? eventosHistorico : eventosFallback;
 
   return (
     <PageLayout
@@ -275,66 +285,14 @@ export default function ProcessoTimeline() {
               <div className="p-4 border-b border-[rgba(255,255,255,0.08)]">
                 <h3 className="text-lg font-medium text-white flex items-center gap-2">
                   <Clock className="h-5 w-5 text-[#ffc800]" />
-                  Timeline de Eventos ({eventos.length})
+                  Timeline de Eventos ({allEventos.length})
+                  {isLoadingEvents && (
+                    <Loader2 className="h-4 w-4 animate-spin text-[#888]" />
+                  )}
                 </h3>
               </div>
               
-              {eventos.length === 0 ? (
-                <div className="p-10 text-center">
-                  <Clock className="h-12 w-12 text-[#666] mx-auto mb-4" />
-                  <p className="text-[#888]">Nenhum evento registrado</p>
-                </div>
-              ) : (
-                <div className="p-4">
-                  <div className="relative">
-                    <div className="absolute left-4 top-0 bottom-0 w-0.5 bg-[rgba(255,255,255,0.1)]" />
-                    
-                    <div className="space-y-4">
-                      {[...eventos]
-                        .sort((a, b) => new Date(b.data_hora_evento).getTime() - new Date(a.data_hora_evento).getTime())
-                        .map((evento, index) => (
-                          <div key={evento.id} className="relative pl-10">
-                            <div className={cn(
-                              "absolute left-2.5 w-3 h-3 rounded-full border-2",
-                              index === 0 
-                                ? "border-[#ffc800] bg-[#ffc800] ring-4 ring-[#ffc800]/20" 
-                                : "border-[#666] bg-[#666]"
-                            )} />
-                            
-                            <div className={cn(
-                              "p-4 rounded-lg border",
-                              evento.nivel_confianca === "COMPLEMENTAR"
-                                ? "bg-[rgba(255,255,255,0.02)] border-dashed border-[rgba(255,255,255,0.08)]"
-                                : "bg-[rgba(255,255,255,0.03)] border-[rgba(255,255,255,0.08)]"
-                            )}>
-                              <div className="flex items-start justify-between gap-2 flex-wrap">
-                                <div className="flex items-center gap-2 flex-wrap">
-                                  <span className="font-mono font-medium text-white">
-                                    {evento.codigo_evento}
-                                  </span>
-                                  <Badge className="text-xs bg-cyan-500/20 text-cyan-400 border-cyan-500/30">
-                                    {evento.fonte}
-                                  </Badge>
-                                  {evento.nivel_confianca === "COMPLEMENTAR" && (
-                                    <Badge className="text-xs bg-[rgba(255,255,255,0.1)] text-[#888]">
-                                      Complementar
-                                    </Badge>
-                                  )}
-                                </div>
-                                <span className="text-xs text-[#888]">
-                                  {formatDate(evento.data_hora_evento)}
-                                </span>
-                              </div>
-                              {evento.descricao && (
-                                <p className="text-sm text-[#aaa] mt-2">{evento.descricao}</p>
-                              )}
-                            </div>
-                          </div>
-                        ))}
-                    </div>
-                  </div>
-                </div>
-              )}
+              <EventTimeline eventos={allEventos} />
             </div>
           </TabsContent>
 

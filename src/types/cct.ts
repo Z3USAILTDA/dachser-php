@@ -69,11 +69,12 @@ export interface CCTShipment {
 export interface CCTEvento {
   id: string;
   shipment_id: string;
-  codigo_evento: CodigoEvento;
+  codigo_evento: string; // Mais flexível para aceitar qualquer código
   data_hora_evento: string;
   descricao?: string | null;
   fonte: FonteEvento;
   nivel_confianca: NivelConfianca;
+  aeroporto?: string | null;
   created_at: string;
 }
 
