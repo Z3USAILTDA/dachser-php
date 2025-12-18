@@ -5959,6 +5959,97 @@ async function trackAWB(awb: string, airlineCode: string): Promise<TrackingResul
   };
 }
 
+// ============= HISTORY STORAGE =============
+
+async function saveEventsToHistory(awb: string, events: TrackingEvent[], destination: string): Promise<void> {
+  try {
+    const host = Deno.env.get('MARIADB_HOST');
+    const port = parseInt(Deno.env.get('MARIADB_PORT') || '3306');
+    const database = Deno.env.get('MARIADB_DATABASE');
+    const dbUser = Deno.env.get('MARIADB_USER');
+    const dbPassword = Deno.env.get('MARIADB_PASSWORD');
+
+    if (!host || !database || !dbUser || !dbPassword) {
+      console.error('[HISTORY] Missing database credentials');
+      return;
+    }
+
+    // Dynamic import of mysql client
+    const { Client } = await import("https://deno.land/x/mysql@v2.12.1/mod.ts");
+    
+    const client = await new Client().connect({
+      hostname: host,
+      port: port,
+      db: database,
+      username: dbUser,
+      password: dbPassword,
+      charset: "utf8mb4",
+    });
+
+    // Create table if not exists
+    await client.execute(`
+      CREATE TABLE IF NOT EXISTS ${database}.t_cct_eventos_historico (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        awb VARCHAR(20) NOT NULL,
+        codigo_evento VARCHAR(50) NOT NULL,
+        descricao_evento TEXT,
+        data_hora_evento DATETIME NOT NULL,
+        fonte VARCHAR(20) DEFAULT 'TRACKING',
+        aeroporto VARCHAR(10),
+        nivel_confianca VARCHAR(20) DEFAULT 'PRIMARIA',
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        INDEX idx_awb (awb),
+        INDEX idx_data_evento (data_hora_evento),
+        UNIQUE KEY unique_event (awb, codigo_evento, data_hora_evento)
+      )
+    `);
+
+    // Insert each event into history
+    for (const event of events) {
+      if (!event.status || event.status === 'N/A') continue;
+
+      // Parse event date
+      let eventDate: string;
+      try {
+        const d = new Date(event.date);
+        if (!isNaN(d.getTime())) {
+          eventDate = d.toISOString().slice(0, 19).replace('T', ' ');
+        } else {
+          eventDate = new Date().toISOString().slice(0, 19).replace('T', ' ');
+        }
+      } catch {
+        eventDate = new Date().toISOString().slice(0, 19).replace('T', ' ');
+      }
+
+      // Extract airport code from location if available
+      const airport = event.location?.match(/^[A-Z]{3}$/)?.[0] || destination || null;
+
+      try {
+        await client.execute(`
+          INSERT IGNORE INTO ${database}.t_cct_eventos_historico 
+          (awb, codigo_evento, descricao_evento, data_hora_evento, fonte, aeroporto, nivel_confianca)
+          VALUES (TRIM(?), TRIM(?), ?, ?, 'TRACKING', ?, 'PRIMARIA')
+        `, [
+          awb,
+          event.status.substring(0, 50),
+          event.description || event.status,
+          eventDate,
+          airport
+        ]);
+      } catch (insertErr) {
+        // Ignore duplicate key errors
+        console.log(`[HISTORY] Event may already exist: ${event.status}`);
+      }
+    }
+
+    await client.close();
+    console.log(`[HISTORY] Saved ${events.length} events for AWB ${awb}`);
+  } catch (error) {
+    console.error('[HISTORY] Error saving events:', error);
+    // Don't throw - this is optional functionality
+  }
+}
+
 // ============= MAIN HANDLER =============
 
 serve(async (req) => {
@@ -5982,6 +6073,14 @@ serve(async (req) => {
     console.log(`[MAIN] Tracking AWB: ${awb} for airline: ${airlineCode}`);
 
     const trackingData = await trackAWB(awb, airlineCode);
+
+    // Save events to history table (async, don't wait)
+    if (trackingData.events && trackingData.events.length > 0) {
+      // Don't await - let it run in background
+      saveEventsToHistory(awb, trackingData.events, trackingData.destination).catch(err => {
+        console.error('[MAIN] Background history save failed:', err);
+      });
+    }
 
     return new Response(
       JSON.stringify({ 
