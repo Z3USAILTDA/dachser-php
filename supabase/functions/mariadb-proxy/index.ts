@@ -3516,6 +3516,120 @@ serve(async (req) => {
         break;
       }
 
+      // ==================== CCT EVENTS HISTORY ====================
+      case 'create_cct_events_table': {
+        console.log('Creating t_cct_eventos_historico table if not exists...');
+        
+        await client.execute(`
+          CREATE TABLE IF NOT EXISTS ${database}.t_cct_eventos_historico (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            awb VARCHAR(20) NOT NULL,
+            codigo_evento VARCHAR(50) NOT NULL,
+            descricao_evento TEXT,
+            data_hora_evento DATETIME NOT NULL,
+            fonte VARCHAR(20) DEFAULT 'TRACKING',
+            aeroporto VARCHAR(10),
+            nivel_confianca VARCHAR(20) DEFAULT 'PRIMARIA',
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            INDEX idx_awb (awb),
+            INDEX idx_data_evento (data_hora_evento),
+            UNIQUE KEY unique_event (awb, codigo_evento, data_hora_evento)
+          )
+        `);
+        
+        console.log('Table t_cct_eventos_historico created/verified');
+        result = { success: true, message: 'Table created/verified' };
+        break;
+      }
+
+      case 'insert_cct_event': {
+        const { awb: eventAwb, codigo_evento, descricao_evento, data_hora_evento, fonte, aeroporto, nivel_confianca } = body as any;
+        
+        if (!eventAwb || !codigo_evento) {
+          return new Response(
+            JSON.stringify({ error: 'AWB e codigo_evento são obrigatórios' }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+
+        console.log('Inserting CCT event:', { awb: eventAwb, codigo_evento });
+
+        // First ensure table exists
+        await client.execute(`
+          CREATE TABLE IF NOT EXISTS ${database}.t_cct_eventos_historico (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            awb VARCHAR(20) NOT NULL,
+            codigo_evento VARCHAR(50) NOT NULL,
+            descricao_evento TEXT,
+            data_hora_evento DATETIME NOT NULL,
+            fonte VARCHAR(20) DEFAULT 'TRACKING',
+            aeroporto VARCHAR(10),
+            nivel_confianca VARCHAR(20) DEFAULT 'PRIMARIA',
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            INDEX idx_awb (awb),
+            INDEX idx_data_evento (data_hora_evento),
+            UNIQUE KEY unique_event (awb, codigo_evento, data_hora_evento)
+          )
+        `);
+
+        // Insert event (ignore duplicates)
+        await client.execute(`
+          INSERT IGNORE INTO ${database}.t_cct_eventos_historico 
+          (awb, codigo_evento, descricao_evento, data_hora_evento, fonte, aeroporto, nivel_confianca)
+          VALUES (TRIM(?), TRIM(?), ?, ?, ?, ?, ?)
+        `, [
+          eventAwb,
+          codigo_evento,
+          descricao_evento || codigo_evento,
+          data_hora_evento || new Date().toISOString().slice(0, 19).replace('T', ' '),
+          fonte || 'TRACKING',
+          aeroporto || null,
+          nivel_confianca || 'PRIMARIA'
+        ]);
+
+        result = { success: true, message: 'Event inserted' };
+        break;
+      }
+
+      case 'get_cct_events': {
+        const { awb: queryAwb } = body as any;
+        
+        if (!queryAwb) {
+          return new Response(
+            JSON.stringify({ error: 'AWB é obrigatório' }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+
+        console.log('Fetching CCT events for AWB:', queryAwb);
+
+        // Check if table exists first
+        try {
+          const events = await client.query(`
+            SELECT 
+              id,
+              TRIM(awb) as awb,
+              TRIM(codigo_evento) as codigo_evento,
+              descricao_evento,
+              data_hora_evento,
+              fonte,
+              aeroporto,
+              nivel_confianca,
+              created_at
+            FROM ${database}.t_cct_eventos_historico
+            WHERE TRIM(awb) = TRIM(?)
+            ORDER BY data_hora_evento DESC
+          `, [queryAwb]);
+
+          result = { success: true, data: events || [] };
+        } catch (tableErr) {
+          // Table might not exist yet
+          console.log('Events table may not exist yet:', tableErr);
+          result = { success: true, data: [] };
+        }
+        break;
+      }
+
       default:
         return new Response(
           JSON.stringify({ error: `Ação não suportada: ${action}` }),

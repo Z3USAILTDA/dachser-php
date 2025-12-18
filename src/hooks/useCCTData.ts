@@ -106,7 +106,7 @@ function mapRowToProcessoCCT(row: any): ProcessoCCT {
     updated_at: row.updated_at,
   };
 
-  // Build eventos array from ultimo_evento_* fields
+  // Build eventos array from ultimo_evento_* fields (fallback - will be replaced by useCCTEvents)
   const eventos: CCTEvento[] = [];
   if (row.ultimo_evento_data && row.ultimo_evento_codigo) {
     eventos.push({
@@ -117,6 +117,7 @@ function mapRowToProcessoCCT(row: any): ProcessoCCT {
       descricao: row.ultimo_evento_descricao || row.ultimo_evento_codigo,
       fonte: 'LEADCOMEX' as FonteEvento,
       nivel_confianca: 'PRIMARIA' as NivelConfianca,
+      aeroporto: row.aeroporto_destino || null,
       created_at: row.ultimo_evento_data,
     });
   }
@@ -203,6 +204,55 @@ export function useProcessoCCT(id: string) {
       return mapRowToProcessoCCT(data.data);
     },
     enabled: !!id,
+  });
+}
+
+/**
+ * Fetch CCT events history for a specific AWB from MariaDB
+ */
+export function useCCTEvents(awb: string) {
+  return useQuery({
+    queryKey: ["cct-events", awb],
+    queryFn: async (): Promise<CCTEvento[]> => {
+      if (!awb) return [];
+
+      console.log("CCT: Fetching events for AWB:", awb);
+      
+      const { data, error } = await supabase.functions.invoke('mariadb-proxy', {
+        body: { 
+          action: 'get_cct_events',
+          awb: awb
+        }
+      });
+
+      if (error) {
+        console.error("CCT: Error fetching events:", error);
+        return [];
+      }
+
+      if (!data?.success) {
+        console.error("CCT: Error in response:", data?.error);
+        return [];
+      }
+
+      // Map MariaDB rows to CCTEvento format
+      const eventos: CCTEvento[] = (data.data || []).map((row: any, index: number) => ({
+        id: row.id?.toString() || `event-${awb}-${index}`,
+        shipment_id: awb,
+        codigo_evento: row.codigo_evento || 'UNKNOWN',
+        data_hora_evento: row.data_hora_evento,
+        descricao: row.descricao_evento || row.codigo_evento,
+        fonte: (row.fonte || 'TRACKING') as FonteEvento,
+        nivel_confianca: (row.nivel_confianca || 'PRIMARIA') as NivelConfianca,
+        aeroporto: row.aeroporto || null,
+        created_at: row.created_at || row.data_hora_evento,
+      }));
+
+      console.log(`CCT: Loaded ${eventos.length} events for AWB ${awb}`);
+      return eventos;
+    },
+    enabled: !!awb,
+    staleTime: 30000,
   });
 }
 

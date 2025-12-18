@@ -123,6 +123,7 @@ serve(async (req) => {
     // Use sanitized AWB for insert - TRIM applied to prevent whitespace issues
     const isArrStatus = finalLastEvent === 'ARR';
     
+    // Update current status in t_status_aereo
     await client.execute(
       `INSERT INTO t_status_aereo (awb, destinatário, \`última atualização\`, último_status, origem, destino, hawb, nome_analista, email_analista, email_cliente, data_atraso, tipo_servico, arr_check_count, arr_datetime) 
        VALUES (TRIM(?), TRIM(?), NOW(), TRIM(?), TRIM(?), TRIM(?), TRIM(?), TRIM(?), TRIM(?), TRIM(?), ${isAlertStatus ? 'NOW()' : 'NULL'}, TRIM(?), ${isArrStatus ? '1' : '0'}, ${isArrStatus ? 'NOW()' : 'NULL'})
@@ -155,6 +156,44 @@ serve(async (req) => {
         isArrStatus ? 1 : 0, isArrStatus ? 1 : 0
       ]
     );
+
+    // Also insert into event history table (t_cct_eventos_historico)
+    // Create table if not exists
+    try {
+      await client.execute(`
+        CREATE TABLE IF NOT EXISTS t_cct_eventos_historico (
+          id INT AUTO_INCREMENT PRIMARY KEY,
+          awb VARCHAR(20) NOT NULL,
+          codigo_evento VARCHAR(50) NOT NULL,
+          descricao_evento TEXT,
+          data_hora_evento DATETIME NOT NULL,
+          fonte VARCHAR(20) DEFAULT 'TRACKING',
+          aeroporto VARCHAR(10),
+          nivel_confianca VARCHAR(20) DEFAULT 'PRIMARIA',
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          INDEX idx_awb (awb),
+          INDEX idx_data_evento (data_hora_evento),
+          UNIQUE KEY unique_event (awb, codigo_evento, data_hora_evento)
+        )
+      `);
+
+      // Insert event into history (IGNORE duplicates based on unique key)
+      await client.execute(`
+        INSERT IGNORE INTO t_cct_eventos_historico 
+        (awb, codigo_evento, descricao_evento, data_hora_evento, fonte, aeroporto, nivel_confianca)
+        VALUES (TRIM(?), TRIM(?), ?, NOW(), 'TRACKING', ?, 'PRIMARIA')
+      `, [
+        sanitizedMawb,
+        finalLastEvent,
+        finalLastEvent,
+        finalDestination !== 'N/A' ? finalDestination : null
+      ]);
+
+      console.log('Event inserted into history table');
+    } catch (historyErr) {
+      // Don't fail the main operation if history insert fails
+      console.error('Warning: Could not insert into history table:', historyErr);
+    }
 
     await client.close();
     console.log('AWB added to t_status_aereo successfully');
