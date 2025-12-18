@@ -1895,15 +1895,19 @@ const Index = () => {
 
               <div className="flex items-center gap-2">
                 {/* Botão para ver companhias não cadastradas */}
-                {statusAereoData.filter(awb => (awb.status || "").toUpperCase() === "COMPANY_NOT_REGISTERED").length > 0 && (
-                  <button
-                    onClick={() => setShowUnregisteredModal(true)}
-                    className="h-8 px-4 rounded-full bg-slate-600/80 text-white text-[0.75rem] font-medium flex items-center gap-1.5 hover:bg-slate-500/80 transition border border-slate-500/50"
-                  >
-                    <AlertCircle className="w-3.5 h-3.5" />
-                    Cias Pendentes ({statusAereoData.filter(awb => (awb.status || "").toUpperCase() === "COMPANY_NOT_REGISTERED").length})
-                  </button>
-                )}
+                {(() => {
+                  const unregistered = statusAereoData.filter(awb => (awb.status || "").toUpperCase() === "COMPANY_NOT_REGISTERED");
+                  const uniqueAirlines = new Set(unregistered.map(awb => awb.airline_code)).size;
+                  return uniqueAirlines > 0 && (
+                    <button
+                      onClick={() => setShowUnregisteredModal(true)}
+                      className="h-8 px-4 rounded-full bg-slate-600/80 text-white text-[0.75rem] font-medium flex items-center gap-1.5 hover:bg-slate-500/80 transition border border-slate-500/50"
+                    >
+                      <AlertCircle className="w-3.5 h-3.5" />
+                      Cias Pendentes ({uniqueAirlines})
+                    </button>
+                  );
+                })()}
 
                 <button
                   onClick={handleRefresh}
