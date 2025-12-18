@@ -2241,36 +2241,51 @@ const Index = () => {
             </DialogDescription>
           </DialogHeader>
           <div className="overflow-y-auto max-h-[50vh] mt-4">
-            <table className="w-full border-collapse">
-              <thead className="sticky top-0 bg-[rgba(0,0,0,.8)]">
-                <tr className="border-b border-[rgba(255,255,255,.08)]">
-                  <th className="px-3 py-2 text-left text-[#aaaaaa] uppercase text-[0.68rem] tracking-[0.1em] font-medium">AWB</th>
-                  <th className="px-3 py-2 text-left text-[#aaaaaa] uppercase text-[0.68rem] tracking-[0.1em] font-medium">Cia</th>
-                  <th className="px-3 py-2 text-left text-[#aaaaaa] uppercase text-[0.68rem] tracking-[0.1em] font-medium">Destinatário</th>
-                  <th className="px-3 py-2 text-left text-[#aaaaaa] uppercase text-[0.68rem] tracking-[0.1em] font-medium">Analista</th>
-                </tr>
-              </thead>
-              <tbody>
-                {statusAereoData
-                  .filter(awb => (awb.status || "").toUpperCase() === "COMPANY_NOT_REGISTERED")
-                  .map((awb, index) => {
-                    const airlineName = airlines.find(a => a.code === awb.airline_code)?.name || `Cia ${awb.airline_code}`;
-                    return (
-                      <tr key={index} className="border-b border-[rgba(255,255,255,.05)] hover:bg-[rgba(255,255,255,.03)]">
-                        <td className="px-3 py-2 text-[#f5f5f5] text-sm font-mono">{awb.awb}</td>
-                        <td className="px-3 py-2 text-[#aaaaaa] text-sm">{awb.airline_code} - {airlineName}</td>
-                        <td className="px-3 py-2 text-[#aaaaaa] text-sm">{awb.consignee_name || "-"}</td>
-                        <td className="px-3 py-2 text-[#aaaaaa] text-sm">{awb.nome_analista || "-"}</td>
+            {(() => {
+              const unregisteredAwbs = statusAereoData.filter(awb => (awb.status || "").toUpperCase() === "COMPANY_NOT_REGISTERED");
+              const groupedByAirline = unregisteredAwbs.reduce((acc, awb) => {
+                const code = awb.airline_code || "000";
+                if (!acc[code]) acc[code] = { count: 0, name: airlines.find(a => a.code === code)?.name || `Código ${code}` };
+                acc[code].count++;
+                return acc;
+              }, {} as Record<string, { count: number; name: string }>);
+              
+              const sortedAirlines = Object.entries(groupedByAirline).sort((a, b) => b[1].count - a[1].count);
+              
+              if (sortedAirlines.length === 0) {
+                return (
+                  <div className="text-center py-8 text-[#aaaaaa]">
+                    Nenhuma companhia pendente de cadastro
+                  </div>
+                );
+              }
+              
+              return (
+                <table className="w-full border-collapse">
+                  <thead className="sticky top-0 bg-[rgba(0,0,0,.8)]">
+                    <tr className="border-b border-[rgba(255,255,255,.08)]">
+                      <th className="px-3 py-2 text-left text-[#aaaaaa] uppercase text-[0.68rem] tracking-[0.1em] font-medium">Companhia Aérea</th>
+                      <th className="px-3 py-2 text-right text-[#aaaaaa] uppercase text-[0.68rem] tracking-[0.1em] font-medium">Qtd AWBs</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {sortedAirlines.map(([code, data]) => (
+                      <tr key={code} className="border-b border-[rgba(255,255,255,.05)] hover:bg-[rgba(255,255,255,.03)]">
+                        <td className="px-3 py-2.5 text-[#f5f5f5] text-sm">
+                          <span className="text-[#888] font-mono mr-2">{code}</span>
+                          {data.name}
+                        </td>
+                        <td className="px-3 py-2.5 text-right">
+                          <span className="inline-flex items-center justify-center min-w-[2rem] px-2 py-0.5 rounded-full bg-slate-600/60 text-[#f5f5f5] text-sm font-medium">
+                            {data.count}
+                          </span>
+                        </td>
                       </tr>
-                    );
-                  })}
-              </tbody>
-            </table>
-            {statusAereoData.filter(awb => (awb.status || "").toUpperCase() === "COMPANY_NOT_REGISTERED").length === 0 && (
-              <div className="text-center py-8 text-[#aaaaaa]">
-                Nenhuma companhia pendente de cadastro
-              </div>
-            )}
+                    ))}
+                  </tbody>
+                </table>
+              );
+            })()}
           </div>
           <div className="mt-4 pt-4 border-t border-[rgba(255,255,255,.08)] text-[0.75rem] text-[#666]">
             * Para adicionar suporte a uma companhia, entre em contato com a equipe de desenvolvimento
