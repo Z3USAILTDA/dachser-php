@@ -49,6 +49,23 @@ const EMAIL_SENDING_ENABLED = false;
 const ARR_RETENTION_HOURS = 48;
 const ARR_RETENTION_MS = ARR_RETENTION_HOURS * 60 * 60 * 1000;
 
+// AWBs excluídos manualmente da visualização
+const EXCLUDED_AWBS = [
+  "045-12829121",
+  "020-06994455",
+  "045-12570552",
+  "045-90854890",
+  "045-90418193",
+  "045-49624632",
+  "045-45987406",
+  "045-45198856",
+  "045-13298961",
+  "045-13298530",
+  "045-12718801",
+  "045-12579066",
+  "045-12570854",
+];
+
 const airlines = [
   { code: "006", name: "Delta Cargo" },
   { code: "016", name: "United Cargo" },
@@ -1624,6 +1641,9 @@ const Index = () => {
 
       return matchesSearch && matchesAirline && matchesAnalyst && isAllowed;
     });
+
+    // Filtrar AWBs excluídos manualmente
+    awbs = awbs.filter((awb) => !EXCLUDED_AWBS.includes(awb.awb));
 
     // Apply card filter (don't include COMPANY_NOT_REGISTERED in filtered results)
     if (cardFilter !== "all") {
