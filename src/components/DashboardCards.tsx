@@ -87,7 +87,7 @@ const DashboardCards: React.FC<DashboardCardsProps> = ({
             <span className="text-3xl font-semibold text-primary">
               {emAlerta}
             </span>
-            <span className="text-xs text-primary/80">DIS, OFLD – Atrasos</span>
+            <span className="text-xs text-primary/80">DIS – Atrasos</span>
           </div>
         </div>
       </Card>
@@ -110,7 +110,7 @@ const DashboardCards: React.FC<DashboardCardsProps> = ({
             <span className="text-3xl font-semibold text-destructive">
               {criticos}
             </span>
-            <span className="text-xs text-destructive/80">NIL, NIF – Ação imediata</span>
+            <span className="text-xs text-destructive/80">NIL, NIF, OFLD – Ação imediata</span>
           </div>
         </div>
       </Card>

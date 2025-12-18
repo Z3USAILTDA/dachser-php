@@ -23,10 +23,19 @@ import {
   ArrowLeft,
   User as UserIcon,
   Loader2,
+  AlertCircle,
+  X,
 } from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
 import { useToast } from "@/hooks/use-toast";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import type { User, Session } from "@supabase/supabase-js";
 import DashboardCards, { CardFilterType } from "@/components/DashboardCards";
 import dachserBg from "@/assets/dachser-background.jpg";
@@ -35,6 +44,10 @@ import { Filter as FilterIcon } from "lucide-react";
 
 // TEMPORARIAMENTE DESATIVADO - Mudar para true para reativar envio de emails
 const EMAIL_SENDING_ENABLED = false;
+
+// 48 horas em milissegundos para remoção de AWBs em ARR
+const ARR_RETENTION_HOURS = 48;
+const ARR_RETENTION_MS = ARR_RETENTION_HOURS * 60 * 60 * 1000;
 
 const airlines = [
   { code: "001", name: "American Airlines" },
@@ -313,6 +326,7 @@ const Index = () => {
   const [retrackingAwbs, setRetrackingAwbs] = useState<Set<string>>(new Set());
   const [showCompletionPopup, setShowCompletionPopup] = useState(false);
   const [cardFilter, setCardFilter] = useState<CardFilterType>("all");
+  const [showUnregisteredModal, setShowUnregisteredModal] = useState(false);
   const isPausedRef = useRef(false);
   const shouldSendEmailsRef = useRef(false); // Only send emails when user explicitly clicks button
   const emailEnableTimestampRef = useRef<number>(0); // Track when emails were enabled
@@ -1578,12 +1592,25 @@ const Index = () => {
       // Check if status or last event code is in allowed list
       const isAllowed = allowedStatuses.includes(statusToCheck) || allowedStatuses.includes(lastEventCode);
 
-      // AWBs com status ARR (chegaram) são removidos da tabela, mas permanecem no banco
+      // AWBs com status ARR (chegaram) - permanecem na tabela por 48h para segurança
       const hasAlert = awb.data_atraso !== null || ["DIS", "OFLD", "NIL", "NIF"].includes(lastEventCode);
       
-      // Se está em ARR e não tem alerta, remove da tabela (mas mantém no banco com arr_datetime registrado)
+      // Se está em ARR:
+      // - Se tem alerta, mantém na tabela
+      // - Se não tem alerta, verifica se já passaram 48h desde arr_datetime
       if (lastEventCode === "ARR" && !hasAlert) {
-        return false;
+        // Verificar se arr_datetime existe e se já passaram 48h
+        const arrDatetime = (awb as any).arr_datetime;
+        if (arrDatetime) {
+          const arrTime = new Date(arrDatetime).getTime();
+          const now = Date.now();
+          const hoursElapsed = (now - arrTime) / (1000 * 60 * 60);
+          // Só remove da tabela após 48h em ARR sem alertas
+          if (hoursElapsed >= ARR_RETENTION_HOURS) {
+            return false;
+          }
+        }
+        // Se não tem arr_datetime ou ainda não passaram 48h, mantém na tabela
       }
 
       return matchesSearch && matchesAirline && matchesAnalyst && isAllowed;
@@ -1597,9 +1624,11 @@ const Index = () => {
           case "transito":
             return ["DEP", "MAN", "RCF", "ARR", "TRA", "FOH"].includes(status);
           case "alerta":
-            return status === "DIS" || status === "OFLD";
+            // OFLD movido para críticos - apenas DIS em alerta
+            return status === "DIS";
           case "criticos":
-            return status === "NIL" || status === "NIF";
+            // OFLD agora é crítico junto com NIL e NIF
+            return status === "NIL" || status === "NIF" || status === "OFLD";
           default:
             return true;
         }
@@ -1775,13 +1804,15 @@ const Index = () => {
             const excludedStatuses = ["COMPANY_NOT_REGISTERED", "ERRO", "INFO", "Em Processamento", "NOT_FOUND", "DLV"];
             if (excludedStatuses.includes(awb.status || "")) return false;
             const status = getStatusCode(awb.last_event).toUpperCase();
-            return status === "DIS" || status === "OFLD";
+            // OFLD movido para críticos - apenas DIS em alerta
+            return status === "DIS";
           }).length}
           criticos={statusAereoData.filter((awb) => {
             const excludedStatuses = ["COMPANY_NOT_REGISTERED", "ERRO", "INFO", "Em Processamento", "NOT_FOUND", "DLV"];
             if (excludedStatuses.includes(awb.status || "")) return false;
             const status = getStatusCode(awb.last_event).toUpperCase();
-            return status === "NIL" || status === "NIF";
+            // OFLD agora é crítico junto com NIL e NIF
+            return status === "NIL" || status === "NIF" || status === "OFLD";
           }).length}
           activeFilter={cardFilter}
           onFilterChange={(filter) => {
@@ -1862,13 +1893,26 @@ const Index = () => {
                 </div>
               </div>
 
-              <button
-                onClick={handleRefresh}
-                className="h-8 px-4 rounded-full bg-[#ffc800] text-[#000] text-[0.75rem] font-medium flex items-center gap-1.5 hover:bg-[#ffdc50] transition shadow-[0_0_20px_rgba(255,200,0,.3)]"
-              >
-                <RefreshCw className="w-3.5 h-3.5" />
-                Atualizar
-              </button>
+              <div className="flex items-center gap-2">
+                {/* Botão para ver companhias não cadastradas */}
+                {statusAereoData.filter(awb => (awb.status || "").toUpperCase() === "COMPANY_NOT_REGISTERED").length > 0 && (
+                  <button
+                    onClick={() => setShowUnregisteredModal(true)}
+                    className="h-8 px-4 rounded-full bg-slate-600/80 text-white text-[0.75rem] font-medium flex items-center gap-1.5 hover:bg-slate-500/80 transition border border-slate-500/50"
+                  >
+                    <AlertCircle className="w-3.5 h-3.5" />
+                    Cias Pendentes ({statusAereoData.filter(awb => (awb.status || "").toUpperCase() === "COMPANY_NOT_REGISTERED").length})
+                  </button>
+                )}
+
+                <button
+                  onClick={handleRefresh}
+                  className="h-8 px-4 rounded-full bg-[#ffc800] text-[#000] text-[0.75rem] font-medium flex items-center gap-1.5 hover:bg-[#ffdc50] transition shadow-[0_0_20px_rgba(255,200,0,.3)]"
+                >
+                  <RefreshCw className="w-3.5 h-3.5" />
+                  Atualizar
+                </button>
+              </div>
             </div>
           </div>
         </section>
@@ -2183,6 +2227,56 @@ const Index = () => {
           )}
         </section>
       </main>
+
+      {/* Modal de Companhias Não Cadastradas */}
+      <Dialog open={showUnregisteredModal} onOpenChange={setShowUnregisteredModal}>
+        <DialogContent className="max-w-2xl max-h-[80vh] overflow-hidden bg-[rgba(5,6,18,.98)] border border-[rgba(255,255,255,.12)]">
+          <DialogHeader>
+            <DialogTitle className="text-[#f5f5f5] flex items-center gap-2">
+              <AlertCircle className="w-5 h-5 text-slate-400" />
+              Companhias Aéreas Não Cadastradas
+            </DialogTitle>
+            <DialogDescription className="text-[#aaaaaa]">
+              AWBs com companhias que ainda não possuem integração no sistema
+            </DialogDescription>
+          </DialogHeader>
+          <div className="overflow-y-auto max-h-[50vh] mt-4">
+            <table className="w-full border-collapse">
+              <thead className="sticky top-0 bg-[rgba(0,0,0,.8)]">
+                <tr className="border-b border-[rgba(255,255,255,.08)]">
+                  <th className="px-3 py-2 text-left text-[#aaaaaa] uppercase text-[0.68rem] tracking-[0.1em] font-medium">AWB</th>
+                  <th className="px-3 py-2 text-left text-[#aaaaaa] uppercase text-[0.68rem] tracking-[0.1em] font-medium">Cia</th>
+                  <th className="px-3 py-2 text-left text-[#aaaaaa] uppercase text-[0.68rem] tracking-[0.1em] font-medium">Destinatário</th>
+                  <th className="px-3 py-2 text-left text-[#aaaaaa] uppercase text-[0.68rem] tracking-[0.1em] font-medium">Analista</th>
+                </tr>
+              </thead>
+              <tbody>
+                {statusAereoData
+                  .filter(awb => (awb.status || "").toUpperCase() === "COMPANY_NOT_REGISTERED")
+                  .map((awb, index) => {
+                    const airlineName = airlines.find(a => a.code === awb.airline_code)?.name || `Cia ${awb.airline_code}`;
+                    return (
+                      <tr key={index} className="border-b border-[rgba(255,255,255,.05)] hover:bg-[rgba(255,255,255,.03)]">
+                        <td className="px-3 py-2 text-[#f5f5f5] text-sm font-mono">{awb.awb}</td>
+                        <td className="px-3 py-2 text-[#aaaaaa] text-sm">{awb.airline_code} - {airlineName}</td>
+                        <td className="px-3 py-2 text-[#aaaaaa] text-sm">{awb.consignee_name || "-"}</td>
+                        <td className="px-3 py-2 text-[#aaaaaa] text-sm">{awb.nome_analista || "-"}</td>
+                      </tr>
+                    );
+                  })}
+              </tbody>
+            </table>
+            {statusAereoData.filter(awb => (awb.status || "").toUpperCase() === "COMPANY_NOT_REGISTERED").length === 0 && (
+              <div className="text-center py-8 text-[#aaaaaa]">
+                Nenhuma companhia pendente de cadastro
+              </div>
+            )}
+          </div>
+          <div className="mt-4 pt-4 border-t border-[rgba(255,255,255,.08)] text-[0.75rem] text-[#666]">
+            * Para adicionar suporte a uma companhia, entre em contato com a equipe de desenvolvimento
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* Completion Popup - Fixed class for RPA */}
       {showCompletionPopup && (
