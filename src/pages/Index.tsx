@@ -1894,10 +1894,14 @@ const Index = () => {
               </div>
 
               <div className="flex items-center gap-2">
-                {/* Botão para ver companhias não cadastradas */}
+                {/* Botão para ver companhias pendentes de cadastro */}
                 {(() => {
-                  const unregistered = statusAereoData.filter(awb => (awb.status || "").toUpperCase() === "COMPANY_NOT_REGISTERED");
-                  const uniqueAirlines = new Set(unregistered.map(awb => awb.airline_code)).size;
+                  const pendingAirlineCodes = ["724", "729", "139", "118", "235", "176", "016", "001"];
+                  const pendingAwbs = statusAereoData.filter(awb => {
+                    const code = (awb.airline_code || "").replace(/^0+/, "").padStart(3, "0");
+                    return pendingAirlineCodes.includes(code);
+                  });
+                  const uniqueAirlines = new Set(pendingAwbs.map(awb => awb.airline_code)).size;
                   return uniqueAirlines > 0 && (
                     <button
                       onClick={() => setShowUnregisteredModal(true)}
@@ -2246,10 +2250,26 @@ const Index = () => {
           </DialogHeader>
           <div className="overflow-y-auto max-h-[50vh] mt-4">
             {(() => {
-              const unregisteredAwbs = statusAereoData.filter(awb => (awb.status || "").toUpperCase() === "COMPANY_NOT_REGISTERED");
-              const groupedByAirline = unregisteredAwbs.reduce((acc, awb) => {
-                const code = awb.airline_code || "000";
-                if (!acc[code]) acc[code] = { count: 0, name: airlines.find(a => a.code === code)?.name || `Código ${code}` };
+              const pendingAirlineNames: Record<string, string> = {
+                "724": "Swiss International Air Lines",
+                "729": "Tampa Cargo S.A.",
+                "139": "Aeromexico",
+                "118": "TAAG Angola Airlines",
+                "235": "Turkish Airlines",
+                "176": "Emirates Airlines",
+                "016": "United Airlines",
+                "001": "American Airlines"
+              };
+              const pendingAirlineCodes = Object.keys(pendingAirlineNames);
+              
+              const pendingAwbs = statusAereoData.filter(awb => {
+                const code = (awb.airline_code || "").replace(/^0+/, "").padStart(3, "0");
+                return pendingAirlineCodes.includes(code);
+              });
+              
+              const groupedByAirline = pendingAwbs.reduce((acc, awb) => {
+                const code = (awb.airline_code || "").replace(/^0+/, "").padStart(3, "0");
+                if (!acc[code]) acc[code] = { count: 0, name: pendingAirlineNames[code] || `Código ${code}` };
                 acc[code].count++;
                 return acc;
               }, {} as Record<string, { count: number; name: string }>);
