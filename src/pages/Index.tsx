@@ -50,7 +50,6 @@ const ARR_RETENTION_HOURS = 48;
 const ARR_RETENTION_MS = ARR_RETENTION_HOURS * 60 * 60 * 1000;
 
 const airlines = [
-  { code: "001", name: "American Airlines" },
   { code: "006", name: "Delta Cargo" },
   { code: "016", name: "United Cargo" },
   { code: "020", name: "Lufthansa Cargo" },
@@ -60,18 +59,13 @@ const airlines = [
   { code: "057", name: "Air France Cargo" },
   { code: "074", name: "KLM Cargo" },
   { code: "075", name: "IAG Cargo" },
-  { code: "118", name: "TAAG Angola Airlines" },
   { code: "139", name: "Aeromexico Cargo" },
-  { code: "157", name: "Qatar Cargo" },
-  { code: "172", name: "Cargolux" },
-  { code: "235", name: "Turkish Airlines" },
   { code: "369", name: "Atlas Air Cargo" },
   { code: "549", name: "LATAM Cargo" },
   { code: "577", name: "Azul Cargo" },
-  { code: "615", name: "DHL Aviation Cargo" },
-  { code: "724", name: "Swiss International Air Lines" },
-  { code: "729", name: "Avianca Cargo" },
-  { code: "881", name: "Condor Flugdienst" },
+  { code: "615", name: "European Air Transport" },
+  { code: "724", name: "Swiss International Airlines" },
+  { code: "881", name: "Condor Flugdienst GmbH" },
   { code: "996", name: "Air Europa Cargo" },
 ];
 
@@ -84,7 +78,6 @@ const getTrackingUrl = (airlineCode: string, fullAwb: string): string | null => 
     .trim();
 
   const urlBuilders: Record<string, (iata: string, awb: string) => string> = {
-    "001": (iata, awb) => `https://www.aacargo.com/tracking?awb=${iata}${awb}`,
     "006": (iata, awb) => `https://www.deltacargo.com/Cargo/home/trackShipment?awbNumber=${iata}${awb}&timeZoneOffset=180&t=${Date.now()}`,
     "016": (iata, awb) => `https://www.unitedcargo.com/en/us/tracking.html?awb=${iata}${awb}`,
     "020": (iata, awb) => `https://www.lufthansa-cargo.com/en/eservices/etracking/tracking/-/awb/${iata}/${awb}`,
@@ -94,17 +87,12 @@ const getTrackingUrl = (airlineCode: string, fullAwb: string): string | null => 
     "057": (iata, awb) => `https://www.afklcargo.com/mycargo/shipment/detail/${iata}-${awb}`,
     "074": (iata, awb) => `https://www.afklcargo.com/mycargo/shipment/detail/${iata}-${awb}`,
     "075": (iata, awb) => `https://api.tracking.iagcargo.com/tracking/${iata}-${awb}`,
-    "118": (iata, awb) => `https://taag-cargo.com/tracking?awb=${iata}${awb}`,
     "139": (iata, awb) => `https://www.aeromexico.com/es-mx/carga/rastrear?awb=${iata}${awb}`,
-    "157": (iata, awb) => `https://www.qrcargo.com/s/track-your-cargo?type=awb&awbPrefix=${iata}&awbSerialNumber=${awb}`,
-    "172": (iata, awb) => `https://www.cargolux.com/Our-Solutions/Tracking/Tracking-Page/${iata}${awb}`,
-    "235": (iata, awb) => `https://www.turkishcargo.com.tr/en/cargo-tracking?awbNo=${iata}${awb}`,
     "369": (iata, awb) => `https://jumpseat.atlasair.com/aa/tracktracehtml/TrackTrace.html?pe=${iata}&se=${awb}`,
     "549": (iata, awb) => `https://www.latamcargo.com/en/trackshipment?docNumber=${awb}&docPrefix=${iata}&soType=MAWB`,
     "577": (iata, awb) => `https://azulcargoexpress.smartkargo.com/FrmAWBTracking.aspx?AWBPrefix=${iata}&AWBno=${awb}`,
     "615": (iata, awb) => `https://aviationcargo.dhl.com/track/${iata}-${awb}`,
     "724": (iata, awb) => `https://www.swissworldcargo.com/en/tracking/${iata}${awb}`,
-    "729": (iata, awb) => `https://www.aviancacargo.com/es/tracking?awb=${iata}${awb}`,
     "881": (iata, awb) => `https://www.condor.com/eu/en/cargo/tracking.jsp?awb=${iata}${awb}`,
     "996": (iata, awb) => `https://cargo.aireuropa.com/portal/tracking/${iata}${awb}`,
   };
@@ -1917,7 +1905,7 @@ const Index = () => {
               <div className="flex items-center gap-2">
                 {/* Botão para ver companhias pendentes de cadastro */}
                 {(() => {
-                  const pendingAirlineCodes = ["176"]; // Apenas Emirates ainda não cadastrada
+                  const pendingAirlineCodes = ["001", "118", "157", "172", "176", "235", "729"]; // CIAs pendentes de cadastro
                   const pendingAwbs = statusAereoData.filter(awb => {
                     const code = (awb.airline_code || "").replace(/^0+/, "").padStart(3, "0");
                     return pendingAirlineCodes.includes(code);
@@ -2272,7 +2260,13 @@ const Index = () => {
           <div className="overflow-y-auto max-h-[50vh] mt-4">
             {(() => {
               const pendingAirlineNames: Record<string, string> = {
-                "176": "Emirates Airlines"
+                "001": "American Airlines",
+                "118": "TAAG Angola Airlines",
+                "157": "Qatar Cargo",
+                "172": "Cargolux",
+                "176": "Emirates Airlines",
+                "235": "Turkish Airlines",
+                "729": "Tampa Cargo S.A."
               };
               const pendingAirlineCodes = Object.keys(pendingAirlineNames);
               
