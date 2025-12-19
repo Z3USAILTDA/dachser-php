@@ -74,35 +74,71 @@ WEIGHT NORMALIZATION:
 - Long Tons (LT): multiply by 1016
 
 █████████████████████████████████████████████████████████████████████
-█ INTERNAL: MULTI-HBL SUM LOGIC (DO NOT CHANGE OUTPUT FORMAT)       █
+█ CRITICAL: MULTI-HBL WEIGHT/CBM COMPARISON RULE                    █
 █████████████████████████████████████████████████████████████████████
 
-INTERNAL CALCULATION RULE (apply internally, report in standard format):
+★★★ WHEN MULTIPLE HBLs EXIST (2 or more PDFs) - MANDATORY RULE ★★★
 
-When 1 Manifest is compared against 2+ HBL files:
-1. Extract Gross Weight from EACH HBL using the rules above
-2. SUM all HBL weights together
-3. Compare the SUM against Manifest total Gross Weight
-4. Report any discrepancy in the EXISTING output format (Total Weight section)
+DO NOT compare each HBL's weight/CBM individually against the Manifest total.
+Instead, follow this logic:
 
-SAME LOGIC FOR CBM AND PACKAGES:
-- Sum all HBL CBMs → compare to Manifest total CBM
-- Sum all HBL packages → compare to Manifest total packages
+1. DETECT: Count HBL files. If count >= 2, apply this rule.
 
-TOLERANCE RULES:
-- Weight: Delta > 1 kg OR > 0.1% → DISCREPANCY
-- CBM: Delta > 0.01 m³ OR > 0.1% → DISCREPANCY
-- Packages: ANY difference → DISCREPANCY
+2. FOR WEIGHT AND CBM ONLY:
+   - Extract weight/CBM from EACH HBL
+   - Calculate the SUM of all HBL weights
+   - Calculate the SUM of all HBL CBMs
+   - Compare ONLY the SUM against Manifest total (NOT each HBL individually)
+   
+3. IN THE OUTPUT:
+   - DO NOT report "HBL #1 weight differs from Manifest" 
+   - DO NOT report individual HBL weight/CBM discrepancies against Manifest total
+   - ONLY report if the SUM of all HBLs differs from Manifest total
+   
+4. FORMAT FOR MULTI-HBL WEIGHT COMPARISON:
+   "- Total Weight:
+    HBL #1: X kg | HBL #2: Y kg | Sum: (X + Y) = Z kg
+    Manifest Total: W kg | Delta: ±N kg
+    [If delta > 1 kg: Update: Adjust HBL weights so their combined sum equals W kg]
+    [If delta ≤ 1 kg: No changes required - sum matches manifest.]"
 
-INTERNAL EXAMPLE (how to calculate, NOT how to format output):
-- Manifest total: 5,000 kg / 25.5 m³ / 100 packages
-- HBL #1: 2,800 kg / 14.2 m³ / 55 packages
-- HBL #2: 2,200 kg / 11.3 m³ / 45 packages
-- Sum: 5,000 kg / 25.5 m³ / 100 packages → MATCH
+5. FORMAT FOR MULTI-HBL CBM COMPARISON:
+   "- CBM:
+    HBL #1: X m³ | HBL #2: Y m³ | Sum: (X + Y) = Z m³
+    Manifest Total: W m³ | Delta: ±N m³
+    [If delta > 0.01 m³: Update: Adjust HBL CBM values so their combined sum equals W m³]
+    [If delta ≤ 0.01 m³: No changes required - sum matches manifest.]"
 
-If sum doesn't match manifest:
-- Report in "Total Weight" section: "Sum of HBL weights (2,800 + 2,100 = 4,900 kg) differs from Manifest (5,000 kg). Delta: -100 kg"
-- Update instruction: "Adjust HBL weights so their sum equals 5,000.000 kg"
+EXAMPLE - CORRECT (Multi-HBL):
+Manifest: 5,000 kg total / 25.5 m³ total
+HBL #1: 2,800 kg / 14.2 m³
+HBL #2: 2,200 kg / 11.3 m³
+Sum: 5,000 kg / 25.5 m³ → MATCH ✓
+
+Output:
+"- Total Weight:
+  HBL #1: 2,800.000 kg | HBL #2: 2,200.000 kg | Sum: 5,000.000 kg
+  Manifest Total: 5,000.000 kg | Delta: 0.000 kg
+  No changes required - sum matches manifest.
+
+- CBM:
+  HBL #1: 14.200 m³ | HBL #2: 11.300 m³ | Sum: 25.500 m³
+  Manifest Total: 25.500 m³ | Delta: 0.000 m³
+  No changes required - sum matches manifest."
+
+EXAMPLE - DISCREPANCY (Multi-HBL):
+Manifest: 5,000 kg total
+HBL #1: 2,800 kg
+HBL #2: 2,100 kg (should be 2,200 kg)
+Sum: 4,900 kg → DISCREPANCY
+
+Output:
+"- Total Weight:
+  HBL #1: 2,800.000 kg | HBL #2: 2,100.000 kg | Sum: 4,900.000 kg
+  Manifest Total: 5,000.000 kg | Delta: -100.000 kg
+  Update: Adjust HBL weights so their combined sum equals 5,000.000 kg."
+
+★★★ FOR SINGLE HBL (only 1 PDF): Compare that HBL directly to Manifest as usual ★★★
 
 █████████████████████████████████████████████████████████████████████
 █ CRITICAL: EXHAUSTIVE DATA EXTRACTION - READ EVERYTHING            █
