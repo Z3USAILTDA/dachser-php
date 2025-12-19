@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate, useLocation, useParams } from "react-router-dom";
-import { Send, FileText, AlertCircle, Copy, Check, Info, FileStack } from "lucide-react";
+import { Send, FileText, AlertCircle, Copy, Check, Info, FileStack, Star, Loader2 } from "lucide-react";
 import { PageLayout } from "@/components/layout/PageLayout";
 import { PageCard } from "@/components/layout/PageCard";
 import { Button } from "@/components/ui/button";
@@ -103,6 +103,8 @@ export default function SubmeterManifestHbl() {
     message: string;
     type: 'info' | 'success' | 'error';
   } | null>(null);
+  const [isSavingExample, setIsSavingExample] = useState(false);
+  const [exampleSaved, setExampleSaved] = useState(false);
   useEffect(() => {
     setHblFiles([]);
     setAnalysisResult(null);
@@ -112,6 +114,7 @@ export default function SubmeterManifestHbl() {
     setAnalysisStep("");
     setIsCompletingAnalysis(false);
     setInlineStatus(null);
+    setExampleSaved(false);
   }, [itemId]);
   const showInlineStatus = (message: string, type: 'info' | 'success' | 'error' = 'info') => {
     setInlineStatus({
@@ -283,9 +286,64 @@ export default function SubmeterManifestHbl() {
       setIsCompletingAnalysis(false);
     }
   };
+
+  const handleSaveAsExample = async () => {
+    if (!analysisId || !itemId || !analysisResult?.result_text) {
+      toast.error("Informações da análise não encontradas");
+      return;
+    }
+
+    setIsSavingExample(true);
+    try {
+      // Determine scenario type based on HBL count
+      const hblCount = hblFiles.length;
+      let scenarioType = `${hblCount}_hbl`;
+      
+      // Check if there were discrepancies in the result
+      const resultLower = analysisResult.result_text.toLowerCase();
+      if (resultLower.includes('update:') || resultLower.includes('discrepancy') || resultLower.includes('differs')) {
+        scenarioType += '_with_discrepancy';
+      } else if (resultLower.includes('no changes') || resultLower.includes('no discrepancy')) {
+        scenarioType += '_no_discrepancy';
+      }
+
+      // Get user info from localStorage
+      const userStr = localStorage.getItem('dachser_user');
+      const user = userStr ? JSON.parse(userStr) : null;
+
+      const inputSummary = `Base: ${baseInfo?.base_file_name || 'N/A'}, HBLs: ${hblFiles.map(f => f.name).join(', ')}, Container: ${baseInfo?.container || 'N/A'}`;
+
+      const result = await maritimoApi.saveApprovedExample({
+        runId: parseInt(analysisId),
+        itemId: parseInt(itemId),
+        analysisType: 'manifest_hbl',
+        consignee: baseInfo?.consignee || undefined,
+        scenarioType,
+        hblCount,
+        inputSummary,
+        resultText: analysisResult.result_text,
+        approvedBy: user?.id,
+        approvedByName: user?.username
+      });
+
+      if (result.success) {
+        setExampleSaved(true);
+        toast.success("Análise salva como exemplo de aprendizado!");
+      } else {
+        toast.error(result.error || "Erro ao salvar exemplo");
+      }
+    } catch (error: any) {
+      console.error('Save example error:', error);
+      toast.error("Erro ao salvar exemplo: " + (error.message || 'Erro desconhecido'));
+    } finally {
+      setIsSavingExample(false);
+    }
+  };
+
   const handleNewAnalysis = async () => {
     setAnalysisResult(null);
     setAnalysisId(null);
+    setExampleSaved(false);
     window.scrollTo({
       top: 0,
       behavior: 'smooth'
@@ -431,7 +489,7 @@ export default function SubmeterManifestHbl() {
                   </pre>
                 </div>
 
-                <div className="flex items-center gap-4">
+                <div className="flex items-center gap-4 flex-wrap">
                   <Button onClick={handleNewAnalysis} disabled={isCompletingAnalysis || isAnalyzing} className="h-10 rounded-full px-6 bg-amber-400 text-black font-semibold text-sm shadow-[0_0_22px_rgba(251,191,36,0.6)] hover:bg-amber-300">
                     <Send className="w-4 h-4 mr-2" />
                     {isAnalyzing ? "Processando..." : "Fazer nova análise"}
@@ -441,6 +499,24 @@ export default function SubmeterManifestHbl() {
                   </Button>
                   <Button onClick={handleCopyResult} variant="ghost" size="icon" className="rounded-full w-10 h-10 text-white hover:bg-white/10" title="Copiar resultado">
                     {copiedResult ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
+                  </Button>
+                  
+                  {/* Save as Example Button */}
+                  <Button 
+                    onClick={handleSaveAsExample} 
+                    disabled={isSavingExample || exampleSaved || isCompletingAnalysis} 
+                    variant="outline" 
+                    className={`h-10 rounded-full px-6 border-emerald-500/40 text-emerald-400 hover:border-emerald-400 hover:bg-emerald-500/10 ${exampleSaved ? 'bg-emerald-500/20 border-emerald-400' : ''}`}
+                    title="Salvar esta análise como exemplo para aprendizado da IA"
+                  >
+                    {isSavingExample ? (
+                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    ) : exampleSaved ? (
+                      <Check className="w-4 h-4 mr-2" />
+                    ) : (
+                      <Star className="w-4 h-4 mr-2" />
+                    )}
+                    {exampleSaved ? "Exemplo salvo" : "Salvar como exemplo"}
                   </Button>
                 </div>
               </div>}

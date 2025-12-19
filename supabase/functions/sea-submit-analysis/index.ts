@@ -163,18 +163,109 @@ async function extractXlsxText(fileUrl: string, fileName: string): Promise<strin
   }
 }
 
+// ============ APPROVED EXAMPLES FETCHER ============
+
+async function getApprovedExamples(analysisType: string, hblCount: number): Promise<string> {
+  try {
+    const supabaseUrl = Deno.env.get('SUPABASE_URL');
+    const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+    
+    if (!supabaseUrl || !supabaseKey) {
+      console.log('⚠️ Missing Supabase credentials for approved examples');
+      return '';
+    }
+    
+    console.log(`📚 Fetching approved examples for ${analysisType} with ${hblCount} HBLs`);
+    
+    const response = await fetch(`${supabaseUrl}/functions/v1/mariadb-proxy`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${supabaseKey}`
+      },
+      body: JSON.stringify({
+        action: 'get_approved_examples',
+        analysisType,
+        hblCount,
+        limit: 2 // Get up to 2 relevant examples
+      })
+    });
+    
+    if (!response.ok) {
+      console.error(`❌ Failed to fetch approved examples: ${response.status}`);
+      return '';
+    }
+    
+    const data = await response.json();
+    const examples = data?.examples || [];
+    
+    if (examples.length === 0) {
+      console.log('📚 No approved examples found');
+      return '';
+    }
+    
+    console.log(`📚 Found ${examples.length} approved examples`);
+    
+    // Format examples for the prompt
+    let examplesText = `
+███████████████████████████████████████████████████████████████████████████████
+███ APPROVED ANALYSIS EXAMPLES (LEARN FROM THESE)                            ███
+███████████████████████████████████████████████████████████████████████████████
+
+The following are previously approved analyses that were marked as CORRECT.
+Use them as reference for:
+- Correct output format and structure
+- Proper handling of discrepancies
+- Expected level of detail and tone
+- How to present weight/CBM comparisons
+
+`;
+    
+    examples.forEach((ex: any, idx: number) => {
+      const scenarioDesc = ex.scenario_type?.replace(/_/g, ' ').toUpperCase() || 'GENERAL';
+      examplesText += `
+─────────────────────────────────────────────────────────────────────────────
+EXAMPLE ${idx + 1} (Scenario: ${scenarioDesc}, ${ex.hbl_count} HBL${ex.hbl_count > 1 ? 's' : ''})
+─────────────────────────────────────────────────────────────────────────────
+${ex.result_text?.substring(0, 3000) || ''}
+${ex.result_text?.length > 3000 ? '\n[... truncated for brevity ...]' : ''}
+`;
+    });
+    
+    examplesText += `
+███████████████████████████████████████████████████████████████████████████████
+Use the examples above as guidance for format and tone. 
+Analyze the current documents INDEPENDENTLY - do not copy example content.
+███████████████████████████████████████████████████████████████████████████████
+
+`;
+    
+    return examplesText;
+  } catch (e) {
+    console.error('Error fetching approved examples:', e);
+    return '';
+  }
+}
+
 // ============ ANTHROPIC CLAUDE - ANALYSIS ============
 
 async function analyzeWithAnthropic(
   prompt: string, 
   manifestText: string,
   pdfFiles: Array<{ base64: string; name: string }>,
-  metadata: { consignee?: string; container?: string }
+  metadata: { consignee?: string; container?: string },
+  approvedExamplesText: string = ''
 ): Promise<{ text: string; model: string }> {
   const anthropicKey = Deno.env.get('ANTHROPIC_API_KEY');
   if (!anthropicKey) throw new Error('ANTHROPIC_API_KEY not configured');
   
   let fullPrompt = prompt;
+  
+  // Inject approved examples right after the base prompt
+  if (approvedExamplesText) {
+    fullPrompt += approvedExamplesText;
+  }
+  
   if (metadata.consignee) fullPrompt += `\n\nConsignee: ${metadata.consignee}`;
   if (metadata.container) fullPrompt += `\nContainer: ${metadata.container}`;
   
@@ -201,7 +292,7 @@ async function analyzeWithAnthropic(
     contentParts.push({ type: 'text', text: `[Arquivo PDF: ${file.name}]` });
   }
   
-  console.log(`🤖 Calling Anthropic Claude with ${pdfFiles.length} PDFs + manifest text (${manifestText.length} chars)`);
+  console.log(`🤖 Calling Anthropic Claude with ${pdfFiles.length} PDFs + manifest text (${manifestText.length} chars) + examples (${approvedExamplesText.length} chars)`);
   
   const response = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
@@ -237,32 +328,33 @@ async function analyzeWithGeminiPro(
   prompt: string, 
   manifestText: string,
   pdfFiles: Array<{ base64: string; name: string }>,
-  metadata: { consignee?: string; container?: string }
+  metadata: { consignee?: string; container?: string },
+  approvedExamplesText: string = ''
 ): Promise<{ text: string; model: string }> {
   const lovableKey = Deno.env.get('LOVABLE_API_KEY');
   if (!lovableKey) throw new Error('LOVABLE_API_KEY not configured');
   
   let fullPrompt = prompt;
+  
+  if (approvedExamplesText) {
+    fullPrompt += approvedExamplesText;
+  }
+  
   if (metadata.consignee) fullPrompt += `\n\nConsignee: ${metadata.consignee}`;
   if (metadata.container) fullPrompt += `\nContainer: ${metadata.container}`;
   
-  // Add extracted manifest text
   if (manifestText && manifestText.length > 0) {
     fullPrompt += `\n\n=== CONTEÚDO DO MANIFESTO (extraído do arquivo XLSX) ===\n${manifestText}\n=== FIM DO MANIFESTO ===`;
   }
   
   console.log(`🔄 Fallback: Calling Gemini Pro with ${pdfFiles.length} PDFs + manifest text (${manifestText.length} chars)`);
   
-  // Build content parts for Gemini
   const contentParts: any[] = [{ type: 'text', text: fullPrompt }];
   
-  // Add PDFs as base64 (Gemini accepts PDFs via image_url)
   for (const file of pdfFiles) {
     contentParts.push({
       type: 'image_url',
-      image_url: {
-        url: `data:application/pdf;base64,${file.base64}`
-      }
+      image_url: { url: `data:application/pdf;base64,${file.base64}` }
     });
   }
   
@@ -303,7 +395,12 @@ async function analyzeWithLLM(
   
   console.log(`🚀 Starting analysis for ${files.length} files`);
   
-  // Separate XLSX files from PDFs for special handling
+  // Count HBLs for fetching relevant examples
+  const hblCount = files.filter(f => !f.file_name.toLowerCase().includes('manifest') && !f.file_name.toLowerCase().includes('pack')).length;
+  
+  // Fetch approved examples in parallel with file processing
+  const approvedExamplesPromise = getApprovedExamples(analysisType, hblCount);
+  
   const xlsxUrls = files.filter(f => {
     const ext = f.file_name.toLowerCase().split('.').pop() || '';
     return ['xlsx', 'xls', 'xlsm', 'csv'].includes(ext);
@@ -316,7 +413,6 @@ async function analyzeWithLLM(
   
   console.log(`📊 XLSX files: ${xlsxUrls.length}, PDF files: ${pdfUrls.length}`);
   
-  // Step 1: Extract text from XLSX files
   let manifestText = '';
   for (const xlsxFile of xlsxUrls) {
     try {
@@ -331,18 +427,20 @@ async function analyzeWithLLM(
   
   console.log(`📊 Manifest text extracted: ${manifestText.length} chars`);
   
-  // Step 2: Fetch PDFs as base64
   const pdfPromises = pdfUrls.map(f => fetchFileAsBase64(f.file_url, f.file_name));
   const pdfResults = await Promise.all(pdfPromises);
   const validPdfs = pdfResults.filter((f): f is { base64: string; name: string; mediaType: string; ext: string } => f !== null);
   
   console.log(`📎 PDFs loaded: ${validPdfs.length}`);
   
+  // Wait for approved examples
+  const approvedExamplesText = await approvedExamplesPromise;
+  console.log(`📚 Approved examples text: ${approvedExamplesText.length} chars`);
+  
   if (validPdfs.length === 0 && manifestText.length === 0) {
     throw new Error('Não foi possível carregar nenhum documento');
   }
   
-  // Step 3: Try Anthropic Claude (primary)
   let result: { text: string; model: string };
   
   try {
@@ -350,17 +448,18 @@ async function analyzeWithLLM(
       basePrompt, 
       manifestText,
       validPdfs.map(f => ({ base64: f.base64, name: f.name })),
-      metadata
+      metadata,
+      approvedExamplesText
     );
   } catch (anthropicError) {
     console.error(`❌ Anthropic failed, falling back to Gemini Pro:`, anthropicError);
     
-    // Fallback to Gemini Pro
     result = await analyzeWithGeminiPro(
       basePrompt, 
       manifestText,
       validPdfs.map(f => ({ base64: f.base64, name: f.name })),
-      metadata
+      metadata,
+      approvedExamplesText
     );
   }
   
@@ -373,10 +472,10 @@ async function analyzeWithLLM(
       status: 'completed', 
       model: result.model, 
       total_time_ms: Date.now() - startTime,
-      file_count: xlsxUrls.length + validPdfs.length
+      file_count: xlsxUrls.length + validPdfs.length,
+      used_examples: approvedExamplesText.length > 0
     },
     model: result.model
-  };
 }
 
 // ============ HELPER FUNCTIONS ============
