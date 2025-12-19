@@ -1114,39 +1114,6 @@ Hello, team.
 
 Complete HBL × MBL Comparison Report:
 
---- EXTRACTED DATA (for verification) ---
-From HBL:
-- Shipper: [extracted value]
-- Consignee: [extracted value]
-- Notify Party: [extracted value]
-- Vessel: [extracted value]
-- Voyage: [extracted value]
-- Port of Loading: [extracted value]
-- Port of Discharge: [extracted value]
-- Container: [extracted value]
-- Seal: [extracted value]
-- Gross Weight: [extracted value]
-- CBM: [extracted value]
-- Packages: [extracted value]
-- NCM/HS Codes: [list of codes found]
-
-From MBL:
-- Shipper: [extracted value]
-- Consignee: [extracted value]
-- Notify Party: [extracted value]
-- Vessel: [extracted value]
-- Voyage: [extracted value]
-- Port of Loading: [extracted value]
-- Port of Discharge: [extracted value]
-- Container: [extracted value]
-- Seal: [extracted value]
-- Gross Weight: [extracted value]
-- CBM: [extracted value]
-- Packages: [extracted value]
-- NCM/HS Codes: [list of codes found]
-
---- COMPARISON RESULTS ---
-
 1) Parties
 - Shipper: HBL = "[value]" | MBL = "[value]" → [MATCH ✓ or DIFFERENT: ...]
 - Consignee: HBL = "[value]" | MBL = "[value]" → [MATCH ✓ or DIFFERENT: ...]
@@ -1174,12 +1141,6 @@ From MBL:
 - Extra in HBL: [list or "none"]
 - Status: [MATCH ✓ or DIFFERENT: ...]
 
---- SUMMARY ---
-- Total fields compared: [count]
-- Fields matching: [count] ✓
-- Fields requiring update: [count] ⚠
-- Action required: [Yes/No]
-
 [If no discrepancies:]
 All verified fields match between HBL and MBL. No changes required.
 
@@ -1192,12 +1153,11 @@ The following updates are required:
 ███ CRITICAL RULES                                                             ███
 ███████████████████████████████████████████████████████████████████████████████
 
-1. ALWAYS show the "EXTRACTED DATA" section first - this helps verify extraction worked
-2. ALWAYS compare ALL fields including Shipper, Consignee, and Notify Party
-3. Report ALL differences found - even if expected due to document nature
-4. ALWAYS split combined fields before comparing (Vessel/Voyage)
-5. ALWAYS normalize numbers before comparing (handle European vs American formats)
-6. ALWAYS search entire document - data may be on any page
+1. ALWAYS compare ALL fields including Shipper, Consignee, and Notify Party
+2. Report ALL differences found - even if expected due to document nature
+3. ALWAYS split combined fields before comparing (Vessel/Voyage)
+4. ALWAYS normalize numbers before comparing (handle European vs American formats)
+5. ALWAYS search entire document - data may be on any page
 7. If extraction fails for a field, state what you searched for and where
 8. Produce a COMPLETE response - never skip sections`;
 
