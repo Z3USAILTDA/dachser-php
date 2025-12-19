@@ -3753,11 +3753,9 @@ async function fetchParcelsApp235(awb: string): Promise<StandardResult> {
     let lastStatus: string | null = null;
     
     // ========== EXTRACT ORIGIN AND DESTINATION ==========
-    // ParcelsApp format in sidebar:
-    // "From" (label) then on next line: "EZE, Ministro Pistrini, Buenos Aires"
-    // "To" (label) then on next line: "GRU, Guarulhos Gov Andre Franco Montouro, Sao Paulo"
+    // ParcelsApp format - extract from structured data
     
-    // Invalid codes that should not be treated as airports
+    // Extended invalid codes list - words and status codes that are NOT airports
     const INVALID_ROUTE_VALUES = new Set([
       'THE', 'AND', 'FOR', 'ARE', 'BUT', 'NOT', 'YOU', 'ALL', 'CAN', 'HAD', 'HER', 'WAS', 
       'ONE', 'OUR', 'OUT', 'DAY', 'GET', 'HAS', 'HIM', 'HIS', 'HOW', 'ITS', 'LET', 'MAY', 
@@ -3766,11 +3764,15 @@ async function fetchParcelsApp235(awb: string): Promise<StandardResult> {
       'PNG', 'GIF', 'CSS', 'XML', 'API', 'URL', 'DHL', 'UPS', 'FED', 'TNT', 'USA', 'EUR', 
       'USD', 'GBP', 'TRY', 'ETA', 'ETD', 'UTC', 'GMT', 'MON', 'TUE', 'WED', 'THU', 'FRI', 
       'SAT', 'SUN', 'JAN', 'FEB', 'MAR', 'APR', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 
-      'DEC', 'CAP', 'ERR', 'N/A', 'NIL', 'NIF', 'DIS', 'ADD', 'AIR', 'ANY', 'BOO', 'BOX',
-      'CAR', 'COD', 'DIM', 'DOC', 'HAS', 'HTM', 'HUB', 'IBS', 'ICO', 'IMG', 'KEY', 'LOG',
+      'DEC', 'CAP', 'ERR', 'NIL', 'NIF', 'DIS', 'ADD', 'AIR', 'ANY', 'BOO', 'BOX',
+      'CAR', 'COD', 'DIM', 'DOC', 'HTM', 'HUB', 'IBS', 'ICO', 'IMG', 'KEY', 'LOG',
       'MAX', 'MIN', 'ODD', 'OWN', 'PUT', 'RAW', 'ROW', 'RUN', 'SAY', 'SET', 'SRC', 'SUM',
       'SVG', 'TAB', 'TOP', 'TXT', 'VIA', 'WEB', 'YES', 'ZIP', 'ORG', 'EDU', 'GOV', 'FLT',
-      'REF', 'OUT'
+      'REF', 'ACK', 'CCD', 'KNO', 'INT', 'END', 'STR', 'OBJ', 'MAP', 'FUN',
+      'VAR', 'DEF', 'NUM', 'TMP', 'SYS', 'BIN', 'HEX', 'OCT', 'MEM', 'PTR', 'REG',
+      // STATUS CODES - these are NOT airports
+      'RCF', 'RCS', 'DLV', 'DEP', 'MAN', 'BKD', 'NFD', 'CCC', 'TFD', 'RCT', 'AWD', 'ARR',
+      'DIS', 'FOH', 'PRE', 'TRM', 'CRC', 'DDL', 'AWR', 'TGC', 'OCI', 'FPS', 'CPL', 'DLC'
     ]);
     
     const isValidAirport = (code: string | null | undefined): boolean => {
@@ -3779,117 +3781,121 @@ async function fetchParcelsApp235(awb: string): Promise<StandardResult> {
       return !INVALID_ROUTE_VALUES.has(code.toUpperCase());
     };
     
-    // PRIORITY 1: ParcelsApp specific format - "From" label followed by newline and airport code
-    // Format: "From\n\nEZE, Ministro Pistrini" or "From\nEZE,"
-    const fromLabelMatch = content.match(/\bFrom\s*[\n\r]+\s*([A-Z]{3})[\s,]/i);
-    const toLabelMatch = content.match(/\bTo\s*[\n\r]+\s*([A-Z]{3})[\s,]/i);
+    // PRIORITY 1: ParcelsApp TABLE format - "| From | City Name (CODE)" or "| From | CODE, City Name"
+    // This is the most reliable source - look for airport codes in From/To rows
+    const fromTableWithParenMatch = content.match(/\|\s*From\s*\|\s*[^|]*\(([A-Z]{3})\)/i);
+    const toTableWithParenMatch = content.match(/\|\s*To\s*\|\s*[^|]*\(([A-Z]{3})\)/i);
     
-    if (fromLabelMatch && isValidAirport(fromLabelMatch[1])) {
-      origin = fromLabelMatch[1].toUpperCase();
-      console.log(`[PARCELSAPP 235] ✅ Origin from 'From' label: ${origin}`);
+    if (fromTableWithParenMatch && isValidAirport(fromTableWithParenMatch[1])) {
+      origin = fromTableWithParenMatch[1].toUpperCase();
+      console.log(`[PARCELSAPP 235] ✅ Origin from table (parentheses): ${origin}`);
     }
-    if (toLabelMatch && isValidAirport(toLabelMatch[1])) {
-      destination = toLabelMatch[1].toUpperCase();
-      console.log(`[PARCELSAPP 235] ✅ Destination from 'To' label: ${destination}`);
+    if (toTableWithParenMatch && isValidAirport(toTableWithParenMatch[1])) {
+      destination = toTableWithParenMatch[1].toUpperCase();
+      console.log(`[PARCELSAPP 235] ✅ Destination from table (parentheses): ${destination}`);
     }
     
-    // PRIORITY 2: Look for "Origin:" or "Destination:" inline patterns
+    // PRIORITY 2: Table format "| From | CODE, City |"
     if (!origin) {
-      const originPatterns = [
-        /Origin[:\s]+([A-Z]{3})\b/i,
-        /Departure[:\s]+([A-Z]{3})\b/i,
-      ];
-      for (const pattern of originPatterns) {
-        const match = content.match(pattern);
-        if (match && isValidAirport(match[1])) {
-          origin = match[1].toUpperCase();
-          console.log(`[PARCELSAPP 235] ✅ Origin from inline label: ${origin}`);
-          break;
-        }
+      const fromTableMatch = content.match(/\|\s*From\s*\|\s*([A-Z]{3})\s*,/i);
+      if (fromTableMatch && isValidAirport(fromTableMatch[1])) {
+        origin = fromTableMatch[1].toUpperCase();
+        console.log(`[PARCELSAPP 235] ✅ Origin from table: ${origin}`);
       }
     }
-    
     if (!destination) {
-      const destPatterns = [
-        /Destination[:\s]+([A-Z]{3})\b/i,
-        /Arrival[:\s]+([A-Z]{3})\b/i,
-      ];
-      for (const pattern of destPatterns) {
-        const match = content.match(pattern);
-        if (match && isValidAirport(match[1])) {
-          destination = match[1].toUpperCase();
-          console.log(`[PARCELSAPP 235] ✅ Destination from inline label: ${destination}`);
-          break;
-        }
+      const toTableMatch = content.match(/\|\s*To\s*\|\s*([A-Z]{3})\s*,/i);
+      if (toTableMatch && isValidAirport(toTableMatch[1])) {
+        destination = toTableMatch[1].toUpperCase();
+        console.log(`[PARCELSAPP 235] ✅ Destination from table: ${destination}`);
       }
     }
     
-    // PRIORITY 3: Extract from route arrow pattern "EZE → GRU" or "EZE - GRU"
-    if (!origin || !destination) {
-      const routeMatch = content.match(/\b([A-Z]{3})\s*[→➔>–-]\s*([A-Z]{3})\b/i);
-      if (routeMatch) {
-        if (!origin && isValidAirport(routeMatch[1])) {
-          origin = routeMatch[1].toUpperCase();
-          console.log(`[PARCELSAPP 235] ✅ Origin from route pattern: ${origin}`);
-        }
-        if (!destination && isValidAirport(routeMatch[2])) {
-          destination = routeMatch[2].toUpperCase();
-          console.log(`[PARCELSAPP 235] ✅ Destination from route pattern: ${destination}`);
-        }
+    // PRIORITY 3: ParcelsApp specific - "From\n\nCODE, City Name" or "To\n\nCODE, City Name"
+    if (!origin) {
+      const fromParcelsMatch = content.match(/From\s*\n+\s*([A-Z]{3})\s*,\s*[A-Za-z]/i);
+      if (fromParcelsMatch && isValidAirport(fromParcelsMatch[1])) {
+        origin = fromParcelsMatch[1].toUpperCase();
+        console.log(`[PARCELSAPP 235] ✅ Origin from 'From' pattern: ${origin}`);
+      }
+    }
+    if (!destination) {
+      const toParcelsMatch = content.match(/To\s*\n+\s*([A-Z]{3})\s*,\s*[A-Za-z]/i);
+      if (toParcelsMatch && isValidAirport(toParcelsMatch[1])) {
+        destination = toParcelsMatch[1].toUpperCase();
+        console.log(`[PARCELSAPP 235] ✅ Destination from 'To' pattern: ${destination}`);
       }
     }
     
-    // PRIORITY 4: Extract from timeline events - FIRST and LAST airport codes
+    // PRIORITY 4: Look for airport codes in timeline events - origin from first event location, destination from last
     if (!origin || !destination) {
-      // Find all airport codes in parentheses, e.g., "(EZE)" or location names like "Ministro Pistrini (EZE)"
-      const airportMatches = content.match(/\(([A-Z]{3})\)/g);
-      if (airportMatches && airportMatches.length >= 2) {
-        const codes = airportMatches.map(m => m.replace(/[()]/g, '')).filter(isValidAirport);
+      // Extract all airport codes from event locations (in parentheses after city names)
+      const locationMatches = content.match(/[A-Za-z\s]+\(([A-Z]{3})\)/g);
+      if (locationMatches && locationMatches.length >= 1) {
+        const codes = locationMatches.map(m => {
+          const match = m.match(/\(([A-Z]{3})\)/);
+          return match ? match[1] : null;
+        }).filter(c => c && isValidAirport(c)) as string[];
+        
         if (codes.length >= 2) {
-          if (!origin) {
-            origin = codes[0];
-            console.log(`[PARCELSAPP 235] ✅ Origin from timeline: ${origin}`);
-          }
-          if (!destination) {
-            destination = codes[codes.length - 1];
-            console.log(`[PARCELSAPP 235] ✅ Destination from timeline: ${destination}`);
-          }
+          // First event location is typically the current/last location
+          // Last event location is typically the origin
+          if (!destination) destination = codes[0]; // First code = current location = destination
+          if (!origin) origin = codes[codes.length - 1]; // Last code = starting point = origin
+          console.log(`[PARCELSAPP 235] ✅ Route from timeline locations: ${origin} → ${destination}`);
         }
       }
     }
     
     // ========== EXTRACT LAST STATUS ==========
-    // Look for status indicators in ParcelsApp
-    const statusMappings = [
-      { patterns: [/\bdelivered\b/i, /\bentregue\b/i], code: 'DLV' },
-      { patterns: [/\bdeparted\b/i, /\bleft\b.*\bfacility\b/i, /\bin transit\b/i], code: 'DEP' },
-      { patterns: [/\barrived\b/i, /\breached\b/i], code: 'ARR' },
-      { patterns: [/\breceived\b/i, /\baccepted\b/i, /\bpicked up\b/i], code: 'RCF' },
-      { patterns: [/\bmanifested\b/i, /\bprocessing\b/i], code: 'MAN' },
-      { patterns: [/\bbooked\b/i, /\bshipment\s+information\b/i], code: 'BKD' },
-      { patterns: [/\bout for delivery\b/i, /\bready\s+for\s+pickup\b/i, /\bnotified\b/i], code: 'NFD' },
-      { patterns: [/\bcleared\s+customs\b/i, /\bcustoms\s+released\b/i], code: 'CCD' },
-    ];
+    // PRIORITY 1: Extract status code from the FIRST (most recent) event in timeline
+    // ParcelsApp format: "**(DLV) Description...**" or similar at the start of events
+    const firstStatusEventMatch = content.match(/\*\*\(([A-Z]{3})\)\s+[^*]+\*\*/);
+    if (firstStatusEventMatch) {
+      lastStatus = firstStatusEventMatch[1].toUpperCase();
+      console.log(`[PARCELSAPP 235] ✅ Status from first event: ${lastStatus}`);
+    }
     
-    // First try to find explicit status line
-    const statusLineMatch = content.match(/(?:Status|Estado|Situação)[:\s]+([A-Za-z\s]+?)(?:\n|$|\.)/i);
-    if (statusLineMatch) {
-      const statusText = statusLineMatch[1].trim().toLowerCase();
-      for (const { patterns, code } of statusMappings) {
-        if (patterns.some(p => p.test(statusText))) {
+    // PRIORITY 2: Look for status code in parentheses at start of first bold line
+    if (!lastStatus) {
+      const boldStatusMatch = content.match(/\*\*\s*\(([A-Z]{3})\)/);
+      if (boldStatusMatch) {
+        lastStatus = boldStatusMatch[1].toUpperCase();
+        console.log(`[PARCELSAPP 235] ✅ Status from bold pattern: ${lastStatus}`);
+      }
+    }
+    
+    // PRIORITY 3: Look for status codes in timeline order (first occurrence = most recent)
+    if (!lastStatus) {
+      const STATUS_CODES = ['DLV', 'NFD', 'CCD', 'RCF', 'ARR', 'DEP', 'MAN', 'RCS', 'BKD', 'AWR', 'FOH', 'PRE', 'TFD', 'RCT', 'AWD'];
+      for (const code of STATUS_CODES) {
+        const codePattern = new RegExp(`\\(${code}\\)`, 'i');
+        if (codePattern.test(content)) {
           lastStatus = code;
+          console.log(`[PARCELSAPP 235] ✅ Status from code search: ${lastStatus}`);
           break;
         }
       }
     }
     
-    // Fallback: scan entire content for status keywords
+    // PRIORITY 4: Fallback to keyword matching
     if (!lastStatus) {
-      // Look for the most recent/relevant status (typically "delivered" takes precedence)
+      const statusMappings = [
+        { patterns: [/\bdelivered\b/i, /\bentregue\b/i, /\bphysically delivered\b/i], code: 'DLV' },
+        { patterns: [/\bdeparted\b/i, /\bleft\b.*\bfacility\b/i, /\bin transit\b/i], code: 'DEP' },
+        { patterns: [/\barrived\b/i, /\breached\b/i], code: 'ARR' },
+        { patterns: [/\breceived\b.*\bflight\b/i], code: 'RCF' },
+        { patterns: [/\breceived\b/i, /\baccepted\b/i, /\bpicked up\b/i], code: 'RCS' },
+        { patterns: [/\bmanifested\b/i, /\bprocessing\b/i], code: 'MAN' },
+        { patterns: [/\bbooked\b/i, /\bshipment\s+information\b/i], code: 'BKD' },
+        { patterns: [/\bout for delivery\b/i, /\bready\s+for\s+pickup\b/i, /\bnotified\b/i], code: 'NFD' },
+        { patterns: [/\bcleared\s+customs\b/i, /\bcustoms\s+released\b/i], code: 'CCD' },
+      ];
+      
       for (const { patterns, code } of statusMappings) {
         if (patterns.some(p => p.test(content))) {
           lastStatus = code;
-          // If delivered, stop immediately (final status)
+          console.log(`[PARCELSAPP 235] ✅ Status from keyword: ${lastStatus}`);
           if (code === 'DLV') break;
         }
       }
@@ -3902,11 +3908,11 @@ async function fetchParcelsApp235(awb: string): Promise<StandardResult> {
         const validCodes = allCodes.filter(isValidAirport);
         if (validCodes.length >= 2) {
           if (!origin) {
-            origin = validCodes[0];
+            origin = validCodes[validCodes.length - 1]; // Last valid code = origin
             console.log(`[PARCELSAPP 235] ⚠️ Origin from fallback: ${origin}`);
           }
           if (!destination) {
-            destination = validCodes[validCodes.length - 1];
+            destination = validCodes[0]; // First valid code = destination
             console.log(`[PARCELSAPP 235] ⚠️ Destination from fallback: ${destination}`);
           }
         }
@@ -3948,6 +3954,265 @@ async function fetchParcelsApp235(awb: string): Promise<StandardResult> {
     return { provider, ok: false, status: 500, error: error instanceof Error ? error.message : 'Unknown error', sent: { awb } };
   }
 }
+
+// ============= TAAG ANGOLA AIRLINES (118) via ParcelsApp =============
+
+async function fetchParcelsApp118(awb: string): Promise<StandardResult> {
+  const provider = 'parcelsapp_118';
+  console.log(`[PARCELSAPP 118] Fetching AWB: ${awb}`);
+  
+  try {
+    const firecrawlApiKey = Deno.env.get('FIRECRAWL_API_KEY');
+    if (!firecrawlApiKey) {
+      console.error('[PARCELSAPP 118] FIRECRAWL_API_KEY not configured');
+      return { provider, ok: false, status: 500, error: 'FIRECRAWL_API_KEY not configured', sent: { awb } };
+    }
+    
+    // Format AWB: 118-12879871
+    const digits = awb.replace(/\D/g, '');
+    const formattedAwb = digits.length === 11 ? `${digits.substring(0,3)}-${digits.substring(3)}` : awb;
+    
+    const url = `https://parcelsapp.com/en/tracking/${formattedAwb}`;
+    console.log(`[PARCELSAPP 118] Scraping URL: ${url}`);
+    
+    const response = await fetch('https://api.firecrawl.dev/v1/scrape', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${firecrawlApiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        url,
+        formats: ['markdown', 'html'],
+        waitFor: 15000,
+        timeout: 60000,
+      }),
+    });
+    
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error(`[PARCELSAPP 118] Firecrawl error: ${errorText}`);
+      return { provider, ok: false, status: response.status, error: `Firecrawl error: ${response.status}`, sent: { url } };
+    }
+    
+    const data = await response.json();
+    const markdown = data?.data?.markdown || '';
+    const html = data?.data?.html || '';
+    const content = markdown + '\n' + html;
+    const contentLower = content.toLowerCase();
+    
+    console.log(`[PARCELSAPP 118] Content length: ${content.length}`);
+    console.log(`[PARCELSAPP 118] Markdown preview: ${markdown.substring(0, 3000)}`);
+    
+    // Check if content is too small or blocked
+    if (content.length < 300) {
+      console.log(`[PARCELSAPP 118] Content too small, possibly blocked`);
+      return { 
+        provider, 
+        ok: false, 
+        status: 404, 
+        error: 'Content too small - may be blocked', 
+        sent: { url } 
+      };
+    }
+    
+    // Check for not found patterns
+    if (contentLower.includes('not found') || contentLower.includes('no tracking information') || 
+        contentLower.includes('tracking data is not available')) {
+      console.log(`[PARCELSAPP 118] AWB not found`);
+      return { 
+        provider, 
+        ok: false, 
+        status: 404, 
+        error: 'AWB not found', 
+        sent: { url } 
+      };
+    }
+    
+    let origin: string | null = null;
+    let destination: string | null = null;
+    let lastStatus: string | null = null;
+    let lastStatusDescription: string | null = null;
+    
+    // ========== EXTRACT ORIGIN AND DESTINATION ==========
+    // Extended invalid codes list - INCLUDES STATUS CODES to prevent them from being mistaken as airports
+    const INVALID_ROUTE_VALUES = new Set([
+      'THE', 'AND', 'FOR', 'ARE', 'BUT', 'NOT', 'YOU', 'ALL', 'CAN', 'HAD', 'HER', 'WAS', 
+      'ONE', 'OUR', 'OUT', 'DAY', 'GET', 'HAS', 'HIM', 'HIS', 'HOW', 'ITS', 'LET', 'MAY', 
+      'NEW', 'NOW', 'OLD', 'SEE', 'TWO', 'WAY', 'WHO', 'BOY', 'DID', 'SHE', 'TOO', 'USE', 
+      'AWB', 'KGS', 'LBS', 'PCS', 'VOL', 'PKG', 'COM', 'NET', 'WWW', 'APP', 'PDF', 'JPG', 
+      'PNG', 'GIF', 'CSS', 'XML', 'API', 'URL', 'DHL', 'UPS', 'FED', 'TNT', 'USA', 'EUR', 
+      'USD', 'GBP', 'TRY', 'ETA', 'ETD', 'UTC', 'GMT', 'MON', 'TUE', 'WED', 'THU', 'FRI', 
+      'SAT', 'SUN', 'JAN', 'FEB', 'MAR', 'APR', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 
+      'DEC', 'CAP', 'ERR', 'N/A', 'NIL', 'NIF', 'DIS', 'ADD', 'AIR', 'ANY', 'BOO', 'BOX',
+      'CAR', 'COD', 'DIM', 'DOC', 'HAS', 'HTM', 'HUB', 'IBS', 'ICO', 'IMG', 'KEY', 'LOG',
+      'MAX', 'MIN', 'ODD', 'OWN', 'PUT', 'RAW', 'ROW', 'RUN', 'SAY', 'SET', 'SRC', 'SUM',
+      'SVG', 'TAB', 'TOP', 'TXT', 'VIA', 'WEB', 'YES', 'ZIP', 'ORG', 'EDU', 'GOV', 'FLT',
+      'REF', 'OUT', 'ACK', 'CCD', 'KNO', 'INT', 'END', 'STR', 'OBJ', 'MAP', 'FUN',
+      'VAR', 'LET', 'DEF', 'NUM', 'TMP', 'SYS', 'BIN', 'HEX', 'OCT', 'MEM', 'PTR', 'REG',
+      // STATUS CODES - these are NOT airports
+      'RCF', 'RCS', 'DLV', 'DEP', 'MAN', 'BKD', 'NFD', 'CCC', 'TFD', 'RCT', 'AWD', 'ARR',
+      'DIS', 'FOH', 'PRE', 'TRM', 'CRC', 'DDL', 'AWR', 'TGC', 'OCI', 'FPS', 'CPL', 'DLC'
+    ]);
+    
+    const isValidAirport = (code: string | null | undefined): boolean => {
+      if (!code || code.length !== 3) return false;
+      if (!/^[A-Z]{3}$/i.test(code)) return false;
+      return !INVALID_ROUTE_VALUES.has(code.toUpperCase());
+    };
+    
+    // PRIORITY 1: ParcelsApp TABLE format - "| From | Frankfurt Main (FRA), Frankfurt |"
+    // This is the most reliable source in the markdown table at the bottom
+    const fromTableMatch = content.match(/\|\s*From\s*\|\s*[^|]*\(([A-Z]{3})\)/i);
+    const toTableMatch = content.match(/\|\s*To\s*\|\s*[^|]*\(([A-Z]{3})\)/i);
+    
+    if (fromTableMatch && isValidAirport(fromTableMatch[1])) {
+      origin = fromTableMatch[1].toUpperCase();
+      console.log(`[PARCELSAPP 118] ✅ Origin from table: ${origin}`);
+    }
+    if (toTableMatch && isValidAirport(toTableMatch[1])) {
+      destination = toTableMatch[1].toUpperCase();
+      console.log(`[PARCELSAPP 118] ✅ Destination from table: ${destination}`);
+    }
+    
+    // PRIORITY 2: ParcelsApp specific - "From\n\nCODE, City Name" or "To\n\nCODE, City Name"
+    if (!origin) {
+      const fromParcelsMatch = content.match(/From\s*\n+\s*([A-Z]{3})\s*,\s*[A-Za-z]/i);
+      if (fromParcelsMatch && isValidAirport(fromParcelsMatch[1])) {
+        origin = fromParcelsMatch[1].toUpperCase();
+        console.log(`[PARCELSAPP 118] ✅ Origin from 'From' pattern: ${origin}`);
+      }
+    }
+    if (!destination) {
+      const toParcelsMatch = content.match(/To\s*\n+\s*([A-Z]{3})\s*,\s*[A-Za-z]/i);
+      if (toParcelsMatch && isValidAirport(toParcelsMatch[1])) {
+        destination = toParcelsMatch[1].toUpperCase();
+        console.log(`[PARCELSAPP 118] ✅ Destination from 'To' pattern: ${destination}`);
+      }
+    }
+    
+    // PRIORITY 3: Route arrow pattern "CODE → CODE"
+    if (!origin || !destination) {
+      const routeMatch = content.match(/\b([A-Z]{3})\s*[→➔>\-–]\s*([A-Z]{3})\b/);
+      if (routeMatch && isValidAirport(routeMatch[1]) && isValidAirport(routeMatch[2])) {
+        if (!origin) origin = routeMatch[1].toUpperCase();
+        if (!destination) destination = routeMatch[2].toUpperCase();
+        console.log(`[PARCELSAPP 118] ✅ Route from arrow pattern: ${origin} → ${destination}`);
+      }
+    }
+    
+    // ========== EXTRACT LAST STATUS ==========
+    // PRIORITY 1: Extract status code from the FIRST (most recent) event in timeline
+    // ParcelsApp format: "**(DLV) Description...**" or similar at the start of events
+    const firstStatusEventMatch = content.match(/\*\*\(([A-Z]{3})\)\s+[^*]+\*\*/);
+    if (firstStatusEventMatch) {
+      lastStatus = firstStatusEventMatch[1].toUpperCase();
+      lastStatusDescription = lastStatus;
+      console.log(`[PARCELSAPP 118] ✅ Status from first event: ${lastStatus}`);
+    }
+    
+    // PRIORITY 2: Look for status code in parentheses at start of first bold line
+    if (!lastStatus) {
+      const boldStatusMatch = content.match(/\*\*\s*\(([A-Z]{3})\)/);
+      if (boldStatusMatch) {
+        lastStatus = boldStatusMatch[1].toUpperCase();
+        lastStatusDescription = lastStatus;
+        console.log(`[PARCELSAPP 118] ✅ Status from bold pattern: ${lastStatus}`);
+      }
+    }
+    
+    // PRIORITY 3: Look for status codes in timeline order (first occurrence = most recent)
+    if (!lastStatus) {
+      const STATUS_CODES = ['DLV', 'NFD', 'CCD', 'RCF', 'ARR', 'DEP', 'MAN', 'RCS', 'BKD', 'AWR', 'FOH', 'PRE', 'TFD', 'RCT', 'AWD'];
+      for (const code of STATUS_CODES) {
+        const codePattern = new RegExp(`\\(${code}\\)`, 'i');
+        if (codePattern.test(content)) {
+          lastStatus = code;
+          lastStatusDescription = code;
+          console.log(`[PARCELSAPP 118] ✅ Status from code search: ${lastStatus}`);
+          break;
+        }
+      }
+    }
+    
+    // PRIORITY 4: Fallback to keyword matching on entire content
+    if (!lastStatus) {
+      const statusMappings = [
+        { patterns: [/\bdelivered\b/i, /\bentregue\b/i, /\bphysically delivered\b/i], code: 'DLV', desc: 'Delivered' },
+        { patterns: [/\bdeparted\b/i, /\bleft\b.*\bfacility\b/i, /\bin transit\b/i], code: 'DEP', desc: 'Departed' },
+        { patterns: [/\barrived\b/i, /\breached\b/i], code: 'ARR', desc: 'Arrived' },
+        { patterns: [/\breceived\b.*\bflight\b/i], code: 'RCF', desc: 'Received from Flight' },
+        { patterns: [/\breceived\b/i, /\baccepted\b/i, /\bpicked up\b/i], code: 'RCS', desc: 'Received from Shipper' },
+        { patterns: [/\bmanifested\b/i, /\bprocessing\b/i], code: 'MAN', desc: 'Manifested' },
+        { patterns: [/\bbooked\b/i, /\bshipment\s+information\b/i], code: 'BKD', desc: 'Booked' },
+        { patterns: [/\bout for delivery\b/i, /\bready\s+for\s+pickup\b/i, /\bnotified\b/i], code: 'NFD', desc: 'Notified' },
+        { patterns: [/\bcleared\s+customs\b/i, /\bcustoms\s+released\b/i], code: 'CCD', desc: 'Customs Cleared' },
+      ];
+      
+      for (const { patterns, code, desc } of statusMappings) {
+        if (patterns.some(p => p.test(content))) {
+          lastStatus = code;
+          lastStatusDescription = desc;
+          console.log(`[PARCELSAPP 118] ✅ Status from keyword: ${lastStatus}`);
+          if (code === 'DLV') break;
+        }
+      }
+    }
+    
+    // FINAL FALLBACK: Look for valid airport codes from timeline text
+    if (!origin || !destination) {
+      const allCodes = content.match(/\b([A-Z]{3})\b/g);
+      if (allCodes && allCodes.length >= 2) {
+        const validCodes = allCodes.filter(isValidAirport);
+        if (validCodes.length >= 2) {
+          if (!origin) {
+            origin = validCodes[0];
+            console.log(`[PARCELSAPP 118] ⚠️ Origin from fallback: ${origin}`);
+          }
+          if (!destination) {
+            destination = validCodes[validCodes.length - 1];
+            console.log(`[PARCELSAPP 118] ⚠️ Destination from fallback: ${destination}`);
+          }
+        }
+      }
+    }
+    
+    console.log(`[PARCELSAPP 118] Extracted: origin=${origin}, destination=${destination}, status=${lastStatus}`);
+    
+    // If we couldn't extract anything meaningful, return error
+    if (!origin && !destination && !lastStatus) {
+      return { 
+        provider, 
+        ok: false, 
+        status: 404, 
+        error: 'No tracking data found in ParcelsApp', 
+        sent: { url }, 
+        raw: markdown.substring(0, 1000) 
+      };
+    }
+    
+    return {
+      provider,
+      ok: true,
+      status: 200,
+      error: null,
+      sent: { url, awb: formattedAwb },
+      summary: {
+        origin: origin || undefined,
+        destination: destination || undefined,
+        lastStatus: lastStatus ? {
+          code: lastStatus,
+          description: lastStatusDescription || lastStatus,
+          timestamp: new Date().toISOString(),
+        } : undefined,
+      },
+    };
+  } catch (error) {
+    console.error(`[PARCELSAPP 118] Error:`, error);
+    return { provider, ok: false, status: 500, error: error instanceof Error ? error.message : 'Unknown error', sent: { awb } };
+  }
+}
+
 // ============= AMERICAN AIRLINES CARGO (001) =============
 
 async function fetchAmericanAirlinesAPI(awb: string): Promise<StandardResult> {
@@ -3961,7 +4226,9 @@ async function fetchAmericanAirlinesAPI(awb: string): Promise<StandardResult> {
     'ICO', 'IMG', 'JPG', 'KEY', 'KGS', 'LOG', 'MAX', 'MIN', 'NEW', 'NOT', 'NOW', 'ODD', 'OUR', 
     'OUT', 'OWN', 'PCS', 'PDF', 'PNG', 'PUT', 'RAW', 'ROW', 'RUN', 'SAY', 'SEE', 'SET', 'SRC', 
     'SUM', 'SVG', 'TAB', 'THE', 'TOP', 'TRY', 'TXT', 'URL', 'USE', 'VIA', 'WAY', 'WEB', 'XML', 
-    'YES', 'ZIP', 'API', 'COM', 'NET', 'ORG', 'EDU', 'GOV', 'FLT', 'REF', 'INFO', 'LBS', 'KGS'
+    'YES', 'ZIP', 'API', 'COM', 'NET', 'ORG', 'EDU', 'GOV', 'FLT', 'REF', 'INFO', 'LBS', 'KGS',
+    // Additional invalid codes that are NOT real airports
+    'ACK', 'CCD', 'KNO', 'AWB', 'DIM', 'VOL', 'CHG', 'PER', 'DAY', 'AIR', 'CAR', 'BOX', 'PKG'
   ]);
   
   const isValidAirportCode = (code: string): boolean => {
@@ -4011,24 +4278,81 @@ async function fetchAmericanAirlinesAPI(awb: string): Promise<StandardResult> {
     console.log(`[AA CARGO] Content length: ${content.length}`);
     console.log(`[AA CARGO] Markdown preview: ${markdown.substring(0, 2500)}`);
     
+    // ========== CRITICAL: CHECK FOR "NOT FOUND" FIRST ==========
+    // Must detect non-existent AWBs BEFORE trying to extract any data
+    const contentLower = content.toLowerCase();
+    
+    // Check for explicit "not found" messages from AA Cargo
+    const isNotFound = 
+      contentLower.includes('air waybill not found') || 
+      contentLower.includes('waybill not found') ||
+      contentLower.includes('awb not found') ||
+      (contentLower.includes('not found') && contentLower.includes('please check')) ||
+      (contentLower.includes('not found') && contentLower.includes('three-digit')) ||
+      (contentLower.includes('not found') && contentLower.includes('eight-digit')) ||
+      contentLower.includes('please check the three-digit airline code') ||
+      // Check for error class in HTML
+      content.includes('c-error') ||
+      // Check for hidden tracking sections (display: none on tracking elements)
+      (content.includes('c-tracking-header') && content.includes('display: none') && content.includes('c-tracking-status')) ||
+      content.length < 300;
+    
+    if (isNotFound) {
+      console.log(`[AA CARGO] ❌ AWB NOT FOUND detected in page content`);
+      return { provider, ok: false, status: 404, error: 'AWB not found', sent: { url }, raw: markdown.substring(0, 500) };
+    }
+    
+    // ADDITIONAL CHECK: If the page contains "Track Another Shipment" but NO tracking events
+    // This indicates we're on a not-found page with just the search form
+    const hasTrackAnotherShipment = contentLower.includes('track another shipment');
+    const hasAnyTrackingEvent = 
+      contentLower.includes('received at') || 
+      contentLower.includes('departed from') || 
+      contentLower.includes('arrived at') || 
+      contentLower.includes('delivered') ||
+      contentLower.includes('manifested') ||
+      contentLower.includes('booking confirmed') ||
+      contentLower.includes('in transit') ||
+      // Look for typical AA Cargo route format "City CODE→City CODE"
+      /[a-z]+\s+[a-z]{3}\s*→\s*[a-z]+\s+[a-z]{3}/i.test(content);
+    
+    if (hasTrackAnotherShipment && !hasAnyTrackingEvent) {
+      console.log(`[AA CARGO] ❌ Only search form present, no tracking events - AWB not found`);
+      return { provider, ok: false, status: 404, error: 'AWB not found', sent: { url }, raw: markdown.substring(0, 500) };
+    }
+    
+    // Also check if there's no actual tracking content (e.g., just navigation)
+    const hasTrackingContent = content.includes('AWB') && (
+      content.includes('Received') || 
+      content.includes('Departed') || 
+      content.includes('Arrived') ||
+      content.includes('Delivered') ||
+      content.includes('In Transit')
+    );
+    
+    if (!hasTrackingContent && content.length < 1500) {
+      console.log(`[AA CARGO] ❌ No tracking content found in page (content too short)`);
+      return { provider, ok: false, status: 404, error: 'No tracking data found', sent: { url }, raw: markdown.substring(0, 500) };
+    }
+    
     let origin: string | null = null;
     let destination: string | null = null;
     let lastStatus: string | null = null;
     
     // ========== EXTRACT ORIGIN AND DESTINATION ==========
-    // CRITICAL: Must extract from COMPLETE ROUTE, not from last event location (which could be a hub)
+    // CRITICAL: Must extract from COMPLETE ROUTE header, not from intermediate hub events
     
-    // PRIORITY 0: Handle multiline format "From\nXXX," or "To\nXXX," (like ParcelsApp)
-    const fromMultilineMatch = content.match(/\bFrom\s*[\n\r]+\s*([A-Z]{3})[\s,]/i);
-    const toMultilineMatch = content.match(/\bTo\s*[\n\r]+\s*([A-Z]{3})[\s,]/i);
-    
-    if (fromMultilineMatch && isValidAirportCode(fromMultilineMatch[1])) {
-      origin = fromMultilineMatch[1].toUpperCase();
-      console.log(`[AA CARGO] ✅ Origin from multiline 'From': ${origin}`);
-    }
-    if (toMultilineMatch && isValidAirportCode(toMultilineMatch[1])) {
-      destination = toMultilineMatch[1].toUpperCase();
-      console.log(`[AA CARGO] ✅ Destination from multiline 'To': ${destination}`);
+    // PRIORITY 0 (AA CARGO SPECIFIC): "City Name CODE→City Name CODE" format
+    // Example: "Los Angeles LAX→Sao Paulo GRU" or "Miami MIA→Sao Paulo GRU"
+    const aaCityRouteMatch = content.match(/([A-Za-z\s]+)\s+([A-Z]{3})\s*→\s*([A-Za-z\s]+)\s+([A-Z]{3})/);
+    if (aaCityRouteMatch) {
+      const fromCode = aaCityRouteMatch[2].toUpperCase();
+      const toCode = aaCityRouteMatch[4].toUpperCase();
+      if (isValidAirportCode(fromCode) && isValidAirportCode(toCode)) {
+        origin = fromCode;
+        destination = toCode;
+        console.log(`[AA CARGO] ✅ Route from AA header: ${origin} → ${destination}`);
+      }
     }
     
     // PRIORITY 1: Look for explicit "Origin" and "Destination" labels (inline)
@@ -4047,27 +4371,17 @@ async function fetchAmericanAirlinesAPI(awb: string): Promise<StandardResult> {
       }
     }
     
-    // PRIORITY 2: Look for route header pattern "BOS - GRU" or "BOS → GRU" or "BOS>GRU"
+    // PRIORITY 2: Simple CODE→CODE or CODE - CODE pattern
     if (!origin || !destination) {
-      // Find all potential route patterns
-      const routePatterns = [
-        /\b([A-Z]{3})\s*[-–—→>]\s*([A-Z]{3})\b/g,  // BOS - GRU, BOS → GRU
-        /\b([A-Z]{3})\s+to\s+([A-Z]{3})\b/gi,       // BOS to GRU
-      ];
-      
-      for (const pattern of routePatterns) {
-        let match;
-        while ((match = pattern.exec(content)) !== null) {
-          const from = match[1].toUpperCase();
-          const to = match[2].toUpperCase();
-          if (isValidAirportCode(from) && isValidAirportCode(to) && from !== to) {
-            if (!origin) origin = from;
-            if (!destination) destination = to;
-            console.log(`[AA CARGO] ✅ Route from pattern: ${origin} → ${destination}`);
-            break;
-          }
+      const simpleRouteMatch = content.match(/\b([A-Z]{3})\s*[→\-–>]\s*([A-Z]{3})\b/);
+      if (simpleRouteMatch) {
+        const from = simpleRouteMatch[1].toUpperCase();
+        const to = simpleRouteMatch[2].toUpperCase();
+        if (isValidAirportCode(from) && isValidAirportCode(to) && from !== to) {
+          if (!origin) origin = from;
+          if (!destination) destination = to;
+          console.log(`[AA CARGO] ✅ Route from simple pattern: ${origin} → ${destination}`);
         }
-        if (origin && destination) break;
       }
     }
     
@@ -4145,11 +4459,8 @@ async function fetchAmericanAirlinesAPI(awb: string): Promise<StandardResult> {
     
     console.log(`[AA CARGO] 🏁 Final: Origin=${origin || 'null'}, Dest=${destination || 'null'}, Status=${lastStatus || 'null'}`);
     
-    // Check if we got no data at all
+    // Check if we got no data at all (AWB not found already checked at the beginning)
     if (!origin && !destination && !lastStatus) {
-      if (content.toLowerCase().includes('not found') || content.toLowerCase().includes('no results') || content.length < 500) {
-        return { provider, ok: false, status: 404, error: 'AWB not found', sent: { url }, raw: markdown.substring(0, 500) };
-      }
       return { provider, ok: false, status: 404, error: 'No tracking data extracted', sent: { url }, raw: markdown.substring(0, 500) };
     }
     
@@ -5596,6 +5907,407 @@ async function fetchAirEuropaHTML(awb: string): Promise<StandardResult> {
   }
 }
 
+// ============= EMIRATES SKYCARGO API (Direct API with Guest Token) =============
+
+interface EskySummary {
+  status: string | null;
+  origin: string | null;
+  destination: string | null;
+}
+
+function extractEskySummary(data: any): EskySummary | null {
+  const queue: any[] = [data];
+  let status: string | null = null;
+  let origin: string | null = null;
+  let destination: string | null = null;
+
+  while (queue.length > 0) {
+    let node = queue.shift();
+    if (node === null || node === undefined) continue;
+    if (typeof node !== 'object') continue;
+    if (Array.isArray(node)) {
+      for (const item of node) {
+        queue.push(item);
+      }
+      continue;
+    }
+
+    // Extract origin
+    if (origin === null && node.origin) {
+      const o = node.origin;
+      if (typeof o === 'object' && o.code) {
+        origin = String(o.code);
+      } else if (typeof o === 'string') {
+        origin = o;
+      }
+    }
+
+    // Extract destination
+    if (destination === null && node.destination) {
+      const d = node.destination;
+      if (typeof d === 'object' && d.code) {
+        destination = String(d.code);
+      } else if (typeof d === 'string') {
+        destination = d;
+      }
+    }
+
+    // Extract status from serviceInfo.milestone
+    if (status === null && node.serviceInfo) {
+      const svc = node.serviceInfo;
+      if (svc && svc.milestone) {
+        let miles = svc.milestone;
+        if (!Array.isArray(miles)) miles = [miles];
+        
+        let chosen: any = null;
+        for (const ms of miles) {
+          if (!ms || typeof ms !== 'object') continue;
+          chosen = ms;
+          if (ms.latestMilestone) break;
+        }
+        
+        if (chosen && chosen.code) {
+          const c = chosen.code;
+          if (typeof c === 'object' && c.code && c.code !== '') {
+            status = String(c.code);
+          } else if (typeof c === 'string' && c !== '') {
+            status = c;
+          }
+        }
+      }
+    }
+
+    // Extract status from fulfillmentInfo.serviceInfo.milestone
+    if (status === null && node.fulfillmentInfo) {
+      const ful = node.fulfillmentInfo;
+      if (ful && ful.serviceInfo) {
+        const svc = ful.serviceInfo;
+        if (svc && svc.milestone) {
+          let miles = svc.milestone;
+          if (!Array.isArray(miles)) miles = [miles];
+          
+          for (const ms of miles) {
+            if (!ms || typeof ms !== 'object' || !ms.code) continue;
+            const c = ms.code;
+            if (typeof c === 'object' && c.code && c.code !== '') {
+              status = String(c.code);
+              break;
+            } else if (typeof c === 'string' && c !== '') {
+              status = c;
+              break;
+            }
+          }
+        }
+      }
+    }
+
+    // Add child nodes to queue
+    for (const key of Object.keys(node)) {
+      const v = node[key];
+      if (v && typeof v === 'object') {
+        queue.push(v);
+      }
+    }
+
+    // Early exit if we found everything
+    if (status !== null && origin !== null && destination !== null) break;
+  }
+
+  if (status === null && origin === null && destination === null) return null;
+
+  return { status, origin, destination };
+}
+
+function extractEskyCargoReference(data: any): string | null {
+  if (data === null || data === undefined) return null;
+  
+  const queue: any[] = [data];
+  while (queue.length > 0) {
+    let node = queue.shift();
+    if (node === null || node === undefined) continue;
+    if (typeof node !== 'object') continue;
+    if (Array.isArray(node)) {
+      for (const item of node) {
+        queue.push(item);
+      }
+      continue;
+    }
+
+    if (node.cargoReference && node.cargoReference !== '') {
+      return typeof node.cargoReference === 'string' 
+        ? node.cargoReference 
+        : JSON.stringify(node.cargoReference);
+    }
+
+    for (const key of Object.keys(node)) {
+      const v = node[key];
+      if (v && typeof v === 'object') {
+        queue.push(v);
+      }
+    }
+  }
+  return null;
+}
+
+async function fetchEskyToken(tenant: string, clientId: string, clientSecret: string): Promise<{ ok: boolean; token?: string; error?: string; raw?: any }> {
+  const tokenUrl = 'https://eskycargo.emirates.com/api/uaa/guest/oauth/token?productName=offerandorder';
+  
+  const payload = new URLSearchParams({
+    tenant,
+    client_id: clientId,
+    client_secret: clientSecret,
+  });
+
+  const headers: HeadersInit = {
+    'ADRUM': 'isAjax:true',
+    'Accept': 'application/json, text/plain, */*',
+    'Accept-Encoding': 'gzip, deflate, br',
+    'Accept-Language': 'pt-BR,pt;q=0.9,en-US;q=0.8,en;q=0.7',
+    'Cache-Control': 'no-cache',
+    'Connection': 'keep-alive',
+    'Content-Type': 'application/x-www-form-urlencoded',
+    'Origin': 'https://eskycargo.emirates.com',
+    'Pragma': 'no-cache',
+    'Referer': 'https://eskycargo.emirates.com/app/offerandorder/',
+    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Safari/537.36',
+    'X-Security-Request': 'required',
+  };
+
+  try {
+    const response = await fetch(tokenUrl, {
+      method: 'POST',
+      headers,
+      body: payload.toString(),
+    });
+
+    const data = await response.json();
+    
+    if (!data || !data.access_token) {
+      return { ok: false, error: 'Token ausente na resposta', raw: data };
+    }
+
+    return { ok: true, token: data.access_token, raw: data };
+  } catch (error) {
+    return { ok: false, error: error instanceof Error ? error.message : 'Falha ao obter token' };
+  }
+}
+
+async function callEskySearchByAwb(awb: string, bearer: string, tenant: string = 'EK', clientId: string = 'mercator', clientSecret: string = ''): Promise<{ ok: boolean; cargoReference?: string | null; error?: string; raw?: any }> {
+  // Extract only digits
+  const digits = awb.replace(/\D/g, '');
+  if (digits.length !== 11) {
+    return { ok: false, error: 'AWB invalido (use 11 digitos)' };
+  }
+
+  const payload = {
+    orderFilter: {
+      airCapacity: {
+        documentNumbers: [digits],
+        includeItinerary: false,
+      },
+    },
+    pageRequest: {
+      page: 1,
+      pageSize: 10,
+    },
+  };
+
+  const endpoint = 'https://eskycargo.emirates.com/api/order/services/cargo/v1/orders/actions/search?view=summary';
+
+  const headers: HeadersInit = {
+    'Content-Type': 'application/json',
+    'Accept': 'application/json, text/plain, */*',
+    'Accept-Language': 'pt-BR,pt;q=0.9,en-US;q=0.8,en;q=0.7',
+    'Accept-Encoding': 'gzip, deflate, br',
+    'Origin': 'https://eskycargo.emirates.com',
+    'Referer': 'https://eskycargo.emirates.com/app/offerandorder/',
+    'Cache-Control': 'no-cache',
+    'Pragma': 'no-cache',
+    'ADRUM': 'isAjax:true',
+    'App-Id': '0002',
+    'X-Tenant': tenant,
+    'X-Requested-With': 'XMLHttpRequest',
+    'X-Security-Request': 'required',
+    'Authorization': `Bearer ${bearer}`,
+    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Safari/537.36',
+  };
+
+  try {
+    const response = await fetch(endpoint, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(payload),
+    });
+
+    const data = await response.json();
+    
+    if (!response.ok) {
+      return { ok: false, error: `HTTP ${response.status}`, raw: data };
+    }
+
+    const cargoReference = extractEskyCargoReference(data);
+    return { ok: true, cargoReference, raw: data };
+  } catch (error) {
+    return { ok: false, error: error instanceof Error ? error.message : 'Falha na busca' };
+  }
+}
+
+async function callEskyOrderGet(orderId: string, bearer: string, tenant: string = 'EK'): Promise<{ ok: boolean; summary?: EskySummary | null; error?: string; raw?: any }> {
+  // Ensure orderId starts with 'b'
+  let orderIdTrim = orderId.trim();
+  if (!orderIdTrim.toLowerCase().startsWith('b')) {
+    orderIdTrim = 'b' + orderIdTrim;
+  }
+
+  const endpoint = `https://eskycargo.emirates.com/api/order/services/cargo/v1/orders/${encodeURIComponent(orderIdTrim)}`;
+
+  const headers: HeadersInit = {
+    'Accept': 'application/json, text/plain, */*',
+    'Accept-Encoding': 'gzip, deflate, br',
+    'Accept-Language': 'pt-BR,pt;q=0.9,en-US;q=0.8,en;q=0.7',
+    'ADRUM': 'isAjax:true',
+    'App-Id': '0002',
+    'Cache-Control': 'no-cache',
+    'Pragma': 'no-cache',
+    'Origin': 'https://eskycargo.emirates.com',
+    'Referer': 'https://eskycargo.emirates.com/app/offerandorder/',
+    'X-Tenant': tenant,
+    'X-Requested-With': 'XMLHttpRequest',
+    'Authorization': `Bearer ${bearer}`,
+    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Safari/537.36',
+  };
+
+  try {
+    const response = await fetch(endpoint, {
+      method: 'GET',
+      headers,
+    });
+
+    const data = await response.json();
+    
+    if (!response.ok) {
+      return { ok: false, error: `HTTP ${response.status}`, raw: data };
+    }
+
+    const summary = extractEskySummary(data);
+    return { ok: true, summary, raw: data };
+  } catch (error) {
+    return { ok: false, error: error instanceof Error ? error.message : 'Falha ao consultar ordem' };
+  }
+}
+
+async function fetchEmiratesSkyCargo(awb: string): Promise<StandardResult> {
+  const provider = 'EMIRATES_SKYCARGO';
+  console.log(`[EMIRATES SKYCARGO] 🚀 Starting fetch for AWB: ${awb}`);
+
+  try {
+    const tenant = 'EK';
+    const clientId = 'mercator';
+    const clientSecret = '';
+
+    // Step 1: Get guest token
+    console.log('[EMIRATES SKYCARGO] 🔑 Fetching guest token...');
+    const tokenResp = await fetchEskyToken(tenant, clientId, clientSecret);
+    
+    if (!tokenResp.ok || !tokenResp.token) {
+      console.error('[EMIRATES SKYCARGO] ❌ Failed to get token:', tokenResp.error);
+      return {
+        provider,
+        ok: false,
+        status: 401,
+        error: `Falha ao obter token: ${tokenResp.error}`,
+        sent: { awb },
+        raw: tokenResp.raw,
+      };
+    }
+
+    const bearer = tokenResp.token;
+    console.log('[EMIRATES SKYCARGO] ✅ Token obtained successfully');
+
+    // Step 2: Search by AWB to get cargoReference
+    console.log('[EMIRATES SKYCARGO] 🔍 Searching for AWB...');
+    const searchResp = await callEskySearchByAwb(awb, bearer, tenant, clientId, clientSecret);
+    
+    if (!searchResp.ok) {
+      console.error('[EMIRATES SKYCARGO] ❌ Search failed:', searchResp.error);
+      return {
+        provider,
+        ok: false,
+        status: 404,
+        error: `AWB não encontrado: ${searchResp.error}`,
+        sent: { awb },
+        raw: searchResp.raw,
+      };
+    }
+
+    const cargoReference = searchResp.cargoReference;
+    console.log(`[EMIRATES SKYCARGO] 📦 Cargo Reference: ${cargoReference}`);
+
+    if (!cargoReference) {
+      console.error('[EMIRATES SKYCARGO] ❌ No cargoReference found');
+      return {
+        provider,
+        ok: false,
+        status: 404,
+        error: 'AWB não encontrado (cargoReference ausente)',
+        sent: { awb },
+        raw: searchResp.raw,
+      };
+    }
+
+    // Step 3: Get order details using cargoReference
+    console.log(`[EMIRATES SKYCARGO] 📋 Fetching order details for: ${cargoReference}`);
+    const orderResp = await callEskyOrderGet(cargoReference, bearer, tenant);
+
+    if (!orderResp.ok || !orderResp.summary) {
+      console.error('[EMIRATES SKYCARGO] ❌ Order fetch failed:', orderResp.error);
+      return {
+        provider,
+        ok: false,
+        status: orderResp.ok ? 404 : 500,
+        error: orderResp.error || 'Falha ao obter detalhes da ordem',
+        sent: { awb, cargoReference },
+        raw: orderResp.raw,
+      };
+    }
+
+    const summary = orderResp.summary;
+    const origin = summary.origin || 'N/A';
+    const destination = summary.destination || 'N/A';
+    const status = summary.status || 'BKD';
+
+    console.log(`[EMIRATES SKYCARGO] ✅ Final: Origin=${origin}, Dest=${destination}, Status=${status}`);
+
+    return {
+      provider,
+      ok: true,
+      status: 200,
+      error: null,
+      sent: { awb, cargoReference },
+      raw: { token: 'redacted', search: searchResp.raw, order: orderResp.raw },
+      summary: {
+        origin,
+        destination,
+        lastStatus: {
+          code: status,
+          description: status,
+          timestamp: new Date().toISOString(),
+        },
+      },
+    };
+
+  } catch (error) {
+    console.error('[EMIRATES SKYCARGO] ❌ Error:', error);
+    return {
+      provider,
+      ok: false,
+      status: 500,
+      error: error instanceof Error ? error.message : 'Unknown error',
+      sent: { awb },
+    };
+  }
+}
+
 // ============= ORCHESTRATION =============
 
 function shouldUseFallback(result: StandardResult): boolean {
@@ -5628,6 +6340,7 @@ async function trackAWB(awb: string, airlineCode: string): Promise<TrackingResul
     '047': 'TAP Cargo',
     '057': 'Air France Cargo',
     '139': 'Aeromexico Cargo',
+    '176': 'Emirates SkyCargo',
     '235': 'Turkish Airlines',
     '369': 'Atlas Air',
     '020': 'Lufthansa Cargo',
@@ -5774,8 +6487,8 @@ async function trackAWB(awb: string, airlineCode: string): Promise<TrackingResul
     case '881': // IATA (Condor Flugdienst GmbH)
       apiResult = await fetchCondorPathfinderAPI(formattedAwb);
       break;
-    case '118': // TAAG Angola Airlines
-      apiResult = await fetchTAAGFreightAeroHTML(formattedAwb);
+    case '118': // TAAG Angola Airlines via ParcelsApp
+      apiResult = await fetchParcelsApp118(formattedAwb);
       break;
     case '996': // Air Europa Cargo
       apiResult = await fetchAirEuropaHTML(formattedAwb);
@@ -5788,6 +6501,9 @@ async function trackAWB(awb: string, airlineCode: string): Promise<TrackingResul
       break;
     case '235': // Turkish Airlines via ParcelsApp
       apiResult = await fetchParcelsApp235(formattedAwb);
+      break;
+    case '176': // Emirates SkyCargo
+      apiResult = await fetchEmiratesSkyCargo(formattedAwb);
       break;
     case '074': // AF/KL
       console.log('[AFKL] Using AI agent scraping method');
@@ -5959,97 +6675,6 @@ async function trackAWB(awb: string, airlineCode: string): Promise<TrackingResul
   };
 }
 
-// ============= HISTORY STORAGE =============
-
-async function saveEventsToHistory(awb: string, events: TrackingEvent[], destination: string): Promise<void> {
-  try {
-    const host = Deno.env.get('MARIADB_HOST');
-    const port = parseInt(Deno.env.get('MARIADB_PORT') || '3306');
-    const database = Deno.env.get('MARIADB_DATABASE');
-    const dbUser = Deno.env.get('MARIADB_USER');
-    const dbPassword = Deno.env.get('MARIADB_PASSWORD');
-
-    if (!host || !database || !dbUser || !dbPassword) {
-      console.error('[HISTORY] Missing database credentials');
-      return;
-    }
-
-    // Dynamic import of mysql client
-    const { Client } = await import("https://deno.land/x/mysql@v2.12.1/mod.ts");
-    
-    const client = await new Client().connect({
-      hostname: host,
-      port: port,
-      db: database,
-      username: dbUser,
-      password: dbPassword,
-      charset: "utf8mb4",
-    });
-
-    // Create table if not exists
-    await client.execute(`
-      CREATE TABLE IF NOT EXISTS ${database}.t_cct_eventos_historico (
-        id INT AUTO_INCREMENT PRIMARY KEY,
-        awb VARCHAR(20) NOT NULL,
-        codigo_evento VARCHAR(50) NOT NULL,
-        descricao_evento TEXT,
-        data_hora_evento DATETIME NOT NULL,
-        fonte VARCHAR(20) DEFAULT 'TRACKING',
-        aeroporto VARCHAR(10),
-        nivel_confianca VARCHAR(20) DEFAULT 'PRIMARIA',
-        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-        INDEX idx_awb (awb),
-        INDEX idx_data_evento (data_hora_evento),
-        UNIQUE KEY unique_event (awb, codigo_evento, data_hora_evento)
-      )
-    `);
-
-    // Insert each event into history
-    for (const event of events) {
-      if (!event.status || event.status === 'N/A') continue;
-
-      // Parse event date
-      let eventDate: string;
-      try {
-        const d = new Date(event.date);
-        if (!isNaN(d.getTime())) {
-          eventDate = d.toISOString().slice(0, 19).replace('T', ' ');
-        } else {
-          eventDate = new Date().toISOString().slice(0, 19).replace('T', ' ');
-        }
-      } catch {
-        eventDate = new Date().toISOString().slice(0, 19).replace('T', ' ');
-      }
-
-      // Extract airport code from location if available
-      const airport = event.location?.match(/^[A-Z]{3}$/)?.[0] || destination || null;
-
-      try {
-        await client.execute(`
-          INSERT IGNORE INTO ${database}.t_cct_eventos_historico 
-          (awb, codigo_evento, descricao_evento, data_hora_evento, fonte, aeroporto, nivel_confianca)
-          VALUES (TRIM(?), TRIM(?), ?, ?, 'TRACKING', ?, 'PRIMARIA')
-        `, [
-          awb,
-          event.status.substring(0, 50),
-          event.description || event.status,
-          eventDate,
-          airport
-        ]);
-      } catch (insertErr) {
-        // Ignore duplicate key errors
-        console.log(`[HISTORY] Event may already exist: ${event.status}`);
-      }
-    }
-
-    await client.close();
-    console.log(`[HISTORY] Saved ${events.length} events for AWB ${awb}`);
-  } catch (error) {
-    console.error('[HISTORY] Error saving events:', error);
-    // Don't throw - this is optional functionality
-  }
-}
-
 // ============= MAIN HANDLER =============
 
 serve(async (req) => {
@@ -6073,14 +6698,6 @@ serve(async (req) => {
     console.log(`[MAIN] Tracking AWB: ${awb} for airline: ${airlineCode}`);
 
     const trackingData = await trackAWB(awb, airlineCode);
-
-    // Save events to history table (async, don't wait)
-    if (trackingData.events && trackingData.events.length > 0) {
-      // Don't await - let it run in background
-      saveEventsToHistory(awb, trackingData.events, trackingData.destination).catch(err => {
-        console.error('[MAIN] Background history save failed:', err);
-      });
-    }
 
     return new Response(
       JSON.stringify({ 
