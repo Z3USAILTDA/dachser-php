@@ -353,6 +353,7 @@ const Index = () => {
   const [showCompletionPopup, setShowCompletionPopup] = useState(false);
   const [cardFilter, setCardFilter] = useState<CardFilterType>("all");
   const [showUnregisteredModal, setShowUnregisteredModal] = useState(false);
+  const [showMonitoredModal, setShowMonitoredModal] = useState(false);
   const isPausedRef = useRef(false);
   const shouldSendEmailsRef = useRef(false); // Only send emails when user explicitly clicks button
   const emailEnableTimestampRef = useRef<number>(0); // Track when emails were enabled
@@ -1942,6 +1943,15 @@ const Index = () => {
                   );
                 })()}
 
+                {/* Botão para ver companhias monitoradas */}
+                <button
+                  onClick={() => setShowMonitoredModal(true)}
+                  className="h-8 px-4 rounded-full bg-emerald-600/80 text-white text-[0.75rem] font-medium flex items-center gap-1.5 hover:bg-emerald-500/80 transition border border-emerald-500/50"
+                >
+                  <Plane className="w-3.5 h-3.5" />
+                  CIAs Monitoradas (24)
+                </button>
+
                 <button
                   onClick={handleRefresh}
                   className="h-8 px-4 rounded-full bg-[#ffc800] text-[#000] text-[0.75rem] font-medium flex items-center gap-1.5 hover:bg-[#ffdc50] transition shadow-[0_0_20px_rgba(255,200,0,.3)]"
@@ -2338,6 +2348,94 @@ const Index = () => {
           </div>
           <div className="mt-4 pt-4 border-t border-[rgba(255,255,255,.08)] text-[0.75rem] text-[#666]">
             * Para adicionar suporte a uma companhia, entre em contato com a equipe de desenvolvimento
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Modal de Companhias Monitoradas */}
+      <Dialog open={showMonitoredModal} onOpenChange={setShowMonitoredModal}>
+        <DialogContent className="max-w-2xl max-h-[80vh] overflow-hidden bg-[rgba(5,6,18,.98)] border border-[rgba(255,255,255,.12)]">
+          <DialogHeader>
+            <DialogTitle className="text-[#f5f5f5] flex items-center gap-2">
+              <Plane className="w-5 h-5 text-emerald-400" />
+              Companhias Aéreas Monitoradas
+            </DialogTitle>
+            <DialogDescription className="text-[#aaaaaa]">
+              24 companhias aéreas com integração ativa no sistema de rastreamento
+            </DialogDescription>
+          </DialogHeader>
+          <div className="overflow-y-auto max-h-[50vh] mt-4">
+            <table className="w-full border-collapse">
+              <thead className="sticky top-0 bg-[rgba(0,0,0,.8)]">
+                <tr className="border-b border-[rgba(255,255,255,.08)]">
+                  <th className="px-3 py-2 text-left text-[#aaaaaa] uppercase text-[0.68rem] tracking-[0.1em] font-medium">Código</th>
+                  <th className="px-3 py-2 text-left text-[#aaaaaa] uppercase text-[0.68rem] tracking-[0.1em] font-medium">Companhia Aérea</th>
+                  <th className="px-3 py-2 text-left text-[#aaaaaa] uppercase text-[0.68rem] tracking-[0.1em] font-medium">Método</th>
+                </tr>
+              </thead>
+              <tbody>
+                {[
+                  { code: "001", name: "American Airlines Cargo", method: "API Direta" },
+                  { code: "006", name: "Delta Cargo", method: "API Direta" },
+                  { code: "016", name: "United Cargo", method: "AI Agent (Firecrawl)" },
+                  { code: "020", name: "Lufthansa Cargo", method: "API Direta" },
+                  { code: "045", name: "LATAM Cargo", method: "ParcelsApp" },
+                  { code: "047", name: "TAP Air Portugal Cargo", method: "AI Agent (Firecrawl)" },
+                  { code: "055", name: "ITA Airways Cargo", method: "AI Agent (Firecrawl)" },
+                  { code: "057", name: "Air France Cargo", method: "AI Agent (Firecrawl)" },
+                  { code: "074", name: "KLM Cargo", method: "AI Agent (Firecrawl)" },
+                  { code: "075", name: "IAG Cargo (British Airways)", method: "API Direta" },
+                  { code: "118", name: "TAAG Angola Airlines", method: "AI Agent (Firecrawl)" },
+                  { code: "139", name: "Aeromexico Cargo", method: "AI Agent (Firecrawl)" },
+                  { code: "157", name: "Qatar Airways Cargo", method: "AI Agent (Firecrawl)" },
+                  { code: "172", name: "Cargolux", method: "AI Agent (Firecrawl)" },
+                  { code: "176", name: "Emirates SkyCargo", method: "AI Agent (Firecrawl)" },
+                  { code: "235", name: "Turkish Airlines Cargo", method: "AI Agent (Firecrawl)" },
+                  { code: "369", name: "Atlas Air", method: "API Direta" },
+                  { code: "549", name: "LATAM Cargo (Alt)", method: "ParcelsApp" },
+                  { code: "577", name: "Azul Cargo", method: "API Direta" },
+                  { code: "615", name: "DHL Aviation (EAT Leipzig)", method: "AI Agent (Firecrawl)" },
+                  { code: "695", name: "Ethiopian Airlines Cargo", method: "AI Agent (Firecrawl)" },
+                  { code: "724", name: "Swiss WorldCargo", method: "AI Agent (Firecrawl)" },
+                  { code: "729", name: "Tampa Cargo (Avianca)", method: "AI Agent (Firecrawl)" },
+                  { code: "996", name: "Air Europa Cargo", method: "AI Agent (Firecrawl)" },
+                ].map((airline) => (
+                  <tr key={airline.code} className="border-b border-[rgba(255,255,255,.05)] hover:bg-[rgba(255,255,255,.03)]">
+                    <td className="px-3 py-2.5">
+                      <span className="font-mono text-emerald-400 text-sm">{airline.code}</span>
+                    </td>
+                    <td className="px-3 py-2.5 text-[#f5f5f5] text-sm">{airline.name}</td>
+                    <td className="px-3 py-2.5">
+                      <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[0.7rem] font-medium ${
+                        airline.method === "API Direta" 
+                          ? "bg-emerald-500/20 text-emerald-400" 
+                          : airline.method === "ParcelsApp"
+                          ? "bg-blue-500/20 text-blue-400"
+                          : "bg-amber-500/20 text-amber-400"
+                      }`}>
+                        {airline.method}
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <div className="mt-4 pt-4 border-t border-[rgba(255,255,255,.08)] text-[0.75rem] text-[#666]">
+            <div className="flex gap-4">
+              <span className="flex items-center gap-1.5">
+                <span className="w-2 h-2 rounded-full bg-emerald-400"></span>
+                API Direta
+              </span>
+              <span className="flex items-center gap-1.5">
+                <span className="w-2 h-2 rounded-full bg-amber-400"></span>
+                AI Agent (Firecrawl)
+              </span>
+              <span className="flex items-center gap-1.5">
+                <span className="w-2 h-2 rounded-full bg-blue-400"></span>
+                ParcelsApp
+              </span>
+            </div>
           </div>
         </DialogContent>
       </Dialog>
