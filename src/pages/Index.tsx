@@ -1926,7 +1926,7 @@ const Index = () => {
               <div className="flex items-center gap-2">
                 {/* Botão para ver companhias pendentes de cadastro */}
                 {(() => {
-                  const pendingAirlineCodes = ["014", "023", "605", "865"]; // CIAs realmente não cadastradas
+                  const pendingAirlineCodes = ["014", "023", "605", "865", "992"]; // CIAs realmente não cadastradas
                   const pendingAwbs = statusAereoData.filter(awb => {
                     const code = (awb.airline_code || "").replace(/^0+/, "").padStart(3, "0");
                     return pendingAirlineCodes.includes(code);
@@ -2293,7 +2293,8 @@ const Index = () => {
                 "014": "Air Canada Cargo",
                 "023": "Andes Lineas Aereas",
                 "605": "Copa Airlines Cargo",
-                "865": "Korean Air Cargo"
+                "865": "Korean Air Cargo",
+                "992": "DHL Aero Expreso"
               };
               const pendingAirlineCodes = Object.keys(pendingAirlineNames);
               
