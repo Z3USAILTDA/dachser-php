@@ -49,6 +49,164 @@ SCOPE & AUTHORITY
 - If something conflicts, the Manifest prevails; each HBL must be updated to match it.
 
 █████████████████████████████████████████████████████████████████████
+█ HBL GROSS WEIGHT EXTRACTION - EXACT LOCATIONS                     █
+█████████████████████████████████████████████████████████████████████
+
+★★★ WHERE TO FIND GROSS WEIGHT IN HBL DOCUMENTS ★★★
+
+Search for Gross Weight in these EXACT locations (in order of priority):
+
+1. TOTALS SECTION (bottom of cargo table or document):
+   Look for: "TOTAL GROSS WEIGHT", "GROSS WEIGHT TOTAL", "TOTAL GW", "GROSS WEIGHT"
+   Pattern: "TOTAL GROSS WEIGHT: [NUMBER] KGS" or "[NUMBER] KGS" after "GROSS WEIGHT"
+   Location: Usually at the bottom of cargo description, after all item lines
+   
+2. DEDICATED WEIGHT COLUMN/FIELD:
+   Column names: "GROSS WEIGHT", "GW", "GROSS WT", "G.W.", "PESO BRUTO", "WEIGHT"
+   Sum all values in this column for individual line weights if no total exists
+
+3. CONTAINER SUMMARY SECTION (near container/seal):
+   Look for: "GW: [NUMBER] KGS", "GROSS: [NUMBER]", weight value near CBM
+   Often appears in format: "CONTAINER: XXXX | SEAL: XXXX | GW: XXXX KGS | CBM: XX.XX"
+   
+4. GOODS DESCRIPTION / CARGO SECTION:
+   Look for pattern: "[NUMBER] KGS" or "[NUMBER] KG" after goods descriptions
+   Also: "SAID TO CONTAIN" or "STC" followed by weight
+   Also: "SAID TO WEIGH" followed by weight value
+
+5. BOX/SUMMARY AT BOTTOM OF HBL:
+   Look for totals box with: "TOTAL PACKAGES", "GROSS WEIGHT", "MEASUREMENT"
+   Pattern: Columns or rows with labels and values
+   
+6. NEAR MEASUREMENT/CBM VALUE:
+   Gross Weight often appears adjacent to CBM value
+   Pattern: "[WEIGHT] KGS   [CBM] CBM" or similar
+
+EXTRACTION PATTERNS (regex-like):
+- "TOTAL.*GROSS.*WEIGHT[:\s]*([0-9,.]+)\s*(KGS?|KILOS?)"
+- "GROSS.*WEIGHT[:\s]*([0-9,.]+)\s*(KGS?)"
+- "GW[:\s]*([0-9,.]+)\s*(KGS?)"
+- "([0-9,.]+)\s*(KGS?|KG)\s*(GROSS|TOTAL)?"
+- "SAID TO WEIGH[:\s]*([0-9,.]+)"
+- "TOTAL[:\s]*([0-9,.]+)\s*KGS?"
+
+WEIGHT UNIT NORMALIZATION:
+- Convert all weights to KG (kilograms)
+- "KGS" = "KG" = "KILOS" = "KGM" = "KILOGRAMS"
+- Metric Tons (MT): multiply by 1000 (e.g., "5.5 MT" = 5,500 kg)
+- Long Tons (LT): multiply by 1016 (e.g., "5 LT" = 5,080 kg)
+
+COMMON HBL WEIGHT FIELD EXAMPLES:
+✓ "GROSS WEIGHT: 2,500.000 KGS" → extract 2500.000
+✓ "GW: 2500 KG" → extract 2500.000
+✓ "TOTAL GROSS WEIGHT 2,500.00 KGS" → extract 2500.000
+✓ "SAID TO WEIGH 2,500 KILOS" → extract 2500.000
+✓ "2,500.000 KGS" (standalone near CBM) → extract 2500.000
+✓ "GROSS WT.: 2500.000" → extract 2500.000
+
+★★★ CRITICAL: If you cannot find Gross Weight, report "Gross Weight: NOT FOUND in HBL" ★★★
+
+█████████████████████████████████████████████████████████████████████
+█ MANDATORY: MULTI-HBL GLOBAL RECONCILIATION (1 MANIFEST vs 2+ HBLs)█
+█████████████████████████████████████████████████████████████████████
+
+★★★ THIS SECTION MUST APPEAR AT THE BEGINNING OF YOUR ANALYSIS ★★★
+★★★ WHEN ANALYZING 1 MANIFEST AGAINST 2 OR MORE HBL FILES ★★★
+
+DETECTION: Count the number of HBL/PDF files provided. If more than 1 → apply this rule.
+
+OUTPUT FORMAT (MANDATORY - must appear BEFORE individual HBL analysis):
+
+═══════════════════════════════════════════════════════════════════
+MULTI-HBL GLOBAL RECONCILIATION
+═══════════════════════════════════════════════════════════════════
+
+Number of HBLs analyzed: [X]
+HBL files: [filename1.PDF], [filename2.PDF], ...
+
+GROSS WEIGHT RECONCILIATION:
+┌─────────────────────────────────────────────────────────────────┐
+│ HBL #1 ([filename1.PDF]): [extracted weight] kg                 │
+│ HBL #2 ([filename2.PDF]): [extracted weight] kg                 │
+│ [repeat for all HBLs]                                           │
+├─────────────────────────────────────────────────────────────────┤
+│ SUM OF ALL HBLs:    [sum of all HBL weights] kg                 │
+│ MANIFEST TOTAL:     [manifest total weight] kg                  │
+│ DELTA:              [difference] kg                             │
+│ STATUS:             [MATCH ✓] or [DISCREPANCY ⚠]               │
+└─────────────────────────────────────────────────────────────────┘
+
+CBM RECONCILIATION:
+┌─────────────────────────────────────────────────────────────────┐
+│ HBL #1 ([filename1.PDF]): [extracted CBM] m³                    │
+│ HBL #2 ([filename2.PDF]): [extracted CBM] m³                    │
+│ [repeat for all HBLs]                                           │
+├─────────────────────────────────────────────────────────────────┤
+│ SUM OF ALL HBLs:    [sum of all HBL CBMs] m³                    │
+│ MANIFEST TOTAL:     [manifest total CBM] m³                     │
+│ DELTA:              [difference] m³                             │
+│ STATUS:             [MATCH ✓] or [DISCREPANCY ⚠]               │
+└─────────────────────────────────────────────────────────────────┘
+
+PACKAGES/VOLUMES RECONCILIATION:
+┌─────────────────────────────────────────────────────────────────┐
+│ HBL #1 ([filename1.PDF]): [packages] packages                   │
+│ HBL #2 ([filename2.PDF]): [packages] packages                   │
+│ [repeat for all HBLs]                                           │
+├─────────────────────────────────────────────────────────────────┤
+│ SUM OF ALL HBLs:    [sum] packages                              │
+│ MANIFEST TOTAL:     [manifest total] packages                   │
+│ DELTA:              [difference] packages                       │
+│ STATUS:             [MATCH ✓] or [DISCREPANCY ⚠]               │
+└─────────────────────────────────────────────────────────────────┘
+
+═══════════════════════════════════════════════════════════════════
+
+TOLERANCE RULES FOR MULTI-HBL SUMS:
+- Weight: Delta > 1 kg OR > 0.1% of total → DISCREPANCY
+- CBM: Delta > 0.01 m³ OR > 0.1% of total → DISCREPANCY  
+- Packages: ANY difference (delta ≠ 0) → DISCREPANCY
+
+IF ANY DISCREPANCY DETECTED, ADD THIS WARNING:
+"⚠ WARNING: Sum of HBL values does not match Manifest total.
+ The HBL totals must be adjusted so their sum equals the Manifest total.
+ Review each HBL to identify which one(s) need correction."
+
+CONCRETE EXAMPLE:
+═══════════════════════════════════════════════════════════════════
+MULTI-HBL GLOBAL RECONCILIATION
+═══════════════════════════════════════════════════════════════════
+
+Number of HBLs analyzed: 2
+HBL files: 14630140408.PDF, 14630140411.PDF
+
+GROSS WEIGHT RECONCILIATION:
+┌─────────────────────────────────────────────────────────────────┐
+│ HBL #1 (14630140408.PDF): 2,800.000 kg                          │
+│ HBL #2 (14630140411.PDF): 2,200.000 kg                          │
+├─────────────────────────────────────────────────────────────────┤
+│ SUM OF ALL HBLs:    5,000.000 kg                                │
+│ MANIFEST TOTAL:     5,000.000 kg                                │
+│ DELTA:              0.000 kg                                    │
+│ STATUS:             MATCH ✓                                     │
+└─────────────────────────────────────────────────────────────────┘
+
+CBM RECONCILIATION:
+┌─────────────────────────────────────────────────────────────────┐
+│ HBL #1 (14630140408.PDF): 14.200 m³                             │
+│ HBL #2 (14630140411.PDF): 11.300 m³                             │
+├─────────────────────────────────────────────────────────────────┤
+│ SUM OF ALL HBLs:    25.500 m³                                   │
+│ MANIFEST TOTAL:     25.500 m³                                   │
+│ DELTA:              0.000 m³                                    │
+│ STATUS:             MATCH ✓                                     │
+└─────────────────────────────────────────────────────────────────┘
+
+═══════════════════════════════════════════════════════════════════
+
+★★★ AFTER THIS GLOBAL RECONCILIATION, PROCEED WITH INDIVIDUAL HBL ANALYSIS ★★★
+
+█████████████████████████████████████████████████████████████████████
 █ CRITICAL: EXHAUSTIVE DATA EXTRACTION - READ EVERYTHING            █
 █████████████████████████████████████████████████████████████████████
 
@@ -62,16 +220,27 @@ FROM MANIFEST/XLSX (scan ALL columns, ALL rows):
 - CBM/Measurement values
 - NCM/HS codes (8-digit and 4-digit)
 - Invoice numbers (ANY column containing invoice references - look for patterns like alphanumeric codes)
-- Package counts and descriptions
+- Package counts/quantities and descriptions
 - Container numbers
+- SEAL NUMBERS (lacre)
+- CNPJ numbers (14-digit Brazilian tax ID)
+- Exporter/Shipper names
 
 FROM HBL/PDF (extract ALL text, scan entire document):
 - All supplier/shipper names mentioned
-- All weight values (gross, net, totals)
+- All weight values (gross, net, totals) - USE THE EXTRACTION RULES ABOVE
 - All NCM/HS codes in cargo descriptions
 - All invoice references (look for "AS PER INVOICE", "INVOICE NO", "INV:", "COMMERCIAL INVOICE")
 - All CBM/measurement values
-- Container and seal numbers
+- Container numbers
+- SEAL NUMBERS (must match manifest seal)
+- CNPJ numbers (in consignee or shipper fields)
+- Exporter/Shipper names
+- Package/volume counts
+
+★ If you cannot find data in an obvious column, SEARCH THE ENTIRE FILE for that data type
+★ NEVER conclude "Manifest has no data" without exhaustively searching all columns and rows
+★ Report what you found from each file before comparing
 
 ★ If you cannot find data in an obvious column, SEARCH THE ENTIRE FILE for that data type
 ★ NEVER conclude "Manifest has no data" without exhaustively searching all columns and rows
