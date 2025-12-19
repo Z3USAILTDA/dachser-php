@@ -150,7 +150,7 @@ function mapRowToProcessoCCT(row: any): ProcessoCCT {
 
 /**
  * Main hook to fetch CCT processes from MariaDB via mariadb-proxy
- * Source: t_dados_master (AIR IMPORT) LEFT JOIN t_status_aereo
+ * Source: t_master_dados (AIR IMPORT) LEFT JOIN t_status_aereo
  */
 export function useProcessosCCT() {
   return useQuery({

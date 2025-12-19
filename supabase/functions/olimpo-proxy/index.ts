@@ -565,7 +565,7 @@ serve(async (req) => {
             dm.cliente AS cliente,
             dm.tipo_processo AS tipo
           FROM dados_dachser.t_awb_voo af
-          LEFT JOIN dados_dachser.t_dados_master dm ON dm.mawb = af.awb
+          LEFT JOIN dados_dachser.t_master_dados dm ON dm.mawb = af.awb
           WHERE af.num_voo IS NOT NULL
             AND TRIM(af.num_voo) <> ''
             AND TRIM(af.num_voo) <> '0'

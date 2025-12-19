@@ -92,7 +92,7 @@ serve(async (req) => {
       // Build query - apply limit only if specified
       const baseQuery = `SELECT id, cliente, mawb, hawb, emails_cliente, nome_analista, email_analista, 
                 active, tipo_processo, container, previsao_faturamento, data_finalizacao, num_voo, data_insert
-         FROM t_dados_master 
+         FROM t_master_dados 
          WHERE active = 1 AND tipo_processo = 'AIR IMPORT'
          ORDER BY id DESC`;
       
@@ -229,7 +229,7 @@ serve(async (req) => {
       // Preview data without syncing
       const mariaData = await mariaClient.query(
         `SELECT id, cliente, mawb, hawb, nome_analista, email_analista, tipo_processo
-         FROM t_dados_master 
+         FROM t_master_dados 
          WHERE active = 1 AND tipo_processo = 'AIR IMPORT'
          ORDER BY id DESC
          LIMIT 10`
@@ -262,7 +262,7 @@ serve(async (req) => {
     } else if (action === 'count') {
       // Count records available for sync
       const countResult = await mariaClient.query(
-        `SELECT COUNT(*) as total FROM t_dados_master WHERE active = 1 AND tipo_processo = 'AIR IMPORT'`
+        `SELECT COUNT(*) as total FROM t_master_dados WHERE active = 1 AND tipo_processo = 'AIR IMPORT'`
       ) as Array<{ total: number }>;
 
       const { count: supabaseCount } = await supabase
@@ -283,7 +283,7 @@ serve(async (req) => {
       // Find duplicate HAWBs in MariaDB
       const duplicates = await mariaClient.query(
         `SELECT hawb, COUNT(*) as cnt, GROUP_CONCAT(DISTINCT cliente SEPARATOR ' | ') as clientes
-         FROM t_dados_master 
+         FROM t_master_dados 
          WHERE active = 1 AND tipo_processo = 'AIR IMPORT' AND hawb IS NOT NULL AND hawb != ''
          GROUP BY hawb 
          HAVING COUNT(*) > 1 

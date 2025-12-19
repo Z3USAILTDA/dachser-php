@@ -39,10 +39,10 @@ Deno.serve(async (req) => {
     );
     console.log(`Queue sample: ${queueSample.length} records`);
 
-    // 3. Get count of unprocessed AWBs (in t_dados_master but not in t_status_aereo)
+    // 3. Get count of unprocessed AWBs (in t_master_dados but not in t_status_aereo)
     const unprocessedCountQuery = `
       SELECT COUNT(DISTINCT dm.mawb) as count
-      FROM t_dados_master dm
+      FROM t_master_dados dm
       LEFT JOIN t_status_aereo sa ON dm.mawb = sa.awb
       WHERE sa.awb IS NULL
         AND dm.tipo_processo IN ('AIR IMPORT', 'AIR EXPORT')
@@ -51,10 +51,10 @@ Deno.serve(async (req) => {
     const unprocessedCount = unprocessedCountResult[0]?.count || 0;
     console.log(`Unprocessed count (anti-join): ${unprocessedCount}`);
 
-    // 4. Get sample of unprocessed AWBs from t_dados_master
+    // 4. Get sample of unprocessed AWBs from t_master_dados
     const unprocessedSampleQuery = `
       SELECT dm.mawb, MIN(dm.hawb) as hawb, MIN(dm.cliente) as cliente, MIN(dm.nome_analista) as nome_analista
-      FROM t_dados_master dm
+      FROM t_master_dados dm
       LEFT JOIN t_status_aereo sa ON dm.mawb = sa.awb
       WHERE sa.awb IS NULL
         AND dm.tipo_processo IN ('AIR IMPORT', 'AIR EXPORT')

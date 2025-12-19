@@ -2312,10 +2312,10 @@ serve(async (req) => {
 
       // ==================== CCT (Control Tower) ====================
       case 'get_cct_shipments': {
-        console.log('Fetching CCT shipments from t_dados_master (AIR IMPORT)...');
+        console.log('Fetching CCT shipments from t_master_dados (AIR IMPORT)...');
         
-        // Query from t_dados_master as primary source, LEFT JOIN t_status_aereo for latest status
-        // Note: t_dados_master only has: id, cliente, mawb, hawb, emails_cliente, nome_analista, email_analista, active, tipo_processo, previsao_faturamento, data_finalizacao
+        // Query from t_master_dados as primary source, LEFT JOIN t_status_aereo for latest status
+        // Note: t_master_dados only has: id, cliente, mawb, hawb, emails_cliente, nome_analista, email_analista, active, tipo_processo, previsao_faturamento, data_finalizacao
         const shipments = await client.query(`
           SELECT 
             m.id,
@@ -2333,7 +2333,7 @@ serve(async (req) => {
             TRIM(s.origem) as aeroporto_origem,
             TRIM(s.destino) as aeroporto_destino,
             s.data_atraso
-          FROM ${database}.t_dados_master m
+          FROM ${database}.t_master_dados m
           LEFT JOIN ${database}.t_status_aereo s ON TRIM(m.mawb) = TRIM(s.awb)
           WHERE m.active = 1 
           AND m.tipo_processo = 'AIR IMPORT'
@@ -2408,7 +2408,7 @@ serve(async (req) => {
           };
         });
 
-        console.log(`CCT: Found ${processedShipments.length} active AIR IMPORT shipments from t_dados_master`);
+        console.log(`CCT: Found ${processedShipments.length} active AIR IMPORT shipments from t_master_dados`);
         result = { success: true, data: processedShipments };
         break;
       }
@@ -2446,7 +2446,7 @@ serve(async (req) => {
             m.peso_bruto as peso_declarado,
             m.cnpj as cnpj_consignatario
           FROM ${database}.t_status_aereo s
-          LEFT JOIN ${database}.t_dados_master m ON TRIM(s.awb) = TRIM(m.mawb)
+          LEFT JOIN ${database}.t_master_dados m ON TRIM(s.awb) = TRIM(m.mawb)
           WHERE ${whereClause}
           LIMIT 1
         `);
@@ -2685,12 +2685,12 @@ serve(async (req) => {
 
       // ==================== SEA CONTAINER COUNT ====================
       case 'get_sea_container_count': {
-        console.log('Fetching sea container count from t_dados_master...');
+        console.log('Fetching sea container count from t_master_dados...');
         
-        // Count distinct containers from t_dados_master with SEA imports
+        // Count distinct containers from t_master_dados with SEA imports
         const countResult = await client.query(`
           SELECT COUNT(DISTINCT container) as count 
-          FROM ${database}.t_dados_master 
+          FROM ${database}.t_master_dados 
           WHERE container IS NOT NULL 
             AND container != '' 
             AND TRIM(container) != ''

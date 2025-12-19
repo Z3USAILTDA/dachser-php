@@ -26,11 +26,11 @@ Deno.serve(async (req) => {
 
     console.log('Connected to MariaDB');
 
-    // Build query to get AWBs from t_dados_master that don't exist in t_status_aereo
+    // Build query to get AWBs from t_master_dados that don't exist in t_status_aereo
     // Using LEFT JOIN to find unprocessed AWBs
     // Apply TRIM to AWB data to prevent whitespace issues
     let query = `SELECT MAX(m.cliente) as cliente, TRIM(m.mawb) as mawb, MAX(TRIM(m.hawb)) as hawb, MAX(TRIM(m.nome_analista)) as nome_analista, MAX(TRIM(m.email_analista)) as email_analista, MAX(TRIM(m.tipo_servico)) as tipo_servico 
-                 FROM t_dados_master m
+                 FROM t_master_dados m
                  LEFT JOIN t_status_aereo s ON TRIM(m.mawb) = TRIM(s.awb)
                  WHERE m.tipo_processo IN ('AIR IMPORT', 'AIR EXPORT')
                  AND m.mawb IS NOT NULL 
@@ -44,9 +44,9 @@ Deno.serve(async (req) => {
 
     const result = await client.query(query, params);
 
-    // Get the last AWB from t_dados_master for comparison (ordered ASC)
+    // Get the last AWB from t_master_dados for comparison (ordered ASC)
     const lastMasterAwbResult = await client.query(
-      `SELECT TRIM(mawb) as mawb FROM t_dados_master WHERE tipo_processo IN ('AIR IMPORT', 'AIR EXPORT') AND mawb IS NOT NULL AND TRIM(mawb) != '' ORDER BY TRIM(mawb) DESC LIMIT 1`
+      `SELECT TRIM(mawb) as mawb FROM t_master_dados WHERE tipo_processo IN ('AIR IMPORT', 'AIR EXPORT') AND mawb IS NOT NULL AND TRIM(mawb) != '' ORDER BY TRIM(mawb) DESC LIMIT 1`
     );
     
     const lastMasterAwb = lastMasterAwbResult.length > 0 ? (lastMasterAwbResult[0].mawb || '').trim() : null;

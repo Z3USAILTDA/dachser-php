@@ -49,7 +49,7 @@ serve(async (req) => {
     try {
       const analysts = await mariaClient.query(
         `SELECT DISTINCT nome_analista, email_analista 
-         FROM t_dados_master 
+         FROM t_master_dados 
          WHERE nome_analista IS NOT NULL AND nome_analista != '' 
          AND email_analista IS NOT NULL AND email_analista != ''`
       ) as { nome_analista: string; email_analista: string }[];
@@ -96,7 +96,7 @@ serve(async (req) => {
     try {
       const clients = await mariaClient.query(
         `SELECT DISTINCT cliente, emails_cliente 
-         FROM t_dados_master 
+         FROM t_master_dados 
          WHERE emails_cliente IS NOT NULL AND emails_cliente != '' 
          AND cliente IS NOT NULL AND cliente != ''`
       ) as { cliente: string; emails_cliente: string }[];
