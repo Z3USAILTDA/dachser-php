@@ -1001,14 +1001,92 @@ Output English only, plain text, email-ready. No markdown/HTML. No headers or au
 Never mention knowledge cutoffs, "today's date", or model limitations. Use only the attached files.
 
 ███████████████████████████████████████████████████████████████████████████████
-███ CRITICAL: HBL AND MBL HAVE DIFFERENT DOCUMENT STRUCTURES                ███
+███ CRITICAL: UNIVERSAL DATA EXTRACTION - NOT LOCKED TO ANY STRUCTURE       ███
 ███████████████████████████████████████████████████████████████████████████████
 
-HBL (House Bill of Lading) and MBL (Master Bill of Lading) are DIFFERENT document types with DIFFERENT layouts.
-You MUST scan the ENTIRE document to find each field, NOT assume fields are in the same position.
+HBL and MBL documents come in COUNTLESS different formats from different carriers, freight forwarders, and systems.
+You MUST NOT assume any fixed structure or layout. Instead, apply UNIVERSAL EXTRACTION PRINCIPLES:
+
+★★★ UNIVERSAL EXTRACTION ALGORITHM (APPLY TO EVERY FIELD) ★★★
+
+1. FULL DOCUMENT SCAN: Search the ENTIRE document text, tables, headers, footers, and margins
+2. KEYWORD MATCHING: Look for multiple variations of field labels (see examples below)
+3. CONTEXT EXTRACTION: Extract the VALUE near/after the keyword, not the label itself
+4. VALUE NORMALIZATION: Clean up the extracted value (trim, normalize units, case, etc.)
+5. FALLBACK SEARCH: If not found by keyword, search for patterns (dates, numbers, codes)
+
+★★★ NEVER ASSUME FIXED POSITIONS ★★★
+- A field that appears top-right in one document may appear bottom-left in another
+- Some documents combine fields (e.g., "VESSEL / VOYAGE"), others separate them
+- Some use tables, others use free text, others use grids
+- Labels may be in ALL CAPS, Title Case, or lowercase
+- Fields may or may not have colons, may use different separators
+
+★★★ KEYWORD VARIATIONS TO SEARCH (not exhaustive - be creative!) ★★★
+
+VOYAGE: "VOYAGE", "VOYAGE NO", "VOYAGE NUMBER", "VOY", "VOY.", "V/", "VOYAGE-NO"
+VESSEL: "VESSEL", "OCEAN VESSEL", "CARRYING VESSEL", "VESSEL NAME", "M/V", "V."
+PORT LOADING: "PORT OF LOADING", "POL", "LOADING PORT", "PLACE OF LOADING", "PORT OF LADING"
+PORT DISCHARGE: "PORT OF DISCHARGE", "POD", "DISCHARGE PORT", "PLACE OF DELIVERY", "FINAL DESTINATION"
+SHIPPER: "SHIPPER", "SHIPPER/EXPORTER", "EXPORTER", "SENDER"
+CONSIGNEE: "CONSIGNEE", "CONSIGNED TO", "CONSIGNEE/IMPORTER", "TO ORDER", "RECEIVER"
+NOTIFY: "NOTIFY PARTY", "NOTIFY", "ALSO NOTIFY", "NOTIFY ADDRESS"
+CONTAINER: "CONTAINER NO", "CONTAINER NUMBER", "CNTR", "EQUIPMENT NO", 4 letters + 7 digits pattern
+SEAL: "SEAL NO", "SEAL NUMBER", "SEAL", "S/N" near container
+WEIGHT: "GROSS WEIGHT", "GR.WT", "WEIGHT", "KGS", "KG", "KGM", "TOTAL WEIGHT"
+CBM: "MEASUREMENT", "CBM", "M3", "M³", "VOLUME", "CUBIC", "MTQ"
+PACKAGES: "NO. OF PACKAGES", "PACKAGES", "PKGS", "PCS", "QUANTITY", "TOTAL PACKAGES"
+HS/NCM: "HS-CODE", "HS CODE", "HSCODE", "NCM", "H.S.", "TARIFF", "COMMODITY CODE", 6-8 digit patterns
+FREIGHT: "FREIGHT", "FREIGHT TERMS", "FREIGHT PREPAID", "FREIGHT COLLECT", "PREPAID", "COLLECT"
+DATE ISSUE: "DATE OF ISSUE", "ISSUED", "DATE AND PLACE", "B/L DATE"
+DATE SHIPPED: "SHIPPED ON BOARD", "ON BOARD", "LADEN ON BOARD", "DATE OF SHIPMENT"
+
+★★★ PATTERN-BASED EXTRACTION (when keywords fail) ★★★
+
+- CONTAINER: 4 uppercase letters + 7 digits (e.g., SEKU5762065)
+- SEAL: Numeric sequence near container info
+- DATES: Various formats - YYYY-MM-DD, DD/MM/YYYY, DD-MON-YYYY, "Dec 19, 2025"
+- WEIGHTS: Numbers followed by KG/KGS/KGM/MT
+- CBM: Numbers followed by CBM/M3/M³/MTQ
+- HS CODES: 4-8 digit codes in cargo description area
+
+★★★ COMBINED FIELD HANDLING ★★★
+
+Many documents COMBINE fields that are separate in others. Always handle both:
+- "VESSEL / VOYAGE": Split at "/" → vessel = first part, voyage = second part
+- "MAERSK LETICIA / 0EWMHS1MA" → vessel = "MAERSK LETICIA", voyage = "0EWMHS1MA"
+- "PORT OF LOADING/DISCHARGE": May contain both ports
+- "SHIPPER/EXPORTER": Single field with shipper info
+- "DATE AND PLACE OF ISSUE": Extract both date and place separately
+
+★★★ COMPARISON RULES ★★★
+
+After extracting values from BOTH documents:
+1. Normalize both values (uppercase, trim whitespace, standardize units)
+2. Compare CORE values only (ignore addresses, extra details, formatting)
+3. If values match after normalization → MATCH ✓
+4. If values differ → MISMATCH, provide update instruction
+5. If value not found after exhaustive search → "Not found in [document]"
+
+★★★ EXAMPLES OF SUCCESSFUL EXTRACTION ★★★
+
+EXAMPLE 1 - Voyage in different locations:
+- MBL (top-right box): "VOYAGE NUMBER: 0EWMHS1MA" → voyage = "0EWMHS1MA"
+- HBL (combined field): "Vessel / Voyage-No.: MAERSK LETICIA / 0EWMHS1MA" → voyage = "0EWMHS1MA"
+- RESULT: MATCH ✓ (both = "0EWMHS1MA")
+
+EXAMPLE 2 - Weight in different formats:
+- MBL (column header): "GROSS WEIGHT CARGO: 17970.000" → 17970 kg
+- HBL (in marks section): "17 970,000 KG" → 17970 kg (European format)
+- RESULT: MATCH ✓ (both = 17970 kg)
+
+EXAMPLE 3 - Shipper with different detail levels:
+- MBL: "DACHSER SE,CTA HAMBURG\nAS AGENT OF KINGWOOD LOGISTICS LTD.\n..."
+- HBL: "SCHENKER DEUTSCHLAND AG\nBAYERNSTR. 38-44\n..."
+- RESULT: MISMATCH (different companies - this IS a real discrepancy)
 
 ███████████████████████████████████████████████████████████████████████████████
-███ REAL DOCUMENT STRUCTURE EXAMPLES - USE THESE AS REFERENCE               ███
+███ REFERENCE: COMMON DOCUMENT STRUCTURES (for guidance, not as rules)      ███
 ███████████████████████████████████████████████████████████████████████████████
 
 EXAMPLE MBL STRUCTURE (CMA CGM FORMAT - VERY COMMON):
