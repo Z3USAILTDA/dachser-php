@@ -70,7 +70,7 @@ const Login = () => {
       console.error('Login error:', error);
       toast({
         title: "Erro no login",
-        description: "Não foi possível conectar ao servidor.",
+        description: "Usuário ou Senha incorretos.",
         variant: "destructive",
       });
     } finally {
