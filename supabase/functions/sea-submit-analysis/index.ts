@@ -605,7 +605,7 @@ function determineFileType(analysisType: string, isBase: boolean, fileName: stri
 /**
  * Extract HBL shipping data JSON from analysis result text
  */
-function extractHblShippingData(resultText: string): { container: string; vessel: string; voyage: string; origem: string; destino: string } | null {
+function extractHblShippingData(resultText: string): { container: string; consignee: string; vessel: string; voyage: string; origem: string; destino: string } | null {
   try {
     // Look for JSON block between ```json and ``` markers
     const jsonMatch = resultText.match(/```json\s*(\{[^`]+\})\s*```/);
@@ -614,6 +614,7 @@ function extractHblShippingData(resultText: string): { container: string; vessel
       if (parsed.hbl_shipping_data) {
         return {
           container: parsed.hbl_shipping_data.container || '',
+          consignee: parsed.hbl_shipping_data.consignee || '',
           vessel: parsed.hbl_shipping_data.vessel || '',
           voyage: parsed.hbl_shipping_data.voyage || '',
           origem: parsed.hbl_shipping_data.origem || '',
@@ -629,6 +630,7 @@ function extractHblShippingData(resultText: string): { container: string; vessel
       if (parsed.hbl_shipping_data) {
         return {
           container: parsed.hbl_shipping_data.container || '',
+          consignee: parsed.hbl_shipping_data.consignee || '',
           vessel: parsed.hbl_shipping_data.vessel || '',
           voyage: parsed.hbl_shipping_data.voyage || '',
           origem: parsed.hbl_shipping_data.origem || '',
@@ -983,16 +985,54 @@ serve(async (req) => {
           
           // Extract and save HBL shipping data (container, vessel, voyage, origem, destino)
           const hblShippingData = extractHblShippingData(result.result_text || '');
-          if (hblShippingData && hblShippingData.container) {
+          if (hblShippingData) {
             console.log(`📦 Extracted HBL shipping data:`, hblShippingData);
-            await saveContainerData(hblShippingData);
+            
+            // Update item with extracted metadata (consignee, container)
+            if (actualItemId) {
+              const updateFields: string[] = [];
+              const updateValues: any[] = [];
+              
+              if (hblShippingData.container) {
+                updateFields.push('container = ?');
+                updateValues.push(hblShippingData.container);
+              }
+              if (hblShippingData.consignee) {
+                updateFields.push('consignee = ?');
+                updateValues.push(hblShippingData.consignee);
+              }
+              
+              if (updateFields.length > 0) {
+                updateValues.push(actualItemId);
+                await bgClient.execute(`
+                  UPDATE ai_agente.t_dachser_sea_items 
+                  SET ${updateFields.join(', ')}, status = 'realizado'
+                  WHERE id = ?
+                `, updateValues);
+                console.log(`✅ Updated item ${actualItemId} with metadata and status 'realizado'`);
+              } else {
+                // No metadata but still update status
+                await bgClient.execute(`
+                  UPDATE ai_agente.t_dachser_sea_items SET status = 'realizado' WHERE id = ?
+                `, [actualItemId]);
+                console.log(`✅ Updated item ${actualItemId} status to 'realizado'`);
+              }
+            }
+            
+            // Save container data to MariaDB via mariadb-proxy (for tracking)
+            if (hblShippingData.container) {
+              await saveContainerData(hblShippingData);
+            }
           } else {
             console.log(`⚠️ No HBL shipping data found in analysis result`);
+            // Still update item status to 'realizado' even without metadata
+            if (actualItemId) {
+              await bgClient.execute(`
+                UPDATE ai_agente.t_dachser_sea_items SET status = 'realizado' WHERE id = ?
+              `, [actualItemId]);
+              console.log(`✅ Updated item ${actualItemId} status to 'realizado' (no metadata)`);
+            }
           }
-          
-          // NOTE: Item status is NOT updated here automatically.
-          // It will only be marked as 'realizado' when user clicks "Concluir Análise"
-          console.log(`📋 Item ${actualItemId} status unchanged - waiting for user to complete`);
 
           
           console.log(`✅ Run ${runId} completed successfully with ${result.model}`);
