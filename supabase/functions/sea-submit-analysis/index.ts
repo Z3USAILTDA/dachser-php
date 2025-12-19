@@ -476,8 +476,8 @@ async function analyzeWithLLM(
       used_examples: approvedExamplesText.length > 0
     },
     model: result.model
+  };
 }
-
 // ============ HELPER FUNCTIONS ============
 
 function extractContainerFromFilename(fileName: string): string | null {
