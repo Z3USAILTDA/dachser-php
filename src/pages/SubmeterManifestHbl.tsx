@@ -466,7 +466,7 @@ export default function SubmeterManifestHbl() {
 
                 <div className="bg-black/20 border border-white/5 rounded-xl p-6">
                   <pre className="text-sm text-neutral-200 whitespace-pre-wrap font-mono bg-black/30 p-4 rounded-lg max-h-96 overflow-y-auto">
-                    {analysisResult.result_text}
+                    {analysisResult.result_text?.replace(/```json\s*\{[^`]*"hbl_shipping_data"[^`]*\}\s*```/g, '').trim()}
                   </pre>
                 </div>
 
