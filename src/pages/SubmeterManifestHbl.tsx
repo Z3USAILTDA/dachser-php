@@ -269,12 +269,12 @@ export default function SubmeterManifestHbl() {
       return;
     }
     setIsCompletingAnalysis(true);
-    const loadingToast = toast.loading("Concluindo análise e salvando como exemplo de aprendizado...");
+    const loadingToast = toast.loading("Concluindo análise...");
     try {
       // Complete the analysis
       await maritimoApi.completeAnalysis(analysisId, itemId, true);
       
-      // Automatically save as learning example
+      // Silently save as learning example (user doesn't need to know)
       if (analysisResult?.result_text) {
         try {
           const hblCount = hblFiles.length;
@@ -304,14 +304,14 @@ export default function SubmeterManifestHbl() {
             approvedBy: user?.id,
             approvedByName: user?.username
           });
-          console.log('Analysis saved as learning example');
         } catch (exampleError) {
+          // Silent failure - don't notify user
           console.warn('Failed to save as example (non-blocking):', exampleError);
         }
       }
       
       toast.dismiss(loadingToast);
-      toast.success("Análise concluída e salva como exemplo!");
+      toast.success("Análise concluída com sucesso!");
       setTimeout(() => navigate("/maritimo"), 1000);
     } catch (error: any) {
       console.error('Complete analysis error:', error);
