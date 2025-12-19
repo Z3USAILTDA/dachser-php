@@ -71,6 +71,11 @@ const ResetPassword = () => {
         throw new Error(data.error);
       }
 
+      // Log the password reset action for metrics
+      await supabase.functions.invoke("mariadb-proxy", {
+        body: { action: "log_usage", username, endpoint: "/reset-password", method: "POST" },
+      });
+
       toast({
         title: "Senha alterada com sucesso!",
         description: "Você já pode fazer login com sua nova senha.",
