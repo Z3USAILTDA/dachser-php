@@ -1005,6 +1005,16 @@ NORMALIZATION & MATCHING
 - Ports and vessel/voyage: compare ignoring case and extra spacing.
 - Freight terms: e.g., "Freight Collect" ~ "Freight payable at Destination (Collect)".
 
+CRITICAL: VOYAGE NUMBER EXTRACTION IN MBL
+- The MBL voyage number may appear in DIFFERENT LOCATIONS than the HBL:
+  1) Header/top-right area with label "VOYAGE NUMBER" or "VOYAGE NO" or "VOY."
+  2) Near the vessel name field
+  3) In a combined "VESSEL/VOYAGE" field
+  4) In a separate box/field labeled "VOYAGE" anywhere on the document
+- ALWAYS scan the ENTIRE MBL document for voyage information, not just the same location as HBL.
+- Common MBL formats: "VOYAGE NUMBER: 0EWMHS1MA", "VOY: 123E", "VOYAGE NO. ABC456"
+- The voyage may be alphanumeric (letters + numbers) and should be extracted exactly as shown.
+
 REPORTING STYLE
 - Only print mismatches and exact target values. No questions or open options.
 - Sections 3) Container & Seal and 3a) NCM/HS Codes are MANDATORY and must ALWAYS be printed with match status.
