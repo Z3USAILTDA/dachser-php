@@ -1007,104 +1007,297 @@ Never mention knowledge cutoffs, "today's date", or model limitations. Use only 
 HBL (House Bill of Lading) and MBL (Master Bill of Lading) are DIFFERENT document types with DIFFERENT layouts.
 You MUST scan the ENTIRE document to find each field, NOT assume fields are in the same position.
 
-DOCUMENT STRUCTURE DIFFERENCES AND EXTRACTION RULES:
+███████████████████████████████████████████████████████████████████████████████
+███ REAL DOCUMENT STRUCTURE EXAMPLES - USE THESE AS REFERENCE               ███
+███████████████████████████████████████████████████████████████████████████████
+
+EXAMPLE MBL STRUCTURE (CMA CGM FORMAT - VERY COMMON):
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ Top-Right Corner:                                                            │
+│   VOYAGE NUMBER: 0EWMHS1MA                                                   │
+│   BILL OF LADING NUMBER: HBG2065163                                          │
+│                                                                              │
+│ Left Column (Parties):                                                       │
+│   SHIPPER: [company name and full address]                                   │
+│   CONSIGNEE: [company name and full address, may include CNPJ]               │
+│   NOTIFY PARTY: [company name and address]                                   │
+│                                                                              │
+│ Center Header:                                                               │
+│   CARRIER: CMA CGM Société Anonyme...                                        │
+│                                                                              │
+│ Transport Grid (middle section):                                             │
+│   PRE CARRIAGE BY* | PLACE OF RECEIPT* | FREIGHT TO BE PAID AT | NUMBER OF ORIGINAL B/L │
+│                    |                   | SANTOS               | THREE (3)              │
+│   ─────────────────────────────────────────────────────────────────────────  │
+│   VESSEL           | PORT OF LOADING   | PORT OF DISCHARGE    | FINAL PLACE OF DELIVERY │
+│   MAERSK LETICIA   | HAMBURG           | SANTOS               |                         │
+│                                                                              │
+│ Cargo Table (main content):                                                  │
+│   MARKS AND NOS    | NO AND KIND   | DESCRIPTION OF PACKAGES... | GROSS WEIGHT | TARE | MEASUREMENT │
+│   CONTAINER/SEALS  | OF PACKAGES   | SHIPPER'S LOAD...          | CARGO        |      |             │
+│   ─────────────────────────────────────────────────────────────────────────  │
+│   SEKU5762065      | 1 x 40HC      | 82 PACKAGE(S)              | 17970.000    | 3700 | 56.027      │
+│   SEAL 2000030906  |               | [cargo lines with details] |              |      |             │
+│                    |               | 5 PALLETS                  |              |      |             │
+│                    |               | 930 KGM                    |              |      |             │
+│                    |               | 3.781 MTQ                  |              |      |             │
+│                    |               | AUTOPARTS                  |              |      |             │
+│                    |               | AS PER INVOICE: 7500712796 |              |      |             │
+│                    |               | HS-CODE: 870850            |              |      |             │
+│                                                                              │
+│ Bottom:                                                                      │
+│   PLACE AND DATE OF ISSUE: HAMBURG, 19 DEC 2025                              │
+│   SIGNED FOR THE CARRIER CMA CGM S.A.                                        │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+EXAMPLE HBL STRUCTURE (FREIGHT FORWARDER FORMAT):
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ Header: "Bill of Lading" or "House Bill of Lading"                          │
+│ Operator: "Operated by: [Logistics Company Name]"                           │
+│                                                                              │
+│ Left Column (Parties):                                                       │
+│   Shipper: [company name and address]                                        │
+│   Consignee: [company name and address with CNPJ]                            │
+│   Notify Party: [may say "SAME AS CONSIGNEE"]                                │
+│   Also Notify / Delivery Agent: [additional party]                           │
+│                                                                              │
+│ Transport Details Section:                                                   │
+│   Combined Transport - Place of Receipt: [location]                          │
+│   Pre-Carriage by: [carrier]                                                 │
+│   Port of Loading: HAMBURG                                                   │
+│   Vessel / Voyage-No.: MAERSK LETICIA / 0EWMHS1MA  ← COMBINED FIELD!         │
+│   Port of Discharge: SANTOS                                                  │
+│   Combined Transport - Place of Delivery: [final destination]                │
+│                                                                              │
+│ Marks and Numbers (Cargo Table):                                             │
+│   SEKU5762065 | 40' HC/HIGH CUBE |           | 17 970,000 KG | 56,027 CBM    │
+│   SEAL NO: 2000030906                                                        │
+│   ZF DCG1    | 5 X WOODEN PALLET | AUTOPARTS | 930,000 KG    | 3,781 CBM     │
+│              |                   | AS PER INVOICE: 7500712796                │
+│              |                   | HS-CODE: 870850                           │
+│                                                                              │
+│ Footer:                                                                      │
+│   No. of Original B(s)/L: 3                                                  │
+│   Freight Payable at: DESTINATION                                            │
+│   SHIPPED ON BOARD: 2025-12-16                                               │
+│   PLACE AND DATE OF ISSUE: HAMBURG 2025-12-16                                │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+███████████████████████████████████████████████████████████████████████████████
+███ FIELD-BY-FIELD EXTRACTION RULES WITH EXACT LOCATIONS                     ███
+███████████████████████████████████████████████████████████████████████████████
 
 1) VOYAGE NUMBER - CRITICAL EXTRACTION RULE:
-   - HBL: Often in a COMBINED "VESSEL/VOYAGE" field (e.g., "MAERSK LETICIA / 0EWMHS1MA")
-     * If combined, SPLIT the field: vessel is before "/" and voyage is after "/"
-   - MBL: Almost ALWAYS in SEPARATE fields:
-     * Voyage in dedicated "VOYAGE NUMBER", "VOYAGE NO", "VOY." field (often top-right)
-     * Vessel in separate "OCEAN VESSEL", "VESSEL NAME" field
-   - COMPARISON RULE: Extract voyage SEPARATELY from both documents, then compare ONLY the voyage values
-   - Example: HBL has "MAERSK LETICIA / 0EWMHS1MA" → extract voyage = "0EWMHS1MA"
-              MBL has voyage field with "0EWMHS1MA" → voyage = "0EWMHS1MA"
-              RESULT: MATCH ✓ (both voyages are identical)
-   - NEVER compare a combined "VESSEL/VOYAGE" string against a single "VESSEL" or "VOYAGE" field
+   ★ MBL LOCATIONS (search in order):
+     a) Top-right corner box labeled "VOYAGE NUMBER" (most common for CMA CGM, MSC, etc.)
+     b) Near B/L number in header area
+     c) In a dedicated "VOY." or "VOY NO." field in the transport grid
+     d) Next to vessel name if combined
+   
+   ★ HBL LOCATIONS (search in order):
+     a) COMBINED "Vessel / Voyage-No." field (e.g., "MAERSK LETICIA / 0EWMHS1MA")
+        → SPLIT at "/" to extract voyage = "0EWMHS1MA"
+     b) Separate "Voyage" or "Voyage No." field if present
+     c) In transport details section
+   
+   ★ EXTRACTION ALGORITHM:
+     - MBL: Search for text near "VOYAGE NUMBER", "VOY.", "VOYAGE NO" labels
+     - HBL: If "Vessel / Voyage" combined, split at "/" and take second part
+     - Compare ONLY the voyage codes (alphanumeric, e.g., "0EWMHS1MA")
+   
+   ★ EXAMPLE MATCH (NOT a discrepancy):
+     HBL: "Vessel / Voyage-No.: MAERSK LETICIA / 0EWMHS1MA" → voyage = "0EWMHS1MA"
+     MBL: "VOYAGE NUMBER: 0EWMHS1MA" → voyage = "0EWMHS1MA"
+     RESULT: MATCH ✓
 
 2) VESSEL NAME - CRITICAL EXTRACTION RULE:
-   - HBL: Usually in "VESSEL" or combined "VESSEL/VOYAGE" field
-     * If combined with voyage, extract ONLY the vessel name (before "/" or voyage code)
-   - MBL: Labeled as "OCEAN VESSEL", "VESSEL NAME", "CARRYING VESSEL", "PRE-CARRIAGE BY"
-   - COMPARISON RULE: Extract vessel name SEPARATELY from both documents, then compare ONLY the vessel names
-   - Example: HBL has "MAERSK LETICIA / 0EWMHS1MA" → extract vessel = "MAERSK LETICIA"
-              MBL has vessel field with "MAERSK LETICIA" → vessel = "MAERSK LETICIA"
-              RESULT: MATCH ✓ (both vessel names are identical)
+   ★ MBL LOCATIONS (search in order):
+     a) "VESSEL" field in transport grid (row below or next to PORT OF LOADING)
+     b) "OCEAN VESSEL" or "CARRYING VESSEL" field
+     c) "PRE-CARRIAGE BY" if that's where the main vessel appears
+   
+   ★ HBL LOCATIONS (search in order):
+     a) COMBINED "Vessel / Voyage-No." field → extract FIRST part before "/"
+     b) Separate "Vessel" or "Ocean Vessel" field
+     c) "Pre-Carriage by" or "Feeder Vessel"
+   
+   ★ EXTRACTION ALGORITHM:
+     - If combined, split at "/" and take first part
+     - Normalize: uppercase, trim spaces
+     - Compare only the vessel name string
 
 3) PORTS (Loading/Discharge) - CRITICAL EXTRACTION RULE:
-   - HBL field names: "PORT OF LOADING", "POL", "PLACE OF RECEIPT", "LOADING PORT"
-   - MBL field names: "PORT OF LOADING", "LOADING PORT", "POL", "PLACE OF LOADING", "PORT OF LADING"
-   - For discharge HBL: "PORT OF DISCHARGE", "POD", "PLACE OF DELIVERY", "FINAL DESTINATION"
-   - For discharge MBL: "PORT OF DISCHARGE", "POD", "PLACE OF DELIVERY", "FINAL DESTINATION"
-   - COMPARISON RULE: Extract the PORT NAME/CODE value, ignoring the field label
-   - NORMALIZATION: Ignore case, extra spaces, and common abbreviations
-   - Example: HBL has "Port of Loading: HAMBURG" and MBL has "Loading Port: HAMBURG" → MATCH ✓
+   ★ MBL LOCATIONS:
+     a) Transport grid: "PORT OF LOADING" / "PORT OF DISCHARGE" rows
+     b) May use "LOADING PORT" / "DISCHARGE PORT" labels
+     c) Sometimes abbreviated "POL" / "POD"
+   
+   ★ HBL LOCATIONS:
+     a) Transport Details section: "Port of Loading:" / "Port of Discharge:"
+     b) May be labeled "Place of Receipt" / "Place of Delivery" for combined transport
+   
+   ★ NORMALIZATION: Uppercase, trim, ignore country codes in parentheses
+   ★ EXAMPLE: "Hamburg" = "HAMBURG" = "HAMBURG, GERMANY" (core value: HAMBURG)
 
-4) PARTIES (Shipper/Consignee/Notify) - CRITICAL EXTRACTION RULE:
-   - SHIPPER:
-     * HBL: "SHIPPER", "EXPORTER", "SHIPPER/EXPORTER"
-     * MBL: "SHIPPER", "SHIPPER/EXPORTER", may include full address
-   - CONSIGNEE:
-     * HBL: "CONSIGNEE", "CONSIGNED TO", "CONSIGNEE/IMPORTER"
-     * MBL: "CONSIGNEE", "CONSIGNED TO ORDER", may say "TO ORDER" or "TO ORDER OF..."
-     * IMPORTANT: If MBL says "TO ORDER" and HBL has a specific name, this is NORMAL - NOT a mismatch
-   - NOTIFY PARTY:
-     * HBL: "NOTIFY PARTY", "NOTIFY", "NOTIFY ADDRESS"
-     * MBL: "NOTIFY PARTY", "NOTIFY", "ALSO NOTIFY"
-   - COMPARISON RULE: Compare the CORE company/entity name, ignoring:
-     * Address details (street, city, country, postal code)
-     * Registration numbers (CNPJ, VAT, etc.)
-     * Minor punctuation differences ("CO., LTD." = "CO LTD" = "COMPANY LIMITED")
-   - Example: HBL = "ACME CORP, 123 Main St, São Paulo" vs MBL = "ACME CORP" → MATCH ✓
+4) SHIPPER - CRITICAL EXTRACTION RULE:
+   ★ MBL LOCATIONS:
+     a) Top-left box labeled "SHIPPER"
+     b) May include full address, VAT number, phone
+     c) For freight forwarders: The shipper on MBL is often the freight forwarder, NOT the actual shipper
+   
+   ★ HBL LOCATIONS:
+     a) "Shipper" or "Shipper/Exporter" section
+     b) Usually at top-left of document
+   
+   ★ COMPARISON RULE:
+     - Extract CORE company name (first line or entity name)
+     - Ignore: address details, registration numbers, phone/fax
+     - Normalize: uppercase, remove punctuation like "." and ","
+     - "DACHSER SE,CTA HAMBURG" ≈ "DACHSER SE CTA HAMBURG" → MATCH
 
-5) CONTAINER/SEAL - CRITICAL EXTRACTION RULE:
-   - CONTAINER NUMBER:
-     * HBL: "CONTAINER NO.", "CONTAINER NUMBER", "MARKS AND NUMBERS", in goods description
-     * MBL: "CONTAINER NO.", "CONTAINER NUMBERS", "PARTICULARS", "CONTAINER/SEAL"
-     * Format: 4 letters + 7 digits (ISO 6346, e.g., "SEKU5762065")
-     * NORMALIZATION: Remove spaces, dashes, normalize to uppercase
-   - SEAL NUMBER:
-     * HBL: "SEAL NO.", "SEAL", may be near container number
-     * MBL: "SEAL NO.", "SEAL NUMBER", "SEAL", in separate field or combined with container
-   - COMPARISON RULE: Extract container/seal values from wherever they appear, compare normalized values
+5) CONSIGNEE - CRITICAL EXTRACTION RULE:
+   ★ MBL LOCATIONS:
+     a) "CONSIGNEE" box, usually below SHIPPER
+     b) May include "CNPJ/CPF:" registration number
+     c) May say "TO ORDER" or "TO ORDER OF [BANK]"
+   
+   ★ HBL LOCATIONS:
+     a) "Consignee" section with full address
+     b) Usually includes CNPJ for Brazilian imports
+   
+   ★ IMPORTANT RULE: 
+     - If MBL says "TO ORDER" and HBL has specific consignee → This is NORMAL, NOT a mismatch
+     - Compare core entity name only if both have specific names
 
-6) TOTALS (Weight/CBM/Packages) - CRITICAL EXTRACTION RULE:
-   - PACKAGES:
-     * HBL: "NO. OF PACKAGES", "PACKAGES", "NO. OF PKGS", "QUANTITY"
-     * MBL: "NO. OF PACKAGES", "TOTAL PACKAGES", "NUMBER OF PACKAGES"
-     * IMPORTANT: MBL may show "1" (meaning 1 container) while HBL shows actual package count inside
-     * If MBL = 1 and HBL > 1, check if MBL is counting containers vs HBL counting inner packages
-   - GROSS WEIGHT:
-     * HBL: "GROSS WEIGHT", "WEIGHT", "GR. WT.", in KG/KGS
-     * MBL: "GROSS WEIGHT", "WEIGHT", "TOTAL WEIGHT"
-     * NORMALIZATION: Convert all to KG, compare numeric values (ignore formatting)
-   - MEASUREMENT (CBM):
-     * HBL: "MEASUREMENT", "CBM", "VOLUME", "M3"
-     * MBL: "MEASUREMENT", "VOLUME", "CBM", "CUBIC METERS"
-     * NORMALIZATION: Convert all to m³, compare numeric values
+6) NOTIFY PARTY - CRITICAL EXTRACTION RULE:
+   ★ MBL LOCATIONS:
+     a) "NOTIFY PARTY" box, usually after CONSIGNEE
+     b) May include "Carrier not to be responsible for failure to notify"
+   
+   ★ HBL LOCATIONS:
+     a) "Notify Party" section
+     b) May say "SAME AS CONSIGNEE" - in this case, use consignee data
+   
+   ★ COMPARISON RULE:
+     - If HBL says "SAME AS CONSIGNEE", compare MBL Notify vs HBL Consignee
+     - Extract core company name only
 
-7) DATES - CRITICAL EXTRACTION RULE:
-   - SHIPPED ON BOARD DATE:
-     * HBL: "SHIPPED ON BOARD", "ON BOARD DATE", "DATE OF SHIPMENT", "LADEN ON BOARD"
-     * MBL: "SHIPPED ON BOARD", "ON BOARD DATE", "DATE LADEN ON BOARD"
-   - DATE OF ISSUE:
-     * HBL: "DATE OF ISSUE", "ISSUED AT", "DATE AND PLACE OF ISSUE", "B/L DATE"
-     * MBL: "DATE OF ISSUE", "DATE AND PLACE OF ISSUE", "ISSUED ON"
-   - COMPARISON RULE: Normalize all dates to YYYY-MM-DD format before comparing
-   - "20-JUL-2025" = "2025-07-20" = "July 20, 2025" → all equivalent, no mismatch
+7) CONTAINER NUMBER - CRITICAL EXTRACTION RULE:
+   ★ MBL LOCATIONS:
+     a) Cargo table first column "MARKS AND NOS / CONTAINER AND SEALS"
+     b) Format: 4 letters + 7 digits (e.g., "SEKU5762065")
+     c) May be followed by size/type (e.g., "1 x 40HC")
+   
+   ★ HBL LOCATIONS:
+     a) "Marks and Numbers" section/table
+     b) First entry in cargo description
+     c) May show as "SEKU5762065 40' HC/HIGH CUBE"
+   
+   ★ NORMALIZATION: Remove spaces, dashes, normalize uppercase
+   ★ Compare only 11-character ISO code
 
-8) FREIGHT TERMS - CRITICAL EXTRACTION RULE:
-   - HBL: "FREIGHT", "FREIGHT TERMS", may be stamped or printed
-   - MBL: "FREIGHT", "FREIGHT TERMS", "FREIGHT AND CHARGES"
-   - NORMALIZATION: These are equivalent:
-     * "FREIGHT PREPAID" = "PREPAID" = "FREIGHT PAYABLE AT ORIGIN"
-     * "FREIGHT COLLECT" = "COLLECT" = "FREIGHT PAYABLE AT DESTINATION"
-   - COMPARISON RULE: Normalize to PREPAID or COLLECT before comparing
+8) SEAL NUMBER - CRITICAL EXTRACTION RULE:
+   ★ MBL LOCATIONS:
+     a) Below or next to container number
+     b) Labeled "SEAL" or preceded by "SEAL" in cargo table
+     c) Format varies: numeric or alphanumeric
+   
+   ★ HBL LOCATIONS:
+     a) "SEAL NO:" in marks and numbers section
+     b) May be on same line or next line after container
+   
+   ★ COMPARISON: Normalize to numeric only if purely numeric, otherwise exact match
 
-9) NCM/HS CODES - CRITICAL EXTRACTION RULE:
-   - Look for 8-digit codes in cargo/goods description area
-   - Search keywords: "NCM", "HS", "HS CODE", "HSCODE", "H.S.", "TARIC", "TARIFF"
-   - Extract ALL unique 8-digit codes from each document
-   - COMPARISON RULE: Compare the SETS of codes, not their order or formatting
+9) PACKAGES - CRITICAL EXTRACTION RULE:
+   ★ MBL LOCATIONS:
+     a) "NO AND KIND OF PACKAGES" column in cargo table
+     b) May show container count (e.g., "1 x 40HC") AND package count (e.g., "82 PACKAGE(S)")
+     c) Individual cargo lines may show pallet/carton counts
+     d) IMPORTANT: "1 x 40HC" means 1 container - look for total packages elsewhere
+   
+   ★ HBL LOCATIONS:
+     a) Header totals or "Carrier assumes liability for XX Package(s)"
+     b) Sum of all line items in cargo table
+   
+   ★ EXTRACTION RULE:
+     - Find the TOTAL package count, not container count
+     - Look for "PACKAGE(S)", "PALLETS", "CARTONS" totals
+     - "82 PACKAGE(S)" = 82 packages
+
+10) GROSS WEIGHT - CRITICAL EXTRACTION RULE:
+    ★ MBL LOCATIONS:
+      a) "GROSS WEIGHT CARGO" column in cargo table (usually near right side)
+      b) Shows total weight in KG/KGM/KGS
+      c) Individual cargo lines also show per-line weights
+      d) TARE column shows container weight - EXCLUDE this from gross weight comparison
+    
+    ★ HBL LOCATIONS:
+      a) Header/summary area with total weight
+      b) In cargo table, per-line weights in KG column
+      c) May use "KGS", "KG", "KGM" interchangeably
+    
+    ★ NORMALIZATION:
+      - Convert all to KG
+      - "17 970,000 KG" = "17970.000 KG" = 17970 kg
+      - European format uses "." for thousands, "," for decimals
+      - American format uses "," for thousands, "." for decimals
+
+11) MEASUREMENT (CBM) - CRITICAL EXTRACTION RULE:
+    ★ MBL LOCATIONS:
+      a) "MEASUREMENT" column in cargo table (usually rightmost)
+      b) Shows in CBM or m³ or MTQ (cubic meters)
+      c) May be abbreviated "MEAS." or "VOL."
+    
+    ★ HBL LOCATIONS:
+      a) "CBM" column in cargo table
+      b) May show per-line and total measurements
+      c) Uses "CBM", "M3", "m³", "MTQ" interchangeably
+    
+    ★ NORMALIZATION:
+      - "56,027 CBM" = "56.027 m³" = 56.027 cubic meters
+      - "MTQ" = cubic meters (ISO unit code)
+
+12) HS/NCM CODES - CRITICAL EXTRACTION RULE:
+    ★ MBL LOCATIONS:
+      a) In cargo description text: "HS-CODE: 870850" or "HS CODE: 870850"
+      b) May be 4, 6, or 8 digits
+      c) Search entire cargo description area for "HS", "HS-CODE", "HSCODE", "NCM"
+    
+    ★ HBL LOCATIONS:
+      a) In "Description of Goods" or cargo details
+      b) Labeled "HS-CODE:", "NCM:", or just the code near product description
+    
+    ★ EXTRACTION: Find ALL codes, normalize to standard format, compare sets
+
+13) FREIGHT TERMS - CRITICAL EXTRACTION RULE:
+    ★ MBL LOCATIONS:
+      a) "FREIGHT TO BE PAID AT" field in transport grid
+      b) May show location (e.g., "SANTOS") meaning COLLECT/DESTINATION
+      c) Or "ORIGIN" meaning PREPAID
+      d) May have "PREPAID" or "COLLECT" stamp
+    
+    ★ HBL LOCATIONS:
+      a) "Freight Payable at:" field (e.g., "DESTINATION")
+      b) "PREPAID COLLECT" section with checkboxes
+      c) Service type info
+    
+    ★ NORMALIZATION:
+      - "DESTINATION" = "COLLECT" = "FREIGHT COLLECT"
+      - "ORIGIN" = "PREPAID" = "FREIGHT PREPAID"
+      - Location name in "FREIGHT TO BE PAID AT" indicates where → COLLECT if destination port
+
+14) DATES - CRITICAL EXTRACTION RULE:
+    ★ MBL LOCATIONS:
+      a) "PLACE AND DATE OF ISSUE" at bottom of document
+      b) "SHIPPED ON BOARD" or "LADEN ON BOARD" date
+      c) Format varies: "19 DEC 2025", "2025-12-19", "19/12/2025"
+    
+    ★ HBL LOCATIONS:
+      a) "SHIPPED ON BOARD:" field
+      b) "PLACE AND DATE OF ISSUE:" field
+      c) May use ISO format "2025-12-16"
+    
+    ★ NORMALIZATION: Convert all to YYYY-MM-DD for comparison
 
 ███████████████████████████████████████████████████████████████████████████████
 ███ MASTER EXTRACTION RULE - APPLY TO ALL FIELDS                            ███
@@ -1116,6 +1309,7 @@ For EVERY field comparison:
 3. NORMALIZE the value (case, punctuation, units, date formats)
 4. COMPARE normalized values from HBL and MBL
 5. Only report MISMATCH if the normalized core values are ACTUALLY different
+6. NEVER return "Not available" if the data exists ANYWHERE in the document
 
 FALSE POSITIVE PREVENTION:
 - Different field POSITIONS → NOT a mismatch (compare VALUES only)
@@ -1123,6 +1317,12 @@ FALSE POSITIVE PREVENTION:
 - Different FORMATTING → NOT a mismatch (normalize first)
 - Combined vs separate fields → NOT a mismatch (extract and compare individual values)
 - Extra details in one doc → NOT a mismatch if core value matches
+
+"NOT AVAILABLE" PREVENTION:
+- Before marking any field as "Not available", you MUST search the ENTIRE document
+- Check all sections, tables, and text areas - not just labeled fields
+- If a value exists ANYWHERE in the document, extract it
+- Only use "Not available" if the data truly does not exist in the document
 
 SCOPE
 - Compare an HBL against its carrier-issued MBL and produce concrete update instructions for whichever document must change.
