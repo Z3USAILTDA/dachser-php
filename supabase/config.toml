@@ -179,3 +179,12 @@ verify_jwt = false
 
 [functions.voucher-sync-rm-pending]
 verify_jwt = false
+
+[functions.sea-setup-approved-examples]
+verify_jwt = false
+
+[functions.add-tipo-servico-column]
+verify_jwt = false
+
+[functions.send-password-reset-code]
+verify_jwt = false
