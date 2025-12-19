@@ -676,8 +676,24 @@ const ContainerTracking = () => {
   };
 
   // Filter and sort containers
+  // Containers excluídos da exibição visual
+  const EXCLUDED_CONTAINERS = [
+    'TCKU2140363',
+    'SEKU5762065',
+    'BEAU4076927',
+    'ECMU5599537',
+    'CMAU8531522',
+    'TCNU7706015',
+    'TRHU2388168'
+  ];
+
   const filteredContainers = useMemo(() => {
     let containers = containersList.filter((c) => {
+      // Excluir containers específicos
+      if (EXCLUDED_CONTAINERS.includes(c.container?.trim().toUpperCase())) {
+        return false;
+      }
+      
       const searchLower = searchTerm.toLowerCase();
       const matchesSearch =
         !searchTerm ||
