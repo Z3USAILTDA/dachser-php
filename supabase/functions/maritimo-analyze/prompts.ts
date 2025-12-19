@@ -49,37 +49,162 @@ SCOPE & AUTHORITY
 - If something conflicts, the Manifest prevails; each HBL must be updated to match it.
 
 █████████████████████████████████████████████████████████████████████
-█ CRITICAL: MULTIPLE HBLs → SUM VALUES FOR MANIFEST COMPARISON      █
+█ HBL GROSS WEIGHT EXTRACTION - EXACT LOCATIONS                     █
 █████████████████████████████████████████████████████████████████████
 
-★★★ WHEN 1 MANIFEST IS COMPARED AGAINST MULTIPLE HBLs ★★★
+★★★ WHERE TO FIND GROSS WEIGHT IN HBL DOCUMENTS ★★★
 
-When analyzing 1 Manifest against 2 or more HBLs, follow this MANDATORY logic:
+Search for Gross Weight in these EXACT locations (in order of priority):
 
-1. WEIGHT RECONCILIATION (MULTI-HBL):
-   - Extract total Gross Weight from each HBL individually
-   - SUM all HBL weights together
-   - Compare the SUM against the Manifest total Gross Weight
-   - If SUM of HBLs differs from Manifest by more than 1 kg or 0.1% → DISCREPANCY
-   - Report: "Sum of HBL weights (X + Y = Z kg) vs Manifest total (W kg) | Delta: ±N kg"
+1. TOTALS SECTION (bottom of cargo table or document):
+   Look for: "TOTAL GROSS WEIGHT", "GROSS WEIGHT TOTAL", "TOTAL GW", "GROSS WEIGHT"
+   Pattern: "TOTAL GROSS WEIGHT: [NUMBER] KGS" or "[NUMBER] KGS" after "GROSS WEIGHT"
+   Location: Usually at the bottom of cargo description, after all item lines
+   
+2. DEDICATED WEIGHT COLUMN/FIELD:
+   Column names: "GROSS WEIGHT", "GW", "GROSS WT", "G.W.", "PESO BRUTO", "WEIGHT"
+   Sum all values in this column for individual line weights if no total exists
 
-2. CBM RECONCILIATION (MULTI-HBL):
-   - Extract total CBM from each HBL individually
-   - SUM all HBL CBM values together
-   - Compare the SUM against the Manifest total CBM
-   - If SUM of HBLs differs from Manifest by more than 0.001 m³ or 0.1% → DISCREPANCY
-   - Report: "Sum of HBL CBM (X + Y = Z m³) vs Manifest total (W m³) | Delta: ±N m³"
+3. CONTAINER SUMMARY SECTION (near container/seal):
+   Look for: "GW: [NUMBER] KGS", "GROSS: [NUMBER]", weight value near CBM
+   Often appears in format: "CONTAINER: XXXX | SEAL: XXXX | GW: XXXX KGS | CBM: XX.XX"
+   
+4. GOODS DESCRIPTION / CARGO SECTION:
+   Look for pattern: "[NUMBER] KGS" or "[NUMBER] KG" after goods descriptions
+   Also: "SAID TO CONTAIN" or "STC" followed by weight
+   Also: "SAID TO WEIGH" followed by weight value
 
-EXAMPLE FOR 1 MANIFEST × 2 HBLs:
-- Manifest total: 5,000 kg and 25.5 m³
-- HBL #1: 2,800 kg and 14.2 m³
-- HBL #2: 2,200 kg and 11.3 m³
-- Sum: 5,000 kg and 25.5 m³ → MATCH ✓
+5. BOX/SUMMARY AT BOTTOM OF HBL:
+   Look for totals box with: "TOTAL PACKAGES", "GROSS WEIGHT", "MEASUREMENT"
+   Pattern: Columns or rows with labels and values
+   
+6. NEAR MEASUREMENT/CBM VALUE:
+   Gross Weight often appears adjacent to CBM value
+   Pattern: "[WEIGHT] KGS   [CBM] CBM" or similar
 
-If there's a mismatch:
-- Manifest total: 5,000 kg
-- HBL #1: 2,800 kg + HBL #2: 2,100 kg = 4,900 kg
-- Delta: -100 kg → Report discrepancy
+EXTRACTION PATTERNS (regex-like):
+- "TOTAL.*GROSS.*WEIGHT[:\s]*([0-9,.]+)\s*(KGS?|KILOS?)"
+- "GROSS.*WEIGHT[:\s]*([0-9,.]+)\s*(KGS?)"
+- "GW[:\s]*([0-9,.]+)\s*(KGS?)"
+- "([0-9,.]+)\s*(KGS?|KG)\s*(GROSS|TOTAL)?"
+- "SAID TO WEIGH[:\s]*([0-9,.]+)"
+- "TOTAL[:\s]*([0-9,.]+)\s*KGS?"
+
+WEIGHT UNIT NORMALIZATION:
+- Convert all weights to KG (kilograms)
+- "KGS" = "KG" = "KILOS" = "KGM" = "KILOGRAMS"
+- Metric Tons (MT): multiply by 1000 (e.g., "5.5 MT" = 5,500 kg)
+- Long Tons (LT): multiply by 1016 (e.g., "5 LT" = 5,080 kg)
+
+COMMON HBL WEIGHT FIELD EXAMPLES:
+✓ "GROSS WEIGHT: 2,500.000 KGS" → extract 2500.000
+✓ "GW: 2500 KG" → extract 2500.000
+✓ "TOTAL GROSS WEIGHT 2,500.00 KGS" → extract 2500.000
+✓ "SAID TO WEIGH 2,500 KILOS" → extract 2500.000
+✓ "2,500.000 KGS" (standalone near CBM) → extract 2500.000
+✓ "GROSS WT.: 2500.000" → extract 2500.000
+
+★★★ CRITICAL: If you cannot find Gross Weight, report "Gross Weight: NOT FOUND in HBL" ★★★
+
+█████████████████████████████████████████████████████████████████████
+█ MANDATORY: MULTI-HBL GLOBAL RECONCILIATION (1 MANIFEST vs 2+ HBLs)█
+█████████████████████████████████████████████████████████████████████
+
+★★★ THIS SECTION MUST APPEAR AT THE BEGINNING OF YOUR ANALYSIS ★★★
+★★★ WHEN ANALYZING 1 MANIFEST AGAINST 2 OR MORE HBL FILES ★★★
+
+DETECTION: Count the number of HBL/PDF files provided. If more than 1 → apply this rule.
+
+OUTPUT FORMAT (MANDATORY - must appear BEFORE individual HBL analysis):
+
+═══════════════════════════════════════════════════════════════════
+MULTI-HBL GLOBAL RECONCILIATION
+═══════════════════════════════════════════════════════════════════
+
+Number of HBLs analyzed: [X]
+HBL files: [filename1.PDF], [filename2.PDF], ...
+
+GROSS WEIGHT RECONCILIATION:
+┌─────────────────────────────────────────────────────────────────┐
+│ HBL #1 ([filename1.PDF]): [extracted weight] kg                 │
+│ HBL #2 ([filename2.PDF]): [extracted weight] kg                 │
+│ [repeat for all HBLs]                                           │
+├─────────────────────────────────────────────────────────────────┤
+│ SUM OF ALL HBLs:    [sum of all HBL weights] kg                 │
+│ MANIFEST TOTAL:     [manifest total weight] kg                  │
+│ DELTA:              [difference] kg                             │
+│ STATUS:             [MATCH ✓] or [DISCREPANCY ⚠]               │
+└─────────────────────────────────────────────────────────────────┘
+
+CBM RECONCILIATION:
+┌─────────────────────────────────────────────────────────────────┐
+│ HBL #1 ([filename1.PDF]): [extracted CBM] m³                    │
+│ HBL #2 ([filename2.PDF]): [extracted CBM] m³                    │
+│ [repeat for all HBLs]                                           │
+├─────────────────────────────────────────────────────────────────┤
+│ SUM OF ALL HBLs:    [sum of all HBL CBMs] m³                    │
+│ MANIFEST TOTAL:     [manifest total CBM] m³                     │
+│ DELTA:              [difference] m³                             │
+│ STATUS:             [MATCH ✓] or [DISCREPANCY ⚠]               │
+└─────────────────────────────────────────────────────────────────┘
+
+PACKAGES/VOLUMES RECONCILIATION:
+┌─────────────────────────────────────────────────────────────────┐
+│ HBL #1 ([filename1.PDF]): [packages] packages                   │
+│ HBL #2 ([filename2.PDF]): [packages] packages                   │
+│ [repeat for all HBLs]                                           │
+├─────────────────────────────────────────────────────────────────┤
+│ SUM OF ALL HBLs:    [sum] packages                              │
+│ MANIFEST TOTAL:     [manifest total] packages                   │
+│ DELTA:              [difference] packages                       │
+│ STATUS:             [MATCH ✓] or [DISCREPANCY ⚠]               │
+└─────────────────────────────────────────────────────────────────┘
+
+═══════════════════════════════════════════════════════════════════
+
+TOLERANCE RULES FOR MULTI-HBL SUMS:
+- Weight: Delta > 1 kg OR > 0.1% of total → DISCREPANCY
+- CBM: Delta > 0.01 m³ OR > 0.1% of total → DISCREPANCY  
+- Packages: ANY difference (delta ≠ 0) → DISCREPANCY
+
+IF ANY DISCREPANCY DETECTED, ADD THIS WARNING:
+"⚠ WARNING: Sum of HBL values does not match Manifest total.
+ The HBL totals must be adjusted so their sum equals the Manifest total.
+ Review each HBL to identify which one(s) need correction."
+
+CONCRETE EXAMPLE:
+═══════════════════════════════════════════════════════════════════
+MULTI-HBL GLOBAL RECONCILIATION
+═══════════════════════════════════════════════════════════════════
+
+Number of HBLs analyzed: 2
+HBL files: 14630140408.PDF, 14630140411.PDF
+
+GROSS WEIGHT RECONCILIATION:
+┌─────────────────────────────────────────────────────────────────┐
+│ HBL #1 (14630140408.PDF): 2,800.000 kg                          │
+│ HBL #2 (14630140411.PDF): 2,200.000 kg                          │
+├─────────────────────────────────────────────────────────────────┤
+│ SUM OF ALL HBLs:    5,000.000 kg                                │
+│ MANIFEST TOTAL:     5,000.000 kg                                │
+│ DELTA:              0.000 kg                                    │
+│ STATUS:             MATCH ✓                                     │
+└─────────────────────────────────────────────────────────────────┘
+
+CBM RECONCILIATION:
+┌─────────────────────────────────────────────────────────────────┐
+│ HBL #1 (14630140408.PDF): 14.200 m³                             │
+│ HBL #2 (14630140411.PDF): 11.300 m³                             │
+├─────────────────────────────────────────────────────────────────┤
+│ SUM OF ALL HBLs:    25.500 m³                                   │
+│ MANIFEST TOTAL:     25.500 m³                                   │
+│ DELTA:              0.000 m³                                    │
+│ STATUS:             MATCH ✓                                     │
+└─────────────────────────────────────────────────────────────────┘
+
+═══════════════════════════════════════════════════════════════════
+
+★★★ AFTER THIS GLOBAL RECONCILIATION, PROCEED WITH INDIVIDUAL HBL ANALYSIS ★★★
 
 █████████████████████████████████████████████████████████████████████
 █ CRITICAL: EXHAUSTIVE DATA EXTRACTION - READ EVERYTHING            █
