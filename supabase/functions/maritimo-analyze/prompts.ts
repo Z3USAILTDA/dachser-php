@@ -1007,44 +1007,103 @@ DOCUMENT STRUCTURE DIFFERENCES:
               RESULT: MATCH ✓ (both vessel names are identical)
    - Look in header area, routing section, or dedicated vessel field
 
-3) PORTS (Loading/Discharge):
-   - HBL: May use "PORT OF LOADING", "POL", "PLACE OF RECEIPT"
-   - MBL: May use "PORT OF LOADING", "LOADING PORT", "POL", "PLACE OF LOADING"
-   - For discharge: "PORT OF DISCHARGE", "POD", "PLACE OF DELIVERY", "FINAL DESTINATION"
-   - Extract the port name/code, ignoring field label differences
+3) PORTS (Loading/Discharge) - CRITICAL EXTRACTION RULE:
+   - HBL field names: "PORT OF LOADING", "POL", "PLACE OF RECEIPT", "LOADING PORT"
+   - MBL field names: "PORT OF LOADING", "LOADING PORT", "POL", "PLACE OF LOADING", "PORT OF LADING"
+   - For discharge HBL: "PORT OF DISCHARGE", "POD", "PLACE OF DELIVERY", "FINAL DESTINATION", "DISCHARGE PORT"
+   - For discharge MBL: "PORT OF DISCHARGE", "POD", "PLACE OF DELIVERY", "FINAL DESTINATION", "PORT OF DESTINATION"
+   - COMPARISON RULE: Extract the PORT NAME/CODE value, ignoring the field label
+   - NORMALIZATION: Ignore case, extra spaces, and common abbreviations (e.g., "HAMBURG" = "Hamburg" = "HAMBURG, GERMANY")
+   - Example: HBL has "Port of Loading: HAMBURG" and MBL has "Loading Port: HAMBURG" → MATCH ✓
 
-4) PARTIES (Shipper/Consignee/Notify):
-   - Both documents have these but field positions vary
-   - MBL may have carrier-specific formatting
-   - HBL may have more detailed party information
-   - Match by content, not by field position
+4) PARTIES (Shipper/Consignee/Notify) - CRITICAL EXTRACTION RULE:
+   - SHIPPER:
+     * HBL: "SHIPPER", "EXPORTER", "SHIPPER/EXPORTER"
+     * MBL: "SHIPPER", "SHIPPER/EXPORTER", may include full address
+   - CONSIGNEE:
+     * HBL: "CONSIGNEE", "CONSIGNED TO", "CONSIGNEE/IMPORTER"
+     * MBL: "CONSIGNEE", "CONSIGNED TO ORDER", may say "TO ORDER" or "TO ORDER OF..."
+     * IMPORTANT: If MBL says "TO ORDER" and HBL has a specific name, this is NORMAL for ocean freight - NOT a mismatch
+   - NOTIFY PARTY:
+     * HBL: "NOTIFY PARTY", "NOTIFY", "NOTIFY ADDRESS"
+     * MBL: "NOTIFY PARTY", "NOTIFY", "ALSO NOTIFY"
+   - COMPARISON RULE: Compare the CORE company/entity name, ignoring:
+     * Address details (street, city, country, postal code)
+     * Registration numbers (CNPJ, VAT, etc.)
+     * Minor punctuation differences ("CO., LTD." = "CO LTD" = "COMPANY LIMITED")
+   - Example: HBL = "ACME CORP, 123 Main St, São Paulo" vs MBL = "ACME CORP" → MATCH ✓
 
-5) CONTAINER/SEAL:
-   - HBL: In "CONTAINER NO.", "MARKS AND NUMBERS", goods description area
-   - MBL: In "CONTAINER NO.", "CONTAINER NUMBERS", "PARTICULARS" section
-   - Container format: 4 letters + 7 digits (ISO 6346)
-   - Seal may be near container or in separate field
+5) CONTAINER/SEAL - CRITICAL EXTRACTION RULE:
+   - CONTAINER NUMBER:
+     * HBL: "CONTAINER NO.", "CONTAINER NUMBER", "MARKS AND NUMBERS", in goods description
+     * MBL: "CONTAINER NO.", "CONTAINER NUMBERS", "PARTICULARS", "CONTAINER/SEAL"
+     * Format: 4 letters + 7 digits (ISO 6346, e.g., "SEKU5762065")
+     * NORMALIZATION: Remove spaces, dashes, normalize to uppercase
+   - SEAL NUMBER:
+     * HBL: "SEAL NO.", "SEAL", may be near container number
+     * MBL: "SEAL NO.", "SEAL NUMBER", "SEAL", in separate field or combined with container
+     * May have multiple seals - compare all seals found
+   - COMPARISON RULE: Extract container/seal values from wherever they appear, compare normalized values
 
-6) TOTALS (Weight/CBM/Packages):
-   - Look in "PARTICULARS", "GROSS WEIGHT", "MEASUREMENT" columns/fields
-   - May be in footer area or goods description section
-   - Units may vary: KG/KGS/KILOS, M3/CBM/m³
+6) TOTALS (Weight/CBM/Packages) - CRITICAL EXTRACTION RULE:
+   - PACKAGES:
+     * HBL: "NO. OF PACKAGES", "PACKAGES", "NO. OF PKGS", "QUANTITY"
+     * MBL: "NO. OF PACKAGES", "TOTAL PACKAGES", "NUMBER OF PACKAGES"
+     * IMPORTANT: MBL may show "1" (meaning 1 container) while HBL shows actual package count inside
+     * If MBL = 1 and HBL > 1, check if MBL is counting containers vs HBL counting inner packages
+   - GROSS WEIGHT:
+     * HBL: "GROSS WEIGHT", "WEIGHT", "GR. WT.", in KG/KGS
+     * MBL: "GROSS WEIGHT", "WEIGHT", "TOTAL WEIGHT"
+     * NORMALIZATION: Convert all to KG, compare numeric values (ignore formatting: "17,970.000 kg" = "17970 KGS")
+   - MEASUREMENT (CBM):
+     * HBL: "MEASUREMENT", "CBM", "VOLUME", "M3"
+     * MBL: "MEASUREMENT", "VOLUME", "CBM", "CUBIC METERS"
+     * NORMALIZATION: Convert all to m³, compare numeric values
 
-7) DATES:
-   - "SHIPPED ON BOARD", "ON BOARD DATE", "DATE OF SHIPMENT"
-   - "DATE OF ISSUE", "DATE AND PLACE OF ISSUE", "ISSUED AT"
-   - Check multiple locations: header, footer, stamp area
+7) DATES - CRITICAL EXTRACTION RULE:
+   - SHIPPED ON BOARD DATE:
+     * HBL: "SHIPPED ON BOARD", "ON BOARD DATE", "DATE OF SHIPMENT", "LADEN ON BOARD"
+     * MBL: "SHIPPED ON BOARD", "ON BOARD DATE", "DATE LADEN ON BOARD"
+     * May appear in a stamp or handwritten area
+   - DATE OF ISSUE:
+     * HBL: "DATE OF ISSUE", "ISSUED AT", "DATE AND PLACE OF ISSUE", "B/L DATE"
+     * MBL: "DATE OF ISSUE", "DATE AND PLACE OF ISSUE", "ISSUED ON"
+   - COMPARISON RULE: Normalize all dates to YYYY-MM-DD format before comparing
+   - "20-JUL-2025" = "2025-07-20" = "July 20, 2025" → all equivalent, no mismatch
 
-8) FREIGHT TERMS:
-   - "FREIGHT PREPAID", "FREIGHT COLLECT", "FREIGHT PAYABLE AT..."
-   - May be in dedicated field or stamped on document
+8) FREIGHT TERMS - CRITICAL EXTRACTION RULE:
+   - HBL: "FREIGHT", "FREIGHT TERMS", may be stamped or printed
+   - MBL: "FREIGHT", "FREIGHT TERMS", "FREIGHT AND CHARGES"
+   - Common values: "PREPAID", "COLLECT", "FREIGHT PREPAID", "FREIGHT COLLECT"
+   - NORMALIZATION: These are equivalent:
+     * "FREIGHT PREPAID" = "PREPAID" = "FREIGHT PAYABLE AT ORIGIN"
+     * "FREIGHT COLLECT" = "COLLECT" = "FREIGHT PAYABLE AT DESTINATION"
+   - COMPARISON RULE: Normalize to PREPAID or COLLECT before comparing
 
-EXTRACTION RULES:
-- Scan the ENTIRE document for each field, not just expected locations
-- If a field appears in different positions in HBL vs MBL, still compare the VALUES
-- Never report a mismatch because a field is in a different position
-- Only report mismatches when the actual VALUES differ after normalization
-- If a field is not found, state "Not found in <document>" rather than assuming empty
+9) NCM/HS CODES - CRITICAL EXTRACTION RULE:
+   - Look for 8-digit codes in cargo/goods description area
+   - Search keywords: "NCM", "HS", "HS CODE", "HSCODE", "H.S.", "TARIC", "TARIFF"
+   - Use ±60 character context window around keywords
+   - Extract ALL unique 8-digit codes from each document
+   - COMPARISON RULE: Compare the SETS of codes, not their order or formatting
+
+███████████████████████████████████████████████████████████████████████████████
+███ MASTER EXTRACTION RULE - APPLY TO ALL FIELDS                            ███
+███████████████████████████████████████████████████████████████████████████████
+
+For EVERY field comparison:
+1. SEARCH the ENTIRE document for the relevant data (not just expected locations)
+2. EXTRACT the core value (ignore field labels, formatting, extra text)
+3. NORMALIZE the value (case, punctuation, units, date formats)
+4. COMPARE normalized values from HBL and MBL
+5. Only report MISMATCH if the normalized core values are ACTUALLY different
+
+FALSE POSITIVE PREVENTION:
+- Different field POSITIONS → NOT a mismatch (compare VALUES only)
+- Different field LABELS → NOT a mismatch (compare VALUES only)
+- Different FORMATTING → NOT a mismatch (normalize first)
+- Combined vs separate fields → NOT a mismatch (extract and compare individual values)
+- Extra details in one doc → NOT a mismatch if core value matches
 
 SCOPE
 - Compare an HBL against its carrier-issued MBL and produce concrete update instructions for whichever document must change.
