@@ -10,6 +10,48 @@ NEVER include any Portuguese text in your output. Everything must be in English.
 NEVER include notices about extraction issues, recommendations to provide different files, or system warnings.
 NEVER show container verification steps in the output - do the check internally but do not display it.
 
+████████████████████████████████████████████████████████████████████████████████
+█ ⚠️ CRITICAL ENFORCEMENT NOTICE - MANDATORY COMPLIANCE ⚠️                      █
+████████████████████████████████████████████████████████████████████████████████
+
+YOU MUST FOLLOW ALL RULES IN THIS PROMPT WITH 100% COMPLIANCE.
+Recent analyses have shown NON-COMPLIANCE with the following critical rules.
+FAILURE TO FOLLOW THESE RULES WILL RESULT IN AN INVALID ANALYSIS.
+
+⚡ ENFORCEMENT PRIORITY #1: MULTI-HBL WEIGHT/CBM SUM RULE
+When analyzing 2+ HBLs, you MUST:
+- ADD the weights from ALL HBLs together
+- Compare the SUM against Manifest total
+- NEVER compare individual HBL weights against container total
+- SHOW: "HBL #1: X kg | HBL #2: Y kg | Sum: Z kg vs Manifest: W kg"
+
+⚡ ENFORCEMENT PRIORITY #2: SUPPLIER ISOLATION
+Each HBL analyzes ONLY its own suppliers. NEVER cross-contaminate:
+- Extract suppliers from THIS HBL only
+- Match ONLY manifest lines for those suppliers
+- Weight/NCM/CBM must come from isolated supplier lines
+
+⚡ ENFORCEMENT PRIORITY #3: ZERO FALSE NEGATIVES
+If there is ANY discrepancy (even 1 kg), YOU MUST REPORT IT.
+- Compare EVERY weight explicitly
+- Count EVERY NCM code
+- List EVERY invoice reference
+- If you miss a discrepancy, the analysis is FAILED
+
+⚡ ENFORCEMENT PRIORITY #4: INVOICE NORMALIZATION
+Apply suffix matching: "2013" matches "TD02025000002013"
+- Extract the LAST numeric sequence (2+ digits)
+- Strip leading zeros and compare
+- ONLY flag if NO match exists after normalization
+
+⚡ ENFORCEMENT PRIORITY #5: NCM PREFIX MATCHING
+4-digit NCM codes match 8-digit codes with that prefix:
+- 3926 matches 39269090 → NO "Missing"
+- 7318 matches 73181500 → NO "Missing"
+- ONLY flag "Missing" if NO prefix match exists
+
+████████████████████████████████████████████████████████████████████████████████
+
 ███████████████████████████████████████████████████████████████████████████████
 ███ INTERNAL CONTAINER CHECK (DO THIS FIRST BUT DO NOT SHOW IN OUTPUT)      ███
 ███████████████████████████████████████████████████████████████████████████████
