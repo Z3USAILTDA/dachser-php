@@ -322,58 +322,80 @@ export const maritimoApi = {
   },
 
   /**
-   * Poll analysis status with timeout
+   * Poll analysis status with extended timeout and retry logic
    */
   async pollAnalysisUntilComplete(
     analysisId: string, 
     onProgress?: (percent: number, step: string) => void,
-    timeoutMs: number = 8 * 60 * 1000 // 8 minutes
+    timeoutMs: number = 10 * 60 * 1000 // 10 minutes (extended from 8)
   ): Promise<any> {
     const startTime = Date.now();
-    const pollInterval = 3000;
+    const pollInterval = 4000; // 4 seconds between polls
+    let consecutiveErrors = 0;
+    const maxConsecutiveErrors = 5;
+    let lastProgress = 15;
     
     while (Date.now() - startTime < timeoutMs) {
-      const status = await this.pollAnalysis(analysisId);
-      
-      // Map step to progress
-      let progressPercent = 50;
-      let progressStep = 'Analisando documentos...';
-      
-      if (status.status === 'pendente' || status.status === 'queued') {
-        progressPercent = 15;
-        progressStep = 'Aguardando processamento...';
-      } else if (status.status === 'analisando' || status.status === 'processing') {
-        progressPercent = 50;
-        progressStep = 'Analisando com IA...';
-      } else if (status.status === 'realizado' || status.status === 'completed') {
-        progressPercent = 100;
-        progressStep = 'Concluído';
-      }
-      
-      if (onProgress) {
-        onProgress(progressPercent, progressStep);
-      }
+      try {
+        const status = await this.pollAnalysis(analysisId);
+        consecutiveErrors = 0; // Reset error counter on success
+        
+        // Map step to progress with smoother progression
+        let progressPercent = 50;
+        let progressStep = 'Analisando documentos...';
+        
+        if (status.status === 'pendente' || status.status === 'queued') {
+          progressPercent = Math.min(lastProgress + 2, 25);
+          progressStep = 'Preparando análise...';
+        } else if (status.status === 'analisando' || status.status === 'processing') {
+          // Smoother progress between 30-85%
+          const elapsed = Date.now() - startTime;
+          const progressRatio = Math.min(elapsed / (timeoutMs * 0.8), 1);
+          progressPercent = Math.min(30 + Math.floor(progressRatio * 55), 85);
+          progressStep = 'Processando com IA...';
+        } else if (status.status === 'realizado' || status.status === 'completed') {
+          progressPercent = 100;
+          progressStep = 'Concluído';
+        }
+        
+        lastProgress = progressPercent;
+        
+        if (onProgress) {
+          onProgress(progressPercent, progressStep);
+        }
 
-      // Check for completed states (MariaDB uses 'realizado', 'erro')
-      if (status.status === 'realizado' || status.status === 'completed') {
-        return {
-          success: true,
-          result_text: status.result_text,
-          result_data: status.result_data,
-          status: 'completed',
-          analysisId
-        };
-      }
+        // Check for completed states (MariaDB uses 'realizado', 'erro')
+        if (status.status === 'realizado' || status.status === 'completed') {
+          return {
+            success: true,
+            result_text: status.result_text,
+            result_data: status.result_data,
+            status: 'completed',
+            analysisId
+          };
+        }
 
-      if (status.status === 'erro' || status.status === 'error') {
-        throw new Error(status.error_message || 'Erro na análise');
-      }
+        if (status.status === 'erro' || status.status === 'error') {
+          throw new Error(status.error_message || 'Erro na análise');
+        }
 
-      await new Promise(resolve => setTimeout(resolve, pollInterval));
+        await new Promise(resolve => setTimeout(resolve, pollInterval));
+        
+      } catch (pollError: any) {
+        consecutiveErrors++;
+        console.warn(`Poll attempt failed (${consecutiveErrors}/${maxConsecutiveErrors}):`, pollError.message);
+        
+        if (consecutiveErrors >= maxConsecutiveErrors) {
+          throw new Error('Erro de conexão com a internet. Por favor, verifique sua conexão e tente novamente.');
+        }
+        
+        // Wait longer between retries on error
+        await new Promise(resolve => setTimeout(resolve, pollInterval * 2));
+      }
     }
     
     console.error(`Analysis timeout after ${timeoutMs/1000/60} minutes.`);
-    throw new Error(`Tempo limite excedido (${Math.round(timeoutMs/1000/60)} minutos)`);
+    throw new Error('Erro de conexão com a internet. Por favor, verifique sua conexão e tente novamente.');
   },
 
   /**

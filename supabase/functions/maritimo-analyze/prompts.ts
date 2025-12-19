@@ -49,6 +49,39 @@ SCOPE & AUTHORITY
 - If something conflicts, the Manifest prevails; each HBL must be updated to match it.
 
 █████████████████████████████████████████████████████████████████████
+█ CRITICAL: MULTIPLE HBLs → SUM VALUES FOR MANIFEST COMPARISON      █
+█████████████████████████████████████████████████████████████████████
+
+★★★ WHEN 1 MANIFEST IS COMPARED AGAINST MULTIPLE HBLs ★★★
+
+When analyzing 1 Manifest against 2 or more HBLs, follow this MANDATORY logic:
+
+1. WEIGHT RECONCILIATION (MULTI-HBL):
+   - Extract total Gross Weight from each HBL individually
+   - SUM all HBL weights together
+   - Compare the SUM against the Manifest total Gross Weight
+   - If SUM of HBLs differs from Manifest by more than 1 kg or 0.1% → DISCREPANCY
+   - Report: "Sum of HBL weights (X + Y = Z kg) vs Manifest total (W kg) | Delta: ±N kg"
+
+2. CBM RECONCILIATION (MULTI-HBL):
+   - Extract total CBM from each HBL individually
+   - SUM all HBL CBM values together
+   - Compare the SUM against the Manifest total CBM
+   - If SUM of HBLs differs from Manifest by more than 0.001 m³ or 0.1% → DISCREPANCY
+   - Report: "Sum of HBL CBM (X + Y = Z m³) vs Manifest total (W m³) | Delta: ±N m³"
+
+EXAMPLE FOR 1 MANIFEST × 2 HBLs:
+- Manifest total: 5,000 kg and 25.5 m³
+- HBL #1: 2,800 kg and 14.2 m³
+- HBL #2: 2,200 kg and 11.3 m³
+- Sum: 5,000 kg and 25.5 m³ → MATCH ✓
+
+If there's a mismatch:
+- Manifest total: 5,000 kg
+- HBL #1: 2,800 kg + HBL #2: 2,100 kg = 4,900 kg
+- Delta: -100 kg → Report discrepancy
+
+█████████████████████████████████████████████████████████████████████
 █ CRITICAL: EXHAUSTIVE DATA EXTRACTION - READ EVERYTHING            █
 █████████████████████████████████████████████████████████████████████
 
@@ -62,8 +95,11 @@ FROM MANIFEST/XLSX (scan ALL columns, ALL rows):
 - CBM/Measurement values
 - NCM/HS codes (8-digit and 4-digit)
 - Invoice numbers (ANY column containing invoice references - look for patterns like alphanumeric codes)
-- Package counts and descriptions
+- Package counts/quantities and descriptions
 - Container numbers
+- SEAL NUMBERS (lacre)
+- CNPJ numbers (14-digit Brazilian tax ID)
+- Exporter/Shipper names
 
 FROM HBL/PDF (extract ALL text, scan entire document):
 - All supplier/shipper names mentioned
@@ -71,7 +107,11 @@ FROM HBL/PDF (extract ALL text, scan entire document):
 - All NCM/HS codes in cargo descriptions
 - All invoice references (look for "AS PER INVOICE", "INVOICE NO", "INV:", "COMMERCIAL INVOICE")
 - All CBM/measurement values
-- Container and seal numbers
+- Container numbers
+- SEAL NUMBERS (must match manifest seal)
+- CNPJ numbers (in consignee or shipper fields)
+- Exporter/Shipper names
+- Package/volume counts
 
 ★ If you cannot find data in an obvious column, SEARCH THE ENTIRE FILE for that data type
 ★ NEVER conclude "Manifest has no data" without exhaustively searching all columns and rows
@@ -702,9 +742,30 @@ ALWAYS provide per-HBL structure as shown in the example above.
     Update: Set HBL container number to "<XXXX1234567>".  ← ONLY IF DIFFERENT
     NOTE: Container number verification is MANDATORY. Always include this section showing both values.
 
-  - Shipper:
-    Manifest shipper: "<exact normalized>"  |  HBL shipper: "<exact>"
-    Update: Set HBL shipper to "<manifest shipper>".
+  - Seal Number (MANDATORY VERIFICATION):
+    Manifest seal: "<seal_number>"  |  HBL seal: "<value found or 'not found'>"
+    # ONLY include "Update:" line if seals are DIFFERENT or missing.
+    # If seals MATCH: omit the "Update:" line entirely.
+    Update: Set HBL seal number to "<manifest seal>".  ← ONLY IF DIFFERENT
+    NOTE: Seal number verification is MANDATORY for import documentation. Always include this section.
+
+  - CNPJ (MANDATORY VERIFICATION):
+    Manifest CNPJ: "<XX.XXX.XXX/XXXX-XX>"  |  HBL CNPJ: "<value found or 'not found'>"
+    # Brazilian tax ID (14 digits). Must match exactly.
+    Update: Set HBL consignee CNPJ to "<manifest CNPJ>".  ← ONLY IF DIFFERENT
+    NOTE: CNPJ verification is MANDATORY for Brazilian import processes.
+
+  - Exporter/Shipper (MANDATORY VERIFICATION):
+    Manifest exporter: "<company name>"  |  HBL shipper: "<value found>"
+    # Compare after normalization (case/diacritics/punctuation insensitive)
+    Update: Set HBL shipper to "<manifest exporter>".  ← ONLY IF DIFFERENT
+    NOTE: Exporter must match for customs clearance.
+
+  - Volumes/Quantities (MANDATORY VERIFICATION):
+    Manifest total volumes: <n>  |  HBL total volumes: <n>  |  Delta: <signed n>
+    # Volume = number of packages, pallets, boxes, etc.
+    Update: Set HBL total volumes to <n>.  ← ONLY IF DIFFERENT
+    NOTE: Volume count must match exactly for cargo verification.
 
 HANDLING LIMITED OR UNREADABLE FILES
 - If file extraction yields very limited text (< 200 chars), still attempt to produce analysis structure.
