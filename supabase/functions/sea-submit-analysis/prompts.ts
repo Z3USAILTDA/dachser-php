@@ -1016,30 +1016,31 @@ HBL (House Bill of Lading) and MBL (Master Bill of Lading) serve DIFFERENT purpo
   - Consignee: The ACTUAL importer (final buyer)
   - These are the SHIPPER'S commercial parties
 
-★★★ CRITICAL RULE: Shipper, Consignee, and Notify Party are DESIGNED to be DIFFERENT ★★★
-★★★ DO NOT compare these parties between HBL and MBL - it's NOT a discrepancy      ★★★
+★★★ IMPORTANT: Compare ALL fields including Shipper, Consignee, and Notify Party     ★★★
+★★★ Report ALL differences found - even if they are expected due to document nature  ★★★
 
 ███████████████████████████████████████████████████████████████████████████████
 ███ WHAT TO COMPARE (these MUST match between HBL and MBL)                    ███
 ███████████████████████████████████████████████████████████████████████████████
 
-COMPARE THESE FIELDS - they must be identical or very close:
-1. VESSEL NAME - The carrying vessel (e.g., "MAERSK LETICIA")
-2. VOYAGE NUMBER - The voyage code (e.g., "0EWMHS1MA")
-3. PORT OF LOADING - Origin port (e.g., "HAMBURG")
-4. PORT OF DISCHARGE - Destination port (e.g., "SANTOS")
-5. CONTAINER NUMBER - ISO 6346 format (e.g., "SEKU5762065")
-6. SEAL NUMBER - Container seal (e.g., "2000030906")
-7. TOTAL GROSS WEIGHT - Total cargo weight in KG
-8. TOTAL CBM/MEASUREMENT - Total volume in cubic meters
-9. PACKAGES - Total package count (may differ slightly - HBL may show more detail)
-10. NCM/HS CODES - Commodity codes (MBL often has fewer details)
+COMPARE ALL FIELDS - report any differences found:
+1. SHIPPER - The exporting party (compare even if different by document nature)
+2. CONSIGNEE - The receiving party (compare even if different by document nature)
+3. NOTIFY PARTY - Party to notify (compare even if different by document nature)
+4. VESSEL NAME - The carrying vessel (e.g., "MAERSK LETICIA")
+5. VOYAGE NUMBER - The voyage code (e.g., "0EWMHS1MA")
+6. PORT OF LOADING - Origin port (e.g., "HAMBURG")
+7. PORT OF DISCHARGE - Destination port (e.g., "SANTOS")
+8. CONTAINER NUMBER - ISO 6346 format (e.g., "SEKU5762065")
+9. SEAL NUMBER - Container seal (e.g., "2000030906")
+10. TOTAL GROSS WEIGHT - Total cargo weight in KG
+11. TOTAL CBM/MEASUREMENT - Total volume in cubic meters
+12. PACKAGES - Total package count
+13. NCM/HS CODES - Commodity codes
 
-DO NOT COMPARE (different by design):
-- Shipper (freight forwarder on MBL vs actual exporter on HBL)
-- Consignee (agent/TO ORDER on MBL vs actual importer on HBL)
-- Notify Party (different notification chains)
-- Carrier/Agent (already known to be different entities)
+★★★ OBJECTIVE: Report ALL differences for user verification ★★★
+Even if differences are expected (e.g., Shipper being different between HBL and MBL),
+the user wants to see ALL differences so they can verify the information themselves.
 
 ███████████████████████████████████████████████████████████████████████████████
 ███ UNIVERSAL DATA EXTRACTION - SEARCH EVERYWHERE                             ███
@@ -1057,6 +1058,9 @@ CRITICAL: Documents come in MANY different formats. Never assume fixed positions
 
 ★★★ KEYWORD VARIATIONS TO SEARCH ★★★
 
+SHIPPER: "SHIPPER", "EXPORTER", "CONSIGNOR", "SHIPPED BY", "FROM"
+CONSIGNEE: "CONSIGNEE", "IMPORTER", "CONSIGNED TO", "TO", "RECEIVER"
+NOTIFY: "NOTIFY", "NOTIFY PARTY", "ALSO NOTIFY", "NOTIFY ADDRESS"
 VESSEL: "VESSEL", "OCEAN VESSEL", "CARRYING VESSEL", "M/V", "VESSEL NAME"
 VOYAGE: "VOYAGE", "VOYAGE NO", "VOYAGE NUMBER", "VOY", "V/"
   - COMBINED: "VESSEL / VOYAGE-NO." or "VESSEL/VOYAGE" → split at "/" and take second part
@@ -1112,6 +1116,9 @@ Complete HBL × MBL Comparison Report:
 
 --- EXTRACTED DATA (for verification) ---
 From HBL:
+- Shipper: [extracted value]
+- Consignee: [extracted value]
+- Notify Party: [extracted value]
 - Vessel: [extracted value]
 - Voyage: [extracted value]
 - Port of Loading: [extracted value]
@@ -1124,6 +1131,9 @@ From HBL:
 - NCM/HS Codes: [list of codes found]
 
 From MBL:
+- Shipper: [extracted value]
+- Consignee: [extracted value]
+- Notify Party: [extracted value]
 - Vessel: [extracted value]
 - Voyage: [extracted value]
 - Port of Loading: [extracted value]
@@ -1137,35 +1147,32 @@ From MBL:
 
 --- COMPARISON RESULTS ---
 
-1) Routing & Transport
-- Vessel: HBL = "[value]" | MBL = "[value]" → [MATCH ✓ or UPDATE REQUIRED: ...]
-- Voyage: HBL = "[value]" | MBL = "[value]" → [MATCH ✓ or UPDATE REQUIRED: ...]
-- Port of Loading: HBL = "[value]" | MBL = "[value]" → [MATCH ✓ or UPDATE REQUIRED: ...]
-- Port of Discharge: HBL = "[value]" | MBL = "[value]" → [MATCH ✓ or UPDATE REQUIRED: ...]
+1) Parties
+- Shipper: HBL = "[value]" | MBL = "[value]" → [MATCH ✓ or DIFFERENT: ...]
+- Consignee: HBL = "[value]" | MBL = "[value]" → [MATCH ✓ or DIFFERENT: ...]
+- Notify Party: HBL = "[value]" | MBL = "[value]" → [MATCH ✓ or DIFFERENT: ...]
 
-2) Container & Seal
-- Container Nº: HBL = "[value]" | MBL = "[value]" → [MATCH ✓ or UPDATE REQUIRED: ...]
-- Seal Nº: HBL = "[value]" | MBL = "[value]" → [MATCH ✓ or UPDATE REQUIRED: ...]
+2) Routing & Transport
+- Vessel: HBL = "[value]" | MBL = "[value]" → [MATCH ✓ or DIFFERENT: ...]
+- Voyage: HBL = "[value]" | MBL = "[value]" → [MATCH ✓ or DIFFERENT: ...]
+- Port of Loading: HBL = "[value]" | MBL = "[value]" → [MATCH ✓ or DIFFERENT: ...]
+- Port of Discharge: HBL = "[value]" | MBL = "[value]" → [MATCH ✓ or DIFFERENT: ...]
 
-3) Totals
-- Packages: HBL = [n] | MBL = [n] | Delta: [±n] → [MATCH ✓ or UPDATE REQUIRED: ...]
-- Gross Weight: HBL = [n] kg | MBL = [n] kg | Delta: [±n] kg → [MATCH ✓ or UPDATE REQUIRED: ...]
-- CBM: HBL = [n] m³ | MBL = [n] m³ | Delta: [±n] m³ → [MATCH ✓ or UPDATE REQUIRED: ...]
+3) Container & Seal
+- Container Nº: HBL = "[value]" | MBL = "[value]" → [MATCH ✓ or DIFFERENT: ...]
+- Seal Nº: HBL = "[value]" | MBL = "[value]" → [MATCH ✓ or DIFFERENT: ...]
 
-4) NCM/HS Codes
+4) Totals
+- Packages: HBL = [n] | MBL = [n] | Delta: [±n] → [MATCH ✓ or DIFFERENT: ...]
+- Gross Weight: HBL = [n] kg | MBL = [n] kg | Delta: [±n] kg → [MATCH ✓ or DIFFERENT: ...]
+- CBM: HBL = [n] m³ | MBL = [n] m³ | Delta: [±n] m³ → [MATCH ✓ or DIFFERENT: ...]
+
+5) NCM/HS Codes
 - MBL codes: [list]
 - HBL codes: [list]
 - Missing in HBL: [list or "none"]
 - Extra in HBL: [list or "none"]
-- Status: [MATCH ✓ or UPDATE REQUIRED: ...]
-
-5) Parties (Informational Only - NOT compared)
-Note: Shipper, Consignee, and Notify Party are DIFFERENT BY DESIGN between HBL and MBL.
-- HBL Shipper: [actual exporter] (correct for HBL)
-- MBL Shipper: [freight forwarder] (correct for MBL)
-- HBL Consignee: [actual importer] (correct for HBL)
-- MBL Consignee: [destination agent or TO ORDER] (correct for MBL)
-- These are NOT discrepancies.
+- Status: [MATCH ✓ or DIFFERENT: ...]
 
 --- SUMMARY ---
 - Total fields compared: [count]
@@ -1186,12 +1193,13 @@ The following updates are required:
 ███████████████████████████████████████████████████████████████████████████████
 
 1. ALWAYS show the "EXTRACTED DATA" section first - this helps verify extraction worked
-2. NEVER compare Shipper/Consignee/Notify - they are intentionally different
-3. ALWAYS split combined fields before comparing (Vessel/Voyage)
-4. ALWAYS normalize numbers before comparing (handle European vs American formats)
-5. ALWAYS search entire document - data may be on any page
-6. If extraction fails for a field, state what you searched for and where
-7. Produce a COMPLETE response - never skip sections`;
+2. ALWAYS compare ALL fields including Shipper, Consignee, and Notify Party
+3. Report ALL differences found - even if expected due to document nature
+4. ALWAYS split combined fields before comparing (Vessel/Voyage)
+5. ALWAYS normalize numbers before comparing (handle European vs American formats)
+6. ALWAYS search entire document - data may be on any page
+7. If extraction fails for a field, state what you searched for and where
+8. Produce a COMPLETE response - never skip sections`;
 
 export const PROMPT_INVOICES_HBL = `SYSTEM — CRONOS (Invoices × Draft HBL Auditor)
 
