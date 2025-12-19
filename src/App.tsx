@@ -5,6 +5,9 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import Login from "./pages/Login";
 import ChangePassword from "./pages/ChangePassword";
+import ForgotPassword from "./pages/ForgotPassword";
+import VerifyResetCode from "./pages/VerifyResetCode";
+import ResetPassword from "./pages/ResetPassword";
 import Dashboard from "./pages/Dashboard";
 import MetricsUsage from "./pages/MetricsUsage";
 import Register from "./pages/Register";
@@ -68,6 +71,9 @@ const App = () => (
           
           <Route path="/login" element={<Login />} />
           <Route path="/change-password" element={<ChangePassword />} />
+          <Route path="/forgot-password" element={<ForgotPassword />} />
+          <Route path="/verify-code" element={<VerifyResetCode />} />
+          <Route path="/reset-password" element={<ResetPassword />} />
           <Route path="/dashboard" element={<Dashboard />} />
           <Route path="/admin/metrics" element={<MetricsUsage />} />
           <Route path="/admin/register" element={<Register />} />

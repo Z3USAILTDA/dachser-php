@@ -3630,6 +3630,182 @@ serve(async (req) => {
         break;
       }
 
+      // ==================== PASSWORD RESET ====================
+      case 'get_user_by_email': {
+        const { email } = body as { email?: string };
+        
+        if (!email) {
+          return new Response(
+            JSON.stringify({ error: 'E-mail é obrigatório', success: false }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+
+        console.log(`Looking up user by email: ${email}`);
+        
+        const users = await client.query(
+          'SELECT id, username, email FROM ai_agente.t_users_dachser WHERE email = ?',
+          [email.trim().toLowerCase()]
+        );
+
+        if (!users || users.length === 0) {
+          return new Response(
+            JSON.stringify({ error: 'E-mail não encontrado', success: false }),
+            { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+
+        result = { success: true, user: users[0] };
+        break;
+      }
+
+      case 'create_reset_code': {
+        const { email, userId } = body as { email?: string; userId?: number };
+        
+        if (!email || !userId) {
+          return new Response(
+            JSON.stringify({ error: 'E-mail e userId são obrigatórios', success: false }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+
+        // Create table if not exists
+        await client.execute(`
+          CREATE TABLE IF NOT EXISTS ai_agente.t_password_reset_codes (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            email VARCHAR(255) NOT NULL,
+            code VARCHAR(10) NOT NULL,
+            user_id INT NOT NULL,
+            expires_at DATETIME NOT NULL,
+            used TINYINT(1) DEFAULT 0,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            INDEX idx_email (email),
+            INDEX idx_code (code)
+          )
+        `);
+
+        // Generate 6-digit code
+        const code = Math.floor(100000 + Math.random() * 900000).toString();
+        
+        // Set expiration to 15 minutes from now
+        const expiresAt = new Date(Date.now() + 15 * 60 * 1000);
+        const expiresAtStr = expiresAt.toISOString().slice(0, 19).replace('T', ' ');
+
+        // Invalidate any previous codes for this email
+        await client.execute(
+          'UPDATE ai_agente.t_password_reset_codes SET used = 1 WHERE email = ? AND used = 0',
+          [email.trim().toLowerCase()]
+        );
+
+        // Insert new code
+        await client.execute(
+          'INSERT INTO ai_agente.t_password_reset_codes (email, code, user_id, expires_at) VALUES (?, ?, ?, ?)',
+          [email.trim().toLowerCase(), code, userId, expiresAtStr]
+        );
+
+        console.log(`Reset code created for email: ${email}`);
+        result = { success: true, code };
+        break;
+      }
+
+      case 'verify_reset_code': {
+        const { email, code } = body as { email?: string; code?: string };
+        
+        if (!email || !code) {
+          return new Response(
+            JSON.stringify({ error: 'E-mail e código são obrigatórios', success: false }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+
+        console.log(`Verifying reset code for email: ${email}`);
+
+        const codes = await client.query(
+          `SELECT rc.*, u.username 
+           FROM ai_agente.t_password_reset_codes rc
+           JOIN ai_agente.t_users_dachser u ON rc.user_id = u.id
+           WHERE rc.email = ? AND rc.code = ? AND rc.used = 0 AND rc.expires_at > NOW()
+           ORDER BY rc.created_at DESC
+           LIMIT 1`,
+          [email.trim().toLowerCase(), code.trim()]
+        );
+
+        if (!codes || codes.length === 0) {
+          return new Response(
+            JSON.stringify({ error: 'Código inválido ou expirado', success: false }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+
+        const codeRecord = codes[0];
+        
+        // Mark code as used
+        await client.execute(
+          'UPDATE ai_agente.t_password_reset_codes SET used = 1 WHERE id = ?',
+          [codeRecord.id]
+        );
+
+        result = { 
+          success: true, 
+          user: {
+            id: codeRecord.user_id,
+            username: codeRecord.username,
+            email: codeRecord.email
+          }
+        };
+        break;
+      }
+
+      case 'reset_password_by_email': {
+        const { email, password: newPassword } = body as { email?: string; password?: string };
+        
+        if (!email || !newPassword) {
+          return new Response(
+            JSON.stringify({ error: 'E-mail e nova senha são obrigatórios', success: false }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+
+        if (newPassword.length < 6) {
+          return new Response(
+            JSON.stringify({ error: 'A senha deve ter pelo menos 6 caracteres', success: false }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+
+        // Get user by email first
+        const users = await client.query(
+          'SELECT id, username FROM ai_agente.t_users_dachser WHERE email = ?',
+          [email.trim().toLowerCase()]
+        );
+
+        if (!users || users.length === 0) {
+          return new Response(
+            JSON.stringify({ error: 'Usuário não encontrado', success: false }),
+            { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+
+        // Hash new password
+        const newPasswordHash = bcrypt.hashSync(newPassword);
+
+        // Update password
+        await client.execute(
+          `UPDATE ai_agente.t_users_dachser 
+           SET password_hash = ?, must_change_password = 0 
+           WHERE email = ?`,
+          [newPasswordHash, email.trim().toLowerCase()]
+        );
+
+        console.log(`Password reset for email: ${email}`);
+        result = { 
+          success: true, 
+          message: 'Senha alterada com sucesso',
+          username: users[0].username
+        };
+        break;
+      }
+
       default:
         return new Response(
           JSON.stringify({ error: `Ação não suportada: ${action}` }),

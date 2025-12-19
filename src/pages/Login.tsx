@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -214,8 +214,13 @@ const Login = () => {
             )}
           </Button>
 
-          <p className="mt-2 text-[0.72rem] text-[#b9c4e0] text-center">
-            Esqueceu a senha? Contate o TI.
+          <p className="mt-2 text-[0.72rem] text-center">
+            <Link 
+              to="/forgot-password" 
+              className="text-[#b9c4e0] hover:text-[#ffc800] transition-colors underline underline-offset-2"
+            >
+              Esqueceu a senha?
+            </Link>
           </p>
 
           <p className="mt-3 text-[0.7rem] text-[#b9c4e0] text-right">
