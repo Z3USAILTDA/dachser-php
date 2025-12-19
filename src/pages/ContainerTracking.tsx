@@ -81,122 +81,161 @@ const detectArmadorFromVessel = (vessel: string | null | undefined): string => {
   return "-";
 };
 
-// Status mapping for containers (JSONCargo events)
-const containerStatusMap: Record<string, string> = {
-  // Pre-shipment
-  "EMPTY_TO_SHIPPER": "Container Vazio p/ Exportador",
-  "GATE_OUT_EMPTY": "Saída Vazio do Terminal",
-  "EMPTY_PICK_UP": "Coleta do Container Vazio",
-  // Loading
-  "LOADED": "Carregado",
-  "LOAD": "Carregado",
-  "FULL_IN": "Entrada Cheio no Terminal",
-  "GATE_IN_FULL": "Gate In Cheio",
-  // Departure  
-  "VESSEL_DEPARTED": "Navio Partiu",
-  "DEPARTURE": "Partida",
-  "DEPARTED": "Partiu",
-  // Transit
-  "IN_TRANSIT": "Em Trânsito",
-  "ON_RAIL": "Em Trânsito Ferroviário",
-  // Transshipment
-  "TRANSSHIPMENT": "Transbordo",
-  "TRANSSHIPMENT_DISCHARGED": "Descarregado p/ Transbordo",
-  "TRANSSHIPMENT_LOADED": "Carregado p/ Transbordo",
-  // Arrival
-  "VESSEL_ARRIVED": "Navio Chegou",
-  "ARRIVAL": "Chegada",
-  "ARRIVED": "Chegou",
-  // Discharge
-  "DISCHARGED": "Descarregado",
-  "DISCHARGE": "Descarregado",
-  "FULL_OUT": "Saída Cheio do Terminal",
-  // Delivery
-  "GATE_OUT_FULL": "Gate Out Cheio",
-  "DELIVERED": "Entregue",
-  "DELIVERY": "Entrega",
-  "EMPTY_RETURN": "Devolução Vazio",
-  // Pending
-  "PENDING": "Pendente",
-  "BOOKED": "Reservado",
-  "BOOKING": "Reserva Confirmada",
+// ========== REPORT STATUS SYSTEM (12 statuses) ==========
+export interface ReportStatus {
+  code: string;
+  label: string;
+  etapa: 'PRE_EMBARQUE' | 'EMBARQUE' | 'TRANSITO' | 'CHEGADA' | 'LIBERACAO' | 'ENTREGA';
+  etapaIndex: number; // 0-5 for progress calculation
+  color: string;
+}
+
+// 12 Report Status definitions
+const REPORT_STATUSES: Record<string, ReportStatus> = {
+  BKG: { code: 'BKG', label: 'Booking criado', etapa: 'PRE_EMBARQUE', etapaIndex: 0, color: '#94a3b8' },
+  CLT: { code: 'CLT', label: 'Coleta da carga', etapa: 'PRE_EMBARQUE', etapaIndex: 0, color: '#a78bfa' },
+  GIO: { code: 'GIO', label: 'Gate-in origem', etapa: 'PRE_EMBARQUE', etapaIndex: 0, color: '#818cf8' },
+  CRG: { code: 'CRG', label: 'Carregado no navio', etapa: 'EMBARQUE', etapaIndex: 1, color: '#60a5fa' },
+  DEP: { code: 'DEP', label: 'Partida do navio', etapa: 'EMBARQUE', etapaIndex: 1, color: '#38bdf8' },
+  TSP: { code: 'TSP', label: 'Chegada/Partida em transbordo', etapa: 'TRANSITO', etapaIndex: 2, color: '#f97316' },
+  ARR: { code: 'ARR', label: 'Chegada do navio', etapa: 'CHEGADA', etapaIndex: 3, color: '#22d3ee' },
+  DCH: { code: 'DCH', label: 'Descarga', etapa: 'CHEGADA', etapaIndex: 3, color: '#2dd4bf' },
+  INS: { code: 'INS', label: 'Inspeção/Liberação aduaneira', etapa: 'LIBERACAO', etapaIndex: 4, color: '#fbbf24' },
+  GOD: { code: 'GOD', label: 'Gate-out destino', etapa: 'ENTREGA', etapaIndex: 5, color: '#4ade80' },
+  DLV: { code: 'DLV', label: 'Entrega final', etapa: 'ENTREGA', etapaIndex: 5, color: '#22c55e' },
+  AGD: { code: 'AGD', label: 'Aguardando', etapa: 'PRE_EMBARQUE', etapaIndex: 0, color: '#64748b' },
 };
 
-// Get status code from JSONCargo event
-// Stages: L/C → ATD → AT SEA → ATA → T/S → ATA (final)
-const getStatusCode = (lastEvent: string | null): string => {
-  if (!lastEvent) return "AGD"; // Aguardando
+// JSONCargo event to Report Status mapping
+const EVENT_TO_REPORT_STATUS: Record<string, string> = {
+  // Booking criado (BKG)
+  'BOOKED': 'BKG',
+  'BOOKING': 'BKG',
+  'BOOKING_CONFIRMED': 'BKG',
+  'BOOKING_CREATED': 'BKG',
+  'PENDING': 'BKG',
   
-  const upperEvent = lastEvent.toUpperCase().replace(/[_\s-]/g, "");
+  // Coleta da carga (CLT)
+  'EMPTY_TO_SHIPPER': 'CLT',
+  'EMPTY_PICK_UP': 'CLT',
+  'GATE_OUT_EMPTY': 'CLT',
+  'PICKED_UP': 'CLT',
+  'PICKUP': 'CLT',
   
-  // Delivery/Final (after final arrival)
-  if (upperEvent.includes("DELIVERED") || upperEvent.includes("DELIVERY") || upperEvent.includes("EMPTYRETURN") ||
-      upperEvent.includes("GATEOUTFULL") || upperEvent.includes("FULLOUT") ||
-      upperEvent.includes("DISCHARGED") || upperEvent.includes("DISCHARGE")) return "ATA2";
-  // Transshipment
-  if (upperEvent.includes("TRANSSHIPMENT")) return "T/S";
-  // Arrival (first arrival / intermediate)
-  if (upperEvent.includes("ARRIVED") || upperEvent.includes("ARRIVAL") || upperEvent.includes("VESSELARRIVED")) return "ATA";
-  // In transit / At Sea
-  if (upperEvent.includes("TRANSIT") || upperEvent.includes("ONRAIL") || upperEvent.includes("ATSEA")) return "SEA";
-  // Departure
-  if (upperEvent.includes("DEPARTED") || upperEvent.includes("DEPARTURE") || upperEvent.includes("VESSELDEPARTED")) return "ATD";
-  // Loaded
-  if (upperEvent.includes("LOADED") || upperEvent.includes("LOAD") || upperEvent.includes("FULLIN") || upperEvent.includes("GATEINFULL")) return "L/C";
-  // Pre-loading statuses
-  if (upperEvent.includes("GATEOUTEMPTY") || upperEvent.includes("EMPTYPICKUP") || 
-      upperEvent.includes("EMPTYTOSHIPPER") || upperEvent.includes("BOOKED") || upperEvent.includes("BOOKING") ||
-      upperEvent.includes("PENDING")) return "AGD";
+  // Gate-in origem (GIO)
+  'GATE_IN_FULL': 'GIO',
+  'FULL_IN': 'GIO',
+  'RECEIVED': 'GIO',
+  'RECEIVED_FOR_EXPORT': 'GIO',
+  'RECEIVED_FOR_EXPORT_TRANSFER': 'GIO',
   
-  return "AGD";
+  // Carregado no navio (CRG)
+  'LOADED': 'CRG',
+  'LOAD': 'CRG',
+  'LOADED_ON_VESSEL': 'CRG',
+  'LOADING': 'CRG',
+  
+  // Partida do navio (DEP)
+  'VESSEL_DEPARTED': 'DEP',
+  'DEPARTED': 'DEP',
+  'DEPARTURE': 'DEP',
+  'VESSEL_DEPARTURE': 'DEP',
+  
+  // Transbordo (TSP)
+  'TRANSSHIPMENT': 'TSP',
+  'TRANSSHIPMENT_DISCHARGED': 'TSP',
+  'TRANSSHIPMENT_LOADED': 'TSP',
+  'IN_TRANSIT': 'TSP',
+  'ON_RAIL': 'TSP',
+  
+  // Chegada do navio (ARR)
+  'VESSEL_ARRIVED': 'ARR',
+  'ARRIVED': 'ARR',
+  'ARRIVAL': 'ARR',
+  'VESSEL_ARRIVAL': 'ARR',
+  
+  // Descarga (DCH)
+  'DISCHARGED': 'DCH',
+  'DISCHARGE': 'DCH',
+  'UNLOADED': 'DCH',
+  'OFFLOADED': 'DCH',
+  
+  // Inspeção/Liberação aduaneira (INS)
+  'CUSTOMS_RELEASED': 'INS',
+  'CUSTOMS_CLEARED': 'INS',
+  'RELEASED': 'INS',
+  'CUSTOMS': 'INS',
+  'CUSTOMS_HOLD': 'INS',
+  'INSPECTION': 'INS',
+  'AVAILABLE': 'INS',
+  'READY_FOR_PICKUP': 'INS',
+  
+  // Gate-out destino (GOD)
+  'GATE_OUT_FULL': 'GOD',
+  'FULL_OUT': 'GOD',
+  'OUT_GATE': 'GOD',
+  'CONTAINER_TO_CONSIGNEE': 'GOD',
+  
+  // Entrega final (DLV)
+  'DELIVERED': 'DLV',
+  'DELIVERY': 'DLV',
+  'EMPTY_RETURN': 'DLV',
+  'EMPTY_RETURNED': 'DLV',
+  'EMPTY_IN_DEPOT': 'DLV',
+  'EMPTY_RECEIVED_AT_CY': 'DLV',
 };
 
-// Timeline progress for container tracking (JSONCargo stages)
-// Stages: L/C → ATD → AT SEA → ATA → T/S → ATA (final)
+// Get report status from JSONCargo event
+const getReportStatus = (lastEvent: string | null): ReportStatus => {
+  if (!lastEvent) return REPORT_STATUSES.AGD;
+  
+  // Normalize the event: uppercase, remove spaces/underscores/dashes
+  const normalizedEvent = lastEvent.toUpperCase().replace(/[\s-]/g, '_');
+  
+  // Direct match
+  if (EVENT_TO_REPORT_STATUS[normalizedEvent]) {
+    return REPORT_STATUSES[EVENT_TO_REPORT_STATUS[normalizedEvent]];
+  }
+  
+  // Partial match - check if any key is contained in the event
+  for (const [eventKey, statusCode] of Object.entries(EVENT_TO_REPORT_STATUS)) {
+    const normalizedKey = eventKey.replace(/_/g, '');
+    const cleanEvent = normalizedEvent.replace(/_/g, '');
+    if (cleanEvent.includes(normalizedKey) || normalizedKey.includes(cleanEvent)) {
+      return REPORT_STATUSES[statusCode];
+    }
+  }
+  
+  return REPORT_STATUSES.AGD;
+};
+
+// Timeline progress calculation based on etapa (6 stages: 0-100%)
 const getTimelineProgress = (lastEvent: string | null): number => {
-  if (!lastEvent) return 0;
-  
-  const statusCode = getStatusCode(lastEvent);
-  
-  const progressMap: Record<string, number> = {
-    // Aguardando (pre-load)
-    AGD: 0,
-    // L/C - Loaded
-    "L/C": 0,
-    // ATD - Departed
-    ATD: 20,
-    // AT SEA - In Transit
-    SEA: 40,
-    // ATA - Arrived (first/intermediate)
-    ATA: 60,
-    // T/S - Transshiped
-    "T/S": 80,
-    // ATA2 - Final Arrival
-    ATA2: 100,
-  };
-  
-  return progressMap[statusCode] ?? 0;
+  const status = getReportStatus(lastEvent);
+  // Map etapaIndex (0-5) to progress (0-100%)
+  return (status.etapaIndex / 5) * 100;
+};
+
+// Get status code (for backwards compatibility)
+const getStatusCode = (lastEvent: string | null): string => {
+  return getReportStatus(lastEvent).code;
 };
 
 // Get human-readable status description
 const getStatusDescription = (lastEvent: string | null): string => {
-  if (!lastEvent) return "Aguardando rastreio";
-  
-  // Check if we have a direct mapping
-  const normalizedEvent = lastEvent.toUpperCase().replace(/\s+/g, "_");
-  if (containerStatusMap[normalizedEvent]) {
-    return containerStatusMap[normalizedEvent];
-  }
-  
-  // Try to find partial match
-  for (const [key, value] of Object.entries(containerStatusMap)) {
-    if (normalizedEvent.includes(key.replace(/_/g, ""))) {
-      return value;
-    }
-  }
-  
-  return lastEvent;
+  const status = getReportStatus(lastEvent);
+  return status.label;
 };
+
+// Timeline stage labels
+const TIMELINE_STAGES = [
+  { position: 0, label: 'Pré-Embarque', statuses: ['BKG', 'CLT', 'GIO'] },
+  { position: 20, label: 'Embarque', statuses: ['CRG', 'DEP'] },
+  { position: 40, label: 'Trânsito', statuses: ['TSP'] },
+  { position: 60, label: 'Chegada', statuses: ['ARR', 'DCH'] },
+  { position: 80, label: 'Liberação', statuses: ['INS'] },
+  { position: 100, label: 'Entrega', statuses: ['GOD', 'DLV'] },
+];
 
 interface ContainerData {
   id: string;
@@ -244,33 +283,32 @@ const ContainerTracking = () => {
 
   const itemsPerPage = 10;
 
-  // Helper functions for status categorization
+  // Helper functions for status categorization based on new 12-status system
   const isEmTransito = (lastEvent: string | null): boolean => {
-    if (!lastEvent) return false;
-    const upper = lastEvent.toUpperCase().replace(/[_\s-]/g, "");
-    return upper.includes("LOADED") || upper.includes("LOAD") || upper.includes("FULLIN") ||
-           upper.includes("DEPARTED") || upper.includes("DEPARTURE") || upper.includes("VESSELDEPARTED") ||
-           upper.includes("TRANSIT") || upper.includes("ATSEA") || upper.includes("ONRAIL") ||
-           upper.includes("TRANSSHIPMENT") ||
-           upper.includes("ARRIVED") || upper.includes("ARRIVAL") || upper.includes("VESSELARRIVED");
+    const status = getReportStatus(lastEvent);
+    // Em trânsito: Embarque (CRG, DEP) + Trânsito (TSP) + Chegada (ARR, DCH)
+    return ['CRG', 'DEP', 'TSP', 'ARR', 'DCH'].includes(status.code);
   };
 
   const isEmAlerta = (lastEvent: string | null): boolean => {
     if (!lastEvent) return false;
     const upper = lastEvent.toUpperCase().replace(/[_\s-]/g, "");
+    // Alerts remain based on specific keywords
     return upper.includes("DELAYED") || upper.includes("DELAY") ||
            upper.includes("CANCELLED") || upper.includes("CANCEL") ||
-           upper.includes("CUSTOMSHOLD") || upper.includes("CUSTOMS") || upper.includes("HOLD") ||
+           upper.includes("CUSTOMSHOLD") || 
            upper.includes("MISSEDCONNECTION") || upper.includes("MISSED");
   };
 
   const isEntregue = (lastEvent: string | null): boolean => {
-    if (!lastEvent) return false;
-    const upper = lastEvent.toUpperCase().replace(/[_\s-]/g, "");
-    return upper.includes("DISCHARGED") || upper.includes("DISCHARGE") ||
-           upper.includes("DELIVERED") || upper.includes("DELIVERY") ||
-           upper.includes("AVAILABLE") || upper.includes("FULLOUT") ||
-           upper.includes("GATEOUTFULL") || upper.includes("EMPTYRETURN");
+    const status = getReportStatus(lastEvent);
+    // Entregue: Gate-out destino (GOD) + Entrega final (DLV)
+    return ['GOD', 'DLV'].includes(status.code);
+  };
+  
+  const isEmLiberacao = (lastEvent: string | null): boolean => {
+    const status = getReportStatus(lastEvent);
+    return status.code === 'INS';
   };
 
   // Check admin access from localStorage
@@ -864,7 +902,7 @@ const ContainerTracking = () => {
                 <span className="text-3xl font-semibold text-blue-300">
                   {stats.emTransito}
                 </span>
-                <span className="text-xs text-blue-200/80">LOADED, DEPARTED, IN_TRANSIT</span>
+                <span className="text-xs text-blue-200/80">CRG, DEP, TSP, ARR, DCH</span>
               </div>
             </div>
           </Card>
@@ -910,7 +948,7 @@ const ContainerTracking = () => {
                 <span className="text-3xl font-semibold text-green-300">
                   {stats.entregues}
                 </span>
-                <span className="text-xs text-green-200/80">DISCHARGED, AVAILABLE</span>
+                <span className="text-xs text-green-200/80">GOD, DLV (Gate-out, Entrega)</span>
               </div>
             </div>
           </Card>
@@ -1072,28 +1110,15 @@ const ContainerTracking = () => {
                   </thead>
                   <tbody>
                     {currentContainers.map((container, idx) => {
-                      const statusCode = getStatusCode(container.last_event);
+                      // Get full report status for colors
+                      const reportStatus = getReportStatus(container.last_event);
+                      const statusCode = reportStatus.code;
                       const progress = getTimelineProgress(container.last_event);
+                      const statusColor = reportStatus.color;
                       
-                      // Timeline colors based on status
-                      let progressColor = "hsl(45 100% 50%)"; // gold - default/in transit
-                      let shipColor = "#ffc800";
-                      
-                      // Delivered - green
-                      if (statusCode === "DLV") {
-                        progressColor = "hsl(120 100% 35%)";
-                        shipColor = "#22c55e";
-                      }
-                      // Arrived/Discharged/Gate Out Full - blue (near destination)
-                      else if (["ARR", "DCH", "GOF"].includes(statusCode)) {
-                        progressColor = "hsl(200 100% 50%)";
-                        shipColor = "#3b82f6";
-                      }
-                      // Transshipment - amber/orange
-                      else if (statusCode === "TSP") {
-                        progressColor = "hsl(30 100% 50%)";
-                        shipColor = "#f97316";
-                      }
+                      // Timeline colors based on etapa
+                      let progressColor = statusColor;
+                      let shipColor = statusColor;
 
                       return (
                         <tr
@@ -1142,55 +1167,24 @@ const ContainerTracking = () => {
                                 }}
                               />
 
-                              {/* Timeline dots - 6 stages: L/C → ATD → AT SEA → ATA → T/S → ATA */}
+                              {/* Timeline dots - 6 stages based on new report status system */}
                               <TooltipProvider>
-                                {/* L/C - 0% (LOADED) */}
-                                <Tooltip>
-                                  <TooltipTrigger asChild>
-                                    <div className="absolute left-0 w-1.5 h-1.5 rounded-full bg-white/90 shadow-sm z-10 cursor-pointer hover:scale-150 transition-transform" />
-                                  </TooltipTrigger>
-                                  <TooltipContent><p className="text-xs">L/C - LOADED</p></TooltipContent>
-                                </Tooltip>
-
-                                {/* ATD - 20% (DEPARTED) */}
-                                <Tooltip>
-                                  <TooltipTrigger asChild>
-                                    <div className="absolute w-1.5 h-1.5 rounded-full bg-white/70 shadow-sm z-10 cursor-pointer hover:scale-150 transition-transform" style={{ left: '20%' }} />
-                                  </TooltipTrigger>
-                                  <TooltipContent><p className="text-xs">ATD - DEPARTED</p></TooltipContent>
-                                </Tooltip>
-
-                                {/* AT SEA - 40% (IN_TRANSIT) */}
-                                <Tooltip>
-                                  <TooltipTrigger asChild>
-                                    <div className="absolute w-1.5 h-1.5 rounded-full bg-white/70 shadow-sm z-10 cursor-pointer hover:scale-150 transition-transform" style={{ left: '40%' }} />
-                                  </TooltipTrigger>
-                                  <TooltipContent><p className="text-xs">AT SEA - IN_TRANSIT</p></TooltipContent>
-                                </Tooltip>
-
-                                {/* ATA - 60% (ARRIVED) */}
-                                <Tooltip>
-                                  <TooltipTrigger asChild>
-                                    <div className="absolute w-1.5 h-1.5 rounded-full bg-white/70 shadow-sm z-10 cursor-pointer hover:scale-150 transition-transform" style={{ left: '60%' }} />
-                                  </TooltipTrigger>
-                                  <TooltipContent><p className="text-xs">ATA - ARRIVED</p></TooltipContent>
-                                </Tooltip>
-
-                                {/* T/S - 80% (TRANSSHIPED) */}
-                                <Tooltip>
-                                  <TooltipTrigger asChild>
-                                    <div className="absolute w-1.5 h-1.5 rounded-full bg-white/70 shadow-sm z-10 cursor-pointer hover:scale-150 transition-transform" style={{ left: '80%' }} />
-                                  </TooltipTrigger>
-                                  <TooltipContent><p className="text-xs">T/S - TRANSSHIPED</p></TooltipContent>
-                                </Tooltip>
-
-                                {/* ATA - 100% (ARRIVED Final) */}
-                                <Tooltip>
-                                  <TooltipTrigger asChild>
-                                    <div className="absolute right-0 w-1.5 h-1.5 rounded-full bg-white/90 shadow-sm z-10 cursor-pointer hover:scale-150 transition-transform" />
-                                  </TooltipTrigger>
-                                  <TooltipContent><p className="text-xs">ATA - ARRIVED</p></TooltipContent>
-                                </Tooltip>
+                                {TIMELINE_STAGES.map((stage, i) => (
+                                  <Tooltip key={stage.label}>
+                                    <TooltipTrigger asChild>
+                                      <div 
+                                        className={`absolute w-1.5 h-1.5 rounded-full shadow-sm z-10 cursor-pointer hover:scale-150 transition-transform ${
+                                          progress >= stage.position ? 'bg-white/90' : 'bg-white/40'
+                                        }`}
+                                        style={{ left: stage.position === 0 ? '0%' : stage.position === 100 ? 'auto' : `${stage.position}%`, right: stage.position === 100 ? '0%' : 'auto' }} 
+                                      />
+                                    </TooltipTrigger>
+                                    <TooltipContent>
+                                      <p className="text-xs font-medium">{stage.label}</p>
+                                      <p className="text-xs text-muted-foreground">{stage.statuses.join(', ')}</p>
+                                    </TooltipContent>
+                                  </Tooltip>
+                                ))}
                               </TooltipProvider>
 
                               {/* Ship icon at progress position */}
@@ -1220,15 +1214,25 @@ const ContainerTracking = () => {
                             </div>
                           </td>
                           <td className="px-3 py-3">
-                            <span 
-                              className="text-sm font-bold px-2 py-1 rounded-md"
-                              style={{ 
-                                color: shipColor,
-                                backgroundColor: `${shipColor}20`,
-                              }}
-                            >
-                              {statusCode}
-                            </span>
+                            <TooltipProvider>
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <span 
+                                    className="text-sm font-bold px-2 py-1 rounded-md cursor-help"
+                                    style={{ 
+                                      color: statusColor,
+                                      backgroundColor: `${statusColor}20`,
+                                    }}
+                                  >
+                                    {statusCode}
+                                  </span>
+                                </TooltipTrigger>
+                                <TooltipContent>
+                                  <p className="text-xs font-medium">{reportStatus.label}</p>
+                                  <p className="text-xs text-muted-foreground">Etapa: {reportStatus.etapa.replace('_', ' ')}</p>
+                                </TooltipContent>
+                              </Tooltip>
+                            </TooltipProvider>
                           </td>
                         </tr>
                       );
