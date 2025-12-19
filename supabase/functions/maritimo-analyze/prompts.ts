@@ -48,6 +48,52 @@ SCOPE & AUTHORITY
 - Task: compare a Manifest/Pack List (authoritative source) against one or more Draft HBLs and produce update instructions.
 - If something conflicts, the Manifest prevails; each HBL must be updated to match it.
 
+███████████████████████████████████████████████████████████████████████████████
+███ CRITICAL RULE #1: MULTI-HBL WEIGHT/CBM SUM COMPARISON                    ███
+███████████████████████████████████████████████████████████████████████████████
+
+★★★★★ THIS IS THE MOST IMPORTANT RULE - READ CAREFULLY ★★★★★
+
+WHEN YOU RECEIVE 2 OR MORE HBL PDF FILES:
+
+1. FOR TOTAL WEIGHT AND CBM - USE SUM LOGIC:
+   - DO NOT compare each individual HBL weight against the Manifest total
+   - DO NOT report "HBL X weight differs from Manifest"
+   - INSTEAD: Extract weight from EACH HBL, ADD THEM TOGETHER, compare the SUM to Manifest
+   
+2. WHAT TO SHOW IN OUTPUT:
+   For weight: "HBL #1: X kg | HBL #2: Y kg | Sum: Z kg vs Manifest: W kg"
+   For CBM: "HBL #1: X m³ | HBL #2: Y m³ | Sum: Z m³ vs Manifest: W m³"
+
+3. WHEN IS THERE A DISCREPANCY:
+   - If SUM of all HBLs differs from Manifest by more than 1 kg (weight) or 0.01 m³ (CBM)
+   - Report: "Update: Adjust HBL weights/CBM so their combined sum equals [Manifest total]"
+   
+4. WHEN THERE IS NO DISCREPANCY:
+   - If SUM matches Manifest (within tolerance)
+   - Report: "No changes required - sum of HBL values matches manifest total"
+
+EXAMPLE WITH 2 HBLs (CORRECT OUTPUT):
+Manifest total: 5,000.000 kg and 25.500 m³
+HBL #1 (5B01EA11.PDF): 2,800.000 kg and 14.200 m³
+HBL #2 (5B01D011.PDF): 2,200.000 kg and 11.300 m³
+Sum: 5,000.000 kg and 25.500 m³
+
+OUTPUT:
+"- Total Weight:
+  HBL #1 (5B01EA11.PDF): 2,800.000 kg | HBL #2 (5B01D011.PDF): 2,200.000 kg
+  Sum of HBLs: 5,000.000 kg | Manifest Total: 5,000.000 kg | Delta: 0.000 kg
+  No changes required - sum matches manifest.
+
+- CBM:
+  HBL #1 (5B01EA11.PDF): 14.200 m³ | HBL #2 (5B01D011.PDF): 11.300 m³
+  Sum of HBLs: 25.500 m³ | Manifest Total: 25.500 m³ | Delta: 0.000 m³
+  No changes required - sum matches manifest."
+
+★★★ FOR SINGLE HBL (1 PDF): Compare directly to Manifest as usual ★★★
+
+███████████████████████████████████████████████████████████████████████████████
+
 █████████████████████████████████████████████████████████████████████
 █ INTERNAL: HBL GROSS WEIGHT EXTRACTION RULES (DO NOT SHOW IN OUTPUT)█
 █████████████████████████████████████████████████████████████████████
