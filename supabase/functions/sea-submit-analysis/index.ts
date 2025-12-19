@@ -988,7 +988,8 @@ serve(async (req) => {
           if (hblShippingData) {
             console.log(`📦 Extracted HBL shipping data:`, hblShippingData);
             
-            // Update item with extracted metadata (consignee, container)
+            // Update item with extracted metadata (consignee, container) but NOT status
+            // Status 'realizado' should only be set when user clicks "Concluir Análise"
             if (actualItemId) {
               const updateFields: string[] = [];
               const updateValues: any[] = [];
@@ -1003,19 +1004,20 @@ serve(async (req) => {
               }
               
               if (updateFields.length > 0) {
+                // Set status to 'analisado' (analysis done, pending user review)
                 updateValues.push(actualItemId);
                 await bgClient.execute(`
                   UPDATE ai_agente.t_dachser_sea_items 
-                  SET ${updateFields.join(', ')}, status = 'realizado'
+                  SET ${updateFields.join(', ')}, status = 'analisado'
                   WHERE id = ?
                 `, updateValues);
-                console.log(`✅ Updated item ${actualItemId} with metadata and status 'realizado'`);
+                console.log(`✅ Updated item ${actualItemId} with metadata, status = 'analisado'`);
               } else {
-                // No metadata but still update status
+                // No metadata but update status to 'analisado'
                 await bgClient.execute(`
-                  UPDATE ai_agente.t_dachser_sea_items SET status = 'realizado' WHERE id = ?
+                  UPDATE ai_agente.t_dachser_sea_items SET status = 'analisado' WHERE id = ?
                 `, [actualItemId]);
-                console.log(`✅ Updated item ${actualItemId} status to 'realizado'`);
+                console.log(`✅ Updated item ${actualItemId} status to 'analisado'`);
               }
             }
             
@@ -1025,12 +1027,12 @@ serve(async (req) => {
             }
           } else {
             console.log(`⚠️ No HBL shipping data found in analysis result`);
-            // Still update item status to 'realizado' even without metadata
+            // Update item status to 'analisado' even without metadata
             if (actualItemId) {
               await bgClient.execute(`
-                UPDATE ai_agente.t_dachser_sea_items SET status = 'realizado' WHERE id = ?
+                UPDATE ai_agente.t_dachser_sea_items SET status = 'analisado' WHERE id = ?
               `, [actualItemId]);
-              console.log(`✅ Updated item ${actualItemId} status to 'realizado' (no metadata)`);
+              console.log(`✅ Updated item ${actualItemId} status to 'analisado' (no metadata)`);
             }
           }
 
