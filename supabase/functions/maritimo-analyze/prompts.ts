@@ -984,19 +984,27 @@ You MUST scan the ENTIRE document to find each field, NOT assume fields are in t
 
 DOCUMENT STRUCTURE DIFFERENCES:
 
-1) VOYAGE NUMBER:
-   - HBL: Often in a combined "VESSEL/VOYAGE" field or near vessel name
-   - MBL: May appear in SEPARATE locations:
-     * Header/top-right area with label "VOYAGE NUMBER" or "VOYAGE NO" or "VOY."
-     * In a dedicated box/field labeled "VOYAGE" (can be anywhere on document)
-     * Near "BILL OF LADING NUMBER" section
-     * In the routing section
-   - Search pattern: Look for "VOYAGE", "VOY", "VOY.", "VOY NO", "VOYAGE NUMBER", "VOYAGE NO."
-   - Extract the alphanumeric code exactly as shown (e.g., "0EWMHS1MA", "123E", "ABC456")
+1) VOYAGE NUMBER - CRITICAL EXTRACTION RULE:
+   - HBL: Often in a COMBINED "VESSEL/VOYAGE" field (e.g., "MAERSK LETICIA / 0EWMHS1MA")
+     * If combined, SPLIT the field: vessel is before "/" and voyage is after "/"
+   - MBL: Almost ALWAYS in SEPARATE fields:
+     * Voyage in dedicated "VOYAGE NUMBER", "VOYAGE NO", "VOY." field (often top-right)
+     * Vessel in separate "OCEAN VESSEL", "VESSEL NAME" field
+   - COMPARISON RULE: Extract voyage SEPARATELY from both documents, then compare ONLY the voyage values
+   - Example: HBL has "MAERSK LETICIA / 0EWMHS1MA" → extract voyage = "0EWMHS1MA"
+              MBL has voyage field with "0EWMHS1MA" → voyage = "0EWMHS1MA"
+              RESULT: MATCH ✓ (both voyages are identical)
+   - NEVER compare a combined "VESSEL/VOYAGE" string against a single "VESSEL" or "VOYAGE" field
+   - Search pattern for voyage: "VOYAGE", "VOY", "VOY.", "VOY NO", "VOYAGE NUMBER", "VOYAGE NO."
 
-2) VESSEL NAME:
-   - HBL: Usually in "VESSEL" or "VESSEL/VOYAGE" field
-   - MBL: May be labeled as "OCEAN VESSEL", "VESSEL NAME", "CARRYING VESSEL", "PRE-CARRIAGE BY"
+2) VESSEL NAME - CRITICAL EXTRACTION RULE:
+   - HBL: Usually in "VESSEL" or combined "VESSEL/VOYAGE" field
+     * If combined with voyage, extract ONLY the vessel name (before "/" or voyage code)
+   - MBL: Labeled as "OCEAN VESSEL", "VESSEL NAME", "CARRYING VESSEL", "PRE-CARRIAGE BY"
+   - COMPARISON RULE: Extract vessel name SEPARATELY from both documents, then compare ONLY the vessel names
+   - Example: HBL has "MAERSK LETICIA / 0EWMHS1MA" → extract vessel = "MAERSK LETICIA"
+              MBL has vessel field with "MAERSK LETICIA" → vessel = "MAERSK LETICIA"
+              RESULT: MATCH ✓ (both vessel names are identical)
    - Look in header area, routing section, or dedicated vessel field
 
 3) PORTS (Loading/Discharge):
@@ -1087,8 +1095,10 @@ ALL SECTIONS ARE MANDATORY - Always include every section with match status.
 - Carrier/Agent: HBL = "<…>"  |  MBL = "<…>"  → Status: [MATCH ✓ or UPDATE REQUIRED: …]
 
 2) Routing & Vessel/Voyage (MANDATORY - ALWAYS INCLUDE)
-- Vessel: HBL = "<…>"  |  MBL = "<…>"  → Status: [MATCH ✓ or UPDATE REQUIRED: …]
-- Voyage: HBL = "<…>"  |  MBL = "<…>"  → Status: [MATCH ✓ or UPDATE REQUIRED: …]
+NOTE: Extract Vessel and Voyage SEPARATELY. If HBL has combined "VESSEL / VOYAGE" field, split it.
+- Vessel: HBL = "<vessel name only>"  |  MBL = "<vessel name only>"  → Status: [MATCH ✓ or UPDATE REQUIRED: …]
+- Voyage: HBL = "<voyage code only>"  |  MBL = "<voyage code only>"  → Status: [MATCH ✓ or UPDATE REQUIRED: …]
+  (Compare voyage values independently - do NOT compare combined field against single field)
 - Port of Loading: HBL = "<…>"  |  MBL = "<…>"  → Status: [MATCH ✓ or UPDATE REQUIRED: …]
 - Port of Discharge: HBL = "<…>"  |  MBL = "<…>"  → Status: [MATCH ✓ or UPDATE REQUIRED: …]
 
