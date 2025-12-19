@@ -392,6 +392,19 @@ async function analyzeWithAnthropic(
   
   console.log(`🤖 Calling Anthropic Claude with ${pdfFiles.length} PDFs + manifest text (${manifestText.length} chars) + examples (${approvedExamplesText.length} chars)`);
   
+  // Add system instruction to ensure complete response
+  const systemPrompt = `You are CRONOS, a thorough logistics document auditor. 
+
+CRITICAL INSTRUCTIONS:
+1. You MUST provide a COMPLETE analysis covering ALL sections as specified in the prompt.
+2. NEVER cut short your response or skip sections.
+3. ALL 7 sections are MANDATORY and must be included with full details.
+4. Your response must be comprehensive - at least 2000 characters for a proper analysis.
+5. Include match status for EVERY field in EVERY section.
+6. If you're unsure about a field, state what you found or "Not found in <document>".
+
+DO NOT truncate or abbreviate your response. Provide the FULL analysis.`;
+
   const response = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
     headers: {
@@ -401,8 +414,9 @@ async function analyzeWithAnthropic(
     },
     body: JSON.stringify({
       model: 'claude-sonnet-4-20250514',
-      max_tokens: 8000,
+      max_tokens: 16000,
       temperature: 0.1,
+      system: systemPrompt,
       messages: [{ role: 'user', content: contentParts }]
     }),
   });
