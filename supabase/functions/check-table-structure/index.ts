@@ -25,9 +25,9 @@ serve(async (req) => {
 
     console.log('Connected to MariaDB');
 
-    // Get column names from t_dados_master
+    // Get column names from t_master_dados
     const masterColumns = await client.query(`
-      SHOW COLUMNS FROM t_dados_master
+      SHOW COLUMNS FROM t_master_dados
     `);
 
     // Get column names from t_status_aereo
@@ -35,9 +35,9 @@ serve(async (req) => {
       SHOW COLUMNS FROM t_status_aereo
     `);
 
-    // Get sample data from t_dados_master
+    // Get sample data from t_master_dados
     const masterSample = await client.query(`
-      SELECT * FROM t_dados_master 
+      SELECT * FROM t_master_dados 
       WHERE tipo_processo IN ('AIR IMPORT', 'AIR EXPORT')
       LIMIT 1
     `);
@@ -46,7 +46,7 @@ serve(async (req) => {
 
     return new Response(
       JSON.stringify({
-        t_dados_master: {
+        t_master_dados: {
           columns: masterColumns,
           sample: masterSample[0] || null
         },

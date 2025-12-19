@@ -29,7 +29,7 @@ serve(async (req) => {
     const previewResult = await client.query(`
       SELECT COUNT(*) as count
       FROM t_status_aereo s
-      INNER JOIN t_dados_master m ON s.awb = m.mawb
+      INNER JOIN t_master_dados m ON s.awb = m.mawb
       WHERE (s.email_analista IS NULL OR s.email_analista = '')
         AND m.email_analista IS NOT NULL
         AND m.email_analista != ''
@@ -41,7 +41,7 @@ serve(async (req) => {
     // Execute the UPDATE
     const updateResult = await client.execute(`
       UPDATE t_status_aereo s
-      INNER JOIN t_dados_master m ON s.awb = m.mawb
+      INNER JOIN t_master_dados m ON s.awb = m.mawb
       SET s.email_analista = m.email_analista
       WHERE (s.email_analista IS NULL OR s.email_analista = '')
         AND m.email_analista IS NOT NULL

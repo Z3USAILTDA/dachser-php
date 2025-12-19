@@ -83,7 +83,7 @@ serve(async (req) => {
       }
 
       case 'populate': {
-        // Populate queue with unprocessed AWBs from t_dados_master using anti-join
+        // Populate queue with unprocessed AWBs from t_master_dados using anti-join
         const insertQuery = `
           INSERT IGNORE INTO ${database}.t_awb_processing_queue 
             (mawb, hawb, destinatario, nome_analista, email_analista, origem, destino)
@@ -95,7 +95,7 @@ serve(async (req) => {
             MAX(m.email_analista) as email_analista,
             'N/A' as origem,
             'N/A' as destino
-          FROM ${database}.t_dados_master m
+          FROM ${database}.t_master_dados m
           LEFT JOIN ${database}.t_status_aereo s ON TRIM(m.mawb) = TRIM(s.awb)
           WHERE m.tipo_processo IN ('AIR IMPORT', 'AIR EXPORT')
             AND m.mawb IS NOT NULL 
