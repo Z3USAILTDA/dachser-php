@@ -3806,6 +3806,243 @@ serve(async (req) => {
         break;
       }
 
+      // ==================== APPROVED EXAMPLES (LEARNING) ====================
+      case 'save_approved_example': {
+        const { runId, itemId, analysisType, consignee, scenarioType, hblCount, inputSummary, resultText, approvedBy, approvedByName } = body as {
+          runId?: number;
+          itemId?: number;
+          analysisType?: string;
+          consignee?: string;
+          scenarioType?: string;
+          hblCount?: number;
+          inputSummary?: string;
+          resultText?: string;
+          approvedBy?: number;
+          approvedByName?: string;
+        };
+
+        if (!runId || !itemId || !analysisType || !resultText) {
+          return new Response(
+            JSON.stringify({ error: 'runId, itemId, analysisType, and resultText are required' }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+
+        // Check if example already exists for this run
+        const existingExample = await client.query(
+          `SELECT id FROM ai_agente.t_dachser_sea_approved_examples WHERE run_id = ? LIMIT 1`,
+          [runId]
+        );
+
+        if (existingExample && existingExample.length > 0) {
+          // Update existing example
+          await client.execute(
+            `UPDATE ai_agente.t_dachser_sea_approved_examples 
+             SET result_text = ?, scenario_type = ?, hbl_count = ?, input_summary = ?, 
+                 approved_by = ?, approved_by_name = ?, approved_at = NOW(), is_active = TRUE
+             WHERE run_id = ?`,
+            [resultText, scenarioType || '1_hbl', hblCount || 1, inputSummary || '', approvedBy || null, approvedByName || null, runId]
+          );
+          console.log(`Updated approved example for run ${runId}`);
+          result = { success: true, action: 'updated', id: existingExample[0].id };
+        } else {
+          // Insert new example
+          await client.execute(
+            `INSERT INTO ai_agente.t_dachser_sea_approved_examples 
+             (run_id, item_id, analysis_type, consignee, scenario_type, hbl_count, input_summary, result_text, approved_by, approved_by_name)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            [runId, itemId, analysisType, consignee || null, scenarioType || '1_hbl', hblCount || 1, inputSummary || '', resultText, approvedBy || null, approvedByName || null]
+          );
+          
+          const lastId = await client.query('SELECT LAST_INSERT_ID() as id');
+          console.log(`Saved new approved example for run ${runId}`);
+          result = { success: true, action: 'inserted', id: lastId[0]?.id };
+        }
+        break;
+      }
+
+      case 'get_approved_examples': {
+        const { analysisType, hblCount, limit: exLimit } = body as {
+          analysisType?: string;
+          hblCount?: number;
+          limit?: number;
+        };
+
+        if (!analysisType) {
+          return new Response(
+            JSON.stringify({ error: 'analysisType is required' }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+
+        const maxExamples = Math.min(exLimit || 3, 5);
+        
+        // Get relevant examples prioritizing:
+        // 1. Same analysis type
+        // 2. Same or similar HBL count
+        // 3. Higher effectiveness score
+        // 4. More recent approvals
+        const examples = await client.query(
+          `SELECT id, run_id, analysis_type, scenario_type, hbl_count, consignee, 
+                  input_summary, result_text, approved_by_name, approved_at, 
+                  usage_count, effectiveness_score
+           FROM ai_agente.t_dachser_sea_approved_examples 
+           WHERE analysis_type = ? 
+             AND is_active = TRUE
+             AND effectiveness_score >= 50
+           ORDER BY 
+             CASE WHEN hbl_count = ? THEN 0 ELSE 1 END,
+             effectiveness_score DESC,
+             approved_at DESC
+           LIMIT ?`,
+          [analysisType, hblCount || 1, maxExamples]
+        );
+
+        // Increment usage count for retrieved examples
+        if (examples && examples.length > 0) {
+          const exampleIds = examples.map((e: any) => e.id);
+          await client.execute(
+            `UPDATE ai_agente.t_dachser_sea_approved_examples 
+             SET usage_count = usage_count + 1, last_used_at = NOW() 
+             WHERE id IN (${exampleIds.join(',')})`,
+            []
+          );
+        }
+
+        console.log(`Retrieved ${examples?.length || 0} approved examples for ${analysisType} with ${hblCount} HBLs`);
+        result = { success: true, examples: examples || [] };
+        break;
+      }
+
+      case 'update_example_effectiveness': {
+        const { exampleId, success: wasSuccessful } = body as {
+          exampleId?: number;
+          success?: boolean;
+        };
+
+        if (!exampleId) {
+          return new Response(
+            JSON.stringify({ error: 'exampleId is required' }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+
+        if (wasSuccessful) {
+          // Increase effectiveness (max 100)
+          await client.execute(
+            `UPDATE ai_agente.t_dachser_sea_approved_examples 
+             SET effectiveness_score = LEAST(effectiveness_score + 2, 100)
+             WHERE id = ?`,
+            [exampleId]
+          );
+        } else {
+          // Decrease effectiveness, deactivate if too low
+          await client.execute(
+            `UPDATE ai_agente.t_dachser_sea_approved_examples 
+             SET effectiveness_score = GREATEST(effectiveness_score - 5, 0),
+                 is_active = CASE WHEN effectiveness_score - 5 < 30 THEN FALSE ELSE is_active END
+             WHERE id = ?`,
+            [exampleId]
+          );
+        }
+
+        console.log(`Updated effectiveness for example ${exampleId}: success=${wasSuccessful}`);
+        result = { success: true };
+        break;
+      }
+
+      case 'list_approved_examples': {
+        const { analysisType: filterType, isActive: filterActive, limit: listLimit, offset: listOffset } = body as {
+          analysisType?: string;
+          isActive?: boolean;
+          limit?: number;
+          offset?: number;
+        };
+
+        let query = `SELECT id, run_id, item_id, analysis_type, scenario_type, hbl_count, 
+                            consignee, approved_by_name, approved_at, is_active, 
+                            usage_count, effectiveness_score, last_used_at
+                     FROM ai_agente.t_dachser_sea_approved_examples WHERE 1=1`;
+        const params: (string | number | boolean)[] = [];
+
+        if (filterType) {
+          query += ` AND analysis_type = ?`;
+          params.push(filterType);
+        }
+        if (filterActive !== undefined) {
+          query += ` AND is_active = ?`;
+          params.push(filterActive ? 1 : 0);
+        }
+
+        query += ` ORDER BY approved_at DESC LIMIT ? OFFSET ?`;
+        params.push(listLimit || 20, listOffset || 0);
+
+        const examples = await client.query(query, params);
+
+        // Get total count
+        let countQuery = `SELECT COUNT(*) as total FROM ai_agente.t_dachser_sea_approved_examples WHERE 1=1`;
+        const countParams: (string | number | boolean)[] = [];
+        if (filterType) {
+          countQuery += ` AND analysis_type = ?`;
+          countParams.push(filterType);
+        }
+        if (filterActive !== undefined) {
+          countQuery += ` AND is_active = ?`;
+          countParams.push(filterActive ? 1 : 0);
+        }
+        const countResult = await client.query(countQuery, countParams);
+
+        result = { 
+          success: true, 
+          examples: examples || [], 
+          total: countResult[0]?.total || 0 
+        };
+        break;
+      }
+
+      case 'toggle_example_active': {
+        const { exampleId, isActive: setActive } = body as {
+          exampleId?: number;
+          isActive?: boolean;
+        };
+
+        if (!exampleId) {
+          return new Response(
+            JSON.stringify({ error: 'exampleId is required' }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+
+        await client.execute(
+          `UPDATE ai_agente.t_dachser_sea_approved_examples SET is_active = ? WHERE id = ?`,
+          [setActive ? 1 : 0, exampleId]
+        );
+
+        console.log(`Toggled example ${exampleId} active status to ${setActive}`);
+        result = { success: true };
+        break;
+      }
+
+      case 'delete_approved_example': {
+        const { exampleId } = body as { exampleId?: number };
+
+        if (!exampleId) {
+          return new Response(
+            JSON.stringify({ error: 'exampleId is required' }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+
+        await client.execute(
+          `DELETE FROM ai_agente.t_dachser_sea_approved_examples WHERE id = ?`,
+          [exampleId]
+        );
+
+        console.log(`Deleted approved example ${exampleId}`);
+        result = { success: true };
+        break;
+      }
+
       default:
         return new Response(
           JSON.stringify({ error: `Ação não suportada: ${action}` }),

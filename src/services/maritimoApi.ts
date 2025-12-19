@@ -464,6 +464,143 @@ export const maritimoApi = {
   async migrateToMariaDB(): Promise<any> {
     // Already using MariaDB, no migration needed
     return { success: true, message: 'Já está usando MariaDB' };
+  },
+
+  // ==================== APPROVED EXAMPLES (LEARNING) ====================
+
+  /**
+   * Save an analysis as an approved example for AI learning
+   */
+  async saveApprovedExample(params: {
+    runId: number;
+    itemId: number;
+    analysisType: string;
+    consignee?: string;
+    scenarioType: string;
+    hblCount: number;
+    inputSummary?: string;
+    resultText: string;
+    approvedBy?: number;
+    approvedByName?: string;
+  }): Promise<{ success: boolean; action?: string; id?: number; error?: string }> {
+    try {
+      const { data, error } = await supabase.functions.invoke('mariadb-proxy', {
+        body: { 
+          action: 'save_approved_example',
+          runId: params.runId,
+          itemId: params.itemId,
+          analysisType: params.analysisType,
+          consignee: params.consignee,
+          scenarioType: params.scenarioType,
+          hblCount: params.hblCount,
+          inputSummary: params.inputSummary,
+          resultText: params.resultText,
+          approvedBy: params.approvedBy,
+          approvedByName: params.approvedByName
+        }
+      });
+      
+      if (error) throw error;
+      return { success: true, action: data?.action, id: data?.id };
+    } catch (error: any) {
+      console.error('Error saving approved example:', error);
+      return { success: false, error: error.message };
+    }
+  },
+
+  /**
+   * Get approved examples for a specific analysis type
+   */
+  async getApprovedExamples(params: {
+    analysisType: string;
+    hblCount?: number;
+    limit?: number;
+  }): Promise<{ success: boolean; examples: any[]; error?: string }> {
+    try {
+      const { data, error } = await supabase.functions.invoke('mariadb-proxy', {
+        body: { 
+          action: 'get_approved_examples',
+          analysisType: params.analysisType,
+          hblCount: params.hblCount || 1,
+          limit: params.limit || 3
+        }
+      });
+      
+      if (error) throw error;
+      return { success: true, examples: data?.examples || [] };
+    } catch (error: any) {
+      console.error('Error getting approved examples:', error);
+      return { success: false, examples: [], error: error.message };
+    }
+  },
+
+  /**
+   * List all approved examples with optional filtering
+   */
+  async listApprovedExamples(params: {
+    analysisType?: string;
+    isActive?: boolean;
+    limit?: number;
+    offset?: number;
+  } = {}): Promise<{ success: boolean; examples: any[]; total: number; error?: string }> {
+    try {
+      const { data, error } = await supabase.functions.invoke('mariadb-proxy', {
+        body: { 
+          action: 'list_approved_examples',
+          analysisType: params.analysisType,
+          isActive: params.isActive,
+          limit: params.limit || 20,
+          offset: params.offset || 0
+        }
+      });
+      
+      if (error) throw error;
+      return { success: true, examples: data?.examples || [], total: data?.total || 0 };
+    } catch (error: any) {
+      console.error('Error listing approved examples:', error);
+      return { success: false, examples: [], total: 0, error: error.message };
+    }
+  },
+
+  /**
+   * Toggle an approved example active/inactive
+   */
+  async toggleExampleActive(exampleId: number, isActive: boolean): Promise<{ success: boolean; error?: string }> {
+    try {
+      const { data, error } = await supabase.functions.invoke('mariadb-proxy', {
+        body: { 
+          action: 'toggle_example_active',
+          exampleId,
+          isActive
+        }
+      });
+      
+      if (error) throw error;
+      return { success: true };
+    } catch (error: any) {
+      console.error('Error toggling example:', error);
+      return { success: false, error: error.message };
+    }
+  },
+
+  /**
+   * Delete an approved example
+   */
+  async deleteApprovedExample(exampleId: number): Promise<{ success: boolean; error?: string }> {
+    try {
+      const { data, error } = await supabase.functions.invoke('mariadb-proxy', {
+        body: { 
+          action: 'delete_approved_example',
+          exampleId
+        }
+      });
+      
+      if (error) throw error;
+      return { success: true };
+    } catch (error: any) {
+      console.error('Error deleting example:', error);
+      return { success: false, error: error.message };
+    }
   }
 };
 
