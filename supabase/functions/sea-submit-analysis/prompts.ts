@@ -1486,7 +1486,8 @@ export function getPromptForAnalysisType(analysisType: string): string {
 export function buildFullPrompt(
   basePrompt: string,
   files: Array<{ name: string; type: string; url: string }>,
-  metadata?: { consignee?: string; container?: string }
+  metadata?: { consignee?: string; container?: string },
+  analysisType?: string
 ): string {
   let fullPrompt = basePrompt + "\n\n";
   
@@ -1508,8 +1509,67 @@ export function buildFullPrompt(
   fullPrompt += "INSTRUCTIONS:\n";
   fullPrompt += "Analyze the attached documents and provide only the necessary corrections in plain text format.\n";
   
-  // Add HBL shipping data extraction instruction
-  fullPrompt += `
+  // Add shipping data extraction instruction based on analysis type
+  if (analysisType === 'invoices_hbl') {
+    // For Invoices × HBL: extract from HBL OR Invoice (fallback)
+    fullPrompt += `
+███████████████████████████████████████████████████████████████████████████████
+███ MANDATORY: SHIPPING DATA EXTRACTION (HBL OR INVOICE)                      ███
+███████████████████████████████████████████████████████████████████████████████
+
+At the VERY END of your analysis, after all discrepancy analysis is complete, you MUST output a JSON block with shipping data.
+
+EXTRACTION PRIORITY (use first available source):
+1. PRIMARY SOURCE: Draft HBL document
+2. FALLBACK SOURCE: Commercial Invoice(s) — if HBL field is missing/unreadable
+
+DATA EXTRACTION RULES:
+
+CONTAINER NUMBER:
+- PRIMARY: From HBL "Marks and Numbers" or "Container No." field
+- FALLBACK: From Invoice header, shipping details, or container reference
+- Format: 4 letters + 7 digits (ISO 6346), e.g., "GLDU9941805"
+
+CONSIGNEE:
+- PRIMARY: From HBL "Consignee" field (full company name)
+- FALLBACK: From Invoice "Buyer", "Ship To", "Consignee", or "Customer" field
+- Extract: Full company name without address
+
+VESSEL NAME:
+- PRIMARY: From HBL "Vessel / Voyage-No." field, BEFORE the "/"
+- FALLBACK: From Invoice shipping details if stated
+- Example: "MAERSK LETICIA" from "MAERSK LETICIA / 0EWMHS1MA"
+
+VOYAGE NUMBER:
+- PRIMARY: From HBL "Vessel / Voyage-No." field, AFTER the "/"
+- FALLBACK: From Invoice shipping details if stated
+- Example: "0EWMHS1MA" from "MAERSK LETICIA / 0EWMHS1MA"
+
+PORT OF LOADING (ORIGEM):
+- PRIMARY: From HBL "Port of Loading" field
+- FALLBACK: From Invoice "Ship From", "Origin", or shipper address country/port
+
+PORT OF DISCHARGE (DESTINO):
+- PRIMARY: From HBL "Port of Discharge" field
+- FALLBACK: From Invoice "Ship To", "Destination", or consignee address country/port
+
+OUTPUT FORMAT (MANDATORY - ADD THIS BLOCK AT THE END):
+\`\`\`json
+{"hbl_shipping_data": {"container": "XXXX1234567", "consignee": "COMPANY NAME", "vessel": "VESSEL NAME", "voyage": "VOYAGE_CODE", "origem": "PORT_OF_LOADING", "destino": "PORT_OF_DISCHARGE"}}
+\`\`\`
+
+RULES:
+- Always try HBL first, then Invoice as fallback
+- If multiple HBLs: use data from the FIRST HBL file
+- If multiple Invoices: use data from the Invoice with most complete shipping info
+- If any field cannot be extracted from ANY source, use empty string ""
+- Always output this JSON block, even if analysis has errors
+- The JSON must be on a single line between the \`\`\`json and \`\`\` markers
+- Include "consignee" field in the JSON output
+`;
+  } else {
+    // For other analysis types: extract from HBL only
+    fullPrompt += `
 ███████████████████████████████████████████████████████████████████████████████
 ███ MANDATORY: HBL SHIPPING DATA EXTRACTION                                  ███
 ███████████████████████████████████████████████████████████████████████████████
@@ -1518,6 +1578,7 @@ At the VERY END of your analysis, after all discrepancy analysis is complete, yo
 
 EXTRACTION SOURCES FROM HBL:
 - container: Extract from "Marks and Numbers" section (e.g., "GLDU9941805" from "GLDU9941805 / 40' HC/HIGH CUBE")
+- consignee: Extract from "Consignee" field (full company name, no address)
 - vessel: Extract from "Vessel / Voyage-No." field, BEFORE the "/" (e.g., "MAERSK LETICIA" from "MAERSK LETICIA / 0EWMHS1MA")
 - voyage: Extract from "Vessel / Voyage-No." field, AFTER the "/" (e.g., "0EWMHS1MA" from "MAERSK LETICIA / 0EWMHS1MA")
 - origem: Extract from "Port of Loading" field (e.g., "HAMBURG")
@@ -1525,7 +1586,7 @@ EXTRACTION SOURCES FROM HBL:
 
 OUTPUT FORMAT (MANDATORY - ADD THIS BLOCK AT THE END):
 \`\`\`json
-{"hbl_shipping_data": {"container": "XXXX1234567", "vessel": "VESSEL NAME", "voyage": "VOYAGE_CODE", "origem": "PORT_OF_LOADING", "destino": "PORT_OF_DISCHARGE"}}
+{"hbl_shipping_data": {"container": "XXXX1234567", "consignee": "COMPANY NAME", "vessel": "VESSEL NAME", "voyage": "VOYAGE_CODE", "origem": "PORT_OF_LOADING", "destino": "PORT_OF_DISCHARGE"}}
 \`\`\`
 
 RULES:
@@ -1535,6 +1596,7 @@ RULES:
 - Always output this JSON block, even if analysis has errors
 - The JSON must be on a single line between the \`\`\`json and \`\`\` markers
 `;
+  }
   
   return fullPrompt;
 }

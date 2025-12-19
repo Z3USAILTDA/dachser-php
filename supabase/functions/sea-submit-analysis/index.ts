@@ -25,6 +25,100 @@ interface FileInfo {
   file_url: string;
 }
 
+// ============ SHIPPING DATA EXTRACTION HELPER ============
+
+function getShippingDataExtractionInstructions(analysisType: string): string {
+  if (analysisType === 'invoices_hbl') {
+    // For Invoices × HBL: extract from HBL OR Invoice (fallback)
+    return `
+
+███████████████████████████████████████████████████████████████████████████████
+███ MANDATORY: SHIPPING DATA EXTRACTION (HBL OR INVOICE)                      ███
+███████████████████████████████████████████████████████████████████████████████
+
+At the VERY END of your analysis, after all discrepancy analysis is complete, you MUST output a JSON block with shipping data.
+
+EXTRACTION PRIORITY (use first available source):
+1. PRIMARY SOURCE: Draft HBL document
+2. FALLBACK SOURCE: Commercial Invoice(s) — if HBL field is missing/unreadable
+
+DATA EXTRACTION RULES:
+
+CONTAINER NUMBER:
+- PRIMARY: From HBL "Marks and Numbers" or "Container No." field
+- FALLBACK: From Invoice header, shipping details, or container reference
+- Format: 4 letters + 7 digits (ISO 6346), e.g., "GLDU9941805"
+
+CONSIGNEE:
+- PRIMARY: From HBL "Consignee" field (full company name)
+- FALLBACK: From Invoice "Buyer", "Ship To", "Consignee", or "Customer" field
+- Extract: Full company name without address
+
+VESSEL NAME:
+- PRIMARY: From HBL "Vessel / Voyage-No." field, BEFORE the "/"
+- FALLBACK: From Invoice shipping details if stated
+- Example: "MAERSK LETICIA" from "MAERSK LETICIA / 0EWMHS1MA"
+
+VOYAGE NUMBER:
+- PRIMARY: From HBL "Vessel / Voyage-No." field, AFTER the "/"
+- FALLBACK: From Invoice shipping details if stated
+- Example: "0EWMHS1MA" from "MAERSK LETICIA / 0EWMHS1MA"
+
+PORT OF LOADING (ORIGEM):
+- PRIMARY: From HBL "Port of Loading" field
+- FALLBACK: From Invoice "Ship From", "Origin", or shipper address country/port
+
+PORT OF DISCHARGE (DESTINO):
+- PRIMARY: From HBL "Port of Discharge" field
+- FALLBACK: From Invoice "Ship To", "Destination", or consignee address country/port
+
+OUTPUT FORMAT (MANDATORY - ADD THIS BLOCK AT THE END):
+\`\`\`json
+{"hbl_shipping_data": {"container": "XXXX1234567", "consignee": "COMPANY NAME", "vessel": "VESSEL NAME", "voyage": "VOYAGE_CODE", "origem": "PORT_OF_LOADING", "destino": "PORT_OF_DISCHARGE"}}
+\`\`\`
+
+RULES:
+- Always try HBL first, then Invoice as fallback
+- If multiple HBLs: use data from the FIRST HBL file
+- If multiple Invoices: use data from the Invoice with most complete shipping info
+- If any field cannot be extracted from ANY source, use empty string ""
+- Always output this JSON block, even if analysis has errors
+- The JSON must be on a single line between the \`\`\`json and \`\`\` markers
+- Include "consignee" field in the JSON output
+`;
+  } else {
+    // For other analysis types: extract from HBL only
+    return `
+
+███████████████████████████████████████████████████████████████████████████████
+███ MANDATORY: HBL SHIPPING DATA EXTRACTION                                  ███
+███████████████████████████████████████████████████████████████████████████████
+
+At the VERY END of your analysis, after all discrepancy analysis is complete, you MUST output a JSON block with the following shipping data extracted from the HBL document(s):
+
+EXTRACTION SOURCES FROM HBL:
+- container: Extract from "Marks and Numbers" section (e.g., "GLDU9941805" from "GLDU9941805 / 40' HC/HIGH CUBE")
+- consignee: Extract from "Consignee" field (full company name, no address)
+- vessel: Extract from "Vessel / Voyage-No." field, BEFORE the "/" (e.g., "MAERSK LETICIA" from "MAERSK LETICIA / 0EWMHS1MA")
+- voyage: Extract from "Vessel / Voyage-No." field, AFTER the "/" (e.g., "0EWMHS1MA" from "MAERSK LETICIA / 0EWMHS1MA")
+- origem: Extract from "Port of Loading" field (e.g., "HAMBURG")
+- destino: Extract from "Port of Discharge" field (e.g., "SANTOS")
+
+OUTPUT FORMAT (MANDATORY - ADD THIS BLOCK AT THE END):
+\`\`\`json
+{"hbl_shipping_data": {"container": "XXXX1234567", "consignee": "COMPANY NAME", "vessel": "VESSEL NAME", "voyage": "VOYAGE_CODE", "origem": "PORT_OF_LOADING", "destino": "PORT_OF_DISCHARGE"}}
+\`\`\`
+
+RULES:
+- If multiple HBLs are analyzed, use data from the FIRST HBL file
+- Container format: 4 letters + 7 digits (ISO 6346), e.g., "GLDU9941805"
+- If any field cannot be extracted, use empty string ""
+- Always output this JSON block, even if analysis has errors
+- The JSON must be on a single line between the \`\`\`json and \`\`\` markers
+`;
+  }
+}
+
 // ============ UTILITY FUNCTIONS ============
 
 // Chunked base64 encoding to avoid memory issues
@@ -254,7 +348,8 @@ async function analyzeWithAnthropic(
   manifestText: string,
   pdfFiles: Array<{ base64: string; name: string }>,
   metadata: { consignee?: string; container?: string },
-  approvedExamplesText: string = ''
+  approvedExamplesText: string = '',
+  analysisType: string = ''
 ): Promise<{ text: string; model: string }> {
   const anthropicKey = Deno.env.get('ANTHROPIC_API_KEY');
   if (!anthropicKey) throw new Error('ANTHROPIC_API_KEY not configured');
@@ -273,6 +368,9 @@ async function analyzeWithAnthropic(
   if (manifestText && manifestText.length > 0) {
     fullPrompt += `\n\n=== CONTEÚDO DO MANIFESTO (extraído do arquivo XLSX) ===\n${manifestText}\n=== FIM DO MANIFESTO ===`;
   }
+  
+  // Add shipping data extraction instructions based on analysis type
+  fullPrompt += getShippingDataExtractionInstructions(analysisType);
   
   // Build content parts: prompt + PDF documents
   const contentParts: any[] = [
@@ -329,7 +427,8 @@ async function analyzeWithGeminiPro(
   manifestText: string,
   pdfFiles: Array<{ base64: string; name: string }>,
   metadata: { consignee?: string; container?: string },
-  approvedExamplesText: string = ''
+  approvedExamplesText: string = '',
+  analysisType: string = ''
 ): Promise<{ text: string; model: string }> {
   const lovableKey = Deno.env.get('LOVABLE_API_KEY');
   if (!lovableKey) throw new Error('LOVABLE_API_KEY not configured');
@@ -346,6 +445,9 @@ async function analyzeWithGeminiPro(
   if (manifestText && manifestText.length > 0) {
     fullPrompt += `\n\n=== CONTEÚDO DO MANIFESTO (extraído do arquivo XLSX) ===\n${manifestText}\n=== FIM DO MANIFESTO ===`;
   }
+  
+  // Add shipping data extraction instructions based on analysis type
+  fullPrompt += getShippingDataExtractionInstructions(analysisType);
   
   console.log(`🔄 Fallback: Calling Gemini Pro with ${pdfFiles.length} PDFs + manifest text (${manifestText.length} chars)`);
   
@@ -449,7 +551,8 @@ async function analyzeWithLLM(
       manifestText,
       validPdfs.map(f => ({ base64: f.base64, name: f.name })),
       metadata,
-      approvedExamplesText
+      approvedExamplesText,
+      analysisType
     );
   } catch (anthropicError) {
     console.error(`❌ Anthropic failed, falling back to Gemini Pro:`, anthropicError);
@@ -459,7 +562,8 @@ async function analyzeWithLLM(
       manifestText,
       validPdfs.map(f => ({ base64: f.base64, name: f.name })),
       metadata,
-      approvedExamplesText
+      approvedExamplesText,
+      analysisType
     );
   }
   

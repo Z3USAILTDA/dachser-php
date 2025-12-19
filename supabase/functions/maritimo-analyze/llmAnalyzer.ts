@@ -4,7 +4,7 @@
  * Optimized to avoid CPU timeout on edge functions
  */
 
-import { getPromptForAnalysisType } from './prompts.ts';
+import { getPromptForAnalysisType, getShippingDataExtractionInstructions } from './prompts.ts';
 import { extractXlsxText } from './simpleXlsxReader.ts';
 
 export interface AnalysisResult {
@@ -89,7 +89,8 @@ async function analyzeWithAnthropic(
   manifestText: string,
   pdfFiles: FileInfo[],
   metadata: { consignee?: string; container?: string },
-  apiKey: string
+  apiKey: string,
+  analysisType: string = ''
 ): Promise<{ text: string; model: string }> {
   console.log(`[Analysis] Starting Anthropic analysis with ${pdfFiles.length} PDFs`);
   const startTime = Date.now();
@@ -101,6 +102,9 @@ async function analyzeWithAnthropic(
   let fullPrompt = prompt;
   if (metadata.consignee) fullPrompt += `\n\nConsignee: ${metadata.consignee}`;
   if (metadata.container) fullPrompt += `\nContainer: ${metadata.container}`;
+  
+  // Add shipping data extraction instructions based on analysis type
+  fullPrompt += getShippingDataExtractionInstructions(analysisType);
   
   contentParts.push({ type: 'text', text: fullPrompt });
   
@@ -221,7 +225,8 @@ async function analyzeWithGemini(
   prompt: string,
   manifestText: string,
   pdfFiles: FileInfo[],
-  metadata: { consignee?: string; container?: string }
+  metadata: { consignee?: string; container?: string },
+  analysisType: string = ''
 ): Promise<{ text: string; model: string }> {
   console.log(`[Fallback] Using Gemini for analysis`);
   const startTime = Date.now();
@@ -235,6 +240,9 @@ async function analyzeWithGemini(
   let fullPrompt = prompt;
   if (metadata.consignee) fullPrompt += `\n\nConsignee: ${metadata.consignee}`;
   if (metadata.container) fullPrompt += `\nContainer: ${metadata.container}`;
+  
+  // Add shipping data extraction instructions based on analysis type
+  fullPrompt += getShippingDataExtractionInstructions(analysisType);
   
   contentParts.push({ type: 'text', text: fullPrompt });
   
@@ -379,7 +387,8 @@ export async function analyzeWithLLM(
         manifestText, 
         comparisonPdfs.length > 0 ? comparisonPdfs : pdfFiles,
         metadata, 
-        ANTHROPIC_API_KEY
+        ANTHROPIC_API_KEY,
+        analysisType
       );
     } catch (error) {
       console.warn(`[Main] Anthropic failed, trying Gemini:`, error);
@@ -387,7 +396,8 @@ export async function analyzeWithLLM(
         basePrompt, 
         manifestText, 
         comparisonPdfs.length > 0 ? comparisonPdfs : pdfFiles,
-        metadata
+        metadata,
+        analysisType
       );
     }
   } else {
@@ -395,7 +405,8 @@ export async function analyzeWithLLM(
       basePrompt, 
       manifestText, 
       comparisonPdfs.length > 0 ? comparisonPdfs : pdfFiles,
-      metadata
+      metadata,
+      analysisType
     );
   }
   
