@@ -147,45 +147,71 @@ async function analyzeWithAnthropic(
   });
   
   const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 180000); // 3 minutes
+  const timeoutId = setTimeout(() => controller.abort(), 300000); // 5 minutes timeout
   
-  try {
-    const response = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: {
-        'x-api-key': apiKey,
-        'anthropic-version': '2023-06-01',
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        model: 'claude-sonnet-4-20250514',
-        max_tokens: 8000,
-        temperature: 0.1,
-        messages: [{ role: 'user', content: contentParts }]
-      }),
-      signal: controller.signal,
-    });
-    
-    clearTimeout(timeoutId);
-    const elapsed = Date.now() - startTime;
-    
-    if (response.ok) {
-      const data = await response.json();
-      const text = data.content?.[0]?.text || '';
-      console.log(`[Analysis] Anthropic completed in ${elapsed}ms (${text.length} chars)`);
-      return { text, model: 'claude-sonnet-4-20250514' };
-    } else {
-      const errorText = await response.text();
-      console.error(`[Analysis] Anthropic failed (${response.status}): ${errorText.substring(0, 300)}`);
-      throw new Error(`Anthropic API error: ${response.status}`);
+  const maxRetries = 3;
+  let lastError: Error | null = null;
+  
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      console.log(`[Analysis] Anthropic attempt ${attempt}/${maxRetries}`);
+      
+      const response = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: {
+          'x-api-key': apiKey,
+          'anthropic-version': '2023-06-01',
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          model: 'claude-sonnet-4-20250514',
+          max_tokens: 8000,
+          temperature: 0.1,
+          messages: [{ role: 'user', content: contentParts }]
+        }),
+        signal: controller.signal,
+      });
+      
+      clearTimeout(timeoutId);
+      const elapsed = Date.now() - startTime;
+      
+      if (response.ok) {
+        const data = await response.json();
+        const text = data.content?.[0]?.text || '';
+        console.log(`[Analysis] Anthropic completed in ${elapsed}ms (${text.length} chars)`);
+        return { text, model: 'claude-sonnet-4-20250514' };
+      } else {
+        const errorText = await response.text();
+        console.error(`[Analysis] Anthropic failed (${response.status}): ${errorText.substring(0, 300)}`);
+        lastError = new Error(`Anthropic API error: ${response.status}`);
+        
+        // Don't retry on certain status codes
+        if (response.status === 401 || response.status === 403) {
+          throw lastError;
+        }
+        
+        // Wait before retry
+        if (attempt < maxRetries) {
+          await new Promise(resolve => setTimeout(resolve, 2000 * attempt));
+        }
+      }
+    } catch (error) {
+      clearTimeout(timeoutId);
+      if (error instanceof Error && error.name === 'AbortError') {
+        lastError = new Error('Análise interrompida por tempo de processamento');
+        break; // Don't retry on timeout
+      }
+      lastError = error instanceof Error ? error : new Error('Unknown error');
+      
+      // Wait before retry
+      if (attempt < maxRetries) {
+        console.log(`[Analysis] Retry ${attempt + 1} after error: ${lastError.message}`);
+        await new Promise(resolve => setTimeout(resolve, 2000 * attempt));
+      }
     }
-  } catch (error) {
-    clearTimeout(timeoutId);
-    if (error instanceof Error && error.name === 'AbortError') {
-      throw new Error('Análise interrompida por tempo de processamento');
-    }
-    throw error;
   }
+  
+  throw lastError || new Error('Falha após múltiplas tentativas');
 }
 
 /**
@@ -232,40 +258,64 @@ async function analyzeWithGemini(
   contentParts.push({ type: 'text', text: '\n\nProvide your complete analysis following the specified format.' });
   
   const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 180000); // 3 minutes
+  const timeoutId = setTimeout(() => controller.abort(), 300000); // 5 minutes
   
-  try {
-    const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${lovableApiKey}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        model: 'google/gemini-2.5-flash',
-        messages: [{ role: 'user', content: contentParts }],
-        max_tokens: 8000,
-        temperature: 0.1,
-      }),
-      signal: controller.signal,
-    });
-    
-    clearTimeout(timeoutId);
-    const elapsed = Date.now() - startTime;
-    
-    if (response.ok) {
-      const data = await response.json();
-      const text = data.choices?.[0]?.message?.content || '';
-      console.log(`[Fallback] Gemini completed in ${elapsed}ms (${text.length} chars)`);
-      return { text, model: 'google/gemini-2.5-flash' };
-    } else {
-      const errorText = await response.text();
-      throw new Error(`Gemini API error: ${errorText.substring(0, 200)}`);
+  const maxRetries = 3;
+  let lastError: Error | null = null;
+  
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      console.log(`[Fallback] Gemini attempt ${attempt}/${maxRetries}`);
+      
+      const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${lovableApiKey}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          model: 'google/gemini-2.5-flash',
+          messages: [{ role: 'user', content: contentParts }],
+          max_tokens: 8000,
+          temperature: 0.1,
+        }),
+        signal: controller.signal,
+      });
+      
+      clearTimeout(timeoutId);
+      const elapsed = Date.now() - startTime;
+      
+      if (response.ok) {
+        const data = await response.json();
+        const text = data.choices?.[0]?.message?.content || '';
+        console.log(`[Fallback] Gemini completed in ${elapsed}ms (${text.length} chars)`);
+        return { text, model: 'google/gemini-2.5-flash' };
+      } else {
+        const errorText = await response.text();
+        console.error(`[Fallback] Gemini failed (${response.status}): ${errorText.substring(0, 200)}`);
+        lastError = new Error(`Gemini API error: ${response.status}`);
+        
+        // Wait before retry
+        if (attempt < maxRetries) {
+          await new Promise(resolve => setTimeout(resolve, 2000 * attempt));
+        }
+      }
+    } catch (error) {
+      clearTimeout(timeoutId);
+      if (error instanceof Error && error.name === 'AbortError') {
+        lastError = new Error('Análise interrompida por tempo de processamento');
+        break;
+      }
+      lastError = error instanceof Error ? error : new Error('Unknown error');
+      
+      if (attempt < maxRetries) {
+        console.log(`[Fallback] Retry ${attempt + 1} after error: ${lastError.message}`);
+        await new Promise(resolve => setTimeout(resolve, 2000 * attempt));
+      }
     }
-  } catch (error) {
-    clearTimeout(timeoutId);
-    throw error;
   }
+  
+  throw lastError || new Error('Falha após múltiplas tentativas');
 }
 
 export async function analyzeWithLLM(

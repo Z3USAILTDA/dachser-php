@@ -176,6 +176,11 @@ export default function SubmeterManifestHbl() {
       showInlineStatus("Item ID não encontrado", 'error');
       return;
     }
+    // Validate consignee and container are not empty (except for 'N/A')
+    if (!baseInfo?.container || baseInfo.container === 'N/A') {
+      showInlineStatus("Container não identificado no arquivo base. Verifique o nome do arquivo ou o conteúdo.", 'error');
+      return;
+    }
     const totalSize = hblFiles.reduce((sum, file) => sum + file.size, 0);
     const maxTotalSize = 100 * 1024 * 1024;
     if (totalSize > maxTotalSize) {
@@ -188,15 +193,16 @@ export default function SubmeterManifestHbl() {
     setInlineStatus(null);
     showInlineStatus("Processando análise com IA...", 'info');
     try {
+      // Smoother progress animation
       const progressInterval = setInterval(() => {
         setAnalysisProgress(prev => {
-          if (prev >= 90) {
-            clearInterval(progressInterval);
-            return 90;
+          if (prev >= 85) {
+            return prev;
           }
-          return prev + 2;
+          // Slower progress increase for longer processing
+          return prev + 1;
         });
-      }, 500);
+      }, 3000);
       const response = await maritimoApi.submitAnalysis({
         itemId,
         analysisType: 'manifest_hbl',
@@ -221,11 +227,11 @@ export default function SubmeterManifestHbl() {
         }
       } else {
         console.log('Falling back to polling mode');
-        setAnalysisStep("Aguardando resultado...");
+        setAnalysisStep("Processando com IA...");
         result = await maritimoApi.pollAnalysisUntilComplete(response.analysisId, (percent, step) => {
           setAnalysisProgress(Math.min(percent, 95));
           setAnalysisStep(step);
-        }, 8 * 60 * 1000 // 8 minutes
+        }, 10 * 60 * 1000 // 10 minutes (extended timeout)
         );
       }
       setAnalysisProgress(100);
