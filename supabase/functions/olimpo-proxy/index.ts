@@ -1830,144 +1830,273 @@ serve(async (req) => {
       });
 
       try {
-        // Fetch containers with PENDING status
+        // Fetch containers with PENDING status or failed tracking
         const pendingContainers = await client.query(`
-          SELECT id, container, shipping_line 
+          SELECT id, container, shipping_line, mawb
           FROM ai_agente.t_dachser_container_tracking 
-          WHERE (container_status = 'PENDING' OR container_status IS NULL OR last_event = 'Aguardando rastreio...') 
+          WHERE (container_status = 'PENDING' OR container_status IS NULL OR last_event = 'Aguardando rastreio...' OR container_status = 'TRACKING_FAILED') 
             AND active = 1
+          ORDER BY 
+            CASE WHEN container_status = 'PENDING' OR container_status IS NULL THEN 0 ELSE 1 END,
+            updated_at ASC
           LIMIT 15
         `);
 
         console.log(`[update_pending_tracking] Found ${pendingContainers.length} pending containers to track`);
+
+        // Shipping line detection by container prefix
+        const prefixToShippingLine: Record<string, string> = {
+          // MSC
+          'MSCU': 'MSC', 'MEDU': 'MSC', 'MSDU': 'MSC',
+          // MAERSK
+          'MAEU': 'MAERSK', 'MRKU': 'MAERSK', 'MSKU': 'MAERSK', 'MRSU': 'MAERSK', 'SEGU': 'MAERSK',
+          // CMA CGM
+          'CMAU': 'CMA_CGM', 'CCLU': 'CMA_CGM', 'CXDU': 'CMA_CGM', 'CGMU': 'CMA_CGM',
+          // HAPAG LLOYD
+          'HLCU': 'HAPAG_LLOYD', 'HLXU': 'HAPAG_LLOYD',
+          // ONE
+          'ONEY': 'ONE', 'ONEU': 'ONE', 'NYKU': 'ONE',
+          // HMM
+          'HDMU': 'HMM', 'HMMU': 'HMM',
+          // EVERGREEN
+          'EISU': 'EVERGREEN', 'EITU': 'EVERGREEN', 'EGSU': 'EVERGREEN', 'EGHU': 'EVERGREEN', 'EGLV': 'EVERGREEN',
+          // YANG MING
+          'YMLU': 'YANG_MING', 'YMMU': 'YANG_MING', 'YMJA': 'YANG_MING',
+          // COSCO
+          'COSU': 'COSCO', 'CSNU': 'COSCO', 'CBHU': 'COSCO',
+          // ZIM
+          'ZIMU': 'ZIM', 'ZCSU': 'ZIM',
+          // PIL
+          'PCIU': 'PIL', 'PONU': 'PIL',
+          // OOCL
+          'OOLU': 'OOCL',
+          // HAMBURG SUD (now part of Maersk)
+          'SUDU': 'HAMBURG_SUD',
+        };
+
+        // Known prefixes for major shipping lines
+        const knownPrefixes = Object.keys(prefixToShippingLine);
+
+        // All shipping lines to try for unknown containers
+        const allShippingLines = ['MSC', 'MAERSK', 'CMA_CGM', 'HAPAG_LLOYD', 'ONE', 'HMM', 'EVERGREEN', 'COSCO', 'ZIM', 'YANG_MING', 'PIL', 'OOCL', 'HAMBURG_SUD'];
 
         let updated = 0;
         let failed = 0;
 
         for (const row of pendingContainers) {
           const containerNumber = String(row.container).trim().toUpperCase();
-          const shippingLine = row.shipping_line || '';
+          const dbShippingLine = row.shipping_line || '';
+          const prefix = containerNumber.substring(0, 4).toUpperCase();
           
-          if (!containerNumber || !shippingLine) {
-            console.log(`[update_pending_tracking] Skipping ${containerNumber}: missing shipping_line`);
+          if (!containerNumber) {
+            console.log(`[update_pending_tracking] Skipping empty container`);
             failed++;
             continue;
           }
 
-          try {
-            console.log(`[update_pending_tracking] Tracking container ${containerNumber} (${shippingLine})`);
-            
-            const containerUrl = `http://api.jsoncargo.com/api/v1/containers/${encodeURIComponent(containerNumber)}?shipping_line=${shippingLine}`;
-            const containerRes = await jcJson(containerUrl, {}, 60000); // 60 second timeout
-            
-            if (containerRes.__status === 200 && containerRes.data) {
-              const cData = containerRes.data;
-              
-              let origem: string | null = null;
-              let destino: string | null = null;
-              let vessel: string | null = null;
-              let eta: string | null = null;
-              let containerStatus = 'TRACKED';
-              let lastEvent = 'Rastreado com sucesso';
-              
-              // Extract origin
-              if (cData.loading_port) {
-                origem = typeof cData.loading_port === 'object' 
-                  ? cData.loading_port.name || cData.loading_port.code 
-                  : String(cData.loading_port);
-              } else if (cData.pol) {
-                origem = String(cData.pol);
+          // Build list of shipping lines to try
+          let shippingLinesToTry: string[] = [];
+          
+          // 1. Try database shipping line first if present
+          if (dbShippingLine && dbShippingLine.trim()) {
+            shippingLinesToTry.push(dbShippingLine.trim().toUpperCase().replace(/ /g, '_'));
+          }
+          
+          // 2. Try detected shipping line from prefix
+          const detectedShippingLine = prefixToShippingLine[prefix];
+          if (detectedShippingLine && !shippingLinesToTry.includes(detectedShippingLine)) {
+            shippingLinesToTry.push(detectedShippingLine);
+          }
+          
+          // 3. If container prefix is unknown (SOC/third-party), try all shipping lines
+          const isThirdParty = !knownPrefixes.includes(prefix);
+          if (isThirdParty || shippingLinesToTry.length === 0) {
+            for (const sl of allShippingLines) {
+              if (!shippingLinesToTry.includes(sl)) {
+                shippingLinesToTry.push(sl);
               }
-              
-              // Extract destination
-              if (cData.discharging_port) {
-                destino = typeof cData.discharging_port === 'object' 
-                  ? cData.discharging_port.name || cData.discharging_port.code 
-                  : String(cData.discharging_port);
-              } else if (cData.pod) {
-                destino = String(cData.pod);
-              } else if (cData.final_destination) {
-                destino = typeof cData.final_destination === 'object'
-                  ? cData.final_destination.name || cData.final_destination.code
-                  : String(cData.final_destination);
-              }
-              
-              // Extract vessel
-              if (cData.vessel) {
-                vessel = typeof cData.vessel === 'object' 
-                  ? cData.vessel.name 
-                  : String(cData.vessel);
-              } else if (cData.current_vessel_name) {
-                vessel = String(cData.current_vessel_name);
-              }
-              
-              // Extract ETA
-              if (cData.eta_final_destination) {
-                eta = String(cData.eta_final_destination);
-              } else if (cData.eta) {
-                eta = String(cData.eta);
-              } else if (cData.arrival_date) {
-                eta = String(cData.arrival_date);
-              }
-              
-              // Extract container status
-              if (cData.container_status) {
-                containerStatus = String(cData.container_status).toUpperCase();
-              }
-              
-              // Extract last event from events array
-              if (cData.events && Array.isArray(cData.events) && cData.events.length > 0) {
-                const sortedEvents = [...cData.events].sort((a, b) => {
-                  const dateA = new Date(a.date || a.event_date || 0);
-                  const dateB = new Date(b.date || b.event_date || 0);
-                  return dateB.getTime() - dateA.getTime();
-                });
-                const latestEvent = sortedEvents[0];
-                lastEvent = latestEvent.description || latestEvent.event_description || latestEvent.name || lastEvent;
-              }
-              
-              console.log(`[update_pending_tracking] Container ${containerNumber}: origem=${origem}, destino=${destino}, vessel=${vessel}, eta=${eta}, status=${containerStatus}`);
-              
-              // Update container with full details
-              await client.execute(`
-                UPDATE ai_agente.t_dachser_container_tracking 
-                SET origem = ?, destino = ?, vessel = ?, eta = ?, 
-                    last_event = ?, container_status = ?, last_check = NOW(), updated_at = NOW()
-                WHERE id = ?
-              `, [origem, destino, vessel, eta, lastEvent, containerStatus, row.id]);
-              
-              updated++;
-            } else {
-              console.log(`[update_pending_tracking] Container ${containerNumber}: API returned status ${containerRes.__status}`);
-              
-              // Mark as TRACKING_FAILED after unsuccessful attempt
-              await client.execute(`
-                UPDATE ai_agente.t_dachser_container_tracking 
-                SET container_status = 'TRACKING_FAILED', 
-                    last_event = 'Falha no rastreio (API status ${containerRes.__status})',
-                    last_check = NOW(), updated_at = NOW()
-                WHERE id = ?
-              `, [row.id]);
-              
-              failed++;
             }
-          } catch (trackErr: any) {
-            console.error(`[update_pending_tracking] Error tracking ${containerNumber}:`, trackErr.message);
+          }
+
+          console.log(`[update_pending_tracking] Container ${containerNumber}: prefix=${prefix}, isThirdParty=${isThirdParty}, trying ${shippingLinesToTry.length} shipping lines`);
+
+          let successfulShippingLine: string | null = null;
+          let trackingData: any = null;
+
+          // Try each shipping line until one works
+          for (const tryShippingLine of shippingLinesToTry) {
+            try {
+              console.log(`[update_pending_tracking] Trying ${containerNumber} with ${tryShippingLine}`);
+              
+              const qs: Record<string, string> = { 'shipping_line': tryShippingLine };
+              const apiRes = await jcJson(`http://api.jsoncargo.com/api/v1/containers/${encodeURIComponent(containerNumber)}`, qs, 20000);
+
+              // Check if we got a valid response with data
+              if (!apiRes.__curl_error && !apiRes.error && apiRes.data) {
+                const cData = apiRes.data;
+                
+                // Validate we have meaningful data
+                const hasOrigin = cData.loading_port || cData.pol || cData.shipped_from;
+                const hasDestination = cData.discharging_port || cData.pod || cData.final_destination || cData.shipped_to;
+                const hasStatus = cData.container_status || (cData.events && cData.events.length > 0);
+                
+                if (hasOrigin || hasDestination || hasStatus) {
+                  console.log(`[update_pending_tracking] SUCCESS! ${containerNumber} found with ${tryShippingLine}`);
+                  
+                  // Extract origin
+                  let origem: string | null = null;
+                  if (cData.loading_port) {
+                    origem = typeof cData.loading_port === 'object' 
+                      ? cData.loading_port.name || cData.loading_port.code 
+                      : String(cData.loading_port);
+                  } else if (cData.pol) {
+                    origem = String(cData.pol);
+                  } else if (cData.shipped_from) {
+                    origem = String(cData.shipped_from);
+                  }
+                  
+                  // Extract destination
+                  let destino: string | null = null;
+                  if (cData.discharging_port) {
+                    destino = typeof cData.discharging_port === 'object' 
+                      ? cData.discharging_port.name || cData.discharging_port.code 
+                      : String(cData.discharging_port);
+                  } else if (cData.pod) {
+                    destino = String(cData.pod);
+                  } else if (cData.final_destination) {
+                    destino = typeof cData.final_destination === 'object'
+                      ? cData.final_destination.name || cData.final_destination.code
+                      : String(cData.final_destination);
+                  } else if (cData.shipped_to) {
+                    destino = String(cData.shipped_to);
+                  }
+                  
+                  // Extract vessel
+                  let vessel: string | null = null;
+                  if (cData.vessel) {
+                    vessel = typeof cData.vessel === 'object' 
+                      ? cData.vessel.name 
+                      : String(cData.vessel);
+                  } else if (cData.current_vessel_name) {
+                    vessel = String(cData.current_vessel_name);
+                  } else if (cData.last_vessel_name) {
+                    vessel = String(cData.last_vessel_name);
+                  }
+                  
+                  // Extract ETA
+                  let eta: string | null = null;
+                  if (cData.eta_final_destination) {
+                    eta = String(cData.eta_final_destination);
+                  } else if (cData.eta) {
+                    eta = String(cData.eta);
+                  } else if (cData.arrival_date) {
+                    eta = String(cData.arrival_date);
+                  }
+                  
+                  // Extract container status
+                  let containerStatus = cData.container_status || 'TRACKED';
+                  
+                  // Extract last event from events array
+                  let lastEvent = containerStatus;
+                  if (cData.events && Array.isArray(cData.events) && cData.events.length > 0) {
+                    const sortedEvents = [...cData.events].sort((a: any, b: any) => {
+                      const dateA = new Date(a.date || a.event_date || 0);
+                      const dateB = new Date(b.date || b.event_date || 0);
+                      return dateB.getTime() - dateA.getTime();
+                    });
+                    const latestEvent = sortedEvents[0];
+                    lastEvent = latestEvent.description || latestEvent.event_description || latestEvent.name || lastEvent;
+                  } else if (cData.last_movement?.description) {
+                    lastEvent = cData.last_movement.description;
+                  }
+
+                  trackingData = {
+                    origem,
+                    destino,
+                    vessel,
+                    eta,
+                    container_status: containerStatus,
+                    last_event: lastEvent
+                  };
+                  
+                  successfulShippingLine = tryShippingLine;
+                  break; // Found it, stop trying
+                }
+              }
+              
+              // Small delay between attempts to avoid rate limiting
+              await new Promise(r => setTimeout(r, 150));
+              
+            } catch (tryErr: any) {
+              console.log(`[update_pending_tracking] Error trying ${tryShippingLine} for ${containerNumber}: ${tryErr.message}`);
+              await new Promise(r => setTimeout(r, 100));
+            }
+          }
+
+          // Update database with results
+          if (trackingData && successfulShippingLine) {
+            console.log(`[update_pending_tracking] ${containerNumber}: origem=${trackingData.origem}, destino=${trackingData.destino}, vessel=${trackingData.vessel}, eta=${trackingData.eta}, status=${trackingData.container_status}`);
+            
+            await client.execute(`
+              UPDATE ai_agente.t_dachser_container_tracking 
+              SET origem = COALESCE(?, origem), 
+                  destino = COALESCE(?, destino), 
+                  vessel = COALESCE(?, vessel), 
+                  eta = ?,
+                  last_event = ?, 
+                  container_status = ?, 
+                  shipping_line = ?,
+                  last_check = NOW(), 
+                  updated_at = NOW()
+              WHERE id = ?
+            `, [
+              trackingData.origem, 
+              trackingData.destino, 
+              trackingData.vessel, 
+              trackingData.eta ? new Date(trackingData.eta) : null,
+              trackingData.last_event, 
+              trackingData.container_status, 
+              successfulShippingLine,
+              row.id
+            ]);
+
+            // Record status history
+            if (trackingData.last_event || trackingData.container_status) {
+              const codigoEvento = trackingData.container_status || trackingData.last_event?.substring(0, 50) || 'UNKNOWN';
+              const descricaoEvento = trackingData.last_event || trackingData.container_status || null;
+              const mawb = row.mawb || null;
+              const destino = trackingData.destino || null;
+              
+              try {
+                await client.execute(`
+                  INSERT IGNORE INTO ai_agente.t_sea_hist_status 
+                  (container, mawb, codigo_evento, descricao_evento, data_hora_evento, fonte, aeroporto)
+                  VALUES (?, ?, ?, ?, NOW(), 'JSONCARGO', ?)
+                `, [containerNumber, mawb, codigoEvento, descricaoEvento, destino]);
+              } catch (histErr: any) {
+                console.error(`[update_pending_tracking] Error recording history: ${histErr.message}`);
+              }
+            }
+
+            updated++;
+          } else {
+            console.error(`[update_pending_tracking] ${containerNumber} not found in any shipping line after trying ${shippingLinesToTry.length} carriers`);
             
             // Mark as TRACKING_FAILED
             await client.execute(`
               UPDATE ai_agente.t_dachser_container_tracking 
               SET container_status = 'TRACKING_FAILED', 
-                  last_event = 'Erro: ${trackErr.message?.substring(0, 100) || 'Timeout'}',
-                  last_check = NOW(), updated_at = NOW()
+                  last_event = 'Não encontrado em nenhum armador',
+                  last_check = NOW(), 
+                  updated_at = NOW()
               WHERE id = ?
             `, [row.id]);
             
             failed++;
           }
           
-          // Rate limit between API calls
-          await new Promise(r => setTimeout(r, 1000));
+          // Rate limit between containers
+          await new Promise(r => setTimeout(r, 500));
         }
 
         // Count remaining pending
