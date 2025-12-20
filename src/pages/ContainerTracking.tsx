@@ -241,6 +241,7 @@ interface ContainerData {
   id: string;
   container: string;
   bl?: string;
+  mawb?: string;
   shipping_line: string;
   consignee_name: string;
   last_event: string;
@@ -372,6 +373,7 @@ const ContainerTracking = () => {
           id: String(row.id),
           container: row.container,
           bl: row.bl,
+          mawb: row.mawb || null,
           shipping_line: row.shipping_line || '',
           consignee_name: row.consignee_name || '',
           last_event: row.last_event || 'Aguardando rastreio...',
@@ -1242,6 +1244,7 @@ const ContainerTracking = () => {
                 <table className="w-full border-collapse">
                   <thead>
                     <tr className="bg-[rgba(0,0,0,.4)] border-b border-[rgba(255,255,255,.08)]">
+                      <th className="px-4 py-3 text-left text-[#aaaaaa] uppercase text-[0.68rem] tracking-[0.1em] font-medium">MAWB</th>
                       <th
                         className="px-4 py-3 text-left text-[#aaaaaa] uppercase text-[0.68rem] tracking-[0.1em] font-medium cursor-pointer select-none hover:text-[#ffc800] transition"
                         onClick={handleContainerSort}
@@ -1286,6 +1289,9 @@ const ContainerTracking = () => {
                           key={container.id}
                           className="border-b border-[rgba(255,255,255,.05)] hover:bg-[rgba(255,255,255,.03)] transition"
                         >
+                          <td className="px-4 py-3">
+                            <span className="text-[#aaaaaa] font-mono text-xs">{container.mawb || '-'}</span>
+                          </td>
                           <td className="px-4 py-3">
                             <span className="text-[#f5f5f5] font-mono text-sm">{container.container}</span>
                           </td>

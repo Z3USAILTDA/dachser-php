@@ -1275,8 +1275,29 @@ serve(async (req) => {
       });
 
       try {
+        // Create history table if not exists
+        await client.execute(`
+          CREATE TABLE IF NOT EXISTS ai_agente.t_sea_hist_status (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            container VARCHAR(20) NOT NULL,
+            mawb VARCHAR(50),
+            codigo_evento VARCHAR(50) NOT NULL,
+            descricao_evento TEXT,
+            data_hora_evento DATETIME NOT NULL,
+            fonte VARCHAR(30) DEFAULT 'JSONCARGO',
+            aeroporto VARCHAR(10),
+            nivel_confianca VARCHAR(20) DEFAULT 'PRIMARIA',
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            INDEX idx_container (container),
+            INDEX idx_mawb (mawb),
+            INDEX idx_data_evento (data_hora_evento),
+            UNIQUE KEY unique_event (container, codigo_evento, data_hora_evento)
+          )
+        `);
+        console.log('[refresh_all_containers] t_sea_hist_status table ensured');
+
         const containers = await client.query(`
-          SELECT container, shipping_line, vessel FROM ai_agente.t_dachser_container_tracking WHERE active = 1
+          SELECT container, shipping_line, vessel, mawb FROM ai_agente.t_dachser_container_tracking WHERE active = 1
         `);
 
         let updated = 0;
@@ -1449,6 +1470,26 @@ serve(async (req) => {
               successfulShippingLine,
               containerId
             ]);
+
+            // Record status history in t_sea_hist_status
+            if (trackingData.last_event || trackingData.container_status) {
+              const codigoEvento = trackingData.container_status || trackingData.last_event?.substring(0, 50) || 'UNKNOWN';
+              const descricaoEvento = trackingData.last_event || trackingData.container_status || null;
+              const mawb = row.mawb || null;
+              const destino = trackingData.discharging_port || null;
+              
+              try {
+                await client.execute(`
+                  INSERT IGNORE INTO ai_agente.t_sea_hist_status 
+                  (container, mawb, codigo_evento, descricao_evento, data_hora_evento, fonte, aeroporto)
+                  VALUES (?, ?, ?, ?, NOW(), 'JSONCARGO', ?)
+                `, [containerId, mawb, codigoEvento, descricaoEvento, destino]);
+                console.log(`[refresh_all] Status history recorded for ${containerId}`);
+              } catch (histErr: any) {
+                console.error(`[refresh_all] Error recording history for ${containerId}:`, histErr.message);
+              }
+            }
+
             updated++;
           } else {
             console.error(`[refresh_all] Container ${containerId} not found in any shipping line after trying ${shippingLinesToTry.length} carriers`);
