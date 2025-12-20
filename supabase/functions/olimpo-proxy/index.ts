@@ -1747,9 +1747,11 @@ serve(async (req) => {
 
         console.log(`[sea_track_bl] Containers encontrados: ${containerNumbers.length}`, containerNumbers);
 
-        // Buscar detalhes de cada container
+        // Buscar detalhes de cada container usando o shipping_line detectado do BL
         for (const containerNumber of containerNumbers) {
-          const containerRes = await jcJson(`http://api.jsoncargo.com/api/v1/containers/${encodeURIComponent(containerNumber)}`, {}, 20000);
+          const containerUrl = `http://api.jsoncargo.com/api/v1/containers/${encodeURIComponent(containerNumber)}?shipping_line=${encodeURIComponent(shippingLine)}`;
+          console.log(`[sea_track_bl] Buscando container: ${containerNumber} com armador: ${shippingLine}`);
+          const containerRes = await jcJson(containerUrl, {}, 20000);
           
           if (containerRes.__status === 200) {
             const containerData = containerRes.data || containerRes;
