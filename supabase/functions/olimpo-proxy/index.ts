@@ -1689,7 +1689,6 @@ serve(async (req) => {
         let processed = 0;
         let containersAdded = 0;
         let skipped = 0;
-        let errors = 0;
 
         for (const master of masters) {
           const blNumber = String(master.mawb || '').trim().toUpperCase();
@@ -1710,44 +1709,41 @@ serve(async (req) => {
             continue;
           }
 
-          // Use JSONCargo API to find containers for this BL
+          // Detect shipping line from BL prefix
+          const prefix = blNumber.substring(0, 4).toUpperCase();
+          const prefixMapping: Record<string, string> = {
+            'MEDU': 'MSC', 'MSCU': 'MSC', 'MSCM': 'MSC',
+            'MAEU': 'MAERSK', 'MRKU': 'MAERSK', 'MSKU': 'MAERSK', 'SEAU': 'MAERSK',
+            'CMAU': 'CMA_CGM', 'CGMU': 'CMA_CGM', 'APLU': 'CMA_CGM',
+            'HLCU': 'HAPAG_LLOYD', 'HLXU': 'HAPAG_LLOYD',
+            'ONEY': 'ONE', 'NYKU': 'ONE',
+            'EGLV': 'EVERGREEN', 'EGHU': 'EVERGREEN', 'EITU': 'EVERGREEN',
+            'COSU': 'COSCO', 'CBHU': 'COSCO', 'OOLU': 'COSCO',
+            'ZIMU': 'ZIM',
+            'YMLU': 'YANG_MING', 'YMJA': 'YANG_MING',
+            'HDMU': 'HMM',
+            'PCIU': 'PIL',
+          };
+          
+          const shippingLine = prefixMapping[prefix];
+          
+          if (!shippingLine) {
+            console.log(`[import_masters] BL ${blNumber}: Unknown prefix ${prefix}, skipping`);
+            skipped++;
+            continue;
+          }
+
+          console.log(`[import_masters] Fetching containers for BL ${blNumber} (${shippingLine})`);
+
+          // Call JSONCargo BOL API to get container numbers only
           try {
-            // Detect shipping line from BL prefix (already filtered to valid prefixes)
-            const prefix = blNumber.substring(0, 4).toUpperCase();
-            const prefixMapping: Record<string, string> = {
-              'MEDU': 'MSC', 'MSCU': 'MSC', 'MSCM': 'MSC',
-              'MAEU': 'MAERSK', 'MRKU': 'MAERSK', 'MSKU': 'MAERSK', 'SEAU': 'MAERSK',
-              'CMAU': 'CMA_CGM', 'CGMU': 'CMA_CGM', 'APLU': 'CMA_CGM',
-              'HLCU': 'HAPAG_LLOYD', 'HLXU': 'HAPAG_LLOYD',
-              'ONEY': 'ONE', 'NYKU': 'ONE',
-              'EGLV': 'EVERGREEN', 'EGHU': 'EVERGREEN', 'EITU': 'EVERGREEN',
-              'COSU': 'COSCO', 'CBHU': 'COSCO', 'OOLU': 'COSCO',
-              'ZIMU': 'ZIM',
-              'YMLU': 'YANG_MING', 'YMJA': 'YANG_MING',
-              'HDMU': 'HMM',
-              'PCIU': 'PIL',
-            };
-            
-            const shippingLine = prefixMapping[prefix];
-            
-            // Should always have a shipping line since we pre-filtered, but double check
-            if (!shippingLine) {
-              console.log(`[import_masters] BL ${blNumber}: Unknown prefix ${prefix}, skipping`);
-              skipped++;
-              continue;
-            }
-
-            console.log(`[import_masters] Tracking BL ${blNumber} with shipping line ${shippingLine}`);
-
-            // Call JSONCargo BOL API
             const bolUrl = `http://api.jsoncargo.com/api/v1/containers/bol/${encodeURIComponent(blNumber)}`;
-            const bolRes = await jcJson(bolUrl, { shipping_line: shippingLine }, 30000);
+            const bolRes = await jcJson(bolUrl, { shipping_line: shippingLine }, 15000);
 
             if (bolRes.__status === 200 && bolRes.data) {
               const data = bolRes.data;
               const containerNumbers: string[] = [];
 
-              // Extract containers from response
               if (data.associated_container_numbers && Array.isArray(data.associated_container_numbers)) {
                 for (const c of data.associated_container_numbers) {
                   if (typeof c === 'string' && c.trim()) {
@@ -1758,136 +1754,32 @@ serve(async (req) => {
 
               console.log(`[import_masters] BL ${blNumber}: found ${containerNumbers.length} containers`);
 
-              // Add each container to tracking with full details
+              // Insert each container with PENDING status (no detail fetch here)
               for (const containerNumber of containerNumbers) {
-                try {
-                  // Fetch detailed tracking info for this container
-                  const containerUrl = `http://api.jsoncargo.com/api/v1/containers/${encodeURIComponent(containerNumber)}?shipping_line=${shippingLine}`;
-                  const containerRes = await jcJson(containerUrl, {}, 30000);
-                  
-                  let origem: string | null = null;
-                  let destino: string | null = null;
-                  let vessel: string | null = null;
-                  let eta: string | null = null;
-                  let containerStatus = 'PENDING';
-                  let lastEvent = 'Aguardando rastreio...';
-                  
-                  if (containerRes.__status === 200 && containerRes.data) {
-                    const cData = containerRes.data;
-                    
-                    // Extract origin (loading port)
-                    if (cData.loading_port) {
-                      origem = typeof cData.loading_port === 'object' 
-                        ? cData.loading_port.name || cData.loading_port.code 
-                        : String(cData.loading_port);
-                    } else if (cData.pol) {
-                      origem = String(cData.pol);
-                    }
-                    
-                    // Extract destination (discharge port)
-                    if (cData.discharging_port) {
-                      destino = typeof cData.discharging_port === 'object' 
-                        ? cData.discharging_port.name || cData.discharging_port.code 
-                        : String(cData.discharging_port);
-                    } else if (cData.pod) {
-                      destino = String(cData.pod);
-                    } else if (cData.final_destination) {
-                      destino = typeof cData.final_destination === 'object'
-                        ? cData.final_destination.name || cData.final_destination.code
-                        : String(cData.final_destination);
-                    }
-                    
-                    // Extract vessel
-                    if (cData.vessel) {
-                      vessel = typeof cData.vessel === 'object' 
-                        ? cData.vessel.name 
-                        : String(cData.vessel);
-                    } else if (cData.current_vessel_name) {
-                      vessel = String(cData.current_vessel_name);
-                    }
-                    
-                    // Extract ETA
-                    if (cData.eta_final_destination) {
-                      eta = String(cData.eta_final_destination);
-                    } else if (cData.eta) {
-                      eta = String(cData.eta);
-                    } else if (cData.arrival_date) {
-                      eta = String(cData.arrival_date);
-                    }
-                    
-                    // Extract container status
-                    if (cData.container_status) {
-                      containerStatus = String(cData.container_status).toUpperCase();
-                    }
-                    
-                    // Extract last event from events array
-                    if (cData.events && Array.isArray(cData.events) && cData.events.length > 0) {
-                      // Sort by date descending and get most recent
-                      const sortedEvents = [...cData.events].sort((a, b) => {
-                        const dateA = new Date(a.date || a.event_date || 0);
-                        const dateB = new Date(b.date || b.event_date || 0);
-                        return dateB.getTime() - dateA.getTime();
-                      });
-                      const latestEvent = sortedEvents[0];
-                      lastEvent = latestEvent.description || latestEvent.event_description || latestEvent.name || lastEvent;
-                    }
-                    
-                    console.log(`[import_masters] Container ${containerNumber}: origem=${origem}, destino=${destino}, vessel=${vessel}, eta=${eta}, status=${containerStatus}`);
-                  } else {
-                    console.log(`[import_masters] Container ${containerNumber}: Could not fetch details (status ${containerRes.__status}), inserting with basic info`);
-                  }
-                  
-                  // Insert container with all available info
-                  await client.execute(`
-                    INSERT INTO ai_agente.t_dachser_container_tracking 
-                    (container, mawb, consignee_name, shipping_line, origem, destino, vessel, eta, last_event, container_status, active)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
-                    ON DUPLICATE KEY UPDATE
-                      mawb = COALESCE(VALUES(mawb), mawb),
-                      consignee_name = COALESCE(VALUES(consignee_name), consignee_name),
-                      shipping_line = COALESCE(VALUES(shipping_line), shipping_line),
-                      origem = COALESCE(VALUES(origem), origem),
-                      destino = COALESCE(VALUES(destino), destino),
-                      vessel = COALESCE(VALUES(vessel), vessel),
-                      eta = COALESCE(VALUES(eta), eta),
-                      last_event = COALESCE(VALUES(last_event), last_event),
-                      container_status = COALESCE(VALUES(container_status), container_status),
-                      active = 1,
-                      updated_at = NOW()
-                  `, [containerNumber, blNumber, cliente, shippingLine, origem, destino, vessel, eta, lastEvent, containerStatus]);
-                  containersAdded++;
-                  
-                  // Rate limit between container API calls
-                  await new Promise(r => setTimeout(r, 800));
-                } catch (containerErr: any) {
-                  console.error(`[import_masters] Error fetching details for container ${containerNumber}:`, containerErr.message);
-                  // Still insert with basic info even if detail fetch fails
-                  await client.execute(`
-                    INSERT INTO ai_agente.t_dachser_container_tracking 
-                    (container, mawb, consignee_name, shipping_line, last_event, container_status, active)
-                    VALUES (?, ?, ?, ?, 'Erro ao buscar rastreio', 'PENDING', 1)
-                    ON DUPLICATE KEY UPDATE
-                      mawb = COALESCE(VALUES(mawb), mawb),
-                      consignee_name = COALESCE(VALUES(consignee_name), consignee_name),
-                      shipping_line = COALESCE(VALUES(shipping_line), shipping_line),
-                      active = 1,
-                      updated_at = NOW()
-                  `, [containerNumber, blNumber, cliente, shippingLine]);
-                  containersAdded++;
-                }
+                await client.execute(`
+                  INSERT INTO ai_agente.t_dachser_container_tracking 
+                  (container, mawb, consignee_name, shipping_line, last_event, container_status, active)
+                  VALUES (?, ?, ?, ?, 'Aguardando rastreio...', 'PENDING', 1)
+                  ON DUPLICATE KEY UPDATE
+                    mawb = COALESCE(VALUES(mawb), mawb),
+                    consignee_name = COALESCE(VALUES(consignee_name), consignee_name),
+                    shipping_line = COALESCE(VALUES(shipping_line), shipping_line),
+                    active = 1,
+                    updated_at = NOW()
+                `, [containerNumber, blNumber, cliente, shippingLine]);
+                containersAdded++;
               }
             } else {
-              // 404 or other status - just skip, not an error
               console.log(`[import_masters] BL ${blNumber}: API returned status ${bolRes.__status}, skipping`);
               skipped++;
             }
           } catch (apiErr: any) {
-            console.error(`[import_masters] Error tracking BL ${blNumber}:`, apiErr.message);
+            console.error(`[import_masters] Error fetching BL ${blNumber}:`, apiErr.message);
             skipped++;
           }
 
-          // Rate limit
-          await new Promise(r => setTimeout(r, 500));
+          // Rate limit between BL API calls
+          await new Promise(r => setTimeout(r, 300));
         }
 
         await client.close();
@@ -1899,13 +1791,209 @@ serve(async (req) => {
           processed,
           containersAdded,
           skipped,
-          message: `Importação concluída! ${containersAdded} container(s) adicionado(s) de ${processed} Master(s). ${skipped} ignorado(s).`
+          message: `Importação concluída! ${containersAdded} container(s) adicionado(s) de ${processed} Master(s). ${skipped} ignorado(s). Use "Atualizar Rastreio" para buscar detalhes.`
         }), {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' }
         });
       } catch (e: any) {
         await client.close();
         console.error('[import_masters_from_master_dados] Error:', e);
+        return new Response(JSON.stringify({ error: e.message }), {
+          status: 500,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      }
+    }
+
+    // ===== SEA TRACKING: Update Pending Tracking (fetch details for PENDING containers) =====
+    if (action === 'update_pending_tracking') {
+      const mariadbHost = Deno.env.get('MARIADB_HOST');
+      const mariadbPort = Deno.env.get('MARIADB_PORT') || '3306';
+      const mariadbUser = Deno.env.get('MARIADB_USER');
+      const mariadbPass = Deno.env.get('MARIADB_PASSWORD');
+      const mariadbDb = Deno.env.get('MARIADB_DATABASE');
+
+      if (!mariadbHost || !mariadbUser || !mariadbPass || !mariadbDb) {
+        return new Response(JSON.stringify({ error: 'MariaDB não configurado' }), {
+          status: 500,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      }
+
+      const { Client } = await import("https://deno.land/x/mysql@v2.12.1/mod.ts");
+      const client = await new Client().connect({
+        hostname: mariadbHost,
+        port: parseInt(mariadbPort, 10),
+        username: mariadbUser,
+        password: mariadbPass,
+        db: mariadbDb,
+      });
+
+      try {
+        // Fetch containers with PENDING status
+        const pendingContainers = await client.query(`
+          SELECT id, container, shipping_line 
+          FROM ai_agente.t_dachser_container_tracking 
+          WHERE (container_status = 'PENDING' OR container_status IS NULL OR last_event = 'Aguardando rastreio...') 
+            AND active = 1
+          LIMIT 15
+        `);
+
+        console.log(`[update_pending_tracking] Found ${pendingContainers.length} pending containers to track`);
+
+        let updated = 0;
+        let failed = 0;
+
+        for (const row of pendingContainers) {
+          const containerNumber = String(row.container).trim().toUpperCase();
+          const shippingLine = row.shipping_line || '';
+          
+          if (!containerNumber || !shippingLine) {
+            console.log(`[update_pending_tracking] Skipping ${containerNumber}: missing shipping_line`);
+            failed++;
+            continue;
+          }
+
+          try {
+            console.log(`[update_pending_tracking] Tracking container ${containerNumber} (${shippingLine})`);
+            
+            const containerUrl = `http://api.jsoncargo.com/api/v1/containers/${encodeURIComponent(containerNumber)}?shipping_line=${shippingLine}`;
+            const containerRes = await jcJson(containerUrl, {}, 60000); // 60 second timeout
+            
+            if (containerRes.__status === 200 && containerRes.data) {
+              const cData = containerRes.data;
+              
+              let origem: string | null = null;
+              let destino: string | null = null;
+              let vessel: string | null = null;
+              let eta: string | null = null;
+              let containerStatus = 'TRACKED';
+              let lastEvent = 'Rastreado com sucesso';
+              
+              // Extract origin
+              if (cData.loading_port) {
+                origem = typeof cData.loading_port === 'object' 
+                  ? cData.loading_port.name || cData.loading_port.code 
+                  : String(cData.loading_port);
+              } else if (cData.pol) {
+                origem = String(cData.pol);
+              }
+              
+              // Extract destination
+              if (cData.discharging_port) {
+                destino = typeof cData.discharging_port === 'object' 
+                  ? cData.discharging_port.name || cData.discharging_port.code 
+                  : String(cData.discharging_port);
+              } else if (cData.pod) {
+                destino = String(cData.pod);
+              } else if (cData.final_destination) {
+                destino = typeof cData.final_destination === 'object'
+                  ? cData.final_destination.name || cData.final_destination.code
+                  : String(cData.final_destination);
+              }
+              
+              // Extract vessel
+              if (cData.vessel) {
+                vessel = typeof cData.vessel === 'object' 
+                  ? cData.vessel.name 
+                  : String(cData.vessel);
+              } else if (cData.current_vessel_name) {
+                vessel = String(cData.current_vessel_name);
+              }
+              
+              // Extract ETA
+              if (cData.eta_final_destination) {
+                eta = String(cData.eta_final_destination);
+              } else if (cData.eta) {
+                eta = String(cData.eta);
+              } else if (cData.arrival_date) {
+                eta = String(cData.arrival_date);
+              }
+              
+              // Extract container status
+              if (cData.container_status) {
+                containerStatus = String(cData.container_status).toUpperCase();
+              }
+              
+              // Extract last event from events array
+              if (cData.events && Array.isArray(cData.events) && cData.events.length > 0) {
+                const sortedEvents = [...cData.events].sort((a, b) => {
+                  const dateA = new Date(a.date || a.event_date || 0);
+                  const dateB = new Date(b.date || b.event_date || 0);
+                  return dateB.getTime() - dateA.getTime();
+                });
+                const latestEvent = sortedEvents[0];
+                lastEvent = latestEvent.description || latestEvent.event_description || latestEvent.name || lastEvent;
+              }
+              
+              console.log(`[update_pending_tracking] Container ${containerNumber}: origem=${origem}, destino=${destino}, vessel=${vessel}, eta=${eta}, status=${containerStatus}`);
+              
+              // Update container with full details
+              await client.execute(`
+                UPDATE ai_agente.t_dachser_container_tracking 
+                SET origem = ?, destino = ?, vessel = ?, eta = ?, 
+                    last_event = ?, container_status = ?, last_check = NOW(), updated_at = NOW()
+                WHERE id = ?
+              `, [origem, destino, vessel, eta, lastEvent, containerStatus, row.id]);
+              
+              updated++;
+            } else {
+              console.log(`[update_pending_tracking] Container ${containerNumber}: API returned status ${containerRes.__status}`);
+              
+              // Mark as TRACKING_FAILED after unsuccessful attempt
+              await client.execute(`
+                UPDATE ai_agente.t_dachser_container_tracking 
+                SET container_status = 'TRACKING_FAILED', 
+                    last_event = 'Falha no rastreio (API status ${containerRes.__status})',
+                    last_check = NOW(), updated_at = NOW()
+                WHERE id = ?
+              `, [row.id]);
+              
+              failed++;
+            }
+          } catch (trackErr: any) {
+            console.error(`[update_pending_tracking] Error tracking ${containerNumber}:`, trackErr.message);
+            
+            // Mark as TRACKING_FAILED
+            await client.execute(`
+              UPDATE ai_agente.t_dachser_container_tracking 
+              SET container_status = 'TRACKING_FAILED', 
+                  last_event = 'Erro: ${trackErr.message?.substring(0, 100) || 'Timeout'}',
+                  last_check = NOW(), updated_at = NOW()
+              WHERE id = ?
+            `, [row.id]);
+            
+            failed++;
+          }
+          
+          // Rate limit between API calls
+          await new Promise(r => setTimeout(r, 1000));
+        }
+
+        // Count remaining pending
+        const remainingResult = await client.query(`
+          SELECT COUNT(*) as cnt FROM ai_agente.t_dachser_container_tracking 
+          WHERE (container_status = 'PENDING' OR container_status IS NULL OR last_event = 'Aguardando rastreio...') 
+            AND active = 1
+        `);
+        const remaining = remainingResult[0]?.cnt || 0;
+
+        await client.close();
+        
+        console.log(`[update_pending_tracking] Completed: ${updated} updated, ${failed} failed, ${remaining} remaining`);
+        
+        return new Response(JSON.stringify({ 
+          success: true, 
+          updated,
+          failed,
+          remaining,
+          message: `Rastreio atualizado! ${updated} container(s) rastreado(s), ${failed} falha(s). ${remaining} pendente(s).`
+        }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      } catch (e: any) {
+        await client.close();
+        console.error('[update_pending_tracking] Error:', e);
         return new Response(JSON.stringify({ error: e.message }), {
           status: 500,
           headers: { ...corsHeaders, 'Content-Type': 'application/json' }
