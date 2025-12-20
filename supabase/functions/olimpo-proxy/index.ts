@@ -1650,25 +1650,20 @@ serve(async (req) => {
         `);
         console.log(`[import_masters] Available tipo_processo values:`, JSON.stringify(checkTable));
 
-        // Fetch SEA masters from t_master_dados that are not yet tracked
-        // Try multiple possible values for SEA type
+        // Fetch SEA IMPORT masters from t_master_dados - only recent ones
         const masters = await client.query(`
           SELECT DISTINCT 
             md.mawb,
             md.cliente,
-            md.tipo_processo
+            md.tipo_processo,
+            md.armador
           FROM dados_dachser.t_master_dados md
-          WHERE (
-            md.tipo_processo = 'SEA' 
-            OR md.tipo_processo = 'MARITIME'
-            OR md.tipo_processo = 'MAR'
-            OR md.tipo_processo LIKE '%SEA%'
-            OR md.tipo_processo LIKE '%MAR%'
-          )
+          WHERE md.tipo_processo = 'SEA IMPORT'
             AND md.mawb IS NOT NULL 
             AND TRIM(md.mawb) != ''
-          ORDER BY md.mawb DESC
-          LIMIT 50
+            AND md.data_abertura >= DATE_SUB(CURDATE(), INTERVAL 60 DAY)
+          ORDER BY md.data_abertura DESC
+          LIMIT 100
         `);
 
         console.log(`[import_masters] Found ${masters.length} SEA masters in t_master_dados`);
@@ -1697,37 +1692,69 @@ serve(async (req) => {
 
           // Use JSONCargo API to find containers for this BL
           try {
-            // Detect shipping line from BL prefix
-            const prefix = blNumber.substring(0, 4).toUpperCase();
-            const mapping: Record<string, string> = {
-              'MEDU': 'MSC', 'MSCU': 'MSC',
-              'MAEU': 'MAERSK', 'MRKU': 'MAERSK', 'MSKU': 'MAERSK',
-              'CMAU': 'CMA_CGM', 'CGMU': 'CMA_CGM',
-              'HLCU': 'HAPAG_LLOYD', 'HLXU': 'HAPAG_LLOYD',
-              'ONEY': 'ONE', 'NYKU': 'ONE',
-              'EGLV': 'EVERGREEN', 'EGHU': 'EVERGREEN',
-              'COSU': 'COSCO', 'CBHU': 'COSCO',
-              'ZIMU': 'ZIM',
-              'YMLU': 'YANG_MING', 'YMJA': 'YANG_MING',
-              'HDMU': 'HMM',
+            // Get armador from database or detect from BL prefix
+            const armadorDb = String(master.armador || '').toUpperCase().trim();
+            
+            // Map armador name to JSONCargo shipping_line
+            const armadorMapping: Record<string, string> = {
+              'MSC': 'MSC', 'MEDITERRANEAN': 'MSC',
+              'MAERSK': 'MAERSK', 'SEALAND': 'MAERSK',
+              'CMA': 'CMA_CGM', 'CMA CGM': 'CMA_CGM', 'CMA-CGM': 'CMA_CGM',
+              'HAPAG': 'HAPAG_LLOYD', 'HAPAG-LLOYD': 'HAPAG_LLOYD', 'HAPAG LLOYD': 'HAPAG_LLOYD',
+              'ONE': 'ONE', 'OCEAN NETWORK': 'ONE',
+              'EVERGREEN': 'EVERGREEN', 'EVG': 'EVERGREEN',
+              'COSCO': 'COSCO',
+              'ZIM': 'ZIM',
+              'YANG MING': 'YANG_MING', 'YML': 'YANG_MING',
+              'HMM': 'HMM', 'HYUNDAI': 'HMM',
+              'PIL': 'PIL', 'PACIFIC': 'PIL',
             };
             
-            let shippingLine = mapping[prefix];
+            let shippingLine = '';
+            
+            // First try to match from armador field
+            for (const [key, value] of Object.entries(armadorMapping)) {
+              if (armadorDb.includes(key)) {
+                shippingLine = value;
+                break;
+              }
+            }
+            
+            // If not found, try from BL prefix
             if (!shippingLine) {
-              const prefix3 = prefix.substring(0, 3);
-              const mapping3: Record<string, string> = {
-                'MED': 'MSC', 'MSC': 'MSC',
-                'MAE': 'MAERSK', 'MRK': 'MAERSK',
-                'CMA': 'CMA_CGM', 'CGM': 'CMA_CGM',
-                'HLC': 'HAPAG_LLOYD', 'HLX': 'HAPAG_LLOYD',
-                'ONE': 'ONE', 'NYK': 'ONE',
-                'EGL': 'EVERGREEN', 'EGH': 'EVERGREEN',
-                'COS': 'COSCO', 'CBH': 'COSCO',
-                'ZIM': 'ZIM',
-                'YML': 'YANG_MING',
-                'HDM': 'HMM',
+              const prefix = blNumber.substring(0, 4).toUpperCase();
+              const prefixMapping: Record<string, string> = {
+                'MEDU': 'MSC', 'MSCU': 'MSC', 'MSCM': 'MSC',
+                'MAEU': 'MAERSK', 'MRKU': 'MAERSK', 'MSKU': 'MAERSK', 'SEAU': 'MAERSK',
+                'CMAU': 'CMA_CGM', 'CGMU': 'CMA_CGM',
+                'HLCU': 'HAPAG_LLOYD', 'HLXU': 'HAPAG_LLOYD',
+                'ONEY': 'ONE', 'NYKU': 'ONE',
+                'EGLV': 'EVERGREEN', 'EGHU': 'EVERGREEN',
+                'COSU': 'COSCO', 'CBHU': 'COSCO',
+                'ZIMU': 'ZIM',
+                'YMLU': 'YANG_MING', 'YMJA': 'YANG_MING',
+                'HDMU': 'HMM',
               };
-              shippingLine = mapping3[prefix3] || 'MSC';
+              shippingLine = prefixMapping[prefix] || '';
+              
+              // Try 3-char prefix
+              if (!shippingLine) {
+                const prefix3 = prefix.substring(0, 3);
+                if (prefix3 === 'MED' || prefix3 === 'MSC') shippingLine = 'MSC';
+                else if (prefix3 === 'MAE' || prefix3 === 'MRK') shippingLine = 'MAERSK';
+                else if (prefix3 === 'CMA' || prefix3 === 'CGM') shippingLine = 'CMA_CGM';
+                else if (prefix3 === 'HLC' || prefix3 === 'HLX') shippingLine = 'HAPAG_LLOYD';
+                else if (prefix3 === 'ONE' || prefix3 === 'NYK') shippingLine = 'ONE';
+                else if (prefix3 === 'EGL' || prefix3 === 'EGH') shippingLine = 'EVERGREEN';
+                else if (prefix3 === 'COS' || prefix3 === 'CBH') shippingLine = 'COSCO';
+                else if (prefix3 === 'ZIM') shippingLine = 'ZIM';
+              }
+            }
+            
+            // Skip if we can't determine the shipping line
+            if (!shippingLine) {
+              console.log(`[import_masters] BL ${blNumber}: Cannot determine shipping line (armador: ${armadorDb}), skipping`);
+              continue;
             }
 
             console.log(`[import_masters] Tracking BL ${blNumber} with shipping line ${shippingLine}`);
