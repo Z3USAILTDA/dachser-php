@@ -267,7 +267,7 @@ const ContainerTracking = () => {
   const [consigneeName, setConsigneeName] = useState("");
   const [searchTerm, setSearchTerm] = useState("");
   const [filterLine, setFilterLine] = useState("all");
-  const [filterAnalyst, setFilterAnalyst] = useState("all");
+  
   const [activeCardFilter, setActiveCardFilter] = useState<"all" | "transito" | "alerta" | "entregues">("all");
   const [sortAnalyst, setSortAnalyst] = useState<"asc" | "desc" | null>(null);
   const [sortContainer, setSortContainer] = useState<"asc" | "desc" | null>(null);
@@ -703,7 +703,6 @@ const ContainerTracking = () => {
         (c.shipping_line && c.shipping_line.toLowerCase().includes(searchLower)) ||
         (c.nome_analista && c.nome_analista.toLowerCase().includes(searchLower));
       const matchesLine = filterLine === "all" || c.shipping_line === filterLine;
-      const matchesAnalyst = filterAnalyst === "all" || c.nome_analista === filterAnalyst;
       
       // Card filter
       let matchesCardFilter = true;
@@ -715,7 +714,7 @@ const ContainerTracking = () => {
         matchesCardFilter = isEntregue(c.last_event);
       }
 
-      return matchesSearch && matchesLine && matchesAnalyst && matchesCardFilter;
+      return matchesSearch && matchesLine && matchesCardFilter;
     });
 
     // Apply sorting
@@ -750,7 +749,7 @@ const ContainerTracking = () => {
     }
 
     return containers;
-  }, [containersList, searchTerm, filterLine, filterAnalyst, activeCardFilter, sortAnalyst, sortContainer, sortClient, sortLastCheck]);
+  }, [containersList, searchTerm, filterLine, activeCardFilter, sortAnalyst, sortContainer, sortClient, sortLastCheck]);
 
   const totalPages = Math.ceil(filteredContainers.length / itemsPerPage);
   const startIndex = (currentPage - 1) * itemsPerPage;
@@ -1013,33 +1012,6 @@ const ContainerTracking = () => {
                   </Select>
                 </div>
 
-                <div className="flex items-center gap-1.5">
-                  <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-[rgba(0,0,0,.5)] border border-[rgba(255,255,255,.22)]">
-                    <span className="w-1.5 h-1.5 rounded-full bg-[#ffc800]" />
-                    <span className="text-[0.68rem] tracking-[0.1em] uppercase text-[#aaaaaa]">Analista</span>
-                  </div>
-                  <Select value={filterAnalyst} onValueChange={setFilterAnalyst}>
-                    <SelectTrigger className="h-8 w-[160px] rounded-full bg-[#13141a] border border-[rgba(255,255,255,.14)] text-[0.78rem]">
-                      <SelectValue placeholder="Todos" />
-                    </SelectTrigger>
-                    <SelectContent className="bg-card border border-border z-50">
-                      <SelectItem value="all">Todos</SelectItem>
-                      {Array.from(
-                        new Set(
-                          containersList
-                            .map((c) => c.nome_analista)
-                            .filter((name) => name && name !== "N/A" && name.trim() !== ""),
-                        ),
-                      )
-                        .sort()
-                        .map((analyst) => (
-                          <SelectItem key={analyst} value={analyst!}>
-                            {analyst}
-                          </SelectItem>
-                        ))}
-                    </SelectContent>
-                  </Select>
-                </div>
               </div>
 
               <div className="flex items-center gap-2">
