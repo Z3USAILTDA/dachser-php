@@ -1679,8 +1679,7 @@ serve(async (req) => {
             AND md.mawb IS NOT NULL 
             AND TRIM(md.mawb) != ''
             AND (${prefixConditions})
-            AND md.data_abertura >= DATE_SUB(CURDATE(), INTERVAL 60 DAY)
-          ORDER BY md.data_abertura DESC
+          ORDER BY md.mawb DESC
           LIMIT 100
         `);
 
