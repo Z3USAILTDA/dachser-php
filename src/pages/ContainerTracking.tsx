@@ -281,6 +281,11 @@ const ContainerTracking = () => {
   const [isLoadingSeaItems, setIsLoadingSeaItems] = useState(false);
   const { toast } = useToast();
 
+  // Master BL search states
+  const [masterBlSearch, setMasterBlSearch] = useState("");
+  const [isSearchingBl, setIsSearchingBl] = useState(false);
+  const [blSearchResults, setBlSearchResults] = useState<any>(null);
+
   const itemsPerPage = 10;
 
   // Helper functions for status categorization based on new 12-status system
@@ -488,7 +493,69 @@ const ContainerTracking = () => {
     }
   };
 
-  // Track single container
+  // Search containers by Master BL
+  const handleSearchByMasterBl = async () => {
+    if (!masterBlSearch.trim()) {
+      toast({
+        title: "Campo obrigatório",
+        description: "Digite o número do Master BL para pesquisar.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setIsSearchingBl(true);
+    setBlSearchResults(null);
+    
+    try {
+      const res = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/olimpo-proxy?action=sea_track_bl`,
+        {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ bl: masterBlSearch.trim().toUpperCase() })
+        }
+      );
+      
+      const result = await res.json();
+      
+      if (result.success) {
+        setBlSearchResults(result);
+        if (result.containers_found > 0) {
+          toast({
+            title: "BL encontrado",
+            description: `${result.containers_found} container(s) associado(s) ao BL ${result.bl_number}`,
+          });
+        } else {
+          toast({
+            title: "Nenhum container encontrado",
+            description: `O BL ${result.bl_number} não retornou containers via ${result.detected_shipping_line}`,
+            variant: "destructive",
+          });
+        }
+      } else {
+        toast({
+          title: "Erro na busca",
+          description: result.error || "Falha ao buscar Master BL",
+          variant: "destructive",
+        });
+      }
+    } catch (error) {
+      console.error("Error searching BL:", error);
+      toast({
+        title: "Erro",
+        description: "Falha ao buscar Master BL",
+        variant: "destructive",
+      });
+    } finally {
+      setIsSearchingBl(false);
+    }
+  };
+
+
   const handleTrackContainer = async (containerId: string, shippingLine: string) => {
     setTrackingContainer(containerId);
     try {
@@ -967,6 +1034,112 @@ const ContainerTracking = () => {
               </div>
             </div>
           </Card>
+        </section>
+
+        {/* Master BL Search */}
+        <section 
+          className="rounded-2xl p-4"
+          style={{
+            background: 'linear-gradient(135deg, rgba(59,130,246,0.15) 0%, rgba(5,6,18,.9) 50%)',
+            border: '1px solid rgba(59,130,246,.3)',
+            boxShadow: '0 18px 40px rgba(0,0,0,.85)',
+          }}
+        >
+          <div className="flex items-center gap-2 mb-3">
+            <Ship className="w-5 h-5 text-blue-400" />
+            <h3 className="text-sm font-medium text-blue-200 uppercase tracking-wide">Rastrear por Master BL</h3>
+          </div>
+          <div className="flex flex-wrap items-center gap-3">
+            <div className="relative flex-1 min-w-[200px]">
+              <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-blue-400" />
+              <input
+                type="text"
+                placeholder="Digite o número do Master BL (ex: MEDUD8022532)"
+                value={masterBlSearch}
+                onChange={(e) => setMasterBlSearch(e.target.value.toUpperCase())}
+                onKeyDown={(e) => e.key === 'Enter' && handleSearchByMasterBl()}
+                className="h-10 w-full pl-10 pr-4 rounded-full border border-blue-500/40 bg-[#13141a] text-[#f5f5f5] text-[0.85rem] placeholder:text-[#666] focus:outline-none focus:border-blue-400 focus:shadow-[0_0_0_1px_rgba(59,130,246,.6)]"
+              />
+            </div>
+            <button
+              onClick={handleSearchByMasterBl}
+              disabled={isSearchingBl}
+              className="h-10 px-6 rounded-full bg-blue-600 text-white text-[0.8rem] font-medium flex items-center gap-2 hover:bg-blue-500 transition shadow-[0_0_20px_rgba(59,130,246,.4)] disabled:opacity-50"
+            >
+              {isSearchingBl ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : (
+                <Search className="w-4 h-4" />
+              )}
+              Buscar BL
+            </button>
+            {blSearchResults && (
+              <button
+                onClick={() => { setBlSearchResults(null); setMasterBlSearch(""); }}
+                className="h-10 px-4 rounded-full bg-[rgba(255,255,255,.1)] text-white/70 text-[0.75rem] flex items-center gap-1.5 hover:bg-[rgba(255,255,255,.2)] transition"
+              >
+                Limpar
+              </button>
+            )}
+          </div>
+          
+          {/* BL Search Results */}
+          {blSearchResults && (
+            <div className="mt-4 space-y-3">
+              <div className="flex flex-wrap items-center gap-3 text-sm">
+                <span className="px-3 py-1 rounded-full bg-blue-900/50 text-blue-200 border border-blue-700/50">
+                  BL: {blSearchResults.bl_number}
+                </span>
+                <span className="px-3 py-1 rounded-full bg-purple-900/50 text-purple-200 border border-purple-700/50">
+                  Armador: {blSearchResults.detected_shipping_line}
+                </span>
+                <span className="px-3 py-1 rounded-full bg-green-900/50 text-green-200 border border-green-700/50">
+                  {blSearchResults.containers_found} container(s)
+                </span>
+              </div>
+              
+              {blSearchResults.containers && blSearchResults.containers.length > 0 && (
+                <div className="overflow-x-auto rounded-xl border border-[rgba(255,255,255,.1)]">
+                  <table className="w-full border-collapse">
+                    <thead>
+                      <tr className="bg-[rgba(0,0,0,.5)] border-b border-[rgba(255,255,255,.08)]">
+                        <th className="px-4 py-2 text-left text-blue-300 uppercase text-[0.68rem] tracking-[0.1em] font-medium">Container</th>
+                        <th className="px-4 py-2 text-left text-blue-300 uppercase text-[0.68rem] tracking-[0.1em] font-medium">Status Atual</th>
+                        <th className="px-4 py-2 text-left text-blue-300 uppercase text-[0.68rem] tracking-[0.1em] font-medium">Status Relatório</th>
+                        <th className="px-4 py-2 text-left text-blue-300 uppercase text-[0.68rem] tracking-[0.1em] font-medium">Etapa</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {blSearchResults.containers.map((c: any, idx: number) => (
+                        <tr key={idx} className="border-b border-[rgba(255,255,255,.05)] hover:bg-[rgba(59,130,246,.1)]">
+                          <td className="px-4 py-2 text-[0.8rem] font-mono text-white">{c.container_number}</td>
+                          <td className="px-4 py-2 text-[0.8rem] text-[#aaaaaa]">{c.current_event || c.container_status || '-'}</td>
+                          <td className="px-4 py-2">
+                            <span 
+                              className="px-2 py-0.5 rounded text-[0.7rem] font-medium"
+                              style={{ 
+                                backgroundColor: `${c.report_status?.code ? REPORT_STATUSES[c.report_status.code]?.color || '#64748b' : '#64748b'}20`,
+                                color: c.report_status?.code ? REPORT_STATUSES[c.report_status.code]?.color || '#64748b' : '#64748b'
+                              }}
+                            >
+                              {c.report_status?.label || 'Aguardando'}
+                            </span>
+                          </td>
+                          <td className="px-4 py-2 text-[0.8rem] text-[#aaaaaa]">{c.report_status?.etapa || '-'}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+              
+              {blSearchResults.bol_response_status !== 200 && (
+                <div className="p-3 rounded-lg bg-red-900/20 border border-red-700/30 text-red-300 text-sm">
+                  A API JSONCargo retornou status {blSearchResults.bol_response_status}. O BL pode não estar disponível para rastreio.
+                </div>
+              )}
+            </div>
+          )}
         </section>
 
         {/* Search and Filter Bar */}
