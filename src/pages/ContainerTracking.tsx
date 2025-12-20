@@ -281,12 +281,22 @@ const ContainerTracking = () => {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isLoadingSeaItems, setIsLoadingSeaItems] = useState(false);
   const [isImportingMasters, setIsImportingMasters] = useState(false);
+  const [isUpdatingTracking, setIsUpdatingTracking] = useState(false);
   const { toast } = useToast();
 
   // Master BL search states
   const [masterBlSearch, setMasterBlSearch] = useState("");
   const [isSearchingBl, setIsSearchingBl] = useState(false);
   const [blSearchResults, setBlSearchResults] = useState<any>(null);
+
+  // Count pending containers
+  const pendingCount = useMemo(() => {
+    return containersList.filter(c => 
+      c.status === 'PENDING' || 
+      !c.status || 
+      c.last_event === 'Aguardando rastreio...'
+    ).length;
+  }, [containersList]);
 
   const itemsPerPage = 10;
 
@@ -547,6 +557,59 @@ const ContainerTracking = () => {
       });
     } finally {
       setIsImportingMasters(false);
+    }
+  };
+
+  // Update pending tracking - fetch details for PENDING containers
+  const handleUpdateTracking = async () => {
+    setIsUpdatingTracking(true);
+    toast({
+      title: "Atualizando Rastreio",
+      description: "Buscando detalhes dos containers pendentes...",
+    });
+    
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 180000); // 3 min timeout
+      
+      const res = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/olimpo-proxy?action=update_pending_tracking`,
+        {
+          method: 'GET',
+          headers: {
+            'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
+            'Content-Type': 'application/json',
+          },
+          signal: controller.signal,
+        }
+      );
+      
+      clearTimeout(timeoutId);
+      
+      const result = await res.json();
+      
+      if (result.success) {
+        toast({
+          title: "Rastreio Atualizado",
+          description: result.message || `${result.updated} container(s) rastreado(s)`,
+        });
+        await fetchContainersData();
+      } else {
+        toast({
+          title: "Erro ao atualizar",
+          description: result.error || "Falha ao atualizar rastreio",
+          variant: "destructive",
+        });
+      }
+    } catch (error) {
+      console.error("Error updating tracking:", error);
+      toast({
+        title: "Erro",
+        description: "Falha ao atualizar rastreio dos containers",
+        variant: "destructive",
+      });
+    } finally {
+      setIsUpdatingTracking(false);
     }
   };
 
@@ -1285,6 +1348,28 @@ const ContainerTracking = () => {
                     </TooltipTrigger>
                     <TooltipContent>
                       <p className="text-xs">Carregar containers das análises HBL</p>
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <button
+                        onClick={handleUpdateTracking}
+                        disabled={isUpdatingTracking || pendingCount === 0}
+                        className="h-8 px-4 rounded-full bg-green-600 text-white text-[0.75rem] font-medium flex items-center gap-1.5 hover:bg-green-500 transition shadow-[0_0_20px_rgba(34,197,94,.3)] disabled:opacity-50"
+                      >
+                        {isUpdatingTracking ? (
+                          <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                        ) : (
+                          <RefreshCw className="w-3.5 h-3.5" />
+                        )}
+                        Rastrear ({pendingCount})
+                      </button>
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      <p className="text-xs">Buscar detalhes dos {pendingCount} containers pendentes</p>
                     </TooltipContent>
                   </Tooltip>
                 </TooltipProvider>
