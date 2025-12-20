@@ -1668,7 +1668,7 @@ serve(async (req) => {
         // Build WHERE clause to filter only real Master BLs
         const prefixConditions = masterPrefixes.map(p => `md.mawb LIKE '${p}%'`).join(' OR ');
         
-        // Fetch SEA IMPORT masters - only BLs that match known shipping line patterns
+        // Fetch SEA IMPORT masters - only BLs that match known shipping line patterns (last 60 days)
         const masters = await client.query(`
           SELECT DISTINCT 
             md.mawb,
@@ -1679,7 +1679,8 @@ serve(async (req) => {
             AND md.mawb IS NOT NULL 
             AND TRIM(md.mawb) != ''
             AND (${prefixConditions})
-          ORDER BY md.mawb DESC
+            AND md.data_insert >= DATE_SUB(CURDATE(), INTERVAL 60 DAY)
+          ORDER BY md.data_insert DESC
           LIMIT 100
         `);
 
