@@ -1605,6 +1605,184 @@ serve(async (req) => {
       }
     }
 
+    // ===== SEA TRACKING: Import Masters from t_master_dados =====
+    if (action === 'import_masters_from_master_dados') {
+      const mariadbHost = Deno.env.get('MARIADB_HOST');
+      const mariadbPort = Deno.env.get('MARIADB_PORT') || '3306';
+      const mariadbUser = Deno.env.get('MARIADB_USER');
+      const mariadbPass = Deno.env.get('MARIADB_PASSWORD');
+      const mariadbDb = Deno.env.get('MARIADB_DATABASE');
+
+      if (!mariadbHost || !mariadbUser || !mariadbPass || !mariadbDb) {
+        return new Response(JSON.stringify({ error: 'MariaDB não configurado' }), {
+          status: 500,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      }
+
+      const { Client } = await import("https://deno.land/x/mysql@v2.12.1/mod.ts");
+      const client = await new Client().connect({
+        hostname: mariadbHost,
+        port: parseInt(mariadbPort, 10),
+        username: mariadbUser,
+        password: mariadbPass,
+        db: mariadbDb,
+      });
+
+      try {
+        // Ensure mawb column exists in tracking table
+        try {
+          await client.execute(`
+            ALTER TABLE ai_agente.t_dachser_container_tracking 
+            ADD COLUMN IF NOT EXISTS mawb VARCHAR(50) DEFAULT NULL
+          `);
+        } catch (e) {
+          // Column might already exist
+          console.log('[import_masters] mawb column check done');
+        }
+
+        // Fetch SEA masters from t_master_dados that are not yet tracked
+        // We need to get the BL/Master and then track containers associated with it
+        const masters = await client.query(`
+          SELECT DISTINCT 
+            md.mawb,
+            md.cliente,
+            md.tipo_processo
+          FROM dados_dachser.t_master_dados md
+          WHERE md.tipo_processo = 'SEA'
+            AND md.mawb IS NOT NULL 
+            AND TRIM(md.mawb) != ''
+          ORDER BY md.mawb DESC
+          LIMIT 50
+        `);
+
+        console.log(`[import_masters] Found ${masters.length} SEA masters in t_master_dados`);
+
+        let processed = 0;
+        let containersAdded = 0;
+        let errors = 0;
+
+        for (const master of masters) {
+          const blNumber = String(master.mawb || '').trim().toUpperCase();
+          const cliente = master.cliente || 'Unknown';
+          
+          if (!blNumber) continue;
+          processed++;
+
+          // Check if we already have containers with this mawb
+          const existing = await client.query(`
+            SELECT COUNT(*) as cnt FROM ai_agente.t_dachser_container_tracking 
+            WHERE mawb = ? AND active = 1
+          `, [blNumber]);
+          
+          if (existing[0]?.cnt > 0) {
+            console.log(`[import_masters] BL ${blNumber} already has containers tracked, skipping`);
+            continue;
+          }
+
+          // Use JSONCargo API to find containers for this BL
+          try {
+            // Detect shipping line from BL prefix
+            const prefix = blNumber.substring(0, 4).toUpperCase();
+            const mapping: Record<string, string> = {
+              'MEDU': 'MSC', 'MSCU': 'MSC',
+              'MAEU': 'MAERSK', 'MRKU': 'MAERSK', 'MSKU': 'MAERSK',
+              'CMAU': 'CMA_CGM', 'CGMU': 'CMA_CGM',
+              'HLCU': 'HAPAG_LLOYD', 'HLXU': 'HAPAG_LLOYD',
+              'ONEY': 'ONE', 'NYKU': 'ONE',
+              'EGLV': 'EVERGREEN', 'EGHU': 'EVERGREEN',
+              'COSU': 'COSCO', 'CBHU': 'COSCO',
+              'ZIMU': 'ZIM',
+              'YMLU': 'YANG_MING', 'YMJA': 'YANG_MING',
+              'HDMU': 'HMM',
+            };
+            
+            let shippingLine = mapping[prefix];
+            if (!shippingLine) {
+              const prefix3 = prefix.substring(0, 3);
+              const mapping3: Record<string, string> = {
+                'MED': 'MSC', 'MSC': 'MSC',
+                'MAE': 'MAERSK', 'MRK': 'MAERSK',
+                'CMA': 'CMA_CGM', 'CGM': 'CMA_CGM',
+                'HLC': 'HAPAG_LLOYD', 'HLX': 'HAPAG_LLOYD',
+                'ONE': 'ONE', 'NYK': 'ONE',
+                'EGL': 'EVERGREEN', 'EGH': 'EVERGREEN',
+                'COS': 'COSCO', 'CBH': 'COSCO',
+                'ZIM': 'ZIM',
+                'YML': 'YANG_MING',
+                'HDM': 'HMM',
+              };
+              shippingLine = mapping3[prefix3] || 'MSC';
+            }
+
+            console.log(`[import_masters] Tracking BL ${blNumber} with shipping line ${shippingLine}`);
+
+            // Call JSONCargo BOL API
+            const bolUrl = `http://api.jsoncargo.com/api/v1/containers/bol/${encodeURIComponent(blNumber)}`;
+            const bolRes = await jcJson(bolUrl, { shipping_line: shippingLine }, 30000);
+
+            if (bolRes.__status === 200 && bolRes.data) {
+              const data = bolRes.data;
+              const containerNumbers: string[] = [];
+
+              // Extract containers from response
+              if (data.associated_container_numbers && Array.isArray(data.associated_container_numbers)) {
+                for (const c of data.associated_container_numbers) {
+                  if (typeof c === 'string' && c.trim()) {
+                    containerNumbers.push(c.trim().toUpperCase());
+                  }
+                }
+              }
+
+              console.log(`[import_masters] BL ${blNumber}: found ${containerNumbers.length} containers`);
+
+              // Add each container to tracking
+              for (const containerNumber of containerNumbers) {
+                await client.execute(`
+                  INSERT INTO ai_agente.t_dachser_container_tracking 
+                  (container, mawb, consignee_name, shipping_line, last_event, container_status, active)
+                  VALUES (?, ?, ?, ?, 'Aguardando rastreio...', 'PENDING', 1)
+                  ON DUPLICATE KEY UPDATE
+                    mawb = COALESCE(VALUES(mawb), mawb),
+                    consignee_name = COALESCE(VALUES(consignee_name), consignee_name),
+                    shipping_line = COALESCE(VALUES(shipping_line), shipping_line),
+                    active = 1,
+                    updated_at = NOW()
+                `, [containerNumber, blNumber, cliente, shippingLine]);
+                containersAdded++;
+              }
+            } else {
+              console.log(`[import_masters] BL ${blNumber}: API returned status ${bolRes.__status}`);
+            }
+          } catch (apiErr: any) {
+            console.error(`[import_masters] Error tracking BL ${blNumber}:`, apiErr.message);
+            errors++;
+          }
+
+          // Rate limit
+          await new Promise(r => setTimeout(r, 500));
+        }
+
+        await client.close();
+        return new Response(JSON.stringify({ 
+          success: true, 
+          processed,
+          containersAdded,
+          errors,
+          message: `${processed} Master(s) processado(s), ${containersAdded} container(s) adicionado(s)`
+        }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      } catch (e: any) {
+        await client.close();
+        console.error('[import_masters_from_master_dados] Error:', e);
+        return new Response(JSON.stringify({ error: e.message }), {
+          status: 500,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      }
+    }
+
     // ===== SEA TRACKING: Get available containers from sea_items (not yet tracked) =====
     if (action === 'get_available_containers') {
       const mariadbHost = Deno.env.get('MARIADB_HOST');

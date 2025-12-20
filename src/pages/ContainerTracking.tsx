@@ -280,6 +280,7 @@ const ContainerTracking = () => {
   const [isLoadingData, setIsLoadingData] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isLoadingSeaItems, setIsLoadingSeaItems] = useState(false);
+  const [isImportingMasters, setIsImportingMasters] = useState(false);
   const { toast } = useToast();
 
   // Master BL search states
@@ -492,6 +493,53 @@ const ContainerTracking = () => {
       });
     } finally {
       setIsLoadingSeaItems(false);
+    }
+  };
+
+  // Import Masters from t_master_dados
+  const handleImportMasters = async () => {
+    setIsImportingMasters(true);
+    toast({
+      title: "Importando Masters",
+      description: "Buscando Masters SEA de t_master_dados...",
+    });
+    
+    try {
+      const res = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/olimpo-proxy?action=import_masters_from_master_dados`,
+        {
+          method: 'GET',
+          headers: {
+            'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
+            'Content-Type': 'application/json',
+          }
+        }
+      );
+      
+      const result = await res.json();
+      
+      if (result.success) {
+        toast({
+          title: "Masters importados",
+          description: result.message || `${result.containersAdded} container(s) adicionado(s)`,
+        });
+        await fetchContainersData();
+      } else {
+        toast({
+          title: "Erro ao importar",
+          description: result.error || "Falha ao importar masters",
+          variant: "destructive",
+        });
+      }
+    } catch (error) {
+      console.error("Error importing masters:", error);
+      toast({
+        title: "Erro",
+        description: "Falha ao importar masters de t_master_dados",
+        variant: "destructive",
+      });
+    } finally {
+      setIsImportingMasters(false);
     }
   };
 
@@ -1190,6 +1238,28 @@ const ContainerTracking = () => {
               </div>
 
               <div className="flex items-center gap-2">
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <button
+                        onClick={handleImportMasters}
+                        disabled={isImportingMasters}
+                        className="h-8 px-4 rounded-full bg-purple-600 text-white text-[0.75rem] font-medium flex items-center gap-1.5 hover:bg-purple-500 transition shadow-[0_0_20px_rgba(147,51,234,.3)] disabled:opacity-50"
+                      >
+                        {isImportingMasters ? (
+                          <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                        ) : (
+                          <Ship className="w-3.5 h-3.5" />
+                        )}
+                        Importar Masters
+                      </button>
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      <p className="text-xs">Importar Masters SEA de t_master_dados</p>
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+
                 <TooltipProvider>
                   <Tooltip>
                     <TooltipTrigger asChild>
