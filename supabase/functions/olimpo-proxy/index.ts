@@ -1688,6 +1688,7 @@ serve(async (req) => {
 
         let processed = 0;
         let containersAdded = 0;
+        let skipped = 0;
         let errors = 0;
 
         for (const master of masters) {
@@ -1705,6 +1706,7 @@ serve(async (req) => {
           
           if (existing[0]?.cnt > 0) {
             console.log(`[import_masters] BL ${blNumber} already has containers tracked, skipping`);
+            skipped++;
             continue;
           }
 
@@ -1731,6 +1733,7 @@ serve(async (req) => {
             // Should always have a shipping line since we pre-filtered, but double check
             if (!shippingLine) {
               console.log(`[import_masters] BL ${blNumber}: Unknown prefix ${prefix}, skipping`);
+              skipped++;
               continue;
             }
 
@@ -1771,11 +1774,13 @@ serve(async (req) => {
                 containersAdded++;
               }
             } else {
-              console.log(`[import_masters] BL ${blNumber}: API returned status ${bolRes.__status}`);
+              // 404 or other status - just skip, not an error
+              console.log(`[import_masters] BL ${blNumber}: API returned status ${bolRes.__status}, skipping`);
+              skipped++;
             }
           } catch (apiErr: any) {
             console.error(`[import_masters] Error tracking BL ${blNumber}:`, apiErr.message);
-            errors++;
+            skipped++;
           }
 
           // Rate limit
@@ -1783,12 +1788,15 @@ serve(async (req) => {
         }
 
         await client.close();
+        
+        console.log(`[import_masters] Completed: ${processed} processed, ${containersAdded} containers added, ${skipped} skipped`);
+        
         return new Response(JSON.stringify({ 
           success: true, 
           processed,
           containersAdded,
-          errors,
-          message: `${processed} Master(s) processado(s), ${containersAdded} container(s) adicionado(s)`
+          skipped,
+          message: `Importação concluída! ${containersAdded} container(s) adicionado(s) de ${processed} Master(s). ${skipped} ignorado(s).`
         }), {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' }
         });
