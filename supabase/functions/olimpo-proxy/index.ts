@@ -1681,7 +1681,7 @@ serve(async (req) => {
             AND (${prefixConditions})
             AND md.data_insert >= DATE_SUB(CURDATE(), INTERVAL 60 DAY)
           ORDER BY md.data_insert DESC
-          LIMIT 100
+          LIMIT 30
         `);
 
         console.log(`[import_masters] Found ${masters.length} SEA masters in t_master_dados`);

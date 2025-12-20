@@ -505,6 +505,10 @@ const ContainerTracking = () => {
     });
     
     try {
+      // Use AbortController with extended timeout for long-running import
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 300000); // 5 min timeout
+      
       const res = await fetch(
         `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/olimpo-proxy?action=import_masters_from_master_dados`,
         {
@@ -512,9 +516,12 @@ const ContainerTracking = () => {
           headers: {
             'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
             'Content-Type': 'application/json',
-          }
+          },
+          signal: controller.signal,
         }
       );
+      
+      clearTimeout(timeoutId);
       
       const result = await res.json();
       
