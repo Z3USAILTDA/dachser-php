@@ -1719,7 +1719,14 @@ serve(async (req) => {
           const data = bolRes.data || bolRes;
           
           // A resposta pode ter containers em diferentes formatos
-          if (Array.isArray(data)) {
+          // Formato JSONCargo: associated_container_numbers é um array de strings
+          if (data.associated_container_numbers && Array.isArray(data.associated_container_numbers)) {
+            for (const c of data.associated_container_numbers) {
+              if (typeof c === 'string' && c.trim()) {
+                containerNumbers.push(c.trim());
+              }
+            }
+          } else if (Array.isArray(data)) {
             for (const item of data) {
               if (item.container_number || item.container) {
                 containerNumbers.push(item.container_number || item.container);
