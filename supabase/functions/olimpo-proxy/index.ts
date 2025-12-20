@@ -1623,6 +1623,130 @@ serve(async (req) => {
       }
     }
 
+    // ===== TEST: Rastrear BL Master via JSONCargo API =====
+    if (action === 'test_bl_tracking') {
+      const blNumber = url.searchParams.get('bl');
+      
+      if (!blNumber) {
+        return new Response(JSON.stringify({ error: 'Parâmetro bl é obrigatório' }), {
+          status: 400,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      }
+
+      const apiKey = Deno.env.get('JSONCARGO_API_KEY');
+      if (!apiKey) {
+        return new Response(JSON.stringify({ error: 'JSONCARGO_API_KEY não configurada' }), {
+          status: 500,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      }
+
+      console.log(`[test_bl_tracking] Rastreando BL: ${blNumber}`);
+
+      try {
+        // 1. Buscar BL via endpoint de BL
+        const blRes = await jcJson(`http://api.jsoncargo.com/api/v1/bl/${encodeURIComponent(blNumber)}`, {}, 20000);
+        console.log(`[test_bl_tracking] BL Response:`, JSON.stringify(blRes).slice(0, 500));
+
+        // 2. Tentar endpoint de shipment
+        const shipmentRes = await jcJson(`http://api.jsoncargo.com/api/v1/shipment/${encodeURIComponent(blNumber)}`, {}, 20000);
+        console.log(`[test_bl_tracking] Shipment Response:`, JSON.stringify(shipmentRes).slice(0, 500));
+
+        // 3. Tentar buscar como container (alguns BLs podem ser rastreados assim)
+        const containerRes = await jcJson(`http://api.jsoncargo.com/api/v1/containers/${encodeURIComponent(blNumber)}`, {}, 20000);
+        console.log(`[test_bl_tracking] Container Response:`, JSON.stringify(containerRes).slice(0, 500));
+
+        // 4. Mapear eventos para status de relatório
+        const reportStatusMapping = {
+          'BKG': { code: 'BKG', label: 'Booking criado', etapa: 'Pré-Embarque' },
+          'CLT': { code: 'CLT', label: 'Coleta da carga', etapa: 'Pré-Embarque' },
+          'GIO': { code: 'GIO', label: 'Gate-in origem', etapa: 'Pré-Embarque' },
+          'CRG': { code: 'CRG', label: 'Carregado no navio', etapa: 'Embarque' },
+          'DEP': { code: 'DEP', label: 'Partida do navio', etapa: 'Embarque' },
+          'TSP': { code: 'TSP', label: 'Chegada/Partida em transbordo', etapa: 'Trânsito' },
+          'ARR': { code: 'ARR', label: 'Chegada do navio', etapa: 'Chegada' },
+          'DCH': { code: 'DCH', label: 'Descarga', etapa: 'Chegada' },
+          'INS': { code: 'INS', label: 'Inspeção/Liberação aduaneira', etapa: 'Liberação' },
+          'GOD': { code: 'GOD', label: 'Gate-out destino', etapa: 'Entrega' },
+          'DLV': { code: 'DLV', label: 'Entrega final', etapa: 'Entrega' },
+          'AGD': { code: 'AGD', label: 'Aguardando', etapa: 'Aguardando' },
+        };
+
+        // Função para mapear evento JSONCargo para status de relatório
+        const mapEventToReportStatus = (event: string | null): typeof reportStatusMapping['BKG'] => {
+          if (!event) return reportStatusMapping['AGD'];
+          
+          const e = event.toLowerCase();
+          
+          // Mapeamento baseado em palavras-chave do evento
+          if (/booking|booked|bkg/i.test(e)) return reportStatusMapping['BKG'];
+          if (/pick.?up|collected|coleta|pick/i.test(e)) return reportStatusMapping['CLT'];
+          if (/gate.?in.*origin|received.*for.*shipment|stuffed|loaded.*at.*origin/i.test(e)) return reportStatusMapping['GIO'];
+          if (/loaded.*on.*vessel|on.?board|load/i.test(e)) return reportStatusMapping['CRG'];
+          if (/vessel.*depart|departed|sailed|departure/i.test(e)) return reportStatusMapping['DEP'];
+          if (/tranship|transshipment|transit|arr.*at.*tranship|dep.*from.*tranship/i.test(e)) return reportStatusMapping['TSP'];
+          if (/vessel.*arriv|arrived.*at.*destination|arrival/i.test(e)) return reportStatusMapping['ARR'];
+          if (/discharged|unloaded|offloaded|discharge/i.test(e)) return reportStatusMapping['DCH'];
+          if (/customs|inspection|clearance|released|cleared/i.test(e)) return reportStatusMapping['INS'];
+          if (/gate.?out|picked.*up.*by.*consignee|out.*for.*delivery/i.test(e)) return reportStatusMapping['GOD'];
+          if (/delivered|completed|final.*delivery|empty.*returned/i.test(e)) return reportStatusMapping['DLV'];
+          
+          return reportStatusMapping['AGD'];
+        };
+
+        // Extrair dados principais
+        const blData = blRes?.data || blRes;
+        const shipmentData = shipmentRes?.data || shipmentRes;
+        const containerData = containerRes?.data || containerRes;
+
+        // Mapear status atual
+        const currentEvent = blData?.container_status || shipmentData?.status || containerData?.container_status || null;
+        const currentReportStatus = mapEventToReportStatus(currentEvent);
+
+        // Compilar resultado
+        const result = {
+          bl_number: blNumber,
+          endpoints_tested: {
+            bl: {
+              status: blRes.__status,
+              error: blRes.__curl_error || null,
+              data: blData
+            },
+            shipment: {
+              status: shipmentRes.__status,
+              error: shipmentRes.__curl_error || null,
+              data: shipmentData
+            },
+            container: {
+              status: containerRes.__status,
+              error: containerRes.__curl_error || null,
+              data: containerData
+            }
+          },
+          current_event: currentEvent,
+          mapped_report_status: currentReportStatus,
+          all_report_statuses: Object.values(reportStatusMapping),
+          raw_responses: {
+            bl: blRes,
+            shipment: shipmentRes,
+            container: containerRes
+          }
+        };
+
+        return new Response(JSON.stringify({ success: true, ...result }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+
+      } catch (e: any) {
+        console.error('[test_bl_tracking] Error:', e);
+        return new Response(JSON.stringify({ error: e.message, details: e.stack }), {
+          status: 500,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      }
+    }
+
     return new Response(JSON.stringify({ error: 'Ação não reconhecida' }), {
       status: 400,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' }
