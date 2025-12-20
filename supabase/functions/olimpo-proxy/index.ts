@@ -1641,15 +1641,30 @@ serve(async (req) => {
           console.log('[import_masters] mawb column check done');
         }
 
+        // First, let's check what data exists in the table
+        const checkTable = await client.query(`
+          SELECT DISTINCT tipo_processo, COUNT(*) as cnt 
+          FROM dados_dachser.t_master_dados 
+          GROUP BY tipo_processo
+          LIMIT 20
+        `);
+        console.log(`[import_masters] Available tipo_processo values:`, JSON.stringify(checkTable));
+
         // Fetch SEA masters from t_master_dados that are not yet tracked
-        // We need to get the BL/Master and then track containers associated with it
+        // Try multiple possible values for SEA type
         const masters = await client.query(`
           SELECT DISTINCT 
             md.mawb,
             md.cliente,
             md.tipo_processo
           FROM dados_dachser.t_master_dados md
-          WHERE md.tipo_processo = 'SEA'
+          WHERE (
+            md.tipo_processo = 'SEA' 
+            OR md.tipo_processo = 'MARITIME'
+            OR md.tipo_processo = 'MAR'
+            OR md.tipo_processo LIKE '%SEA%'
+            OR md.tipo_processo LIKE '%MAR%'
+          )
             AND md.mawb IS NOT NULL 
             AND TRIM(md.mawb) != ''
           ORDER BY md.mawb DESC
