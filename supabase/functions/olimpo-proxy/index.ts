@@ -1758,20 +1758,123 @@ serve(async (req) => {
 
               console.log(`[import_masters] BL ${blNumber}: found ${containerNumbers.length} containers`);
 
-              // Add each container to tracking
+              // Add each container to tracking with full details
               for (const containerNumber of containerNumbers) {
-                await client.execute(`
-                  INSERT INTO ai_agente.t_dachser_container_tracking 
-                  (container, mawb, consignee_name, shipping_line, last_event, container_status, active)
-                  VALUES (?, ?, ?, ?, 'Aguardando rastreio...', 'PENDING', 1)
-                  ON DUPLICATE KEY UPDATE
-                    mawb = COALESCE(VALUES(mawb), mawb),
-                    consignee_name = COALESCE(VALUES(consignee_name), consignee_name),
-                    shipping_line = COALESCE(VALUES(shipping_line), shipping_line),
-                    active = 1,
-                    updated_at = NOW()
-                `, [containerNumber, blNumber, cliente, shippingLine]);
-                containersAdded++;
+                try {
+                  // Fetch detailed tracking info for this container
+                  const containerUrl = `http://api.jsoncargo.com/api/v1/containers/${encodeURIComponent(containerNumber)}?shipping_line=${shippingLine}`;
+                  const containerRes = await jcJson(containerUrl, {}, 30000);
+                  
+                  let origem: string | null = null;
+                  let destino: string | null = null;
+                  let vessel: string | null = null;
+                  let eta: string | null = null;
+                  let containerStatus = 'PENDING';
+                  let lastEvent = 'Aguardando rastreio...';
+                  
+                  if (containerRes.__status === 200 && containerRes.data) {
+                    const cData = containerRes.data;
+                    
+                    // Extract origin (loading port)
+                    if (cData.loading_port) {
+                      origem = typeof cData.loading_port === 'object' 
+                        ? cData.loading_port.name || cData.loading_port.code 
+                        : String(cData.loading_port);
+                    } else if (cData.pol) {
+                      origem = String(cData.pol);
+                    }
+                    
+                    // Extract destination (discharge port)
+                    if (cData.discharging_port) {
+                      destino = typeof cData.discharging_port === 'object' 
+                        ? cData.discharging_port.name || cData.discharging_port.code 
+                        : String(cData.discharging_port);
+                    } else if (cData.pod) {
+                      destino = String(cData.pod);
+                    } else if (cData.final_destination) {
+                      destino = typeof cData.final_destination === 'object'
+                        ? cData.final_destination.name || cData.final_destination.code
+                        : String(cData.final_destination);
+                    }
+                    
+                    // Extract vessel
+                    if (cData.vessel) {
+                      vessel = typeof cData.vessel === 'object' 
+                        ? cData.vessel.name 
+                        : String(cData.vessel);
+                    } else if (cData.current_vessel_name) {
+                      vessel = String(cData.current_vessel_name);
+                    }
+                    
+                    // Extract ETA
+                    if (cData.eta_final_destination) {
+                      eta = String(cData.eta_final_destination);
+                    } else if (cData.eta) {
+                      eta = String(cData.eta);
+                    } else if (cData.arrival_date) {
+                      eta = String(cData.arrival_date);
+                    }
+                    
+                    // Extract container status
+                    if (cData.container_status) {
+                      containerStatus = String(cData.container_status).toUpperCase();
+                    }
+                    
+                    // Extract last event from events array
+                    if (cData.events && Array.isArray(cData.events) && cData.events.length > 0) {
+                      // Sort by date descending and get most recent
+                      const sortedEvents = [...cData.events].sort((a, b) => {
+                        const dateA = new Date(a.date || a.event_date || 0);
+                        const dateB = new Date(b.date || b.event_date || 0);
+                        return dateB.getTime() - dateA.getTime();
+                      });
+                      const latestEvent = sortedEvents[0];
+                      lastEvent = latestEvent.description || latestEvent.event_description || latestEvent.name || lastEvent;
+                    }
+                    
+                    console.log(`[import_masters] Container ${containerNumber}: origem=${origem}, destino=${destino}, vessel=${vessel}, eta=${eta}, status=${containerStatus}`);
+                  } else {
+                    console.log(`[import_masters] Container ${containerNumber}: Could not fetch details (status ${containerRes.__status}), inserting with basic info`);
+                  }
+                  
+                  // Insert container with all available info
+                  await client.execute(`
+                    INSERT INTO ai_agente.t_dachser_container_tracking 
+                    (container, mawb, consignee_name, shipping_line, origem, destino, vessel, eta, last_event, container_status, active)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
+                    ON DUPLICATE KEY UPDATE
+                      mawb = COALESCE(VALUES(mawb), mawb),
+                      consignee_name = COALESCE(VALUES(consignee_name), consignee_name),
+                      shipping_line = COALESCE(VALUES(shipping_line), shipping_line),
+                      origem = COALESCE(VALUES(origem), origem),
+                      destino = COALESCE(VALUES(destino), destino),
+                      vessel = COALESCE(VALUES(vessel), vessel),
+                      eta = COALESCE(VALUES(eta), eta),
+                      last_event = COALESCE(VALUES(last_event), last_event),
+                      container_status = COALESCE(VALUES(container_status), container_status),
+                      active = 1,
+                      updated_at = NOW()
+                  `, [containerNumber, blNumber, cliente, shippingLine, origem, destino, vessel, eta, lastEvent, containerStatus]);
+                  containersAdded++;
+                  
+                  // Rate limit between container API calls
+                  await new Promise(r => setTimeout(r, 800));
+                } catch (containerErr: any) {
+                  console.error(`[import_masters] Error fetching details for container ${containerNumber}:`, containerErr.message);
+                  // Still insert with basic info even if detail fetch fails
+                  await client.execute(`
+                    INSERT INTO ai_agente.t_dachser_container_tracking 
+                    (container, mawb, consignee_name, shipping_line, last_event, container_status, active)
+                    VALUES (?, ?, ?, ?, 'Erro ao buscar rastreio', 'PENDING', 1)
+                    ON DUPLICATE KEY UPDATE
+                      mawb = COALESCE(VALUES(mawb), mawb),
+                      consignee_name = COALESCE(VALUES(consignee_name), consignee_name),
+                      shipping_line = COALESCE(VALUES(shipping_line), shipping_line),
+                      active = 1,
+                      updated_at = NOW()
+                  `, [containerNumber, blNumber, cliente, shippingLine]);
+                  containersAdded++;
+                }
               }
             } else {
               // 404 or other status - just skip, not an error
