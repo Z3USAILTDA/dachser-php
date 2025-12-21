@@ -3131,6 +3131,83 @@ serve(async (req) => {
           await client.execute(`
             UPDATE ai_agente.t_dachser_sea_items SET status = 'realizado' WHERE id = ?
           `, [itemId]);
+          
+          // === NEW: Save container data to t_dachser_container on analysis completion ===
+          try {
+            // 1. Fetch item data (container, consignee)
+            const itemData = await client.query(`
+              SELECT container, consignee FROM ai_agente.t_dachser_sea_items WHERE id = ?
+            `, [itemId]);
+            
+            // 2. Fetch last analysis result for this item (vessel, voyage, origem, destino)
+            const runData = await client.query(`
+              SELECT result_json FROM ai_agente.t_dachser_sea_runs 
+              WHERE item_id = ? AND status = 'completed'
+              ORDER BY updated_at DESC LIMIT 1
+            `, [itemId]);
+            
+            if (itemData && itemData.length > 0 && itemData[0].container) {
+              const containerNum = itemData[0].container;
+              const consignee = itemData[0].consignee || '';
+              
+              // Parse shipping data from result_json
+              let vessel = '', voyage = '', origem = '', destino = '';
+              if (runData && runData.length > 0 && runData[0].result_json) {
+                try {
+                  const resultJson = typeof runData[0].result_json === 'string' 
+                    ? JSON.parse(runData[0].result_json) 
+                    : runData[0].result_json;
+                  
+                  if (resultJson.hblShippingData) {
+                    vessel = resultJson.hblShippingData.vessel || '';
+                    voyage = resultJson.hblShippingData.voyage || '';
+                    origem = resultJson.hblShippingData.origin || resultJson.hblShippingData.portOfLoading || '';
+                    destino = resultJson.hblShippingData.destination || resultJson.hblShippingData.portOfDischarge || '';
+                  }
+                } catch (parseErr) {
+                  console.log('Error parsing result_json:', parseErr);
+                }
+              }
+              
+              console.log('Saving container data on completion:', { containerNum, vessel, voyage, origem, destino, consignee });
+              
+              // Ensure consignee column exists
+              try {
+                await client.execute(`
+                  ALTER TABLE ai_agente.t_dachser_container 
+                  ADD COLUMN IF NOT EXISTS consignee VARCHAR(255) DEFAULT NULL
+                `);
+              } catch (alterErr) {
+                console.log('Consignee column check:', alterErr);
+              }
+              
+              // Check if container already exists
+              const existing = await client.query(`
+                SELECT id FROM ai_agente.t_dachser_container WHERE container = ?
+              `, [containerNum.trim()]);
+              
+              if (existing && existing.length > 0) {
+                await client.execute(`
+                  UPDATE ai_agente.t_dachser_container 
+                  SET vessel = ?, voyage = ?, origem = ?, destino = ?, consignee = ?
+                  WHERE container = ?
+                `, [vessel, voyage, origem, destino, consignee, containerNum.trim()]);
+                console.log(`✅ Container ${containerNum} updated in t_dachser_container`);
+              } else {
+                await client.execute(`
+                  INSERT INTO ai_agente.t_dachser_container 
+                  (container, vessel, voyage, origem, destino, consignee)
+                  VALUES (?, ?, ?, ?, ?, ?)
+                `, [containerNum.trim(), vessel, voyage, origem, destino, consignee]);
+                console.log(`✅ Container ${containerNum} inserted into t_dachser_container`);
+              }
+            } else {
+              console.log('⚠️ No container found for item, skipping t_dachser_container save');
+            }
+          } catch (containerErr) {
+            console.error('Error saving container data on completion:', containerErr);
+            // Don't fail the whole operation, just log the error
+          }
         }
         
         result = { success: true };
@@ -3462,14 +3539,25 @@ serve(async (req) => {
 
       // ==================== SEA CONTAINER DATA ====================
       case 'save_container_data': {
-        const { container, vessel, voyage, origem, destino } = body as any;
-        console.log('Saving container data:', { container, vessel, voyage, origem, destino });
+        const { container, vessel, voyage, origem, destino, consignee } = body as any;
+        console.log('Saving container data:', { container, vessel, voyage, origem, destino, consignee });
         
         if (!container) {
           return new Response(
             JSON.stringify({ error: 'Container é obrigatório' }),
             { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
           );
+        }
+        
+        // Ensure consignee column exists (add if missing)
+        try {
+          await client.execute(`
+            ALTER TABLE ai_agente.t_dachser_container 
+            ADD COLUMN IF NOT EXISTS consignee VARCHAR(255) DEFAULT NULL
+          `);
+        } catch (alterErr) {
+          // Column may already exist, ignore error
+          console.log('Consignee column check:', alterErr);
         }
         
         // Check if container already exists
@@ -3481,17 +3569,17 @@ serve(async (req) => {
           // Update existing record
           await client.execute(`
             UPDATE ai_agente.t_dachser_container 
-            SET vessel = ?, voyage = ?, origem = ?, destino = ?
+            SET vessel = ?, voyage = ?, origem = ?, destino = ?, consignee = ?
             WHERE container = ?
-          `, [vessel || '', voyage || '', origem || '', destino || '', container.trim()]);
+          `, [vessel || '', voyage || '', origem || '', destino || '', consignee || '', container.trim()]);
           result = { success: true, action: 'updated', id: existing[0].id };
         } else {
           // Insert new record
           const insertResult = await client.execute(`
             INSERT INTO ai_agente.t_dachser_container 
-            (container, vessel, voyage, origem, destino)
-            VALUES (?, ?, ?, ?, ?)
-          `, [container.trim(), vessel || '', voyage || '', origem || '', destino || '']);
+            (container, vessel, voyage, origem, destino, consignee)
+            VALUES (?, ?, ?, ?, ?, ?)
+          `, [container.trim(), vessel || '', voyage || '', origem || '', destino || '', consignee || '']);
           result = { success: true, action: 'inserted', id: insertResult.lastInsertId };
         }
         break;
