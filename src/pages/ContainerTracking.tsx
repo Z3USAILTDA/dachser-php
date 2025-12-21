@@ -125,6 +125,19 @@ const CONTAINER_PREFIX_MAP: Record<string, string> = {
   "TCNU": "CONTAINER LEASING",
 };
 
+// Normaliza códigos de armadores do banco para nomes legíveis
+const normalizeShippingLine = (code: string | null | undefined): string => {
+  if (!code) return "N/D";
+  const upper = code.toUpperCase().trim();
+  const map: Record<string, string> = {
+    'CMA_CGM': 'CMA CGM',
+    'CMA': 'CMA CGM',
+    'HAPAG_LLOYD': 'HAPAG-LLOYD',
+    'YANG_MING': 'YANG MING',
+  };
+  return map[upper] || code;
+};
+
 // Detect armador from vessel name AND container prefix
 const detectArmadorFromVessel = (vessel: string | null | undefined, container?: string | null): string => {
   // First try to detect from container prefix (most reliable)
@@ -802,7 +815,7 @@ const ContainerTracking = () => {
         (c.consignee_name && c.consignee_name.toLowerCase().includes(searchLower)) ||
         (c.shipping_line && c.shipping_line.toLowerCase().includes(searchLower)) ||
         (c.nome_analista && c.nome_analista.toLowerCase().includes(searchLower));
-      const armador = c.shipping_line || detectArmadorFromVessel(c.vessel, c.container);
+      const armador = normalizeShippingLine(c.shipping_line) !== "N/D" ? normalizeShippingLine(c.shipping_line) : detectArmadorFromVessel(c.vessel, c.container);
       const matchesLine = filterLine === "all" || armador === filterLine;
       
       // Card filter
@@ -879,8 +892,8 @@ const ContainerTracking = () => {
     
     const armadoresSet = new Set<string>();
     containersAtivos.forEach(c => {
-      // Prioritize shipping_line from database, fallback to detection
-      const armador = c.shipping_line || detectArmadorFromVessel(c.vessel, c.container);
+      // Prioritize shipping_line from database (normalized), fallback to detection
+      const armador = normalizeShippingLine(c.shipping_line) !== "N/D" ? normalizeShippingLine(c.shipping_line) : detectArmadorFromVessel(c.vessel, c.container);
       if (armador && armador !== "N/D" && armador !== "OUTRO") {
         armadoresSet.add(armador);
       }
@@ -1259,7 +1272,7 @@ const ContainerTracking = () => {
                           </td>
                           <td className="px-4 py-3">
                             <span className="px-2 py-1 rounded-full text-xs font-medium bg-[rgba(255,200,0,.15)] text-[#ffc800] border border-[rgba(255,200,0,.3)]">
-                              {container.shipping_line || detectArmadorFromVessel(container.vessel, container.container)}
+                              {normalizeShippingLine(container.shipping_line) !== "N/D" ? normalizeShippingLine(container.shipping_line) : detectArmadorFromVessel(container.vessel, container.container)}
                             </span>
                           </td>
                           <td className="px-4 py-3 text-[#aaaaaa] text-sm">{container.origem || "-"}</td>
