@@ -424,7 +424,7 @@ DO NOT truncate. DO NOT skip fields. DO NOT follow old example formats.`;
     },
     body: JSON.stringify({
       model: 'claude-sonnet-4-20250514',
-      max_tokens: 16000,
+      max_tokens: 64000,
       temperature: 0.1,
       system: systemPrompt,
       messages: [{ role: 'user', content: contentParts }]
