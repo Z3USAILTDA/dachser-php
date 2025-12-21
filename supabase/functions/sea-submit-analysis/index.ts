@@ -1035,10 +1035,9 @@ serve(async (req) => {
               }
             }
             
-            // Save container data to MariaDB via mariadb-proxy (for tracking)
-            if (hblShippingData.container) {
-              await saveContainerData(hblShippingData);
-            }
+            // Container data will be saved to t_dachser_container only when user completes the analysis
+            // via the complete_maritimo_analysis action (not automatically here)
+            console.log(`ℹ️ Container data extracted but will be saved on analysis completion only`);
           } else {
             console.log(`⚠️ No HBL shipping data found in analysis result`);
             // Update item status to 'analisado' even without metadata
