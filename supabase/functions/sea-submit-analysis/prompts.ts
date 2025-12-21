@@ -1600,17 +1600,19 @@ EXPORTER #1: <EXPORTER_COMPANY_NAME>
          [If UPDATE REQUIRED: -> Update: Add invoice reference <invoice value>]
 
    Item 2: <GOODS_DESCRIPTION>
-      [Same structure - ALL fields with values and status]
+- Gross Weight: Invoice: X kg | HBL: Y kg | Status: <MATCH|UPDATE REQUIRED|NOT FOUND>
+- CBM: Invoice: X m³ | HBL: Y m³ | Status: <MATCH|UPDATE REQUIRED|NOT FOUND>
+- Volume Qty: Invoice: N | HBL: N | Status: <MATCH|UPDATE REQUIRED|NOT FOUND>
+- Volume Type: Invoice: TYPE | HBL: TYPE | Status: <MATCH|UPDATE REQUIRED|NOT FOUND>
+- Invoice Ref: Invoice: REF | HBL: REF | Status: <MATCH|UPDATE REQUIRED|NOT FOUND>
 
-   Subtotals:
-      Total Weight: Invoice = <#,###.000 kg> | HBL = <#,###.000 kg> | Delta: <+/-#,###.000 kg>
-      Total CBM: Invoice = <#,###.000 m3> | HBL = <#,###.000 m3> | Delta: <+/-#,###.000 m3>
-      Total Volumes: Invoice = <N> | HBL = <N> | Delta: <+/-N>
+Subtotals EXPORTER #1:
+- Total Weight: Invoice: X kg | HBL: Y kg | Delta: Z kg
+- Total CBM: Invoice: X m³ | HBL: Y m³ | Delta: Z m³
+- Total Volumes: Invoice: N | HBL: N | Delta: N
 
-
-EXPORTER #2: <NEXT_EXPORTER_NAME>
-   [Same complete structure as above]
-
+EXPORTER #2, EXPORTER #3, etc.: REPEAT THE EXACT SAME STRUCTURE ABOVE FOR EACH EXPORTER.
+DO NOT use placeholder text like "[Same structure]" or "[Continuing...]" - show FULL details for ALL.
 
 After ALL exporters, show CONTAINER-LEVEL TOTALS:
 
