@@ -9,6 +9,9 @@ import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import { Textarea } from "@/components/ui/textarea";
 import {
   Search,
   Plus,
@@ -393,6 +396,13 @@ const ContainerTracking = () => {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isLoadingSeaItems, setIsLoadingSeaItems] = useState(false);
   const { toast } = useToast();
+  
+  // Email modal state
+  const [emailModalOpen, setEmailModalOpen] = useState(false);
+  const [emailContainer, setEmailContainer] = useState<ContainerData | null>(null);
+  const [emailType, setEmailType] = useState<"interno" | "cliente">("interno");
+  const [emailCustomMessage, setEmailCustomMessage] = useState("");
+  const [isSendingEmail, setIsSendingEmail] = useState(false);
 
   const itemsPerPage = 10;
 
@@ -724,6 +734,69 @@ const ContainerTracking = () => {
       }
     } catch (error) {
       console.error("Error deleting container:", error);
+    }
+  };
+
+  // Send email for container
+  const handleOpenEmailModal = (container: ContainerData) => {
+    setEmailContainer(container);
+    setEmailType("interno");
+    setEmailCustomMessage("");
+    setEmailModalOpen(true);
+  };
+
+  const handleSendEmail = async () => {
+    if (!emailContainer) return;
+    
+    setIsSendingEmail(true);
+    try {
+      const res = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/send-container-status-email`,
+        {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            to: emailType === "interno" ? emailContainer.email_analista : emailContainer.email_cliente,
+            container: emailContainer.container,
+            vessel: emailContainer.vessel,
+            shipping_line: emailContainer.shipping_line,
+            status: emailContainer.last_event,
+            eta: emailContainer.eta,
+            consignee: emailContainer.consignee_name,
+            origem: emailContainer.origem,
+            destino: emailContainer.destino,
+            custom_message: emailCustomMessage || undefined,
+          })
+        }
+      );
+      
+      const result = await res.json();
+      
+      if (result.success) {
+        toast({
+          title: "E-mail enviado",
+          description: `E-mail enviado para ${result.sent_to}`,
+        });
+        setEmailModalOpen(false);
+      } else {
+        toast({
+          title: "Erro ao enviar e-mail",
+          description: result.error || "Falha no envio",
+          variant: "destructive",
+        });
+      }
+    } catch (error) {
+      console.error("Error sending email:", error);
+      toast({
+        title: "Erro",
+        description: "Falha ao enviar e-mail",
+        variant: "destructive",
+      });
+    } finally {
+      setIsSendingEmail(false);
     }
   };
 
@@ -1364,23 +1437,42 @@ const ContainerTracking = () => {
                           </td>
                           {isAdmin && (
                             <td className="px-3 py-3 text-center">
-                              <TooltipProvider>
-                                <Tooltip>
-                                  <TooltipTrigger asChild>
-                                    <Button
-                                      variant="ghost"
-                                      size="icon"
-                                      onClick={() => handleDeleteContainer(container.id, container.container)}
-                                      className="h-8 w-8 text-red-500 hover:text-red-400 hover:bg-red-500/10"
-                                    >
-                                      <Trash2 className="h-4 w-4" />
-                                    </Button>
-                                  </TooltipTrigger>
-                                  <TooltipContent>
-                                    <p className="text-xs">Remover container do monitoramento</p>
-                                  </TooltipContent>
-                                </Tooltip>
-                              </TooltipProvider>
+                              <div className="flex items-center justify-center gap-1">
+                                <TooltipProvider>
+                                  <Tooltip>
+                                    <TooltipTrigger asChild>
+                                      <Button
+                                        variant="ghost"
+                                        size="icon"
+                                        onClick={() => handleOpenEmailModal(container)}
+                                        className="h-8 w-8 text-blue-400 hover:text-blue-300 hover:bg-blue-500/10"
+                                      >
+                                        <Mail className="h-4 w-4" />
+                                      </Button>
+                                    </TooltipTrigger>
+                                    <TooltipContent>
+                                      <p className="text-xs">Enviar e-mail de status</p>
+                                    </TooltipContent>
+                                  </Tooltip>
+                                </TooltipProvider>
+                                <TooltipProvider>
+                                  <Tooltip>
+                                    <TooltipTrigger asChild>
+                                      <Button
+                                        variant="ghost"
+                                        size="icon"
+                                        onClick={() => handleDeleteContainer(container.id, container.container)}
+                                        className="h-8 w-8 text-red-500 hover:text-red-400 hover:bg-red-500/10"
+                                      >
+                                        <Trash2 className="h-4 w-4" />
+                                      </Button>
+                                    </TooltipTrigger>
+                                    <TooltipContent>
+                                      <p className="text-xs">Remover container do monitoramento</p>
+                                    </TooltipContent>
+                                  </Tooltip>
+                                </TooltipProvider>
+                              </div>
                             </td>
                           )}
                         </tr>
@@ -1412,6 +1504,104 @@ const ContainerTracking = () => {
           )}
         </section>
       </main>
+
+      {/* Email Modal */}
+      <Dialog open={emailModalOpen} onOpenChange={setEmailModalOpen}>
+        <DialogContent className="sm:max-w-[425px] bg-[#1a1a1a] border-[rgba(255,255,255,.1)]">
+          <DialogHeader>
+            <DialogTitle className="text-white flex items-center gap-2">
+              <Mail className="h-5 w-5 text-blue-400" />
+              Enviar E-mail - {emailContainer?.container}
+            </DialogTitle>
+            <DialogDescription className="text-gray-400">
+              Selecione o tipo de destinatário e adicione uma mensagem personalizada (opcional).
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="space-y-4 py-4">
+            <div className="space-y-3">
+              <Label className="text-white">Tipo de envio:</Label>
+              <RadioGroup 
+                value={emailType} 
+                onValueChange={(v) => setEmailType(v as "interno" | "cliente")}
+                className="flex flex-col gap-3"
+              >
+                <div className="flex items-center space-x-3 p-3 rounded-lg border border-[rgba(255,255,255,.1)] hover:border-blue-400/50 transition cursor-pointer">
+                  <RadioGroupItem value="interno" id="interno" className="border-gray-500 text-blue-400" />
+                  <Label htmlFor="interno" className="text-white cursor-pointer flex-1">
+                    Interno (Analista)
+                    <span className="block text-xs text-gray-400 mt-0.5">
+                      {emailContainer?.email_analista || "Não configurado"}
+                    </span>
+                  </Label>
+                </div>
+                <div className="flex items-center space-x-3 p-3 rounded-lg border border-[rgba(255,255,255,.1)] hover:border-blue-400/50 transition cursor-pointer">
+                  <RadioGroupItem value="cliente" id="cliente" className="border-gray-500 text-blue-400" />
+                  <Label htmlFor="cliente" className="text-white cursor-pointer flex-1">
+                    Cliente
+                    <span className="block text-xs text-gray-400 mt-0.5">
+                      {emailContainer?.email_cliente || "Não configurado"}
+                    </span>
+                  </Label>
+                </div>
+              </RadioGroup>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="customMessage" className="text-white">Mensagem personalizada (opcional):</Label>
+              <Textarea
+                id="customMessage"
+                value={emailCustomMessage}
+                onChange={(e) => setEmailCustomMessage(e.target.value)}
+                placeholder="Adicione uma mensagem personalizada..."
+                className="bg-[rgba(0,0,0,.3)] border-[rgba(255,255,255,.1)] text-white placeholder:text-gray-500 min-h-[80px]"
+              />
+            </div>
+
+            <div className="bg-[rgba(0,0,0,.3)] rounded-lg p-3 space-y-1 text-sm">
+              <div className="flex justify-between">
+                <span className="text-gray-400">Container:</span>
+                <span className="text-white font-mono">{emailContainer?.container}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-gray-400">Consignee:</span>
+                <span className="text-white">{emailContainer?.consignee_name || "-"}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-gray-400">Status:</span>
+                <span className="text-white">{emailContainer?.last_event || "-"}</span>
+              </div>
+            </div>
+          </div>
+
+          <DialogFooter className="gap-2">
+            <Button
+              variant="outline"
+              onClick={() => setEmailModalOpen(false)}
+              className="border-[rgba(255,255,255,.1)] text-gray-300 hover:bg-[rgba(255,255,255,.05)]"
+            >
+              Cancelar
+            </Button>
+            <Button
+              onClick={handleSendEmail}
+              disabled={isSendingEmail}
+              className="bg-blue-600 hover:bg-blue-700 text-white"
+            >
+              {isSendingEmail ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Enviando...
+                </>
+              ) : (
+                <>
+                  <Mail className="h-4 w-4 mr-2" />
+                  Enviar E-mail
+                </>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
