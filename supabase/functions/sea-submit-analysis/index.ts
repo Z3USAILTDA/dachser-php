@@ -395,40 +395,70 @@ async function analyzeWithAnthropic(
   console.log(`🤖 Calling Anthropic Claude with ${pdfFiles.length} PDFs + manifest text (${manifestText.length} chars) + examples (${approvedExamplesText.length} chars)`);
   
   // Add system instruction to ensure complete response WITH MANDATORY FORMAT
-  const systemPrompt = `You are CRONOS, a thorough logistics document auditor.
+  const systemPrompt = `You are CRONOS, a thorough logistics document auditor specialized in maritime Bills of Lading.
 
-████████████████████████████████████████████████████████████████████████████████
-██ CRITICAL: YOU MUST LIST EVERY SINGLE EXPORTER - NO EXCEPTIONS                ██
-████████████████████████████████████████████████████████████████████████████████
+██████████████████████████████████████████████████████████████████████████████████████
+██ ABSOLUTE REQUIREMENT #1: COMPLETE PER-EXPORTER ANALYSIS                          ██
+██████████████████████████████████████████████████████████████████████████████████████
 
-If the manifest has 15 exporters, you MUST output details for ALL 15 exporters.
-If the manifest has 20 exporters, you MUST output details for ALL 20 exporters.
-If the manifest has 50 exporters, you MUST output details for ALL 50 exporters.
+BEFORE STARTING YOUR ANALYSIS:
+1. Scan the Manifest XLSX file and COUNT how many unique "Supplier Name" values exist
+2. This count = the EXACT number of EXPORTER sections you MUST produce
+3. Log internally: "Found N unique suppliers/exporters"
 
-DO NOT STOP EARLY. DO NOT SUMMARIZE. DO NOT SAY "same structure for others".
-EVERY EXPORTER MUST HAVE ITS OWN COMPLETE SECTION WITH ALL FIELDS.
+FOR EACH OF THE N EXPORTERS, YOU MUST OUTPUT A COMPLETE SECTION:
 
-CRITICAL MANDATORY FORMAT INSTRUCTIONS:
-1. You MUST follow the MANDATORY OUTPUT STRUCTURE from the user prompt EXACTLY.
-2. If you see "approved examples", use them for TONE and TERMINOLOGY ONLY - do NOT copy their format.
-3. The examples may show an OLD format that is no longer valid.
+EXPORTER #1: <COMPANY_NAME>
+- CNPJ: Manifest: <value> | HBL: <value> | Status: <MATCH|UPDATE REQUIRED|NOT FOUND>
+- Seal: Manifest: <value> | HBL: <value> | Status: <MATCH|UPDATE REQUIRED|NOT FOUND>
 
-YOUR OUTPUT MUST INCLUDE (in this exact structure):
-- Per-exporter breakdown showing CNPJ, Seal, and ALL Items
-- Each Item MUST show: Gross Weight, CBM, Volume Qty, Volume Type, Invoice Ref
-- EACH field MUST have status: MATCH | UPDATE REQUIRED | NOT FOUND
-- Subtotals per exporter with deltas
-- Container totals at the end
-- Analysis Summary with: Total exporters identified, Total items analyzed, Fields with discrepancies
+Item 1: <DESCRIPTION>
+- Gross Weight: Manifest: X kg | HBL: Y kg | Status: <MATCH|UPDATE REQUIRED|NOT FOUND>
+- CBM: Manifest: X m³ | HBL: Y m³ | Status: <MATCH|UPDATE REQUIRED|NOT FOUND>
+- Volume Qty: Manifest: N | HBL: N | Status: <MATCH|UPDATE REQUIRED|NOT FOUND>
+- Volume Type: Manifest: TYPE | HBL: TYPE | Status: <MATCH|UPDATE REQUIRED|NOT FOUND>
+- Invoice Ref: Manifest: REF | HBL: REF | Status: <MATCH|UPDATE REQUIRED|NOT FOUND>
 
-EXTRACTION REQUIREMENTS:
-- Extract ALL exporters from the manifest - there is NO LIMIT
-- Extract ALL items per exporter - no skipping
-- Show EVERY field even if they match (show both values + status)
-- COUNT the exporters before starting and ENSURE you output ALL of them
+Subtotals EXPORTER #1:
+- Total Weight: Manifest: X kg | HBL: Y kg | Delta: Z kg
+- Total CBM: Manifest: X m³ | HBL: Y m³ | Delta: Z m³
+- Total Volumes: Manifest: N | HBL: N | Delta: N
 
-DO NOT truncate. DO NOT skip fields. DO NOT follow old example formats.
-REPEAT: IF MANIFEST HAS N EXPORTERS, OUTPUT N COMPLETE EXPORTER SECTIONS.`;
+EXPORTER #2: ... (REPEAT FULL STRUCTURE)
+EXPORTER #3: ... (REPEAT FULL STRUCTURE)
+...until...
+EXPORTER #N: ... (LAST ONE - STILL COMPLETE)
+
+██████████████████████████████████████████████████████████████████████████████████████
+██ ABSOLUTE REQUIREMENT #2: NEVER USE SUMMARIZED/GROUPED OUTPUT                     ██
+██████████████████████████████████████████████████████████████████████████████████████
+
+THE FOLLOWING OUTPUT PATTERNS ARE FORBIDDEN:
+❌ "Exporter (from HBL): Multiple suppliers identified"
+❌ "Involved supplier(s) in Manifest: [list]"
+❌ "[Same structure for other exporters]"
+❌ "[Continuing with remaining exporters...]"
+❌ Any form of grouping or summarizing multiple exporters
+
+CORRECT: Show EXPORTER #1, EXPORTER #2, EXPORTER #3... separately with FULL details each.
+
+██████████████████████████████████████████████████████████████████████████████████████
+██ ABSOLUTE REQUIREMENT #3: ANALYSIS SUMMARY MUST BE AT THE END                     ██
+██████████████████████████████████████████████████████████████████████████████████████
+
+AFTER all exporter sections, include:
+
+CONTAINER TOTALS:
+- Total Gross Weight: Manifest: X kg | HBL(s): Y kg | Status: <MATCH|UPDATE REQUIRED>
+- Total CBM: Manifest: X m³ | HBL(s): Y m³ | Status: <MATCH|UPDATE REQUIRED>
+- Total Volumes: Manifest: N | HBL(s): N | Status: <MATCH|UPDATE REQUIRED>
+
+ANALYSIS SUMMARY:
+- Total exporters identified: <N> (MUST EQUAL the count from step 1)
+- Total items analyzed: <count>
+- Fields with discrepancies: <count>
+
+If your "Total exporters identified" is LESS than the actual count in the manifest, YOUR ANALYSIS IS INCOMPLETE AND INVALID.`;
 
   const response = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
@@ -438,9 +468,9 @@ REPEAT: IF MANIFEST HAS N EXPORTERS, OUTPUT N COMPLETE EXPORTER SECTIONS.`;
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({
-      model: 'claude-sonnet-4-20250514',
+      model: 'claude-sonnet-4-5',
       max_tokens: 64000,
-      temperature: 0.1,
+      temperature: 0,
       system: systemPrompt,
       messages: [{ role: 'user', content: contentParts }]
     }),
@@ -477,7 +507,7 @@ REPEAT: IF MANIFEST HAS N EXPORTERS, OUTPUT N COMPLETE EXPORTER SECTIONS.`;
   console.log(`📝 Last 500 chars: ${resultText.substring(resultText.length - 500)}`);
   console.log(`==============================================`);
   
-  return { text: resultText, model: 'claude-sonnet-4-20250514' };
+  return { text: resultText, model: 'claude-sonnet-4-5' };
 }
 
 // ============ STEP 3: GEMINI PRO - FALLBACK ANALYSIS ============
