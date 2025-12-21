@@ -300,37 +300,39 @@ async function getApprovedExamples(analysisType: string, hblCount: number): Prom
     
     console.log(`📚 Found ${examples.length} approved examples`);
     
-    // Format examples for the prompt
+    // Format examples for the prompt - CRITICAL: Examples are for TONE ONLY, not structure
     let examplesText = `
-███████████████████████████████████████████████████████████████████████████████
-███ APPROVED ANALYSIS EXAMPLES (LEARN FROM THESE)                            ███
-███████████████████████████████████████████████████████████████████████████████
 
-The following are previously approved analyses that were marked as CORRECT.
-Use them as reference for:
-- Correct output format and structure
-- Proper handling of discrepancies
-- Expected level of detail and tone
-- How to present weight/CBM comparisons
+████████████████████████████████████████████████████████████████████████████████
+██ CRITICAL WARNING: OUTPUT FORMAT INSTRUCTIONS ABOVE ARE MANDATORY            ██
+██ The examples below may use an OUTDATED format - DO NOT copy their structure ██
+██ Follow ONLY the MANDATORY OUTPUT STRUCTURE defined in the prompt above      ██
+████████████████████████████████████████████████████████████████████████████████
+
+The following are previously approved analyses provided for TONE and TERMINOLOGY reference ONLY.
+
+IMPORTANT:
+- Use these examples for TONE, LANGUAGE, and TERMINOLOGY only
+- DO NOT copy the output structure from these examples
+- The format in these examples may be OUTDATED and no longer valid
+- You MUST follow the MANDATORY OUTPUT STRUCTURE defined above
 
 `;
     
     examples.forEach((ex: any, idx: number) => {
       const scenarioDesc = ex.scenario_type?.replace(/_/g, ' ').toUpperCase() || 'GENERAL';
       examplesText += `
-─────────────────────────────────────────────────────────────────────────────
-EXAMPLE ${idx + 1} (Scenario: ${scenarioDesc}, ${ex.hbl_count} HBL${ex.hbl_count > 1 ? 's' : ''})
-─────────────────────────────────────────────────────────────────────────────
-${ex.result_text?.substring(0, 3000) || ''}
-${ex.result_text?.length > 3000 ? '\n[... truncated for brevity ...]' : ''}
+─── EXAMPLE ${idx + 1} (Scenario: ${scenarioDesc}) - FOR TONE REFERENCE ONLY ───
+${ex.result_text?.substring(0, 2000) || ''}
+${ex.result_text?.length > 2000 ? '\n[... truncated ...]' : ''}
 `;
     });
     
     examplesText += `
-███████████████████████████████████████████████████████████████████████████████
-Use the examples above as guidance for format and tone. 
-Analyze the current documents INDEPENDENTLY - do not copy example content.
-███████████████████████████████████████████████████████████████████████████████
+████████████████████████████████████████████████████████████████████████████████
+REMINDER: The examples above are for TONE ONLY.
+Your output MUST follow the MANDATORY OUTPUT STRUCTURE from the main prompt.
+████████████████████████████████████████████████████████████████████████████████
 
 `;
     
@@ -392,18 +394,28 @@ async function analyzeWithAnthropic(
   
   console.log(`🤖 Calling Anthropic Claude with ${pdfFiles.length} PDFs + manifest text (${manifestText.length} chars) + examples (${approvedExamplesText.length} chars)`);
   
-  // Add system instruction to ensure complete response
-  const systemPrompt = `You are CRONOS, a thorough logistics document auditor. 
+  // Add system instruction to ensure complete response WITH MANDATORY FORMAT
+  const systemPrompt = `You are CRONOS, a thorough logistics document auditor.
 
-CRITICAL INSTRUCTIONS:
-1. You MUST provide a COMPLETE analysis covering ALL sections as specified in the prompt.
-2. NEVER cut short your response or skip sections.
-3. ALL 7 sections are MANDATORY and must be included with full details.
-4. Your response must be comprehensive - at least 2000 characters for a proper analysis.
-5. Include match status for EVERY field in EVERY section.
-6. If you're unsure about a field, state what you found or "Not found in <document>".
+CRITICAL MANDATORY FORMAT INSTRUCTIONS:
+1. You MUST follow the MANDATORY OUTPUT STRUCTURE from the user prompt EXACTLY.
+2. If you see "approved examples", use them for TONE and TERMINOLOGY ONLY - do NOT copy their format.
+3. The examples may show an OLD format that is no longer valid.
 
-DO NOT truncate or abbreviate your response. Provide the FULL analysis.`;
+YOUR OUTPUT MUST INCLUDE (in this exact structure):
+- Per-exporter breakdown showing CNPJ, Seal, and ALL Items
+- Each Item MUST show: Gross Weight, CBM, Volume Qty, Volume Type, Invoice Ref
+- EACH field MUST have status: MATCH | UPDATE REQUIRED | NOT FOUND
+- Subtotals per exporter with deltas
+- Container totals at the end
+- Analysis Summary with: Total exporters identified, Total items analyzed, Fields with discrepancies
+
+EXTRACTION REQUIREMENTS:
+- Extract ALL exporters from the manifest - there is NO LIMIT
+- Extract ALL items per exporter - no skipping
+- Show EVERY field even if they match (show both values + status)
+
+DO NOT truncate. DO NOT skip fields. DO NOT follow old example formats.`;
 
   const response = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
