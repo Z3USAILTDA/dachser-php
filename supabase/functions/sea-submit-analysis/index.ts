@@ -356,10 +356,12 @@ async function analyzeWithAnthropic(
   
   let fullPrompt = prompt;
   
+  // TEMPORARILY DISABLED: Approved examples may be causing model to stop early
   // Inject approved examples right after the base prompt
-  if (approvedExamplesText) {
-    fullPrompt += approvedExamplesText;
-  }
+  // if (approvedExamplesText) {
+  //   fullPrompt += approvedExamplesText;
+  // }
+  console.log(`⚠️ Approved examples DISABLED to test full exporter output`);
   
   if (metadata.consignee) fullPrompt += `\n\nConsignee: ${metadata.consignee}`;
   if (metadata.container) fullPrompt += `\nContainer: ${metadata.container}`;
@@ -395,6 +397,17 @@ async function analyzeWithAnthropic(
   // Add system instruction to ensure complete response WITH MANDATORY FORMAT
   const systemPrompt = `You are CRONOS, a thorough logistics document auditor.
 
+████████████████████████████████████████████████████████████████████████████████
+██ CRITICAL: YOU MUST LIST EVERY SINGLE EXPORTER - NO EXCEPTIONS                ██
+████████████████████████████████████████████████████████████████████████████████
+
+If the manifest has 15 exporters, you MUST output details for ALL 15 exporters.
+If the manifest has 20 exporters, you MUST output details for ALL 20 exporters.
+If the manifest has 50 exporters, you MUST output details for ALL 50 exporters.
+
+DO NOT STOP EARLY. DO NOT SUMMARIZE. DO NOT SAY "same structure for others".
+EVERY EXPORTER MUST HAVE ITS OWN COMPLETE SECTION WITH ALL FIELDS.
+
 CRITICAL MANDATORY FORMAT INSTRUCTIONS:
 1. You MUST follow the MANDATORY OUTPUT STRUCTURE from the user prompt EXACTLY.
 2. If you see "approved examples", use them for TONE and TERMINOLOGY ONLY - do NOT copy their format.
@@ -412,8 +425,10 @@ EXTRACTION REQUIREMENTS:
 - Extract ALL exporters from the manifest - there is NO LIMIT
 - Extract ALL items per exporter - no skipping
 - Show EVERY field even if they match (show both values + status)
+- COUNT the exporters before starting and ENSURE you output ALL of them
 
-DO NOT truncate. DO NOT skip fields. DO NOT follow old example formats.`;
+DO NOT truncate. DO NOT skip fields. DO NOT follow old example formats.
+REPEAT: IF MANIFEST HAS N EXPORTERS, OUTPUT N COMPLETE EXPORTER SECTIONS.`;
 
   const response = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
