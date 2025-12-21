@@ -769,6 +769,7 @@ const ContainerTracking = () => {
             origem: emailContainer.origem,
             destino: emailContainer.destino,
             custom_message: emailCustomMessage || undefined,
+            email_type: emailType,
           })
         }
       );
