@@ -790,121 +790,159 @@ Please update HBL as follows:
 Then, for EVERY HBL file provided (even if data extraction failed), you MUST output:
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-**DRAFT HBL: <exact_filename>**
+DRAFT HBL: <exact_filename>
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-Followed by the PER-EXPORTER ANALYSIS (NEW MANDATORY STRUCTURE).
+Followed by the PER-EXPORTER ANALYSIS (MANDATORY STRUCTURE).
 
 NEVER output "CRITICAL ERROR: All files unreadable" as the main response.
 NEVER skip individual HBL sections.
 ALWAYS provide per-HBL structure with per-exporter breakdown.
 
 ████████████████████████████████████████████████████████████████████████████████
-█ CRITICAL NEW REQUIREMENT: PER-EXPORTER DETAILED ANALYSIS                      █
+█ CRITICAL: COMPLETE EXPORTER EXTRACTION                                        █
 ████████████████████████████████████████████████████████████████████████████████
 
-For EACH EXPORTER identified in the Manifest, you MUST provide a detailed breakdown:
+EXTRACTION RULES - YOU MUST FOLLOW:
+1. Extract ALL exporters from Manifest - there is NO LIMIT
+2. Look for: "Shipper", "Exporter", "Supplier", "Vendor", "Seller" columns/fields
+3. Each unique company name = one exporter
+4. NEVER stop after the first exporter - continue until ALL are processed
+5. If you find only 1 exporter but document appears to have more sections, RE-ANALYZE
+6. Count total exporters and report at the end: "Total exporters identified: X"
 
-**EXPORTER #1: <EXPORTER_COMPANY_NAME>**
+VALIDATION CHECKPOINT:
+Before finishing, confirm you extracted ALL exporters by scanning the ENTIRE document.
 
-   CNPJ: Manifest = <XX.XXX.XXX/XXXX-XX> | HBL = <value or 'not found'>
-   [If different: → Update: Set CNPJ to <manifest value>]
+████████████████████████████████████████████████████████████████████████████████
+█ PER-EXPORTER DETAILED ANALYSIS (MANIFEST x HBL)                               █
+████████████████████████████████████████████████████████████████████████████████
 
-   **Item 1: <GOODS_DESCRIPTION>**
-      • Gross Weight: Manifest = <#,###.000 kg> | HBL = <#,###.000 kg>
-        [If different: → Update: Set weight to <manifest value>]
-      • CBM: Manifest = <#,###.000 m³> | HBL = <#,###.000 m³>
-        [If different: → Update: Set CBM to <manifest value>]
-      • Volume Qty: Manifest = <N> | HBL = <N>
-        [If different: → Update: Set volume qty to <manifest value>]
-      • Volume Type: Manifest = <PALLETS/BOXES/CARTONS> | HBL = <value>
-        [If different: → Update: Set volume type to <manifest value>]
-      • Invoice Ref: Manifest = <invoice_number> | HBL = <value or 'not found'>
-        [If different: → Update: Add invoice reference <manifest value>]
+For EACH EXPORTER identified in the Manifest, provide COMPLETE breakdown.
+CRITICAL: Show ALL fields with their values, even if they match.
+Use status indicators: MATCH | UPDATE REQUIRED | NOT FOUND
 
-   **Item 2: <GOODS_DESCRIPTION>**
-      • Gross Weight: Manifest = <#,###.000 kg> | HBL = <#,###.000 kg>
-      • CBM: Manifest = <#,###.000 m³> | HBL = <#,###.000 m³>
-      • Volume Qty: Manifest = <N> | HBL = <N>
-      • Volume Type: Manifest = <type> | HBL = <value>
-      • Invoice Ref: Manifest = <invoice_number> | HBL = <value>
+EXPORTER #1: <EXPORTER_COMPANY_NAME>
+
+   CNPJ:
+      Manifest: <XX.XXX.XXX/XXXX-XX or "not specified">
+      HBL: <value or "not found">
+      Status: <MATCH | UPDATE REQUIRED | NOT FOUND>
+      [If UPDATE REQUIRED: -> Update: Set CNPJ to <manifest value>]
+
+   Seal:
+      Manifest: <seal_number or "not specified">
+      HBL: <value or "not found">
+      Status: <MATCH | UPDATE REQUIRED | NOT FOUND>
+      [If UPDATE REQUIRED: -> Update: Set seal to <manifest value>]
+
+   Item 1: <GOODS_DESCRIPTION>
+      Gross Weight:
+         Manifest: <#,###.000 kg>
+         HBL: <#,###.000 kg>
+         Status: <MATCH | UPDATE REQUIRED | NOT FOUND>
+         [If UPDATE REQUIRED: -> Update: Set weight to <manifest value>]
+      
+      CBM:
+         Manifest: <#,###.000 m3>
+         HBL: <#,###.000 m3>
+         Status: <MATCH | UPDATE REQUIRED | NOT FOUND>
+         [If UPDATE REQUIRED: -> Update: Set CBM to <manifest value>]
+      
+      Volume Qty:
+         Manifest: <N>
+         HBL: <N>
+         Status: <MATCH | UPDATE REQUIRED | NOT FOUND>
+         [If UPDATE REQUIRED: -> Update: Set volume qty to <manifest value>]
+      
+      Volume Type:
+         Manifest: <PALLETS/BOXES/CARTONS/etc>
+         HBL: <value or "not specified">
+         Status: <MATCH | UPDATE REQUIRED | NOT FOUND>
+         [If UPDATE REQUIRED: -> Update: Set volume type to <manifest value>]
+      
+      Invoice Ref:
+         Manifest: <invoice_number or "not specified">
+         HBL: <value or "not found">
+         Status: <MATCH | UPDATE REQUIRED | NOT FOUND>
+         [If UPDATE REQUIRED: -> Update: Add invoice reference <manifest value>]
+
+   Item 2: <GOODS_DESCRIPTION>
+      [Same structure - ALL fields with values and status]
       [Continue for ALL items of this exporter...]
 
-   **Subtotals:**
-      • Total Weight: Manifest = <#,###.000 kg> | HBL = <#,###.000 kg> | Delta: <±#,###.000 kg>
-      • Total CBM: Manifest = <#,###.000 m³> | HBL = <#,###.000 m³> | Delta: <±#,###.000 m³>
-      • Total Volumes: Manifest = <N> | HBL = <N> | Delta: <±N>
-
-   Seal: Manifest = <seal_number> | HBL = <value or 'not found'>
-   [If different: → Update: Set seal to <manifest value>]
+   Subtotals:
+      Total Weight: Manifest = <#,###.000 kg> | HBL = <#,###.000 kg> | Delta: <+/-#,###.000 kg>
+      Total CBM: Manifest = <#,###.000 m3> | HBL = <#,###.000 m3> | Delta: <+/-#,###.000 m3>
+      Total Volumes: Manifest = <N> | HBL = <N> | Delta: <+/-N>
 
 
-**EXPORTER #2: <NEXT_EXPORTER_NAME>**
-   [Same structure as above...]
+EXPORTER #2: <NEXT_EXPORTER_NAME>
+   [Same complete structure as above - ALL fields with values and status]
+
+
+[Continue for ALL exporters found in the Manifest]
 
 
 After ALL exporters, show the CONTAINER-LEVEL TOTALS:
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-**Total Gross Weight:** Manifest = <#,###.000 kg> | HBL(s) = <#,###.000 kg>
-   [If different: → Update HBL weights so total equals <manifest value>]
+CONTAINER TOTALS:
 
-**Total CBM:** Manifest = <#,###.000 m³> | HBL(s) = <#,###.000 m³>
-   [If different: → Update HBL CBM so total equals <manifest value>]
+Total Gross Weight: Manifest = <#,###.000 kg> | HBL(s) = <#,###.000 kg>
+   Status: <MATCH | UPDATE REQUIRED>
+   [If UPDATE REQUIRED: -> Update HBL weights so total equals <manifest value>]
 
-**Total Volumes:** Manifest = <N> | HBL(s) = <N>
-   [If different: → Update HBL volumes so total equals <manifest value>]
+Total CBM: Manifest = <#,###.000 m3> | HBL(s) = <#,###.000 m3>
+   Status: <MATCH | UPDATE REQUIRED>
+   [If UPDATE REQUIRED: -> Update HBL CBM so total equals <manifest value>]
 
-████████████████████████████████████████████████████████████████████████████████
-█ EXPORTER EXTRACTION RULES                                                     █
-████████████████████████████████████████████████████████████████████████████████
+Total Volumes: Manifest = <N> | HBL(s) = <N>
+   Status: <MATCH | UPDATE REQUIRED>
+   [If UPDATE REQUIRED: -> Update HBL volumes so total equals <manifest value>]
 
-1. IDENTIFY ALL EXPORTERS from Manifest (look for Shipper, Exporter, Supplier columns)
-2. For EACH exporter, extract ALL their line items (do NOT skip any lines)
-3. Extract for EACH item: Weight, CBM, Volume Qty, Volume Type, Invoice Ref
-4. Calculate SUBTOTALS per exporter (sum of all their items)
-5. Compare EACH field against corresponding HBL values
-6. Report discrepancies with → Update instructions
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-EXTRACTION COMPLETENESS:
-- You MUST extract ALL lines from the Manifest - there is NO limit
-- Each item should be analyzed individually
-- NEVER aggregate items - show each one separately
+ANALYSIS SUMMARY:
+- Total exporters identified: <X>
+- Total items analyzed: <Y>
+- Fields with discrepancies: <Z>
 
 ████████████████████████████████████████████████████████████████████████████████
 █ ADDITIONAL MANDATORY SECTIONS (after per-exporter analysis)                   █
 ████████████████████████████████████████████████████████████████████████████████
 
-  - NCM Codes:
-    Manifest NCMs (reference): [sorted unique list]
-    BL NCMs in this HBL: [sorted list]
-    Missing in this HBL: [list or "none"]  |  Extra in this HBL: [list or "none"]
-    Rules:
-      • Do not print "Missing" when the HBL is a legitimate subset.
-      • Print this section when (a) HBL has goods but zero NCMs, or (b) there are extras not in the Manifest.
+NCM Codes:
+   Manifest NCMs (reference): [sorted unique list]
+   BL NCMs in this HBL: [sorted list]
+   Missing in this HBL: [list or "none"]
+   Extra in this HBL: [list or "none"]
+   Status: <MATCH | UPDATE REQUIRED>
 
-  - Container Number (MANDATORY VERIFICATION):
-    Manifest container: "<XXXX1234567>"  |  HBL container: "<value found>"
-    # ONLY include "Update:" line if containers are DIFFERENT.
-    Update: Set HBL container number to "<XXXX1234567>".  ← ONLY IF DIFFERENT
+Container Number:
+   Manifest container: <XXXX1234567>
+   HBL container: <value found>
+   Status: <MATCH | UPDATE REQUIRED>
+   [If UPDATE REQUIRED: -> Update: Set HBL container number to <manifest value>]
 
 HANDLING LIMITED OR UNREADABLE FILES
 - If file extraction yields very limited text (< 200 chars), still attempt to produce analysis structure.
 - For each HBL with limited data, output:
-  — Draft HBL: <filename>
+  -- Draft HBL: <filename>
   
   - Total Weight:
     Sheet Approved Total: <value if known, or "data not extracted">  |  BL Gross Total: <value if known, or "data not extracted">  |  Delta: <if calculable>
-    Update: <if applicable>
+    Status: <MATCH | UPDATE REQUIRED | DATA NOT EXTRACTED>
   
   - NCM Codes:
     Manifest NCMs (reference): [<if available>]
     BL NCMs in this HBL: [<if available or empty>]
-    Missing in this HBL: <if calculable or "unable to determine">  |  Extra in this HBL: <if calculable or "unable to determine">
+    Status: <if calculable or "unable to determine">
   
   - CBM:
     Sheet total CBM: <value if known, or "data not extracted">  |  BL total Measurement: <value if known, or "data not extracted">  |  Delta: <if calculable>
+    Status: <MATCH | UPDATE REQUIRED | DATA NOT EXTRACTED>
 
 - NEVER return a single generic "CRITICAL ERROR: All files unreadable" when multiple HBLs are provided.
 - ALWAYS produce individual analysis sections for each HBL file, even with limited data.
@@ -1558,95 +1596,128 @@ Please update HBL as follows:
 Then, for EVERY HBL file provided, you MUST output:
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-**DRAFT HBL: <exact_filename>**
+DRAFT HBL: <exact_filename>
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 Container: [container number]
 Invoices linked: [comma-separated list of invoice filenames]
 
 ████████████████████████████████████████████████████████████████████████████████
-█ CRITICAL: PER-EXPORTER DETAILED ANALYSIS (INVOICES x HBL)                     █
+█ CRITICAL: COMPLETE EXPORTER EXTRACTION (INVOICES)                             █
 ████████████████████████████████████████████████████████████████████████████████
 
-NOTE: For Invoice x HBL comparison, DO NOT verify CNPJ or Seal (these are not available on invoices).
+EXTRACTION RULES - YOU MUST FOLLOW:
+1. Extract ALL exporters from Invoices - there is NO LIMIT
+2. Look for: "Shipper", "Seller", "Exporter", "Vendor" fields on each invoice
+3. Each unique company name = one exporter
+4. NEVER stop after the first exporter - continue until ALL are processed
+5. If you find only 1 exporter but multiple invoices exist, RE-ANALYZE each invoice
+6. Count total exporters and report at the end: "Total exporters identified: X"
 
-For EACH EXPORTER/SUPPLIER identified in the Invoices, you MUST provide a detailed breakdown:
+████████████████████████████████████████████████████████████████████████████████
+█ PER-EXPORTER DETAILED ANALYSIS (INVOICES x HBL)                               █
+████████████████████████████████████████████████████████████████████████████████
 
-**EXPORTER #1: <EXPORTER_COMPANY_NAME>**
+NOTE: For Invoice x HBL comparison, DO NOT verify CNPJ or Seal (not available on invoices).
 
-   **Item 1: <GOODS_DESCRIPTION>**
-      • Gross Weight: Invoice = <#,###.000 kg> | HBL = <#,###.000 kg>
-        [If different: → Update: Set weight to <invoice value>]
-      • CBM: Invoice = <#,###.000 m³> | HBL = <#,###.000 m³>
-        [If different: → Update: Set CBM to <invoice value>]
-      • Volume Qty: Invoice = <N> | HBL = <N>
-        [If different: → Update: Set volume qty to <invoice value>]
-      • Volume Type: Invoice = <PALLETS/BOXES/CARTONS> | HBL = <value>
-        [If different: → Update: Set volume type to <invoice value>]
-      • Invoice Ref: Invoice = <invoice_number> | HBL = <value or 'not found'>
-        [If different: → Update: Add invoice reference <invoice value>]
+For EACH EXPORTER/SUPPLIER identified in the Invoices, provide COMPLETE breakdown.
+CRITICAL: Show ALL fields with their values, even if they match.
+Use status indicators: MATCH | UPDATE REQUIRED | NOT FOUND
 
-   **Item 2: <GOODS_DESCRIPTION>**
+EXPORTER #1: <EXPORTER_COMPANY_NAME>
+
+   Item 1: <GOODS_DESCRIPTION>
+      Gross Weight:
+         Invoice: <#,###.000 kg>
+         HBL: <#,###.000 kg>
+         Status: <MATCH | UPDATE REQUIRED | NOT FOUND>
+         [If UPDATE REQUIRED: -> Update: Set weight to <invoice value>]
+      
+      CBM:
+         Invoice: <#,###.000 m3>
+         HBL: <#,###.000 m3>
+         Status: <MATCH | UPDATE REQUIRED | NOT FOUND>
+         [If UPDATE REQUIRED: -> Update: Set CBM to <invoice value>]
+      
+      Volume Qty:
+         Invoice: <N>
+         HBL: <N>
+         Status: <MATCH | UPDATE REQUIRED | NOT FOUND>
+         [If UPDATE REQUIRED: -> Update: Set volume qty to <invoice value>]
+      
+      Volume Type:
+         Invoice: <PALLETS/BOXES/CARTONS/etc>
+         HBL: <value or "not specified">
+         Status: <MATCH | UPDATE REQUIRED | NOT FOUND>
+         [If UPDATE REQUIRED: -> Update: Set volume type to <invoice value>]
+      
+      Invoice Ref:
+         Invoice: <invoice_number>
+         HBL: <value or "not found">
+         Status: <MATCH | UPDATE REQUIRED | NOT FOUND>
+         [If UPDATE REQUIRED: -> Update: Add invoice reference <invoice value>]
+
+   Item 2: <GOODS_DESCRIPTION>
+      [Same structure - ALL fields with values and status]
       [Continue for ALL items of this exporter...]
 
-   **Subtotals:**
-      • Total Weight: Invoice = <#,###.000 kg> | HBL = <#,###.000 kg> | Delta: <±#,###.000 kg>
-      • Total CBM: Invoice = <#,###.000 m³> | HBL = <#,###.000 m³> | Delta: <±#,###.000 m³>
-      • Total Volumes: Invoice = <N> | HBL = <N> | Delta: <±N>
+   Subtotals:
+      Total Weight: Invoice = <#,###.000 kg> | HBL = <#,###.000 kg> | Delta: <+/-#,###.000 kg>
+      Total CBM: Invoice = <#,###.000 m3> | HBL = <#,###.000 m3> | Delta: <+/-#,###.000 m3>
+      Total Volumes: Invoice = <N> | HBL = <N> | Delta: <+/-N>
 
 
-**EXPORTER #2: <NEXT_EXPORTER_NAME>**
-   [Same structure as above...]
+EXPORTER #2: <NEXT_EXPORTER_NAME>
+   [Same complete structure as above - ALL fields with values and status]
+
+
+[Continue for ALL exporters found in the Invoices]
 
 
 After ALL exporters, show the CONTAINER-LEVEL TOTALS:
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-**Total Gross Weight:** Invoices sum = <#,###.000 kg> | HBL = <#,###.000 kg>
-   [If different: → Update HBL weight to <invoice sum>]
+CONTAINER TOTALS:
 
-**Total CBM:** Invoices sum = <#,###.000 m³> | HBL = <#,###.000 m³>
-   [If different: → Update HBL CBM to <invoice sum>]
+Total Gross Weight: Invoices sum = <#,###.000 kg> | HBL = <#,###.000 kg>
+   Status: <MATCH | UPDATE REQUIRED>
+   [If UPDATE REQUIRED: -> Update HBL weight to <invoice sum>]
 
-**Total Volumes:** Invoices sum = <N> | HBL = <N>
-   [If different: → Update HBL volumes to <invoice sum>]
+Total CBM: Invoices sum = <#,###.000 m3> | HBL = <#,###.000 m3>
+   Status: <MATCH | UPDATE REQUIRED>
+   [If UPDATE REQUIRED: -> Update HBL CBM to <invoice sum>]
 
-████████████████████████████████████████████████████████████████████████████████
-█ EXPORTER EXTRACTION RULES (INVOICES)                                          █
-████████████████████████████████████████████████████████████████████████████████
+Total Volumes: Invoices sum = <N> | HBL = <N>
+   Status: <MATCH | UPDATE REQUIRED>
+   [If UPDATE REQUIRED: -> Update HBL volumes to <invoice sum>]
 
-1. IDENTIFY ALL EXPORTERS/SUPPLIERS from Invoices (look for Shipper, Seller, Exporter fields)
-2. For EACH exporter, extract ALL their line items (do NOT skip any lines)
-3. Extract for EACH item: Weight, CBM, Volume Qty, Volume Type, Invoice Ref
-4. Calculate SUBTOTALS per exporter (sum of all their items)
-5. Compare EACH field against corresponding HBL values
-6. Report discrepancies with → Update instructions
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-IMPORTANT DIFFERENCES FROM MANIFEST x HBL:
-- DO NOT verify CNPJ (not available on commercial invoices)
-- DO NOT verify Seal Number (not available on commercial invoices)
-- Focus on: Weight, CBM, Volume Qty, Volume Type, Invoice References
+ANALYSIS SUMMARY:
+- Total exporters identified: <X>
+- Total items analyzed: <Y>
+- Fields with discrepancies: <Z>
 
 ████████████████████████████████████████████████████████████████████████████████
 █ ADDITIONAL SECTIONS                                                           █
 ████████████████████████████████████████████████████████████████████████████████
 
-- NCM/HS Code Verification (only if discrepancies):
+NCM/HS Code Verification:
    Invoice NCM: [list]
    HBL NCM: [list or "Not specified"]
-   
-   Missing from HBL: [NCM codes to add]
-   → Update: Add NCM codes to HBL cargo description: "[codes]"
+   Missing from HBL: [NCM codes to add or "none"]
+   Extra on HBL: [NCM codes not on invoice or "none"]
+   Status: <MATCH | UPDATE REQUIRED>
+   [If UPDATE REQUIRED: -> Update: Add NCM codes to HBL cargo description: "[codes]"]
 
-- Invoice Token Verification:
+Invoice Token Verification:
    Provided invoice tokens: [list from analyzed files]
    HBL tokens: [list as printed on HBL]
-   
-   - Missing from HBL: [tokens in invoices but not on HBL]
-   - Extra on HBL: [tokens on HBL without matching file]
-   
-   → Update: Add to HBL invoice references: "[missing token(s)]"
+   Missing from HBL: [tokens in invoices but not on HBL or "none"]
+   Extra on HBL: [tokens on HBL without matching file or "none"]
+   Status: <MATCH | UPDATE REQUIRED>
+   [If UPDATE REQUIRED: -> Update: Add to HBL invoice references: "[missing token(s)]"]
 
 ---
 
@@ -1657,11 +1728,16 @@ Hello, team.
 No changes required — Draft HBL reconciles with the linked invoices.
 
 Verification completed:
-- Container: [number] — Matched across all documents
-- Invoice tokens: [count] tokens verified on HBL
-- Gross Weight: Invoices sum = [X kg] | HBL = [X kg] — Match
-- CBM: Invoices sum = [X m³] | HBL = [X m³] — Match
-- Packages: Invoices sum = [N] | HBL = [N] — Match
+- Container: [number] — Status: MATCH
+- Invoice tokens: [count] tokens verified on HBL — Status: MATCH
+- Gross Weight: Invoices sum = [X kg] | HBL = [X kg] — Status: MATCH
+- CBM: Invoices sum = [X m3] | HBL = [X m3] — Status: MATCH
+- Packages: Invoices sum = [N] | HBL = [N] — Status: MATCH
+
+ANALYSIS SUMMARY:
+- Total exporters identified: <X>
+- Total items analyzed: <Y>
+- Fields with discrepancies: 0
 
 ---
 
