@@ -317,7 +317,7 @@ serve(async (req) => {
 </html>`;
     } else {
       // EMAIL INTERNO (ANALISTA) - Formato com tabela igual ao AWB
-      emailSubject = `[Rastreio Marítimo] ${container} - ${friendlyStatus}`;
+      emailSubject = `${container} - ${friendlyStatus} | ETA: ${formattedEta}`;
       
       const rowBg = isAlert ? 'rgba(255, 0, 0, 0.15)' : '#ffffff';
       const rowStyle = isAlert
