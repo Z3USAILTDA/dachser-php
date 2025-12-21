@@ -197,10 +197,6 @@ serve(async (req) => {
   
   <table cellpadding="0" cellspacing="0" border="0" style="margin: 24px 0; border-left: 4px solid #FF9933; padding-left: 16px;">
     <tr>
-      <td style="padding: 8px 0; color: #6b7280; font-size: 14px;">Navio:</td>
-      <td style="padding: 8px 0 8px 16px; color: #1f2937; font-size: 14px; font-weight: 500;">${vessel || '—'}</td>
-    </tr>
-    <tr>
       <td style="padding: 8px 0; color: #6b7280; font-size: 14px;">Armador:</td>
       <td style="padding: 8px 0 8px 16px; color: #1f2937; font-size: 14px; font-weight: 500;">${shipping_line || '—'}</td>
     </tr>
@@ -281,7 +277,6 @@ serve(async (req) => {
 <thead>
 <tr style="background-color: #f8f9fa;">
 <th style="padding: 14px 12px; text-align: left; font-weight: 600; font-size: 13px; color: #495057; text-transform: uppercase; letter-spacing: 0.5px; border-bottom: 2px solid #dee2e6;">Container</th>
-<th style="padding: 14px 12px; text-align: center; font-weight: 600; font-size: 13px; color: #495057; text-transform: uppercase; letter-spacing: 0.5px; border-bottom: 2px solid #dee2e6;">Navio</th>
 <th style="padding: 14px 12px; text-align: center; font-weight: 600; font-size: 13px; color: #495057; text-transform: uppercase; letter-spacing: 0.5px; border-bottom: 2px solid #dee2e6;">Armador</th>
 <th style="padding: 14px 12px; text-align: center; font-weight: 600; font-size: 13px; color: #495057; text-transform: uppercase; letter-spacing: 0.5px; border-bottom: 2px solid #dee2e6;">ETA</th>
 <th style="padding: 14px 12px; text-align: center; font-weight: 600; font-size: 13px; color: #495057; text-transform: uppercase; letter-spacing: 0.5px; border-bottom: 2px solid #dee2e6;">Status Atual</th>
@@ -291,7 +286,6 @@ serve(async (req) => {
 <tbody>
 <tr style="${rowStyle}">
   <td style="padding: 16px 12px; border-bottom: 1px solid #dee2e6; ${cellStyle} font-weight: 600;">${container}</td>
-  <td style="padding: 16px 12px; border-bottom: 1px solid #dee2e6; text-align: center; ${cellStyle}">${vessel || '—'}</td>
   <td style="padding: 16px 12px; border-bottom: 1px solid #dee2e6; text-align: center; ${cellStyle}">${shipping_line || '—'}</td>
   <td style="padding: 16px 12px; border-bottom: 1px solid #dee2e6; text-align: center; ${cellStyle}">${formattedEta}</td>
   <td style="padding: 16px 12px; border-bottom: 1px solid #dee2e6; text-align: center;">
@@ -331,7 +325,6 @@ ${custom_message ? `
 ${email_type === 'cliente' ? 'Atualização de Status' : 'Relatório de Status - Rastreio Marítimo'}
 
 Container: ${container}
-Navio: ${vessel || '—'}
 Armador: ${shipping_line || '—'}
 Status: ${friendlyStatus}
 Origem: ${origem || '—'}
