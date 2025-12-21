@@ -45,41 +45,92 @@ const shippingLines = [
   { code: "MAEU", name: "MAERSK" },
 ];
 
-// Detect armador from vessel name
-const detectArmadorFromVessel = (vessel: string | null | undefined): string => {
-  if (!vessel) return "-";
-  const upperVessel = vessel.toUpperCase();
+// Container prefix to shipping line mapping (primeiros 4 caracteres do container)
+const CONTAINER_PREFIX_MAP: Record<string, string> = {
+  // MAERSK
+  "MAEU": "MAERSK", "MSKU": "MAERSK", "MRKU": "MAERSK", "MRSU": "MAERSK",
+  // HAPAG-LLOYD
+  "HLCU": "HAPAG-LLOYD", "HLXU": "HAPAG-LLOYD", "HJCU": "HAPAG-LLOYD",
+  // CMA CGM
+  "CMAU": "CMA", "CGMU": "CMA", "APLU": "CMA", "ANLU": "CMA", "ECMU": "CMA",
+  // MSC
+  "MSCU": "MSC", "MEDU": "MSC", "MSCZ": "MSC",
+  // ONE
+  "ONEY": "ONE", "NYKU": "ONE", "MOLU": "ONE", "KSTU": "ONE",
+  // HMM
+  "HDMU": "HMM", "HMMU": "HMM",
+  // COSCO
+  "CSLU": "COSCO", "CCLU": "COSCO", "COSU": "COSCO", "CBHU": "COSCO",
+  // EVERGREEN
+  "EGHU": "EVERGREEN", "EMCU": "EVERGREEN", "EISU": "EVERGREEN", "EGLV": "EVERGREEN",
+  // YANG MING
+  "YMLU": "YANG MING", "YMMU": "YANG MING",
+  // ZIM
+  "ZIMU": "ZIM", "ZCSU": "ZIM",
+  // PIL
+  "PCIU": "PIL",
+  // WAN HAI
+  "WHLU": "WAN HAI",
+  // HAMBURG SUD (agora Maersk)
+  "SUDU": "MAERSK",
+  // Outros comuns (lessors)
+  "TRHU": "TRITON", "TCLU": "TEXTAINER", "TEMU": "TOUAX", "GESU": "GESEACO",
+  "FCIU": "FLORENS", "CAIU": "CAI", "SEGU": "SEACO", "TCKU": "TRITON",
+};
+
+// Detect armador from vessel name AND container prefix
+const detectArmadorFromVessel = (vessel: string | null | undefined, container?: string | null): string => {
+  // First try to detect from container prefix (most reliable)
+  if (container) {
+    const prefix = container.trim().substring(0, 4).toUpperCase();
+    if (CONTAINER_PREFIX_MAP[prefix]) {
+      return CONTAINER_PREFIX_MAP[prefix];
+    }
+  }
+
+  // Then try to detect from vessel name
+  if (vessel) {
+    const upperVessel = vessel.toUpperCase();
+    
+    // MAERSK patterns
+    if (upperVessel.includes("MAERSK") || upperVessel.includes("MAEU") || 
+        upperVessel.includes("SEALAND") || upperVessel.includes("SAFMARINE")) {
+      return "MAERSK";
+    }
+    // HAPAG-LLOYD patterns
+    if (upperVessel.includes("HAPAG") || upperVessel.includes("LLOYD") || 
+        upperVessel.includes("HAMBURG") || upperVessel.includes("HLCU")) {
+      return "HAPAG-LLOYD";
+    }
+    // CMA CGM patterns
+    if (upperVessel.includes("CMA") || upperVessel.includes("CGM") || 
+        upperVessel.includes("APL") || upperVessel.includes("ANL")) {
+      return "CMA";
+    }
+    // HMM patterns
+    if (upperVessel.includes("HMM") || upperVessel.includes("HYUNDAI")) {
+      return "HMM";
+    }
+    // ONE patterns
+    if (upperVessel.includes("ONE ") || upperVessel.startsWith("ONE") ||
+        upperVessel.includes("OCEAN NETWORK")) {
+      return "ONE";
+    }
+    // MSC patterns
+    if (upperVessel.includes("MSC")) {
+      return "MSC";
+    }
+    // COSCO patterns
+    if (upperVessel.includes("COSCO") || upperVessel.includes("OOCL")) {
+      return "COSCO";
+    }
+    // EVERGREEN patterns
+    if (upperVessel.includes("EVERGREEN") || upperVessel.includes("EVER ")) {
+      return "EVERGREEN";
+    }
+  }
   
-  // MAERSK patterns
-  if (upperVessel.includes("MAERSK") || upperVessel.includes("MAEU") || 
-      upperVessel.includes("SEALAND") || upperVessel.includes("SAFMARINE")) {
-    return "MAERSK";
-  }
-  // HAPAG-LLOYD patterns
-  if (upperVessel.includes("HAPAG") || upperVessel.includes("LLOYD") || 
-      upperVessel.includes("HAMBURG") || upperVessel.includes("HLCU")) {
-    return "HAPAG-LLOYD";
-  }
-  // CMA CGM patterns
-  if (upperVessel.includes("CMA") || upperVessel.includes("CGM") || 
-      upperVessel.includes("APL") || upperVessel.includes("ANL")) {
-    return "CMA";
-  }
-  // HMM patterns
-  if (upperVessel.includes("HMM") || upperVessel.includes("HYUNDAI")) {
-    return "HMM";
-  }
-  // ONE patterns
-  if (upperVessel.includes("ONE ") || upperVessel.startsWith("ONE") ||
-      upperVessel.includes("OCEAN NETWORK")) {
-    return "ONE";
-  }
-  // MSC patterns
-  if (upperVessel.includes("MSC")) {
-    return "MSC";
-  }
-  
-  return "-";
+  return "N/D";
 };
 
 // ========== REPORT STATUS SYSTEM (12 statuses) ==========
@@ -1141,7 +1192,7 @@ const ContainerTracking = () => {
                           </td>
                           <td className="px-4 py-3">
                             <span className="px-2 py-1 rounded-full text-xs font-medium bg-[rgba(255,200,0,.15)] text-[#ffc800] border border-[rgba(255,200,0,.3)]">
-                              {detectArmadorFromVessel(container.vessel)}
+                              {detectArmadorFromVessel(container.vessel, container.container)}
                             </span>
                           </td>
                           <td className="px-4 py-3 text-[#aaaaaa] text-sm">{container.origem || "-"}</td>
