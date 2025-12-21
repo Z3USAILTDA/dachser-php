@@ -273,25 +273,21 @@ export default function SubmeterManifestHbl() {
     try {
       // Complete the analysis
       await maritimoApi.completeAnalysis(analysisId, itemId, true);
-      
+
       // Silently save as learning example (user doesn't need to know)
       if (analysisResult?.result_text) {
         try {
           const hblCount = hblFiles.length;
           let scenarioType = `${hblCount}_hbl`;
-          
           const resultLower = analysisResult.result_text.toLowerCase();
           if (resultLower.includes('update:') || resultLower.includes('discrepancy') || resultLower.includes('differs')) {
             scenarioType += '_with_discrepancy';
           } else if (resultLower.includes('no changes') || resultLower.includes('no discrepancy')) {
             scenarioType += '_no_discrepancy';
           }
-
           const userStr = localStorage.getItem('dachser_user');
           const user = userStr ? JSON.parse(userStr) : null;
-
           const inputSummary = `Base: ${baseInfo?.base_file_name || 'N/A'}, HBLs: ${hblFiles.map(f => f.name).join(', ')}, Container: ${baseInfo?.container || 'N/A'}`;
-
           await maritimoApi.saveApprovedExample({
             runId: parseInt(analysisId),
             itemId: parseInt(itemId),
@@ -309,7 +305,6 @@ export default function SubmeterManifestHbl() {
           console.warn('Failed to save as example (non-blocking):', exampleError);
         }
       }
-      
       toast.dismiss(loadingToast);
       toast.success("Análise concluída com sucesso!");
       setTimeout(() => navigate("/maritimo"), 1000);
@@ -321,7 +316,6 @@ export default function SubmeterManifestHbl() {
       setIsCompletingAnalysis(false);
     }
   };
-
   const handleNewAnalysis = async () => {
     setAnalysisResult(null);
     setAnalysisId(null);
@@ -392,7 +386,7 @@ export default function SubmeterManifestHbl() {
               </div>
             </div>
 
-            <h3 className="text-xs tracking-[0.22em] uppercase text-neutral-400 mb-4">Envie os arquivos Draft HBL (múltiplos PDFs):</h3>
+            <h3 className="text-xs tracking-[0.22em] uppercase mb-4 text-white">Envie os arquivos Draft HBL (múltiplos PDFs):</h3>
           
             <UploadZone onFilesSelected={handleFilesSelected} accept=".pdf" multiple={true} label="Arraste e solte ou clique para enviar" description="Aceito apenas: PDF (máx. 10 arquivos, 20MB cada)" />
 
