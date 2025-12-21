@@ -37,7 +37,7 @@ import { Filter as FilterIcon } from "lucide-react";
 
 // Base shipping lines list (fallback)
 const BASE_SHIPPING_LINES = [
-  "HAPAG-LLOYD", "CMA", "HMM", "ONE", "MSC", "MAERSK"
+  "HAPAG-LLOYD", "CMA CGM", "HMM", "ONE", "MSC", "MAERSK"
 ];
 
 // Container prefix to shipping line mapping (primeiros 4 caracteres do container)
@@ -50,8 +50,8 @@ const CONTAINER_PREFIX_MAP: Record<string, string> = {
   "HLCU": "HAPAG-LLOYD", "HLXU": "HAPAG-LLOYD", "HJCU": "HAPAG-LLOYD", "HASU": "HAPAG-LLOYD",
   
   // CMA CGM (inclui APL, ANL)
-  "CMAU": "CMA", "CGMU": "CMA", "APLU": "CMA", "ANLU": "CMA", "ECMU": "CMA",
-  "APHU": "CMA", "CXDU": "CMA",
+  "CMAU": "CMA CGM", "CGMU": "CMA CGM", "APLU": "CMA CGM", "ANLU": "CMA CGM", "ECMU": "CMA CGM",
+  "APHU": "CMA CGM", "CXDU": "CMA CGM",
   
   // MSC
   "MSCU": "MSC", "MEDU": "MSC", "MSCZ": "MSC", "MSDU": "MSC",
@@ -152,7 +152,7 @@ const detectArmadorFromVessel = (vessel: string | null | undefined, container?: 
     // CMA CGM patterns
     if (upperVessel.includes("CMA") || upperVessel.includes("CGM") || 
         upperVessel.includes("APL") || upperVessel.includes("ANL")) {
-      return "CMA";
+      return "CMA CGM";
     }
     // HMM patterns
     if (upperVessel.includes("HMM") || upperVessel.includes("HYUNDAI")) {
