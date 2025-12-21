@@ -11,6 +11,7 @@ interface EmailRequest {
   vessel?: string;
   shipping_line?: string;
   status?: string;
+  old_status?: string;
   eta?: string;
   consignee?: string;
   origem?: string;
@@ -23,100 +24,73 @@ function translateStatus(status: string | null | undefined): string {
   if (!status) return 'N/A';
   
   const translations: Record<string, string> = {
-    // Booking
     'BOOKED': 'Reserva confirmada',
     'BOOKING': 'Reserva confirmada',
     'BOOKING_CONFIRMED': 'Reserva confirmada',
     'BOOKING_CREATED': 'Reserva criada',
     'PENDING': 'Pendente',
-    
-    // Empty/Pickup
     'EMPTY_TO_SHIPPER': 'Container vazio enviado ao embarcador',
     'EMPTY_PICK_UP': 'Container vazio retirado',
     'GATE_OUT_EMPTY': 'Saída de container vazio',
     'PICKED_UP': 'Coletado',
     'PICKUP': 'Coleta',
     'Empty to shipper': 'Container vazio enviado ao embarcador',
-    
-    // Gate-in
     'GATE_IN_FULL': 'Entrada de container cheio',
     'FULL_IN': 'Entrada cheio',
     'RECEIVED': 'Recebido',
     'RECEIVED_FOR_EXPORT': 'Recebido para exportação',
     'RECEIVED_FOR_EXPORT_TRANSFER': 'Recebido para transferência de exportação',
     'Received for export transfer': 'Recebido para transferência de exportação',
-    
-    // Loading
     'LOADED': 'Carregado',
     'LOAD': 'Carregado',
     'LOADED_ON_VESSEL': 'Carregado no navio',
     'LOADING': 'Carregando',
     'Loaded on board': 'Carregado a bordo',
-    
-    // Departure
     'DEPARTED': 'Partiu',
     'DEPARTURE': 'Partida',
     'VESSEL_DEPARTURE': 'Partida do navio',
     'DEPARTED_BY_VESSEL': 'Partiu via navio',
     'Vessel Departure': 'Partida do navio',
     'Departed by Vessel': 'Partiu via navio',
-    
-    // Transit
     'IN_TRANSIT': 'Em trânsito',
     'TRANSSHIPMENT': 'Em transbordo',
     'TRANSHIPMENT_ARRIVAL': 'Chegada em transbordo',
     'TRANSHIPMENT_DEPARTURE': 'Partida de transbordo',
     'Container in transit': 'Container em trânsito',
     'Container in transit for export': 'Container em trânsito para exportação',
-    
-    // Arrival
     'ARRIVED': 'Chegou',
     'ARRIVAL': 'Chegada',
     'VESSEL_ARRIVAL': 'Chegada do navio',
     'ARRIVED_AT_PORT': 'Chegou ao porto',
-    
-    // Discharge
     'DISCHARGED': 'Descarregado',
     'DISCHARGE': 'Descarga',
     'UNLOADED': 'Descarregado',
-    
-    // Customs
     'CUSTOMS_HOLD': 'Retenção aduaneira',
     'CUSTOMS_RELEASED': 'Liberado pela alfândega',
     'CUSTOMS_INSPECTION': 'Inspeção aduaneira',
-    
-    // Gate-out
     'GATE_OUT': 'Saída do terminal',
     'GATE_OUT_FULL': 'Saída de container cheio',
     'RELEASED': 'Liberado',
-    
-    // Delivery
     'DELIVERED': 'Entregue',
     'DELIVERY': 'Entrega',
     'CONTAINER_TO_CONSIGNEE': 'Container entregue ao consignatário',
     'Container to consignee': 'Container entregue ao consignatário',
-    
-    // Empty return
     'EMPTY_RETURNED': 'Container vazio devolvido',
     'EMPTY_IN': 'Entrada de container vazio',
     'EMPTY_RECEIVED': 'Container vazio recebido',
     'Empty returned by Truck': 'Container vazio devolvido por caminhão',
     'Empty received at CY': 'Container vazio recebido no pátio',
     'Empty in depot': 'Container vazio no depósito',
-    
-    // Alerts
     'DELAYED': 'Atrasado',
     'DELAY': 'Atraso',
     'CANCELLED': 'Cancelado',
     'MISSED_CONNECTION': 'Conexão perdida',
   };
   
-  // Tenta tradução direta
   if (translations[status]) {
     return translations[status];
   }
   
-  // Tenta tradução case-insensitive
   const upperStatus = status.toUpperCase().replace(/[_\s-]/g, '_');
   for (const [key, value] of Object.entries(translations)) {
     if (key.toUpperCase().replace(/[_\s-]/g, '_') === upperStatus) {
@@ -124,7 +98,6 @@ function translateStatus(status: string | null | undefined): string {
     }
   }
   
-  // Retorna o status original se não houver tradução
   return status;
 }
 
@@ -135,7 +108,7 @@ serve(async (req) => {
 
   try {
     const body: EmailRequest = await req.json();
-    const { to, container, vessel, shipping_line, status, eta, consignee, origem, destino, custom_message } = body;
+    const { to, container, vessel, shipping_line, status, old_status, eta, consignee, origem, destino, custom_message } = body;
 
     // Sempre enviar para devs@z3us.ai (hardcoded por enquanto)
     const recipient = 'devs@z3us.ai';
@@ -168,19 +141,19 @@ serve(async (req) => {
         formattedEta = etaDate.toLocaleDateString('pt-BR', { 
           day: '2-digit', 
           month: '2-digit', 
-          year: 'numeric',
-          weekday: 'long'
+          year: 'numeric'
         });
       } catch (e) {
         formattedEta = eta;
       }
     }
 
-    // Traduz o status para português
+    // Traduz os status para português
     const translatedStatus = translateStatus(status);
-    console.log(`[send-container-status-email] Status original: "${status}" -> Traduzido: "${translatedStatus}"`);
+    const translatedOldStatus = old_status ? translateStatus(old_status) : null;
+    console.log(`[send-container-status-email] Status: "${status}" -> "${translatedStatus}"`);
 
-    // Build email content (SEM BL conforme solicitado)
+    // Build email content - SEGUINDO EXATAMENTE O PADRÃO DO AWB
     const statusChangeHtml = `
 <!DOCTYPE html>
 <html>
@@ -194,18 +167,17 @@ serve(async (req) => {
     .header { background-color: #050608; padding: 20px; text-align: center; }
     .header img { max-height: 50px; }
     .content { padding: 30px; }
-    .status-box { background-color: #f8f9fa; border-left: 4px solid #0ea5e9; padding: 15px; margin: 20px 0; }
-    .status-badge { padding: 8px 16px; border-radius: 4px; font-weight: bold; background-color: #0ea5e9; color: #ffffff; display: inline-block; }
-    .eta-highlight { background-color: #fef3c7; border: 1px solid #f59e0b; padding: 12px 16px; border-radius: 6px; margin: 15px 0; }
-    .eta-highlight strong { color: #b45309; }
+    .status-box { background-color: #f8f9fa; border-left: 4px solid #F5B843; padding: 15px; margin: 20px 0; }
+    .status-change { display: flex; align-items: center; gap: 10px; margin: 10px 0; }
+    .status-badge { padding: 5px 12px; border-radius: 4px; font-weight: bold; }
+    .status-old { background-color: #e9ecef; color: #495057; }
+    .status-new { background-color: #F5B843; color: #000000; }
+    .arrow { font-size: 20px; color: #666; }
     .info-table { width: 100%; border-collapse: collapse; margin: 20px 0; }
-    .info-table td { padding: 12px 10px; border-bottom: 1px solid #eee; }
-    .info-table td:first-child { font-weight: bold; color: #666; width: 140px; }
-    .info-table td:last-child { color: #333; }
+    .info-table td { padding: 10px; border-bottom: 1px solid #eee; }
+    .info-table td:first-child { font-weight: bold; color: #666; width: 120px; }
     .footer { background-color: #050608; color: #ffffff; padding: 20px; text-align: center; font-size: 12px; }
-    .footer a { color: #0ea5e9; text-decoration: none; }
-    .custom-message { background-color: #e0f2fe; border: 1px solid #0ea5e9; padding: 15px; border-radius: 4px; margin: 20px 0; }
-    .custom-message p { margin: 0; color: #0369a1; }
+    .footer a { color: #F5B843; text-decoration: none; }
   </style>
 </head>
 <body>
@@ -214,37 +186,34 @@ serve(async (req) => {
       <img src="https://z3us.ai/logo-branco.png" alt="Z3US" />
     </div>
     <div class="content">
-      <h2 style="color: #333; margin-bottom: 20px;">🚢 Atualização de Status - Rastreio Marítimo</h2>
+      <h2 style="color: #333; margin-bottom: 20px;">Atualização de Status de Rastreamento</h2>
       
       <div class="status-box">
-        <p style="margin: 0 0 10px 0; color: #666;">Container: <strong style="font-size: 1.2em; color: #333;">${container}</strong></p>
-        ${translatedStatus ? `<span class="status-badge">${translatedStatus}</span>` : ''}
+        <p style="margin: 0 0 10px 0; color: #666;">Container: <strong>${container}</strong></p>
+        ${vessel ? `<p style="margin: 0 0 10px 0; color: #666;">Navio: <strong>${vessel}</strong></p>` : ''}
+        <div class="status-change">
+          ${translatedOldStatus ? `<span class="status-badge status-old">${translatedOldStatus}</span><span class="arrow">→</span>` : ''}
+          <span class="status-badge status-new">${translatedStatus}</span>
+        </div>
       </div>
-
-      ${formattedEta ? `
-      <div class="eta-highlight">
-        <strong>📅 Previsão de Chegada (ETA):</strong> ${formattedEta}
-      </div>
-      ` : ''}
 
       <table class="info-table">
-        ${vessel ? `<tr><td>🛳️ Navio</td><td>${vessel}</td></tr>` : ''}
-        ${shipping_line ? `<tr><td>📦 Armador</td><td>${shipping_line}</td></tr>` : ''}
-        ${consignee ? `<tr><td>👤 Consignatário</td><td>${consignee}</td></tr>` : ''}
-        ${origem ? `<tr><td>📍 Origem</td><td>${origem}</td></tr>` : ''}
-        ${destino ? `<tr><td>🎯 Destino</td><td>${destino}</td></tr>` : ''}
-        <tr><td>⏰ Data/Hora Envio</td><td>${new Date().toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' })}</td></tr>
+        ${consignee ? `<tr><td>Destinatário</td><td>${consignee}</td></tr>` : ''}
+        ${shipping_line ? `<tr><td>Armador</td><td>${shipping_line}</td></tr>` : ''}
+        ${origem ? `<tr><td>Origem</td><td>${origem}</td></tr>` : ''}
+        ${destino ? `<tr><td>Destino</td><td>${destino}</td></tr>` : ''}
+        ${formattedEta ? `<tr><td>ETA</td><td>${formattedEta}</td></tr>` : ''}
+        <tr><td>Data/Hora</td><td>${new Date().toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' })}</td></tr>
       </table>
 
       ${custom_message ? `
-      <div class="custom-message">
-        <p><strong>📝 Mensagem:</strong></p>
-        <p style="margin-top: 8px;">${custom_message}</p>
+      <div style="background-color: #fff3cd; border: 1px solid #ffc107; padding: 15px; border-radius: 4px; margin: 20px 0;">
+        <p style="margin: 0; color: #856404;">${custom_message}</p>
       </div>
       ` : ''}
 
       <p style="color: #666; font-size: 14px; margin-top: 30px;">
-        Este é um email automático do sistema de rastreamento marítimo Z3US. Para mais detalhes, acesse a plataforma.
+        Este é um email automático do sistema de rastreamento Z3US. Para mais detalhes, acesse a plataforma.
       </p>
     </div>
     <div class="footer">
@@ -257,17 +226,19 @@ serve(async (req) => {
     `;
 
     const plainText = `
-Atualização de Status - Rastreio Marítimo
+Atualização de Status de Rastreamento
 
 Container: ${container}
-${translatedStatus ? `Status: ${translatedStatus}` : ''}
-${formattedEta ? `ETA (Previsão de Chegada): ${formattedEta}` : ''}
 ${vessel ? `Navio: ${vessel}` : ''}
+${translatedOldStatus ? `Status anterior: ${translatedOldStatus}` : ''}
+Novo status: ${translatedStatus}
+
+${consignee ? `Destinatário: ${consignee}` : ''}
 ${shipping_line ? `Armador: ${shipping_line}` : ''}
-${consignee ? `Consignatário: ${consignee}` : ''}
 ${origem ? `Origem: ${origem}` : ''}
 ${destino ? `Destino: ${destino}` : ''}
-Data/Hora Envio: ${new Date().toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' })}
+${formattedEta ? `ETA: ${formattedEta}` : ''}
+Data/Hora: ${new Date().toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' })}
 
 ${custom_message || ''}
 
@@ -278,7 +249,6 @@ https://z3us.ai
 
     console.log(`[send-container-status-email] Sending email via Resend API...`);
     
-    // Send via Resend
     const response = await fetch('https://api.resend.com/emails', {
       method: 'POST',
       headers: {
@@ -286,9 +256,9 @@ https://z3us.ai
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        from: 'Z3US Maritime <noreply@hermes.z3us.ai>',
+        from: 'Z3US Tracking <noreply@hermes.z3us.ai>',
         to: [recipient],
-        subject: `[Z3US] Container ${container} - ${translatedStatus || 'Atualização de Status'}`,
+        subject: `[Z3US] Atualização Container ${container} - ${translatedStatus}`,
         html: statusChangeHtml,
         text: plainText,
       }),
