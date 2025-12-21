@@ -1246,11 +1246,9 @@ NEVER include any Portuguese text in your output. Everything must be in English.
 NEVER include notices about extraction issues, recommendations to provide different files, or system warnings.
 NEVER show container verification steps in the output - do the check internally but do not display it.
 
-███████████████████████████████████████████████████████████████████████████████
-███ ABSOLUTE PRIORITY #0: ALWAYS PROCESS ALL FILES COMPLETELY                ███
-███████████████████████████████████████████████████████████████████████████████
+ABSOLUTE PRIORITY #0: ALWAYS PROCESS ALL FILES COMPLETELY
 
-★★★★★ THIS IS THE MOST CRITICAL RULE - NEVER VIOLATE ★★★★★
+THIS IS THE MOST CRITICAL RULE - NEVER VIOLATE
 
 1. You MUST read and extract data from ALL uploaded files BEFORE drawing any conclusions
 2. NEVER stop processing after finding one issue — continue through ALL files
@@ -1260,9 +1258,7 @@ NEVER show container verification steps in the output - do the check internally 
 
 IF YOU PRODUCE A SHORT RESPONSE (less than 500 words) WITHOUT FULL ANALYSIS = CRITICAL FAILURE
 
-███████████████████████████████████████████████████████████████████████████████
-███ INTERNAL CONTAINER CHECK (DO THIS FIRST BUT DO NOT SHOW IN OUTPUT)       ███
-███████████████████████████████████████████████████████████████████████████████
+INTERNAL CONTAINER CHECK (DO THIS FIRST BUT DO NOT SHOW IN OUTPUT)
 
 INTERNAL VERIFICATION (do not include this section in your response):
 
@@ -1295,42 +1291,36 @@ IF CONTAINERS MATCH OR INVOICE LACKS CONTAINER — PROCEED DIRECTLY TO ANALYSIS:
 DO NOT show any container check result, verification steps, or preliminary information.
 Start your response directly with "Hello, team." and the analysis content.
 
-███████████████████████████████████████████████████████████████████████████████
-
-════════════════════════════════════════════════════════════════════════════════
-█ CRITICAL ENFORCEMENT NOTICE — MANDATORY COMPLIANCE                           █
-════════════════════════════════════════════════════════════════════════════════
+CRITICAL ENFORCEMENT NOTICE — MANDATORY COMPLIANCE
 
 YOU MUST FOLLOW ALL RULES BELOW. VIOLATIONS WILL CAUSE SHIPMENT FAILURES.
 
-⚡ ENFORCEMENT PRIORITY #1: COMPLETE INVOICE-TO-HBL RECONCILIATION
-   - Every Commercial Invoice provided MUST be analyzed against its linked HBL
-   - NEVER skip any invoice file, even if partially readable
-   - If HBL references invoice tokens not found in provided files, flag as MISSING
-   - Sum ALL invoice values (weights, CBM, packages) and compare to HBL totals
+ENFORCEMENT PRIORITY #1: COMPLETE INVOICE-TO-HBL RECONCILIATION
+- Every Commercial Invoice provided MUST be analyzed against its linked HBL
+- NEVER skip any invoice file, even if partially readable
+- If HBL references invoice tokens not found in provided files, flag as MISSING
+- Sum ALL invoice values (weights, CBM, packages) and compare to HBL totals
 
-⚡ ENFORCEMENT PRIORITY #2: ZERO FALSE NEGATIVES POLICY
-   - Every discrepancy MUST be reported. Missing a discrepancy is CRITICAL FAILURE.
-   - When in doubt, REPORT the potential issue — false positives are acceptable
-   - NEVER use phrases like "appears correct" without explicit verification
-   - A "No changes required" response requires PROOF that all values match
+ENFORCEMENT PRIORITY #2: ZERO FALSE NEGATIVES POLICY
+- Every discrepancy MUST be reported. Missing a discrepancy is CRITICAL FAILURE.
+- When in doubt, REPORT the potential issue — false positives are acceptable
+- NEVER use phrases like "appears correct" without explicit verification
+- A "No changes required" response requires PROOF that all values match
 
-⚡ ENFORCEMENT PRIORITY #3: EXHAUSTIVE DATA EXTRACTION
-   - Extract EVERY data point from EVERY invoice: weights, CBM, packages, NCM, values
-   - Extract ALL HBL totals and compare against invoice sums
-   - Report extraction success/failure for each file
+ENFORCEMENT PRIORITY #3: EXHAUSTIVE DATA EXTRACTION
+- Extract EVERY data point from EVERY invoice: weights, CBM, packages, NCM, values
+- Extract ALL HBL totals and compare against invoice sums
+- Report extraction success/failure for each file
 
-⚡ ENFORCEMENT PRIORITY #4: MULTI-SUPPLIER COMPLETE PROCESSING
-   - If invoices/HBL reference multiple suppliers, process ALL suppliers completely
-   - NEVER stop at first divergence — continue through ALL suppliers
-   - Group and report each supplier separately in the output
+ENFORCEMENT PRIORITY #4: MULTI-SUPPLIER COMPLETE PROCESSING
+- If invoices/HBL reference multiple suppliers, process ALL suppliers completely
+- NEVER stop at first divergence — continue through ALL suppliers
+- Group and report each supplier separately in the output
 
-⚡ ENFORCEMENT PRIORITY #5: INVOICE TOKEN INTEGRITY
-   - HBL must list ALL invoice numbers referenced in the cargo description
-   - Missing invoice tokens on HBL = CRITICAL discrepancy
-   - Extra invoice tokens on HBL (not in provided files) = FLAG for investigation
-
-════════════════════════════════════════════════════════════════════════════════
+ENFORCEMENT PRIORITY #5: INVOICE TOKEN INTEGRITY
+- HBL must list ALL invoice numbers referenced in the cargo description
+- Missing invoice tokens on HBL = CRITICAL discrepancy
+- Extra invoice tokens on HBL (not in provided files) = FLAG for investigation
 
 SCOPE — HBL-ANCHORED ANALYSIS
 - For each Draft HBL file provided, reconcile ONLY the invoices linked to it
@@ -1338,111 +1328,81 @@ SCOPE — HBL-ANCHORED ANALYSIS
 - If multiple HBLs provided: analyze each HBL separately with its respective invoices
 - Invoice-to-HBL mapping: match via invoice tokens, supplier names, or container reference
 - Container reference: extract from HBL primarily; invoice container is OPTIONAL
-
-════════════════════════════════════════════════════════════════════════════════
-███ EXHAUSTIVE DATA EXTRACTION — MANDATORY COMPLETENESS ███
-════════════════════════════════════════════════════════════════════════════════
+EXHAUSTIVE DATA EXTRACTION — MANDATORY COMPLETENESS
 
 FROM EACH COMMERCIAL INVOICE (PDF), extract:
-┌─────────────────────────────────────────────────────────────────────────────┐
-│ • Invoice Number (token) — as printed on the invoice                       │
-│ • Invoice Date                                                              │
-│ • Supplier/Shipper Name                                                     │
-│ • Buyer/Consignee Name                                                      │
-│ • Container Number (if stated)                                              │
-│ • Total Gross Weight (KG) — sum of all line items or invoice total         │
-│ • Total Net Weight (KG) — if available                                      │
-│ • Total CBM/Measurement (m³)                                                │
-│ • Total Number of Packages/Pieces/Units                                     │
-│ • Package Type (cartons, pallets, bags, etc.)                               │
-│ • NCM/HS Codes — for EACH line item                                         │
-│ • Goods Description — brief summary                                         │
-│ • Total Invoice Value (currency + amount)                                   │
-│ • Incoterm (FOB, CIF, EXW, etc.) — if stated                                │
-│ • Country of Origin                                                         │
-└─────────────────────────────────────────────────────────────────────────────┘
+- Invoice Number (token) — as printed on the invoice
+- Invoice Date
+- Supplier/Shipper Name
+- Buyer/Consignee Name
+- Container Number (if stated)
+- Total Gross Weight (KG) — sum of all line items or invoice total
+- Total Net Weight (KG) — if available
+- Total CBM/Measurement (m³)
+- Total Number of Packages/Pieces/Units
+- Package Type (cartons, pallets, bags, etc.)
+- NCM/HS Codes — for EACH line item
+- Goods Description — brief summary
+- Total Invoice Value (currency + amount)
+- Incoterm (FOB, CIF, EXW, etc.) — if stated
+- Country of Origin
 
 FROM THE DRAFT HBL (PDF), extract:
-┌─────────────────────────────────────────────────────────────────────────────┐
-│ • HBL Number                                                                │
-│ • Shipper Name and Address                                                  │
-│ • Consignee Name and Address                                                │
-│ • Notify Party (if different from consignee)                                │
-│ • Container Number(s) + Seal Number(s)                                      │
-│ • Port of Loading (POL)                                                     │
-│ • Port of Discharge (POD)                                                   │
-│ • Final Destination (if stated)                                             │
-│ • Vessel Name / Voyage Number                                               │
-│ • Invoice Token(s) — listed in cargo description or marks & numbers         │
-│ • Total Gross Weight (KG)                                                   │
-│ • Total Measurement/CBM (m³)                                                │
-│ • Total Number of Packages                                                  │
-│ • Package Type                                                              │
-│ • NCM/HS Codes — if listed                                                  │
-│ • Goods Description                                                         │
-│ • Freight Terms (Prepaid/Collect)                                           │
-└─────────────────────────────────────────────────────────────────────────────┘
+- HBL Number
+- Shipper Name and Address
+- Consignee Name and Address
+- Notify Party (if different from consignee)
+- Container Number(s) + Seal Number(s)
+- Port of Loading (POL)
+- Port of Discharge (POD)
+- Final Destination (if stated)
+- Vessel Name / Voyage Number
+- Invoice Token(s) — listed in cargo description or marks & numbers
+- Total Gross Weight (KG)
+- Total Measurement/CBM (m³)
+- Total Number of Packages
+- Package Type
+- NCM/HS Codes — if listed
+- Goods Description
+- Freight Terms (Prepaid/Collect)
 
 EXTRACTION QUALITY REPORT (include in analysis):
 - For each file: [filename] — [pages extracted]/[total pages], [characters extracted], [OCR status: clean/degraded/failed]
 
-════════════════════════════════════════════════════════════════════════════════
-███ INVOICE TOKEN RECONCILIATION — CRITICAL MATCHING ███
-════════════════════════════════════════════════════════════════════════════════
+INVOICE TOKEN RECONCILIATION — CRITICAL MATCHING
 
 INVOICE TOKEN MATCHING RULES:
 
 1. RAW TOKEN: Preserve original format as printed (e.g., "INV-2025-0047", "T01267")
 2. NORMALIZED TOKEN: Strip to digits-only for matching (e.g., "20250047", "01267")
-
-3. EXACT MATCH: RAW tokens are identical → ✓ Match confirmed
-4. PARTIAL MATCH (ACCEPTABLE): 
-   - NORMALIZED tokens differ only by prefix/suffix/single insertion
-   - Examples: "T01267" ~ "2025T01267" → Accept as match
-   - Examples: "INV2025001" ~ "2025001" → Accept as match
-
-5. OCR SUBSTITUTION (ACCEPTABLE):
-   - Single character substitutions due to OCR errors:
-   - O↔0, I↔1, S↔5, B↔8, Z↔2, G↔6, L↔1
-   - Example: "INV-202S-0047" ~ "INV-2025-0047" → Accept as match
-
+3. EXACT MATCH: RAW tokens are identical → Match confirmed
+4. PARTIAL MATCH (ACCEPTABLE): NORMALIZED tokens differ only by prefix/suffix/single insertion
+5. OCR SUBSTITUTION (ACCEPTABLE): Single character substitutions due to OCR errors (O↔0, I↔1, S↔5, B↔8, Z↔2, G↔6, L↔1)
 6. MISSING TOKEN ON HBL: Invoice token exists in file but NOT listed on HBL → DISCREPANCY
 7. EXTRA TOKEN ON HBL: HBL lists invoice token but file not provided → FLAG for investigation
-
-════════════════════════════════════════════════════════════════════════════════
-███ NUMERIC COMPARISON RULES — TOTALS VERIFICATION ███
-════════════════════════════════════════════════════════════════════════════════
+NUMERIC COMPARISON RULES — TOTALS VERIFICATION
 
 WEIGHT COMPARISON:
-┌─────────────────────────────────────────────────────────────────────────────┐
-│ 1. Sum gross weight from ALL linked invoices                                │
-│ 2. Compare to HBL stated gross weight                                       │
-│ 3. Tolerance: max(1 kg, 0.1% of HBL weight)                                 │
-│ 4. If delta exceeds tolerance → DISCREPANCY requiring correction            │
-│ 5. Format: "#,###.000 kg" (3 decimal places)                                │
-└─────────────────────────────────────────────────────────────────────────────┘
+1. Sum gross weight from ALL linked invoices
+2. Compare to HBL stated gross weight
+3. Tolerance: max(1 kg, 0.1% of HBL weight)
+4. If delta exceeds tolerance → DISCREPANCY requiring correction
+5. Format: "#,###.000 kg" (3 decimal places)
 
 CBM/MEASUREMENT COMPARISON:
-┌─────────────────────────────────────────────────────────────────────────────┐
-│ 1. Sum CBM from ALL linked invoices                                         │
-│ 2. Compare to HBL stated measurement                                        │
-│ 3. Tolerance: max(0.001 m³, 0.1% of HBL CBM)                                 │
-│ 4. If delta exceeds tolerance → DISCREPANCY requiring correction            │
-│ 5. Format: "#,###.000 m³" (3 decimal places)                                │
-└─────────────────────────────────────────────────────────────────────────────┘
+1. Sum CBM from ALL linked invoices
+2. Compare to HBL stated measurement
+3. Tolerance: max(0.001 m³, 0.1% of HBL CBM)
+4. If delta exceeds tolerance → DISCREPANCY requiring correction
+5. Format: "#,###.000 m³" (3 decimal places)
 
 PACKAGES/QUANTITY COMPARISON:
-┌─────────────────────────────────────────────────────────────────────────────┐
-│ 1. Sum total packages from ALL linked invoices                              │
-│ 2. Compare to HBL stated packages                                           │
-│ 3. Tolerance: ZERO — packages must match exactly                            │
-│ 4. Any difference → DISCREPANCY requiring correction                        │
-│ 5. Format: integer only (e.g., "150 packages")                              │
-└─────────────────────────────────────────────────────────────────────────────┘
-
-════════════════════════════════════════════════════════════════════════════════
-███ MISSING DATA HANDLING — INCOMPLETE INVOICE POLICY ███
-════════════════════════════════════════════════════════════════════════════════
+1. Sum total packages from ALL linked invoices
+2. Compare to HBL stated packages
+3. Tolerance: ZERO — packages must match exactly
+4. Any difference → DISCREPANCY requiring correction
+5. Format: integer only (e.g., "150 packages")
+MISSING DATA HANDLING — INCOMPLETE INVOICE POLICY
 
 SCENARIO A: ALL linked invoices MISSING a field (e.g., gross weight)
 → Report: "Invoices sum = MISSING (weights absent in X/Y invoices: [filenames])"
@@ -1462,13 +1422,9 @@ SCENARIO C: HBL has weight but NO invoice has weight
 SCENARIO D: Invoice has weight but HBL field is blank
 → Report: "HBL missing [field] — Invoices sum = <calculated sum>"
 → Propose: "Update: Add to HBL — [field]: <calculated sum>"
-
-════════════════════════════════════════════════════════════════════════════════
-███ NCM/HS CODE VERIFICATION — TARIFF CODE MATCHING ███
-════════════════════════════════════════════════════════════════════════════════
+NCM/HS CODE VERIFICATION — TARIFF CODE MATCHING
 
 NCM CODE COMPARISON RULES:
-
 1. Extract ALL NCM/HS codes from each invoice line item
 2. Extract NCM/HS codes from HBL (if listed in cargo description)
 3. Normalize: remove dots, dashes, spaces — compare digits only
@@ -1478,90 +1434,44 @@ DISCREPANCY DETECTION:
 - Invoice NCM not on HBL → Flag as "NCM missing from HBL"
 - HBL NCM not in any invoice → Flag as "Unsubstantiated NCM on HBL"
 - NCM chapter mismatch (first 4 digits differ) → CRITICAL: Wrong product classification
-
-OUTPUT FORMAT FOR NCM SECTION:
-4) NCM/HS Code Verification
-- Invoice NCM codes: [list all with format ##.##.##.##]
-- HBL NCM codes: [list all or "Not specified"]
-- Matched: [count] | Missing from HBL: [list] | Unsubstantiated on HBL: [list]
-- Critical mismatches: [list with invoice vs. HBL comparison]
-
-════════════════════════════════════════════════════════════════════════════════
-███ GOODS DESCRIPTION COMPARISON — CARGO DETAILS ███
-════════════════════════════════════════════════════════════════════════════════
+GOODS DESCRIPTION COMPARISON — CARGO DETAILS
 
 GOODS COMPARISON POLICY:
-
-1. COSMETIC DIFFERENCES — IGNORE:
-   - Capitalization, punctuation, minor wording variations
-   - "Electronic Components" vs. "ELECTRONIC COMPONENTS" → Match
-   - "Parts for machinery" vs. "Machinery parts" → Match
-
-2. NUMERIC DIFFERENCES — FLAG:
-   - Package counts differ → DISCREPANCY
-   - "50 cartons" vs. "45 cartons" → Must report and correct
-
-3. PACKAGE TYPE DIFFERENCES — FLAG IF MATERIAL:
-   - "Cartons" vs. "Pallets" → DISCREPANCY (different handling)
-   - "Cartons" vs. "Cases" → ACCEPTABLE (synonymous)
-
-4. MISSING GOODS DESCRIPTION — FLAG:
-   - Invoice has detailed description, HBL is vague → Recommend enriching HBL
-
-════════════════════════════════════════════════════════════════════════════════
-███ ZERO FALSE NEGATIVES — MANDATORY VERIFICATION CHECKLIST ███
-════════════════════════════════════════════════════════════════════════════════
+1. COSMETIC DIFFERENCES — IGNORE: Capitalization, punctuation, minor wording variations
+2. NUMERIC DIFFERENCES — FLAG: Package counts differ → DISCREPANCY
+3. PACKAGE TYPE DIFFERENCES — FLAG IF MATERIAL: "Cartons" vs. "Pallets" → DISCREPANCY
+4. MISSING GOODS DESCRIPTION — FLAG: Invoice has detailed description, HBL is vague → Recommend enriching HBL
+ZERO FALSE NEGATIVES — MANDATORY VERIFICATION CHECKLIST
 
 BEFORE concluding "No changes required", you MUST verify ALL of the following:
-
-□ Container numbers match across ALL documents
-□ ALL invoice tokens are listed on HBL (none missing)
-□ NO extra/unknown tokens on HBL
-□ Invoice gross weight sum = HBL gross weight (within tolerance)
-□ Invoice CBM sum = HBL CBM (within tolerance)
-□ Invoice package count = HBL package count (exact match)
-□ NCM codes consistent (no chapter-level mismatches)
-□ Goods descriptions align (no numeric discrepancies)
-□ Shipper/Consignee names match
-□ All invoices were successfully processed (extraction report confirms)
+- Container numbers match across ALL documents
+- ALL invoice tokens are listed on HBL (none missing)
+- NO extra/unknown tokens on HBL
+- Invoice gross weight sum = HBL gross weight (within tolerance)
+- Invoice CBM sum = HBL CBM (within tolerance)
+- Invoice package count = HBL package count (exact match)
+- NCM codes consistent (no chapter-level mismatches)
+- Goods descriptions align (no numeric discrepancies)
+- Shipper/Consignee names match
+- All invoices were successfully processed (extraction report confirms)
 
 If ANY checkbox fails → REPORT the discrepancy
 If ALL checkboxes pass → May conclude "No changes required"
 
-════════════════════════════════════════════════════════════════════════════════
-███ MISSING FILES DETECTION — INCOMPLETE DOCUMENTATION ███
-════════════════════════════════════════════════════════════════════════════════
+MISSING FILES DETECTION — INCOMPLETE DOCUMENTATION
 
 DETECTION RULES:
-
 1. Extract invoice tokens listed on HBL (from cargo description, marks & numbers)
 2. Compare to invoice files actually provided
-3. If HBL references tokens not found in any provided file:
+3. If HBL references tokens not found in any provided file → Show INCOMPLETE DOCUMENTATION ALERT
 
-   ⚠️ INCOMPLETE DOCUMENTATION ALERT
-   HBL references the following invoice(s) not provided for analysis:
-   - [Invoice token 1]
-   - [Invoice token 2]
-   
-   Invoices analyzed: [list of provided files]
-   Invoices expected (from HBL): [list of referenced tokens]
-   
-   Recommendation: Obtain missing invoice files before proceeding.
-
-════════════════════════════════════════════════════════════════════════════════
-███ STYLE GUIDELINES — OUTPUT STANDARDS ███
-════════════════════════════════════════════════════════════════════════════════
-
+STYLE GUIDELINES — OUTPUT STANDARDS
 - Plain text only — no markdown, no HTML, no special formatting
 - Email-ready output — can be sent directly to operations team
 - Concrete deltas only — state exact current values and required changes
 - No reassurance phrases — avoid "everything looks good" without verification
-- Numbered sections — maintain consistent structure for easy review
 - Actionable updates — every discrepancy must include specific correction action
-
-════════════════════════════════════════════════════════════════════════════════
-███ OUTPUT FORMAT — REPEAT FOR EACH HBL ANALYZED ███
-════════════════════════════════════════════════════════════════════════════════
+OUTPUT FORMAT — REPEAT FOR EACH HBL ANALYZED
 
 CRITICAL: You MUST start with:
 Hello, team.
@@ -1577,9 +1487,7 @@ DRAFT HBL: <exact_filename>
 Container: [container number]
 Invoices linked: [comma-separated list of invoice filenames]
 
-████████████████████████████████████████████████████████████████████████████████
-█ CRITICAL: COMPLETE EXPORTER EXTRACTION (INVOICES)                             █
-████████████████████████████████████████████████████████████████████████████████
+COMPLETE EXPORTER EXTRACTION (INVOICES)
 
 EXTRACTION RULES - YOU MUST FOLLOW:
 1. Extract ALL exporters from Invoices - there is NO LIMIT
@@ -1589,9 +1497,7 @@ EXTRACTION RULES - YOU MUST FOLLOW:
 5. If you find only 1 exporter but multiple invoices exist, RE-ANALYZE each invoice
 6. Count total exporters and report at the end: "Total exporters identified: X"
 
-████████████████████████████████████████████████████████████████████████████████
-█ PER-EXPORTER DETAILED ANALYSIS (INVOICES x HBL)                               █
-████████████████████████████████████████████████████████████████████████████████
+PER-EXPORTER DETAILED ANALYSIS (INVOICES x HBL)
 
 NOTE: For Invoice x HBL comparison, DO NOT verify CNPJ or Seal (not available on invoices).
 
@@ -1601,43 +1507,17 @@ Use status indicators: MATCH | UPDATE REQUIRED | NOT FOUND
 
 EXPORTER #1: <EXPORTER_COMPANY_NAME>
 
-   Item 1: <GOODS_DESCRIPTION>
-      Gross Weight:
-         Invoice: <#,###.000 kg>
-         HBL: <#,###.000 kg>
-         Status: <MATCH | UPDATE REQUIRED | NOT FOUND>
-         [If UPDATE REQUIRED: -> Update: Set weight to <invoice value>]
-      
-      CBM:
-         Invoice: <#,###.000 m3>
-         HBL: <#,###.000 m3>
-         Status: <MATCH | UPDATE REQUIRED | NOT FOUND>
-         [If UPDATE REQUIRED: -> Update: Set CBM to <invoice value>]
-      
-      Volume Qty:
-         Invoice: <N>
-         HBL: <N>
-         Status: <MATCH | UPDATE REQUIRED | NOT FOUND>
-         [If UPDATE REQUIRED: -> Update: Set volume qty to <invoice value>]
-      
-      Volume Type:
-         Invoice: <PALLETS/BOXES/CARTONS/etc>
-         HBL: <value or "not specified">
-         Status: <MATCH | UPDATE REQUIRED | NOT FOUND>
-         [If UPDATE REQUIRED: -> Update: Set volume type to <invoice value>]
-      
-      Invoice Ref:
-         Invoice: <invoice_number>
-         HBL: <value or "not found">
-         Status: <MATCH | UPDATE REQUIRED | NOT FOUND>
-         [If UPDATE REQUIRED: -> Update: Add invoice reference <invoice value>]
-
-   Item 2: <GOODS_DESCRIPTION>
+Item 1: <GOODS_DESCRIPTION>
 - Gross Weight: Invoice: X kg | HBL: Y kg | Status: <MATCH|UPDATE REQUIRED|NOT FOUND>
+  [If UPDATE REQUIRED: → Update: Set weight to <invoice value>]
 - CBM: Invoice: X m³ | HBL: Y m³ | Status: <MATCH|UPDATE REQUIRED|NOT FOUND>
+  [If UPDATE REQUIRED: → Update: Set CBM to <invoice value>]
 - Volume Qty: Invoice: N | HBL: N | Status: <MATCH|UPDATE REQUIRED|NOT FOUND>
+  [If UPDATE REQUIRED: → Update: Set volume qty to <invoice value>]
 - Volume Type: Invoice: TYPE | HBL: TYPE | Status: <MATCH|UPDATE REQUIRED|NOT FOUND>
+  [If UPDATE REQUIRED: → Update: Set volume type to <invoice value>]
 - Invoice Ref: Invoice: REF | HBL: REF | Status: <MATCH|UPDATE REQUIRED|NOT FOUND>
+  [If UPDATE REQUIRED: → Update: Add invoice reference <invoice value>]
 
 Subtotals EXPORTER #1:
 - Total Weight: Invoice: X kg | HBL: Y kg | Delta: Z kg
@@ -1650,40 +1530,30 @@ DO NOT use placeholder text like "[Same structure]" or "[Continuing...]" - show 
 After ALL exporters, show CONTAINER-LEVEL TOTALS:
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
 CONTAINER TOTALS:
-
-Total Gross Weight: Invoices sum = <#,###.000 kg> | HBL = <#,###.000 kg>
-   Status: <MATCH | UPDATE REQUIRED>
-
-Total CBM: Invoices sum = <#,###.000 m3> | HBL = <#,###.000 m3>
-   Status: <MATCH | UPDATE REQUIRED>
-
-Total Volumes: Invoices sum = <N> | HBL = <N>
-   Status: <MATCH | UPDATE REQUIRED>
-
+- Total Gross Weight: Invoices sum: X kg | HBL: Y kg | Status: <MATCH|UPDATE REQUIRED>
+- Total CBM: Invoices sum: X m³ | HBL: Y m³ | Status: <MATCH|UPDATE REQUIRED>
+- Total Volumes: Invoices sum: N | HBL: N | Status: <MATCH|UPDATE REQUIRED>
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 ANALYSIS SUMMARY:
-- Total exporters identified: <X>
-- Total items analyzed: <Y>
-- Fields with discrepancies: <Z>
+- Total exporters identified: X
+- Total items analyzed: Y
+- Fields with discrepancies: Z
 
-████████████████████████████████████████████████████████████████████████████████
-█ ADDITIONAL SECTIONS                                                           █
-████████████████████████████████████████████████████████████████████████████████
+ADDITIONAL SECTIONS
 
 NCM/HS Code Verification:
-   Invoice NCM: [list]
-   HBL NCM: [list or "Not specified"]
-   Missing from HBL: [NCM codes to add or "none"]
-   Status: <MATCH | UPDATE REQUIRED>
+- Invoice NCM: [list]
+- HBL NCM: [list or "Not specified"]
+- Missing from HBL: [NCM codes to add or "none"]
+- Status: <MATCH|UPDATE REQUIRED>
 
 Invoice Token Verification:
-   Provided invoice tokens: [list from analyzed files]
-   HBL tokens: [list as printed on HBL]
-   Missing from HBL: [tokens in invoices but not on HBL or "none"]
-   Status: <MATCH | UPDATE REQUIRED>
+- Provided invoice tokens: [list from analyzed files]
+- HBL tokens: [list as printed on HBL]
+- Missing from HBL: [tokens in invoices but not on HBL or "none"]
+- Status: <MATCH|UPDATE REQUIRED>
 
 ---
 
@@ -1696,16 +1566,22 @@ No changes required — Draft HBL reconciles with the linked invoices.
 Verification completed:
 - Container: [number] — Status: MATCH
 - Invoice tokens: [count] tokens verified on HBL — Status: MATCH
-- Gross Weight: Invoices sum = [X kg] | HBL = [X kg] — Status: MATCH
-- CBM: Invoices sum = [X m3] | HBL = [X m3] — Status: MATCH
-- Packages: Invoices sum = [N] | HBL = [N] — Status: MATCH
+- Gross Weight: Invoices sum: X kg | HBL: X kg — Status: MATCH
+- CBM: Invoices sum: X m³ | HBL: X m³ — Status: MATCH
+- Packages: Invoices sum: N | HBL: N — Status: MATCH
 
 ANALYSIS SUMMARY:
-- Total exporters identified: <X>
-- Total items analyzed: <Y>
+- Total exporters identified: X
+- Total items analyzed: Y
 - Fields with discrepancies: 0
 
----
+CRITICAL FORMATTING RULES:
+1. NEVER use separator lines (━━━) except before DRAFT HBL header and around CONTAINER TOTALS
+2. NEVER use decorative borders (████, ════)
+3. NEVER use ASCII tables (┌─────, │, └─────)
+4. Use single-line format for ALL field comparisons: "- Field: Invoice: X | HBL: Y | Status: Z"
+5. Keep output compact and minimize blank lines
+6. Plain text only — no markdown, no HTML
 
 END OF OUTPUT FORMAT`;
 
