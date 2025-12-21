@@ -241,7 +241,6 @@ interface ContainerData {
   id: string;
   container: string;
   bl?: string;
-  mawb?: string;
   shipping_line: string;
   consignee_name: string;
   last_event: string;
@@ -280,23 +279,7 @@ const ContainerTracking = () => {
   const [isLoadingData, setIsLoadingData] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isLoadingSeaItems, setIsLoadingSeaItems] = useState(false);
-  const [isImportingMasters, setIsImportingMasters] = useState(false);
-  const [isUpdatingTracking, setIsUpdatingTracking] = useState(false);
   const { toast } = useToast();
-
-  // Master BL search states
-  const [masterBlSearch, setMasterBlSearch] = useState("");
-  const [isSearchingBl, setIsSearchingBl] = useState(false);
-  const [blSearchResults, setBlSearchResults] = useState<any>(null);
-
-  // Count pending containers
-  const pendingCount = useMemo(() => {
-    return containersList.filter(c => 
-      c.status === 'PENDING' || 
-      !c.status || 
-      c.last_event === 'Aguardando rastreio...'
-    ).length;
-  }, [containersList]);
 
   const itemsPerPage = 10;
 
@@ -384,7 +367,6 @@ const ContainerTracking = () => {
           id: String(row.id),
           container: row.container,
           bl: row.bl,
-          mawb: row.mawb || null,
           shipping_line: row.shipping_line || '',
           consignee_name: row.consignee_name || '',
           last_event: row.last_event || 'Aguardando rastreio...',
@@ -506,176 +488,7 @@ const ContainerTracking = () => {
     }
   };
 
-  // Import Masters from t_master_dados
-  const handleImportMasters = async () => {
-    setIsImportingMasters(true);
-    toast({
-      title: "Importando Masters",
-      description: "Buscando Masters SEA de t_master_dados...",
-    });
-    
-    try {
-      // Use AbortController with extended timeout for long-running import
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 300000); // 5 min timeout
-      
-      const res = await fetch(
-        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/olimpo-proxy?action=import_masters_from_master_dados`,
-        {
-          method: 'GET',
-          headers: {
-            'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
-            'Content-Type': 'application/json',
-          },
-          signal: controller.signal,
-        }
-      );
-      
-      clearTimeout(timeoutId);
-      
-      const result = await res.json();
-      
-      if (result.success) {
-        toast({
-          title: "Masters importados",
-          description: result.message || `${result.containersAdded} container(s) adicionado(s)`,
-        });
-        await fetchContainersData();
-      } else {
-        toast({
-          title: "Erro ao importar",
-          description: result.error || "Falha ao importar masters",
-          variant: "destructive",
-        });
-      }
-    } catch (error) {
-      console.error("Error importing masters:", error);
-      toast({
-        title: "Erro",
-        description: "Falha ao importar masters de t_master_dados",
-        variant: "destructive",
-      });
-    } finally {
-      setIsImportingMasters(false);
-    }
-  };
-
-  // Update pending tracking - fetch details for PENDING containers
-  const handleUpdateTracking = async () => {
-    setIsUpdatingTracking(true);
-    toast({
-      title: "Atualizando Rastreio",
-      description: "Buscando detalhes dos containers pendentes...",
-    });
-    
-    try {
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 180000); // 3 min timeout
-      
-      const res = await fetch(
-        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/olimpo-proxy?action=update_pending_tracking`,
-        {
-          method: 'GET',
-          headers: {
-            'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
-            'Content-Type': 'application/json',
-          },
-          signal: controller.signal,
-        }
-      );
-      
-      clearTimeout(timeoutId);
-      
-      const result = await res.json();
-      
-      if (result.success) {
-        toast({
-          title: "Rastreio Atualizado",
-          description: result.message || `${result.updated} container(s) rastreado(s)`,
-        });
-        await fetchContainersData();
-      } else {
-        toast({
-          title: "Erro ao atualizar",
-          description: result.error || "Falha ao atualizar rastreio",
-          variant: "destructive",
-        });
-      }
-    } catch (error) {
-      console.error("Error updating tracking:", error);
-      toast({
-        title: "Erro",
-        description: "Falha ao atualizar rastreio dos containers",
-        variant: "destructive",
-      });
-    } finally {
-      setIsUpdatingTracking(false);
-    }
-  };
-
-  // Search containers by Master BL
-  const handleSearchByMasterBl = async () => {
-    if (!masterBlSearch.trim()) {
-      toast({
-        title: "Campo obrigatório",
-        description: "Digite o número do Master BL para pesquisar.",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    setIsSearchingBl(true);
-    setBlSearchResults(null);
-    
-    try {
-      const res = await fetch(
-        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/olimpo-proxy?action=sea_track_bl`,
-        {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({ bl: masterBlSearch.trim().toUpperCase() })
-        }
-      );
-      
-      const result = await res.json();
-      
-      if (result.success) {
-        setBlSearchResults(result);
-        if (result.containers_found > 0) {
-          toast({
-            title: "BL encontrado",
-            description: `${result.containers_found} container(s) associado(s) ao BL ${result.bl_number}`,
-          });
-        } else {
-          toast({
-            title: "Nenhum container encontrado",
-            description: `O BL ${result.bl_number} não retornou containers via ${result.detected_shipping_line}`,
-            variant: "destructive",
-          });
-        }
-      } else {
-        toast({
-          title: "Erro na busca",
-          description: result.error || "Falha ao buscar Master BL",
-          variant: "destructive",
-        });
-      }
-    } catch (error) {
-      console.error("Error searching BL:", error);
-      toast({
-        title: "Erro",
-        description: "Falha ao buscar Master BL",
-        variant: "destructive",
-      });
-    } finally {
-      setIsSearchingBl(false);
-    }
-  };
-
-
+  // Track single container
   const handleTrackContainer = async (containerId: string, shippingLine: string) => {
     setTrackingContainer(containerId);
     try {
@@ -1156,112 +969,6 @@ const ContainerTracking = () => {
           </Card>
         </section>
 
-        {/* Master BL Search */}
-        <section 
-          className="rounded-2xl p-4"
-          style={{
-            background: 'linear-gradient(135deg, rgba(59,130,246,0.15) 0%, rgba(5,6,18,.9) 50%)',
-            border: '1px solid rgba(59,130,246,.3)',
-            boxShadow: '0 18px 40px rgba(0,0,0,.85)',
-          }}
-        >
-          <div className="flex items-center gap-2 mb-3">
-            <Ship className="w-5 h-5 text-blue-400" />
-            <h3 className="text-sm font-medium text-blue-200 uppercase tracking-wide">Rastrear por Master BL</h3>
-          </div>
-          <div className="flex flex-wrap items-center gap-3">
-            <div className="relative flex-1 min-w-[200px]">
-              <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-blue-400" />
-              <input
-                type="text"
-                placeholder="Digite o número do Master BL (ex: MEDUD8022532)"
-                value={masterBlSearch}
-                onChange={(e) => setMasterBlSearch(e.target.value.toUpperCase())}
-                onKeyDown={(e) => e.key === 'Enter' && handleSearchByMasterBl()}
-                className="h-10 w-full pl-10 pr-4 rounded-full border border-blue-500/40 bg-[#13141a] text-[#f5f5f5] text-[0.85rem] placeholder:text-[#666] focus:outline-none focus:border-blue-400 focus:shadow-[0_0_0_1px_rgba(59,130,246,.6)]"
-              />
-            </div>
-            <button
-              onClick={handleSearchByMasterBl}
-              disabled={isSearchingBl}
-              className="h-10 px-6 rounded-full bg-blue-600 text-white text-[0.8rem] font-medium flex items-center gap-2 hover:bg-blue-500 transition shadow-[0_0_20px_rgba(59,130,246,.4)] disabled:opacity-50"
-            >
-              {isSearchingBl ? (
-                <Loader2 className="w-4 h-4 animate-spin" />
-              ) : (
-                <Search className="w-4 h-4" />
-              )}
-              Buscar BL
-            </button>
-            {blSearchResults && (
-              <button
-                onClick={() => { setBlSearchResults(null); setMasterBlSearch(""); }}
-                className="h-10 px-4 rounded-full bg-[rgba(255,255,255,.1)] text-white/70 text-[0.75rem] flex items-center gap-1.5 hover:bg-[rgba(255,255,255,.2)] transition"
-              >
-                Limpar
-              </button>
-            )}
-          </div>
-          
-          {/* BL Search Results */}
-          {blSearchResults && (
-            <div className="mt-4 space-y-3">
-              <div className="flex flex-wrap items-center gap-3 text-sm">
-                <span className="px-3 py-1 rounded-full bg-blue-900/50 text-blue-200 border border-blue-700/50">
-                  BL: {blSearchResults.bl_number}
-                </span>
-                <span className="px-3 py-1 rounded-full bg-purple-900/50 text-purple-200 border border-purple-700/50">
-                  Armador: {blSearchResults.detected_shipping_line}
-                </span>
-                <span className="px-3 py-1 rounded-full bg-green-900/50 text-green-200 border border-green-700/50">
-                  {blSearchResults.containers_found} container(s)
-                </span>
-              </div>
-              
-              {blSearchResults.containers && blSearchResults.containers.length > 0 && (
-                <div className="overflow-x-auto rounded-xl border border-[rgba(255,255,255,.1)]">
-                  <table className="w-full border-collapse">
-                    <thead>
-                      <tr className="bg-[rgba(0,0,0,.5)] border-b border-[rgba(255,255,255,.08)]">
-                        <th className="px-4 py-2 text-left text-blue-300 uppercase text-[0.68rem] tracking-[0.1em] font-medium">Container</th>
-                        <th className="px-4 py-2 text-left text-blue-300 uppercase text-[0.68rem] tracking-[0.1em] font-medium">Status Atual</th>
-                        <th className="px-4 py-2 text-left text-blue-300 uppercase text-[0.68rem] tracking-[0.1em] font-medium">Status Relatório</th>
-                        <th className="px-4 py-2 text-left text-blue-300 uppercase text-[0.68rem] tracking-[0.1em] font-medium">Etapa</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {blSearchResults.containers.map((c: any, idx: number) => (
-                        <tr key={idx} className="border-b border-[rgba(255,255,255,.05)] hover:bg-[rgba(59,130,246,.1)]">
-                          <td className="px-4 py-2 text-[0.8rem] font-mono text-white">{c.container_number}</td>
-                          <td className="px-4 py-2 text-[0.8rem] text-[#aaaaaa]">{c.current_event || c.container_status || '-'}</td>
-                          <td className="px-4 py-2">
-                            <span 
-                              className="px-2 py-0.5 rounded text-[0.7rem] font-medium"
-                              style={{ 
-                                backgroundColor: `${c.report_status?.code ? REPORT_STATUSES[c.report_status.code]?.color || '#64748b' : '#64748b'}20`,
-                                color: c.report_status?.code ? REPORT_STATUSES[c.report_status.code]?.color || '#64748b' : '#64748b'
-                              }}
-                            >
-                              {c.report_status?.label || 'Aguardando'}
-                            </span>
-                          </td>
-                          <td className="px-4 py-2 text-[0.8rem] text-[#aaaaaa]">{c.report_status?.etapa || '-'}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-              
-              {blSearchResults.bol_response_status !== 200 && (
-                <div className="p-3 rounded-lg bg-red-900/20 border border-red-700/30 text-red-300 text-sm">
-                  A API JSONCargo retornou status {blSearchResults.bol_response_status}. O BL pode não estar disponível para rastreio.
-                </div>
-              )}
-            </div>
-          )}
-        </section>
-
         {/* Search and Filter Bar */}
         <section 
           className="rounded-2xl p-4"
@@ -1312,28 +1019,6 @@ const ContainerTracking = () => {
                   <Tooltip>
                     <TooltipTrigger asChild>
                       <button
-                        onClick={handleImportMasters}
-                        disabled={isImportingMasters}
-                        className="h-8 px-4 rounded-full bg-purple-600 text-white text-[0.75rem] font-medium flex items-center gap-1.5 hover:bg-purple-500 transition shadow-[0_0_20px_rgba(147,51,234,.3)] disabled:opacity-50"
-                      >
-                        {isImportingMasters ? (
-                          <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                        ) : (
-                          <Ship className="w-3.5 h-3.5" />
-                        )}
-                        Importar Masters
-                      </button>
-                    </TooltipTrigger>
-                    <TooltipContent>
-                      <p className="text-xs">Importar Masters SEA de t_master_dados</p>
-                    </TooltipContent>
-                  </Tooltip>
-                </TooltipProvider>
-
-                <TooltipProvider>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <button
                         onClick={handleLoadFromSeaItems}
                         disabled={isLoadingSeaItems}
                         className="h-8 px-4 rounded-full bg-blue-600 text-white text-[0.75rem] font-medium flex items-center gap-1.5 hover:bg-blue-500 transition shadow-[0_0_20px_rgba(59,130,246,.3)] disabled:opacity-50"
@@ -1348,28 +1033,6 @@ const ContainerTracking = () => {
                     </TooltipTrigger>
                     <TooltipContent>
                       <p className="text-xs">Carregar containers das análises HBL</p>
-                    </TooltipContent>
-                  </Tooltip>
-                </TooltipProvider>
-
-                <TooltipProvider>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <button
-                        onClick={handleUpdateTracking}
-                        disabled={isUpdatingTracking || pendingCount === 0}
-                        className="h-8 px-4 rounded-full bg-green-600 text-white text-[0.75rem] font-medium flex items-center gap-1.5 hover:bg-green-500 transition shadow-[0_0_20px_rgba(34,197,94,.3)] disabled:opacity-50"
-                      >
-                        {isUpdatingTracking ? (
-                          <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                        ) : (
-                          <RefreshCw className="w-3.5 h-3.5" />
-                        )}
-                        Rastrear ({pendingCount})
-                      </button>
-                    </TooltipTrigger>
-                    <TooltipContent>
-                      <p className="text-xs">Buscar detalhes dos {pendingCount} containers pendentes</p>
                     </TooltipContent>
                   </Tooltip>
                 </TooltipProvider>
@@ -1406,7 +1069,6 @@ const ContainerTracking = () => {
                 <table className="w-full border-collapse">
                   <thead>
                     <tr className="bg-[rgba(0,0,0,.4)] border-b border-[rgba(255,255,255,.08)]">
-                      <th className="px-4 py-3 text-left text-[#aaaaaa] uppercase text-[0.68rem] tracking-[0.1em] font-medium">MAWB</th>
                       <th
                         className="px-4 py-3 text-left text-[#aaaaaa] uppercase text-[0.68rem] tracking-[0.1em] font-medium cursor-pointer select-none hover:text-[#ffc800] transition"
                         onClick={handleContainerSort}
@@ -1451,9 +1113,6 @@ const ContainerTracking = () => {
                           key={container.id}
                           className="border-b border-[rgba(255,255,255,.05)] hover:bg-[rgba(255,255,255,.03)] transition"
                         >
-                          <td className="px-4 py-3">
-                            <span className="text-[#aaaaaa] font-mono text-xs">{container.mawb || '-'}</span>
-                          </td>
                           <td className="px-4 py-3">
                             <span className="text-[#f5f5f5] font-mono text-sm">{container.container}</span>
                           </td>
