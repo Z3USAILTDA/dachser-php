@@ -1115,7 +1115,7 @@ const ContainerTracking = () => {
 
                       return (
                         <tr
-                          key={container.id}
+                          key={`${container.id}-${container.container}-${idx}`}
                           className="border-b border-[rgba(255,255,255,.05)] hover:bg-[rgba(255,255,255,.03)] transition"
                         >
                           <td className="px-4 py-3">
