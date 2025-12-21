@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useUsageLog } from "@/hooks/useUsageLog";
+import { useUserRole } from "@/hooks/useUserRole";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -259,6 +260,7 @@ interface ContainerData {
 const ContainerTracking = () => {
   useUsageLog({ endpoint: "/sea/tracking" });
   const navigate = useNavigate();
+  const { isAdmin } = useUserRole();
   const [user, setUser] = useState<User | null>(null);
   const [session, setSession] = useState<Session | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -1094,6 +1096,9 @@ const ContainerTracking = () => {
                       <th className="px-4 py-3 text-left text-[#aaaaaa] uppercase text-[0.68rem] tracking-[0.1em] font-medium">Destino</th>
                       <th className="px-4 py-3 text-center text-[#aaaaaa] uppercase text-[0.68rem] tracking-[0.1em] font-medium min-w-[180px]">Timeline</th>
                       <th className="px-4 py-3 text-left text-[#aaaaaa] uppercase text-[0.68rem] tracking-[0.1em] font-medium">Status</th>
+                      {isAdmin && (
+                        <th className="px-4 py-3 text-center text-[#aaaaaa] uppercase text-[0.68rem] tracking-[0.1em] font-medium">Ações</th>
+                      )}
                     </tr>
                   </thead>
                   <tbody>
@@ -1222,6 +1227,27 @@ const ContainerTracking = () => {
                               </Tooltip>
                             </TooltipProvider>
                           </td>
+                          {isAdmin && (
+                            <td className="px-3 py-3 text-center">
+                              <TooltipProvider>
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <Button
+                                      variant="ghost"
+                                      size="icon"
+                                      onClick={() => handleDeleteContainer(container.id, container.container)}
+                                      className="h-8 w-8 text-red-500 hover:text-red-400 hover:bg-red-500/10"
+                                    >
+                                      <Trash2 className="h-4 w-4" />
+                                    </Button>
+                                  </TooltipTrigger>
+                                  <TooltipContent>
+                                    <p className="text-xs">Remover container do monitoramento</p>
+                                  </TooltipContent>
+                                </Tooltip>
+                              </TooltipProvider>
+                            </td>
+                          )}
                         </tr>
                       );
                     })}
