@@ -3187,12 +3187,8 @@ serve(async (req) => {
               `, [containerNum.trim()]);
               
               if (existing && existing.length > 0) {
-                await client.execute(`
-                  UPDATE ai_agente.t_dachser_container 
-                  SET vessel = ?, voyage = ?, origem = ?, destino = ?, consignee = ?
-                  WHERE container = ?
-                `, [vessel, voyage, origem, destino, consignee, containerNum.trim()]);
-                console.log(`✅ Container ${containerNum} updated in t_dachser_container`);
+                // Container already exists - skip to avoid duplicity
+                console.log(`⚠️ Container ${containerNum} already exists in t_dachser_container, skipping save`);
               } else {
                 await client.execute(`
                   INSERT INTO ai_agente.t_dachser_container 
