@@ -386,7 +386,7 @@ export default function SubmeterManifestHbl() {
               </div>
             </div>
 
-            <h3 className="text-xs tracking-[0.22em] uppercase mb-4 text-white">Envie os arquivos Draft HBL (múltiplos PDFs):</h3>
+            <h3 className="text-xs tracking-[0.22em] uppercase mb-4 text-white font-bold">Envie os arquivos Draft HBL (múltiplos PDFs):</h3>
           
             <UploadZone onFilesSelected={handleFilesSelected} accept=".pdf" multiple={true} label="Arraste e solte ou clique para enviar" description="Aceito apenas: PDF (máx. 10 arquivos, 20MB cada)" />
 
