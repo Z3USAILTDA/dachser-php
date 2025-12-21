@@ -27,6 +27,16 @@ function parseFlightsCsv(csv: string): string[] {
   return valid;
 }
 
+// Normaliza códigos de armadores da API para nomes legíveis no banco
+function normalizeShippingLine(code: string): string {
+  const map: Record<string, string> = {
+    'CMA_CGM': 'CMA CGM',
+    'HAPAG_LLOYD': 'HAPAG-LLOYD',
+    'YANG_MING': 'YANG MING',
+  };
+  return map[code] || code;
+}
+
 async function curlJson(url: string, headers: Record<string, string> = {}, timeout = 25000): Promise<any> {
   try {
     const controller = new AbortController();
@@ -1506,7 +1516,7 @@ serve(async (req) => {
               trackingData.eta ? new Date(trackingData.eta) : null,
               trackingData.vessel,
               trackingData.last_event,
-              successfulShippingLine,
+              normalizeShippingLine(successfulShippingLine),
               containerId
             ]);
             updated++;
