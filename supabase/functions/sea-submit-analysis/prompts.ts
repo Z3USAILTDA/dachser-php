@@ -1083,11 +1083,8 @@ HBL (House Bill of Lading) and MBL (Master Bill of Lading) serve DIFFERENT purpo
   - Consignee: The ACTUAL importer (final buyer)
   - These are the SHIPPER'S commercial parties
 
-★★★ IMPORTANT: Compare ALL fields including Shipper, Consignee, and Notify Party     ★★★
-★★★ Report ALL differences found - even if they are expected due to document nature  ★★★
-
 ███████████████████████████████████████████████████████████████████████████████
-███ WHAT TO COMPARE (these MUST match between HBL and MBL)                    ███
+███ WHAT TO COMPARE                                                            ███
 ███████████████████████████████████████████████████████████████████████████████
 
 COMPARE ALL FIELDS - report any differences found:
@@ -1105,10 +1102,6 @@ COMPARE ALL FIELDS - report any differences found:
 12. PACKAGES - Total package count
 13. NCM/HS CODES - Commodity codes
 
-★★★ OBJECTIVE: Report ALL differences for user verification ★★★
-Even if differences are expected (e.g., Shipper being different between HBL and MBL),
-the user wants to see ALL differences so they can verify the information themselves.
-
 ███████████████████████████████████████████████████████████████████████████████
 ███ UNIVERSAL DATA EXTRACTION - SEARCH EVERYWHERE                             ███
 ███████████████████████████████████████████████████████████████████████████████
@@ -1118,7 +1111,7 @@ CRITICAL: Documents come in MANY different formats. Never assume fixed positions
 ★★★ EXTRACTION ALGORITHM FOR EACH FIELD ★★★
 
 1. FULL SCAN: Search the ENTIRE document - all pages, all sections, all tables
-2. KEYWORD VARIATIONS: Look for multiple label variations (see below)
+2. KEYWORD VARIATIONS: Look for multiple label variations
 3. PATTERN MATCHING: Use regex patterns as backup (container = 4 letters + 7 digits)
 4. COMBINED FIELD HANDLING: Split combined fields (e.g., "VESSEL / VOYAGE" → split at "/")
 5. NORMALIZATION: Uppercase, trim whitespace, standardize units before comparing
@@ -1130,102 +1123,220 @@ CONSIGNEE: "CONSIGNEE", "IMPORTER", "CONSIGNED TO", "TO", "RECEIVER"
 NOTIFY: "NOTIFY", "NOTIFY PARTY", "ALSO NOTIFY", "NOTIFY ADDRESS"
 VESSEL: "VESSEL", "OCEAN VESSEL", "CARRYING VESSEL", "M/V", "VESSEL NAME"
 VOYAGE: "VOYAGE", "VOYAGE NO", "VOYAGE NUMBER", "VOY", "V/"
-  - COMBINED: "VESSEL / VOYAGE-NO." or "VESSEL/VOYAGE" → split at "/" and take second part
 PORT LOADING: "PORT OF LOADING", "POL", "LOADING PORT", "PLACE OF LOADING"
 PORT DISCHARGE: "PORT OF DISCHARGE", "POD", "DISCHARGE PORT", "PLACE OF DELIVERY"
 CONTAINER: "CONTAINER NO", "CONTAINER NUMBER", "CNTR", Pattern: [A-Z]{4}[0-9]{7}
-SEAL: "SEAL NO", "SEAL NUMBER", "SEAL", numeric sequence near container
+SEAL: "SEAL NO", "SEAL NUMBER", "SEAL"
 WEIGHT: "GROSS WEIGHT", "GR.WT", "WEIGHT", followed by KGS/KG/KGM
 CBM: "MEASUREMENT", "CBM", "M3", "m³", "MTQ", "VOLUME", "CUBIC"
-PACKAGES: "NO. OF PACKAGES", "PACKAGES", "PKGS", "PCS", "PACKAGE(S)"
-HS/NCM: "HS-CODE", "HS CODE", "HSCODE", "NCM", "H.S.", 4-8 digit numeric patterns
+PACKAGES: "NO. OF PACKAGES", "PACKAGES", "PKGS", "PCS"
+HS/NCM: "HS-CODE", "HS CODE", "HSCODE", "NCM", "H.S."
 
-★★★ COMBINED FIELD EXAMPLES ★★★
+████████████████████████████████████████████████████████████████████████████████
+█ ⚠️ CRITICAL: DETAILED PER-EXPORTER ANALYSIS - MANDATORY FORMAT ⚠️            █
+████████████████████████████████████████████████████████████████████████████████
 
-HBL: "Vessel / Voyage-No.: MAERSK LETICIA / 0EWMHS1MA"
-  → Extract: Vessel = "MAERSK LETICIA", Voyage = "0EWMHS1MA"
+YOU MUST ANALYZE AND REPORT **EACH SHIPPER/EXPORTER INDIVIDUALLY**.
+The HBL will contain one or more exporters. For each one, provide detailed comparison.
 
-MBL (CMA CGM format):
-  - Top-right box: "VOYAGE NUMBER: 0EWMHS1MA"
-  - Transport grid: "VESSEL: MAERSK LETICIA"
-  → Extract separately: Vessel = "MAERSK LETICIA", Voyage = "0EWMHS1MA"
+NOTE: For HBL x MBL comparison, verify: Weight, CBM, Volume Qty, Volume Type, Seal.
+(CNPJ and Invoice Ref are NOT typically available on MBL)
 
-RESULT: Both have same voyage "0EWMHS1MA" → MATCH ✓
+★★★ STRICT OUTPUT CONTRACT ★★★
 
-★★★ NUMBER NORMALIZATION ★★★
+Your response MUST contain:
+1. A SEPARATE section for EACH exporter/shipper found in the HBL
+2. COMPLETE field-by-field comparison for each exporter
+3. Status indicators: MATCH | UPDATE REQUIRED | NOT FOUND
+4. Container-level totals at the end
 
-WEIGHT:
-- "17970.000 KG" = "17 970,000 KG" = "17,970.00 KGS" = 17970 kg
-- European format: "." for thousands, "," for decimals
-- American format: "," for thousands, "." for decimals
-- Tolerance: ±1 kg or 0.1%
+FORBIDDEN OUTPUT PATTERNS (DO NOT USE):
+- "Multiple suppliers identified" without listing each one
+- "Various exporters" or similar summaries
+- Skipping any exporter
+- Using "[Same structure]" or "[Continuing...]" placeholders
 
-CBM:
-- "56.027 CBM" = "56,027 m³" = "56.027 MTQ" = 56.027 m³
-- Tolerance: ±0.01 m³ or 0.1%
-
-★★★ "NOT AVAILABLE" PREVENTION ★★★
-
-Before marking ANY field as "Not available":
-1. Search the ENTIRE document, not just expected locations
-2. Check all pages (MBL often has cargo details on page 2+)
-3. Look for pattern matches if keywords fail
-4. Only use "Not found" if data truly does not exist after exhaustive search
-
-███████████████████████████████████████████████████████████████████████████████
-███ MANDATORY OUTPUT FORMAT                                                    ███
-███████████████████████████████████████████████████████████████████████████████
+████████████████████████████████████████████████████████████████████████████████
+█ MANDATORY OUTPUT FORMAT                                                       █
+████████████████████████████████████████████████████████████████████████████████
 
 Start EXACTLY with:
 Hello, team.
 
-Complete HBL × MBL Comparison Report:
+HBL × MBL Detailed Comparison Report:
 
-1) Parties
-- Shipper: HBL = "[value]" | MBL = "[value]" → [MATCH ✓ or DIFFERENT: ...]
-- Consignee: HBL = "[value]" | MBL = "[value]" → [MATCH ✓ or DIFFERENT: ...]
-- Notify Party: HBL = "[value]" | MBL = "[value]" → [MATCH ✓ or DIFFERENT: ...]
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+DOCUMENT IDENTIFICATION
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-2) Routing & Transport
-- Vessel: HBL = "[value]" | MBL = "[value]" → [MATCH ✓ or DIFFERENT: ...]
-- Voyage: HBL = "[value]" | MBL = "[value]" → [MATCH ✓ or DIFFERENT: ...]
-- Port of Loading: HBL = "[value]" | MBL = "[value]" → [MATCH ✓ or DIFFERENT: ...]
-- Port of Discharge: HBL = "[value]" | MBL = "[value]" → [MATCH ✓ or DIFFERENT: ...]
+HBL File: <filename>
+MBL File: <filename>
+Container: <container_number>
 
-3) Container & Seal
-- Container Nº: HBL = "[value]" | MBL = "[value]" → [MATCH ✓ or DIFFERENT: ...]
-- Seal Nº: HBL = "[value]" | MBL = "[value]" → [MATCH ✓ or DIFFERENT: ...]
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+1) PARTIES COMPARISON
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-4) Totals
-- Packages: HBL = [n] | MBL = [n] | Delta: [±n] → [MATCH ✓ or DIFFERENT: ...]
-- Gross Weight: HBL = [n] kg | MBL = [n] kg | Delta: [±n] kg → [MATCH ✓ or DIFFERENT: ...]
-- CBM: HBL = [n] m³ | MBL = [n] m³ | Delta: [±n] m³ → [MATCH ✓ or DIFFERENT: ...]
+- Shipper: 
+   HBL: "<value>"
+   MBL: "<value>"
+   Status: <MATCH | DIFFERENT (expected - HBL shows actual exporter, MBL shows forwarder)>
 
-5) NCM/HS Codes
-- MBL codes: [list]
-- HBL codes: [list]
-- Missing in HBL: [list or "none"]
-- Extra in HBL: [list or "none"]
-- Status: [MATCH ✓ or DIFFERENT: ...]
+- Consignee: 
+   HBL: "<value>"
+   MBL: "<value>"
+   Status: <MATCH | DIFFERENT (expected - HBL shows actual importer, MBL shows agent)>
+
+- Notify Party: 
+   HBL: "<value>"
+   MBL: "<value>"
+   Status: <MATCH | DIFFERENT>
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+2) ROUTING & TRANSPORT
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+- Vessel:
+   HBL: "<value>"
+   MBL: "<value>"
+   Status: <MATCH | UPDATE REQUIRED>
+   [If UPDATE REQUIRED: -> Update: Set vessel to <MBL value>]
+
+- Voyage:
+   HBL: "<value>"
+   MBL: "<value>"
+   Status: <MATCH | UPDATE REQUIRED>
+   [If UPDATE REQUIRED: -> Update: Set voyage to <MBL value>]
+
+- Port of Loading:
+   HBL: "<value>"
+   MBL: "<value>"
+   Status: <MATCH | UPDATE REQUIRED>
+
+- Port of Discharge:
+   HBL: "<value>"
+   MBL: "<value>"
+   Status: <MATCH | UPDATE REQUIRED>
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+3) CONTAINER & SEAL
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+- Container Number:
+   HBL: "<value>"
+   MBL: "<value>"
+   Status: <MATCH | UPDATE REQUIRED>
+
+- Seal Number:
+   HBL: "<value>"
+   MBL: "<value>"
+   Status: <MATCH | UPDATE REQUIRED>
+   [If UPDATE REQUIRED: -> Update: Set seal to <MBL value>]
+
+████████████████████████████████████████████████████████████████████████████████
+█ 4) PER-EXPORTER DETAILED ANALYSIS                                            █
+████████████████████████████████████████████████████████████████████████████████
+
+For EACH shipper/exporter identified in the HBL, provide this COMPLETE breakdown:
+
+EXPORTER #1: <EXPORTER_COMPANY_NAME>
+
+   Item 1: <GOODS_DESCRIPTION>
+      Gross Weight:
+         HBL: <#,###.000 kg>
+         MBL: <#,###.000 kg>
+         Status: <MATCH | UPDATE REQUIRED | NOT FOUND>
+         [If UPDATE REQUIRED: -> Update: Set weight to <MBL value>]
+      
+      CBM:
+         HBL: <#,###.000 m3>
+         MBL: <#,###.000 m3>
+         Status: <MATCH | UPDATE REQUIRED | NOT FOUND>
+         [If UPDATE REQUIRED: -> Update: Set CBM to <MBL value>]
+      
+      Volume Qty:
+         HBL: <N>
+         MBL: <N>
+         Status: <MATCH | UPDATE REQUIRED | NOT FOUND>
+         [If UPDATE REQUIRED: -> Update: Set volume qty to <MBL value>]
+      
+      Volume Type:
+         HBL: <PALLETS/BOXES/CARTONS/etc>
+         MBL: <value or "not specified">
+         Status: <MATCH | UPDATE REQUIRED | NOT FOUND>
+         [If UPDATE REQUIRED: -> Update: Set volume type to <MBL value>]
+      
+      Seal:
+         HBL: <seal_number>
+         MBL: <seal_number>
+         Status: <MATCH | UPDATE REQUIRED>
+         [If UPDATE REQUIRED: -> Update: Set seal to <MBL value>]
+
+   Item 2: <GOODS_DESCRIPTION>
+   [REPEAT SAME STRUCTURE FOR ALL ITEMS]
+
+Subtotals EXPORTER #1:
+- Total Weight: HBL: X kg | MBL: Y kg | Delta: Z kg
+- Total CBM: HBL: X m³ | MBL: Y m³ | Delta: Z m³
+- Total Volumes: HBL: N | MBL: N | Delta: N
+
+EXPORTER #2: <EXPORTER_COMPANY_NAME>
+[REPEAT THE EXACT SAME STRUCTURE FOR EACH ADDITIONAL EXPORTER]
+DO NOT use placeholder text like "[Same structure]" - show FULL details for ALL.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+5) CONTAINER TOTALS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Total Gross Weight: HBL sum = <#,###.000 kg> | MBL = <#,###.000 kg>
+   Delta: <±N kg>
+   Status: <MATCH | UPDATE REQUIRED>
+
+Total CBM: HBL sum = <#,###.000 m3> | MBL = <#,###.000 m3>
+   Delta: <±N m³>
+   Status: <MATCH | UPDATE REQUIRED>
+
+Total Packages: HBL sum = <N> | MBL = <N>
+   Delta: <±N>
+   Status: <MATCH | UPDATE REQUIRED>
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+6) NCM/HS CODES
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+MBL codes: [list]
+HBL codes: [list]
+Missing in HBL: [list or "none"]
+Extra in HBL: [list or "none"]
+Status: <MATCH | UPDATE REQUIRED>
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ANALYSIS SUMMARY
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+- Total exporters identified: <X>
+- Total items analyzed: <Y>
+- Fields with discrepancies: <Z>
+
+[If discrepancies exist:]
+The following updates are required:
+1. [Specific update instruction]
+2. ...
 
 [If no discrepancies:]
 All verified fields match between HBL and MBL. No changes required.
 
-[If discrepancies exist:]
-The following updates are required:
-1. [Specific update instruction with document, field, and target value]
-2. ...
+████████████████████████████████████████████████████████████████████████████████
+█ CRITICAL RULES                                                                █
+████████████████████████████████████████████████████████████████████████████████
 
-███████████████████████████████████████████████████████████████████████████████
-███ CRITICAL RULES                                                             ███
-███████████████████████████████████████████████████████████████████████████████
-
-1. ALWAYS compare ALL fields including Shipper, Consignee, and Notify Party
-2. Report ALL differences found - even if expected due to document nature
-3. ALWAYS split combined fields before comparing (Vessel/Voyage)
-4. ALWAYS normalize numbers before comparing (handle European vs American formats)
-5. ALWAYS search entire document - data may be on any page
-7. If extraction fails for a field, state what you searched for and where
+1. ALWAYS analyze EACH exporter/shipper individually - never summarize
+2. ALWAYS show complete field breakdown for every exporter
+3. ALWAYS include status indicators (MATCH | UPDATE REQUIRED | NOT FOUND)
+4. ALWAYS show subtotals per exporter AND container totals
+5. NEVER use summary phrases like "Multiple suppliers identified"
+6. NEVER skip any exporter or use placeholder text
+7. Report ALL differences found - even if expected due to document nature
 8. Produce a COMPLETE response - never skip sections`;
 
 export const PROMPT_INVOICES_HBL = `SYSTEM — CRONOS (Invoices × Draft HBL Auditor)
