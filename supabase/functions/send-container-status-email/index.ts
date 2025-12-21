@@ -20,41 +20,104 @@ interface EmailRequest {
   email_type?: 'interno' | 'cliente'; // Tipo de email
 }
 
-// Tradução de status para português (cliente)
+// Tradução de status para português - status real traduzido
 function getCustomerFriendlyStatus(status: string | null | undefined): string {
   if (!status) return 'N/A';
   
   const statusMap: Record<string, string> = {
-    'BOOKED': 'Reserva Confirmada',
-    'BOOKING': 'Reserva Confirmada',
-    'EMPTY_TO_SHIPPER': 'Container Disponibilizado',
-    'GATE_IN_FULL': 'Entrada no Terminal',
-    'LOADED': 'Carregado no Navio',
-    'LOADED_ON_VESSEL': 'Carregado no Navio',
-    'Loaded on board': 'Carregado no Navio',
-    'DEPARTED': 'Em Trânsito',
-    'VESSEL_DEPARTURE': 'Em Trânsito',
-    'Departed by Vessel': 'Em Trânsito',
-    'IN_TRANSIT': 'Em Trânsito',
-    'TRANSSHIPMENT': 'Em Transbordo',
-    'ARRIVED': 'Chegou ao Destino',
-    'VESSEL_ARRIVAL': 'Chegou ao Destino',
-    'DISCHARGED': 'Descarregado',
-    'CUSTOMS_RELEASED': 'Liberado pela Alfândega',
-    'GATE_OUT': 'Liberado para Retirada',
-    'DELIVERED': 'Entregue',
-    'Container to consignee': 'Entregue ao Cliente',
-    'EMPTY_RETURNED': 'Container Devolvido',
+    // Booking / Reserva
+    'BOOKED': 'Reserva confirmada',
+    'BOOKING': 'Reserva confirmada',
+    'BOOKING_CONFIRMED': 'Reserva confirmada',
+    
+    // Coleta / Pickup
+    'EMPTY_TO_SHIPPER': 'Coleta da carga',
+    'Empty to shipper': 'Coleta da carga',
+    'PICKED_UP': 'Carga coletada',
+    'PICKUP': 'Coleta da carga',
+    'EMPTY_PICK_UP': 'Container vazio retirado',
+    
+    // Entrada no terminal
+    'GATE_IN': 'Entrada no terminal',
+    'GATE_IN_FULL': 'Entrada no terminal',
+    'RECEIVED': 'Recebido no terminal',
+    'RECEIVED_FOR_EXPORT': 'Recebido para exportação',
+    'Received for export transfer': 'Recebido para transferência',
+    
+    // Carregamento
+    'LOADED': 'Carregado no navio',
+    'LOADING': 'Carregando',
+    'LOADED_ON_VESSEL': 'Carregado no navio',
+    'Loaded on board': 'Carregado no navio',
+    'LOAD': 'Carregado',
+    
+    // Partida / Em trânsito
+    'DEPARTED': 'Em trânsito marítimo',
+    'DEPARTURE': 'Partida do navio',
+    'VESSEL_DEPARTURE': 'Partida do navio',
+    'Departed by Vessel': 'Em trânsito marítimo',
+    'Vessel Departure': 'Partida do navio',
+    'IN_TRANSIT': 'Em trânsito marítimo',
+    'Container in transit': 'Em trânsito marítimo',
+    'Container in transit for export': 'Em trânsito para exportação',
+    
+    // Transbordo
+    'TRANSSHIPMENT': 'Em transbordo',
+    'TRANSHIPMENT_ARRIVAL': 'Chegada em transbordo',
+    'TRANSHIPMENT_DEPARTURE': 'Partida de transbordo',
+    
+    // Chegada
+    'ARRIVED': 'Chegada no porto de destino',
+    'ARRIVAL': 'Chegada no porto',
+    'VESSEL_ARRIVAL': 'Chegada do navio',
+    'ARRIVED_AT_PORT': 'Chegada no porto',
+    
+    // Descarga
+    'DISCHARGED': 'Descarregado do navio',
+    'DISCHARGE': 'Descarga do navio',
+    'UNLOADED': 'Descarregado',
+    
+    // Alfândega
+    'CUSTOMS_HOLD': 'Retenção aduaneira',
+    'CUSTOMS_RELEASED': 'Liberado pela alfândega',
+    'CUSTOMS_INSPECTION': 'Inspeção aduaneira',
+    'CUSTOMS_CLEARED': 'Desembaraço concluído',
+    
+    // Saída do terminal / Liberação
+    'GATE_OUT': 'Saída do terminal',
+    'GATE_OUT_FULL': 'Saída do terminal',
+    'GATE_OUT_EMPTY': 'Saída de container vazio',
+    'RELEASED': 'Liberado para retirada',
+    
+    // Entrega
+    'DELIVERED': 'Entregue ao cliente',
+    'DELIVERY': 'Em entrega',
+    'CONTAINER_TO_CONSIGNEE': 'Entregue ao consignatário',
+    'Container to consignee': 'Entregue ao consignatário',
+    
+    // Devolução de vazio
+    'EMPTY_RETURNED': 'Container vazio devolvido',
+    'EMPTY_IN': 'Devolução de container vazio',
+    'EMPTY_RECEIVED': 'Container vazio recebido',
+    'Empty returned by Truck': 'Vazio devolvido por caminhão',
+    'Empty received at CY': 'Vazio recebido no pátio',
+    'Empty in depot': 'Vazio no depósito',
+    
+    // Alertas
     'DELAYED': 'Atrasado',
-    'Received for export transfer': 'Recebido para Transferência',
-    'Container in transit': 'Em Trânsito',
-    'Empty to shipper': 'Container Disponibilizado',
+    'DELAY': 'Atraso',
+    'CANCELLED': 'Cancelado',
+    'MISSED_CONNECTION': 'Conexão perdida',
+    'HELD': 'Retido',
+    'HOLD': 'Retido',
   };
   
+  // Busca exata
   if (statusMap[status]) {
     return statusMap[status];
   }
   
+  // Busca case-insensitive
   const upperStatus = status.toUpperCase().replace(/[_\s-]/g, '_');
   for (const [key, value] of Object.entries(statusMap)) {
     if (key.toUpperCase().replace(/[_\s-]/g, '_') === upperStatus) {
@@ -62,6 +125,21 @@ function getCustomerFriendlyStatus(status: string | null | undefined): string {
     }
   }
   
+  // Busca parcial para status não mapeados
+  const lowerStatus = status.toLowerCase();
+  if (lowerStatus.includes('empty') && lowerStatus.includes('shipper')) return 'Coleta da carga';
+  if (lowerStatus.includes('load')) return 'Carregado no navio';
+  if (lowerStatus.includes('depart')) return 'Em trânsito marítimo';
+  if (lowerStatus.includes('transit')) return 'Em trânsito marítimo';
+  if (lowerStatus.includes('arriv')) return 'Chegada no porto';
+  if (lowerStatus.includes('discharg')) return 'Descarregado do navio';
+  if (lowerStatus.includes('deliver')) return 'Entregue ao cliente';
+  if (lowerStatus.includes('gate') && lowerStatus.includes('out')) return 'Saída do terminal';
+  if (lowerStatus.includes('gate') && lowerStatus.includes('in')) return 'Entrada no terminal';
+  if (lowerStatus.includes('custom')) return 'Em processo aduaneiro';
+  if (lowerStatus.includes('transship')) return 'Em transbordo';
+  
+  // Retorna o status original se não houver tradução
   return status;
 }
 
