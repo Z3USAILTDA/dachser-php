@@ -840,123 +840,121 @@ DRAFT HBL: <exact_filename>
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 ████████████████████████████████████████████████████████████████████████████████
+█ MANIFEST XLSX COLUMN MAPPING - CRITICAL EXTRACTION RULES                      █
+████████████████████████████████████████████████████████████████████████████████
+
+YOU MUST USE THESE COLUMN MAPPINGS WHEN EXTRACTING FROM MANIFEST XLSX:
+
+COLUMN MAPPING TABLE:
+| Field to Extract    | XLSX Column Name(s)                                      |
+|---------------------|----------------------------------------------------------|
+| EXPORTER/SHIPPER    | "Supplier Name" column - EACH UNIQUE VALUE = ONE EXPORTER |
+| CNPJ                | "VAT No." column (this is the CONSIGNEE's CNPJ)          |
+| SEAL                | Header "Seal No." field OR "ZF REF" column for sub-seals |
+| GROSS WEIGHT        | "Total Gross Weight" OR "Weight after Weighting" column  |
+| CBM                 | "CBM [m³]" OR "CBM" column                               |
+| VOLUME QTY          | "QTY Packages" column                                    |
+| VOLUME TYPE         | "Kind of Packaging" column                               |
+| INVOICE REF         | "Delivery Note" OR "Reference" column                    |
+| HS CODE/NCM         | "HS Code" column                                         |
+| GOODS DESCRIPTION   | "Description" OR "Product Description" column            |
+
+GROUPING RULE - ABSOLUTELY CRITICAL:
+- Group ALL items by "Supplier Name" to get per-exporter totals
+- Each UNIQUE "Supplier Name" value = one EXPORTER in your analysis
+- Sum weights, CBM, and packages PER SUPPLIER
+- The manifest may contain 10-30+ different suppliers/exporters in a single container
+
+HANDLING "within" VALUES - IMPORTANT:
+- When "QTY Packages" shows "within", the item is INCLUDED in the previous row's package count
+- When "CBM" shows "within", the volume is INCLUDED in the previous CBM total
+- When "Weight" shows "WITHIN" or "within", it is INCLUDED in the previous weight total
+- DO NOT count "within" rows as separate packages/volumes - they are SUB-ITEMS of the previous row
+
+ITEMS GROUPING BY NTG ID:
+- Items with the same "NTG ID" are grouped together
+- Only the FIRST row of a group has the package count
+- Subsequent rows with same NTG ID show "within" for their values
+- SUM all weights/CBM within each NTG ID group, then by Supplier Name
+
+████████████████████████████████████████████████████████████████████████████████
 █ CRITICAL: COMPLETE EXPORTER EXTRACTION                                        █
 ████████████████████████████████████████████████████████████████████████████████
 
 EXTRACTION RULES - YOU MUST FOLLOW:
 1. Extract ALL exporters from Manifest - there is NO LIMIT
-2. Look for: "Shipper", "Exporter", "Supplier", "Vendor", "Seller" columns/fields
+2. Look for: "Supplier Name" as primary, then "Shipper", "Exporter", "Vendor", "Seller"
 3. Each unique company name = one exporter
 4. NEVER stop after the first exporter - continue until ALL are processed
-5. If you find only 1 exporter but document appears to have more sections, RE-ANALYZE
+5. If you find only 1 exporter but the manifest appears to have more rows, RE-ANALYZE the "Supplier Name" column
 6. Count total exporters and report at the end: "Total exporters identified: X"
 
 ████████████████████████████████████████████████████████████████████████████████
-█ PER-EXPORTER DETAILED ANALYSIS (MANIFEST x HBL)                               █
+█ SINGLE-LINE OUTPUT FORMAT - MANDATORY FOR ALL FIELDS                          █
 ████████████████████████████████████████████████████████████████████████████████
 
-For EACH EXPORTER identified in the Manifest, provide COMPLETE breakdown.
-CRITICAL: Show ALL fields with their values, even if they match.
-Use status indicators: MATCH | UPDATE REQUIRED | NOT FOUND
+CRITICAL: Each field comparison MUST be on a SINGLE LINE using this exact format:
+- <Field>: Manifest: <value> | HBL: <value> | Status: <MATCH|UPDATE REQUIRED|NOT FOUND>
 
-EXPORTER #1: <EXPORTER_COMPANY_NAME>
+If UPDATE REQUIRED, add the update instruction on the next line with arrow:
+  → Update: <action to take>
 
-   CNPJ:
-      Manifest: <XX.XXX.XXX/XXXX-XX or "not specified">
-      HBL: <value or "not found">
-      Status: <MATCH | UPDATE REQUIRED | NOT FOUND>
-      [If UPDATE REQUIRED: -> Update: Set CNPJ to <manifest value>]
+EXAMPLE OUTPUT (CORRECT FORMAT):
 
-   Seal:
-      Manifest: <seal_number or "not specified">
-      HBL: <value or "not found">
-      Status: <MATCH | UPDATE REQUIRED | NOT FOUND>
-      [If UPDATE REQUIRED: -> Update: Set seal to <manifest value>]
+EXPORTER #1: CONTINENTAL AUTOMOTIVE GMBH
+- CNPJ: Manifest: 12.345.678/0001-90 | HBL: 12.345.678/0001-90 | Status: MATCH
+- Seal: Manifest: NTG001053 | HBL: NTG001053 | Status: MATCH
 
-   Item 1: <GOODS_DESCRIPTION>
-      Gross Weight:
-         Manifest: <#,###.000 kg>
-         HBL: <#,###.000 kg>
-         Status: <MATCH | UPDATE REQUIRED | NOT FOUND>
-         [If UPDATE REQUIRED: -> Update: Set weight to <manifest value>]
-      
-      CBM:
-         Manifest: <#,###.000 m3>
-         HBL: <#,###.000 m3>
-         Status: <MATCH | UPDATE REQUIRED | NOT FOUND>
-         [If UPDATE REQUIRED: -> Update: Set CBM to <manifest value>]
-      
-      Volume Qty:
-         Manifest: <N>
-         HBL: <N>
-         Status: <MATCH | UPDATE REQUIRED | NOT FOUND>
-         [If UPDATE REQUIRED: -> Update: Set volume qty to <manifest value>]
-      
-      Volume Type:
-         Manifest: <PALLETS/BOXES/CARTONS/etc>
-         HBL: <value or "not specified">
-         Status: <MATCH | UPDATE REQUIRED | NOT FOUND>
-         [If UPDATE REQUIRED: -> Update: Set volume type to <manifest value>]
-      
-      Invoice Ref:
-         Manifest: <invoice_number or "not specified">
-         HBL: <value or "not found">
-         Status: <MATCH | UPDATE REQUIRED | NOT FOUND>
-         [If UPDATE REQUIRED: -> Update: Add invoice reference <manifest value>]
+Item 1: CAR PARTS - ELECTRONIC COMPONENTS
+- Gross Weight: Manifest: 1,250.000 kg | HBL: 1,250.000 kg | Status: MATCH
+- CBM: Manifest: 8.500 m³ | HBL: 8.500 m³ | Status: MATCH
+- Volume Qty: Manifest: 15 | HBL: 15 | Status: MATCH
+- Volume Type: Manifest: PALLETS | HBL: PALLETS | Status: MATCH
+- Invoice Ref: Manifest: INV-2025-001 | HBL: INV-2025-001 | Status: MATCH
 
-   Item 2: <GOODS_DESCRIPTION>
-      [Same structure - ALL fields with values and status]
+Item 2: RUBBER SEALS
+- Gross Weight: Manifest: 320.000 kg | HBL: 300.000 kg | Status: UPDATE REQUIRED
+  → Update: Set weight to 320.000 kg
+- CBM: Manifest: 2.100 m³ | HBL: 2.100 m³ | Status: MATCH
+- Volume Qty: Manifest: 8 | HBL: 8 | Status: MATCH
+- Volume Type: Manifest: BOXES | HBL: BOXES | Status: MATCH
+- Invoice Ref: Manifest: INV-2025-002 | HBL: INV-2025-002 | Status: MATCH
 
-   Subtotals:
-      Total Weight: Manifest = <#,###.000 kg> | HBL = <#,###.000 kg> | Delta: <+/-#,###.000 kg>
-      Total CBM: Manifest = <#,###.000 m3> | HBL = <#,###.000 m3> | Delta: <+/-#,###.000 m3>
-      Total Volumes: Manifest = <N> | HBL = <N> | Delta: <+/-N>
+Subtotals EXPORTER #1:
+- Total Weight: Manifest: 1,570.000 kg | HBL: 1,550.000 kg | Delta: -20.000 kg
+- Total CBM: Manifest: 10.600 m³ | HBL: 10.600 m³ | Delta: 0.000 m³
+- Total Volumes: Manifest: 23 | HBL: 23 | Delta: 0
 
+EXPORTER #2: BOSCH AUTOMOTIVE PARTS
+- CNPJ: Manifest: 98.765.432/0001-10 | HBL: 98.765.432/0001-10 | Status: MATCH
+- Seal: Manifest: NTG001053 | HBL: NTG001053 | Status: MATCH
 
-EXPORTER #2: <NEXT_EXPORTER_NAME>
-   [Same complete structure as above]
+Item 1: BRAKE SYSTEMS
+- Gross Weight: Manifest: 2,800.000 kg | HBL: 2,800.000 kg | Status: MATCH
+- CBM: Manifest: 14.400 m³ | HBL: 14.400 m³ | Status: MATCH
+- Volume Qty: Manifest: 19 | HBL: 19 | Status: MATCH
+- Volume Type: Manifest: PALLETS | HBL: PALLETS | Status: MATCH
+- Invoice Ref: Manifest: DN-789456 | HBL: DN-789456 | Status: MATCH
 
-
-After ALL exporters, show CONTAINER-LEVEL TOTALS:
+Subtotals EXPORTER #2:
+- Total Weight: Manifest: 2,800.000 kg | HBL: 2,800.000 kg | Delta: 0.000 kg
+- Total CBM: Manifest: 14.400 m³ | HBL: 14.400 m³ | Delta: 0.000 m³
+- Total Volumes: Manifest: 19 | HBL: 19 | Delta: 0
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
 CONTAINER TOTALS:
-
-Total Gross Weight: Manifest = <#,###.000 kg> | HBL(s) = <#,###.000 kg>
-   Status: <MATCH | UPDATE REQUIRED>
-
-Total CBM: Manifest = <#,###.000 m3> | HBL(s) = <#,###.000 m3>
-   Status: <MATCH | UPDATE REQUIRED>
-
-Total Volumes: Manifest = <N> | HBL(s) = <N>
-   Status: <MATCH | UPDATE REQUIRED>
-
+- Total Gross Weight: Manifest: 4,370.000 kg | HBL(s): 4,350.000 kg | Status: UPDATE REQUIRED
+  → Update: Adjust HBL weights so total equals 4,370.000 kg
+- Total CBM: Manifest: 25.000 m³ | HBL(s): 25.000 m³ | Status: MATCH
+- Total Volumes: Manifest: 42 | HBL(s): 42 | Status: MATCH
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 ANALYSIS SUMMARY:
-- Total exporters identified: <X>
-- Total items analyzed: <Y>
-- Fields with discrepancies: <Z>
+- Total exporters identified: 2
+- Total items analyzed: 3
+- Fields with discrepancies: 1
 
 ████████████████████████████████████████████████████████████████████████████████
-
-NCM Codes:
-   Manifest NCMs (reference): [sorted unique list]
-   BL NCMs in this HBL: [sorted list]
-   Missing in this HBL: [list or "none"]
-   Extra in this HBL: [list or "none"]
-   Status: <MATCH | UPDATE REQUIRED>
-
-Container Number:
-   Manifest container: <XXXX1234567>
-   HBL container: <value found>
-   Status: <MATCH | UPDATE REQUIRED>
-
-Shipper:
-   Manifest shipper: <exact normalized>
-   HBL shipper: <exact>
-   Status: <MATCH | UPDATE REQUIRED>
 
 HANDLING LIMITED OR UNREADABLE FILES
 - If file extraction yields very limited text (< 200 chars), still attempt to produce analysis structure.
