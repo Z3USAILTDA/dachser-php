@@ -758,12 +758,16 @@ const ContainerTracking = () => {
   const endIndex = startIndex + itemsPerPage;
   const currentContainers = filteredContainers.slice(startIndex, endIndex);
 
-  // Dashboard stats with new categories
+  // Dashboard stats with new categories - exclude EXCLUDED_CONTAINERS for consistency with table
   const stats = useMemo(() => {
-    const total = containersList.length;
-    const emTransito = containersList.filter((c) => isEmTransito(c.last_event) && !isEntregue(c.last_event) && !isEmAlerta(c.last_event)).length;
-    const emAlerta = containersList.filter((c) => isEmAlerta(c.last_event)).length;
-    const entregues = containersList.filter((c) => isEntregue(c.last_event)).length;
+    const containersAtivos = containersList.filter(
+      c => !EXCLUDED_CONTAINERS.includes(c.container?.trim().toUpperCase())
+    );
+    
+    const total = containersAtivos.length;
+    const emTransito = containersAtivos.filter((c) => isEmTransito(c.last_event) && !isEntregue(c.last_event) && !isEmAlerta(c.last_event)).length;
+    const emAlerta = containersAtivos.filter((c) => isEmAlerta(c.last_event)).length;
+    const entregues = containersAtivos.filter((c) => isEntregue(c.last_event)).length;
 
     return { total, emTransito, emAlerta, entregues };
   }, [containersList]);
