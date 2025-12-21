@@ -833,65 +833,58 @@ Hello, team.
 
 Please update HBL as follows:
 
-Then, for EVERY HBL file provided (even if data extraction failed), you MUST output:
-— Draft HBL: <exact_filename>
+Then, for EVERY HBL file provided, you MUST output:
 
-Followed by the analysis sections (even if showing "data not extracted" or "unable to verify").
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+**DRAFT HBL: <exact_filename>**
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-NEVER output "CRITICAL ERROR: All files unreadable" as the main response.
-NEVER skip individual HBL sections.
-ALWAYS provide per-HBL structure as shown in the example above.
+████████████████████████████████████████████████████████████████████████████████
+█ CRITICAL: PER-EXPORTER DETAILED ANALYSIS                                      █
+████████████████████████████████████████████████████████████████████████████████
 
-  Then emit ONLY the sections that have discrepancies, in THIS fixed order (never numeric prefixes). Use exact labels and formatting:
+For EACH EXPORTER identified in the Manifest, provide a detailed breakdown:
 
-  - Total Weight:
-    Sheet Approved Total: <"#,###.000 kg">  |  BL Gross Total: <"#,###.000 kg">  |  Delta: <signed "#,###.000 kg">
-    Update: Set BL total Gross Weight to <"#,###.000 kg"> to match the manifest.
+**EXPORTER #1: <EXPORTER_COMPANY_NAME>**
 
-  - Per-Line Weights (only lines beyond tolerance):
-    Supplier: "<exact as printed in HBL>"
-    No. / kind of packing units: "<exact>"
-    Description of Goods: "<exact>"
-    Sheet approved weight: <"#,###.000 kg">  |  HBL gross weight: <"#,###.000 kg">  |  Delta: <signed "#,###.000 kg">
-    Update: Set HBL line weight to <"#,###.000 kg">.
-    (If missing on HBL: "Create line with weight <…>". If extra on HBL: "Remove or correct this line".)
-    After listing lines, append:
-    Reconciliation check: sum of listed line deltas = <signed "#,###.000 kg">; unexplained remainder = <signed "#,###.000 kg">.
+   CNPJ: Manifest = <XX.XXX.XXX/XXXX-XX> | HBL = <value or 'not found'>
+   [If different: → Update: Set CNPJ to <manifest value>]
 
-  - Invoice References — per-line differences:
-    # Include supplier sub-blocks ONLY when invoice reference exists AND (Missing!=none OR Extra!=none).
-    # CRITICAL: Only compare INVOICE references, NOT Delivery Note references.
-    Supplier: "<exact>" | No./kind: "<exact>" | Desc: "<exact>"
-    Manifest invoice references: [digits-only list or []]  |  HBL invoice references: [RAW list or []]
-    Missing in HBL: [digits-only or "none"]  |  Extra in HBL: [digits-only or "none"]
-    Update: Add/remove to match manifest.
-    NOTE: Delivery Note numbers are NOT invoice references and should be ignored entirely.
+   **Item 1: <GOODS_DESCRIPTION>**
+      • Gross Weight: Manifest = <#,###.000 kg> | HBL = <#,###.000 kg>
+      • CBM: Manifest = <#,###.000 m³> | HBL = <#,###.000 m³>
+      • Volume Qty: Manifest = <N> | HBL = <N>
+      • Volume Type: Manifest = <PALLETS/BOXES/CARTONS> | HBL = <value>
+      • Invoice Ref: Manifest = <invoice_number> | HBL = <value or 'not found'>
+      [Report discrepancies with → Update instructions]
+
+   **Subtotals:**
+      • Total Weight: Manifest = <#,###.000 kg> | HBL = <#,###.000 kg> | Delta: <±#,###.000 kg>
+      • Total CBM: Manifest = <#,###.000 m³> | HBL = <#,###.000 m³> | Delta: <±#,###.000 m³>
+      • Total Volumes: Manifest = <N> | HBL = <N> | Delta: <±N>
+
+   Seal: Manifest = <seal_number> | HBL = <value or 'not found'>
+
+After ALL exporters, show CONTAINER-LEVEL TOTALS:
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+**Total Gross Weight:** Manifest = <#,###.000 kg> | HBL(s) = <#,###.000 kg>
+
+**Total CBM:** Manifest = <#,###.000 m³> | HBL(s) = <#,###.000 m³>
+
+**Total Volumes:** Manifest = <N> | HBL(s) = <N>
+
+████████████████████████████████████████████████████████████████████████████████
 
   - NCM Codes:
     Manifest NCMs (reference): [sorted unique list]
     BL NCMs in this HBL: [sorted list]
     Missing in this HBL: [list or "none"]  |  Extra in this HBL: [list or "none"]
-    Rules:
-      • Do not print "Missing" when the HBL is a legitimate subset.
-      • Print this section when (a) HBL has goods but zero NCMs, or (b) there are extras not in the Manifest.
-
-  - Packages:
-    Manifest total packages: <n>  |  HBL total packages: <n>  |  Delta: <signed n>
-    Update: Set HBL total packages to <n>.
-
-  - CBM:
-    Sheet total CBM: <"#,###.000 m³">  |  BL total Measurement: <"#,###.000 m³">  |  Delta: <signed "#,###.000 m³">
-    For each mismatched line:
-      Supplier: "<exact>"  |  No./kind: "<exact>"  |  Desc: "<exact>"
-      Sheet CBM: <"#,###.000 m³">  |  HBL CBM: <"#,###.000 m³">  |  Delta: <signed "#,###.000 m³">
-      Update: Set HBL line CBM to <"#,###.000 m³">.
 
   - Container Number (MANDATORY VERIFICATION):
     Manifest container: "<XXXX1234567>"  |  HBL container: "<value found>"
-    # ONLY include "Update:" line if containers are DIFFERENT.
-    # If containers MATCH: omit the "Update:" line entirely.
     Update: Set HBL container number to "<XXXX1234567>".  ← ONLY IF DIFFERENT
-    NOTE: Container number verification is MANDATORY. Always include this section showing both values.
 
   - Shipper:
     Manifest shipper: "<exact normalized>"  |  HBL shipper: "<exact>"
