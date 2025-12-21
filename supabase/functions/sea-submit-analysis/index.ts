@@ -182,10 +182,10 @@ async function extractXlsxText(fileUrl: string, fileName: string): Promise<strin
     // Import xlsx library
     const XLSX = await import('https://esm.sh/xlsx@0.18.5');
     
-    // Read workbook with OPTIMIZED settings - read more rows to capture ALL manifest data
+    // Read workbook with NO ROW LIMITS - capture ALL manifest data
     const workbook = XLSX.read(arrayBuffer, { 
       type: 'array',
-      sheetRows: isLargeFile ? 500 : 1000,  // Increased to capture ALL manifest lines (was 150/300)
+      // NO sheetRows limit - read ALL rows with data
       cellFormula: false,
       cellStyles: false,
       cellNF: false,
@@ -234,10 +234,8 @@ async function extractXlsxText(fileUrl: string, fileName: string): Promise<strin
         const lines = csv.split('\n')
           .filter((line: string) => line.trim().length > 0);
         
-        // For summary sheets, take more lines; for detail sheets, increase to capture ALL data
-        const isSummarySheet = highPriority.some(p => sheetName.toLowerCase().includes(p));
-        const maxLines = isSummarySheet ? 400 : 500;  // Increased from 200/120 to capture ALL manifest lines
-        const linesToProcess = lines.slice(0, maxLines);
+        // NO LINE LIMIT - process ALL lines with data
+        const linesToProcess = lines; // Process ALL lines, no slicing
         
         if (linesToProcess.length > 0) {
           const sheetText = `\n=== ${sheetName} (${linesToProcess.length} rows) ===\n${linesToProcess.join('\n')}`;
