@@ -617,7 +617,7 @@ GENERAL CONTAINER EXAMPLE FOR CMAU5829745 with 3 HBLs:
   → Do NOT include suppliers from other HBLs
   → NCMs: only from NAS's manifest lines (verify each exists)
 
-RULE: "Involved supplier(s) in Manifest" must list ONLY suppliers that appear in THAT HBL.
+RULE: Each supplier that appears in an HBL gets its own EXPORTER #N section with full details.
 
 ████████████████████████████████████████████████████████████████████████████████
 █ DIAGNOSTIC: MANDATORY VERIFICATION BEFORE OUTPUT                              █
@@ -705,10 +705,10 @@ Each HBL uses its OWN approved total calculated from its matching manifest lines
                     UNIVERSAL DETECTION RULES FOR ALL ANALYSES
 ════════════════════════════════════════════════════════════════════════════════
 
-★★★ RULE 1: INVOLVED SUPPLIERS - LIST ALL DISTINCT VARIANTS ★★★
-For EVERY HBL, list ALL distinct supplier name variations found in the manifest.
-Different spellings, cases, or addresses count as SEPARATE entries.
-Example: "COMPANY GmbH" and "Company GmbH c/o Agent..." are TWO distinct entries.
+★★★ RULE 1: COMPLETE PER-EXPORTER ANALYSIS ★★★
+For EVERY unique supplier/exporter in the manifest, create a SEPARATE numbered section.
+Each EXPORTER #N section must include: CNPJ, Seal, all Items with detailed field comparisons, and Subtotals.
+Count all unique "Supplier Name" values in manifest BEFORE starting and output that many EXPORTER sections.
 
 ★★★ RULE 2: TOTAL WEIGHT (per-HBL) ★★★
 - Calculate approved_total FOR THIS HBL by summing manifest lines matching this HBL's suppliers.
@@ -1017,26 +1017,49 @@ Only when ALL checks explicitly pass, return:
 CRITICAL WARNING: If you return "no changes required" when discrepancies exist, this is a CRITICAL FAILURE.
 When in doubt, ALWAYS report potential discrepancies rather than suppressing them.
 
-STRICT OUTPUT CONTRACT (MUST FOLLOW EXACTLY)
+████████████████████████████████████████████████████████████████████████████████
+█ OUTPUT CONTRACT - DETAILED PER-EXPORTER FORMAT ONLY                            █
+████████████████████████████████████████████████████████████████████████████████
+
+THE FOLLOWING OUTPUT PATTERNS ARE ABSOLUTELY FORBIDDEN:
+❌ "Exporter (from HBL): Multiple suppliers identified"
+❌ "Involved supplier(s) in Manifest: [list of names]"
+❌ "[Same structure for other exporters]"
+❌ "[Continuing with remaining exporters...]"
+❌ Grouping multiple exporters in a summary list
+❌ Any placeholder text like "[...]" or "etc."
+
+YOU MUST USE THIS FORMAT - ONE COMPLETE SECTION PER EXPORTER:
+
+For EACH unique supplier/exporter in the manifest, output:
+
+EXPORTER #N: <COMPANY_NAME>
+- CNPJ: Manifest: <value> | HBL: <value> | Status: <MATCH|UPDATE REQUIRED|NOT FOUND>
+- Seal: Manifest: <value> | HBL: <value> | Status: <MATCH|UPDATE REQUIRED|NOT FOUND>
+
+Item 1: <DESCRIPTION>
+- Gross Weight: Manifest: X kg | HBL: Y kg | Status: <MATCH|UPDATE REQUIRED|NOT FOUND>
+  [If UPDATE REQUIRED: → Update: Set weight to X kg]
+- CBM: Manifest: X m³ | HBL: Y m³ | Status: <MATCH|UPDATE REQUIRED|NOT FOUND>
+- Volume Qty: Manifest: N | HBL: N | Status: <MATCH|UPDATE REQUIRED|NOT FOUND>
+- Volume Type: Manifest: TYPE | HBL: TYPE | Status: <MATCH|UPDATE REQUIRED|NOT FOUND>
+- Invoice Ref: Manifest: REF | HBL: REF | Status: <MATCH|UPDATE REQUIRED|NOT FOUND>
+
+Subtotals EXPORTER #N:
+- Total Weight: Manifest: X kg | HBL: Y kg | Delta: Z kg
+- Total CBM: Manifest: X m³ | HBL: Y m³ | Delta: Z m³
+- Total Volumes: Manifest: N | HBL: N | Delta: N
+
+REPEAT THIS COMPLETE STRUCTURE FOR EVERY SINGLE EXPORTER (EXPORTER #1, #2, #3... #N)
+
+ADDITIONAL RULES:
 - Do NOT print any "(Note: ...)" lines anywhere.
-- Immediately after the line "— Draft HBL: <filename>", you MUST print:
-  1) "Exporter (from HBL): <name>"
-  2) "Involved supplier(s) in Manifest: [list] | or "not identified""
-- In "Per-Line Weights", ONLY print lines whose absolute Delta > tolerance. NEVER print a line with Delta = 0.000.
-- Always use square brackets for lists, even singletons:
-  • Manifest references: [ ... ]      (digits-only; "[]" allowed)
-  • HBL references: [ ... ]           (RAW as printed; "[]" allowed)
-  • Missing in HBL: [ ... ]           (digits-only, or the literal "none")
-  • Extra in HBL: [ ... ]             (digits-only, or the literal "none")
-- Suppression rules:
-  • Never include supplier sub-blocks where BOTH "Missing in HBL" and "Extra in HBL" are "none".
-  • If all supplier sub-blocks would be suppressed, OMIT the entire "Invoice References — per-line differences" section.
-  • EXCEPTION: NCM Codes and Container Number sections are MANDATORY and must always be included, even without discrepancies.
-  • For other sections: Omit sections without discrepancies.
-- Part-Container split (weights):
-  • You MUST NOT suppress per-HBL total weight deltas beyond tolerance even when container-level sums match the Manifest Approved Total.
-- Anti-inflation guard:
-  • If an HBL weight differs from the manifest reference by ~×1000 (within ±0.5%), down-scale the HBL value by 1000 before comparing.`;
+- Always use square brackets for lists.
+- In weight comparisons, ONLY print lines whose absolute Delta > tolerance.
+- NCM Codes and Container Number sections are MANDATORY.
+- If an HBL weight differs from the manifest by ~×1000 (within ±0.5%), down-scale the HBL value.`;
+
+
 
 export const PROMPT_HBL_MBL = `SYSTEM — CRONOS (HBL × MBL Auditor)
 
