@@ -1479,6 +1479,99 @@ DETECTION RULES:
 ███ OUTPUT FORMAT — REPEAT FOR EACH HBL ANALYZED ███
 ════════════════════════════════════════════════════════════════════════════════
 
+CRITICAL: You MUST start with:
+Hello, team.
+
+Please update HBL as follows:
+
+Then, for EVERY HBL file provided, you MUST output:
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+**DRAFT HBL: <exact_filename>**
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Container: [container number]
+Invoices linked: [comma-separated list of invoice filenames]
+
+████████████████████████████████████████████████████████████████████████████████
+█ CRITICAL: PER-EXPORTER DETAILED ANALYSIS (INVOICES x HBL)                     █
+████████████████████████████████████████████████████████████████████████████████
+
+NOTE: For Invoice x HBL comparison, DO NOT verify CNPJ or Seal (these are not available on invoices).
+
+For EACH EXPORTER/SUPPLIER identified in the Invoices, you MUST provide a detailed breakdown:
+
+**EXPORTER #1: <EXPORTER_COMPANY_NAME>**
+
+   **Item 1: <GOODS_DESCRIPTION>**
+      • Gross Weight: Invoice = <#,###.000 kg> | HBL = <#,###.000 kg>
+        [If different: → Update: Set weight to <invoice value>]
+      • CBM: Invoice = <#,###.000 m³> | HBL = <#,###.000 m³>
+        [If different: → Update: Set CBM to <invoice value>]
+      • Volume Qty: Invoice = <N> | HBL = <N>
+        [If different: → Update: Set volume qty to <invoice value>]
+      • Volume Type: Invoice = <PALLETS/BOXES/CARTONS> | HBL = <value>
+        [If different: → Update: Set volume type to <invoice value>]
+      • Invoice Ref: Invoice = <invoice_number> | HBL = <value or 'not found'>
+        [If different: → Update: Add invoice reference <invoice value>]
+
+   **Item 2: <GOODS_DESCRIPTION>**
+      [Continue for ALL items of this exporter...]
+
+   **Subtotals:**
+      • Total Weight: Invoice = <#,###.000 kg> | HBL = <#,###.000 kg> | Delta: <±#,###.000 kg>
+      • Total CBM: Invoice = <#,###.000 m³> | HBL = <#,###.000 m³> | Delta: <±#,###.000 m³>
+      • Total Volumes: Invoice = <N> | HBL = <N> | Delta: <±N>
+
+
+**EXPORTER #2: <NEXT_EXPORTER_NAME>**
+   [Same structure as above...]
+
+
+After ALL exporters, show the CONTAINER-LEVEL TOTALS:
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+**Total Gross Weight:** Invoices sum = <#,###.000 kg> | HBL = <#,###.000 kg>
+   [If different: → Update HBL weight to <invoice sum>]
+
+**Total CBM:** Invoices sum = <#,###.000 m³> | HBL = <#,###.000 m³>
+   [If different: → Update HBL CBM to <invoice sum>]
+
+**Total Volumes:** Invoices sum = <N> | HBL = <N>
+   [If different: → Update HBL volumes to <invoice sum>]
+
+████████████████████████████████████████████████████████████████████████████████
+█ EXPORTER EXTRACTION RULES (INVOICES)                                          █
+████████████████████████████████████████████████████████████████████████████████
+
+1. IDENTIFY ALL EXPORTERS/SUPPLIERS from Invoices
+2. For EACH exporter, extract ALL their line items (do NOT skip any lines)
+3. Extract for EACH item: Weight, CBM, Volume Qty, Volume Type, Invoice Ref
+4. Calculate SUBTOTALS per exporter (sum of all their items)
+5. Compare EACH field against corresponding HBL values
+6. Report discrepancies with → Update instructions
+
+IMPORTANT: DO NOT verify CNPJ or Seal Number (not available on commercial invoices)
+
+████████████████████████████████████████████████████████████████████████████████
+█ ADDITIONAL SECTIONS                                                           █
+████████████████████████████████████████████████████████████████████████████████
+
+- NCM/HS Code Verification (only if discrepancies):
+   Invoice NCM: [list]
+   HBL NCM: [list or "Not specified"]
+   Missing from HBL: [NCM codes to add]
+   → Update: Add NCM codes to HBL cargo description: "[codes]"
+
+- Invoice Token Verification:
+   Provided invoice tokens: [list from analyzed files]
+   HBL tokens: [list as printed on HBL]
+   Missing from HBL: [tokens in invoices but not on HBL]
+   → Update: Add to HBL invoice references: "[missing token(s)]"
+
+---
+
 If NO discrepancies found (after full verification):
 
 Hello, team.
@@ -1491,62 +1584,6 @@ Verification completed:
 - Gross Weight: Invoices sum = [X kg] | HBL = [X kg] — Match
 - CBM: Invoices sum = [X m³] | HBL = [X m³] — Match
 - Packages: Invoices sum = [N] | HBL = [N] — Match
-
----
-
-If DISCREPANCIES found:
-
-Hello, team.
-
-Draft HBL: "[HBL filename]"
-Container: [container number]
-Invoices linked: [comma-separated list of invoice filenames]
-
-EXTRACTION REPORT:
-- [filename1]: [pages]/[total], [chars] chars, OCR [status]
-- [filename2]: [pages]/[total], [chars] chars, OCR [status]
-
-1) Invoice Token Verification
-   HBL tokens (RAW): [list as printed on HBL]
-   Provided invoice tokens: [list from analyzed files]
-   
-   - Exact matches: [list or "none"]
-   - Partial matches (accepted): [pairs like "A ~ B" or "none"]
-   - Missing from HBL: [tokens in invoices but not on HBL]
-   - Extra on HBL (file not provided): [tokens on HBL without matching file]
-   
-   → Update: Add to HBL invoice references: "[missing token(s)]"
-
-2) Totals Comparison
-   Packages:
-   - HBL = [N] | Invoices sum = [N] | Delta = [±N]
-   → Update: Set HBL packages to [correct total]
-   
-   Gross Weight:
-   - HBL = "[#,###.000 kg]" | Invoices sum = "[#,###.000 kg]" | Delta = "[±#,###.000 kg]"
-   → Update: Set HBL gross weight to "[correct total]"
-   
-   Measurement (CBM):
-   - HBL = "[#,###.000 m³]" | Invoices sum = "[#,###.000 m³]" | Delta = "[±#,###.000 m³]"
-   → Update: Set HBL measurement to "[correct total]"
-
-3) Goods Description (only if numeric/material mismatch)
-   Supplier: "[supplier name]"
-   Invoice says: "[goods description with counts]"
-   HBL says: "[goods description with counts]"
-   
-   → Update: Align HBL goods to invoices: "[exact corrected text]"
-
-4) NCM/HS Code Verification (only if discrepancies)
-   Invoice NCM: [list]
-   HBL NCM: [list or "Not specified"]
-   
-   Missing from HBL: [NCM codes to add]
-   → Update: Add NCM codes to HBL cargo description: "[codes]"
-
-5) Additional Observations (optional)
-   - [Any other relevant findings]
-   - [Recommendations for shipper/agent]
 
 ---
 
