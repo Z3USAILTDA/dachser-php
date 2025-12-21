@@ -35,47 +35,94 @@ import dachserBg from "@/assets/dachser-background.jpg";
 import { TablePagination } from "@/components/layout/TablePagination";
 import { Filter as FilterIcon } from "lucide-react";
 
-// Shipping lines - only 6 approved carriers
-const shippingLines = [
-  { code: "HLCU", name: "HAPAG-LLOYD" },
-  { code: "CMAU", name: "CMA" },
-  { code: "HDMU", name: "HMM" },
-  { code: "ONEY", name: "ONE" },
-  { code: "MSCU", name: "MSC" },
-  { code: "MAEU", name: "MAERSK" },
+// Base shipping lines list (fallback)
+const BASE_SHIPPING_LINES = [
+  "HAPAG-LLOYD", "CMA", "HMM", "ONE", "MSC", "MAERSK"
 ];
 
 // Container prefix to shipping line mapping (primeiros 4 caracteres do container)
 const CONTAINER_PREFIX_MAP: Record<string, string> = {
-  // MAERSK
-  "MAEU": "MAERSK", "MSKU": "MAERSK", "MRKU": "MAERSK", "MRSU": "MAERSK",
+  // MAERSK (inclui Hamburg Süd, Sealand, Safmarine)
+  "MAEU": "MAERSK", "MSKU": "MAERSK", "MRKU": "MAERSK", "MRSU": "MAERSK", 
+  "SUDU": "MAERSK", "SEAU": "MAERSK", "SFCU": "MAERSK",
+  
   // HAPAG-LLOYD
-  "HLCU": "HAPAG-LLOYD", "HLXU": "HAPAG-LLOYD", "HJCU": "HAPAG-LLOYD",
-  // CMA CGM
+  "HLCU": "HAPAG-LLOYD", "HLXU": "HAPAG-LLOYD", "HJCU": "HAPAG-LLOYD", "HASU": "HAPAG-LLOYD",
+  
+  // CMA CGM (inclui APL, ANL)
   "CMAU": "CMA", "CGMU": "CMA", "APLU": "CMA", "ANLU": "CMA", "ECMU": "CMA",
+  "APHU": "CMA", "CXDU": "CMA",
+  
   // MSC
-  "MSCU": "MSC", "MEDU": "MSC", "MSCZ": "MSC",
-  // ONE
-  "ONEY": "ONE", "NYKU": "ONE", "MOLU": "ONE", "KSTU": "ONE",
-  // HMM
+  "MSCU": "MSC", "MEDU": "MSC", "MSCZ": "MSC", "MSDU": "MSC",
+  
+  // ONE (Ocean Network Express - fusão de NYK, MOL, K-Line)
+  "ONEY": "ONE", "NYKU": "ONE", "MOLU": "ONE", "KSTU": "ONE", "KKFU": "ONE",
+  
+  // HMM (Hyundai Merchant Marine)
   "HDMU": "HMM", "HMMU": "HMM",
-  // COSCO
+  
+  // COSCO / OOCL
   "CSLU": "COSCO", "CCLU": "COSCO", "COSU": "COSCO", "CBHU": "COSCO",
+  "OOLU": "COSCO", "OOCU": "COSCO",
+  
   // EVERGREEN
   "EGHU": "EVERGREEN", "EMCU": "EVERGREEN", "EISU": "EVERGREEN", "EGLV": "EVERGREEN",
+  "EGSU": "EVERGREEN", "EITU": "EVERGREEN",
+  
   // YANG MING
-  "YMLU": "YANG MING", "YMMU": "YANG MING",
+  "YMLU": "YANG MING", "YMMU": "YANG MING", "YMJU": "YANG MING",
+  
   // ZIM
   "ZIMU": "ZIM", "ZCSU": "ZIM",
-  // PIL
-  "PCIU": "PIL",
+  
+  // PIL (Pacific International Lines)
+  "PCIU": "PIL", "PONU": "PIL",
+  
   // WAN HAI
-  "WHLU": "WAN HAI",
-  // HAMBURG SUD (agora Maersk)
-  "SUDU": "MAERSK",
-  // Outros comuns (lessors)
-  "TRHU": "TRITON", "TCLU": "TEXTAINER", "TEMU": "TOUAX", "GESU": "GESEACO",
-  "FCIU": "FLORENS", "CAIU": "CAI", "SEGU": "SEACO", "TCKU": "TRITON",
+  "WHLU": "WAN HAI", "WHSU": "WAN HAI",
+  
+  // SM LINE
+  "SMCU": "SM LINE", "SMLM": "SM LINE",
+  
+  // SINOKOR
+  "SKHU": "SINOKOR", "SNKU": "SINOKOR",
+  
+  // TS LINES
+  "TSLU": "TS LINES",
+  
+  // ARKAS
+  "ARKU": "ARKAS",
+  
+  // ANTONG
+  "ATHU": "ANTONG",
+  
+  // SITC
+  "SITU": "SITC",
+  
+  // HEUNG-A
+  "HAEU": "HEUNG-A",
+  
+  // NAMSUNG
+  "NAMU": "NAMSUNG",
+  
+  // Container lessors (empresas de leasing de containers)
+  "TRHU": "TRITON", "TCKU": "TRITON", "TLLU": "TRITON",
+  "TCLU": "TEXTAINER", "TXGU": "TEXTAINER",
+  "TEMU": "TOUAX", 
+  "GESU": "GESEACO", "GATU": "GATE",
+  "FCIU": "FLORENS", "FBLU": "FLORENS",
+  "CAIU": "CAI", "CARU": "CAI",
+  "SEGU": "SEACO", "SCMU": "SEACO",
+  "BEAU": "BEACON", "BICU": "BEACON",
+  "DFSU": "DONG FANG", "DFDL": "DONG FANG",
+  "UETU": "UNIT", "UTCU": "UNIT",
+  "TGBU": "TGS", "TGCU": "TGS",
+  "BMOU": "BLUE SKY",
+  "DRYU": "DRY",
+  "CLHU": "CLOU",
+  "SEKU": "SEKO",
+  "TCNU": "CONTAINER LEASING",
 };
 
 // Detect armador from vessel name AND container prefix
@@ -755,7 +802,8 @@ const ContainerTracking = () => {
         (c.consignee_name && c.consignee_name.toLowerCase().includes(searchLower)) ||
         (c.shipping_line && c.shipping_line.toLowerCase().includes(searchLower)) ||
         (c.nome_analista && c.nome_analista.toLowerCase().includes(searchLower));
-      const matchesLine = filterLine === "all" || c.shipping_line === filterLine;
+      const detectedArmador = detectArmadorFromVessel(c.vessel, c.container);
+      const matchesLine = filterLine === "all" || detectedArmador === filterLine;
       
       // Card filter
       let matchesCardFilter = true;
@@ -821,6 +869,24 @@ const ContainerTracking = () => {
     const entregues = containersAtivos.filter((c) => isEntregue(c.last_event)).length;
 
     return { total, emTransito, emAlerta, entregues };
+  }, [containersList]);
+
+  // Dynamic list of armadores based on containers data
+  const dynamicArmadores = useMemo(() => {
+    const containersAtivos = containersList.filter(
+      c => !EXCLUDED_CONTAINERS.includes(c.container?.trim().toUpperCase())
+    );
+    
+    const armadoresSet = new Set<string>();
+    containersAtivos.forEach(c => {
+      const armador = detectArmadorFromVessel(c.vessel, c.container);
+      if (armador && armador !== "N/D") {
+        armadoresSet.add(armador);
+      }
+    });
+    
+    // Sort alphabetically
+    return Array.from(armadoresSet).sort();
   }, [containersList]);
 
   if (isLoading) {
@@ -1060,9 +1126,9 @@ const ContainerTracking = () => {
                     </SelectTrigger>
                     <SelectContent className="bg-card border border-border z-50">
                       <SelectItem value="all">Todos</SelectItem>
-                      {shippingLines.map((line) => (
-                        <SelectItem key={line.code} value={line.code}>
-                          {line.code} - {line.name}
+                      {dynamicArmadores.map((armador) => (
+                        <SelectItem key={armador} value={armador}>
+                          {armador}
                         </SelectItem>
                       ))}
                     </SelectContent>
