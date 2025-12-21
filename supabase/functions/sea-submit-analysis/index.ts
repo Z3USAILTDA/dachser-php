@@ -454,7 +454,28 @@ REPEAT: IF MANIFEST HAS N EXPORTERS, OUTPUT N COMPLETE EXPORTER SECTIONS.`;
   
   const data = await response.json();
   const resultText = data.content?.[0]?.text || '';
-  console.log(`✅ Anthropic response: ${resultText.length} chars`);
+  
+  // DETAILED LOGGING FOR DEBUGGING
+  console.log(`========== ANTHROPIC RESPONSE DEBUG ==========`);
+  console.log(`📊 Response length: ${resultText.length} chars`);
+  console.log(`🛑 Stop reason: ${data.stop_reason}`);
+  console.log(`📈 Usage - Input tokens: ${data.usage?.input_tokens}, Output tokens: ${data.usage?.output_tokens}`);
+  
+  // Count exporters in the result
+  const exporterMatches = resultText.match(/EXPORTER\s*\d+|Exporter\s*\d+|### EXPORTER|##\s*\d+\./gi) || [];
+  console.log(`👥 Exporters found in output: ${exporterMatches.length}`);
+  
+  // Check if response was truncated
+  if (data.stop_reason === 'max_tokens') {
+    console.error(`⚠️ RESPONSE WAS TRUNCATED DUE TO MAX_TOKENS!`);
+  } else if (data.stop_reason === 'end_turn') {
+    console.log(`✅ Model finished naturally (end_turn)`);
+  }
+  
+  // Log first and last 500 chars to see structure
+  console.log(`📝 First 500 chars: ${resultText.substring(0, 500)}`);
+  console.log(`📝 Last 500 chars: ${resultText.substring(resultText.length - 500)}`);
+  console.log(`==============================================`);
   
   return { text: resultText, model: 'claude-sonnet-4-20250514' };
 }
