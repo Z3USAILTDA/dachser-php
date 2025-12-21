@@ -802,8 +802,8 @@ const ContainerTracking = () => {
         (c.consignee_name && c.consignee_name.toLowerCase().includes(searchLower)) ||
         (c.shipping_line && c.shipping_line.toLowerCase().includes(searchLower)) ||
         (c.nome_analista && c.nome_analista.toLowerCase().includes(searchLower));
-      const detectedArmador = detectArmadorFromVessel(c.vessel, c.container);
-      const matchesLine = filterLine === "all" || detectedArmador === filterLine;
+      const armador = c.shipping_line || detectArmadorFromVessel(c.vessel, c.container);
+      const matchesLine = filterLine === "all" || armador === filterLine;
       
       // Card filter
       let matchesCardFilter = true;
@@ -879,8 +879,9 @@ const ContainerTracking = () => {
     
     const armadoresSet = new Set<string>();
     containersAtivos.forEach(c => {
-      const armador = detectArmadorFromVessel(c.vessel, c.container);
-      if (armador && armador !== "N/D") {
+      // Prioritize shipping_line from database, fallback to detection
+      const armador = c.shipping_line || detectArmadorFromVessel(c.vessel, c.container);
+      if (armador && armador !== "N/D" && armador !== "OUTRO") {
         armadoresSet.add(armador);
       }
     });
@@ -1258,7 +1259,7 @@ const ContainerTracking = () => {
                           </td>
                           <td className="px-4 py-3">
                             <span className="px-2 py-1 rounded-full text-xs font-medium bg-[rgba(255,200,0,.15)] text-[#ffc800] border border-[rgba(255,200,0,.3)]">
-                              {detectArmadorFromVessel(container.vessel, container.container)}
+                              {container.shipping_line || detectArmadorFromVessel(container.vessel, container.container)}
                             </span>
                           </td>
                           <td className="px-4 py-3 text-[#aaaaaa] text-sm">{container.origem || "-"}</td>

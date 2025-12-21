@@ -922,6 +922,52 @@ serve(async (req) => {
           )
         `);
 
+        // Container prefix to shipping line mapping
+        const CONTAINER_PREFIX_MAP: Record<string, string> = {
+          "MAEU": "MAERSK", "MSKU": "MAERSK", "MRKU": "MAERSK", "MRSU": "MAERSK", "SUDU": "MAERSK", "SEAU": "MAERSK", "SFCU": "MAERSK",
+          "HLCU": "HAPAG-LLOYD", "HLXU": "HAPAG-LLOYD", "HJCU": "HAPAG-LLOYD", "HASU": "HAPAG-LLOYD",
+          "CMAU": "CMA CGM", "CGMU": "CMA CGM", "APLU": "CMA CGM", "ANLU": "CMA CGM", "ECMU": "CMA CGM", "APHU": "CMA CGM", "CXDU": "CMA CGM",
+          "MSCU": "MSC", "MEDU": "MSC", "MSCZ": "MSC", "MSDU": "MSC",
+          "ONEY": "ONE", "NYKU": "ONE", "MOLU": "ONE", "KSTU": "ONE", "KKFU": "ONE",
+          "HDMU": "HMM", "HMMU": "HMM",
+          "CSLU": "COSCO", "CCLU": "COSCO", "COSU": "COSCO", "CBHU": "COSCO", "OOLU": "COSCO", "OOCU": "COSCO",
+          "EGHU": "EVERGREEN", "EMCU": "EVERGREEN", "EISU": "EVERGREEN", "EGLV": "EVERGREEN", "EGSU": "EVERGREEN", "EITU": "EVERGREEN",
+          "YMLU": "YANG MING", "YMMU": "YANG MING", "YMJU": "YANG MING",
+          "ZIMU": "ZIM", "ZCSU": "ZIM",
+          "PCIU": "PIL", "PONU": "PIL",
+          "WHLU": "WAN HAI", "WHSU": "WAN HAI",
+          "SMCU": "SM LINE", "SMLM": "SM LINE",
+          "SKHU": "SINOKOR", "SNKU": "SINOKOR",
+          "TSLU": "TS LINES",
+          "ARKU": "ARKAS",
+          "ATHU": "ANTONG",
+          "SITU": "SITC",
+          "HAEU": "HEUNG-A",
+          "NAMU": "NAMSUNG",
+          "TRHU": "TRITON", "TCKU": "TRITON", "TLLU": "TRITON",
+          "TCLU": "TEXTAINER", "TXGU": "TEXTAINER",
+          "TEMU": "TOUAX",
+          "GESU": "GESEACO", "GATU": "GATE",
+          "FCIU": "FLORENS", "FBLU": "FLORENS",
+          "CAIU": "CAI", "CARU": "CAI",
+          "SEGU": "SEACO", "SCMU": "SEACO",
+          "BEAU": "BEACON", "BICU": "BEACON",
+          "DFSU": "DONG FANG", "DFDL": "DONG FANG",
+          "UETU": "UNIT", "UTCU": "UNIT",
+          "TGBU": "TGS", "TGCU": "TGS",
+          "BMOU": "BLUE SKY",
+          "DRYU": "DRY",
+          "CLHU": "CLOU",
+          "SEKU": "SEKO",
+          "TCNU": "TRANSAMERICA",
+        };
+
+        const detectArmador = (container: string | null): string => {
+          if (!container) return 'N/D';
+          const prefix = container.trim().substring(0, 4).toUpperCase();
+          return CONTAINER_PREFIX_MAP[prefix] || 'OUTRO';
+        };
+
         // First, update tracking records with data from t_dachser_container if missing
         await client.execute(`
           UPDATE ai_agente.t_dachser_container_tracking ct
@@ -947,6 +993,20 @@ serve(async (req) => {
           WHERE ct.active = 1 
           ORDER BY ct.created_at DESC
         `);
+
+        // Update shipping_line for each container if empty
+        for (const row of rows) {
+          if (!row.shipping_line || row.shipping_line === '' || row.shipping_line === 'N/D') {
+            const armador = detectArmador(row.container);
+            if (armador !== 'N/D') {
+              await client.execute(
+                `UPDATE ai_agente.t_dachser_container_tracking SET shipping_line = ? WHERE id = ?`,
+                [armador, row.id]
+              );
+              row.shipping_line = armador;
+            }
+          }
+        }
 
         await client.close();
         return new Response(JSON.stringify({ success: true, data: rows }), {
