@@ -235,8 +235,15 @@ export default function SubmeterHblMbl() {
     }
 
     try {
+      // Remove JSON blocks and clean up the text before copying
+      let textToCopy = analysisResult.result_text
+        .replace(/```json[\s\S]*?```/g, '')  // Remove markdown JSON blocks
+        .replace(/\{"hbl_shipping_data"[\s\S]*?\}\s*$/g, '')  // Remove raw JSON at end
+        .replace(/<!--[\s\S]*?-->/g, '')  // Remove HTML comments
+        .trim();
+
       const textarea = document.createElement('textarea');
-      textarea.value = analysisResult.result_text;
+      textarea.value = textToCopy;
       textarea.style.position = 'fixed';
       textarea.style.opacity = '0';
       document.body.appendChild(textarea);

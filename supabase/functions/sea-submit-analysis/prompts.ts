@@ -1177,61 +1177,25 @@ Container: <container_number>
 1) PARTIES COMPARISON
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-- Shipper: 
-   HBL: "<value>"
-   MBL: "<value>"
-   Status: <MATCH | DIFFERENT (expected - HBL shows actual exporter, MBL shows forwarder)>
-
-- Consignee: 
-   HBL: "<value>"
-   MBL: "<value>"
-   Status: <MATCH | DIFFERENT (expected - HBL shows actual importer, MBL shows agent)>
-
-- Notify Party: 
-   HBL: "<value>"
-   MBL: "<value>"
-   Status: <MATCH | DIFFERENT>
+- Shipper: HBL: "<value>" | MBL: "<value>" | Status: <MATCH | DIFFERENT>
+- Consignee: HBL: "<value>" | MBL: "<value>" | Status: <MATCH | DIFFERENT>
+- Notify Party: HBL: "<value>" | MBL: "<value>" | Status: <MATCH | DIFFERENT>
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 2) ROUTING & TRANSPORT
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-- Vessel:
-   HBL: "<value>"
-   MBL: "<value>"
-   Status: <MATCH | UPDATE REQUIRED>
-   [If UPDATE REQUIRED: -> Update: Set vessel to <MBL value>]
-
-- Voyage:
-   HBL: "<value>"
-   MBL: "<value>"
-   Status: <MATCH | UPDATE REQUIRED>
-   [If UPDATE REQUIRED: -> Update: Set voyage to <MBL value>]
-
-- Port of Loading:
-   HBL: "<value>"
-   MBL: "<value>"
-   Status: <MATCH | UPDATE REQUIRED>
-
-- Port of Discharge:
-   HBL: "<value>"
-   MBL: "<value>"
-   Status: <MATCH | UPDATE REQUIRED>
+- Vessel: HBL: "<value>" | MBL: "<value>" | Status: <MATCH | UPDATE REQUIRED>
+- Voyage: HBL: "<value>" | MBL: "<value>" | Status: <MATCH | UPDATE REQUIRED>
+- Port of Loading: HBL: "<value>" | MBL: "<value>" | Status: <MATCH | UPDATE REQUIRED>
+- Port of Discharge: HBL: "<value>" | MBL: "<value>" | Status: <MATCH | UPDATE REQUIRED>
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 3) CONTAINER & SEAL
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-- Container Number:
-   HBL: "<value>"
-   MBL: "<value>"
-   Status: <MATCH | UPDATE REQUIRED>
-
-- Seal Number:
-   HBL: "<value>"
-   MBL: "<value>"
-   Status: <MATCH | UPDATE REQUIRED>
-   [If UPDATE REQUIRED: -> Update: Set seal to <MBL value>]
+- Container Number: HBL: "<value>" | MBL: "<value>" | Status: <MATCH | UPDATE REQUIRED>
+- Seal Number: HBL: "<value>" | MBL: "<value>" | Status: <MATCH | UPDATE REQUIRED>
 
 ████████████████████████████████████████████████████████████████████████████████
 █ 4) PER-EXPORTER DETAILED ANALYSIS                                            █
@@ -1242,38 +1206,14 @@ For EACH shipper/exporter identified in the HBL, provide this COMPLETE breakdown
 EXPORTER #1: <EXPORTER_COMPANY_NAME>
 
    Item 1: <GOODS_DESCRIPTION>
-      Gross Weight:
-         HBL: <#,###.000 kg>
-         MBL: <#,###.000 kg>
-         Status: <MATCH | UPDATE REQUIRED | NOT FOUND>
-         [If UPDATE REQUIRED: -> Update: Set weight to <MBL value>]
-      
-      CBM:
-         HBL: <#,###.000 m3>
-         MBL: <#,###.000 m3>
-         Status: <MATCH | UPDATE REQUIRED | NOT FOUND>
-         [If UPDATE REQUIRED: -> Update: Set CBM to <MBL value>]
-      
-      Volume Qty:
-         HBL: <N>
-         MBL: <N>
-         Status: <MATCH | UPDATE REQUIRED | NOT FOUND>
-         [If UPDATE REQUIRED: -> Update: Set volume qty to <MBL value>]
-      
-      Volume Type:
-         HBL: <PALLETS/BOXES/CARTONS/etc>
-         MBL: <value or "not specified">
-         Status: <MATCH | UPDATE REQUIRED | NOT FOUND>
-         [If UPDATE REQUIRED: -> Update: Set volume type to <MBL value>]
-      
-      Seal:
-         HBL: <seal_number>
-         MBL: <seal_number>
-         Status: <MATCH | UPDATE REQUIRED>
-         [If UPDATE REQUIRED: -> Update: Set seal to <MBL value>]
+      - Peso: HBL: <#,###.000 kg> | MBL: <#,###.000 kg> | Status: <MATCH | UPDATE REQUIRED | NOT FOUND>
+      - CBM: HBL: <#,###.000 m³> | MBL: <#,###.000 m³> | Status: <MATCH | UPDATE REQUIRED | NOT FOUND>
+      - Qtd Volume: HBL: <N> | MBL: <N> | Status: <MATCH | UPDATE REQUIRED | NOT FOUND>
+      - Tipo Volume: HBL: <PALLETS/BOXES/CARTONS/etc> | MBL: <value or "not specified"> | Status: <MATCH | UPDATE REQUIRED | NOT FOUND>
+      - Seal: HBL: <seal_number> | MBL: <seal_number> | Status: <MATCH | UPDATE REQUIRED>
 
    Item 2: <GOODS_DESCRIPTION>
-   [REPEAT SAME STRUCTURE FOR ALL ITEMS]
+   [REPEAT SAME STRUCTURE FOR ALL ITEMS - use single-line format for each field]
 
 Subtotals EXPORTER #1:
 - Total Weight: HBL: X kg | MBL: Y kg | Delta: Z kg
@@ -1288,27 +1228,19 @@ DO NOT use placeholder text like "[Same structure]" - show FULL details for ALL.
 5) CONTAINER TOTALS
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-Total Gross Weight: HBL sum = <#,###.000 kg> | MBL = <#,###.000 kg>
-   Delta: <±N kg>
-   Status: <MATCH | UPDATE REQUIRED>
-
-Total CBM: HBL sum = <#,###.000 m3> | MBL = <#,###.000 m3>
-   Delta: <±N m³>
-   Status: <MATCH | UPDATE REQUIRED>
-
-Total Packages: HBL sum = <N> | MBL = <N>
-   Delta: <±N>
-   Status: <MATCH | UPDATE REQUIRED>
+- Total Gross Weight: HBL sum: <#,###.000 kg> | MBL: <#,###.000 kg> | Delta: <±N kg> | Status: <MATCH | UPDATE REQUIRED>
+- Total CBM: HBL sum: <#,###.000 m³> | MBL: <#,###.000 m³> | Delta: <±N m³> | Status: <MATCH | UPDATE REQUIRED>
+- Total Packages: HBL sum: <N> | MBL: <N> | Delta: <±N> | Status: <MATCH | UPDATE REQUIRED>
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 6) NCM/HS CODES
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-MBL codes: [list]
-HBL codes: [list]
-Missing in HBL: [list or "none"]
-Extra in HBL: [list or "none"]
-Status: <MATCH | UPDATE REQUIRED>
+- MBL codes: [list]
+- HBL codes: [list]
+- Missing in HBL: [list or "none"]
+- Extra in HBL: [list or "none"]
+- Status: <MATCH | UPDATE REQUIRED>
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 ANALYSIS SUMMARY
@@ -1330,14 +1262,15 @@ All verified fields match between HBL and MBL. No changes required.
 █ CRITICAL RULES                                                                █
 ████████████████████████████████████████████████████████████████████████████████
 
-1. ALWAYS analyze EACH exporter/shipper individually - never summarize
-2. ALWAYS show complete field breakdown for every exporter
-3. ALWAYS include status indicators (MATCH | UPDATE REQUIRED | NOT FOUND)
-4. ALWAYS show subtotals per exporter AND container totals
-5. NEVER use summary phrases like "Multiple suppliers identified"
-6. NEVER skip any exporter or use placeholder text
-7. Report ALL differences found - even if expected due to document nature
-8. Produce a COMPLETE response - never skip sections`;
+1. USE SINGLE-LINE FORMAT: Every field comparison must be on ONE line: "- Field: HBL: <value> | MBL: <value> | Status: <status>"
+2. ALWAYS analyze EACH exporter/shipper individually - never summarize
+3. ALWAYS show complete field breakdown for every exporter
+4. ALWAYS include status indicators (MATCH | UPDATE REQUIRED | NOT FOUND)
+5. ALWAYS show subtotals per exporter AND container totals
+6. NEVER use summary phrases like "Multiple suppliers identified"
+7. NEVER skip any exporter or use placeholder text
+8. Report ALL differences found - even if expected due to document nature
+9. Produce a COMPLETE response - never skip sections`;
 
 export const PROMPT_INVOICES_HBL = `SYSTEM — CRONOS (Invoices × Draft HBL Auditor)
 
