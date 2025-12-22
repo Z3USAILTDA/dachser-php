@@ -2338,8 +2338,21 @@ serve(async (req) => {
           'AGUARDANDO_MANIFESTACAO': 24,
         };
         
+        // Error statuses to exclude from CCT
+        const errorStatuses = [
+          'COMPANY_NOT_REGISTERED',
+          'NOT_FOUND', 
+          'ERRO',
+          'ERROR',
+          'INVALID_AWB',
+          'API_ERROR',
+          'TIMEOUT',
+          'PARSE_ERROR'
+        ];
+        const errorStatusFilter = errorStatuses.map(s => `'${s}'`).join(',');
+        
         // Query from t_master_dados as primary source, LEFT JOIN t_status_aereo for latest status
-        // IMPORTANT: Filter by registered airlines and exclude COMPANY_NOT_REGISTERED
+        // IMPORTANT: Filter by registered airlines and exclude error statuses
         const shipments = await client.query(`
           SELECT 
             m.id,
@@ -2364,7 +2377,7 @@ serve(async (req) => {
           AND m.tipo_processo = 'AIR IMPORT'
           AND m.data_finalizacao IS NULL
           AND LEFT(TRIM(m.mawb), 3) IN (${airlineFilter})
-          AND (s.\`último_status\` IS NULL OR s.\`último_status\` != 'COMPANY_NOT_REGISTERED')
+          AND (s.\`último_status\` IS NULL OR s.\`último_status\` NOT IN (${errorStatusFilter}))
           ORDER BY s.\`última atualização\` DESC, m.id DESC
           LIMIT 500
         `);
