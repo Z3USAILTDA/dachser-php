@@ -103,10 +103,10 @@ export default function ManualUsuario() {
 
   return (
     <PageLayout title="DACHSER" subtitle="Manual do Usuário — Sistema CCT v2.0" pageIcon={BookOpen}>
-      <div className="flex gap-6">
+      <div className="flex gap-6 relative">
         {/* Sidebar Navigation */}
-        <aside className="w-64 shrink-0">
-          <Card className="bg-[rgba(5,6,18,0.9)] border-white/12 sticky top-6">
+        <aside className="w-64 shrink-0 self-start sticky top-24">
+          <Card className="bg-[rgba(5,6,18,0.9)] border-white/12 max-h-[calc(100vh-8rem)] overflow-y-auto">
             <CardHeader className="pb-3">
               <CardTitle className="text-white text-sm flex items-center gap-2">
                 <BookOpen className="h-4 w-4 text-amber-400" />
