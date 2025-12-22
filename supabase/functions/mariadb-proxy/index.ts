@@ -2338,7 +2338,7 @@ serve(async (req) => {
           'AGUARDANDO_MANIFESTACAO': 24,
         };
         
-        // Error statuses to exclude from CCT
+        // Error/system statuses to exclude from CCT
         const errorStatuses = [
           'COMPANY_NOT_REGISTERED',
           'NOT_FOUND', 
@@ -2347,7 +2347,14 @@ serve(async (req) => {
           'INVALID_AWB',
           'API_ERROR',
           'TIMEOUT',
-          'PARSE_ERROR'
+          'PARSE_ERROR',
+          // System/pending statuses
+          'SIS',
+          'PENDING',
+          'PROCESSING',
+          'UNKNOWN',
+          'N/A',
+          'NULL'
         ];
         const errorStatusFilter = errorStatuses.map(s => `'${s}'`).join(',');
         

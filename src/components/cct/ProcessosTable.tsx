@@ -9,7 +9,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { StatusBadge, SLABadge } from "./StatusBadge";
+import { StatusBadge, SLAInfoBadge } from "./StatusBadge";
 import { TablePagination } from "@/components/layout/TablePagination";
 import { Search, Eye, AlertTriangle } from "lucide-react";
 import { format } from "date-fns";
@@ -168,7 +168,12 @@ export function ProcessosTable({ processos, onAssignAnalista, metricFilter }: Pr
                     <StatusBadge status={processo.status_atual?.status_cct_oficial || "AGUARDANDO_MANIFESTACAO"} />
                   </TableCell>
                   <TableCell>
-                    <SLABadge status={processo.status_atual?.sla_status || "OK"} />
+                    <SLAInfoBadge 
+                      slaInfo={(processo.status_atual as any)?.sla_info || { 
+                        status: processo.status_atual?.sla_status || 'OK', 
+                        horasRestantes: null 
+                      }} 
+                    />
                   </TableCell>
                   <TableCell className="text-[#aaaaaa] text-[0.85rem]">
                     <div className="flex items-center gap-1.5 max-w-[120px] truncate">
