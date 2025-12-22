@@ -860,6 +860,7 @@ const EsteiraIndex = () => {
         responsavelFinanceiroUserId: v.responsavel_financeiro_user_id,
         aprovadoPorUserId: v.aprovado_por_user_id,
         clienteEmail: v.cliente_email,
+        origemCriacao: v.origem_criacao || "MANUAL",
         createdAt: new Date(v.created_at),
         updatedAt: new Date(v.updated_at || v.created_at),
         anexos: [],
@@ -1022,6 +1023,21 @@ const EsteiraIndex = () => {
         const isUrgente = voucher.urgenciaTipo !== "NORMAL";
         if (filters.urgente === "true" && !isUrgente) return false;
         if (filters.urgente === "false" && isUrgente) return false;
+      }
+      // Filtro de vencimento - data inicial
+      if (filters.vencimentoInicio) {
+        const inicio = new Date(filters.vencimentoInicio);
+        if (voucher.vencimento < inicio) return false;
+      }
+      // Filtro de vencimento - data final
+      if (filters.vencimentoFim) {
+        const fim = new Date(filters.vencimentoFim);
+        fim.setHours(23, 59, 59, 999);
+        if (voucher.vencimento > fim) return false;
+      }
+      // Filtro de origem
+      if (filters.origemCriacao && filters.origemCriacao !== "all" && voucher.origemCriacao !== filters.origemCriacao) {
+        return false;
       }
       // Quick filter: Fornecedor
       if (quickFilterFornecedor !== "all" && voucher.fornecedor !== quickFilterFornecedor) {

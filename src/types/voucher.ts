@@ -177,6 +177,7 @@ export interface Voucher {
   accrualDiferenca?: number;
   processoId?: string;
   origemProcesso?: string;
+  origemCriacao?: "MANUAL" | "RM";
   clienteNome?: string;
   centroCusto?: string;
   tipoOperacao?: string;
