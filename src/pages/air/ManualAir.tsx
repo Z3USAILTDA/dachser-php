@@ -114,7 +114,7 @@ export default function ManualAir() {
   );
 
   return (
-    <PageLayout title="DACHSER" subtitle="Manual do Usuário — Tracking Aéreo v1.0" backTo="/air/tracking" pageIcon={BookOpen}>
+    <PageLayout title="DACHSER" subtitle="Manual do Usuário — Módulo Aéreo v1.0" backTo="/air/tracking" pageIcon={BookOpen}>
       <div className="flex gap-6 items-start">
         {/* Sidebar Navigation */}
         <div ref={sidebarPlaceholderRef} className="w-64 shrink-0">
