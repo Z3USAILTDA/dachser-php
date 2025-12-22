@@ -4,8 +4,8 @@ import { PageLayout } from "@/components/cct/PageLayout";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { StatusBadge, SLAInfoBadge } from "@/components/cct/StatusBadge";
+import { InnerNavTabs } from "@/components/cct/InnerNavTabs";
 import { EventTimeline } from "@/components/cct/EventTimeline";
 import { useProcessosCCT, useRegistrarPeso, useUpdateTratamentos, useUpdateDecolagem, useCCTEvents } from "@/hooks/useCCTData";
 import { toast } from "sonner";
@@ -268,41 +268,36 @@ export default function ProcessoTimeline() {
         </div>
 
         {/* Tabs */}
-        <Tabs value={activeTab} onValueChange={setActiveTab}>
-          <TabsList className="bg-[rgba(5,6,18,0.9)] border border-[rgba(255,255,255,0.12)]">
-            <TabsTrigger value="timeline" className="data-[state=active]:bg-[rgba(255,200,0,0.15)] data-[state=active]:text-[#ffc800]">
-              <Clock className="h-4 w-4 mr-2" />
-              Timeline
-            </TabsTrigger>
-            <TabsTrigger value="dados" className="data-[state=active]:bg-[rgba(255,200,0,0.15)] data-[state=active]:text-[#ffc800]">
-              <FileText className="h-4 w-4 mr-2" />
-              Dados
-            </TabsTrigger>
-            <TabsTrigger value="excecoes" className="data-[state=active]:bg-[rgba(255,200,0,0.15)] data-[state=active]:text-[#ffc800]">
-              <AlertTriangle className="h-4 w-4 mr-2" />
-              Exceções ({excecoes.length})
-            </TabsTrigger>
-          </TabsList>
+        <InnerNavTabs
+          tabs={[
+            { id: 'timeline', label: 'Timeline', icon: Clock },
+            { id: 'dados', label: 'Dados', icon: FileText },
+            { id: 'excecoes', label: 'Exceções', icon: AlertTriangle, count: excecoes.length }
+          ]}
+          activeTab={activeTab}
+          onTabChange={setActiveTab}
+        />
 
-          {/* Timeline Tab */}
-          <TabsContent value="timeline" className="mt-6">
-            <div className="rounded-2xl bg-[rgba(5,6,18,0.9)] border border-[rgba(255,255,255,0.12)] shadow-[0_18px_40px_rgba(0,0,0,0.85)] overflow-hidden">
-              <div className="p-4 border-b border-[rgba(255,255,255,0.08)]">
-                <h3 className="text-lg font-medium text-white flex items-center gap-2">
-                  <Clock className="h-5 w-5 text-[#ffc800]" />
-                  Timeline de Eventos ({allEventos.length})
-                  {isLoadingEvents && (
-                    <Loader2 className="h-4 w-4 animate-spin text-[#888]" />
-                  )}
-                </h3>
-              </div>
-              
-              <EventTimeline eventos={allEventos} />
+        {/* Timeline Tab */}
+        {activeTab === 'timeline' && (
+          <div className="rounded-2xl bg-[rgba(5,6,18,0.9)] border border-[rgba(255,255,255,0.12)] shadow-[0_18px_40px_rgba(0,0,0,0.85)] overflow-hidden mt-6">
+            <div className="p-4 border-b border-[rgba(255,255,255,0.08)]">
+              <h3 className="text-lg font-medium text-white flex items-center gap-2">
+                <Clock className="h-5 w-5 text-[#ffc800]" />
+                Timeline de Eventos ({allEventos.length})
+                {isLoadingEvents && (
+                  <Loader2 className="h-4 w-4 animate-spin text-[#888]" />
+                )}
+              </h3>
             </div>
-          </TabsContent>
+            
+            <EventTimeline eventos={allEventos} />
+          </div>
+        )}
 
-          {/* Dados Tab */}
-          <TabsContent value="dados" className="mt-6 space-y-6">
+        {/* Dados Tab */}
+        {activeTab === 'dados' && (
+          <div className="mt-6 space-y-6">
             {/* Peso e Volume */}
             <div className="rounded-2xl bg-[rgba(5,6,18,0.9)] border border-[rgba(255,255,255,0.12)] shadow-[0_18px_40px_rgba(0,0,0,0.85)] p-5">
               <div className="flex items-center justify-between mb-4">
@@ -487,56 +482,56 @@ export default function ProcessoTimeline() {
                 <p className="text-[#666] text-sm mt-2">Nenhum tratamento especial aplicado</p>
               )}
             </div>
-          </TabsContent>
+          </div>
+        )}
 
-          {/* Exceções Tab */}
-          <TabsContent value="excecoes" className="mt-6">
-            <div className="rounded-2xl bg-[rgba(5,6,18,0.9)] border border-[rgba(255,255,255,0.12)] shadow-[0_18px_40px_rgba(0,0,0,0.85)] overflow-hidden">
-              <div className="p-4 border-b border-[rgba(255,255,255,0.08)]">
-                <h3 className="text-lg font-medium text-white flex items-center gap-2">
-                  <AlertTriangle className="h-5 w-5 text-[#ffc800]" />
-                  Exceções Operacionais ({excecoes.length})
-                </h3>
+        {/* Exceções Tab */}
+        {activeTab === 'excecoes' && (
+          <div className="rounded-2xl bg-[rgba(5,6,18,0.9)] border border-[rgba(255,255,255,0.12)] shadow-[0_18px_40px_rgba(0,0,0,0.85)] overflow-hidden mt-6">
+            <div className="p-4 border-b border-[rgba(255,255,255,0.08)]">
+              <h3 className="text-lg font-medium text-white flex items-center gap-2">
+                <AlertTriangle className="h-5 w-5 text-[#ffc800]" />
+                Exceções Operacionais ({excecoes.length})
+              </h3>
+            </div>
+            
+            {excecoes.length === 0 ? (
+              <div className="p-10 text-center">
+                <CheckCircle className="h-12 w-12 text-emerald-400 mx-auto mb-4" />
+                <p className="text-[#888]">Nenhuma exceção registrada</p>
               </div>
-              
-              {excecoes.length === 0 ? (
-                <div className="p-10 text-center">
-                  <CheckCircle className="h-12 w-12 text-emerald-400 mx-auto mb-4" />
-                  <p className="text-[#888]">Nenhuma exceção registrada</p>
-                </div>
-              ) : (
-                <div className="divide-y divide-[rgba(255,255,255,0.08)]">
-                  {excecoes.map((exc) => (
-                    <div key={exc.id} className="p-4">
-                      <div className="flex items-start justify-between gap-4">
-                        <div className="flex-1">
-                          <div className="flex items-center gap-2 mb-2">
-                            <Badge className={cn(
-                              "text-xs",
-                              exc.status_excecao === "ABERTA" && "bg-red-500/20 text-red-400 border-red-500/30",
-                              exc.status_excecao === "EM_ANALISE" && "bg-yellow-500/20 text-yellow-400 border-yellow-500/30",
-                              exc.status_excecao === "RESOLVIDA" && "bg-emerald-500/20 text-emerald-400 border-emerald-500/30"
-                            )}>
-                              {exc.status_excecao.replace(/_/g, " ")}
-                            </Badge>
-                            <Badge className="text-xs bg-[rgba(255,200,0,0.1)] text-[#ffc800] border-[#ffc800]/30">
-                              {exc.tipo_excecao.replace(/_/g, " ")}
-                            </Badge>
-                          </div>
-                          <p className="text-[#aaa] text-sm">{exc.descricao}</p>
-                          <p className="text-[#666] text-xs mt-2">
-                            Criado em {formatDate(exc.created_at)}
-                            {exc.fonte_detectou && ` • Fonte: ${exc.fonte_detectou}`}
-                          </p>
+            ) : (
+              <div className="divide-y divide-[rgba(255,255,255,0.08)]">
+                {excecoes.map((exc) => (
+                  <div key={exc.id} className="p-4">
+                    <div className="flex items-start justify-between gap-4">
+                      <div className="flex-1">
+                        <div className="flex items-center gap-2 mb-2">
+                          <Badge className={cn(
+                            "text-xs",
+                            exc.status_excecao === "ABERTA" && "bg-red-500/20 text-red-400 border-red-500/30",
+                            exc.status_excecao === "EM_ANALISE" && "bg-yellow-500/20 text-yellow-400 border-yellow-500/30",
+                            exc.status_excecao === "RESOLVIDA" && "bg-emerald-500/20 text-emerald-400 border-emerald-500/30"
+                          )}>
+                            {exc.status_excecao.replace(/_/g, " ")}
+                          </Badge>
+                          <Badge className="text-xs bg-[rgba(255,200,0,0.1)] text-[#ffc800] border-[#ffc800]/30">
+                            {exc.tipo_excecao.replace(/_/g, " ")}
+                          </Badge>
                         </div>
+                        <p className="text-[#aaa] text-sm">{exc.descricao}</p>
+                        <p className="text-[#666] text-xs mt-2">
+                          Criado em {formatDate(exc.created_at)}
+                          {exc.fonte_detectou && ` • Fonte: ${exc.fonte_detectou}`}
+                        </p>
                       </div>
                     </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          </TabsContent>
-        </Tabs>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
       </div>
     </PageLayout>
   );
