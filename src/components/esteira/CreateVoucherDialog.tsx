@@ -2,8 +2,8 @@ import { useState, useEffect, useCallback } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { Plus, Upload, X, Search, FileText, RefreshCw, Plane, Ship, FileCheck, AlertCircle, Loader2, Check } from "lucide-react";
-import { format } from "date-fns";
+import { Plus, Upload, X, Search, FileText, RefreshCw, Plane, Ship, FileCheck, AlertCircle, Loader2, Check, Save } from "lucide-react";
+import { format, parse, isValid } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import {
   Dialog,
@@ -381,51 +381,64 @@ export const CreateVoucherDialog = ({
     setBoletoFiles(prev => prev.filter((_, i) => i !== index));
   };
 
-  const onSubmit = async (values: FormValues) => {
-    // Validation
-    if (entryMode === "manual" && !values.numeroRM?.trim()) {
-      toast({
-        title: "Erro de validação",
-        description: "Nº do Voucher é obrigatório",
-        variant: "destructive",
-      });
-      return;
-    }
+  const handleSubmitVoucher = async (values: FormValues, isDraft: boolean = false) => {
+    // Skip validations for draft
+    if (!isDraft) {
+      // Validation
+      if (entryMode === "manual" && !values.numeroRM?.trim()) {
+        toast({
+          title: "Erro de validação",
+          description: "Nº do Voucher é obrigatório",
+          variant: "destructive",
+        });
+        return;
+      }
 
-    if (entryMode === "manual" && !values.fornecedor) {
-      toast({
-        title: "Erro de validação",
-        description: "Fornecedor é obrigatório no modo manual",
-        variant: "destructive",
-      });
-      return;
-    }
+      if (entryMode === "manual" && !values.fornecedor) {
+        toast({
+          title: "Erro de validação",
+          description: "Fornecedor é obrigatório no modo manual",
+          variant: "destructive",
+        });
+        return;
+      }
 
-    if (!values.vencimento) {
-      toast({
-        title: "Erro de validação",
-        description: "Data de vencimento é obrigatória",
-        variant: "destructive",
-      });
-      return;
-    }
+      if (!values.vencimento) {
+        toast({
+          title: "Erro de validação",
+          description: "Data de vencimento é obrigatória",
+          variant: "destructive",
+        });
+        return;
+      }
 
-    if (faturaFiles.length === 0) {
-      toast({
-        title: "Erro de validação",
-        description: "Fatura e Demonstrativo é obrigatório",
-        variant: "destructive",
-      });
-      return;
-    }
+      if (faturaFiles.length === 0) {
+        toast({
+          title: "Erro de validação",
+          description: "Fatura e Demonstrativo é obrigatório",
+          variant: "destructive",
+        });
+        return;
+      }
 
-    if (boletoFiles.length === 0) {
-      toast({
-        title: "Erro de validação",
-        description: "Boleto ou Instruções de Pagamento é obrigatório",
-        variant: "destructive",
-      });
-      return;
+      if (boletoFiles.length === 0) {
+        toast({
+          title: "Erro de validação",
+          description: "Boleto ou Instruções de Pagamento é obrigatório",
+          variant: "destructive",
+        });
+        return;
+      }
+    } else {
+      // Draft requires at least a voucher number
+      if (!values.numeroRM?.trim()) {
+        toast({
+          title: "Erro de validação",
+          description: "Informe pelo menos o Nº do Voucher para salvar como rascunho",
+          variant: "destructive",
+        });
+        return;
+      }
     }
 
     setIsSubmitting(true);
@@ -442,13 +455,21 @@ export const CreateVoucherDialog = ({
           ? "URGENTE_AUTOMATICO" 
           : "NORMAL";
 
+      // Determine etapa_atual based on isDraft and tipoDocumento
+      let etapaAtual = "OPERACAO";
+      if (isDraft) {
+        etapaAtual = "RASCUNHO";
+      } else if (values.tipoDocumento === "ADF") {
+        etapaAtual = "FINANCEIRO";
+      }
+
       const voucherData = {
         numero_spo: values.numeroRM || `MANUAL-${Date.now()}`,
         fornecedor: values.fornecedor || null,
         cnpj_fornecedor: values.cnpjFornecedor || null,
         valor: values.valor ? parseFloat(values.valor.replace(",", ".")) : null,
         moeda: values.moeda,
-        vencimento: values.vencimento.toISOString(),
+        vencimento: values.vencimento?.toISOString() || new Date().toISOString(),
         data_emissao_documento: values.dataEmissaoDocumento?.toISOString() || null,
         cobranca_em_nome_de: values.cobrancaEmNomeDe,
         forma_pagamento: values.formaPagamento,
@@ -456,10 +477,11 @@ export const CreateVoucherDialog = ({
         filial: values.filial || null,
         urgencia_tipo: urgenciaTipo,
         comentarios_operacao: values.comentariosOperacao || null,
-        etapa_atual: values.tipoDocumento === "ADF" ? "FINANCEIRO" : "OPERACAO",
+        etapa_atual: etapaAtual,
         status_baixa: "PENDENTE",
         status_financeiro: "PENDENTE",
         criado_por_user_id: null, // MariaDB user ID is integer, not UUID
+        origem_criacao: entryMode === "rm" ? "RM" : "MANUAL",
       };
 
       const { data: voucher, error: voucherError } = await (supabase as any)
@@ -646,7 +668,7 @@ export const CreateVoucherDialog = ({
         </DialogHeader>
         
         <Form {...form}>
-          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+          <form onSubmit={form.handleSubmit((values) => handleSubmitVoucher(values, false))} className="space-y-6">
             
             {/* Mode Toggle - Tab style */}
             <div className="flex gap-2 p-1 bg-background/30 rounded-xl border border-border/50">
@@ -1026,35 +1048,65 @@ export const CreateVoucherDialog = ({
                         <FormLabel className="flex items-center gap-1.5 text-sm">
                           Data de Vencimento <span className="text-destructive">*</span> {isRmMode && <SyncIcon />}
                         </FormLabel>
-                        <Popover>
-                          <PopoverTrigger asChild>
-                            <FormControl>
-                              <Button
-                                variant="outline"
-                                disabled={isRmMode}
-                                className={cn(
-                                  "w-full pl-3 text-left font-normal bg-background/50 border-border",
-                                  !field.value && "text-muted-foreground"
-                                )}
-                              >
-                                {field.value ? (
-                                  format(field.value, "dd/MM/yyyy", { locale: ptBR })
-                                ) : (
-                                  <span>dd/mm/aaaa</span>
-                                )}
-                                <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
-                              </Button>
-                            </FormControl>
-                          </PopoverTrigger>
-                          <PopoverContent className="w-auto p-0" align="start">
-                            <Calendar
-                              mode="single"
-                              selected={field.value}
-                              onSelect={field.onChange}
-                              locale={ptBR}
+                        <div className="flex gap-2">
+                          <FormControl>
+                            <Input
+                              placeholder="DD/MM/AAAA"
+                              className="flex-1 bg-background/50 border-border"
+                              disabled={isRmMode}
+                              value={field.value ? format(field.value, "dd/MM/yyyy") : ""}
+                              onChange={(e) => {
+                                const value = e.target.value;
+                                // Apply mask
+                                const digits = value.replace(/\D/g, "");
+                                let masked = "";
+                                if (digits.length <= 2) masked = digits;
+                                else if (digits.length <= 4) masked = `${digits.slice(0, 2)}/${digits.slice(2)}`;
+                                else masked = `${digits.slice(0, 2)}/${digits.slice(2, 4)}/${digits.slice(4, 8)}`;
+                                
+                                // Try to parse the date if complete
+                                if (digits.length === 8) {
+                                  const parsed = parse(masked, "dd/MM/yyyy", new Date());
+                                  if (isValid(parsed)) {
+                                    field.onChange(parsed);
+                                  }
+                                } else if (digits.length === 0) {
+                                  field.onChange(undefined);
+                                }
+                                // For partial input, we just update the display
+                                e.target.value = masked;
+                              }}
+                              onBlur={(e) => {
+                                const parsed = parse(e.target.value, "dd/MM/yyyy", new Date());
+                                if (e.target.value && !isValid(parsed)) {
+                                  e.target.value = field.value ? format(field.value, "dd/MM/yyyy") : "";
+                                }
+                              }}
                             />
-                          </PopoverContent>
-                        </Popover>
+                          </FormControl>
+                          <Popover>
+                            <PopoverTrigger asChild>
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="icon"
+                                disabled={isRmMode}
+                                className="bg-background/50 border-border shrink-0"
+                              >
+                                <CalendarIcon className="h-4 w-4" />
+                              </Button>
+                            </PopoverTrigger>
+                            <PopoverContent className="w-auto p-0 pointer-events-auto" align="start">
+                              <Calendar
+                                mode="single"
+                                selected={field.value}
+                                onSelect={field.onChange}
+                                locale={ptBR}
+                                className="pointer-events-auto"
+                              />
+                            </PopoverContent>
+                          </Popover>
+                        </div>
                         <FormMessage />
                       </FormItem>
                     )}
@@ -1067,34 +1119,60 @@ export const CreateVoucherDialog = ({
                         <FormLabel className="flex items-center gap-1.5 text-sm">
                           Data de Emissão
                         </FormLabel>
-                        <Popover>
-                          <PopoverTrigger asChild>
-                            <FormControl>
-                              <Button
-                                variant="outline"
-                                className={cn(
-                                  "w-full pl-3 text-left font-normal bg-background/50 border-border",
-                                  !field.value && "text-muted-foreground"
-                                )}
-                              >
-                                {field.value ? (
-                                  format(field.value, "dd/MM/yyyy", { locale: ptBR })
-                                ) : (
-                                  <span>dd/mm/aaaa</span>
-                                )}
-                                <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
-                              </Button>
-                            </FormControl>
-                          </PopoverTrigger>
-                          <PopoverContent className="w-auto p-0" align="start">
-                            <Calendar
-                              mode="single"
-                              selected={field.value}
-                              onSelect={field.onChange}
-                              locale={ptBR}
+                        <div className="flex gap-2">
+                          <FormControl>
+                            <Input
+                              placeholder="DD/MM/AAAA"
+                              className="flex-1 bg-background/50 border-border"
+                              value={field.value ? format(field.value, "dd/MM/yyyy") : ""}
+                              onChange={(e) => {
+                                const value = e.target.value;
+                                const digits = value.replace(/\D/g, "");
+                                let masked = "";
+                                if (digits.length <= 2) masked = digits;
+                                else if (digits.length <= 4) masked = `${digits.slice(0, 2)}/${digits.slice(2)}`;
+                                else masked = `${digits.slice(0, 2)}/${digits.slice(2, 4)}/${digits.slice(4, 8)}`;
+                                
+                                if (digits.length === 8) {
+                                  const parsed = parse(masked, "dd/MM/yyyy", new Date());
+                                  if (isValid(parsed)) {
+                                    field.onChange(parsed);
+                                  }
+                                } else if (digits.length === 0) {
+                                  field.onChange(undefined);
+                                }
+                                e.target.value = masked;
+                              }}
+                              onBlur={(e) => {
+                                const parsed = parse(e.target.value, "dd/MM/yyyy", new Date());
+                                if (e.target.value && !isValid(parsed)) {
+                                  e.target.value = field.value ? format(field.value, "dd/MM/yyyy") : "";
+                                }
+                              }}
                             />
-                          </PopoverContent>
-                        </Popover>
+                          </FormControl>
+                          <Popover>
+                            <PopoverTrigger asChild>
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="icon"
+                                className="bg-background/50 border-border shrink-0"
+                              >
+                                <CalendarIcon className="h-4 w-4" />
+                              </Button>
+                            </PopoverTrigger>
+                            <PopoverContent className="w-auto p-0 pointer-events-auto" align="start">
+                              <Calendar
+                                mode="single"
+                                selected={field.value}
+                                onSelect={field.onChange}
+                                locale={ptBR}
+                                className="pointer-events-auto"
+                              />
+                            </PopoverContent>
+                          </Popover>
+                        </div>
                         <FormMessage />
                       </FormItem>
                     )}
@@ -1165,7 +1243,6 @@ export const CreateVoucherDialog = ({
                         <SelectContent>
                           <SelectItem value="TRANSFERENCIA_PIX">Transferência/Pix</SelectItem>
                           <SelectItem value="BOLETO">Boleto</SelectItem>
-                          <SelectItem value="TED">TED</SelectItem>
                           <SelectItem value="DARF">DARF</SelectItem>
                           <SelectItem value="GPS">GPS</SelectItem>
                           <SelectItem value="DEBITO">Débito</SelectItem>
@@ -1306,6 +1383,19 @@ export const CreateVoucherDialog = ({
                 className="border-border"
               >
                 Cancelar
+              </Button>
+              <Button
+                type="button"
+                variant="secondary"
+                disabled={isSubmitting}
+                onClick={() => {
+                  const values = form.getValues();
+                  handleSubmitVoucher(values, true);
+                }}
+                className="gap-2"
+              >
+                <Save className="h-4 w-4" />
+                Salvar Rascunho
               </Button>
               <Button 
                 type="submit" 

@@ -20,6 +20,9 @@ export interface FilterValues {
   urgente: string;
   statusBaixa: string;
   statusComprovante: string;
+  vencimentoInicio: string;
+  vencimentoFim: string;
+  origemCriacao: string;
 }
 
 type SortField = "numeroSPO" | "fornecedor" | "valor" | "vencimento" | "etapaAtual" | "tempoNaEtapa" | "createdAt";
@@ -37,6 +40,7 @@ interface VoucherTableProps {
 
 const getEtapaColor = (etapa: string) => {
   const colors: Record<string, string> = {
+    RASCUNHO: "bg-gray-500/10 text-gray-400 border-gray-500/20",
     OPERACAO: "bg-blue-500/10 text-blue-500 border-blue-500/20",
     FISCAL: "bg-purple-500/10 text-purple-500 border-purple-500/20",
     SUPERVISOR: "bg-orange-500/10 text-orange-500 border-orange-500/20",

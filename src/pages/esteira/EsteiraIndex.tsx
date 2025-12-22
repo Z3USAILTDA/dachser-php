@@ -757,6 +757,9 @@ const EsteiraIndex = () => {
     urgente: "all",
     statusBaixa: "all",
     statusComprovante: "all",
+    vencimentoInicio: "",
+    vencimentoFim: "",
+    origemCriacao: "all",
   });
   const [metrics, setMetrics] = useState<DashboardMetrics>({
     ativos: 0,

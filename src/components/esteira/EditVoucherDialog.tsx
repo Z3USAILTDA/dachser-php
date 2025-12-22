@@ -291,7 +291,6 @@ export const EditVoucherDialog = ({ open, onOpenChange, onSuccess, voucher }: Ed
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="BOLETO">Boleto</SelectItem>
-                  <SelectItem value="TED">TED</SelectItem>
                   <SelectItem value="PIX">PIX</SelectItem>
                   <SelectItem value="TRANSFERENCIA_PIX">Transferência/Pix</SelectItem>
                   <SelectItem value="CARTAO">Cartão</SelectItem>

@@ -76,7 +76,7 @@ export const FileUpload = ({
       }, 200);
 
       const { error: uploadError } = await supabase.storage
-        .from("voucher-attachments")
+        .from("voucher-anexos")
         .upload(filePath, file);
 
       clearInterval(progressInterval);
@@ -84,7 +84,7 @@ export const FileUpload = ({
       if (uploadError) throw uploadError;
 
       const { data: { publicUrl } } = supabase.storage
-        .from("voucher-attachments")
+        .from("voucher-anexos")
         .getPublicUrl(filePath);
 
       setUploadingFiles(prev =>
@@ -137,7 +137,7 @@ export const FileUpload = ({
         uploadFile(files[0]);
       }
     }
-  }, [multiple]);
+  }, [multiple, uploadFile, uploadMultipleFiles]);
 
   const handleDrag = (e: React.DragEvent) => {
     e.preventDefault();
