@@ -16,6 +16,7 @@ import { cn } from "@/lib/utils";
 import { exportVouchersToExcel } from "@/utils/voucherExcelExport";
 import { exportVouchersToPDF } from "@/utils/voucherPdfExport";
 import { Voucher } from "@/types/voucher";
+import { HelpButton } from "@/components/esteira/HelpButton";
 
 interface ReportFilters {
   etapa: string;
@@ -150,7 +151,7 @@ export default function EsteiraReports() {
   };
 
   return (
-    <PageLayout backTo="/fin/esteira">
+    <PageLayout backTo="/fin/esteira" rightContent={<HelpButton />}>
       <PageHeader 
         title="Relatórios"
         subtitle="Exporte dados de vouchers para análise"

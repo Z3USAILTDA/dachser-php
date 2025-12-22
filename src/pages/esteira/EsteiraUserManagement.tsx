@@ -6,7 +6,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
-import { Loader2, Users, ShieldCheck, ShieldX, ArrowLeft, Search, UserCog } from "lucide-react";
+import { Loader2, Users, ShieldCheck, ShieldX, ArrowLeft, Search, UserCog, HelpCircle } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { UserRole } from "@/types/voucher";
 import dachserBg from "@/assets/dachser-background.jpg";
@@ -238,7 +238,7 @@ export default function EsteiraUserManagement() {
           </header>
         </div>
 
-        {/* Right - Stats */}
+        {/* Right - Stats and Help */}
         <div className="flex items-center gap-3">
           <div className="px-4 py-2 rounded-full bg-[rgba(0,0,0,.7)] border border-[rgba(255,255,255,.18)]">
             <span className="text-[#aaaaaa] text-[0.8rem]">Total: </span>
@@ -252,6 +252,14 @@ export default function EsteiraUserManagement() {
             <span className="text-[#aaaaaa] text-[0.8rem]">Ativos: </span>
             <span className="text-[#10b981] font-semibold">{usersActive}</span>
           </div>
+          {/* Help Button */}
+          <button
+            onClick={() => navigate("/fin/esteira/manual")}
+            className="w-9 h-9 rounded-full border border-primary/30 bg-primary/10 text-primary hover:bg-primary/20 hover:border-primary/50 transition flex items-center justify-center"
+            title="Ajuda - Manual do Usuário"
+          >
+            <HelpCircle className="h-4 w-4" />
+          </button>
         </div>
       </div>
 
