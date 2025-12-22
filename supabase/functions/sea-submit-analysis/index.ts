@@ -843,41 +843,8 @@ serve(async (req) => {
     let actualItemId = (!itemId || itemId.trim() === '') ? null : parseInt(itemId);
     const storagePrefix = actualItemId || `temp-${Date.now()}`;
     
-    console.log(`📋 Parsed itemId: ${itemId} -> actualItemId: ${actualItemId}`);
-    
     // Connect to MariaDB
     const dbClient = await getDbClient();
-    
-    // For hbl_mbl: validate that itemId exists
-    if (analysisType === 'hbl_mbl' && actualItemId) {
-      const existingItems = await dbClient.query(`
-        SELECT id FROM ai_agente.t_dachser_sea_items WHERE id = ?
-      `, [actualItemId]);
-      
-      if (!existingItems || existingItems.length === 0) {
-        await dbClient.close();
-        console.error(`❌ Item ${actualItemId} not found in database`);
-        return new Response(JSON.stringify({ 
-          error: `Item ${actualItemId} não encontrado no banco de dados` 
-        }), { 
-          status: 404, 
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
-        });
-      }
-      console.log(`✅ Item ${actualItemId} validated - exists in database`);
-    }
-    
-    // For hbl_mbl: require valid itemId
-    if (analysisType === 'hbl_mbl' && !actualItemId) {
-      await dbClient.close();
-      console.error('❌ hbl_mbl analysis requires a valid itemId');
-      return new Response(JSON.stringify({ 
-        error: 'ID do item base é obrigatório para análise HBL x MBL' 
-      }), { 
-        status: 400, 
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
-      });
-    }
 
     try {
       // For invoices_hbl: create new item if no itemId
