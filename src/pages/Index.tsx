@@ -47,7 +47,7 @@ import { Filter as FilterIcon } from "lucide-react";
 const EMAIL_SENDING_ENABLED = false;
 
 // 48 horas em milissegundos para remoção de AWBs em ARR
-const ARR_RETENTION_HOURS = 48;
+const ARR_RETENTION_HOURS = 120; // 5 dias para AWBs em ARR permanecerem visíveis
 const ARR_RETENTION_MS = ARR_RETENTION_HOURS * 60 * 60 * 1000;
 
 // AWBs excluídos manualmente da visualização
