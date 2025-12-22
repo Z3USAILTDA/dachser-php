@@ -2388,8 +2388,8 @@ serve(async (req) => {
             cct.tratamentos_especiais,
             cct.cnpj_consignatario
           FROM ${database}.t_master_dados m
-          LEFT JOIN ${database}.t_status_aereo s ON TRIM(m.mawb) = TRIM(s.awb)
-          LEFT JOIN ${database}.t_cct_shipments cct ON TRIM(m.mawb) = TRIM(cct.master)
+          LEFT JOIN ${database}.t_status_aereo s ON TRIM(m.mawb) COLLATE utf8mb4_unicode_ci = TRIM(s.awb) COLLATE utf8mb4_unicode_ci
+          LEFT JOIN ${database}.t_cct_shipments cct ON TRIM(m.mawb) COLLATE utf8mb4_unicode_ci = TRIM(cct.master) COLLATE utf8mb4_unicode_ci
           WHERE m.active = 1 
           AND m.tipo_processo = 'AIR IMPORT'
           AND m.data_finalizacao IS NULL
@@ -2538,8 +2538,8 @@ serve(async (req) => {
             cct.tratamentos_especiais,
             cct.cnpj_consignatario
           FROM ${database}.t_status_aereo s
-          LEFT JOIN ${database}.t_master_dados m ON TRIM(s.awb) = TRIM(m.mawb)
-          LEFT JOIN ${database}.t_cct_shipments cct ON TRIM(s.awb) = TRIM(cct.master)
+          LEFT JOIN ${database}.t_master_dados m ON TRIM(s.awb) COLLATE utf8mb4_unicode_ci = TRIM(m.mawb) COLLATE utf8mb4_unicode_ci
+          LEFT JOIN ${database}.t_cct_shipments cct ON TRIM(s.awb) COLLATE utf8mb4_unicode_ci = TRIM(cct.master) COLLATE utf8mb4_unicode_ci
           WHERE ${whereClause}
           LIMIT 1
         `);
