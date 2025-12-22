@@ -51,6 +51,9 @@ import RegrasNotificacao from "./pages/cct/RegrasNotificacao";
 import AnalyticsDashboard from "./pages/cct/AnalyticsDashboard";
 import ProcessoTimeline from "./pages/cct/ProcessoTimeline";
 
+// SEA Module
+import ManualSea from "./pages/sea/ManualSea";
+
 // AWB Pages
 import AWBList from "./pages/AWBList";
 import StatusAereoList from "./pages/StatusAereoList";
@@ -81,6 +84,7 @@ const App = () => (
           <Route path="/admin/logs" element={<Logs />} />
           <Route path="/air/check" element={<CheckAwb />} />
           <Route path="/sea/analysis" element={<SeaAnalysis />} />
+          <Route path="/sea/manual" element={<ManualSea />} />
           <Route path="/sea/tracking" element={<ContainerTracking />} />
           <Route path="/maritimo" element={<SeaAnalysis />} />
           <Route path="/sea/cadastro-hbl" element={<CadastroHbl />} />
