@@ -34,6 +34,7 @@ const sections: Section[] = [
   { id: 'manifest-hbl', title: 'Manifest → HBL', icon: <FileText className="h-4 w-4" /> },
   { id: 'hbl-mbl', title: 'HBL → MBL', icon: <FileSpreadsheet className="h-4 w-4" /> },
   { id: 'invoices', title: 'Invoices Draft', icon: <Package className="h-4 w-4" /> },
+  { id: 'container-tracking', title: 'Container Tracking', icon: <Ship className="h-4 w-4" /> },
   { id: 'cadastro', title: 'Cadastro de Arquivos', icon: <Upload className="h-4 w-4" /> },
   { id: 'submissao', title: 'Submissão e Análise', icon: <Play className="h-4 w-4" /> },
   { id: 'faq', title: 'FAQ', icon: <HelpCircle className="h-4 w-4" /> },
@@ -340,6 +341,64 @@ export default function ManualSea() {
                   <div className="p-3 rounded bg-white/5 border border-white/10">
                     <p className="text-white font-medium text-sm">Dados de Embarque</p>
                     <p className="text-xs text-white/60">Origem, destino, container</p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          </section>
+
+          {/* Container Tracking */}
+          <section ref={el => sectionRefs.current['container-tracking'] = el} id="container-tracking">
+            <Card className="bg-[rgba(5,6,18,0.9)] border-white/12">
+              <CardHeader>
+                <CardTitle className="text-white flex items-center gap-2">
+                  <Ship className="h-5 w-5 text-amber-400" />
+                  Container Tracking
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4 text-white/80">
+                <p>
+                  Rastreamento em tempo real de containers marítimos. Acompanhe a posição, 
+                  status e previsão de chegada dos seus containers.
+                </p>
+
+                <h4 className="text-white font-medium mt-4">Funcionalidades</h4>
+                <ul className="space-y-2 text-sm">
+                  <li className="flex items-start gap-2">
+                    <CheckCircle2 className="h-4 w-4 text-green-400 mt-0.5 shrink-0" />
+                    <span>Adicionar containers para monitoramento</span>
+                  </li>
+                  <li className="flex items-start gap-2">
+                    <CheckCircle2 className="h-4 w-4 text-green-400 mt-0.5 shrink-0" />
+                    <span>Visualização em mapa interativo</span>
+                  </li>
+                  <li className="flex items-start gap-2">
+                    <CheckCircle2 className="h-4 w-4 text-green-400 mt-0.5 shrink-0" />
+                    <span>Histórico de movimentações</span>
+                  </li>
+                  <li className="flex items-start gap-2">
+                    <CheckCircle2 className="h-4 w-4 text-green-400 mt-0.5 shrink-0" />
+                    <span>Notificações por email de eventos</span>
+                  </li>
+                  <li className="flex items-start gap-2">
+                    <CheckCircle2 className="h-4 w-4 text-green-400 mt-0.5 shrink-0" />
+                    <span>ETA (Estimated Time of Arrival) atualizado</span>
+                  </li>
+                </ul>
+
+                <h4 className="text-white font-medium mt-4">Status de Container</h4>
+                <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                  <div className="p-3 rounded bg-blue-500/10 border border-blue-500/20">
+                    <Badge className="bg-blue-500 mb-2">EM TRÂNSITO</Badge>
+                    <p className="text-xs text-white/60">Container em viagem</p>
+                  </div>
+                  <div className="p-3 rounded bg-purple-500/10 border border-purple-500/20">
+                    <Badge className="bg-purple-500 mb-2">NO PORTO</Badge>
+                    <p className="text-xs text-white/60">Aguardando liberação</p>
+                  </div>
+                  <div className="p-3 rounded bg-green-500/10 border border-green-500/20">
+                    <Badge className="bg-green-500 mb-2">ENTREGUE</Badge>
+                    <p className="text-xs text-white/60">Container liberado</p>
                   </div>
                 </div>
               </CardContent>

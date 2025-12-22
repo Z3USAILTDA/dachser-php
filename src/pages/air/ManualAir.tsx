@@ -30,6 +30,7 @@ const sections: Section[] = [
   { id: 'visao-geral', title: 'Visão Geral', icon: <BookOpen className="h-4 w-4" /> },
   { id: 'tracking', title: 'Tracking Aéreo', icon: <Plane className="h-4 w-4" /> },
   { id: 'check-awb', title: 'Check AWB', icon: <SearchIcon className="h-4 w-4" /> },
+  { id: 'lista-awbs', title: 'Lista de AWBs', icon: <Package className="h-4 w-4" /> },
   { id: 'status', title: 'Status Aéreo', icon: <RefreshCw className="h-4 w-4" /> },
   { id: 'notificacoes', title: 'Notificações', icon: <Mail className="h-4 w-4" /> },
   { id: 'faq', title: 'FAQ', icon: <HelpCircle className="h-4 w-4" /> },
@@ -273,6 +274,56 @@ export default function ManualAir() {
                     </div>
                   ))}
                 </div>
+              </CardContent>
+            </Card>
+          </section>
+
+          {/* Lista de AWBs */}
+          <section ref={el => sectionRefs.current['lista-awbs'] = el} id="lista-awbs">
+            <Card className="bg-[rgba(5,6,18,0.9)] border-white/12">
+              <CardHeader>
+                <CardTitle className="text-white flex items-center gap-2">
+                  <Package className="h-5 w-5 text-amber-400" />
+                  Lista de AWBs
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4 text-white/80">
+                <p>
+                  Visualize todos os AWBs cadastrados no sistema em formato de tabela, 
+                  com filtros avançados e opções de exportação.
+                </p>
+
+                <h4 className="text-white font-medium mt-4">Diferença do Tracking</h4>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  <div className="p-3 rounded bg-blue-500/10 border border-blue-500/20">
+                    <p className="text-sm font-medium text-white">Lista de AWBs</p>
+                    <p className="text-xs text-white/60">Visão tabular com dados completos, filtros e exportação</p>
+                  </div>
+                  <div className="p-3 rounded bg-purple-500/10 border border-purple-500/20">
+                    <p className="text-sm font-medium text-white">Tracking Aéreo</p>
+                    <p className="text-xs text-white/60">Foco em monitoramento e timeline de eventos</p>
+                  </div>
+                </div>
+
+                <h4 className="text-white font-medium mt-4">Funcionalidades</h4>
+                <ul className="space-y-2 text-sm">
+                  <li className="flex items-start gap-2">
+                    <CheckCircle2 className="h-4 w-4 text-green-400 mt-0.5 shrink-0" />
+                    <span>Filtros por cliente, status, período</span>
+                  </li>
+                  <li className="flex items-start gap-2">
+                    <CheckCircle2 className="h-4 w-4 text-green-400 mt-0.5 shrink-0" />
+                    <span>Ordenação por qualquer coluna</span>
+                  </li>
+                  <li className="flex items-start gap-2">
+                    <CheckCircle2 className="h-4 w-4 text-green-400 mt-0.5 shrink-0" />
+                    <span>Exportação para Excel</span>
+                  </li>
+                  <li className="flex items-start gap-2">
+                    <CheckCircle2 className="h-4 w-4 text-green-400 mt-0.5 shrink-0" />
+                    <span>Ações em lote</span>
+                  </li>
+                </ul>
               </CardContent>
             </Card>
           </section>

@@ -30,6 +30,8 @@ const sections: Section[] = [
   { id: 'visao-geral', title: 'Visão Geral', icon: <BookOpen className="h-4 w-4" /> },
   { id: 'regua', title: 'Régua de Cobrança', icon: <Calendar className="h-4 w-4" /> },
   { id: 'disputa', title: 'Disputa Financeira', icon: <AlertTriangle className="h-4 w-4" /> },
+  { id: 'local-charges', title: 'Local Charges', icon: <DollarSign className="h-4 w-4" /> },
+  { id: 'alteracoes-fee', title: 'Alterações Fee', icon: <TrendingUp className="h-4 w-4" /> },
   { id: 'analise-documental', title: 'Análise Documental', icon: <FileText className="h-4 w-4" /> },
   { id: 'faq', title: 'FAQ', icon: <HelpCircle className="h-4 w-4" /> },
   { id: 'glossario', title: 'Glossário', icon: <BookText className="h-4 w-4" /> },
@@ -106,7 +108,7 @@ export default function ManualFinanceiro() {
   );
 
   return (
-    <PageLayout title="DACHSER" subtitle="Manual do Usuário — Financeiro v1.0" backTo="/dashboard" pageIcon={BookOpen}>
+    <PageLayout title="DACHSER" subtitle="Manual do Usuário — Financeiro v1.0" backTo="/fin/regua" pageIcon={BookOpen}>
       <div className="flex gap-6 items-start">
         {/* Sidebar Navigation */}
         <div ref={sidebarPlaceholderRef} className="w-64 shrink-0">
@@ -284,6 +286,90 @@ export default function ManualFinanceiro() {
                   <div className="flex items-center gap-3 p-2 rounded bg-green-500/10">
                     <Badge className="bg-green-500">RESOLVIDA</Badge>
                     <span className="text-sm">Disputa encerrada com resolução</span>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          </section>
+
+          {/* Local Charges */}
+          <section ref={el => sectionRefs.current['local-charges'] = el} id="local-charges">
+            <Card className="bg-[rgba(5,6,18,0.9)] border-white/12">
+              <CardHeader>
+                <CardTitle className="text-white flex items-center gap-2">
+                  <DollarSign className="h-5 w-5 text-amber-400" />
+                  Local Charges
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4 text-white/80">
+                <p>
+                  Gerencie as taxas locais aplicadas a processos de importação, 
+                  incluindo THC, capatazia, armazenagem e demais despesas portuárias.
+                </p>
+
+                <h4 className="text-white font-medium mt-4">Tipos de Taxas</h4>
+                <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                  <div className="p-3 rounded bg-white/5 border border-white/10">
+                    <p className="text-sm font-medium text-white">THC</p>
+                    <p className="text-xs text-white/60">Terminal Handling Charge</p>
+                  </div>
+                  <div className="p-3 rounded bg-white/5 border border-white/10">
+                    <p className="text-sm font-medium text-white">Capatazia</p>
+                    <p className="text-xs text-white/60">Movimentação de carga</p>
+                  </div>
+                  <div className="p-3 rounded bg-white/5 border border-white/10">
+                    <p className="text-sm font-medium text-white">Armazenagem</p>
+                    <p className="text-xs text-white/60">Período de guarda</p>
+                  </div>
+                </div>
+
+                <h4 className="text-white font-medium mt-4">Funcionalidades</h4>
+                <ul className="space-y-2 text-sm">
+                  <li className="flex items-start gap-2">
+                    <CheckCircle2 className="h-4 w-4 text-green-400 mt-0.5 shrink-0" />
+                    <span>Cadastro de tabelas de tarifas</span>
+                  </li>
+                  <li className="flex items-start gap-2">
+                    <CheckCircle2 className="h-4 w-4 text-green-400 mt-0.5 shrink-0" />
+                    <span>Simulação de custos</span>
+                  </li>
+                  <li className="flex items-start gap-2">
+                    <CheckCircle2 className="h-4 w-4 text-green-400 mt-0.5 shrink-0" />
+                    <span>Histórico de alterações</span>
+                  </li>
+                </ul>
+              </CardContent>
+            </Card>
+          </section>
+
+          {/* Alterações Fee */}
+          <section ref={el => sectionRefs.current['alteracoes-fee'] = el} id="alteracoes-fee">
+            <Card className="bg-[rgba(5,6,18,0.9)] border-white/12">
+              <CardHeader>
+                <CardTitle className="text-white flex items-center gap-2">
+                  <TrendingUp className="h-5 w-5 text-amber-400" />
+                  Alterações Fee
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4 text-white/80">
+                <p>
+                  Acompanhe e gerencie alterações em taxas e honorários, 
+                  mantendo histórico de mudanças e justificativas.
+                </p>
+
+                <h4 className="text-white font-medium mt-4">Tipos de Alteração</h4>
+                <div className="space-y-2">
+                  <div className="flex items-center gap-3 p-2 rounded bg-green-500/10">
+                    <Badge className="bg-green-500">AUMENTO</Badge>
+                    <span className="text-sm">Reajuste positivo de valores</span>
+                  </div>
+                  <div className="flex items-center gap-3 p-2 rounded bg-red-500/10">
+                    <Badge className="bg-red-500">REDUÇÃO</Badge>
+                    <span className="text-sm">Desconto ou redução de taxa</span>
+                  </div>
+                  <div className="flex items-center gap-3 p-2 rounded bg-blue-500/10">
+                    <Badge className="bg-blue-500">NOVA</Badge>
+                    <span className="text-sm">Nova taxa adicionada</span>
                   </div>
                 </div>
               </CardContent>

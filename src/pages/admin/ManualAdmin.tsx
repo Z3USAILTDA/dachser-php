@@ -29,6 +29,7 @@ interface Section {
 const sections: Section[] = [
   { id: 'visao-geral', title: 'Visão Geral', icon: <BookOpen className="h-4 w-4" /> },
   { id: 'usuarios', title: 'Gestão de Usuários', icon: <Users className="h-4 w-4" /> },
+  { id: 'registro', title: 'Registro de Usuários', icon: <Shield className="h-4 w-4" /> },
   { id: 'metricas', title: 'Métricas de Uso', icon: <BarChart3 className="h-4 w-4" /> },
   { id: 'logs', title: 'Logs do Sistema', icon: <FileText className="h-4 w-4" /> },
   { id: 'faq', title: 'FAQ', icon: <HelpCircle className="h-4 w-4" /> },
@@ -106,7 +107,7 @@ export default function ManualAdmin() {
   );
 
   return (
-    <PageLayout title="DACHSER" subtitle="Manual do Administrador v1.0" backTo="/dashboard" pageIcon={BookOpen}>
+    <PageLayout title="DACHSER" subtitle="Manual do Administrador v1.0" backTo="/admin/users" pageIcon={BookOpen}>
       <div className="flex gap-6 items-start">
         {/* Sidebar Navigation */}
         <div ref={sidebarPlaceholderRef} className="w-64 shrink-0">
@@ -260,6 +261,52 @@ export default function ManualAdmin() {
                     <span>Resetar senhas</span>
                   </li>
                 </ul>
+              </CardContent>
+            </Card>
+          </section>
+
+          {/* Registro de Usuários */}
+          <section ref={el => sectionRefs.current['registro'] = el} id="registro">
+            <Card className="bg-[rgba(5,6,18,0.9)] border-white/12">
+              <CardHeader>
+                <CardTitle className="text-white flex items-center gap-2">
+                  <Shield className="h-5 w-5 text-amber-400" />
+                  Registro de Usuários
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4 text-white/80">
+                <p>
+                  Tela dedicada ao registro de novos usuários no sistema. 
+                  Permite criar contas com perfis e permissões pré-definidas.
+                </p>
+
+                <h4 className="text-white font-medium mt-4">Dados Necessários</h4>
+                <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                  <div className="p-3 rounded bg-white/5 border border-white/10">
+                    <p className="text-sm font-medium text-white">Nome Completo</p>
+                    <p className="text-xs text-white/60">Identificação do usuário</p>
+                  </div>
+                  <div className="p-3 rounded bg-white/5 border border-white/10">
+                    <p className="text-sm font-medium text-white">Email</p>
+                    <p className="text-xs text-white/60">Login e notificações</p>
+                  </div>
+                  <div className="p-3 rounded bg-white/5 border border-white/10">
+                    <p className="text-sm font-medium text-white">Perfil</p>
+                    <p className="text-xs text-white/60">Nível de acesso</p>
+                  </div>
+                </div>
+
+                <h4 className="text-white font-medium mt-4">Fluxo de Registro</h4>
+                <div className="space-y-2">
+                  {['1. Preencher formulário com dados do usuário', '2. Selecionar perfil de acesso', '3. Enviar convite por email', '4. Usuário define senha no primeiro acesso'].map((etapa, i) => (
+                    <div key={etapa} className="flex items-center gap-3 p-2 rounded bg-white/5">
+                      <div className="w-6 h-6 rounded-full bg-amber-500/20 flex items-center justify-center text-xs text-amber-300 font-bold">
+                        {i + 1}
+                      </div>
+                      <span className="text-sm">{etapa.split('. ')[1]}</span>
+                    </div>
+                  ))}
+                </div>
               </CardContent>
             </Card>
           </section>
