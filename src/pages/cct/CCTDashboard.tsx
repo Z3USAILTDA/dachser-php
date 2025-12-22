@@ -45,6 +45,13 @@ export default function CCTDashboard() {
   
   const storedUser = localStorage.getItem("user");
   const user = storedUser ? JSON.parse(storedUser) : null;
+  const isAdmin = user?.is_admin === 1 || user?.is_admin === "1" || user?.is_admin === true;
+  
+  // Filter tabs - Console only for admins
+  const visibleTabs = navTabs.filter(tab => {
+    if (tab.id === "console") return isAdmin;
+    return true;
+  });
   
   // Dashboard data
   const {
@@ -292,7 +299,7 @@ export default function CCTDashboard() {
 
           {/* Navigation Tabs - Below cards, above table */}
           <nav className="flex items-center gap-1 px-2 py-1.5 rounded-full bg-[rgba(5,6,18,0.85)] border border-white/10 backdrop-blur-sm w-fit">
-            {navTabs.map((tab) => {
+            {visibleTabs.map((tab) => {
               const Icon = tab.icon;
               const isActive = activeTab === tab.id;
               return (

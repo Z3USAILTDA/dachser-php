@@ -1,4 +1,5 @@
 import { useEffect, useState, useCallback } from "react";
+import { useNavigate } from "react-router-dom";
 import { PageLayout } from "@/components/cct/PageLayout";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
@@ -53,6 +54,21 @@ interface CCTUser {
 }
 
 export default function ConsoleTecnico() {
+  const navigate = useNavigate();
+  
+  // Check admin access
+  const storedUser = localStorage.getItem("user");
+  const user = storedUser ? JSON.parse(storedUser) : null;
+  const isAdmin = user?.is_admin === 1 || user?.is_admin === "1" || user?.is_admin === true;
+  
+  // Redirect non-admin users
+  useEffect(() => {
+    if (!isAdmin) {
+      toast.error("Acesso restrito a administradores");
+      navigate("/air/cct");
+    }
+  }, [isAdmin, navigate]);
+
   const [syncStatuses, setSyncStatuses] = useState<SyncStatus[]>([
     { name: 'MariaDB', lastSync: null, status: 'offline' },
     { name: 'LeadComex', lastSync: null, status: 'offline' },
@@ -64,6 +80,9 @@ export default function ConsoleTecnico() {
   const [syncing, setSyncing] = useState<string | null>(null);
   const [logFilter, setLogFilter] = useState('');
   const [userSearch, setUserSearch] = useState('');
+  
+  // Don't render content if not admin
+  if (!isAdmin) return null;
 
   const addLog = useCallback((level: SystemLog['level'], source: string, message: string, details?: string) => {
     const newLog: SystemLog = {
