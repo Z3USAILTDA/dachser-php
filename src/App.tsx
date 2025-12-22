@@ -51,8 +51,14 @@ import RegrasNotificacao from "./pages/cct/RegrasNotificacao";
 import AnalyticsDashboard from "./pages/cct/AnalyticsDashboard";
 import ProcessoTimeline from "./pages/cct/ProcessoTimeline";
 
-// SEA Module
-import ManualSea from "./pages/sea/ManualSea";
+// SEA Module Manuals
+import ManualSeaAnalysis from "./pages/sea/ManualSeaAnalysis";
+import ManualContainerTracking from "./pages/sea/ManualContainerTracking";
+import ManualCadastroHbl from "./pages/sea/ManualCadastroHbl";
+import ManualCadastroManifest from "./pages/sea/ManualCadastroManifest";
+import ManualSubmeterHblMbl from "./pages/sea/ManualSubmeterHblMbl";
+import ManualSubmeterManifestHbl from "./pages/sea/ManualSubmeterManifestHbl";
+import ManualInvoicesDraft from "./pages/sea/ManualInvoicesDraft";
 
 // CHB Module
 import ManualChb from "./pages/chb/ManualChb";
@@ -99,7 +105,13 @@ const App = () => (
           <Route path="/admin/logs" element={<Logs />} />
           <Route path="/air/check" element={<CheckAwb />} />
           <Route path="/sea/analysis" element={<SeaAnalysis />} />
-          <Route path="/sea/manual" element={<ManualSea />} />
+          <Route path="/sea/analysis/manual" element={<ManualSeaAnalysis />} />
+          <Route path="/sea/tracking/manual" element={<ManualContainerTracking />} />
+          <Route path="/sea/cadastro-hbl/manual" element={<ManualCadastroHbl />} />
+          <Route path="/sea/cadastro-manifest/manual" element={<ManualCadastroManifest />} />
+          <Route path="/sea/submeter-hbl-mbl/manual" element={<ManualSubmeterHblMbl />} />
+          <Route path="/sea/submeter-manifest-hbl/manual" element={<ManualSubmeterManifestHbl />} />
+          <Route path="/sea/invoices-draft-hbl/manual" element={<ManualInvoicesDraft />} />
           <Route path="/sea/tracking" element={<ContainerTracking />} />
           <Route path="/maritimo" element={<SeaAnalysis />} />
           <Route path="/sea/cadastro-hbl" element={<CadastroHbl />} />
