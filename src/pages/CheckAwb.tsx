@@ -78,7 +78,7 @@ const CheckAwb = () => {
   const [checks, setChecks] = useState<AwbCheck[]>([]);
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
-  const [periodFilter, setPeriodFilter] = useState("7");
+  const [periodFilter, setPeriodFilter] = useState("30");
 
   // Modal states
   const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
