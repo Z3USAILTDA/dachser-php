@@ -1,5 +1,5 @@
 import { useState, useMemo } from "react";
-import { RefreshCw, Trash2, Play, FileText, ArrowRightLeft, Download, FolderOpen, Ship } from "lucide-react";
+import { RefreshCw, Trash2, Play, FileText, ArrowRightLeft, Download, FolderOpen, Ship, HelpCircle } from "lucide-react";
 import { useUsageLog } from "@/hooks/useUsageLog";
 import { NavTabs } from "@/components/maritimo/NavTabs";
 import { BadgeStatus } from "@/components/maritimo/BadgeStatus";
@@ -185,6 +185,14 @@ export default function SeaAnalysis() {
           <FontAwesomeIcon icon={faTerminal} className="w-4 h-4 text-[#ffc800]" />
         </button>
       )}
+      <button
+        type="button"
+        onClick={() => navigate("/sea/manual")}
+        className="w-8 h-8 rounded-full border border-[rgba(255,255,255,.25)] flex items-center justify-center bg-[rgba(0,0,0,.7)] text-[#aaaaaa] hover:text-[#ffc800] hover:bg-[rgba(0,0,0,.9)] transition"
+        title="Ajuda"
+      >
+        <HelpCircle className="w-4 h-4" />
+      </button>
     </>
   );
 
