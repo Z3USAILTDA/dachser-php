@@ -18,6 +18,7 @@ import {
   ChevronRight
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
 type Section = 
   | "visao-geral" 
@@ -84,7 +85,9 @@ const FeatureCard = ({
 
 export default function EsteiraManual() {
   const [activeSection, setActiveSection] = useState<Section>("visao-geral");
+  const [isSticky, setIsSticky] = useState(false);
   const contentRef = useRef<HTMLDivElement>(null);
+  const sidebarPlaceholderRef = useRef<HTMLDivElement>(null);
   const sectionRefs = useRef<Record<Section, HTMLDivElement | null>>({
     "visao-geral": null,
     "dashboard": null,
@@ -103,19 +106,29 @@ export default function EsteiraManual() {
     }
   };
 
+  // Detect scroll to toggle sticky behavior
   useEffect(() => {
     const handleScroll = () => {
+      if (sidebarPlaceholderRef.current) {
+        const rect = sidebarPlaceholderRef.current.getBoundingClientRect();
+        // When the placeholder top goes above 24px from viewport top, make sidebar fixed
+        setIsSticky(rect.top < 24);
+      }
+
+      // Update active section based on scroll position
       const container = contentRef.current;
       if (!container) return;
 
-      const scrollTop = container.scrollTop;
-      const offset = 150;
+      const scrollTop = window.scrollY;
+      const offset = 200;
 
       for (const item of navItems) {
         const element = sectionRefs.current[item.id];
         if (element) {
-          const { offsetTop, offsetHeight } = element;
-          if (scrollTop >= offsetTop - offset && scrollTop < offsetTop + offsetHeight - offset) {
+          const rect = element.getBoundingClientRect();
+          const elementTop = rect.top + window.scrollY;
+          const elementBottom = elementTop + rect.height;
+          if (scrollTop >= elementTop - offset && scrollTop < elementBottom - offset) {
             setActiveSection(item.id);
             break;
           }
@@ -123,11 +136,9 @@ export default function EsteiraManual() {
       }
     };
 
-    const container = contentRef.current;
-    if (container) {
-      container.addEventListener("scroll", handleScroll);
-      return () => container.removeEventListener("scroll", handleScroll);
-    }
+    window.addEventListener('scroll', handleScroll, { passive: true });
+    handleScroll(); // Check initial state
+    return () => window.removeEventListener('scroll', handleScroll);
   }, []);
 
   const rightContent = (
@@ -143,37 +154,49 @@ export default function EsteiraManual() {
       rightContent={rightContent}
       backTo="/fin/esteira"
     >
-      <div className="flex gap-4">
-        {/* Sidebar */}
-        <PageCard className="w-64 h-fit sticky top-4" padding="sm">
-          <div className="p-3">
-            <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-              Navegação
-            </span>
+      <div className="flex gap-6 items-start">
+        {/* Sidebar Navigation - Dynamic sticky */}
+        <div ref={sidebarPlaceholderRef} className="w-64 shrink-0">
+          <div 
+            className={cn(
+              "w-64 transition-all duration-200",
+              isSticky ? "fixed top-6 z-40" : "relative"
+            )}
+          >
+            <Card className="bg-card/90 backdrop-blur-sm border-border/50 max-h-[calc(100vh-4rem)] overflow-y-auto">
+              <CardHeader className="pb-3">
+                <CardTitle className="text-foreground text-sm flex items-center gap-2">
+                  <BookOpen className="h-4 w-4 text-primary" />
+                  Conteúdo
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="p-0">
+                <nav className="space-y-1 pb-4">
+                  {navItems.map((item) => (
+                    <button
+                      key={item.id}
+                      onClick={() => scrollToSection(item.id)}
+                      className={cn(
+                        "w-full flex items-center gap-2 px-4 py-2 text-sm transition-colors",
+                        activeSection === item.id 
+                          ? "bg-primary/20 text-primary border-l-2 border-primary" 
+                          : "text-muted-foreground hover:text-foreground hover:bg-muted/50"
+                      )}
+                    >
+                      <item.icon className="h-4 w-4" />
+                      {item.label}
+                    </button>
+                  ))}
+                </nav>
+              </CardContent>
+            </Card>
           </div>
-          <nav className="space-y-1 p-2">
-            {navItems.map((item) => (
-              <button
-                key={item.id}
-                onClick={() => scrollToSection(item.id)}
-                className={cn(
-                  "w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all",
-                  activeSection === item.id
-                    ? "bg-primary text-primary-foreground"
-                    : "text-muted-foreground hover:bg-muted hover:text-foreground"
-                )}
-              >
-                <item.icon className="h-4 w-4" />
-                {item.label}
-              </button>
-            ))}
-          </nav>
-        </PageCard>
+        </div>
 
         {/* Content */}
         <div 
           ref={contentRef}
-          className="flex-1 max-h-[calc(100vh-180px)] overflow-y-auto pr-2"
+          className="flex-1 pr-2"
         >
           <div className="space-y-12">
             <div ref={(el) => (sectionRefs.current["visao-geral"] = el)}>

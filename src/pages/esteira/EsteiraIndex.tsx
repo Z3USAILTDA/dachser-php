@@ -1266,6 +1266,15 @@ const EsteiraIndex = () => {
             <Settings className="h-4 w-4" />
           </button>
 
+          {/* Help Button */}
+          <button
+            onClick={() => navigate("/fin/esteira/manual")}
+            className="w-9 h-9 rounded-full border border-primary/30 bg-primary/10 text-primary hover:bg-primary/20 hover:border-primary/50 transition flex items-center justify-center"
+            title="Ajuda - Manual do Usuário"
+          >
+            <HelpCircle className="h-4 w-4" />
+          </button>
+
           <div
             className="w-8 h-8 rounded-full border border-[rgba(255,255,255,.25)] flex items-center justify-center bg-[rgba(0,0,0,.7)] text-[#ffc800]"
             title="Esteira de Vouchers"

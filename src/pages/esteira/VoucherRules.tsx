@@ -10,6 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { Settings, Save, RefreshCw, Clock, AlertTriangle, FileText, Scale } from "lucide-react";
+import { HelpButton } from "@/components/esteira/HelpButton";
 
 interface SLAConfig {
   id: string;
@@ -135,7 +136,7 @@ export default function VoucherRules() {
   };
 
   return (
-    <PageLayout backTo="/fin/esteira">
+    <PageLayout backTo="/fin/esteira" rightContent={<HelpButton />}>
       <PageHeader
         title="Configuração de Regras"
         subtitle="Gerencie SLAs e regras de urgência automática"

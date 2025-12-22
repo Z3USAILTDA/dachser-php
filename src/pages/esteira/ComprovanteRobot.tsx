@@ -12,6 +12,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { Bot, Upload, CheckCircle2, XCircle, AlertCircle, FileText } from "lucide-react";
 import { TipoAnexo } from "@/types/voucher";
+import { HelpButton } from "@/components/esteira/HelpButton";
 
 interface FileMatch {
   file: File;
@@ -201,7 +202,7 @@ export default function ComprovanteRobot() {
   };
 
   return (
-    <PageLayout backTo="/fin/esteira">
+    <PageLayout backTo="/fin/esteira" rightContent={<HelpButton />}>
       <PageHeader 
         title="Robô de Comprovantes"
         subtitle="Upload em lote de comprovantes com associação automática"

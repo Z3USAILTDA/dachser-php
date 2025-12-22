@@ -17,6 +17,7 @@ import { VoucherFiscalActions } from "@/components/esteira/VoucherFiscalActions"
 import { VoucherSupervisorActions } from "@/components/esteira/VoucherSupervisorActions";
 import { VoucherFinanceiroActions } from "@/components/esteira/VoucherFinanceiroActions";
 import { VoucherRoboActions } from "@/components/esteira/VoucherRoboActions";
+import { HelpButton } from "@/components/esteira/HelpButton";
 
 const EsteiraVoucherDetails = () => {
   const { id } = useParams();
@@ -152,7 +153,7 @@ const EsteiraVoucherDetails = () => {
 
   if (loading) {
     return (
-      <PageLayout backTo="/fin/esteira">
+      <PageLayout backTo="/fin/esteira" rightContent={<HelpButton />}>
         <div className="flex-1 flex items-center justify-center min-h-[60vh]">
           <Loader2 className="h-8 w-8 animate-spin text-primary" />
         </div>
@@ -162,7 +163,7 @@ const EsteiraVoucherDetails = () => {
 
   if (!voucher) {
     return (
-      <PageLayout backTo="/fin/esteira">
+      <PageLayout backTo="/fin/esteira" rightContent={<HelpButton />}>
         <div className="flex-1 flex items-center justify-center min-h-[60vh]">
           <p className="text-muted-foreground">Voucher não encontrado</p>
         </div>
@@ -185,7 +186,7 @@ const EsteiraVoucherDetails = () => {
   };
 
   return (
-    <PageLayout backTo="/fin/esteira">
+    <PageLayout backTo="/fin/esteira" rightContent={<HelpButton />}>
       <PageHeader 
         title={`Voucher ${voucher.numeroSPO}`}
         subtitle={
