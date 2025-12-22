@@ -133,10 +133,14 @@ export function ProcessosTable({ processos, onAssignAnalista, metricFilter }: Pr
             {paginatedProcessos.map((processo, index) => {
               const isCCT = processo.status_atual?.status_cct_oficial !== "AGUARDANDO_MANIFESTACAO";
               const excecoesAbertas = processo.excecoes.filter(e => e.status_excecao !== "RESOLVIDA").length;
+              // Format tratamentos for display
+              const tratamentosDisplay = Array.isArray(processo.shipment.tratamentos_especiais) 
+                ? processo.shipment.tratamentos_especiais.join(", ") 
+                : processo.shipment.tratamentos_especiais;
 
               return (
                 <TableRow 
-                  key={processo.shipment.id}
+                  key={`${processo.shipment.id}-${processo.shipment.master}-${index}`}
                   className={`border-[rgba(255,255,255,0.05)] hover:bg-[rgba(255,255,255,0.03)] ${index % 2 === 0 ? "bg-[rgba(255,255,255,0.02)]" : ""}`}
                 >
                   <TableCell>
@@ -164,8 +168,10 @@ export function ProcessosTable({ processos, onAssignAnalista, metricFilter }: Pr
                       <div className="w-2 h-2 rounded-full bg-emerald-400" />
                     </div>
                   </TableCell>
-                  <TableCell className="text-[#666] text-[0.85rem]">
-                    {processo.shipment.tratamentos_especiais || "—"}
+                  <TableCell className="text-[#aaaaaa] text-[0.85rem] max-w-[150px]">
+                    <span className="truncate block" title={tratamentosDisplay || undefined}>
+                      {tratamentosDisplay || "—"}
+                    </span>
                   </TableCell>
                   <TableCell>
                     <StatusBadge status={processo.status_atual?.status_cct_oficial || "AGUARDANDO_MANIFESTACAO"} />
