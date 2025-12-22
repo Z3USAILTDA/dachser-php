@@ -33,7 +33,9 @@ export default function SubmeterHblMbl() {
   const [copiedResult, setCopiedResult] = useState(false);
   const [inlineStatus, setInlineStatus] = useState<{ message: string; type: 'info' | 'success' | 'error' } | null>(null);
 
-  const itemId = location.state?.itemId;
+  // Support both query params (from SeaAnalysis list) and location state (from CadastroHbl)
+  const searchParams = new URLSearchParams(location.search);
+  const itemId = searchParams.get('itemId') || location.state?.itemId;
 
   useEffect(() => {
     if (!itemId) {
