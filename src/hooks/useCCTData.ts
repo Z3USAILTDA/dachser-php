@@ -94,12 +94,26 @@ function mapRowToProcessoCCT(row: any): ProcessoCCT {
   };
 
   // Build status_atual object - status is derived from ultimo_evento_codigo
+  // Extract sla_info from backend response for detailed SLA display
+  const sla_info = row.sla_info ? {
+    status: (row.sla_info.status || row.sla_status || 'OK') as SLAStatus,
+    horasRestantes: row.sla_info.horasRestantes ?? null,
+    percentual: row.sla_info.percentual ?? null,
+    slaConfigHoras: row.sla_info.horasLimite ?? 24,
+  } : {
+    status: (row.sla_status || 'OK') as SLAStatus,
+    horasRestantes: null,
+    percentual: null,
+    slaConfigHoras: 24,
+  };
+
   const status_atual: CCTStatusAtual = {
     id: `status-${row.id}`,
     shipment_id: row.id?.toString() || row.master,
     status_cct_oficial: row.status_cct_oficial as StatusCCTOficial || 'AGUARDANDO_MANIFESTACAO',
-    sla_status: row.sla_status as SLAStatus || 'OK',
+    sla_status: sla_info.status,
     sla_limite: row.sla_limite,
+    sla_info,
     proximo_evento_esperado: null,
     tipo_voo: row.tipo_voo as TipoVoo || null,
     created_at: row.created_at,
