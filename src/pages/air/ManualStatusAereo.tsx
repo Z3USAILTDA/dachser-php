@@ -28,7 +28,7 @@ const sections: Section[] = [
   { id: 'visao-geral', title: 'Visão Geral', icon: <BookOpen className="h-4 w-4" /> },
   { id: 'tabela-status', title: 'Tabela de Status', icon: <TableIcon className="h-4 w-4" /> },
   { id: 'status-tipos', title: 'Tipos de Status', icon: <Activity className="h-4 w-4" /> },
-  { id: 'alertas', title: 'Alertas', icon: <AlertTriangle className="h-4 w-4" /> },
+  { id: 'busca', title: 'Busca', icon: <SearchIcon className="h-4 w-4" /> },
   { id: 'atualizacao', title: 'Atualização', icon: <RefreshCw className="h-4 w-4" /> },
   { id: 'faq', title: 'FAQ', icon: <HelpCircle className="h-4 w-4" /> },
   { id: 'glossario', title: 'Glossário', icon: <BookText className="h-4 w-4" /> },
@@ -52,18 +52,18 @@ const faqItems = [
     a: 'Use o campo de busca no topo da página. Você pode buscar por AWB, destinatário ou status.' 
   },
   { 
-    q: 'Posso exportar estes dados?', 
-    a: 'Use a tela "Lista de AWBs" para opções de exportação mais completas.' 
+    q: 'Qual a diferença para a Lista de AWBs?', 
+    a: 'Esta tela mostra dados diretos da tabela t_status_aereo com mais detalhes técnicos como origem, destino e status_info.' 
   },
 ];
 
 const glossaryItems = [
-  { term: 'PENDING', definition: 'AWB aguardando primeira consulta ou atualização.' },
-  { term: 'IN_TRANSIT', definition: 'Carga em trânsito entre origem e destino.' },
-  { term: 'ARRIVED', definition: 'Carga chegou ao aeroporto de destino.' },
-  { term: 'DELIVERED', definition: 'Carga entregue ao destinatário final.' },
-  { term: 'EXCEPTION', definition: 'Ocorreu uma exceção no transporte.' },
+  { term: 'DLV', definition: 'Delivered - Carga entregue ao destinatário final.' },
+  { term: 'ARR', definition: 'Arrived - Carga chegou ao aeroporto de destino.' },
+  { term: 'DEP', definition: 'Departed - Carga decolou do aeroporto de origem.' },
+  { term: 'ERRO', definition: 'Erro na consulta ao sistema da companhia aérea.' },
   { term: 'NOT_FOUND', definition: 'AWB não encontrado no sistema da companhia.' },
+  { term: 'Status Info', definition: 'Informação detalhada do último evento.' },
 ];
 
 export default function ManualStatusAereo() {
@@ -169,9 +169,9 @@ export default function ManualStatusAereo() {
               </CardHeader>
               <CardContent className="space-y-4 text-white/80">
                 <p>
-                  A tela <strong className="text-amber-300">Status Aéreo</strong> exibe os dados brutos 
-                  da tabela t_status_aereo do banco de dados, mostrando todos os AWBs monitorados e seus 
-                  status atuais.
+                  A tela <strong className="text-amber-300">Status Aereo</strong> exibe os dados da 
+                  tabela t_status_aereo do banco de dados, mostrando todos os AWBs monitorados e seus 
+                  status atuais com informações de origem e destino.
                 </p>
                 
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-6">
@@ -188,7 +188,7 @@ export default function ManualStatusAereo() {
                   <div className="p-4 rounded-lg bg-white/5 border border-white/10">
                     <SearchIcon className="h-8 w-8 text-amber-400 mb-2" />
                     <h4 className="text-white font-medium mb-1">Busca</h4>
-                    <p className="text-xs text-white/60">Filtros avançados</p>
+                    <p className="text-xs text-white/60">Pesquise por AWB ou status</p>
                   </div>
                 </div>
               </CardContent>
@@ -206,7 +206,7 @@ export default function ManualStatusAereo() {
               </CardHeader>
               <CardContent className="space-y-4 text-white/80">
                 <p>
-                  A tabela exibe os dados diretamente do banco:
+                  A tabela exibe as seguintes colunas:
                 </p>
 
                 <ul className="space-y-2 text-sm">
@@ -216,11 +216,11 @@ export default function ManualStatusAereo() {
                   </li>
                   <li className="flex items-start gap-2">
                     <CheckCircle2 className="h-4 w-4 text-green-400 mt-0.5 shrink-0" />
-                    <span><strong>Origem:</strong> Aeroporto de origem</span>
+                    <span><strong>Origem:</strong> Código do aeroporto de origem</span>
                   </li>
                   <li className="flex items-start gap-2">
                     <CheckCircle2 className="h-4 w-4 text-green-400 mt-0.5 shrink-0" />
-                    <span><strong>Destino:</strong> Aeroporto de destino</span>
+                    <span><strong>Destino:</strong> Código do aeroporto de destino</span>
                   </li>
                   <li className="flex items-start gap-2">
                     <CheckCircle2 className="h-4 w-4 text-green-400 mt-0.5 shrink-0" />
@@ -228,11 +228,11 @@ export default function ManualStatusAereo() {
                   </li>
                   <li className="flex items-start gap-2">
                     <CheckCircle2 className="h-4 w-4 text-green-400 mt-0.5 shrink-0" />
-                    <span><strong>Último Status:</strong> Status mais recente</span>
+                    <span><strong>Último Status:</strong> Código do status mais recente</span>
                   </li>
                   <li className="flex items-start gap-2">
                     <CheckCircle2 className="h-4 w-4 text-green-400 mt-0.5 shrink-0" />
-                    <span><strong>Última Atualização:</strong> Data/hora do último update</span>
+                    <span><strong>Status Info:</strong> Descrição detalhada do evento</span>
                   </li>
                 </ul>
               </CardContent>
@@ -254,61 +254,65 @@ export default function ManualStatusAereo() {
                 </p>
 
                 <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-                  <div className="p-3 rounded bg-gray-500/10 border border-gray-500/20">
-                    <Badge className="bg-gray-500 mb-2">PENDING</Badge>
-                    <p className="text-xs text-white/60">Aguardando consulta</p>
+                  <div className="p-3 rounded bg-green-500/10 border border-green-500/20">
+                    <Badge className="bg-green-500 mb-2">DLV</Badge>
+                    <p className="text-xs text-white/60">Entregue ao destinatário</p>
                   </div>
                   <div className="p-3 rounded bg-blue-500/10 border border-blue-500/20">
-                    <Badge className="bg-blue-500 mb-2">IN_TRANSIT</Badge>
-                    <p className="text-xs text-white/60">Em trânsito</p>
-                  </div>
-                  <div className="p-3 rounded bg-purple-500/10 border border-purple-500/20">
-                    <Badge className="bg-purple-500 mb-2">ARRIVED</Badge>
+                    <Badge className="bg-blue-500 mb-2">ARR</Badge>
                     <p className="text-xs text-white/60">Chegou ao destino</p>
                   </div>
-                  <div className="p-3 rounded bg-green-500/10 border border-green-500/20">
-                    <Badge className="bg-green-500 mb-2">DELIVERED</Badge>
-                    <p className="text-xs text-white/60">Entregue</p>
+                  <div className="p-3 rounded bg-blue-500/10 border border-blue-500/20">
+                    <Badge className="bg-blue-500 mb-2">DEP</Badge>
+                    <p className="text-xs text-white/60">Decolou da origem</p>
                   </div>
-                  <div className="p-3 rounded bg-amber-500/10 border border-amber-500/20">
-                    <Badge className="bg-amber-500 mb-2">EXCEPTION</Badge>
-                    <p className="text-xs text-white/60">Exceção</p>
+                  <div className="p-3 rounded bg-red-500/10 border border-red-500/20">
+                    <Badge className="bg-red-500 mb-2">ERRO</Badge>
+                    <p className="text-xs text-white/60">Erro na consulta</p>
                   </div>
                   <div className="p-3 rounded bg-red-500/10 border border-red-500/20">
                     <Badge className="bg-red-500 mb-2">NOT_FOUND</Badge>
-                    <p className="text-xs text-white/60">Não encontrado</p>
+                    <p className="text-xs text-white/60">AWB não encontrado</p>
+                  </div>
+                  <div className="p-3 rounded bg-amber-500/10 border border-amber-500/20">
+                    <Badge className="bg-amber-500 mb-2">Outros</Badge>
+                    <p className="text-xs text-white/60">Em processamento</p>
                   </div>
                 </div>
               </CardContent>
             </Card>
           </section>
 
-          {/* Alertas */}
-          <section ref={el => sectionRefs.current['alertas'] = el} id="alertas">
+          {/* Busca */}
+          <section ref={el => sectionRefs.current['busca'] = el} id="busca">
             <Card className="bg-[rgba(5,6,18,0.9)] border-white/12">
               <CardHeader>
                 <CardTitle className="text-white flex items-center gap-2">
-                  <AlertTriangle className="h-5 w-5 text-amber-400" />
-                  Alertas
+                  <SearchIcon className="h-5 w-5 text-amber-400" />
+                  Busca
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-4 text-white/80">
                 <p>
-                  A tela indica visualmente situações que requerem atenção:
+                  Use o campo de busca para filtrar os dados:
                 </p>
 
                 <ul className="space-y-2 text-sm">
                   <li className="flex items-start gap-2">
-                    <AlertTriangle className="h-4 w-4 text-red-400 mt-0.5 shrink-0" />
-                    <span><strong>NOT_FOUND:</strong> AWB não encontrado - verifique o número</span>
+                    <CheckCircle2 className="h-4 w-4 text-green-400 mt-0.5 shrink-0" />
+                    <span>Digite o número do AWB para buscar um processo específico</span>
                   </li>
                   <li className="flex items-start gap-2">
-                    <AlertTriangle className="h-4 w-4 text-amber-400 mt-0.5 shrink-0" />
-                    <span><strong>EXCEPTION:</strong> Ocorreu um problema no transporte</span>
+                    <CheckCircle2 className="h-4 w-4 text-green-400 mt-0.5 shrink-0" />
+                    <span>Busque pelo nome do destinatário</span>
                   </li>
                   <li className="flex items-start gap-2">
-                    <AlertTriangle className="h-4 w-4 text-yellow-400 mt-0.5 shrink-0" />
-                    <span><strong>Sem atualização:</strong> AWB sem updates há muito tempo</span>
+                    <CheckCircle2 className="h-4 w-4 text-green-400 mt-0.5 shrink-0" />
+                    <span>Filtre por status (DLV, ARR, DEP, etc.)</span>
+                  </li>
+                  <li className="flex items-start gap-2">
+                    <CheckCircle2 className="h-4 w-4 text-green-400 mt-0.5 shrink-0" />
+                    <span>Pressione Enter ou clique em "Search" para aplicar</span>
                   </li>
                 </ul>
               </CardContent>
@@ -326,7 +330,7 @@ export default function ManualStatusAereo() {
               </CardHeader>
               <CardContent className="space-y-4 text-white/80">
                 <p>
-                  Os dados são atualizados de forma automática e manual:
+                  Os dados são atualizados automaticamente:
                 </p>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
@@ -336,7 +340,7 @@ export default function ManualStatusAereo() {
                   </div>
                   <div className="p-3 rounded bg-green-500/10 border border-green-500/20">
                     <p className="text-sm font-medium text-white">Manual</p>
-                    <p className="text-xs text-white/60">Use a busca para forçar atualização</p>
+                    <p className="text-xs text-white/60">Execute uma nova busca para atualizar</p>
                   </div>
                 </div>
 
