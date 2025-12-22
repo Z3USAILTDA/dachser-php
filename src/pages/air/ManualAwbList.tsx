@@ -5,7 +5,6 @@ import {
   Search as SearchIcon, 
   Package, 
   Filter, 
-  Download, 
   Eye, 
   HelpCircle, 
   BookText,
@@ -27,9 +26,8 @@ interface Section {
 const sections: Section[] = [
   { id: 'visao-geral', title: 'Visão Geral', icon: <BookOpen className="h-4 w-4" /> },
   { id: 'tabela', title: 'Tabela de AWBs', icon: <TableIcon className="h-4 w-4" /> },
-  { id: 'filtros', title: 'Filtros', icon: <Filter className="h-4 w-4" /> },
+  { id: 'filtros', title: 'Busca', icon: <Filter className="h-4 w-4" /> },
   { id: 'detalhes', title: 'Visualizar Detalhes', icon: <Eye className="h-4 w-4" /> },
-  { id: 'exportacao', title: 'Exportação', icon: <Download className="h-4 w-4" /> },
   { id: 'faq', title: 'FAQ', icon: <HelpCircle className="h-4 w-4" /> },
   { id: 'glossario', title: 'Glossário', icon: <BookText className="h-4 w-4" /> },
 ];
@@ -37,23 +35,23 @@ const sections: Section[] = [
 const faqItems = [
   { 
     q: 'Qual a diferença entre esta tela e o Tracking Aéreo?', 
-    a: 'Esta tela apresenta uma visão tabular completa de todos os AWBs. O Tracking Aéreo foca em monitoramento com timeline de eventos.' 
+    a: 'Esta tela apresenta uma visão tabular simples de todos os AWBs. O Tracking Aéreo foca em monitoramento com timeline de eventos e cards de resumo.' 
   },
   { 
-    q: 'Como filtrar AWBs por status?', 
-    a: 'Use o campo de busca ou o seletor de status para filtrar. Você pode combinar múltiplos filtros.' 
+    q: 'Como buscar AWBs?', 
+    a: 'Use o campo de busca no topo da tela. Digite AWB, destinatário ou código da companhia e pressione Enter ou clique em Search.' 
   },
   { 
-    q: 'Posso exportar os dados?', 
-    a: 'Sim, clique no botão "Exportar" para gerar um arquivo Excel com os dados filtrados.' 
-  },
-  { 
-    q: 'Como ver detalhes de um AWB específico?', 
-    a: 'Clique em qualquer linha da tabela para ver os detalhes completos e o histórico de eventos.' 
+    q: 'Como ver detalhes de um AWB?', 
+    a: 'Clique em qualquer linha da tabela para navegar para a tela de Tracking Aéreo com os detalhes completos.' 
   },
   { 
     q: 'Os dados são atualizados automaticamente?', 
-    a: 'Sim, a lista é atualizada a cada 30 segundos automaticamente.' 
+    a: 'Sim, a lista é atualizada automaticamente a cada 30 segundos.' 
+  },
+  { 
+    q: 'O que significam as cores nos status?', 
+    a: 'Verde (DLV) indica entregue, azul (ARR) indica chegou, amarelo indica outros status em progresso.' 
   },
 ];
 
@@ -61,8 +59,8 @@ const glossaryItems = [
   { term: 'AWB', definition: 'Air Waybill - Conhecimento de transporte aéreo.' },
   { term: 'Consignatário', definition: 'Destinatário da carga, empresa ou pessoa que recebe.' },
   { term: 'Status', definition: 'Estado atual do AWB no processo de transporte.' },
-  { term: 'Origem', definition: 'Aeroporto de onde a carga partiu.' },
-  { term: 'Destino', definition: 'Aeroporto de chegada da carga.' },
+  { term: 'DLV', definition: 'Delivered - Carga entregue ao destinatário.' },
+  { term: 'ARR', definition: 'Arrived - Carga chegou ao aeroporto de destino.' },
 ];
 
 export default function ManualAwbList() {
@@ -168,9 +166,8 @@ export default function ManualAwbList() {
               </CardHeader>
               <CardContent className="space-y-4 text-white/80">
                 <p>
-                  A tela <strong className="text-amber-300">Lista de AWBs</strong> apresenta uma visão 
-                  tabular completa de todos os AWBs cadastrados no sistema, com opções avançadas de 
-                  filtro e exportação.
+                  A tela <strong className="text-amber-300">Tracked AWBs</strong> apresenta uma visão 
+                  tabular de todos os AWBs monitorados no sistema, com busca e atualização automática.
                 </p>
                 
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-6">
@@ -181,13 +178,13 @@ export default function ManualAwbList() {
                   </div>
                   <div className="p-4 rounded-lg bg-white/5 border border-white/10">
                     <Filter className="h-8 w-8 text-amber-400 mb-2" />
-                    <h4 className="text-white font-medium mb-1">Filtros</h4>
-                    <p className="text-xs text-white/60">Busca e filtros avançados</p>
+                    <h4 className="text-white font-medium mb-1">Busca</h4>
+                    <p className="text-xs text-white/60">Campo de busca integrado</p>
                   </div>
                   <div className="p-4 rounded-lg bg-white/5 border border-white/10">
-                    <Download className="h-8 w-8 text-amber-400 mb-2" />
-                    <h4 className="text-white font-medium mb-1">Exportação</h4>
-                    <p className="text-xs text-white/60">Exporte para Excel</p>
+                    <Eye className="h-8 w-8 text-amber-400 mb-2" />
+                    <h4 className="text-white font-medium mb-1">Detalhes</h4>
+                    <p className="text-xs text-white/60">Clique para ver mais</p>
                   </div>
                 </div>
               </CardContent>
@@ -211,19 +208,19 @@ export default function ManualAwbList() {
                 <ul className="space-y-2 text-sm">
                   <li className="flex items-start gap-2">
                     <CheckCircle2 className="h-4 w-4 text-green-400 mt-0.5 shrink-0" />
-                    <span><strong>AWB:</strong> Número do conhecimento aéreo (clicável)</span>
+                    <span><strong>AWB:</strong> Número do conhecimento aéreo</span>
                   </li>
                   <li className="flex items-start gap-2">
                     <CheckCircle2 className="h-4 w-4 text-green-400 mt-0.5 shrink-0" />
-                    <span><strong>Cia Aérea:</strong> Código da companhia aérea</span>
+                    <span><strong>Airline:</strong> Código da companhia aérea</span>
                   </li>
                   <li className="flex items-start gap-2">
                     <CheckCircle2 className="h-4 w-4 text-green-400 mt-0.5 shrink-0" />
-                    <span><strong>Consignatário:</strong> Nome do destinatário</span>
+                    <span><strong>Consignee:</strong> Nome do destinatário</span>
                   </li>
                   <li className="flex items-start gap-2">
                     <CheckCircle2 className="h-4 w-4 text-green-400 mt-0.5 shrink-0" />
-                    <span><strong>Último Evento:</strong> Descrição do último status</span>
+                    <span><strong>Latest Event:</strong> Descrição do último evento</span>
                   </li>
                   <li className="flex items-start gap-2">
                     <CheckCircle2 className="h-4 w-4 text-green-400 mt-0.5 shrink-0" />
@@ -231,7 +228,7 @@ export default function ManualAwbList() {
                   </li>
                   <li className="flex items-start gap-2">
                     <CheckCircle2 className="h-4 w-4 text-green-400 mt-0.5 shrink-0" />
-                    <span><strong>Data:</strong> Data/hora da última atualização</span>
+                    <span><strong>Date:</strong> Data de criação do registro</span>
                   </li>
                 </ul>
 
@@ -245,35 +242,38 @@ export default function ManualAwbList() {
             </Card>
           </section>
 
-          {/* Filtros */}
+          {/* Busca */}
           <section ref={el => sectionRefs.current['filtros'] = el} id="filtros">
             <Card className="bg-[rgba(5,6,18,0.9)] border-white/12">
               <CardHeader>
                 <CardTitle className="text-white flex items-center gap-2">
                   <Filter className="h-5 w-5 text-amber-400" />
-                  Filtros
+                  Busca
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-4 text-white/80">
                 <p>
-                  Use os filtros para encontrar AWBs específicos:
+                  Use o campo de busca para encontrar AWBs específicos:
                 </p>
 
                 <ul className="space-y-2 text-sm">
                   <li className="flex items-start gap-2">
                     <CheckCircle2 className="h-4 w-4 text-green-400 mt-0.5 shrink-0" />
-                    <span><strong>Busca por texto:</strong> AWB, destinatário ou status</span>
+                    <span>Digite o número do AWB, nome do destinatário ou código da companhia</span>
                   </li>
                   <li className="flex items-start gap-2">
                     <CheckCircle2 className="h-4 w-4 text-green-400 mt-0.5 shrink-0" />
-                    <span><strong>Filtro por status:</strong> Selecione um ou mais status</span>
+                    <span>Pressione Enter ou clique no botão "Search"</span>
+                  </li>
+                  <li className="flex items-start gap-2">
+                    <CheckCircle2 className="h-4 w-4 text-green-400 mt-0.5 shrink-0" />
+                    <span>Os resultados são filtrados em tempo real</span>
                   </li>
                 </ul>
 
                 <div className="mt-4 p-3 rounded bg-amber-500/10 border border-amber-500/20">
                   <p className="text-sm text-amber-300">
-                    <strong>Nota:</strong> Os filtros são aplicados em tempo real. Pressione Enter 
-                    ou aguarde a busca automática.
+                    <strong>Nota:</strong> A tabela atualiza automaticamente a cada 30 segundos.
                   </p>
                 </div>
               </CardContent>
@@ -298,54 +298,17 @@ export default function ManualAwbList() {
                 <ul className="space-y-2 text-sm">
                   <li className="flex items-start gap-2">
                     <CheckCircle2 className="h-4 w-4 text-green-400 mt-0.5 shrink-0" />
-                    <span>Histórico completo de eventos</span>
+                    <span>Timeline visual do progresso do transporte</span>
                   </li>
                   <li className="flex items-start gap-2">
                     <CheckCircle2 className="h-4 w-4 text-green-400 mt-0.5 shrink-0" />
-                    <span>Timeline visual do transporte</span>
+                    <span>Dados completos do AWB (origem, destino, analista)</span>
                   </li>
                   <li className="flex items-start gap-2">
                     <CheckCircle2 className="h-4 w-4 text-green-400 mt-0.5 shrink-0" />
-                    <span>Dados detalhados do AWB</span>
-                  </li>
-                  <li className="flex items-start gap-2">
-                    <CheckCircle2 className="h-4 w-4 text-green-400 mt-0.5 shrink-0" />
-                    <span>Configurações de notificação</span>
+                    <span>Status atualizado em tempo real</span>
                   </li>
                 </ul>
-              </CardContent>
-            </Card>
-          </section>
-
-          {/* Exportação */}
-          <section ref={el => sectionRefs.current['exportacao'] = el} id="exportacao">
-            <Card className="bg-[rgba(5,6,18,0.9)] border-white/12">
-              <CardHeader>
-                <CardTitle className="text-white flex items-center gap-2">
-                  <Download className="h-5 w-5 text-amber-400" />
-                  Exportação
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4 text-white/80">
-                <p>
-                  Exporte os dados da tabela para análise externa:
-                </p>
-
-                <div className="space-y-2">
-                  {[
-                    'Aplique os filtros desejados',
-                    'Clique no botão "Exportar"',
-                    'Escolha o formato (Excel)',
-                    'O arquivo será baixado automaticamente'
-                  ].map((etapa, i) => (
-                    <div key={i} className="flex items-center gap-3 p-2 rounded bg-white/5">
-                      <div className="w-6 h-6 rounded-full bg-amber-500/20 flex items-center justify-center text-xs text-amber-300 font-bold">
-                        {i + 1}
-                      </div>
-                      <span className="text-sm">{etapa}</span>
-                    </div>
-                  ))}
-                </div>
               </CardContent>
             </Card>
           </section>
