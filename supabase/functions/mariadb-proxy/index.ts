@@ -2395,7 +2395,8 @@ serve(async (req) => {
           AND m.data_finalizacao IS NULL
           AND LEFT(TRIM(m.mawb), 3) IN (${airlineFilter})
           AND (s.\`último_status\` IS NULL OR s.\`último_status\` NOT IN (${errorStatusFilter}))
-          AND (s.rota IS NOT NULL AND LOWER(TRIM(s.rota)) NOT IN ('n/a', 'na', 'erro', 'error', ''))
+          AND (s.origem IS NOT NULL AND LOWER(TRIM(s.origem)) NOT IN ('n/a', 'na', 'erro', 'error', ''))
+          AND (s.destino IS NOT NULL AND LOWER(TRIM(s.destino)) NOT IN ('n/a', 'na', 'erro', 'error', ''))
           ORDER BY s.\`última atualização\` DESC, m.id DESC
           LIMIT 500
         `);
