@@ -106,7 +106,7 @@ export default function ManualUsuario() {
       <div className="flex gap-6 items-start">
         {/* Sidebar Navigation - Fixed position */}
         <div className="w-64 shrink-0">
-          <div className="fixed w-64 top-28">
+          <div className="fixed w-64 top-6">
             <Card className="bg-[rgba(5,6,18,0.9)] border-white/12 max-h-[calc(100vh-10rem)] overflow-y-auto">
               <CardHeader className="pb-3">
                 <CardTitle className="text-white text-sm flex items-center gap-2">
