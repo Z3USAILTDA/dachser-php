@@ -4428,6 +4428,75 @@ serve(async (req) => {
         break;
       }
 
+      case 'insert_dados_financeiro_voucher': {
+        const { 
+          documento,
+          nd,
+          nome_beneficiario,
+          nome_cobranca,
+          numero_nf,
+          numero_processo,
+          modal,
+          tipo_pag,
+          forma_pag,
+          data_emissao,
+          data_vencimento,
+          valor_nf,
+          moeda,
+          cnpj,
+          razao_social,
+          id_rm
+        } = body as {
+          documento?: string;
+          nd?: string;
+          nome_beneficiario?: string;
+          nome_cobranca?: string;
+          numero_nf?: string;
+          numero_processo?: string;
+          modal?: string;
+          tipo_pag?: string;
+          forma_pag?: string;
+          data_emissao?: string;
+          data_vencimento?: string;
+          valor_nf?: number;
+          moeda?: string;
+          cnpj?: string;
+          razao_social?: string;
+          id_rm?: string;
+        };
+
+        console.log('Inserting into t_dados_financeiro_voucher:', { nd, documento, id_rm });
+
+        const insertResult = await client.execute(`
+          INSERT INTO dados_dachser.t_dados_financeiro_voucher (
+            documento, nd, nome_beneficiario, nome_cobranca, numero_nf,
+            numero_processo, modal, tipo_pag, forma_pag, data_emissao,
+            data_vencimento, valor_nf, moeda, cnpj, razao_social, id_rm
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `, [
+          documento || null,
+          nd || null,
+          nome_beneficiario || null,
+          nome_cobranca || null,
+          numero_nf || null,
+          numero_processo || null,
+          modal || null,
+          tipo_pag || null,
+          forma_pag || null,
+          data_emissao || null,
+          data_vencimento || null,
+          valor_nf || 0,
+          moeda || 'BRL',
+          cnpj || null,
+          razao_social || null,
+          id_rm || null
+        ]);
+
+        console.log('Insert result:', insertResult);
+        result = { success: true, insertId: insertResult.lastInsertId };
+        break;
+      }
+
       default:
         return new Response(
           JSON.stringify({ error: `Ação não suportada: ${action}` }),

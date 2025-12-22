@@ -194,6 +194,42 @@ export const VoucherOperacaoActions = ({ voucher, onUpdate }: VoucherOperacaoAct
 
       if (error) throw error;
 
+      // Inserir dados na tabela t_dados_financeiro_voucher (MariaDB)
+      try {
+        const dataEmissao = voucher.dataEmissaoDocumento 
+          ? new Date(voucher.dataEmissaoDocumento).toISOString().split('T')[0] 
+          : null;
+        const dataVencimento = voucher.vencimento 
+          ? new Date(voucher.vencimento).toISOString().split('T')[0] 
+          : null;
+
+        await supabase.functions.invoke("mariadb-proxy", {
+          body: {
+            action: "insert_dados_financeiro_voucher",
+            documento: voucher.tipoDocumento || "FATURA",
+            nd: voucher.numeroSPO,
+            nome_beneficiario: voucher.fornecedor,
+            nome_cobranca: voucher.cobrancaEmNomeDe,
+            numero_nf: null,
+            numero_processo: null,
+            modal: "AIR",
+            tipo_pag: voucher.tipoDocumento || "FATURA",
+            forma_pag: voucher.formaPagamento,
+            data_emissao: dataEmissao,
+            data_vencimento: dataVencimento,
+            valor_nf: voucher.valor || 0,
+            moeda: voucher.moeda || "BRL",
+            cnpj: voucher.cnpjFornecedor,
+            razao_social: voucher.fornecedor,
+            id_rm: voucher.numeroSPO
+          }
+        });
+        console.log("Dados inseridos em t_dados_financeiro_voucher com sucesso");
+      } catch (rmError: any) {
+        console.error("Erro ao inserir em t_dados_financeiro_voucher:", rmError);
+        // Não bloqueia o fluxo, apenas loga o erro
+      }
+
       const etapaLabel = proximaEtapa === "SUPERVISOR" ? "Supervisor" : 
                          proximaEtapa === "FISCAL" ? "Fiscal" : "Financeiro";
 
