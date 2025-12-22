@@ -1,6 +1,5 @@
-import { useEffect, useRef, useState } from "react";
+import { useState, useRef, useEffect } from "react";
 import { PageLayout } from "@/components/layout/PageLayout";
-import { PageCard } from "@/components/layout/PageCard";
 import { 
   BookOpen, 
   LayoutDashboard, 
@@ -9,101 +8,89 @@ import {
   Bell, 
   HelpCircle, 
   BookText,
+  ChevronRight,
+  Search,
   FileText,
-  Send,
-  CheckCircle,
+  Users,
   DollarSign,
   Bot,
-  Users,
-  ChevronRight
+  CheckCircle2,
+  Settings,
+  Upload
 } from "lucide-react";
-import { cn } from "@/lib/utils";
+import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { cn } from "@/lib/utils";
 
-type Section = 
-  | "visao-geral" 
-  | "dashboard" 
-  | "fluxo-voucher" 
-  | "urgencias" 
-  | "notificacoes" 
-  | "perfis" 
-  | "faq" 
-  | "glossario";
+interface Section {
+  id: string;
+  title: string;
+  icon: React.ReactNode;
+}
 
-const navItems: { id: Section; label: string; icon: React.ElementType }[] = [
-  { id: "visao-geral", label: "Visão Geral", icon: BookOpen },
-  { id: "dashboard", label: "Dashboard", icon: LayoutDashboard },
-  { id: "fluxo-voucher", label: "Fluxo do Voucher", icon: Clock },
-  { id: "urgencias", label: "Urgências e SLA", icon: AlertTriangle },
-  { id: "notificacoes", label: "Notificações", icon: Bell },
-  { id: "perfis", label: "Perfis e Permissões", icon: Users },
-  { id: "faq", label: "FAQ", icon: HelpCircle },
-  { id: "glossario", label: "Glossário", icon: BookText },
+const sections: Section[] = [
+  { id: 'visao-geral', title: 'Visão Geral', icon: <BookOpen className="h-4 w-4" /> },
+  { id: 'dashboard', title: 'Dashboard', icon: <LayoutDashboard className="h-4 w-4" /> },
+  { id: 'fluxo-voucher', title: 'Fluxo do Voucher', icon: <Clock className="h-4 w-4" /> },
+  { id: 'urgencias', title: 'Urgências e SLA', icon: <AlertTriangle className="h-4 w-4" /> },
+  { id: 'notificacoes', title: 'Notificações', icon: <Bell className="h-4 w-4" /> },
+  { id: 'perfis', title: 'Perfis e Permissões', icon: <Users className="h-4 w-4" /> },
+  { id: 'faq', title: 'FAQ', icon: <HelpCircle className="h-4 w-4" /> },
+  { id: 'glossario', title: 'Glossário', icon: <BookText className="h-4 w-4" /> },
 ];
 
-const FlowStep = ({ 
-  number, 
-  title, 
-  icon: Icon 
-}: { 
-  number: number; 
-  title: string; 
-  icon: React.ElementType 
-}) => (
-  <div className="flex flex-col items-center text-center">
-    <div className="relative">
-      <div className="w-14 h-14 rounded-full bg-primary/20 border-2 border-primary flex items-center justify-center">
-        <Icon className="h-6 w-6 text-primary" />
-      </div>
-      <span className="absolute -top-2 -right-2 w-6 h-6 rounded-full bg-primary text-primary-foreground text-xs font-bold flex items-center justify-center">
-        {number}
-      </span>
-    </div>
-    <span className="mt-2 text-sm text-muted-foreground">{title}</span>
-  </div>
-);
+const faqItems = [
+  { 
+    q: 'Como marcar um voucher como urgente?', 
+    a: 'Na etapa de Operação, selecione o tipo de urgência no formulário de criação. Vouchers "Urgente Real" requerem aprovação do supervisor.' 
+  },
+  { 
+    q: 'Como funciona o urgente automático?', 
+    a: 'Vouchers de ICMS e ARMAZENAGEM são marcados automaticamente como urgentes pelo sistema.' 
+  },
+  { 
+    q: 'Como visualizar documentos anexados?', 
+    a: 'Clique no ícone de anexo na linha do voucher para abrir a visualização de documentos.' 
+  },
+  { 
+    q: 'Quais campos são obrigatórios?', 
+    a: 'Número SPO, fornecedor, valor, vencimento, cobrança em nome de e forma de pagamento.' 
+  },
+  { 
+    q: 'Como funcionam os alertas de SLA?', 
+    a: 'Os gestores recebem notificações automáticas quando vouchers permanecem parados por mais de 24h.' 
+  },
+  { 
+    q: 'Posso editar um voucher após criado?', 
+    a: 'Sim, desde que esteja na etapa de Operação e você tenha permissão de edição.' 
+  },
+];
 
-const FeatureCard = ({ 
-  title, 
-  description, 
-  icon: Icon 
-}: { 
-  title: string; 
-  description: string; 
-  icon: React.ElementType 
-}) => (
-  <div className="flex items-start gap-3 p-4 bg-card/40 rounded-lg border border-border/30">
-    <div className="p-2 rounded-lg bg-primary/20">
-      <Icon className="h-5 w-5 text-primary" />
-    </div>
-    <div>
-      <h4 className="font-semibold text-foreground">{title}</h4>
-      <p className="text-sm text-muted-foreground">{description}</p>
-    </div>
-  </div>
-);
+const glossaryItems = [
+  { term: 'SPO', definition: 'Número de identificação único do voucher no sistema' },
+  { term: 'Voucher', definition: 'Documento financeiro que autoriza um pagamento a fornecedor' },
+  { term: 'SLA', definition: 'Service Level Agreement - Tempo máximo para conclusão de cada etapa' },
+  { term: 'Accrual', definition: 'Provisão financeira para despesas previstas mas não faturadas' },
+  { term: 'RM', definition: 'Sistema de gestão financeira integrado (ERP)' },
+  { term: 'Remessa', definition: 'Agrupamento de pagamentos para envio ao banco' },
+  { term: 'Boleto', definition: 'Documento para pagamento bancário' },
+  { term: 'NF', definition: 'Nota Fiscal - documento fiscal que comprova a transação' },
+  { term: 'ICMS', definition: 'Imposto sobre Circulação de Mercadorias e Serviços' },
+  { term: 'Baixa', definition: 'Confirmação de que o pagamento foi realizado' },
+];
 
 export default function EsteiraManual() {
-  const [activeSection, setActiveSection] = useState<Section>("visao-geral");
+  const [activeSection, setActiveSection] = useState('visao-geral');
+  const [searchTerm, setSearchTerm] = useState('');
   const [isSticky, setIsSticky] = useState(false);
-  const contentRef = useRef<HTMLDivElement>(null);
+  const sectionRefs = useRef<Record<string, HTMLElement | null>>({});
+  const sidebarRef = useRef<HTMLDivElement>(null);
   const sidebarPlaceholderRef = useRef<HTMLDivElement>(null);
-  const sectionRefs = useRef<Record<Section, HTMLDivElement | null>>({
-    "visao-geral": null,
-    "dashboard": null,
-    "fluxo-voucher": null,
-    "urgencias": null,
-    "notificacoes": null,
-    "perfis": null,
-    "faq": null,
-    "glossario": null,
-  });
 
-  const scrollToSection = (sectionId: Section) => {
-    const element = sectionRefs.current[sectionId];
-    if (element) {
-      element.scrollIntoView({ behavior: "smooth", block: "start" });
-    }
+  const scrollToSection = (id: string) => {
+    setActiveSection(id);
+    sectionRefs.current[id]?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   };
 
   // Detect scroll to toggle sticky behavior
@@ -114,26 +101,6 @@ export default function EsteiraManual() {
         // When the placeholder top goes above 24px from viewport top, make sidebar fixed
         setIsSticky(rect.top < 24);
       }
-
-      // Update active section based on scroll position
-      const container = contentRef.current;
-      if (!container) return;
-
-      const scrollTop = window.scrollY;
-      const offset = 200;
-
-      for (const item of navItems) {
-        const element = sectionRefs.current[item.id];
-        if (element) {
-          const rect = element.getBoundingClientRect();
-          const elementTop = rect.top + window.scrollY;
-          const elementBottom = elementTop + rect.height;
-          if (scrollTop >= elementTop - offset && scrollTop < elementBottom - offset) {
-            setActiveSection(item.id);
-            break;
-          }
-        }
-      }
     };
 
     window.addEventListener('scroll', handleScroll, { passive: true });
@@ -141,50 +108,51 @@ export default function EsteiraManual() {
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
 
-  const rightContent = (
-    <div className="px-3 py-1.5 rounded-md border border-primary/50 bg-primary/10 text-primary text-xs font-medium">
-      VOUCHER DACHSER v1.0
-    </div>
+  const filteredFaq = faqItems.filter(item => 
+    item.q.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    item.a.toLowerCase().includes(searchTerm.toLowerCase())
+  );
+
+  const filteredGlossary = glossaryItems.filter(item =>
+    item.term.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    item.definition.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
   return (
-    <PageLayout 
-      title="DACHSER" 
-      subtitle="Manual do Usuário"
-      rightContent={rightContent}
-      backTo="/fin/esteira"
-    >
+    <PageLayout title="DACHSER" subtitle="Manual do Usuário — Esteira de Vouchers v1.0" pageIcon={BookOpen} backTo="/fin/esteira">
       <div className="flex gap-6 items-start">
         {/* Sidebar Navigation - Dynamic sticky */}
         <div ref={sidebarPlaceholderRef} className="w-64 shrink-0">
           <div 
+            ref={sidebarRef}
             className={cn(
               "w-64 transition-all duration-200",
               isSticky ? "fixed top-6 z-40" : "relative"
             )}
           >
-            <Card className="bg-card/90 backdrop-blur-sm border-border/50 max-h-[calc(100vh-4rem)] overflow-y-auto">
+            <Card className="bg-[rgba(5,6,18,0.9)] border-white/12 max-h-[calc(100vh-4rem)] overflow-y-auto">
               <CardHeader className="pb-3">
-                <CardTitle className="text-foreground text-sm flex items-center gap-2">
-                  <BookOpen className="h-4 w-4 text-primary" />
+                <CardTitle className="text-white text-sm flex items-center gap-2">
+                  <BookOpen className="h-4 w-4 text-amber-400" />
                   Conteúdo
                 </CardTitle>
               </CardHeader>
               <CardContent className="p-0">
                 <nav className="space-y-1 pb-4">
-                  {navItems.map((item) => (
+                  {sections.map(section => (
                     <button
-                      key={item.id}
-                      onClick={() => scrollToSection(item.id)}
+                      key={section.id}
+                      onClick={() => scrollToSection(section.id)}
                       className={cn(
                         "w-full flex items-center gap-2 px-4 py-2 text-sm transition-colors",
-                        activeSection === item.id 
-                          ? "bg-primary/20 text-primary border-l-2 border-primary" 
-                          : "text-muted-foreground hover:text-foreground hover:bg-muted/50"
+                        activeSection === section.id 
+                          ? "bg-amber-500/20 text-amber-300 border-l-2 border-amber-400" 
+                          : "text-white/60 hover:text-white hover:bg-white/5"
                       )}
                     >
-                      <item.icon className="h-4 w-4" />
-                      {item.label}
+                      {section.icon}
+                      {section.title}
+                      {activeSection === section.id && <ChevronRight className="h-3 w-3 ml-auto" />}
                     </button>
                   ))}
                 </nav>
@@ -193,331 +161,390 @@ export default function EsteiraManual() {
           </div>
         </div>
 
-        {/* Content */}
-        <div 
-          ref={contentRef}
-          className="flex-1 pr-2"
-        >
-          <div className="space-y-12">
-            <div ref={(el) => (sectionRefs.current["visao-geral"] = el)}>
-              <VisaoGeralSection />
-            </div>
-            <div ref={(el) => (sectionRefs.current["dashboard"] = el)}>
-              <DashboardSection />
-            </div>
-            <div ref={(el) => (sectionRefs.current["fluxo-voucher"] = el)}>
-              <FluxoVoucherSection />
-            </div>
-            <div ref={(el) => (sectionRefs.current["urgencias"] = el)}>
-              <UrgenciasSection />
-            </div>
-            <div ref={(el) => (sectionRefs.current["notificacoes"] = el)}>
-              <NotificacoesSection />
-            </div>
-            <div ref={(el) => (sectionRefs.current["perfis"] = el)}>
-              <PerfisSection />
-            </div>
-            <div ref={(el) => (sectionRefs.current["faq"] = el)}>
-              <FAQSection />
-            </div>
-            <div ref={(el) => (sectionRefs.current["glossario"] = el)}>
-              <GlossarioSection />
-            </div>
+        {/* Main Content */}
+        <main className="flex-1 space-y-8">
+          {/* Search */}
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-white/40" />
+            <Input
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              placeholder="Buscar no manual..."
+              className="pl-9 bg-white/5 border-white/12 text-white"
+            />
           </div>
-        </div>
+
+          {/* Visão Geral */}
+          <section ref={el => sectionRefs.current['visao-geral'] = el} id="visao-geral">
+            <Card className="bg-[rgba(5,6,18,0.9)] border-white/12">
+              <CardHeader>
+                <CardTitle className="text-white flex items-center gap-2">
+                  <BookOpen className="h-5 w-5 text-amber-400" />
+                  Visão Geral
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4 text-white/80">
+                <p>
+                  O <strong className="text-amber-300">Sistema de Vouchers DACHSER</strong> é uma plataforma 
+                  completa para gerenciamento do ciclo de vida de pagamentos a fornecedores. O sistema integra 
+                  operação, fiscal, financeiro e automação para um fluxo eficiente.
+                </p>
+                
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-6">
+                  <div className="p-4 rounded-lg bg-white/5 border border-white/10">
+                    <FileText className="h-8 w-8 text-amber-400 mb-2" />
+                    <h4 className="text-white font-medium mb-1">Workflow</h4>
+                    <p className="text-xs text-white/60">Fluxo completo de aprovação em 4 etapas</p>
+                  </div>
+                  <div className="p-4 rounded-lg bg-white/5 border border-white/10">
+                    <Bell className="h-8 w-8 text-amber-400 mb-2" />
+                    <h4 className="text-white font-medium mb-1">Alertas</h4>
+                    <p className="text-xs text-white/60">Notificações automáticas de SLA e vencimento</p>
+                  </div>
+                  <div className="p-4 rounded-lg bg-white/5 border border-white/10">
+                    <Bot className="h-8 w-8 text-amber-400 mb-2" />
+                    <h4 className="text-white font-medium mb-1">Automação</h4>
+                    <p className="text-xs text-white/60">Integração automática com sistema RM</p>
+                  </div>
+                </div>
+
+                <h4 className="text-white font-medium mt-6">Fluxo Operacional</h4>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <Badge className="bg-blue-500">1. OPERAÇÃO</Badge>
+                  <ChevronRight className="h-4 w-4 text-white/40" />
+                  <Badge className="bg-purple-500">2. FISCAL</Badge>
+                  <ChevronRight className="h-4 w-4 text-white/40" />
+                  <Badge className="bg-amber-500">3. FINANCEIRO</Badge>
+                  <ChevronRight className="h-4 w-4 text-white/40" />
+                  <Badge className="bg-cyan-500">4. ROBÔ/RM</Badge>
+                  <ChevronRight className="h-4 w-4 text-white/40" />
+                  <Badge className="bg-green-500">CONCLUÍDO</Badge>
+                </div>
+              </CardContent>
+            </Card>
+          </section>
+
+          {/* Dashboard */}
+          <section ref={el => sectionRefs.current['dashboard'] = el} id="dashboard">
+            <Card className="bg-[rgba(5,6,18,0.9)] border-white/12">
+              <CardHeader>
+                <CardTitle className="text-white flex items-center gap-2">
+                  <LayoutDashboard className="h-5 w-5 text-amber-400" />
+                  Dashboard
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4 text-white/80">
+                <p>
+                  O Dashboard é a tela principal do sistema, oferecendo uma visão consolidada de todos os vouchers 
+                  em andamento com métricas de performance e alertas prioritários.
+                </p>
+
+                <h4 className="text-white font-medium mt-4">Métricas Principais</h4>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                  <div className="p-3 rounded bg-white/5">
+                    <p className="text-xs text-white/50">Total</p>
+                    <p className="text-lg font-bold text-white">Vouchers ativos</p>
+                  </div>
+                  <div className="p-3 rounded bg-amber-500/10 border border-amber-500/20">
+                    <p className="text-xs text-amber-300">Alerta</p>
+                    <p className="text-lg font-bold text-amber-300">Vence em 24h</p>
+                  </div>
+                  <div className="p-3 rounded bg-red-500/10 border border-red-500/20">
+                    <p className="text-xs text-red-300">Crítico</p>
+                    <p className="text-lg font-bold text-red-300">Vencidos</p>
+                  </div>
+                  <div className="p-3 rounded bg-green-500/10 border border-green-500/20">
+                    <p className="text-xs text-green-300">Concluídos</p>
+                    <p className="text-lg font-bold text-green-300">Baixados</p>
+                  </div>
+                </div>
+
+                <h4 className="text-white font-medium mt-4">Funcionalidades</h4>
+                <ul className="space-y-2 text-sm">
+                  <li className="flex items-start gap-2">
+                    <CheckCircle2 className="h-4 w-4 text-green-400 mt-0.5 shrink-0" />
+                    <span>Filtros por etapa, status e urgência</span>
+                  </li>
+                  <li className="flex items-start gap-2">
+                    <CheckCircle2 className="h-4 w-4 text-green-400 mt-0.5 shrink-0" />
+                    <span>Busca por SPO, fornecedor ou cliente</span>
+                  </li>
+                  <li className="flex items-start gap-2">
+                    <CheckCircle2 className="h-4 w-4 text-green-400 mt-0.5 shrink-0" />
+                    <span>Criação e edição de vouchers</span>
+                  </li>
+                  <li className="flex items-start gap-2">
+                    <CheckCircle2 className="h-4 w-4 text-green-400 mt-0.5 shrink-0" />
+                    <span>Exportação para Excel e PDF</span>
+                  </li>
+                </ul>
+              </CardContent>
+            </Card>
+          </section>
+
+          {/* Fluxo do Voucher */}
+          <section ref={el => sectionRefs.current['fluxo-voucher'] = el} id="fluxo-voucher">
+            <Card className="bg-[rgba(5,6,18,0.9)] border-white/12">
+              <CardHeader>
+                <CardTitle className="text-white flex items-center gap-2">
+                  <Clock className="h-5 w-5 text-amber-400" />
+                  Fluxo do Voucher
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4 text-white/80">
+                <p>
+                  O voucher passa por 4 etapas principais, cada uma com responsáveis e ações específicas.
+                </p>
+
+                <h4 className="text-white font-medium mt-4">Etapas do Workflow</h4>
+                <div className="space-y-3">
+                  <div className="p-3 rounded bg-blue-500/10 border border-blue-500/20">
+                    <div className="flex items-center gap-2 mb-2">
+                      <Badge className="bg-blue-500">1. OPERAÇÃO</Badge>
+                    </div>
+                    <ul className="text-xs text-white/70 space-y-1 ml-2">
+                      <li>• Criar voucher com informações básicas</li>
+                      <li>• Anexar documentos (NF, boleto)</li>
+                      <li>• Definir nível de urgência</li>
+                      <li>• Enviar para etapa Fiscal</li>
+                    </ul>
+                  </div>
+                  
+                  <div className="p-3 rounded bg-purple-500/10 border border-purple-500/20">
+                    <div className="flex items-center gap-2 mb-2">
+                      <Badge className="bg-purple-500">2. FISCAL</Badge>
+                    </div>
+                    <ul className="text-xs text-white/70 space-y-1 ml-2">
+                      <li>• Revisar documentação fiscal</li>
+                      <li>• Validar informações tributárias</li>
+                      <li>• Aprovar ou devolver para ajustes</li>
+                    </ul>
+                  </div>
+
+                  <div className="p-3 rounded bg-amber-500/10 border border-amber-500/20">
+                    <div className="flex items-center gap-2 mb-2">
+                      <Badge className="bg-amber-500">3. FINANCEIRO</Badge>
+                    </div>
+                    <ul className="text-xs text-white/70 space-y-1 ml-2">
+                      <li>• Processar pagamento</li>
+                      <li>• Anexar comprovante de pagamento</li>
+                      <li>• Enviar para integração com RM</li>
+                    </ul>
+                  </div>
+
+                  <div className="p-3 rounded bg-cyan-500/10 border border-cyan-500/20">
+                    <div className="flex items-center gap-2 mb-2">
+                      <Badge className="bg-cyan-500">4. ROBÔ/RM</Badge>
+                    </div>
+                    <ul className="text-xs text-white/70 space-y-1 ml-2">
+                      <li>• Integração automática com sistema RM</li>
+                      <li>• Upload de comprovantes em lote</li>
+                      <li>• Baixa automática ou manual</li>
+                    </ul>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          </section>
+
+          {/* Urgências e SLA */}
+          <section ref={el => sectionRefs.current['urgencias'] = el} id="urgencias">
+            <Card className="bg-[rgba(5,6,18,0.9)] border-white/12">
+              <CardHeader>
+                <CardTitle className="text-white flex items-center gap-2">
+                  <AlertTriangle className="h-5 w-5 text-amber-400" />
+                  Urgências e SLA
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4 text-white/80">
+                <p>
+                  O sistema possui 3 níveis de urgência que determinam a prioridade de tratamento e os SLAs aplicáveis.
+                </p>
+
+                <h4 className="text-white font-medium mt-4">Tipos de Urgência</h4>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                  <div className="p-3 rounded bg-green-500/10 border border-green-500/20">
+                    <Badge variant="outline" className="bg-green-500/20 text-green-300 border-green-500/30 mb-2">NORMAL</Badge>
+                    <p className="text-xs text-white/60">Fluxo padrão do voucher sem priorização especial</p>
+                  </div>
+                  <div className="p-3 rounded bg-red-500/10 border border-red-500/20">
+                    <Badge variant="outline" className="bg-red-500/20 text-red-300 border-red-500/30 mb-2">URGENTE REAL</Badge>
+                    <p className="text-xs text-white/60">Requer aprovação do supervisor e justificativa</p>
+                  </div>
+                  <div className="p-3 rounded bg-amber-500/10 border border-amber-500/20">
+                    <Badge variant="outline" className="bg-amber-500/20 text-amber-300 border-amber-500/30 mb-2">URGENTE AUTO</Badge>
+                    <p className="text-xs text-white/60">Atribuído automaticamente para ICMS e Armazenagem</p>
+                  </div>
+                </div>
+
+                <h4 className="text-white font-medium mt-4">SLA por Etapa</h4>
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between p-2 rounded bg-white/5">
+                    <span className="text-sm">Operação</span>
+                    <Badge variant="outline" className="text-white/70">24 horas</Badge>
+                  </div>
+                  <div className="flex items-center justify-between p-2 rounded bg-white/5">
+                    <span className="text-sm">Fiscal</span>
+                    <Badge variant="outline" className="text-white/70">48 horas</Badge>
+                  </div>
+                  <div className="flex items-center justify-between p-2 rounded bg-white/5">
+                    <span className="text-sm">Financeiro</span>
+                    <Badge variant="outline" className="text-white/70">24 horas</Badge>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          </section>
+
+          {/* Notificações */}
+          <section ref={el => sectionRefs.current['notificacoes'] = el} id="notificacoes">
+            <Card className="bg-[rgba(5,6,18,0.9)] border-white/12">
+              <CardHeader>
+                <CardTitle className="text-white flex items-center gap-2">
+                  <Bell className="h-5 w-5 text-amber-400" />
+                  Sistema de Notificações
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4 text-white/80">
+                <p>
+                  O sistema envia notificações automáticas por e-mail para gestores e responsáveis 
+                  em situações críticas do fluxo de vouchers.
+                </p>
+
+                <h4 className="text-white font-medium mt-4">Tipos de Notificação</h4>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  <div className="p-3 rounded bg-red-500/10 border border-red-500/20">
+                    <Badge className="bg-red-500 mb-2">ALERTA SLA</Badge>
+                    <p className="text-xs text-white/60">Enviado quando voucher fica parado por mais de 24h</p>
+                  </div>
+                  <div className="p-3 rounded bg-amber-500/10 border border-amber-500/20">
+                    <Badge className="bg-amber-500 mb-2">VENCIMENTO</Badge>
+                    <p className="text-xs text-white/60">Enviado 24h antes do vencimento do voucher</p>
+                  </div>
+                  <div className="p-3 rounded bg-blue-500/10 border border-blue-500/20">
+                    <Badge className="bg-blue-500 mb-2">RELATÓRIO DIÁRIO</Badge>
+                    <p className="text-xs text-white/60">Enviado às 8:30h e 13:30h com resumo</p>
+                  </div>
+                  <div className="p-3 rounded bg-purple-500/10 border border-purple-500/20">
+                    <Badge className="bg-purple-500 mb-2">AJUSTE SOLICITADO</Badge>
+                    <p className="text-xs text-white/60">Enviado quando voucher retorna para correção</p>
+                  </div>
+                </div>
+
+                <h4 className="text-white font-medium mt-4">Destinatários</h4>
+                <ul className="space-y-1 text-sm">
+                  <li>• <strong>Gestores de etapa:</strong> Recebem alertas de SLA da sua área</li>
+                  <li>• <strong>Responsável pelo voucher:</strong> Recebe notificações de ajuste</li>
+                  <li>• <strong>Cliente:</strong> Pode receber cópia de comprovantes (opcional)</li>
+                </ul>
+              </CardContent>
+            </Card>
+          </section>
+
+          {/* Perfis e Permissões */}
+          <section ref={el => sectionRefs.current['perfis'] = el} id="perfis">
+            <Card className="bg-[rgba(5,6,18,0.9)] border-white/12">
+              <CardHeader>
+                <CardTitle className="text-white flex items-center gap-2">
+                  <Users className="h-5 w-5 text-amber-400" />
+                  Perfis e Permissões
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4 text-white/80">
+                <p>
+                  O sistema possui diferentes perfis com permissões específicas para cada etapa do workflow.
+                </p>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  <div className="p-3 rounded bg-blue-500/10 border border-blue-500/20">
+                    <div className="flex items-center gap-2 mb-2">
+                      <FileText className="h-4 w-4 text-blue-400" />
+                      <span className="text-white font-medium text-sm">Operação</span>
+                    </div>
+                    <p className="text-xs text-white/60">Criar vouchers, anexar documentos, definir urgência</p>
+                  </div>
+                  <div className="p-3 rounded bg-purple-500/10 border border-purple-500/20">
+                    <div className="flex items-center gap-2 mb-2">
+                      <CheckCircle2 className="h-4 w-4 text-purple-400" />
+                      <span className="text-white font-medium text-sm">Fiscal</span>
+                    </div>
+                    <p className="text-xs text-white/60">Revisar documentação, aprovar ou solicitar ajustes</p>
+                  </div>
+                  <div className="p-3 rounded bg-amber-500/10 border border-amber-500/20">
+                    <div className="flex items-center gap-2 mb-2">
+                      <DollarSign className="h-4 w-4 text-amber-400" />
+                      <span className="text-white font-medium text-sm">Financeiro</span>
+                    </div>
+                    <p className="text-xs text-white/60">Processar pagamentos, anexar comprovantes</p>
+                  </div>
+                  <div className="p-3 rounded bg-orange-500/10 border border-orange-500/20">
+                    <div className="flex items-center gap-2 mb-2">
+                      <AlertTriangle className="h-4 w-4 text-orange-400" />
+                      <span className="text-white font-medium text-sm">Supervisor</span>
+                    </div>
+                    <p className="text-xs text-white/60">Aprovar urgentes reais, visão de todas as etapas</p>
+                  </div>
+                  <div className="p-3 rounded bg-red-500/10 border border-red-500/20 md:col-span-2">
+                    <div className="flex items-center gap-2 mb-2">
+                      <Settings className="h-4 w-4 text-red-400" />
+                      <span className="text-white font-medium text-sm">Administrador</span>
+                    </div>
+                    <p className="text-xs text-white/60">Acesso total: gestão de usuários, configuração de SLAs, relatórios completos</p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          </section>
+
+          {/* FAQ */}
+          <section ref={el => sectionRefs.current['faq'] = el} id="faq">
+            <Card className="bg-[rgba(5,6,18,0.9)] border-white/12">
+              <CardHeader>
+                <CardTitle className="text-white flex items-center gap-2">
+                  <HelpCircle className="h-5 w-5 text-amber-400" />
+                  Perguntas Frequentes
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                {(searchTerm ? filteredFaq : faqItems).map((item, i) => (
+                  <div key={i} className="p-4 rounded bg-white/5 border border-white/10">
+                    <p className="text-white font-medium mb-2">{item.q}</p>
+                    <p className="text-sm text-white/70">{item.a}</p>
+                  </div>
+                ))}
+                {searchTerm && filteredFaq.length === 0 && (
+                  <p className="text-white/50 text-center py-4">Nenhuma pergunta encontrada</p>
+                )}
+              </CardContent>
+            </Card>
+          </section>
+
+          {/* Glossário */}
+          <section ref={el => sectionRefs.current['glossario'] = el} id="glossario">
+            <Card className="bg-[rgba(5,6,18,0.9)] border-white/12">
+              <CardHeader>
+                <CardTitle className="text-white flex items-center gap-2">
+                  <BookText className="h-5 w-5 text-amber-400" />
+                  Glossário
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  {(searchTerm ? filteredGlossary : glossaryItems).map((item, i) => (
+                    <div key={i} className="p-3 rounded bg-white/5 border border-white/10">
+                      <p className="text-amber-300 font-mono font-bold">{item.term}</p>
+                      <p className="text-sm text-white/70">{item.definition}</p>
+                    </div>
+                  ))}
+                </div>
+                {searchTerm && filteredGlossary.length === 0 && (
+                  <p className="text-white/50 text-center py-4">Nenhum termo encontrado</p>
+                )}
+              </CardContent>
+            </Card>
+          </section>
+        </main>
       </div>
     </PageLayout>
-  );
-}
-
-function VisaoGeralSection() {
-  return (
-    <div className="space-y-8">
-      <div className="flex items-center gap-3">
-        <BookOpen className="h-6 w-6 text-primary" />
-        <h2 className="text-2xl font-bold text-foreground">Visão Geral do Sistema</h2>
-      </div>
-
-      <PageCard>
-        <h3 className="text-lg font-semibold mb-4">O que é o Sistema de Vouchers?</h3>
-        <p className="text-muted-foreground">
-          O <span className="text-primary font-semibold">Sistema de Vouchers Dachser</span> é uma plataforma desenvolvida pela Z3US para a DACHSER, 
-          responsável pelo gerenciamento completo do ciclo de vida de vouchers financeiros.
-        </p>
-      </PageCard>
-
-      <PageCard>
-        <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider mb-6">
-          Fluxo Operacional
-        </h3>
-        <div className="flex items-center justify-between gap-4">
-          <FlowStep number={1} title="Operação" icon={FileText} />
-          <ChevronRight className="h-5 w-5 text-muted-foreground" />
-          <FlowStep number={2} title="Fiscal" icon={CheckCircle} />
-          <ChevronRight className="h-5 w-5 text-muted-foreground" />
-          <FlowStep number={3} title="Financeiro" icon={DollarSign} />
-          <ChevronRight className="h-5 w-5 text-muted-foreground" />
-          <FlowStep number={4} title="Robô/RM" icon={Bot} />
-        </div>
-      </PageCard>
-
-      <div>
-        <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider mb-4">
-          Principais Funcionalidades
-        </h3>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <FeatureCard icon={LayoutDashboard} title="Dashboard Operacional" description="Visão consolidada de todos os vouchers ativos" />
-          <FeatureCard icon={Clock} title="Timeline em Tempo Real" description="Acompanhamento detalhado de cada evento" />
-          <FeatureCard icon={AlertTriangle} title="Gestão de Urgências" description="3 níveis de urgência com aprovação de supervisor" />
-          <FeatureCard icon={Bell} title="Notificações Inteligentes" description="Comunicação automática com gestores e equipe" />
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function DashboardSection() {
-  return (
-    <div className="space-y-8">
-      <div className="flex items-center gap-3">
-        <LayoutDashboard className="h-6 w-6 text-primary" />
-        <h2 className="text-2xl font-bold text-foreground">Dashboard</h2>
-      </div>
-
-      <PageCard>
-        <h3 className="text-lg font-semibold mb-4">Visão Geral do Dashboard</h3>
-        <p className="text-muted-foreground">
-          O dashboard é a página inicial do sistema, oferecendo uma visão consolidada de todos os vouchers 
-          e métricas importantes para acompanhamento.
-        </p>
-      </PageCard>
-
-      <div className="space-y-4">
-        <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">
-          Cards de Métricas
-        </h3>
-        <PageCard>
-          <div className="space-y-3">
-            <div className="flex items-center gap-2">
-              <div className="w-3 h-3 rounded-full bg-primary" />
-              <span className="font-medium">Total Monitorados:</span>
-              <span className="text-muted-foreground">Vouchers ativos no sistema</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <div className="w-3 h-3 rounded-full bg-warning" />
-              <span className="font-medium">Em Alerta:</span>
-              <span className="text-muted-foreground">Vencimento nas próximas 24h</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <div className="w-3 h-3 rounded-full bg-destructive" />
-              <span className="font-medium">Críticos:</span>
-              <span className="text-muted-foreground">Vouchers vencidos não concluídos</span>
-            </div>
-          </div>
-        </PageCard>
-      </div>
-    </div>
-  );
-}
-
-function FluxoVoucherSection() {
-  return (
-    <div className="space-y-8">
-      <div className="flex items-center gap-3">
-        <Clock className="h-6 w-6 text-primary" />
-        <h2 className="text-2xl font-bold text-foreground">Fluxo do Voucher</h2>
-      </div>
-
-      <div className="space-y-6">
-        <PageCard>
-          <div className="flex items-center gap-3 mb-4">
-            <div className="p-2 rounded-lg bg-primary/20">
-              <FileText className="h-5 w-5 text-primary" />
-            </div>
-            <h3 className="text-lg font-semibold">1. Operação</h3>
-          </div>
-          <ul className="space-y-2 text-muted-foreground ml-12">
-            <li>• Criar voucher com informações básicas</li>
-            <li>• Anexar documentos</li>
-            <li>• Definir nível de urgência</li>
-            <li>• Enviar para etapa Fiscal</li>
-          </ul>
-        </PageCard>
-
-        <PageCard>
-          <div className="flex items-center gap-3 mb-4">
-            <div className="p-2 rounded-lg bg-info/20">
-              <CheckCircle className="h-5 w-5 text-info" />
-            </div>
-            <h3 className="text-lg font-semibold">2. Fiscal</h3>
-          </div>
-          <ul className="space-y-2 text-muted-foreground ml-12">
-            <li>• Revisar documentação fiscal</li>
-            <li>• Validar informações</li>
-            <li>• Aprovar e enviar para Financeiro</li>
-          </ul>
-        </PageCard>
-
-        <PageCard>
-          <div className="flex items-center gap-3 mb-4">
-            <div className="p-2 rounded-lg bg-success/20">
-              <DollarSign className="h-5 w-5 text-success" />
-            </div>
-            <h3 className="text-lg font-semibold">3. Financeiro</h3>
-          </div>
-          <ul className="space-y-2 text-muted-foreground ml-12">
-            <li>• Processar pagamento</li>
-            <li>• Anexar boleto</li>
-            <li>• Enviar para Robô</li>
-          </ul>
-        </PageCard>
-      </div>
-    </div>
-  );
-}
-
-function UrgenciasSection() {
-  return (
-    <div className="space-y-8">
-      <div className="flex items-center gap-3">
-        <AlertTriangle className="h-6 w-6 text-primary" />
-        <h2 className="text-2xl font-bold text-foreground">Urgências e SLA</h2>
-      </div>
-
-      <div className="space-y-4">
-        <PageCard className="border-l-4 border-l-success">
-          <h4 className="font-semibold text-success mb-2">Normal</h4>
-          <p className="text-muted-foreground">Fluxo padrão do voucher.</p>
-        </PageCard>
-
-        <PageCard className="border-l-4 border-l-destructive">
-          <h4 className="font-semibold text-destructive mb-2">Urgente Real</h4>
-          <p className="text-muted-foreground">Requer autorização e aprovação do supervisor.</p>
-        </PageCard>
-
-        <PageCard className="border-l-4 border-l-warning">
-          <h4 className="font-semibold text-warning mb-2">Urgente Automático</h4>
-          <p className="text-muted-foreground">Atribuído automaticamente para ICMS e ARMAZENAGEM.</p>
-        </PageCard>
-      </div>
-    </div>
-  );
-}
-
-function NotificacoesSection() {
-  return (
-    <div className="space-y-8">
-      <div className="flex items-center gap-3">
-        <Bell className="h-6 w-6 text-primary" />
-        <h2 className="text-2xl font-bold text-foreground">Notificações</h2>
-      </div>
-
-      <PageCard>
-        <h3 className="text-lg font-semibold mb-4">Sistema de Notificações por E-mail</h3>
-        <p className="text-muted-foreground">
-          O sistema envia notificações automáticas para os gestores responsáveis.
-        </p>
-      </PageCard>
-
-      <div className="grid gap-4">
-        <FeatureCard icon={AlertTriangle} title="Alertas SLA" description="Enviados quando vouchers ficam parados" />
-        <FeatureCard icon={Clock} title="Alertas de Vencimento" description="Enviados 24h antes do vencimento" />
-        <FeatureCard icon={Send} title="Relatórios Diários" description="Enviados às 8:30h e 13:30h" />
-      </div>
-    </div>
-  );
-}
-
-function PerfisSection() {
-  const perfis = [
-    { nome: "Operação", descricao: "Cria vouchers e envia para Fiscal", permissoes: ["Criar vouchers", "Anexar documentos"] },
-    { nome: "Fiscal", descricao: "Valida documentação", permissoes: ["Revisar documentação", "Aprovar/Rejeitar"] },
-    { nome: "Financeiro", descricao: "Processa pagamentos", permissoes: ["Processar pagamentos", "Baixa manual"] },
-    { nome: "Admin", descricao: "Acesso total", permissoes: ["Todas as permissões"] },
-  ];
-
-  return (
-    <div className="space-y-8">
-      <div className="flex items-center gap-3">
-        <Users className="h-6 w-6 text-primary" />
-        <h2 className="text-2xl font-bold text-foreground">Perfis e Permissões</h2>
-      </div>
-
-      <div className="grid gap-4">
-        {perfis.map((perfil) => (
-          <PageCard key={perfil.nome}>
-            <h4 className="font-semibold text-foreground mb-1">{perfil.nome}</h4>
-            <p className="text-sm text-muted-foreground mb-3">{perfil.descricao}</p>
-            <div className="flex flex-wrap gap-2">
-              {perfil.permissoes.map((perm) => (
-                <span key={perm} className="px-2 py-1 text-xs rounded-full bg-primary/20 text-primary">
-                  {perm}
-                </span>
-              ))}
-            </div>
-          </PageCard>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-function FAQSection() {
-  const faqs = [
-    { pergunta: "Como marcar um voucher como urgente?", resposta: "Na etapa de Operação, selecione o tipo de urgência no formulário de criação." },
-    { pergunta: "Como funciona o urgente automático?", resposta: "Vouchers de ICMS e ARMAZENAGEM são marcados automaticamente como urgentes." },
-    { pergunta: "Como visualizar documentos anexados?", resposta: "Clique no ícone de anexo na linha do voucher para abrir a visualização." },
-    { pergunta: "Quais campos são obrigatórios?", resposta: "Número SPO, fornecedor, valor, vencimento, cobrança em nome de e forma de pagamento." },
-    { pergunta: "Como funcionam os alertas de SLA?", resposta: "Os gestores recebem notificações automáticas quando vouchers permanecem parados por mais de 24h." },
-    { pergunta: "Posso editar um voucher após criado?", resposta: "Sim, desde que esteja na etapa de Operação e você tenha permissão de edição." },
-  ];
-
-  return (
-    <div className="space-y-8">
-      <div className="flex items-center gap-3">
-        <HelpCircle className="h-6 w-6 text-primary" />
-        <h2 className="text-2xl font-bold text-foreground">Perguntas Frequentes</h2>
-      </div>
-
-      <div className="space-y-4">
-        {faqs.map((faq, index) => (
-          <PageCard key={index}>
-            <h4 className="font-semibold text-foreground mb-2">{faq.pergunta}</h4>
-            <p className="text-muted-foreground">{faq.resposta}</p>
-          </PageCard>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-function GlossarioSection() {
-  const termos = [
-    { termo: "SPO", definicao: "Número de identificação único do voucher no sistema" },
-    { termo: "SLA", definicao: "Service Level Agreement - tempo máximo de permanência em cada etapa" },
-    { termo: "Voucher", definicao: "Documento financeiro de pagamento a fornecedores" },
-    { termo: "Etapa", definicao: "Fase do processo de aprovação (Operação, Fiscal, Financeiro, Robô)" },
-    { termo: "Baixa", definicao: "Confirmação de pagamento efetivado" },
-    { termo: "RM", definicao: "Sistema de gestão financeira integrado" },
-  ];
-
-  return (
-    <div className="space-y-8">
-      <div className="flex items-center gap-3">
-        <BookText className="h-6 w-6 text-primary" />
-        <h2 className="text-2xl font-bold text-foreground">Glossário</h2>
-      </div>
-
-      <PageCard>
-        <div className="space-y-4">
-          {termos.map((item) => (
-            <div key={item.termo} className="flex gap-4 pb-4 border-b border-border/30 last:border-0 last:pb-0">
-              <span className="font-semibold text-primary min-w-[80px]">{item.termo}</span>
-              <span className="text-muted-foreground">{item.definicao}</span>
-            </div>
-          ))}
-        </div>
-      </PageCard>
-    </div>
   );
 }
