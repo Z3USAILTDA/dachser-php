@@ -55,13 +55,14 @@ const CODIGOS_IATA: CodigoIATA[] = [
  * Data comes directly from mariadb-proxy get_cct_shipments action
  */
 function mapRowToProcessoCCT(row: any): ProcessoCCT {
-  // Parse tratamentos_especiais
+  // Parse tratamento from t_master_dados - this is the primary source
   let tratamentos: string[] | null = null;
-  if (row.tratamentos_especiais) {
-    if (Array.isArray(row.tratamentos_especiais)) {
-      tratamentos = row.tratamentos_especiais;
-    } else if (typeof row.tratamentos_especiais === 'string') {
-      tratamentos = row.tratamentos_especiais.split(',').map((t: string) => t.trim()).filter(Boolean);
+  const tratamentoSource = row.tratamento; // Use tratamento from t_master_dados
+  if (tratamentoSource) {
+    if (Array.isArray(tratamentoSource)) {
+      tratamentos = tratamentoSource;
+    } else if (typeof tratamentoSource === 'string') {
+      tratamentos = tratamentoSource.split(',').map((t: string) => t.trim()).filter(Boolean);
     }
   }
 
