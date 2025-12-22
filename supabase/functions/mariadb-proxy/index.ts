@@ -4278,6 +4278,156 @@ serve(async (req) => {
         break;
       }
 
+      // ==================== FATURAS DO DIA ====================
+      case 'get_faturas_do_dia': {
+        console.log('Fetching faturas do dia...');
+        
+        // Ensure linha_digitavel column exists
+        try {
+          await client.execute(`
+            ALTER TABLE dados_dachser.t_vouchers 
+            ADD COLUMN IF NOT EXISTS linha_digitavel VARCHAR(60) DEFAULT NULL
+          `);
+        } catch (alterErr) {
+          console.log('Column might already exist:', alterErr);
+        }
+
+        const faturas = await client.query(`
+          SELECT 
+            v.id,
+            v.numero_spo,
+            v.fornecedor,
+            v.cnpj_fornecedor,
+            v.valor,
+            v.vencimento,
+            v.forma_pagamento,
+            v.status_baixa,
+            v.etapa_atual,
+            v.linha_digitavel,
+            v.remessa
+          FROM dados_dachser.t_vouchers v
+          WHERE DATE(v.vencimento) = CURDATE()
+            AND v.etapa_atual IN ('FINANCEIRO', 'ROBO')
+          ORDER BY v.vencimento ASC, v.fornecedor ASC
+        `);
+
+        console.log(`Found ${faturas?.length || 0} faturas do dia`);
+        result = { success: true, data: faturas || [] };
+        break;
+      }
+
+      case 'get_dados_bancarios_fornecedor': {
+        const { cnpj: cnpjFornecedor } = body as { cnpj?: string };
+        
+        if (!cnpjFornecedor) {
+          return new Response(
+            JSON.stringify({ error: 'CNPJ é obrigatório' }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+
+        console.log('Fetching dados bancários for CNPJ:', cnpjFornecedor);
+        
+        const dados = await client.query(`
+          SELECT 
+            banco,
+            agencia,
+            digito_agencia,
+            conta_corrente,
+            digito_conta,
+            razao_social,
+            cnpj
+          FROM dados_dachser.t_dados_financeiro_pag
+          WHERE REPLACE(REPLACE(REPLACE(cnpj, '.', ''), '/', ''), '-', '') = ?
+          LIMIT 1
+        `, [cnpjFornecedor.replace(/\D/g, '')]);
+
+        if (dados && dados.length > 0) {
+          result = { success: true, data: dados[0] };
+        } else {
+          result = { success: false, error: 'Dados bancários não encontrados' };
+        }
+        break;
+      }
+
+      case 'insert_dados_rm': {
+        const { 
+          id_rm: idRm, 
+          voucher_boleto: voucherBoleto, 
+          forma_pag: formaPag, 
+          fornecedor: fornecedorRm, 
+          regras_forma_pag: regrasFormaPag 
+        } = body as { 
+          id_rm?: string; 
+          voucher_boleto?: string; 
+          forma_pag?: string; 
+          fornecedor?: string; 
+          regras_forma_pag?: string;
+        };
+        
+        if (!idRm) {
+          return new Response(
+            JSON.stringify({ error: 'id_rm é obrigatório' }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+
+        console.log('Inserting into t_dados_rm:', { idRm, formaPag, fornecedorRm, regrasFormaPag });
+        
+        // Ensure table exists
+        await client.execute(`
+          CREATE TABLE IF NOT EXISTS dados_dachser.t_dados_rm (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            id_rm VARCHAR(50) NOT NULL,
+            nf_disputa TINYINT(1) DEFAULT 0,
+            voucher_boleto VARCHAR(60) DEFAULT NULL,
+            forma_pag VARCHAR(50) DEFAULT NULL,
+            fornecedor VARCHAR(255) DEFAULT NULL,
+            regras_forma_pag VARCHAR(100) DEFAULT NULL,
+            inicio_disputa DATE DEFAULT NULL,
+            fim_disputa DATE DEFAULT NULL,
+            responsavel_disp VARCHAR(100) DEFAULT NULL,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            INDEX idx_id_rm (id_rm)
+          )
+        `);
+
+        await client.execute(`
+          INSERT INTO dados_dachser.t_dados_rm 
+          (id_rm, nf_disputa, voucher_boleto, forma_pag, fornecedor, regras_forma_pag)
+          VALUES (?, 0, ?, ?, ?, ?)
+        `, [idRm, voucherBoleto || null, formaPag || null, fornecedorRm || null, regrasFormaPag || null]);
+
+        console.log('Inserted into t_dados_rm successfully');
+        result = { success: true };
+        break;
+      }
+
+      case 'save_linha_digitavel': {
+        const { voucher_id: vId, linha_digitavel: linhaDigitavel } = body as { 
+          voucher_id?: string; 
+          linha_digitavel?: string; 
+        };
+        
+        if (!vId || !linhaDigitavel) {
+          return new Response(
+            JSON.stringify({ error: 'voucher_id e linha_digitavel são obrigatórios' }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+
+        console.log('Saving linha_digitavel for voucher:', vId);
+        
+        await client.execute(`
+          UPDATE dados_dachser.t_vouchers 
+          SET linha_digitavel = ?
+          WHERE id = ?
+        `, [linhaDigitavel, vId]);
+
+        result = { success: true };
+        break;
+      }
+
       default:
         return new Response(
           JSON.stringify({ error: `Ação não suportada: ${action}` }),

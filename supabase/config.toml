@@ -197,3 +197,6 @@ verify_jwt = false
 
 [functions.reset-awb-status]
 verify_jwt = false
+
+[functions.extract-boleto-barcode]
+verify_jwt = false
