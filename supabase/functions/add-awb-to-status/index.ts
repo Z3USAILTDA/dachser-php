@@ -123,14 +123,23 @@ serve(async (req) => {
     // Use sanitized AWB for insert - TRIM applied to prevent whitespace issues
     const isArrStatus = finalLastEvent === 'ARR';
     
+    // Define critical/alert statuses that can override ARR
+    const criticalStatuses = ['DIS', 'NIL', 'NIF', 'OFLD'];
+    const isCriticalStatus = criticalStatuses.includes(finalLastEvent);
+    
     // Update current status in t_status_aereo
+    // ARR status is "locked" - only critical statuses (DIS, NIL, NIF, OFLD) can override it
     await client.execute(
       `INSERT INTO t_status_aereo (awb, destinatário, \`última atualização\`, último_status, origem, destino, hawb, nome_analista, email_analista, email_cliente, data_atraso, tipo_servico, arr_check_count, arr_datetime) 
        VALUES (TRIM(?), TRIM(?), NOW(), TRIM(?), TRIM(?), TRIM(?), TRIM(?), TRIM(?), TRIM(?), TRIM(?), ${isAlertStatus ? 'NOW()' : 'NULL'}, TRIM(?), ${isArrStatus ? '1' : '0'}, ${isArrStatus ? 'NOW()' : 'NULL'})
        ON DUPLICATE KEY UPDATE 
          destinatário = TRIM(?),
          \`última atualização\` = NOW(),
-         último_status = TRIM(?),
+         último_status = IF(
+           último_status = 'ARR' AND ? = 0,
+           'ARR',
+           TRIM(?)
+         ),
          origem = IF(TRIM(?) != 'N/A', TRIM(?), origem),
          destino = IF(TRIM(?) != 'N/A', TRIM(?), destino),
          hawb = IF(TRIM(?) != 'N/A', TRIM(?), hawb),
@@ -139,11 +148,12 @@ serve(async (req) => {
          email_cliente = IF(? IS NOT NULL AND TRIM(?) != '', TRIM(?), email_cliente),
          data_atraso = IF(TRIM(?) = 'DLV', NULL, IF(? = 1 AND data_atraso IS NULL, NOW(), data_atraso)),
          tipo_servico = IF(TRIM(?) != 'N/A', TRIM(?), tipo_servico),
-         arr_check_count = IF(? = 1, COALESCE(arr_check_count, 0) + 1, 0),
-         arr_datetime = IF(? = 1 AND arr_datetime IS NULL, NOW(), IF(? = 0, NULL, arr_datetime))`,
+         arr_check_count = IF(último_status = 'ARR' OR ? = 1, COALESCE(arr_check_count, 0) + 1, 0),
+         arr_datetime = IF((último_status = 'ARR' OR ? = 1) AND arr_datetime IS NULL, NOW(), IF(último_status != 'ARR' AND ? = 0, NULL, arr_datetime))`,
       [
         sanitizedMawb, finalConsigneeName, finalLastEvent, finalOrigin, finalDestination, finalHawb, finalNomeAnalista, finalEmailAnalista, finalEmailCliente, finalTipoServico,
-        finalConsigneeName, finalLastEvent, 
+        finalConsigneeName,
+        isCriticalStatus ? 1 : 0, finalLastEvent,
         finalOrigin, finalOrigin, 
         finalDestination, finalDestination, 
         finalHawb, finalHawb, 
