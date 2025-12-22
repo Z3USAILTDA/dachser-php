@@ -10,7 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { Upload, Trash2, FileSpreadsheet, RefreshCw, Search, Info, AlertCircle, DollarSign } from "lucide-react";
-import { HelpButton } from "@/components/esteira/HelpButton";
+
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import * as XLSX from "xlsx";
@@ -197,7 +197,7 @@ const AccrualManagement = () => {
   const totalValor = filteredEntries.reduce((acc, e) => acc + e.valor, 0);
 
   return (
-    <PageLayout backTo="/fin/esteira" rightContent={<HelpButton />}>
+    <PageLayout backTo="/fin/esteira">
       <PageHeader
         title="Gestão de Accrual"
         subtitle="Upload e gerenciamento da base de provisões (conciliação)"

@@ -174,14 +174,13 @@ export const AppHeader = () => {
               {/* Help Icon - Navigates to Manual */}
               <Tooltip>
                 <TooltipTrigger asChild>
-                  <Button 
-                    variant="ghost" 
-                    size="icon"
-                    onClick={() => navigate("/manual")}
-                    className="text-muted-foreground hover:text-foreground hover:bg-muted/50 rounded-full"
+                  <button
+                    onClick={() => navigate("/fin/esteira/manual")}
+                    className="w-8 h-8 rounded-full border border-[rgba(255,255,255,.25)] flex items-center justify-center bg-[rgba(0,0,0,.7)] text-[#aaaaaa] hover:text-[#ffc800] hover:bg-[rgba(0,0,0,.9)] transition"
+                    title="Ajuda"
                   >
-                    <HelpCircle className="h-5 w-5" />
-                  </Button>
+                    <HelpCircle className="h-4 w-4" />
+                  </button>
                 </TooltipTrigger>
                 <TooltipContent>
                   <p>Manual do Sistema</p>

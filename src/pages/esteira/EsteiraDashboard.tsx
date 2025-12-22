@@ -14,7 +14,7 @@ import {
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
-import { HelpButton } from "@/components/esteira/HelpButton";
+
 
 interface DashboardMetrics {
   pendentesOperacao: number;
@@ -139,7 +139,7 @@ const EsteiraDashboard = () => {
   };
 
   return (
-    <PageLayout rightContent={<HelpButton />}>
+    <PageLayout>
       <PageHeader 
         title="Dashboard"
         subtitle="Visão geral do workflow de vouchers"
