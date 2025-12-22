@@ -38,6 +38,13 @@ export function PageLayout({
   const location = useLocation();
   const storedUser = localStorage.getItem("user");
   const user = storedUser ? JSON.parse(storedUser) : null;
+  const isAdmin = user?.is_admin === 1 || user?.is_admin === "1" || user?.is_admin === true;
+  
+  // Filter tabs - Console only for admins
+  const visibleTabs = navTabs.filter(tab => {
+    if (tab.href === "/air/cct/console") return isAdmin;
+    return true;
+  });
 
   const handleLogout = () => {
     localStorage.removeItem("user");
@@ -131,7 +138,7 @@ export function PageLayout({
 
         {/* Center - Navigation Tabs */}
         <nav className="hidden lg:flex items-center gap-1 px-2 py-1.5 rounded-full bg-[rgba(5,6,18,0.85)] border border-white/10 backdrop-blur-sm">
-          {navTabs.map((tab) => {
+          {visibleTabs.map((tab) => {
             const Icon = tab.icon;
             const isActive = location.pathname === tab.href;
             return (
