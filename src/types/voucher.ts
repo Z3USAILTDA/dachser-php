@@ -178,6 +178,7 @@ export interface Voucher {
   processoId?: string;
   origemProcesso?: string;
   origemCriacao?: "MANUAL" | "RM";
+  linhaDigitavel?: string;
   clienteNome?: string;
   centroCusto?: string;
   tipoOperacao?: string;

@@ -57,6 +57,7 @@ import { CreateVoucherDialog } from "@/components/esteira/CreateVoucherDialog";
 import { EditVoucherDialog } from "@/components/esteira/EditVoucherDialog";
 import { RoboTab } from "@/components/tabs/RoboTab";
 import { ReportsTab } from "@/components/tabs/ReportsTab";
+import { FaturasDoDiaTab } from "@/components/esteira/FaturasDoDiaTab";
 import { MetricCard } from "@/components/cct/MetricCard";
 import {
   DropdownMenu,
@@ -746,7 +747,7 @@ const EsteiraIndex = () => {
   const [vouchers, setVouchers] = useState<Voucher[]>([]);
   const [loading, setLoading] = useState(true);
   const [isRefetching, setIsRefetching] = useState(false);
-  const [activeTab, setActiveTab] = useState<"processos" | "dashboard" | "analytics" | "robo" | "relatorios">(
+  const [activeTab, setActiveTab] = useState<"processos" | "dashboard" | "analytics" | "robo" | "relatorios" | "faturas">(
     "processos",
   );
   const [filters, setFilters] = useState<FilterValues>({
@@ -1402,6 +1403,11 @@ const EsteiraIndex = () => {
                 label: "Relatórios",
                 icon: FileSpreadsheet,
               },
+              {
+                id: "faturas" as const,
+                label: "Faturas do Dia",
+                icon: Calendar,
+              },
             ].map((tab) => {
               const Icon = tab.icon;
               const isActive = activeTab === tab.id;
@@ -1505,6 +1511,11 @@ const EsteiraIndex = () => {
           {activeTab === "analytics" && <AnalyticsDashboard vouchers={vouchers} />}
           {activeTab === "robo" && <RoboTab />}
           {activeTab === "relatorios" && <ReportsTab />}
+          {activeTab === "faturas" && (
+            <div className="rounded-2xl p-5 bg-[rgba(5,6,18,0.9)] border border-[rgba(255,255,255,0.12)] backdrop-blur-[18px] shadow-[0_18px_40px_rgba(0,0,0,0.85)]">
+              <FaturasDoDiaTab />
+            </div>
+          )}
         </div>
       </main>
 
