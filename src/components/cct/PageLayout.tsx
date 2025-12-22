@@ -24,6 +24,7 @@ interface PageLayoutProps {
   showBack?: boolean;
   headerActions?: ReactNode;
   pageIcon?: LucideIcon;
+  hideNavTabs?: boolean;
 }
 
 export function PageLayout({ 
@@ -32,7 +33,8 @@ export function PageLayout({
   subtitle = "CRONOS CCT — Monitoramento de Carga Aérea",
   showBack = true,
   headerActions,
-  pageIcon: PageIcon = Radio
+  pageIcon: PageIcon = Radio,
+  hideNavTabs = false
 }: PageLayoutProps) {
   const navigate = useNavigate();
   const location = useLocation();
@@ -137,6 +139,7 @@ export function PageLayout({
         </div>
 
         {/* Center - Navigation Tabs */}
+        {!hideNavTabs && (
         <nav className="hidden lg:flex items-center gap-1 px-2 py-1.5 rounded-full bg-[rgba(5,6,18,0.85)] border border-white/10 backdrop-blur-sm">
           {visibleTabs.map((tab) => {
             const Icon = tab.icon;
@@ -159,6 +162,7 @@ export function PageLayout({
             );
           })}
         </nav>
+        )}
 
         {/* Right - Actions and user */}
         <div className="flex items-center gap-2.5 text-[0.85rem]">
