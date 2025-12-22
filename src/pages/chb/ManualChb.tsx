@@ -218,21 +218,21 @@ export default function ManualChb() {
 
                 <h4 className="text-white font-medium mt-4">Status das Análises</h4>
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                  <div className="p-3 rounded bg-blue-500/10 border border-blue-500/20">
-                    <Badge className="bg-blue-500 mb-2">PENDENTE</Badge>
-                    <p className="text-xs text-white/60">Aguardando documentos</p>
-                  </div>
                   <div className="p-3 rounded bg-amber-500/10 border border-amber-500/20">
-                    <Badge className="bg-amber-500 mb-2">EM_ANALISE</Badge>
-                    <p className="text-xs text-white/60">Processando documentos</p>
+                    <Badge className="bg-amber-500 mb-2">PRÉ-ALERTA PENDENTE</Badge>
+                    <p className="text-xs text-white/60">Aguardando pré-alerta</p>
+                  </div>
+                  <div className="p-3 rounded bg-blue-500/10 border border-blue-500/20">
+                    <Badge className="bg-blue-500 mb-2">INSTRUÇÃO PENDENTE</Badge>
+                    <p className="text-xs text-white/60">Aguardando instrução</p>
+                  </div>
+                  <div className="p-3 rounded bg-purple-500/10 border border-purple-500/20">
+                    <Badge className="bg-purple-500 mb-2">DI PENDENTE</Badge>
+                    <p className="text-xs text-white/60">Aguardando DI/Fechamento</p>
                   </div>
                   <div className="p-3 rounded bg-green-500/10 border border-green-500/20">
-                    <Badge className="bg-green-500 mb-2">CONCLUIDO</Badge>
+                    <Badge className="bg-green-500 mb-2">CONCLUÍDA</Badge>
                     <p className="text-xs text-white/60">Conferência finalizada</p>
-                  </div>
-                  <div className="p-3 rounded bg-red-500/10 border border-red-500/20">
-                    <Badge className="bg-red-500 mb-2">ERRO</Badge>
-                    <p className="text-xs text-white/60">Falha no processamento</p>
                   </div>
                 </div>
 
@@ -276,12 +276,16 @@ export default function ManualChb() {
 
                 <h4 className="text-white font-medium mt-4">Etapas da Conferência</h4>
                 <div className="space-y-2">
-                  {['1. Upload do HBL', '2. Upload do MBL', '3. Upload de Invoice/Packing', '4. Análise Automática', '5. Revisão e Aprovação'].map((etapa, i) => (
+                  {[
+                    '1. Pré-Alerta - Recepção inicial e validação de documentos básicos',
+                    '2. Instrução - Conferência de dados e envio de instruções ao despachante',
+                    '3. DI/Fechamento - Validação final, registro da DI e conclusão do processo'
+                  ].map((etapa, i) => (
                     <div key={etapa} className="flex items-center gap-3 p-2 rounded bg-white/5">
                       <div className="w-6 h-6 rounded-full bg-amber-500/20 flex items-center justify-center text-xs text-amber-300 font-bold">
                         {i + 1}
                       </div>
-                      <span className="text-sm">{etapa.split('. ')[1]}</span>
+                      <span className="text-sm">{etapa.split('. ').slice(1).join('. ')}</span>
                     </div>
                   ))}
                 </div>
