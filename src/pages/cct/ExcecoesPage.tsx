@@ -53,6 +53,9 @@ const TIPO_LABELS: Record<TipoExcecao, string> = {
   API_INDISPONIVEL: "API indisponível",
   DIVERGENCIA_DADOS: "Divergência de dados",
   ATRASO_EVENTO: "Atraso de evento",
+  CARGA_BLOQUEADA: "Carga bloqueada/congelada",
+  SLA_PROXIMO_VENCIMENTO: "SLA próximo do vencimento",
+  SLA_VENCIDO: "SLA vencido",
 };
 
 const TIPO_ICONS: Record<TipoExcecao, React.ElementType> = {
@@ -60,6 +63,9 @@ const TIPO_ICONS: Record<TipoExcecao, React.ElementType> = {
   API_INDISPONIVEL: Wifi,
   DIVERGENCIA_DADOS: Scale,
   ATRASO_EVENTO: Clock,
+  CARGA_BLOQUEADA: AlertTriangle,
+  SLA_PROXIMO_VENCIMENTO: Clock,
+  SLA_VENCIDO: AlertCircle,
 };
 
 const STATUS_CONFIG: Record<StatusExcecao, { label: string; color: string; icon: React.ElementType }> = {

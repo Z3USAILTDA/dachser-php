@@ -2314,8 +2314,32 @@ serve(async (req) => {
       case 'get_cct_shipments': {
         console.log('Fetching CCT shipments from t_master_dados (AIR IMPORT)...');
         
+        // Registered airline codes for CCT filtering
+        const registeredAirlineCodes = [
+          '001', '016', '020', '006', '047', '055', '045', '057', '074', '075',
+          '118', '125', '139', '157', '172', '176', '235', '369', '399', '406',
+          '549', '577', '615', '724', '729', '881', '996'
+        ];
+        const airlineFilter = registeredAirlineCodes.map(c => `'${c}'`).join(',');
+        
+        // SLA configuration by status (hours)
+        const slaConfigByStatus: Record<string, number> = {
+          'COLETA_REALIZADA': 1,
+          'CARGA_RECEBIDA_TECA': 6,
+          'DEP': 1,
+          'ATD': 1,
+          'ARR': 1,
+          'ATA': 1,
+          'RCF': 6,
+          'NFD': 6,
+          'AWD': 6,
+          'DLV': 2,
+          'POD': 2,
+          'AGUARDANDO_MANIFESTACAO': 24,
+        };
+        
         // Query from t_master_dados as primary source, LEFT JOIN t_status_aereo for latest status
-        // Note: t_master_dados only has: id, cliente, mawb, hawb, emails_cliente, nome_analista, email_analista, active, tipo_processo, previsao_faturamento, data_finalizacao
+        // IMPORTANT: Filter by registered airlines and exclude COMPANY_NOT_REGISTERED
         const shipments = await client.query(`
           SELECT 
             m.id,
@@ -2332,45 +2356,71 @@ serve(async (req) => {
             COALESCE(s.\`último_status\`, 'AGUARDANDO_MANIFESTACAO') as ultimo_evento_codigo,
             TRIM(s.origem) as aeroporto_origem,
             TRIM(s.destino) as aeroporto_destino,
-            s.data_atraso
+            s.data_atraso,
+            LEFT(TRIM(m.mawb), 3) as airline_code
           FROM ${database}.t_master_dados m
           LEFT JOIN ${database}.t_status_aereo s ON TRIM(m.mawb) = TRIM(s.awb)
           WHERE m.active = 1 
           AND m.tipo_processo = 'AIR IMPORT'
           AND m.data_finalizacao IS NULL
+          AND LEFT(TRIM(m.mawb), 3) IN (${airlineFilter})
+          AND (s.\`último_status\` IS NULL OR s.\`último_status\` != 'COMPANY_NOT_REGISTERED')
           ORDER BY s.\`última atualização\` DESC, m.id DESC
           LIMIT 500
         `);
 
-        // Calculate SLA status and derive CCT status for each shipment
+        // Calculate SLA status based on specific status, not generic 24h/48h
         const now = new Date();
         const processedShipments = (shipments || []).map((row: any) => {
           const lastUpdate = row.ultimo_evento_data ? new Date(row.ultimo_evento_data) : null;
+          const statusCode = row.status_cct_oficial || 'AGUARDANDO_MANIFESTACAO';
+          
+          // Get SLA hours for this specific status
+          const slaHours = slaConfigByStatus[statusCode] ?? 24;
           const hoursSinceUpdate = lastUpdate ? (now.getTime() - lastUpdate.getTime()) / (1000 * 60 * 60) : null;
           
-          // SLA calculation: CRITICO if > 48h, ALERTA if > 24h
+          // SLA calculation based on status-specific hours
           let slaStatus = 'OK';
+          let horasRestantes: number | null = null;
+          let percentual: number | null = null;
+          
           if (hoursSinceUpdate !== null) {
-            if (hoursSinceUpdate > 48) slaStatus = 'CRITICO';
-            else if (hoursSinceUpdate > 24) slaStatus = 'ALERTA';
+            horasRestantes = slaHours - hoursSinceUpdate;
+            percentual = Math.min(100, Math.max(0, (hoursSinceUpdate / slaHours) * 100));
+            
+            if (horasRestantes <= 0) {
+              slaStatus = 'VENCIDO';
+            } else if (horasRestantes <= 0.5) { // 30 minutes
+              slaStatus = 'CRITICO';
+            } else if (percentual >= 75) {
+              slaStatus = 'ALERTA';
+            }
           }
 
-          // Check for alert statuses (DIS, OFLD, etc)
-          const alertStatuses = ['DIS', 'OFLD', 'NOT_FOUND', 'ERRO', 'BLOQUEIO'];
-          const isAlert = alertStatuses.includes(row.status_cct_oficial);
+          // Check for alert/frozen statuses
+          const frozenStatuses = ['FRO', 'FROZEN'];
+          const blockStatuses = ['DIS', 'OFLD', 'NOT_FOUND', 'ERRO', 'BLOQUEIO'];
+          const isFrozen = frozenStatuses.includes(statusCode);
+          const isBlock = blockStatuses.includes(statusCode);
 
-          // Derive CCT status from ultimo_status
+          // Derive CCT status from ultimo_status with expanded mapping
           const statusMap: Record<string, string> = {
             'DEP': 'EM_TRANSITO',
+            'MAN': 'MANIFESTADO',
+            'BKD': 'MANIFESTADO',
             'ARR': 'CHEGADA_INFORMADA',
+            'ATA': 'CHEGADA_INFORMADA',
             'RCF': 'RECEPCIONADO',
+            'RCS': 'RECEPCIONADO',
+            'NFD': 'DISPONIVEL_RETIRADA',
+            'AWD': 'DISPONIVEL_RETIRADA',
             'DLV': 'ENTREGUE',
             'POD': 'ENTREGUE',
-            'NFD': 'AREA_TRANSFERENCIA',
+            'FRO': 'FROZEN',
             'DIS': 'BLOQUEIO',
             'OFLD': 'BLOQUEIO',
           };
-          const derivedStatus = statusMap[row.status_cct_oficial] || row.status_cct_oficial || 'AGUARDANDO_MANIFESTACAO';
+          const derivedStatus = statusMap[statusCode] || statusCode || 'AGUARDANDO_MANIFESTACAO';
 
           return {
             id: row.id?.toString() || row.master,
@@ -2380,13 +2430,19 @@ serve(async (req) => {
             aeroporto_origem: row.aeroporto_origem || 'N/A',
             aeroporto_destino: row.aeroporto_destino || 'GRU',
             status_cct_oficial: derivedStatus,
-            status_manifestacao: row.status_cct_oficial && row.status_cct_oficial !== 'AGUARDANDO_MANIFESTACAO' ? 'MANIFESTADO_CCT' : 'RECEBIDO_NOVA',
+            status_manifestacao: statusCode && statusCode !== 'AGUARDANDO_MANIFESTACAO' ? 'MANIFESTADO_CCT' : 'RECEBIDO_NOVA',
             sla_status: slaStatus,
+            sla_info: {
+              status: slaStatus,
+              horasRestantes: horasRestantes !== null ? Math.round(horasRestantes * 100) / 100 : null,
+              percentual: percentual !== null ? Math.round(percentual * 100) / 100 : null,
+              slaConfigHoras: slaHours,
+            },
             sla_limite: null,
             tipo_voo: null,
             ultimo_evento_data: row.ultimo_evento_data,
-            ultimo_evento_codigo: row.status_cct_oficial || 'AGUARDANDO_MANIFESTACAO',
-            ultimo_evento_descricao: row.status_cct_oficial || 'Aguardando manifestação',
+            ultimo_evento_codigo: statusCode,
+            ultimo_evento_descricao: statusCode,
             nome_analista: row.nome_analista,
             email_analista: row.email_analista,
             emails_cliente: row.emails_cliente,
@@ -2398,7 +2454,8 @@ serve(async (req) => {
             volume_constatado: null,
             cnpj_consignatario: null,
             tratamentos_especiais: null,
-            excecoes_abertas: isAlert ? 1 : 0,
+            excecoes_abertas: isFrozen ? 1 : isBlock ? 1 : 0,
+            is_frozen: isFrozen,
             data_atraso: row.data_atraso,
             data_decolagem_ultimo_trecho: null,
             previsao_faturamento: row.previsao_faturamento,
@@ -2408,7 +2465,7 @@ serve(async (req) => {
           };
         });
 
-        console.log(`CCT: Found ${processedShipments.length} active AIR IMPORT shipments from t_master_dados`);
+        console.log(`CCT: Found ${processedShipments.length} active AIR IMPORT shipments from registered airlines`);
         result = { success: true, data: processedShipments };
         break;
       }

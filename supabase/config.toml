@@ -1,5 +1,8 @@
 project_id = "finktakbjcfmurqeiubz"
 
+[functions.arr-to-cct-sync]
+verify_jwt = false
+
 [functions.mariadb-proxy]
 verify_jwt = false
 
