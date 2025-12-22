@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo } from "react";
-import { CalendarRange } from "lucide-react";
+import { useNavigate } from "react-router-dom";
+import { CalendarRange, HelpCircle } from "lucide-react";
 import { useUsageLog } from "@/hooks/useUsageLog";
 import { FileText, Clock, Flag, Search, X, RefreshCw } from "lucide-react";
 import { Input } from "@/components/ui/input";
@@ -66,6 +67,7 @@ const PAGE_SIZE = 15;
 
 export default function ReguaCobranca() {
   useUsageLog({ endpoint: "/fin/regua-cobranca" });
+  const navigate = useNavigate();
   const { toast } = useToast();
 
   const [counts, setCounts] = useState<StageCounts>({
@@ -165,7 +167,14 @@ export default function ReguaCobranca() {
   };
 
   const rightContent = (
-    <>
+    <div className="flex items-center gap-3">
+      <button
+        onClick={() => navigate("/fin/manual")}
+        className="w-8 h-8 rounded-full border border-white/25 flex items-center justify-center bg-black/70 text-gray-400 hover:text-[#ffc800] transition-colors"
+        title="Manual do usuário"
+      >
+        <HelpCircle className="h-4 w-4" />
+      </button>
       <button
         onClick={() => window.location.href = "/fin/disputa"}
         className="px-3 py-1.5 rounded-full bg-primary/12 border border-primary/90 text-primary font-bold text-[0.85rem] inline-flex items-center gap-[6px] hover:bg-primary/20 transition-colors"
@@ -181,7 +190,7 @@ export default function ReguaCobranca() {
         <RefreshCw className={`h-4 w-4 mr-1 ${loading ? 'animate-spin' : ''}`} />
         Atualizar
       </Button>
-    </>
+    </div>
   );
 
   return (

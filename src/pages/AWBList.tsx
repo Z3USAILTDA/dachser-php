@@ -12,7 +12,7 @@ import {
   TableHeader, 
   TableRow 
 } from "@/components/ui/table";
-import { Search, Plane, Package, ArrowLeft } from "lucide-react";
+import { Search, Plane, Package, ArrowLeft, HelpCircle } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useNavigate } from "react-router-dom";
 import { DatabaseConnectionIndicator } from "@/components/DatabaseConnectionIndicator";
@@ -55,14 +55,23 @@ const AWBList = () => {
       <div className="container mx-auto px-4 py-8">
         {/* Header */}
         <div className="mb-8">
-          <Button 
-            variant="ghost" 
-            onClick={() => navigate(-1)}
-            className="mb-4 gap-2"
-          >
-            <ArrowLeft className="w-4 h-4" />
-            Voltar
-          </Button>
+          <div className="flex items-center justify-between mb-4">
+            <Button 
+              variant="ghost" 
+              onClick={() => navigate(-1)}
+              className="gap-2"
+            >
+              <ArrowLeft className="w-4 h-4" />
+              Voltar
+            </Button>
+            <button
+              onClick={() => navigate("/air/manual")}
+              className="w-8 h-8 rounded-full border border-white/25 flex items-center justify-center bg-black/70 text-gray-400 hover:text-[#ffc800] transition-colors"
+              title="Manual do usuário"
+            >
+              <HelpCircle className="h-4 w-4" />
+            </button>
+          </div>
           <div className="flex items-center gap-3 mb-2">
             <Package className="w-8 h-8 text-primary" />
             <h1 className="text-4xl font-bold text-foreground">

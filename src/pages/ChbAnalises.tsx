@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useUsageLog } from "@/hooks/useUsageLog";
-import { Upload, Clock, Copy, ClipboardList, Trash2, FileText, CheckCircle, FileDown } from "lucide-react";
+import { Upload, Clock, Copy, ClipboardList, Trash2, FileText, CheckCircle, FileDown, HelpCircle } from "lucide-react";
 import { PageLayout } from "@/components/layout/PageLayout";
 import { FilterCard, TableCard } from "@/components/layout/PageCard";
 import { FilterBar } from "@/components/layout/FilterBar";
@@ -168,13 +168,22 @@ export default function ChbAnalises() {
   };
 
   const rightContent = (
-    <button
-      onClick={() => setNovoProcessoModal(true)}
-      className="h-8 rounded-full px-4 flex items-center gap-1.5 bg-[#ffc800] text-black font-semibold text-[0.78rem] shadow-[0_0_22px_rgba(255,200,0,.6)] hover:bg-[#f5b843]"
-    >
-      <Upload className="h-4 w-4" />
-      Novo Processo
-    </button>
+    <div className="flex items-center gap-3">
+      <button
+        onClick={() => navigate("/chb/manual")}
+        className="w-8 h-8 rounded-full border border-white/25 flex items-center justify-center bg-black/70 text-gray-400 hover:text-[#ffc800] transition-colors"
+        title="Manual do usuário"
+      >
+        <HelpCircle className="h-4 w-4" />
+      </button>
+      <button
+        onClick={() => setNovoProcessoModal(true)}
+        className="h-8 rounded-full px-4 flex items-center gap-1.5 bg-[#ffc800] text-black font-semibold text-[0.78rem] shadow-[0_0_22px_rgba(255,200,0,.6)] hover:bg-[#f5b843]"
+      >
+        <Upload className="h-4 w-4" />
+        Novo Processo
+      </button>
+    </div>
   );
 
   return (
