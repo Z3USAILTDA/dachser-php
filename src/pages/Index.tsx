@@ -1926,7 +1926,7 @@ const Index = () => {
               <div className="flex items-center gap-2">
                 {/* Botão para ver companhias pendentes de cadastro */}
                 {(() => {
-                  const pendingAirlineCodes = ["014", "023", "605", "865", "992"]; // CIAs realmente não cadastradas
+                  const pendingAirlineCodes = ["014", "605", "865", "992"]; // CIAs realmente não cadastradas
                   const pendingAwbs = statusAereoData.filter(awb => {
                     const code = (awb.airline_code || "").replace(/^0+/, "").padStart(3, "0");
                     return pendingAirlineCodes.includes(code);
@@ -1949,7 +1949,7 @@ const Index = () => {
                   className="h-8 px-4 rounded-full bg-emerald-600/80 text-white text-[0.75rem] font-medium flex items-center gap-1.5 hover:bg-emerald-500/80 transition border border-emerald-500/50"
                 >
                   <Plane className="w-3.5 h-3.5" />
-                  CIAs Monitoradas (24)
+                  CIAs Monitoradas (27)
                 </button>
 
                 <button
@@ -2362,7 +2362,7 @@ const Index = () => {
               Companhias Aéreas Monitoradas
             </DialogTitle>
             <DialogDescription className="text-[#aaaaaa]">
-              24 companhias aéreas com integração ativa no sistema de rastreamento
+              27 companhias aéreas com integração ativa no sistema de rastreamento
             </DialogDescription>
           </DialogHeader>
           <div className="overflow-y-auto max-h-[50vh] mt-4">
@@ -2372,6 +2372,7 @@ const Index = () => {
                 { code: "006", name: "Delta Cargo" },
                 { code: "016", name: "United Cargo" },
                 { code: "020", name: "Lufthansa Cargo" },
+                { code: "023", name: "FedEx Express" },
                 { code: "045", name: "LATAM Cargo" },
                 { code: "047", name: "TAP Air Portugal Cargo" },
                 { code: "055", name: "ITA Airways Cargo" },
@@ -2385,12 +2386,13 @@ const Index = () => {
                 { code: "176", name: "Emirates SkyCargo" },
                 { code: "235", name: "Turkish Airlines Cargo" },
                 { code: "369", name: "Atlas Air" },
+                { code: "406", name: "UPS Airlines" },
                 { code: "549", name: "LATAM Cargo (Alt)" },
                 { code: "577", name: "Azul Cargo" },
                 { code: "615", name: "DHL Aviation (EAT Leipzig)" },
-                { code: "695", name: "Ethiopian Airlines Cargo" },
                 { code: "724", name: "Swiss WorldCargo" },
                 { code: "729", name: "Tampa Cargo (Avianca)" },
+                { code: "881", name: "Condor Flugdienst" },
                 { code: "996", name: "Air Europa Cargo" },
               ];
 
@@ -2447,7 +2449,7 @@ const Index = () => {
           </div>
           <div className="mt-4 pt-4 border-t border-[rgba(255,255,255,.08)] text-[0.75rem] text-[#aaa] flex justify-between">
             <span>Total de AWBs monitorados: <strong className="text-emerald-400">{statusAereoData.length}</strong></span>
-            <span>24 companhias integradas</span>
+            <span>27 companhias integradas</span>
           </div>
         </DialogContent>
       </Dialog>
