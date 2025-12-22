@@ -1926,7 +1926,7 @@ const Index = () => {
               <div className="flex items-center gap-2">
                 {/* Botão para ver companhias pendentes de cadastro */}
                 {(() => {
-                  const pendingAirlineCodes = ["014", "605", "865", "992"]; // CIAs realmente não cadastradas
+                  const pendingAirlineCodes = ["014", "083", "125", "127", "147", "160", "399", "605", "865", "992", "999"]; // CIAs realmente não cadastradas
                   const pendingAwbs = statusAereoData.filter(awb => {
                     const code = (awb.airline_code || "").replace(/^0+/, "").padStart(3, "0");
                     return pendingAirlineCodes.includes(code);
@@ -1949,7 +1949,7 @@ const Index = () => {
                   className="h-8 px-4 rounded-full bg-emerald-600/80 text-white text-[0.75rem] font-medium flex items-center gap-1.5 hover:bg-emerald-500/80 transition border border-emerald-500/50"
                 >
                   <Plane className="w-3.5 h-3.5" />
-                  CIAs Monitoradas (27)
+                  CIAs Monitoradas (26)
                 </button>
 
                 <button
@@ -2291,9 +2291,16 @@ const Index = () => {
             {(() => {
               const pendingAirlineNames: Record<string, string> = {
                 "014": "Air Canada Cargo",
+                "083": "South African Airways (SAA Cargo)",
+                "125": "British Airways World Cargo",
+                "127": "ABX Air",
+                "147": "Royal Air Maroc Cargo",
+                "160": "Cathay Pacific Cargo",
+                "399": "Marine Air",
                 "605": "Copa Airlines Cargo",
                 "865": "Korean Air Cargo",
-                "992": "DHL Aero Expreso"
+                "992": "DHL Aero Expreso",
+                "999": "Air China Cargo"
               };
               const pendingAirlineCodes = Object.keys(pendingAirlineNames);
               
@@ -2361,7 +2368,7 @@ const Index = () => {
               Companhias Aéreas Monitoradas
             </DialogTitle>
             <DialogDescription className="text-[#aaaaaa]">
-              27 companhias aéreas com integração ativa no sistema de rastreamento
+              26 companhias aéreas com integração ativa no sistema de rastreamento
             </DialogDescription>
           </DialogHeader>
           <div className="overflow-y-auto max-h-[50vh] mt-4">

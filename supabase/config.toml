@@ -191,3 +191,6 @@ verify_jwt = false
 
 [functions.send-container-status-email]
 verify_jwt = false
+
+[functions.reset-awb-status]
+verify_jwt = false
