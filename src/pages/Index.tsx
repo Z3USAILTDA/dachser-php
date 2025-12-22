@@ -339,6 +339,7 @@ const Index = () => {
   const [searchTerm, setSearchTerm] = useState("");
   const [filterAirline, setFilterAirline] = useState("all");
   const [filterAnalyst, setFilterAnalyst] = useState("all");
+  const [filterService, setFilterService] = useState("all");
   const [sortAnalyst, setSortAnalyst] = useState<"asc" | "desc" | null>(null);
   const [sortAwb, setSortAwb] = useState<"asc" | "desc" | null>(null);
   const [sortClient, setSortClient] = useState<"asc" | "desc" | null>(null);
@@ -1597,6 +1598,7 @@ const Index = () => {
         (awb.nome_analista && awb.nome_analista.toLowerCase().includes(searchLower));
       const matchesAirline = filterAirline === "all" || awb.airline_code === filterAirline;
       const matchesAnalyst = filterAnalyst === "all" || awb.nome_analista === filterAnalyst;
+      const matchesService = filterService === "all" || awb.tipo_servico === filterService;
 
       // Only show AWBs with these specific status codes
       const allowedStatuses = [
@@ -1611,7 +1613,7 @@ const Index = () => {
       
       // Collect COMPANY_NOT_REGISTERED AWBs separately
       if (statusToCheck === "COMPANY_NOT_REGISTERED") {
-        if (matchesSearch && matchesAirline && matchesAnalyst && cardFilter === "all") {
+        if (matchesSearch && matchesAirline && matchesAnalyst && matchesService && cardFilter === "all") {
           companyNotRegisteredAwbs.push(awb);
         }
         return false; // Don't include in main list yet
@@ -1641,7 +1643,7 @@ const Index = () => {
         // Se não tem arr_datetime ou ainda não passaram 48h, mantém na tabela
       }
 
-      return matchesSearch && matchesAirline && matchesAnalyst && isAllowed;
+      return matchesSearch && matchesAirline && matchesAnalyst && matchesService && isAllowed;
     });
 
     // Filtrar AWBs excluídos manualmente
@@ -1703,7 +1705,7 @@ const Index = () => {
     }
 
     return awbs;
-  }, [statusAereoData, searchTerm, filterAirline, filterAnalyst, cardFilter, sortAnalyst, sortAwb, sortClient, sortLastCheck]);
+  }, [statusAereoData, searchTerm, filterAirline, filterAnalyst, filterService, cardFilter, sortAnalyst, sortAwb, sortClient, sortLastCheck]);
 
   const totalPages = Math.ceil(filteredAwbs.length / itemsPerPage);
   const startIndex = (currentPage - 1) * itemsPerPage;
@@ -1924,6 +1926,34 @@ const Index = () => {
                         .map((analyst) => (
                           <SelectItem key={analyst} value={analyst}>
                             {analyst}
+                          </SelectItem>
+                        ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="flex items-center gap-1.5">
+                  <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-[rgba(0,0,0,.5)] border border-[rgba(255,255,255,.22)]">
+                    <Plane className="h-3 w-3 text-[#ffc800]" />
+                    <span className="text-[0.68rem] tracking-[0.1em] uppercase text-[#aaaaaa]">Serviço</span>
+                  </div>
+                  <Select value={filterService} onValueChange={setFilterService}>
+                    <SelectTrigger className="h-8 w-[160px] rounded-full bg-[#13141a] border border-[rgba(255,255,255,.14)] text-[0.78rem]">
+                      <SelectValue placeholder="Todos" />
+                    </SelectTrigger>
+                    <SelectContent className="bg-card border border-border z-50">
+                      <SelectItem value="all">Todos</SelectItem>
+                      {Array.from(
+                        new Set(
+                          statusAereoData
+                            .map((awb) => awb.tipo_servico)
+                            .filter((service) => service && service !== "N/A" && service.trim() !== ""),
+                        ),
+                      )
+                        .sort()
+                        .map((service) => (
+                          <SelectItem key={service} value={service}>
+                            {service}
                           </SelectItem>
                         ))}
                     </SelectContent>
