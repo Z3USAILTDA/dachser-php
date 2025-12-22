@@ -362,7 +362,7 @@ export default function SubmeterManifestHbl() {
   const showManifestDiagnostic = analysisResult?.result_data?.manifest?.invoice_tokens?.length === 0 || analysisResult?.result_data?.manifest?.ncm8?.length === 0;
   const helpButton = (
     <button
-      onClick={() => navigate("/sea/manual")}
+      onClick={() => navigate("/sea/submeter-manifest-hbl/manual")}
       className="w-8 h-8 rounded-full border border-[rgba(255,255,255,.25)] flex items-center justify-center bg-[rgba(0,0,0,.7)] text-[#aaaaaa] hover:text-[#ffc800] hover:bg-[rgba(0,0,0,.9)] transition"
       title="Ajuda"
     >
