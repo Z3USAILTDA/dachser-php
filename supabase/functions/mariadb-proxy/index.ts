@@ -2371,6 +2371,7 @@ serve(async (req) => {
             m.emails_cliente,
             m.previsao_faturamento,
             m.data_finalizacao,
+            TRIM(m.tratamento) as tratamento,
             COALESCE(s.\`último_status\`, 'AGUARDANDO_MANIFESTACAO') as status_cct_oficial,
             s.\`última atualização\` as ultimo_evento_data,
             COALESCE(s.\`último_status\`, 'AGUARDANDO_MANIFESTACAO') as ultimo_evento_codigo,
@@ -2385,7 +2386,6 @@ serve(async (req) => {
             cct.eta,
             cct.etd,
             cct.data_decolagem_ultimo_trecho,
-            cct.tratamentos_especiais,
             cct.cnpj_consignatario
           FROM ${database}.t_master_dados m
           LEFT JOIN ${database}.t_status_aereo s ON TRIM(m.mawb) COLLATE utf8mb4_unicode_ci = TRIM(s.awb) COLLATE utf8mb4_unicode_ci
