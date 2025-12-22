@@ -84,12 +84,30 @@ const glossaryItems = [
 export default function ManualUsuario() {
   const [activeSection, setActiveSection] = useState('visao-geral');
   const [searchTerm, setSearchTerm] = useState('');
+  const [isSticky, setIsSticky] = useState(false);
   const sectionRefs = useRef<Record<string, HTMLElement | null>>({});
+  const sidebarRef = useRef<HTMLDivElement>(null);
+  const sidebarPlaceholderRef = useRef<HTMLDivElement>(null);
 
   const scrollToSection = (id: string) => {
     setActiveSection(id);
     sectionRefs.current[id]?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   };
+
+  // Detect scroll to toggle sticky behavior
+  useEffect(() => {
+    const handleScroll = () => {
+      if (sidebarPlaceholderRef.current) {
+        const rect = sidebarPlaceholderRef.current.getBoundingClientRect();
+        // When the placeholder top goes above 24px from viewport top, make sidebar fixed
+        setIsSticky(rect.top < 24);
+      }
+    };
+
+    window.addEventListener('scroll', handleScroll, { passive: true });
+    handleScroll(); // Check initial state
+    return () => window.removeEventListener('scroll', handleScroll);
+  }, []);
 
   const filteredFaq = faqItems.filter(item => 
     item.q.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -104,40 +122,48 @@ export default function ManualUsuario() {
   return (
     <PageLayout title="DACHSER" subtitle="Manual do Usuário — Sistema CCT v2.0" pageIcon={BookOpen}>
       <div className="flex gap-6 items-start">
-        {/* Sidebar Navigation - Sticky */}
-        <aside className="w-64 shrink-0 sticky top-6 self-start">
-          <Card className="bg-[rgba(5,6,18,0.9)] border-white/12 max-h-[calc(100vh-4rem)] overflow-y-auto">
-            <CardHeader className="pb-3">
-              <CardTitle className="text-white text-sm flex items-center gap-2">
-                <BookOpen className="h-4 w-4 text-amber-400" />
-                Conteúdo
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="p-0">
-              <nav className="space-y-1 pb-4">
-                {sections.map(section => (
-                  <button
-                    key={section.id}
-                    onClick={() => scrollToSection(section.id)}
-                    className={cn(
-                      "w-full flex items-center gap-2 px-4 py-2 text-sm transition-colors",
-                      activeSection === section.id 
-                        ? "bg-amber-500/20 text-amber-300 border-l-2 border-amber-400" 
-                        : "text-white/60 hover:text-white hover:bg-white/5"
-                    )}
-                  >
-                    {section.icon}
-                    {section.title}
-                    {activeSection === section.id && <ChevronRight className="h-3 w-3 ml-auto" />}
-                  </button>
-                ))}
-              </nav>
-            </CardContent>
-          </Card>
-        </aside>
+        {/* Sidebar Navigation - Dynamic sticky */}
+        <div ref={sidebarPlaceholderRef} className="w-64 shrink-0">
+          <div 
+            ref={sidebarRef}
+            className={cn(
+              "w-64 transition-all duration-200",
+              isSticky ? "fixed top-6 z-40" : "relative"
+            )}
+          >
+            <Card className="bg-[rgba(5,6,18,0.9)] border-white/12 max-h-[calc(100vh-4rem)] overflow-y-auto">
+              <CardHeader className="pb-3">
+                <CardTitle className="text-white text-sm flex items-center gap-2">
+                  <BookOpen className="h-4 w-4 text-amber-400" />
+                  Conteúdo
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="p-0">
+                <nav className="space-y-1 pb-4">
+                  {sections.map(section => (
+                    <button
+                      key={section.id}
+                      onClick={() => scrollToSection(section.id)}
+                      className={cn(
+                        "w-full flex items-center gap-2 px-4 py-2 text-sm transition-colors",
+                        activeSection === section.id 
+                          ? "bg-amber-500/20 text-amber-300 border-l-2 border-amber-400" 
+                          : "text-white/60 hover:text-white hover:bg-white/5"
+                      )}
+                    >
+                      {section.icon}
+                      {section.title}
+                      {activeSection === section.id && <ChevronRight className="h-3 w-3 ml-auto" />}
+                    </button>
+                  ))}
+                </nav>
+              </CardContent>
+            </Card>
+          </div>
+        </div>
 
         {/* Main Content */}
-        <main className="flex-1 space-y-8 min-h-[200vh]">
+        <main className="flex-1 space-y-8">
           {/* Search */}
           <div className="relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-white/40" />
