@@ -118,7 +118,7 @@ export function PageLayout({
         <div className="flex items-center gap-[18px]">
           {showBack && (
             <button
-              onClick={() => navigate("/air/cct")}
+              onClick={() => navigate(location.pathname === "/air/cct" ? "/dashboard" : "/air/cct")}
               className="w-8 h-8 rounded-full border border-white/12 bg-[rgba(5,6,18,0.9)] text-white/80 flex items-center justify-center backdrop-blur-sm hover:bg-[rgba(5,6,18,1)] hover:text-white transition-all"
             >
               <ArrowLeft size={16} />
