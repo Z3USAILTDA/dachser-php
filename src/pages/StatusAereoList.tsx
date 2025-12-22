@@ -60,7 +60,7 @@ const StatusAereoList = () => {
               Voltar
             </Button>
             <button
-              onClick={() => navigate("/air/manual")}
+              onClick={() => navigate("/air/status-aereo/manual")}
               className="w-8 h-8 rounded-full border border-white/25 flex items-center justify-center bg-black/70 text-gray-400 hover:text-[#ffc800] transition-colors"
               title="Manual do usuário"
             >
