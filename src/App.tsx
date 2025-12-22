@@ -138,9 +138,21 @@ const App = () => (
           <Route path="/air/cct/manual" element={<ManualUsuario />} />
           <Route path="/air/cct/processo/:id" element={<ProcessoTimeline />} />
           
+          {/* AIR Module Manual */}
+          <Route path="/air/manual" element={<ManualAir />} />
+          
           {/* AWB Tracking Pages */}
           <Route path="/air/awb-list" element={<AWBList />} />
           <Route path="/air/status-aereo" element={<StatusAereoList />} />
+          
+          {/* CHB Module Manual */}
+          <Route path="/chb/manual" element={<ManualChb />} />
+          
+          {/* FIN Module Manual */}
+          <Route path="/fin/manual" element={<ManualFinanceiro />} />
+          
+          {/* Admin Module Manual */}
+          <Route path="/admin/manual" element={<ManualAdmin />} />
           
           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
           <Route path="*" element={<NotFound />} />

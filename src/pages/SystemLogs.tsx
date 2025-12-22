@@ -11,7 +11,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import { faSearch, faDownload, faSync, faSignOut } from "@fortawesome/free-solid-svg-icons";
-import { ArrowLeft, Terminal } from "lucide-react";
+import { ArrowLeft, Terminal, HelpCircle } from "lucide-react";
 import { toast } from "sonner";
 
 export default function SystemLogs() {
@@ -256,6 +256,13 @@ export default function SystemLogs() {
             </div>
           </div>
           <div className="flex items-center gap-2">
+            <button
+              onClick={() => navigate("/admin/manual")}
+              className="w-8 h-8 rounded-full border border-white/25 flex items-center justify-center bg-black/70 text-gray-400 hover:text-[#ffc800] transition-colors"
+              title="Manual do usuário"
+            >
+              <HelpCircle className="h-4 w-4" />
+            </button>
             <Button
               onClick={() => {
                 if (activeLogTab === 'live') fetchLogs();

@@ -1,6 +1,6 @@
 import { useState, useMemo, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { FileSearch, Play, Trash2, FileText, RefreshCw, Clock } from "lucide-react";
+import { FileSearch, Play, Trash2, FileText, RefreshCw, Clock, HelpCircle } from "lucide-react";
 import { useUsageLog } from "@/hooks/useUsageLog";
 import { useAuth } from "@/hooks/useAuth";
 import { PageLayout } from "@/components/layout/PageLayout";
@@ -132,7 +132,15 @@ const AnaliseDocumental = () => {
         <div className="text-white/60">Carregando...</div>
       </div>;
   }
-  return <PageLayout title="DACHSER" subtitle="Análise Documental" pageIcon={FileSearch} backTo="/dashboard">
+  return <PageLayout title="DACHSER" subtitle="Análise Documental" pageIcon={FileSearch} backTo="/dashboard" rightContent={
+    <button
+      onClick={() => navigate("/fin/manual")}
+      className="w-8 h-8 rounded-full border border-white/25 flex items-center justify-center bg-black/70 text-gray-400 hover:text-[#ffc800] transition-colors"
+      title="Manual do usuário"
+    >
+      <HelpCircle className="h-4 w-4" />
+    </button>
+  }>
       {/* Card de Filtros */}
       <PageCard>
         <FilterBar searchValue={searchTerm} onSearchChange={handleSearchChange} searchPlaceholder="Buscar por arquivo ou usuário" filters={[filterPresets.status(statusFilter, handleStatusChange), filterPresets.period(periodFilter, handlePeriodChange)]} showRefresh onRefresh={handleRefresh} isRefreshing={isLoading} />

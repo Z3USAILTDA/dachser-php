@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { FileCheck } from 'lucide-react';
+import { FileCheck, HelpCircle } from 'lucide-react';
 import { useUsageLog } from "@/hooks/useUsageLog";
 import { PageLayout } from '@/components/layout/PageLayout';
 import { PageCard } from '@/components/layout/PageCard';
@@ -502,9 +502,18 @@ export default function ConferenciaChb() {
   };
 
   const rightContent = (
-    <div className="flex items-center gap-2 px-[14px] py-1.5 rounded-full bg-[rgba(0,0,0,.70)] border border-[rgba(255,255,255,.18)] text-[#aaaaaa]">
-      <FileCheck size={14} className="text-[#ffc800]" />
-      <span>{id ? `#${id}` : 'Processo'}</span>
+    <div className="flex items-center gap-3">
+      <button
+        onClick={() => navigate("/chb/manual")}
+        className="w-8 h-8 rounded-full border border-white/25 flex items-center justify-center bg-black/70 text-gray-400 hover:text-[#ffc800] transition-colors"
+        title="Manual do usuário"
+      >
+        <HelpCircle className="h-4 w-4" />
+      </button>
+      <div className="flex items-center gap-2 px-[14px] py-1.5 rounded-full bg-[rgba(0,0,0,.70)] border border-[rgba(255,255,255,.18)] text-[#aaaaaa]">
+        <FileCheck size={14} className="text-[#ffc800]" />
+        <span>{id ? `#${id}` : 'Processo'}</span>
+      </div>
     </div>
   );
 

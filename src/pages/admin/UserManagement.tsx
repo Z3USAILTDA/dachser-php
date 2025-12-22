@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { Users, Shield, UserCheck, UserX, Search, RefreshCw, Check } from "lucide-react";
+import { Users, Shield, UserCheck, UserX, Search, RefreshCw, Check, HelpCircle } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { PageLayout } from "@/components/layout/PageLayout";
@@ -183,6 +183,15 @@ const UserManagement = () => {
       title="Gerenciamento de Usuários"
       subtitle="Defina funções para a Esteira de Vouchers"
       backTo="/dashboard"
+      rightContent={
+        <button
+          onClick={() => navigate("/admin/manual")}
+          className="w-8 h-8 rounded-full border border-white/25 flex items-center justify-center bg-black/70 text-gray-400 hover:text-[#ffc800] transition-colors"
+          title="Manual do usuário"
+        >
+          <HelpCircle className="h-4 w-4" />
+        </button>
+      }
     >
       <div className="max-w-6xl mx-auto space-y-6 p-4">
         {/* Stats Cards */}

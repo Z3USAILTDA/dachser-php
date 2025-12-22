@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { ChartLine, RotateCcw, Download, FileText } from "lucide-react";
+import { ChartLine, RotateCcw, Download, FileText, HelpCircle } from "lucide-react";
 import * as XLSX from "xlsx";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
@@ -244,8 +244,17 @@ const MetricsUsage = () => {
   };
 
   const rightContent = (
-    <div className="w-8 h-8 rounded-full border border-white/25 flex items-center justify-center bg-black/70 text-primary">
-      <ChartLine size={16} />
+    <div className="flex items-center gap-3">
+      <button
+        onClick={() => navigate("/admin/manual")}
+        className="w-8 h-8 rounded-full border border-white/25 flex items-center justify-center bg-black/70 text-gray-400 hover:text-[#ffc800] transition-colors"
+        title="Manual do usuário"
+      >
+        <HelpCircle className="h-4 w-4" />
+      </button>
+      <div className="w-8 h-8 rounded-full border border-white/25 flex items-center justify-center bg-black/70 text-primary">
+        <ChartLine size={16} />
+      </div>
     </div>
   );
 

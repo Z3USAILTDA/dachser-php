@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { useUsageLog } from "@/hooks/useUsageLog";
 import * as XLSX from "xlsx";
-import { Flag, Search, Filter, X, Plus, Check, Trash2, Clock, Scale, Upload, FileSpreadsheet, Loader2, Download } from "lucide-react";
+import { Flag, Search, Filter, X, Plus, Check, Trash2, Clock, Scale, Upload, FileSpreadsheet, Loader2, Download, HelpCircle } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -501,6 +501,13 @@ export default function FinanceiroDisputa() {
 
   const rightContent = (
     <div className="flex gap-2">
+      <button
+        onClick={() => navigate("/fin/manual")}
+        className="w-8 h-8 rounded-full border border-white/25 flex items-center justify-center bg-black/70 text-gray-400 hover:text-[#ffc800] transition-colors"
+        title="Manual do usuário"
+      >
+        <HelpCircle className="h-4 w-4" />
+      </button>
       <Button
         onClick={handleExport}
         variant="outline"
