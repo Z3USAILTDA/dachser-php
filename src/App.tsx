@@ -57,8 +57,11 @@ import ManualSea from "./pages/sea/ManualSea";
 // CHB Module
 import ManualChb from "./pages/chb/ManualChb";
 
-// AIR Module
-import ManualAir from "./pages/air/ManualAir";
+// AIR Module Manuals
+import ManualTracking from "./pages/air/ManualTracking";
+import ManualCheckAwb from "./pages/air/ManualCheckAwb";
+import ManualAwbList from "./pages/air/ManualAwbList";
+import ManualStatusAereo from "./pages/air/ManualStatusAereo";
 
 // FIN Module
 import ManualFinanceiro from "./pages/fin/ManualFinanceiro";
@@ -138,8 +141,11 @@ const App = () => (
           <Route path="/air/cct/manual" element={<ManualUsuario />} />
           <Route path="/air/cct/processo/:id" element={<ProcessoTimeline />} />
           
-          {/* AIR Module Manual */}
-          <Route path="/air/manual" element={<ManualAir />} />
+          {/* AIR Module Manuals */}
+          <Route path="/air/tracking/manual" element={<ManualTracking />} />
+          <Route path="/air/check/manual" element={<ManualCheckAwb />} />
+          <Route path="/air/awb-list/manual" element={<ManualAwbList />} />
+          <Route path="/air/status-aereo/manual" element={<ManualStatusAereo />} />
           
           {/* AWB Tracking Pages */}
           <Route path="/air/awb-list" element={<AWBList />} />
