@@ -2,7 +2,7 @@ import { useState, useMemo, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { PageLayout } from "@/components/cct/PageLayout";
 import { Badge } from "@/components/ui/badge";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { InnerNavTabs } from "@/components/cct/InnerNavTabs";
 import {
   Select,
   SelectContent,
@@ -129,25 +129,18 @@ export default function ExcecoesPage() {
       subtitle="Gestão de Exceções — Monitoramento e Tratativas"
       pageIcon={AlertTriangle}
     >
-      <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-        <TabsList className="bg-[rgba(5,6,18,0.9)] border border-[rgba(255,255,255,0.12)]">
-          <TabsTrigger 
-            value="lista" 
-            className="data-[state=active]:bg-[rgba(255,200,0,0.15)] data-[state=active]:text-[#ffc800] data-[state=active]:border data-[state=active]:border-[#ffc800]/40"
-          >
-            <List className="h-4 w-4 mr-2" />
-            Lista de Exceções
-          </TabsTrigger>
-          <TabsTrigger 
-            value="analytics" 
-            className="data-[state=active]:bg-[rgba(255,200,0,0.15)] data-[state=active]:text-[#ffc800] data-[state=active]:border data-[state=active]:border-[#ffc800]/40"
-          >
-            <BarChart3 className="h-4 w-4 mr-2" />
-            Analytics
-          </TabsTrigger>
-        </TabsList>
+      <div className="space-y-6">
+        <InnerNavTabs
+          tabs={[
+            { id: 'lista', label: 'Lista de Exceções', icon: List },
+            { id: 'analytics', label: 'Analytics', icon: BarChart3 }
+          ]}
+          activeTab={activeTab}
+          onTabChange={setActiveTab}
+        />
 
-        <TabsContent value="lista" className="space-y-6">
+        {activeTab === 'lista' && (
+          <div className="space-y-6">
           {/* Stats Cards */}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             <div 
@@ -374,15 +367,18 @@ export default function ExcecoesPage() {
               </>
             )}
           </div>
-        </TabsContent>
+        </div>
+        )}
 
-        <TabsContent value="analytics" className="space-y-6">
-          <div className="rounded-2xl bg-[rgba(5,6,18,0.9)] border border-[rgba(255,255,255,0.12)] p-10 text-center shadow-[0_18px_40px_rgba(0,0,0,0.85)]">
-            <BarChart3 className="h-12 w-12 text-[#aaaaaa] mx-auto mb-4" />
-            <p className="text-[#aaaaaa]">Analytics de exceções em desenvolvimento</p>
+        {activeTab === 'analytics' && (
+          <div className="space-y-6">
+            <div className="rounded-2xl bg-[rgba(5,6,18,0.9)] border border-[rgba(255,255,255,0.12)] p-10 text-center shadow-[0_18px_40px_rgba(0,0,0,0.85)]">
+              <BarChart3 className="h-12 w-12 text-[#aaaaaa] mx-auto mb-4" />
+              <p className="text-[#aaaaaa]">Analytics de exceções em desenvolvimento</p>
+            </div>
           </div>
-        </TabsContent>
-      </Tabs>
+        )}
+      </div>
     </PageLayout>
   );
 }
