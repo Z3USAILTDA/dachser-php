@@ -54,6 +54,18 @@ import ProcessoTimeline from "./pages/cct/ProcessoTimeline";
 // SEA Module
 import ManualSea from "./pages/sea/ManualSea";
 
+// CHB Module
+import ManualChb from "./pages/chb/ManualChb";
+
+// AIR Module
+import ManualAir from "./pages/air/ManualAir";
+
+// FIN Module
+import ManualFinanceiro from "./pages/fin/ManualFinanceiro";
+
+// Admin Module
+import ManualAdmin from "./pages/admin/ManualAdmin";
+
 // AWB Pages
 import AWBList from "./pages/AWBList";
 import StatusAereoList from "./pages/StatusAereoList";
