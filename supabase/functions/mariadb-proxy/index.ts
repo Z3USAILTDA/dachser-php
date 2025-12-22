@@ -2418,11 +2418,16 @@ serve(async (req) => {
             horasRestantes = slaHours - hoursSinceUpdate;
             percentual = Math.min(100, Math.max(0, (hoursSinceUpdate / slaHours) * 100));
             
+            // SLA status logic:
+            // VENCIDO: SLA expirado (horasRestantes <= 0)
+            // CRITICO: Menos de 2 horas restantes (urgente)
+            // ALERTA: Entre 2 e 6 horas restantes ou >= 75% do tempo consumido
+            // OK: Dentro do prazo confortável
             if (horasRestantes <= 0) {
-              slaStatus = 'CRITICO'; // Vencidos são críticos (precisam de ação imediata)
-            } else if (horasRestantes <= 2) { // 2 horas ou menos = crítico
+              slaStatus = 'VENCIDO';
+            } else if (horasRestantes <= 2) {
               slaStatus = 'CRITICO';
-            } else if (percentual >= 75) {
+            } else if (horasRestantes <= 6 || percentual >= 75) {
               slaStatus = 'ALERTA';
             }
           }

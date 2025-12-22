@@ -72,8 +72,12 @@ export default function CCTDashboard() {
   const metrics = useMemo(() => {
     const total = processos.length;
     const emTransito = processos.filter(p => p.status_atual?.status_cct_oficial === "AGUARDANDO_MANIFESTACAO").length;
+    // ALERTA: apenas status ALERTA (não inclui VENCIDO nem CRITICO)
     const alerta = processos.filter(p => p.status_atual?.sla_status === "ALERTA").length;
-    const critico = processos.filter(p => p.status_atual?.sla_status === "CRITICO").length;
+    // CRITICO: inclui tanto CRITICO quanto VENCIDO (ambos precisam de ação imediata)
+    const critico = processos.filter(p => 
+      p.status_atual?.sla_status === "CRITICO" || p.status_atual?.sla_status === "VENCIDO"
+    ).length;
     const eventos24h = processos.reduce((acc, p) => {
       const recent = p.eventos.filter(e => {
         const eventDate = new Date(e.data_hora_evento);
