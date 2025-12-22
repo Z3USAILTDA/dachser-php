@@ -462,6 +462,7 @@ export type Database = {
           id: string
           moeda: string | null
           numero_spo: string
+          origem_criacao: string | null
           remessa: string | null
           responsavel_financeiro_user_id: string | null
           responsavel_fiscal_user_id: string | null
@@ -496,6 +497,7 @@ export type Database = {
           id?: string
           moeda?: string | null
           numero_spo: string
+          origem_criacao?: string | null
           remessa?: string | null
           responsavel_financeiro_user_id?: string | null
           responsavel_fiscal_user_id?: string | null
@@ -530,6 +532,7 @@ export type Database = {
           id?: string
           moeda?: string | null
           numero_spo?: string
+          origem_criacao?: string | null
           remessa?: string | null
           responsavel_financeiro_user_id?: string | null
           responsavel_fiscal_user_id?: string | null
