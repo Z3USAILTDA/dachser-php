@@ -2291,7 +2291,6 @@ const Index = () => {
             {(() => {
               const pendingAirlineNames: Record<string, string> = {
                 "014": "Air Canada Cargo",
-                "023": "Andes Lineas Aereas",
                 "605": "Copa Airlines Cargo",
                 "865": "Korean Air Cargo",
                 "992": "DHL Aero Expreso"
