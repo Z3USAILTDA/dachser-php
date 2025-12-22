@@ -47,6 +47,7 @@ import {
   TipoAnexo,
 } from "@/types/voucher";
 import { Badge } from "@/components/ui/badge";
+import { DateInputField } from "./DateInputField";
 
 // CNPJ formatting and validation utilities
 const formatCNPJ = (value: string): string => {
@@ -1040,142 +1041,18 @@ export const CreateVoucherDialog = ({
 
                 {/* Row 3: Data Vencimento, Data Emissão */}
                 <div className="grid grid-cols-2 gap-4">
-                  <FormField
+                  <DateInputField
                     control={form.control}
                     name="vencimento"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel className="flex items-center gap-1.5 text-sm">
-                          Data de Vencimento <span className="text-destructive">*</span> {isRmMode && <SyncIcon />}
-                        </FormLabel>
-                        <div className="flex gap-2">
-                          <FormControl>
-                            <Input
-                              placeholder="DD/MM/AAAA"
-                              className="flex-1 bg-background/50 border-border"
-                              disabled={isRmMode}
-                              value={field.value ? format(field.value, "dd/MM/yyyy") : ""}
-                              onChange={(e) => {
-                                const value = e.target.value;
-                                // Apply mask
-                                const digits = value.replace(/\D/g, "");
-                                let masked = "";
-                                if (digits.length <= 2) masked = digits;
-                                else if (digits.length <= 4) masked = `${digits.slice(0, 2)}/${digits.slice(2)}`;
-                                else masked = `${digits.slice(0, 2)}/${digits.slice(2, 4)}/${digits.slice(4, 8)}`;
-                                
-                                // Try to parse the date if complete
-                                if (digits.length === 8) {
-                                  const parsed = parse(masked, "dd/MM/yyyy", new Date());
-                                  if (isValid(parsed)) {
-                                    field.onChange(parsed);
-                                  }
-                                } else if (digits.length === 0) {
-                                  field.onChange(undefined);
-                                }
-                                // For partial input, we just update the display
-                                e.target.value = masked;
-                              }}
-                              onBlur={(e) => {
-                                const parsed = parse(e.target.value, "dd/MM/yyyy", new Date());
-                                if (e.target.value && !isValid(parsed)) {
-                                  e.target.value = field.value ? format(field.value, "dd/MM/yyyy") : "";
-                                }
-                              }}
-                            />
-                          </FormControl>
-                          <Popover>
-                            <PopoverTrigger asChild>
-                              <Button
-                                type="button"
-                                variant="outline"
-                                size="icon"
-                                disabled={isRmMode}
-                                className="bg-background/50 border-border shrink-0"
-                              >
-                                <CalendarIcon className="h-4 w-4" />
-                              </Button>
-                            </PopoverTrigger>
-                            <PopoverContent className="w-auto p-0 pointer-events-auto" align="start">
-                              <Calendar
-                                mode="single"
-                                selected={field.value}
-                                onSelect={field.onChange}
-                                locale={ptBR}
-                                className="pointer-events-auto"
-                              />
-                            </PopoverContent>
-                          </Popover>
-                        </div>
-                        <FormMessage />
-                      </FormItem>
-                    )}
+                    label="Data de Vencimento"
+                    required
+                    disabled={isRmMode}
+                    showSyncIcon={isRmMode}
                   />
-                  <FormField
+                  <DateInputField
                     control={form.control}
                     name="dataEmissaoDocumento"
-                    render={({ field }) => (
-                      <FormItem>
-                        <FormLabel className="flex items-center gap-1.5 text-sm">
-                          Data de Emissão
-                        </FormLabel>
-                        <div className="flex gap-2">
-                          <FormControl>
-                            <Input
-                              placeholder="DD/MM/AAAA"
-                              className="flex-1 bg-background/50 border-border"
-                              value={field.value ? format(field.value, "dd/MM/yyyy") : ""}
-                              onChange={(e) => {
-                                const value = e.target.value;
-                                const digits = value.replace(/\D/g, "");
-                                let masked = "";
-                                if (digits.length <= 2) masked = digits;
-                                else if (digits.length <= 4) masked = `${digits.slice(0, 2)}/${digits.slice(2)}`;
-                                else masked = `${digits.slice(0, 2)}/${digits.slice(2, 4)}/${digits.slice(4, 8)}`;
-                                
-                                if (digits.length === 8) {
-                                  const parsed = parse(masked, "dd/MM/yyyy", new Date());
-                                  if (isValid(parsed)) {
-                                    field.onChange(parsed);
-                                  }
-                                } else if (digits.length === 0) {
-                                  field.onChange(undefined);
-                                }
-                                e.target.value = masked;
-                              }}
-                              onBlur={(e) => {
-                                const parsed = parse(e.target.value, "dd/MM/yyyy", new Date());
-                                if (e.target.value && !isValid(parsed)) {
-                                  e.target.value = field.value ? format(field.value, "dd/MM/yyyy") : "";
-                                }
-                              }}
-                            />
-                          </FormControl>
-                          <Popover>
-                            <PopoverTrigger asChild>
-                              <Button
-                                type="button"
-                                variant="outline"
-                                size="icon"
-                                className="bg-background/50 border-border shrink-0"
-                              >
-                                <CalendarIcon className="h-4 w-4" />
-                              </Button>
-                            </PopoverTrigger>
-                            <PopoverContent className="w-auto p-0 pointer-events-auto" align="start">
-                              <Calendar
-                                mode="single"
-                                selected={field.value}
-                                onSelect={field.onChange}
-                                locale={ptBR}
-                                className="pointer-events-auto"
-                              />
-                            </PopoverContent>
-                          </Popover>
-                        </div>
-                        <FormMessage />
-                      </FormItem>
-                    )}
+                    label="Data de Emissão"
                   />
                 </div>
               </div>
