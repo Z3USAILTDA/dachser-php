@@ -5,7 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { StatusBadge, SLABadge } from "@/components/cct/StatusBadge";
+import { StatusBadge, SLAInfoBadge } from "@/components/cct/StatusBadge";
 import { EventTimeline } from "@/components/cct/EventTimeline";
 import { useProcessosCCT, useRegistrarPeso, useUpdateTratamentos, useUpdateDecolagem, useCCTEvents } from "@/hooks/useCCTData";
 import { toast } from "sonner";
@@ -239,7 +239,12 @@ export default function ProcessoTimeline() {
               </div>
               <div className="flex flex-col gap-2">
                 <StatusBadge status={status_atual?.status_cct_oficial || "AGUARDANDO_MANIFESTACAO"} />
-                <SLABadge status={status_atual?.sla_status || "OK"} />
+                <SLAInfoBadge 
+                  slaInfo={(status_atual as any)?.sla_info || { 
+                    status: status_atual?.sla_status || 'OK', 
+                    horasRestantes: null 
+                  }} 
+                />
               </div>
             </div>
 
