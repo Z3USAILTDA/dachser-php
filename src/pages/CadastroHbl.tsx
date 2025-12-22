@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Check, FileText } from "lucide-react";
+import { Check, FileText, HelpCircle } from "lucide-react";
 import { PageLayout } from "@/components/layout/PageLayout";
 import { PageCard } from "@/components/layout/PageCard";
 import { Button } from "@/components/ui/button";
@@ -55,12 +55,23 @@ export default function CadastroHbl() {
     }
   };
 
+  const helpButton = (
+    <button
+      onClick={() => navigate("/sea/manual")}
+      className="w-8 h-8 rounded-full border border-[rgba(255,255,255,.25)] flex items-center justify-center bg-[rgba(0,0,0,.7)] text-[#aaaaaa] hover:text-[#ffc800] hover:bg-[rgba(0,0,0,.9)] transition"
+      title="Ajuda"
+    >
+      <HelpCircle className="w-4 h-4" />
+    </button>
+  );
+
   return (
     <PageLayout
       title="DACHSER"
       subtitle="Cadastro – HBL"
       pageIcon={FileText}
       backTo="/maritimo"
+      rightContent={helpButton}
     >
       <PageCard className="max-w-4xl mx-auto">
         <h1 className="text-2xl font-bold text-white mb-2">Cadastro – HBL</h1>
