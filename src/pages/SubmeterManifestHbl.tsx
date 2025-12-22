@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate, useLocation, useParams } from "react-router-dom";
-import { Send, FileText, AlertCircle, Copy, Check, Info, FileStack, Loader2 } from "lucide-react";
+import { Send, FileText, AlertCircle, Copy, Check, Info, FileStack, Loader2, HelpCircle } from "lucide-react";
 import { PageLayout } from "@/components/layout/PageLayout";
 import { PageCard } from "@/components/layout/PageCard";
 import { Button } from "@/components/ui/button";
@@ -360,7 +360,16 @@ export default function SubmeterManifestHbl() {
     return null;
   }
   const showManifestDiagnostic = analysisResult?.result_data?.manifest?.invoice_tokens?.length === 0 || analysisResult?.result_data?.manifest?.ncm8?.length === 0;
-  return <PageLayout title="DACHSER" subtitle="Submeter – Manifest/Pack List × Draft HBL" pageIcon={FileStack} backTo="/maritimo">
+  const helpButton = (
+    <button
+      onClick={() => navigate("/sea/manual")}
+      className="w-8 h-8 rounded-full border border-[rgba(255,255,255,.25)] flex items-center justify-center bg-[rgba(0,0,0,.7)] text-[#aaaaaa] hover:text-[#ffc800] hover:bg-[rgba(0,0,0,.9)] transition"
+      title="Ajuda"
+    >
+      <HelpCircle className="w-4 h-4" />
+    </button>
+  );
+  return <PageLayout title="DACHSER" subtitle="Submeter – Manifest/Pack List × Draft HBL" pageIcon={FileStack} backTo="/maritimo" rightContent={helpButton}>
       <PageCard className="max-w-4xl mx-auto">
             <h1 className="text-2xl font-bold text-white mb-2">Submeter – Manifest/Pack List × Draft HBL</h1>
             <p className="text-sm text-neutral-400 mb-8">Adicione os arquivos HBL para análise comparativa</p>

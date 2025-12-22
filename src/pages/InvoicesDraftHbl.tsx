@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
-import { Info, Copy, Check, Upload, Download, X, Link as LinkIcon, FolderOpen, Loader2, FileText } from "lucide-react";
+import { Info, Copy, Check, Upload, Download, X, Link as LinkIcon, FolderOpen, Loader2, FileText, HelpCircle } from "lucide-react";
 import { useUsageLog } from "@/hooks/useUsageLog";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
@@ -845,12 +845,23 @@ export default function InvoicesDraftHbl() {
     );
   };
 
+  const helpButton = (
+    <button
+      onClick={() => navigate("/sea/manual")}
+      className="w-8 h-8 rounded-full border border-[rgba(255,255,255,.25)] flex items-center justify-center bg-[rgba(0,0,0,.7)] text-[#aaaaaa] hover:text-[#ffc800] hover:bg-[rgba(0,0,0,.9)] transition"
+      title="Ajuda"
+    >
+      <HelpCircle className="w-4 h-4" />
+    </button>
+  );
+
   return (
     <PageLayout 
       title="DACHSER" 
       subtitle="Invoices × Draft HBL"
       backTo="/maritimo"
       pageIcon={FileText}
+      rightContent={helpButton}
     >
       <PageCard>
         {/* Upload and Options Grid */}
