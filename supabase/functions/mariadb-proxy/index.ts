@@ -2358,7 +2358,7 @@ serve(async (req) => {
         ];
         const errorStatusFilter = errorStatuses.map(s => `'${s}'`).join(',');
         
-        // Query from t_master_dados as primary source, LEFT JOIN t_status_aereo for latest status
+        // Query from t_master_dados as primary source, LEFT JOIN t_status_aereo and t_cct_shipments
         // IMPORTANT: Filter by registered airlines and exclude error statuses
         const shipments = await client.query(`
           SELECT 
@@ -2377,9 +2377,19 @@ serve(async (req) => {
             TRIM(s.origem) as aeroporto_origem,
             TRIM(s.destino) as aeroporto_destino,
             s.data_atraso,
-            LEFT(TRIM(m.mawb), 3) as airline_code
+            LEFT(TRIM(m.mawb), 3) as airline_code,
+            cct.peso_declarado,
+            cct.peso_constatado,
+            cct.volume_declarado,
+            cct.volume_constatado,
+            cct.eta,
+            cct.etd,
+            cct.data_decolagem_ultimo_trecho,
+            cct.tratamentos_especiais,
+            cct.cnpj_consignatario
           FROM ${database}.t_master_dados m
           LEFT JOIN ${database}.t_status_aereo s ON TRIM(m.mawb) = TRIM(s.awb)
+          LEFT JOIN ${database}.t_cct_shipments cct ON TRIM(m.mawb) = TRIM(cct.master)
           WHERE m.active = 1 
           AND m.tipo_processo = 'AIR IMPORT'
           AND m.data_finalizacao IS NULL
@@ -2466,18 +2476,18 @@ serve(async (req) => {
             nome_analista: row.nome_analista,
             email_analista: row.email_analista,
             emails_cliente: row.emails_cliente,
-            eta: null,
-            etd: null,
-            peso_declarado: null,
-            peso_constatado: null,
-            volume_declarado: null,
-            volume_constatado: null,
-            cnpj_consignatario: null,
-            tratamentos_especiais: null,
+            eta: row.eta || null,
+            etd: row.etd || null,
+            peso_declarado: row.peso_declarado ? Number(row.peso_declarado) : null,
+            peso_constatado: row.peso_constatado ? Number(row.peso_constatado) : null,
+            volume_declarado: row.volume_declarado ? Number(row.volume_declarado) : null,
+            volume_constatado: row.volume_constatado ? Number(row.volume_constatado) : null,
+            cnpj_consignatario: row.cnpj_consignatario || null,
+            tratamentos_especiais: row.tratamentos_especiais || null,
             excecoes_abertas: isFrozen ? 1 : isBlock ? 1 : 0,
             is_frozen: isFrozen,
             data_atraso: row.data_atraso,
-            data_decolagem_ultimo_trecho: null,
+            data_decolagem_ultimo_trecho: row.data_decolagem_ultimo_trecho || null,
             previsao_faturamento: row.previsao_faturamento,
             data_finalizacao: row.data_finalizacao,
             created_at: row.ultimo_evento_data || new Date().toISOString(),
@@ -2518,12 +2528,18 @@ serve(async (req) => {
             s.email_analista,
             s.email_cliente as emails_cliente,
             s.data_atraso,
-            m.eta,
-            m.etd,
-            m.peso_bruto as peso_declarado,
-            m.cnpj as cnpj_consignatario
+            cct.eta,
+            cct.etd,
+            cct.peso_declarado,
+            cct.peso_constatado,
+            cct.volume_declarado,
+            cct.volume_constatado,
+            cct.data_decolagem_ultimo_trecho,
+            cct.tratamentos_especiais,
+            cct.cnpj_consignatario
           FROM ${database}.t_status_aereo s
           LEFT JOIN ${database}.t_master_dados m ON TRIM(s.awb) = TRIM(m.mawb)
+          LEFT JOIN ${database}.t_cct_shipments cct ON TRIM(s.awb) = TRIM(cct.master)
           WHERE ${whereClause}
           LIMIT 1
         `);
@@ -2560,31 +2576,82 @@ serve(async (req) => {
           );
         }
 
-        // Map CCT field names to t_status_aereo column names
-        const fieldMapping: Record<string, string> = {
+        // Fields that go to t_cct_shipments
+        const cctFields = [
+          'peso_declarado', 'peso_constatado', 'peso_bruto', 'peso_real',
+          'volume_declarado', 'volume_constatado', 'volume',
+          'eta', 'etd', 'data_decolagem_ultimo_trecho',
+          'tratamentos_especiais', 'tratamento_especial', 
+          'cnpj_consignatario'
+        ];
+
+        // Fields that go to t_status_aereo
+        const statusFieldMapping: Record<string, string> = {
           nome_analista: 'nome_analista',
           email_analista: 'email_analista',
           emails_cliente: 'email_cliente',
         };
 
-        const setClauses: string[] = [];
-        const values: any[] = [];
+        const cctUpdates: Record<string, any> = {};
+        const statusUpdates: Record<string, any> = {};
 
         for (const [key, value] of Object.entries(updates)) {
-          const dbColumn = fieldMapping[key] || key;
-          setClauses.push(`${dbColumn} = ?`);
-          values.push(value);
+          if (cctFields.includes(key)) {
+            // Normalize field names for t_cct_shipments
+            const normalizedKey = key === 'peso_bruto' || key === 'peso_real' ? 'peso_declarado' 
+              : key === 'volume' ? 'volume_declarado'
+              : key === 'tratamento_especial' ? 'tratamentos_especiais'
+              : key;
+            cctUpdates[normalizedKey] = value;
+          } else if (statusFieldMapping[key]) {
+            statusUpdates[statusFieldMapping[key]] = value;
+          } else {
+            statusUpdates[key] = value;
+          }
         }
 
-        const whereClause = shipmentId 
-          ? `id = ?` 
-          : `TRIM(awb) = ?`;
-        values.push(shipmentId || (awbNumber || '').trim());
+        const masterAwb = (awbNumber || '').trim();
 
-        await client.execute(
-          `UPDATE ${database}.t_status_aereo SET ${setClauses.join(', ')} WHERE ${whereClause}`,
-          values
-        );
+        // UPSERT into t_cct_shipments if there are CCT updates
+        if (Object.keys(cctUpdates).length > 0) {
+          const cctColumns = ['master', ...Object.keys(cctUpdates), 'updated_at'];
+          const cctPlaceholders = cctColumns.map(() => '?').join(', ');
+          const cctValues = [masterAwb, ...Object.values(cctUpdates), new Date()];
+          
+          const updateClauses = Object.keys(cctUpdates)
+            .map(col => `${col} = VALUES(${col})`)
+            .join(', ');
+
+          await client.execute(
+            `INSERT INTO ${database}.t_cct_shipments (${cctColumns.join(', ')}) 
+             VALUES (${cctPlaceholders})
+             ON DUPLICATE KEY UPDATE ${updateClauses}, updated_at = NOW()`,
+            cctValues
+          );
+          console.log(`CCT: Upserted t_cct_shipments for ${masterAwb}`);
+        }
+
+        // UPDATE t_status_aereo if there are status updates
+        if (Object.keys(statusUpdates).length > 0) {
+          const setClauses: string[] = [];
+          const values: any[] = [];
+
+          for (const [key, value] of Object.entries(statusUpdates)) {
+            setClauses.push(`${key} = ?`);
+            values.push(value);
+          }
+
+          const whereClause = shipmentId 
+            ? `id = ?` 
+            : `TRIM(awb) = ?`;
+          values.push(shipmentId || masterAwb);
+
+          await client.execute(
+            `UPDATE ${database}.t_status_aereo SET ${setClauses.join(', ')} WHERE ${whereClause}`,
+            values
+          );
+          console.log(`CCT: Updated t_status_aereo for ${shipmentId || masterAwb}`);
+        }
 
         console.log(`CCT: Updated shipment ${shipmentId || awbNumber}`);
         result = { success: true, message: 'Shipment atualizado' };
