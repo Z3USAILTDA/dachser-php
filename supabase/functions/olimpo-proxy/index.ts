@@ -992,20 +992,25 @@ serve(async (req) => {
         `);
 
         // Sync email_analista and email_cliente from t_master_dados based on consignee_name matching cliente
-        console.log('[get_tracked_containers] Syncing emails from t_master_dados...');
-        const emailSyncResult = await client.execute(`
-          UPDATE ai_agente.t_dachser_container_tracking ct
-          JOIN ai_agente.t_master_dados m 
-            ON TRIM(UPPER(ct.consignee_name)) = TRIM(UPPER(m.cliente))
-          SET 
-            ct.nome_analista = COALESCE(ct.nome_analista, m.nome_analista),
-            ct.email_analista = COALESCE(ct.email_analista, m.email_analista),
-            ct.email_cliente = COALESCE(ct.email_cliente, m.emails_cliente)
-          WHERE ct.active = 1
-            AND ct.consignee_name IS NOT NULL
-            AND (ct.email_analista IS NULL OR ct.email_cliente IS NULL)
-        `);
-        console.log(`[get_tracked_containers] Email sync completed. Rows affected: ${emailSyncResult.affectedRows || 0}`);
+        // This is optional - table may not exist in all environments
+        try {
+          console.log('[get_tracked_containers] Attempting to sync emails from t_master_dados...');
+          const emailSyncResult = await client.execute(`
+            UPDATE ai_agente.t_dachser_container_tracking ct
+            JOIN ai_agente.t_master_dados m 
+              ON TRIM(UPPER(ct.consignee_name)) = TRIM(UPPER(m.cliente))
+            SET 
+              ct.nome_analista = COALESCE(ct.nome_analista, m.nome_analista),
+              ct.email_analista = COALESCE(ct.email_analista, m.email_analista),
+              ct.email_cliente = COALESCE(ct.email_cliente, m.emails_cliente)
+            WHERE ct.active = 1
+              AND ct.consignee_name IS NOT NULL
+              AND (ct.email_analista IS NULL OR ct.email_cliente IS NULL)
+          `);
+          console.log(`[get_tracked_containers] Email sync completed. Rows affected: ${emailSyncResult.affectedRows || 0}`);
+        } catch (syncErr) {
+          console.log('[get_tracked_containers] Skipping t_master_dados sync (table may not exist):', syncErr instanceof Error ? syncErr.message : 'Unknown error');
+        }
 
         const rows = await client.query(`
           SELECT 
