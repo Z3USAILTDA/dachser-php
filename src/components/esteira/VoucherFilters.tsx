@@ -3,7 +3,7 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
-import { Search, X } from "lucide-react";
+import { Search, X, Calendar } from "lucide-react";
 
 interface VoucherFiltersProps {
   onSearch: (filters: FilterValues) => void;
@@ -15,6 +15,9 @@ export interface FilterValues {
   cobrancaEmNomeDe: string;
   formaPagamento: string;
   urgente: string;
+  vencimentoInicio: string;
+  vencimentoFim: string;
+  origemCriacao: string;
 }
 
 export const VoucherFilters = ({ onSearch }: VoucherFiltersProps) => {
@@ -24,6 +27,9 @@ export const VoucherFilters = ({ onSearch }: VoucherFiltersProps) => {
     cobrancaEmNomeDe: "all",
     formaPagamento: "all",
     urgente: "all",
+    vencimentoInicio: "",
+    vencimentoFim: "",
+    origemCriacao: "all",
   });
 
   const handleFilterChange = (key: keyof FilterValues, value: string) => {
@@ -33,12 +39,15 @@ export const VoucherFilters = ({ onSearch }: VoucherFiltersProps) => {
   };
 
   const handleClear = () => {
-    const clearedFilters = {
+    const clearedFilters: FilterValues = {
       search: "",
       etapa: "all",
       cobrancaEmNomeDe: "all",
       formaPagamento: "all",
       urgente: "all",
+      vencimentoInicio: "",
+      vencimentoFim: "",
+      origemCriacao: "all",
     };
     setFilters(clearedFilters);
     onSearch(clearedFilters);
@@ -46,7 +55,7 @@ export const VoucherFilters = ({ onSearch }: VoucherFiltersProps) => {
 
   return (
     <div className="bg-card border border-border rounded-lg p-4 space-y-4">
-      <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-4 lg:grid-cols-5 gap-4">
         <div>
           <Label htmlFor="search">Buscar por SPO/Voucher</Label>
           <div className="relative">
@@ -69,6 +78,7 @@ export const VoucherFilters = ({ onSearch }: VoucherFiltersProps) => {
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">Todas</SelectItem>
+              <SelectItem value="RASCUNHO">Rascunho</SelectItem>
               <SelectItem value="OPERACAO">Voucher</SelectItem>
               <SelectItem value="FISCAL">Fiscal</SelectItem>
               <SelectItem value="SUPERVISOR">Supervisor</SelectItem>
@@ -127,11 +137,52 @@ export const VoucherFilters = ({ onSearch }: VoucherFiltersProps) => {
         </div>
       </div>
 
-      <div className="flex justify-end">
-        <Button variant="outline" size="sm" onClick={handleClear} className="gap-2">
-          <X className="h-4 w-4" />
-          Limpar Filtros
-        </Button>
+      {/* Second row of filters */}
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <div>
+          <Label className="flex items-center gap-1.5">
+            <Calendar className="h-3.5 w-3.5" />
+            Vencimento (De)
+          </Label>
+          <Input
+            type="date"
+            value={filters.vencimentoInicio}
+            onChange={(e) => handleFilterChange("vencimentoInicio", e.target.value)}
+          />
+        </div>
+
+        <div>
+          <Label className="flex items-center gap-1.5">
+            <Calendar className="h-3.5 w-3.5" />
+            Vencimento (Até)
+          </Label>
+          <Input
+            type="date"
+            value={filters.vencimentoFim}
+            onChange={(e) => handleFilterChange("vencimentoFim", e.target.value)}
+          />
+        </div>
+
+        <div>
+          <Label>Origem</Label>
+          <Select value={filters.origemCriacao} onValueChange={(v) => handleFilterChange("origemCriacao", v)}>
+            <SelectTrigger>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Todas</SelectItem>
+              <SelectItem value="MANUAL">Manual</SelectItem>
+              <SelectItem value="RM">Via RM</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+
+        <div className="flex items-end">
+          <Button variant="outline" size="sm" onClick={handleClear} className="gap-2 w-full">
+            <X className="h-4 w-4" />
+            Limpar Filtros
+          </Button>
+        </div>
       </div>
     </div>
   );

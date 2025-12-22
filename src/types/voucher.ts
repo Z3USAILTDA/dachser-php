@@ -1,6 +1,7 @@
 // DACHSER Voucher Types
 
 export type EtapaAtual = 
+  | "RASCUNHO"
   | "OPERACAO" 
   | "FISCAL" 
   | "SUPERVISOR" 
@@ -26,7 +27,6 @@ export type AccrualStatus = "MATCH_OK" | "MATCH_PARCIAL" | "SEM_ACCRUAL";
 
 export type FormaPagamento = 
   | "BOLETO" 
-  | "TED" 
   | "PIX" 
   | "CARTAO" 
   | "DEPOSITO"
@@ -78,6 +78,7 @@ export type UserRole =
 
 // Labels e SLAs configuráveis
 export const ETAPA_LABELS: Record<EtapaAtual, string> = {
+  RASCUNHO: "Rascunho",
   OPERACAO: "Voucher",
   FISCAL: "Fiscal",
   SUPERVISOR: "Supervisor",
@@ -89,6 +90,7 @@ export const ETAPA_LABELS: Record<EtapaAtual, string> = {
 };
 
 export const SLA_POR_ETAPA: Record<EtapaAtual, number> = {
+  RASCUNHO: 0,
   OPERACAO: 24,
   FISCAL: 48,
   SUPERVISOR: 24,
