@@ -38,7 +38,10 @@ export function ProcessosTable({ processos, onAssignAnalista, metricFilter }: Pr
     if (metricFilter === "alerta") {
       filtered = filtered.filter(p => p.status_atual?.sla_status === "ALERTA");
     } else if (metricFilter === "critico") {
-      filtered = filtered.filter(p => p.status_atual?.sla_status === "CRITICO");
+      // CRITICO inclui tanto CRITICO quanto VENCIDO
+      filtered = filtered.filter(p => 
+        p.status_atual?.sla_status === "CRITICO" || p.status_atual?.sla_status === "VENCIDO"
+      );
     } else if (metricFilter === "eventos24h") {
       const now = new Date();
       filtered = filtered.filter(p => 
