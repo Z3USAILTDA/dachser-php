@@ -2419,8 +2419,8 @@ serve(async (req) => {
             percentual = Math.min(100, Math.max(0, (hoursSinceUpdate / slaHours) * 100));
             
             if (horasRestantes <= 0) {
-              slaStatus = 'VENCIDO';
-            } else if (horasRestantes <= 0.5) { // 30 minutes
+              slaStatus = 'CRITICO'; // Vencidos são críticos (precisam de ação imediata)
+            } else if (horasRestantes <= 2) { // 2 horas ou menos = crítico
               slaStatus = 'CRITICO';
             } else if (percentual >= 75) {
               slaStatus = 'ALERTA';
