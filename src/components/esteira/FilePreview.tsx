@@ -1,8 +1,14 @@
-import { useState } from "react";
+import { useState, useCallback } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { Eye, Download, Loader2, ExternalLink, FileText } from "lucide-react";
+import { Eye, Download, Loader2, ExternalLink, FileText, ChevronLeft, ChevronRight, ZoomIn, ZoomOut } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { Document, Page, pdfjs } from "react-pdf";
+import "react-pdf/dist/esm/Page/AnnotationLayer.css";
+import "react-pdf/dist/esm/Page/TextLayer.css";
+
+// Configure PDF.js worker
+pdfjs.GlobalWorkerOptions.workerSrc = `//unpkg.com/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.mjs`;
 
 interface FilePreviewProps {
   fileName: string;
@@ -15,6 +21,9 @@ export const FilePreview = ({ fileName, fileUrl, fileType, onDownload }: FilePre
   const [isOpen, setIsOpen] = useState(false);
   const [xmlContent, setXmlContent] = useState<string>("");
   const [loading, setLoading] = useState(false);
+  const [numPages, setNumPages] = useState<number>(0);
+  const [pageNumber, setPageNumber] = useState<number>(1);
+  const [scale, setScale] = useState<number>(1.2);
   const [pdfError, setPdfError] = useState(false);
 
   const lowerName = fileName.toLowerCase();
@@ -31,6 +40,7 @@ export const FilePreview = ({ fileName, fileUrl, fileType, onDownload }: FilePre
     if (!canPreview) return;
 
     setPdfError(false);
+    setPageNumber(1);
     setIsOpen(true);
 
     if (isXML && !xmlContent) {
@@ -50,6 +60,22 @@ export const FilePreview = ({ fileName, fileUrl, fileType, onDownload }: FilePre
   const handleOpenInNewTab = () => {
     window.open(fileUrl, '_blank', 'noopener,noreferrer');
   };
+
+  const onDocumentLoadSuccess = useCallback(({ numPages }: { numPages: number }) => {
+    setNumPages(numPages);
+    setLoading(false);
+  }, []);
+
+  const onDocumentLoadError = useCallback((error: Error) => {
+    console.error("Erro ao carregar PDF:", error);
+    setPdfError(true);
+    setLoading(false);
+  }, []);
+
+  const goToPrevPage = () => setPageNumber((prev) => Math.max(prev - 1, 1));
+  const goToNextPage = () => setPageNumber((prev) => Math.min(prev + 1, numPages));
+  const zoomIn = () => setScale((prev) => Math.min(prev + 0.2, 3));
+  const zoomOut = () => setScale((prev) => Math.max(prev - 0.2, 0.5));
 
   const formatXML = (xml: string) => {
     try {
@@ -115,6 +141,19 @@ export const FilePreview = ({ fileName, fileUrl, fileType, onDownload }: FilePre
             <div className="flex items-center justify-between">
               <DialogTitle className="text-lg font-semibold truncate max-w-md">{fileName}</DialogTitle>
               <div className="flex gap-2">
+                {isPDF && numPages > 0 && (
+                  <div className="flex items-center gap-2 mr-4">
+                    <Button variant="outline" size="icon" onClick={zoomOut} disabled={scale <= 0.5}>
+                      <ZoomOut className="h-4 w-4" />
+                    </Button>
+                    <span className="text-sm text-muted-foreground min-w-[4rem] text-center">
+                      {Math.round(scale * 100)}%
+                    </span>
+                    <Button variant="outline" size="icon" onClick={zoomIn} disabled={scale >= 3}>
+                      <ZoomIn className="h-4 w-4" />
+                    </Button>
+                  </div>
+                )}
                 <Button
                   variant="outline"
                   size="sm"
@@ -144,39 +183,62 @@ export const FilePreview = ({ fileName, fileUrl, fileType, onDownload }: FilePre
               </div>
             )}
 
-            {!loading && isPDF && !pdfError && (
+            {isPDF && !pdfError && (
               <div className="w-full h-full flex flex-col">
-                <object
-                  data={fileUrl}
-                  type="application/pdf"
-                  className="w-full flex-1"
-                  onError={() => setPdfError(true)}
-                >
-                  {/* Fallback for browsers that can't display PDF */}
-                  <div className="flex flex-col items-center justify-center h-full p-8 bg-muted/30">
-                    <FileText className="h-16 w-16 text-muted-foreground mb-4" />
-                    <p className="text-lg font-medium text-foreground mb-2">
-                      Visualização não disponível
-                    </p>
-                    <p className="text-muted-foreground text-center mb-6">
-                      Seu navegador não suporta visualização de PDF incorporada.
-                    </p>
-                    <div className="flex gap-3">
-                      <Button onClick={handleOpenInNewTab} className="gap-2">
-                        <ExternalLink className="h-4 w-4" />
-                        Abrir em Nova Aba
-                      </Button>
-                      <Button variant="outline" onClick={onDownload} className="gap-2">
-                        <Download className="h-4 w-4" />
-                        Baixar PDF
-                      </Button>
-                    </div>
+                <ScrollArea className="flex-1">
+                  <div className="flex justify-center p-4 bg-muted/30">
+                    <Document
+                      file={fileUrl}
+                      onLoadSuccess={onDocumentLoadSuccess}
+                      onLoadError={onDocumentLoadError}
+                      loading={
+                        <div className="flex items-center justify-center py-20">
+                          <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                        </div>
+                      }
+                    >
+                      <Page
+                        pageNumber={pageNumber}
+                        scale={scale}
+                        renderTextLayer={true}
+                        renderAnnotationLayer={true}
+                        loading={
+                          <div className="flex items-center justify-center py-20">
+                            <Loader2 className="h-6 w-6 animate-spin text-primary" />
+                          </div>
+                        }
+                      />
+                    </Document>
                   </div>
-                </object>
+                </ScrollArea>
+                
+                {numPages > 1 && (
+                  <div className="flex items-center justify-center gap-4 py-3 border-t border-border bg-background">
+                    <Button
+                      variant="outline"
+                      size="icon"
+                      onClick={goToPrevPage}
+                      disabled={pageNumber <= 1}
+                    >
+                      <ChevronLeft className="h-4 w-4" />
+                    </Button>
+                    <span className="text-sm text-muted-foreground">
+                      Página {pageNumber} de {numPages}
+                    </span>
+                    <Button
+                      variant="outline"
+                      size="icon"
+                      onClick={goToNextPage}
+                      disabled={pageNumber >= numPages}
+                    >
+                      <ChevronRight className="h-4 w-4" />
+                    </Button>
+                  </div>
+                )}
               </div>
             )}
 
-            {!loading && isPDF && pdfError && (
+            {isPDF && pdfError && (
               <div className="flex flex-col items-center justify-center h-full p-8 bg-muted/30">
                 <FileText className="h-16 w-16 text-muted-foreground mb-4" />
                 <p className="text-lg font-medium text-foreground mb-2">
