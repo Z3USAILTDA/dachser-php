@@ -358,22 +358,42 @@ export default function SubmeterManifestHbl() {
     const lines = text.split('\n');
     
     // Pattern to detect Delta: 0 (not a real divergence)
-    const zeroDetlaPattern = /Delta:\s*[+-]?0[.,]?0*\s*(kg|m³|m3)/i;
+    const zeroDeltaPattern = /Delta:\s*[+-]?0[.,]?0*\s*(kg|m³|m3)/i;
     
+    // Expanded patterns to catch more divergence indicators
     const divergencePatterns = [
       /UPDATE REQUIRED/i,
+      /Status:\s*DIFFERENT/i,
+      /Status:\s*UPDATE/i,
+      /Status:\s*MISMATCH/i,
+      /Status:\s*NOT FOUND/i,
       /Delta:\s*[+-]?[0-9,.]+\s*(kg|m³|m3)/i,
       /Missing:/i,
       /Extra:/i,
       /→\s*Update:/i,
+      /Update:/i,
       /DISCREPANCY/i,
       /DISCREPANCIES FOUND/i,
       /⚠️ WARNING/i,
+      /⚠️/,
+      /requires? update/i,
+      /needs? correction/i,
+      /adjust/i,
+    ];
+    
+    // Patterns to explicitly EXCLUDE (matches, not divergences)
+    const matchPatterns = [
+      /Status:\s*MATCH/i,
+      /MATCH\s*✓/i,
+      /No changes required/i,
+      /No discrepancies/i,
     ];
     
     const summaryStartPatterns = [
       /SUMMARY FOR EXTERNAL COMMUNICATION/i,
       /═══.*SUMMARY/i,
+      /ANALYSIS SUMMARY/i,
+      /Fields with discrepancies/i,
     ];
     
     const divergentLines: string[] = [];
@@ -384,8 +404,9 @@ export default function SubmeterManifestHbl() {
     for (let i = 0; i < lines.length; i++) {
       const line = lines[i];
       
-      // Track current HBL context
-      const hblMatch = line.match(/(?:DRAFT HBL|HBL):\s*(.+\.pdf)/i);
+      // Track current HBL context - expanded patterns
+      const hblMatch = line.match(/(?:DRAFT HBL|HBL):\s*["']?(.+?\.pdf)["']?/i) ||
+                       line.match(/Comparing.*?["'](.+?\.pdf)["']/i);
       if (hblMatch) {
         currentHbl = hblMatch[1];
         hblAddedForSection = false;
@@ -396,9 +417,14 @@ export default function SubmeterManifestHbl() {
         inSummarySection = true;
       }
       
-      // Include summary section lines
-      if (inSummarySection) {
+      // Include summary section lines that contain discrepancy counts
+      if (inSummarySection && /discrepanc|update|differ/i.test(line)) {
         divergentLines.push(line);
+        continue;
+      }
+      
+      // Skip lines that are explicit matches
+      if (matchPatterns.some(p => p.test(line))) {
         continue;
       }
       
@@ -407,7 +433,7 @@ export default function SubmeterManifestHbl() {
       
       if (hasDivergence) {
         // Skip lines that are just "Delta: 0" (not real divergences)
-        if (zeroDetlaPattern.test(line) && !/UPDATE REQUIRED|Missing:|Extra:|DISCREPANCY/i.test(line)) {
+        if (zeroDeltaPattern.test(line) && !/UPDATE|DIFFERENT|Missing:|Extra:|DISCREPANCY|adjust/i.test(line)) {
           continue;
         }
         
