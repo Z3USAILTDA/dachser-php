@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
-import { Info, Copy, Check, Upload, Download, X, Link as LinkIcon, FolderOpen, Loader2, FileText, HelpCircle } from "lucide-react";
+import { Info, Copy, Check, Upload, Download, X, Link as LinkIcon, FolderOpen, Loader2, FileText, HelpCircle, Eye } from "lucide-react";
 import { useUsageLog } from "@/hooks/useUsageLog";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
@@ -10,6 +10,7 @@ import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import { faFileContract } from "@fortawesome/free-solid-svg-icons";
 import { PageLayout } from "@/components/layout/PageLayout";
 import { PageCard } from "@/components/layout/PageCard";
+import { FilePreviewDialog } from "@/components/maritimo/FilePreviewDialog";
 import {
   Dialog,
   DialogContent,
@@ -61,6 +62,25 @@ export default function InvoicesDraftHbl() {
   const [extractingFiles, setExtractingFiles] = useState<Set<string>>(new Set());
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [fileToDelete, setFileToDelete] = useState<{ key: string; name: string } | null>(null);
+  
+  // Preview state
+  const [previewOpen, setPreviewOpen] = useState(false);
+  const [previewFile, setPreviewFile] = useState<{ file: File | null; url?: string; name: string } | null>(null);
+
+  const handlePreviewFile = (classifiedFile: ClassifiedFile) => {
+    const isPdf = classifiedFile.file.name.toLowerCase().endsWith('.pdf');
+    if (!isPdf) {
+      toast.info("Visualização disponível apenas para arquivos PDF");
+      return;
+    }
+    
+    setPreviewFile({
+      file: classifiedFile.storageUrl ? null : classifiedFile.file,
+      url: classifiedFile.storageUrl,
+      name: classifiedFile.file.name
+    });
+    setPreviewOpen(true);
+  };
   
   // Analysis state
   const [isAnalyzing, setIsAnalyzing] = useState(false);
@@ -643,6 +663,17 @@ export default function InvoicesDraftHbl() {
         </p>
       </div>
           <div className="flex items-center gap-1 flex-shrink-0">
+            {classifiedFile.file.name.toLowerCase().endsWith('.pdf') && (
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={() => handlePreviewFile(classifiedFile)}
+                className="h-7 w-7 p-0"
+                title="Visualizar"
+              >
+                <Eye className="w-3.5 h-3.5 text-muted-foreground" />
+              </Button>
+            )}
             <Button
               size="sm"
               variant="ghost"
@@ -732,6 +763,17 @@ export default function InvoicesDraftHbl() {
         </p>
       </div>
           <div className="flex items-center gap-1 flex-shrink-0">
+            {classifiedFile.file.name.toLowerCase().endsWith('.pdf') && (
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={() => handlePreviewFile(classifiedFile)}
+                className="h-7 w-7 p-0"
+                title="Visualizar"
+              >
+                <Eye className="w-3.5 h-3.5 text-muted-foreground" />
+              </Button>
+            )}
             <Button
               size="sm"
               variant="ghost"
@@ -796,6 +838,17 @@ export default function InvoicesDraftHbl() {
         </p>
       </div>
           <div className="flex items-center gap-1 flex-shrink-0">
+            {classifiedFile.file.name.toLowerCase().endsWith('.pdf') && (
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={() => handlePreviewFile(classifiedFile)}
+                className="h-7 w-7 p-0"
+                title="Visualizar"
+              >
+                <Eye className="w-3.5 h-3.5 text-muted-foreground" />
+              </Button>
+            )}
             <Button
               size="sm"
               variant="ghost"
@@ -1163,6 +1216,15 @@ export default function InvoicesDraftHbl() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* File Preview Dialog */}
+      <FilePreviewDialog
+        open={previewOpen}
+        onOpenChange={setPreviewOpen}
+        file={previewFile?.file || null}
+        fileUrl={previewFile?.url}
+        fileName={previewFile?.name || ""}
+      />
     </PageLayout>
   );
 }
