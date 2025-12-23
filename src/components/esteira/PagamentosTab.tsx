@@ -136,7 +136,8 @@ export const PagamentosTab = () => {
           filterVencimento: filterVencimento === "todos" ? undefined : filterVencimento,
           filterStatusPagamento: filterStatusPagamento === "all" ? undefined : filterStatusPagamento,
           filterTipoExecucao: filterTipoExecucao === "all" ? undefined : filterTipoExecucao,
-          filterFormaPagamento: filterFormaPagamento === "all" ? undefined : filterFormaPagamento
+          filterFormaPagamento: filterFormaPagamento === "all" ? undefined : filterFormaPagamento,
+          filterStatusIntegracaoRm: filterStatusIntegracaoRm === "all" ? undefined : filterStatusIntegracaoRm
         }
       });
 
@@ -183,7 +184,7 @@ export const PagamentosTab = () => {
 
   useEffect(() => {
     loadPagamentos();
-  }, [filterVencimento, filterStatusPagamento, filterTipoExecucao, filterFormaPagamento]);
+  }, [filterVencimento, filterStatusPagamento, filterTipoExecucao, filterFormaPagamento, filterStatusIntegracaoRm]);
 
   useEffect(() => {
     pagamentos.forEach(pag => {
@@ -326,7 +327,22 @@ export const PagamentosTab = () => {
     );
   };
 
-  const today = new Date().toLocaleDateString('pt-BR', { 
+  const getStatusIntegracaoRmBadge = (status?: StatusIntegracaoRM) => {
+    if (!status) return null;
+    const variants: Record<StatusIntegracaoRM, string> = {
+      PENDENTE: "bg-gray-500/20 text-gray-400 border-gray-500/30",
+      ENVIADO_T_DADOS_RM: "bg-blue-500/20 text-blue-400 border-blue-500/30",
+      PROCESSADO: "bg-emerald-500/20 text-emerald-400 border-emerald-500/30",
+      ERRO: "bg-red-500/20 text-red-400 border-red-500/30",
+    };
+    return (
+      <Badge variant="outline" className={cn("text-[10px]", variants[status])}>
+        {STATUS_INTEGRACAO_RM_LABELS[status]}
+      </Badge>
+    );
+  };
+
+  const today = new Date().toLocaleDateString('pt-BR', {
     weekday: 'long', 
     day: '2-digit', 
     month: 'long', 
@@ -391,6 +407,19 @@ export const PagamentosTab = () => {
               <SelectItem value="TRANSFERENCIA_PIX">Transferência</SelectItem>
               <SelectItem value="DARF">DARF</SelectItem>
               <SelectItem value="GPS">GPS</SelectItem>
+            </SelectContent>
+          </Select>
+
+          <Select value={filterStatusIntegracaoRm} onValueChange={setFilterStatusIntegracaoRm}>
+            <SelectTrigger className="w-[140px] bg-card border-border rounded-full">
+              <SelectValue placeholder="Status RM" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Todos RM</SelectItem>
+              <SelectItem value="PENDENTE">Pendente</SelectItem>
+              <SelectItem value="ENVIADO_T_DADOS_RM">Enviado</SelectItem>
+              <SelectItem value="PROCESSADO">Processado</SelectItem>
+              <SelectItem value="ERRO">Erro</SelectItem>
             </SelectContent>
           </Select>
 
@@ -519,6 +548,7 @@ export const PagamentosTab = () => {
                 <th className="p-3 text-left text-xs font-medium uppercase tracking-wider text-muted-foreground">Forma Pag.</th>
                 <th className="p-3 text-left text-xs font-medium uppercase tracking-wider text-muted-foreground">Tipo Exec.</th>
                 <th className="p-3 text-left text-xs font-medium uppercase tracking-wider text-muted-foreground">Status</th>
+                <th className="p-3 text-left text-xs font-medium uppercase tracking-wider text-muted-foreground">Status RM</th>
                 <th className="p-3 text-left text-xs font-medium uppercase tracking-wider text-muted-foreground">Ações</th>
               </tr>
             </thead>
@@ -588,6 +618,9 @@ export const PagamentosTab = () => {
                     </td>
                     <td className="p-3">
                       {getStatusPagamentoBadge(pag.status_pagamento as StatusPagamento)}
+                    </td>
+                    <td className="p-3">
+                      {getStatusIntegracaoRmBadge(pag.status_integracao_rm as StatusIntegracaoRM)}
                     </td>
                     <td className="p-3">
                       <div className="flex items-center gap-1">
