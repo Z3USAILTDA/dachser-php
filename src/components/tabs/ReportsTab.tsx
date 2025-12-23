@@ -11,13 +11,16 @@ import { Loader2, Download, FileSpreadsheet, CalendarIcon, FileText } from "luci
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { cn } from "@/lib/utils";
-import { ETAPA_LABELS } from "@/types/voucher";
-import * as XLSX from "xlsx";
+import { Voucher } from "@/types/voucher";
+import { exportVouchersToExcel } from "@/utils/voucherExcelExport";
+import { exportVouchersToPDF } from "@/utils/voucherPdfExport";
 
 interface ReportFilters {
   etapa: string;
   statusBaixa: string;
   cobrancaEmNomeDe: string;
+  statusIntegracaoRm: string;
+  tipoExecucaoPagamento: string;
   dataInicio?: Date;
   dataFim?: Date;
 }
@@ -30,42 +33,31 @@ export function ReportsTab() {
     etapa: "all",
     statusBaixa: "all",
     cobrancaEmNomeDe: "all",
+    statusIntegracaoRm: "all",
+    tipoExecucaoPagamento: "all",
   });
 
   const handleExport = async () => {
     try {
       setLoading(true);
       
-      let query = supabase
-        .from("vouchers")
-        .select(`*`)
-        .order("created_at", { ascending: false });
-
-      if (filters.etapa !== "all") {
-        query = query.eq("etapa_atual", filters.etapa as any);
-      }
-
-      if (filters.statusBaixa !== "all") {
-        query = query.eq("status_baixa", filters.statusBaixa as any);
-      }
-
-      if (filters.cobrancaEmNomeDe !== "all") {
-        query = query.eq("cobranca_em_nome_de", filters.cobrancaEmNomeDe as any);
-      }
-
-      if (filters.dataInicio) {
-        query = query.gte("created_at", filters.dataInicio.toISOString());
-      }
-
-      if (filters.dataFim) {
-        const dataFimEnd = new Date(filters.dataFim);
-        dataFimEnd.setHours(23, 59, 59, 999);
-        query = query.lte("created_at", dataFimEnd.toISOString());
-      }
-
-      const { data, error } = await query;
+      // Fetch from MariaDB via mariadb-proxy
+      const { data: response, error } = await supabase.functions.invoke('mariadb-proxy', {
+        body: {
+          action: 'export_vouchers_report',
+          etapa: filters.etapa,
+          statusBaixa: filters.statusBaixa,
+          cobrancaEmNomeDe: filters.cobrancaEmNomeDe,
+          statusIntegracaoRm: filters.statusIntegracaoRm,
+          tipoExecucaoPagamento: filters.tipoExecucaoPagamento,
+          dataInicio: filters.dataInicio ? format(filters.dataInicio, 'yyyy-MM-dd') : undefined,
+          dataFim: filters.dataFim ? format(filters.dataFim, 'yyyy-MM-dd') : undefined,
+        }
+      });
 
       if (error) throw error;
+
+      const data = response?.vouchers || [];
 
       if (!data || data.length === 0) {
         toast({
@@ -76,37 +68,60 @@ export function ReportsTab() {
         return;
       }
 
+      // Map MariaDB data to Voucher type
+      const mappedVouchers: Voucher[] = data.map((v: any) => ({
+        id: v.id,
+        numeroSPO: v.numero_spo,
+        fornecedor: v.fornecedor,
+        cnpjFornecedor: v.cnpj_fornecedor,
+        valor: v.valor,
+        moeda: v.moeda || "BRL",
+        vencimento: new Date(v.vencimento),
+        dataEmissaoDocumento: v.data_emissao_documento ? new Date(v.data_emissao_documento) : undefined,
+        cobrancaEmNomeDe: v.cobranca_em_nome_de,
+        formaPagamento: v.forma_pagamento,
+        tipoDocumento: v.tipo_documento,
+        filial: v.filial,
+        remessa: v.remessa,
+        urgente: v.urgencia_tipo !== "NORMAL",
+        urgenciaTipo: v.urgencia_tipo || "NORMAL",
+        comentariosOperacao: v.comentarios_operacao,
+        comentariosFiscal: v.comentarios_fiscal,
+        comentariosFinanceiro: v.comentarios_financeiro,
+        ajusteOperacao: v.ajuste_operacao,
+        ajusteFiscal: v.ajuste_fiscal,
+        etapaAtual: v.etapa_atual,
+        statusBaixa: v.status_baixa || "PENDENTE",
+        statusFinanceiro: v.status_financeiro || "PENDENTE",
+        statusEnvioCliente: v.status_envio_cliente,
+        statusIntegracaoRm: v.status_integracao_rm || "PENDENTE",
+        tipoExecucaoPagamento: v.tipo_execucao_pagamento,
+        criadoPorUserId: v.criado_por_user_id,
+        criadoPorUserName: v.criado_por_username,
+        responsavelOperacaoUserId: v.responsavel_operacao_user_id,
+        responsavelOperacaoUserName: v.responsavel_operacao_username,
+        responsavelFiscalUserId: v.responsavel_fiscal_user_id,
+        responsavelFiscalUserName: v.responsavel_fiscal_username,
+        responsavelFinanceiroUserId: v.responsavel_financeiro_user_id,
+        responsavelFinanceiroUserName: v.responsavel_financeiro_username,
+        clienteEmail: v.cliente_email,
+        createdAt: new Date(v.created_at),
+        updatedAt: new Date(v.updated_at),
+        anexos: [],
+        logs: [],
+      }));
+
+      let fileName: string;
       if (exportType === "excel") {
-        const exportData = data.map((v: any) => ({
-          "SPO": v.numero_spo,
-          "Fornecedor": v.fornecedor,
-          "CNPJ": v.cnpj_fornecedor,
-          "Valor": v.valor,
-          "Moeda": v.moeda,
-          "Vencimento": v.vencimento ? format(new Date(v.vencimento), "dd/MM/yyyy") : "",
-          "Etapa": ETAPA_LABELS[v.etapa_atual as keyof typeof ETAPA_LABELS] || v.etapa_atual,
-          "Status Baixa": v.status_baixa,
-          "Cobrança": v.cobranca_em_nome_de,
-          "Forma Pagamento": v.forma_pagamento,
-          "Urgência": v.urgencia_tipo,
-          "Criado em": v.created_at ? format(new Date(v.created_at), "dd/MM/yyyy HH:mm") : "",
-        }));
-
-        const ws = XLSX.utils.json_to_sheet(exportData);
-        const wb = XLSX.utils.book_new();
-        XLSX.utils.book_append_sheet(wb, ws, "Vouchers");
-        XLSX.writeFile(wb, `vouchers_${format(new Date(), "yyyyMMdd_HHmm")}.xlsx`);
-
-        toast({
-          title: "Exportação concluída!",
-          description: `${data.length} vouchers exportados para Excel`,
-        });
+        fileName = exportVouchersToExcel(mappedVouchers);
       } else {
-        toast({
-          title: "PDF em desenvolvimento",
-          description: "Use a exportação Excel por enquanto",
-        });
+        fileName = exportVouchersToPDF(mappedVouchers);
       }
+
+      toast({
+        title: "Exportação concluída!",
+        description: `${mappedVouchers.length} vouchers exportados para ${fileName}`,
+      });
     } catch (error: any) {
       console.error("Erro ao exportar:", error);
       toast({
@@ -193,7 +208,7 @@ export function ReportsTab() {
           </div>
 
           {/* Filters */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
             <div className="space-y-2">
               <Label>Etapa</Label>
               <Select
@@ -248,6 +263,43 @@ export function ReportsTab() {
                   <SelectItem value="all">Todos</SelectItem>
                   <SelectItem value="DACHSER">Dachser</SelectItem>
                   <SelectItem value="CLIENTE">Cliente</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-2">
+              <Label>Status Integração RM</Label>
+              <Select
+                value={filters.statusIntegracaoRm}
+                onValueChange={(value) => setFilters({ ...filters, statusIntegracaoRm: value })}
+              >
+                <SelectTrigger className="bg-input/50 border-border/50">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent className="bg-card border-border/50">
+                  <SelectItem value="all">Todos</SelectItem>
+                  <SelectItem value="PENDENTE">Pendente</SelectItem>
+                  <SelectItem value="ENVIADO_T_DADOS_RM">Enviado p/ RM</SelectItem>
+                  <SelectItem value="PROCESSADO">Processado</SelectItem>
+                  <SelectItem value="ERRO">Erro</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-2">
+              <Label>Tipo Execução Pagamento</Label>
+              <Select
+                value={filters.tipoExecucaoPagamento}
+                onValueChange={(value) => setFilters({ ...filters, tipoExecucaoPagamento: value })}
+              >
+                <SelectTrigger className="bg-input/50 border-border/50">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent className="bg-card border-border/50">
+                  <SelectItem value="all">Todos</SelectItem>
+                  <SelectItem value="BOLETO">Boleto</SelectItem>
+                  <SelectItem value="TED">TED</SelectItem>
+                  <SelectItem value="PIX">PIX</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -336,6 +388,8 @@ export function ReportsTab() {
                 etapa: "all",
                 statusBaixa: "all",
                 cobrancaEmNomeDe: "all",
+                statusIntegracaoRm: "all",
+                tipoExecucaoPagamento: "all",
                 dataInicio: undefined,
                 dataFim: undefined,
               })}

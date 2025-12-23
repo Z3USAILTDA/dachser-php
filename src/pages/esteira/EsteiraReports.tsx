@@ -17,11 +17,12 @@ import { exportVouchersToExcel } from "@/utils/voucherExcelExport";
 import { exportVouchersToPDF } from "@/utils/voucherPdfExport";
 import { Voucher } from "@/types/voucher";
 
-
 interface ReportFilters {
   etapa: string;
   statusBaixa: string;
   cobrancaEmNomeDe: string;
+  statusIntegracaoRm: string;
+  tipoExecucaoPagamento: string;
   dataInicio?: Date;
   dataFim?: Date;
 }
@@ -34,48 +35,31 @@ export default function EsteiraReports() {
     etapa: "all",
     statusBaixa: "all",
     cobrancaEmNomeDe: "all",
+    statusIntegracaoRm: "all",
+    tipoExecucaoPagamento: "all",
   });
 
   const handleExport = async () => {
     try {
       setLoading(true);
       
-      let query = (supabase as any)
-        .from("vouchers")
-        .select(`
-          *,
-          criado_por:profiles!criado_por_user_id(name),
-          responsavel_operacao:profiles!responsavel_operacao_user_id(name),
-          responsavel_fiscal:profiles!responsavel_fiscal_user_id(name),
-          responsavel_financeiro:profiles!responsavel_financeiro_user_id(name)
-        `)
-        .order("created_at", { ascending: false });
-
-      if (filters.etapa !== "all") {
-        query = query.eq("etapa_atual", filters.etapa);
-      }
-
-      if (filters.statusBaixa !== "all") {
-        query = query.eq("status_baixa", filters.statusBaixa);
-      }
-
-      if (filters.cobrancaEmNomeDe !== "all") {
-        query = query.eq("cobranca_em_nome_de", filters.cobrancaEmNomeDe);
-      }
-
-      if (filters.dataInicio) {
-        query = query.gte("created_at", filters.dataInicio.toISOString());
-      }
-
-      if (filters.dataFim) {
-        const dataFimEnd = new Date(filters.dataFim);
-        dataFimEnd.setHours(23, 59, 59, 999);
-        query = query.lte("created_at", dataFimEnd.toISOString());
-      }
-
-      const { data, error } = await query;
+      // Fetch from MariaDB via mariadb-proxy
+      const { data: response, error } = await supabase.functions.invoke('mariadb-proxy', {
+        body: {
+          action: 'export_vouchers_report',
+          etapa: filters.etapa,
+          statusBaixa: filters.statusBaixa,
+          cobrancaEmNomeDe: filters.cobrancaEmNomeDe,
+          statusIntegracaoRm: filters.statusIntegracaoRm,
+          tipoExecucaoPagamento: filters.tipoExecucaoPagamento,
+          dataInicio: filters.dataInicio ? format(filters.dataInicio, 'yyyy-MM-dd') : undefined,
+          dataFim: filters.dataFim ? format(filters.dataFim, 'yyyy-MM-dd') : undefined,
+        }
+      });
 
       if (error) throw error;
+
+      const data = response?.vouchers || [];
 
       if (!data || data.length === 0) {
         toast({
@@ -86,7 +70,7 @@ export default function EsteiraReports() {
         return;
       }
 
-      // Map data to Voucher type
+      // Map MariaDB data to Voucher type
       const mappedVouchers: Voucher[] = data.map((v: any) => ({
         id: v.id,
         numeroSPO: v.numero_spo,
@@ -112,14 +96,16 @@ export default function EsteiraReports() {
         statusBaixa: v.status_baixa || "PENDENTE",
         statusFinanceiro: v.status_financeiro || "PENDENTE",
         statusEnvioCliente: v.status_envio_cliente,
+        statusIntegracaoRm: v.status_integracao_rm || "PENDENTE",
+        tipoExecucaoPagamento: v.tipo_execucao_pagamento,
         criadoPorUserId: v.criado_por_user_id,
-        criadoPorUserName: v.criado_por?.name,
+        criadoPorUserName: v.criado_por_username,
         responsavelOperacaoUserId: v.responsavel_operacao_user_id,
-        responsavelOperacaoUserName: v.responsavel_operacao?.name,
+        responsavelOperacaoUserName: v.responsavel_operacao_username,
         responsavelFiscalUserId: v.responsavel_fiscal_user_id,
-        responsavelFiscalUserName: v.responsavel_fiscal?.name,
+        responsavelFiscalUserName: v.responsavel_fiscal_username,
         responsavelFinanceiroUserId: v.responsavel_financeiro_user_id,
-        responsavelFinanceiroUserName: v.responsavel_financeiro?.name,
+        responsavelFinanceiroUserName: v.responsavel_financeiro_username,
         clienteEmail: v.cliente_email,
         createdAt: new Date(v.created_at),
         updatedAt: new Date(v.updated_at),
@@ -230,7 +216,7 @@ export default function EsteiraReports() {
             </div>
 
             {/* Filters */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
               <div className="space-y-2">
                 <Label>Etapa</Label>
                 <Select
@@ -285,6 +271,43 @@ export default function EsteiraReports() {
                     <SelectItem value="all">Todos</SelectItem>
                     <SelectItem value="DACHSER">Dachser</SelectItem>
                     <SelectItem value="CLIENTE">Cliente</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-2">
+                <Label>Status Integração RM</Label>
+                <Select
+                  value={filters.statusIntegracaoRm}
+                  onValueChange={(value) => setFilters({ ...filters, statusIntegracaoRm: value })}
+                >
+                  <SelectTrigger className="bg-input/50 border-border/50">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent className="bg-card border-border/50">
+                    <SelectItem value="all">Todos</SelectItem>
+                    <SelectItem value="PENDENTE">Pendente</SelectItem>
+                    <SelectItem value="ENVIADO_T_DADOS_RM">Enviado p/ RM</SelectItem>
+                    <SelectItem value="PROCESSADO">Processado</SelectItem>
+                    <SelectItem value="ERRO">Erro</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-2">
+                <Label>Tipo Execução Pagamento</Label>
+                <Select
+                  value={filters.tipoExecucaoPagamento}
+                  onValueChange={(value) => setFilters({ ...filters, tipoExecucaoPagamento: value })}
+                >
+                  <SelectTrigger className="bg-input/50 border-border/50">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent className="bg-card border-border/50">
+                    <SelectItem value="all">Todos</SelectItem>
+                    <SelectItem value="BOLETO">Boleto</SelectItem>
+                    <SelectItem value="TED">TED</SelectItem>
+                    <SelectItem value="PIX">PIX</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -373,6 +396,8 @@ export default function EsteiraReports() {
                   etapa: "all",
                   statusBaixa: "all",
                   cobrancaEmNomeDe: "all",
+                  statusIntegracaoRm: "all",
+                  tipoExecucaoPagamento: "all",
                   dataInicio: undefined,
                   dataFim: undefined,
                 })}
