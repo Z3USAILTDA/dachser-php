@@ -25,12 +25,13 @@ serve(async (req) => {
   }
 
   try {
-    const anthropicApiKey = Deno.env.get('ANTHROPIC_API_KEY');
+    // Use dedicated API key for financial analyses
+    const anthropicApiKey = Deno.env.get('ANTHROPIC_FINANCEIRO_API_KEY') || Deno.env.get('ANTHROPIC_API_KEY');
     
     if (!anthropicApiKey) {
-      console.error('ANTHROPIC_API_KEY not configured');
+      console.error('ANTHROPIC_FINANCEIRO_API_KEY not configured');
       return new Response(
-        JSON.stringify({ error: 'Anthropic API key not configured', success: false }),
+        JSON.stringify({ error: 'Anthropic API key for financial analyses not configured', success: false }),
         { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
