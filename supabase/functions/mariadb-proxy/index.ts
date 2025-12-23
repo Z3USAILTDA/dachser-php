@@ -3619,13 +3619,162 @@ serve(async (req) => {
 
       case 'get_voucher_by_id': {
         const { voucher_id } = body as any;
-        console.log('Fetching voucher by ID:', voucher_id);
+        console.log('Fetching voucher by ID with anexos and logs:', voucher_id);
         
+        if (!voucher_id) {
+          return new Response(
+            JSON.stringify({ error: 'voucher_id é obrigatório' }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+        
+        // Fetch voucher
         const vouchers = await client.query(`
           SELECT * FROM dados_dachser.t_vouchers WHERE id = ?
         `, [voucher_id]);
         
-        result = { success: true, data: vouchers?.[0] || null };
+        const voucher = vouchers?.[0] || null;
+        
+        if (!voucher) {
+          result = { success: true, data: null, anexos: [], logs: [] };
+          break;
+        }
+        
+        // Fetch anexos
+        let anexos: any[] = [];
+        try {
+          anexos = await client.query(`
+            SELECT id, voucher_id, tipo, file_name, file_url, file_size, created_at
+            FROM dados_dachser.t_voucher_anexos
+            WHERE voucher_id = ?
+            ORDER BY created_at DESC
+          `, [voucher_id]);
+        } catch (anexosErr) {
+          console.log('Error fetching anexos (table may not exist):', anexosErr);
+        }
+        
+        // Ensure t_voucher_logs table exists
+        try {
+          await client.execute(`
+            CREATE TABLE IF NOT EXISTS dados_dachser.t_voucher_logs (
+              id VARCHAR(36) PRIMARY KEY,
+              voucher_id VARCHAR(36) NOT NULL,
+              user_id VARCHAR(100) DEFAULT NULL,
+              user_name VARCHAR(255) DEFAULT NULL,
+              acao VARCHAR(100) NOT NULL,
+              detalhe TEXT DEFAULT NULL,
+              data_hora TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+              INDEX idx_voucher_logs_voucher_id (voucher_id),
+              INDEX idx_voucher_logs_data_hora (data_hora)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+          `);
+        } catch (createLogsErr) {
+          console.log('t_voucher_logs table creation skipped (may already exist)');
+        }
+        
+        // Fetch logs
+        let logs: any[] = [];
+        try {
+          logs = await client.query(`
+            SELECT id, voucher_id, user_id, user_name, acao, detalhe, data_hora
+            FROM dados_dachser.t_voucher_logs
+            WHERE voucher_id = ?
+            ORDER BY data_hora DESC
+          `, [voucher_id]);
+        } catch (logsErr) {
+          console.log('Error fetching logs (table may not exist):', logsErr);
+        }
+        
+        result = { success: true, data: voucher, anexos: anexos || [], logs: logs || [] };
+        break;
+      }
+
+      case 'save_voucher_log': {
+        const { voucher_id, user_id, user_name, acao, detalhe } = body as any;
+        console.log('Saving voucher log:', voucher_id, acao);
+        
+        if (!voucher_id || !acao) {
+          return new Response(
+            JSON.stringify({ error: 'voucher_id e acao são obrigatórios' }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+        
+        // Ensure t_voucher_logs table exists
+        try {
+          await client.execute(`
+            CREATE TABLE IF NOT EXISTS dados_dachser.t_voucher_logs (
+              id VARCHAR(36) PRIMARY KEY,
+              voucher_id VARCHAR(36) NOT NULL,
+              user_id VARCHAR(100) DEFAULT NULL,
+              user_name VARCHAR(255) DEFAULT NULL,
+              acao VARCHAR(100) NOT NULL,
+              detalhe TEXT DEFAULT NULL,
+              data_hora TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+              INDEX idx_voucher_logs_voucher_id (voucher_id),
+              INDEX idx_voucher_logs_data_hora (data_hora)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+          `);
+        } catch (createLogsErr) {
+          console.log('t_voucher_logs table creation skipped (may already exist)');
+        }
+        
+        const logId = crypto.randomUUID();
+        
+        await client.execute(`
+          INSERT INTO dados_dachser.t_voucher_logs (id, voucher_id, user_id, user_name, acao, detalhe, data_hora)
+          VALUES (?, ?, ?, ?, ?, ?, NOW())
+        `, [logId, voucher_id, user_id || null, user_name || 'Sistema', acao, detalhe || null]);
+        
+        console.log('Voucher log saved, ID:', logId);
+        result = { success: true, logId };
+        break;
+      }
+
+      case 'get_voucher_anexos': {
+        const { voucher_id } = body as any;
+        console.log('Fetching voucher anexos:', voucher_id);
+        
+        if (!voucher_id) {
+          return new Response(
+            JSON.stringify({ error: 'voucher_id é obrigatório' }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+        
+        let anexos: any[] = [];
+        try {
+          anexos = await client.query(`
+            SELECT id, voucher_id, tipo, file_name, file_url, file_size, created_at
+            FROM dados_dachser.t_voucher_anexos
+            WHERE voucher_id = ?
+            ORDER BY created_at DESC
+          `, [voucher_id]);
+        } catch (anexosErr) {
+          console.log('Error fetching anexos:', anexosErr);
+        }
+        
+        result = { success: true, data: anexos || [] };
+        break;
+      }
+
+      case 'delete_voucher_anexo': {
+        const { anexo_id } = body as any;
+        console.log('Deleting voucher anexo:', anexo_id);
+        
+        if (!anexo_id) {
+          return new Response(
+            JSON.stringify({ error: 'anexo_id é obrigatório' }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+        
+        await client.execute(`
+          DELETE FROM dados_dachser.t_voucher_anexos WHERE id = ?
+        `, [anexo_id]);
+        
+        console.log('Voucher anexo deleted:', anexo_id);
+        result = { success: true };
         break;
       }
 
