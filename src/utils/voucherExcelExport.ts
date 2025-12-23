@@ -1,7 +1,7 @@
 import * as XLSX from "xlsx-js-style";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import { Voucher } from "@/types/voucher";
+import { Voucher, ETAPA_LABELS, STATUS_INTEGRACAO_RM_LABELS } from "@/types/voucher";
 
 const COLORS = {
   header: { fgColor: { rgb: "D4AF37" } }, // Dourado
@@ -16,17 +16,32 @@ const COLORS = {
   },
 };
 
+const formatCurrency = (value: number | undefined, moeda: string = "BRL"): string => {
+  if (value === undefined || value === null) return "-";
+  return new Intl.NumberFormat("pt-BR", {
+    style: "currency",
+    currency: moeda,
+  }).format(value);
+};
+
 export const exportVouchersToExcel = (data: Voucher[]) => {
-  // Preparar dados
+  // Preparar dados com novas colunas
   const excelData = data.map((v) => ({
     "Número SPO": v.numeroSPO,
-    Vencimento: format(new Date(v.vencimento), "dd/MM/yyyy", { locale: ptBR }),
-    Cobrança: v.cobrancaEmNomeDe === "DACHSER" ? "Dachser" : "Cliente",
+    "Fornecedor": v.fornecedor || "-",
+    "CNPJ Fornecedor": v.cnpjFornecedor || "-",
+    "Valor": formatCurrency(v.valor, v.moeda),
+    "Moeda": v.moeda || "BRL",
+    "Vencimento": format(new Date(v.vencimento), "dd/MM/yyyy", { locale: ptBR }),
+    "Cobrança": v.cobrancaEmNomeDe === "DACHSER" ? "Dachser" : "Cliente",
     "Forma Pagamento": v.formaPagamento,
-    Remessa: v.remessa || "NENHUM",
-    Urgente: v.urgente ? "Sim" : "Não",
-    "Etapa Atual": v.etapaAtual,
+    "Tipo Execução": v.tipoExecucaoPagamento || "-",
+    "Filial": v.filial || "-",
+    "Remessa": v.remessa || "NENHUM",
+    "Urgente": v.urgente ? "Sim" : "Não",
+    "Etapa Atual": ETAPA_LABELS[v.etapaAtual as keyof typeof ETAPA_LABELS] || v.etapaAtual,
     "Status Baixa": v.statusBaixa || "PENDENTE",
+    "Status Integração RM": STATUS_INTEGRACAO_RM_LABELS[v.statusIntegracaoRm as keyof typeof STATUS_INTEGRACAO_RM_LABELS] || v.statusIntegracaoRm || "PENDENTE",
     "Criado Por": v.criadoPorUserName || "-",
     "Resp. Operação": v.responsavelOperacaoUserName || "-",
     "Resp. Fiscal": v.responsavelFiscalUserName || "-",
@@ -90,23 +105,30 @@ export const exportVouchersToExcel = (data: Voucher[]) => {
         alignment: {
           horizontal: col === 0 ? "center" : "left",
           vertical: "center",
-          wrapText: col >= 12, // Wrap text para comentários
+          wrapText: col >= 19, // Wrap text para comentários
         },
         border: COLORS.border,
       };
     }
   }
 
-  // Ajustar largura das colunas
+  // Ajustar largura das colunas (24 colunas agora)
   const colWidths = [
     { wch: 15 }, // Número SPO
+    { wch: 30 }, // Fornecedor
+    { wch: 18 }, // CNPJ Fornecedor
+    { wch: 15 }, // Valor
+    { wch: 8 },  // Moeda
     { wch: 12 }, // Vencimento
     { wch: 12 }, // Cobrança
     { wch: 20 }, // Forma Pagamento
+    { wch: 15 }, // Tipo Execução
+    { wch: 10 }, // Filial
     { wch: 15 }, // Remessa
-    { wch: 8 }, // Urgente
+    { wch: 8 },  // Urgente
     { wch: 18 }, // Etapa Atual
     { wch: 15 }, // Status Baixa
+    { wch: 18 }, // Status Integração RM
     { wch: 25 }, // Criado Por
     { wch: 25 }, // Resp. Operação
     { wch: 25 }, // Resp. Fiscal

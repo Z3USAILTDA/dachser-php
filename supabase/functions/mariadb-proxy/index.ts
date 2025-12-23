@@ -166,6 +166,13 @@ interface QueryRequest {
   filterFormaPagamento?: string;
   filterStatus?: string;
   filterBanco?: string;
+  filterStatusIntegracaoRm?: string;
+  status_integracao_rm?: string;
+  statusIntegracaoRm?: string;
+  statusBaixa?: string;
+  cobrancaEmNomeDe?: string;
+  dataInicio?: string;
+  dataFim?: string;
 }
 
 serve(async (req) => {
@@ -5368,11 +5375,7 @@ serve(async (req) => {
       }
 
       case 'update_status_integracao_rm': {
-        const { voucher_id, status_integracao_rm } = body as { 
-          voucher_id?: string; 
-          status_integracao_rm?: string;
-        };
-        
+        const { voucher_id, status_integracao_rm } = body;
         if (!voucher_id || !status_integracao_rm) {
           return new Response(
             JSON.stringify({ error: 'voucher_id e status_integracao_rm são obrigatórios' }),
@@ -5380,26 +5383,144 @@ serve(async (req) => {
           );
         }
 
-        console.log('Updating status_integracao_rm:', { voucher_id, status_integracao_rm });
-        
-        // Ensure column exists
+        // Ensure the column exists
         try {
-          await client.execute(`
+          await client.query(`
             ALTER TABLE dados_dachser.t_vouchers 
-            ADD COLUMN IF NOT EXISTS status_integracao_rm ENUM('PENDENTE', 'ENVIADO_T_DADOS_RM', 'PROCESSADO', 'ERRO') DEFAULT 'PENDENTE'
+            ADD COLUMN IF NOT EXISTS status_integracao_rm VARCHAR(50) DEFAULT 'PENDENTE'
           `);
         } catch (alterErr) {
-          console.log('Column might already exist:', alterErr);
+          console.log('Note: ALTER TABLE might have failed (column may already exist)');
         }
 
-        await client.execute(`
-          UPDATE dados_dachser.t_vouchers 
-          SET status_integracao_rm = ?, updated_at = NOW()
-          WHERE id = ?
-        `, [status_integracao_rm, voucher_id]);
+        await client.query(
+          `UPDATE dados_dachser.t_vouchers SET status_integracao_rm = ?, updated_at = NOW() WHERE id = ?`,
+          [status_integracao_rm, voucher_id]
+        );
 
         console.log(`Updated status_integracao_rm to ${status_integracao_rm} for voucher ${voucher_id}`);
         result = { success: true };
+        break;
+      }
+
+      // ==================== VOUCHERS REPORT EXPORT ====================
+      case 'export_vouchers_report': {
+        const {
+          etapa,
+          statusBaixa,
+          cobrancaEmNomeDe,
+          statusIntegracaoRm,
+          tipoExecucaoPagamento,
+          dataInicio,
+          dataFim,
+        } = body as {
+          etapa?: string;
+          statusBaixa?: string;
+          cobrancaEmNomeDe?: string;
+          statusIntegracaoRm?: string;
+          tipoExecucaoPagamento?: string;
+          dataInicio?: string;
+          dataFim?: string;
+        };
+
+        let whereConditions: string[] = [];
+        let params: (string | number)[] = [];
+
+        if (etapa && etapa !== 'all') {
+          whereConditions.push('v.etapa_atual = ?');
+          params.push(etapa);
+        }
+
+        if (statusBaixa && statusBaixa !== 'all') {
+          whereConditions.push('v.status_baixa = ?');
+          params.push(statusBaixa);
+        }
+
+        if (cobrancaEmNomeDe && cobrancaEmNomeDe !== 'all') {
+          whereConditions.push('v.cobranca_em_nome_de = ?');
+          params.push(cobrancaEmNomeDe);
+        }
+
+        if (statusIntegracaoRm && statusIntegracaoRm !== 'all') {
+          whereConditions.push('v.status_integracao_rm = ?');
+          params.push(statusIntegracaoRm);
+        }
+
+        if (tipoExecucaoPagamento && tipoExecucaoPagamento !== 'all') {
+          whereConditions.push('v.tipo_execucao_pagamento = ?');
+          params.push(tipoExecucaoPagamento);
+        }
+
+        if (dataInicio) {
+          whereConditions.push('v.created_at >= ?');
+          params.push(dataInicio);
+        }
+
+        if (dataFim) {
+          whereConditions.push('v.created_at <= ?');
+          params.push(dataFim + ' 23:59:59');
+        }
+
+        const whereClause = whereConditions.length > 0 ? `WHERE ${whereConditions.join(' AND ')}` : '';
+
+        const query = `
+          SELECT 
+            v.*,
+            u_criado.username AS criado_por_username,
+            u_operacao.username AS responsavel_operacao_username,
+            u_fiscal.username AS responsavel_fiscal_username,
+            u_financeiro.username AS responsavel_financeiro_username,
+            u_supervisor.username AS responsavel_supervisor_username
+          FROM dados_dachser.t_vouchers v
+          LEFT JOIN ai_agente.t_users_dachser u_criado ON v.criado_por_user_id = u_criado.id
+          LEFT JOIN ai_agente.t_users_dachser u_operacao ON v.responsavel_operacao_user_id = u_operacao.id
+          LEFT JOIN ai_agente.t_users_dachser u_fiscal ON v.responsavel_fiscal_user_id = u_fiscal.id
+          LEFT JOIN ai_agente.t_users_dachser u_financeiro ON v.responsavel_financeiro_user_id = u_financeiro.id
+          LEFT JOIN ai_agente.t_users_dachser u_supervisor ON v.responsavel_supervisor_user_id = u_supervisor.id
+          ${whereClause}
+          ORDER BY v.created_at DESC
+          LIMIT 5000
+        `;
+
+        console.log('Export report query:', query);
+        console.log('Export report params:', params);
+
+        const vouchers = await client.query(query, params);
+
+        result = { success: true, vouchers };
+        console.log(`Export report returned ${vouchers.length} vouchers`);
+        break;
+      }
+
+      // ==================== PENDING VOUCHERS FOR DAILY REPORT ====================
+      case 'get_pending_vouchers_for_report': {
+        const twentyFourHoursAgo = new Date();
+        twentyFourHoursAgo.setHours(twentyFourHoursAgo.getHours() - 24);
+        const cutoffDate = twentyFourHoursAgo.toISOString().replace('T', ' ').substring(0, 19);
+
+        const query = `
+          SELECT 
+            v.id,
+            v.numero_spo,
+            v.etapa_atual,
+            v.vencimento,
+            v.updated_at,
+            v.urgencia_tipo,
+            v.criado_por_user_id,
+            v.status_integracao_rm,
+            v.fornecedor,
+            v.valor,
+            v.moeda
+          FROM dados_dachser.t_vouchers v
+          WHERE v.updated_at < ?
+            AND v.etapa_atual != 'CONCLUIDO'
+          ORDER BY v.etapa_atual, v.vencimento ASC
+        `;
+
+        const pendingVouchers = await client.query(query, [cutoffDate]);
+
+        result = { success: true, vouchers: pendingVouchers };
+        console.log(`Found ${pendingVouchers.length} pending vouchers for daily report`);
         break;
       }
 

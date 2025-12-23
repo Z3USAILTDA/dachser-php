@@ -2,7 +2,15 @@ import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import { Voucher } from "@/types/voucher";
+import { Voucher, ETAPA_LABELS, STATUS_INTEGRACAO_RM_LABELS } from "@/types/voucher";
+
+const formatCurrency = (value: number | undefined, moeda: string = "BRL"): string => {
+  if (value === undefined || value === null) return "-";
+  return new Intl.NumberFormat("pt-BR", {
+    style: "currency",
+    currency: moeda,
+  }).format(value);
+};
 
 export const exportVouchersToPDF = (data: Voucher[]) => {
   // Criar documento PDF em modo paisagem
@@ -29,17 +37,19 @@ export const exportVouchersToPDF = (data: Voucher[]) => {
     19
   );
 
-  // Preparar dados para tabela
+  // Preparar dados para tabela (12 colunas principais)
   const tableData = data.map((v) => [
     v.numeroSPO,
+    v.fornecedor || "-",
+    formatCurrency(v.valor, v.moeda),
     format(new Date(v.vencimento), "dd/MM/yyyy", { locale: ptBR }),
     v.cobrancaEmNomeDe === "DACHSER" ? "Dachser" : "Cliente",
-    v.formaPagamento,
+    v.tipoExecucaoPagamento || "-",
     v.urgente ? "Sim" : "Não",
-    v.etapaAtual,
+    ETAPA_LABELS[v.etapaAtual as keyof typeof ETAPA_LABELS] || v.etapaAtual,
     v.statusBaixa || "PENDENTE",
+    STATUS_INTEGRACAO_RM_LABELS[v.statusIntegracaoRm as keyof typeof STATUS_INTEGRACAO_RM_LABELS] || v.statusIntegracaoRm || "-",
     v.criadoPorUserName || "-",
-    v.responsavelOperacaoUserName || "-",
     format(new Date(v.createdAt), "dd/MM/yyyy", { locale: ptBR }),
   ]);
 
@@ -49,14 +59,16 @@ export const exportVouchersToPDF = (data: Voucher[]) => {
     head: [
       [
         "Nº SPO",
+        "Fornecedor",
+        "Valor",
         "Vencimento",
         "Cobrança",
-        "Forma Pagto",
+        "Tipo Exec.",
         "Urgente",
         "Etapa",
         "Status",
+        "Status RM",
         "Criado Por",
-        "Resp. Operação",
         "Data Criação",
       ],
     ],
@@ -66,27 +78,29 @@ export const exportVouchersToPDF = (data: Voucher[]) => {
       fillColor: [212, 175, 55], // Dourado
       textColor: [0, 0, 0],
       fontStyle: "bold",
-      fontSize: 9,
+      fontSize: 8,
       halign: "center",
     },
     bodyStyles: {
-      fontSize: 8,
+      fontSize: 7,
       cellPadding: 2,
     },
     alternateRowStyles: {
       fillColor: [245, 245, 245],
     },
     columnStyles: {
-      0: { cellWidth: 25, halign: "center" }, // Nº SPO
-      1: { cellWidth: 22, halign: "center" }, // Vencimento
-      2: { cellWidth: 18, halign: "center" }, // Cobrança
-      3: { cellWidth: 30 }, // Forma Pagto
-      4: { cellWidth: 15, halign: "center" }, // Urgente
-      5: { cellWidth: 25 }, // Etapa
-      6: { cellWidth: 25 }, // Status
-      7: { cellWidth: 30 }, // Criado Por
-      8: { cellWidth: 30 }, // Resp. Operação
-      9: { cellWidth: 22, halign: "center" }, // Data Criação
+      0: { cellWidth: 20, halign: "center" }, // Nº SPO
+      1: { cellWidth: 30 }, // Fornecedor
+      2: { cellWidth: 22, halign: "right" }, // Valor
+      3: { cellWidth: 20, halign: "center" }, // Vencimento
+      4: { cellWidth: 16, halign: "center" }, // Cobrança
+      5: { cellWidth: 18, halign: "center" }, // Tipo Exec.
+      6: { cellWidth: 14, halign: "center" }, // Urgente
+      7: { cellWidth: 22 }, // Etapa
+      8: { cellWidth: 22 }, // Status
+      9: { cellWidth: 22 }, // Status RM
+      10: { cellWidth: 28 }, // Criado Por
+      11: { cellWidth: 20, halign: "center" }, // Data Criação
     },
     didParseCell: (cellData) => {
       // Destacar linhas urgentes
@@ -141,13 +155,25 @@ export const exportVouchersToPDF = (data: Voucher[]) => {
     const stats = {
       total: data.length,
       urgentes: data.filter((v) => v.urgente).length,
+      valorTotal: data.reduce((acc, v) => acc + (v.valor || 0), 0),
       porEtapa: data.reduce((acc, v) => {
-        acc[v.etapaAtual] = (acc[v.etapaAtual] || 0) + 1;
+        const etapa = ETAPA_LABELS[v.etapaAtual as keyof typeof ETAPA_LABELS] || v.etapaAtual;
+        acc[etapa] = (acc[etapa] || 0) + 1;
         return acc;
       }, {} as Record<string, number>),
       porStatus: data.reduce((acc, v) => {
         const status = v.statusBaixa || "PENDENTE";
         acc[status] = (acc[status] || 0) + 1;
+        return acc;
+      }, {} as Record<string, number>),
+      porStatusRm: data.reduce((acc, v) => {
+        const statusRm = STATUS_INTEGRACAO_RM_LABELS[v.statusIntegracaoRm as keyof typeof STATUS_INTEGRACAO_RM_LABELS] || v.statusIntegracaoRm || "PENDENTE";
+        acc[statusRm] = (acc[statusRm] || 0) + 1;
+        return acc;
+      }, {} as Record<string, number>),
+      porTipoExecucao: data.reduce((acc, v) => {
+        const tipo = v.tipoExecucaoPagamento || "Não definido";
+        acc[tipo] = (acc[tipo] || 0) + 1;
         return acc;
       }, {} as Record<string, number>),
     };
@@ -158,6 +184,9 @@ export const exportVouchersToPDF = (data: Voucher[]) => {
     yPosition += 8;
 
     doc.text(`Vouchers Urgentes: ${stats.urgentes}`, 15, yPosition);
+    yPosition += 8;
+
+    doc.text(`Valor Total: ${formatCurrency(stats.valorTotal)}`, 15, yPosition);
     yPosition += 15;
 
     // Por Etapa
@@ -174,7 +203,7 @@ export const exportVouchersToPDF = (data: Voucher[]) => {
 
     yPosition += 8;
 
-    // Por Status
+    // Por Status de Baixa
     doc.setFontSize(14);
     doc.setFont("helvetica", "bold");
     doc.text("Por Status de Baixa:", 15, yPosition);
@@ -185,6 +214,37 @@ export const exportVouchersToPDF = (data: Voucher[]) => {
     Object.entries(stats.porStatus).forEach(([status, count]) => {
       doc.text(`• ${status}: ${count}`, 20, yPosition);
       yPosition += 7;
+    });
+
+    yPosition += 8;
+
+    // Por Status Integração RM
+    doc.setFontSize(14);
+    doc.setFont("helvetica", "bold");
+    doc.text("Por Status Integração RM:", 15, yPosition);
+    yPosition += 8;
+
+    doc.setFontSize(11);
+    doc.setFont("helvetica", "normal");
+    Object.entries(stats.porStatusRm).forEach(([status, count]) => {
+      doc.text(`• ${status}: ${count}`, 20, yPosition);
+      yPosition += 7;
+    });
+
+    // Segunda coluna - começar do lado direito
+    const xCol2 = 150;
+    let yCol2 = 40;
+
+    doc.setFontSize(14);
+    doc.setFont("helvetica", "bold");
+    doc.text("Por Tipo Execução Pagamento:", xCol2, yCol2);
+    yCol2 += 8;
+
+    doc.setFontSize(11);
+    doc.setFont("helvetica", "normal");
+    Object.entries(stats.porTipoExecucao).forEach(([tipo, count]) => {
+      doc.text(`• ${tipo}: ${count}`, xCol2 + 5, yCol2);
+      yCol2 += 7;
     });
   }
 
