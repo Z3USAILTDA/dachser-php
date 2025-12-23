@@ -3440,19 +3440,20 @@ serve(async (req) => {
           return val;
         };
         
-        // Insert voucher data into existing t_vouchers table
+        // Insert voucher data into existing t_vouchers table (with id_rm support)
         const insertResult = await client.execute(`
           INSERT INTO dados_dachser.t_vouchers (
-            id, numero_spo, vencimento, cobranca_em_nome_de,
+            id, id_rm, numero_spo, vencimento, cobranca_em_nome_de,
             forma_pagamento, remessa, urgente, urgencia_tipo,
             etapa_atual, status_baixa, status_envio_cliente, status_financeiro,
             tipo_documento, valor, moeda, fornecedor, cnpj_fornecedor,
             cliente_email, filial, data_emissao_documento,
             comentarios_operacao, comentarios_fiscal, comentarios_financeiro,
             ajuste_operacao, ajuste_fiscal, criado_por_user_id
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `, [
           voucherId,
+          emptyToNull(voucherData.id_rm),
           emptyToNull(voucherData.numero_spo),
           toMySQLDate(voucherData.vencimento),
           emptyToNull(voucherData.cobranca_em_nome_de) || 'DACHSER',
@@ -3480,8 +3481,46 @@ serve(async (req) => {
           emptyToNull(voucherData.criado_por_user_id)
         ]);
         
-        console.log('Voucher saved to MariaDB t_vouchers, ID:', voucherId);
+        console.log('Voucher saved to MariaDB t_vouchers, ID:', voucherId, 'id_rm:', voucherData.id_rm);
         result = { success: true, mariadbId: voucherId };
+        break;
+      }
+
+      case 'save_voucher_anexo': {
+        const anexoData = body as {
+          voucher_id?: string;
+          tipo?: string;
+          file_name?: string;
+          file_url?: string;
+          file_size?: number;
+        };
+        
+        if (!anexoData.voucher_id || !anexoData.tipo || !anexoData.file_name || !anexoData.file_url) {
+          return new Response(
+            JSON.stringify({ error: 'voucher_id, tipo, file_name e file_url são obrigatórios' }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+
+        console.log('Saving anexo to dados_dachser.t_voucher_anexos:', anexoData.voucher_id, anexoData.tipo);
+        
+        const anexoId = crypto.randomUUID();
+        
+        await client.execute(`
+          INSERT INTO dados_dachser.t_voucher_anexos (
+            id, voucher_id, tipo, file_name, file_url, file_size, created_at
+          ) VALUES (?, ?, ?, ?, ?, ?, NOW())
+        `, [
+          anexoId,
+          anexoData.voucher_id,
+          anexoData.tipo,
+          anexoData.file_name,
+          anexoData.file_url,
+          anexoData.file_size || 0
+        ]);
+        
+        console.log('Anexo saved to MariaDB t_voucher_anexos, ID:', anexoId);
+        result = { success: true, anexoId };
         break;
       }
 

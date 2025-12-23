@@ -15,16 +15,21 @@ interface IntegrateRMRequest {
 }
 
 interface RMVoucherData {
-  IdMovRM: number;
-  IdLanRM: number;
+  idRM: string;
+  numeroVoucher: string;
+  numeroDocumento: string;
   fornecedor: string;
-  beneficiario: string;
-  vencimento: string;
-  forma_pagamento: string;
+  filial: string;
+  numeroNF: string;
+  numeroProcesso: string;
+  modal: string;
+  tipoDocumento: string;
+  formaPagamento: string;
+  dataEmissao: string | null;
+  vencimento: string | null;
   valor: number | null;
-  data_baixa: string | null;
-  status_lan: number | null;
-  cnpj_fornecedor: string | null;
+  moeda: string;
+  cnpjFornecedor: string | null;
 }
 
 const getMariaDBClient = async (): Promise<Client> => {
@@ -72,10 +77,9 @@ const handler = async (req: Request): Promise<Response> => {
         mariaClient = await getMariaDBClient();
         
         const result = await mariaClient.query(
-          `SELECT v.IdMovRM, v.IdLanRM, v.NomeDaCobranca, v.DataVencimento, b.StatusLan
-           FROM dados_dachser.tspovoucher v
-           LEFT JOIN dados_dachser.tbaixas b ON v.IdLanRM = b.IdLancamentoRM
-           ORDER BY v.IdLanRM DESC
+          `SELECT id_rm, nd, nome_beneficiario, data_vencimento, modal
+           FROM dados_dachser.t_dados_financeiro_voucher
+           ORDER BY id_rm DESC
            LIMIT 20`
         );
         
@@ -103,112 +107,37 @@ const handler = async (req: Request): Promise<Response> => {
       }
     }
 
-    // ACTION: FETCH - Buscar dados do voucher no RM/MariaDB
+    // ACTION: FETCH - Buscar dados do voucher na tabela t_dados_financeiro_voucher pelo campo nd
     if (action === "fetch" && numeroVoucherRM) {
-      console.log(`[voucher-integrate-rm] Buscando dados do voucher RM: ${numeroVoucherRM}`);
+      console.log(`[voucher-integrate-rm] Buscando dados do voucher RM (nd): ${numeroVoucherRM}`);
       
       let mariaClient: Client | null = null;
       try {
         mariaClient = await getMariaDBClient();
         
-        // First, check if the tables exist
-        const tablesCheck = await mariaClient.query(
-          `SELECT TABLE_NAME FROM INFORMATION_SCHEMA.TABLES 
-           WHERE TABLE_SCHEMA = 'dados_dachser' 
-           AND TABLE_NAME IN ('tspovoucher', 'tbaixas', 't_dados_financeiro_nfs', 't_vouchers')
-           ORDER BY TABLE_NAME`
-        );
-        
-        const existingTables = (tablesCheck || []).map((t: any) => t.TABLE_NAME);
-        console.log("[voucher-integrate-rm] Tabelas encontradas:", existingTables);
-        
-        // If tspovoucher doesn't exist, try using t_vouchers directly
-        if (!existingTables.includes('tspovoucher')) {
-          console.log("[voucher-integrate-rm] tspovoucher não existe, tentando t_vouchers...");
-          
-          // Try to fetch from t_vouchers instead
-          if (existingTables.includes('t_vouchers')) {
-            const voucherResult = await mariaClient.query(
-              `SELECT 
-                id AS IdLanRM,
-                numero_spo,
-                vencimento,
-                fornecedor,
-                fornecedor AS beneficiario,
-                forma_pagamento,
-                valor,
-                status_baixa,
-                cnpj_fornecedor
-              FROM dados_dachser.t_vouchers
-              WHERE numero_spo = ? OR id = ?
-              LIMIT 1`,
-              [numeroVoucherRM, numeroVoucherRM]
-            );
-            
-            if (voucherResult && voucherResult.length > 0) {
-              const rmData = voucherResult[0] as any;
-              console.log("[voucher-integrate-rm] Dados encontrados em t_vouchers:", rmData);
-              
-              await mariaClient.close();
-              
-              return new Response(
-                JSON.stringify({
-                  success: true,
-                  data: {
-                    idMovRM: null,
-                    idLanRM: rmData.IdLanRM,
-                    fornecedor: rmData.fornecedor || "",
-                    beneficiario: rmData.beneficiario || "",
-                    vencimento: rmData.vencimento ? new Date(rmData.vencimento).toISOString().split('T')[0] : null,
-                    formaPagamento: mapFormaPagamento(rmData.forma_pagamento),
-                    formaPagamentoOriginal: rmData.forma_pagamento,
-                    valor: rmData.valor,
-                    dataBaixa: null,
-                    statusLan: rmData.status_baixa === 'BAIXADO_RM' ? 1 : 0,
-                    cnpjFornecedor: rmData.cnpj_fornecedor,
-                  },
-                }),
-                {
-                  status: 200,
-                  headers: { "Content-Type": "application/json", ...corsHeaders },
-                }
-              );
-            }
-          }
-          
-          await mariaClient.close();
-          return new Response(
-            JSON.stringify({
-              success: false,
-              error: `Tabela tspovoucher não encontrada no banco dados_dachser. Tabelas disponíveis: ${existingTables.join(', ') || 'nenhuma'}`,
-              availableTables: existingTables,
-            }),
-            {
-              status: 404,
-              headers: { "Content-Type": "application/json", ...corsHeaders },
-            }
-          );
-        }
-        
-        // Buscar dados do voucher em tspovoucher JOIN tbaixas
-        // Colunas tspovoucher: IdMovRM, IdLanRM, DataVencimento, HashComprovante, NomeDaCobranca, NomeDoBeneficiarioPag, FormaDePagamento
-        // Colunas tbaixas: IdLancamentoRM, TipoPagRec, IdBaixa, ValorBaixado, DataDaBaixa, UsuarioBaixa, StatusLan
+        // Buscar na tabela t_dados_financeiro_voucher pelo campo nd
         const result = await mariaClient.query(
           `SELECT 
-            v.IdMovRM,
-            v.IdLanRM,
-            v.DataVencimento AS vencimento,
-            v.NomeDaCobranca AS fornecedor,
-            v.NomeDoBeneficiarioPag AS beneficiario,
-            v.FormaDePagamento AS forma_pagamento,
-            b.ValorBaixado AS valor,
-            b.DataDaBaixa AS data_baixa,
-            b.StatusLan AS status_lan
-          FROM dados_dachser.tspovoucher v
-          LEFT JOIN dados_dachser.tbaixas b ON v.IdLanRM = b.IdLancamentoRM
-          WHERE v.IdLanRM = ? OR v.IdMovRM = ?
+            id_rm,
+            nd,
+            documento,
+            nome_beneficiario,
+            nome_cobranca,
+            numero_nf,
+            numero_processo,
+            modal,
+            tipo_pag,
+            forma_pag,
+            data_emissao,
+            data_vencimento,
+            valor_nf,
+            moeda,
+            cnpj,
+            razao_social
+          FROM dados_dachser.t_dados_financeiro_voucher
+          WHERE nd = ?
           LIMIT 1`,
-          [numeroVoucherRM, numeroVoucherRM]
+          [numeroVoucherRM.trim()]
         );
         
         console.log("[voucher-integrate-rm] Query result:", result);
@@ -218,7 +147,7 @@ const handler = async (req: Request): Promise<Response> => {
           return new Response(
             JSON.stringify({
               success: false,
-              error: `Voucher RM ${numeroVoucherRM} não encontrado`,
+              error: `Voucher com nd "${numeroVoucherRM}" não encontrado na tabela t_dados_financeiro_voucher`,
             }),
             {
               status: 404,
@@ -230,66 +159,56 @@ const handler = async (req: Request): Promise<Response> => {
         const rmData = result[0] as any;
         console.log("[voucher-integrate-rm] Dados encontrados:", rmData);
 
-        // Check if already has baixa with StatusLan = 1
-        if (rmData.status_lan === 1) {
-          await mariaClient.close();
-          return new Response(
-            JSON.stringify({
-              success: false,
-              error: `Este voucher já possui baixa registrada (StatusLan = 1)`,
-              alreadyProcessed: true,
-            }),
-            {
-              status: 400,
-              headers: { "Content-Type": "application/json", ...corsHeaders },
-            }
-          );
-        }
-
-        // Buscar CNPJ via t_dados_financeiro_nfs (comparando razao_social com fornecedor)
-        let cnpjFornecedor: string | null = null;
-        if (rmData.fornecedor && existingTables.includes('t_dados_financeiro_nfs')) {
-          const cnpjResult = await mariaClient.query(
-            `SELECT cnpj, razao_social
-             FROM dados_dachser.t_dados_financeiro_nfs
-             WHERE TRIM(razao_social) = TRIM(?)
-             LIMIT 1`,
-            [rmData.fornecedor]
-          );
-          
-          if (cnpjResult && cnpjResult.length > 0) {
-            cnpjFornecedor = (cnpjResult[0] as any).cnpj;
-            console.log("[voucher-integrate-rm] CNPJ encontrado:", cnpjFornecedor);
-          } else {
-            console.log("[voucher-integrate-rm] CNPJ não encontrado para fornecedor:", rmData.fornecedor);
-          }
-        }
-
         await mariaClient.close();
 
-        // Format vencimento date
+        // Format dates
         let vencimentoFormatted: string | null = null;
-        if (rmData.vencimento) {
-          const d = new Date(rmData.vencimento);
+        if (rmData.data_vencimento) {
+          const d = new Date(rmData.data_vencimento);
           vencimentoFormatted = d.toISOString().split('T')[0];
         }
+
+        let dataEmissaoFormatted: string | null = null;
+        if (rmData.data_emissao) {
+          const d = new Date(rmData.data_emissao);
+          dataEmissaoFormatted = d.toISOString().split('T')[0];
+        }
+
+        // Mapear campos conforme especificado:
+        // - nd → número do voucher (campo de busca)
+        // - documento → número de documento
+        // - nome_beneficiario → fornecedor
+        // - nome_cobranca → filial
+        // - razao_social → fornecedor (alternativo)
+        // - numero_nf → número da nota fiscal
+        // - numero_processo → número do processo
+        // - modal → AIR/SEA/CHB
+        // - tipo_pag → tipo de documento
+        // - forma_pag → forma de pagamento
+        // - id_rm → referência para t_vouchers
+
+        const responseData: RMVoucherData = {
+          idRM: rmData.id_rm?.toString() || "",
+          numeroVoucher: rmData.nd || "",
+          numeroDocumento: rmData.documento || "",
+          fornecedor: rmData.nome_beneficiario || rmData.razao_social || "",
+          filial: rmData.nome_cobranca || "",
+          numeroNF: rmData.numero_nf || "",
+          numeroProcesso: rmData.numero_processo || "",
+          modal: rmData.modal || "",
+          tipoDocumento: rmData.tipo_pag || "",
+          formaPagamento: mapFormaPagamento(rmData.forma_pag),
+          dataEmissao: dataEmissaoFormatted,
+          vencimento: vencimentoFormatted,
+          valor: rmData.valor_nf ? parseFloat(rmData.valor_nf) : null,
+          moeda: rmData.moeda || "BRL",
+          cnpjFornecedor: rmData.cnpj || null,
+        };
 
         return new Response(
           JSON.stringify({
             success: true,
-            data: {
-              idMovRM: rmData.IdMovRM,
-              idLanRM: rmData.IdLanRM,
-              fornecedor: rmData.fornecedor || "",
-              beneficiario: rmData.beneficiario || "",
-              vencimento: vencimentoFormatted,
-              formaPagamento: mapFormaPagamento(rmData.forma_pagamento),
-              formaPagamentoOriginal: rmData.forma_pagamento,
-              valor: rmData.valor,
-              dataBaixa: rmData.data_baixa,
-              statusLan: rmData.status_lan,
-              cnpjFornecedor: cnpjFornecedor,
-            },
+            data: responseData,
           }),
           {
             status: 200,
@@ -303,90 +222,59 @@ const handler = async (req: Request): Promise<Response> => {
       }
     }
 
-    // ACTION: INTEGRATE - Integrar voucher ao RM após comprovante
+    // ACTION: INTEGRATE - Integrar voucher ao RM após comprovante (busca do MariaDB t_vouchers)
     if (action === "integrate" && voucherId) {
       console.log(`[voucher-integrate-rm] Integrando voucher ${voucherId} ao RM`);
-
-      // Buscar dados do voucher
-      const { data: voucher, error: voucherError } = await supabase
-        .from("vouchers")
-        .select("*, voucher_anexos(*)")
-        .eq("id", voucherId)
-        .single();
-
-      if (voucherError) throw voucherError;
-      if (!voucher) throw new Error("Voucher não encontrado");
-
-      // Validar que o voucher está em etapa ROBO
-      if (voucher.etapa_atual !== "ROBO") {
-        throw new Error("Voucher não está na etapa ROBO");
-      }
-
-      // Validar que tem comprovante anexado
-      const hasComprovante = voucher.voucher_anexos?.some(
-        (a: any) => a.tipo === "COMPROVANTE"
-      );
-
-      if (!hasComprovante) {
-        throw new Error("Voucher não possui comprovante anexado. Anexe o comprovante antes de integrar.");
-      }
 
       let mariaClient: Client | null = null;
       try {
         mariaClient = await getMariaDBClient();
-        
-        // Buscar IdLanRM do voucher no RM pelo numero_spo
-        const rmLookup = await mariaClient.query(
-          `SELECT IdLanRM FROM dados_dachser.t_spovoucher 
-           WHERE IdLanRM = ? OR IdMovRM = ?
+
+        // Buscar voucher no MariaDB t_vouchers
+        const voucherResult = await mariaClient.query(
+          `SELECT v.*, 
+            (SELECT COUNT(*) FROM dados_dachser.t_voucher_anexos a WHERE a.voucher_id = v.id AND a.tipo = 'COMPROVANTE') as has_comprovante
+           FROM dados_dachser.t_vouchers v
+           WHERE v.id = ?
            LIMIT 1`,
-          [voucher.numero_spo, voucher.numero_spo]
+          [voucherId]
         );
 
-        if (!rmLookup || rmLookup.length === 0) {
+        if (!voucherResult || voucherResult.length === 0) {
           await mariaClient.close();
-          throw new Error(`Voucher RM ${voucher.numero_spo} não encontrado para integração`);
+          throw new Error("Voucher não encontrado no MariaDB");
         }
 
-        const idLanRM = (rmLookup[0] as any).IdLanRM;
-        const idBaixa = Date.now(); // Generate unique IdBaixa
+        const voucher = voucherResult[0] as any;
 
-        // Registrar baixa no MariaDB t_baixas
+        // Validar que o voucher está em etapa ROBO
+        if (voucher.etapa_atual !== "ROBO") {
+          await mariaClient.close();
+          throw new Error("Voucher não está na etapa ROBO");
+        }
+
+        // Validar que tem comprovante anexado
+        if (!voucher.has_comprovante || voucher.has_comprovante === 0) {
+          await mariaClient.close();
+          throw new Error("Voucher não possui comprovante anexado. Anexe o comprovante antes de integrar.");
+        }
+
+        const idBaixa = Date.now();
+        const rmProtocol = `RM-${idBaixa}`;
+
+        // Atualizar voucher para CONCLUIDO e status BAIXADO_RM no MariaDB
         await mariaClient.execute(
-          `INSERT INTO dados_dachser.t_baixas (
-            IdLancamentoRM, 
-            IdBaixa,
-            ValorBaixado, 
-            DataDaBaixa, 
-            UsuarioBaixa,
-            StatusLan
-          ) VALUES (?, ?, ?, NOW(), ?, 1)`,
-          [
-            idLanRM,
-            idBaixa,
-            voucher.valor,
-            "SISTEMA_LOVABLE",
-          ]
+          `UPDATE dados_dachser.t_vouchers 
+           SET etapa_atual = 'CONCLUIDO', status_baixa = 'BAIXADO_RM', updated_at = NOW()
+           WHERE id = ?`,
+          [voucherId]
         );
 
         await mariaClient.close();
 
-        const rmProtocol = `RM-${idBaixa}`;
         console.log(`[voucher-integrate-rm] Baixa registrada no MariaDB. Protocolo: ${rmProtocol}`);
 
-        // Atualizar voucher para CONCLUIDO e status BAIXADO_RM
-        const { error: updateError } = await supabase
-          .from("vouchers")
-          .update({
-            etapa_atual: "CONCLUIDO",
-            status_baixa: "BAIXADO_RM",
-            updated_at: new Date().toISOString(),
-          })
-          .eq("id", voucherId);
-
-        if (updateError) throw updateError;
-
-        // Criar log de integração
+        // Criar log de integração no Supabase (para métricas)
         const authHeader = req.headers.get("Authorization");
         let userId = null;
         

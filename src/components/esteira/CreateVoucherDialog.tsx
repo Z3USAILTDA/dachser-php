@@ -105,16 +105,20 @@ const formSchema = z.object({
 type FormValues = z.infer<typeof formSchema>;
 
 interface RMData {
-  idMovRM: number;
-  idLanRM: number;
+  idRM: string;
+  numeroVoucher: string;
+  numeroDocumento: string;
   fornecedor: string;
-  beneficiario: string;
-  vencimento: string | null;
+  filial: string;
+  numeroNF: string;
+  numeroProcesso: string;
+  modal: string;
+  tipoDocumento: string;
   formaPagamento: string;
-  formaPagamentoOriginal: string | null;
+  dataEmissao: string | null;
+  vencimento: string | null;
   valor: number | null;
-  dataBaixa: string | null;
-  statusLan: number | null;
+  moeda: string;
   cnpjFornecedor: string | null;
 }
 
@@ -155,6 +159,7 @@ export const CreateVoucherDialog = ({
   const [faturaFiles, setFaturaFiles] = useState<File[]>([]);
   const [boletoFiles, setBoletoFiles] = useState<File[]>([]);
   const [hasDraft, setHasDraft] = useState(false);
+  const [idRM, setIdRM] = useState<string | null>(null);
   const { toast } = useToast();
 
   const DRAFT_KEY = "voucher_draft";
@@ -305,10 +310,13 @@ export const CreateVoucherDialog = ({
 
       const rmData: RMData = data.data;
       
-      // Fill form with RM data
+      // Fill form with RM data from t_dados_financeiro_voucher
       form.setValue("fornecedor", rmData.fornecedor || "");
-      form.setValue("beneficiario", rmData.beneficiario || "");
+      form.setValue("filial", rmData.filial || "");
       form.setValue("formaPagamento", rmData.formaPagamento);
+      form.setValue("tipoDocumento", rmData.tipoDocumento || "");
+      form.setValue("moeda", rmData.moeda || "BRL");
+      form.setValue("processoId", rmData.numeroProcesso || "");
       
       if (rmData.cnpjFornecedor) {
         form.setValue("cnpjFornecedor", rmData.cnpjFornecedor);
@@ -329,6 +337,18 @@ export const CreateVoucherDialog = ({
       if (rmData.vencimento) {
         form.setValue("vencimento", new Date(rmData.vencimento));
       }
+
+      if (rmData.dataEmissao) {
+        form.setValue("dataEmissaoDocumento", new Date(rmData.dataEmissao));
+      }
+
+      // Modal → origemProcesso (AIR/SEA/CHB)
+      if (rmData.modal && ["AIR", "SEA", "CHB"].includes(rmData.modal)) {
+        setOrigemProcesso(rmData.modal as OrigemProcesso);
+      }
+
+      // Guardar idRM para usar ao salvar em t_vouchers
+      setIdRM(rmData.idRM);
 
       setRmDataLoaded(true);
       
@@ -358,10 +378,11 @@ export const CreateVoucherDialog = ({
       setEntryMode(mode);
       setRmDataLoaded(false);
       setCnpjNotFound(false);
+      setIdRM(null);
       // Reset RM-related fields when switching modes
       form.setValue("numeroRM", "");
       form.setValue("fornecedor", "");
-      form.setValue("beneficiario", "");
+      form.setValue("filial", "");
       form.setValue("cnpjFornecedor", "");
       form.setValue("valor", "");
       form.setValue("vencimento", undefined);
@@ -485,112 +506,114 @@ export const CreateVoucherDialog = ({
         origem_criacao: entryMode === "rm" ? "RM" : "MANUAL",
       };
 
-      const { data: voucher, error: voucherError } = await (supabase as any)
-        .from("vouchers")
-        .insert(voucherData)
-        .select()
-        .single();
+      // Generate UUID for voucher (100% MariaDB - no Supabase insert)
+      const voucherId = crypto.randomUUID();
 
-      if (voucherError) throw voucherError;
-
-      // Upload fatura files
-      for (const file of faturaFiles) {
-        const fileExt = file.name.split(".").pop();
-        const filePath = `${voucher.id}/${Date.now()}-fatura.${fileExt}`;
-
-        const { error: uploadError } = await supabase.storage
-          .from("voucher-anexos")
-          .upload(filePath, file);
-
-        if (uploadError) {
-          console.error("Erro ao fazer upload:", uploadError);
-          continue;
-        }
-
-        const { data: publicUrl } = supabase.storage
-          .from("voucher-anexos")
-          .getPublicUrl(filePath);
-
-        await (supabase as any).from("voucher_anexos").insert({
-          voucher_id: voucher.id,
-          tipo: "FATURA" as TipoAnexo,
-          file_name: file.name,
-          file_url: publicUrl.publicUrl,
-          file_size: file.size,
-          uploaded_by_user_id: null, // MariaDB user ID is integer, not UUID
-        });
-      }
-
-      // Upload boleto files
-      for (const file of boletoFiles) {
-        const fileExt = file.name.split(".").pop();
-        const filePath = `${voucher.id}/${Date.now()}-boleto.${fileExt}`;
-
-        const { error: uploadError } = await supabase.storage
-          .from("voucher-anexos")
-          .upload(filePath, file);
-
-        if (uploadError) {
-          console.error("Erro ao fazer upload:", uploadError);
-          continue;
-        }
-
-        const { data: publicUrl } = supabase.storage
-          .from("voucher-anexos")
-          .getPublicUrl(filePath);
-
-        await (supabase as any).from("voucher_anexos").insert({
-          voucher_id: voucher.id,
-          tipo: "BOLETO" as TipoAnexo,
-          file_name: file.name,
-          file_url: publicUrl.publicUrl,
-          file_size: file.size,
-          uploaded_by_user_id: null, // MariaDB user ID is integer, not UUID
-        });
-      }
-
-      // Log creation
-      await (supabase as any).from("voucher_logs").insert({
-        voucher_id: voucher.id,
-        user_id: null, // MariaDB user ID is integer, not UUID
-        acao: "VOUCHER_CRIADO",
-        detalhe: `Voucher criado via ${entryMode === "rm" ? "RM" : "entrada manual"}`,
+      // PRIMEIRO: Salvar voucher no MariaDB t_vouchers
+      const { data: mariaResult, error: mariaError } = await supabase.functions.invoke("mariadb-proxy", {
+        body: {
+          action: "save_voucher_esteira",
+          id: voucherId,
+          id_rm: idRM, // Referência do RM (de t_dados_financeiro_voucher)
+          numero_spo: voucherData.numero_spo,
+          vencimento: values.vencimento?.toISOString(),
+          cobranca_em_nome_de: values.cobrancaEmNomeDe,
+          forma_pagamento: values.formaPagamento,
+          remessa: "NENHUM",
+          urgente: values.urgente ? 1 : 0,
+          urgencia_tipo: urgenciaTipo,
+          etapa_atual: voucherData.etapa_atual,
+          status_baixa: voucherData.status_baixa,
+          status_envio_cliente: "NAO_APLICA",
+          status_financeiro: voucherData.status_financeiro,
+          tipo_documento: values.tipoDocumento,
+          valor: voucherData.valor,
+          moeda: values.moeda,
+          fornecedor: values.fornecedor,
+          cnpj_fornecedor: values.cnpjFornecedor,
+          cliente_email: null,
+          filial: values.filial,
+          data_emissao_documento: values.dataEmissaoDocumento?.toISOString().split('T')[0],
+          comentarios_operacao: values.comentariosOperacao,
+          criado_por_user_id: userData.id,
+        },
       });
 
-      // Save copy to MariaDB dados_dachser.t_vouchers
-      try {
+      if (mariaError) {
+        throw new Error(`Erro ao salvar voucher no MariaDB: ${mariaError.message}`);
+      }
+
+      console.log("Voucher saved to MariaDB t_vouchers, ID:", voucherId);
+
+      // Upload fatura files (Supabase Storage) + metadata (MariaDB t_voucher_anexos)
+      for (const file of faturaFiles) {
+        const fileExt = file.name.split(".").pop();
+        const filePath = `${voucherId}/${Date.now()}-fatura.${fileExt}`;
+
+        const { error: uploadError } = await supabase.storage
+          .from("voucher-anexos")
+          .upload(filePath, file);
+
+        if (uploadError) {
+          console.error("Erro ao fazer upload:", uploadError);
+          continue;
+        }
+
+        const { data: publicUrl } = supabase.storage
+          .from("voucher-anexos")
+          .getPublicUrl(filePath);
+
+        // Salvar metadata no MariaDB (não no Supabase)
         await supabase.functions.invoke("mariadb-proxy", {
           body: {
-            action: "save_voucher_esteira",
-            id: voucher.id, // Use same UUID as Supabase
-            numero_spo: voucherData.numero_spo,
-            vencimento: values.vencimento?.toISOString(),
-            cobranca_em_nome_de: values.cobrancaEmNomeDe,
-            forma_pagamento: values.formaPagamento,
-            remessa: "NENHUM", // Default value
-            urgente: values.urgente ? 1 : 0,
-            urgencia_tipo: urgenciaTipo,
-            etapa_atual: voucherData.etapa_atual,
-            status_baixa: voucherData.status_baixa,
-            status_envio_cliente: "NAO_APLICA",
-            status_financeiro: voucherData.status_financeiro,
-            tipo_documento: values.tipoDocumento,
-            valor: voucherData.valor,
-            moeda: values.moeda,
-            fornecedor: values.fornecedor,
-            cnpj_fornecedor: values.cnpjFornecedor,
-            cliente_email: null,
-            filial: values.filial,
-            data_emissao_documento: values.dataEmissaoDocumento?.toISOString().split('T')[0],
-            comentarios_operacao: values.comentariosOperacao,
-            criado_por_user_id: userData.id,
+            action: "save_voucher_anexo",
+            voucher_id: voucherId,
+            tipo: "FATURA",
+            file_name: file.name,
+            file_url: publicUrl.publicUrl,
+            file_size: file.size,
           },
         });
-        console.log("Voucher saved to MariaDB dados_dachser.t_vouchers");
-      } catch (mariaErr) {
-        console.error("Error saving to MariaDB:", mariaErr);
-        // Don't fail the main operation, just log the error
       }
+
+      // Upload boleto files (Supabase Storage) + metadata (MariaDB t_voucher_anexos)
+      for (const file of boletoFiles) {
+        const fileExt = file.name.split(".").pop();
+        const filePath = `${voucherId}/${Date.now()}-boleto.${fileExt}`;
+
+        const { error: uploadError } = await supabase.storage
+          .from("voucher-anexos")
+          .upload(filePath, file);
+
+        if (uploadError) {
+          console.error("Erro ao fazer upload:", uploadError);
+          continue;
+        }
+
+        const { data: publicUrl } = supabase.storage
+          .from("voucher-anexos")
+          .getPublicUrl(filePath);
+
+        // Salvar metadata no MariaDB (não no Supabase)
+        await supabase.functions.invoke("mariadb-proxy", {
+          body: {
+            action: "save_voucher_anexo",
+            voucher_id: voucherId,
+            tipo: "BOLETO",
+            file_name: file.name,
+            file_url: publicUrl.publicUrl,
+            file_size: file.size,
+          },
+        });
+      }
+
+      // Log creation - MANTER no Supabase para métricas
+      await (supabase as any).from("voucher_logs").insert({
+        voucher_id: voucherId,
+        user_id: null,
+        acao: "VOUCHER_CRIADO",
+        detalhe: `Voucher criado via ${entryMode === "rm" ? "RM" : "entrada manual"}${idRM ? ` (id_rm: ${idRM})` : ""}`,
+      });
 
       toast({
         title: "Voucher criado",
@@ -607,6 +630,7 @@ export const CreateVoucherDialog = ({
       setOrigemProcesso(null);
       setEntryMode("rm");
       setRmDataLoaded(false);
+      setIdRM(null);
       setOpen(false);
       onSuccess?.();
       onVoucherCreated?.();
