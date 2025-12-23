@@ -24,21 +24,42 @@ export const VoucherFinanceiroActions = ({ voucher, onUpdate }: VoucherFinanceir
   const [motivoAjusteFiscal, setMotivoAjusteFiscal] = useState("");
   const { toast } = useToast();
 
+  // Get user data from localStorage (MariaDB auth)
+  const getUserData = () => {
+    const storedUser = localStorage.getItem("user") || localStorage.getItem("dachser_user");
+    return storedUser ? JSON.parse(storedUser) : { id: 0, username: "sistema" };
+  };
+
   const handleBaixar = async () => {
     try {
       setLoading(true);
+      const userData = getUserData();
 
-      const { error } = await (supabase as any)
-        .from("vouchers")
-        .update({
+      // Update voucher in MariaDB
+      const { error } = await supabase.functions.invoke("mariadb-proxy", {
+        body: {
+          action: "update_voucher_esteira",
+          voucher_id: voucher.id,
           etapa_atual: "ROBO",
           status_baixa: tipoBaixa,
           comentarios_financeiro: comentarios || null,
-          responsavel_financeiro_user_id: (await supabase.auth.getUser()).data.user?.id,
-        })
-        .eq("id", voucher.id);
+          responsavel_financeiro_user_id: userData.id?.toString(),
+        },
+      });
 
       if (error) throw error;
+
+      // Log the action
+      await supabase.functions.invoke("mariadb-proxy", {
+        body: {
+          action: "save_voucher_log",
+          voucher_id: voucher.id,
+          user_id: userData.id?.toString(),
+          user_name: userData.username,
+          acao: "BAIXADO_FINANCEIRO",
+          detalhe: `Voucher baixado (${tipoBaixa}) e enviado para Robô`,
+        },
+      });
 
       toast({
         title: "Voucher baixado!",
@@ -69,44 +90,48 @@ export const VoucherFinanceiroActions = ({ voucher, onUpdate }: VoucherFinanceir
 
     try {
       setLoading(true);
+      const userData = getUserData();
 
-      const { error } = await (supabase as any)
-        .from("vouchers")
-        .update({
+      // Update voucher in MariaDB
+      const { error } = await supabase.functions.invoke("mariadb-proxy", {
+        body: {
+          action: "update_voucher_esteira",
+          voucher_id: voucher.id,
           etapa_atual: "AJUSTE_OPERACAO",
           ajuste_operacao: motivoAjusteOperacao,
           comentarios_financeiro: comentarios || null,
-          responsavel_financeiro_user_id: (await supabase.auth.getUser()).data.user?.id,
-        })
-        .eq("id", voucher.id);
+          responsavel_financeiro_user_id: userData.id?.toString(),
+        },
+      });
 
       if (error) throw error;
 
-      const { data: userData } = await supabase.auth.getUser();
-      const { data: senderProfile } = await (supabase as any)
-        .from("profiles")
-        .select("name")
-        .eq("id", userData.user?.id)
-        .maybeSingle();
+      // Log the action
+      await supabase.functions.invoke("mariadb-proxy", {
+        body: {
+          action: "save_voucher_log",
+          voucher_id: voucher.id,
+          user_id: userData.id?.toString(),
+          user_name: userData.username,
+          acao: "DEVOLVIDO_FINANCEIRO_OP",
+          detalhe: `Devolvido para Operação: ${motivoAjusteOperacao}`,
+        },
+      });
 
-      const { data: operacaoProfile } = await (supabase as any)
-        .from("profiles")
-        .select("email")
-        .eq("id", voucher.responsavelOperacaoUserId || voucher.criadoPorUserId)
-        .maybeSingle();
-
-      if (operacaoProfile?.email) {
-        await supabase.functions.invoke("send-notification-email", {
+      // Try to send notification email (optional)
+      try {
+        await supabase.functions.invoke("send-voucher-notification", {
           body: {
-            to: operacaoProfile.email,
             voucherId: voucher.id,
             voucherNumber: voucher.numeroSPO,
             fromStage: "FINANCEIRO",
             toStage: "AJUSTE_OPERACAO",
             reason: motivoAjusteOperacao,
-            senderName: senderProfile?.name || "Financeiro",
+            senderName: userData.username,
           },
         });
+      } catch (emailErr) {
+        console.log("Email notification skipped:", emailErr);
       }
 
       toast({
@@ -138,44 +163,48 @@ export const VoucherFinanceiroActions = ({ voucher, onUpdate }: VoucherFinanceir
 
     try {
       setLoading(true);
+      const userData = getUserData();
 
-      const { error } = await (supabase as any)
-        .from("vouchers")
-        .update({
+      // Update voucher in MariaDB
+      const { error } = await supabase.functions.invoke("mariadb-proxy", {
+        body: {
+          action: "update_voucher_esteira",
+          voucher_id: voucher.id,
           etapa_atual: "AJUSTE_FISCAL",
           ajuste_fiscal: motivoAjusteFiscal,
           comentarios_financeiro: comentarios || null,
-          responsavel_financeiro_user_id: (await supabase.auth.getUser()).data.user?.id,
-        })
-        .eq("id", voucher.id);
+          responsavel_financeiro_user_id: userData.id?.toString(),
+        },
+      });
 
       if (error) throw error;
 
-      const { data: userData } = await supabase.auth.getUser();
-      const { data: senderProfile } = await (supabase as any)
-        .from("profiles")
-        .select("name")
-        .eq("id", userData.user?.id)
-        .maybeSingle();
+      // Log the action
+      await supabase.functions.invoke("mariadb-proxy", {
+        body: {
+          action: "save_voucher_log",
+          voucher_id: voucher.id,
+          user_id: userData.id?.toString(),
+          user_name: userData.username,
+          acao: "DEVOLVIDO_FINANCEIRO_FISCAL",
+          detalhe: `Devolvido para Fiscal: ${motivoAjusteFiscal}`,
+        },
+      });
 
-      const { data: fiscalProfile } = await (supabase as any)
-        .from("profiles")
-        .select("email")
-        .eq("id", voucher.responsavelFiscalUserId)
-        .maybeSingle();
-
-      if (fiscalProfile?.email) {
-        await supabase.functions.invoke("send-notification-email", {
+      // Try to send notification email (optional)
+      try {
+        await supabase.functions.invoke("send-voucher-notification", {
           body: {
-            to: fiscalProfile.email,
             voucherId: voucher.id,
             voucherNumber: voucher.numeroSPO,
             fromStage: "FINANCEIRO",
             toStage: "AJUSTE_FISCAL",
             reason: motivoAjusteFiscal,
-            senderName: senderProfile?.name || "Financeiro",
+            senderName: userData.username,
           },
         });
+      } catch (emailErr) {
+        console.log("Email notification skipped:", emailErr);
       }
 
       toast({
