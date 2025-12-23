@@ -1026,6 +1026,49 @@ ANALYSIS SUMMARY:
 - Fields with discrepancies: 1
 
 ████████████████████████████████████████████████████████████████████████████████
+█ MANDATORY NCM CODES SECTION - MUST ALWAYS BE INCLUDED                         █
+████████████████████████████████████████████████████████████████████████████████
+
+★★★ CRITICAL: YOU MUST ALWAYS INCLUDE THIS EXACT NCM CODES SECTION ★★★
+
+At the end of EVERY analysis (before the final summary), include this section:
+
+NCM CODES:
+- Manifest NCMs (all suppliers): [list of all unique 4-digit NCM prefixes found in manifest, sorted]
+- HBL NCMs: [list of all unique 4-digit NCM prefixes found in HBL(s), sorted]
+- Missing in HBL: [list of NCMs in manifest but not in HBL, or "none"]
+- Extra in HBL: [list of NCMs in HBL but not in manifest, or "none"]
+- Status: MATCH (if no missing/extra) or UPDATE REQUIRED (if discrepancies)
+
+EXAMPLE OF CORRECT NCM CODES OUTPUT:
+
+NCM CODES:
+- Manifest NCMs (all suppliers): [8481, 8483, 8414, 8708, 3926, 7318, 8526, 8543, 8536, 8421, 7419, 9026, 9032, 3917, 7412, 7326, 8412, 8544, 7320]
+- HBL NCMs: [8481, 8483, 8414, 8708, 3926, 7318, 8526, 8543, 8536, 8421, 7419, 9026, 9032, 3917, 7412, 7326, 8412, 8544, 7320]
+- Missing in HBL: none
+- Extra in HBL: none
+- Status: MATCH
+
+ANOTHER EXAMPLE (with discrepancies):
+
+NCM CODES:
+- Manifest NCMs (all suppliers): [3926, 4016, 7318, 7326, 8708]
+- HBL NCMs: [3926, 4016, 7326, 8708, 9999]
+- Missing in HBL: 7318
+- Extra in HBL: 9999
+- Status: UPDATE REQUIRED
+  → Update: Add NCM 7318 to HBL. Remove NCM 9999 from HBL.
+
+EXTRACTION RULES FOR NCM CODES:
+1. From MANIFEST: Search ALL columns, especially "HS Code", "NCM", "Tariff Code" columns
+2. From HBL: Search entire document text for 4-8 digit numeric codes in cargo descriptions
+3. NORMALIZE: Extract first 4 digits of each NCM for comparison (e.g., 87089990 → 8708)
+4. DEDUPLICATE: Remove duplicate codes before comparison
+5. ALWAYS include this section even if manifest has no NCM codes (show "Manifest NCMs: []")
+
+★★★ THIS SECTION IS MANDATORY - NEVER SKIP IT ★★★
+
+████████████████████████████████████████████████████████████████████████████████
 
 HANDLING LIMITED OR UNREADABLE FILES
 - If file extraction yields very limited text (< 200 chars), still attempt to produce analysis structure.
