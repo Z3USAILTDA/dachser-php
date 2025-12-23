@@ -1,0 +1,660 @@
+import { useState, useEffect, useMemo, useCallback } from "react";
+import { 
+  Calendar, 
+  Copy, 
+  Check, 
+  Building2, 
+  CreditCard, 
+  RefreshCw,
+  Send,
+  FileText,
+  AlertCircle,
+  Loader2,
+  Banknote,
+  Receipt,
+  Filter,
+  CheckSquare,
+  Square,
+  Clock,
+  AlertTriangle,
+  ChevronDown,
+  MoreHorizontal,
+  Eye
+} from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { supabase } from "@/integrations/supabase/client";
+import { useToast } from "@/hooks/use-toast";
+import { cn } from "@/lib/utils";
+import { 
+  TipoExecucaoPagamento, 
+  StatusPagamento, 
+  TIPO_EXECUCAO_LABELS, 
+  STATUS_PAGAMENTO_LABELS,
+  isBoleto,
+  validarProntoParaRobo
+} from "@/types/voucher";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+  DropdownMenuSeparator,
+} from "@/components/ui/dropdown-menu";
+import { DadosPagamentoPanel } from "./DadosPagamentoPanel";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+
+interface PagamentoItem {
+  id: string;
+  numero_spo: string;
+  fornecedor: string;
+  cnpj_fornecedor: string;
+  valor: number;
+  moeda: string;
+  vencimento: string;
+  forma_pagamento: string;
+  tipo_documento: string;
+  cobranca_em_nome_de: string;
+  filial: string;
+  linha_digitavel?: string;
+  codigo_barras?: string;
+  status_pagamento?: StatusPagamento;
+  tipo_execucao_pagamento?: TipoExecucaoPagamento;
+  is_pronto_para_robo?: boolean;
+  lote_remessa_id?: string;
+  etapa_atual: string;
+  status_baixa: string;
+  created_at: string;
+  updated_at: string;
+}
+
+interface DadosBancarios {
+  banco: string;
+  agencia: string;
+  digito_agencia?: string;
+  conta_corrente: string;
+  digito_conta?: string;
+  razao_social: string;
+  cnpj: string;
+  chave_pix?: string;
+  pix_tipo_chave?: string;
+}
+
+interface Stats {
+  total: number;
+  vencem_hoje: number;
+  vencidos: number;
+  prontos: number;
+  em_remessa: number;
+  aguardando_dados: number;
+  valor_total: number;
+}
+
+type FilterVencimento = "todos" | "hoje" | "vencidos" | "proximos7";
+
+export const PagamentosTab = () => {
+  const [pagamentos, setPagamentos] = useState<PagamentoItem[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [stats, setStats] = useState<Stats | null>(null);
+  
+  // Filters
+  const [filterVencimento, setFilterVencimento] = useState<FilterVencimento>("todos");
+  const [filterStatusPagamento, setFilterStatusPagamento] = useState<string>("all");
+  const [filterTipoExecucao, setFilterTipoExecucao] = useState<string>("all");
+  const [filterFormaPagamento, setFilterFormaPagamento] = useState<string>("all");
+  
+  // Selection
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  
+  // Actions state
+  const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [dadosBancariosCache, setDadosBancariosCache] = useState<Record<string, DadosBancarios>>({});
+  const [loadingDados, setLoadingDados] = useState<Record<string, boolean>>({});
+  const [processingAction, setProcessingAction] = useState<Record<string, boolean>>({});
+  
+  // Dialog state
+  const [detailsDialogOpen, setDetailsDialogOpen] = useState(false);
+  const [selectedPagamento, setSelectedPagamento] = useState<PagamentoItem | null>(null);
+  
+  const { toast } = useToast();
+
+  const loadPagamentos = async () => {
+    try {
+      setLoading(true);
+      const { data, error } = await supabase.functions.invoke("mariadb-proxy", {
+        body: { 
+          action: "list_pagamentos",
+          page: 1,
+          perPage: 100,
+          filterVencimento: filterVencimento === "todos" ? undefined : filterVencimento,
+          filterStatusPagamento: filterStatusPagamento === "all" ? undefined : filterStatusPagamento,
+          filterTipoExecucao: filterTipoExecucao === "all" ? undefined : filterTipoExecucao,
+          filterFormaPagamento: filterFormaPagamento === "all" ? undefined : filterFormaPagamento
+        }
+      });
+
+      if (error) throw error;
+
+      setPagamentos(data?.vouchers || []);
+      setStats(data?.stats || null);
+    } catch (error: unknown) {
+      console.error("Erro ao carregar pagamentos:", error);
+      toast({
+        title: "Erro ao carregar pagamentos",
+        description: error instanceof Error ? error.message : "Erro desconhecido",
+        variant: "destructive"
+      });
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  };
+
+  const loadDadosBancarios = async (cnpj: string) => {
+    if (dadosBancariosCache[cnpj] || loadingDados[cnpj]) return;
+
+    setLoadingDados(prev => ({ ...prev, [cnpj]: true }));
+    try {
+      const { data, error } = await supabase.functions.invoke("mariadb-proxy", {
+        body: { 
+          action: "get_dados_bancarios_fornecedor",
+          cnpj: cnpj.replace(/\D/g, "")
+        }
+      });
+
+      if (error) throw error;
+
+      if (data?.data) {
+        setDadosBancariosCache(prev => ({ ...prev, [cnpj]: data.data }));
+      }
+    } catch (error) {
+      console.error("Erro ao carregar dados bancários:", error);
+    } finally {
+      setLoadingDados(prev => ({ ...prev, [cnpj]: false }));
+    }
+  };
+
+  useEffect(() => {
+    loadPagamentos();
+  }, [filterVencimento, filterStatusPagamento, filterTipoExecucao, filterFormaPagamento]);
+
+  useEffect(() => {
+    pagamentos.forEach(pag => {
+      if (pag.cnpj_fornecedor && !isBoleto(pag.forma_pagamento as any)) {
+        loadDadosBancarios(pag.cnpj_fornecedor);
+      }
+    });
+  }, [pagamentos]);
+
+  const handleCopy = async (text: string, id: string) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopiedId(id);
+      toast({ title: "Copiado!", description: "Texto copiado para a área de transferência" });
+      setTimeout(() => setCopiedId(null), 2000);
+    } catch {
+      toast({ title: "Erro ao copiar", variant: "destructive" });
+    }
+  };
+
+  const handleSelectAll = () => {
+    if (selectedIds.size === pagamentos.length) {
+      setSelectedIds(new Set());
+    } else {
+      setSelectedIds(new Set(pagamentos.map(p => p.id)));
+    }
+  };
+
+  const handleSelectOne = (id: string) => {
+    const newSelected = new Set(selectedIds);
+    if (newSelected.has(id)) {
+      newSelected.delete(id);
+    } else {
+      newSelected.add(id);
+    }
+    setSelectedIds(newSelected);
+  };
+
+  const handleSetTipoExecucao = async (id: string, tipo: TipoExecucaoPagamento) => {
+    setProcessingAction(prev => ({ ...prev, [id]: true }));
+    try {
+      const { error } = await supabase.functions.invoke("mariadb-proxy", {
+        body: { action: "set_tipo_execucao_pagamento", id, tipo_execucao_pagamento: tipo }
+      });
+      if (error) throw error;
+      toast({ title: "Tipo de execução atualizado" });
+      loadPagamentos();
+    } catch (error: unknown) {
+      toast({ 
+        title: "Erro ao atualizar", 
+        description: error instanceof Error ? error.message : "Erro desconhecido", 
+        variant: "destructive" 
+      });
+    } finally {
+      setProcessingAction(prev => ({ ...prev, [id]: false }));
+    }
+  };
+
+  const handleBatchSetTipoExecucao = async (tipo: TipoExecucaoPagamento) => {
+    if (selectedIds.size === 0) {
+      toast({ title: "Selecione ao menos um voucher", variant: "destructive" });
+      return;
+    }
+
+    try {
+      const { error } = await supabase.functions.invoke("mariadb-proxy", {
+        body: { 
+          action: "batch_set_tipo_execucao", 
+          voucher_ids: Array.from(selectedIds), 
+          tipo_execucao_pagamento: tipo 
+        }
+      });
+      if (error) throw error;
+      toast({ title: `Tipo de execução atualizado para ${selectedIds.size} vouchers` });
+      setSelectedIds(new Set());
+      loadPagamentos();
+    } catch (error: unknown) {
+      toast({ 
+        title: "Erro ao atualizar em lote", 
+        description: error instanceof Error ? error.message : "Erro desconhecido", 
+        variant: "destructive" 
+      });
+    }
+  };
+
+  const handleSetReady = async (id: string, isReady: boolean) => {
+    setProcessingAction(prev => ({ ...prev, [id]: true }));
+    try {
+      const { error } = await supabase.functions.invoke("mariadb-proxy", {
+        body: { action: "set_ready_for_robo", id, is_pronto: isReady }
+      });
+      if (error) throw error;
+      toast({ title: isReady ? "Marcado como pronto" : "Desmarcado" });
+      loadPagamentos();
+    } catch (error: unknown) {
+      toast({ 
+        title: "Erro ao atualizar", 
+        description: error instanceof Error ? error.message : "Erro desconhecido", 
+        variant: "destructive" 
+      });
+    } finally {
+      setProcessingAction(prev => ({ ...prev, [id]: false }));
+    }
+  };
+
+  const formatCurrency = (value: number, moeda = "BRL") => {
+    return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: moeda }).format(value);
+  };
+
+  const formatDate = (dateStr: string) => {
+    return new Date(dateStr).toLocaleDateString('pt-BR');
+  };
+
+  const isVencido = (dateStr: string) => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const vencimento = new Date(dateStr);
+    vencimento.setHours(0, 0, 0, 0);
+    return vencimento < today;
+  };
+
+  const isHoje = (dateStr: string) => {
+    const today = new Date().toISOString().split('T')[0];
+    return dateStr.split('T')[0] === today;
+  };
+
+  const getStatusPagamentoBadge = (status?: StatusPagamento) => {
+    if (!status) return null;
+    const variants: Record<StatusPagamento, string> = {
+      PENDENTE_DADOS: "bg-yellow-500/20 text-yellow-400 border-yellow-500/30",
+      PRONTO: "bg-green-500/20 text-green-400 border-green-500/30",
+      EM_REMESSA: "bg-blue-500/20 text-blue-400 border-blue-500/30",
+      PAGO: "bg-emerald-500/20 text-emerald-400 border-emerald-500/30",
+      ERRO: "bg-red-500/20 text-red-400 border-red-500/30",
+    };
+    return (
+      <Badge variant="outline" className={cn("text-[10px]", variants[status])}>
+        {STATUS_PAGAMENTO_LABELS[status]}
+      </Badge>
+    );
+  };
+
+  const today = new Date().toLocaleDateString('pt-BR', { 
+    weekday: 'long', 
+    day: '2-digit', 
+    month: 'long', 
+    year: 'numeric' 
+  });
+
+  if (loading && pagamentos.length === 0) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-4">
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <CreditCard className="h-5 w-5 text-primary" />
+          <div>
+            <h2 className="text-lg font-semibold text-foreground">Pagamentos</h2>
+            <p className="text-sm text-muted-foreground capitalize">{today}</p>
+          </div>
+        </div>
+        
+        <div className="flex items-center gap-3">
+          {/* Quick filters */}
+          <Select value={filterVencimento} onValueChange={(v) => setFilterVencimento(v as FilterVencimento)}>
+            <SelectTrigger className="w-[140px] bg-card border-border rounded-full">
+              <Calendar className="h-4 w-4 mr-2" />
+              <SelectValue placeholder="Vencimento" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="todos">Todos</SelectItem>
+              <SelectItem value="hoje">Vencem Hoje</SelectItem>
+              <SelectItem value="vencidos">Vencidos</SelectItem>
+              <SelectItem value="proximos7">Próximos 7 dias</SelectItem>
+            </SelectContent>
+          </Select>
+
+          <Select value={filterStatusPagamento} onValueChange={setFilterStatusPagamento}>
+            <SelectTrigger className="w-[150px] bg-card border-border rounded-full">
+              <SelectValue placeholder="Status" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Todos Status</SelectItem>
+              <SelectItem value="PENDENTE_DADOS">Aguardando Dados</SelectItem>
+              <SelectItem value="PRONTO">Prontos</SelectItem>
+              <SelectItem value="EM_REMESSA">Em Remessa</SelectItem>
+            </SelectContent>
+          </Select>
+
+          <Select value={filterFormaPagamento} onValueChange={setFilterFormaPagamento}>
+            <SelectTrigger className="w-[140px] bg-card border-border rounded-full">
+              <SelectValue placeholder="Forma Pag." />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Todas</SelectItem>
+              <SelectItem value="BOLETO">Boleto</SelectItem>
+              <SelectItem value="PIX">PIX</SelectItem>
+              <SelectItem value="TRANSFERENCIA_PIX">Transferência</SelectItem>
+              <SelectItem value="DARF">DARF</SelectItem>
+              <SelectItem value="GPS">GPS</SelectItem>
+            </SelectContent>
+          </Select>
+
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => {
+              setRefreshing(true);
+              loadPagamentos();
+            }}
+            disabled={refreshing}
+            className="rounded-full"
+          >
+            <RefreshCw className={cn("h-4 w-4 mr-2", refreshing && "animate-spin")} />
+            Atualizar
+          </Button>
+        </div>
+      </div>
+
+      {/* Stats */}
+      <div className="grid grid-cols-2 md:grid-cols-6 gap-3">
+        <div className="p-3 rounded-xl bg-card border border-border">
+          <div className="text-[10px] uppercase tracking-wider text-muted-foreground">Total</div>
+          <div className="text-xl font-bold mt-1">{stats?.total || pagamentos.length}</div>
+        </div>
+        <div 
+          className={cn(
+            "p-3 rounded-xl border cursor-pointer transition-colors",
+            filterVencimento === "hoje" ? "bg-primary/20 border-primary" : "bg-card border-border hover:border-primary/50"
+          )}
+          onClick={() => setFilterVencimento(filterVencimento === "hoje" ? "todos" : "hoje")}
+        >
+          <div className="text-[10px] uppercase tracking-wider text-muted-foreground">Vencem Hoje</div>
+          <div className="text-xl font-bold mt-1 text-yellow-400">{stats?.vencem_hoje || 0}</div>
+        </div>
+        <div 
+          className={cn(
+            "p-3 rounded-xl border cursor-pointer transition-colors",
+            filterVencimento === "vencidos" ? "bg-red-500/20 border-red-500" : "bg-card border-border hover:border-red-500/50"
+          )}
+          onClick={() => setFilterVencimento(filterVencimento === "vencidos" ? "todos" : "vencidos")}
+        >
+          <div className="text-[10px] uppercase tracking-wider text-muted-foreground">Vencidos</div>
+          <div className="text-xl font-bold mt-1 text-red-400">{stats?.vencidos || 0}</div>
+        </div>
+        <div 
+          className={cn(
+            "p-3 rounded-xl border cursor-pointer transition-colors",
+            filterStatusPagamento === "PRONTO" ? "bg-green-500/20 border-green-500" : "bg-card border-border hover:border-green-500/50"
+          )}
+          onClick={() => setFilterStatusPagamento(filterStatusPagamento === "PRONTO" ? "all" : "PRONTO")}
+        >
+          <div className="text-[10px] uppercase tracking-wider text-muted-foreground">Prontos</div>
+          <div className="text-xl font-bold mt-1 text-green-400">{stats?.prontos || 0}</div>
+        </div>
+        <div 
+          className={cn(
+            "p-3 rounded-xl border cursor-pointer transition-colors",
+            filterStatusPagamento === "EM_REMESSA" ? "bg-blue-500/20 border-blue-500" : "bg-card border-border hover:border-blue-500/50"
+          )}
+          onClick={() => setFilterStatusPagamento(filterStatusPagamento === "EM_REMESSA" ? "all" : "EM_REMESSA")}
+        >
+          <div className="text-[10px] uppercase tracking-wider text-muted-foreground">Em Remessa</div>
+          <div className="text-xl font-bold mt-1 text-blue-400">{stats?.em_remessa || 0}</div>
+        </div>
+        <div className="p-3 rounded-xl bg-card border border-border">
+          <div className="text-[10px] uppercase tracking-wider text-muted-foreground">Valor Total</div>
+          <div className="text-lg font-bold mt-1">{formatCurrency(stats?.valor_total || 0)}</div>
+        </div>
+      </div>
+
+      {/* Batch Actions Bar */}
+      {selectedIds.size > 0 && (
+        <div className="flex items-center gap-3 p-3 rounded-xl bg-primary/10 border border-primary/30">
+          <span className="text-sm font-medium">{selectedIds.size} selecionado(s)</span>
+          <div className="flex-1" />
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button size="sm" variant="outline">
+                Definir Tipo Execução
+                <ChevronDown className="h-4 w-4 ml-2" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent>
+              <DropdownMenuItem onClick={() => handleBatchSetTipoExecucao("MANUAL")}>
+                Manual
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => handleBatchSetTipoExecucao("REMESSA")}>
+                Remessa Bancária
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => handleBatchSetTipoExecucao("TED")}>
+                TED/DOC
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => handleBatchSetTipoExecucao("PIX")}>
+                PIX
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+          <Button size="sm" variant="ghost" onClick={() => setSelectedIds(new Set())}>
+            Limpar Seleção
+          </Button>
+        </div>
+      )}
+
+      {/* Table */}
+      {pagamentos.length === 0 ? (
+        <div className="flex flex-col items-center justify-center h-64 text-muted-foreground">
+          <Receipt className="h-12 w-12 mb-4 opacity-50" />
+          <p>Nenhum pagamento encontrado</p>
+        </div>
+      ) : (
+        <div className="rounded-xl bg-card border border-border overflow-hidden">
+          <table className="w-full">
+            <thead className="bg-muted/50 border-b border-border">
+              <tr>
+                <th className="p-3 text-left">
+                  <Checkbox
+                    checked={selectedIds.size === pagamentos.length && pagamentos.length > 0}
+                    onCheckedChange={handleSelectAll}
+                  />
+                </th>
+                <th className="p-3 text-left text-xs font-medium uppercase tracking-wider text-muted-foreground">SPO</th>
+                <th className="p-3 text-left text-xs font-medium uppercase tracking-wider text-muted-foreground">Fornecedor</th>
+                <th className="p-3 text-left text-xs font-medium uppercase tracking-wider text-muted-foreground">Valor</th>
+                <th className="p-3 text-left text-xs font-medium uppercase tracking-wider text-muted-foreground">Vencimento</th>
+                <th className="p-3 text-left text-xs font-medium uppercase tracking-wider text-muted-foreground">Forma Pag.</th>
+                <th className="p-3 text-left text-xs font-medium uppercase tracking-wider text-muted-foreground">Tipo Exec.</th>
+                <th className="p-3 text-left text-xs font-medium uppercase tracking-wider text-muted-foreground">Status</th>
+                <th className="p-3 text-left text-xs font-medium uppercase tracking-wider text-muted-foreground">Ações</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-border">
+              {pagamentos.map((pag) => {
+                const vencido = isVencido(pag.vencimento);
+                const hoje = isHoje(pag.vencimento);
+                
+                return (
+                  <tr 
+                    key={pag.id} 
+                    className={cn(
+                      "hover:bg-muted/30 transition-colors",
+                      selectedIds.has(pag.id) && "bg-primary/5"
+                    )}
+                  >
+                    <td className="p-3">
+                      <Checkbox
+                        checked={selectedIds.has(pag.id)}
+                        onCheckedChange={() => handleSelectOne(pag.id)}
+                      />
+                    </td>
+                    <td className="p-3">
+                      <span className="font-mono font-medium text-foreground">{pag.numero_spo}</span>
+                    </td>
+                    <td className="p-3">
+                      <div className="max-w-[200px] truncate text-sm" title={pag.fornecedor}>
+                        {pag.fornecedor}
+                      </div>
+                      <div className="text-xs text-muted-foreground font-mono">{pag.cnpj_fornecedor}</div>
+                    </td>
+                    <td className="p-3">
+                      <span className="font-semibold">{formatCurrency(pag.valor || 0, pag.moeda)}</span>
+                    </td>
+                    <td className="p-3">
+                      <div className={cn(
+                        "flex items-center gap-1.5",
+                        vencido && "text-red-400",
+                        hoje && "text-yellow-400"
+                      )}>
+                        {vencido && <AlertTriangle className="h-3.5 w-3.5" />}
+                        {hoje && <Clock className="h-3.5 w-3.5" />}
+                        <span>{formatDate(pag.vencimento)}</span>
+                      </div>
+                    </td>
+                    <td className="p-3">
+                      <Badge variant="outline" className="text-[10px]">
+                        {pag.forma_pagamento}
+                      </Badge>
+                    </td>
+                    <td className="p-3">
+                      <Select
+                        value={pag.tipo_execucao_pagamento || ""}
+                        onValueChange={(v) => handleSetTipoExecucao(pag.id, v as TipoExecucaoPagamento)}
+                        disabled={processingAction[pag.id]}
+                      >
+                        <SelectTrigger className="h-8 w-[120px] text-xs">
+                          <SelectValue placeholder="Definir..." />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="MANUAL">Manual</SelectItem>
+                          <SelectItem value="REMESSA">Remessa</SelectItem>
+                          <SelectItem value="TED">TED/DOC</SelectItem>
+                          <SelectItem value="PIX">PIX</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </td>
+                    <td className="p-3">
+                      {getStatusPagamentoBadge(pag.status_pagamento as StatusPagamento)}
+                    </td>
+                    <td className="p-3">
+                      <div className="flex items-center gap-1">
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8"
+                          onClick={() => {
+                            setSelectedPagamento(pag);
+                            setDetailsDialogOpen(true);
+                          }}
+                        >
+                          <Eye className="h-4 w-4" />
+                        </Button>
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button variant="ghost" size="icon" className="h-8 w-8">
+                              <MoreHorizontal className="h-4 w-4" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end">
+                            {pag.linha_digitavel && (
+                              <DropdownMenuItem onClick={() => handleCopy(pag.linha_digitavel!, `ld-${pag.id}`)}>
+                                <Copy className="h-4 w-4 mr-2" />
+                                Copiar Linha Digitável
+                              </DropdownMenuItem>
+                            )}
+                            <DropdownMenuSeparator />
+                            {!pag.is_pronto_para_robo ? (
+                              <DropdownMenuItem onClick={() => handleSetReady(pag.id, true)}>
+                                <Check className="h-4 w-4 mr-2" />
+                                Marcar como Pronto
+                              </DropdownMenuItem>
+                            ) : (
+                              <DropdownMenuItem onClick={() => handleSetReady(pag.id, false)}>
+                                <Square className="h-4 w-4 mr-2" />
+                                Desmarcar Pronto
+                              </DropdownMenuItem>
+                            )}
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {/* Details Dialog */}
+      <Dialog open={detailsDialogOpen} onOpenChange={setDetailsDialogOpen}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Dados de Pagamento - {selectedPagamento?.numero_spo}</DialogTitle>
+          </DialogHeader>
+          {selectedPagamento && (
+            <DadosPagamentoPanel
+              voucherId={selectedPagamento.id}
+              formaPagamento={selectedPagamento.forma_pagamento}
+              linhaDigitavel={selectedPagamento.linha_digitavel}
+              codigoBarras={selectedPagamento.codigo_barras}
+              cnpjFornecedor={selectedPagamento.cnpj_fornecedor}
+              dadosBancarios={dadosBancariosCache[selectedPagamento.cnpj_fornecedor]}
+              tipoExecucao={selectedPagamento.tipo_execucao_pagamento}
+              onUpdate={loadPagamentos}
+            />
+          )}
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+};
