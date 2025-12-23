@@ -715,12 +715,22 @@ export default function InvoicesDraftHbl() {
                 return (
                   <div
                     key={invKey}
-                    className="inline-flex items-center gap-2 px-3 py-1.5 bg-success/10 border border-success/30 rounded-full text-xs text-success"
+                    className="inline-flex items-center gap-1 px-2 py-1 bg-success/10 border border-success/30 rounded-full text-xs text-success"
                   >
-                    <span className="truncate max-w-[120px]">{invFile.file.name}</span>
+                    <span className="truncate max-w-[100px]">{invFile.file.name}</span>
+                    {invFile.file.name.toLowerCase().endsWith('.pdf') && (
+                      <button
+                        onClick={() => handlePreviewFile(invFile)}
+                        className="hover:bg-success/20 rounded-full p-0.5 transition-colors"
+                        title="Visualizar"
+                      >
+                        <Eye className="w-3 h-3" />
+                      </button>
+                    )}
                     <button
                       onClick={() => handleRemovePill(classifiedFile.key, invKey)}
                       className="hover:bg-success/20 rounded-full p-0.5 transition-colors"
+                      title="Remover"
                     >
                       <X className="w-3 h-3" />
                     </button>
