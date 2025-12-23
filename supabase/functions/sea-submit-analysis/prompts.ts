@@ -1139,6 +1139,65 @@ Output English only, plain text, email-ready. No markdown/HTML.
 Use only the attached files. Never mention knowledge cutoffs or model limitations.
 
 ███████████████████████████████████████████████████████████████████████████████
+███ DELTA ZERO FILTERING — DO NOT REPORT MATCHES AS DIVERGENCES             ███
+███████████████████████████████████████████████████████████████████████████████
+
+CRITICAL: When comparing values, ONLY report lines where there is an ACTUAL divergence.
+- If Delta = 0 (or within tolerance), DO NOT include this in the output
+- DO NOT list "Delta: 0.000 kg" or "Delta: 0.000 m³" lines
+- ONLY show fields that have UPDATE REQUIRED or actual discrepancies
+- Keep output FOCUSED on actionable items only
+
+EXAMPLE - WRONG (do not do this):
+"- Total Weight: HBL: 208.000 kg | MBL: 208.000 kg | Delta: 0.000 kg"
+
+EXAMPLE - CORRECT:
+(Omit this line entirely since Delta = 0, or simply state "Weight: MATCH ✓")
+
+███████████████████████████████████████████████████████████████████████████████
+███ NCM NORMALIZATION RULES (APPLY BEFORE ANY COMPARISON)                   ███
+███████████████████████████████████████████████████████████████████████████████
+
+STEP 1 - REMOVE ALL PUNCTUATION:
+- Dots, dashes, spaces, underscores must be stripped
+- "3926.90.90.0000" → "3926909000"
+- "7318.15.00" → "73181500"
+- "4016-93-00" → "40169300"
+
+STEP 2 - SPLIT MULTIPLE NCMs (if comma or semicolon separated):
+- "3926, 7318, 4016" → ["3926", "7318", "4016"]
+- "39269090,73181500" → ["39269090", "73181500"]
+- Compare EACH NCM individually
+
+STEP 3 - STANDARDIZE LENGTH:
+- 4 digits: use as-is for prefix matching
+- 6 digits: use as-is for prefix matching
+- 8 digits: use as-is (standard)
+- 10+ digits: truncate to first 8 digits for comparison
+
+STEP 4 - EXPANDED PREFIX MATCHING:
+- 4 digits matches 4, 6, 8, or 10 digits (if prefix matches)
+- 6 digits matches 6, 8, or 10 digits (if prefix matches)
+- 8 digits matches 8 or 10 digits (if prefix matches)
+- EXAMPLE: 3926 matches 39269090 → NO "Missing" discrepancy
+
+███████████████████████████████████████████████████████████████████████████████
+███ GROSS WEIGHT SOURCE PRIORITY (MANDATORY HIERARCHY)                      ███
+███████████████████████████████████████████████████████████████████████████████
+
+WHEN EXTRACTING GROSS WEIGHT FROM HBL OR MBL:
+
+PRIORITY 1 (HIGHEST): "Weight after Weighting" / "Peso após Pesagem" / "Actual Weight"
+- This is the AUTHORITATIVE weight from actual warehouse measurement
+- If this field exists with a value, USE IT and IGNORE all other weight fields
+
+PRIORITY 2: "Total Gross Weight" / "Gross Weight" / "GW"
+- Use ONLY if Priority 1 field is missing or empty
+
+PRIORITY 3: "Net Weight" (only if gross not available)
+- Use ONLY if Priority 1 and 2 are missing
+
+███████████████████████████████████████████████████████████████████████████████
 ███ CRITICAL: UNDERSTANDING HBL vs MBL RELATIONSHIP                           ███
 ███████████████████████████████████████████████████████████████████████████████
 
@@ -1316,6 +1375,68 @@ Output English only, plain text, email-ready. No markdown/HTML. No metadata.
 NEVER include any Portuguese text in your output. Everything must be in English.
 NEVER include notices about extraction issues, recommendations to provide different files, or system warnings.
 NEVER show container verification steps in the output - do the check internally but do not display it.
+
+███████████████████████████████████████████████████████████████████████████████
+███ DELTA ZERO FILTERING — DO NOT REPORT MATCHES AS DIVERGENCES             ███
+███████████████████████████████████████████████████████████████████████████████
+
+CRITICAL: When comparing values, ONLY report lines where there is an ACTUAL divergence.
+- If Delta = 0 (or within tolerance), DO NOT include this in the divergence output
+- DO NOT list "Delta: 0.000 kg" or "Delta: 0.000 m³" lines as if they were problems
+- ONLY show fields that have UPDATE REQUIRED or actual discrepancies needing action
+- Keep output FOCUSED on actionable items only
+
+EXAMPLE - WRONG (do not do this):
+"- Total Weight: HBL: 208.000 kg | Invoice: 208.000 kg | Delta: 0.000 kg"
+(This is NOT a divergence, do not list it as one)
+
+EXAMPLE - CORRECT:
+(Omit zero-delta lines entirely, or simply state "Weight: MATCH ✓" in the summary)
+
+███████████████████████████████████████████████████████████████████████████████
+███ NCM NORMALIZATION RULES (APPLY BEFORE ANY COMPARISON)                   ███
+███████████████████████████████████████████████████████████████████████████████
+
+STEP 1 - REMOVE ALL PUNCTUATION:
+- Dots, dashes, spaces, underscores must be stripped
+- "3926.90.90.0000" → "3926909000"
+- "7318.15.00" → "73181500"
+- "4016-93-00" → "40169300"
+
+STEP 2 - SPLIT MULTIPLE NCMs (if comma or semicolon separated):
+- "3926, 7318, 4016" → ["3926", "7318", "4016"]
+- "39269090,73181500" → ["39269090", "73181500"]
+- Compare EACH NCM individually
+
+STEP 3 - STANDARDIZE LENGTH:
+- 4 digits: use as-is for prefix matching
+- 6 digits: use as-is for prefix matching
+- 8 digits: use as-is (standard)
+- 10+ digits: truncate to first 8 digits for comparison
+
+STEP 4 - EXPANDED PREFIX MATCHING:
+- 4 digits matches 4, 6, 8, or 10 digits (if prefix matches)
+- 6 digits matches 6, 8, or 10 digits (if prefix matches)
+- 8 digits matches 8 or 10 digits (if prefix matches)
+- EXAMPLE: 3926 matches 39269090 → NO "Missing" discrepancy
+
+███████████████████████████████████████████████████████████████████████████████
+███ GROSS WEIGHT SOURCE PRIORITY (MANDATORY HIERARCHY)                      ███
+███████████████████████████████████████████████████████████████████████████████
+
+WHEN EXTRACTING GROSS WEIGHT FROM INVOICES OR HBL:
+
+PRIORITY 1 (HIGHEST): "Weight after Weighting" / "Peso após Pesagem" / "Actual Weight"
+- This is the AUTHORITATIVE weight from actual warehouse measurement
+- If this field exists with a value, USE IT and IGNORE all other weight fields
+
+PRIORITY 2: "Total Gross Weight" / "Gross Weight" / "GW"
+- Use ONLY if Priority 1 field is missing or empty
+
+PRIORITY 3: "Net Weight" (only if gross not available)
+- Use ONLY if Priority 1 and 2 are missing
+
+███████████████████████████████████████████████████████████████████████████████
 
 ABSOLUTE PRIORITY #0: ALWAYS PROCESS ALL FILES COMPLETELY
 
