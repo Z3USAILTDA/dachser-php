@@ -59,14 +59,7 @@ export const ProntidaoChecklist = ({ voucher, className }: ProntidaoChecklistPro
     });
   }
 
-  // 5. Para REMESSA: voucher em lote
-  if (voucher.tipoExecucaoPagamento === "REMESSA") {
-    items.push({
-      label: "Incluído em lote de remessa",
-      checked: !!voucher.loteRemessaId,
-      required: true
-    });
-  }
+  // 5. Para REMESSA: validação de lote removida - não faz parte do MVP
 
   const allChecked = items.filter(i => i.required).every(i => i.checked);
   const someChecked = items.some(i => i.checked);

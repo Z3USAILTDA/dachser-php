@@ -5360,6 +5360,42 @@ serve(async (req) => {
         break;
       }
 
+      case 'update_status_integracao_rm': {
+        const { voucher_id, status_integracao_rm } = body as { 
+          voucher_id?: string; 
+          status_integracao_rm?: string;
+        };
+        
+        if (!voucher_id || !status_integracao_rm) {
+          return new Response(
+            JSON.stringify({ error: 'voucher_id e status_integracao_rm são obrigatórios' }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+
+        console.log('Updating status_integracao_rm:', { voucher_id, status_integracao_rm });
+        
+        // Ensure column exists
+        try {
+          await client.execute(`
+            ALTER TABLE dados_dachser.t_vouchers 
+            ADD COLUMN IF NOT EXISTS status_integracao_rm ENUM('PENDENTE', 'ENVIADO_T_DADOS_RM', 'PROCESSADO', 'ERRO') DEFAULT 'PENDENTE'
+          `);
+        } catch (alterErr) {
+          console.log('Column might already exist:', alterErr);
+        }
+
+        await client.execute(`
+          UPDATE dados_dachser.t_vouchers 
+          SET status_integracao_rm = ?, updated_at = NOW()
+          WHERE id = ?
+        `, [status_integracao_rm, voucher_id]);
+
+        console.log(`Updated status_integracao_rm to ${status_integracao_rm} for voucher ${voucher_id}`);
+        result = { success: true };
+        break;
+      }
+
       default:
         return new Response(
           JSON.stringify({ error: `Ação não suportada: ${action}` }),
