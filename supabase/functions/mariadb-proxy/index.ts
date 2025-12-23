@@ -3413,11 +3413,17 @@ serve(async (req) => {
         const voucherData = body as any;
         console.log('Saving voucher to dados_dachser.t_vouchers:', voucherData.numero_spo);
         
-        // First, try to alter the tipo_documento column to VARCHAR if it's still ENUM
+        // Ensure id_rm column exists
+        try {
+          await client.execute(`ALTER TABLE dados_dachser.t_vouchers ADD COLUMN IF NOT EXISTS id_rm VARCHAR(50) DEFAULT NULL`);
+        } catch (alterErr) {
+          console.log('id_rm column alter skipped (may already exist)');
+        }
+        
+        // Ensure tipo_documento column is VARCHAR if it's still ENUM
         try {
           await client.execute(`ALTER TABLE dados_dachser.t_vouchers MODIFY COLUMN tipo_documento VARCHAR(100) DEFAULT NULL`);
         } catch (alterErr) {
-          // Column might already be VARCHAR, ignore error
           console.log('tipo_documento column alter skipped (may already be VARCHAR)');
         }
         
