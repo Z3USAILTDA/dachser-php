@@ -6,6 +6,18 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
+// Helper function to convert ArrayBuffer to base64 without stack overflow
+function arrayBufferToBase64(buffer: ArrayBuffer): string {
+  const bytes = new Uint8Array(buffer);
+  let binary = '';
+  const chunkSize = 8192;
+  for (let i = 0; i < bytes.length; i += chunkSize) {
+    const chunk = bytes.subarray(i, i + chunkSize);
+    binary += String.fromCharCode.apply(null, Array.from(chunk));
+  }
+  return btoa(binary);
+}
+
 serve(async (req) => {
   // Handle CORS preflight requests
   if (req.method === 'OPTIONS') {
@@ -40,7 +52,7 @@ serve(async (req) => {
       }
 
       const arrayBuffer = await file.arrayBuffer();
-      base64Image = btoa(String.fromCharCode(...new Uint8Array(arrayBuffer)));
+      base64Image = arrayBufferToBase64(arrayBuffer);
       fileType = file.type.includes('pdf') ? 'pdf' : 'image';
     } else {
       // Handle JSON with base64 or URL
@@ -53,7 +65,7 @@ serve(async (req) => {
         // Fetch file from URL
         const fileResponse = await fetch(body.fileUrl);
         const arrayBuffer = await fileResponse.arrayBuffer();
-        base64Image = btoa(String.fromCharCode(...new Uint8Array(arrayBuffer)));
+        base64Image = arrayBufferToBase64(arrayBuffer);
         fileType = body.fileUrl.toLowerCase().includes('.pdf') ? 'pdf' : 'image';
       }
     }

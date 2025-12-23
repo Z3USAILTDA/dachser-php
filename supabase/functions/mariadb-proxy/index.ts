@@ -3508,6 +3508,24 @@ serve(async (req) => {
           );
         }
 
+        // Ensure t_voucher_anexos table exists
+        try {
+          await client.execute(`
+            CREATE TABLE IF NOT EXISTS dados_dachser.t_voucher_anexos (
+              id VARCHAR(36) PRIMARY KEY,
+              voucher_id VARCHAR(36) NOT NULL,
+              tipo VARCHAR(50) NOT NULL,
+              file_name VARCHAR(500) NOT NULL,
+              file_url TEXT NOT NULL,
+              file_size BIGINT DEFAULT 0,
+              created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+              INDEX idx_voucher_id (voucher_id)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+          `);
+        } catch (createErr) {
+          console.log('t_voucher_anexos table creation skipped (may already exist)');
+        }
+
         console.log('Saving anexo to dados_dachser.t_voucher_anexos:', anexoData.voucher_id, anexoData.tipo);
         
         const anexoId = crypto.randomUUID();
