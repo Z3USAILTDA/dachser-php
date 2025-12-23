@@ -67,18 +67,27 @@ async function fetchFileAsBase64(fileUrl: string): Promise<{ base64: string; siz
 /**
  * Extract text from XLSX/CSV files
  */
-async function extractTextFromFile(file: FileInfo): Promise<string> {
+async function extractTextFromFile(file: FileInfo): Promise<{ text: string; ncmCodes?: string[]; debugInfo?: string }> {
   const extension = file.file_name.toLowerCase().split('.').pop();
   
   if (extension === 'xlsx' || extension === 'xls' || extension === 'xlsm') {
     const result = await extractXlsxText(file.file_url, file.file_name);
-    return result.text;
+    console.log(`[Extract] ${file.file_name}: ${result.rowCount} rows, ${result.ncmCodes?.length || 0} NCMs`);
+    if (result.debugInfo) {
+      console.log(`[Extract] Debug info: ${result.debugInfo}`);
+    }
+    return { 
+      text: result.text, 
+      ncmCodes: result.ncmCodes,
+      debugInfo: result.debugInfo 
+    };
   } else if (extension === 'csv') {
     const response = await fetch(file.file_url);
-    return await response.text();
+    const text = await response.text();
+    return { text };
   }
   
-  return '';
+  return { text: '' };
 }
 
 /**
@@ -354,14 +363,23 @@ export async function analyzeWithLLM(
   
   // Extract manifest text directly (no LLM pre-processing)
   let manifestText = '';
+  let allNCMCodes: string[] = [];
+  
   if (manifestFiles.length > 0) {
     for (const manifestFile of manifestFiles) {
-      const rawText = await extractTextFromFile(manifestFile);
-      if (rawText) {
-        manifestText += `\n\n--- ${manifestFile.file_name} ---\n${rawText}`;
+      const extracted = await extractTextFromFile(manifestFile);
+      if (extracted.text) {
+        manifestText += `\n\n--- ${manifestFile.file_name} ---\n${extracted.text}`;
+      }
+      if (extracted.ncmCodes && extracted.ncmCodes.length > 0) {
+        allNCMCodes.push(...extracted.ncmCodes);
+        console.log(`[Analysis] NCMs from ${manifestFile.file_name}: ${extracted.ncmCodes.join(', ')}`);
+      }
+      if (extracted.debugInfo) {
+        console.log(`[Analysis] Extraction debug: ${extracted.debugInfo}`);
       }
     }
-    console.log(`Manifest text extracted: ${manifestText.length} chars`);
+    console.log(`[Analysis] Manifest text extracted: ${manifestText.length} chars, Total NCMs: ${allNCMCodes.length}`);
   }
   
   // If no manifest but we have PDFs, one might be the base document
