@@ -577,6 +577,8 @@ export const CreateVoucherDialog = ({
       }
 
       // Upload boleto files (Supabase Storage) + metadata (MariaDB t_voucher_anexos)
+      let linhaDigitavelExtraida = false; // Flag para extrair apenas do primeiro boleto
+      
       for (const file of boletoFiles) {
         const fileExt = file.name.split(".").pop();
         const filePath = `${voucherId}/${Date.now()}-boleto.${fileExt}`;
@@ -605,6 +607,43 @@ export const CreateVoucherDialog = ({
             file_size: file.size,
           },
         });
+
+        // Extrair linha digitável automaticamente do primeiro boleto (apenas para BOLETO)
+        if (!linhaDigitavelExtraida && values.formaPagamento === "BOLETO") {
+          try {
+            console.log("Extraindo linha digitável do boleto...");
+            const { data: extractionResult, error: extractionError } = await supabase.functions.invoke("extract-boleto-barcode", {
+              body: {
+                fileUrl: publicUrl.publicUrl
+              },
+            });
+
+            if (extractionError) {
+              console.error("Erro na extração de código de barras:", extractionError);
+            } else if (extractionResult?.success && extractionResult?.linhaDigitavel) {
+              // Salvar a linha digitável no MariaDB
+              const { error: saveError } = await supabase.functions.invoke("mariadb-proxy", {
+                body: {
+                  action: "save_linha_digitavel",
+                  voucher_id: voucherId,
+                  linha_digitavel: extractionResult.linhaDigitavel,
+                },
+              });
+
+              if (saveError) {
+                console.error("Erro ao salvar linha digitável:", saveError);
+              } else {
+                console.log("Linha digitável extraída e salva:", extractionResult.linhaDigitavel);
+                linhaDigitavelExtraida = true;
+              }
+            } else {
+              console.warn("Não foi possível extrair linha digitável:", extractionResult?.error || "Resultado inválido");
+            }
+          } catch (extractError) {
+            console.error("Erro ao extrair linha digitável:", extractError);
+            // Não bloqueia a criação do voucher se a extração falhar
+          }
+        }
       }
 
       // Log creation - MANTER no Supabase para métricas
