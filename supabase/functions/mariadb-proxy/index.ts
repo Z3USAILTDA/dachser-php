@@ -4777,6 +4777,22 @@ serve(async (req) => {
 
       // ==================== PAGAMENTOS MODULE ====================
       case 'list_pagamentos': {
+        console.log('Fetching pagamentos from dados_dachser.t_vouchers');
+        
+        // Ensure status_integracao_rm column exists
+        try {
+          await client.execute(`ALTER TABLE dados_dachser.t_vouchers ADD COLUMN IF NOT EXISTS status_integracao_rm VARCHAR(50) DEFAULT 'PENDENTE'`);
+        } catch (alterErr) {
+          console.log('status_integracao_rm column may already exist');
+        }
+        
+        // Ensure tipo_execucao_pagamento column exists
+        try {
+          await client.execute(`ALTER TABLE dados_dachser.t_vouchers ADD COLUMN IF NOT EXISTS tipo_execucao_pagamento VARCHAR(50) DEFAULT NULL`);
+        } catch (alterErr) {
+          console.log('tipo_execucao_pagamento column may already exist');
+        }
+        
         const { 
           page = 1, 
           perPage = 50, 
