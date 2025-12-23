@@ -3458,6 +3458,41 @@ serve(async (req) => {
           console.log('tipo_documento column alter skipped (may already be VARCHAR)');
         }
         
+        // Ensure etapa_atual column is VARCHAR to accept all values (RASCUNHO, SUPERVISOR, etc)
+        try {
+          await client.execute(`ALTER TABLE dados_dachser.t_vouchers MODIFY COLUMN etapa_atual VARCHAR(50) NOT NULL DEFAULT 'OPERACAO'`);
+        } catch (alterErr) {
+          console.log('etapa_atual column alter skipped (may already be VARCHAR)');
+        }
+        
+        // Ensure urgencia_tipo column is VARCHAR
+        try {
+          await client.execute(`ALTER TABLE dados_dachser.t_vouchers MODIFY COLUMN urgencia_tipo VARCHAR(50) DEFAULT 'NORMAL'`);
+        } catch (alterErr) {
+          console.log('urgencia_tipo column alter skipped');
+        }
+        
+        // Ensure status_baixa column is VARCHAR
+        try {
+          await client.execute(`ALTER TABLE dados_dachser.t_vouchers MODIFY COLUMN status_baixa VARCHAR(50) DEFAULT 'PENDENTE'`);
+        } catch (alterErr) {
+          console.log('status_baixa column alter skipped');
+        }
+        
+        // Ensure remessa column is VARCHAR
+        try {
+          await client.execute(`ALTER TABLE dados_dachser.t_vouchers MODIFY COLUMN remessa VARCHAR(50) DEFAULT 'NENHUM'`);
+        } catch (alterErr) {
+          console.log('remessa column alter skipped');
+        }
+        
+        // Ensure forma_pagamento column is VARCHAR
+        try {
+          await client.execute(`ALTER TABLE dados_dachser.t_vouchers MODIFY COLUMN forma_pagamento VARCHAR(50) DEFAULT 'BOLETO'`);
+        } catch (alterErr) {
+          console.log('forma_pagamento column alter skipped');
+        }
+        
         // Generate UUID for id
         const voucherId = voucherData.id || crypto.randomUUID();
         
