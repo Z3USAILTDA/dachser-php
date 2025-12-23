@@ -32,11 +32,21 @@ export const FilePreviewDialog = ({
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!open) return;
+    if (!open) {
+      // Reset when dialog closes
+      setPdfUrl(null);
+      return;
+    }
+    
+    // Reset state when opening
+    setError(null);
+    setIsLoading(true);
     
     // Prefer fileUrl if available (for files from storage)
     // Also prefer fileUrl if file has no content (reference files from history)
     const fileHasContent = file && file.size > 0;
+    
+    let blobUrl: string | null = null;
     
     if (fileUrl) {
       // Use storage URL directly
@@ -44,17 +54,21 @@ export const FilePreviewDialog = ({
       setIsLoading(false);
     } else if (fileHasContent) {
       // Create blob URL for local file with actual content
-      const url = URL.createObjectURL(file);
-      setPdfUrl(url);
+      blobUrl = URL.createObjectURL(file);
+      setPdfUrl(blobUrl);
       setIsLoading(false);
-      return () => {
-        URL.revokeObjectURL(url);
-      };
     } else {
       // No valid source available
       setError("Arquivo não disponível para visualização");
       setIsLoading(false);
     }
+    
+    // Cleanup blob URL on unmount or when deps change
+    return () => {
+      if (blobUrl) {
+        URL.revokeObjectURL(blobUrl);
+      }
+    };
   }, [open, file, fileUrl]);
 
   useEffect(() => {

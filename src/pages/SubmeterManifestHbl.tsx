@@ -356,13 +356,16 @@ export default function SubmeterManifestHbl() {
   // Extract only divergences from analysis result
   const extractDivergences = (text: string): string => {
     const lines = text.split('\n');
+    
+    // Pattern to detect Delta: 0 (not a real divergence)
+    const zeroDetlaPattern = /Delta:\s*[+-]?0[.,]?0*\s*(kg|m³|m3)/i;
+    
     const divergencePatterns = [
       /UPDATE REQUIRED/i,
       /Delta:\s*[+-]?[0-9,.]+\s*(kg|m³|m3)/i,
       /Missing:/i,
       /Extra:/i,
       /→\s*Update:/i,
-      /Update:/i,
       /DISCREPANCY/i,
       /DISCREPANCIES FOUND/i,
       /⚠️ WARNING/i,
@@ -375,8 +378,19 @@ export default function SubmeterManifestHbl() {
     
     const divergentLines: string[] = [];
     let inSummarySection = false;
+    let currentHbl: string | null = null;
+    let hblAddedForSection = false;
     
-    for (const line of lines) {
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i];
+      
+      // Track current HBL context
+      const hblMatch = line.match(/(?:DRAFT HBL|HBL):\s*(.+\.pdf)/i);
+      if (hblMatch) {
+        currentHbl = hblMatch[1];
+        hblAddedForSection = false;
+      }
+      
       // Check if entering summary section
       if (summaryStartPatterns.some(p => p.test(line))) {
         inSummarySection = true;
@@ -389,12 +403,24 @@ export default function SubmeterManifestHbl() {
       }
       
       // Check for divergence patterns
-      if (divergencePatterns.some(pattern => pattern.test(line))) {
+      const hasDivergence = divergencePatterns.some(pattern => pattern.test(line));
+      
+      if (hasDivergence) {
+        // Skip lines that are just "Delta: 0" (not real divergences)
+        if (zeroDetlaPattern.test(line) && !/UPDATE REQUIRED|Missing:|Extra:|DISCREPANCY/i.test(line)) {
+          continue;
+        }
+        
+        // Add HBL header context if not yet added
+        if (currentHbl && !hblAddedForSection) {
+          divergentLines.push(`\n📄 HBL: ${currentHbl}`);
+          hblAddedForSection = true;
+        }
+        
         // Include context - add preceding line if it contains exporter/item info
-        const lineIndex = lines.indexOf(line);
-        if (lineIndex > 0) {
-          const prevLine = lines[lineIndex - 1];
-          if (/EXPORTER|Item \d+:|Draft HBL:/i.test(prevLine) && !divergentLines.includes(prevLine)) {
+        if (i > 0) {
+          const prevLine = lines[i - 1];
+          if (/EXPORTER|Item \d+:|Subtotals/i.test(prevLine) && !divergentLines.includes(prevLine)) {
             divergentLines.push(prevLine);
           }
         }
