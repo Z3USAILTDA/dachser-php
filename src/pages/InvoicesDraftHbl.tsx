@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
-import { Info, Copy, Check, Upload, Download, X, Link as LinkIcon, FolderOpen, Loader2, FileText, HelpCircle, Eye } from "lucide-react";
+import { Info, Copy, Check, Upload, Download, X, Link as LinkIcon, FolderOpen, Loader2, FileText, HelpCircle, Eye, ClipboardList } from "lucide-react";
 import { useUsageLog } from "@/hooks/useUsageLog";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
@@ -92,6 +92,7 @@ export default function InvoicesDraftHbl() {
     status: string;
   } | null>(null);
   const [copiedResult, setCopiedResult] = useState(false);
+  const [copiedDivergences, setCopiedDivergences] = useState(false);
   const [inlineStatus, setInlineStatus] = useState<{ message: string; type: 'info' | 'success' | 'error' } | null>(null);
 
   const showInlineStatus = (message: string, type: 'info' | 'success' | 'error' = 'info') => {
@@ -573,6 +574,88 @@ export default function InvoicesDraftHbl() {
     }
   };
 
+  // Extract only divergences from analysis result
+  const extractDivergences = (text: string): string => {
+    const lines = text.split('\n');
+    
+    // Pattern to detect Delta: 0 (not a real divergence)
+    const zeroDeltaPattern = /Delta:\s*[+-]?0[.,]?0*\s*(kg|m³|m3)/i;
+    
+    const divergencePatterns = [
+      /UPDATE REQUIRED/i,
+      /Delta:\s*[+-]?[0-9,.]+\s*(kg|m³|m3)/i,
+      /Missing:/i,
+      /Extra:/i,
+      /→\s*Update:/i,
+      /DISCREPANCY/i,
+      /DISCREPANCIES FOUND/i,
+      /⚠️ WARNING/i,
+    ];
+    
+    const summaryStartPatterns = [
+      /SUMMARY FOR EXTERNAL COMMUNICATION/i,
+      /═══.*SUMMARY/i,
+    ];
+    
+    const divergentLines: string[] = [];
+    let inSummarySection = false;
+    let currentHbl: string | null = null;
+    let hblAddedForSection = false;
+    
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i];
+      
+      // Track current HBL context
+      const hblMatch = line.match(/(?:DRAFT HBL|HBL):\s*(.+\.pdf)/i);
+      if (hblMatch) {
+        currentHbl = hblMatch[1];
+        hblAddedForSection = false;
+      }
+      
+      // Check if entering summary section
+      if (summaryStartPatterns.some(p => p.test(line))) {
+        inSummarySection = true;
+      }
+      
+      // Include summary section lines
+      if (inSummarySection) {
+        divergentLines.push(line);
+        continue;
+      }
+      
+      // Check for divergence patterns
+      const hasDivergence = divergencePatterns.some(pattern => pattern.test(line));
+      
+      if (hasDivergence) {
+        // Skip lines that are just "Delta: 0" (not real divergences)
+        if (zeroDeltaPattern.test(line) && !/UPDATE REQUIRED|Missing:|Extra:|DISCREPANCY/i.test(line)) {
+          continue;
+        }
+        
+        // Add HBL header context if not yet added
+        if (currentHbl && !hblAddedForSection) {
+          divergentLines.push(`\n📄 HBL: ${currentHbl}`);
+          hblAddedForSection = true;
+        }
+        
+        // Include context - add preceding line if it contains exporter/item info
+        if (i > 0) {
+          const prevLine = lines[i - 1];
+          if (/EXPORTER|Item \d+:|Subtotals/i.test(prevLine) && !divergentLines.includes(prevLine)) {
+            divergentLines.push(prevLine);
+          }
+        }
+        divergentLines.push(line);
+      }
+    }
+    
+    if (divergentLines.length === 0) {
+      return "Nenhuma divergência encontrada - todos os documentos estão reconciliados.";
+    }
+    
+    return divergentLines.join('\n').trim();
+  };
+
   const handleCopyResult = () => {
     if (!analysisResult?.text || analysisResult.text.trim().length === 0) {
       toast.error("Não há conteúdo para copiar");
@@ -595,6 +678,34 @@ export default function InvoicesDraftHbl() {
         setCopiedResult(true);
         toast.success("Resultado copiado");
         setTimeout(() => setCopiedResult(false), 2000);
+      } else {
+        throw new Error("execCommand failed");
+      }
+    } catch (err) {
+      console.error('Copy error:', err);
+      toast.error("Não foi possível copiar. Selecione o texto manualmente.");
+    }
+  };
+
+  const handleCopyDivergences = () => {
+    if (!analysisResult?.text || analysisResult.text.trim().length === 0) {
+      toast.error("Não há conteúdo para copiar");
+      return;
+    }
+    try {
+      const divergences = extractDivergences(analysisResult.text);
+      const textarea = document.createElement('textarea');
+      textarea.value = divergences;
+      textarea.style.position = 'fixed';
+      textarea.style.opacity = '0';
+      document.body.appendChild(textarea);
+      textarea.select();
+      const successful = document.execCommand('copy');
+      document.body.removeChild(textarea);
+      if (successful) {
+        setCopiedDivergences(true);
+        toast.success("Divergências copiadas");
+        setTimeout(() => setCopiedDivergences(false), 2000);
       } else {
         throw new Error("execCommand failed");
       }
@@ -1140,11 +1251,20 @@ export default function InvoicesDraftHbl() {
               Concluir análise
             </Button>
             <Button
+              onClick={handleCopyDivergences}
+              variant="outline"
+              className="rounded-full px-6 border-amber-400/50 bg-black/40 text-amber-300 hover:border-amber-400 hover:bg-black"
+              title="Copiar apenas divergências"
+            >
+              {copiedDivergences ? <Check className="w-4 h-4 mr-2" /> : <ClipboardList className="w-4 h-4 mr-2" />}
+              Copiar Divergências
+            </Button>
+            <Button
               onClick={handleCopyResult}
               variant="ghost"
               size="icon"
               className="rounded-full w-10 h-10"
-              title="Copiar resultado"
+              title="Copiar resultado completo"
             >
               {copiedResult ? (
                 <Check className="w-4 h-4" />
