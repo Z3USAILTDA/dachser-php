@@ -33,6 +33,8 @@ import {
   StatusPagamento, 
   TIPO_EXECUCAO_LABELS, 
   STATUS_PAGAMENTO_LABELS,
+  StatusIntegracaoRM,
+  STATUS_INTEGRACAO_RM_LABELS,
   isBoleto,
   validarProntoParaRobo
 } from "@/types/voucher";
@@ -64,6 +66,7 @@ interface PagamentoItem {
   tipo_execucao_pagamento?: TipoExecucaoPagamento;
   is_pronto_para_robo?: boolean;
   lote_remessa_id?: string;
+  status_integracao_rm?: StatusIntegracaoRM;
   etapa_atual: string;
   status_baixa: string;
   created_at: string;
@@ -105,6 +108,7 @@ export const PagamentosTab = () => {
   const [filterStatusPagamento, setFilterStatusPagamento] = useState<string>("all");
   const [filterTipoExecucao, setFilterTipoExecucao] = useState<string>("all");
   const [filterFormaPagamento, setFilterFormaPagamento] = useState<string>("all");
+  const [filterStatusIntegracaoRm, setFilterStatusIntegracaoRm] = useState<string>("all");
   
   // Selection
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());

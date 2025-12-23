@@ -5,7 +5,7 @@ import { PageHeader } from "@/components/layout/PageHeader";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { useUserRole } from "@/hooks/useUserRole";
-import { Voucher } from "@/types/voucher";
+import { Voucher, STATUS_INTEGRACAO_RM_LABELS, StatusIntegracaoRM } from "@/types/voucher";
 import { Loader2 } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -17,6 +17,7 @@ import { VoucherFiscalActions } from "@/components/esteira/VoucherFiscalActions"
 import { VoucherSupervisorActions } from "@/components/esteira/VoucherSupervisorActions";
 import { VoucherFinanceiroActions } from "@/components/esteira/VoucherFinanceiroActions";
 import { VoucherRoboActions } from "@/components/esteira/VoucherRoboActions";
+import { DadosPagamentoPanel } from "@/components/esteira/DadosPagamentoPanel";
 
 const EsteiraVoucherDetails = () => {
   const { id } = useParams();
@@ -100,6 +101,13 @@ const EsteiraVoucherDetails = () => {
           acao: l.acao,
           detalhe: l.detalhe,
         })).sort((a: any, b: any) => b.dataHora.getTime() - a.dataHora.getTime()),
+        // Payment related fields
+        tipoExecucaoPagamento: data.tipo_execucao_pagamento,
+        isProntoParaRobo: data.is_pronto_para_robo === 1 || data.is_pronto_para_robo === true,
+        linhaDigitavel: data.linha_digitavel,
+        codigoBarras: data.codigo_barras,
+        statusIntegracaoRm: data.status_integracao_rm as StatusIntegracaoRM | undefined,
+        dadosBancarios: responseData.dadosBancarios || undefined,
       };
 
       setVoucher(mappedVoucher);
@@ -195,11 +203,21 @@ const EsteiraVoucherDetails = () => {
       <PageHeader 
         title={`Voucher ${voucher.numeroSPO}`}
         subtitle={
-          <div className="flex items-center gap-2 mt-1">
+        <div className="flex items-center gap-2 mt-1">
             <span className="text-muted-foreground">Etapa atual:</span>
             <Badge className={getEtapaBadgeColor(voucher.etapaAtual)}>
               {voucher.etapaAtual.replace("_", " ")}
             </Badge>
+            {voucher.statusIntegracaoRm && voucher.statusIntegracaoRm !== "PENDENTE" && (
+              <Badge variant="outline" className={cn(
+                "text-[10px]",
+                voucher.statusIntegracaoRm === "ENVIADO_T_DADOS_RM" && "bg-blue-500/20 text-blue-400 border-blue-500/30",
+                voucher.statusIntegracaoRm === "PROCESSADO" && "bg-green-500/20 text-green-400 border-green-500/30",
+                voucher.statusIntegracaoRm === "ERRO" && "bg-red-500/20 text-red-400 border-red-500/30"
+              )}>
+                RM: {STATUS_INTEGRACAO_RM_LABELS[voucher.statusIntegracaoRm]}
+              </Badge>
+            )}
           </div>
         }
       />
@@ -209,6 +227,9 @@ const EsteiraVoucherDetails = () => {
           <TabsList className="bg-card/80 backdrop-blur-sm border border-border/50">
             <TabsTrigger value="detalhes" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
               Detalhes
+            </TabsTrigger>
+            <TabsTrigger value="pagamento" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
+              Pagamento
             </TabsTrigger>
             <TabsTrigger value="historico" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
               Histórico
@@ -264,6 +285,32 @@ const EsteiraVoucherDetails = () => {
                 <p className="text-foreground">{voucher.ajusteFiscal}</p>
               </Card>
             )}
+          </TabsContent>
+
+          <TabsContent value="pagamento" className="mt-6">
+            <Card className="p-6 bg-card/80 backdrop-blur-sm border-border/50 animate-fade-in">
+              <h3 className="text-lg font-semibold mb-4 text-foreground">Dados de Pagamento</h3>
+              <DadosPagamentoPanel
+                voucherId={voucher.id}
+                formaPagamento={voucher.formaPagamento}
+                tipoExecucao={voucher.tipoExecucaoPagamento}
+                linhaDigitavel={voucher.linhaDigitavel}
+                codigoBarras={voucher.codigoBarras}
+                cnpjFornecedor={voucher.cnpjFornecedor}
+                dadosBancarios={voucher.dadosBancarios ? {
+                  banco: voucher.dadosBancarios.banco || "",
+                  agencia: voucher.dadosBancarios.agencia || "",
+                  digito_agencia: "",
+                  conta_corrente: voucher.dadosBancarios.conta || "",
+                  digito_conta: "",
+                  razao_social: voucher.dadosBancarios.favorecidoNome || voucher.fornecedor,
+                  cnpj: voucher.dadosBancarios.favorecidoDocumento || voucher.cnpjFornecedor || "",
+                  chave_pix: voucher.dadosBancarios.chavePix,
+                  pix_tipo_chave: voucher.dadosBancarios.pixTipoChave,
+                } : undefined}
+                onUpdate={loadVoucher}
+              />
+            </Card>
           </TabsContent>
 
           <TabsContent value="historico" className="mt-6">

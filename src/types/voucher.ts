@@ -89,6 +89,8 @@ export type LogOrigin = "UI" | "ROBO" | "RM" | "SYSTEM";
 
 export type LogEntityType = "VOUCHER" | "ANEXO" | "PAGAMENTO" | "REMESSA";
 
+export type StatusIntegracaoRM = "PENDENTE" | "ENVIADO_T_DADOS_RM" | "PROCESSADO" | "ERRO";
+
 // Labels e SLAs configuráveis
 export const ETAPA_LABELS: Record<EtapaAtual, string> = {
   RASCUNHO: "Rascunho",
@@ -144,6 +146,13 @@ export const STATUS_ITEM_REMESSA_LABELS: Record<StatusItemRemessa, string> = {
   AUTORIZADO: "Autorizado",
   PAGO: "Pago",
   REJEITADO: "Rejeitado",
+  ERRO: "Erro",
+};
+
+export const STATUS_INTEGRACAO_RM_LABELS: Record<StatusIntegracaoRM, string> = {
+  PENDENTE: "Pendente",
+  ENVIADO_T_DADOS_RM: "Enviado p/ RM",
+  PROCESSADO: "Processado",
   ERRO: "Erro",
 };
 
@@ -269,6 +278,7 @@ export interface Voucher {
   statusPagamento?: StatusPagamento;
   loteRemessaId?: string;
   dadosBancarios?: DadosBancarios;
+  statusIntegracaoRm?: StatusIntegracaoRM;
 }
 
 export interface RemessaItem {
@@ -365,10 +375,7 @@ export const validarProntoParaRobo = (voucher: Voucher): ValidacaoProntoParaRobo
     }
   }
 
-  // 5. Para REMESSA: voucher deve estar em lote
-  if (voucher.tipoExecucaoPagamento === 'REMESSA' && !voucher.loteRemessaId) {
-    pendencias.push("Voucher não incluído em lote de remessa");
-  }
+  // 5. Para REMESSA: validação removida - lotes de remessa não fazem parte do MVP
 
   return { valido: pendencias.length === 0, pendencias };
 };

@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { Voucher } from "@/types/voucher";
+import { useState, useMemo } from "react";
+import { Voucher, validarProntoParaRobo, isBoleto } from "@/types/voucher";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
@@ -7,7 +7,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Checkbox } from "@/components/ui/checkbox";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
-import { CheckCircle2, XCircle } from "lucide-react";
+import { CheckCircle2, XCircle, AlertTriangle, Loader2 } from "lucide-react";
+import { ProntidaoChecklist } from "./ProntidaoChecklist";
 
 interface VoucherFinanceiroActionsProps {
   voucher: Voucher;
@@ -17,12 +18,18 @@ interface VoucherFinanceiroActionsProps {
 export const VoucherFinanceiroActions = ({ voucher, onUpdate }: VoucherFinanceiroActionsProps) => {
   const [loading, setLoading] = useState(false);
   const [comentarios, setComentarios] = useState(voucher.comentariosFinanceiro || "");
-  const [tipoBaixa, setTipoBaixa] = useState<"BAIXA_MANUAL" | "BAIXA_REMESSA">("BAIXA_MANUAL");
+  const [tipoBaixa, setTipoBaixa] = useState<"BAIXA_MANUAL" | "BAIXA_REMESSA">(
+    voucher.statusBaixa === "BAIXA_REMESSA" ? "BAIXA_REMESSA" : "BAIXA_MANUAL"
+  );
   const [necessitaAjusteOperacao, setNecessitaAjusteOperacao] = useState(false);
   const [necessitaAjusteFiscal, setNecessitaAjusteFiscal] = useState(false);
   const [motivoAjusteOperacao, setMotivoAjusteOperacao] = useState("");
   const [motivoAjusteFiscal, setMotivoAjusteFiscal] = useState("");
   const { toast } = useToast();
+
+  // Validate readiness for ROBO
+  const validacao = useMemo(() => validarProntoParaRobo(voucher), [voucher]);
+  const isProntoParaRobo = validacao.valido;
 
   // Get user data from localStorage (MariaDB auth)
   const getUserData = () => {
@@ -31,11 +38,68 @@ export const VoucherFinanceiroActions = ({ voucher, onUpdate }: VoucherFinanceir
   };
 
   const handleBaixar = async () => {
+    // Gate de validação - bloquear se não estiver pronto para ROBO
+    if (!isProntoParaRobo) {
+      toast({
+        title: "Voucher não está pronto",
+        description: "Complete todas as pendências antes de enviar para o Robô",
+        variant: "destructive",
+      });
+      return;
+    }
+
     try {
       setLoading(true);
       const userData = getUserData();
 
-      // Update voucher in MariaDB
+      // 1. Log extended com origin e payload
+      await supabase.functions.invoke("mariadb-proxy", {
+        body: {
+          action: "save_voucher_log_extended",
+          voucher_id: voucher.id,
+          user_id: userData.id?.toString(),
+          user_name: userData.username,
+          acao: "BAIXADO_FINANCEIRO",
+          detalhe: `Voucher baixado (${tipoBaixa}) e enviado para Robô`,
+          origin: "UI",
+          entity_type: "VOUCHER",
+          event_type: "BAIXA",
+          payload_json: {
+            tipo_baixa: tipoBaixa,
+            forma_pagamento: voucher.formaPagamento,
+            tipo_execucao: voucher.tipoExecucaoPagamento,
+            valor: voucher.valor,
+            vencimento: voucher.vencimento,
+            linha_digitavel: voucher.linhaDigitavel,
+            codigo_barras: voucher.codigoBarras,
+          },
+        },
+      });
+
+      // 2. Para BAIXA_REMESSA, inserir em t_dados_rm
+      if (tipoBaixa === "BAIXA_REMESSA") {
+        await supabase.functions.invoke("mariadb-proxy", {
+          body: {
+            action: "insert_dados_rm",
+            id_rm: voucher.numeroSPO,
+            voucher_boleto: voucher.linhaDigitavel || voucher.codigoBarras || null,
+            forma_pag: voucher.formaPagamento,
+            fornecedor: voucher.fornecedor,
+            regras_forma_pag: voucher.tipoExecucaoPagamento || "MANUAL",
+          },
+        });
+
+        // 3. Atualizar status_integracao_rm
+        await supabase.functions.invoke("mariadb-proxy", {
+          body: {
+            action: "update_status_integracao_rm",
+            voucher_id: voucher.id,
+            status_integracao_rm: "ENVIADO_T_DADOS_RM",
+          },
+        });
+      }
+
+      // 4. Update voucher - avançar para ROBO
       const { error } = await supabase.functions.invoke("mariadb-proxy", {
         body: {
           action: "update_voucher_esteira",
@@ -44,26 +108,17 @@ export const VoucherFinanceiroActions = ({ voucher, onUpdate }: VoucherFinanceir
           status_baixa: tipoBaixa,
           comentarios_financeiro: comentarios || null,
           responsavel_financeiro_user_id: userData.id?.toString(),
+          is_pronto_para_robo: true,
         },
       });
 
       if (error) throw error;
 
-      // Log the action
-      await supabase.functions.invoke("mariadb-proxy", {
-        body: {
-          action: "save_voucher_log",
-          voucher_id: voucher.id,
-          user_id: userData.id?.toString(),
-          user_name: userData.username,
-          acao: "BAIXADO_FINANCEIRO",
-          detalhe: `Voucher baixado (${tipoBaixa}) e enviado para Robô`,
-        },
-      });
-
       toast({
         title: "Voucher baixado!",
-        description: "Voucher enviado para processamento do Robô",
+        description: tipoBaixa === "BAIXA_REMESSA" 
+          ? "Voucher enviado para Robô e dados enviados ao RM" 
+          : "Voucher enviado para processamento do Robô",
       });
 
       onUpdate();
@@ -235,6 +290,11 @@ export const VoucherFinanceiroActions = ({ voucher, onUpdate }: VoucherFinanceir
         </p>
       </div>
 
+      {/* Checklist de Prontidão */}
+      <div className="p-4 rounded-lg bg-secondary/30 border border-border">
+        <ProntidaoChecklist voucher={voucher} />
+      </div>
+
       <div className="space-y-4">
         {!isDevolvendo && (
           <div className="space-y-2">
@@ -248,6 +308,11 @@ export const VoucherFinanceiroActions = ({ voucher, onUpdate }: VoucherFinanceir
                 <SelectItem value="BAIXA_REMESSA">Baixa por Remessa</SelectItem>
               </SelectContent>
             </Select>
+            {tipoBaixa === "BAIXA_REMESSA" && (
+              <p className="text-xs text-muted-foreground">
+                Os dados serão enviados para o setor especializado gerar a remessa bancária
+              </p>
+            )}
           </div>
         )}
 
@@ -351,11 +416,17 @@ export const VoucherFinanceiroActions = ({ voucher, onUpdate }: VoucherFinanceir
         ) : (
           <Button
             onClick={handleBaixar}
-            disabled={loading}
+            disabled={loading || !isProntoParaRobo}
             className="gap-2 bg-primary hover:bg-primary/90"
           >
-            <CheckCircle2 className="h-4 w-4" />
-            Baixar Voucher
+            {loading ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : isProntoParaRobo ? (
+              <CheckCircle2 className="h-4 w-4" />
+            ) : (
+              <AlertTriangle className="h-4 w-4" />
+            )}
+            {isProntoParaRobo ? "Baixar Voucher" : "Pendências para Baixar"}
           </Button>
         )}
       </div>
