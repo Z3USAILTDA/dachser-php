@@ -9,16 +9,13 @@ const corsHeaders = {
 
 interface QueryRequest {
   action: string;
-  id?: number | string; // For update/delete operations
-  query?: string; // For raw_query action
-  observacoes?: string; // For disputa observacoes update
-  // Auth/User
+  id?: number | string;
+  query?: string;
+  observacoes?: string;
   username?: string;
   password?: string;
   userId?: number;
-  // Batch rules
   rules?: Array<{cnpj: string; airportCode?: string; notes?: string; emailDespachante?: string; enderecoCompleto?: string}>;
-  // Metrics / Usage Log
   dateFrom?: string;
   dateTo?: string;
   module?: string;
@@ -26,7 +23,6 @@ interface QueryRequest {
   page?: number;
   endpoint?: string;
   method?: string;
-  // Rule Matrix
   matrixId?: number;
   customer?: string;
   version?: string;
@@ -34,7 +30,6 @@ interface QueryRequest {
   effectiveTo?: string;
   isActive?: boolean;
   fileUrl?: string;
-  // Rule Row
   ruleId?: number;
   cnpj?: string;
   airportCode?: string;
@@ -49,13 +44,11 @@ interface QueryRequest {
   estado?: string;
   cep?: string;
   pais?: string;
-  // Document
   documentId?: number;
   fileName?: string;
   fileType?: string;
   filePath?: string;
   fileSize?: number;
-  // Parsed AWB
   parsedAwbId?: number;
   awbNumber?: string;
   shipper?: string;
@@ -73,7 +66,6 @@ interface QueryRequest {
   incoterms?: string;
   references?: string[];
   rawJson?: object;
-  // AWB Check - new fields
   awbCheckId?: number;
   hawbDocumentId?: number;
   instructionDocumentId?: number;
@@ -93,15 +85,12 @@ interface QueryRequest {
   extractedDestination?: string;
   extractedCustomer?: string;
   confidenceScore?: number;
-  // Log Entry
   logAction?: string;
   entity?: string;
   entityId?: number;
   details?: string;
-  // DHL AWB Tracking updates
-  updates?: Record<string, any>;
+  updates?: Record<string, unknown>;
   awbNumbers?: string[];
-  // CCT Notification Rules
   cliente_nome?: string;
   cnpj_consignatario?: string;
   aeroportos?: string;
@@ -109,7 +98,6 @@ interface QueryRequest {
   canais?: string;
   template_id?: string;
   ativo?: boolean;
-  // CHB Module
   itemId?: number;
   reference?: string;
   status_macro?: string;
@@ -130,7 +118,6 @@ interface QueryRequest {
   resultHtml?: string;
   resultJson?: string;
   usedAsCtx?: boolean;
-  // SEA (Maritime) Module
   analysisType?: string;
   search?: string;
   analysisId?: string;
@@ -138,10 +125,47 @@ interface QueryRequest {
   forceAll?: boolean;
   fileContent?: string;
   role?: string;
-  metadata?: any;
-  // User Esteira Management
+  metadata?: unknown;
   esteira_role?: string;
   esteira_active?: number;
+  // Pagamentos module
+  tipo_execucao_pagamento?: string;
+  is_pronto?: boolean;
+  status_pagamento?: string;
+  codigo_barras?: string;
+  voucher_ids?: string[];
+  banco?: string;
+  criado_por_user_id?: string;
+  criado_por_user_name?: string;
+  lote_id?: string;
+  item_id?: string;
+  voucher_id?: string;
+  status_lote?: string;
+  arquivo_remessa_url?: string;
+  arquivo_retorno_url?: string;
+  arquivo_url?: string;
+  arquivo_nome?: string;
+  uploaded_by_user_id?: string;
+  uploaded_by_user_name?: string;
+  checksum?: string;
+  user_id?: string;
+  user_name?: string;
+  acao?: string;
+  detalhe?: string;
+  origin_log?: string;
+  entity_type?: string;
+  event_type?: string;
+  payload_json?: object;
+  filterVencimento?: string;
+  filterStatusPagamento?: string;
+  filterTipoExecucao?: string;
+  filterFornecedor?: string;
+  filterCobranca?: string;
+  filterFilial?: string;
+  filterMoeda?: string;
+  filterFormaPagamento?: string;
+  filterStatus?: string;
+  filterBanco?: string;
 }
 
 serve(async (req) => {
@@ -4706,6 +4730,633 @@ serve(async (req) => {
 
         console.log('Insert result:', insertResult);
         result = { success: true, insertId: insertResult.lastInsertId };
+        break;
+      }
+
+      // ==================== PAGAMENTOS MODULE ====================
+      case 'list_pagamentos': {
+        const { 
+          page = 1, 
+          perPage = 50, 
+          filterVencimento,
+          filterStatusPagamento,
+          filterTipoExecucao,
+          filterFornecedor,
+          filterCobranca,
+          filterFilial,
+          filterMoeda,
+          filterFormaPagamento
+        } = body as {
+          page?: number;
+          perPage?: number;
+          filterVencimento?: 'hoje' | 'vencidos' | 'proximos7' | 'todos';
+          filterStatusPagamento?: string;
+          filterTipoExecucao?: string;
+          filterFornecedor?: string;
+          filterCobranca?: string;
+          filterFilial?: string;
+          filterMoeda?: string;
+          filterFormaPagamento?: string;
+        };
+
+        const offset = (page - 1) * perPage;
+        const conditions: string[] = ["v.etapa_atual = 'FINANCEIRO'"];
+        const params: (string | number)[] = [];
+
+        // Date filters
+        if (filterVencimento === 'hoje') {
+          conditions.push("v.vencimento = CURDATE()");
+        } else if (filterVencimento === 'vencidos') {
+          conditions.push("v.vencimento < CURDATE()");
+        } else if (filterVencimento === 'proximos7') {
+          conditions.push("v.vencimento BETWEEN CURDATE() AND DATE_ADD(CURDATE(), INTERVAL 7 DAY)");
+        }
+
+        if (filterStatusPagamento) {
+          conditions.push("v.status_pagamento = ?");
+          params.push(filterStatusPagamento);
+        }
+
+        if (filterTipoExecucao) {
+          conditions.push("v.tipo_execucao_pagamento = ?");
+          params.push(filterTipoExecucao);
+        }
+
+        if (filterFornecedor) {
+          conditions.push("v.fornecedor LIKE ?");
+          params.push(`%${filterFornecedor}%`);
+        }
+
+        if (filterCobranca) {
+          conditions.push("v.cobranca_em_nome_de = ?");
+          params.push(filterCobranca);
+        }
+
+        if (filterFilial) {
+          conditions.push("v.filial = ?");
+          params.push(filterFilial);
+        }
+
+        if (filterMoeda) {
+          conditions.push("v.moeda = ?");
+          params.push(filterMoeda);
+        }
+
+        if (filterFormaPagamento) {
+          conditions.push("v.forma_pagamento = ?");
+          params.push(filterFormaPagamento);
+        }
+
+        const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+
+        // Count total
+        const countResult = await client.query(
+          `SELECT COUNT(*) as total FROM dados_dachser.t_vouchers v ${whereClause}`,
+          params
+        );
+        const total = Number(countResult[0]?.total || 0);
+
+        // Get paginated data
+        const vouchers = await client.query(
+          `SELECT 
+            v.id, v.numero_spo, v.fornecedor, v.cnpj_fornecedor, v.valor, v.moeda,
+            v.vencimento, v.forma_pagamento, v.tipo_documento, v.cobranca_em_nome_de,
+            v.filial, v.linha_digitavel, v.codigo_barras, v.status_pagamento,
+            v.tipo_execucao_pagamento, v.is_pronto_para_robo, v.lote_remessa_id,
+            v.etapa_atual, v.status_baixa, v.created_at, v.updated_at
+          FROM dados_dachser.t_vouchers v
+          ${whereClause}
+          ORDER BY v.vencimento ASC, v.created_at DESC
+          LIMIT ? OFFSET ?`,
+          [...params, perPage, offset]
+        );
+
+        // Get summary stats
+        const statsResult = await client.query(
+          `SELECT 
+            COUNT(*) as total,
+            SUM(CASE WHEN v.vencimento = CURDATE() THEN 1 ELSE 0 END) as vencem_hoje,
+            SUM(CASE WHEN v.vencimento < CURDATE() THEN 1 ELSE 0 END) as vencidos,
+            SUM(CASE WHEN v.status_pagamento = 'PRONTO' THEN 1 ELSE 0 END) as prontos,
+            SUM(CASE WHEN v.status_pagamento = 'EM_REMESSA' THEN 1 ELSE 0 END) as em_remessa,
+            SUM(CASE WHEN v.status_pagamento = 'PENDENTE_DADOS' THEN 1 ELSE 0 END) as aguardando_dados,
+            SUM(COALESCE(v.valor, 0)) as valor_total
+          FROM dados_dachser.t_vouchers v
+          WHERE v.etapa_atual = 'FINANCEIRO'`
+        );
+
+        result = {
+          success: true,
+          vouchers,
+          total,
+          totalPages: Math.ceil(total / perPage),
+          currentPage: page,
+          stats: statsResult[0] || {}
+        };
+        break;
+      }
+
+      case 'set_tipo_execucao_pagamento': {
+        const { id: voucherId, tipo_execucao_pagamento } = body as {
+          id: string;
+          tipo_execucao_pagamento: string;
+        };
+
+        if (!voucherId || !tipo_execucao_pagamento) {
+          return new Response(
+            JSON.stringify({ error: 'voucher_id e tipo_execucao_pagamento são obrigatórios' }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+
+        await client.execute(
+          `UPDATE dados_dachser.t_vouchers SET tipo_execucao_pagamento = ?, updated_at = NOW() WHERE id = ?`,
+          [tipo_execucao_pagamento, voucherId]
+        );
+
+        console.log(`Updated tipo_execucao_pagamento for voucher ${voucherId} to ${tipo_execucao_pagamento}`);
+        result = { success: true };
+        break;
+      }
+
+      case 'set_ready_for_robo': {
+        const { id: voucherId, is_pronto } = body as {
+          id: string;
+          is_pronto: boolean;
+        };
+
+        if (!voucherId) {
+          return new Response(
+            JSON.stringify({ error: 'voucher_id é obrigatório' }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+
+        await client.execute(
+          `UPDATE dados_dachser.t_vouchers 
+           SET is_pronto_para_robo = ?, 
+               status_pagamento = CASE WHEN ? = 1 THEN 'PRONTO' ELSE status_pagamento END,
+               updated_at = NOW() 
+           WHERE id = ?`,
+          [is_pronto ? 1 : 0, is_pronto ? 1 : 0, voucherId]
+        );
+
+        console.log(`Updated is_pronto_para_robo for voucher ${voucherId} to ${is_pronto}`);
+        result = { success: true };
+        break;
+      }
+
+      case 'update_status_pagamento': {
+        const { id: voucherId, status_pagamento } = body as {
+          id: string;
+          status_pagamento: string;
+        };
+
+        if (!voucherId || !status_pagamento) {
+          return new Response(
+            JSON.stringify({ error: 'voucher_id e status_pagamento são obrigatórios' }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+
+        await client.execute(
+          `UPDATE dados_dachser.t_vouchers SET status_pagamento = ?, updated_at = NOW() WHERE id = ?`,
+          [status_pagamento, voucherId]
+        );
+
+        console.log(`Updated status_pagamento for voucher ${voucherId} to ${status_pagamento}`);
+        result = { success: true };
+        break;
+      }
+
+      case 'update_codigo_barras': {
+        const { id: voucherId, codigo_barras } = body as {
+          id: string;
+          codigo_barras: string;
+        };
+
+        if (!voucherId) {
+          return new Response(
+            JSON.stringify({ error: 'voucher_id é obrigatório' }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+
+        await client.execute(
+          `UPDATE dados_dachser.t_vouchers SET codigo_barras = ?, updated_at = NOW() WHERE id = ?`,
+          [codigo_barras || null, voucherId]
+        );
+
+        console.log(`Updated codigo_barras for voucher ${voucherId}`);
+        result = { success: true };
+        break;
+      }
+
+      case 'batch_set_tipo_execucao': {
+        const { voucher_ids, tipo_execucao_pagamento } = body as {
+          voucher_ids: string[];
+          tipo_execucao_pagamento: string;
+        };
+
+        if (!voucher_ids || voucher_ids.length === 0 || !tipo_execucao_pagamento) {
+          return new Response(
+            JSON.stringify({ error: 'voucher_ids e tipo_execucao_pagamento são obrigatórios' }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+
+        const placeholders = voucher_ids.map(() => '?').join(',');
+        await client.execute(
+          `UPDATE dados_dachser.t_vouchers 
+           SET tipo_execucao_pagamento = ?, updated_at = NOW() 
+           WHERE id IN (${placeholders})`,
+          [tipo_execucao_pagamento, ...voucher_ids]
+        );
+
+        console.log(`Batch updated tipo_execucao_pagamento for ${voucher_ids.length} vouchers to ${tipo_execucao_pagamento}`);
+        result = { success: true, updated: voucher_ids.length };
+        break;
+      }
+
+      // ==================== REMESSA MODULE ====================
+      case 'create_remessa_lote': {
+        const { banco, criado_por_user_id, criado_por_user_name } = body as {
+          banco: string;
+          criado_por_user_id?: string;
+          criado_por_user_name?: string;
+        };
+
+        if (!banco) {
+          return new Response(
+            JSON.stringify({ error: 'banco é obrigatório' }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+
+        const loteId = crypto.randomUUID();
+        await client.execute(
+          `INSERT INTO dados_dachser.t_remessa_lotes (id, banco, criado_por_user_id, criado_por_user_name) 
+           VALUES (?, ?, ?, ?)`,
+          [loteId, banco, criado_por_user_id || null, criado_por_user_name || null]
+        );
+
+        console.log(`Created remessa lote ${loteId} for banco ${banco}`);
+        result = { success: true, loteId };
+        break;
+      }
+
+      case 'add_itens_remessa': {
+        const { lote_id, voucher_ids } = body as {
+          lote_id: string;
+          voucher_ids: string[];
+        };
+
+        if (!lote_id || !voucher_ids || voucher_ids.length === 0) {
+          return new Response(
+            JSON.stringify({ error: 'lote_id e voucher_ids são obrigatórios' }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+
+        // Get voucher data for the items
+        const placeholders = voucher_ids.map(() => '?').join(',');
+        const vouchers = await client.query(
+          `SELECT id, valor, vencimento, linha_digitavel, codigo_barras 
+           FROM dados_dachser.t_vouchers WHERE id IN (${placeholders})`,
+          voucher_ids
+        );
+
+        let insertedCount = 0;
+        for (const v of vouchers) {
+          const itemId = crypto.randomUUID();
+          try {
+            await client.execute(
+              `INSERT INTO dados_dachser.t_remessa_itens 
+               (id, lote_id, voucher_id, valor, vencimento, linha_digitavel, codigo_barras) 
+               VALUES (?, ?, ?, ?, ?, ?, ?)`,
+              [itemId, lote_id, v.id, v.valor, v.vencimento, v.linha_digitavel, v.codigo_barras]
+            );
+
+            // Update voucher to link to lote
+            await client.execute(
+              `UPDATE dados_dachser.t_vouchers 
+               SET lote_remessa_id = ?, status_pagamento = 'EM_REMESSA', updated_at = NOW() 
+               WHERE id = ?`,
+              [lote_id, v.id]
+            );
+
+            insertedCount++;
+          } catch (e) {
+            console.log(`Failed to add voucher ${v.id} to lote: ${e}`);
+          }
+        }
+
+        // Update lote totals
+        await client.execute(
+          `UPDATE dados_dachser.t_remessa_lotes 
+           SET total_itens = (SELECT COUNT(*) FROM dados_dachser.t_remessa_itens WHERE lote_id = ?),
+               valor_total = (SELECT COALESCE(SUM(valor), 0) FROM dados_dachser.t_remessa_itens WHERE lote_id = ?),
+               updated_at = NOW()
+           WHERE id = ?`,
+          [lote_id, lote_id, lote_id]
+        );
+
+        console.log(`Added ${insertedCount} items to remessa lote ${lote_id}`);
+        result = { success: true, insertedCount };
+        break;
+      }
+
+      case 'remove_item_remessa': {
+        const { item_id, voucher_id } = body as {
+          item_id?: string;
+          voucher_id?: string;
+        };
+
+        if (!item_id && !voucher_id) {
+          return new Response(
+            JSON.stringify({ error: 'item_id ou voucher_id é obrigatório' }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+
+        // Get the lote_id before removing
+        let loteId: string | null = null;
+        if (item_id) {
+          const itemResult = await client.query(
+            `SELECT lote_id, voucher_id FROM dados_dachser.t_remessa_itens WHERE id = ?`,
+            [item_id]
+          );
+          if (itemResult.length > 0) {
+            loteId = itemResult[0].lote_id;
+            await client.execute(`DELETE FROM dados_dachser.t_remessa_itens WHERE id = ?`, [item_id]);
+            await client.execute(
+              `UPDATE dados_dachser.t_vouchers 
+               SET lote_remessa_id = NULL, status_pagamento = 'PENDENTE_DADOS', updated_at = NOW() 
+               WHERE id = ?`,
+              [itemResult[0].voucher_id]
+            );
+          }
+        } else if (voucher_id) {
+          const itemResult = await client.query(
+            `SELECT lote_id FROM dados_dachser.t_remessa_itens WHERE voucher_id = ?`,
+            [voucher_id]
+          );
+          if (itemResult.length > 0) {
+            loteId = itemResult[0].lote_id;
+          }
+          await client.execute(`DELETE FROM dados_dachser.t_remessa_itens WHERE voucher_id = ?`, [voucher_id]);
+          await client.execute(
+            `UPDATE dados_dachser.t_vouchers 
+             SET lote_remessa_id = NULL, status_pagamento = 'PENDENTE_DADOS', updated_at = NOW() 
+             WHERE id = ?`,
+            [voucher_id]
+          );
+        }
+
+        // Update lote totals if we found a lote
+        if (loteId) {
+          await client.execute(
+            `UPDATE dados_dachser.t_remessa_lotes 
+             SET total_itens = (SELECT COUNT(*) FROM dados_dachser.t_remessa_itens WHERE lote_id = ?),
+                 valor_total = (SELECT COALESCE(SUM(valor), 0) FROM dados_dachser.t_remessa_itens WHERE lote_id = ?),
+                 updated_at = NOW()
+             WHERE id = ?`,
+            [loteId, loteId, loteId]
+          );
+        }
+
+        console.log(`Removed item from remessa lote`);
+        result = { success: true };
+        break;
+      }
+
+      case 'update_lote_status': {
+        const { lote_id, status_lote, arquivo_remessa_url, arquivo_retorno_url } = body as {
+          lote_id: string;
+          status_lote: string;
+          arquivo_remessa_url?: string;
+          arquivo_retorno_url?: string;
+        };
+
+        if (!lote_id || !status_lote) {
+          return new Response(
+            JSON.stringify({ error: 'lote_id e status_lote são obrigatórios' }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+
+        let updateQuery = `UPDATE dados_dachser.t_remessa_lotes SET status_lote = ?, updated_at = NOW()`;
+        const updateParams: (string | null)[] = [status_lote];
+
+        if (arquivo_remessa_url !== undefined) {
+          updateQuery += `, arquivo_remessa_url = ?`;
+          updateParams.push(arquivo_remessa_url);
+        }
+
+        if (arquivo_retorno_url !== undefined) {
+          updateQuery += `, arquivo_retorno_url = ?`;
+          updateParams.push(arquivo_retorno_url);
+        }
+
+        updateQuery += ` WHERE id = ?`;
+        updateParams.push(lote_id);
+
+        await client.execute(updateQuery, updateParams);
+
+        console.log(`Updated remessa lote ${lote_id} status to ${status_lote}`);
+        result = { success: true };
+        break;
+      }
+
+      case 'get_remessa_lote_by_id': {
+        const { lote_id } = body as { lote_id: string };
+
+        if (!lote_id) {
+          return new Response(
+            JSON.stringify({ error: 'lote_id é obrigatório' }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+
+        const lotes = await client.query(
+          `SELECT * FROM dados_dachser.t_remessa_lotes WHERE id = ?`,
+          [lote_id]
+        );
+
+        if (lotes.length === 0) {
+          return new Response(
+            JSON.stringify({ error: 'Lote não encontrado' }),
+            { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+
+        const itens = await client.query(
+          `SELECT ri.*, v.numero_spo, v.fornecedor, v.forma_pagamento
+           FROM dados_dachser.t_remessa_itens ri
+           LEFT JOIN dados_dachser.t_vouchers v ON ri.voucher_id = v.id
+           WHERE ri.lote_id = ?
+           ORDER BY ri.created_at ASC`,
+          [lote_id]
+        );
+
+        result = { success: true, lote: lotes[0], itens };
+        break;
+      }
+
+      case 'list_remessa_lotes': {
+        const { page = 1, perPage = 20, filterStatus, filterBanco } = body as {
+          page?: number;
+          perPage?: number;
+          filterStatus?: string;
+          filterBanco?: string;
+        };
+
+        const offset = (page - 1) * perPage;
+        const conditions: string[] = [];
+        const params: (string | number)[] = [];
+
+        if (filterStatus) {
+          conditions.push("status_lote = ?");
+          params.push(filterStatus);
+        }
+
+        if (filterBanco) {
+          conditions.push("banco = ?");
+          params.push(filterBanco);
+        }
+
+        const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+
+        const countResult = await client.query(
+          `SELECT COUNT(*) as total FROM dados_dachser.t_remessa_lotes ${whereClause}`,
+          params
+        );
+        const total = Number(countResult[0]?.total || 0);
+
+        const lotes = await client.query(
+          `SELECT * FROM dados_dachser.t_remessa_lotes 
+           ${whereClause}
+           ORDER BY data_criacao DESC
+           LIMIT ? OFFSET ?`,
+          [...params, perPage, offset]
+        );
+
+        result = { success: true, lotes, total, totalPages: Math.ceil(total / perPage), currentPage: page };
+        break;
+      }
+
+      // ==================== CRASS MODULE ====================
+      case 'upload_crass': {
+        const { arquivo_url, arquivo_nome, uploaded_by_user_id, uploaded_by_user_name, checksum } = body as {
+          arquivo_url: string;
+          arquivo_nome: string;
+          uploaded_by_user_id?: string;
+          uploaded_by_user_name?: string;
+          checksum?: string;
+        };
+
+        if (!arquivo_url || !arquivo_nome) {
+          return new Response(
+            JSON.stringify({ error: 'arquivo_url e arquivo_nome são obrigatórios' }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+
+        // Mark all existing as not vigente
+        await client.execute(
+          `UPDATE dados_dachser.t_crass SET is_vigente = 0 WHERE is_vigente = 1`
+        );
+
+        // Insert new CRASS
+        const crassId = crypto.randomUUID();
+        await client.execute(
+          `INSERT INTO dados_dachser.t_crass (id, arquivo_url, arquivo_nome, uploaded_by_user_id, uploaded_by_user_name, checksum, is_vigente) 
+           VALUES (?, ?, ?, ?, ?, ?, 1)`,
+          [crassId, arquivo_url, arquivo_nome, uploaded_by_user_id || null, uploaded_by_user_name || null, checksum || null]
+        );
+
+        console.log(`Uploaded new CRASS ${crassId}: ${arquivo_nome}`);
+        result = { success: true, crassId };
+        break;
+      }
+
+      case 'get_crass_vigente': {
+        const crassResult = await client.query(
+          `SELECT * FROM dados_dachser.t_crass WHERE is_vigente = 1 LIMIT 1`
+        );
+
+        result = { success: true, crass: crassResult.length > 0 ? crassResult[0] : null };
+        break;
+      }
+
+      case 'list_crass_historico': {
+        const { page = 1, perPage = 20 } = body as { page?: number; perPage?: number };
+        const offset = (page - 1) * perPage;
+
+        const countResult = await client.query(`SELECT COUNT(*) as total FROM dados_dachser.t_crass`);
+        const total = Number(countResult[0]?.total || 0);
+
+        const crassItems = await client.query(
+          `SELECT * FROM dados_dachser.t_crass ORDER BY data_upload DESC LIMIT ? OFFSET ?`,
+          [perPage, offset]
+        );
+
+        result = { success: true, items: crassItems, total, totalPages: Math.ceil(total / perPage), currentPage: page };
+        break;
+      }
+
+      // ==================== ENHANCED LOGS ====================
+      case 'save_voucher_log_extended': {
+        const { 
+          voucher_id, 
+          user_id, 
+          user_name, 
+          acao, 
+          detalhe,
+          origin = 'UI',
+          entity_type = 'VOUCHER',
+          event_type,
+          payload_json
+        } = body as {
+          voucher_id: string;
+          user_id?: string;
+          user_name?: string;
+          acao: string;
+          detalhe?: string;
+          origin?: string;
+          entity_type?: string;
+          event_type?: string;
+          payload_json?: object;
+        };
+
+        if (!voucher_id || !acao) {
+          return new Response(
+            JSON.stringify({ error: 'voucher_id e acao são obrigatórios' }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+
+        const logId = crypto.randomUUID();
+        await client.execute(
+          `INSERT INTO dados_dachser.t_voucher_logs 
+           (id, voucher_id, user_id, user_name, acao, detalhe, origin, entity_type, event_type, payload_json) 
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          [
+            logId, 
+            voucher_id, 
+            user_id || null, 
+            user_name || null, 
+            acao, 
+            detalhe || null,
+            origin,
+            entity_type,
+            event_type || null,
+            payload_json ? JSON.stringify(payload_json) : null
+          ]
+        );
+
+        console.log(`Saved extended log for voucher ${voucher_id}: ${acao}`);
+        result = { success: true, logId };
         break;
       }
 

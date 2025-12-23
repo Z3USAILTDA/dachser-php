@@ -76,6 +76,19 @@ export type UserRole =
   | "SUPERVISOR"
   | "FINANCEIRO";
 
+// New types for Pagamentos module
+export type TipoExecucaoPagamento = "MANUAL" | "REMESSA" | "TED" | "PIX";
+
+export type StatusPagamento = "PENDENTE_DADOS" | "PRONTO" | "EM_REMESSA" | "PAGO" | "ERRO";
+
+export type StatusLoteRemessa = "DRAFT" | "GERADO" | "ENVIADO" | "RETORNO_IMPORTADO" | "FINALIZADO" | "ERRO";
+
+export type StatusItemRemessa = "INCLUIDO" | "REGISTRADO" | "AUTORIZADO" | "PAGO" | "REJEITADO" | "ERRO";
+
+export type LogOrigin = "UI" | "ROBO" | "RM" | "SYSTEM";
+
+export type LogEntityType = "VOUCHER" | "ANEXO" | "PAGAMENTO" | "REMESSA";
+
 // Labels e SLAs configuráveis
 export const ETAPA_LABELS: Record<EtapaAtual, string> = {
   RASCUNHO: "Rascunho",
@@ -101,6 +114,39 @@ export const SLA_POR_ETAPA: Record<EtapaAtual, number> = {
   AJUSTE_FISCAL: 24,
 };
 
+export const STATUS_PAGAMENTO_LABELS: Record<StatusPagamento, string> = {
+  PENDENTE_DADOS: "Aguardando Dados",
+  PRONTO: "Pronto",
+  EM_REMESSA: "Em Remessa",
+  PAGO: "Pago",
+  ERRO: "Erro",
+};
+
+export const TIPO_EXECUCAO_LABELS: Record<TipoExecucaoPagamento, string> = {
+  MANUAL: "Manual",
+  REMESSA: "Remessa Bancária",
+  TED: "TED/DOC",
+  PIX: "PIX",
+};
+
+export const STATUS_LOTE_REMESSA_LABELS: Record<StatusLoteRemessa, string> = {
+  DRAFT: "Rascunho",
+  GERADO: "Arquivo Gerado",
+  ENVIADO: "Enviado ao Banco",
+  RETORNO_IMPORTADO: "Retorno Importado",
+  FINALIZADO: "Finalizado",
+  ERRO: "Erro",
+};
+
+export const STATUS_ITEM_REMESSA_LABELS: Record<StatusItemRemessa, string> = {
+  INCLUIDO: "Incluído",
+  REGISTRADO: "Registrado",
+  AUTORIZADO: "Autorizado",
+  PAGO: "Pago",
+  REJEITADO: "Rejeitado",
+  ERRO: "Erro",
+};
+
 // Calcular tempo na etapa em horas
 export const calcularTempoNaEtapa = (voucher: Voucher): number => {
   const agora = new Date();
@@ -123,6 +169,17 @@ export const formatarTempoNaEtapa = (horas: number): string => {
   return `${dias}d ${horasRestantes}h`;
 };
 
+export interface DadosBancarios {
+  banco?: string;
+  agencia?: string;
+  conta?: string;
+  tipoConta?: string;
+  favorecidoNome?: string;
+  favorecidoDocumento?: string;
+  chavePix?: string;
+  pixTipoChave?: string;
+}
+
 export interface Anexo {
   id: string;
   voucherId: string;
@@ -142,6 +199,11 @@ export interface LogEntry {
   userName?: string;
   acao: string;
   detalhe?: string;
+  // New fields for extended logging
+  origin?: LogOrigin;
+  entityType?: LogEntityType;
+  eventType?: string;
+  payloadJson?: Record<string, unknown>;
 }
 
 export interface Voucher {
@@ -200,4 +262,113 @@ export interface Voucher {
   updatedAt: Date;
   anexos: Anexo[];
   logs: LogEntry[];
+  // New fields for Pagamentos module
+  tipoExecucaoPagamento?: TipoExecucaoPagamento;
+  isProntoParaRobo?: boolean;
+  codigoBarras?: string;
+  statusPagamento?: StatusPagamento;
+  loteRemessaId?: string;
+  dadosBancarios?: DadosBancarios;
 }
+
+export interface RemessaItem {
+  id: string;
+  loteId: string;
+  voucherId: string;
+  valor: number;
+  vencimento: Date;
+  linhaDigitavel?: string;
+  codigoBarras?: string;
+  statusItem: StatusItemRemessa;
+  retornoJson?: Record<string, unknown>;
+  createdAt: Date;
+  updatedAt: Date;
+  // Joined data
+  voucher?: Partial<Voucher>;
+}
+
+export interface RemessaLote {
+  id: string;
+  banco: string;
+  dataCriacao: Date;
+  criadoPorUserId?: string;
+  criadoPorUserName?: string;
+  statusLote: StatusLoteRemessa;
+  arquivoRemessaUrl?: string;
+  arquivoRetornoUrl?: string;
+  metadataJson?: Record<string, unknown>;
+  totalItens: number;
+  valorTotal: number;
+  updatedAt: Date;
+  itens?: RemessaItem[];
+}
+
+export interface Crass {
+  id: string;
+  arquivoUrl: string;
+  arquivoNome: string;
+  dataUpload: Date;
+  uploadedByUserId?: string;
+  uploadedByUserName?: string;
+  checksum?: string;
+  isVigente: boolean;
+  createdAt: Date;
+}
+
+// Validation result for ROBO readiness
+export interface ValidacaoProntoParaRobo {
+  valido: boolean;
+  pendencias: string[];
+}
+
+// Helper function to check if payment method is boleto-like
+export const isBoleto = (formaPagamento: FormaPagamento): boolean => {
+  return ['BOLETO', 'DARF', 'GPS'].includes(formaPagamento);
+};
+
+// Helper function to check if payment requires bank details
+export const requiresBankDetails = (tipoExecucao?: TipoExecucaoPagamento): boolean => {
+  return tipoExecucao === 'TED';
+};
+
+// Helper function to check if payment requires PIX key
+export const requiresPixKey = (tipoExecucao?: TipoExecucaoPagamento): boolean => {
+  return tipoExecucao === 'PIX';
+};
+
+// Validate if voucher is ready for ROBO
+export const validarProntoParaRobo = (voucher: Voucher): ValidacaoProntoParaRobo => {
+  const pendencias: string[] = [];
+
+  // 1. Tipo execução definido
+  if (!voucher.tipoExecucaoPagamento) {
+    pendencias.push("Tipo de execução de pagamento não definido");
+  }
+
+  // 2. Para BOLETO: linha digitável ou código de barras
+  if (isBoleto(voucher.formaPagamento) && !voucher.linhaDigitavel && !voucher.codigoBarras) {
+    pendencias.push("Linha digitável ou código de barras não informado");
+  }
+
+  // 3. Para TED: dados bancários completos
+  if (voucher.tipoExecucaoPagamento === 'TED') {
+    const db = voucher.dadosBancarios;
+    if (!db?.banco || !db?.agencia || !db?.conta) {
+      pendencias.push("Dados bancários incompletos para TED");
+    }
+  }
+
+  // 4. Para PIX: chave PIX
+  if (voucher.tipoExecucaoPagamento === 'PIX') {
+    if (!voucher.dadosBancarios?.chavePix) {
+      pendencias.push("Chave PIX não informada");
+    }
+  }
+
+  // 5. Para REMESSA: voucher deve estar em lote
+  if (voucher.tipoExecucaoPagamento === 'REMESSA' && !voucher.loteRemessaId) {
+    pendencias.push("Voucher não incluído em lote de remessa");
+  }
+
+  return { valido: pendencias.length === 0, pendencias };
+};

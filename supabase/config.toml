@@ -200,3 +200,6 @@ verify_jwt = false
 
 [functions.extract-boleto-barcode]
 verify_jwt = false
+
+[functions.voucher-pagamentos-setup]
+verify_jwt = false
