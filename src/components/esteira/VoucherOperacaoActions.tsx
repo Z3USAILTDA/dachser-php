@@ -46,23 +46,40 @@ export const VoucherOperacaoActions = ({ voucher, onUpdate }: VoucherOperacaoAct
   const isRmPendente = voucher.fonteDados === "RM_PENDENTE";
   const isAjusteOperacao = voucher.etapaAtual === "AJUSTE_OPERACAO";
 
-  // Função para adicionar novo anexo
+  // Get user data from localStorage (MariaDB auth)
+  const getUserData = () => {
+    const storedUser = localStorage.getItem("user") || localStorage.getItem("dachser_user");
+    return storedUser ? JSON.parse(storedUser) : { id: 0, username: "sistema" };
+  };
+
+  // Função para adicionar novo anexo (MariaDB)
   const handleFileUpload = async (fileUrl: string, fileName: string, fileSize: number) => {
-    if (!user) return;
-    
     try {
-      const { error } = await (supabase as any)
-        .from("voucher_anexos")
-        .insert({
+      const { error } = await supabase.functions.invoke("mariadb-proxy", {
+        body: {
+          action: "save_voucher_anexo",
           voucher_id: voucher.id,
           tipo: selectedTipo,
           file_name: fileName,
           file_url: fileUrl,
           file_size: fileSize,
-          uploaded_by_user_id: user.id,
-        });
+        },
+      });
 
       if (error) throw error;
+
+      // Log the action
+      const userData = getUserData();
+      await supabase.functions.invoke("mariadb-proxy", {
+        body: {
+          action: "save_voucher_log",
+          voucher_id: voucher.id,
+          user_id: userData.id?.toString(),
+          user_name: userData.username,
+          acao: "ANEXO_ADICIONADO",
+          detalhe: `Anexo "${fileName}" (${selectedTipo}) adicionado`,
+        },
+      });
 
       toast({
         title: "Anexo adicionado",
@@ -95,10 +112,11 @@ export const VoucherOperacaoActions = ({ voucher, onUpdate }: VoucherOperacaoAct
       if (error) throw error;
 
       if (data.success && data.data) {
-        // Atualizar voucher com dados do RM
-        const { error: updateError } = await (supabase as any)
-          .from("vouchers")
-          .update({
+        // Atualizar voucher no MariaDB
+        await supabase.functions.invoke("mariadb-proxy", {
+          body: {
+            action: "update_voucher_esteira",
+            voucher_id: voucher.id,
             fornecedor: data.data.fornecedor || voucher.fornecedor,
             cnpj_fornecedor: data.data.cnpjFornecedor || voucher.cnpjFornecedor,
             valor: data.data.valor || voucher.valor,
@@ -106,11 +124,21 @@ export const VoucherOperacaoActions = ({ voucher, onUpdate }: VoucherOperacaoAct
             tipo_documento: data.data.tipoDocumento || voucher.tipoDocumento,
             data_emissao_documento: data.data.dataEmissao || voucher.dataEmissaoDocumento,
             moeda: data.data.moeda || voucher.moeda,
-            fonte_dados: "RM", // Marcar como sincronizado
-          })
-          .eq("id", voucher.id);
+          },
+        });
 
-        if (updateError) throw updateError;
+        // Log the action
+        const userData = getUserData();
+        await supabase.functions.invoke("mariadb-proxy", {
+          body: {
+            action: "save_voucher_log",
+            voucher_id: voucher.id,
+            user_id: userData.id?.toString(),
+            user_name: userData.username,
+            acao: "DADOS_RM_SINCRONIZADOS",
+            detalhe: "Dados do RM carregados com sucesso",
+          },
+        });
 
         toast({
           title: "Dados sincronizados!",
@@ -150,7 +178,7 @@ export const VoucherOperacaoActions = ({ voucher, onUpdate }: VoucherOperacaoAct
         return;
       }
 
-      // Verificar anexos obrigatórios (aceita ambas nomenclaturas: FATURA/FATURA_DEMONSTRATIVO e BOLETO/BOLETO_INSTRUCOES)
+      // Verificar anexos obrigatórios
       const hasFatura = voucher.anexos.some(a => a.tipo === "FATURA_DEMONSTRATIVO" || a.tipo === "FATURA");
       const hasBoleto = voucher.anexos.some(a => a.tipo === "BOLETO_INSTRUCOES" || a.tipo === "BOLETO");
 
@@ -163,10 +191,9 @@ export const VoucherOperacaoActions = ({ voucher, onUpdate }: VoucherOperacaoAct
         return;
       }
 
-      // Determinar próxima etapa baseado em urgência, cobrança e tipo documento
+      // Determinar próxima etapa
       let proximaEtapa: "FISCAL" | "FINANCEIRO" | "SUPERVISOR";
       
-      // ADF pula etapa Fiscal, vai direto para Financeiro
       if (voucher.tipoDocumento === "ADF") {
         proximaEtapa = "FINANCEIRO";
       } else if (voucher.urgenciaTipo === "URGENTE_REAL") {
@@ -182,23 +209,36 @@ export const VoucherOperacaoActions = ({ voucher, onUpdate }: VoucherOperacaoAct
         status_envio_cliente: voucher.cobrancaEmNomeDe === "CLIENTE" ? "AGUARDANDO_CLIENTE" : "NAO_APLICA",
       };
 
-      // Se for ajuste, salvar a resposta
       if (isAjusteOperacao && respostaAjuste.trim()) {
         updateData.comentarios_operacao = respostaAjuste.trim();
       }
 
-      const { error } = await (supabase as any)
-        .from("vouchers")
-        .update(updateData)
-        .eq("id", voucher.id);
+      // Update voucher in MariaDB
+      const { error } = await supabase.functions.invoke("mariadb-proxy", {
+        body: {
+          action: "update_voucher_esteira",
+          voucher_id: voucher.id,
+          ...updateData,
+        },
+      });
 
       if (error) throw error;
 
-      // Nota: t_dados_financeiro_voucher é apenas FONTE de dados (leitura)
-      // Não inserimos nela - o voucher já foi salvo em t_vouchers na criação
-
+      // Log the action
+      const userData = getUserData();
       const etapaLabel = proximaEtapa === "SUPERVISOR" ? "Supervisor" : 
                          proximaEtapa === "FISCAL" ? "Fiscal" : "Financeiro";
+      
+      await supabase.functions.invoke("mariadb-proxy", {
+        body: {
+          action: "save_voucher_log",
+          voucher_id: voucher.id,
+          user_id: userData.id?.toString(),
+          user_name: userData.username,
+          acao: isAjusteOperacao ? "REENVIO_APOS_AJUSTE" : "ENVIADO_OPERACAO",
+          detalhe: `Voucher enviado para ${etapaLabel}`,
+        },
+      });
 
       toast({
         title: "Voucher enviado!",
@@ -248,10 +288,9 @@ export const VoucherOperacaoActions = ({ voucher, onUpdate }: VoucherOperacaoAct
         </Alert>
       )}
 
-      {/* Seção de Ajuste - apenas em AJUSTE_OPERACAO */}
+      {/* Seção de Ajuste */}
       {isAjusteOperacao && (
         <>
-          {/* Motivo do ajuste solicitado pelo Fiscal */}
           {voucher.ajusteFiscal && (
             <Alert className="bg-destructive/10 border-destructive/30">
               <AlertTriangle className="h-4 w-4 text-destructive" />
@@ -262,7 +301,6 @@ export const VoucherOperacaoActions = ({ voucher, onUpdate }: VoucherOperacaoAct
             </Alert>
           )}
 
-          {/* Campo de resposta ao ajuste */}
           <Card className="border-primary/30 bg-primary/5">
             <CardHeader className="pb-3">
               <CardTitle className="text-base flex items-center gap-2 text-primary">
@@ -275,19 +313,15 @@ export const VoucherOperacaoActions = ({ voucher, onUpdate }: VoucherOperacaoAct
                 <Label htmlFor="resposta-ajuste">Descreva o que foi corrigido</Label>
                 <Textarea
                   id="resposta-ajuste"
-                  placeholder="Ex: Anexos corrigidos conforme solicitado. A fatura foi substituída pela versão atualizada..."
+                  placeholder="Ex: Anexos corrigidos conforme solicitado..."
                   value={respostaAjuste}
                   onChange={(e) => setRespostaAjuste(e.target.value)}
                   className="min-h-[100px] bg-background"
                 />
-                <p className="text-xs text-muted-foreground">
-                  Este comentário será visível na próxima etapa do workflow.
-                </p>
               </div>
             </CardContent>
           </Card>
 
-          {/* Seção de Upload de Novos Anexos */}
           <Card className="border-warning/30 bg-warning/5">
             <CardHeader className="pb-3">
               <CardTitle className="text-base flex items-center gap-2 text-warning">
@@ -297,7 +331,7 @@ export const VoucherOperacaoActions = ({ voucher, onUpdate }: VoucherOperacaoAct
             </CardHeader>
             <CardContent className="space-y-4">
               <p className="text-sm text-muted-foreground">
-                Exclua os anexos incorretos na lista acima e adicione os novos aqui.
+                Exclua os anexos incorretos e adicione os novos aqui.
               </p>
               
               <div className="flex items-center gap-3">
@@ -362,7 +396,7 @@ export const VoucherOperacaoActions = ({ voucher, onUpdate }: VoucherOperacaoAct
             <AlertDialogDescription>
               {isAjusteOperacao 
                 ? "Confirma que os ajustes foram realizados e o voucher pode ser reenviado?"
-                : `Após o envio, os campos da operação serão bloqueados para edição${voucher.formaPagamento === "ADF" ? " (exceto para ADF)" : ""}.`}
+                : "Após o envio, os campos da operação serão bloqueados para edição."}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

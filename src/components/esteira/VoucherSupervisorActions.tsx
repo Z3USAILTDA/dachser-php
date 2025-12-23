@@ -29,23 +29,42 @@ export const VoucherSupervisorActions = ({ voucher, onUpdate }: VoucherSuperviso
   const [showRejectDialog, setShowRejectDialog] = useState(false);
   const { toast } = useToast();
 
+  // Get user data from localStorage (MariaDB auth)
+  const getUserData = () => {
+    const storedUser = localStorage.getItem("user") || localStorage.getItem("dachser_user");
+    return storedUser ? JSON.parse(storedUser) : { id: 0, username: "sistema" };
+  };
+
   const handleAprovar = async () => {
     try {
       setLoading(true);
+      const userData = getUserData();
 
-      const { data: userData } = await supabase.auth.getUser();
-
-      const { error } = await (supabase as any)
-        .from("vouchers")
-        .update({
+      // Update voucher in MariaDB
+      const { error } = await supabase.functions.invoke("mariadb-proxy", {
+        body: {
+          action: "update_voucher_esteira",
+          voucher_id: voucher.id,
           etapa_atual: "FINANCEIRO",
           status_financeiro: "APROVADO",
-          aprovado_por_user_id: userData.user?.id,
-          responsavel_supervisor_user_id: userData.user?.id,
-        })
-        .eq("id", voucher.id);
+          aprovado_por_user_id: userData.id?.toString(),
+          responsavel_supervisor_user_id: userData.id?.toString(),
+        },
+      });
 
       if (error) throw error;
+
+      // Log the action
+      await supabase.functions.invoke("mariadb-proxy", {
+        body: {
+          action: "save_voucher_log",
+          voucher_id: voucher.id,
+          user_id: userData.id?.toString(),
+          user_name: userData.username,
+          acao: "APROVADO_SUPERVISOR",
+          detalhe: "Voucher urgente aprovado pelo Supervisor",
+        },
+      });
 
       toast({
         title: "Voucher aprovado",
@@ -77,46 +96,48 @@ export const VoucherSupervisorActions = ({ voucher, onUpdate }: VoucherSuperviso
 
     try {
       setLoading(true);
+      const userData = getUserData();
 
-      const { data: userData } = await supabase.auth.getUser();
-
-      const { error } = await (supabase as any)
-        .from("vouchers")
-        .update({
+      // Update voucher in MariaDB
+      const { error } = await supabase.functions.invoke("mariadb-proxy", {
+        body: {
+          action: "update_voucher_esteira",
+          voucher_id: voucher.id,
           etapa_atual: "OPERACAO",
           status_financeiro: "REJEITADO",
           ajuste_operacao: `REJEITADO PELO SUPERVISOR: ${comentarios}`,
-          responsavel_supervisor_user_id: userData.user?.id,
-        })
-        .eq("id", voucher.id);
+          responsavel_supervisor_user_id: userData.id?.toString(),
+        },
+      });
 
       if (error) throw error;
 
-      // Enviar email de notificação para operação
-      const { data: senderProfile } = await (supabase as any)
-        .from("profiles")
-        .select("name")
-        .eq("id", userData.user?.id)
-        .maybeSingle();
+      // Log the action
+      await supabase.functions.invoke("mariadb-proxy", {
+        body: {
+          action: "save_voucher_log",
+          voucher_id: voucher.id,
+          user_id: userData.id?.toString(),
+          user_name: userData.username,
+          acao: "REJEITADO_SUPERVISOR",
+          detalhe: `Voucher rejeitado: ${comentarios}`,
+        },
+      });
 
-      const { data: operacaoProfile } = await (supabase as any)
-        .from("profiles")
-        .select("email")
-        .eq("id", voucher.responsavelOperacaoUserId || voucher.criadoPorUserId)
-        .maybeSingle();
-
-      if (operacaoProfile?.email) {
-        await supabase.functions.invoke("send-notification-email", {
+      // Try to send notification email (optional)
+      try {
+        await supabase.functions.invoke("send-voucher-notification", {
           body: {
-            to: operacaoProfile.email,
             voucherId: voucher.id,
             voucherNumber: voucher.numeroSPO,
             fromStage: "SUPERVISOR",
             toStage: "OPERACAO",
             reason: comentarios,
-            senderName: senderProfile?.name || "Supervisor",
+            senderName: userData.username,
           },
         });
+      } catch (emailErr) {
+        console.log("Email notification skipped:", emailErr);
       }
 
       toast({

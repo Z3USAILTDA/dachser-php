@@ -20,20 +20,41 @@ export const VoucherFiscalActions = ({ voucher, onUpdate }: VoucherFiscalActions
   const [motivoAjuste, setMotivoAjuste] = useState("");
   const { toast } = useToast();
 
+  // Get user data from localStorage (MariaDB auth)
+  const getUserData = () => {
+    const storedUser = localStorage.getItem("user") || localStorage.getItem("dachser_user");
+    return storedUser ? JSON.parse(storedUser) : { id: 0, username: "sistema" };
+  };
+
   const handleAprovar = async () => {
     try {
       setLoading(true);
+      const userData = getUserData();
 
-      const { error } = await (supabase as any)
-        .from("vouchers")
-        .update({
+      // Update voucher in MariaDB
+      const { error } = await supabase.functions.invoke("mariadb-proxy", {
+        body: {
+          action: "update_voucher_esteira",
+          voucher_id: voucher.id,
           etapa_atual: "FINANCEIRO",
           comentarios_fiscal: comentarios || null,
-          responsavel_fiscal_user_id: (await supabase.auth.getUser()).data.user?.id,
-        })
-        .eq("id", voucher.id);
+          responsavel_fiscal_user_id: userData.id?.toString(),
+        },
+      });
 
       if (error) throw error;
+
+      // Log the action
+      await supabase.functions.invoke("mariadb-proxy", {
+        body: {
+          action: "save_voucher_log",
+          voucher_id: voucher.id,
+          user_id: userData.id?.toString(),
+          user_name: userData.username,
+          acao: "APROVADO_FISCAL",
+          detalhe: "Voucher aprovado pelo Fiscal e enviado para Financeiro",
+        },
+      });
 
       toast({
         title: "Voucher aprovado!",
@@ -64,45 +85,48 @@ export const VoucherFiscalActions = ({ voucher, onUpdate }: VoucherFiscalActions
 
     try {
       setLoading(true);
+      const userData = getUserData();
 
-      const { error } = await (supabase as any)
-        .from("vouchers")
-        .update({
+      // Update voucher in MariaDB
+      const { error } = await supabase.functions.invoke("mariadb-proxy", {
+        body: {
+          action: "update_voucher_esteira",
+          voucher_id: voucher.id,
           etapa_atual: "AJUSTE_OPERACAO",
           ajuste_operacao: motivoAjuste,
           comentarios_fiscal: comentarios || null,
-          responsavel_fiscal_user_id: (await supabase.auth.getUser()).data.user?.id,
-        })
-        .eq("id", voucher.id);
+          responsavel_fiscal_user_id: userData.id?.toString(),
+        },
+      });
 
       if (error) throw error;
 
-      // Enviar email de notificação
-      const { data: userData } = await supabase.auth.getUser();
-      const { data: senderProfile } = await (supabase as any)
-        .from("profiles")
-        .select("name")
-        .eq("id", userData.user?.id)
-        .maybeSingle();
+      // Log the action
+      await supabase.functions.invoke("mariadb-proxy", {
+        body: {
+          action: "save_voucher_log",
+          voucher_id: voucher.id,
+          user_id: userData.id?.toString(),
+          user_name: userData.username,
+          acao: "DEVOLVIDO_FISCAL",
+          detalhe: `Devolvido para Operação: ${motivoAjuste}`,
+        },
+      });
 
-      const { data: operacaoProfile } = await (supabase as any)
-        .from("profiles")
-        .select("email")
-        .eq("id", voucher.responsavelOperacaoUserId || voucher.criadoPorUserId)
-        .maybeSingle();
-
-      if (operacaoProfile?.email) {
-        await supabase.functions.invoke("send-notification-email", {
+      // Try to send notification email (optional - may fail silently)
+      try {
+        await supabase.functions.invoke("send-voucher-notification", {
           body: {
-            to: operacaoProfile.email,
             voucherId: voucher.id,
             voucherNumber: voucher.numeroSPO,
             fromStage: "FISCAL",
             toStage: "AJUSTE_OPERACAO",
             reason: motivoAjuste,
-            senderName: senderProfile?.name || "Fiscal",
+            senderName: userData.username,
           },
         });
+      } catch (emailErr) {
+        console.log("Email notification skipped:", emailErr);
       }
 
       toast({

@@ -21,28 +21,41 @@ export const VoucherRoboActions = ({ voucher, onUpdate }: VoucherRoboActionsProp
   const hasComprovante = voucher.anexos.some((a) => a.tipo === "COMPROVANTE");
   const comprovanteFile = voucher.anexos.find((a) => a.tipo === "COMPROVANTE");
 
+  // Get user data from localStorage (MariaDB auth)
+  const getUserData = () => {
+    const storedUser = localStorage.getItem("user") || localStorage.getItem("dachser_user");
+    return storedUser ? JSON.parse(storedUser) : { id: 0, username: "sistema" };
+  };
+
   const handleComprovanteUpload = async (fileUrl: string, fileName: string, fileSize: number) => {
     try {
       setUploadingComprovante(true);
+      const userData = getUserData();
 
-      const { data: userData } = await supabase.auth.getUser();
-
-      const { error } = await (supabase as any).from("attachments").insert({
-        voucher_id: voucher.id,
-        tipo: "COMPROVANTE" as TipoAnexo,
-        file_url: fileUrl,
-        file_name: fileName,
-        file_size: fileSize,
-        uploaded_by_user_id: userData.user?.id,
+      // Save attachment to MariaDB
+      const { error } = await supabase.functions.invoke("mariadb-proxy", {
+        body: {
+          action: "save_voucher_anexo",
+          voucher_id: voucher.id,
+          tipo: "COMPROVANTE",
+          file_name: fileName,
+          file_url: fileUrl,
+          file_size: fileSize,
+        },
       });
 
       if (error) throw error;
 
-      await (supabase as any).from("log_entries").insert({
-        voucher_id: voucher.id,
-        user_id: userData.user?.id,
-        acao: "COMPROVANTE_ANEXADO",
-        detalhe: `Comprovante ${fileName} anexado`,
+      // Log the action
+      await supabase.functions.invoke("mariadb-proxy", {
+        body: {
+          action: "save_voucher_log",
+          voucher_id: voucher.id,
+          user_id: userData.id?.toString(),
+          user_name: userData.username,
+          acao: "COMPROVANTE_ANEXADO",
+          detalhe: `Comprovante ${fileName} anexado`,
+        },
       });
 
       toast({
@@ -74,9 +87,13 @@ export const VoucherRoboActions = ({ voucher, onUpdate }: VoucherRoboActionsProp
 
     try {
       setLoading(true);
+      const userData = getUserData();
 
-      const { data, error } = await supabase.functions.invoke("integrate-rm", {
-        body: { voucherId: voucher.id },
+      const { data, error } = await supabase.functions.invoke("voucher-integrate-rm", {
+        body: { 
+          action: "integrate",
+          voucherId: voucher.id 
+        },
       });
 
       if (error) throw error;
@@ -85,9 +102,31 @@ export const VoucherRoboActions = ({ voucher, onUpdate }: VoucherRoboActionsProp
         throw new Error(data.error || "Erro ao integrar com RM");
       }
 
+      // Update voucher status in MariaDB
+      await supabase.functions.invoke("mariadb-proxy", {
+        body: {
+          action: "update_voucher_esteira",
+          voucher_id: voucher.id,
+          etapa_atual: "CONCLUIDO",
+          status_baixa: "CONCLUIDO",
+        },
+      });
+
+      // Log the action
+      await supabase.functions.invoke("mariadb-proxy", {
+        body: {
+          action: "save_voucher_log",
+          voucher_id: voucher.id,
+          user_id: userData.id?.toString(),
+          user_name: userData.username,
+          acao: "INTEGRADO_RM",
+          detalhe: `Voucher integrado ao RM. Protocolo: ${data.rm_protocol || 'N/A'}`,
+        },
+      });
+
       toast({
         title: "Integração concluída!",
-        description: `Voucher integrado ao RM. Protocolo: ${data.rm_protocol}`,
+        description: `Voucher integrado ao RM. Protocolo: ${data.rm_protocol || 'N/A'}`,
       });
 
       onUpdate();
