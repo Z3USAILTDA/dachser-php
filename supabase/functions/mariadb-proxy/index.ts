@@ -4745,7 +4745,8 @@ serve(async (req) => {
           filterCobranca,
           filterFilial,
           filterMoeda,
-          filterFormaPagamento
+          filterFormaPagamento,
+          filterStatusIntegracaoRm
         } = body as {
           page?: number;
           perPage?: number;
@@ -4757,6 +4758,7 @@ serve(async (req) => {
           filterFilial?: string;
           filterMoeda?: string;
           filterFormaPagamento?: string;
+          filterStatusIntegracaoRm?: string;
         };
 
         const offset = (page - 1) * perPage;
@@ -4807,6 +4809,11 @@ serve(async (req) => {
           params.push(filterFormaPagamento);
         }
 
+        if (filterStatusIntegracaoRm) {
+          conditions.push("v.status_integracao_rm = ?");
+          params.push(filterStatusIntegracaoRm);
+        }
+
         const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
 
         // Count total
@@ -4823,7 +4830,7 @@ serve(async (req) => {
             v.vencimento, v.forma_pagamento, v.tipo_documento, v.cobranca_em_nome_de,
             v.filial, v.linha_digitavel, v.codigo_barras, v.status_pagamento,
             v.tipo_execucao_pagamento, v.is_pronto_para_robo, v.lote_remessa_id,
-            v.etapa_atual, v.status_baixa, v.created_at, v.updated_at
+            v.status_integracao_rm, v.etapa_atual, v.status_baixa, v.created_at, v.updated_at
           FROM dados_dachser.t_vouchers v
           ${whereClause}
           ORDER BY v.vencimento ASC, v.created_at DESC
