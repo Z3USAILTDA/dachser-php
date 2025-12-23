@@ -1,7 +1,7 @@
 import { useState, useCallback } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { Eye, Download, Loader2, ExternalLink, FileText, ChevronLeft, ChevronRight, ZoomIn, ZoomOut } from "lucide-react";
+import { Eye, Download, Loader2, FileText, ChevronLeft, ChevronRight, ZoomIn, ZoomOut } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Document, Page, pdfjs } from "react-pdf";
 import "react-pdf/dist/esm/Page/AnnotationLayer.css";
@@ -55,10 +55,6 @@ export const FilePreview = ({ fileName, fileUrl, fileType, onDownload }: FilePre
         setLoading(false);
       }
     }
-  };
-
-  const handleOpenInNewTab = () => {
-    window.open(fileUrl, '_blank', 'noopener,noreferrer');
   };
 
   const onDocumentLoadSuccess = useCallback(({ numPages }: { numPages: number }) => {
@@ -119,15 +115,6 @@ export const FilePreview = ({ fileName, fileUrl, fileType, onDownload }: FilePre
         <Button
           variant="ghost"
           size="sm"
-          onClick={handleOpenInNewTab}
-          className="gap-2"
-          title="Abrir em nova aba"
-        >
-          <ExternalLink className="h-4 w-4" />
-        </Button>
-        <Button
-          variant="ghost"
-          size="sm"
           onClick={onDownload}
           className="gap-2"
         >
@@ -154,15 +141,6 @@ export const FilePreview = ({ fileName, fileUrl, fileType, onDownload }: FilePre
                     </Button>
                   </div>
                 )}
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={handleOpenInNewTab}
-                  className="gap-2"
-                >
-                  <ExternalLink className="h-4 w-4" />
-                  Abrir em Nova Aba
-                </Button>
                 <Button
                   variant="outline"
                   size="sm"
@@ -247,16 +225,10 @@ export const FilePreview = ({ fileName, fileUrl, fileType, onDownload }: FilePre
                 <p className="text-muted-foreground text-center mb-6">
                   Não foi possível exibir o PDF nesta janela.
                 </p>
-                <div className="flex gap-3">
-                  <Button onClick={handleOpenInNewTab} className="gap-2">
-                    <ExternalLink className="h-4 w-4" />
-                    Abrir em Nova Aba
-                  </Button>
-                  <Button variant="outline" onClick={onDownload} className="gap-2">
-                    <Download className="h-4 w-4" />
-                    Baixar PDF
-                  </Button>
-                </div>
+                <Button onClick={onDownload} className="gap-2">
+                  <Download className="h-4 w-4" />
+                  Baixar PDF
+                </Button>
               </div>
             )}
 
