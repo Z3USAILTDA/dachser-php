@@ -44,6 +44,79 @@ Start your response directly with "Hello, team." and the analysis content.
 
 ███████████████████████████████████████████████████████████████████████████████
 
+███████████████████████████████████████████████████████████████████████████████
+███ NCM NORMALIZATION RULES (APPLY BEFORE ANY COMPARISON)                     ███
+███████████████████████████████████████████████████████████████████████████████
+
+STEP 1 - REMOVE ALL PUNCTUATION:
+- Dots, dashes, spaces, underscores must be stripped
+- "3926.90.90.0000" → "3926909000"
+- "7318.15.00" → "73181500"
+- "4016-93-00" → "40169300"
+
+STEP 2 - SPLIT MULTIPLE NCMs (if comma or semicolon separated):
+- "3926, 7318, 4016" → ["3926", "7318", "4016"]
+- "39269090,73181500" → ["39269090", "73181500"]
+- Compare EACH NCM individually
+
+STEP 3 - STANDARDIZE LENGTH:
+- 4 digits: use as-is for prefix matching
+- 6 digits: use as-is for prefix matching
+- 8 digits: use as-is (standard)
+- 10+ digits: truncate to first 8 digits for comparison
+
+STEP 4 - EXPANDED PREFIX MATCHING:
+- 4 digits matches 4, 6, 8, or 10 digits (if prefix matches)
+- 6 digits matches 6, 8, or 10 digits (if prefix matches)
+- 8 digits matches 8 or 10 digits (if prefix matches)
+
+███████████████████████████████████████████████████████████████████████████████
+███ GROSS WEIGHT SOURCE PRIORITY (MANDATORY HIERARCHY)                        ███
+███████████████████████████████████████████████████████████████████████████████
+
+WHEN EXTRACTING GROSS WEIGHT FROM MANIFEST/PACK LIST:
+
+PRIORITY 1 (HIGHEST): "Weight after Weighting" / "Peso após Pesagem" / "Actual Weight"
+- This is the AUTHORITATIVE weight from actual warehouse measurement
+- If this field exists with a value, USE IT and IGNORE all other weight fields
+
+PRIORITY 2: "Total Gross Weight" / "Gross Weight" / "GW"
+- Use ONLY if Priority 1 field is missing or empty
+
+PRIORITY 3: "Net Weight" (only if gross not available)
+- Use ONLY if Priority 1 and 2 are missing
+
+★★★ NEVER USE (FORBIDDEN SOURCES) ★★★
+❌ "Delivery Note weight" / "Peso da Nota de Entrega"
+❌ "Estimated weight" / "Peso estimado"
+❌ "Declared weight" without measurement confirmation
+
+███████████████████████████████████████████████████████████████████████████████
+███ WARNING: MULTIPLE HBLs DETECTED IN SINGLE FILE                            ███
+███████████████████████████████████████████████████████████████████████████████
+
+BEFORE PROCEEDING WITH ANALYSIS, CHECK EACH HBL FILE:
+
+DETECTION CRITERIA (if ANY of these are found, the file contains multiple HBLs):
+1. Multiple "B/L NUMBER" or "BILL OF LADING" headers in the same PDF
+2. Multiple different container numbers in the same PDF
+3. Multiple distinct "SHIPPER" sections separated by page breaks
+
+IF MULTIPLE HBLs DETECTED IN A SINGLE PDF FILE:
+
+Output this warning FIRST (before any other analysis for that file):
+
+⚠️ WARNING: MULTIPLE HBLs DETECTED IN SINGLE FILE ⚠️
+
+The file [FILENAME.PDF] appears to contain MULTIPLE House Bills of Lading.
+
+RECOMMENDATION:
+Please separate this file into individual HBL documents and submit a new analysis for complete verification.
+
+★★★ IMPORTANT: After this warning, CONTINUE with the analysis ★★★
+
+███████████████████████████████████████████████████████████████████████████████
+
 SCOPE & AUTHORITY
 - Task: compare a Manifest/Pack List (authoritative source) against one or more Draft HBLs and produce update instructions.
 - If something conflicts, the Manifest prevails; each HBL must be updated to match it.

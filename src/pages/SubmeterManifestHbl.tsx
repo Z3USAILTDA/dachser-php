@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate, useLocation, useParams } from "react-router-dom";
-import { Send, FileText, AlertCircle, Copy, Check, Info, FileStack, Loader2, HelpCircle } from "lucide-react";
+import { Send, FileText, AlertCircle, Copy, Check, Info, FileStack, Loader2, HelpCircle, ClipboardList } from "lucide-react";
 import { PageLayout } from "@/components/layout/PageLayout";
 import { PageCard } from "@/components/layout/PageCard";
 import { Button } from "@/components/ui/button";
@@ -99,6 +99,7 @@ export default function SubmeterManifestHbl() {
   const [analysisStep, setAnalysisStep] = useState("");
   const [isCompletingAnalysis, setIsCompletingAnalysis] = useState(false);
   const [copiedResult, setCopiedResult] = useState(false);
+  const [copiedDivergences, setCopiedDivergences] = useState(false);
   const [inlineStatus, setInlineStatus] = useState<{
     message: string;
     type: 'info' | 'success' | 'error';
@@ -351,6 +352,90 @@ export default function SubmeterManifestHbl() {
       toast.error("Não foi possível copiar. Selecione o texto manualmente.");
     }
   };
+
+  // Extract only divergences from analysis result
+  const extractDivergences = (text: string): string => {
+    const lines = text.split('\n');
+    const divergencePatterns = [
+      /UPDATE REQUIRED/i,
+      /Delta:\s*[+-]?[0-9,.]+\s*(kg|m³|m3)/i,
+      /Missing:/i,
+      /Extra:/i,
+      /→\s*Update:/i,
+      /Update:/i,
+      /DISCREPANCY/i,
+      /DISCREPANCIES FOUND/i,
+      /⚠️ WARNING/i,
+    ];
+    
+    const summaryStartPatterns = [
+      /SUMMARY FOR EXTERNAL COMMUNICATION/i,
+      /═══.*SUMMARY/i,
+    ];
+    
+    const divergentLines: string[] = [];
+    let inSummarySection = false;
+    
+    for (const line of lines) {
+      // Check if entering summary section
+      if (summaryStartPatterns.some(p => p.test(line))) {
+        inSummarySection = true;
+      }
+      
+      // Include summary section lines
+      if (inSummarySection) {
+        divergentLines.push(line);
+        continue;
+      }
+      
+      // Check for divergence patterns
+      if (divergencePatterns.some(pattern => pattern.test(line))) {
+        // Include context - add preceding line if it contains exporter/item info
+        const lineIndex = lines.indexOf(line);
+        if (lineIndex > 0) {
+          const prevLine = lines[lineIndex - 1];
+          if (/EXPORTER|Item \d+:|Draft HBL:/i.test(prevLine) && !divergentLines.includes(prevLine)) {
+            divergentLines.push(prevLine);
+          }
+        }
+        divergentLines.push(line);
+      }
+    }
+    
+    if (divergentLines.length === 0) {
+      return "Nenhuma divergência encontrada - todos os documentos estão reconciliados.";
+    }
+    
+    return divergentLines.join('\n').trim();
+  };
+
+  const handleCopyDivergences = () => {
+    if (!analysisResult?.result_text || analysisResult.result_text.trim().length === 0) {
+      toast.error("Não há conteúdo para copiar");
+      return;
+    }
+    try {
+      const divergences = extractDivergences(analysisResult.result_text);
+      const textarea = document.createElement('textarea');
+      textarea.value = divergences;
+      textarea.style.position = 'fixed';
+      textarea.style.opacity = '0';
+      document.body.appendChild(textarea);
+      textarea.select();
+      const successful = document.execCommand('copy');
+      document.body.removeChild(textarea);
+      if (successful) {
+        setCopiedDivergences(true);
+        toast.success("Divergências copiadas");
+        setTimeout(() => setCopiedDivergences(false), 2000);
+      } else {
+        throw new Error("execCommand failed");
+      }
+    } catch (err) {
+      console.error('Copy error:', err);
+      toast.error("Não foi possível copiar. Selecione o texto manualmente.");
+    }
+  };
   if (isLoading) {
     return <div className="min-h-screen bg-background flex items-center justify-center">
         <div className="text-neutral-400">Carregando...</div>
@@ -481,7 +566,11 @@ export default function SubmeterManifestHbl() {
                   <Button onClick={handleCompleteAnalysis} disabled={isCompletingAnalysis} variant="outline" className="h-10 rounded-full px-6 border-white/24 bg-black/40 text-white hover:border-amber-400/80 hover:bg-black">
                     Concluir análise
                   </Button>
-                  <Button onClick={handleCopyResult} variant="ghost" size="icon" className="rounded-full w-10 h-10 text-white hover:bg-white/10" title="Copiar resultado">
+                  <Button onClick={handleCopyDivergences} variant="outline" className="h-10 rounded-full px-6 border-amber-400/50 bg-black/40 text-amber-300 hover:border-amber-400 hover:bg-black" title="Copiar apenas divergências">
+                    {copiedDivergences ? <Check className="w-4 h-4 mr-2" /> : <ClipboardList className="w-4 h-4 mr-2" />}
+                    Copiar Divergências
+                  </Button>
+                  <Button onClick={handleCopyResult} variant="ghost" size="icon" className="rounded-full w-10 h-10 text-white hover:bg-white/10" title="Copiar resultado completo">
                     {copiedResult ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
                   </Button>
                 </div>
