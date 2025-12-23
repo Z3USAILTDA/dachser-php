@@ -1433,6 +1433,21 @@ NOTE: Extract Vessel and Voyage SEPARATELY. If HBL has combined "VESSEL / VOYAGE
   - If Date of Issue < Shipped on Board on any BL → UPDATE REQUIRED: Set Date of Issue to same day or later than SOB.
   - Otherwise → Chronology: OK ✓
 
+████████████████████████████████████████████████████████████████████████████████
+█ MANDATORY NCM CODES SECTION - MUST ALWAYS BE INCLUDED                         █
+████████████████████████████████████████████████████████████████████████████████
+
+★★★ CRITICAL: YOU MUST ALWAYS INCLUDE THIS EXACT NCM CODES SECTION ★★★
+
+NCM CODES:
+- HBL NCMs: [list of all unique 4-digit NCM prefixes found in HBL, sorted]
+- MBL NCMs: [list of all unique 4-digit NCM prefixes found in MBL, sorted]
+- Missing in MBL: [list of NCMs in HBL but not in MBL, or "none"]
+- Extra in MBL: [list of NCMs in MBL but not in HBL, or "none"]
+- Status: MATCH (if no missing/extra) or UPDATE REQUIRED (if discrepancies)
+
+★★★ THIS SECTION IS MANDATORY - NEVER SKIP IT ★★★
+
 7) Summary
 - Total fields verified: [count]
 - Fields matching: [count] ✓
@@ -1952,6 +1967,21 @@ ANALYSIS SUMMARY:
 ████████████████████████████████████████████████████████████████████████████████
 █ ADDITIONAL SECTIONS                                                           █
 ████████████████████████████████████████████████████████████████████████████████
+
+████████████████████████████████████████████████████████████████████████████████
+█ MANDATORY NCM CODES SECTION - MUST ALWAYS BE INCLUDED                         █
+████████████████████████████████████████████████████████████████████████████████
+
+★★★ CRITICAL: YOU MUST ALWAYS INCLUDE THIS EXACT NCM CODES SECTION ★★★
+
+NCM CODES:
+- Invoice NCMs (all suppliers): [list of all unique 4-digit NCM prefixes found in invoices, sorted]
+- HBL NCMs: [list of all unique 4-digit NCM prefixes found in HBL(s), sorted]
+- Missing in HBL: [list of NCMs in invoices but not in HBL, or "none"]
+- Extra in HBL: [list of NCMs in HBL but not in invoices, or "none"]
+- Status: MATCH (if no missing/extra) or UPDATE REQUIRED (if discrepancies)
+
+★★★ THIS SECTION IS MANDATORY - NEVER SKIP IT ★★★
 
 NCM/HS Code Verification:
    Invoice NCM: [list]

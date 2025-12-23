@@ -1380,11 +1380,28 @@ DO NOT use placeholder text like "[Same structure]" - show FULL details for ALL.
 - Total CBM: HBL sum: <#,###.000 m³> | MBL: <#,###.000 m³> | Delta: <±N m³> | Status: <MATCH | UPDATE REQUIRED>
 - Total Packages: HBL sum: <N> | MBL: <N> | Delta: <±N> | Status: <MATCH | UPDATE REQUIRED>
 
+████████████████████████████████████████████████████████████████████████████████
+█ MANDATORY NCM CODES SECTION - MUST ALWAYS BE INCLUDED                         █
+████████████████████████████████████████████████████████████████████████████████
+
+★★★ CRITICAL: YOU MUST ALWAYS INCLUDE THIS EXACT NCM CODES SECTION ★★★
+
+At the end of EVERY analysis (before the final summary), include this section:
+
+NCM CODES:
+- HBL NCMs: [list of all unique 4-digit NCM prefixes found in HBL, sorted]
+- MBL NCMs: [list of all unique 4-digit NCM prefixes found in MBL, sorted]
+- Missing in MBL: [list of NCMs in HBL but not in MBL, or "none"]
+- Extra in MBL: [list of NCMs in MBL but not in HBL, or "none"]
+- Status: MATCH (if no missing/extra) or UPDATE REQUIRED (if discrepancies)
+
+★★★ THIS SECTION IS MANDATORY - NEVER SKIP IT ★★★
+
 6) NCM/HS CODES
-- MBL codes: [list]
-- HBL codes: [list]
-- Missing in HBL: [list or "none"]
-- Extra in HBL: [list or "none"]
+- HBL NCMs: [list]
+- MBL NCMs: [list]
+- Missing in MBL: [list or "none"]
+- Extra in MBL: [list or "none"]
 - Status: <MATCH | UPDATE REQUIRED>
 
 ANALYSIS SUMMARY
@@ -1777,6 +1794,21 @@ ANALYSIS SUMMARY:
 - Fields with discrepancies: Z
 
 ADDITIONAL SECTIONS
+
+████████████████████████████████████████████████████████████████████████████████
+█ MANDATORY NCM CODES SECTION - MUST ALWAYS BE INCLUDED                         █
+████████████████████████████████████████████████████████████████████████████████
+
+★★★ CRITICAL: YOU MUST ALWAYS INCLUDE THIS EXACT NCM CODES SECTION ★★★
+
+NCM CODES:
+- Invoice NCMs (all suppliers): [list of all unique 4-digit NCM prefixes found in invoices, sorted]
+- HBL NCMs: [list of all unique 4-digit NCM prefixes found in HBL(s), sorted]
+- Missing in HBL: [list of NCMs in invoices but not in HBL, or "none"]
+- Extra in HBL: [list of NCMs in HBL but not in invoices, or "none"]
+- Status: MATCH (if no missing/extra) or UPDATE REQUIRED (if discrepancies)
+
+★★★ THIS SECTION IS MANDATORY - NEVER SKIP IT ★★★
 
 NCM/HS Code Verification:
 - Invoice NCM: [list]
