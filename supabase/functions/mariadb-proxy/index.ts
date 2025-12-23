@@ -4652,7 +4652,7 @@ serve(async (req) => {
 
         console.log('Inserting into t_dados_rm:', { idRm, formaPag, fornecedorRm, regrasFormaPag });
         
-        // Ensure table exists
+        // Ensure table exists with proper structure
         await client.execute(`
           CREATE TABLE IF NOT EXISTS dados_dachser.t_dados_rm (
             id INT AUTO_INCREMENT PRIMARY KEY,
@@ -4669,6 +4669,16 @@ serve(async (req) => {
             INDEX idx_id_rm (id_rm)
           )
         `);
+        
+        // Fix id column if it's VARCHAR without default
+        try {
+          await client.execute(`
+            ALTER TABLE dados_dachser.t_dados_rm 
+            MODIFY COLUMN id INT AUTO_INCREMENT PRIMARY KEY
+          `);
+        } catch (alterErr) {
+          console.log('Note: id column may already be AUTO_INCREMENT');
+        }
 
         await client.execute(`
           INSERT INTO dados_dachser.t_dados_rm 
