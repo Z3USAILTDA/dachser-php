@@ -32,16 +32,27 @@ export const FilePreviewDialog = ({
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (open && file) {
-      // Create blob URL for local file
+    if (!open) return;
+    
+    // Prefer fileUrl if available (for files from storage)
+    // Also prefer fileUrl if file has no content (reference files from history)
+    const fileHasContent = file && file.size > 0;
+    
+    if (fileUrl) {
+      // Use storage URL directly
+      setPdfUrl(fileUrl);
+      setIsLoading(false);
+    } else if (fileHasContent) {
+      // Create blob URL for local file with actual content
       const url = URL.createObjectURL(file);
       setPdfUrl(url);
       setIsLoading(false);
       return () => {
         URL.revokeObjectURL(url);
       };
-    } else if (open && fileUrl) {
-      setPdfUrl(fileUrl);
+    } else {
+      // No valid source available
+      setError("Arquivo não disponível para visualização");
       setIsLoading(false);
     }
   }, [open, file, fileUrl]);
