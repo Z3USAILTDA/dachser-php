@@ -25,19 +25,19 @@ serve(async (req) => {
   }
 
   try {
-    const openAIApiKey = Deno.env.get('CHB_OPENAI_API_KEY');
+    const anthropicApiKey = Deno.env.get('ANTHROPIC_API_KEY');
     
-    if (!openAIApiKey) {
-      console.error('CHB_OPENAI_API_KEY not configured');
+    if (!anthropicApiKey) {
+      console.error('ANTHROPIC_API_KEY not configured');
       return new Response(
-        JSON.stringify({ error: 'OpenAI API key not configured', success: false }),
+        JSON.stringify({ error: 'Anthropic API key not configured', success: false }),
         { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
     const contentType = req.headers.get('content-type') || '';
-    let base64Image: string | null = null;
-    let fileType = 'pdf';
+    let base64Data: string | null = null;
+    let mediaType = 'application/pdf';
 
     if (contentType.includes('multipart/form-data')) {
       // Handle file upload
@@ -52,50 +52,80 @@ serve(async (req) => {
       }
 
       const arrayBuffer = await file.arrayBuffer();
-      base64Image = arrayBufferToBase64(arrayBuffer);
-      fileType = file.type.includes('pdf') ? 'pdf' : 'image';
+      base64Data = arrayBufferToBase64(arrayBuffer);
+      mediaType = file.type || 'application/pdf';
     } else {
       // Handle JSON with base64 or URL
       const body = await req.json();
       
       if (body.base64) {
-        base64Image = body.base64;
-        fileType = body.fileType || 'pdf';
+        base64Data = body.base64;
+        mediaType = body.mediaType || 'application/pdf';
       } else if (body.fileUrl) {
         // Fetch file from URL
+        console.log('Fetching file from URL:', body.fileUrl);
         const fileResponse = await fetch(body.fileUrl);
+        
+        if (!fileResponse.ok) {
+          console.error('Failed to fetch file:', fileResponse.status);
+          return new Response(
+            JSON.stringify({ error: 'Failed to fetch file from URL', success: false }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+        
         const arrayBuffer = await fileResponse.arrayBuffer();
-        base64Image = arrayBufferToBase64(arrayBuffer);
-        fileType = body.fileUrl.toLowerCase().includes('.pdf') ? 'pdf' : 'image';
+        base64Data = arrayBufferToBase64(arrayBuffer);
+        
+        // Determine media type from URL or content-type
+        const responseContentType = fileResponse.headers.get('content-type');
+        if (responseContentType) {
+          mediaType = responseContentType.split(';')[0].trim();
+        } else if (body.fileUrl.toLowerCase().includes('.pdf')) {
+          mediaType = 'application/pdf';
+        } else if (body.fileUrl.toLowerCase().match(/\.(jpg|jpeg)$/)) {
+          mediaType = 'image/jpeg';
+        } else if (body.fileUrl.toLowerCase().includes('.png')) {
+          mediaType = 'image/png';
+        }
       }
     }
 
-    if (!base64Image) {
+    if (!base64Data) {
       return new Response(
         JSON.stringify({ error: 'No file data provided', success: false }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
-    console.log(`Processing ${fileType} file for barcode extraction...`);
+    console.log(`Processing ${mediaType} file for barcode extraction (size: ${base64Data.length} chars)...`);
 
-    // Use GPT-4o-mini with vision to extract the barcode
-    const mediaType = fileType === 'pdf' ? 'application/pdf' : 'image/jpeg';
-    
-    const response = await fetch('https://api.openai.com/v1/chat/completions', {
+    // Use Claude to extract the barcode - Claude supports PDFs natively
+    const response = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${openAIApiKey}`,
+        'x-api-key': anthropicApiKey,
+        'anthropic-version': '2023-06-01',
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: 'gpt-4o-mini',
+        model: 'claude-sonnet-4-20250514',
         max_tokens: 500,
         messages: [
           {
-            role: 'system',
-            content: `Você é um especialista em extração de dados de boletos bancários brasileiros.
-Sua tarefa é extrair APENAS a linha digitável (código de barras) do boleto.
+            role: 'user',
+            content: [
+              {
+                type: 'document',
+                source: {
+                  type: 'base64',
+                  media_type: mediaType,
+                  data: base64Data
+                }
+              },
+              {
+                type: 'text',
+                text: `Analise este boleto bancário e extraia APENAS a linha digitável (código de barras numérico).
 
 A linha digitável tem 47 ou 48 dígitos numéricos, geralmente formatada em grupos separados por pontos ou espaços.
 Exemplo de formatos:
@@ -104,19 +134,6 @@ Exemplo de formatos:
 
 RESPONDA APENAS com a linha digitável no formato limpo (apenas números) ou "NAO_ENCONTRADO" se não conseguir identificar.
 NÃO inclua explicações, apenas os números.`
-          },
-          {
-            role: 'user',
-            content: [
-              {
-                type: 'text',
-                text: 'Extraia a linha digitável (código de barras) deste boleto bancário:'
-              },
-              {
-                type: 'image_url',
-                image_url: {
-                  url: `data:${mediaType};base64,${base64Image}`
-                }
               }
             ]
           }
@@ -126,15 +143,15 @@ NÃO inclua explicações, apenas os números.`
 
     if (!response.ok) {
       const errorText = await response.text();
-      console.error('OpenAI API error:', response.status, errorText);
+      console.error('Anthropic API error:', response.status, errorText);
       return new Response(
-        JSON.stringify({ error: 'Error calling OpenAI API', details: errorText, success: false }),
+        JSON.stringify({ error: 'Error calling Anthropic API', details: errorText, success: false }),
         { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
     const data = await response.json();
-    const extractedText = data.choices?.[0]?.message?.content?.trim() || '';
+    const extractedText = data.content?.[0]?.text?.trim() || '';
     
     console.log('Extracted text:', extractedText);
 
