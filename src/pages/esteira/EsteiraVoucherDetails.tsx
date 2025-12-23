@@ -18,7 +18,6 @@ import { VoucherSupervisorActions } from "@/components/esteira/VoucherSupervisor
 import { VoucherFinanceiroActions } from "@/components/esteira/VoucherFinanceiroActions";
 import { VoucherRoboActions } from "@/components/esteira/VoucherRoboActions";
 
-
 const EsteiraVoucherDetails = () => {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -32,29 +31,33 @@ const EsteiraVoucherDetails = () => {
     
     try {
       setLoading(true);
-      const { data, error } = await (supabase as any)
-        .from("vouchers")
-        .select(`
-          *,
-          anexos:voucher_anexos(id, tipo, file_name, file_url, file_size, created_at),
-          logs:voucher_logs(id, data_hora, acao, detalhe, user_id)
-        `)
-        .eq("id", id)
-        .single();
+      
+      // Fetch voucher data from MariaDB
+      const { data: responseData, error: fnError } = await supabase.functions.invoke('mariadb-proxy', {
+        body: { action: 'get_voucher_by_id', voucher_id: id }
+      });
 
-      if (error) throw error;
+      if (fnError) throw fnError;
+      
+      if (!responseData?.success || !responseData?.data) {
+        throw new Error('Voucher não encontrado');
+      }
+
+      const data = responseData.data;
+      const anexos = responseData.anexos || [];
+      const logs = responseData.logs || [];
 
       const mappedVoucher: Voucher = {
         id: data.id,
         numeroSPO: data.numero_spo,
         fornecedor: data.fornecedor,
         cnpjFornecedor: data.cnpj_fornecedor,
-        valor: data.valor,
+        valor: data.valor ? parseFloat(data.valor) : undefined,
         moeda: data.moeda || "BRL",
-        vencimento: new Date(data.vencimento),
+        vencimento: data.vencimento ? new Date(data.vencimento) : new Date(),
         dataEmissaoDocumento: data.data_emissao_documento ? new Date(data.data_emissao_documento) : undefined,
-        cobrancaEmNomeDe: data.cobranca_em_nome_de,
-        formaPagamento: data.forma_pagamento,
+        cobrancaEmNomeDe: data.cobranca_em_nome_de || 'DACHSER',
+        formaPagamento: data.forma_pagamento || 'BOLETO',
         tipoDocumento: data.tipo_documento,
         filial: data.filial,
         remessa: data.remessa,
@@ -65,7 +68,7 @@ const EsteiraVoucherDetails = () => {
         comentariosFinanceiro: data.comentarios_financeiro,
         ajusteOperacao: data.ajuste_operacao,
         ajusteFiscal: data.ajuste_fiscal,
-        etapaAtual: data.etapa_atual,
+        etapaAtual: data.etapa_atual || 'OPERACAO',
         statusBaixa: data.status_baixa || "PENDENTE",
         statusFinanceiro: data.status_financeiro || "PENDENTE",
         statusEnvioCliente: data.status_envio_cliente,
@@ -76,9 +79,9 @@ const EsteiraVoucherDetails = () => {
         responsavelFinanceiroUserId: data.responsavel_financeiro_user_id,
         aprovadoPorUserId: data.aprovado_por_user_id,
         clienteEmail: data.cliente_email,
-        createdAt: new Date(data.created_at),
-        updatedAt: new Date(data.updated_at),
-        anexos: (data.anexos || []).map((a: any) => ({
+        createdAt: data.created_at ? new Date(data.created_at) : new Date(),
+        updatedAt: data.updated_at ? new Date(data.updated_at) : new Date(),
+        anexos: anexos.map((a: any) => ({
           id: a.id,
           voucherId: data.id,
           tipo: a.tipo,
@@ -86,13 +89,14 @@ const EsteiraVoucherDetails = () => {
           fileUrl: a.file_url,
           fileSize: a.file_size,
           uploadedByUserId: data.criado_por_user_id,
-          createdAt: new Date(a.created_at),
+          createdAt: a.created_at ? new Date(a.created_at) : new Date(),
         })),
-        logs: (data.logs || []).map((l: any) => ({
+        logs: logs.map((l: any) => ({
           id: l.id,
           voucherId: data.id,
-          dataHora: new Date(l.data_hora),
+          dataHora: l.data_hora ? new Date(l.data_hora) : new Date(),
           userId: l.user_id,
+          userName: l.user_name,
           acao: l.acao,
           detalhe: l.detalhe,
         })).sort((a: any, b: any) => b.dataHora.getTime() - a.dataHora.getTime()),
@@ -100,6 +104,7 @@ const EsteiraVoucherDetails = () => {
 
       setVoucher(mappedVoucher);
     } catch (error: any) {
+      console.error('Error loading voucher:', error);
       toast({
         title: "Erro ao carregar voucher",
         description: error.message,

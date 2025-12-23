@@ -646,12 +646,16 @@ export const CreateVoucherDialog = ({
         }
       }
 
-      // Log creation - MANTER no Supabase para métricas
-      await (supabase as any).from("voucher_logs").insert({
-        voucher_id: voucherId,
-        user_id: null,
-        acao: "VOUCHER_CRIADO",
-        detalhe: `Voucher criado via ${entryMode === "rm" ? "RM" : "entrada manual"}${idRM ? ` (id_rm: ${idRM})` : ""}`,
+      // Log creation in MariaDB
+      await supabase.functions.invoke("mariadb-proxy", {
+        body: {
+          action: "save_voucher_log",
+          voucher_id: voucherId,
+          user_id: userData.id?.toString() || null,
+          user_name: userData.username || "Sistema",
+          acao: "VOUCHER_CRIADO",
+          detalhe: `Voucher criado via ${entryMode === "rm" ? "RM" : "entrada manual"}${idRM ? ` (id_rm: ${idRM})` : ""}`,
+        },
       });
 
       toast({
