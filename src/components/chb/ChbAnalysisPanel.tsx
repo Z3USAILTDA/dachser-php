@@ -1,7 +1,8 @@
 import { ChbAnalysisResult } from '@/types/chb';
 import { stepTitles } from '@/data/chbMocks';
-import { Play, CheckCircle, Loader2, RefreshCw, FileText, Copy } from 'lucide-react';
+import { Play, CheckCircle, Loader2, RefreshCw, FileText, Copy, AlertTriangle, XCircle, Ship, Plane } from 'lucide-react';
 import { toast } from 'sonner';
+import { ChbComparisonGrid } from './ChbComparisonGrid';
 
 interface ChbAnalysisPanelProps {
   stepId: number;
@@ -88,6 +89,8 @@ export function ChbAnalysisPanel({
   }
 
   // Has analysis result
+  const analysisData = analysisResult as ChbAnalysisResult & { modal?: string; cliente?: string };
+  
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
@@ -99,17 +102,35 @@ export function ChbAnalysisPanel({
         </span>
       </div>
 
+      {/* Extracted metadata badges */}
+      {(analysisData.modal || analysisData.cliente) && (
+        <div className="flex flex-wrap items-center gap-2">
+          {analysisData.modal && (
+            <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[0.7rem] font-medium border ${
+              analysisData.modal === 'SEA' 
+                ? 'bg-blue-500/20 border-blue-500/30 text-blue-400' 
+                : 'bg-purple-500/20 border-purple-500/30 text-purple-400'
+            }`}>
+              {analysisData.modal === 'SEA' ? <Ship className="w-3 h-3" /> : <Plane className="w-3 h-3" />}
+              Modal: {analysisData.modal}
+            </span>
+          )}
+          {analysisData.cliente && (
+            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[0.7rem] font-medium border bg-white/10 border-white/20 text-white/80">
+              Cliente: {analysisData.cliente}
+            </span>
+          )}
+        </div>
+      )}
+
       {/* Files analyzed list */}
       <div className="text-[0.65rem] text-white/50">
         <span className="font-medium">Arquivos analisados:</span> {analysisResult.filesAnalyzed.join(', ')}
       </div>
 
-      {/* Analysis HTML content - table and observations */}
-      <div className="p-4 rounded-lg bg-black/30 border border-white/10 overflow-auto">
-        <div 
-          className="prose prose-invert prose-sm max-w-none chb-analysis-content"
-          dangerouslySetInnerHTML={{ __html: analysisResult.html }}
-        />
+      {/* Analysis HTML content - using new comparison grid */}
+      <div className="p-4 rounded-lg bg-black/30 border border-white/10 overflow-auto max-h-[500px]">
+        <ChbComparisonGrid htmlContent={analysisResult.html} />
       </div>
 
       {/* Action buttons - only show if step is not completed */}

@@ -1,7 +1,7 @@
-import { useRef } from 'react';
+import { useRef, useState } from 'react';
 import { ChbDocument } from '@/types/chb';
 import { stepTitles } from '@/data/chbMocks';
-import { Upload, FileText, Download, X, Play, Loader2, Trash2 } from 'lucide-react';
+import { Upload, FileText, Download, X, Play, Loader2, Trash2, CheckCircle2 } from 'lucide-react';
 
 interface ChbDocumentsPanelProps {
   stepId: number;
@@ -25,18 +25,57 @@ export function ChbDocumentsPanel({
   hasAnalysisResult 
 }: ChbDocumentsPanelProps) {
   const inputRef = useRef<HTMLInputElement>(null);
+  const [isDragging, setIsDragging] = useState(false);
+  const dragCounter = useRef(0);
+
+  const handleDragEnter = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    dragCounter.current++;
+    if (e.dataTransfer.items && e.dataTransfer.items.length > 0) {
+      setIsDragging(true);
+    }
+  };
+
+  const handleDragLeave = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    dragCounter.current--;
+    if (dragCounter.current === 0) {
+      setIsDragging(false);
+    }
+  };
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+  };
 
   const handleDrop = (e: React.DragEvent) => {
     e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(false);
+    dragCounter.current = 0;
+    
     const files = Array.from(e.dataTransfer.files);
-    onFilesChange([...uploadedFiles, ...files]);
+    if (files.length > 0) {
+      onFilesChange([...uploadedFiles, ...files]);
+    }
   };
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files) {
       const files = Array.from(e.target.files);
       onFilesChange([...uploadedFiles, ...files]);
+      // Reset input value to allow selecting same file again
+      e.target.value = '';
     }
+  };
+
+  const handleZoneClick = (e: React.MouseEvent) => {
+    // Only open file dialog when clicking the drop zone itself
+    e.stopPropagation();
+    inputRef.current?.click();
   };
 
   const removeFile = (index: number) => {
@@ -133,11 +172,17 @@ export function ChbDocumentsPanel({
       )}
 
       <div
-        onDragOver={(e) => e.preventDefault()}
+        onDragEnter={handleDragEnter}
+        onDragLeave={handleDragLeave}
+        onDragOver={handleDragOver}
         onDrop={handleDrop}
-        onClick={() => inputRef.current?.click()}
-        className="border-2 border-dashed rounded-lg p-5 text-center cursor-pointer
-          transition-all duration-200 border-white/20 hover:border-amber-500/50 bg-black/20 hover:bg-amber-500/5"
+        onClick={handleZoneClick}
+        className={`border-2 border-dashed rounded-lg p-5 text-center cursor-pointer
+          transition-all duration-200 
+          ${isDragging 
+            ? 'border-amber-500 bg-amber-500/10 scale-[1.02]' 
+            : 'border-white/20 hover:border-amber-500/50 bg-black/20 hover:bg-amber-500/5'
+          }`}
       >
         <input
           ref={inputRef}
@@ -147,13 +192,24 @@ export function ChbDocumentsPanel({
           className="hidden"
           accept=".pdf,.doc,.docx,.xls,.xlsx,.png,.jpg,.jpeg,.xml,.json"
         />
-        <Upload className="w-6 h-6 mx-auto mb-2 text-white/40" />
-        <p className="text-xs text-white/60">
-          Arraste arquivos aqui ou clique para enviar
-        </p>
-        <p className="text-[0.65rem] text-white/40 mt-0.5">
-          PDF, DOC, XLS, imagens, XML, JSON
-        </p>
+        {isDragging ? (
+          <>
+            <CheckCircle2 className="w-8 h-8 mx-auto mb-2 text-amber-500 animate-pulse" />
+            <p className="text-sm text-amber-500 font-medium">
+              Solte para adicionar os arquivos
+            </p>
+          </>
+        ) : (
+          <>
+            <Upload className="w-6 h-6 mx-auto mb-2 text-white/40" />
+            <p className="text-xs text-white/60">
+              Arraste arquivos aqui ou clique para enviar
+            </p>
+            <p className="text-[0.65rem] text-white/40 mt-0.5">
+              PDF, DOC, XLS, imagens, XML, JSON
+            </p>
+          </>
+        )}
       </div>
 
       {uploadedFiles.length > 0 && (
