@@ -14,6 +14,7 @@ import { ChbHistoryPanel } from '@/components/chb/ChbHistoryPanel';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { useChbFiles, useChbRuns, useChbItems, ChbFile, ChbRun } from '@/hooks/useChbData';
+import { useChbClientConfig, ChbClientConfig } from '@/hooks/useChbClientConfig';
 
 export default function ConferenciaChb() {
   useUsageLog({ endpoint: "/chb/conferencia" });
@@ -24,6 +25,7 @@ export default function ConferenciaChb() {
   const { files: dbFiles, fetchFiles, createFile, deleteFile } = useChbFiles(itemId);
   const { runs: dbRuns, fetchRuns, createRun } = useChbRuns(itemId);
   const { updateItem } = useChbItems();
+  const { getConfigByClient } = useChbClientConfig();
   
   const [steps, setSteps] = useState<ChbStep[]>(initialSteps);
   const [activeStep, setActiveStep] = useState(1);
@@ -51,6 +53,7 @@ export default function ConferenciaChb() {
     3: [],
   });
   const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [clientConfig, setClientConfig] = useState<ChbClientConfig | null>(null);
 
   const currentUser = localStorage.getItem('user_email') || localStorage.getItem('username') || 'Usuário';
 
@@ -247,11 +250,20 @@ export default function ConferenciaChb() {
       const allFilesContent = [...existingDocsContent, ...uniqueNewFiles];
 
       console.log(`Sending ${allFilesContent.length} files for analysis (${existingDocsContent.length} existing, ${uniqueNewFiles.length} new)`);
+      if (clientConfig) {
+        console.log(`Using client config for: ${clientConfig.cliente_nome || clientConfig.cliente_cnpj}`);
+      }
 
       const { data, error } = await supabase.functions.invoke('analyze-chb-documents', {
         body: {
           stepId: activeStep,
           files: allFilesContent,
+          clientConfig: clientConfig ? {
+            tolerancia_peso: clientConfig.tolerancia_peso,
+            tolerancia_valor: clientConfig.tolerancia_valor,
+            campos_obrigatorios: clientConfig.campos_obrigatorios,
+            cliente_nome: clientConfig.cliente_nome,
+          } : undefined,
         },
       });
 
@@ -338,10 +350,28 @@ export default function ConferenciaChb() {
         }));
       }
 
+      const analysisData = data as ChbAnalysisResult & { cliente?: string };
+      
       setAnalysisResults(prev => ({
         ...prev,
-        [activeStep]: data as ChbAnalysisResult,
+        [activeStep]: analysisData,
       }));
+
+      // Try to load client config if cliente was identified and we dont have one yet
+      if (analysisData.cliente && !clientConfig) {
+        // Try to find config by client name (partial match via CNPJ would be better but we use name for now)
+        const configs = await supabase.from('chb_client_config').select('*').eq('ativo', true);
+        if (configs.data) {
+          const match = configs.data.find((c: any) => 
+            analysisData.cliente?.toLowerCase().includes(c.cliente_nome?.toLowerCase()) ||
+            c.cliente_nome?.toLowerCase().includes(analysisData.cliente?.toLowerCase())
+          );
+          if (match) {
+            setClientConfig(match as ChbClientConfig);
+            toast.info(`Configuração do cliente "${match.cliente_nome}" carregada automaticamente.`);
+          }
+        }
+      }
 
       toast.success('Análise concluída com sucesso!');
     } catch (error) {

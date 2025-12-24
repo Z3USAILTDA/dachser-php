@@ -64,7 +64,35 @@ FORMATO DE SAÍDA — HTML ESTRITO
 - Permitido SOMENTE: h4, p, strong, table, thead, tbody, tr, th, td.
 `;
 
-const CHB_TABLE_SPEC = `
+// Client config interface for personalized validation
+interface ClientConfig {
+  tolerancia_peso?: number;
+  tolerancia_valor?: number;
+  campos_obrigatorios?: string[];
+  cliente_nome?: string;
+}
+
+function buildTableSpec(clientConfig?: ClientConfig): string {
+  const toleranciaPeso = clientConfig?.tolerancia_peso ?? 2.0;
+  const toleranciaValor = clientConfig?.tolerancia_valor ?? 1.0;
+  const camposObrigatorios = clientConfig?.campos_obrigatorios || ['peso_bruto', 'peso_liquido', 'valor_total', 'moeda', 'incoterm'];
+  
+  const camposLabel: Record<string, string> = {
+    peso_bruto: 'Peso Bruto',
+    peso_liquido: 'Peso Líquido',
+    valor_total: 'Valor Total',
+    valor_item: 'Valor por Item',
+    moeda: 'Moeda',
+    incoterm: 'Incoterm',
+    frete: 'Frete',
+    quantidade: 'Quantidade',
+    ncm: 'NCM',
+    descricao: 'Descrição',
+  };
+  
+  const camposObrigatoriosText = camposObrigatorios.map(c => camposLabel[c] || c).join(', ');
+  
+  return `
 REGRAS DE CONTEÚDO DA TABELA
 
 1) COLUNAS DINÂMICAS — REGRA CRÍTICA:
@@ -81,47 +109,55 @@ REGRAS DE CONTEÚDO DA TABELA
    - Ausência: "ND" (não disponível) ou "Ilegível"
    - Status: SOMENTE ícones ✅, 🟨, 🔴
 
-3) TOLERÂNCIA NUMÉRICA — IMPORTANTE:
+3) TOLERÂNCIA NUMÉRICA — CONFIGURAÇÃO DO CLIENTE:
+   - TOLERÂNCIA DE PESO: ${toleranciaPeso}% (divergências acima disso = 🔴)
+   - TOLERÂNCIA DE VALOR: ${toleranciaValor}% (divergências acima disso = 🔴)
    - Valores como 97,3 e 97,30 são EQUIVALENTES (✅)
    - 10.841,00 e 10841 e 10.841 são EQUIVALENTES (✅)
    - Ignore zeros à direita e diferenças de formatação
-   - Apenas divergências REAIS > 0,5 absoluto OU > 0,3% são relevantes
 
-4) Regras de PESO — CRÍTICO (linhas separadas obrigatórias):
+4) CAMPOS OBRIGATÓRIOS (definidos pelo cliente):
+   ${camposObrigatoriosText}
+   - Se um campo obrigatório estiver ausente (ND) em QUALQUER documento → 🟨 (alerta)
+   - Se um campo obrigatório tiver divergência acima da tolerância → 🔴 (crítico)
+
+5) Regras de PESO — CRÍTICO (linhas separadas obrigatórias):
    - PESO BRUTO (Gross Weight): linha própria na tabela
    - PESO LÍQUIDO (Net Weight): linha própria na tabela (NÃO assumir Gross como padrão)
    - TARA: linha própria quando presente
    - Se Gross(BL) ≈ Net(PL) e há diferença de tara → 🟨 com nota explicativa
-   - Divergência > tolerância sem explicação → 🔴
+   - Divergência > ${toleranciaPeso}% sem explicação → 🔴
    - Se DI usa líquido como bruto → 🔴 CRÍTICO
 
-5) INCOTERM e FRETE — LINHAS SEPARADAS OBRIGATÓRIAS:
+6) INCOTERM e FRETE — LINHAS SEPARADAS OBRIGATÓRIAS:
    - INCOTERM: linha própria (ex.: FOB, CFR, CIF, EXW, etc.)
    - FRETE: linha própria (valor e moeda)
    - NUNCA unificar em uma única linha de validação
    - Incoterms diferentes (ex.: CFR × FOB) → 🔴
    - Incoterm coerente mas rótulo faltante → 🟨
 
-6) VALORES — REGRAS CRÍTICAS:
+7) VALORES — REGRAS CRÍTICAS:
    - VALOR TOTAL: uma linha com valor total por documento
    - MOEDA: sempre especificar (USD, EUR, BRL, etc.)
    - NUNCA inventar valores que não existam no documento
    - NUNCA duplicar valores entre documentos diferentes
    - Se documento não tem valor → "ND" (não "0" ou valor inventado)
+   - Divergência de valor > ${toleranciaValor}% → 🔴
 
-7) NCM — Regra aduaneira:
+8) NCM — Regra aduaneira:
    - Divergência na RAIZ (4 primeiros dígitos) → 🔴 CRÍTICO
    - Divergência apenas no sufixo com descrição compatível → 🟨
 
-8) CNPJ/Consignee:
+9) CNPJ/Consignee:
    - CNPJ divergente → 🔴 CRÍTICO
    - Razão social diferente (mesmo CNPJ) → 🟨
 
-9) IDENTIFICAÇÃO DE MODAL — AUTOMÁTICA:
+10) IDENTIFICAÇÃO DE MODAL — AUTOMÁTICA:
    - Se documento contém "AWB", "Airway Bill", "MAWB", "HAWB" → MODAL = AIR
    - Se documento contém "BL", "Bill of Lading", "HBL", "MBL", "Container" → MODAL = SEA
    - Reportar o modal detectado no bloco METADATA
 `;
+}
 
 const EXTRACTION_INSTRUCTIONS = `
 INSTRUÇÕES DE EXTRAÇÃO AVANÇADA
@@ -215,9 +251,15 @@ CÁLCULOS PERMITIDOS (para evitar ND):
 - Planilhas multi-abas: consolide valores distribuídos de TODAS as abas.
 `;
 
-function getPromptByStep(stepId: number, fileNames: string[]): string {
+function getPromptByStep(stepId: number, fileNames: string[], clientConfig?: ClientConfig): string {
   const fileListText = fileNames.map((name, i) => `${i + 1}. ${name}`).join('\n');
   const columnHeaders = fileNames.join(' | ');
+  const tableSpec = buildTableSpec(clientConfig);
+  
+  // Add client context if available
+  const clientContext = clientConfig?.cliente_nome 
+    ? `\nCLIENTE IDENTIFICADO: ${clientConfig.cliente_nome}\nAplicando regras de validação personalizadas para este cliente.\n`
+    : '';
 
   if (stepId === 1) {
     return `
@@ -225,7 +267,7 @@ SISTEMA — CRONOS (Etapa 1: Integridade do Pré-Alerta)
 
 Você é o CRONOS, auditor de logística (importação, Brasil).
 Objetivo: verificar consistência interna dos documentos do Pré-Alerta (entre si).
-
+${clientContext}
 ARQUIVOS PARA ANÁLISE:
 ${fileListText}
 
@@ -254,7 +296,7 @@ CAMPOS A VERIFICAR:
 
 ${EXTRACTION_INSTRUCTIONS}
 ${CHB_FORMAT_HTML}
-${CHB_TABLE_SPEC}
+${tableSpec}
 `;
   }
 
@@ -264,7 +306,7 @@ SISTEMA — CRONOS (Etapa 2: Pré-Alerta × Instrução)
 
 Você é o CRONOS, auditor de logística (importação, Brasil).
 Objetivo: comparar Pré-Alerta (referência) com Instrução de Despacho.
-
+${clientContext}
 ARQUIVOS PARA ANÁLISE:
 ${fileListText}
 
@@ -294,7 +336,7 @@ CAMPOS A COMPARAR:
 
 ${EXTRACTION_INSTRUCTIONS}
 ${CHB_FORMAT_HTML}
-${CHB_TABLE_SPEC}
+${tableSpec}
 `;
   }
 
@@ -305,7 +347,7 @@ SISTEMA — CRONOS (Etapa 3: DI × (Pré-Alerta + Instrução))
 Você é o CRONOS, auditor de logística (importação, Brasil).
 Objetivo: confrontar Rascunho DI com a Consolidação (PA+Instr.).
 Esta é a VALIDAÇÃO FINAL antes do registro da Declaração de Importação.
-
+${clientContext}
 ARQUIVOS PARA ANÁLISE:
 ${fileListText}
 
@@ -340,7 +382,7 @@ ATENÇÃO MÁXIMA:
 
 ${EXTRACTION_INSTRUCTIONS}
 ${CHB_FORMAT_HTML}
-${CHB_TABLE_SPEC}
+${tableSpec}
 `;
 }
 
@@ -710,7 +752,7 @@ serve(async (req) => {
   }
 
   try {
-    const { stepId, files } = await req.json();
+    const { stepId, files, clientConfig } = await req.json();
 
     if (!stepId || !files || !Array.isArray(files) || files.length === 0) {
       return new Response(
@@ -721,9 +763,12 @@ serve(async (req) => {
 
     console.log(`Analyzing ${files.length} files for step ${stepId}`);
     console.log('Files:', files.map((f: any) => `${f.name} (${f.mimeType})`).join(', '));
+    if (clientConfig) {
+      console.log('Using client config:', JSON.stringify(clientConfig));
+    }
 
     const fileNames = files.map((f: any) => f.name);
-    const prompt = getPromptByStep(stepId, fileNames);
+    const prompt = getPromptByStep(stepId, fileNames, clientConfig as ClientConfig | undefined);
     let responseText: string;
     let usedFallback = false;
     let fileWarnings: ChbFileError[] = [];
