@@ -180,7 +180,7 @@ export const VoucherTable = ({ vouchers, onViewDetails, onEdit, onDelete, onGoBa
                 <TableHead>
                   <SortableHeader field="numeroSPO">Nº Voucher (SPO)</SortableHeader>
                 </TableHead>
-                <TableHead>Processo / Origem</TableHead>
+                <TableHead>Processo</TableHead>
                 <TableHead>Cobrança em Nome de</TableHead>
                 <TableHead>
                   <SortableHeader field="fornecedor">Fornecedor</SortableHeader>
@@ -321,47 +321,8 @@ export const VoucherTable = ({ vouchers, onViewDetails, onEdit, onDelete, onGoBa
                           )}
                         </div>
                       </TableCell>
-                      <TableCell>
-                        {voucher.processoId || voucher.origemProcesso ? (
-                          <div className="flex flex-col gap-1">
-                            {voucher.processoId && (
-                              <span className="font-mono text-xs font-medium">{voucher.processoId}</span>
-                            )}
-                            {voucher.origemProcesso && (
-                              <Tooltip>
-                                <TooltipTrigger onClick={(e) => e.stopPropagation()}>
-                                  <Badge 
-                                    variant="outline" 
-                                    className={cn(
-                                      "gap-1 w-fit",
-                                      voucher.origemProcesso === "AIR" || voucher.origemProcesso === "AI"
-                                        ? "bg-sky-500/10 text-sky-500 border-sky-500/30" 
-                                        : voucher.origemProcesso === "SEA" || voucher.origemProcesso === "SI"
-                                          ? "bg-blue-500/10 text-blue-500 border-blue-500/30"
-                                          : "bg-amber-500/10 text-amber-500 border-amber-500/30"
-                                    )}
-                                  >
-                                    {(voucher.origemProcesso === "AIR" || voucher.origemProcesso === "AI") && <Plane className="h-3 w-3" />}
-                                    {(voucher.origemProcesso === "SEA" || voucher.origemProcesso === "SI") && <Ship className="h-3 w-3" />}
-                                    {voucher.origemProcesso === "CHB" && <Package className="h-3 w-3" />}
-                                    {voucher.origemProcesso === "AI" ? "AIR" : voucher.origemProcesso === "SI" ? "SEA" : voucher.origemProcesso}
-                                  </Badge>
-                                </TooltipTrigger>
-                                <TooltipContent>
-                                  <p className="text-xs">
-                                    {voucher.origemProcesso === "AIR" || voucher.origemProcesso === "AI" 
-                                      ? "Aéreo" 
-                                      : voucher.origemProcesso === "SEA" || voucher.origemProcesso === "SI" 
-                                        ? "Marítimo" 
-                                        : "Customhouse Broker"}
-                                  </p>
-                                </TooltipContent>
-                              </Tooltip>
-                            )}
-                          </div>
-                        ) : (
-                          <span className="text-muted-foreground text-xs">-</span>
-                        )}
+                      <TableCell className="font-mono text-xs">
+                        {voucher.processoId || "-"}
                       </TableCell>
                       <TableCell>
                         <Tooltip>
