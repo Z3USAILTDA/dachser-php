@@ -537,6 +537,8 @@ export const CreateVoucherDialog = ({
           data_emissao_documento: values.dataEmissaoDocumento?.toISOString().split('T')[0],
           comentarios_operacao: values.comentariosOperacao,
           criado_por_user_id: userData.id,
+          processo_id: values.processoId || null,
+          origem_processo: origemProcesso || null,
         },
       });
 

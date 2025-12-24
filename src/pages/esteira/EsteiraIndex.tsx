@@ -865,6 +865,8 @@ const EsteiraIndex = () => {
         aprovadoPorUserId: v.aprovado_por_user_id,
         clienteEmail: v.cliente_email,
         origemCriacao: v.origem_criacao || "MANUAL",
+        processoId: v.processo_id || null,
+        origemProcesso: v.origem_processo || null,
         createdAt: parseMariaDBDate(v.created_at) || new Date(),
         updatedAt: parseMariaDBDate(v.updated_at || v.created_at) || new Date(),
         anexos: [],
