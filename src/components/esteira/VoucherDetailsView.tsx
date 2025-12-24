@@ -119,18 +119,6 @@ export const VoucherDetailsView = ({ voucher, onUpdate, canEditAttachments = fal
 
   return (
     <div className="space-y-6">
-      {/* Card de Origem Operacional */}
-      {voucher.processoId && (
-        <ProcessoOrigemCard
-          processoId={voucher.processoId}
-          origemProcesso={voucher.origemProcesso}
-          clienteNome={voucher.clienteNome}
-          cnpjFornecedor={voucher.cnpjFornecedor}
-          centroCusto={voucher.centroCusto}
-          tipoOperacao={voucher.tipoOperacao}
-          fonteDados={voucher.fonteDados}
-        />
-      )}
 
       {/* Badges movidos para EsteiraVoucherDetails - removidos daqui */}
 
