@@ -244,14 +244,26 @@ const EsteiraVoucherDetails = () => {
     >
 
       <Tabs defaultValue="detalhes" className="w-full">
-        <TabsList className="bg-white/5 border border-white/10 p-1">
-          <TabsTrigger value="detalhes" className="data-[state=active]:bg-amber-500 data-[state=active]:text-black">
+        <TabsList 
+          className="border border-[rgba(255,255,255,0.12)] p-1 rounded-full"
+          style={{ backgroundColor: 'rgba(5,6,18,0.9)' }}
+        >
+          <TabsTrigger 
+            value="detalhes" 
+            className="rounded-full px-6 text-[#aaaaaa] data-[state=active]:bg-[#ffc800] data-[state=active]:text-black data-[state=active]:font-semibold"
+          >
             Detalhes
           </TabsTrigger>
-          <TabsTrigger value="pagamento" className="data-[state=active]:bg-amber-500 data-[state=active]:text-black">
+          <TabsTrigger 
+            value="pagamento" 
+            className="rounded-full px-6 text-[#aaaaaa] data-[state=active]:bg-[#ffc800] data-[state=active]:text-black data-[state=active]:font-semibold"
+          >
             Pagamento
           </TabsTrigger>
-          <TabsTrigger value="historico" className="data-[state=active]:bg-amber-500 data-[state=active]:text-black">
+          <TabsTrigger 
+            value="historico" 
+            className="rounded-full px-6 text-[#aaaaaa] data-[state=active]:bg-[#ffc800] data-[state=active]:text-black data-[state=active]:font-semibold"
+          >
             Histórico
           </TabsTrigger>
         </TabsList>
