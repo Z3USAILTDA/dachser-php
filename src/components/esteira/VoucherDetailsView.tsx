@@ -143,16 +143,19 @@ export const VoucherDetailsView = ({ voucher, onUpdate, canEditAttachments = fal
         <StatusComprovanteBadge status={voucher.statusComprovante} />
       </div>
 
-      {/* Header Fixo - Cobrança em nome de + SLA */}
-      <div className="sticky top-0 z-10 -mx-6 -mt-6 px-6 pt-6 pb-4 bg-[rgba(5,6,18,0.95)] backdrop-blur-[18px] border-b border-[rgba(255,255,255,0.12)] mb-6">
+      {/* Header - Cobrança em nome de + Etapa + SLA */}
+      <div 
+        className="rounded-xl px-6 py-4 border border-[rgba(255,255,255,0.12)] backdrop-blur-[18px]"
+        style={{ backgroundColor: 'rgba(5,6,18,0.9)' }}
+      >
         <div className="flex flex-wrap items-center justify-between gap-4">
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-6">
             {/* Cobrança em nome de - DESTAQUE */}
             <div className={cn(
-              "flex items-center gap-3 px-4 py-2 rounded-lg border-2",
+              "flex items-center gap-3 px-4 py-3 rounded-lg border-2",
               voucher.cobrancaEmNomeDe === "DACHSER" 
-                ? "bg-primary/10 border-primary/40 text-primary" 
-                : "bg-info/10 border-info/40 text-info"
+                ? "bg-[#ffc800]/10 border-[#ffc800]/40 text-[#ffc800]" 
+                : "bg-blue-500/10 border-blue-500/40 text-blue-400"
             )}>
               {voucher.cobrancaEmNomeDe === "DACHSER" ? (
                 <Building2 className="h-5 w-5" />
@@ -168,9 +171,9 @@ export const VoucherDetailsView = ({ voucher, onUpdate, canEditAttachments = fal
             </div>
 
             {/* Etapa Atual */}
-            <div className="flex flex-col">
-              <p className="text-xs text-muted-foreground">Etapa Atual</p>
-              <Badge className="text-sm">
+            <div className="flex flex-col gap-1">
+              <p className="text-xs text-[#aaaaaa]">Etapa Atual</p>
+              <Badge className="bg-[rgba(255,255,255,0.1)] text-[#f5f5f5] border border-[rgba(255,255,255,0.2)] text-sm px-3 py-1">
                 {ETAPA_LABELS[voucher.etapaAtual] || voucher.etapaAtual}
               </Badge>
             </div>
@@ -179,28 +182,28 @@ export const VoucherDetailsView = ({ voucher, onUpdate, canEditAttachments = fal
           {/* SLA Indicator */}
           {voucher.etapaAtual !== "CONCLUIDO" && (
             <div className={cn(
-              "flex items-center gap-2 px-4 py-2 rounded-lg",
+              "flex items-center gap-3 px-4 py-3 rounded-lg border",
               slaExcedido 
-                ? "bg-destructive/10 border border-destructive/30" 
+                ? "bg-red-500/10 border-red-500/30" 
                 : tempoNaEtapa >= slaLimit * 0.75 
-                  ? "bg-warning/10 border border-warning/30"
-                  : "bg-green-500/10 border border-green-500/30"
+                  ? "bg-orange-500/10 border-orange-500/30"
+                  : "bg-green-500/10 border-green-500/30"
             )}>
               <Clock className={cn(
                 "h-5 w-5",
-                slaExcedido ? "text-destructive animate-pulse" : tempoNaEtapa >= slaLimit * 0.75 ? "text-warning" : "text-green-500"
+                slaExcedido ? "text-red-500 animate-pulse" : tempoNaEtapa >= slaLimit * 0.75 ? "text-orange-400" : "text-green-400"
               )} />
               <div>
-                <p className="text-xs text-muted-foreground">Tempo na etapa</p>
+                <p className="text-xs text-[#aaaaaa]">Tempo na etapa</p>
                 <p className={cn(
-                  "font-bold",
-                  slaExcedido ? "text-destructive" : tempoNaEtapa >= slaLimit * 0.75 ? "text-warning" : "text-green-500"
+                  "font-bold text-lg",
+                  slaExcedido ? "text-red-500" : tempoNaEtapa >= slaLimit * 0.75 ? "text-orange-400" : "text-green-400"
                 )}>
                   {formatarTempoNaEtapa(tempoNaEtapa)} / {slaLimit}h
                 </p>
               </div>
               {slaExcedido && (
-                <Badge variant="destructive" className="ml-2">
+                <Badge className="bg-red-500/20 text-red-400 border border-red-500/30 ml-2">
                   SLA Excedido!
                 </Badge>
               )}
