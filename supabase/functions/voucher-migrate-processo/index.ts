@@ -54,11 +54,11 @@ serve(async (req) => {
 
     for (const voucher of vouchersToMigrate) {
       try {
-        // Fetch RM data
+        // Fetch RM data using id_rm column (not id)
         const rmData = await client.query(`
           SELECT numero_processo, modal
           FROM dados_dachser.t_dados_financeiro_voucher
-          WHERE id = ?
+          WHERE id_rm = ?
           LIMIT 1
         `, [voucher.id_rm]);
 
