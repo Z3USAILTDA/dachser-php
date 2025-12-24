@@ -352,7 +352,7 @@ const EsteiraVoucherDetails = () => {
             )}
           </TabsContent>
 
-          <TabsContent value="pagamento" className="mt-6">
+          <TabsContent value="pagamento" className="mt-3">
             <Card className="p-6 bg-card/80 backdrop-blur-sm border-border/50 animate-fade-in">
               <h3 className="text-lg font-semibold mb-4 text-foreground">Dados de Pagamento</h3>
               <DadosPagamentoPanel
@@ -378,7 +378,7 @@ const EsteiraVoucherDetails = () => {
             </Card>
           </TabsContent>
 
-          <TabsContent value="historico" className="mt-6">
+          <TabsContent value="historico" className="mt-3">
             <Card className="p-6 bg-card/80 backdrop-blur-sm border-border/50 animate-fade-in">
               <h3 className="text-lg font-semibold mb-4 text-foreground">Histórico de Ações</h3>
               <div className="space-y-4">
