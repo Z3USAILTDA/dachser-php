@@ -203,3 +203,6 @@ verify_jwt = false
 
 [functions.voucher-pagamentos-setup]
 verify_jwt = false
+
+[functions.voucher-migrate-processo]
+verify_jwt = false
