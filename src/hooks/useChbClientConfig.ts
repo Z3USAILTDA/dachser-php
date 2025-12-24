@@ -9,6 +9,7 @@ export interface ChbClientConfig {
   tolerancia_valor: number;
   campos_obrigatorios: string[];
   regras_comparacao: Record<string, any>;
+  instrucoes_personalizadas: string | null;
   ativo: boolean;
   created_at: string;
   updated_at: string;
@@ -21,6 +22,7 @@ export interface ChbClientConfigInput {
   tolerancia_valor?: number;
   campos_obrigatorios?: string[];
   regras_comparacao?: Record<string, any>;
+  instrucoes_personalizadas?: string;
   ativo?: boolean;
 }
 

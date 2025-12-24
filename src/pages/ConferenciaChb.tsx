@@ -263,6 +263,7 @@ export default function ConferenciaChb() {
             tolerancia_valor: clientConfig.tolerancia_valor,
             campos_obrigatorios: clientConfig.campos_obrigatorios,
             cliente_nome: clientConfig.cliente_nome,
+            instrucoes_personalizadas: clientConfig.instrucoes_personalizadas,
           } : undefined,
         },
       });
