@@ -38,6 +38,7 @@ import { Voucher, EtapaAtual, ETAPA_LABELS, SLA_POR_ETAPA } from "@/types/vouche
 import { useUserRole } from "@/hooks/useUserRole";
 import { useVoucherSync } from "@/hooks/useVoucherSync";
 import { cn } from "@/lib/utils";
+import { parseMariaDBDate } from "@/utils/parseMariaDBDate";
 import {
   BarChart,
   Bar,
@@ -838,8 +839,8 @@ const EsteiraIndex = () => {
         cnpjFornecedor: v.cnpj_fornecedor,
         valor: v.valor ? parseFloat(v.valor) : null,
         moeda: v.moeda || "BRL",
-        vencimento: new Date(v.vencimento),
-        dataEmissaoDocumento: v.data_emissao_documento ? new Date(v.data_emissao_documento) : undefined,
+        vencimento: parseMariaDBDate(v.vencimento) || new Date(),
+        dataEmissaoDocumento: parseMariaDBDate(v.data_emissao_documento) || undefined,
         cobrancaEmNomeDe: v.cobranca_em_nome_de || "DACHSER",
         formaPagamento: v.forma_pagamento || "BOLETO",
         tipoDocumento: v.tipo_documento,
@@ -864,8 +865,8 @@ const EsteiraIndex = () => {
         aprovadoPorUserId: v.aprovado_por_user_id,
         clienteEmail: v.cliente_email,
         origemCriacao: v.origem_criacao || "MANUAL",
-        createdAt: new Date(v.created_at + 'Z'),
-        updatedAt: new Date((v.updated_at || v.created_at) + 'Z'),
+        createdAt: parseMariaDBDate(v.created_at) || new Date(),
+        updatedAt: parseMariaDBDate(v.updated_at || v.created_at) || new Date(),
         anexos: [],
         logs: [],
       }));
