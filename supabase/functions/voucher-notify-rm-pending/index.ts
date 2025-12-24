@@ -117,11 +117,26 @@ const handler = async (req: Request): Promise<Response> => {
       );
     }
 
+    // Helper para parsear datas do MariaDB como UTC
+    const parseMariaDBDate = (dateStr: string | null | undefined): Date | null => {
+      if (!dateStr) return null;
+      if (dateStr.includes('Z') || dateStr.includes('+')) {
+        return new Date(dateStr);
+      }
+      if (dateStr.includes('T')) {
+        return new Date(dateStr + 'Z');
+      }
+      if (dateStr.includes(' ')) {
+        return new Date(dateStr.replace(' ', 'T') + 'Z');
+      }
+      return new Date(dateStr + 'T00:00:00Z');
+    };
+
     // Construir tabela HTML dos vouchers pendentes
     const vouchersHtml = pendingVouchers.map(v => {
-      const createdAt = new Date(v.created_at + 'Z');
+      const createdAt = parseMariaDBDate(v.created_at) || new Date();
       const horasPendente = Math.floor((Date.now() - createdAt.getTime()) / (1000 * 60 * 60));
-      const vencimento = new Date(v.vencimento + 'Z');
+      const vencimento = parseMariaDBDate(v.vencimento) || new Date();
       
       return `
         <tr style="border-bottom: 1px solid #333;">
