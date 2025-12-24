@@ -93,8 +93,7 @@ export default function ChbAnalises() {
   });
   const [novoProcessoModal, setNovoProcessoModal] = useState(false);
   const [novoProcessoForm, setNovoProcessoForm] = useState({
-    reference: '',
-    consignee: ''
+    reference: ''
   });
 
   useEffect(() => {
@@ -153,16 +152,16 @@ export default function ChbAnalises() {
   };
 
   const handleCreateNovoProcesso = async () => {
-    if (!novoProcessoForm.reference.trim() || !novoProcessoForm.consignee.trim()) {
-      toast.error("Preencha todos os campos");
+    if (!novoProcessoForm.reference.trim()) {
+      toast.error("Preencha a referência do processo");
       return;
     }
 
-    const newId = await createItem(novoProcessoForm.reference, novoProcessoForm.consignee);
+    const newId = await createItem(novoProcessoForm.reference);
     
     if (newId) {
       setNovoProcessoModal(false);
-      setNovoProcessoForm({ reference: '', consignee: '' });
+      setNovoProcessoForm({ reference: '' });
       navigate(`/chb/conferences/${newId}`);
     }
   };
@@ -263,7 +262,8 @@ export default function ChbAnalises() {
                 <thead>
                   <tr className="bg-[#14151c]">
                     <th className="px-[10px] py-[10px] text-left text-[0.75rem] uppercase tracking-[0.12em] text-[#aaaaaa] font-medium sticky top-0 bg-[#14151c] z-[5] border-b border-[rgba(255,255,255,.09)]">Referência</th>
-                    <th className="px-[10px] py-[10px] text-left text-[0.75rem] uppercase tracking-[0.12em] text-[#aaaaaa] font-medium sticky top-0 bg-[#14151c] z-[5] border-b border-[rgba(255,255,255,.09)]">Consignee</th>
+                    <th className="px-[10px] py-[10px] text-left text-[0.75rem] uppercase tracking-[0.12em] text-[#aaaaaa] font-medium sticky top-0 bg-[#14151c] z-[5] border-b border-[rgba(255,255,255,.09)]">Cliente</th>
+                    <th className="px-[10px] py-[10px] text-left text-[0.75rem] uppercase tracking-[0.12em] text-[#aaaaaa] font-medium sticky top-0 bg-[#14151c] z-[5] border-b border-[rgba(255,255,255,.09)]">Modal</th>
                     <th className="px-[10px] py-[10px] text-left text-[0.75rem] uppercase tracking-[0.12em] text-[#aaaaaa] font-medium sticky top-0 bg-[#14151c] z-[5] border-b border-[rgba(255,255,255,.09)]">Status</th>
                     <th className="px-[10px] py-[10px] text-left text-[0.75rem] uppercase tracking-[0.12em] text-[#aaaaaa] font-medium sticky top-0 bg-[#14151c] z-[5] border-b border-[rgba(255,255,255,.09)]">Etapas</th>
                     <th className="px-[10px] py-[10px] text-left text-[0.75rem] uppercase tracking-[0.12em] text-[#aaaaaa] font-medium sticky top-0 bg-[#14151c] z-[5] border-b border-[rgba(255,255,255,.09)]">Submeter</th>
@@ -275,7 +275,20 @@ export default function ChbAnalises() {
                   {filteredItems.map(item => (
                     <tr key={item.id} className="border-b border-[rgba(255,255,255,.09)] hover:bg-[rgba(255,255,255,.05)] transition-colors">
                       <td className="px-[10px] py-[9px] whitespace-nowrap font-mono">{item.reference || "—"}</td>
-                      <td className="px-[10px] py-[9px] whitespace-nowrap">{item.consignee || "—"}</td>
+                      <td className="px-[10px] py-[9px] whitespace-nowrap">{item.consignee || <span className="text-[#777] italic">A identificar</span>}</td>
+                      <td className="px-[10px] py-[9px] whitespace-nowrap">
+                        {item.modal ? (
+                          <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[0.7rem] font-medium ${
+                            item.modal === 'SEA' 
+                              ? 'bg-blue-500/20 text-blue-400 border border-blue-500/30' 
+                              : 'bg-purple-500/20 text-purple-400 border border-purple-500/30'
+                          }`}>
+                            {item.modal === 'SEA' ? '🚢' : '✈️'} {item.modal}
+                          </span>
+                        ) : (
+                          <span className="text-[#777] italic text-[0.75rem]">—</span>
+                        )}
+                      </td>
                       <td className="px-[10px] py-[9px] whitespace-nowrap">
                         <span className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-full border border-[rgba(255,255,255,.14)] bg-[#111] text-[0.8rem] ${getStatusColor(item.status_macro)}`}>
                           {statusLabels[item.status_macro] || item.status_macro}
@@ -331,7 +344,7 @@ export default function ChbAnalises() {
           </DialogHeader>
           <div className="space-y-4 mt-2">
             <div className="space-y-2">
-              <Label className="text-[#aaaaaa]">Referência</Label>
+              <Label className="text-[#aaaaaa]">Referência do Processo</Label>
               <Input
                 placeholder="Ex: CHB-2025-001"
                 value={novoProcessoForm.reference}
@@ -339,14 +352,10 @@ export default function ChbAnalises() {
                 className="bg-[rgba(255,255,255,.05)] border-[rgba(255,255,255,.15)] text-white"
               />
             </div>
-            <div className="space-y-2">
-              <Label className="text-[#aaaaaa]">Consignee</Label>
-              <Input
-                placeholder="Nome do consignatário"
-                value={novoProcessoForm.consignee}
-                onChange={(e) => setNovoProcessoForm(prev => ({ ...prev, consignee: e.target.value }))}
-                className="bg-[rgba(255,255,255,.05)] border-[rgba(255,255,255,.15)] text-white"
-              />
+            <div className="p-3 rounded-lg bg-[rgba(255,200,0,.08)] border border-[rgba(255,200,0,.2)]">
+              <p className="text-[0.75rem] text-[#ffc800]">
+                💡 O Cliente e Modal (SEA/AIR) serão identificados automaticamente a partir dos documentos na análise.
+              </p>
             </div>
             <div className="flex justify-end gap-2 pt-2">
               <button

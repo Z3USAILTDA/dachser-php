@@ -17,23 +17,31 @@ FORMATO DE SAÍDA — HTML ESTRITO
   ...conteúdo HTML...
   <<END_HTML>>
 
-- Dentro do bloco gere SOMENTE HTML simples:
+- ANTES do bloco HTML, produza uma linha de METADADOS no formato:
+  <<METADATA>>
+  MODAL: SEA ou AIR
+  CLIENTE: [Nome do cliente/consignee extraído dos documentos]
+  <<END_METADATA>>
+
+- Dentro do bloco HTML gere SOMENTE HTML simples:
 
 1) TABELA DE COMPARAÇÃO:
    <table>
    <thead><tr>
+     <th>Status</th>
      <th>Campo</th>
      <th>[NOME_ARQUIVO_1]</th>
      <th>[NOME_ARQUIVO_2]</th>
      ... (uma coluna para CADA arquivo fornecido, usando o NOME REAL do arquivo)
-     <th>Status</th>
    </tr></thead>
    <tbody>...</tbody>
    </table>
 
-   REGRA CRÍTICA: O número de colunas deve corresponder EXATAMENTE ao número de arquivos + 2 (Campo e Status).
-   Use o NOME EXATO de cada arquivo como cabeçalho de coluna (ex.: "Invoice_123.pdf", "PackingList.pdf").
-   NÃO use "Fonte A", "Fonte B", "Fonte C" - use os nomes reais dos arquivos!
+   REGRA CRÍTICA: 
+   - Status vem PRIMEIRO para leitura rápida
+   - O número de colunas deve corresponder EXATAMENTE ao número de arquivos + 2 (Status e Campo).
+   - Use o NOME EXATO de cada arquivo como cabeçalho de coluna (ex.: "Invoice_123.pdf", "PackingList.pdf").
+   - NÃO use "Fonte A", "Fonte B", "Fonte C" - use os nomes reais dos arquivos!
 
 2) SEÇÃO OBSERVAÇÕES (apenas se houver 🟨 ou 🔴):
    <h4>Observações</h4>
@@ -60,7 +68,8 @@ const CHB_TABLE_SPEC = `
 REGRAS DE CONTEÚDO DA TABELA
 
 1) COLUNAS DINÂMICAS — REGRA CRÍTICA:
-   - A tabela deve ter: Campo | [Arquivo1] | [Arquivo2] | ... | Status
+   - A tabela deve ter: Status | Campo | [Arquivo1] | [Arquivo2] | ...
+   - STATUS VEM PRIMEIRO para decisão rápida
    - Use o NOME EXATO de cada arquivo como título da coluna
    - O número de colunas de dados = número de arquivos fornecidos
    - NUNCA use "Fonte A", "Fonte B" — sempre nomes reais dos arquivos
@@ -78,22 +87,40 @@ REGRAS DE CONTEÚDO DA TABELA
    - Ignore zeros à direita e diferenças de formatação
    - Apenas divergências REAIS > 0,5 absoluto OU > 0,3% são relevantes
 
-4) Regras de PESO (Gross/Net/tara):
+4) Regras de PESO — CRÍTICO (linhas separadas obrigatórias):
+   - PESO BRUTO (Gross Weight): linha própria na tabela
+   - PESO LÍQUIDO (Net Weight): linha própria na tabela (NÃO assumir Gross como padrão)
+   - TARA: linha própria quando presente
    - Se Gross(BL) ≈ Net(PL) e há diferença de tara → 🟨 com nota explicativa
    - Divergência > tolerância sem explicação → 🔴
    - Se DI usa líquido como bruto → 🔴 CRÍTICO
 
-5) NCM — Regra aduaneira:
-   - Divergência na RAIZ (4 primeiros dígitos) → 🔴 CRÍTICO
-   - Divergência apenas no sufixo com descrição compatível → 🟨
-
-6) Incoterm × Condição de frete:
+5) INCOTERM e FRETE — LINHAS SEPARADAS OBRIGATÓRIAS:
+   - INCOTERM: linha própria (ex.: FOB, CFR, CIF, EXW, etc.)
+   - FRETE: linha própria (valor e moeda)
+   - NUNCA unificar em uma única linha de validação
    - Incoterms diferentes (ex.: CFR × FOB) → 🔴
    - Incoterm coerente mas rótulo faltante → 🟨
 
-7) CNPJ/Consignee:
+6) VALORES — REGRAS CRÍTICAS:
+   - VALOR TOTAL: uma linha com valor total por documento
+   - MOEDA: sempre especificar (USD, EUR, BRL, etc.)
+   - NUNCA inventar valores que não existam no documento
+   - NUNCA duplicar valores entre documentos diferentes
+   - Se documento não tem valor → "ND" (não "0" ou valor inventado)
+
+7) NCM — Regra aduaneira:
+   - Divergência na RAIZ (4 primeiros dígitos) → 🔴 CRÍTICO
+   - Divergência apenas no sufixo com descrição compatível → 🟨
+
+8) CNPJ/Consignee:
    - CNPJ divergente → 🔴 CRÍTICO
    - Razão social diferente (mesmo CNPJ) → 🟨
+
+9) IDENTIFICAÇÃO DE MODAL — AUTOMÁTICA:
+   - Se documento contém "AWB", "Airway Bill", "MAWB", "HAWB" → MODAL = AIR
+   - Se documento contém "BL", "Bill of Lading", "HBL", "MBL", "Container" → MODAL = SEA
+   - Reportar o modal detectado no bloco METADATA
 `;
 
 const EXTRACTION_INSTRUCTIONS = `
@@ -105,22 +132,50 @@ REGRA CRÍTICA — MINIMIZAR "ND":
 - NUNCA retorne "ND" sem verificar TODAS as páginas de TODOS os documentos.
 - Examine cabeçalhos, rodapés, selos, carimbos, tabelas secundárias.
 - Procure sinônimos e variações de nomenclatura para cada campo:
-  * Peso: "Gross Weight", "GW", "Peso Bruto", "Weight", "Brutto", "Total Weight"
+  * Peso Bruto: "Gross Weight", "GW", "Peso Bruto", "Weight", "Brutto", "Total Weight"
+  * Peso Líquido: "Net Weight", "NW", "Peso Líquido", "Peso Neto"
+  * Tara: "Tare", "Tara Weight"
   * Volume: "CBM", "Cubic Meters", "M³", "Volume", "Measurement"
-  * Consignee: "Consignatário", "Importador", "Buyer", "Destinatário", "Notify Party"
+  * Consignee/Cliente: "Consignatário", "Importador", "Buyer", "Destinatário", "Notify Party"
   * NCM: "HS Code", "Tariff Code", "Código Aduaneiro", "NCM/SH"
   * Container: "Container No", "CNTR", "Contenedor", "Nº Container"
-  * Incoterm: "Terms", "Delivery Terms", "Trade Terms", "Payment Terms"
+  * Incoterm: "Terms", "Delivery Terms", "Trade Terms"
+  * Frete: "Freight", "Ocean Freight", "Air Freight", "Frete Marítimo/Aéreo"
 - Cheque TODAS as abas de planilhas, mesmo que pareçam secundárias.
 - Se encontrar em QUALQUER lugar do documento, NÃO marque como ND.
 - Use "ND" SOMENTE se realmente não existir no documento após busca exaustiva.
 - Se parcialmente legível, extraia o que for possível e marque referência da página.
 
+IDENTIFICAÇÃO AUTOMÁTICA:
+- MODAL: Identifique se o processo é SEA ou AIR baseado nos documentos:
+  * AWB, Airway Bill, MAWB, HAWB → AIR
+  * BL, Bill of Lading, HBL, MBL, Container → SEA
+- CLIENTE: Extraia o nome do Consignee/Importador do documento principal
+
+REGRAS DE EXTRAÇÃO DE PESO — CRÍTICO:
+- SEMPRE extraia Peso Bruto (Gross) e Peso Líquido (Net) SEPARADAMENTE
+- NUNCA assuma que Gross = padrão quando Net está disponível
+- Se só houver um peso, identifique claramente qual é (Gross ou Net)
+- Exiba ambos os pesos no grid como linhas separadas
+
+REGRAS DE VALORES — CRÍTICO:
+- Extraia VALOR TOTAL e VALOR POR ITEM separadamente quando disponível
+- NUNCA INVENTE valores que não existem no documento
+- NUNCA DUPLIQUE valores entre documentos diferentes
+- Se um documento não tem valor, marque "ND" (não "0")
+- Sempre inclua a MOEDA (USD, EUR, BRL, etc.)
+
+REGRAS DE INCOTERM E FRETE — CRÍTICO:
+- INCOTERM e FRETE são campos SEPARADOS
+- Nunca unifique em uma única linha
+- Incoterm: FOB, CFR, CIF, EXW, etc.
+- Frete: valor numérico + moeda
+
 ENTRADAS HETEROGÊNEAS:
 - PDFs (digitáveis ou escaneados), DOC/DOCX, planilhas (XLS/XLSX), imagens, XML/JSON.
 - Considere TODAS as fontes fornecidas.
 - Planilhas multi-abas: trate CADA aba. Use "/aba <nome>" na referência.
-- XML/JSON: interprete chaves usuais (ncm, hs_code, gross_weight, incoterm, consign*, invoice*, container*, seal*).
+- XML/JSON: interprete chaves usuais (ncm, hs_code, gross_weight, net_weight, incoterm, freight, consign*, invoice*, container*, seal*).
 - OCR: aplique com máxima precisão. Corrija erros comuns (0↔O, 1↔I, 5↔S).
 - Use "Ilegível" SOMENTE quando o OCR falhar completamente e o texto for irrecuperável.
 
@@ -145,9 +200,11 @@ SEMÁFORO (usar literalmente):
 
 REGRAS POR CAMPO:
 - Peso bruto: ✅ se convergem; 🟨 se ND/Ilegível sem conflito; 🔴 se diverge. Se Gross(BL)≈Net(PL) e diferença≈tara, marcar 🟨 e explicar.
+- Peso líquido: linha separada; mesmas regras do peso bruto
 - Consignee: ✅ equivalentes; 🟨 legível só em 1–2 fontes; 🔴 conflitantes.
 - CNPJ: colunas sem CNPJ aplicável = N/A. ✅ válido; 🟨 Ilegível; 🔴 inválido ou conflitante.
-- Incoterm/Frete: ✅ INC + condição convergem; 🟨 etiqueta faltante; 🔴 INC distintos.
+- Incoterm: linha separada; ✅ INC convergem; 🟨 etiqueta faltante; 🔴 INC distintos.
+- Frete: linha separada; ✅ valores convergem; 🟨 faltante em uma fonte; 🔴 valores divergentes.
 - Container: ✅ coerente entre docs; 🟨 só em uma fonte; 🔴 conflitante.
 - NCM: ✅ raiz 4 dígitos coincide; 🟨 listado em uma fonte; 🔴 códigos distintos com impacto.
 
@@ -474,7 +531,21 @@ function extractHtmlAndTags(response: string, stepId: number): {
   summary: string;
   detailedSummary: string;
   parecer: string;
+  modal: 'SEA' | 'AIR' | null;
+  cliente: string | null;
 } {
+  // Extract metadata
+  const metadataMatch = response.match(/<<METADATA>>([\s\S]*?)<<END_METADATA>>/);
+  let modal: 'SEA' | 'AIR' | null = null;
+  let cliente: string | null = null;
+  
+  if (metadataMatch) {
+    const modalMatch = metadataMatch[1].match(/MODAL:\s*(SEA|AIR)/i);
+    if (modalMatch) modal = modalMatch[1].toUpperCase() as 'SEA' | 'AIR';
+    
+    const clienteMatch = metadataMatch[1].match(/CLIENTE:\s*([^\n]+)/i);
+    if (clienteMatch) cliente = clienteMatch[1].trim();
+  }
   // Extract HTML between markers
   const htmlMatch = response.match(/<<BEGIN_HTML>>([\s\S]*?)<<END_HTML>>/);
   const html = htmlMatch ? htmlMatch[1].trim() : response;
@@ -565,7 +636,7 @@ function extractHtmlAndTags(response: string, stepId: number): {
   if (successCount > 0) summary += `${successCount} item(ns) conforme(s).`;
   if (!summary) summary = 'Análise concluída.';
 
-  return { html, tags, summary, detailedSummary, parecer };
+  return { html, tags, summary, detailedSummary, parecer, modal, cliente };
 }
 
 serve(async (req) => {
@@ -610,7 +681,7 @@ serve(async (req) => {
       }
     }
 
-    const { html, tags, summary, detailedSummary, parecer } = extractHtmlAndTags(responseText, stepId);
+    const { html, tags, summary, detailedSummary, parecer, modal, cliente } = extractHtmlAndTags(responseText, stepId);
 
     return new Response(
       JSON.stringify({
@@ -621,6 +692,8 @@ serve(async (req) => {
         summary,
         detailedSummary,
         parecer,
+        modal,
+        cliente,
         generatedAt: new Date().toLocaleString('pt-BR'),
         filesAnalyzed: files.map((f: any) => f.name),
         usedFallback,
