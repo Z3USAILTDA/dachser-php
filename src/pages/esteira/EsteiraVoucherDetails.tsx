@@ -278,7 +278,7 @@ const EsteiraVoucherDetails = () => {
       {/* Nav de Abas */}
       <Tabs defaultValue="detalhes" className="w-full">
         <TabsList 
-          className="border border-[rgba(255,255,255,0.12)] p-1 rounded-full mb-6"
+          className="border border-[rgba(255,255,255,0.12)] p-1 rounded-full mb-3"
           style={{ backgroundColor: 'rgba(5,6,18,0.9)' }}
         >
           <TabsTrigger 
