@@ -132,16 +132,7 @@ export const VoucherDetailsView = ({ voucher, onUpdate, canEditAttachments = fal
         />
       )}
 
-      {/* Badges de Status Accrual e Comprovante */}
-      <div className="flex flex-wrap gap-3">
-        <AccrualMatchBadge
-          status={voucher.accrualStatus}
-          valorFatura={voucher.valor}
-          valorAccrual={voucher.accrualValor}
-          diferenca={voucher.accrualDiferenca}
-        />
-        <StatusComprovanteBadge status={voucher.statusComprovante} />
-      </div>
+      {/* Badges movidos para EsteiraVoucherDetails - removidos daqui */}
 
       {/* Header - Cobrança em nome de + Etapa + SLA */}
       <div 

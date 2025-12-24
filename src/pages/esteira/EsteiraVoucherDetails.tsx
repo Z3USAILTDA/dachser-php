@@ -5,7 +5,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { useUserRole } from "@/hooks/useUserRole";
 import { Voucher, STATUS_INTEGRACAO_RM_LABELS, StatusIntegracaoRM } from "@/types/voucher";
-import { Loader2, Receipt } from "lucide-react";
+import { Loader2, Receipt, AlertCircle, Clock } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
@@ -243,9 +243,42 @@ const EsteiraVoucherDetails = () => {
       }
     >
 
+      {/* Badges de Status - Acima das tabs */}
+      <div className="flex flex-wrap gap-3 mb-4">
+        {voucher.accrualStatus && (
+          <Badge 
+            className={cn(
+              "flex items-center gap-1.5 px-3 py-1.5 rounded-full border text-xs",
+              voucher.accrualStatus === "MATCH_OK" && "bg-green-500/10 text-green-400 border-green-500/30",
+              voucher.accrualStatus === "SEM_ACCRUAL" && "bg-[rgba(255,255,255,0.05)] text-[#aaaaaa] border-[rgba(255,255,255,0.15)]",
+              voucher.accrualStatus === "MATCH_PARCIAL" && "bg-orange-500/10 text-orange-400 border-orange-500/30"
+            )}
+          >
+            <AlertCircle className="h-3.5 w-3.5" />
+            {voucher.accrualStatus === "MATCH_OK" ? "Accrual OK" : 
+             voucher.accrualStatus === "SEM_ACCRUAL" ? "Pendente" : "Accrual Parcial"}
+          </Badge>
+        )}
+        {voucher.statusComprovante && (
+          <Badge 
+            className={cn(
+              "flex items-center gap-1.5 px-3 py-1.5 rounded-full border text-xs",
+              voucher.statusComprovante === "VALIDADO" && "bg-green-500/10 text-green-400 border-green-500/30",
+              voucher.statusComprovante === "PENDENTE" && "bg-[rgba(255,255,255,0.05)] text-[#aaaaaa] border-[rgba(255,255,255,0.15)]",
+              voucher.statusComprovante === "ANEXADO" && "bg-blue-500/10 text-blue-400 border-blue-500/30"
+            )}
+          >
+            <Clock className="h-3.5 w-3.5" />
+            {voucher.statusComprovante === "VALIDADO" ? "Comprovante Validado" : 
+             voucher.statusComprovante === "PENDENTE" ? "Comprovante Pendente" : "Comprovante Anexado"}
+          </Badge>
+        )}
+      </div>
+
+      {/* Nav de Abas */}
       <Tabs defaultValue="detalhes" className="w-full">
         <TabsList 
-          className="border border-[rgba(255,255,255,0.12)] p-1 rounded-full"
+          className="border border-[rgba(255,255,255,0.12)] p-1 rounded-full mb-6"
           style={{ backgroundColor: 'rgba(5,6,18,0.9)' }}
         >
           <TabsTrigger 
@@ -268,7 +301,7 @@ const EsteiraVoucherDetails = () => {
           </TabsTrigger>
         </TabsList>
 
-          <TabsContent value="detalhes" className="space-y-6 mt-6">
+          <TabsContent value="detalhes" className="space-y-6">
             {/* Voucher Details */}
             <VoucherDetailsView voucher={voucher} />
 
