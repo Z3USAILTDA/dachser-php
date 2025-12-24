@@ -181,7 +181,7 @@ export const VoucherTable = ({ vouchers, onViewDetails, onEdit, onDelete, onGoBa
                   <SortableHeader field="numeroSPO">Nº Voucher (SPO)</SortableHeader>
                 </TableHead>
                 <TableHead>Processo</TableHead>
-                <TableHead>Cobrança em Nome de</TableHead>
+                <TableHead>Cobrança</TableHead>
                 <TableHead>
                   <SortableHeader field="fornecedor">Fornecedor</SortableHeader>
                 </TableHead>
@@ -204,7 +204,6 @@ export const VoucherTable = ({ vouchers, onViewDetails, onEdit, onDelete, onGoBa
                   </SortableHeader>
                 </TableHead>
                 <TableHead>Comprovante</TableHead>
-                <TableHead>Responsável Atual</TableHead>
                 <TableHead className="text-right">Ações</TableHead>
               </TableRow>
               <TableRow className="bg-background/50 border-b-primary/10">
@@ -278,13 +277,12 @@ export const VoucherTable = ({ vouchers, onViewDetails, onEdit, onDelete, onGoBa
                   </Select>
                 </TableHead>
                 <TableHead className="py-2"></TableHead>
-                <TableHead className="py-2"></TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {sortedVouchers.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={12} className="text-center text-muted-foreground py-8">
+                  <TableCell colSpan={11} className="text-center text-muted-foreground py-8">
                     Nenhum voucher encontrado
                   </TableCell>
                 </TableRow>
@@ -435,15 +433,6 @@ export const VoucherTable = ({ vouchers, onViewDetails, onEdit, onDelete, onGoBa
                             </Badge>
                           );
                         })()}
-                      </TableCell>
-                      <TableCell className="text-sm">
-                        {voucher.etapaAtual === "OPERACAO" && (voucher.responsavelOperacaoUserName || "-")}
-                        {voucher.etapaAtual === "FISCAL" && (voucher.responsavelFiscalUserName || "-")}
-                        {voucher.etapaAtual === "SUPERVISOR" && (voucher.responsavelSupervisorUserName || "-")}
-                        {voucher.etapaAtual === "FINANCEIRO" && (voucher.responsavelFinanceiroUserName || "-")}
-                        {(voucher.etapaAtual === "ROBO" || voucher.etapaAtual === "CONCLUIDO") && "Sistema"}
-                        {voucher.etapaAtual === "AJUSTE_OPERACAO" && (voucher.responsavelOperacaoUserName || "-")}
-                        {voucher.etapaAtual === "AJUSTE_FISCAL" && (voucher.responsavelFiscalUserName || "-")}
                       </TableCell>
                       <TableCell className="text-right">
                         <div className="flex items-center justify-end gap-2" onClick={(e) => e.stopPropagation()}>
