@@ -210,7 +210,10 @@ export const VoucherDetailsView = ({ voucher, onUpdate, canEditAttachments = fal
       </div>
 
       {/* Informações Básicas */}
-      <Card className="bg-[rgba(5,6,18,0.9)] border border-[rgba(255,255,255,0.12)] backdrop-blur-[18px] shadow-[0_18px_40px_rgba(0,0,0,0.85)]">
+      <Card 
+        className="border border-[rgba(255,255,255,0.12)] backdrop-blur-[18px] shadow-[0_18px_40px_rgba(0,0,0,0.85)]"
+        style={{ backgroundColor: 'rgba(5,6,18,0.9)' }}
+      >
         <CardHeader>
           <CardTitle className="text-[#f5f5f5]">Informações do Voucher</CardTitle>
         </CardHeader>
@@ -329,7 +332,10 @@ export const VoucherDetailsView = ({ voucher, onUpdate, canEditAttachments = fal
 
       {/* Comentários */}
       {(voucher.comentariosOperacao || voucher.comentariosFiscal || voucher.comentariosFinanceiro) && (
-        <Card className="bg-[rgba(5,6,18,0.9)] border border-[rgba(255,255,255,0.12)] backdrop-blur-[18px] shadow-[0_18px_40px_rgba(0,0,0,0.85)]">
+        <Card 
+          className="border border-[rgba(255,255,255,0.12)] backdrop-blur-[18px] shadow-[0_18px_40px_rgba(0,0,0,0.85)]"
+          style={{ backgroundColor: 'rgba(5,6,18,0.9)' }}
+        >
         <CardHeader>
             <CardTitle className="text-[#f5f5f5]">Comentários</CardTitle>
           </CardHeader>
@@ -358,7 +364,10 @@ export const VoucherDetailsView = ({ voucher, onUpdate, canEditAttachments = fal
 
       {/* Ajustes Solicitados */}
       {(voucher.ajusteOperacao || voucher.ajusteFiscal) && (
-        <Card className="bg-[rgba(5,6,18,0.9)] border border-orange-500/30 backdrop-blur-[18px] shadow-[0_18px_40px_rgba(0,0,0,0.85)]">
+        <Card 
+          className="border border-orange-500/30 backdrop-blur-[18px] shadow-[0_18px_40px_rgba(0,0,0,0.85)]"
+          style={{ backgroundColor: 'rgba(5,6,18,0.9)' }}
+        >
           <CardHeader>
             <CardTitle className="text-orange-500">Ajustes Solicitados</CardTitle>
           </CardHeader>
@@ -380,7 +389,10 @@ export const VoucherDetailsView = ({ voucher, onUpdate, canEditAttachments = fal
       )}
 
       {/* Anexos */}
-      <Card className="bg-[rgba(5,6,18,0.9)] border border-[rgba(255,255,255,0.12)] backdrop-blur-[18px] shadow-[0_18px_40px_rgba(0,0,0,0.85)]">
+      <Card 
+        className="border border-[rgba(255,255,255,0.12)] backdrop-blur-[18px] shadow-[0_18px_40px_rgba(0,0,0,0.85)]"
+        style={{ backgroundColor: 'rgba(5,6,18,0.9)' }}
+      >
         <CardHeader className="flex flex-row items-center justify-between">
           <CardTitle className="text-[#f5f5f5]">Anexos</CardTitle>
           {canEditAttachments && (
