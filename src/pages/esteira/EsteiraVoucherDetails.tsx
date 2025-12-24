@@ -1,12 +1,11 @@
 import { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { PageLayout } from "@/components/layout/PageLayout";
-import { PageHeader } from "@/components/layout/PageHeader";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { useUserRole } from "@/hooks/useUserRole";
 import { Voucher, STATUS_INTEGRACAO_RM_LABELS, StatusIntegracaoRM } from "@/types/voucher";
-import { Loader2 } from "lucide-react";
+import { Loader2, Receipt } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
@@ -217,29 +216,33 @@ const EsteiraVoucherDetails = () => {
     }
   };
 
+  // Build subtitle for PageLayout
+  const subtitleText = `Voucher ${voucher.numeroSPO}`;
+
   return (
-    <PageLayout backTo="/fin/esteira">
-      <PageHeader 
-        title={`Voucher ${voucher.numeroSPO}`}
-        subtitle={
-        <div className="flex items-center gap-2 mt-1">
-            <span className="text-muted-foreground">Etapa atual:</span>
-            <Badge className={getEtapaBadgeColor(voucher.etapaAtual)}>
-              {voucher.etapaAtual.replace("_", " ")}
+    <PageLayout 
+      backTo="/fin/esteira" 
+      title="ESTEIRA FINANCEIRA"
+      subtitle={subtitleText}
+      pageIcon={Receipt}
+      rightContent={
+        <div className="flex items-center gap-2">
+          <Badge className={cn("text-xs", getEtapaBadgeColor(voucher.etapaAtual))}>
+            {voucher.etapaAtual.replace("_", " ")}
+          </Badge>
+          {voucher.statusIntegracaoRm && voucher.statusIntegracaoRm !== "PENDENTE" && (
+            <Badge variant="outline" className={cn(
+              "text-[10px]",
+              voucher.statusIntegracaoRm === "ENVIADO_T_DADOS_RM" && "bg-blue-500/20 text-blue-400 border-blue-500/30",
+              voucher.statusIntegracaoRm === "PROCESSADO" && "bg-green-500/20 text-green-400 border-green-500/30",
+              voucher.statusIntegracaoRm === "ERRO" && "bg-red-500/20 text-red-400 border-red-500/30"
+            )}>
+              RM: {STATUS_INTEGRACAO_RM_LABELS[voucher.statusIntegracaoRm]}
             </Badge>
-            {voucher.statusIntegracaoRm && voucher.statusIntegracaoRm !== "PENDENTE" && (
-              <Badge variant="outline" className={cn(
-                "text-[10px]",
-                voucher.statusIntegracaoRm === "ENVIADO_T_DADOS_RM" && "bg-blue-500/20 text-blue-400 border-blue-500/30",
-                voucher.statusIntegracaoRm === "PROCESSADO" && "bg-green-500/20 text-green-400 border-green-500/30",
-                voucher.statusIntegracaoRm === "ERRO" && "bg-red-500/20 text-red-400 border-red-500/30"
-              )}>
-                RM: {STATUS_INTEGRACAO_RM_LABELS[voucher.statusIntegracaoRm]}
-              </Badge>
-            )}
-          </div>
-        }
-      />
+          )}
+        </div>
+      }
+    >
 
       <main className="container mx-auto px-4 py-6 space-y-6">
         <Tabs defaultValue="detalhes" className="w-full">
