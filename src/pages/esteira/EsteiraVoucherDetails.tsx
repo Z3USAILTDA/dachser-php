@@ -27,6 +27,25 @@ const EsteiraVoucherDetails = () => {
   const [voucher, setVoucher] = useState<Voucher | null>(null);
   const [loading, setLoading] = useState(true);
 
+  // Helper para parsear datas do MariaDB como UTC
+  const parseMariaDBDate = (dateStr: string | null | undefined): Date | null => {
+    if (!dateStr) return null;
+    // Se já contém 'Z' ou timezone, parse diretamente
+    if (dateStr.includes('Z') || dateStr.includes('+')) {
+      return new Date(dateStr);
+    }
+    // Se tem 'T', é ISO sem timezone - adicionar Z
+    if (dateStr.includes('T')) {
+      return new Date(dateStr + 'Z');
+    }
+    // Se tem espaço (formato "YYYY-MM-DD HH:mm:ss"), converter para ISO
+    if (dateStr.includes(' ')) {
+      return new Date(dateStr.replace(' ', 'T') + 'Z');
+    }
+    // Se é apenas data (YYYY-MM-DD), adicionar horário meia-noite UTC
+    return new Date(dateStr + 'T00:00:00Z');
+  };
+
   const loadVoucher = async () => {
     if (!id) return;
     
@@ -55,8 +74,8 @@ const EsteiraVoucherDetails = () => {
         cnpjFornecedor: data.cnpj_fornecedor,
         valor: data.valor ? parseFloat(data.valor) : undefined,
         moeda: data.moeda || "BRL",
-        vencimento: data.vencimento ? new Date(data.vencimento + 'Z') : new Date(),
-        dataEmissaoDocumento: data.data_emissao_documento ? new Date(data.data_emissao_documento + 'Z') : undefined,
+        vencimento: parseMariaDBDate(data.vencimento) || new Date(),
+        dataEmissaoDocumento: parseMariaDBDate(data.data_emissao_documento) || undefined,
         cobrancaEmNomeDe: data.cobranca_em_nome_de || 'DACHSER',
         formaPagamento: data.forma_pagamento || 'BOLETO',
         tipoDocumento: data.tipo_documento,
@@ -80,8 +99,8 @@ const EsteiraVoucherDetails = () => {
         responsavelFinanceiroUserId: data.responsavel_financeiro_user_id,
         aprovadoPorUserId: data.aprovado_por_user_id,
         clienteEmail: data.cliente_email,
-        createdAt: data.created_at ? new Date(data.created_at + 'Z') : new Date(),
-        updatedAt: data.updated_at ? new Date(data.updated_at + 'Z') : new Date(),
+        createdAt: parseMariaDBDate(data.created_at) || new Date(),
+        updatedAt: parseMariaDBDate(data.updated_at) || new Date(),
         anexos: anexos.map((a: any) => ({
           id: a.id,
           voucherId: data.id,
@@ -90,12 +109,12 @@ const EsteiraVoucherDetails = () => {
           fileUrl: a.file_url,
           fileSize: a.file_size,
           uploadedByUserId: data.criado_por_user_id,
-          createdAt: a.created_at ? new Date(a.created_at + 'Z') : new Date(),
+          createdAt: parseMariaDBDate(a.created_at) || new Date(),
         })),
         logs: logs.map((l: any) => ({
           id: l.id,
           voucherId: data.id,
-          dataHora: l.data_hora ? new Date(l.data_hora + 'Z') : new Date(),
+          dataHora: parseMariaDBDate(l.data_hora) || new Date(),
           userId: l.user_id,
           userName: l.user_name,
           acao: l.acao,
