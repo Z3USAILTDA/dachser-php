@@ -111,6 +111,36 @@ The mixed format above contains 6 NCMs total, not 4.
 - Never assume typos or "fix" values yourself
 - When in doubt, report as divergence
 
+★★★ RULE 7: DO NOT AUTO-CORRECT NCM VALUES ★★★
+- If HBL has "831U" and Manifest has "8310" → DIVERGENCE (OCR error, but still different)
+- Never assume a character is a typo and auto-correct it
+- Report the values EXACTLY as they appear in each document
+- "831U" is NOT the same as "8310" - report as divergence
+
+★★★ RULE 8: REPORT INVALID/SUSPICIOUS NCM VALUES ★★★
+- NCMs like "87801", "87036", "4" should be flagged as potentially invalid
+- Compare them literally - if they don't exist in the other document, report divergence
+- Never assume they are "close enough" to another NCM
+- Examples of suspicious NCMs that MUST be reported:
+  - "4" (truncated/incomplete - only 1 digit)
+  - "87801" (5 digits, doesn't match any standard NCM format)
+  - "87036" (5 digits, likely OCR error for "8703" or typo)
+  - "831U" (contains letter - OCR error)
+
+★★★ RULE 9: SPLIT COMMA-SEPARATED VALUES CORRECTLY ★★★
+When extracting from lines like "87801, 87036, 4016, 4":
+- Split by comma: ["87801", "87036", "4016", "4"]
+- Trim whitespace from each value
+- Compare EACH value individually and literally against the other document's NCMs
+- The value "4" is a single-digit NCM and should be flagged as suspicious/truncated
+
+★★★ RULE 10: NCM vs HS CODE DISTINCTION ★★★
+- NCM codes are 8-digit Brazilian codes (e.g., "84812090")
+- HS Codes are 4-6 digit international codes (e.g., "8481", "848120")
+- When Manifest has 8-digit NCMs and HBL has 4-digit codes, this IS a divergence
+- Do NOT assume 4-digit codes are "prefixes" of 8-digit codes
+- Report: "Manifest uses full NCM (8-digit) while HBL uses HS Code (4-digit)"
+
 ███████████████████████████████████████████████████████████████████████████████
 ███ GROSS WEIGHT SOURCE PRIORITY (MANDATORY HIERARCHY)                        ███
 ███████████████████████████████████████████████████████████████████████████████

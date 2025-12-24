@@ -52,19 +52,45 @@ function extractNCMCodes(text: string): string[] {
 
 /**
  * Find columns that likely contain NCM data
+ * PRIORITY: "NCM Code" columns take precedence over "HS Code" columns
  */
 function findNCMColumns(headers: string[]): number[] {
-  const ncmKeywords = ['ncm', 'hscode', 'hs code', 'hs-code', 'codigo ncm', 'código ncm', 'tariff', 'harmonized'];
-  const indices: number[] = [];
+  // Priority 1: Exact NCM columns (highest priority)
+  const ncmPrimaryKeywords = ['ncm code', 'ncm_code', 'ncmcode', 'codigo ncm', 'código ncm', 'ncm'];
+  // Priority 2: HS Code columns (only if no NCM columns found)
+  const hsCodeKeywords = ['hscode', 'hs code', 'hs-code', 'hs_code', 'tariff', 'harmonized'];
+  
+  const ncmIndices: number[] = [];
+  const hsIndices: number[] = [];
   
   headers.forEach((header, index) => {
     const lowerHeader = header.toLowerCase().trim();
-    if (ncmKeywords.some(kw => lowerHeader.includes(kw))) {
-      indices.push(index);
+    
+    // Check for NCM-specific columns first
+    if (ncmPrimaryKeywords.some(kw => lowerHeader.includes(kw) && !lowerHeader.includes('hs'))) {
+      ncmIndices.push(index);
+      console.log(`[XLSX] Found NCM column at index ${index}: "${header}"`);
+    }
+    // Check for HS Code columns separately
+    else if (hsCodeKeywords.some(kw => lowerHeader.includes(kw))) {
+      hsIndices.push(index);
+      console.log(`[XLSX] Found HS Code column at index ${index}: "${header}"`);
     }
   });
   
-  return indices;
+  // Return NCM columns if found, otherwise fall back to HS Code columns
+  if (ncmIndices.length > 0) {
+    console.log(`[XLSX] Using NCM columns: ${ncmIndices.join(', ')}`);
+    return ncmIndices;
+  }
+  
+  if (hsIndices.length > 0) {
+    console.log(`[XLSX] No NCM columns found, falling back to HS Code columns: ${hsIndices.join(', ')}`);
+    return hsIndices;
+  }
+  
+  console.log(`[XLSX] WARNING: No NCM or HS Code columns found in headers`);
+  return [];
 }
 
 export async function extractXlsxText(fileUrl: string, fileName: string): Promise<XlsxReadResult> {
