@@ -5,7 +5,8 @@ import { toast } from 'sonner';
 export interface ChbItem {
   id: number;
   reference: string;
-  consignee: string;
+  consignee: string; // Cliente - extraído automaticamente dos documentos
+  modal: 'SEA' | 'AIR' | null; // Identificado automaticamente
   status_macro: 'pre_alerta_pendente' | 'instrucao_pendente' | 'di_pendente' | 'concluida';
   step1_status: string;
   step2_status: string;
@@ -75,12 +76,12 @@ export function useChbItems() {
     }
   }, []);
 
-  const createItem = useCallback(async (reference: string, consignee: string): Promise<number | null> => {
+  const createItem = useCallback(async (reference: string, consignee?: string): Promise<number | null> => {
     try {
       const userId = localStorage.getItem('user_id');
       const response = await callMariaDB<{ success: boolean; id: number }>('create_chb_item', {
         reference,
-        consignee,
+        consignee: consignee || '', // Cliente será extraído automaticamente dos documentos
         userId: userId ? parseInt(userId) : null,
       });
       toast.success('Processo criado com sucesso!');
@@ -89,6 +90,21 @@ export function useChbItems() {
       console.error('Error creating CHB item:', error);
       toast.error('Erro ao criar processo');
       return null;
+    }
+  }, []);
+
+  const updateItemClient = useCallback(async (id: number, clientName: string, modal?: 'SEA' | 'AIR') => {
+    try {
+      await callMariaDB('update_chb_item', { 
+        id, 
+        consignee: clientName,
+        modal: modal || null 
+      });
+      setItems(prev => prev.map(item => 
+        item.id === id ? { ...item, consignee: clientName, modal: modal || null } : item
+      ));
+    } catch (error) {
+      console.error('Error updating CHB item client:', error);
     }
   }, []);
 
@@ -116,7 +132,7 @@ export function useChbItems() {
     }
   }, []);
 
-  return { items, loading, fetchItems, createItem, updateItem, deleteItem };
+  return { items, loading, fetchItems, createItem, updateItem, updateItemClient, deleteItem };
 }
 
 export function useChbFiles(itemId: number | null) {
