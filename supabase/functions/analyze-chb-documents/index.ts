@@ -344,13 +344,64 @@ ${CHB_TABLE_SPEC}
 `;
 }
 
-async function callAnthropicAPI(prompt: string, filesContent: { name: string; content: string; mimeType: string }[]): Promise<string> {
+// Error types for structured error responses
+interface ChbFileError {
+  type: 'file_read' | 'file_format' | 'api_error' | 'network' | 'timeout' | 'unknown';
+  message: string;
+  documentName?: string;
+  details?: string;
+  suggestion?: string;
+}
+
+function createFileError(file: { name: string; mimeType: string }, errorType: string, details?: string): ChbFileError {
+  const supportedFormats = ['application/pdf', 'image/png', 'image/jpeg', 'image/jpg', 'image/webp'];
+  
+  if (errorType === 'unsupported_format') {
+    return {
+      type: 'file_format',
+      message: `Formato não suportado: ${file.mimeType}`,
+      documentName: file.name,
+      details: `O arquivo "${file.name}" está em formato ${file.mimeType} que não é totalmente suportado.`,
+      suggestion: 'Converta o arquivo para PDF ou imagem (PNG, JPG) para melhor análise.'
+    };
+  }
+  
+  if (errorType === 'empty_content') {
+    return {
+      type: 'file_read',
+      message: 'Arquivo vazio ou sem conteúdo legível',
+      documentName: file.name,
+      details: `Não foi possível extrair texto do arquivo "${file.name}".`,
+      suggestion: 'Verifique se o arquivo não está corrompido. Para PDFs escaneados, certifique-se de que há texto OCR incorporado.'
+    };
+  }
+  
+  if (errorType === 'binary_not_readable') {
+    return {
+      type: 'file_read',
+      message: 'Conteúdo binário não legível',
+      documentName: file.name,
+      details: `O arquivo "${file.name}" contém dados binários que não podem ser interpretados diretamente.`,
+      suggestion: 'Para planilhas Excel, exporte para PDF ou CSV. Para outros formatos, converta para PDF.'
+    };
+  }
+  
+  return {
+    type: 'unknown',
+    message: details || 'Erro ao processar arquivo',
+    documentName: file.name,
+    suggestion: 'Tente enviar o arquivo novamente ou use um formato diferente.'
+  };
+}
+
+async function callAnthropicAPI(prompt: string, filesContent: { name: string; content: string; mimeType: string }[]): Promise<{ text: string; warnings: ChbFileError[] }> {
   const apiKey = Deno.env.get('CHB_ANTHROPIC_API_KEY');
   if (!apiKey) {
     throw new Error('CHB_ANTHROPIC_API_KEY not configured');
   }
 
   const content: any[] = [];
+  const warnings: ChbFileError[] = [];
   
   // Add files as images or documents
   for (const file of filesContent) {
@@ -372,14 +423,26 @@ async function callAnthropicAPI(prompt: string, filesContent: { name: string; co
           data: file.content,
         },
       });
+    } else if (file.mimeType.includes('spreadsheet') || file.mimeType.includes('excel') || file.name.endsWith('.xlsx') || file.name.endsWith('.xls')) {
+      // Excel files - add warning
+      warnings.push(createFileError(file, 'binary_not_readable'));
+      content.push({
+        type: 'text',
+        text: `[Arquivo: ${file.name}] - Planilha Excel (não legível diretamente). Análise pode ser incompleta para este arquivo.`,
+      });
     } else {
       // For other types, try to send as text
       try {
+        const decoded = atob(file.content);
+        if (decoded.trim().length === 0) {
+          warnings.push(createFileError(file, 'empty_content'));
+        }
         content.push({
           type: 'text',
-          text: `[Arquivo: ${file.name}]\n${atob(file.content)}`,
+          text: `[Arquivo: ${file.name}]\n${decoded}`,
         });
       } catch {
+        warnings.push(createFileError(file, 'binary_not_readable'));
         content.push({
           type: 'text',
           text: `[Arquivo: ${file.name}] - Conteúdo binário não legível como texto`,
@@ -418,20 +481,30 @@ async function callAnthropicAPI(prompt: string, filesContent: { name: string; co
   if (!response.ok) {
     const errorText = await response.text();
     console.error('Anthropic API error:', response.status, errorText);
-    throw new Error(`Anthropic API error: ${response.status}`);
+    
+    if (response.status === 400 && errorText.includes('document')) {
+      throw new Error(`Erro ao processar documento: O serviço não conseguiu interpretar um ou mais arquivos. Verifique se os PDFs não estão protegidos.`);
+    } else if (response.status === 429) {
+      throw new Error('Limite de requisições excedido. Aguarde alguns minutos e tente novamente.');
+    } else if (response.status === 401) {
+      throw new Error('Erro de autenticação com o serviço de IA. Entre em contato com o suporte.');
+    }
+    
+    throw new Error(`Erro na API de análise (código ${response.status})`);
   }
 
   const data = await response.json();
-  return data.content[0].text;
+  return { text: data.content[0].text, warnings };
 }
 
-async function callLovableAI(prompt: string, filesContent: { name: string; content: string; mimeType: string }[]): Promise<string> {
+async function callLovableAI(prompt: string, filesContent: { name: string; content: string; mimeType: string }[]): Promise<{ text: string; warnings: ChbFileError[] }> {
   const apiKey = Deno.env.get('LOVABLE_API_KEY');
   if (!apiKey) {
     throw new Error('LOVABLE_API_KEY not configured');
   }
 
   const content: any[] = [];
+  const warnings: ChbFileError[] = [];
 
   // Add files - Gemini supports PDFs, images and documents via inline_data
   for (const file of filesContent) {
@@ -443,7 +516,6 @@ async function callLovableAI(prompt: string, filesContent: { name: string; conte
         },
       });
     } else if (file.mimeType === 'application/pdf') {
-      // Gemini supports PDFs via inline_data with application/pdf mime type
       content.push({
         type: 'image_url',
         image_url: {
@@ -451,28 +523,23 @@ async function callLovableAI(prompt: string, filesContent: { name: string; conte
         },
       });
     } else if (file.mimeType.includes('spreadsheet') || file.mimeType.includes('excel') || file.name.endsWith('.xlsx') || file.name.endsWith('.xls')) {
-      // For spreadsheets, try to decode as text or mark as binary
+      warnings.push(createFileError(file, 'binary_not_readable'));
+      content.push({
+        type: 'text',
+        text: `[Arquivo: ${file.name}] - Planilha Excel (dados binários). Análise pode ser limitada.`,
+      });
+    } else {
       try {
         const decoded = atob(file.content);
-        // XLSX files are binary, so we'll note this
+        if (decoded.trim().length === 0) {
+          warnings.push(createFileError(file, 'empty_content'));
+        }
         content.push({
           type: 'text',
-          text: `[Arquivo: ${file.name}] - Planilha Excel (dados binários). Por favor, analise baseado nos outros documentos disponíveis.`,
+          text: `[Arquivo: ${file.name}]\n${decoded}`,
         });
       } catch {
-        content.push({
-          type: 'text',
-          text: `[Arquivo: ${file.name}] - Planilha Excel não legível diretamente.`,
-        });
-      }
-    } else {
-      // For other types, try to decode as text
-      try {
-        content.push({
-          type: 'text',
-          text: `[Arquivo: ${file.name}]\n${atob(file.content)}`,
-        });
-      } catch {
+        warnings.push(createFileError(file, 'binary_not_readable'));
         content.push({
           type: 'text',
           text: `[Arquivo: ${file.name}] - Conteúdo binário não legível como texto`,
@@ -481,7 +548,6 @@ async function callLovableAI(prompt: string, filesContent: { name: string; conte
     }
   }
 
-  // Add the prompt
   content.push({
     type: 'text',
     text: prompt,
@@ -496,7 +562,7 @@ async function callLovableAI(prompt: string, filesContent: { name: string; conte
       'Authorization': `Bearer ${apiKey}`,
     },
     body: JSON.stringify({
-      model: 'google/gemini-2.5-pro',
+      model: 'google/gemini-2.5-flash',
       messages: [
         {
           role: 'user',
@@ -510,19 +576,18 @@ async function callLovableAI(prompt: string, filesContent: { name: string; conte
     const errorText = await response.text();
     console.error('Lovable AI error:', response.status, errorText);
     
-    // Check for specific rate limit errors
     if (response.status === 429) {
-      throw new Error('Rate limit exceeded - tente novamente em alguns minutos');
+      throw new Error('Limite de requisições excedido. Aguarde alguns minutos e tente novamente.');
     }
     if (response.status === 402) {
-      throw new Error('Créditos insuficientes - adicione créditos ao workspace');
+      throw new Error('Créditos de IA esgotados. Entre em contato com o administrador.');
     }
     
-    throw new Error(`Lovable AI error: ${response.status}`);
+    throw new Error(`Erro no serviço de IA (código ${response.status})`);
   }
 
   const data = await response.json();
-  return data.choices[0].message.content;
+  return { text: data.choices[0].message.content, warnings };
 }
 
 function extractHtmlAndTags(response: string, stepId: number): { 
@@ -661,11 +726,14 @@ serve(async (req) => {
     const prompt = getPromptByStep(stepId, fileNames);
     let responseText: string;
     let usedFallback = false;
+    let fileWarnings: ChbFileError[] = [];
 
     // Try Anthropic first
     try {
       console.log('Attempting Anthropic API...');
-      responseText = await callAnthropicAPI(prompt, files);
+      const result = await callAnthropicAPI(prompt, files);
+      responseText = result.text;
+      fileWarnings = result.warnings;
       console.log('Anthropic API succeeded');
     } catch (anthropicError) {
       console.error('Anthropic API failed, trying Lovable AI (Gemini) fallback:', anthropicError);
@@ -673,11 +741,27 @@ serve(async (req) => {
       
       try {
         console.log('Attempting Lovable AI (Gemini) fallback...');
-        responseText = await callLovableAI(prompt, files);
+        const result = await callLovableAI(prompt, files);
+        responseText = result.text;
+        fileWarnings = result.warnings;
         console.log('Lovable AI succeeded');
       } catch (geminiError) {
         console.error('Lovable AI also failed:', geminiError);
-        throw new Error('Ambas as APIs (Anthropic e Gemini) falharam');
+        
+        // Return structured error
+        const errorMessage = geminiError instanceof Error ? geminiError.message : 'Erro desconhecido';
+        return new Response(
+          JSON.stringify({
+            error: 'Falha na análise dos documentos',
+            errors: [{
+              type: 'api_error',
+              message: 'Não foi possível processar os documentos',
+              details: `Os serviços de análise (Anthropic e Gemini) falharam: ${errorMessage}`,
+              suggestion: 'Verifique a qualidade dos arquivos (PDFs digitais funcionam melhor que scans). Tente novamente em alguns minutos.'
+            }]
+          }),
+          { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
       }
     }
 
@@ -697,13 +781,24 @@ serve(async (req) => {
         generatedAt: new Date().toLocaleString('pt-BR'),
         filesAnalyzed: files.map((f: any) => f.name),
         usedFallback,
+        fileWarnings: fileWarnings.length > 0 ? fileWarnings : undefined,
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   } catch (error) {
     console.error('Error in analyze-chb-documents:', error);
+    
+    const errorMessage = error instanceof Error ? error.message : 'Erro desconhecido';
+    
     return new Response(
-      JSON.stringify({ error: error instanceof Error ? error.message : 'Erro desconhecido' }),
+      JSON.stringify({ 
+        error: errorMessage,
+        errors: [{
+          type: 'unknown',
+          message: errorMessage,
+          suggestion: 'Tente novamente. Se o problema persistir, entre em contato com o suporte.'
+        }]
+      }),
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   }
