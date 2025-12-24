@@ -307,31 +307,46 @@ const EsteiraVoucherDetails = () => {
 
             {/* Stage Actions */}
             {canShowOperacaoActions() && (
-              <Card className="p-6 bg-card/80 backdrop-blur-sm border-border/50">
+              <Card 
+                className="p-6 border border-[rgba(255,255,255,0.12)] backdrop-blur-[18px]"
+                style={{ backgroundColor: 'rgba(5,6,18,0.9)' }}
+              >
                 <VoucherOperacaoActions voucher={voucher} onUpdate={loadVoucher} />
               </Card>
             )}
 
             {canShowFiscalActions() && (
-              <Card className="p-6 bg-card/80 backdrop-blur-sm border-border/50">
+              <Card 
+                className="p-6 border border-[rgba(255,255,255,0.12)] backdrop-blur-[18px]"
+                style={{ backgroundColor: 'rgba(5,6,18,0.9)' }}
+              >
                 <VoucherFiscalActions voucher={voucher} onUpdate={loadVoucher} />
               </Card>
             )}
 
             {canShowSupervisorActions() && (
-              <Card className="p-6 bg-card/80 backdrop-blur-sm border-border/50">
+              <Card 
+                className="p-6 border border-[rgba(255,255,255,0.12)] backdrop-blur-[18px]"
+                style={{ backgroundColor: 'rgba(5,6,18,0.9)' }}
+              >
                 <VoucherSupervisorActions voucher={voucher} onUpdate={loadVoucher} />
               </Card>
             )}
 
             {canShowFinanceiroActions() && (
-              <Card className="p-6 bg-card/80 backdrop-blur-sm border-border/50">
+              <Card 
+                className="p-6 border border-[rgba(255,255,255,0.12)] backdrop-blur-[18px]"
+                style={{ backgroundColor: 'rgba(5,6,18,0.9)' }}
+              >
                 <VoucherFinanceiroActions voucher={voucher} onUpdate={loadVoucher} />
               </Card>
             )}
 
             {canShowRoboActions() && (
-              <Card className="p-6 bg-card/80 backdrop-blur-sm border-border/50">
+              <Card 
+                className="p-6 border border-[rgba(255,255,255,0.12)] backdrop-blur-[18px]"
+                style={{ backgroundColor: 'rgba(5,6,18,0.9)' }}
+              >
                 <VoucherRoboActions voucher={voucher} onUpdate={loadVoucher} />
               </Card>
             )}
