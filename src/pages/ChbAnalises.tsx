@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useUsageLog } from "@/hooks/useUsageLog";
-import { Upload, Clock, Copy, ClipboardList, Trash2, FileText, CheckCircle, FileDown, HelpCircle } from "lucide-react";
+import { Upload, Clock, Copy, ClipboardList, Trash2, FileText, CheckCircle, FileDown, HelpCircle, Settings } from "lucide-react";
 import { PageLayout } from "@/components/layout/PageLayout";
 import { FilterCard, TableCard } from "@/components/layout/PageCard";
 import { FilterBar } from "@/components/layout/FilterBar";
@@ -15,7 +15,7 @@ import { Filter as FilterIcon } from "lucide-react";
 import { useChbItems, ChbItem } from "@/hooks/useChbData";
 import { supabase } from "@/integrations/supabase/client";
 import { exportChbHistoryToPDF } from "@/utils/chbPdfExport";
-
+import { ChbClientConfigDialog } from "@/components/chb/ChbClientConfigDialog";
 interface HistoryEntry {
   id: number;
   etapa: string;
@@ -95,6 +95,7 @@ export default function ChbAnalises() {
   const [novoProcessoForm, setNovoProcessoForm] = useState({
     reference: ''
   });
+  const [configDialogOpen, setConfigDialogOpen] = useState(false);
 
   useEffect(() => {
     fetchItems();
@@ -168,6 +169,13 @@ export default function ChbAnalises() {
 
   const rightContent = (
     <div className="flex items-center gap-3">
+      <button
+        onClick={() => setConfigDialogOpen(true)}
+        className="w-8 h-8 rounded-full border border-white/25 flex items-center justify-center bg-black/70 text-gray-400 hover:text-[#ffc800] transition-colors"
+        title="Configurações por cliente"
+      >
+        <Settings className="h-4 w-4" />
+      </button>
       <button
         onClick={() => navigate("/chb/manual")}
         className="w-8 h-8 rounded-full border border-white/25 flex items-center justify-center bg-black/70 text-gray-400 hover:text-[#ffc800] transition-colors"
@@ -501,6 +509,9 @@ export default function ChbAnalises() {
           color: rgba(255, 255, 255, 0.7);
         }
       `}</style>
+
+      {/* Client Config Dialog */}
+      <ChbClientConfigDialog open={configDialogOpen} onOpenChange={setConfigDialogOpen} />
     </PageLayout>
   );
 }

@@ -185,6 +185,45 @@ export type Database = {
           },
         ]
       }
+      chb_client_config: {
+        Row: {
+          ativo: boolean | null
+          campos_obrigatorios: Json | null
+          cliente_cnpj: string
+          cliente_nome: string | null
+          created_at: string
+          id: string
+          regras_comparacao: Json | null
+          tolerancia_peso: number | null
+          tolerancia_valor: number | null
+          updated_at: string
+        }
+        Insert: {
+          ativo?: boolean | null
+          campos_obrigatorios?: Json | null
+          cliente_cnpj: string
+          cliente_nome?: string | null
+          created_at?: string
+          id?: string
+          regras_comparacao?: Json | null
+          tolerancia_peso?: number | null
+          tolerancia_valor?: number | null
+          updated_at?: string
+        }
+        Update: {
+          ativo?: boolean | null
+          campos_obrigatorios?: Json | null
+          cliente_cnpj?: string
+          cliente_nome?: string | null
+          created_at?: string
+          id?: string
+          regras_comparacao?: Json | null
+          tolerancia_peso?: number | null
+          tolerancia_valor?: number | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
       profiles: {
         Row: {
           active: boolean | null
