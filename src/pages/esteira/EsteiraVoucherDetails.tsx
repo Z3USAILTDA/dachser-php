@@ -16,6 +16,7 @@ import { VoucherFiscalActions } from "@/components/esteira/VoucherFiscalActions"
 import { VoucherSupervisorActions } from "@/components/esteira/VoucherSupervisorActions";
 import { VoucherFinanceiroActions } from "@/components/esteira/VoucherFinanceiroActions";
 import { VoucherRoboActions } from "@/components/esteira/VoucherRoboActions";
+import { VoucherRascunhoActions } from "@/components/esteira/VoucherRascunhoActions";
 import { DadosPagamentoPanel } from "@/components/esteira/DadosPagamentoPanel";
 
 const EsteiraVoucherDetails = () => {
@@ -148,10 +149,24 @@ const EsteiraVoucherDetails = () => {
     loadVoucher();
   }, [id]);
 
+  const canShowRascunhoActions = () => {
+    if (!voucher || !role) return false;
+    const isRascunho = voucher.etapaAtual === "RASCUNHO";
+    // Operação, Supervisor, Financeiro e Admin podem editar rascunhos
+    const canAct = hasRole("OPERACAO") || hasRole("GESTOR_OPERACAO") || 
+                   hasRole("SUPERVISOR") || hasRole("GESTOR_SUPERVISOR") ||
+                   hasRole("FINANCEIRO") || hasRole("GESTOR_FINANCEIRO") ||
+                   hasRole("ADMIN");
+    return isRascunho && canAct;
+  };
+
   const canShowOperacaoActions = () => {
     if (!voucher || !role) return false;
     const isOperacaoEtapa = voucher.etapaAtual === "OPERACAO" || voucher.etapaAtual === "AJUSTE_OPERACAO";
-    const canAct = hasRole("OPERACAO") || hasRole("GESTOR_OPERACAO");
+    const canAct = hasRole("OPERACAO") || hasRole("GESTOR_OPERACAO") ||
+                   hasRole("SUPERVISOR") || hasRole("GESTOR_SUPERVISOR") ||
+                   hasRole("FINANCEIRO") || hasRole("GESTOR_FINANCEIRO") ||
+                   hasRole("ADMIN");
     return isOperacaoEtapa && canAct;
   };
 
@@ -159,28 +174,33 @@ const EsteiraVoucherDetails = () => {
     if (!voucher || !role) return false;
     const isFiscalEtapa = voucher.etapaAtual === "FISCAL" || voucher.etapaAtual === "AJUSTE_FISCAL";
     const isDachser = voucher.cobrancaEmNomeDe === "DACHSER";
-    const canAct = hasRole("FISCAL") || hasRole("GESTOR_FISCAL");
+    const canAct = hasRole("FISCAL") || hasRole("GESTOR_FISCAL") ||
+                   hasRole("SUPERVISOR") || hasRole("GESTOR_SUPERVISOR") ||
+                   hasRole("FINANCEIRO") || hasRole("GESTOR_FINANCEIRO") ||
+                   hasRole("ADMIN");
     return isFiscalEtapa && isDachser && canAct;
   };
 
   const canShowSupervisorActions = () => {
     if (!voucher || !role) return false;
     const isSupervisorEtapa = voucher.etapaAtual === "SUPERVISOR";
-    const canAct = hasRole("SUPERVISOR") || hasRole("GESTOR_SUPERVISOR");
+    const canAct = hasRole("SUPERVISOR") || hasRole("GESTOR_SUPERVISOR") ||
+                   hasRole("FINANCEIRO") || hasRole("GESTOR_FINANCEIRO") ||
+                   hasRole("ADMIN");
     return isSupervisorEtapa && canAct;
   };
 
   const canShowFinanceiroActions = () => {
     if (!voucher || !role) return false;
     const isFinanceiroEtapa = voucher.etapaAtual === "FINANCEIRO";
-    const canAct = hasRole("FINANCEIRO") || hasRole("GESTOR_FINANCEIRO");
+    const canAct = hasRole("FINANCEIRO") || hasRole("GESTOR_FINANCEIRO") || hasRole("ADMIN");
     return isFinanceiroEtapa && canAct;
   };
 
   const canShowRoboActions = () => {
     if (!voucher || !role) return false;
     const isRoboEtapa = voucher.etapaAtual === "ROBO";
-    const canAct = hasRole("FINANCEIRO") || hasRole("GESTOR_FINANCEIRO");
+    const canAct = hasRole("FINANCEIRO") || hasRole("GESTOR_FINANCEIRO") || hasRole("ADMIN");
     return isRoboEtapa && canAct;
   };
 
@@ -306,6 +326,16 @@ const EsteiraVoucherDetails = () => {
           <TabsContent value="detalhes" className="space-y-6">
             {/* Voucher Details */}
             <VoucherDetailsView voucher={voucher} />
+
+            {/* Rascunho Actions */}
+            {canShowRascunhoActions() && (
+              <Card 
+                className="p-6 border border-[rgba(255,255,255,0.12)] backdrop-blur-[18px]"
+                style={{ backgroundColor: 'rgba(5,6,18,0.9)' }}
+              >
+                <VoucherRascunhoActions voucher={voucher} onUpdate={loadVoucher} />
+              </Card>
+            )}
 
             {/* Stage Actions */}
             {canShowOperacaoActions() && (
