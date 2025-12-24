@@ -800,6 +800,10 @@ const EsteiraIndex = () => {
     isAdmin,
     isGestor,
     hasEsteiraAccess,
+    canCreateVoucher,
+    canEditVoucher,
+    canDeleteVoucher,
+    canManageUsers,
   } = useUserRole();
   const storedUser = localStorage.getItem("user") || localStorage.getItem("dachser_user");
   const user = storedUser ? JSON.parse(storedUser) : null;
@@ -1285,13 +1289,15 @@ const EsteiraIndex = () => {
             Atualizar
           </button>
 
-          <Button
-            className="gap-2 bg-primary text-primary-foreground hover:bg-primary/90 shadow-lg shadow-primary/20 rounded-full px-4"
-            onClick={() => setShowCreateDialog(true)}
-          >
-            <Plus className="h-4 w-4" />
-            Enviar Voucher
-          </Button>
+          {canCreateVoucher && (
+            <Button
+              className="gap-2 bg-primary text-primary-foreground hover:bg-primary/90 shadow-lg shadow-primary/20 rounded-full px-4"
+              onClick={() => setShowCreateDialog(true)}
+            >
+              <Plus className="h-4 w-4" />
+              Enviar Voucher
+            </Button>
+          )}
 
           {user && (
             <div className="px-[14px] py-1.5 rounded-full bg-[rgba(0,0,0,.70)] border border-[rgba(255,255,255,.18)] text-[#aaaaaa] max-w-[180px] truncate">
@@ -1299,17 +1305,19 @@ const EsteiraIndex = () => {
             </div>
           )}
 
-          {/* Settings Button */}
-          <button
-            onClick={() => {
-              loadEsteiraUsers();
-              setShowUsersDialog(true);
-            }}
-            className="w-9 h-9 rounded-full border border-[rgba(255,255,255,.25)] bg-[rgba(0,0,0,.7)] text-[#aaaaaa] hover:text-white hover:bg-[rgba(0,0,0,.9)] transition flex items-center justify-center"
-            title="Configurações"
-          >
-            <Settings className="h-4 w-4" />
-          </button>
+          {/* Settings Button - Only for admins */}
+          {canManageUsers && (
+            <button
+              onClick={() => {
+                loadEsteiraUsers();
+                setShowUsersDialog(true);
+              }}
+              className="w-9 h-9 rounded-full border border-[rgba(255,255,255,.25)] bg-[rgba(0,0,0,.7)] text-[#aaaaaa] hover:text-white hover:bg-[rgba(0,0,0,.9)] transition flex items-center justify-center"
+              title="Configurações"
+            >
+              <Settings className="h-4 w-4" />
+            </button>
+          )}
 
           {/* Help Button */}
           <button
@@ -1518,15 +1526,17 @@ const EsteiraIndex = () => {
                 <div className="h-96 rounded-2xl bg-[rgba(5,6,18,0.9)] border border-[rgba(255,255,255,0.12)] animate-pulse" />
               ) : (
                 <div className="rounded-2xl bg-[rgba(5,6,18,0.9)] border border-[rgba(255,255,255,0.12)] backdrop-blur-[18px] shadow-[0_18px_40px_rgba(0,0,0,0.85)] overflow-hidden">
-                  <VoucherTable
-                    vouchers={filteredVouchers}
-                    onViewDetails={handleViewDetails}
-                    onEdit={handleEdit}
-                    onDelete={handleDelete}
-                    onGoBack={handleGoBack}
-                    filters={filters}
-                    onFilterChange={setFilters}
-                  />
+                    <VoucherTable
+                      vouchers={filteredVouchers}
+                      onViewDetails={handleViewDetails}
+                      onEdit={handleEdit}
+                      onDelete={handleDelete}
+                      onGoBack={handleGoBack}
+                      filters={filters}
+                      onFilterChange={setFilters}
+                      canEdit={canEditVoucher}
+                      canDelete={canDeleteVoucher}
+                    />
                 </div>
               )}
             </div>

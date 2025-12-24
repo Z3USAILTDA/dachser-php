@@ -36,6 +36,8 @@ interface VoucherTableProps {
   onGoBack: (voucher: Voucher) => void;
   filters: FilterValues;
   onFilterChange: (filters: FilterValues) => void;
+  canEdit?: boolean;
+  canDelete?: boolean;
 }
 
 const getEtapaColor = (etapa: string) => {
@@ -99,7 +101,7 @@ const getSlaColor = (status: "ok" | "warning" | "critical") => {
   return colors[status];
 };
 
-export const VoucherTable = ({ vouchers, onViewDetails, onEdit, onDelete, onGoBack, filters, onFilterChange }: VoucherTableProps) => {
+export const VoucherTable = ({ vouchers, onViewDetails, onEdit, onDelete, onGoBack, filters, onFilterChange, canEdit = true, canDelete = true }: VoucherTableProps) => {
   const [sortField, setSortField] = useState<SortField>("createdAt");
   const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
 
@@ -448,6 +450,8 @@ export const VoucherTable = ({ vouchers, onViewDetails, onEdit, onDelete, onGoBa
                             onDelete={() => onDelete(voucher)}
                             onGoBack={() => onGoBack(voucher)}
                             canGoBack={canGoBack(voucher)}
+                            canEdit={canEdit}
+                            canDelete={canDelete}
                           />
                         </div>
                       </TableCell>
