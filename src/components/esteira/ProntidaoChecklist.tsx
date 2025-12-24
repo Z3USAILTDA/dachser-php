@@ -38,23 +38,14 @@ export const ProntidaoChecklist = ({ voucher, className }: ProntidaoChecklistPro
     });
   }
 
-  // 3. Para TED: dados bancários
-  if (voucher.tipoExecucaoPagamento === "TED") {
+  // 3. Para REMESSA (não boleto): dados bancários para transferência
+  if (voucher.tipoExecucaoPagamento === "REMESSA" && !isBoleto(voucher.formaPagamento as any)) {
     const hasBankData = voucher.dadosBancarios?.banco && 
                         voucher.dadosBancarios?.agencia && 
                         voucher.dadosBancarios?.conta;
     items.push({
       label: "Dados bancários completos",
       checked: !!hasBankData,
-      required: true
-    });
-  }
-
-  // 4. Para PIX: chave PIX
-  if (voucher.tipoExecucaoPagamento === "PIX") {
-    items.push({
-      label: "Chave PIX cadastrada",
-      checked: !!voucher.dadosBancarios?.chavePix,
       required: true
     });
   }

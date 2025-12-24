@@ -58,7 +58,7 @@ import { CreateVoucherDialog } from "@/components/esteira/CreateVoucherDialog";
 import { EditVoucherDialog } from "@/components/esteira/EditVoucherDialog";
 import { RoboTab } from "@/components/tabs/RoboTab";
 import { ReportsTab } from "@/components/tabs/ReportsTab";
-import { FaturasDoDiaTab } from "@/components/esteira/FaturasDoDiaTab";
+// Removed: FaturasDoDiaTab - apenas Pagamentos agora
 import { PagamentosTab } from "@/components/esteira/PagamentosTab";
 import { MetricCard } from "@/components/cct/MetricCard";
 import {
@@ -1150,13 +1150,33 @@ const EsteiraIndex = () => {
         default:
           throw new Error("Não é possível voltar desta etapa");
       }
-      const { error } = await (supabase as any)
-        .from("vouchers")
-        .update({
+      
+      // Use MariaDB proxy instead of Supabase directly
+      const { data, error } = await supabase.functions.invoke("mariadb-proxy", {
+        body: {
+          action: "update_voucher_esteira",
+          voucher_id: voucher.id,
           etapa_atual: previousStage,
-        })
-        .eq("id", voucher.id);
-      if (error) throw error;
+        },
+      });
+
+      if (error || !data?.success) throw new Error(data?.error || error?.message || "Erro ao atualizar");
+
+      // Log the action
+      const storedUser = localStorage.getItem("user") || localStorage.getItem("dachser_user");
+      const userData = storedUser ? JSON.parse(storedUser) : { id: 0, username: "sistema" };
+      
+      await supabase.functions.invoke("mariadb-proxy", {
+        body: {
+          action: "save_voucher_log",
+          voucher_id: voucher.id,
+          user_id: userData.id?.toString(),
+          user_name: userData.username,
+          acao: "ETAPA_RETORNADA",
+          detalhe: `Voucher retornou para etapa ${previousStage.replace("_", " ")}`,
+        },
+      });
+
       toast({
         title: "Etapa atualizada",
         description: `Voucher retornou para etapa ${previousStage.replace("_", " ")}`,
@@ -1410,11 +1430,6 @@ const EsteiraIndex = () => {
                 label: "Pagamentos",
                 icon: CreditCard,
               },
-              {
-                id: "faturas" as const,
-                label: "Faturas do Dia",
-                icon: Calendar,
-              },
             ].map((tab) => {
               const Icon = tab.icon;
               const isActive = activeTab === tab.id;
@@ -1521,11 +1536,6 @@ const EsteiraIndex = () => {
           {activeTab === "pagamentos" && (
             <div className="rounded-2xl p-5 bg-[rgba(5,6,18,0.9)] border border-[rgba(255,255,255,0.12)] backdrop-blur-[18px] shadow-[0_18px_40px_rgba(0,0,0,0.85)]">
               <PagamentosTab />
-            </div>
-          )}
-          {activeTab === "faturas" && (
-            <div className="rounded-2xl p-5 bg-[rgba(5,6,18,0.9)] border border-[rgba(255,255,255,0.12)] backdrop-blur-[18px] shadow-[0_18px_40px_rgba(0,0,0,0.85)]">
-              <FaturasDoDiaTab />
             </div>
           )}
         </div>

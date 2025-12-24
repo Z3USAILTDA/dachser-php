@@ -77,7 +77,8 @@ export type UserRole =
   | "FINANCEIRO";
 
 // New types for Pagamentos module
-export type TipoExecucaoPagamento = "MANUAL" | "REMESSA" | "TED" | "PIX";
+// Simplificado para apenas MANUAL ou REMESSA
+export type TipoExecucaoPagamento = "MANUAL" | "REMESSA";
 
 export type StatusPagamento = "PENDENTE_DADOS" | "PRONTO" | "EM_REMESSA" | "PAGO" | "ERRO";
 
@@ -127,8 +128,6 @@ export const STATUS_PAGAMENTO_LABELS: Record<StatusPagamento, string> = {
 export const TIPO_EXECUCAO_LABELS: Record<TipoExecucaoPagamento, string> = {
   MANUAL: "Manual",
   REMESSA: "Remessa Bancária",
-  TED: "TED/DOC",
-  PIX: "PIX",
 };
 
 export const STATUS_LOTE_REMESSA_LABELS: Record<StatusLoteRemessa, string> = {
@@ -156,11 +155,12 @@ export const STATUS_INTEGRACAO_RM_LABELS: Record<StatusIntegracaoRM, string> = {
   ERRO: "Erro",
 };
 
-// Calcular tempo na etapa em horas
+// Calcular tempo na etapa em horas (usando UTC para evitar problemas de fuso)
 export const calcularTempoNaEtapa = (voucher: Voucher): number => {
-  const agora = new Date();
-  const ultimaAtualizacao = new Date(voucher.updatedAt);
-  const diffMs = agora.getTime() - ultimaAtualizacao.getTime();
+  // Garantir que ambas as datas estejam em UTC
+  const agoraUTC = Date.now();
+  const ultimaAtualizacao = new Date(voucher.updatedAt).getTime();
+  const diffMs = agoraUTC - ultimaAtualizacao;
   return diffMs / (1000 * 60 * 60); // Converter para horas
 };
 
@@ -338,12 +338,12 @@ export const isBoleto = (formaPagamento: FormaPagamento): boolean => {
 
 // Helper function to check if payment requires bank details
 export const requiresBankDetails = (tipoExecucao?: TipoExecucaoPagamento): boolean => {
-  return tipoExecucao === 'TED';
+  return false; // TED removido
 };
 
 // Helper function to check if payment requires PIX key
 export const requiresPixKey = (tipoExecucao?: TipoExecucaoPagamento): boolean => {
-  return tipoExecucao === 'PIX';
+  return false; // PIX como execução removido
 };
 
 // Validate if voucher is ready for ROBO
@@ -360,22 +360,13 @@ export const validarProntoParaRobo = (voucher: Voucher): ValidacaoProntoParaRobo
     pendencias.push("Linha digitável ou código de barras não informado");
   }
 
-  // 3. Para TED: dados bancários completos
-  if (voucher.tipoExecucaoPagamento === 'TED') {
+  // 3. Para REMESSA: dados bancários para transferência
+  if (voucher.tipoExecucaoPagamento === 'REMESSA' && !isBoleto(voucher.formaPagamento)) {
     const db = voucher.dadosBancarios;
     if (!db?.banco || !db?.agencia || !db?.conta) {
-      pendencias.push("Dados bancários incompletos para TED");
+      pendencias.push("Dados bancários incompletos para remessa");
     }
   }
-
-  // 4. Para PIX: chave PIX
-  if (voucher.tipoExecucaoPagamento === 'PIX') {
-    if (!voucher.dadosBancarios?.chavePix) {
-      pendencias.push("Chave PIX não informada");
-    }
-  }
-
-  // 5. Para REMESSA: validação removida - lotes de remessa não fazem parte do MVP
 
   return { valido: pendencias.length === 0, pendencias };
 };
