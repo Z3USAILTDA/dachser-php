@@ -85,7 +85,7 @@ export const VoucherFinanceiroActions = ({ voucher, onUpdate }: VoucherFinanceir
             voucher_boleto: voucher.linhaDigitavel || voucher.codigoBarras || null,
             forma_pag: voucher.formaPagamento,
             fornecedor: voucher.fornecedor,
-            regras_forma_pag: voucher.tipoExecucaoPagamento || "MANUAL",
+            cnpj_fornecedor: voucher.cnpjFornecedor,
           },
         });
 
