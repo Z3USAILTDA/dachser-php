@@ -144,7 +144,7 @@ export const VoucherDetailsView = ({ voucher, onUpdate, canEditAttachments = fal
       </div>
 
       {/* Header Fixo - Cobrança em nome de + SLA */}
-      <div className="sticky top-0 z-10 -mx-6 -mt-6 px-6 pt-6 pb-4 bg-card/95 backdrop-blur-md border-b border-border/50 mb-6">
+      <div className="sticky top-0 z-10 -mx-6 -mt-6 px-6 pt-6 pb-4 bg-[rgba(5,6,18,0.95)] backdrop-blur-[18px] border-b border-[rgba(255,255,255,0.12)] mb-6">
         <div className="flex flex-wrap items-center justify-between gap-4">
           <div className="flex items-center gap-4">
             {/* Cobrança em nome de - DESTAQUE */}
@@ -210,9 +210,9 @@ export const VoucherDetailsView = ({ voucher, onUpdate, canEditAttachments = fal
       </div>
 
       {/* Informações Básicas */}
-      <Card className="bg-card/60 border-border/50">
+      <Card className="bg-[rgba(5,6,18,0.9)] border border-[rgba(255,255,255,0.12)] backdrop-blur-[18px] shadow-[0_18px_40px_rgba(0,0,0,0.85)]">
         <CardHeader>
-          <CardTitle className="text-foreground">Informações do Voucher</CardTitle>
+          <CardTitle className="text-[#f5f5f5]">Informações do Voucher</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
@@ -329,9 +329,9 @@ export const VoucherDetailsView = ({ voucher, onUpdate, canEditAttachments = fal
 
       {/* Comentários */}
       {(voucher.comentariosOperacao || voucher.comentariosFiscal || voucher.comentariosFinanceiro) && (
-        <Card className="bg-card/60 border-border/50">
-          <CardHeader>
-            <CardTitle className="text-foreground">Comentários</CardTitle>
+        <Card className="bg-[rgba(5,6,18,0.9)] border border-[rgba(255,255,255,0.12)] backdrop-blur-[18px] shadow-[0_18px_40px_rgba(0,0,0,0.85)]">
+        <CardHeader>
+            <CardTitle className="text-[#f5f5f5]">Comentários</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
             {voucher.comentariosOperacao && (
@@ -358,7 +358,7 @@ export const VoucherDetailsView = ({ voucher, onUpdate, canEditAttachments = fal
 
       {/* Ajustes Solicitados */}
       {(voucher.ajusteOperacao || voucher.ajusteFiscal) && (
-        <Card className="border-orange-500/20 bg-orange-500/5">
+        <Card className="bg-[rgba(5,6,18,0.9)] border border-orange-500/30 backdrop-blur-[18px] shadow-[0_18px_40px_rgba(0,0,0,0.85)]">
           <CardHeader>
             <CardTitle className="text-orange-500">Ajustes Solicitados</CardTitle>
           </CardHeader>
@@ -380,9 +380,9 @@ export const VoucherDetailsView = ({ voucher, onUpdate, canEditAttachments = fal
       )}
 
       {/* Anexos */}
-      <Card className="bg-card/60 border-border/50">
+      <Card className="bg-[rgba(5,6,18,0.9)] border border-[rgba(255,255,255,0.12)] backdrop-blur-[18px] shadow-[0_18px_40px_rgba(0,0,0,0.85)]">
         <CardHeader className="flex flex-row items-center justify-between">
-          <CardTitle className="text-foreground">Anexos</CardTitle>
+          <CardTitle className="text-[#f5f5f5]">Anexos</CardTitle>
           {canEditAttachments && (
             <Badge variant="outline" className="text-warning border-warning">
               Modo Edição
@@ -399,7 +399,7 @@ export const VoucherDetailsView = ({ voucher, onUpdate, canEditAttachments = fal
                   key={anexo.id}
                   draggable="true"
                   onDragStart={(e) => handleDragStart(e, anexo.fileUrl, anexo.fileName)}
-                  className="flex items-center justify-between p-3 border border-border rounded-lg hover:bg-secondary/30 transition-colors cursor-move"
+                  className="flex items-center justify-between p-3 border border-[rgba(255,255,255,0.08)] rounded-lg hover:bg-secondary/30 transition-colors cursor-move"
                 >
                   <div className="flex items-center gap-3 flex-1 min-w-0">
                     {isImageFile(anexo.fileName) ? (
