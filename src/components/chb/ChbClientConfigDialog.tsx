@@ -4,9 +4,10 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Checkbox } from '@/components/ui/checkbox';
+import { Textarea } from '@/components/ui/textarea';
 import { useChbClientConfig, ChbClientConfig, ChbClientConfigInput } from '@/hooks/useChbClientConfig';
 import { toast } from 'sonner';
-import { Settings, Trash2, Plus, Percent, Scale, FileText } from 'lucide-react';
+import { Settings, Trash2, Plus, Percent, Scale, FileText, MessageSquare } from 'lucide-react';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -41,6 +42,7 @@ export function ChbClientConfigDialog({ open, onOpenChange }: Props) {
     tolerancia_peso: 2.0,
     tolerancia_valor: 1.0,
     campos_obrigatorios: ['peso_bruto', 'peso_liquido', 'valor_total', 'moeda', 'incoterm'],
+    instrucoes_personalizadas: '',
     ativo: true
   });
 
@@ -57,6 +59,7 @@ export function ChbClientConfigDialog({ open, onOpenChange }: Props) {
       tolerancia_peso: 2.0,
       tolerancia_valor: 1.0,
       campos_obrigatorios: ['peso_bruto', 'peso_liquido', 'valor_total', 'moeda', 'incoterm'],
+      instrucoes_personalizadas: '',
       ativo: true
     });
     setEditingConfig(null);
@@ -71,6 +74,7 @@ export function ChbClientConfigDialog({ open, onOpenChange }: Props) {
       tolerancia_peso: config.tolerancia_peso,
       tolerancia_valor: config.tolerancia_valor,
       campos_obrigatorios: config.campos_obrigatorios,
+      instrucoes_personalizadas: config.instrucoes_personalizadas || '',
       ativo: config.ativo
     });
     setIsCreating(false);
@@ -296,6 +300,23 @@ export function ChbClientConfigDialog({ open, onOpenChange }: Props) {
                         </div>
                       ))}
                     </div>
+                  </div>
+
+                  {/* Instruções personalizadas */}
+                  <div className="space-y-2">
+                    <Label className="text-xs flex items-center gap-1">
+                      <MessageSquare className="h-3 w-3" />
+                      Instruções Personalizadas para Análise
+                    </Label>
+                    <Textarea
+                      value={formData.instrucoes_personalizadas || ''}
+                      onChange={e => setFormData({ ...formData, instrucoes_personalizadas: e.target.value })}
+                      placeholder="Escreva aqui instruções específicas para a análise deste cliente. Por exemplo: 'Sempre verificar se o NCM está correto para produtos químicos', 'Este cliente usa peso líquido como referência principal', 'Tolerância zero para divergências de container', etc."
+                      className="min-h-[120px] text-xs resize-y"
+                    />
+                    <p className="text-[0.65rem] text-muted-foreground">
+                      Este texto será enviado como instrução adicional ao modelo de IA durante as análises.
+                    </p>
                   </div>
 
                   {/* Ativo */}

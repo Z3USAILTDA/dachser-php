@@ -70,6 +70,7 @@ interface ClientConfig {
   tolerancia_valor?: number;
   campos_obrigatorios?: string[];
   cliente_nome?: string;
+  instrucoes_personalizadas?: string;
 }
 
 function buildTableSpec(clientConfig?: ClientConfig): string {
@@ -156,7 +157,10 @@ REGRAS DE CONTEÚDO DA TABELA
    - Se documento contém "AWB", "Airway Bill", "MAWB", "HAWB" → MODAL = AIR
    - Se documento contém "BL", "Bill of Lading", "HBL", "MBL", "Container" → MODAL = SEA
    - Reportar o modal detectado no bloco METADATA
-`;
+${clientConfig?.instrucoes_personalizadas ? `
+11) INSTRUÇÕES ESPECÍFICAS DO CLIENTE:
+${clientConfig.instrucoes_personalizadas}
+` : ''}`;
 }
 
 const EXTRACTION_INSTRUCTIONS = `

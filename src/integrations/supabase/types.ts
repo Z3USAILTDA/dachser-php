@@ -193,6 +193,7 @@ export type Database = {
           cliente_nome: string | null
           created_at: string
           id: string
+          instrucoes_personalizadas: string | null
           regras_comparacao: Json | null
           tolerancia_peso: number | null
           tolerancia_valor: number | null
@@ -205,6 +206,7 @@ export type Database = {
           cliente_nome?: string | null
           created_at?: string
           id?: string
+          instrucoes_personalizadas?: string | null
           regras_comparacao?: Json | null
           tolerancia_peso?: number | null
           tolerancia_valor?: number | null
@@ -217,6 +219,7 @@ export type Database = {
           cliente_nome?: string | null
           created_at?: string
           id?: string
+          instrucoes_personalizadas?: string | null
           regras_comparacao?: Json | null
           tolerancia_peso?: number | null
           tolerancia_valor?: number | null
