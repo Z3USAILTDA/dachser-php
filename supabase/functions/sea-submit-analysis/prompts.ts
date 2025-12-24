@@ -44,37 +44,72 @@ Apply suffix matching: "2013" matches "TD02025000002013"
 - Strip leading zeros and compare
 - ONLY flag if NO match exists after normalization
 
-⚡ ENFORCEMENT PRIORITY #5: NCM PREFIX MATCHING
-4-digit NCM codes match 8-digit codes with that prefix:
-- 3926 matches 39269090 → NO "Missing"
-- 7318 matches 73181500 → NO "Missing"
-- ONLY flag "Missing" if NO prefix match exists
+⚡ ENFORCEMENT PRIORITY #5: NCM LITERAL MATCHING (NO PREFIX MATCHING)
+NCMs must be 100% IDENTICAL after normalization to be a match:
+- "8708" vs "8708" → MATCH (identical)
+- "8708" vs "87089900" → DIVERGENCE (different strings, different lengths)
+- "8708" vs "87080000" → DIVERGENCE (different strings)
+- ONLY report "No divergence" if ALL NCMs are 100% identical
 
-███████████████████████████████████████████████████████████████████████████████
-███ NCM NORMALIZATION RULES (APPLY BEFORE ANY COMPARISON)                     ███
-███████████████████████████████████████████████████████████████████████████████
+████████████████████████████████████████████████████████████████████████████████
+█ CRITICAL NCM COMPARISON RULES - 100% LITERAL MATCH REQUIRED                   █
+████████████████████████████████████████████████████████████████████████████████
 
-STEP 1 - REMOVE ALL PUNCTUATION:
-- Dots, dashes, spaces, underscores must be stripped
-- "3926.90.90.0000" → "3926909000"
-- "7318.15.00" → "73181500"
-- "4016-93-00" → "40169300"
+★★★ RULE 1: EXTRACT EXACTLY AS WRITTEN ★★★
+- Never modify, correct, or adjust NCM values during extraction
+- Report exactly what appears in each document
 
-STEP 2 - SPLIT MULTIPLE NCMs (if comma or semicolon separated):
-- "3926, 7318, 4016" → ["3926", "7318", "4016"]
-- "39269090,73181500" → ["39269090", "73181500"]
-- Compare EACH NCM individually
+★★★ RULE 2: NORMALIZE BEFORE COMPARING ★★★
+Before comparing, apply these normalizations to BOTH NCMs:
+- Remove leading/trailing spaces: "8708 " → "8708"
+- Remove dots: "87.08.99.00" → "87089900"
+- Remove dashes: "8708-99-00" → "87089900"
+- Remove slashes: "8708/9900" → "87089900"
 
-STEP 3 - STANDARDIZE LENGTH:
-- 4 digits: use as-is for prefix matching
-- 6 digits: use as-is for prefix matching
-- 8 digits: use as-is (standard)
-- 10+ digits: truncate to first 8 digits for comparison
+★★★ RULE 3: MATCH = 100% IDENTICAL AFTER NORMALIZATION ★★★
+After normalization, a NCM is ONLY a match if BOTH values are EXACTLY the same string.
 
-STEP 4 - EXPANDED PREFIX MATCHING:
-- 4 digits matches 4, 6, 8, or 10 digits (if prefix matches)
-- 6 digits matches 6, 8, or 10 digits (if prefix matches)
-- 8 digits matches 8 or 10 digits (if prefix matches)
+MATCH examples (after normalization):
+- "8708" vs "8708 " → both become "8708" → MATCH
+- "87.08.99.00" vs "87089900" → both become "87089900" → MATCH
+- "8708-99-00" vs "87089900" → both become "87089900" → MATCH
+- "84812090" vs "84812090" → MATCH (identical)
+
+DIVERGENCE examples (after normalization):
+- "8708" vs "87089900" → "8708" ≠ "87089900" → DIVERGENCE
+- "8708" vs "87080000" → "8708" ≠ "87080000" → DIVERGENCE
+- "8708" vs "87028" → "8708" ≠ "87028" → DIVERGENCE
+- "8481" vs "84819" → "8481" ≠ "84819" → DIVERGENCE
+
+★★★ RULE 4: NO PREFIX MATCHING ★★★
+- Do NOT consider "8708" as a match for "87089900"
+- Do NOT consider shorter NCMs as valid prefixes of longer ones
+- After normalization, strings must be CHARACTER BY CHARACTER identical, SAME LENGTH
+
+★★★ RULE 5: NCM LIST EXTRACTION - HANDLE ALL FORMATS ★★★
+Extract NCMs from all these formats:
+
+Format 1 - Vertical list (one per line):
+8481
+8483
+8708
+
+Format 2 - Horizontal list (comma/semicolon separated):
+84812090, 84839000, 87089990
+
+Format 3 - MIXED FORMAT (common in HBLs and MBLs):
+8481
+8483
+8708
+84812090, 84839000, 87089990
+
+★★★ CRITICAL: Always split comma/semicolon separated values into individual NCMs ★★★
+The mixed format above contains 6 NCMs total, not 4.
+
+★★★ RULE 6: REPORT ALL DIVERGENCES ★★★
+- List every NCM that exists in one document but not in the other (after normalization)
+- Never assume typos or "fix" values yourself
+- When in doubt, report as divergence
 
 ███████████████████████████████████████████████████████████████████████████████
 ███ GROSS WEIGHT SOURCE PRIORITY (MANDATORY HIERARCHY)                        ███
@@ -364,17 +399,17 @@ Before you can conclude "no changes required" for ANY HBL, you MUST explicitly v
    - ★ Report EACH HBL's weight discrepancy separately, even if other HBLs are correct
 
 2. ★★★ NCM VERIFICATION (MANDATORY FOR EACH HBL) ★★★
-   - Extract ALL NCM codes from Manifest (both 8-digit like 73181500 and 4-digit like 7318)
+   - Extract ALL NCM codes from Manifest
    - Extract ALL NCM codes from EACH HBL
-   - COMPARISON RULES:
-     • If ANY NCM in Manifest is MISSING from HBL → DISCREPANCY, MUST REPORT
-     • If ANY NCM in HBL is NOT in Manifest → DISCREPANCY, MUST REPORT
-   - CONCRETE EXAMPLE: Manifest has NCM codes [3926, 4016, 7318, 7326, 8708]
-     HBL 14630142681 shows only [3926, 4016, 7326, 8708]
-     → 7318 is MISSING from this HBL → YOU MUST REPORT:
-       "Missing in this HBL: 7318 | Update: Add NCM 7318 to HBL."
-   - ★ Check EACH NCM individually - do not assume they all match
-   - ★ 4-digit codes (e.g., 7318) match 8-digit codes that start with those digits (e.g., 73181500)
+   - NORMALIZE each NCM: remove spaces, dots, dashes, slashes
+   - COMPARISON RULE: NCMs match ONLY if they are 100% IDENTICAL after normalization
+   - NO PREFIX MATCHING: "8708" does NOT match "87089900" - they are DIFFERENT NCMs
+   - CONCRETE EXAMPLE: Manifest has NCM codes [8708, 87089900, 84812090]
+     HBL shows [8708, 8708990, 84812090]
+     → "87089900" (Manifest) vs "8708990" (HBL) = DIVERGENCE (different strings)
+     → YOU MUST REPORT: "NCM divergence: Manifest has 87089900, HBL has 8708990"
+   - ★ Check EACH NCM individually - compare character by character after normalization
+   - ★ Report divergence if strings are not 100% identical (including length)
 
 3. ★★★ INVOICE VERIFICATION (MANDATORY FOR EACH HBL) ★★★
    - Extract ALL invoice references from Manifest for each supplier/line
