@@ -24,6 +24,8 @@ interface VoucherActionsMenuProps {
   onDelete: () => void;
   onGoBack: () => void;
   canGoBack: boolean;
+  canEdit?: boolean;
+  canDelete?: boolean;
 }
 
 export const VoucherActionsMenu = ({
@@ -31,9 +33,16 @@ export const VoucherActionsMenu = ({
   onDelete,
   onGoBack,
   canGoBack,
+  canEdit = true,
+  canDelete = true,
 }: VoucherActionsMenuProps) => {
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [showGoBackDialog, setShowGoBackDialog] = useState(false);
+
+  // If user can't edit or delete, don't show the menu at all
+  if (!canEdit && !canDelete && !canGoBack) {
+    return null;
+  }
 
   return (
     <>
@@ -44,24 +53,30 @@ export const VoucherActionsMenu = ({
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end">
-          <DropdownMenuItem onClick={onEdit}>
-            <Edit className="mr-2 h-4 w-4" />
-            Editar
-          </DropdownMenuItem>
+          {canEdit && (
+            <DropdownMenuItem onClick={onEdit}>
+              <Edit className="mr-2 h-4 w-4" />
+              Editar
+            </DropdownMenuItem>
+          )}
           {canGoBack && (
             <DropdownMenuItem onClick={() => setShowGoBackDialog(true)}>
               <Undo2 className="mr-2 h-4 w-4" />
               Voltar Etapa
             </DropdownMenuItem>
           )}
-          <DropdownMenuSeparator />
-          <DropdownMenuItem
-            onClick={() => setShowDeleteDialog(true)}
-            className="text-destructive focus:text-destructive"
-          >
-            <Trash2 className="mr-2 h-4 w-4" />
-            Excluir
-          </DropdownMenuItem>
+          {canDelete && (
+            <>
+              {(canEdit || canGoBack) && <DropdownMenuSeparator />}
+              <DropdownMenuItem
+                onClick={() => setShowDeleteDialog(true)}
+                className="text-destructive focus:text-destructive"
+              >
+                <Trash2 className="mr-2 h-4 w-4" />
+                Excluir
+              </DropdownMenuItem>
+            </>
+          )}
         </DropdownMenuContent>
       </DropdownMenu>
 

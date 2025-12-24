@@ -37,15 +37,15 @@ export function useUserRole() {
                 setRole(parsedRoles[0] || null);
                 setEsteiraActive(active);
               } else if (isAdminUser) {
-                // Admin users always have access even without explicit esteira_role
+                // Admin users always have access
                 setRole("ADMIN");
                 setRoles(["ADMIN"]);
                 setEsteiraActive(true);
               } else {
-                // Full access for all users - all roles granted
-                setRole("ADMIN");
-                setRoles(["ADMIN"]);
-                setEsteiraActive(true);
+                // No role defined - no access
+                setRole(null);
+                setRoles([]);
+                setEsteiraActive(false);
               }
             } else {
               // If fetch fails, fallback to is_admin check
@@ -54,10 +54,10 @@ export function useUserRole() {
                 setRoles(["ADMIN"]);
                 setEsteiraActive(true);
               } else {
-                // Full access for all users
-                setRole("ADMIN");
-                setRoles(["ADMIN"]);
-                setEsteiraActive(true);
+                // No access
+                setRole(null);
+                setRoles([]);
+                setEsteiraActive(false);
               }
             }
           } catch (fetchErr) {
@@ -68,10 +68,9 @@ export function useUserRole() {
               setRoles(["ADMIN"]);
               setEsteiraActive(true);
             } else {
-              // Full access for all users
-              setRole("ADMIN");
-              setRoles(["ADMIN"]);
-              setEsteiraActive(true);
+              setRole(null);
+              setRoles([]);
+              setEsteiraActive(false);
             }
           }
           setLoading(false);
@@ -82,10 +81,10 @@ export function useUserRole() {
         const { data: { user } } = await supabase.auth.getUser();
         
         if (!user) {
-          // Full access for all users
-          setRole("ADMIN");
-          setRoles(["ADMIN"]);
-          setEsteiraActive(true);
+          // No user - no access
+          setRole(null);
+          setRoles([]);
+          setEsteiraActive(false);
           setLoading(false);
           return;
         }
@@ -102,9 +101,9 @@ export function useUserRole() {
           setRoles([roleData.role as UserRole]);
           setEsteiraActive(true);
         } else {
-          setRole("ADMIN");
-          setRoles(["ADMIN"]);
-          setEsteiraActive(true);
+          setRole(null);
+          setRoles([]);
+          setEsteiraActive(false);
         }
       } catch (error) {
         console.error("Error fetching user role:", error);
@@ -118,16 +117,14 @@ export function useUserRole() {
             setRoles(["ADMIN"]);
             setEsteiraActive(true);
           } else {
-            // Full access for all users
-            setRole("ADMIN");
-            setRoles(["ADMIN"]);
-            setEsteiraActive(true);
+            setRole(null);
+            setRoles([]);
+            setEsteiraActive(false);
           }
         } else {
-          // Full access for all users
-          setRole("ADMIN");
-          setRoles(["ADMIN"]);
-          setEsteiraActive(true);
+          setRole(null);
+          setRoles([]);
+          setEsteiraActive(false);
         }
       } finally {
         setLoading(false);
@@ -137,11 +134,12 @@ export function useUserRole() {
     fetchRole();
   }, []);
 
-  // All permissions granted - no authentication required
-  const hasRole = (_checkRole: UserRole): boolean => {
-    return true;
+  // Check if user has a specific role
+  const hasRole = (checkRole: UserRole): boolean => {
+    return roles.includes(checkRole);
   };
 
+  // Role flags
   const isAdmin = hasRole("ADMIN");
   const isFiscal = hasRole("FISCAL");
   const isSupervisor = hasRole("SUPERVISOR");
@@ -152,8 +150,47 @@ export function useUserRole() {
   const isGestorSupervisor = hasRole("GESTOR_SUPERVISOR");
   const isGestorFinanceiro = hasRole("GESTOR_FINANCEIRO");
   const isGestor = roles.some(r => r?.startsWith("GESTOR_"));
-  // Access granted to all users - no role restriction
-  const hasEsteiraAccess = true;
+
+  // Permission checks based on role hierarchy
+  // ADMIN: acesso total
+  // SUPERVISOR/FINANCEIRO: acesso total (podem fazer tudo que os outros fazem)
+  // OPERACAO: criar e gerenciar vouchers, anexar documentos
+  // FISCAL: validar documentos fiscais, aprovar etapa fiscal
+
+  // Verifica se pode acessar a esteira
+  const hasEsteiraAccess = esteiraActive && (
+    isAdmin || isSupervisor || isFinanceiro || isOperacao || isFiscal || isGestor
+  );
+
+  // Verifica se pode criar vouchers (Operação, Supervisor, Financeiro, Admin)
+  const canCreateVoucher = isAdmin || isSupervisor || isFinanceiro || isOperacao;
+
+  // Verifica se pode editar vouchers (Operação, Supervisor, Financeiro, Admin)
+  const canEditVoucher = isAdmin || isSupervisor || isFinanceiro || isOperacao;
+
+  // Verifica se pode deletar vouchers (Supervisor, Financeiro, Admin)
+  const canDeleteVoucher = isAdmin || isSupervisor || isFinanceiro;
+
+  // Verifica se pode aprovar etapa fiscal (Fiscal, Supervisor, Financeiro, Admin)
+  const canApproveFiscal = isAdmin || isSupervisor || isFinanceiro || isFiscal;
+
+  // Verifica se pode aprovar etapa supervisor (Supervisor, Financeiro, Admin)
+  const canApproveSupervisor = isAdmin || isSupervisor || isFinanceiro;
+
+  // Verifica se pode processar pagamentos (Financeiro, Admin)
+  const canProcessPayment = isAdmin || isFinanceiro;
+
+  // Verifica se pode gerenciar baixas (Financeiro, Admin)
+  const canManageBaixa = isAdmin || isFinanceiro;
+
+  // Verifica se pode anexar documentos (Operação, Supervisor, Financeiro, Admin)
+  const canAttachDocuments = isAdmin || isSupervisor || isFinanceiro || isOperacao;
+
+  // Verifica se pode autorizar exceções (Supervisor, Financeiro, Admin)
+  const canAuthorizeExceptions = isAdmin || isSupervisor || isFinanceiro;
+
+  // Verifica se pode gerenciar usuários (Admin apenas)
+  const canManageUsers = isAdmin;
 
   return { 
     role, 
@@ -171,6 +208,17 @@ export function useUserRole() {
     isGestor,
     hasEsteiraAccess,
     esteiraActive,
-    hasRole
+    hasRole,
+    // Permission checks
+    canCreateVoucher,
+    canEditVoucher,
+    canDeleteVoucher,
+    canApproveFiscal,
+    canApproveSupervisor,
+    canProcessPayment,
+    canManageBaixa,
+    canAttachDocuments,
+    canAuthorizeExceptions,
+    canManageUsers,
   };
 }
