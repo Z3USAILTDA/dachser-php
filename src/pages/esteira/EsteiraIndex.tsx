@@ -864,8 +864,8 @@ const EsteiraIndex = () => {
         aprovadoPorUserId: v.aprovado_por_user_id,
         clienteEmail: v.cliente_email,
         origemCriacao: v.origem_criacao || "MANUAL",
-        createdAt: new Date(v.created_at),
-        updatedAt: new Date(v.updated_at || v.created_at),
+        createdAt: new Date(v.created_at + 'Z'),
+        updatedAt: new Date((v.updated_at || v.created_at) + 'Z'),
         anexos: [],
         logs: [],
       }));

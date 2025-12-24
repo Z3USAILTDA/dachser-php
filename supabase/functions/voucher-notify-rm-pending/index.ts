@@ -119,9 +119,9 @@ const handler = async (req: Request): Promise<Response> => {
 
     // Construir tabela HTML dos vouchers pendentes
     const vouchersHtml = pendingVouchers.map(v => {
-      const createdAt = new Date(v.created_at);
+      const createdAt = new Date(v.created_at + 'Z');
       const horasPendente = Math.floor((Date.now() - createdAt.getTime()) / (1000 * 60 * 60));
-      const vencimento = new Date(v.vencimento);
+      const vencimento = new Date(v.vencimento + 'Z');
       
       return `
         <tr style="border-bottom: 1px solid #333;">

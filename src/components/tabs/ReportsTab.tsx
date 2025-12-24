@@ -105,8 +105,8 @@ export function ReportsTab() {
         responsavelFinanceiroUserId: v.responsavel_financeiro_user_id,
         responsavelFinanceiroUserName: v.responsavel_financeiro_username,
         clienteEmail: v.cliente_email,
-        createdAt: new Date(v.created_at),
-        updatedAt: new Date(v.updated_at),
+        createdAt: new Date(v.created_at + 'Z'),
+        updatedAt: new Date(v.updated_at + 'Z'),
         anexos: [],
         logs: [],
       }));
