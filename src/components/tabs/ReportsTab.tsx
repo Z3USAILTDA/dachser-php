@@ -11,6 +11,7 @@ import { Loader2, Download, FileSpreadsheet, CalendarIcon, FileText } from "luci
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { cn } from "@/lib/utils";
+import { parseMariaDBDate } from "@/utils/parseMariaDBDate";
 import { Voucher } from "@/types/voucher";
 import { exportVouchersToExcel } from "@/utils/voucherExcelExport";
 import { exportVouchersToPDF } from "@/utils/voucherPdfExport";
@@ -76,8 +77,8 @@ export function ReportsTab() {
         cnpjFornecedor: v.cnpj_fornecedor,
         valor: v.valor,
         moeda: v.moeda || "BRL",
-        vencimento: new Date(v.vencimento),
-        dataEmissaoDocumento: v.data_emissao_documento ? new Date(v.data_emissao_documento) : undefined,
+        vencimento: parseMariaDBDate(v.vencimento) || new Date(),
+        dataEmissaoDocumento: parseMariaDBDate(v.data_emissao_documento) || undefined,
         cobrancaEmNomeDe: v.cobranca_em_nome_de,
         formaPagamento: v.forma_pagamento,
         tipoDocumento: v.tipo_documento,
@@ -105,8 +106,8 @@ export function ReportsTab() {
         responsavelFinanceiroUserId: v.responsavel_financeiro_user_id,
         responsavelFinanceiroUserName: v.responsavel_financeiro_username,
         clienteEmail: v.cliente_email,
-        createdAt: new Date(v.created_at + 'Z'),
-        updatedAt: new Date(v.updated_at + 'Z'),
+        createdAt: parseMariaDBDate(v.created_at) || new Date(),
+        updatedAt: parseMariaDBDate(v.updated_at) || new Date(),
         anexos: [],
         logs: [],
       }));
