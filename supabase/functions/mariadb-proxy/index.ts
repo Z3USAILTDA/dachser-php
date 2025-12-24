@@ -4633,14 +4633,14 @@ serve(async (req) => {
           id_rm: idRm, 
           voucher_boleto: voucherBoleto, 
           forma_pag: formaPag, 
-          fornecedor: fornecedorRm, 
-          regras_forma_pag: regrasFormaPag 
+          fornecedor: fornecedorRm,
+          cnpj_fornecedor: cnpjFornecedorRm
         } = body as { 
           id_rm?: string; 
           voucher_boleto?: string; 
           forma_pag?: string; 
           fornecedor?: string; 
-          regras_forma_pag?: string;
+          cnpj_fornecedor?: string;
         };
         
         if (!idRm) {
@@ -4650,7 +4650,32 @@ serve(async (req) => {
           );
         }
 
-        console.log('Inserting into t_dados_rm:', { idRm, formaPag, fornecedorRm, regrasFormaPag });
+        // Determine regras_forma_pag based on bank: DOC for other banks, Crédito CC for Itaú
+        let regrasFormaPagFinal = "DOC (Compe)"; // Default for other banks
+        
+        if (cnpjFornecedorRm) {
+          try {
+            const dadosBancarios = await client.query(`
+              SELECT banco
+              FROM dados_dachser.t_dados_financeiro_pag
+              WHERE REPLACE(REPLACE(REPLACE(cnpj, '.', ''), '/', ''), '-', '') = ?
+              LIMIT 1
+            `, [cnpjFornecedorRm.replace(/\D/g, '')]);
+            
+            if (dadosBancarios && dadosBancarios.length > 0) {
+              const bancoUpper = (dadosBancarios[0].banco || "").toUpperCase();
+              // Itaú bank codes: 341, or contains "ITAU"
+              if (bancoUpper.includes("ITAU") || bancoUpper.includes("ITAÚ") || bancoUpper.includes("341")) {
+                regrasFormaPagFinal = "Crédito em Conta Corrente da Mesma Titularidade";
+              }
+            }
+            console.log(`Bank lookup for CNPJ ${cnpjFornecedorRm}: regra = ${regrasFormaPagFinal}`);
+          } catch (bankErr) {
+            console.log('Could not lookup bank info, using default DOC:', bankErr);
+          }
+        }
+
+        console.log('Inserting into t_dados_rm:', { idRm, formaPag, fornecedorRm, regrasFormaPag: regrasFormaPagFinal });
         
         // Drop and recreate table if it has wrong structure
         try {
@@ -4687,7 +4712,7 @@ serve(async (req) => {
           INSERT INTO dados_dachser.t_dados_rm 
           (id_rm, nf_disputa, voucher_boleto, forma_pag, fornecedor, regras_forma_pag)
           VALUES (?, 0, ?, ?, ?, ?)
-        `, [idRm, voucherBoleto || null, formaPag || null, fornecedorRm || null, regrasFormaPag || null]);
+        `, [idRm, voucherBoleto || null, formaPag || null, fornecedorRm || null, regrasFormaPagFinal]);
 
         console.log('Inserted into t_dados_rm successfully');
         result = { success: true };
