@@ -548,30 +548,30 @@ EXAMPLE OUTPUT STRUCTURE FOR LIMITED DATA:
    ANTI-INFLATION GUARD: If parsed HBL value differs from manifest by factor ~1000 (±0.5%), divide HBL by 1000.
    Example: Manifest 11,142.000 vs HBL 11,142,000.000 → HBL is inflated, use 11,142.000
 
-3. NCM GRANULARITY NORMALIZATION (SUBSET RULE - CRITICAL - NEVER FLAG VALID PREFIXES):
-   - Manifest provides REFERENCE NCMs (usually 8 digits).
-   - HBL may use SHORTENED forms (4 or 6 digits).
+3. NCM CODE COMPARISON (EXACT MATCH REQUIRED - NO PREFIX MATCHING):
+   - NCM codes MUST be compared using exact string matching after normalization.
+   - Normalization removes: leading/trailing spaces, dots, dashes, slashes.
+   - After normalization, strings must be CHARACTER BY CHARACTER identical, SAME LENGTH.
    
-   ★★★ PREFIX MATCH RULE (CRITICAL - HBL IS SUBSET OF MANIFEST) ★★★
-   • If HBL NCM is a PREFIX of any Manifest NCM → MATCH, do NOT flag "Missing"
-   • Check BOTH directions: HBL prefix matches Manifest, OR Manifest prefix matches HBL
+   ★★★ NO PREFIX MATCHING - THIS IS CRITICAL ★★★
+   • "8708" is NOT a match for "87089900" - they are DIFFERENT NCMs
+   • "870850" is NOT a match for "87089990" - they are DIFFERENT NCMs
+   • Only 100% identical strings (after normalization) are considered a MATCH
    
-   CONCRETE EXAMPLES (NEVER flag these as "Missing"):
-   • Manifest: 39239090 vs HBL: 3923 → 3923 is prefix of 39239090 ✓ → NO "Missing"
-   • Manifest: 39269090 vs HBL: 3926 → 3926 is prefix of 39269090 ✓ → NO "Missing"
-   • Manifest: 40169300 vs HBL: 4016 → 4016 is prefix of 40169300 ✓ → NO "Missing"
-   • Manifest: 73181500 vs HBL: 7318 → 7318 is prefix of 73181500 ✓ → NO "Missing"
-   • Manifest: 87089990 vs HBL: 8708 → 8708 is prefix of 87089990 ✓ → NO "Missing"
+   DIVERGENCE EXAMPLES (MUST BE FLAGGED):
+   • Manifest: 87089990 vs HBL: 8708 → DIVERGENCE (different lengths)
+   • Manifest: 84812090 vs HBL: 870850 → DIVERGENCE (completely different)
+   • Manifest: 39174090 vs HBL: 870850 → DIVERGENCE (completely different)
+   • HBL has ONLY 870850 while Manifest has 20+ different NCMs → MAJOR DIVERGENCE
    
-   ALGORITHM:
-   For each Manifest NCM code:
-     1. Extract first 4 digits of Manifest NCM (e.g., 39239090 → 3923)
-     2. Check if HBL contains this 4-digit prefix OR the full 8-digit code
-     3. If YES → MATCH, do NOT flag "Missing"
-     4. If NO prefix or exact match found in HBL → flag "Missing"
+   MATCH EXAMPLES (identical after normalization):
+   • Manifest: 87089990 vs HBL: 87089990 → MATCH
+   • Manifest: 8708 vs HBL: "8708 " → MATCH (trailing space removed)
    
-   For 58ED4351.PDF specifically:
-   - Manifest: 39239090 vs HBL: 3923 → COMPATIBLE, NO "Missing 39239090"
+   ★★★ HS-CODE vs NCM WARNING ★★★
+   If HBL only contains generic HS-CODE (like "870850" for all items) while 
+   Manifest has specific NCM codes (like 84812090, 73181500, etc.), 
+   this is a MAJOR DIVERGENCE that MUST be reported.
 
 4. INVOICE REFERENCE NORMALIZATION (CRITICAL - SUFFIX/NUMERIC MATCHING):
    ★★★ NORMALIZE BEFORE COMPARING - NEVER FLAG EQUIVALENT REFERENCES ★★★
