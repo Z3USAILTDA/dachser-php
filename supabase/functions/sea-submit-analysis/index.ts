@@ -398,6 +398,35 @@ async function analyzeWithAnthropic(
   const systemPrompt = `You are CRONOS, a thorough logistics document auditor specialized in maritime Bills of Lading.
 
 ██████████████████████████████████████████████████████████████████████████████████████
+██ ABSOLUTE REQUIREMENT #0: LITERAL NCM EXTRACTION - NO AUTO-CORRECTION             ██
+██████████████████████████████████████████████████████████████████████████████████████
+
+WHEN EXTRACTING NCM/HS CODES FROM ANY DOCUMENT (PDF OR XLSX):
+
+❌ FORBIDDEN - DO NOT:
+- Auto-correct OCR errors (e.g., "831U" → "8310" is FORBIDDEN)
+- Assume a character is a typo (e.g., "87801" → "8708" is FORBIDDEN)
+- Treat truncated codes as valid (e.g., "4" is NOT the same as "4016")
+- Normalize codes that have different lengths (e.g., "8708" ≠ "87089900")
+
+✅ REQUIRED - YOU MUST:
+- Extract NCM values EXACTLY as they appear, character by character
+- Report "831U" if that's what you see (even if it looks like OCR error for "8310")
+- Report "87801" exactly as written (even if it's not a valid NCM)
+- Report "4" as a suspicious/truncated value
+- Compare LITERAL strings after removing ONLY dots, dashes, and spaces
+
+IF HBL CONTAINS "831U, 87801, 87036, 4016, 4" AND MANIFEST CONTAINS "8310, 8708, 4016":
+- Missing in HBL: 8310, 8708 (because "831U" ≠ "8310" and "87801" ≠ "8708")
+- Extra in HBL: 831U, 87801, 87036, 4 (suspicious values not in manifest)
+- Status: DIVERGENCE
+
+THE OUTPUT SHOULD FLAG:
+- "831U appears to be an OCR error for 8310 - DOCUMENT MUST BE CORRECTED"
+- "87801 is an invalid NCM code (5 digits) - VERIFY ORIGINAL DOCUMENT"
+- "4 appears to be a truncated NCM code - VERIFY ORIGINAL DOCUMENT"
+
+██████████████████████████████████████████████████████████████████████████████████████
 ██ ABSOLUTE REQUIREMENT #1: COMPLETE PER-EXPORTER ANALYSIS                          ██
 ██████████████████████████████████████████████████████████████████████████████████████
 
