@@ -222,7 +222,6 @@ const EsteiraVoucherDetails = () => {
   return (
     <PageLayout 
       backTo="/fin/esteira" 
-      title="ESTEIRA FINANCEIRA"
       subtitle={subtitleText}
       pageIcon={Receipt}
       rightContent={
@@ -244,19 +243,18 @@ const EsteiraVoucherDetails = () => {
       }
     >
 
-      <main className="container mx-auto px-4 py-6 space-y-6">
-        <Tabs defaultValue="detalhes" className="w-full">
-          <TabsList className="bg-card/80 backdrop-blur-sm border border-border/50">
-            <TabsTrigger value="detalhes" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
-              Detalhes
-            </TabsTrigger>
-            <TabsTrigger value="pagamento" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
-              Pagamento
-            </TabsTrigger>
-            <TabsTrigger value="historico" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
-              Histórico
-            </TabsTrigger>
-          </TabsList>
+      <Tabs defaultValue="detalhes" className="w-full">
+        <TabsList className="bg-white/5 border border-white/10 p-1">
+          <TabsTrigger value="detalhes" className="data-[state=active]:bg-amber-500 data-[state=active]:text-black">
+            Detalhes
+          </TabsTrigger>
+          <TabsTrigger value="pagamento" className="data-[state=active]:bg-amber-500 data-[state=active]:text-black">
+            Pagamento
+          </TabsTrigger>
+          <TabsTrigger value="historico" className="data-[state=active]:bg-amber-500 data-[state=active]:text-black">
+            Histórico
+          </TabsTrigger>
+        </TabsList>
 
           <TabsContent value="detalhes" className="space-y-6 mt-6">
             {/* Voucher Details */}
@@ -367,7 +365,6 @@ const EsteiraVoucherDetails = () => {
             </Card>
           </TabsContent>
         </Tabs>
-      </main>
     </PageLayout>
   );
 };
