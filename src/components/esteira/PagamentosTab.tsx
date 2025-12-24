@@ -510,12 +510,6 @@ export const PagamentosTab = () => {
               <DropdownMenuItem onClick={() => handleBatchSetTipoExecucao("REMESSA")}>
                 Remessa Bancária
               </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => handleBatchSetTipoExecucao("TED")}>
-                TED/DOC
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => handleBatchSetTipoExecucao("PIX")}>
-                PIX
-              </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
           <Button size="sm" variant="ghost" onClick={() => setSelectedIds(new Set())}>
@@ -547,8 +541,6 @@ export const PagamentosTab = () => {
                 <th className="p-3 text-left text-xs font-medium uppercase tracking-wider text-muted-foreground">Vencimento</th>
                 <th className="p-3 text-left text-xs font-medium uppercase tracking-wider text-muted-foreground">Forma Pag.</th>
                 <th className="p-3 text-left text-xs font-medium uppercase tracking-wider text-muted-foreground">Tipo Exec.</th>
-                <th className="p-3 text-left text-xs font-medium uppercase tracking-wider text-muted-foreground">Status</th>
-                <th className="p-3 text-left text-xs font-medium uppercase tracking-wider text-muted-foreground">Status RM</th>
                 <th className="p-3 text-left text-xs font-medium uppercase tracking-wider text-muted-foreground">Ações</th>
               </tr>
             </thead>
@@ -611,16 +603,8 @@ export const PagamentosTab = () => {
                         <SelectContent>
                           <SelectItem value="MANUAL">Manual</SelectItem>
                           <SelectItem value="REMESSA">Remessa</SelectItem>
-                          <SelectItem value="TED">TED/DOC</SelectItem>
-                          <SelectItem value="PIX">PIX</SelectItem>
                         </SelectContent>
                       </Select>
-                    </td>
-                    <td className="p-3">
-                      {getStatusPagamentoBadge(pag.status_pagamento as StatusPagamento)}
-                    </td>
-                    <td className="p-3">
-                      {getStatusIntegracaoRmBadge(pag.status_integracao_rm as StatusIntegracaoRM)}
                     </td>
                     <td className="p-3">
                       <div className="flex items-center gap-1">
@@ -628,6 +612,7 @@ export const PagamentosTab = () => {
                           variant="ghost"
                           size="icon"
                           className="h-8 w-8"
+                          title="Visualizar detalhes"
                           onClick={() => {
                             setSelectedPagamento(pag);
                             setDetailsDialogOpen(true);
@@ -635,33 +620,17 @@ export const PagamentosTab = () => {
                         >
                           <Eye className="h-4 w-4" />
                         </Button>
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <Button variant="ghost" size="icon" className="h-8 w-8">
-                              <MoreHorizontal className="h-4 w-4" />
-                            </Button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end">
-                            {pag.linha_digitavel && (
-                              <DropdownMenuItem onClick={() => handleCopy(pag.linha_digitavel!, `ld-${pag.id}`)}>
-                                <Copy className="h-4 w-4 mr-2" />
-                                Copiar Linha Digitável
-                              </DropdownMenuItem>
-                            )}
-                            <DropdownMenuSeparator />
-                            {!pag.is_pronto_para_robo ? (
-                              <DropdownMenuItem onClick={() => handleSetReady(pag.id, true)}>
-                                <Check className="h-4 w-4 mr-2" />
-                                Marcar como Pronto
-                              </DropdownMenuItem>
-                            ) : (
-                              <DropdownMenuItem onClick={() => handleSetReady(pag.id, false)}>
-                                <Square className="h-4 w-4 mr-2" />
-                                Desmarcar Pronto
-                              </DropdownMenuItem>
-                            )}
-                          </DropdownMenuContent>
-                        </DropdownMenu>
+                        <Button
+                          variant={pag.is_pronto_para_robo ? "default" : "outline"}
+                          size="sm"
+                          className="h-8 text-xs"
+                          disabled={processingAction[pag.id]}
+                          onClick={() => handleSetReady(pag.id, !pag.is_pronto_para_robo)}
+                          title={pag.is_pronto_para_robo ? "Desmarcar pronto" : "Marcar como pronto para baixa"}
+                        >
+                          <Check className="h-4 w-4 mr-1" />
+                          {pag.is_pronto_para_robo ? "Pronto" : "Marcar Pronto"}
+                        </Button>
                       </div>
                     </td>
                   </tr>

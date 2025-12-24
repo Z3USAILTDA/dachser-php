@@ -121,8 +121,8 @@ export const DadosPagamentoPanel = ({
   };
 
   const showBoletoSection = isBoleto(formaPagamento as any);
-  const showBankSection = requiresBankDetails(tipoExecucao) || (!showBoletoSection && tipoExecucao !== "PIX");
-  const showPixSection = requiresPixKey(tipoExecucao);
+  const showBankSection = !showBoletoSection; // Sempre mostrar dados bancários para não-boleto
+  const showPixSection = false; // PIX como tipo de execução foi removido
 
   // Completeness indicators
   const hasLinhaDigitavel = !!linhaDigitavel;

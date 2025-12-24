@@ -52,9 +52,28 @@ export const VoucherOperacaoActions = ({ voucher, onUpdate }: VoucherOperacaoAct
     return storedUser ? JSON.parse(storedUser) : { id: 0, username: "sistema" };
   };
 
-  // Função para adicionar novo anexo (MariaDB)
+  // Função para adicionar novo anexo (MariaDB) - SUBSTITUI anexo existente do mesmo tipo
   const handleFileUpload = async (fileUrl: string, fileName: string, fileSize: number) => {
     try {
+      // Verificar se já existe anexo do mesmo tipo e deletar (substituição)
+      const existingAnexo = voucher.anexos.find(a => a.tipo === selectedTipo);
+      if (existingAnexo) {
+        // Deletar arquivo do storage
+        const match = existingAnexo.fileUrl.match(/voucher-anexos\/(.+)$/);
+        if (match) {
+          const filePath = match[1];
+          await supabase.storage.from("voucher-anexos").remove([filePath]);
+        }
+        
+        // Deletar registro do anexo no MariaDB
+        await supabase.functions.invoke("mariadb-proxy", {
+          body: {
+            action: "delete_voucher_anexo",
+            anexo_id: existingAnexo.id,
+          },
+        });
+      }
+
       const { error } = await supabase.functions.invoke("mariadb-proxy", {
         body: {
           action: "save_voucher_anexo",
@@ -76,14 +95,18 @@ export const VoucherOperacaoActions = ({ voucher, onUpdate }: VoucherOperacaoAct
           voucher_id: voucher.id,
           user_id: userData.id?.toString(),
           user_name: userData.username,
-          acao: "ANEXO_ADICIONADO",
-          detalhe: `Anexo "${fileName}" (${selectedTipo}) adicionado`,
+          acao: existingAnexo ? "ANEXO_SUBSTITUIDO" : "ANEXO_ADICIONADO",
+          detalhe: existingAnexo 
+            ? `Anexo "${existingAnexo.fileName}" substituído por "${fileName}" (${selectedTipo})`
+            : `Anexo "${fileName}" (${selectedTipo}) adicionado`,
         },
       });
 
       toast({
-        title: "Anexo adicionado",
-        description: `"${fileName}" foi anexado com sucesso.`,
+        title: existingAnexo ? "Anexo substituído" : "Anexo adicionado",
+        description: existingAnexo 
+          ? `"${existingAnexo.fileName}" foi substituído por "${fileName}".`
+          : `"${fileName}" foi anexado com sucesso.`,
       });
 
       onUpdate();

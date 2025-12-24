@@ -478,7 +478,8 @@ export const CreateVoucherDialog = ({
           : "NORMAL";
 
       // Determine etapa_atual based on isDraft and tipoDocumento
-      let etapaAtual = "OPERACAO";
+      // Voucher criado pela operação vai direto para FISCAL (exceto rascunho ou ADF)
+      let etapaAtual = "FISCAL"; // Padrão: direto para fiscal
       if (isDraft) {
         etapaAtual = "RASCUNHO";
       } else if (values.tipoDocumento === "ADF") {
