@@ -98,6 +98,8 @@ const EsteiraVoucherDetails = () => {
         responsavelFinanceiroUserId: data.responsavel_financeiro_user_id,
         aprovadoPorUserId: data.aprovado_por_user_id,
         clienteEmail: data.cliente_email,
+        processoId: data.processo_id || null,
+        origemProcesso: data.origem_processo || null,
         createdAt: parseMariaDBDate(data.created_at) || new Date(),
         updatedAt: parseMariaDBDate(data.updated_at) || new Date(),
         anexos: anexos.map((a: any) => ({

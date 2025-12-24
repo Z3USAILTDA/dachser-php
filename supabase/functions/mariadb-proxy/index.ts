@@ -3513,6 +3513,14 @@ serve(async (req) => {
         };
         
         // Insert voucher data into existing t_vouchers table (with id_rm support)
+        // Ensure processo_id and origem_processo columns exist
+        try {
+          await client.execute(`ALTER TABLE dados_dachser.t_vouchers ADD COLUMN IF NOT EXISTS processo_id VARCHAR(100) DEFAULT NULL`);
+          await client.execute(`ALTER TABLE dados_dachser.t_vouchers ADD COLUMN IF NOT EXISTS origem_processo VARCHAR(10) DEFAULT NULL`);
+        } catch (e) {
+          console.log('Columns may already exist:', e);
+        }
+        
         const insertResult = await client.execute(`
           INSERT INTO dados_dachser.t_vouchers (
             id, id_rm, numero_spo, vencimento, cobranca_em_nome_de,
@@ -3521,8 +3529,9 @@ serve(async (req) => {
             tipo_documento, valor, moeda, fornecedor, cnpj_fornecedor,
             cliente_email, filial, data_emissao_documento,
             comentarios_operacao, comentarios_fiscal, comentarios_financeiro,
-            ajuste_operacao, ajuste_fiscal, criado_por_user_id
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ajuste_operacao, ajuste_fiscal, criado_por_user_id,
+            processo_id, origem_processo
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `, [
           voucherId,
           emptyToNull(voucherData.id_rm),
@@ -3550,7 +3559,9 @@ serve(async (req) => {
           emptyToNull(voucherData.comentarios_financeiro),
           emptyToNull(voucherData.ajuste_operacao),
           emptyToNull(voucherData.ajuste_fiscal),
-          emptyToNull(voucherData.criado_por_user_id)
+          emptyToNull(voucherData.criado_por_user_id),
+          emptyToNull(voucherData.processo_id),
+          emptyToNull(voucherData.origem_processo)
         ]);
         
         console.log('Voucher saved to MariaDB t_vouchers, ID:', voucherId, 'id_rm:', voucherData.id_rm);
