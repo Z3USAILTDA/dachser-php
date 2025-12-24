@@ -353,7 +353,10 @@ const EsteiraVoucherDetails = () => {
           </TabsContent>
 
           <TabsContent value="pagamento" className="mt-3">
-            <Card className="p-6 bg-card/80 backdrop-blur-sm border-border/50 animate-fade-in">
+            <Card 
+              className="p-6 border border-[rgba(255,255,255,0.12)] backdrop-blur-[18px] animate-fade-in"
+              style={{ backgroundColor: 'rgba(5,6,18,0.9)' }}
+            >
               <h3 className="text-lg font-semibold mb-4 text-foreground">Dados de Pagamento</h3>
               <DadosPagamentoPanel
                 voucherId={voucher.id}
@@ -379,7 +382,10 @@ const EsteiraVoucherDetails = () => {
           </TabsContent>
 
           <TabsContent value="historico" className="mt-3">
-            <Card className="p-6 bg-card/80 backdrop-blur-sm border-border/50 animate-fade-in">
+            <Card 
+              className="p-6 border border-[rgba(255,255,255,0.12)] backdrop-blur-[18px] animate-fade-in"
+              style={{ backgroundColor: 'rgba(5,6,18,0.9)' }}
+            >
               <h3 className="text-lg font-semibold mb-4 text-foreground">Histórico de Ações</h3>
               <div className="space-y-4">
                 {voucher.logs.length === 0 ? (
