@@ -1858,8 +1858,7 @@ serve(async (req) => {
             t.id_rm,
             COALESCE(dnf.numero_processo, '') AS processo,
             COALESCE(dnf.house, '') AS house,
-            COALESCE(dnf.master, '') AS master,
-            COALESCE(t.email_cliente, '') AS email_cliente
+            COALESCE(dnf.master, '') AS master
           FROM dados_dachser.t_dados_financeiro_nfs t
           LEFT JOIN ai_agente.t_financeiro_soft_delete sd ON sd.documento = t.documento
           LEFT JOIN dados_dachser.t_dados_nfs dnf ON dnf.id_rm = t.id_rm
