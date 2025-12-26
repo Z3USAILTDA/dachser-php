@@ -657,6 +657,7 @@ serve(async (req: Request): Promise<Response> => {
         t.valor_nf,
         t.cnpj,
         CASE WHEN t.tipo_documento='FAT_NF' THEN 'À vista' ELSE 'A prazo' END AS tipo_pagto,
+        t.id_rm AS id_rm_financeiro,
         COALESCE(nf.numero_processo, '') AS processo,
         COALESCE(nf.house, '') AS house,
         COALESCE(nf.master, '') AS master,
@@ -678,6 +679,18 @@ serve(async (req: Request): Promise<Response> => {
     console.log(`[regua-send-emails] Executando query para stage ${stage}`);
     const invoices = await client.query(sql);
     console.log(`[regua-send-emails] Encontradas ${invoices.length} faturas`);
+    
+    // Debug: log primeira fatura para verificar os campos
+    if (invoices.length > 0) {
+      const first = invoices[0];
+      console.log(`[regua-send-emails] DEBUG primeira fatura:`, JSON.stringify({
+        documento: first.documento,
+        id_rm_financeiro: first.id_rm_financeiro,
+        processo: first.processo,
+        house: first.house,
+        master: first.master
+      }));
+    }
 
     if (invoices.length === 0) {
       return new Response(
