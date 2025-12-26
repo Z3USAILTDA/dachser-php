@@ -1856,9 +1856,13 @@ serve(async (req) => {
             t.valor_nf,
             t.cnpj,
             t.id_rm,
+            COALESCE(dnf.numero_processo, '') AS processo,
+            COALESCE(dnf.house, '') AS house,
+            COALESCE(dnf.master, '') AS master,
             COALESCE(t.email_cliente, '') AS email_cliente
           FROM dados_dachser.t_dados_financeiro_nfs t
           LEFT JOIN ai_agente.t_financeiro_soft_delete sd ON sd.documento = t.documento
+          LEFT JOIN dados_dachser.t_dados_nfs dnf ON dnf.id_rm = t.id_rm
           WHERE COALESCE(sd.active, 1) = 1
             AND (
               (? IN ('PRE','D1','D7','D15','D30','D45') AND (? = 'PRE' OR DATEDIFF(CURDATE(), t.data_vencimento) <= ?))
