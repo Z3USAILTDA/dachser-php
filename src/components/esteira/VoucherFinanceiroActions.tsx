@@ -1,9 +1,8 @@
 import { useState, useMemo } from "react";
-import { Voucher, validarProntoParaRobo, isBoleto } from "@/types/voucher";
+import { Voucher, validarProntoParaRobo } from "@/types/voucher";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
@@ -18,9 +17,8 @@ interface VoucherFinanceiroActionsProps {
 export const VoucherFinanceiroActions = ({ voucher, onUpdate }: VoucherFinanceiroActionsProps) => {
   const [loading, setLoading] = useState(false);
   const [comentarios, setComentarios] = useState(voucher.comentariosFinanceiro || "");
-  const [tipoBaixa, setTipoBaixa] = useState<"BAIXA_MANUAL" | "BAIXA_REMESSA">(
-    voucher.statusBaixa === "BAIXA_REMESSA" ? "BAIXA_REMESSA" : "BAIXA_MANUAL"
-  );
+  // Use tipoExecucaoPagamento if already defined, otherwise default to MANUAL
+  const tipoBaixa = voucher.tipoExecucaoPagamento === "REMESSA" ? "BAIXA_REMESSA" : "BAIXA_MANUAL";
   const [necessitaAjusteOperacao, setNecessitaAjusteOperacao] = useState(false);
   const [necessitaAjusteFiscal, setNecessitaAjusteFiscal] = useState(false);
   const [motivoAjusteOperacao, setMotivoAjusteOperacao] = useState("");
@@ -299,20 +297,19 @@ export const VoucherFinanceiroActions = ({ voucher, onUpdate }: VoucherFinanceir
         {!isDevolvendo && (
           <div className="space-y-2">
             <Label>Tipo de Baixa</Label>
-            <Select value={tipoBaixa} onValueChange={(v: any) => setTipoBaixa(v)}>
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="BAIXA_MANUAL">Baixa Manual</SelectItem>
-                <SelectItem value="BAIXA_REMESSA">Baixa por Remessa</SelectItem>
-              </SelectContent>
-            </Select>
-            {tipoBaixa === "BAIXA_REMESSA" && (
-              <p className="text-xs text-muted-foreground">
-                Os dados serão enviados para o setor especializado gerar a remessa bancária
+            <div className="p-3 rounded-lg bg-muted/50 border border-border">
+              <span className="font-medium">
+                {tipoBaixa === "BAIXA_REMESSA" ? "Baixa por Remessa" : "Baixa Manual"}
+              </span>
+              <p className="text-xs text-muted-foreground mt-1">
+                {tipoBaixa === "BAIXA_REMESSA" 
+                  ? "Os dados serão enviados para o setor especializado gerar a remessa bancária"
+                  : "Processamento manual do pagamento"}
               </p>
-            )}
+            </div>
+            <p className="text-xs text-muted-foreground">
+              ⓘ O tipo de execução é definido na aba de Pagamentos
+            </p>
           </div>
         )}
 

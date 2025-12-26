@@ -3852,7 +3852,41 @@ serve(async (req) => {
           console.log('Error fetching logs (table may not exist):', logsErr);
         }
         
-        result = { success: true, data: voucher, anexos: anexos || [], logs: logs || [] };
+        // Fetch dados bancários if voucher has cnpj_fornecedor
+        let dadosBancarios = null;
+        if (voucher.cnpj_fornecedor) {
+          try {
+            const cnpjClean = (voucher.cnpj_fornecedor || '').replace(/\D/g, '');
+            const dadosBancariosResult = await client.query(`
+              SELECT 
+                banco,
+                agencia,
+                digito_agencia,
+                conta_corrente,
+                digito_conta,
+                razao_social,
+                cnpj
+              FROM dados_dachser.t_dados_financeiro_pag
+              WHERE REPLACE(REPLACE(REPLACE(cnpj, '.', ''), '/', ''), '-', '') = ?
+              LIMIT 1
+            `, [cnpjClean]);
+            
+            if (dadosBancariosResult && dadosBancariosResult.length > 0) {
+              const db = dadosBancariosResult[0];
+              dadosBancarios = {
+                banco: db.banco,
+                agencia: db.agencia,
+                conta: db.conta_corrente,
+                favorecidoNome: db.razao_social,
+                favorecidoDocumento: db.cnpj,
+              };
+            }
+          } catch (dadosBancErr) {
+            console.log('Error fetching dados bancarios:', dadosBancErr);
+          }
+        }
+        
+        result = { success: true, data: voucher, anexos: anexos || [], logs: logs || [], dadosBancarios };
         break;
       }
 
@@ -5097,16 +5131,28 @@ serve(async (req) => {
           );
         }
 
+        // First get the voucher to check tipo_execucao_pagamento
+        const voucherData = await client.query(
+          `SELECT tipo_execucao_pagamento FROM dados_dachser.t_vouchers WHERE id = ?`,
+          [voucherId]
+        );
+        
+        const tipoExec = voucherData?.[0]?.tipo_execucao_pagamento;
+        const statusBaixa = tipoExec === 'REMESSA' ? 'BAIXA_REMESSA' : 'BAIXA_MANUAL';
+
+        // Update voucher - if marking as ready, also update status_baixa and etapa_atual to ROBO
         await client.execute(
           `UPDATE dados_dachser.t_vouchers 
            SET is_pronto_para_robo = ?, 
                status_pagamento = CASE WHEN ? = 1 THEN 'PRONTO' ELSE status_pagamento END,
+               status_baixa = CASE WHEN ? = 1 THEN ? ELSE status_baixa END,
+               etapa_atual = CASE WHEN ? = 1 THEN 'ROBO' ELSE etapa_atual END,
                updated_at = NOW() 
            WHERE id = ?`,
-          [is_pronto ? 1 : 0, is_pronto ? 1 : 0, voucherId]
+          [is_pronto ? 1 : 0, is_pronto ? 1 : 0, is_pronto ? 1 : 0, statusBaixa, is_pronto ? 1 : 0, voucherId]
         );
 
-        console.log(`Updated is_pronto_para_robo for voucher ${voucherId} to ${is_pronto}`);
+        console.log(`Updated is_pronto_para_robo for voucher ${voucherId} to ${is_pronto}, status_baixa=${statusBaixa}`);
         result = { success: true };
         break;
       }
