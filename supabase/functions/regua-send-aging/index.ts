@@ -230,7 +230,7 @@ serve(async (req: Request): Promise<Response> => {
     const testEmail = "devs@z3us.ai";
     
     const emailResponse = await resend.emails.send({
-      from: "Financeiro Dachser <financeiro@dachser.com.br>",
+      from: "Financeiro Dachser <noreply@hermes.z3us.ai>",
       to: [testEmail], // Using test email
       subject: `[TESTE] Aging List - ${cliente || invoicesResult[0]?.razao_social || "Cliente"}`,
       html: emailHtml,
