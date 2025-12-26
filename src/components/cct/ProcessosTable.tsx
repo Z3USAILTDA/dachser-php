@@ -11,7 +11,7 @@ import {
 } from "@/components/ui/table";
 import { StatusBadge, SLAInfoBadge } from "./StatusBadge";
 import { TablePagination } from "@/components/layout/TablePagination";
-import { Search, Eye, AlertTriangle, Clock, CheckCircle2 } from "lucide-react";
+import { Search, Eye, AlertTriangle } from "lucide-react";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import type { ProcessoCCT } from "@/types/cct";
@@ -115,7 +115,6 @@ export function ProcessosTable({ processos, onAssignAnalista, metricFilter }: Pr
         <Table>
           <TableHeader>
             <TableRow className="hover:bg-transparent border-[rgba(255,255,255,0.08)]">
-              <TableHead className="text-[#888] text-[0.75rem] uppercase tracking-wider font-medium">Origem</TableHead>
               <TableHead className="text-[#888] text-[0.75rem] uppercase tracking-wider font-medium">Cliente</TableHead>
               <TableHead className="text-[#888] text-[0.75rem] uppercase tracking-wider font-medium">House</TableHead>
               <TableHead className="text-[#888] text-[0.75rem] uppercase tracking-wider font-medium">Master</TableHead>
@@ -130,33 +129,16 @@ export function ProcessosTable({ processos, onAssignAnalista, metricFilter }: Pr
           </TableHeader>
           <TableBody>
             {paginatedProcessos.map((processo, index) => {
-              const excecoesAbertas = processo.excecoes.filter(e => e.status_excecao !== "RESOLVIDA").length;
               // Format tratamentos for display
               const tratamentosDisplay = Array.isArray(processo.shipment.tratamentos_especiais) 
                 ? processo.shipment.tratamentos_especiais.join(", ") 
                 : processo.shipment.tratamentos_especiais;
-
-              // Origin badge config
-              const origemConfig = {
-                POS_CHEGADA: { label: "Pós-Chegada", icon: CheckCircle2, className: "bg-emerald-500/20 text-emerald-400 border-emerald-500/30" },
-                ARR_EXPIRADO: { label: "ARR +120h", icon: Clock, className: "bg-amber-500/20 text-amber-400 border-amber-500/30" },
-                OUTRO: { label: "Outro", icon: null, className: "bg-gray-500/20 text-gray-400 border-gray-500/30" },
-              };
-              const origemType = (processo as any).origem_cct || 'OUTRO';
-              const origemStyle = origemConfig[origemType as keyof typeof origemConfig] || origemConfig.OUTRO;
-              const OrigemIcon = origemStyle.icon;
 
               return (
                 <TableRow 
                   key={`${processo.shipment.id}-${processo.shipment.master}-${index}`}
                   className={`border-[rgba(255,255,255,0.05)] hover:bg-[rgba(255,255,255,0.03)] ${index % 2 === 0 ? "bg-[rgba(255,255,255,0.02)]" : ""}`}
                 >
-                  <TableCell>
-                    <Badge className={`${origemStyle.className} text-[0.68rem] flex items-center gap-1 w-fit`}>
-                      {OrigemIcon && <OrigemIcon className="h-3 w-3" />}
-                      {origemStyle.label}
-                    </Badge>
-                  </TableCell>
                   <TableCell>
                     <span className="text-white text-[0.85rem] max-w-[150px] truncate block">{processo.shipment.cliente}</span>
                   </TableCell>
