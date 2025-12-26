@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
-import { CalendarRange, HelpCircle, Mail } from "lucide-react";
+import { CalendarRange, HelpCircle, Mail, Send } from "lucide-react";
 import { useUsageLog } from "@/hooks/useUsageLog";
 import { FileText, Clock, Flag, Search, X, RefreshCw } from "lucide-react";
 import { Input } from "@/components/ui/input";
@@ -100,6 +100,16 @@ export default function ReguaCobranca() {
   const [agingModalOpen, setAgingModalOpen] = useState(false);
   const [selectedRow, setSelectedRow] = useState<StageRow | null>(null);
   const [sendingAging, setSendingAging] = useState(false);
+
+  // Bulk send state (admin only)
+  const [bulkSendModalOpen, setBulkSendModalOpen] = useState(false);
+  const [sendingBulk, setSendingBulk] = useState(false);
+  const [bulkResult, setBulkResult] = useState<{ sent: number; skipped: number; errors?: string[] } | null>(null);
+
+  // Check admin status
+  const storedUser = localStorage.getItem("user");
+  const user = storedUser ? JSON.parse(storedUser) : null;
+  const isAdmin = user?.is_admin === 1 || user?.is_admin === "1" || user?.is_admin === true;
 
   useEffect(() => {
     fetchCounts();
@@ -226,6 +236,51 @@ export default function ReguaCobranca() {
     }
   };
 
+  const handleBulkSend = () => {
+    setBulkResult(null);
+    setBulkSendModalOpen(true);
+  };
+
+  const confirmBulkSend = async () => {
+    if (!openStage) return;
+    
+    setSendingBulk(true);
+    setBulkResult(null);
+    try {
+      const { data, error } = await supabase.functions.invoke("regua-send-emails", {
+        body: {
+          stage: openStage,
+          dryRun: false, // Set to true for testing without actually sending
+        },
+      });
+
+      if (error) throw error;
+      
+      if (data?.success) {
+        setBulkResult({
+          sent: data.sent || 0,
+          skipped: data.skipped || 0,
+          errors: data.errors,
+        });
+        toast({
+          title: "Envio concluído!",
+          description: `${data.sent} e-mail(s) enviado(s), ${data.skipped} ignorado(s)`,
+        });
+      } else {
+        throw new Error(data?.message || "Erro ao enviar e-mails");
+      }
+    } catch (err) {
+      console.error("Erro ao enviar em lote:", err);
+      toast({
+        title: "Erro",
+        description: err instanceof Error ? err.message : "Falha ao enviar e-mails em lote",
+        variant: "destructive",
+      });
+    } finally {
+      setSendingBulk(false);
+    }
+  };
+
   const rightContent = (
     <div className="flex items-center gap-3">
       <button
@@ -348,6 +403,15 @@ export default function ReguaCobranca() {
               >
                 <X className="w-3 h-3 mr-1" /> Limpar filtros
               </Button>
+              {isAdmin && (
+                <Button
+                  size="sm"
+                  onClick={handleBulkSend}
+                  className="rounded-full h-8 text-[0.8rem] bg-orange-600 hover:bg-orange-700 text-white"
+                >
+                  <Send className="w-3 h-3 mr-1" /> Enviar lote
+                </Button>
+              )}
             </div>
           </div>
 
@@ -494,6 +558,82 @@ export default function ReguaCobranca() {
                 </>
               )}
             </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Bulk Send Confirmation Modal (Admin Only) */}
+      <Dialog open={bulkSendModalOpen} onOpenChange={setBulkSendModalOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Envio em Lote - {openStage ? STAGE_LABELS[openStage] : ""}</DialogTitle>
+            <DialogDescription>
+              Enviar e-mails de cobrança para todos os clientes neste estágio?
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="py-4 space-y-3">
+            <div className="p-3 bg-orange-500/10 border border-orange-500/30 rounded-lg">
+              <p className="text-sm text-orange-400">
+                ⚠️ <strong>Atenção:</strong> Esta ação enviará e-mails de cobrança para todos os clientes com faturas no estágio {openStage ? STAGE_LABELS[openStage] : ""}.
+              </p>
+            </div>
+            
+            <div>
+              <span className="text-muted-foreground text-sm">Total de faturas neste estágio:</span>
+              <p className="font-bold text-lg">{filteredRows.length}</p>
+            </div>
+
+            {bulkResult && (
+              <div className="p-3 bg-green-500/10 border border-green-500/30 rounded-lg space-y-1">
+                <p className="text-sm text-green-400">
+                  ✓ Enviados: <strong>{bulkResult.sent}</strong>
+                </p>
+                <p className="text-sm text-muted-foreground">
+                  Ignorados (sem e-mail ou já enviado hoje): <strong>{bulkResult.skipped}</strong>
+                </p>
+                {bulkResult.errors && bulkResult.errors.length > 0 && (
+                  <div className="mt-2">
+                    <p className="text-sm text-red-400">Erros:</p>
+                    {bulkResult.errors.slice(0, 3).map((err, i) => (
+                      <p key={i} className="text-xs text-red-400">{err}</p>
+                    ))}
+                    {bulkResult.errors.length > 3 && (
+                      <p className="text-xs text-red-400">...e mais {bulkResult.errors.length - 3} erros</p>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+
+          <DialogFooter className="gap-2">
+            <Button
+              variant="outline"
+              onClick={() => setBulkSendModalOpen(false)}
+              disabled={sendingBulk}
+            >
+              {bulkResult ? "Fechar" : "Cancelar"}
+            </Button>
+            {!bulkResult && (
+              <Button
+                onClick={confirmBulkSend}
+                disabled={sendingBulk}
+                className="bg-orange-600 hover:bg-orange-700 text-white"
+              >
+                {sendingBulk ? (
+                  <>
+                    <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+                    Enviando...
+                  </>
+                ) : (
+                  <>
+                    <Send className="h-4 w-4 mr-2" />
+                    Confirmar Envio
+                  </>
+                )}
+              </Button>
+            )}
           </DialogFooter>
         </DialogContent>
       </Dialog>
