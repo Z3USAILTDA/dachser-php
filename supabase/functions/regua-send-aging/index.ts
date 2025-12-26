@@ -1,7 +1,7 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { Resend } from "https://esm.sh/resend@2.0.0";
 import { Client } from "https://deno.land/x/mysql@v2.12.1/mod.ts";
-import * as XLSX from "https://esm.sh/xlsx-js-style@1.2.0";
+import * as XLSX from "https://esm.sh/xlsx@0.18.5";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -40,7 +40,7 @@ const formatCnpj = (c: string) => {
   return c;
 };
 
-// Format CNPJ for sheet name (shorter format)
+// Format CNPJ for sheet name (shorter format, Excel max 31 chars)
 const formatCnpjShort = (c: string) => {
   const digits = c.replace(/\D/g, "");
   if (digits.length === 14) {
@@ -49,74 +49,15 @@ const formatCnpjShort = (c: string) => {
   return c;
 };
 
-// Style definitions matching the reference design
-const headerRedStyle = {
-  font: { bold: true, color: { rgb: "FFFFFF" }, sz: 9 },
-  fill: { fgColor: { rgb: "FF0000" } },
-  border: {
-    top: { style: "thin", color: { rgb: "CCCCCC" } },
-    bottom: { style: "thin", color: { rgb: "CCCCCC" } },
-    left: { style: "thin", color: { rgb: "CCCCCC" } },
-    right: { style: "thin", color: { rgb: "CCCCCC" } }
-  },
-  alignment: { horizontal: "left", vertical: "center" }
-};
-
-const cellStyle = {
-  font: { sz: 9 },
-  border: {
-    top: { style: "thin", color: { rgb: "CCCCCC" } },
-    bottom: { style: "thin", color: { rgb: "CCCCCC" } },
-    left: { style: "thin", color: { rgb: "CCCCCC" } },
-    right: { style: "thin", color: { rgb: "CCCCCC" } }
-  },
-  alignment: { horizontal: "left", vertical: "center" }
-};
-
-const valorStyle = {
-  ...cellStyle,
-  font: { sz: 9, color: { rgb: "0000FF" } },
-  alignment: { horizontal: "right", vertical: "center" },
-  numFmt: '#,##0.00'
-};
-
-const houseStyle = {
-  ...cellStyle,
-  font: { sz: 9, color: { rgb: "008000" } }
-};
-
-const logoStyle = {
-  font: { bold: true, sz: 18, color: { rgb: "FFCC00" } }
-};
-
-const titleStyle = {
-  font: { bold: true, sz: 14 },
-  alignment: { horizontal: "center", vertical: "center" }
-};
-
-const totalLabelStyle = {
-  font: { bold: true, sz: 10 },
-  alignment: { horizontal: "right", vertical: "center" }
-};
-
-const totalValueStyle = {
-  font: { bold: true, sz: 12, color: { rgb: "008000" } },
-  alignment: { horizontal: "left", vertical: "center" }
-};
-
-const dateStyle = {
-  font: { sz: 10 },
-  alignment: { horizontal: "right", vertical: "center" }
-};
-
-const periodoStyle = {
-  font: { sz: 10 }
+// Format number as Brazilian currency
+const formatCurrency = (value: number) => {
+  return value.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 };
 
 function createSheetForCnpj(invoices: InvoiceRow[], clienteName: string, totalValue: number, currentDate: string): XLSX.WorkSheet {
-  const totalValueFormatted = totalValue.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const totalValueFormatted = formatCurrency(totalValue);
   
-  // Create worksheet data
+  // Create worksheet data - matching exact structure from reference
   const wsData: any[][] = [];
   
   // Row 1: Logo and "Valor total em atraso" label (14 columns)
@@ -139,7 +80,7 @@ function createSheetForCnpj(invoices: InvoiceRow[], clienteName: string, totalVa
     "Período de Faturamento:", "01/01/2022 a 31/12/2027", "", "", "", "", "", "", "", "", "", "", "", ""
   ]);
   
-  // Row 5: Column headers (red background) - all 14 columns matching reference
+  // Row 5: Column headers - all 14 columns matching reference
   wsData.push([
     "DOCUMENTO", "ND", "REF. CLIENTE", "NOTA FISCAL DACHSER", "MODAL", "TIPO DOC.", "EMISSÃO", "VENCTO", "C.N.P.J", "CLIENTE", "VALOR", "PROCESSO", "MASTER", "HOUSE"
   ]);
@@ -167,51 +108,6 @@ function createSheetForCnpj(invoices: InvoiceRow[], clienteName: string, totalVa
   // Create worksheet
   const ws = XLSX.utils.aoa_to_sheet(wsData);
   
-  // Apply styles
-  const range = XLSX.utils.decode_range(ws['!ref'] || 'A1');
-  
-  // Style row 1 (logo and total label)
-  if (ws['A1']) ws['A1'].s = logoStyle;
-  if (ws['L1']) ws['L1'].s = totalLabelStyle;
-  
-  // Style row 2 (title and total value)
-  if (ws['D2']) ws['D2'].s = titleStyle;
-  if (ws['L2']) ws['L2'].s = totalValueStyle;
-  
-  // Style row 3 (date)
-  if (ws['N3']) ws['N3'].s = dateStyle;
-  
-  // Style row 4 (período)
-  if (ws['A4']) ws['A4'].s = periodoStyle;
-  
-  // Style header row (row 5) - 14 columns: A-N
-  const headerCols = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N'];
-  headerCols.forEach(col => {
-    const cell = `${col}5`;
-    if (ws[cell]) ws[cell].s = headerRedStyle;
-  });
-  
-  // Style data rows
-  for (let row = 6; row <= range.e.r + 1; row++) {
-    headerCols.forEach((col, colIdx) => {
-      const cell = `${col}${row}`;
-      if (ws[cell]) {
-        if (colIdx === 10) { // VALOR column (K)
-          ws[cell].s = valorStyle;
-          // Format as number
-          if (typeof ws[cell].v === 'number') {
-            ws[cell].t = 'n';
-            ws[cell].z = '#,##0.00';
-          }
-        } else if (colIdx === 13) { // HOUSE column (N)
-          ws[cell].s = houseStyle;
-        } else {
-          ws[cell].s = cellStyle;
-        }
-      }
-    });
-  }
-  
   // Set column widths (14 columns)
   ws['!cols'] = [
     { wch: 14 },  // DOCUMENTO
@@ -228,11 +124,6 @@ function createSheetForCnpj(invoices: InvoiceRow[], clienteName: string, totalVa
     { wch: 12 },  // PROCESSO
     { wch: 14 },  // MASTER
     { wch: 14 }   // HOUSE
-  ];
-  
-  // Merge cells for title (D2:J2)
-  ws['!merges'] = [
-    { s: { r: 1, c: 3 }, e: { r: 1, c: 9 } }
   ];
   
   return ws;
@@ -343,9 +234,6 @@ serve(async (req: Request): Promise<Response> => {
       invoicesByCnpj[cnpjKey].push(inv);
     }
 
-    // Calculate total value across all CNPJs
-    const totalValueAll = invoicesResult.reduce((sum: number, inv: InvoiceRow) => sum + (Number(inv.valor_nf) || 0), 0);
-    
     const clienteName = cliente || invoicesResult[0]?.razao_social || "Cliente";
     const currentDate = new Date().toLocaleDateString("en-US", { month: "2-digit", day: "2-digit", year: "numeric" });
 
@@ -361,7 +249,7 @@ serve(async (req: Request): Promise<Response> => {
       XLSX.utils.book_append_sheet(wb, ws, sheetName);
     }
 
-    // Generate Excel buffer
+    // Generate Excel buffer as base64
     const excelBuffer = XLSX.write(wb, { type: "base64", bookType: "xlsx" });
 
     // Build CNPJs list for email body
