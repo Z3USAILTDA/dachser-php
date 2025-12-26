@@ -928,60 +928,116 @@ CRITICAL: Each field comparison MUST be on a SINGLE LINE using this exact format
 If UPDATE REQUIRED, add the update instruction on the next line with arrow:
   → Update: <action to take>
 
-EXAMPLE OUTPUT (CORRECT FORMAT):
+MANDATORY OUTPUT STRUCTURE (FULL EXAMPLE):
 
-EXPORTER #1: CONTINENTAL AUTOMOTIVE GMBH
-- CNPJ: Manifest: 12.345.678/0001-90 | HBL: 12.345.678/0001-90 | Status: MATCH
-- Seal: Manifest: NTG001053 | HBL: NTG001053 | Status: MATCH
+Hello, team.
 
-Item 1: CAR PARTS - ELECTRONIC COMPONENTS
-- Gross Weight: Manifest: 1,250.000 kg | HBL: 1,250.000 kg | Status: MATCH
-- CBM: Manifest: 8.500 m³ | HBL: 8.500 m³ | Status: MATCH
-- Volume Qty: Manifest: 15 | HBL: 15 | Status: MATCH
-- Volume Type: Manifest: PALLETS | HBL: PALLETS | Status: MATCH
-- Invoice Ref: Manifest: INV-2025-001 | HBL: INV-2025-001 | Status: MATCH
-
-Item 2: RUBBER SEALS
-- Gross Weight: Manifest: 320.000 kg | HBL: 300.000 kg | Status: UPDATE REQUIRED
-  → Update: Set weight to 320.000 kg
-- CBM: Manifest: 2.100 m³ | HBL: 2.100 m³ | Status: MATCH
-- Volume Qty: Manifest: 8 | HBL: 8 | Status: MATCH
-- Volume Type: Manifest: BOXES | HBL: BOXES | Status: MATCH
-- Invoice Ref: Manifest: INV-2025-002 | HBL: INV-2025-002 | Status: MATCH
-
-Subtotals EXPORTER #1:
-- Total Weight: Manifest: 1,570.000 kg | HBL: 1,550.000 kg | Delta: -20.000 kg
-- Total CBM: Manifest: 10.600 m³ | HBL: 10.600 m³ | Delta: 0.000 m³
-- Total Volumes: Manifest: 23 | HBL: 23 | Delta: 0
-
-EXPORTER #2: BOSCH AUTOMOTIVE PARTS
-- CNPJ: Manifest: 98.765.432/0001-10 | HBL: 98.765.432/0001-10 | Status: MATCH
-- Seal: Manifest: NTG001053 | HBL: NTG001053 | Status: MATCH
-
-Item 1: BRAKE SYSTEMS
-- Gross Weight: Manifest: 2,800.000 kg | HBL: 2,800.000 kg | Status: MATCH
-- CBM: Manifest: 14.400 m³ | HBL: 14.400 m³ | Status: MATCH
-- Volume Qty: Manifest: 19 | HBL: 19 | Status: MATCH
-- Volume Type: Manifest: PALLETS | HBL: PALLETS | Status: MATCH
-- Invoice Ref: Manifest: DN-789456 | HBL: DN-789456 | Status: MATCH
-
-Subtotals EXPORTER #2:
-- Total Weight: Manifest: 2,800.000 kg | HBL: 2,800.000 kg | Delta: 0.000 kg
-- Total CBM: Manifest: 14.400 m³ | HBL: 14.400 m³ | Delta: 0.000 m³
-- Total Volumes: Manifest: 19 | HBL: 19 | Delta: 0
+Please update HBL as follows:
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-CONTAINER TOTALS:
-- Total Gross Weight: Manifest: 4,370.000 kg | HBL(s): 4,350.000 kg | Status: UPDATE REQUIRED
-  → Update: Adjust HBL weights so total equals 4,370.000 kg
-- Total CBM: Manifest: 25.000 m³ | HBL(s): 25.000 m³ | Status: MATCH
-- Total Volumes: Manifest: 42 | HBL(s): 42 | Status: MATCH
+
+DRAFT HBL: 14630145837
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+CONTAINER VERIFICATION:
+- Manifest Container: TCNU4034386
+- HBL Container: TCNU4034386
+- Status: MATCH
+
+TOTAL WEIGHT:
+- Manifest Total (Weight after Weighting): 14,036.000 kg
+- HBL Total Gross Weight: 14,036.000 kg
+- Delta: 0.000 kg
+- Status: MATCH
+
+TOTAL CBM:
+- Manifest Total: 58.338 m³
+- HBL Total Measurement: 58.338 m³
+- Delta: 0.000 m³
+- Status: MATCH
+
+TOTAL VOLUMES:
+- Manifest Total Packages: 94
+- HBL Total Packages: 94
+- Status: MATCH
+
+SEAL NUMBER:
+- Manifest Seal: 2000030908
+- HBL Seal: 2000030908
+- Status: MATCH
+
+CONSIGNEE CNPJ:
+- Manifest VAT No.: 60.857.349/0029-77
+- HBL CNPJ: 60.857.349/0029-77
+- Status: MATCH
+
+NCM CODES:
+- Manifest NCMs: [8481, 8483, 8414, 8708, 3926, 7318, 8526, 8543, 8536, 8421, 7419, 9026, 9032, 3917, 7412, 7326, 8412, 8544, 7320]
+- HBL NCMs: [8481, 8483, 8414, 8708, 3926, 7318, 8526, 8543, 8536, 8421, 7419, 9026, 9032, 3917, 7412, 7326, 8412, 8544, 7320, 74152900, 84819090, 84818092, 85443000]
+- Missing in HBL: none
+- Extra in HBL: 74152900, 84819090, 84818092, 85443000
+- Status: DIVERGENCE
+  → Update: Remove extra NCMs from HBL that are not in Manifest.
+
+INVOICE REFERENCES:
+All manifest invoice references are present in the HBL across the multiple pages. The HBL contains detailed invoice listings for each supplier matching the manifest delivery notes and invoice numbers.
+- Status: MATCH
+
+EXPORTER/SHIPPER ANALYSIS:
+
+EXPORTER #1: ZF POLSKA
+- CNPJ: Manifest: 60.857.349/0029-77 | HBL: 60.857.349/0029-77 | Status: MATCH
+- Seal: Manifest: 2000030908 | HBL: 2000030908 | Status: MATCH
+- Total Weight: Manifest: 3,522.000 kg | HBL: 3,522.000 kg | Status: MATCH
+- Total CBM: Manifest: 21.186 m³ | HBL: 21.186 m³ | Status: MATCH
+- Invoice References: Multiple invoices (7500714130, 7500714767, 7500716058, 7500716778, 7500716779, 7500717437) | Status: MATCH
+
+EXPORTER #2: ZF DE10
+- CNPJ: Manifest: 60.857.349/0029-77 | HBL: 60.857.349/0029-77 | Status: MATCH
+- Seal: Manifest: 2000030908 | HBL: 2000030908 | Status: MATCH
+- Total Weight: Manifest: 6,374.000 kg | HBL: 6,374.000 kg | Status: MATCH
+- Total CBM: Manifest: 10.673 m³ | HBL: 10.673 m³ | Status: MATCH
+- Invoice References: Multiple invoices (7500714740-7500714746, 7500715414, 7500716098-7500716105, 7500716747-7500716751) | Status: MATCH
+
+EXPORTER #3: ZF DCG1
+- CNPJ: Manifest: 60.857.349/0029-77 | HBL: 60.857.349/0029-77 | Status: MATCH
+- Seal: Manifest: 2000030908 | HBL: 2000030908 | Status: MATCH
+- Total Weight: Manifest: 911.000 kg | HBL: 911.000 kg | Status: MATCH
+- Total CBM: Manifest: 6.931 m³ | HBL: 6.931 m³ | Status: MATCH
+- Invoice References: Multiple invoices (7500715430, 7500716133, 7500716134, 7500716717-7500716719, 7500716784, 7500716785) | Status: MATCH
+
+EXPORTER #4: ADDUXI
+- CNPJ: Manifest: 60.857.349/0029-77 | HBL: 60.857.349/0029-77 | Status: MATCH
+- Seal: Manifest: 2000030908 | HBL: 2000030908 | Status: MATCH
+- Total Weight: Manifest: 88.000 kg | HBL: 88.000 kg | Status: MATCH
+- Total CBM: Manifest: 0.672 m³ | HBL: 0.672 m³ | Status: MATCH
+- Invoice Reference: 20252930 | Status: MATCH
+
+[CONTINUE FOR ALL EXPORTERS...]
+
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 ANALYSIS SUMMARY:
-- Total exporters identified: 2
-- Total items analyzed: 3
+- Total exporters identified: 11
+- Total items analyzed: 94 packages
 - Fields with discrepancies: 1
+
+VERIFICATION CHECKLIST:
+Files analyzed:
+- Manifest: Manifest TCNU4034386.xlsx
+- Draft HBL: 14630145837
+
+Explicit verifications:
+✓ Weight: Manifest = 14,036.000 kg | HBL = 14,036.000 kg (EXACT MATCH)
+✓ CBM: Manifest = 58.338 m³ | HBL = 58.338 m³ (EXACT MATCH)
+✓ NCM Codes: DIVERGENCE - Extra NCMs in HBL need to be removed
+✓ Invoices: All manifest invoice references present in HBL (MATCH)
+✓ Container: TCNU4034386 (EXACT MATCH)
+✓ Seal: 2000030908 (EXACT MATCH)
+✓ Shipper: SCHENKER DEUTSCHLAND AG (MATCH)
+✓ Consignee: ZF AUTOMOTIVE BRASIL LTDA (MATCH)
+✓ CNPJ: 60.857.349/0029-77 (EXACT MATCH)
 
 ████████████████████████████████████████████████████████████████████████████████
 █ MANDATORY NCM CODES SECTION - MUST ALWAYS BE INCLUDED                         █
