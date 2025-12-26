@@ -158,10 +158,13 @@ export function EventTimeline({ eventos }: EventTimelineProps) {
     );
   }
 
-  // Ordenar eventos por data DESC (mais recente primeiro)
-  const sortedEventos = [...eventos].sort(
-    (a, b) => new Date(b.data_hora_evento).getTime() - new Date(a.data_hora_evento).getTime()
-  );
+  // Ordenar eventos por data DESC (mais recente primeiro) e remover duplicados por status
+  const sortedEventos = [...eventos]
+    .sort((a, b) => new Date(b.data_hora_evento).getTime() - new Date(a.data_hora_evento).getTime())
+    .filter((evento, index, arr) => {
+      // Mantém apenas a primeira ocorrência de cada código de evento (a mais recente)
+      return arr.findIndex(e => e.codigo_evento === evento.codigo_evento) === index;
+    });
 
   return (
     <div className="p-4">
