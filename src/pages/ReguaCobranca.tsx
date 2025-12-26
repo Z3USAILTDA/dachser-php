@@ -429,15 +429,6 @@ export default function ReguaCobranca() {
                         Cliente
                       </th>
                       <th className="bg-[#15151f] sticky top-0 z-[5] px-3 py-[10px] text-left text-[0.75rem] uppercase tracking-wider font-bold">
-                        Processo
-                      </th>
-                      <th className="bg-[#15151f] sticky top-0 z-[5] px-3 py-[10px] text-left text-[0.75rem] uppercase tracking-wider font-bold">
-                        House
-                      </th>
-                      <th className="bg-[#15151f] sticky top-0 z-[5] px-3 py-[10px] text-left text-[0.75rem] uppercase tracking-wider font-bold">
-                        Master
-                      </th>
-                      <th className="bg-[#15151f] sticky top-0 z-[5] px-3 py-[10px] text-left text-[0.75rem] uppercase tracking-wider font-bold">
                         Doc / NF
                       </th>
                       <th className="bg-[#15151f] sticky top-0 z-[5] px-3 py-[10px] text-left text-[0.75rem] uppercase tracking-wider font-bold">
@@ -461,9 +452,6 @@ export default function ReguaCobranca() {
                     {paginatedRows.map((r, idx) => (
                       <tr key={idx} className="hover:bg-white/5 border-b border-white/9">
                         <td className="px-3 py-[10px]">{r.razao_base || r.razao_social}</td>
-                        <td className="px-3 py-[10px] text-muted-foreground">{r.processo || "—"}</td>
-                        <td className="px-3 py-[10px] text-muted-foreground">{r.house || "—"}</td>
-                        <td className="px-3 py-[10px] text-muted-foreground">{r.master || "—"}</td>
                         <td className="px-3 py-[10px]">{r.nf_exibicao || "—"}</td>
                         <td className="px-3 py-[10px]">{r.data_venc_br}</td>
                         <td className="px-3 py-[10px]">
@@ -521,11 +509,11 @@ export default function ReguaCobranca() {
               </div>
               <div>
                 <span className="text-muted-foreground text-sm">CNPJ:</span>
-                <p className="font-mono text-sm">{selectedRow.cnpj || "—"}</p>
+                <p className="font-mono text-sm">{selectedRow.cnpj || selectedRow.documento?.slice(0, 18) || "—"}</p>
               </div>
               <div>
-                <span className="text-muted-foreground text-sm">E-mail destino:</span>
-                <p className="font-medium">{selectedRow.email_cliente || "financeiro@cliente.com"}</p>
+                <span className="text-muted-foreground text-sm">E-mail destino (teste):</span>
+                <p className="font-medium text-orange-400">devs@z3us.ai</p>
               </div>
               <p className="text-sm text-muted-foreground mt-2">
                 Será gerada uma Aging List com todas as faturas em atraso deste cliente (incluindo todos os CNPJs do mesmo grupo).
