@@ -168,18 +168,21 @@ export function ProcessosTable({ processos, onAssignAnalista, metricFilter }: Pr
                   <TableCell>
                     {(() => {
                       const manifestacao = processo.shipment.status_manifestacao;
-                      const manifestacaoLabels: Record<string, { label: string; color: string }> = {
-                        'EM_TRANSITO': { label: 'Em Trânsito', color: 'bg-blue-500/20 text-blue-400 border-blue-500/30' },
-                        'CHEGOU': { label: 'Chegou', color: 'bg-green-500/20 text-green-400 border-green-500/30' },
-                        'DISPONIVEL': { label: 'Disponível', color: 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30' },
-                        'ENTREGUE': { label: 'Entregue', color: 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30' },
-                        'AGUARDANDO': { label: 'Aguardando', color: 'bg-gray-500/20 text-gray-400 border-gray-500/30' },
+                      const manifestacaoDots: Record<string, { label: string; bgColor: string }> = {
+                        'EM_TRANSITO': { label: 'Em Trânsito', bgColor: 'bg-blue-500' },
+                        'CHEGOU': { label: 'Chegou', bgColor: 'bg-green-500' },
+                        'DISPONIVEL': { label: 'Disponível', bgColor: 'bg-yellow-500' },
+                        'ENTREGUE': { label: 'Entregue', bgColor: 'bg-emerald-500' },
+                        'AGUARDANDO': { label: 'Aguardando', bgColor: 'bg-gray-500' },
                       };
-                      const { label, color } = manifestacaoLabels[manifestacao || 'AGUARDANDO'] || manifestacaoLabels['AGUARDANDO'];
+                      const { label, bgColor } = manifestacaoDots[manifestacao || 'AGUARDANDO'] || manifestacaoDots['AGUARDANDO'];
                       return (
-                        <span className={`px-2 py-0.5 rounded text-[0.75rem] font-medium border ${color}`}>
-                          {label}
-                        </span>
+                        <div className="flex justify-center">
+                          <span 
+                            className={`w-3 h-3 rounded-full ${bgColor}`} 
+                            title={label}
+                          />
+                        </div>
                       );
                     })()}
                   </TableCell>
