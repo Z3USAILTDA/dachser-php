@@ -3,6 +3,7 @@ import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { LogOut, Plane, Ship, CreditCard, FileText, Building2, UserCog } from "lucide-react";
 import { useUsageLog } from "@/hooks/useUsageLog";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import logoZ3us from "@/assets/logo-z3us.png";
 import dachserBg from "@/assets/dachser-background.jpg";
 interface SubChild {
@@ -179,6 +180,7 @@ const Dashboard = () => {
   };
   const filteredMenuItems = menuItems.filter((item) => !item.adminOnly || isAdmin);
   return (
+    <ScrollArea className="h-screen w-full">
     <div className="min-h-screen relative overflow-x-hidden">
       {/* Background with image and gradient overlay */}
       <div className="fixed inset-0 z-0">
@@ -469,6 +471,7 @@ const Dashboard = () => {
         </div>
       </main>
     </div>
+    </ScrollArea>
   );
 };
 
