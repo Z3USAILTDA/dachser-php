@@ -3111,7 +3111,7 @@ serve(async (req) => {
         
         let query = `
           SELECT i.id, i.view, i.arquivo_id, i.arquivo_label as base_file_name, 
-                 i.consignee, i.container,
+                 i.consignee, i.container, i.mbl_number, i.carrier, i.ata_date,
                  i.status, i.active, i.created_at,
                  (SELECT COUNT(*) FROM ai_agente.t_dachser_sea_runs r WHERE r.item_id = i.id) as run_count
           FROM ai_agente.t_dachser_sea_items i
@@ -3149,7 +3149,7 @@ serve(async (req) => {
         
         const items = await client.query(`
           SELECT i.id, i.view, i.arquivo_id, i.arquivo_label as base_file_name, 
-                 i.consignee, i.container,
+                 i.consignee, i.container, i.mbl_number, i.carrier, i.ata_date,
                  i.status, i.active, i.created_at
           FROM ai_agente.t_dachser_sea_items i 
           WHERE i.id = ?
@@ -3331,7 +3331,10 @@ serve(async (req) => {
           SELECT 
             i.id,
             i.arquivo_label as arquivo,
+            i.mbl_number,
+            i.carrier as armador,
             i.consignee as cliente,
+            i.ata_date as data_atracacao,
             i.container,
             i.view as tipo_analise,
             i.status,
