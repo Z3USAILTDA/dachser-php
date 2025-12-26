@@ -120,6 +120,7 @@ export function ProcessosTable({ processos, onAssignAnalista, metricFilter }: Pr
               <TableHead className="text-[#888] text-[0.75rem] uppercase tracking-wider font-medium">Master</TableHead>
               <TableHead className="text-[#888] text-[0.75rem] uppercase tracking-wider font-medium">Rota</TableHead>
               <TableHead className="text-[#888] text-[0.75rem] uppercase tracking-wider font-medium">Tratamentos</TableHead>
+              <TableHead className="text-[#888] text-[0.75rem] uppercase tracking-wider font-medium">Manifestação</TableHead>
               <TableHead className="text-[#888] text-[0.75rem] uppercase tracking-wider font-medium">Status</TableHead>
               <TableHead className="text-[#888] text-[0.75rem] uppercase tracking-wider font-medium">SLA</TableHead>
               <TableHead className="text-[#888] text-[0.75rem] uppercase tracking-wider font-medium">Analista</TableHead>
@@ -163,6 +164,24 @@ export function ProcessosTable({ processos, onAssignAnalista, metricFilter }: Pr
                     <span className="truncate block" title={tratamentosDisplay || undefined}>
                       {tratamentosDisplay || "—"}
                     </span>
+                  </TableCell>
+                  <TableCell>
+                    {(() => {
+                      const manifestacao = processo.shipment.status_manifestacao;
+                      const manifestacaoLabels: Record<string, { label: string; color: string }> = {
+                        'EM_TRANSITO': { label: 'Em Trânsito', color: 'bg-blue-500/20 text-blue-400 border-blue-500/30' },
+                        'CHEGOU': { label: 'Chegou', color: 'bg-green-500/20 text-green-400 border-green-500/30' },
+                        'DISPONIVEL': { label: 'Disponível', color: 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30' },
+                        'ENTREGUE': { label: 'Entregue', color: 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30' },
+                        'AGUARDANDO': { label: 'Aguardando', color: 'bg-gray-500/20 text-gray-400 border-gray-500/30' },
+                      };
+                      const { label, color } = manifestacaoLabels[manifestacao || 'AGUARDANDO'] || manifestacaoLabels['AGUARDANDO'];
+                      return (
+                        <span className={`px-2 py-0.5 rounded text-[0.75rem] font-medium border ${color}`}>
+                          {label}
+                        </span>
+                      );
+                    })()}
                   </TableCell>
                   <TableCell>
                     <StatusBadge status={processo.status_atual?.status_cct_oficial || "AGUARDANDO_MANIFESTACAO"} />

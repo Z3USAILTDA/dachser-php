@@ -2389,52 +2389,94 @@ serve(async (req) => {
         // Criteria:
         // 1. Post-ARR statuses (ATA, NFD, AWD, DLV, POD) - these don't appear in tracking
         // 2. ARR/RCF status with arr_datetime > 120 hours ago AND no active alerts (data_atraso IS NULL)
+        // Use subquery to get the most recent record per house to avoid duplicates
         const shipments = await client.query(`
           SELECT 
-            s.id,
-            TRIM(s.awb) as master,
-            TRIM(s.hawb) as house,
-            TRIM(s.\`destinatário\`) as cliente,
-            s.nome_analista,
-            s.email_analista,
-            s.email_cliente as emails_cliente,
-            s.\`último_status\` as status_cct_oficial,
-            s.\`última atualização\` as ultimo_evento_data,
-            s.\`último_status\` as ultimo_evento_codigo,
-            TRIM(s.origem) as aeroporto_origem,
-            TRIM(s.destino) as aeroporto_destino,
-            s.data_atraso,
-            s.arr_datetime,
-            s.tipo_servico,
-            LEFT(TRIM(s.awb), 3) as airline_code,
-            cct.peso_declarado,
-            cct.peso_constatado,
-            cct.volume_declarado,
-            cct.volume_constatado,
-            cct.eta,
-            cct.etd,
-            cct.data_decolagem_ultimo_trecho,
-            cct.cnpj_consignatario,
-            -- Get tratamento from t_master_dados via mawb match
-            TRIM(m.tratamento) as tratamento
-          FROM ${database}.t_status_aereo s
-          LEFT JOIN ${database}.t_cct_shipments cct ON TRIM(s.awb) COLLATE utf8mb4_unicode_ci = TRIM(cct.master) COLLATE utf8mb4_unicode_ci
-          LEFT JOIN ${database}.t_master_dados m ON TRIM(s.awb) COLLATE utf8mb4_unicode_ci = TRIM(m.mawb) COLLATE utf8mb4_unicode_ci
-          WHERE LEFT(TRIM(s.awb), 3) IN (${airlineFilter})
-          AND s.\`último_status\` NOT IN (${errorStatusFilter})
-          AND (s.origem IS NOT NULL AND LOWER(TRIM(s.origem)) NOT IN ('n/a', 'na', 'erro', 'error', ''))
-          AND (s.destino IS NOT NULL AND LOWER(TRIM(s.destino)) NOT IN ('n/a', 'na', 'erro', 'error', ''))
-          AND (
-            -- Post-ARR statuses (not shown in tracking screen)
-            s.\`último_status\` IN ('ATA', 'NFD', 'AWD', 'DLV', 'POD')
-            OR 
-            -- ARR/RCF with more than 120 hours (exited tracking by time)
-            (s.\`último_status\` IN ('ARR', 'RCF') 
-             AND s.arr_datetime IS NOT NULL 
-             AND s.arr_datetime <= NOW() - INTERVAL 120 HOUR
-             AND s.data_atraso IS NULL)
-          )
-          ORDER BY s.\`última atualização\` DESC
+            sub.id,
+            sub.master,
+            sub.house,
+            sub.cliente,
+            sub.nome_analista,
+            sub.email_analista,
+            sub.emails_cliente,
+            sub.status_cct_oficial,
+            sub.ultimo_evento_data,
+            sub.ultimo_evento_codigo,
+            sub.aeroporto_origem,
+            sub.aeroporto_destino,
+            sub.data_atraso,
+            sub.arr_datetime,
+            sub.tipo_servico,
+            sub.airline_code,
+            sub.peso_declarado,
+            sub.peso_constatado,
+            sub.volume_declarado,
+            sub.volume_constatado,
+            sub.eta,
+            sub.etd,
+            sub.data_decolagem_ultimo_trecho,
+            sub.cnpj_consignatario,
+            sub.tratamento,
+            sub.status_manifestacao
+          FROM (
+            SELECT 
+              s.id,
+              TRIM(s.awb) as master,
+              TRIM(s.hawb) as house,
+              TRIM(s.\`destinatário\`) as cliente,
+              s.nome_analista,
+              s.email_analista,
+              s.email_cliente as emails_cliente,
+              s.\`último_status\` as status_cct_oficial,
+              s.\`última atualização\` as ultimo_evento_data,
+              s.\`último_status\` as ultimo_evento_codigo,
+              TRIM(s.origem) as aeroporto_origem,
+              TRIM(s.destino) as aeroporto_destino,
+              s.data_atraso,
+              s.arr_datetime,
+              s.tipo_servico,
+              LEFT(TRIM(s.awb), 3) as airline_code,
+              cct.peso_declarado,
+              cct.peso_constatado,
+              cct.volume_declarado,
+              cct.volume_constatado,
+              cct.eta,
+              cct.etd,
+              cct.data_decolagem_ultimo_trecho,
+              cct.cnpj_consignatario,
+              TRIM(m.tratamento) as tratamento,
+              -- Status de manifestação baseado no status atual
+              CASE 
+                WHEN s.\`último_status\` = 'DEP' THEN 'EM_TRANSITO'
+                WHEN s.\`último_status\` IN ('ARR', 'RCF') THEN 'CHEGOU'
+                WHEN s.\`último_status\` IN ('ATA', 'NFD', 'AWD') THEN 'DISPONIVEL'
+                WHEN s.\`último_status\` IN ('DLV', 'POD') THEN 'ENTREGUE'
+                ELSE 'AGUARDANDO'
+              END as status_manifestacao,
+              ROW_NUMBER() OVER (PARTITION BY TRIM(s.hawb) ORDER BY s.\`última atualização\` DESC) as rn
+            FROM ${database}.t_status_aereo s
+            LEFT JOIN ${database}.t_cct_shipments cct ON TRIM(s.awb) COLLATE utf8mb4_unicode_ci = TRIM(cct.master) COLLATE utf8mb4_unicode_ci
+            LEFT JOIN ${database}.t_master_dados m ON TRIM(s.awb) COLLATE utf8mb4_unicode_ci = TRIM(m.mawb) COLLATE utf8mb4_unicode_ci
+            WHERE LEFT(TRIM(s.awb), 3) IN (${airlineFilter})
+            AND s.\`último_status\` NOT IN (${errorStatusFilter})
+            AND (s.origem IS NOT NULL AND LOWER(TRIM(s.origem)) NOT IN ('n/a', 'na', 'erro', 'error', ''))
+            AND (s.destino IS NOT NULL AND LOWER(TRIM(s.destino)) NOT IN ('n/a', 'na', 'erro', 'error', ''))
+            AND (
+              -- DEP status: espelhado no CCT (ainda em rastreio, mas também no CCT)
+              s.\`último_status\` = 'DEP'
+              OR
+              -- Post-ARR statuses (not shown in tracking screen)
+              s.\`último_status\` IN ('ATA', 'NFD', 'AWD', 'DLV', 'POD')
+              OR 
+              -- ARR/RCF with more than 120 hours (exited tracking by time)
+              (s.\`último_status\` IN ('ARR', 'RCF') 
+               AND s.arr_datetime IS NOT NULL 
+               AND s.arr_datetime <= NOW() - INTERVAL 120 HOUR
+               AND s.data_atraso IS NULL)
+            )
+          ) sub
+          WHERE sub.rn = 1
+          ORDER BY sub.ultimo_evento_data DESC
           LIMIT 500
         `);
 
@@ -2496,7 +2538,7 @@ serve(async (req) => {
             aeroporto_origem: row.aeroporto_origem || 'N/A',
             aeroporto_destino: row.aeroporto_destino || 'GRU',
             status_cct_oficial: derivedStatus,
-            status_manifestacao: 'POS_RASTREIO',
+            status_manifestacao: row.status_manifestacao || 'AGUARDANDO',
             sla_status: slaStatus,
             sla_info: {
               status: slaStatus,

@@ -215,6 +215,8 @@ export const REGISTERED_AIRLINE_CODES = [
 
 // ==================== Core Interfaces ====================
 
+export type StatusManifestacao = "EM_TRANSITO" | "CHEGOU" | "DISPONIVEL" | "ENTREGUE" | "AGUARDANDO";
+
 export interface CCTShipment {
   id: string;
   house: string;
@@ -230,6 +232,7 @@ export interface CCTShipment {
   volume_declarado?: number | null;
   volume_constatado?: number | null;
   tratamentos_especiais?: string[] | null;
+  status_manifestacao?: StatusManifestacao | null;
   analista_id?: string | null;
   analista?: { id: string; nome: string; email: string } | null;
   nome_analista_legado?: string | null;
