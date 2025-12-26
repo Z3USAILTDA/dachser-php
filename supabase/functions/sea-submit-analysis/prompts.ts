@@ -16,7 +16,7 @@ NEVER show container verification steps in the output - do the check internally 
 
 1. MANIFEST: Extract ALL NCM/HS Code values found in the file
    - Include values from ALL columns that contain NCM or HS codes
-   - Keep the EXACT values as they appear (do not modify length or format)
+   - Keep the EXACT values as they appear (4-digit, 8-digit, whatever is there)
    - List them all in your output
 
 2. HBL: Extract ALL NCM/HS Code values found in the document
@@ -24,57 +24,10 @@ NEVER show container verification steps in the output - do the check internally 
    - List them all in your output
 
 3. COMPARISON:
-   - Show both lists side by side
-   - If the lists are IDENTICAL (same values) = MATCH
-   - If there is ANY difference = DIVERGENCE
-   - List what is different (missing, extra, or different values)
-
-OUTPUT FORMAT FOR NCM SECTION:
-NCM CODES:
-- Manifest: [list all values found exactly as they appear]
-- HBL: [list all values found exactly as they appear]
-- Comparison: MATCH or DIVERGENCE
-- Differences: [list any differences if DIVERGENCE]
-
-████████████████████████████████████████████████████████████████████████████████
-█ OTHER ENFORCEMENT RULES                                                        █
-████████████████████████████████████████████████████████████████████████████████
-
-⚡ MULTI-HBL WEIGHT/CBM SUM RULE
-When analyzing 2+ HBLs, you MUST:
-- ADD the weights from ALL HBLs together
-- Compare the SUM against Manifest total
-- SHOW: "HBL #1: X kg | HBL #2: Y kg | Sum: Z kg vs Manifest: W kg"
-
-⚡ SUPPLIER ISOLATION
-Each HBL analyzes ONLY its own suppliers. NEVER cross-contaminate.
-
-⚡ ZERO FALSE NEGATIVES
-If there is ANY discrepancy (even 1 kg), YOU MUST REPORT IT.
-
-⚡ INVOICE NORMALIZATION
-Apply suffix matching: "2013" matches "TD02025000002013"
-
-███████████████████████████████████████████████████████████████████████████████
-███ GROSS WEIGHT SOURCE PRIORITY (MANDATORY HIERARCHY)                        ███
-███████████████████████████████████████████████████████████████████████████████
-
-WHEN EXTRACTING GROSS WEIGHT FROM MANIFEST/PACK LIST:
-
-PRIORITY 1 (HIGHEST): "Weight after Weighting" / "Peso após Pesagem" / "Actual Weight"
-- This is the AUTHORITATIVE weight from actual warehouse measurement
-- If this field exists with a value, USE IT and IGNORE all other weight fields
-
-PRIORITY 2: "Total Gross Weight" / "Gross Weight" / "GW"
-- Use ONLY if Priority 1 field is missing or empty
-
-PRIORITY 3: "Net Weight" (only if gross not available)
-- Use ONLY if Priority 1 and 2 are missing
-
-★★★ NEVER USE (FORBIDDEN SOURCES) ★★★
-❌ "Delivery Note weight" / "Peso da Nota de Entrega"
-❌ "Estimated weight" / "Peso estimado"
-❌ "Declared weight" without measurement confirmation
+   - Show both lists
+   - Compare as literal strings - if a value from Manifest is NOT in HBL list = Missing
+   - If a value in HBL is NOT in Manifest list = Extra
+   - Status: MATCH only if lists are identical, otherwise DIVERGENCE
 
 ███████████████████████████████████████████████████████████████████████████████
 ███ WARNING: MULTIPLE HBLs DETECTED IN SINGLE FILE                            ███
@@ -1039,39 +992,38 @@ ANALYSIS SUMMARY:
 At the end of EVERY analysis (before the final summary), include this section:
 
 NCM CODES:
-- Manifest NCMs: [list ALL NCM codes exactly as they appear in manifest, sorted]
-- HBL NCMs: [list ALL NCM codes exactly as they appear in HBL(s), sorted]
-- Missing in HBL: [NCMs in manifest with NO 100% identical match in HBL, or "none"]
-- Extra in HBL: [NCMs in HBL with NO 100% identical match in manifest, or "none"]
-- Status: MATCH (if lists are identical) or DIVERGENCE (if ANY difference)
+- Manifest NCMs: [list ALL NCM codes exactly as extracted, sorted, deduplicated]
+- HBL NCMs: [list ALL NCM codes exactly as extracted, sorted, deduplicated]
+- Missing in HBL: [NCMs from Manifest that are NOT in HBL list, or "none"]
+- Extra in HBL: [NCMs from HBL that are NOT in Manifest list, or "none"]
+- Status: MATCH or DIVERGENCE
 
-EXAMPLE OF MATCH (100% identical lists):
+EXAMPLE OF MATCH:
 
 NCM CODES:
-- Manifest NCMs: [84812090, 84831019, 84149039, 87084090, 39269090]
-- HBL NCMs: [84812090, 84831019, 84149039, 87084090, 39269090]
+- Manifest NCMs: [8481, 8483, 8414, 8708, 3926, 7318, 8526, 8543, 8536, 8421, 7419, 9026, 9032, 3917, 7412, 7326, 8412, 8544, 7320]
+- HBL NCMs: [8481, 8483, 8414, 8708, 3926, 7318, 8526, 8543, 8536, 8421, 7419, 9026, 9032, 3917, 7412, 7326, 8412, 8544, 7320]
 - Missing in HBL: none
 - Extra in HBL: none
 - Status: MATCH
 
-EXAMPLE OF DIVERGENCE:
+EXAMPLE OF DIVERGENCE (HBL has extra values):
 
 NCM CODES:
-- Manifest NCMs: [84812090, 84831019, 84149039, 87084090, 39269090]
-- HBL NCMs: [84812090, 73181500, 84149039, 87084090, 39269090]
-- Missing in HBL: 84831019
-- Extra in HBL: 73181500
+- Manifest NCMs: [8481, 8483, 8414, 8708, 3926, 7318, 8526, 8543, 8536, 8421, 7419, 9026, 9032, 3917, 7412, 7326, 8412, 8544, 7320]
+- HBL NCMs: [8481, 8483, 8414, 8708, 3926, 7318, 8526, 8543, 8536, 8421, 7419, 9026, 9032, 3917, 7412, 7326, 8412, 8544, 7320, 74152900, 84819090, 84818092, 85443000]
+- Missing in HBL: none
+- Extra in HBL: 74152900, 84819090, 84818092, 85443000
 - Status: DIVERGENCE
-  → Update: Correct HBL NCMs to match Manifest NCMs.
+  → Update: Remove extra NCMs from HBL that are not in Manifest.
 
-EXTRACTION AND COMPARISON RULES FOR NCM CODES:
+EXTRACTION RULES FOR NCM CODES:
 1. From MANIFEST: Extract ALL values from "HS Code" or "NCM Code" columns EXACTLY as they appear.
-2. From HBL: Extract ALL NCM values EXACTLY as they appear.
-3. Remove only punctuation (dots, dashes, spaces): "8481.20.90" → "84812090"
-4. DEDUPLICATE before comparison.
-5. COMPARE AS LITERAL STRINGS: If the values are not 100% identical, it's DIVERGENCE.
-6. DO NOT explain WHY they are different (no mentions of digit counts, formats, etc.)
-7. Just list what's in Manifest, what's in HBL, and say MATCH or DIVERGENCE.
+2. From HBL: Extract ALL NCM values from NCM-CODES section and cargo descriptions EXACTLY as they appear.
+3. DEDUPLICATE before comparison.
+4. COMPARE AS LITERAL STRINGS - each value must be identical to be a match.
+5. Report Missing = items in Manifest not found in HBL.
+6. Report Extra = items in HBL not found in Manifest.
 
 ★★★ THIS SECTION IS MANDATORY - NEVER SKIP IT ★★★
 
