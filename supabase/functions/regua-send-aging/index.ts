@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { Resend } from "https://esm.sh/resend@2.0.0";
 import { Client } from "https://deno.land/x/mysql@v2.12.1/mod.ts";
+import * as XLSX from "https://esm.sh/xlsx-js-style@1.2.0";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -28,6 +29,213 @@ interface InvoiceRow {
   processo: string;
   house: string;
   master: string;
+}
+
+// Format CNPJ for display
+const formatCnpj = (c: string) => {
+  const digits = c.replace(/\D/g, "");
+  if (digits.length === 14) {
+    return `${digits.slice(0,2)}.${digits.slice(2,5)}.${digits.slice(5,8)}/${digits.slice(8,12)}-${digits.slice(12,14)}`;
+  }
+  return c;
+};
+
+// Format CNPJ for sheet name (shorter format)
+const formatCnpjShort = (c: string) => {
+  const digits = c.replace(/\D/g, "");
+  if (digits.length === 14) {
+    return `${digits.slice(0,2)}.${digits.slice(2,5)}.${digits.slice(5,8)} ${digits.slice(8,12)}-${digits.slice(12,14)}`;
+  }
+  return c;
+};
+
+// Style definitions matching the reference design
+const headerRedStyle = {
+  font: { bold: true, color: { rgb: "FFFFFF" }, sz: 9 },
+  fill: { fgColor: { rgb: "FF0000" } },
+  border: {
+    top: { style: "thin", color: { rgb: "CCCCCC" } },
+    bottom: { style: "thin", color: { rgb: "CCCCCC" } },
+    left: { style: "thin", color: { rgb: "CCCCCC" } },
+    right: { style: "thin", color: { rgb: "CCCCCC" } }
+  },
+  alignment: { horizontal: "left", vertical: "center" }
+};
+
+const cellStyle = {
+  font: { sz: 9 },
+  border: {
+    top: { style: "thin", color: { rgb: "CCCCCC" } },
+    bottom: { style: "thin", color: { rgb: "CCCCCC" } },
+    left: { style: "thin", color: { rgb: "CCCCCC" } },
+    right: { style: "thin", color: { rgb: "CCCCCC" } }
+  },
+  alignment: { horizontal: "left", vertical: "center" }
+};
+
+const valorStyle = {
+  ...cellStyle,
+  font: { sz: 9, color: { rgb: "0000FF" } },
+  alignment: { horizontal: "right", vertical: "center" },
+  numFmt: '#,##0.00'
+};
+
+const houseStyle = {
+  ...cellStyle,
+  font: { sz: 9, color: { rgb: "008000" } }
+};
+
+const logoStyle = {
+  font: { bold: true, sz: 18, color: { rgb: "FFCC00" } }
+};
+
+const titleStyle = {
+  font: { bold: true, sz: 14 },
+  alignment: { horizontal: "center", vertical: "center" }
+};
+
+const totalLabelStyle = {
+  font: { bold: true, sz: 10 },
+  alignment: { horizontal: "right", vertical: "center" }
+};
+
+const totalValueStyle = {
+  font: { bold: true, sz: 12, color: { rgb: "008000" } },
+  alignment: { horizontal: "left", vertical: "center" }
+};
+
+const dateStyle = {
+  font: { sz: 10 },
+  alignment: { horizontal: "right", vertical: "center" }
+};
+
+const periodoStyle = {
+  font: { sz: 10 }
+};
+
+function createSheetForCnpj(invoices: InvoiceRow[], clienteName: string, totalValue: number, currentDate: string): XLSX.WorkSheet {
+  const totalValueFormatted = totalValue.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  
+  // Create worksheet data
+  const wsData: any[][] = [];
+  
+  // Row 1: Logo and "Valor total em atraso" label
+  wsData.push([
+    "DACHSER", "", "", "", "", "", "", "", "", "", "", "Valor total em atraso", "", ""
+  ]);
+  
+  // Row 2: Title centered and total value
+  wsData.push([
+    "", "", "", `${clienteName} - Demonstrativo de Faturamento`, "", "", "", "", "", "", "", `R$ ${totalValueFormatted}`, "", ""
+  ]);
+  
+  // Row 3: Empty with date on right
+  wsData.push([
+    "", "", "", "", "", "", "", "", "", "", "", "", "", currentDate
+  ]);
+  
+  // Row 4: Período de Faturamento
+  wsData.push([
+    "Período de Faturamento:", "01/01/2022 a 31/12/2027", "", "", "", "", "", "", "", "", "", "", "", ""
+  ]);
+  
+  // Row 5: Column headers (red background)
+  wsData.push([
+    "DOCUMENTO", "ND", "REF. CLIENTE", "NOTA FISCAL DACHSER", "MODAL", "TIPO DOC.", "EMISSÃO", "VENCTO", "C.N.P.J", "CLIENTE", "VALOR", "PROCESSO", "MASTER", "HOUSE"
+  ]);
+  
+  // Data rows
+  for (const inv of invoices) {
+    wsData.push([
+      inv.documento || "",
+      inv.nd || "",
+      inv.ref_cliente || "",
+      inv.numero_nf || "",
+      inv.modal || "",
+      inv.tipo_documento || "",
+      inv.data_emissao || "",
+      inv.data_vencimento || "",
+      formatCnpj(inv.cnpj || ""),
+      inv.razao_social || "",
+      Number(inv.valor_nf) || 0,
+      inv.processo || "",
+      inv.master || "",
+      inv.house || ""
+    ]);
+  }
+  
+  // Create worksheet
+  const ws = XLSX.utils.aoa_to_sheet(wsData);
+  
+  // Apply styles
+  const range = XLSX.utils.decode_range(ws['!ref'] || 'A1');
+  
+  // Style row 1 (logo and total label)
+  if (ws['A1']) ws['A1'].s = logoStyle;
+  if (ws['L1']) ws['L1'].s = totalLabelStyle;
+  
+  // Style row 2 (title and total value)
+  if (ws['D2']) ws['D2'].s = titleStyle;
+  if (ws['L2']) ws['L2'].s = totalValueStyle;
+  
+  // Style row 3 (date)
+  if (ws['N3']) ws['N3'].s = dateStyle;
+  
+  // Style row 4 (período)
+  if (ws['A4']) ws['A4'].s = periodoStyle;
+  
+  // Style header row (row 5)
+  const headerCols = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N'];
+  headerCols.forEach(col => {
+    const cell = `${col}5`;
+    if (ws[cell]) ws[cell].s = headerRedStyle;
+  });
+  
+  // Style data rows
+  for (let row = 6; row <= range.e.r + 1; row++) {
+    headerCols.forEach((col, colIdx) => {
+      const cell = `${col}${row}`;
+      if (ws[cell]) {
+        if (colIdx === 10) { // VALOR column (K)
+          ws[cell].s = valorStyle;
+          // Format as number
+          if (typeof ws[cell].v === 'number') {
+            ws[cell].t = 'n';
+            ws[cell].z = '#,##0.00';
+          }
+        } else if (colIdx === 13) { // HOUSE column (N)
+          ws[cell].s = houseStyle;
+        } else {
+          ws[cell].s = cellStyle;
+        }
+      }
+    });
+  }
+  
+  // Set column widths
+  ws['!cols'] = [
+    { wch: 14 },  // DOCUMENTO
+    { wch: 12 },  // ND
+    { wch: 50 },  // REF. CLIENTE (wide for long references)
+    { wch: 20 },  // NOTA FISCAL DACHSER
+    { wch: 6 },   // MODAL
+    { wch: 8 },   // TIPO DOC.
+    { wch: 10 },  // EMISSÃO
+    { wch: 10 },  // VENCTO
+    { wch: 18 },  // C.N.P.J
+    { wch: 25 },  // CLIENTE
+    { wch: 12 },  // VALOR
+    { wch: 12 },  // PROCESSO
+    { wch: 14 },  // MASTER
+    { wch: 14 }   // HOUSE
+  ];
+  
+  // Merge cells for title
+  ws['!merges'] = [
+    { s: { r: 1, c: 3 }, e: { r: 1, c: 9 } } // Merge D2:J2 for title
+  ];
+  
+  return ws;
 }
 
 serve(async (req: Request): Promise<Response> => {
@@ -91,15 +299,6 @@ serve(async (req: Request): Promise<Response> => {
       allCnpjs.push(cnpj);
     }
 
-    // Format CNPJs for display
-    const formatCnpj = (c: string) => {
-      const digits = c.replace(/\D/g, "");
-      if (digits.length === 14) {
-        return `${digits.slice(0,2)}.${digits.slice(2,5)}.${digits.slice(5,8)}/${digits.slice(8,12)}-${digits.slice(12,14)}`;
-      }
-      return c;
-    };
-
     // Fetch all overdue invoices for these CNPJs with all required columns
     const placeholders = allCnpjs.map(() => "?").join(",");
     const invoicesResult = await client.query(`
@@ -123,7 +322,7 @@ serve(async (req: Request): Promise<Response> => {
       WHERE t.cnpj IN (${placeholders})
         AND COALESCE(sd.active, 1) = 1
         AND DATEDIFF(CURDATE(), t.data_vencimento) >= 1
-      ORDER BY t.data_vencimento ASC
+      ORDER BY t.cnpj, t.data_vencimento ASC
     `, allCnpjs);
 
     if (invoicesResult.length === 0) {
@@ -133,119 +332,41 @@ serve(async (req: Request): Promise<Response> => {
       );
     }
 
-    // Calculate total value
-    const totalValue = invoicesResult.reduce((sum: number, inv: InvoiceRow) => sum + (Number(inv.valor_nf) || 0), 0);
-    const totalValueFormatted = totalValue.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    // Group invoices by CNPJ
+    const invoicesByCnpj: Record<string, InvoiceRow[]> = {};
+    for (const inv of invoicesResult as InvoiceRow[]) {
+      const cnpjKey = inv.cnpj;
+      if (!invoicesByCnpj[cnpjKey]) {
+        invoicesByCnpj[cnpjKey] = [];
+      }
+      invoicesByCnpj[cnpjKey].push(inv);
+    }
 
-    // Generate Excel file content
-    const currentDate = new Date().toLocaleDateString("en-US", { month: "2-digit", day: "2-digit", year: "2-digit" });
-    const clienteName = cliente || invoicesResult[0]?.razao_social || "Cliente";
+    // Calculate total value across all CNPJs
+    const totalValueAll = invoicesResult.reduce((sum: number, inv: InvoiceRow) => sum + (Number(inv.valor_nf) || 0), 0);
     
-    // Build HTML table for Excel matching the exact design from the reference
-    const excelHtml = `
-<!DOCTYPE html>
-<html>
-<head>
-<meta charset="UTF-8">
-<style>
-  body { font-family: Arial, sans-serif; font-size: 10px; }
-  table { border-collapse: collapse; width: 100%; }
-  th { 
-    background-color: #FF0000; 
-    color: white; 
-    font-weight: bold; 
-    padding: 4px 6px; 
-    text-align: left;
-    border: 1px solid #ccc;
-    font-size: 9px;
-  }
-  td { 
-    border: 1px solid #ccc; 
-    padding: 3px 6px; 
-    text-align: left; 
-    font-size: 9px;
-  }
-  .header-row { border: none; }
-  .header-row td { border: none; padding: 2px 4px; }
-  .logo { font-weight: bold; font-size: 18px; color: #FFCC00; }
-  .title { font-size: 14px; font-weight: bold; text-align: center; }
-  .total-label { text-align: right; font-weight: bold; }
-  .total-value { color: #008000; font-weight: bold; font-size: 12px; }
-  .date-cell { text-align: right; }
-  .valor-cell { text-align: right; color: #0000FF; }
-  .house-cell { color: #008000; }
-</style>
-</head>
-<body>
-<table>
-  <!-- Header rows -->
-  <tr class="header-row">
-    <td colspan="2" class="logo">DACHSER</td>
-    <td colspan="8"></td>
-    <td colspan="2" class="total-label">Valor total em atraso</td>
-    <td colspan="2"></td>
-  </tr>
-  <tr class="header-row">
-    <td colspan="2"></td>
-    <td colspan="6" class="title">${clienteName} - Demonstrativo de Faturamento</td>
-    <td colspan="2"></td>
-    <td colspan="2" class="total-value">R$ ${totalValueFormatted}</td>
-    <td colspan="2"></td>
-  </tr>
-  <tr class="header-row">
-    <td colspan="12"></td>
-    <td colspan="2" class="date-cell">${currentDate}</td>
-  </tr>
-  <tr class="header-row">
-    <td colspan="14"><strong>Período de Faturamento:</strong> 01/01/2022 a 31/12/2027</td>
-  </tr>
-  <!-- Data headers -->
-  <tr>
-    <th>DOCUMENTO</th>
-    <th>ND</th>
-    <th>REF. CLIENTE</th>
-    <th>NOTA FISCAL DACHSER</th>
-    <th>MODAL</th>
-    <th>TIPO DOC.</th>
-    <th>EMISSÃO</th>
-    <th>VENCTO</th>
-    <th>C.N.P.J</th>
-    <th>CLIENTE</th>
-    <th>VALOR</th>
-    <th>PROCESSO</th>
-    <th>MASTER</th>
-    <th>HOUSE</th>
-  </tr>
-  <!-- Data rows -->
-  ${invoicesResult.map((inv: InvoiceRow) => `
-  <tr>
-    <td>${inv.documento || ""}</td>
-    <td>${inv.nd || ""}</td>
-    <td>${inv.ref_cliente || ""}</td>
-    <td>${inv.numero_nf || ""}</td>
-    <td>${inv.modal || ""}</td>
-    <td>${inv.tipo_documento || ""}</td>
-    <td>${inv.data_emissao || ""}</td>
-    <td>${inv.data_vencimento || ""}</td>
-    <td>${formatCnpj(inv.cnpj || "")}</td>
-    <td>${inv.razao_social || ""}</td>
-    <td class="valor-cell">${Number(inv.valor_nf || 0).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
-    <td>${inv.processo || ""}</td>
-    <td>${inv.master || ""}</td>
-    <td class="house-cell">${inv.house || ""}</td>
-  </tr>
-  `).join("")}
-</table>
-</body>
-</html>`;
+    const clienteName = cliente || invoicesResult[0]?.razao_social || "Cliente";
+    const currentDate = new Date().toLocaleDateString("en-US", { month: "2-digit", day: "2-digit", year: "numeric" });
 
-    // Convert to base64
-    const excelBase64 = btoa(unescape(encodeURIComponent(excelHtml)));
+    // Create workbook with multiple sheets (one per CNPJ)
+    const wb = XLSX.utils.book_new();
+    
+    for (const [cnpjKey, invoices] of Object.entries(invoicesByCnpj)) {
+      const cnpjTotal = invoices.reduce((sum, inv) => sum + (Number(inv.valor_nf) || 0), 0);
+      const ws = createSheetForCnpj(invoices, clienteName, cnpjTotal, currentDate);
+      
+      // Sheet name: CNPJ formatted (max 31 chars for Excel)
+      const sheetName = formatCnpjShort(cnpjKey).substring(0, 31);
+      XLSX.utils.book_append_sheet(wb, ws, sheetName);
+    }
+
+    // Generate Excel buffer
+    const excelBuffer = XLSX.write(wb, { type: "base64", bookType: "xlsx" });
 
     // Build CNPJs list for email body
     const cnpjsList = allCnpjs.map((c: string) => `<strong>${formatCnpj(c)}</strong>`).join("<br/>");
 
-    // Email body with updated text
+    // Email body
     const emailHtml = `
 <div style="font-family: Arial, sans-serif; font-size: 14px; color: #333;">
   <p>Boa tarde!<br/>Tudo bem?</p>
@@ -277,16 +398,17 @@ serve(async (req: Request): Promise<Response> => {
     // Send email with attachment
     // TESTING: Force destination to devs@z3us.ai
     const testEmail = "devs@z3us.ai";
+    const dateForFile = new Date().toLocaleDateString("pt-BR").replace(/\//g, ".");
     
     const emailResponse = await resend.emails.send({
       from: "Financeiro Dachser <noreply@hermes.z3us.ai>",
       to: [testEmail], // Using test email
-      subject: `[TESTE] Aging List - ${cliente || invoicesResult[0]?.razao_social || "Cliente"}`,
+      subject: `[TESTE] Aging List - ${clienteName}`,
       html: emailHtml,
       attachments: [
         {
-          filename: `Aging_List_${(cliente || "Cliente").replace(/[^a-zA-Z0-9]/g, "_")}_${currentDate.replace(/\//g, "-")}.xls`,
-          content: excelBase64,
+          filename: `Aging_List_-_${clienteName.replace(/[^a-zA-Z0-9]/g, "_")}_${dateForFile}.xlsx`,
+          content: excelBuffer,
         },
       ],
     });
@@ -303,10 +425,10 @@ serve(async (req: Request): Promise<Response> => {
       `, [
         invoicesResult[0]?.documento || "",
         "AGING",
-        cliente || invoicesResult[0]?.razao_social || "",
+        clienteName,
         cnpj,
         email_to,
-        `Aging List - ${cliente || invoicesResult[0]?.razao_social || "Cliente"}`,
+        `Aging List - ${clienteName}`,
         emailId,
       ]);
     } catch (logErr) {
@@ -319,6 +441,7 @@ serve(async (req: Request): Promise<Response> => {
         message: `E-mail enviado com sucesso para ${email_to}`,
         emailId: emailId,
         invoiceCount: invoicesResult.length,
+        sheetsCreated: Object.keys(invoicesByCnpj).length,
         cnpjsIncluded: allCnpjs.map(formatCnpj),
       }),
       { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
