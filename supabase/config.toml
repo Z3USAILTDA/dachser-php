@@ -206,3 +206,9 @@ verify_jwt = false
 
 [functions.voucher-migrate-processo]
 verify_jwt = false
+
+[functions.regua-send-emails]
+verify_jwt = false
+
+[functions.regua-send-aging]
+verify_jwt = false

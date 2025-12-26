@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
-import { CalendarRange, HelpCircle } from "lucide-react";
+import { CalendarRange, HelpCircle, Mail } from "lucide-react";
 import { useUsageLog } from "@/hooks/useUsageLog";
 import { FileText, Clock, Flag, Search, X, RefreshCw } from "lucide-react";
 import { Input } from "@/components/ui/input";
@@ -11,6 +11,14 @@ import { useToast } from "@/hooks/use-toast";
 import { PageLayout } from "@/components/layout/PageLayout";
 import { PageCard } from "@/components/layout/PageCard";
 import { TablePagination } from "@/components/layout/TablePagination";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 
 interface StageCounts {
   PRE: number;
@@ -31,6 +39,11 @@ interface StageRow {
   dias: number;
   tipo_pagto: string;
   valor_br: string;
+  cnpj: string;
+  processo: string;
+  house: string;
+  master: string;
+  email_cliente: string;
 }
 
 const STAGE_LABELS: Record<string, string> = {
@@ -82,6 +95,11 @@ export default function ReguaCobranca() {
   const [stageLoading, setStageLoading] = useState(false);
   const [stageSearch, setStageSearch] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
+
+  // Aging modal state
+  const [agingModalOpen, setAgingModalOpen] = useState(false);
+  const [selectedRow, setSelectedRow] = useState<StageRow | null>(null);
+  const [sendingAging, setSendingAging] = useState(false);
 
   useEffect(() => {
     fetchCounts();
@@ -146,7 +164,7 @@ export default function ReguaCobranca() {
     if (!stageSearch.trim()) return stageRows;
     const q = stageSearch.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
     return stageRows.filter((r) => {
-      const hay = [r.razao_base, r.nf_exibicao, r.data_venc_br, String(r.dias), r.valor_br, r.tipo_pagto]
+      const hay = [r.razao_base, r.nf_exibicao, r.data_venc_br, String(r.dias), r.valor_br, r.tipo_pagto, r.processo, r.house, r.master]
         .join(" ")
         .toLowerCase()
         .normalize("NFD")
@@ -164,6 +182,48 @@ export default function ReguaCobranca() {
 
   const formatDias = (dias: number) => {
     return dias >= 0 ? `D+${dias}` : `D${dias}`;
+  };
+
+  const handleSendAging = (row: StageRow) => {
+    setSelectedRow(row);
+    setAgingModalOpen(true);
+  };
+
+  const confirmSendAging = async () => {
+    if (!selectedRow) return;
+    
+    setSendingAging(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("regua-send-aging", {
+        body: {
+          cnpj: selectedRow.cnpj,
+          cliente: selectedRow.razao_base || selectedRow.razao_social,
+          email_to: selectedRow.email_cliente || "financeiro@cliente.com",
+        },
+      });
+
+      if (error) throw error;
+      
+      if (data?.success) {
+        toast({
+          title: "E-mail enviado!",
+          description: data.message || `Aging List enviada para ${selectedRow.email_cliente}`,
+        });
+      } else {
+        throw new Error(data?.message || "Erro ao enviar e-mail");
+      }
+    } catch (err) {
+      console.error("Erro ao enviar aging:", err);
+      toast({
+        title: "Erro",
+        description: err instanceof Error ? err.message : "Falha ao enviar Aging List",
+        variant: "destructive",
+      });
+    } finally {
+      setSendingAging(false);
+      setAgingModalOpen(false);
+      setSelectedRow(null);
+    }
   };
 
   const rightContent = (
@@ -276,7 +336,7 @@ export default function ReguaCobranca() {
                 <Input
                   value={stageSearch}
                   onChange={(e) => setStageSearch(e.target.value)}
-                  placeholder="Buscar por cliente, documento ou tipo..."
+                  placeholder="Buscar por cliente, documento, processo..."
                   className="pl-9 w-[420px] max-w-[40vw] h-9 rounded-full bg-[#13141a] border-white/20 text-[0.85rem]"
                 />
               </div>
@@ -305,7 +365,16 @@ export default function ReguaCobranca() {
                         Cliente
                       </th>
                       <th className="bg-[#15151f] sticky top-0 z-[5] px-3 py-[10px] text-left text-[0.75rem] uppercase tracking-wider font-bold">
-                        Documento / NF
+                        Processo
+                      </th>
+                      <th className="bg-[#15151f] sticky top-0 z-[5] px-3 py-[10px] text-left text-[0.75rem] uppercase tracking-wider font-bold">
+                        House
+                      </th>
+                      <th className="bg-[#15151f] sticky top-0 z-[5] px-3 py-[10px] text-left text-[0.75rem] uppercase tracking-wider font-bold">
+                        Master
+                      </th>
+                      <th className="bg-[#15151f] sticky top-0 z-[5] px-3 py-[10px] text-left text-[0.75rem] uppercase tracking-wider font-bold">
+                        Doc / NF
                       </th>
                       <th className="bg-[#15151f] sticky top-0 z-[5] px-3 py-[10px] text-left text-[0.75rem] uppercase tracking-wider font-bold">
                         Vencimento
@@ -319,12 +388,18 @@ export default function ReguaCobranca() {
                       <th className="bg-[#15151f] sticky top-0 z-[5] px-3 py-[10px] text-left text-[0.75rem] uppercase tracking-wider font-bold">
                         Tipo
                       </th>
+                      <th className="bg-[#15151f] sticky top-0 z-[5] px-3 py-[10px] text-left text-[0.75rem] uppercase tracking-wider font-bold">
+                        Ação
+                      </th>
                     </tr>
                   </thead>
                   <tbody>
                     {paginatedRows.map((r, idx) => (
                       <tr key={idx} className="hover:bg-white/5 border-b border-white/9">
                         <td className="px-3 py-[10px]">{r.razao_base || r.razao_social}</td>
+                        <td className="px-3 py-[10px] text-muted-foreground">{r.processo || "—"}</td>
+                        <td className="px-3 py-[10px] text-muted-foreground">{r.house || "—"}</td>
+                        <td className="px-3 py-[10px] text-muted-foreground">{r.master || "—"}</td>
                         <td className="px-3 py-[10px]">{r.nf_exibicao || "—"}</td>
                         <td className="px-3 py-[10px]">{r.data_venc_br}</td>
                         <td className="px-3 py-[10px]">
@@ -334,6 +409,17 @@ export default function ReguaCobranca() {
                         </td>
                         <td className="px-3 py-[10px]">{r.valor_br}</td>
                         <td className="px-3 py-[10px]">{r.tipo_pagto}</td>
+                        <td className="px-3 py-[10px]">
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="h-7 text-[0.75rem] gap-1"
+                            onClick={() => handleSendAging(r)}
+                          >
+                            <Mail className="h-3 w-3" />
+                            Aging
+                          </Button>
+                        </td>
                       </tr>
                     ))}
                   </tbody>
@@ -352,6 +438,65 @@ export default function ReguaCobranca() {
           )}
         </PageCard>
       )}
+
+      {/* Aging Confirmation Modal */}
+      <Dialog open={agingModalOpen} onOpenChange={setAgingModalOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Enviar Aging List</DialogTitle>
+            <DialogDescription>
+              Confirmar envio de Aging List para o cliente?
+            </DialogDescription>
+          </DialogHeader>
+          
+          {selectedRow && (
+            <div className="py-4 space-y-3">
+              <div>
+                <span className="text-muted-foreground text-sm">Cliente:</span>
+                <p className="font-medium">{selectedRow.razao_base || selectedRow.razao_social}</p>
+              </div>
+              <div>
+                <span className="text-muted-foreground text-sm">CNPJ:</span>
+                <p className="font-mono text-sm">{selectedRow.cnpj || "—"}</p>
+              </div>
+              <div>
+                <span className="text-muted-foreground text-sm">E-mail destino:</span>
+                <p className="font-medium">{selectedRow.email_cliente || "financeiro@cliente.com"}</p>
+              </div>
+              <p className="text-sm text-muted-foreground mt-2">
+                Será gerada uma Aging List com todas as faturas em atraso deste cliente (incluindo todos os CNPJs do mesmo grupo).
+              </p>
+            </div>
+          )}
+
+          <DialogFooter className="gap-2">
+            <Button
+              variant="outline"
+              onClick={() => setAgingModalOpen(false)}
+              disabled={sendingAging}
+            >
+              Cancelar
+            </Button>
+            <Button
+              onClick={confirmSendAging}
+              disabled={sendingAging}
+              className="bg-primary text-primary-foreground"
+            >
+              {sendingAging ? (
+                <>
+                  <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+                  Enviando...
+                </>
+              ) : (
+                <>
+                  <Mail className="h-4 w-4 mr-2" />
+                  Enviar E-mail
+                </>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </PageLayout>
   );
 }
