@@ -464,7 +464,7 @@ async function handleExcecaoNotification(supabaseUrl: string, supabaseKey: strin
   }
   
   const emailResponse = await resend.emails.send({
-    from: 'Z3US CCT <notificacoes@sdr.z3us.ai>',
+    from: 'Z3US CCT <noreply@hermes.z3us.ai>',
     to: [...new Set(recipients)],
     subject,
     html,
@@ -606,7 +606,7 @@ serve(async (req) => {
             });
 
             await resend.emails.send({
-              from: 'Z3US CCT <notificacoes@sdr.z3us.ai>',
+              from: 'Z3US CCT <noreply@hermes.z3us.ai>',
               to: [...new Set(recipients)],
               subject: getEmailSubject(rule.template_id, payload.evento_codigo, shipment.house),
               html
