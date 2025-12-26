@@ -1041,14 +1041,16 @@ NCM CODES:
 - Extra in HBL: none
 - Status: MATCH
 
-EXAMPLE OF DIVERGENCE (different values or lengths):
+EXAMPLE OF DIVERGENCE (values don't match between Manifest and HBL):
 
 NCM CODES:
 - Manifest NCMs: [84812090, 84831019, 84149039, 87084090, 39269090]
-- HBL NCMs: [8481, 8483, 8414, 8708, 3926]
-- Comparison: DIVERGENCE
-- Note: Manifest uses 8-digit NCMs, HBL uses 4-digit codes. These are NOT matches.
-  → Update: Add complete 8-digit NCM codes to HBL to match manifest.
+- HBL NCMs: [84812090, 84831019, 73181500, 87084090, 39269090]
+- Missing in HBL: 84149039 (present in Manifest but not in HBL)
+- Extra in HBL: 73181500 (present in HBL but not in Manifest)
+- Status: DIVERGENCE
+- Note: The NCM codes in the Manifest do not match the NCM codes in the HBL. The values are different.
+  → Update: Correct HBL to use the NCM codes from the Manifest.
 
 EXTRACTION RULES FOR NCM CODES:
 1. From MANIFEST: Search ALL columns (NCM Code, HS Code, Tariff Code). Keep EXACT values as they appear.
