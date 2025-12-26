@@ -172,40 +172,54 @@ serve(async (req: Request): Promise<Response> => {
     const errors: string[] = [];
     const sentDetails: Array<{ cliente: string; email: string; invoiceCount: number }> = [];
 
-    // Process each client group
-    for (const [clientName, clientInvoices] of clientGroups) {
-      // Find email for this client
-      const clientEmail = clientInvoices.find(inv => inv.email_cliente)?.email_cliente;
-      
-      if (!clientEmail) {
+    // TESTING: Process only the FIRST client for testing purposes
+    const firstClientEntry = clientGroups.entries().next().value;
+    if (!firstClientEntry) {
+      return new Response(
+        JSON.stringify({ success: false, message: "Nenhum cliente encontrado para este estágio" }),
+        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+    
+    const [clientName, clientInvoices] = firstClientEntry;
+    
+    // For testing, always use devs@z3us.ai
+    const clientEmail = "devs@z3us.ai";
+
+    // Check if already sent today
+    try {
+      const alreadySent = await client.query(`
+        SELECT 1 FROM ai_agente.t_regua_email_log 
+        WHERE cliente = ? AND stage = ? AND DATE(sent_at) = CURDATE() AND tipo_email = 'STAGE'
+        LIMIT 1
+      `, [clientName, stage]);
+
+      if (alreadySent.length > 0) {
         skippedCount++;
-        console.log(`Skipping ${clientName}: no email found`);
-        continue;
+        console.log(`Skipping ${clientName}: already sent today`);
+        return new Response(
+          JSON.stringify({
+            success: true,
+            stage,
+            totalClients: clientGroups.size,
+            sent: 0,
+            skipped: 1,
+            message: `${clientName} já recebeu email hoje`,
+            dryRun,
+          }),
+          { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
       }
+    } catch (checkErr) {
+      // Table might not exist yet, continue
+      console.log("Note: Could not check previous sends:", checkErr);
+    }
 
-      // Check if already sent today
-      try {
-        const alreadySent = await client.query(`
-          SELECT 1 FROM ai_agente.t_regua_email_log 
-          WHERE cliente = ? AND stage = ? AND DATE(sent_at) = CURDATE() AND tipo_email = 'STAGE'
-          LIMIT 1
-        `, [clientName, stage]);
+    // Calculate total
+    const totalValue = clientInvoices.reduce((sum: number, inv: InvoiceRow) => sum + (Number(inv.valor_nf) || 0), 0);
 
-        if (alreadySent.length > 0) {
-          skippedCount++;
-          console.log(`Skipping ${clientName}: already sent today`);
-          continue;
-        }
-      } catch (checkErr) {
-        // Table might not exist yet, continue
-        console.log("Note: Could not check previous sends:", checkErr);
-      }
-
-      // Calculate total
-      const totalValue = clientInvoices.reduce((sum, inv) => sum + (Number(inv.valor_nf) || 0), 0);
-
-      // Build consolidated table HTML
-      const tableHtml = `
+    // Build consolidated table HTML
+    const tableHtml = `
 <table style="border-collapse: collapse; width: 100%; font-family: Arial, sans-serif; font-size: 12px;">
   <thead>
     <tr style="background-color: #FFCC00;">
@@ -220,7 +234,7 @@ serve(async (req: Request): Promise<Response> => {
     </tr>
   </thead>
   <tbody>
-    ${clientInvoices.map(inv => `
+    ${clientInvoices.map((inv: InvoiceRow) => `
     <tr>
       <td style="border: 1px solid #ddd; padding: 6px;">${inv.documento || "-"}</td>
       <td style="border: 1px solid #ddd; padding: 6px;">${inv.numero_nf || "-"}</td>
@@ -240,7 +254,7 @@ serve(async (req: Request): Promise<Response> => {
 </table>
 `;
 
-      const emailHtml = `
+    const emailHtml = `
 <div style="font-family: Arial, sans-serif; font-size: 14px; color: #333;">
   <p>${STAGE_MESSAGES[stage] || "Prezado cliente, segue abaixo a relação de faturas."}</p>
   
@@ -256,20 +270,15 @@ serve(async (req: Request): Promise<Response> => {
 </div>
 `;
 
-      if (dryRun) {
-        sentCount++;
-        sentDetails.push({ cliente: clientName, email: clientEmail, invoiceCount: clientInvoices.length });
-        console.log(`[DRY RUN] Would send to ${clientEmail} for ${clientName} (${clientInvoices.length} invoices)`);
-        continue;
-      }
-
+    if (dryRun) {
+      sentCount++;
+      sentDetails.push({ cliente: clientName, email: clientEmail, invoiceCount: clientInvoices.length });
+      console.log(`[DRY RUN] Would send to ${clientEmail} for ${clientName} (${clientInvoices.length} invoices)`);
+    } else {
       try {
-        // TESTING: Force destination to devs@z3us.ai
-        const testEmail = "devs@z3us.ai";
-        
         const emailResponse = await resend!.emails.send({
           from: "Financeiro Dachser <noreply@hermes.z3us.ai>",
-          to: [testEmail], // Using test email
+          to: [clientEmail],
           subject: `[TESTE] ${STAGE_SUBJECTS[stage] || "Faturas em aberto"} - ${clientName}`,
           html: emailHtml,
         });
