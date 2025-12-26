@@ -967,6 +967,28 @@ ZERO-DELTA SAFETY CHECK (ALL TOPICS)
   • NCM: Apply 100% LITERAL MATCH rule - "8481" vs "84812090" = DIVERGENCE (different strings after normalization). NO prefix matching allowed.
   • CBM/Packages/Container/Shipper: any mismatch forbids zero-delta.
 
+★★★ RULE 11: PRESERVE NCM LENGTH DURING EXTRACTION - CRITICAL ★★★
+WHEN EXTRACTING NCMs FROM MANIFEST XLSX:
+- Look for "NCM Code", "Código NCM", or "HS Code" columns
+- If the column contains 8-digit values like "84812090", extract ALL 8 DIGITS
+- DO NOT truncate to 4 digits - preserve the FULL value
+- "84812090" must be extracted as "84812090", NOT as "8481"
+
+WHEN EXTRACTING NCMs FROM HBL PDF:
+- Extract exactly what you see (usually 4-digit HS codes like "8481")
+- DO NOT pad or extend to 8 digits
+
+LENGTH COMPARISON IS CRITICAL:
+- "8481" (4 chars) vs "84812090" (8 chars) = DIVERGENCE (different lengths!)
+- "8708" (4 chars) vs "87089900" (8 chars) = DIVERGENCE
+- "8481" vs "8481" = MATCH (same value, same length)
+- "84812090" vs "84812090" = MATCH
+
+NORMALIZATION RULES FOR NCM:
+- Remove dots, dashes, spaces: "8481.20.90" → "84812090" (8 chars preserved)
+- NEVER truncate during normalization
+- After normalization, compare strings CHARACTER BY CHARACTER
+
 MANDATORY OUTPUT STRUCTURE
 CRITICAL: You MUST start with:
 Hello, team.
