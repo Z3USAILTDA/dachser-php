@@ -14,41 +14,268 @@ interface StageEmailRequest {
 
 interface InvoiceRow {
   documento: string;
+  nd: string;
+  ref_cliente: string;
+  nf_exibicao: string;
   numero_nf: string;
-  razao_social: string;
+  modal: string;
+  tipo_documento: string;
   data_emissao: string;
   data_vencimento: string;
   dias: number;
   valor_nf: number;
-  tipo_documento: string;
   cnpj: string;
+  razao_social: string;
+  razao_base: string;
   processo: string;
   house: string;
   master: string;
   email_cliente: string;
-  nd: string;
-  ref_cliente: string;
-  modal: string;
+  tipo_pagto: string;
 }
 
-const STAGE_SUBJECTS: Record<string, string> = {
-  PRE: "Lembrete de Vencimento - Faturas em aberto",
-  D1: "Aviso de Atraso - 1 dia após vencimento",
-  D7: "1ª Cobrança Formal - Faturas em atraso",
-  D15: "2ª Cobrança - Possível suspensão/protesto",
-  D30: "Notificação Formal - Ações administrativas",
-  D45: "Aviso de Bloqueio - Tratativa urgente",
-  D60: "Última Notificação - Encaminhamento jurídico",
+// Formata CNPJ para exibição
+const formatCnpj = (c: string) => {
+  const digits = (c || "").replace(/\D/g, "");
+  if (digits.length === 14) {
+    return `${digits.slice(0,2)}.${digits.slice(2,5)}.${digits.slice(5,8)}/${digits.slice(8,12)}-${digits.slice(12,14)}`;
+  }
+  return c || "-";
 };
 
-const STAGE_MESSAGES: Record<string, string> = {
-  PRE: "Prezado cliente, informamos que as faturas abaixo estão próximas do vencimento. Por gentileza, providencie o pagamento para evitar transtornos.",
-  D1: "Prezado cliente, identificamos que as faturas abaixo encontram-se vencidas há 1 dia. Solicitamos a regularização o mais breve possível.",
-  D7: "Prezado cliente, as faturas abaixo estão vencidas há 7 dias. Solicitamos a regularização imediata para evitar medidas administrativas.",
-  D15: "Prezado cliente, as faturas abaixo estão vencidas há 15 dias. Caso não regularizadas, poderemos suspender serviços e/ou efetuar protesto.",
-  D30: "Prezado cliente, as faturas abaixo estão vencidas há 30 dias. Notificamos formalmente que medidas administrativas serão tomadas.",
-  D45: "Prezado cliente, as faturas abaixo estão vencidas há 45 dias. Comunicamos que seu cadastro encontra-se bloqueado até a regularização.",
-  D60: "Prezado cliente, as faturas abaixo estão vencidas há mais de 60 dias. Esta é a última notificação antes do encaminhamento ao departamento jurídico.",
+// Formata valor para BRL
+const formatValue = (v: number) => {
+  return "R$ " + Number(v || 0).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+};
+
+// Formata razao social - extrai parte após " - "
+const formatRazaoSocial = (razao: string): string => {
+  if (!razao) return "";
+  const parts = razao.split(" - ");
+  return parts.length >= 2 ? parts.slice(1).join(" - ").trim() : razao.trim();
+};
+
+// HTML encode
+const htmlEncode = (s: string): string => {
+  return (s || "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+};
+
+// Constrói tabela HTML conforme C# original - com PROCESSO, MASTER, HOUSE
+const buildTableHtml = (rows: InvoiceRow[]): string => {
+  let rowsHtml = "";
+  let total = 0;
+
+  for (const r of rows) {
+    total += Number(r.valor_nf) || 0;
+    rowsHtml += `<tr>
+      <td style="border:1px solid #D0D0D0;padding:6px 8px;white-space:nowrap;">${htmlEncode(r.documento)}</td>
+      <td style="border:1px solid #D0D0D0;padding:6px 8px;white-space:nowrap;">${htmlEncode(r.nd)}</td>
+      <td style="border:1px solid #D0D0D0;padding:6px 8px;word-break:break-word;">${htmlEncode(r.ref_cliente)}</td>
+      <td style="border:1px solid #D0D0D0;padding:6px 8px;white-space:nowrap;">${htmlEncode(r.nf_exibicao)}</td>
+      <td style="border:1px solid #D0D0D0;padding:6px 8px;white-space:nowrap;">${htmlEncode(r.modal)}</td>
+      <td style="border:1px solid #D0D0D0;padding:6px 8px;white-space:nowrap;">${htmlEncode(r.tipo_documento)}</td>
+      <td style="border:1px solid #D0D0D0;padding:6px 8px;white-space:nowrap;">${htmlEncode(r.data_emissao)}</td>
+      <td style="border:1px solid #D0D0D0;padding:6px 8px;white-space:nowrap;">${htmlEncode(r.data_vencimento)}</td>
+      <td style="border:1px solid #D0D0D0;padding:6px 8px;white-space:nowrap;">${htmlEncode(formatCnpj(r.cnpj))}</td>
+      <td style="border:1px solid #D0D0D0;padding:6px 8px;word-break:break-word;">${htmlEncode(formatRazaoSocial(r.razao_social))}</td>
+      <td style="border:1px solid #D0D0D0;padding:6px 8px;text-align:right;white-space:nowrap;">${formatValue(r.valor_nf)}</td>
+      <td style="border:1px solid #D0D0D0;padding:6px 8px;white-space:nowrap;">${htmlEncode(r.processo || "-")}</td>
+      <td style="border:1px solid #D0D0D0;padding:6px 8px;white-space:nowrap;">${htmlEncode(r.master || "-")}</td>
+      <td style="border:1px solid #D0D0D0;padding:6px 8px;white-space:nowrap;">${htmlEncode(r.house || "-")}</td>
+    </tr>`;
+  }
+
+  // Linha de total
+  rowsHtml += `<tr style="background-color:#ECECEC;font-weight:bold;">
+    <td colspan="10" style="border:1px solid #D0D0D0;padding:6px 8px;">TOTAL</td>
+    <td style="border:1px solid #D0D0D0;padding:6px 8px;text-align:right;">${formatValue(total)}</td>
+    <td colspan="3" style="border:1px solid #D0D0D0;padding:6px 8px;"></td>
+  </tr>`;
+
+  return `
+<table border="1" style="width:100%;border-collapse:collapse;mso-table-lspace:0pt;mso-table-rspace:0pt;border-spacing:0;font-family:Arial,Helvetica,sans-serif;font-size:13px;line-height:1.3;color:#111;" cellpadding="0" cellspacing="0">
+  <thead>
+    <tr>
+      <th style="background:#ECECEC;border:1px solid #D0D0D0;padding:6px 8px;text-align:left;white-space:nowrap;">DOC</th>
+      <th style="background:#ECECEC;border:1px solid #D0D0D0;padding:6px 8px;text-align:left;white-space:nowrap;">ND</th>
+      <th style="background:#ECECEC;border:1px solid #D0D0D0;padding:6px 8px;text-align:left;white-space:nowrap;">REF. CLIENTE</th>
+      <th style="background:#ECECEC;border:1px solid #D0D0D0;padding:6px 8px;text-align:left;white-space:nowrap;">NF</th>
+      <th style="background:#ECECEC;border:1px solid #D0D0D0;padding:6px 8px;text-align:left;white-space:nowrap;">MODAL</th>
+      <th style="background:#ECECEC;border:1px solid #D0D0D0;padding:6px 8px;text-align:left;white-space:nowrap;">TIPO DOC.</th>
+      <th style="background:#ECECEC;border:1px solid #D0D0D0;padding:6px 8px;text-align:left;white-space:nowrap;">EMISSÃO</th>
+      <th style="background:#ECECEC;border:1px solid #D0D0D0;padding:6px 8px;text-align:left;white-space:nowrap;">VENCTO</th>
+      <th style="background:#ECECEC;border:1px solid #D0D0D0;padding:6px 8px;text-align:left;white-space:nowrap;">C.N.P.J</th>
+      <th style="background:#ECECEC;border:1px solid #D0D0D0;padding:6px 8px;text-align:left;white-space:nowrap;">CLIENTE</th>
+      <th style="background:#ECECEC;border:1px solid #D0D0D0;padding:6px 8px;text-align:left;white-space:nowrap;">VALOR</th>
+      <th style="background:#ECECEC;border:1px solid #D0D0D0;padding:6px 8px;text-align:left;white-space:nowrap;">PROCESSO</th>
+      <th style="background:#ECECEC;border:1px solid #D0D0D0;padding:6px 8px;text-align:left;white-space:nowrap;">MASTER</th>
+      <th style="background:#ECECEC;border:1px solid #D0D0D0;padding:6px 8px;text-align:left;white-space:nowrap;">HOUSE</th>
+    </tr>
+  </thead>
+  <tbody>
+    ${rowsHtml}
+  </tbody>
+</table>`;
+};
+
+// Textos por estágio - EXATAMENTE como no C#
+const buildTemplateText = (
+  tipoPagto: string,
+  stage: string,
+  titulos: InvoiceRow[],
+  hoje: Date
+): { subject: string; bodyBefore: string; bodyAfter: string } => {
+  const first = titulos[0];
+  const multi = titulos.length > 1;
+  
+  const nf = first.nf_exibicao || first.documento || "-";
+  const dataV = first.data_vencimento || "-";
+  
+  // Parse data vencimento
+  const [diaV, mesV, anoV] = (first.data_vencimento || "01/01/2000").split("/");
+  const dataVDate = new Date(parseInt(anoV), parseInt(mesV) - 1, parseInt(diaV));
+  
+  const diasAteVenc = Math.floor((dataVDate.getTime() - hoje.getTime()) / (1000 * 60 * 60 * 24));
+  const diasAtraso = Math.floor((hoje.getTime() - dataVDate.getTime()) / (1000 * 60 * 60 * 24));
+  
+  const valorBr = formatValue(first.valor_nf);
+  
+  const isVista = (tipoPagto || "").toLowerCase().includes("vista");
+
+  let subject: string;
+  let bodyBefore: string;
+  let bodyAfter: string;
+
+  // PRE - ANTES DO VENCIMENTO
+  if (stage === "PRE") {
+    subject = multi
+      ? "Lembrete de Vencimento – Faturas em Aberto"
+      : `Lembrete de Vencimento – Fatura ${nf}`;
+
+    if (!multi) {
+      bodyBefore = `Prezados(as),
+
+Gostaríamos de informar que a fatura ${nf}, no valor de ${valorBr}, tem vencimento previsto para o dia ${dataV}, ou seja, em ${Math.max(diasAteVenc, 0)} dias.
+Recomendamos verificar o agendamento do pagamento para evitar qualquer imprevisto quanto ao prazo. Caso o pagamento já esteja programado, pedimos a gentileza de desconsiderar esta mensagem.
+Em caso de dúvidas ou necessidade de esclarecimentos, a nossa equipa está à disposição através do e-mail jessica.costa@dachser.com ou pelo telefone +55 (19) 3312-6185.
+Agradecemos a sua atenção e permanecemos à disposição.`;
+      bodyAfter = "";
+    } else {
+      bodyBefore = `Prezados(as),
+
+Segue relação de faturas até o momento:`;
+
+      bodyAfter = `
+Recomendamos verificar o agendamento dos pagamentos para evitar qualquer imprevisto quanto ao prazo. Caso já estejam programados, pedimos a gentileza de desconsiderar esta mensagem.
+Em caso de dúvidas ou necessidade de esclarecimentos, a nossa equipa está à disposição através do e-mail jessica.costa@dachser.com ou pelo telefone +55 (19) 3312-6185.
+Agradecemos a sua atenção e permanecemos à disposição.`;
+    }
+    return { subject, bodyBefore, bodyAfter };
+  }
+
+  // A PRAZO
+  if (!isVista) {
+    switch (stage) {
+      case "D1":
+        subject = multi
+          ? "Aviso de Atraso – Faturas em Aberto"
+          : `Aviso de Atraso – Fatura ${nf}`;
+
+        if (!multi) {
+          bodyBefore = `Prezados(as),
+
+Verificamos que a fatura ${nf}, com vencimento em ${dataV} e no valor de ${valorBr}, encontra-se em atraso há ${Math.max(diasAtraso, 0)} dias.
+Solicitamos, por gentileza, a regularização do pagamento no menor prazo possível. Caso já tenha sido efetuado, favor desconsiderar este aviso.
+Havendo qualquer divergência ou necessidade de esclarecimentos, pedimos que nos informem para conferência imediata. Nossa equipa está à disposição através do e-mail jessica.costa@dachser.com ou pelo telefone +55 (19) 3312-6185.
+Agradecemos a sua atenção e contamos com a sua colaboração para a regularização desta pendência.
+Atenciosamente,
+Jessica Costa
+Accounts Receivable Analyst
+Air & Sea Logistics Brazil`;
+          bodyAfter = "";
+        } else {
+          bodyBefore = `Prezados(as),
+
+Verificamos em nosso sistema que a(s) fatura(s) abaixo encontram-se em atraso.`;
+
+          bodyAfter = `
+Solicitamos, por gentileza, a regularização dos pagamentos no menor prazo possível. Caso já tenham sido efetuados, favor desconsiderar este aviso.
+Havendo qualquer divergência ou necessidade de esclarecimentos, pedimos que nos informem para conferência imediata. Nossa equipa está à disposição através do e-mail jessica.costa@dachser.com ou pelo telefone +55 (19) 3312-6185.
+Agradecemos a sua atenção e contamos com a sua colaboração para a regularização destas pendências.
+Atenciosamente,
+Jessica Costa
+Accounts Receivable Analyst
+Air & Sea Logistics Brazil`;
+        }
+        return { subject, bodyBefore, bodyAfter };
+
+      case "D7":
+        subject = multi
+          ? "Pendência de Pagamento – Faturas em Aberto"
+          : `Pendência de Pagamento – Fatura ${nf}`;
+
+        if (!multi) {
+          bodyBefore = `Prezados(as),
+
+Até o presente momento, não identificamos o pagamento da fatura ${nf}, vencida em ${dataV}, no valor de ${valorBr}.
+
+Solicitamos, por gentileza, a regularização desta pendência no menor prazo possível. Caso o pagamento já tenha sido efetuado, favor desconsiderar este aviso.
+Em caso de dúvidas ou divergências, nossa equipa encontra-se à disposição através do e-mail jessica.costa@dachser.com ou pelo telefone +55 (19) 3312-6185.
+Agradecemos a atenção e colaboração.
+
+Atenciosamente,
+Jessica Costa
+Accounts Receivable Analyst
+Air & Sea Logistics Brazil`;
+          bodyAfter = "";
+        } else {
+          bodyBefore = `Prezados(as),
+
+Até o momento, não identificamos o pagamento das faturas listadas abaixo:`;
+
+          bodyAfter = `
+
+Solicitamos a regularização destas pendências no menor prazo possível. Caso os pagamentos já tenham sido realizados, pedimos a gentileza de desconsiderar esta mensagem.
+Em caso de dúvidas ou divergências, nossa equipa encontra-se à disposição através do e-mail jessica.costa@dachser.com ou pelo telefone +55 (19) 3312-6185.
+Agradecemos a sua atenção e colaboração.
+
+Atenciosamente,
+Jessica Costa
+Accounts Receivable Analyst
+Air & Sea Logistics Brazil`;
+        }
+        return { subject, bodyBefore, bodyAfter };
+
+      case "D15":
+      case "D30":
+      case "D45":
+      case "D60":
+        // Genérico para estágios avançados
+        subject = multi
+          ? `Aviso Financeiro – Faturas em Aberto (${stage})`
+          : `Aviso Financeiro – Fatura ${nf} (${stage})`;
+
+        bodyBefore = `Prezados(as),
+
+Há pendências financeiras em aberto.`;
+        bodyAfter = `
+
+Atenciosamente,
+Dachser`;
+        return { subject, bodyBefore, bodyAfter };
+    }
+  }
+
+  // Default
+  subject = "Aviso Financeiro";
+  bodyBefore = "Prezados(as),\n\nHá pendências financeiras em aberto.";
+  bodyAfter = "\n\nAtenciosamente,\nDachser";
+  return { subject, bodyBefore, bodyAfter };
 };
 
 serve(async (req: Request): Promise<Response> => {
@@ -95,48 +322,67 @@ serve(async (req: Request): Promise<Response> => {
       charset: "utf8mb4",
     });
 
-    // Build stage condition
+    // Build stage condition - EXATAMENTE como no C#
     const getStageCondition = (s: string): string => {
       switch (s) {
         case "PRE":
-          return "DATEDIFF(CURDATE(), t.data_vencimento) < 0";
+          return "t.data_vencimento >= CURDATE()";
         case "D1":
-          return "DATEDIFF(CURDATE(), t.data_vencimento) = 1";
+          return "DATEDIFF(CURDATE(), t.data_vencimento) = 2";
         case "D7":
-          return "DATEDIFF(CURDATE(), t.data_vencimento) BETWEEN 7 AND 14";
+          return "DATEDIFF(CURDATE(), t.data_vencimento) = 8";
         case "D15":
-          return "DATEDIFF(CURDATE(), t.data_vencimento) BETWEEN 15 AND 29";
+          return "DATEDIFF(CURDATE(), t.data_vencimento) = 16";
         case "D30":
-          return "DATEDIFF(CURDATE(), t.data_vencimento) BETWEEN 30 AND 44";
+          return "DATEDIFF(CURDATE(), t.data_vencimento) = 31";
         case "D45":
-          return "DATEDIFF(CURDATE(), t.data_vencimento) BETWEEN 45 AND 59 AND t.tipo_documento != 'FAT_NF'";
+          return "DATEDIFF(CURDATE(), t.data_vencimento) = 46";
         case "D60":
-          return "(DATEDIFF(CURDATE(), t.data_vencimento) >= 60 AND t.tipo_documento != 'FAT_NF') OR (DATEDIFF(CURDATE(), t.data_vencimento) >= 45 AND t.tipo_documento = 'FAT_NF')";
+          return "DATEDIFF(CURDATE(), t.data_vencimento) = 61";
         default:
           return "1=0";
       }
     };
 
-    // Fetch invoices for this stage
+    // Fetch invoices com JOIN para t_dados_nfs para pegar processo, house, master
     const sql = `
       SELECT 
-        t.documento,
-        COALESCE(NULLIF(t.numero_nf,''), t.documento) AS numero_nf,
+        SUBSTRING_INDEX(t.razao_social, ' - ', 1) AS razao_base,
         t.razao_social,
+        t.documento,
+        t.nd,
+        t.referencia_cliente AS ref_cliente,
+        COALESCE(NULLIF(t.numero_nf,''), t.documento) AS nf_exibicao,
+        t.numero_nf,
+        t.modal,
+        t.tipo_documento,
         DATE_FORMAT(t.data_emissao, '%d/%m/%Y') AS data_emissao,
         DATE_FORMAT(t.data_vencimento, '%d/%m/%Y') AS data_vencimento,
         DATEDIFF(CURDATE(), t.data_vencimento) AS dias,
         t.valor_nf,
-        t.tipo_documento,
-        t.cnpj
+        t.cnpj,
+        CASE WHEN t.tipo_documento='FAT_NF' THEN 'À vista' ELSE 'A prazo' END AS tipo_pagto,
+        COALESCE(nf.processo, '') AS processo,
+        COALESCE(nf.house, '') AS house,
+        COALESCE(nf.master, '') AS master,
+        (
+          SELECT GROUP_CONCAT(DISTINCT c.email_contato SEPARATOR ';')
+          FROM dados_dachser.t_dados_financeiro_contatos c
+          WHERE REPLACE(REPLACE(REPLACE(c.cnpj,'.',''),'/',''),'-','')
+                = REPLACE(REPLACE(REPLACE(t.cnpj,'.',''),'/',''),'-','')
+        ) AS email_cliente
       FROM dados_dachser.t_dados_financeiro_nfs t
       LEFT JOIN ai_agente.t_financeiro_soft_delete sd ON sd.documento = t.documento
+      LEFT JOIN dados_dachser.t_dados_nfs nf ON nf.id_rm = t.id_rm
       WHERE COALESCE(sd.active, 1) = 1
+        AND (t.disputa IS NULL OR t.disputa = 0)
         AND ${getStageCondition(stage)}
-      ORDER BY t.razao_social ASC, t.data_vencimento ASC
+      ORDER BY t.data_vencimento ASC, t.razao_social ASC
     `;
 
+    console.log(`[regua-send-emails] Executando query para stage ${stage}`);
     const invoices = await client.query(sql);
+    console.log(`[regua-send-emails] Encontradas ${invoices.length} faturas`);
 
     if (invoices.length === 0) {
       return new Response(
@@ -145,27 +391,18 @@ serve(async (req: Request): Promise<Response> => {
       );
     }
 
-    // Group invoices by client (razao_social)
+    // Group invoices by client (razao_base + cnpj) - COMO NO C#
     const clientGroups: Map<string, InvoiceRow[]> = new Map();
     for (const inv of invoices) {
-      const clientKey = inv.razao_social || "Sem cliente";
-      if (!clientGroups.has(clientKey)) {
-        clientGroups.set(clientKey, []);
+      const cliente = inv.razao_base || inv.razao_social || "SEM NOME";
+      const cnpjNorm = (inv.cnpj || "").replace(/\D/g, "");
+      const key = `${cliente}|${cnpjNorm}`;
+      
+      if (!clientGroups.has(key)) {
+        clientGroups.set(key, []);
       }
-      clientGroups.get(clientKey)!.push(inv);
+      clientGroups.get(key)!.push(inv);
     }
-
-    const formatCnpj = (c: string) => {
-      const digits = (c || "").replace(/\D/g, "");
-      if (digits.length === 14) {
-        return `${digits.slice(0,2)}.${digits.slice(2,5)}.${digits.slice(5,8)}/${digits.slice(8,12)}-${digits.slice(12,14)}`;
-      }
-      return c || "-";
-    };
-
-    const formatValue = (v: number) => {
-      return "R$ " + Number(v || 0).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-    };
 
     let sentCount = 0;
     let skippedCount = 0;
@@ -181,7 +418,8 @@ serve(async (req: Request): Promise<Response> => {
       );
     }
     
-    const [clientName, clientInvoices] = firstClientEntry;
+    const [clientKey, clientInvoices] = firstClientEntry;
+    const clientName = clientKey.split("|")[0];
     
     // For testing, always use devs@z3us.ai
     const clientEmail = "devs@z3us.ai";
@@ -211,64 +449,36 @@ serve(async (req: Request): Promise<Response> => {
         );
       }
     } catch (checkErr) {
-      // Table might not exist yet, continue
       console.log("Note: Could not check previous sends:", checkErr);
     }
 
-    // Calculate total
-    const totalValue = clientInvoices.reduce((sum: number, inv: InvoiceRow) => sum + (Number(inv.valor_nf) || 0), 0);
+    // Build template text - EXATAMENTE como no C#
+    const tipoPagto = clientInvoices[0]?.tipo_pagto || "A prazo";
+    const hoje = new Date();
+    const { subject, bodyBefore, bodyAfter } = buildTemplateText(tipoPagto, stage, clientInvoices, hoje);
 
-    // Build consolidated table HTML
-    const tableHtml = `
-<table style="border-collapse: collapse; width: 100%; font-family: Arial, sans-serif; font-size: 12px;">
-  <thead>
-    <tr style="background-color: #FFCC00;">
-      <th style="border: 1px solid #000; padding: 8px; text-align: left;">DOC</th>
-      <th style="border: 1px solid #000; padding: 8px; text-align: left;">NF</th>
-      <th style="border: 1px solid #000; padding: 8px; text-align: left;">TIPO DOC.</th>
-      <th style="border: 1px solid #000; padding: 8px; text-align: left;">EMISSÃO</th>
-      <th style="border: 1px solid #000; padding: 8px; text-align: left;">VENCTO</th>
-      <th style="border: 1px solid #000; padding: 8px; text-align: left;">C.N.P.J</th>
-      <th style="border: 1px solid #000; padding: 8px; text-align: left;">CLIENTE</th>
-      <th style="border: 1px solid #000; padding: 8px; text-align: right;">VALOR</th>
-    </tr>
-  </thead>
-  <tbody>
-    ${clientInvoices.map((inv: InvoiceRow) => `
-    <tr>
-      <td style="border: 1px solid #ddd; padding: 6px;">${inv.documento || "-"}</td>
-      <td style="border: 1px solid #ddd; padding: 6px;">${inv.numero_nf || "-"}</td>
-      <td style="border: 1px solid #ddd; padding: 6px;">${inv.tipo_documento === "FAT_NF" ? "À vista" : "A prazo"}</td>
-      <td style="border: 1px solid #ddd; padding: 6px;">${inv.data_emissao || "-"}</td>
-      <td style="border: 1px solid #ddd; padding: 6px;">${inv.data_vencimento || "-"}</td>
-      <td style="border: 1px solid #ddd; padding: 6px;">${formatCnpj(inv.cnpj)}</td>
-      <td style="border: 1px solid #ddd; padding: 6px;">${inv.razao_social || "-"}</td>
-      <td style="border: 1px solid #ddd; padding: 6px; text-align: right;">${formatValue(inv.valor_nf)}</td>
-    </tr>
-    `).join("")}
-    <tr style="background-color: #f0f0f0; font-weight: bold;">
-      <td colspan="7" style="border: 1px solid #ddd; padding: 6px;">TOTAL</td>
-      <td style="border: 1px solid #ddd; padding: 6px; text-align: right;">${formatValue(totalValue)}</td>
-    </tr>
-  </tbody>
-</table>
-`;
+    // Sempre mostra tabela consolidada
+    const isConsolidado = true;
 
-    const emailHtml = `
-<div style="font-family: Arial, sans-serif; font-size: 14px; color: #333;">
-  <p>${STAGE_MESSAGES[stage] || "Prezado cliente, segue abaixo a relação de faturas."}</p>
-  
-  <br/>
-  ${tableHtml}
-  <br/>
-  
-  <p>Em caso de dúvidas ou eventuais divergências, nossa equipe está à disposição através do e-mail <a href="mailto:jessica.costa@dachser.com">jessica.costa@dachser.com</a> ou pelo telefone +55 (19) 3312-6185.</p>
-  
-  <p>Agradecemos a sua atenção e colaboração.</p>
-  
-  <p>Atenciosamente,<br/><strong>Financeiro Dachser</strong></p>
-</div>
-`;
+    // Build HTML body
+    const beforeHtml = htmlEncode(bodyBefore).replace(/\n/g, "<br>");
+    
+    let htmlBody = `<div style="font-family:Arial,Helvetica,sans-serif;font-size:13px;color:#111;line-height:1.4;">`;
+    htmlBody += beforeHtml;
+    
+    if (isConsolidado) {
+      const tabelaHtml = buildTableHtml(clientInvoices);
+      htmlBody += "<br>";
+      htmlBody += tabelaHtml;
+      
+      if (bodyAfter) {
+        const afterHtml = htmlEncode(bodyAfter).replace(/\n/g, "<br>");
+        htmlBody += "<br>";
+        htmlBody += afterHtml;
+      }
+    }
+    
+    htmlBody += "</div>";
 
     if (dryRun) {
       sentCount++;
@@ -277,10 +487,10 @@ serve(async (req: Request): Promise<Response> => {
     } else {
       try {
         const emailResponse = await resend!.emails.send({
-          from: "Financeiro Dachser <noreply@hermes.z3us.ai>",
+          from: "Dachser <noreply@hermes.z3us.ai>",
           to: [clientEmail],
-          subject: `[TESTE] ${STAGE_SUBJECTS[stage] || "Faturas em aberto"} - ${clientName}`,
-          html: emailHtml,
+          subject: `[TESTE] ${subject}`,
+          html: htmlBody,
         });
 
         console.log(`Email sent to ${clientEmail}:`, emailResponse);
@@ -298,7 +508,7 @@ serve(async (req: Request): Promise<Response> => {
             clientName,
             clientInvoices[0]?.cnpj || "",
             clientEmail,
-            `${STAGE_SUBJECTS[stage] || "Faturas em aberto"} - ${clientName}`,
+            subject,
             emailId,
           ]);
         } catch (logErr) {
