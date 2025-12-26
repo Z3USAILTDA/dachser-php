@@ -68,7 +68,6 @@ const htmlEncode = (s: string): string => {
 // Constrói tabela HTML - Design escuro igual ao modelo com PROCESSO, MASTER, HOUSE
 const buildTableHtml = (rows: InvoiceRow[]): string => {
   let rowsHtml = "";
-  let total = 0;
 
   // Estilo dark header
   const headerBg = "#2D2D2D";
@@ -79,7 +78,6 @@ const buildTableHtml = (rows: InvoiceRow[]): string => {
   const rowColor = "#FFFFFF";
 
   for (const r of rows) {
-    total += Number(r.valor_nf) || 0;
     rowsHtml += `<tr style="background-color:${rowBg};color:${rowColor};">
       <td style="${cellBorder}${cellPadding}white-space:nowrap;">${htmlEncode(r.documento || "-")}</td>
       <td style="${cellBorder}${cellPadding}white-space:nowrap;">${htmlEncode(r.nd || "-")}</td>
@@ -97,13 +95,6 @@ const buildTableHtml = (rows: InvoiceRow[]): string => {
       <td style="${cellBorder}${cellPadding}white-space:nowrap;">${htmlEncode(r.house || "-")}</td>
     </tr>`;
   }
-
-  // Linha de total
-  rowsHtml += `<tr style="background-color:${headerBg};color:${headerColor};font-weight:bold;">
-    <td colspan="10" style="${cellBorder}${cellPadding}">TOTAL</td>
-    <td style="${cellBorder}${cellPadding}text-align:right;">${formatValue(total)}</td>
-    <td colspan="3" style="${cellBorder}${cellPadding}"></td>
-  </tr>`;
 
   return `
 <table border="0" style="width:100%;border-collapse:collapse;mso-table-lspace:0pt;mso-table-rspace:0pt;border-spacing:0;font-family:Arial,Helvetica,sans-serif;font-size:12px;line-height:1.3;" cellpadding="0" cellspacing="0">
