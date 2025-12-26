@@ -2343,30 +2343,27 @@ serve(async (req) => {
 
       // ==================== CCT (Control Tower) ====================
       case 'get_cct_shipments': {
-        console.log('Fetching CCT shipments from t_master_dados (AIR IMPORT)...');
+        console.log('Fetching CCT shipments (post-tracking AWBs from t_status_aereo)...');
         
-        // Registered airline codes for CCT filtering
+        // Registered airline codes for CCT filtering (43 airlines)
         const registeredAirlineCodes = [
-          '001', '016', '020', '006', '047', '055', '045', '057', '074', '075',
-          '118', '125', '139', '157', '172', '176', '235', '369', '399', '406',
-          '549', '577', '615', '724', '729', '881', '996'
+          '001', '005', '006', '014', '016', '020', '023', '045', '047', '055',
+          '057', '072', '074', '075', '081', '082', '086', '112', '118', '125',
+          '139', '157', '160', '172', '176', '180', '205', '217', '235', '254',
+          '263', '369', '399', '406', '416', '489', '549', '577', '615', '695',
+          '724', '729', '881', '996', '999'
         ];
         const airlineFilter = registeredAirlineCodes.map(c => `'${c}'`).join(',');
         
-        // SLA configuration by status (hours)
+        // SLA configuration by status (hours) for post-tracking
         const slaConfigByStatus: Record<string, number> = {
-          'COLETA_REALIZADA': 1,
-          'CARGA_RECEBIDA_TECA': 6,
-          'DEP': 1,
-          'ATD': 1,
-          'ARR': 1,
-          'ATA': 1,
-          'RCF': 6,
-          'NFD': 6,
-          'AWD': 6,
-          'DLV': 2,
-          'POD': 2,
-          'AGUARDANDO_MANIFESTACAO': 24,
+          'ATA': 6,
+          'RCF': 12,
+          'NFD': 24,
+          'AWD': 24,
+          'DLV': 48,
+          'POD': 48,
+          'ARR': 24, // For expired ARR
         };
         
         // Error/system statuses to exclude from CCT
@@ -2379,7 +2376,6 @@ serve(async (req) => {
           'API_ERROR',
           'TIMEOUT',
           'PARSE_ERROR',
-          // System/pending statuses
           'SIS',
           'PENDING',
           'PROCESSING',
@@ -2389,27 +2385,28 @@ serve(async (req) => {
         ];
         const errorStatusFilter = errorStatuses.map(s => `'${s}'`).join(',');
         
-        // Query from t_master_dados as primary source, LEFT JOIN t_status_aereo and t_cct_shipments
-        // IMPORTANT: Filter by registered airlines and exclude error statuses
+        // POST-TRACKING QUERY: AWBs that exited the tracking screen
+        // Criteria:
+        // 1. Post-ARR statuses (ATA, NFD, AWD, DLV, POD) - these don't appear in tracking
+        // 2. ARR/RCF status with arr_datetime > 120 hours ago AND no active alerts (data_atraso IS NULL)
         const shipments = await client.query(`
           SELECT 
-            m.id,
-            TRIM(m.mawb) as master,
-            TRIM(m.hawb) as house,
-            TRIM(m.cliente) as cliente,
-            TRIM(m.nome_analista) as nome_analista,
-            TRIM(m.email_analista) as email_analista,
-            m.emails_cliente,
-            m.previsao_faturamento,
-            m.data_finalizacao,
-            TRIM(m.tratamento) as tratamento,
-            COALESCE(s.\`último_status\`, 'AGUARDANDO_MANIFESTACAO') as status_cct_oficial,
+            s.id,
+            TRIM(s.awb) as master,
+            TRIM(s.hawb) as house,
+            TRIM(s.\`destinatário\`) as cliente,
+            s.nome_analista,
+            s.email_analista,
+            s.email_cliente as emails_cliente,
+            s.\`último_status\` as status_cct_oficial,
             s.\`última atualização\` as ultimo_evento_data,
-            COALESCE(s.\`último_status\`, 'AGUARDANDO_MANIFESTACAO') as ultimo_evento_codigo,
+            s.\`último_status\` as ultimo_evento_codigo,
             TRIM(s.origem) as aeroporto_origem,
             TRIM(s.destino) as aeroporto_destino,
             s.data_atraso,
-            LEFT(TRIM(m.mawb), 3) as airline_code,
+            s.arr_datetime,
+            s.tipo_servico,
+            LEFT(TRIM(s.awb), 3) as airline_code,
             cct.peso_declarado,
             cct.peso_constatado,
             cct.volume_declarado,
@@ -2417,22 +2414,37 @@ serve(async (req) => {
             cct.eta,
             cct.etd,
             cct.data_decolagem_ultimo_trecho,
-            cct.cnpj_consignatario
-          FROM ${database}.t_master_dados m
-          LEFT JOIN ${database}.t_status_aereo s ON TRIM(m.mawb) COLLATE utf8mb4_unicode_ci = TRIM(s.awb) COLLATE utf8mb4_unicode_ci
-          LEFT JOIN ${database}.t_cct_shipments cct ON TRIM(m.mawb) COLLATE utf8mb4_unicode_ci = TRIM(cct.master) COLLATE utf8mb4_unicode_ci
-          WHERE m.active = 1 
-          AND m.tipo_processo = 'AIR IMPORT'
-          AND m.data_finalizacao IS NULL
-          AND LEFT(TRIM(m.mawb), 3) IN (${airlineFilter})
-          AND (s.\`último_status\` IS NULL OR s.\`último_status\` NOT IN (${errorStatusFilter}))
+            cct.cnpj_consignatario,
+            cct.tratamentos_especiais,
+            -- Determine origin type for badge
+            CASE 
+              WHEN s.\`último_status\` IN ('ATA', 'NFD', 'AWD', 'DLV', 'POD') THEN 'POS_CHEGADA'
+              WHEN s.\`último_status\` IN ('ARR', 'RCF') 
+                   AND s.arr_datetime IS NOT NULL 
+                   AND s.arr_datetime <= NOW() - INTERVAL 120 HOUR THEN 'ARR_EXPIRADO'
+              ELSE 'OUTRO'
+            END as origem_cct
+          FROM ${database}.t_status_aereo s
+          LEFT JOIN ${database}.t_cct_shipments cct ON TRIM(s.awb) COLLATE utf8mb4_unicode_ci = TRIM(cct.master) COLLATE utf8mb4_unicode_ci
+          WHERE LEFT(TRIM(s.awb), 3) IN (${airlineFilter})
+          AND s.\`último_status\` NOT IN (${errorStatusFilter})
           AND (s.origem IS NOT NULL AND LOWER(TRIM(s.origem)) NOT IN ('n/a', 'na', 'erro', 'error', ''))
           AND (s.destino IS NOT NULL AND LOWER(TRIM(s.destino)) NOT IN ('n/a', 'na', 'erro', 'error', ''))
-          ORDER BY s.\`última atualização\` DESC, m.id DESC
+          AND (
+            -- Post-ARR statuses (not shown in tracking screen)
+            s.\`último_status\` IN ('ATA', 'NFD', 'AWD', 'DLV', 'POD')
+            OR 
+            -- ARR/RCF with more than 120 hours (exited tracking by time)
+            (s.\`último_status\` IN ('ARR', 'RCF') 
+             AND s.arr_datetime IS NOT NULL 
+             AND s.arr_datetime <= NOW() - INTERVAL 120 HOUR
+             AND s.data_atraso IS NULL)
+          )
+          ORDER BY s.\`última atualização\` DESC
           LIMIT 500
         `);
 
-        // Calculate SLA status based on specific status, not generic 24h/48h
+        // Calculate SLA status based on specific status
         const now = new Date();
         const processedShipments = (shipments || []).map((row: any) => {
           const lastUpdate = row.ultimo_evento_data ? new Date(row.ultimo_evento_data) : null;
@@ -2442,7 +2454,7 @@ serve(async (req) => {
           const slaHours = slaConfigByStatus[statusCode] ?? 24;
           const hoursSinceUpdate = lastUpdate ? (now.getTime() - lastUpdate.getTime()) / (1000 * 60 * 60) : null;
           
-          // SLA calculation based on status-specific hours
+          // SLA calculation
           let slaStatus = 'OK';
           let horasRestantes: number | null = null;
           let percentual: number | null = null;
@@ -2451,11 +2463,6 @@ serve(async (req) => {
             horasRestantes = slaHours - hoursSinceUpdate;
             percentual = Math.min(100, Math.max(0, (hoursSinceUpdate / slaHours) * 100));
             
-            // SLA status logic:
-            // VENCIDO: SLA expirado (horasRestantes <= 0)
-            // CRITICO: Menos de 2 horas restantes (urgente)
-            // ALERTA: Entre 2 e 6 horas restantes ou >= 75% do tempo consumido
-            // OK: Dentro do prazo confortável
             if (horasRestantes <= 0) {
               slaStatus = 'VENCIDO';
             } else if (horasRestantes <= 2) {
@@ -2471,13 +2478,10 @@ serve(async (req) => {
           const isFrozen = frozenStatuses.includes(statusCode);
           const isBlock = blockStatuses.includes(statusCode);
 
-          // Derive CCT status from ultimo_status with expanded mapping
+          // Derive CCT status from ultimo_status
           const statusMap: Record<string, string> = {
-            'DEP': 'EM_TRANSITO',
-            'MAN': 'MANIFESTADO',
-            'BKD': 'MANIFESTADO',
             'ARR': 'CHEGADA_INFORMADA',
-            'ATA': 'CHEGADA_INFORMADA',
+            'ATA': 'CHEGADA_CONFIRMADA',
             'RCF': 'RECEPCIONADO',
             'RCS': 'RECEPCIONADO',
             'NFD': 'DISPONIVEL_RETIRADA',
@@ -2498,7 +2502,7 @@ serve(async (req) => {
             aeroporto_origem: row.aeroporto_origem || 'N/A',
             aeroporto_destino: row.aeroporto_destino || 'GRU',
             status_cct_oficial: derivedStatus,
-            status_manifestacao: statusCode && statusCode !== 'AGUARDANDO_MANIFESTACAO' ? 'MANIFESTADO_CCT' : 'RECEBIDO_NOVA',
+            status_manifestacao: 'POS_RASTREIO',
             sla_status: slaStatus,
             sla_info: {
               status: slaStatus,
@@ -2526,14 +2530,14 @@ serve(async (req) => {
             is_frozen: isFrozen,
             data_atraso: row.data_atraso,
             data_decolagem_ultimo_trecho: row.data_decolagem_ultimo_trecho || null,
-            previsao_faturamento: row.previsao_faturamento,
-            data_finalizacao: row.data_finalizacao,
+            arr_datetime: row.arr_datetime,
+            origem_cct: row.origem_cct || 'OUTRO',
             created_at: row.ultimo_evento_data || new Date().toISOString(),
             updated_at: row.ultimo_evento_data || new Date().toISOString(),
           };
         });
 
-        console.log(`CCT: Found ${processedShipments.length} active AIR IMPORT shipments from registered airlines`);
+        console.log(`CCT: Found ${processedShipments.length} post-tracking AWBs (ARR expirado ou pós-chegada)`);
         result = { success: true, data: processedShipments };
         break;
       }
@@ -4125,30 +4129,31 @@ serve(async (req) => {
           );
         }
 
-        console.log('Fetching CCT events for AWB:', queryAwb);
+        console.log('Fetching CCT events for AWB from t_status_historico:', queryAwb);
 
-        // Check if table exists first
+        // Query from t_status_historico (tracking history table)
         try {
           const events = await client.query(`
             SELECT 
               id,
               TRIM(awb) as awb,
-              TRIM(codigo_evento) as codigo_evento,
-              descricao_evento,
-              data_hora_evento,
+              TRIM(status_code) as codigo_evento,
+              status_description as descricao_evento,
+              data_evento as data_hora_evento,
               fonte,
-              aeroporto,
-              nivel_confianca,
-              created_at
-            FROM ${database}.t_cct_eventos_historico
+              destino as aeroporto,
+              'PRIMARIA' as nivel_confianca,
+              data_registro as created_at
+            FROM ${database}.t_status_historico
             WHERE TRIM(awb) = TRIM(?)
-            ORDER BY data_hora_evento DESC
+            ORDER BY data_evento DESC
+            LIMIT 100
           `, [queryAwb]);
 
+          console.log(`CCT: Found ${events?.length || 0} events in t_status_historico for AWB ${queryAwb}`);
           result = { success: true, data: events || [] };
         } catch (tableErr) {
-          // Table might not exist yet
-          console.log('Events table may not exist yet:', tableErr);
+          console.log('Error fetching from t_status_historico:', tableErr);
           result = { success: true, data: [] };
         }
         break;
