@@ -1041,24 +1041,24 @@ NCM CODES:
 - Extra in HBL: none
 - Status: MATCH
 
-EXAMPLE OF DIVERGENCE (values don't match between Manifest and HBL):
+EXAMPLE OF DIVERGENCE:
 
 NCM CODES:
 - Manifest NCMs: [84812090, 84831019, 84149039, 87084090, 39269090]
-- HBL NCMs: [84812090, 84831019, 73181500, 87084090, 39269090]
-- Missing in HBL: 84149039 (present in Manifest but not in HBL)
-- Extra in HBL: 73181500 (present in HBL but not in Manifest)
+- HBL NCMs: [84812090, 73181500, 84149039, 87084090, 39269090]
+- Missing in HBL: 84831019
+- Extra in HBL: 73181500
 - Status: DIVERGENCE
-- Note: The NCM codes in the Manifest do not match the NCM codes in the HBL. The values are different.
-  → Update: Correct HBL to use the NCM codes from the Manifest.
+  → Update: Correct HBL NCMs to match Manifest NCMs.
 
-EXTRACTION RULES FOR NCM CODES:
-1. From MANIFEST: Search ALL columns (NCM Code, HS Code, Tariff Code). Keep EXACT values as they appear.
-2. From HBL: Search entire document. Keep EXACT values as they appear.
-3. DO NOT TRUNCATE OR NORMALIZE LENGTH: "84812090" stays "84812090", "8481" stays "8481"
-4. Only remove punctuation (dots, dashes, spaces): "8481.20.90" → "84812090"
-5. DEDUPLICATE before comparison
-6. COMPARE AS LITERAL STRINGS: "8481" ≠ "84812090" (different = DIVERGENCE)
+EXTRACTION AND COMPARISON RULES FOR NCM CODES:
+1. From MANIFEST: Extract ALL values from "HS Code" or "NCM Code" columns EXACTLY as they appear.
+2. From HBL: Extract ALL NCM values EXACTLY as they appear.
+3. Remove only punctuation (dots, dashes, spaces): "8481.20.90" → "84812090"
+4. DEDUPLICATE before comparison.
+5. COMPARE AS LITERAL STRINGS: If the values are not 100% identical, it's DIVERGENCE.
+6. DO NOT explain WHY they are different (no mentions of digit counts, formats, etc.)
+7. Just list what's in Manifest, what's in HBL, and say MATCH or DIVERGENCE.
 
 ★★★ THIS SECTION IS MANDATORY - NEVER SKIP IT ★★★
 
