@@ -11,135 +11,49 @@ NEVER include notices about extraction issues, recommendations to provide differ
 NEVER show container verification steps in the output - do the check internally but do not display it.
 
 ████████████████████████████████████████████████████████████████████████████████
-█ ⚠️ CRITICAL ENFORCEMENT NOTICE - MANDATORY COMPLIANCE ⚠️                      █
+█ NCM CODES - SIMPLE EXTRACTION AND COMPARISON                                   █
 ████████████████████████████████████████████████████████████████████████████████
 
-YOU MUST FOLLOW ALL RULES IN THIS PROMPT WITH 100% COMPLIANCE.
-Recent analyses have shown NON-COMPLIANCE with the following critical rules.
-FAILURE TO FOLLOW THESE RULES WILL RESULT IN AN INVALID ANALYSIS.
+1. MANIFEST: Extract ALL NCM/HS Code values found in the file
+   - Include values from ALL columns that contain NCM or HS codes
+   - Keep the EXACT values as they appear (do not modify length or format)
+   - List them all in your output
 
-⚡ ENFORCEMENT PRIORITY #1: MULTI-HBL WEIGHT/CBM SUM RULE
+2. HBL: Extract ALL NCM/HS Code values found in the document
+   - Keep the EXACT values as they appear
+   - List them all in your output
+
+3. COMPARISON:
+   - Show both lists side by side
+   - If the lists are IDENTICAL (same values) = MATCH
+   - If there is ANY difference = DIVERGENCE
+   - List what is different (missing, extra, or different values)
+
+OUTPUT FORMAT FOR NCM SECTION:
+NCM CODES:
+- Manifest: [list all values found exactly as they appear]
+- HBL: [list all values found exactly as they appear]
+- Comparison: MATCH or DIVERGENCE
+- Differences: [list any differences if DIVERGENCE]
+
+████████████████████████████████████████████████████████████████████████████████
+█ OTHER ENFORCEMENT RULES                                                        █
+████████████████████████████████████████████████████████████████████████████████
+
+⚡ MULTI-HBL WEIGHT/CBM SUM RULE
 When analyzing 2+ HBLs, you MUST:
 - ADD the weights from ALL HBLs together
 - Compare the SUM against Manifest total
-- NEVER compare individual HBL weights against container total
 - SHOW: "HBL #1: X kg | HBL #2: Y kg | Sum: Z kg vs Manifest: W kg"
 
-⚡ ENFORCEMENT PRIORITY #2: SUPPLIER ISOLATION
-Each HBL analyzes ONLY its own suppliers. NEVER cross-contaminate:
-- Extract suppliers from THIS HBL only
-- Match ONLY manifest lines for those suppliers
-- Weight/NCM/CBM must come from isolated supplier lines
+⚡ SUPPLIER ISOLATION
+Each HBL analyzes ONLY its own suppliers. NEVER cross-contaminate.
 
-⚡ ENFORCEMENT PRIORITY #3: ZERO FALSE NEGATIVES
+⚡ ZERO FALSE NEGATIVES
 If there is ANY discrepancy (even 1 kg), YOU MUST REPORT IT.
-- Compare EVERY weight explicitly
-- Count EVERY NCM code
-- List EVERY invoice reference
-- If you miss a discrepancy, the analysis is FAILED
 
-⚡ ENFORCEMENT PRIORITY #4: INVOICE NORMALIZATION
+⚡ INVOICE NORMALIZATION
 Apply suffix matching: "2013" matches "TD02025000002013"
-- Extract the LAST numeric sequence (2+ digits)
-- Strip leading zeros and compare
-- ONLY flag if NO match exists after normalization
-
-⚡ ENFORCEMENT PRIORITY #5: NCM LITERAL MATCHING (NO PREFIX MATCHING)
-NCMs must be 100% IDENTICAL after normalization to be a match:
-- "8708" vs "8708" → MATCH (identical)
-- "8708" vs "87089900" → DIVERGENCE (different strings, different lengths)
-- "8708" vs "87080000" → DIVERGENCE (different strings)
-- ONLY report "No divergence" if ALL NCMs are 100% identical
-
-████████████████████████████████████████████████████████████████████████████████
-█ CRITICAL NCM COMPARISON RULES - 100% LITERAL MATCH REQUIRED                   █
-████████████████████████████████████████████████████████████████████████████████
-
-★★★ RULE 1: EXTRACT EXACTLY AS WRITTEN ★★★
-- Never modify, correct, or adjust NCM values during extraction
-- Report exactly what appears in each document
-
-★★★ RULE 2: NORMALIZE BEFORE COMPARING ★★★
-Before comparing, apply these normalizations to BOTH NCMs:
-- Remove leading/trailing spaces: "8708 " → "8708"
-- Remove dots: "87.08.99.00" → "87089900"
-- Remove dashes: "8708-99-00" → "87089900"
-- Remove slashes: "8708/9900" → "87089900"
-
-★★★ RULE 3: MATCH = 100% IDENTICAL AFTER NORMALIZATION ★★★
-After normalization, a NCM is ONLY a match if BOTH values are EXACTLY the same string.
-
-MATCH examples (after normalization):
-- "8708" vs "8708 " → both become "8708" → MATCH
-- "87.08.99.00" vs "87089900" → both become "87089900" → MATCH
-- "8708-99-00" vs "87089900" → both become "87089900" → MATCH
-- "84812090" vs "84812090" → MATCH (identical)
-
-DIVERGENCE examples (after normalization):
-- "8708" vs "87089900" → "8708" ≠ "87089900" → DIVERGENCE
-- "8708" vs "87080000" → "8708" ≠ "87080000" → DIVERGENCE
-- "8708" vs "87028" → "8708" ≠ "87028" → DIVERGENCE
-- "8481" vs "84819" → "8481" ≠ "84819" → DIVERGENCE
-
-★★★ RULE 4: NO PREFIX MATCHING ★★★
-- Do NOT consider "8708" as a match for "87089900"
-- Do NOT consider shorter NCMs as valid prefixes of longer ones
-- After normalization, strings must be CHARACTER BY CHARACTER identical, SAME LENGTH
-
-★★★ RULE 5: NCM LIST EXTRACTION - HANDLE ALL FORMATS ★★★
-Extract NCMs from all these formats:
-
-Format 1 - Vertical list (one per line):
-8481
-8483
-8708
-
-Format 2 - Horizontal list (comma/semicolon separated):
-84812090, 84839000, 87089990
-
-Format 3 - MIXED FORMAT (common in HBLs and MBLs):
-8481
-8483
-8708
-84812090, 84839000, 87089990
-
-★★★ CRITICAL: Always split comma/semicolon separated values into individual NCMs ★★★
-The mixed format above contains 6 NCMs total, not 4.
-
-★★★ RULE 6: REPORT ALL DIVERGENCES ★★★
-- List every NCM that exists in one document but not in the other (after normalization)
-- Never assume typos or "fix" values yourself
-- When in doubt, report as divergence
-
-★★★ RULE 7: DO NOT AUTO-CORRECT NCM VALUES ★★★
-- If HBL has "831U" and Manifest has "8310" → DIVERGENCE (OCR error, but still different)
-- Never assume a character is a typo and auto-correct it
-- Report the values EXACTLY as they appear in each document
-- "831U" is NOT the same as "8310" - report as divergence
-
-★★★ RULE 8: REPORT INVALID/SUSPICIOUS NCM VALUES ★★★
-- NCMs like "87801", "87036", "4" should be flagged as potentially invalid
-- Compare them literally - if they don't exist in the other document, report divergence
-- Never assume they are "close enough" to another NCM
-- Examples of suspicious NCMs that MUST be reported:
-  - "4" (truncated/incomplete - only 1 digit)
-  - "87801" (5 digits, doesn't match any standard NCM format)
-  - "87036" (5 digits, likely OCR error for "8703" or typo)
-  - "831U" (contains letter - OCR error)
-
-★★★ RULE 9: SPLIT COMMA-SEPARATED VALUES CORRECTLY ★★★
-When extracting from lines like "87801, 87036, 4016, 4":
-- Split by comma: ["87801", "87036", "4016", "4"]
-- Trim whitespace from each value
-- Compare EACH value individually and literally against the other document's NCMs
-- The value "4" is a single-digit NCM and should be flagged as suspicious/truncated
-
-★★★ RULE 10: NCM vs HS CODE DISTINCTION ★★★
-- NCM codes are 8-digit Brazilian codes (e.g., "84812090")
-- HS Codes are 4-6 digit international codes (e.g., "8481", "848120")
-- When Manifest has 8-digit NCMs and HBL has 4-digit codes, this IS a divergence
-- Do NOT assume 4-digit codes are "prefixes" of 8-digit codes
-- Report: "Manifest uses full NCM (8-digit) while HBL uses HS Code (4-digit)"
 
 ███████████████████████████████████████████████████████████████████████████████
 ███ GROSS WEIGHT SOURCE PRIORITY (MANDATORY HIERARCHY)                        ███
