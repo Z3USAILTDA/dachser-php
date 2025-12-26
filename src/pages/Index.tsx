@@ -1964,7 +1964,7 @@ const Index = () => {
               <div className="flex items-center gap-2">
                 {/* Botão para ver companhias pendentes de cadastro */}
                 {(() => {
-                  const pendingAirlineCodes = ["014", "083", "125", "127", "147", "160", "399", "605", "865", "992", "999"]; // CIAs realmente não cadastradas
+                  const pendingAirlineCodes = ["399"]; // CIAs realmente não cadastradas (apenas Marine Air)
                   const pendingAwbs = statusAereoData.filter(awb => {
                     const code = (awb.airline_code || "").replace(/^0+/, "").padStart(3, "0");
                     return pendingAirlineCodes.includes(code);
@@ -1987,7 +1987,7 @@ const Index = () => {
                   className="h-8 px-4 rounded-full bg-emerald-600/80 text-white text-[0.75rem] font-medium flex items-center gap-1.5 hover:bg-emerald-500/80 transition border border-emerald-500/50"
                 >
                   <Plane className="w-3.5 h-3.5" />
-                  CIAs Monitoradas (26)
+                  CIAs Monitoradas (43)
                 </button>
 
                 <button
@@ -2328,17 +2328,7 @@ const Index = () => {
           <div className="overflow-y-auto max-h-[50vh] mt-4">
             {(() => {
               const pendingAirlineNames: Record<string, string> = {
-                "014": "Air Canada Cargo",
-                "083": "South African Airways (SAA Cargo)",
-                "125": "British Airways World Cargo",
-                "127": "ABX Air",
-                "147": "Royal Air Maroc Cargo",
-                "160": "Cathay Pacific Cargo",
                 "399": "Marine Air",
-                "605": "Copa Airlines Cargo",
-                "865": "Korean Air Cargo",
-                "992": "DHL Aero Expreso",
-                "999": "Air China Cargo"
               };
               const pendingAirlineCodes = Object.keys(pendingAirlineNames);
               
@@ -2414,6 +2404,7 @@ const Index = () => {
               const monitoredAirlines = [
                 { code: "001", name: "American Airlines Cargo" },
                 { code: "006", name: "Delta Cargo" },
+                { code: "014", name: "Air Canada Cargo" },
                 { code: "016", name: "United Cargo" },
                 { code: "020", name: "Lufthansa Cargo" },
                 { code: "023", name: "FedEx Express" },
@@ -2421,23 +2412,38 @@ const Index = () => {
                 { code: "047", name: "TAP Air Portugal Cargo" },
                 { code: "055", name: "ITA Airways Cargo" },
                 { code: "057", name: "Air France Cargo" },
-                { code: "074", name: "KLM Cargo" },
-                { code: "075", name: "IAG Cargo (British Airways)" },
+                { code: "074", name: "AF/KL Cargo" },
+                { code: "075", name: "IAG Cargo" },
+                { code: "083", name: "SAA Cargo" },
+                { code: "112", name: "China Cargo Airlines" },
                 { code: "118", name: "TAAG Angola Airlines" },
+                { code: "125", name: "IAG Cargo (British Airways)" },
+                { code: "127", name: "Gol Linhas Aéreas (GOLLOG)" },
                 { code: "139", name: "Aeromexico Cargo" },
+                { code: "145", name: "LATAM Cargo Chile" },
+                { code: "147", name: "Royal Air Maroc" },
                 { code: "157", name: "Qatar Airways Cargo" },
+                { code: "160", name: "Cathay Cargo" },
                 { code: "172", name: "Cargolux" },
                 { code: "176", name: "Emirates SkyCargo" },
+                { code: "202", name: "DHLAvianca Cargo" },
                 { code: "235", name: "Turkish Airlines Cargo" },
+                { code: "318", name: "SKY Carga" },
                 { code: "369", name: "Atlas Air" },
                 { code: "406", name: "UPS Airlines" },
                 { code: "549", name: "LATAM Cargo (Alt)" },
                 { code: "577", name: "Azul Cargo" },
-                { code: "615", name: "DHL Aviation (EAT Leipzig)" },
+                { code: "605", name: "SKY Airline Chile" },
+                { code: "615", name: "European Air Transport (DHL)" },
                 { code: "724", name: "Swiss WorldCargo" },
-                { code: "729", name: "Tampa Cargo (Avianca)" },
+                { code: "729", name: "Avianca Cargo" },
+                { code: "805", name: "GSA Force" },
+                { code: "827", name: "RUSA" },
+                { code: "865", name: "MasAir (SmartKargo)" },
                 { code: "881", name: "Condor Flugdienst" },
+                { code: "992", name: "DHL Aviation Cargo" },
                 { code: "996", name: "Air Europa Cargo" },
+                { code: "999", name: "Air China Cargo" },
               ];
 
               // Count AWBs per airline
@@ -2493,7 +2499,7 @@ const Index = () => {
           </div>
           <div className="mt-4 pt-4 border-t border-[rgba(255,255,255,.08)] text-[0.75rem] text-[#aaa] flex justify-between">
             <span>Total de AWBs monitorados: <strong className="text-emerald-400">{statusAereoData.length}</strong></span>
-            <span>27 companhias integradas</span>
+            <span>43 companhias integradas</span>
           </div>
         </DialogContent>
       </Dialog>
