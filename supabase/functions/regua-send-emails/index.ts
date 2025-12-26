@@ -657,7 +657,7 @@ serve(async (req: Request): Promise<Response> => {
         t.valor_nf,
         t.cnpj,
         CASE WHEN t.tipo_documento='FAT_NF' THEN 'À vista' ELSE 'A prazo' END AS tipo_pagto,
-        COALESCE(nf.processo, '') AS processo,
+        COALESCE(nf.numero_processo, '') AS processo,
         COALESCE(nf.house, '') AS house,
         COALESCE(nf.master, '') AS master,
         (
