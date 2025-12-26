@@ -1284,38 +1284,11 @@ const Index = () => {
       { code: "999", name: "Air China Cargo" },
     ];
 
-    // Count AWBs per airline from statusAereoData
-    const awbCountByAirline = statusAereoData.reduce((acc, awb) => {
-      const code = (awb.airline_code || "").replace(/^0+/, "").padStart(3, "0");
-      acc[code] = (acc[code] || 0) + 1;
-      return acc;
-    }, {} as Record<string, number>);
-
-    // Create airline map for quick lookup
-    const airlineMap = new Map(monitoredAirlines.map(a => [a.code, a.name]));
-
-    // Get all airlines with AWBs (both monitored and unmonitored)
-    const allAirlinesWithAwbs = Object.entries(awbCountByAirline)
-      .map(([code, count]) => ({
-        code,
-        name: airlineMap.get(code) || `Companhia ${code}`,
-        count,
-        isMonitored: airlineMap.has(code),
-      }))
-      .sort((a, b) => b.count - a.count);
-
-    // Total is the actual count from statusAereoData
-    const totalAwbs = statusAereoData.length;
-
-    // Count only airlines with at least 1 AWB
-    const airlinesWithAwbs = allAirlinesWithAwbs.filter(a => a.count > 0).length;
-
     return {
-      sortedAirlines: allAirlinesWithAwbs,
-      totalAwbs,
-      totalAirlines: airlinesWithAwbs,
+      airlines: monitoredAirlines,
+      totalAirlines: monitoredAirlines.length,
     };
-  }, [statusAereoData]);
+  }, []);
 
   const handleAddAWB = async () => {
     if (!awbNumber || !selectedAirline || !consigneeName) {
@@ -2485,33 +2458,22 @@ const Index = () => {
                 <tr className="border-b border-[rgba(255,255,255,.08)]">
                   <th className="px-3 py-2 text-left text-[#aaaaaa] uppercase text-[0.68rem] tracking-[0.1em] font-medium">Código</th>
                   <th className="px-3 py-2 text-left text-[#aaaaaa] uppercase text-[0.68rem] tracking-[0.1em] font-medium">Companhia Aérea</th>
-                  <th className="px-3 py-2 text-right text-[#aaaaaa] uppercase text-[0.68rem] tracking-[0.1em] font-medium">AWBs</th>
                 </tr>
               </thead>
               <tbody>
-                {monitoredAirlinesData.sortedAirlines.map((airline) => (
+                {monitoredAirlinesData.airlines.map((airline) => (
                   <tr key={airline.code} className="border-b border-[rgba(255,255,255,.05)] hover:bg-[rgba(255,255,255,.03)]">
                     <td className="px-3 py-2.5">
                       <span className="font-mono text-emerald-400 text-sm">{airline.code}</span>
                     </td>
                     <td className="px-3 py-2.5 text-[#f5f5f5] text-sm">{airline.name}</td>
-                    <td className="px-3 py-2.5 text-right">
-                      {airline.count > 0 ? (
-                        <span className="inline-flex items-center justify-center min-w-[2rem] px-2 py-0.5 rounded-full bg-emerald-600/60 text-[#f5f5f5] text-sm font-medium">
-                          {airline.count}
-                        </span>
-                      ) : (
-                        <span className="text-[#666] text-sm">-</span>
-                      )}
-                    </td>
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
-          <div className="mt-4 pt-4 border-t border-[rgba(255,255,255,.08)] text-[0.75rem] text-[#aaa] flex justify-between">
-            <span>Total de AWBs monitorados: <strong className="text-emerald-400">{monitoredAirlinesData.totalAwbs}</strong></span>
-            <span>{monitoredAirlinesData.totalAirlines} companhias integradas</span>
+          <div className="mt-4 pt-4 border-t border-[rgba(255,255,255,.08)] text-[0.75rem] text-[#aaa] text-center">
+            {monitoredAirlinesData.totalAirlines} companhias integradas
           </div>
         </DialogContent>
       </Dialog>
