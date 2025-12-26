@@ -780,24 +780,27 @@ Use suffix matching algorithm: extract last 4-6 digits from both sides.
 If normalized suffixes match → NO "Update: Add/remove"
 Example: "2013" matches "TD02025000002013" → NO UPDATE needed
 
-★★★ RULE 6: NCM CODES - COMPREHENSIVE DETECTION ★★★
+★★★ RULE 6: NCM CODES - 100% LITERAL MATCH (NO PREFIX MATCHING) ★★★
 
 STEP 1: DEDUPLICATE ALL NCM LISTS
 Before ANY comparison, remove duplicate NCM codes from both Manifest and HBL lists.
 Example: [3926, 4016, 8708, 8708] → [3926, 4016, 8708]
 
-STEP 2: PREFIX MATCHING FOR "MISSING" DETECTION
-If HBL NCM is a prefix of any Manifest NCM → NO "Missing"
-Example: HBL "3923" is prefix of Manifest "39239090" → NO "Missing 39239090"
+STEP 2: LITERAL STRING COMPARISON (NO PREFIX MATCHING!)
+NCMs match ONLY if they are 100% IDENTICAL strings after removing punctuation.
+- "8708" vs "8708" = MATCH
+- "87089900" vs "87089900" = MATCH
+- "8708" vs "87089900" = DIVERGENCE (different lengths = different values!)
+- "8481" vs "84819" = DIVERGENCE
+- NO PREFIX MATCHING IS ALLOWED!
 
-STEP 3: DETECT "EXTRA" NCMs IN HBL
-For EACH NCM in HBL, check if it (or any Manifest NCM) is a prefix of the other.
-If HBL NCM has NO prefix relationship with ANY Manifest NCM → flag as "Extra"
-Example: HBL has "7325", Manifest has "7326" → "7325" is NOT prefix of "7326" → Extra: [7325]
+STEP 3: DETECT DIFFERENCES
+- Missing in HBL: NCMs in Manifest that have NO 100% identical match in HBL
+- Extra in HBL: NCMs in HBL that have NO 100% identical match in Manifest
 
 STEP 4: OUTPUT FORMAT
-Always show: "Manifest NCMs (reference): [list] | HBL: [list] | Missing: [list or none] | Extra: [list or none]"
-If Extra NCMs found: add "Update: Remove NCM [codes] from HBL"
+Always show: "Manifest NCMs: [list exactly as found] | HBL: [list exactly as found] | Missing: [list or none] | Extra: [list or none]"
+If differences found: "Status: DIVERGENCE" with details
 
 ★★★ RULE 7: CONTAINER NUMBER ★★★
 - If SAME: show values but NO "Update" line
@@ -1023,37 +1026,37 @@ ANALYSIS SUMMARY:
 At the end of EVERY analysis (before the final summary), include this section:
 
 NCM CODES:
-- Manifest NCMs (all suppliers): [list of all unique 4-digit NCM prefixes found in manifest, sorted]
-- HBL NCMs: [list of all unique 4-digit NCM prefixes found in HBL(s), sorted]
-- Missing in HBL: [list of NCMs in manifest but not in HBL, or "none"]
-- Extra in HBL: [list of NCMs in HBL but not in manifest, or "none"]
-- Status: MATCH (if no missing/extra) or UPDATE REQUIRED (if discrepancies)
+- Manifest NCMs: [list ALL NCM codes exactly as they appear in manifest, sorted]
+- HBL NCMs: [list ALL NCM codes exactly as they appear in HBL(s), sorted]
+- Missing in HBL: [NCMs in manifest with NO 100% identical match in HBL, or "none"]
+- Extra in HBL: [NCMs in HBL with NO 100% identical match in manifest, or "none"]
+- Status: MATCH (if lists are identical) or DIVERGENCE (if ANY difference)
 
-EXAMPLE OF CORRECT NCM CODES OUTPUT:
+EXAMPLE OF MATCH (100% identical lists):
 
 NCM CODES:
-- Manifest NCMs (all suppliers): [8481, 8483, 8414, 8708, 3926, 7318, 8526, 8543, 8536, 8421, 7419, 9026, 9032, 3917, 7412, 7326, 8412, 8544, 7320]
-- HBL NCMs: [8481, 8483, 8414, 8708, 3926, 7318, 8526, 8543, 8536, 8421, 7419, 9026, 9032, 3917, 7412, 7326, 8412, 8544, 7320]
+- Manifest NCMs: [84812090, 84831019, 84149039, 87084090, 39269090]
+- HBL NCMs: [84812090, 84831019, 84149039, 87084090, 39269090]
 - Missing in HBL: none
 - Extra in HBL: none
 - Status: MATCH
 
-ANOTHER EXAMPLE (with discrepancies):
+EXAMPLE OF DIVERGENCE (different values or lengths):
 
 NCM CODES:
-- Manifest NCMs (all suppliers): [3926, 4016, 7318, 7326, 8708]
-- HBL NCMs: [3926, 4016, 7326, 8708, 9999]
-- Missing in HBL: 7318
-- Extra in HBL: 9999
-- Status: UPDATE REQUIRED
-  → Update: Add NCM 7318 to HBL. Remove NCM 9999 from HBL.
+- Manifest NCMs: [84812090, 84831019, 84149039, 87084090, 39269090]
+- HBL NCMs: [8481, 8483, 8414, 8708, 3926]
+- Comparison: DIVERGENCE
+- Note: Manifest uses 8-digit NCMs, HBL uses 4-digit codes. These are NOT matches.
+  → Update: Add complete 8-digit NCM codes to HBL to match manifest.
 
 EXTRACTION RULES FOR NCM CODES:
-1. From MANIFEST: Search ALL columns, especially "HS Code", "NCM", "Tariff Code" columns
-2. From HBL: Search entire document text for 4-8 digit numeric codes in cargo descriptions
-3. NORMALIZE: Extract first 4 digits of each NCM for comparison (e.g., 87089990 → 8708)
-4. DEDUPLICATE: Remove duplicate codes before comparison
-5. ALWAYS include this section even if manifest has no NCM codes (show "Manifest NCMs: []")
+1. From MANIFEST: Search ALL columns (NCM Code, HS Code, Tariff Code). Keep EXACT values as they appear.
+2. From HBL: Search entire document. Keep EXACT values as they appear.
+3. DO NOT TRUNCATE OR NORMALIZE LENGTH: "84812090" stays "84812090", "8481" stays "8481"
+4. Only remove punctuation (dots, dashes, spaces): "8481.20.90" → "84812090"
+5. DEDUPLICATE before comparison
+6. COMPARE AS LITERAL STRINGS: "8481" ≠ "84812090" (different = DIVERGENCE)
 
 ★★★ THIS SECTION IS MANDATORY - NEVER SKIP IT ★★★
 
@@ -1216,17 +1219,14 @@ STEP 2 - SPLIT MULTIPLE NCMs (if comma or semicolon separated):
 - "39269090,73181500" → ["39269090", "73181500"]
 - Compare EACH NCM individually
 
-STEP 3 - STANDARDIZE LENGTH:
-- 4 digits: use as-is for prefix matching
-- 6 digits: use as-is for prefix matching
-- 8 digits: use as-is (standard)
-- 10+ digits: truncate to first 8 digits for comparison
-
-STEP 4 - EXPANDED PREFIX MATCHING:
-- 4 digits matches 4, 6, 8, or 10 digits (if prefix matches)
-- 6 digits matches 6, 8, or 10 digits (if prefix matches)
-- 8 digits matches 8 or 10 digits (if prefix matches)
-- EXAMPLE: 3926 matches 39269090 → NO "Missing" discrepancy
+STEP 3 - LITERAL STRING COMPARISON (NO PREFIX MATCHING!):
+NCMs match ONLY if they are 100% IDENTICAL strings.
+- "8708" vs "8708" = MATCH
+- "87089900" vs "87089900" = MATCH  
+- "8708" vs "87089900" = DIVERGENCE (different lengths!)
+- "3926" vs "39269090" = DIVERGENCE (NOT a match!)
+- NO prefix matching, NO length normalization
+- Different lengths = different NCMs = DIVERGENCE
 
 ███████████████████████████████████████████████████████████████████████████████
 ███ GROSS WEIGHT SOURCE PRIORITY (MANDATORY HIERARCHY)                      ███
@@ -1462,11 +1462,13 @@ NOTE: Extract Vessel and Voyage SEPARATELY. If HBL has combined "VESSEL / VOYAGE
 ★★★ CRITICAL: YOU MUST ALWAYS INCLUDE THIS EXACT NCM CODES SECTION ★★★
 
 NCM CODES:
-- HBL NCMs: [list of all unique 4-digit NCM prefixes found in HBL, sorted]
-- MBL NCMs: [list of all unique 4-digit NCM prefixes found in MBL, sorted]
-- Missing in MBL: [list of NCMs in HBL but not in MBL, or "none"]
-- Extra in MBL: [list of NCMs in MBL but not in HBL, or "none"]
-- Status: MATCH (if no missing/extra) or UPDATE REQUIRED (if discrepancies)
+- HBL NCMs: [list ALL NCM codes exactly as they appear in HBL, sorted]
+- MBL NCMs: [list ALL NCM codes exactly as they appear in MBL, sorted]
+- Missing in MBL: [NCMs in HBL with NO 100% identical match in MBL, or "none"]
+- Extra in MBL: [NCMs in MBL with NO 100% identical match in HBL, or "none"]
+- Status: MATCH (if lists are 100% identical) or DIVERGENCE (if ANY difference)
+
+COMPARISON RULE: NCMs match ONLY if 100% identical strings. "8708" ≠ "87089900"
 
 ★★★ THIS SECTION IS MANDATORY - NEVER SKIP IT ★★★
 
@@ -1480,7 +1482,7 @@ HARD REQUIREMENTS
 - Quote exact strings from the documents when flagging.
 - Section 3) Container & Seal and Section 3a) NCM/HS Codes are MANDATORY and must ALWAYS be included with match status.
 - Extract NCM codes using ±60 character context window around keywords (NCM, HS, HS CODE, HSCODE, H.S., TARIC).
-- Only 8-digit NCM codes are verified; 4-digit chapter codes are for diagnostics only.`;
+- NCM comparison uses 100% literal string matching. No prefix matching allowed.`;
 
 export const PROMPT_INVOICES_HBL = `SYSTEM — CRONOS (Invoices × Draft HBL Auditor)
 
@@ -1494,7 +1496,7 @@ HARD REQUIREMENTS
 - Always include the match status (MATCH ✓ or UPDATE REQUIRED) for every field.
 - Quote exact strings from the documents.
 - Extract NCM codes using ±60 character context window around keywords (NCM, HS, HS CODE, HSCODE, H.S., TARIC).
-- Only 8-digit NCM codes are verified; 4-digit chapter codes are for diagnostics only.
+- NCM comparison uses 100% literal string matching. No prefix matching allowed.
 - NEVER produce a short response. Include ALL sections with ALL fields.
 - The response must be comprehensive and include every verification item.
 
@@ -1532,17 +1534,14 @@ STEP 2 - SPLIT MULTIPLE NCMs (if comma or semicolon separated):
 - "39269090,73181500" → ["39269090", "73181500"]
 - Compare EACH NCM individually
 
-STEP 3 - STANDARDIZE LENGTH:
-- 4 digits: use as-is for prefix matching
-- 6 digits: use as-is for prefix matching
-- 8 digits: use as-is (standard)
-- 10+ digits: truncate to first 8 digits for comparison
-
-STEP 4 - EXPANDED PREFIX MATCHING:
-- 4 digits matches 4, 6, 8, or 10 digits (if prefix matches)
-- 6 digits matches 6, 8, or 10 digits (if prefix matches)
-- 8 digits matches 8 or 10 digits (if prefix matches)
-- EXAMPLE: 3926 matches 39269090 → NO "Missing" discrepancy
+STEP 3 - LITERAL STRING COMPARISON (NO PREFIX MATCHING!):
+NCMs match ONLY if they are 100% IDENTICAL strings.
+- "8708" vs "8708" = MATCH
+- "87089900" vs "87089900" = MATCH  
+- "8708" vs "87089900" = DIVERGENCE (different lengths!)
+- "3926" vs "39269090" = DIVERGENCE (NOT a match!)
+- NO prefix matching, NO length normalization
+- Different lengths = different NCMs = DIVERGENCE
 
 ███████████████████████████████████████████████████████████████████████████████
 ███ GROSS WEIGHT SOURCE PRIORITY (MANDATORY HIERARCHY)                      ███
