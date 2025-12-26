@@ -15,12 +15,14 @@ interface AgingRequest {
 
 interface InvoiceRow {
   documento: string;
+  nd: string;
+  ref_cliente: string;
   numero_nf: string;
+  modal: string;
+  tipo_documento: string;
   data_emissao: string;
   data_vencimento: string;
-  dias: number;
   valor_nf: number;
-  tipo_pagto: string;
   razao_social: string;
   cnpj: string;
   processo: string;
@@ -98,19 +100,24 @@ serve(async (req: Request): Promise<Response> => {
       return c;
     };
 
-    // Fetch all overdue invoices for these CNPJs
+    // Fetch all overdue invoices for these CNPJs with all required columns
     const placeholders = allCnpjs.map(() => "?").join(",");
     const invoicesResult = await client.query(`
       SELECT 
         t.documento,
-        COALESCE(NULLIF(t.numero_nf,''), t.documento) AS numero_nf,
-        DATE_FORMAT(t.data_emissao, '%d/%m/%Y') AS data_emissao,
-        DATE_FORMAT(t.data_vencimento, '%d/%m/%Y') AS data_vencimento,
-        DATEDIFF(CURDATE(), t.data_vencimento) AS dias,
+        COALESCE(t.nd, '') AS nd,
+        COALESCE(t.ref_cliente, '') AS ref_cliente,
+        COALESCE(NULLIF(t.numero_nf,''), '') AS numero_nf,
+        COALESCE(t.modal, '') AS modal,
+        t.tipo_documento,
+        DATE_FORMAT(t.data_emissao, '%m/%d/%y') AS data_emissao,
+        DATE_FORMAT(t.data_vencimento, '%m/%d/%y') AS data_vencimento,
         t.valor_nf,
-        CASE WHEN t.tipo_documento='FAT_NF' THEN 'À vista' ELSE 'A prazo' END AS tipo_pagto,
         t.razao_social,
-        t.cnpj
+        t.cnpj,
+        COALESCE(t.processo, '') AS processo,
+        COALESCE(t.house, '') AS house,
+        COALESCE(t.master, '') AS master
       FROM dados_dachser.t_dados_financeiro_nfs t
       LEFT JOIN ai_agente.t_financeiro_soft_delete sd ON sd.documento = t.documento
       WHERE t.cnpj IN (${placeholders})
@@ -130,62 +137,104 @@ serve(async (req: Request): Promise<Response> => {
     const totalValue = invoicesResult.reduce((sum: number, inv: InvoiceRow) => sum + (Number(inv.valor_nf) || 0), 0);
     const totalValueFormatted = totalValue.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
-    // Generate Excel file content (CSV format for simplicity, will be converted)
-    const currentDate = new Date().toLocaleDateString("pt-BR");
+    // Generate Excel file content
+    const currentDate = new Date().toLocaleDateString("en-US", { month: "2-digit", day: "2-digit", year: "2-digit" });
+    const clienteName = cliente || invoicesResult[0]?.razao_social || "Cliente";
     
-    // Build HTML table for Excel (using HTML format which Excel can open)
+    // Build HTML table for Excel matching the exact design from the reference
     const excelHtml = `
 <!DOCTYPE html>
 <html>
 <head>
 <meta charset="UTF-8">
 <style>
-  table { border-collapse: collapse; font-family: Arial, sans-serif; }
-  th, td { border: 1px solid #000; padding: 8px; text-align: left; }
-  th { background-color: #FFCC00; font-weight: bold; }
-  .header { font-size: 16px; font-weight: bold; margin-bottom: 10px; }
-  .meta { margin-bottom: 5px; }
-  .total { font-weight: bold; background-color: #f0f0f0; }
+  body { font-family: Arial, sans-serif; font-size: 10px; }
+  table { border-collapse: collapse; width: 100%; }
+  th { 
+    background-color: #FF0000; 
+    color: white; 
+    font-weight: bold; 
+    padding: 4px 6px; 
+    text-align: left;
+    border: 1px solid #ccc;
+    font-size: 9px;
+  }
+  td { 
+    border: 1px solid #ccc; 
+    padding: 3px 6px; 
+    text-align: left; 
+    font-size: 9px;
+  }
+  .header-row { border: none; }
+  .header-row td { border: none; padding: 2px 4px; }
+  .logo { font-weight: bold; font-size: 18px; color: #FFCC00; }
+  .title { font-size: 14px; font-weight: bold; text-align: center; }
+  .total-label { text-align: right; font-weight: bold; }
+  .total-value { color: #008000; font-weight: bold; font-size: 12px; }
+  .date-cell { text-align: right; }
+  .valor-cell { text-align: right; color: #0000FF; }
+  .house-cell { color: #008000; }
 </style>
 </head>
 <body>
-<div class="header">${cliente || invoicesResult[0]?.razao_social || "Cliente"} - Demonstrativo de Faturamento</div>
-<div class="meta">Período: 01/01/2022 a 31/12/2027</div>
-<div class="meta">Valor total em atraso: R$ ${totalValueFormatted}</div>
-<div class="meta">Data: ${currentDate}</div>
-<br/>
 <table>
-  <thead>
-    <tr>
-      <th>DOC</th>
-      <th>NF</th>
-      <th>EMISSÃO</th>
-      <th>VENCTO</th>
-      <th>DIAS</th>
-      <th>VALOR</th>
-      <th>TIPO</th>
-      <th>C.N.P.J</th>
-    </tr>
-  </thead>
-  <tbody>
-    ${invoicesResult.map((inv: InvoiceRow) => `
-    <tr>
-      <td>${inv.documento || "-"}</td>
-      <td>${inv.numero_nf || "-"}</td>
-      <td>${inv.data_emissao || "-"}</td>
-      <td>${inv.data_vencimento || "-"}</td>
-      <td>D+${inv.dias}</td>
-      <td>R$ ${Number(inv.valor_nf || 0).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
-      <td>${inv.tipo_pagto || "-"}</td>
-      <td>${formatCnpj(inv.cnpj || "")}</td>
-    </tr>
-    `).join("")}
-    <tr class="total">
-      <td colspan="5">TOTAL</td>
-      <td>R$ ${totalValueFormatted}</td>
-      <td colspan="2"></td>
-    </tr>
-  </tbody>
+  <!-- Header rows -->
+  <tr class="header-row">
+    <td colspan="2" class="logo">DACHSER</td>
+    <td colspan="8"></td>
+    <td colspan="2" class="total-label">Valor total em atraso</td>
+    <td colspan="2"></td>
+  </tr>
+  <tr class="header-row">
+    <td colspan="2"></td>
+    <td colspan="6" class="title">${clienteName} - Demonstrativo de Faturamento</td>
+    <td colspan="2"></td>
+    <td colspan="2" class="total-value">R$ ${totalValueFormatted}</td>
+    <td colspan="2"></td>
+  </tr>
+  <tr class="header-row">
+    <td colspan="12"></td>
+    <td colspan="2" class="date-cell">${currentDate}</td>
+  </tr>
+  <tr class="header-row">
+    <td colspan="14"><strong>Período de Faturamento:</strong> 01/01/2022 a 31/12/2027</td>
+  </tr>
+  <!-- Data headers -->
+  <tr>
+    <th>DOCUMENTO</th>
+    <th>ND</th>
+    <th>REF. CLIENTE</th>
+    <th>NOTA FISCAL DACHSER</th>
+    <th>MODAL</th>
+    <th>TIPO DOC.</th>
+    <th>EMISSÃO</th>
+    <th>VENCTO</th>
+    <th>C.N.P.J</th>
+    <th>CLIENTE</th>
+    <th>VALOR</th>
+    <th>PROCESSO</th>
+    <th>MASTER</th>
+    <th>HOUSE</th>
+  </tr>
+  <!-- Data rows -->
+  ${invoicesResult.map((inv: InvoiceRow) => `
+  <tr>
+    <td>${inv.documento || ""}</td>
+    <td>${inv.nd || ""}</td>
+    <td>${inv.ref_cliente || ""}</td>
+    <td>${inv.numero_nf || ""}</td>
+    <td>${inv.modal || ""}</td>
+    <td>${inv.tipo_documento || ""}</td>
+    <td>${inv.data_emissao || ""}</td>
+    <td>${inv.data_vencimento || ""}</td>
+    <td>${formatCnpj(inv.cnpj || "")}</td>
+    <td>${inv.razao_social || ""}</td>
+    <td class="valor-cell">${Number(inv.valor_nf || 0).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+    <td>${inv.processo || ""}</td>
+    <td>${inv.master || ""}</td>
+    <td class="house-cell">${inv.house || ""}</td>
+  </tr>
+  `).join("")}
 </table>
 </body>
 </html>`;
