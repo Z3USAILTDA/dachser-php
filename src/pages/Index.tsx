@@ -1291,20 +1291,29 @@ const Index = () => {
       return acc;
     }, {} as Record<string, number>);
 
-    // Sort airlines by AWB count (descending)
-    const sortedAirlines = [...monitoredAirlines]
-      .map((airline) => ({
-        ...airline,
-        count: awbCountByAirline[airline.code] || 0,
+    // Create airline map for quick lookup
+    const airlineMap = new Map(monitoredAirlines.map(a => [a.code, a.name]));
+
+    // Get all airlines with AWBs (both monitored and unmonitored)
+    const allAirlinesWithAwbs = Object.entries(awbCountByAirline)
+      .map(([code, count]) => ({
+        code,
+        name: airlineMap.get(code) || `Companhia ${code}`,
+        count,
+        isMonitored: airlineMap.has(code),
       }))
       .sort((a, b) => b.count - a.count);
 
-    const totalAwbs = sortedAirlines.reduce((sum, airline) => sum + airline.count, 0);
+    // Total is the actual count from statusAereoData
+    const totalAwbs = statusAereoData.length;
+
+    // Count only airlines with at least 1 AWB
+    const airlinesWithAwbs = allAirlinesWithAwbs.filter(a => a.count > 0).length;
 
     return {
-      sortedAirlines,
+      sortedAirlines: allAirlinesWithAwbs,
       totalAwbs,
-      totalAirlines: monitoredAirlines.length,
+      totalAirlines: airlinesWithAwbs,
     };
   }, [statusAereoData]);
 
