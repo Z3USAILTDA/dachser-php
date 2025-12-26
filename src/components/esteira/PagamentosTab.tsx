@@ -270,7 +270,17 @@ export const PagamentosTab = () => {
     }
   };
 
-  const handleSetReady = async (id: string, isReady: boolean) => {
+  const handleSetReady = async (id: string, isReady: boolean, tipoExecucao?: TipoExecucaoPagamento) => {
+    // Validar tipo de execução antes de marcar como pronto
+    if (isReady && !tipoExecucao) {
+      toast({ 
+        title: "Tipo de execução obrigatório", 
+        description: "Defina o tipo de execução (Manual ou Remessa) antes de marcar como pronto",
+        variant: "destructive" 
+      });
+      return;
+    }
+
     setProcessingAction(prev => ({ ...prev, [id]: true }));
     try {
       const { error } = await supabase.functions.invoke("mariadb-proxy", {
@@ -625,7 +635,7 @@ export const PagamentosTab = () => {
                           size="sm"
                           className="h-8 text-xs"
                           disabled={processingAction[pag.id]}
-                          onClick={() => handleSetReady(pag.id, !pag.is_pronto_para_robo)}
+                          onClick={() => handleSetReady(pag.id, !pag.is_pronto_para_robo, pag.tipo_execucao_pagamento)}
                           title={pag.is_pronto_para_robo ? "Desmarcar pronto" : "Marcar como pronto para baixa"}
                         >
                           <Check className="h-4 w-4 mr-1" />
