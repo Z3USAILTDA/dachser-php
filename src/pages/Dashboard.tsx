@@ -260,27 +260,27 @@ const Dashboard = () => {
       </header>
 
       {/* Main Content */}
-      <main className="relative z-10 pt-16 pb-12 px-3">
+      <main className="relative z-10 pt-20 pb-16 px-4">
         {/* Brand Area */}
-        <div className="text-center mb-4">
-          <h1 className="text-2xl md:text-3xl font-bold tracking-[0.16em] text-foreground mb-1">DACHSER</h1>
-          <p className="text-foreground/90 text-sm font-medium">Intelligent Logistics</p>
-          <div className="flex justify-center gap-2 mt-2">
-            <span className="w-1.5 h-1.5 rounded-full bg-primary shadow-[0_0_8px_hsl(var(--primary))]" />
-            <span className="w-1.5 h-1.5 rounded-full bg-primary shadow-[0_0_8px_hsl(var(--primary))]" />
-            <span className="w-1.5 h-1.5 rounded-full bg-primary shadow-[0_0_8px_hsl(var(--primary))]" />
+        <div className="text-center mb-6">
+          <h1 className="text-3xl md:text-4xl font-bold tracking-[0.16em] text-foreground mb-1">DACHSER</h1>
+          <p className="text-foreground/90 text-base font-medium">Intelligent Logistics</p>
+          <div className="flex justify-center gap-2.5 mt-3">
+            <span className="w-1.5 h-1.5 rounded-full bg-primary shadow-[0_0_10px_hsl(var(--primary))]" />
+            <span className="w-1.5 h-1.5 rounded-full bg-primary shadow-[0_0_10px_hsl(var(--primary))]" />
+            <span className="w-1.5 h-1.5 rounded-full bg-primary shadow-[0_0_10px_hsl(var(--primary))]" />
           </div>
         </div>
 
         {/* Decorative Lines */}
-        <div className="relative w-full max-w-4xl mx-auto h-16 mb-4 hidden md:block">
+        <div className="relative w-full max-w-4xl mx-auto h-20 mb-6 hidden md:block">
           {[...Array(6)].map((_, i) => (
             <div
               key={i}
               className="absolute top-0 left-1/2 w-0.5 h-full rounded-full opacity-70"
               style={{
                 background: `linear-gradient(to bottom, hsl(var(--primary) / 0.7), hsl(var(--primary) / 0.08))`,
-                transform: `translateX(${-240 + i * 96}px) skewX(${-20 + i * 8}deg)`,
+                transform: `translateX(${-280 + i * 112}px) skewX(${-20 + i * 8}deg)`,
                 transformOrigin: "top",
               }}
             />
@@ -288,18 +288,18 @@ const Dashboard = () => {
         </div>
 
         {/* Menu Cards Row */}
-        <div className="flex justify-center items-start gap-1.5 px-2">
+        <div className="flex justify-center items-start gap-1.5 px-3">
           {filteredMenuItems.map((item) => (
             <div
               key={item.id}
               className="relative flex flex-col items-center"
-              style={{ width: "120px" }}
+              style={{ width: "140px" }}
             >
               {/* Card */}
               <div
                 onClick={() => (item.href ? navigate(item.href) : toggleMenu(item.id))}
                 className={`
-                  w-[120px] h-[130px] rounded-[16px] flex flex-col items-center justify-center gap-2 cursor-pointer
+                  w-[140px] h-[150px] rounded-[18px] flex flex-col items-center justify-center gap-2.5 cursor-pointer
                   transition-all duration-200 
                   ${activeMenu === item.id ? "text-primary-foreground -translate-y-1" : "text-foreground hover:-translate-y-1"}
                 `}
@@ -308,23 +308,23 @@ const Dashboard = () => {
                     activeMenu === item.id ? "linear-gradient(135deg, #ffc800, #ffe680)" : "rgba(4, 10, 30, 0.75)",
                   boxShadow:
                     activeMenu === item.id
-                      ? "0 16px 40px rgba(0, 0, 0, 0.85), 0 0 16px rgba(255, 200, 0, 0.65)"
-                      : "0 16px 40px rgba(0, 0, 0, 0.85), 0 0 0 1px rgba(255, 255, 255, 0.03)",
+                      ? "0 18px 50px rgba(0, 0, 0, 0.85), 0 0 18px rgba(255, 200, 0, 0.65)"
+                      : "0 18px 50px rgba(0, 0, 0, 0.85), 0 0 0 1px rgba(255, 255, 255, 0.03)",
                   backdropFilter: "blur(18px)",
                   border: "1px solid rgba(255, 255, 255, 0.08)",
                 }}
               >
                 <div
                   className={`
-                    w-9 h-9 rounded-xl flex items-center justify-center
+                    w-10 h-10 rounded-xl flex items-center justify-center
                     ${activeMenu === item.id ? "bg-background/12 border border-background/60 text-primary-foreground" : "bg-primary/12 border border-primary/60 text-primary"}
                   `}
                 >
                   {item.icon}
                 </div>
-                <span className="text-[10px] font-semibold tracking-[0.14em] uppercase">{item.label}</span>
+                <span className="text-[11px] font-semibold tracking-[0.16em] uppercase">{item.label}</span>
                 <span
-                  className={`text-[8px] text-center px-1 ${activeMenu === item.id ? "text-primary-foreground/70" : "text-muted-foreground"}`}
+                  className={`text-[9px] text-center px-1 ${activeMenu === item.id ? "text-primary-foreground/70" : "text-muted-foreground"}`}
                 >
                   {item.subtitle}
                 </span>
@@ -338,11 +338,11 @@ const Dashboard = () => {
                     top: '100%',
                     left: '50%',
                     transform: 'translateX(-50%)',
-                    marginTop: '14px',
+                    marginTop: '18px',
                   }}
                 >
                   {/* Vertical Line from parent */}
-                  <div className="w-0.5 h-3 bg-primary" />
+                  <div className="w-0.5 h-4 bg-primary" />
 
                   {/* Subcards Container */}
                   <div className="relative flex flex-col items-center">
@@ -354,7 +354,7 @@ const Dashboard = () => {
                           className="absolute h-0.5 bg-primary"
                           style={{ 
                             top: 0,
-                            width: `calc(${(visibleChildren.length - 1) * 160}px + ${(visibleChildren.length - 1) * 16}px)`,
+                            width: `calc(${(visibleChildren.length - 1) * 200}px + ${(visibleChildren.length - 1) * 20}px)`,
                             left: '50%',
                             transform: 'translateX(-50%)',
                           }}
@@ -363,34 +363,34 @@ const Dashboard = () => {
                     })()}
 
                     {/* Vertical pins container */}
-                    <div className="flex justify-center" style={{ gap: '16px' }}>
+                    <div className="flex justify-center" style={{ gap: '20px' }}>
                       {item.children.filter(child => !child.adminOnly || isAdmin).map((child, idx) => (
                         <div 
                           key={idx} 
                           className="flex flex-col items-center"
-                          style={{ width: '160px' }}
+                          style={{ width: '200px' }}
                         >
                           {/* Vertical pin connector */}
-                          <div className="w-0.5 h-2 bg-primary" />
+                          <div className="w-0.5 h-3 bg-primary" />
                           <div className="w-2 h-2 rounded-full bg-primary -mt-0.5 border border-background shadow-[0_0_6px_hsl(var(--primary)/0.6)]" />
 
                           {child.expandableId ? (
-                            <div className="relative mt-2 flex flex-col items-center w-full">
+                            <div className="relative mt-2.5 flex flex-col items-center w-full">
                               <button
                                 onClick={() =>
                                   setExpandedChild(
                                     expandedChild === child.expandableId ? null : child.expandableId!
                                   )
                                 }
-                                className={`w-full px-3 py-1.5 rounded-full text-xs font-medium transition-all duration-200 cursor-pointer text-center ${
+                                className={`w-full px-4 py-2 rounded-full text-xs font-medium transition-all duration-200 cursor-pointer text-center ${
                                   expandedChild === child.expandableId
-                                    ? 'bg-primary text-primary-foreground border border-primary shadow-[0_0_10px_hsl(var(--primary)/0.7)]'
+                                    ? 'bg-primary text-primary-foreground border border-primary shadow-[0_0_12px_hsl(var(--primary)/0.7)]'
                                     : 'text-foreground hover:-translate-y-0.5'
                                 }`}
                                 style={{
                                   ...(expandedChild !== child.expandableId && {
                                     background: 'rgba(4, 10, 30, 0.85)',
-                                    boxShadow: '0 8px 20px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(255, 255, 255, 0.08)',
+                                    boxShadow: '0 10px 25px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(255, 255, 255, 0.08)',
                                     backdropFilter: 'blur(18px)',
                                     border: '1px solid rgba(255, 255, 255, 0.08)'
                                   })
@@ -401,8 +401,8 @@ const Dashboard = () => {
 
                               {/* Sub Children */}
                               {expandedChild === child.expandableId && child.subChildren && (
-                                <div className="flex flex-col items-center mt-3 animate-in fade-in duration-300">
-                                  <div className="w-0.5 h-3 bg-primary" />
+                                <div className="flex flex-col items-center mt-4 animate-in fade-in duration-300">
+                                  <div className="w-0.5 h-4 bg-primary" />
 
                                   <div className="relative flex flex-col items-center">
                                     {child.subChildren.length > 1 && (
@@ -410,29 +410,29 @@ const Dashboard = () => {
                                         className="absolute h-0.5 bg-primary"
                                         style={{ 
                                           top: 0,
-                                          width: `calc(${(child.subChildren.length - 1) * 160}px + ${(child.subChildren.length - 1) * 16}px)`,
+                                          width: `calc(${(child.subChildren.length - 1) * 200}px + ${(child.subChildren.length - 1) * 20}px)`,
                                           left: '50%',
                                           transform: 'translateX(-50%)',
                                         }}
                                       />
                                     )}
 
-                                    <div className="flex justify-center" style={{ gap: '16px' }}>
+                                    <div className="flex justify-center" style={{ gap: '20px' }}>
                                       {child.subChildren.map((subChild, subIdx) => (
                                         <div
                                           key={subIdx}
                                           className="flex flex-col items-center"
-                                          style={{ width: '160px' }}
+                                          style={{ width: '200px' }}
                                         >
-                                          <div className="w-0.5 h-2 bg-primary" />
+                                          <div className="w-0.5 h-3 bg-primary" />
                                           <div className="w-2 h-2 rounded-full bg-primary -mt-0.5 border border-background shadow-[0_0_6px_hsl(var(--primary)/0.6)]" />
 
                                           <button
                                             onClick={() => navigate(subChild.href)}
-                                            className="mt-2 w-full px-3 py-1.5 rounded-full text-foreground text-xs font-medium hover:-translate-y-0.5 transition-all duration-200 text-center"
+                                            className="mt-2.5 w-full px-4 py-2 rounded-full text-foreground text-xs font-medium hover:-translate-y-0.5 transition-all duration-200 text-center"
                                             style={{
                                               background: 'rgba(4, 10, 30, 0.85)',
-                                              boxShadow: '0 8px 20px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(255, 255, 255, 0.08)',
+                                              boxShadow: '0 10px 25px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(255, 255, 255, 0.08)',
                                               backdropFilter: 'blur(18px)',
                                               border: '1px solid rgba(255, 255, 255, 0.08)'
                                             }}
@@ -449,10 +449,10 @@ const Dashboard = () => {
                           ) : (
                             <button
                               onClick={() => child.href && navigate(child.href)}
-                              className="mt-2 w-full px-3 py-1.5 rounded-full text-foreground text-xs font-medium hover:-translate-y-0.5 transition-all duration-200 text-center"
+                              className="mt-2.5 w-full px-4 py-2 rounded-full text-foreground text-xs font-medium hover:-translate-y-0.5 transition-all duration-200 text-center"
                               style={{
                                 background: 'rgba(4, 10, 30, 0.85)',
-                                boxShadow: '0 8px 20px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(255, 255, 255, 0.08)',
+                                boxShadow: '0 10px 25px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(255, 255, 255, 0.08)',
                                 backdropFilter: 'blur(18px)',
                                 border: '1px solid rgba(255, 255, 255, 0.08)'
                               }}
