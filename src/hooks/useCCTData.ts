@@ -82,6 +82,7 @@ function mapRowToProcessoCCT(row: any): ProcessoCCT {
     volume_declarado: row.volume_declarado,
     volume_constatado: row.volume_constatado,
     tratamentos_especiais: tratamentos,
+    status_manifestacao: row.status_manifestacao || 'AGUARDANDO',
     analista_id: null,
     analista: row.nome_analista ? {
       id: 'analyst-legacy',
