@@ -158,6 +158,7 @@ function mapRowToProcessoCCT(row: any): ProcessoCCT {
     status_atual,
     eventos,
     excecoes,
+    origem_cct: row.origem_cct || 'OUTRO',
   };
 }
 

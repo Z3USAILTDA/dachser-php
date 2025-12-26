@@ -1,5 +1,8 @@
 // CCT Types - Enhanced with new SLA system and FRO status
 
+// Origin type for post-tracking CCT screen
+export type OrigemCCT = "POS_CHEGADA" | "ARR_EXPIRADO" | "OUTRO";
+
 export type StatusCCTOficial = 
   | "AGUARDANDO_MANIFESTACAO"
   | "COLETA_REALIZADA"
@@ -301,6 +304,7 @@ export interface ProcessoCCT {
   status_atual: CCTStatusAtual;
   eventos: CCTEvento[];
   excecoes: CCTExcecao[];
+  origem_cct?: OrigemCCT;
 }
 
 export interface CodigoIATA {
