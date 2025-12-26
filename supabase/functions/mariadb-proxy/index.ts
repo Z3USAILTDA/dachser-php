@@ -3111,7 +3111,8 @@ serve(async (req) => {
         
         let query = `
           SELECT i.id, i.view, i.arquivo_id, i.arquivo_label as base_file_name, 
-                 i.consignee, i.container, i.status, i.active, i.created_at,
+                 i.consignee, i.container, i.mbl_number, i.carrier, i.ata_date,
+                 i.status, i.active, i.created_at,
                  (SELECT COUNT(*) FROM ai_agente.t_dachser_sea_runs r WHERE r.item_id = i.id) as run_count
           FROM ai_agente.t_dachser_sea_items i
           WHERE i.active = 1
@@ -3148,7 +3149,8 @@ serve(async (req) => {
         
         const items = await client.query(`
           SELECT i.id, i.view, i.arquivo_id, i.arquivo_label as base_file_name, 
-                 i.consignee, i.container, i.status, i.active, i.created_at
+                 i.consignee, i.container, i.mbl_number, i.carrier, i.ata_date,
+                 i.status, i.active, i.created_at
           FROM ai_agente.t_dachser_sea_items i 
           WHERE i.id = ?
         `, [itemId]);
@@ -3318,6 +3320,54 @@ serve(async (req) => {
         }
         
         result = { success: true };
+        break;
+      }
+
+      case 'export_sea_report': {
+        const { analysisType, dateFrom, dateTo, status } = body;
+        console.log('Exporting SEA report:', { analysisType, dateFrom, dateTo, status });
+        
+        let query = `
+          SELECT 
+            i.id,
+            i.arquivo_label as arquivo,
+            i.mbl_number,
+            i.carrier as armador,
+            i.consignee as cliente,
+            i.ata_date as data_atracacao,
+            i.container,
+            i.view as tipo_analise,
+            i.status,
+            i.created_at as data_criacao
+          FROM ai_agente.t_dachser_sea_items i
+          WHERE i.active = 1
+        `;
+        const params: any[] = [];
+        
+        if (analysisType && analysisType !== 'todos') {
+          query += ` AND i.view = ?`;
+          params.push(analysisType);
+        }
+        
+        if (status && status !== 'todos') {
+          query += ` AND i.status = ?`;
+          params.push(status);
+        }
+        
+        if (dateFrom) {
+          query += ` AND DATE(i.created_at) >= ?`;
+          params.push(dateFrom);
+        }
+        
+        if (dateTo) {
+          query += ` AND DATE(i.created_at) <= ?`;
+          params.push(dateTo);
+        }
+        
+        query += ` ORDER BY i.created_at DESC LIMIT 5000`;
+        
+        const items = await client.query(query, params);
+        result = { success: true, items: items || [] };
         break;
       }
 

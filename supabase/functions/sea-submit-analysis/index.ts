@@ -724,7 +724,7 @@ function determineFileType(analysisType: string, isBase: boolean, fileName: stri
 /**
  * Extract HBL shipping data JSON from analysis result text
  */
-function extractHblShippingData(resultText: string): { container: string; consignee: string; vessel: string; voyage: string; origem: string; destino: string } | null {
+function extractHblShippingData(resultText: string): { container: string; consignee: string; vessel: string; voyage: string; origem: string; destino: string; mbl_number: string; carrier: string; ata_date: string } | null {
   try {
     // Look for JSON block between ```json and ``` markers
     const jsonMatch = resultText.match(/```json\s*(\{[^`]+\})\s*```/);
@@ -737,12 +737,15 @@ function extractHblShippingData(resultText: string): { container: string; consig
           vessel: parsed.hbl_shipping_data.vessel || '',
           voyage: parsed.hbl_shipping_data.voyage || '',
           origem: parsed.hbl_shipping_data.origem || '',
-          destino: parsed.hbl_shipping_data.destino || ''
+          destino: parsed.hbl_shipping_data.destino || '',
+          mbl_number: parsed.hbl_shipping_data.mbl_number || '',
+          carrier: parsed.hbl_shipping_data.carrier || '',
+          ata_date: parsed.hbl_shipping_data.ata_date || ''
         };
       }
     }
     
-    // Fallback: try to find the JSON object directly
+    // Fallback: try to find the JSON object directly (extended regex for new fields)
     const directMatch = resultText.match(/\{"hbl_shipping_data":\s*\{[^}]+\}\}/);
     if (directMatch) {
       const parsed = JSON.parse(directMatch[0]);
@@ -753,7 +756,10 @@ function extractHblShippingData(resultText: string): { container: string; consig
           vessel: parsed.hbl_shipping_data.vessel || '',
           voyage: parsed.hbl_shipping_data.voyage || '',
           origem: parsed.hbl_shipping_data.origem || '',
-          destino: parsed.hbl_shipping_data.destino || ''
+          destino: parsed.hbl_shipping_data.destino || '',
+          mbl_number: parsed.hbl_shipping_data.mbl_number || '',
+          carrier: parsed.hbl_shipping_data.carrier || '',
+          ata_date: parsed.hbl_shipping_data.ata_date || ''
         };
       }
     }
@@ -1121,6 +1127,18 @@ serve(async (req) => {
                 updateFields.push('consignee = ?');
                 updateValues.push(hblShippingData.consignee);
               }
+              if (hblShippingData.mbl_number) {
+                updateFields.push('mbl_number = ?');
+                updateValues.push(hblShippingData.mbl_number);
+              }
+              if (hblShippingData.carrier) {
+                updateFields.push('carrier = ?');
+                updateValues.push(hblShippingData.carrier);
+              }
+              if (hblShippingData.ata_date) {
+                updateFields.push('ata_date = ?');
+                updateValues.push(hblShippingData.ata_date);
+              }
               
               if (updateFields.length > 0) {
                 // Set status to 'analisado' (analysis done, pending user review)
@@ -1130,7 +1148,7 @@ serve(async (req) => {
                   SET ${updateFields.join(', ')}, status = 'analisado'
                   WHERE id = ?
                 `, updateValues);
-                console.log(`✅ Updated item ${actualItemId} with metadata, status = 'analisado'`);
+                console.log(`✅ Updated item ${actualItemId} with metadata (incl. mbl/carrier/ata), status = 'analisado'`);
               } else {
                 // No metadata but update status to 'analisado'
                 await bgClient.execute(`
