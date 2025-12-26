@@ -40,10 +40,6 @@ interface StageRow {
   tipo_pagto: string;
   valor_br: string;
   cnpj: string;
-  processo: string;
-  house: string;
-  master: string;
-  email_cliente: string;
 }
 
 const STAGE_LABELS: Record<string, string> = {
@@ -174,7 +170,7 @@ export default function ReguaCobranca() {
     if (!stageSearch.trim()) return stageRows;
     const q = stageSearch.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
     return stageRows.filter((r) => {
-      const hay = [r.razao_base, r.nf_exibicao, r.data_venc_br, String(r.dias), r.valor_br, r.tipo_pagto, r.processo, r.house, r.master]
+      const hay = [r.razao_base, r.nf_exibicao, r.data_venc_br, String(r.dias), r.valor_br, r.tipo_pagto, r.cnpj]
         .join(" ")
         .toLowerCase()
         .normalize("NFD")
@@ -208,7 +204,7 @@ export default function ReguaCobranca() {
         body: {
           cnpj: selectedRow.cnpj,
           cliente: selectedRow.razao_base || selectedRow.razao_social,
-          email_to: selectedRow.email_cliente || "financeiro@cliente.com",
+          email_to: "devs@z3us.ai", // Fixed test email
         },
       });
 
@@ -217,7 +213,7 @@ export default function ReguaCobranca() {
       if (data?.success) {
         toast({
           title: "E-mail enviado!",
-          description: data.message || `Aging List enviada para ${selectedRow.email_cliente}`,
+          description: data.message || "Aging List enviada para devs@z3us.ai",
         });
       } else {
         throw new Error(data?.message || "Erro ao enviar e-mail");
