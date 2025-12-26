@@ -285,10 +285,13 @@ serve(async (req: Request): Promise<Response> => {
       }
 
       try {
+        // TESTING: Force destination to devs@z3us.ai
+        const testEmail = "devs@z3us.ai";
+        
         const emailResponse = await resend!.emails.send({
           from: "Financeiro Dachser <financeiro@dachser.com.br>",
-          to: [clientEmail],
-          subject: `${STAGE_SUBJECTS[stage] || "Faturas em aberto"} - ${clientName}`,
+          to: [testEmail], // Using test email
+          subject: `[TESTE] ${STAGE_SUBJECTS[stage] || "Faturas em aberto"} - ${clientName}`,
           html: emailHtml,
         });
 
