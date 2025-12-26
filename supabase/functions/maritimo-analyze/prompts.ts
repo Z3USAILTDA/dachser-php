@@ -2142,6 +2142,51 @@ export function buildFullPrompt(
  * Get shipping data extraction instructions based on analysis type
  */
 export function getShippingDataExtractionInstructions(analysisType: string): string {
+  const metadataExtraction = `
+
+███████████████████████████████████████████████████████████████████████████████
+███ MANDATORY: DOCUMENT METADATA EXTRACTION (SEPARATE FROM ANALYSIS)         ███
+███████████████████████████████████████████████████████████████████████████████
+
+IMPORTANT: This metadata extraction is SEPARATE from the discrepancy analysis above.
+It does NOT affect the analysis results - it only extracts additional document identifiers.
+
+After the hbl_shipping_data JSON block, output a SECOND JSON block with document metadata:
+
+EXTRACTION SOURCES:
+- mbl_number: Master Bill of Lading number - look for:
+  * "M B/L No." or "MBL No." field in HBL
+  * "Master Bill" reference in any document
+  * Format: Usually alphanumeric, e.g., "COSU6318283080", "MAEU123456789"
+  * May appear as "Ocean B/L", "Master B/L", or similar
+
+- carrier: Shipping line / Armador - look for:
+  * Company logo or letterhead on MBL/HBL (e.g., "COSCO", "MAERSK", "MSC", "ONE", "HAPAG-LLOYD")
+  * "Carrier" or "Ocean Carrier" field
+  * Issuing company of the Bill of Lading
+  * May appear in header, footer, or watermark
+
+- ata_date: Actual Time of Arrival / Data de Atracação - look for:
+  * "ATA" or "Actual Arrival" field
+  * "Date of Arrival" in port documents
+  * "Arrival Date" or "Data de Chegada"
+  * Format: YYYY-MM-DD (convert any date format found to this)
+  * May appear in arrival notices or port documents
+
+OUTPUT FORMAT (MANDATORY - ADD THIS BLOCK AFTER hbl_shipping_data):
+\`\`\`json
+{"document_metadata": {"mbl_number": "COSU6318283080", "carrier": "COSCO", "ata_date": "2024-01-15"}}
+\`\`\`
+
+RULES FOR METADATA EXTRACTION:
+- This extraction is INDEPENDENT of the analysis - it should NOT affect discrepancy results
+- If MBL number is not visible, try to infer from document references or shipping line codes
+- For carrier, prefer the full name (e.g., "COSCO SHIPPING" instead of just "COSCO")
+- For ata_date, always convert to YYYY-MM-DD format
+- If any field cannot be found in ANY document, use empty string ""
+- Always output this JSON block, even if all fields are empty
+`;
+
   if (analysisType === 'invoices_hbl') {
     // For Invoices × HBL: extract from HBL OR Invoice (fallback)
     return `
@@ -2199,7 +2244,7 @@ RULES:
 - Always output this JSON block, even if analysis has errors
 - The JSON must be on a single line between the \`\`\`json and \`\`\` markers
 - Include "consignee" field in the JSON output
-`;
+` + metadataExtraction;
   } else {
     // For other analysis types: extract from HBL only
     return `
@@ -2229,6 +2274,48 @@ RULES:
 - If any field cannot be extracted, use empty string ""
 - Always output this JSON block, even if analysis has errors
 - The JSON must be on a single line between the \`\`\`json and \`\`\` markers
+
+███████████████████████████████████████████████████████████████████████████████
+███ MANDATORY: DOCUMENT METADATA EXTRACTION (SEPARATE FROM ANALYSIS)         ███
+███████████████████████████████████████████████████████████████████████████████
+
+IMPORTANT: This metadata extraction is SEPARATE from the discrepancy analysis above.
+It does NOT affect the analysis results - it only extracts additional document identifiers.
+
+After the hbl_shipping_data JSON block, output a SECOND JSON block with document metadata:
+
+EXTRACTION SOURCES:
+- mbl_number: Master Bill of Lading number - look for:
+  * "M B/L No." or "MBL No." field in HBL
+  * "Master Bill" reference in any document
+  * Format: Usually alphanumeric, e.g., "COSU6318283080", "MAEU123456789"
+  * May appear as "Ocean B/L", "Master B/L", or similar
+
+- carrier: Shipping line / Armador - look for:
+  * Company logo or letterhead on MBL/HBL (e.g., "COSCO", "MAERSK", "MSC", "ONE", "HAPAG-LLOYD")
+  * "Carrier" or "Ocean Carrier" field
+  * Issuing company of the Bill of Lading
+  * May appear in header, footer, or watermark
+
+- ata_date: Actual Time of Arrival / Data de Atracação - look for:
+  * "ATA" or "Actual Arrival" field
+  * "Date of Arrival" in port documents
+  * "Arrival Date" or "Data de Chegada"
+  * Format: YYYY-MM-DD (convert any date format found to this)
+  * May appear in arrival notices or port documents
+
+OUTPUT FORMAT (MANDATORY - ADD THIS BLOCK AFTER hbl_shipping_data):
+\`\`\`json
+{"document_metadata": {"mbl_number": "COSU6318283080", "carrier": "COSCO", "ata_date": "2024-01-15"}}
+\`\`\`
+
+RULES FOR METADATA EXTRACTION:
+- This extraction is INDEPENDENT of the analysis - it should NOT affect discrepancy results
+- If MBL number is not visible, try to infer from document references or shipping line codes
+- For carrier, prefer the full name (e.g., "COSCO SHIPPING" instead of just "COSCO")
+- For ata_date, always convert to YYYY-MM-DD format
+- If any field cannot be found in ANY document, use empty string ""
+- Always output this JSON block, even if all fields are empty
 `;
   }
 }
