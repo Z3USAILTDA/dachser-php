@@ -601,6 +601,48 @@ export const maritimoApi = {
       console.error('Error deleting example:', error);
       return { success: false, error: error.message };
     }
+  },
+
+  /**
+   * Export SEA analysis report with MBL, Carrier, Cliente, ATA columns
+   */
+  async exportReport(params: { 
+    analysisType?: string; 
+    dateFrom?: string; 
+    dateTo?: string;
+    status?: string;
+  } = {}): Promise<{ 
+    success: boolean; 
+    items?: Array<{
+      id: string;
+      arquivo: string;
+      mbl_number: string;
+      armador: string;
+      cliente: string;
+      data_atracacao: string;
+      container: string;
+      tipo_analise: string;
+      status: string;
+      data_criacao: string;
+    }>; 
+    error?: string 
+  }> {
+    try {
+      const { data, error } = await supabase.functions.invoke('mariadb-proxy', {
+        body: { 
+          action: 'export_sea_report',
+          analysisType: params.analysisType,
+          dateFrom: params.dateFrom,
+          dateTo: params.dateTo,
+          status: params.status
+        }
+      });
+      if (error) throw error;
+      return { success: true, items: data?.items || [] };
+    } catch (error: any) {
+      console.error('Error exporting SEA report:', error);
+      return { success: false, error: error.message };
+    }
   }
 };
 

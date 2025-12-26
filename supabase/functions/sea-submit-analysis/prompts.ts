@@ -2007,9 +2007,26 @@ PORT OF DISCHARGE (DESTINO):
 - PRIMARY: From HBL "Port of Discharge" field
 - FALLBACK: From Invoice "Ship To", "Destination", or consignee address country/port
 
+MASTER BL NUMBER (MBL):
+- PRIMARY: From HBL "Master B/L No.", "MBL", "M/BL", or "Ocean Bill of Lading" field
+- FALLBACK: From Invoice "Master BL", "Booking Number", or shipping reference
+- Example: "MAEU123456789" or "HLCUSEA12345678"
+
+CARRIER / ARMADOR / SHIPPING LINE:
+- PRIMARY: From HBL letterhead, logo, or "Carrier" / "Shipping Line" field
+- FALLBACK: From prefix of MBL number (e.g., "MAEU" = Maersk, "HLCU" = Hapag-Lloyd)
+- Common carriers: Maersk, MSC, CMA CGM, Hapag-Lloyd, ONE, Evergreen, COSCO, Yang Ming
+- Example: "MAERSK" or "HAPAG-LLOYD"
+
+ETA / ATA (Arrival Date):
+- PRIMARY: From HBL "ETA", "Estimated Arrival", or "Expected Arrival Date" field
+- FALLBACK: From Invoice shipping details or delivery schedule
+- Format: YYYY-MM-DD (e.g., "2025-01-15")
+- If only ETA is available, use it. If ATA (actual) is available, prefer ATA.
+
 OUTPUT FORMAT (MANDATORY - ADD THIS BLOCK AT THE END):
 \`\`\`json
-{"hbl_shipping_data": {"container": "XXXX1234567", "consignee": "COMPANY NAME", "vessel": "VESSEL NAME", "voyage": "VOYAGE_CODE", "origem": "PORT_OF_LOADING", "destino": "PORT_OF_DISCHARGE"}}
+{"hbl_shipping_data": {"container": "XXXX1234567", "consignee": "COMPANY NAME", "vessel": "VESSEL NAME", "voyage": "VOYAGE_CODE", "origem": "PORT_OF_LOADING", "destino": "PORT_OF_DISCHARGE", "mbl_number": "MAEU123456789", "carrier": "MAERSK", "ata_date": "2025-01-15"}}
 \`\`\`
 
 RULES:
@@ -2020,6 +2037,7 @@ RULES:
 - Always output this JSON block, even if analysis has errors
 - The JSON must be on a single line between the \`\`\`json and \`\`\` markers
 - Include "consignee" field in the JSON output
+- Include "mbl_number", "carrier", and "ata_date" fields (use "" if not found)
 `;
   } else {
     // For other analysis types: extract from HBL only
@@ -2038,9 +2056,23 @@ EXTRACTION SOURCES FROM HBL:
 - origem: Extract from "Port of Loading" field (e.g., "HAMBURG")
 - destino: Extract from "Port of Discharge" field (e.g., "SANTOS")
 
+ADDITIONAL FIELDS TO EXTRACT:
+
+MASTER BL NUMBER (MBL):
+- From HBL "Master B/L No.", "MBL", "M/BL", or related field
+- Example: "MAEU123456789"
+
+CARRIER / ARMADOR / SHIPPING LINE:
+- From HBL letterhead, logo, or "Carrier" field
+- Example: "MAERSK", "MSC", "HAPAG-LLOYD"
+
+ETA / ATA (Arrival Date):
+- From HBL "ETA", "Estimated Arrival", or manifest arrival date
+- Format: YYYY-MM-DD (e.g., "2025-01-15")
+
 OUTPUT FORMAT (MANDATORY - ADD THIS BLOCK AT THE END):
 \`\`\`json
-{"hbl_shipping_data": {"container": "XXXX1234567", "consignee": "COMPANY NAME", "vessel": "VESSEL NAME", "voyage": "VOYAGE_CODE", "origem": "PORT_OF_LOADING", "destino": "PORT_OF_DISCHARGE"}}
+{"hbl_shipping_data": {"container": "XXXX1234567", "consignee": "COMPANY NAME", "vessel": "VESSEL NAME", "voyage": "VOYAGE_CODE", "origem": "PORT_OF_LOADING", "destino": "PORT_OF_DISCHARGE", "mbl_number": "MAEU123456789", "carrier": "MAERSK", "ata_date": "2025-01-15"}}
 \`\`\`
 
 RULES:
@@ -2049,6 +2081,7 @@ RULES:
 - If any field cannot be extracted, use empty string ""
 - Always output this JSON block, even if analysis has errors
 - The JSON must be on a single line between the \`\`\`json and \`\`\` markers
+- Include "mbl_number", "carrier", and "ata_date" fields (use "" if not found)
 `;
   }
   

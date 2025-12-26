@@ -1,5 +1,5 @@
 import { useState, useMemo } from "react";
-import { RefreshCw, Trash2, Play, FileText, ArrowRightLeft, Download, FolderOpen, Ship, HelpCircle } from "lucide-react";
+import { RefreshCw, Trash2, Play, FileText, ArrowRightLeft, Download, FolderOpen, Ship, HelpCircle, FileSpreadsheet } from "lucide-react";
 import { useUsageLog } from "@/hooks/useUsageLog";
 import { NavTabs } from "@/components/maritimo/NavTabs";
 import { BadgeStatus } from "@/components/maritimo/BadgeStatus";
@@ -12,6 +12,7 @@ import { useMaritimoHistory } from "@/hooks/useMaritimoHistory";
 import { useDevAccess } from "@/hooks/useDevAccess";
 import { useAuth } from "@/hooks/useAuth";
 import { maritimoApi } from "@/services/maritimoApi";
+import { exportSeaReportToExcel, SeaReportItem } from "@/utils/seaReportExport";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -47,6 +48,7 @@ export default function SeaAnalysis() {
   const [filesModalOpen, setFilesModalOpen] = useState(false);
   const [selectedFilesItem, setSelectedFilesItem] = useState<{ id: string; name: string } | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
+  const [isExporting, setIsExporting] = useState(false);
   const PAGE_SIZE = 5;
 
   const { items, isLoading, refetch, deleteItem } = useMaritimoItems(activeTab);
@@ -173,6 +175,30 @@ export default function SeaAnalysis() {
     }
   };
 
+  const handleExportReport = async () => {
+    setIsExporting(true);
+    try {
+      const result = await maritimoApi.exportReport({
+        analysisType: activeTab,
+        status: statusFilter !== 'todos' ? statusFilter : undefined
+      });
+      
+      if (result.success && result.items && result.items.length > 0) {
+        exportSeaReportToExcel(result.items as SeaReportItem[], 'relatorio-sea-analysis');
+        toast.success(`${result.items.length} registros exportados`);
+      } else if (result.items?.length === 0) {
+        toast.info('Nenhum dado para exportar');
+      } else {
+        toast.error('Erro ao exportar relatório');
+      }
+    } catch (error) {
+      console.error('Export error:', error);
+      toast.error('Erro ao exportar relatório');
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
   const rightContent = (
     <>
       {!devAccessLoading && isDevOrAdmin && (
@@ -212,16 +238,26 @@ export default function SeaAnalysis() {
           onRefresh={() => refetch()}
           isRefreshing={isLoading}
           rightContent={
-            !devAccessLoading && isDevOrAdmin && (
+            <div className="flex items-center gap-2">
               <button
-                onClick={handleReextractMetadata}
-                disabled={isReextracting}
+                onClick={handleExportReport}
+                disabled={isExporting}
                 className="h-8 px-4 rounded-full border border-border/50 bg-background/50 text-muted-foreground text-[0.75rem] font-medium flex items-center gap-1.5 hover:bg-background/70 hover:text-foreground transition"
               >
-                <ArrowRightLeft className={`w-3.5 h-3.5 ${isReextracting ? 'animate-spin' : ''}`} />
-                {isReextracting ? 'Reextraindo...' : 'Reextrair'}
+                <FileSpreadsheet className={`w-3.5 h-3.5 ${isExporting ? 'animate-spin' : ''}`} />
+                {isExporting ? 'Exportando...' : 'Exportar'}
               </button>
-            )
+              {!devAccessLoading && isDevOrAdmin && (
+                <button
+                  onClick={handleReextractMetadata}
+                  disabled={isReextracting}
+                  className="h-8 px-4 rounded-full border border-border/50 bg-background/50 text-muted-foreground text-[0.75rem] font-medium flex items-center gap-1.5 hover:bg-background/70 hover:text-foreground transition"
+                >
+                  <ArrowRightLeft className={`w-3.5 h-3.5 ${isReextracting ? 'animate-spin' : ''}`} />
+                  {isReextracting ? 'Reextraindo...' : 'Reextrair'}
+                </button>
+              )}
+            </div>
           }
         />
       </PageCard>
