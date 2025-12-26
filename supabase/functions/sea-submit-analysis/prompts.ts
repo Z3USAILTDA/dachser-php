@@ -889,24 +889,28 @@ Use suffix matching algorithm: extract last 4-6 digits from both sides.
 If normalized suffixes match → NO "Update: Add/remove"
 Example: "2013" matches "TD02025000002013" → NO UPDATE needed
 
-★★★ RULE 6: NCM CODES - COMPREHENSIVE DETECTION ★★★
+★★★ RULE 6: NCM CODES - 100% LITERAL MATCH ★★★
 
-STEP 1: DEDUPLICATE ALL NCM LISTS
-Before ANY comparison, remove duplicate NCM codes from both Manifest and HBL lists.
-Example: [3926, 4016, 8708, 8708] → [3926, 4016, 8708]
+STEP 1: NORMALIZE NCM CODES
+Remove ONLY: dots, dashes, and spaces. Keep all digits exactly as they appear.
+Example: "87.08.90.90" → "87089090"
 
-STEP 2: PREFIX MATCHING FOR "MISSING" DETECTION
-If HBL NCM is a prefix of any Manifest NCM → NO "Missing"
-Example: HBL "3923" is prefix of Manifest "39239090" → NO "Missing 39239090"
+STEP 2: COMPARE WITH 100% LITERAL MATCH
+Two NCM codes match ONLY if they are IDENTICAL after normalization.
+- "8481" vs "84812090" = DIVERGENCE (different lengths = different codes)
+- "8708" vs "87089900" = DIVERGENCE (different lengths = different codes)  
+- "8708" vs "8708" = MATCH (identical)
+- "87089090" vs "87089090" = MATCH (identical)
 
-STEP 3: DETECT "EXTRA" NCMs IN HBL
-For EACH NCM in HBL, check if it (or any Manifest NCM) is a prefix of the other.
-If HBL NCM has NO prefix relationship with ANY Manifest NCM → flag as "Extra"
-Example: HBL has "7325", Manifest has "7326" → "7325" is NOT prefix of "7326" → Extra: [7325]
+STEP 3: DETECT "MISSING" NCMs
+Any Manifest NCM that has NO IDENTICAL match in HBL = Missing
 
-STEP 4: OUTPUT FORMAT
-Always show: "Manifest NCMs (reference): [list] | HBL: [list] | Missing: [list or none] | Extra: [list or none]"
-If Extra NCMs found: add "Update: Remove NCM [codes] from HBL"
+STEP 4: DETECT "EXTRA" NCMs  
+Any HBL NCM that has NO IDENTICAL match in Manifest = Extra
+
+STEP 5: OUTPUT FORMAT
+Always show: "Manifest NCMs: [list] | HBL: [list] | Missing: [list or none] | Extra: [list or none]"
+If any Missing or Extra found: Status = DIVERGENCE
 
 ★★★ RULE 7: CONTAINER NUMBER ★★★
 - If SAME: show values but NO "Update" line
@@ -960,7 +964,7 @@ ZERO-DELTA SAFETY CHECK (ALL TOPICS)
   • EMPTY DATA ASYMMETRY: If Manifest has empty arrays for References OR NCM codes BUT HBL has data in those fields, you MUST report this as a discrepancy — zero-delta is FORBIDDEN. Include diagnostic note about possible Manifest extraction issues.
   • Weights: you MUST emit **per-HBL** total-weight deltas beyond tolerance even when the SUM of audited HBL Gross Totals equals the Manifest Approved Total. Never suppress a per-HBL total mismatch due to split; you may add a short reconciliation line, but do not omit the per-HBL delta.
   • References: if any supplier has HBL tokens and the Manifest lists tokens anywhere for the same supplier (line- or sheet-level), compare — zero-delta forbidden while a mismatch remains.
-  • NCM: Use SUBSET RULE - only flag if HBL NCM doesn't match ANY manifest NCM prefix.
+  • NCM: Apply 100% LITERAL MATCH rule - "8481" vs "84812090" = DIVERGENCE (different strings after normalization). NO prefix matching allowed.
   • CBM/Packages/Container/Shipper: any mismatch forbids zero-delta.
 
 MANDATORY OUTPUT STRUCTURE

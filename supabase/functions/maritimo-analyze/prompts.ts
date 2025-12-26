@@ -915,7 +915,7 @@ ZERO-DELTA SAFETY CHECK (ALL TOPICS)
   • EMPTY DATA ASYMMETRY: If Manifest has empty arrays for References OR NCM codes BUT HBL has data in those fields, you MUST report this as a discrepancy — zero-delta is FORBIDDEN. Include diagnostic note about possible Manifest extraction issues.
   • Weights: you MUST emit **per-HBL** total-weight deltas beyond tolerance even when the SUM of audited HBL Gross Totals equals the Manifest Approved Total. Never suppress a per-HBL total mismatch due to split; you may add a short reconciliation line, but do not omit the per-HBL delta.
   • References: if any supplier has HBL tokens and the Manifest lists tokens anywhere for the same supplier (line- or sheet-level), compare — zero-delta forbidden while a mismatch remains.
-  • NCM: Use SUBSET RULE - only flag if HBL NCM doesn't match ANY manifest NCM prefix.
+  • NCM: Apply 100% LITERAL MATCH rule - "8481" vs "84812090" = DIVERGENCE (different strings after normalization). NO prefix matching allowed.
   • CBM/Packages/Container/Shipper: any mismatch forbids zero-delta.
 
 MANDATORY OUTPUT STRUCTURE
