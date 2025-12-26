@@ -2415,17 +2415,11 @@ serve(async (req) => {
             cct.etd,
             cct.data_decolagem_ultimo_trecho,
             cct.cnpj_consignatario,
-            cct.tratamentos_especiais,
-            -- Determine origin type for badge
-            CASE 
-              WHEN s.\`último_status\` IN ('ATA', 'NFD', 'AWD', 'DLV', 'POD') THEN 'POS_CHEGADA'
-              WHEN s.\`último_status\` IN ('ARR', 'RCF') 
-                   AND s.arr_datetime IS NOT NULL 
-                   AND s.arr_datetime <= NOW() - INTERVAL 120 HOUR THEN 'ARR_EXPIRADO'
-              ELSE 'OUTRO'
-            END as origem_cct
+            -- Get tratamento from t_master_dados via mawb match
+            TRIM(m.tratamento) as tratamento
           FROM ${database}.t_status_aereo s
           LEFT JOIN ${database}.t_cct_shipments cct ON TRIM(s.awb) COLLATE utf8mb4_unicode_ci = TRIM(cct.master) COLLATE utf8mb4_unicode_ci
+          LEFT JOIN ${database}.t_master_dados m ON TRIM(s.awb) COLLATE utf8mb4_unicode_ci = TRIM(m.mawb) COLLATE utf8mb4_unicode_ci
           WHERE LEFT(TRIM(s.awb), 3) IN (${airlineFilter})
           AND s.\`último_status\` NOT IN (${errorStatusFilter})
           AND (s.origem IS NOT NULL AND LOWER(TRIM(s.origem)) NOT IN ('n/a', 'na', 'erro', 'error', ''))
@@ -2525,13 +2519,12 @@ serve(async (req) => {
             volume_declarado: row.volume_declarado ? Number(row.volume_declarado) : null,
             volume_constatado: row.volume_constatado ? Number(row.volume_constatado) : null,
             cnpj_consignatario: row.cnpj_consignatario || null,
-            tratamentos_especiais: row.tratamentos_especiais || null,
+            tratamento: row.tratamento || null,
             excecoes_abertas: isFrozen ? 1 : isBlock ? 1 : 0,
             is_frozen: isFrozen,
             data_atraso: row.data_atraso,
             data_decolagem_ultimo_trecho: row.data_decolagem_ultimo_trecho || null,
             arr_datetime: row.arr_datetime,
-            origem_cct: row.origem_cct || 'OUTRO',
             created_at: row.ultimo_evento_data || new Date().toISOString(),
             updated_at: row.ultimo_evento_data || new Date().toISOString(),
           };
