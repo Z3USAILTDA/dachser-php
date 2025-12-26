@@ -65,56 +65,64 @@ const htmlEncode = (s: string): string => {
     .replace(/'/g, "&#39;");
 };
 
-// Constrói tabela HTML conforme C# original - com PROCESSO, MASTER, HOUSE
+// Constrói tabela HTML - Design escuro igual ao modelo com PROCESSO, MASTER, HOUSE
 const buildTableHtml = (rows: InvoiceRow[]): string => {
   let rowsHtml = "";
   let total = 0;
 
+  // Estilo dark header
+  const headerBg = "#2D2D2D";
+  const headerColor = "#FFFFFF";
+  const cellBorder = "border:1px solid #555;";
+  const cellPadding = "padding:6px 8px;";
+  const rowBg = "#3A3A3A";
+  const rowColor = "#FFFFFF";
+
   for (const r of rows) {
     total += Number(r.valor_nf) || 0;
-    rowsHtml += `<tr>
-      <td style="border:1px solid #D0D0D0;padding:6px 8px;white-space:nowrap;">${htmlEncode(r.documento)}</td>
-      <td style="border:1px solid #D0D0D0;padding:6px 8px;white-space:nowrap;">${htmlEncode(r.nd)}</td>
-      <td style="border:1px solid #D0D0D0;padding:6px 8px;word-break:break-word;">${htmlEncode(r.ref_cliente)}</td>
-      <td style="border:1px solid #D0D0D0;padding:6px 8px;white-space:nowrap;">${htmlEncode(r.nf_exibicao)}</td>
-      <td style="border:1px solid #D0D0D0;padding:6px 8px;white-space:nowrap;">${htmlEncode(r.modal)}</td>
-      <td style="border:1px solid #D0D0D0;padding:6px 8px;white-space:nowrap;">${htmlEncode(r.tipo_documento)}</td>
-      <td style="border:1px solid #D0D0D0;padding:6px 8px;white-space:nowrap;">${htmlEncode(r.data_emissao)}</td>
-      <td style="border:1px solid #D0D0D0;padding:6px 8px;white-space:nowrap;">${htmlEncode(r.data_vencimento)}</td>
-      <td style="border:1px solid #D0D0D0;padding:6px 8px;white-space:nowrap;">${htmlEncode(formatCnpj(r.cnpj))}</td>
-      <td style="border:1px solid #D0D0D0;padding:6px 8px;word-break:break-word;">${htmlEncode(formatRazaoSocial(r.razao_social))}</td>
-      <td style="border:1px solid #D0D0D0;padding:6px 8px;text-align:right;white-space:nowrap;">${formatValue(r.valor_nf)}</td>
-      <td style="border:1px solid #D0D0D0;padding:6px 8px;white-space:nowrap;">${htmlEncode(r.processo || "-")}</td>
-      <td style="border:1px solid #D0D0D0;padding:6px 8px;white-space:nowrap;">${htmlEncode(r.master || "-")}</td>
-      <td style="border:1px solid #D0D0D0;padding:6px 8px;white-space:nowrap;">${htmlEncode(r.house || "-")}</td>
+    rowsHtml += `<tr style="background-color:${rowBg};color:${rowColor};">
+      <td style="${cellBorder}${cellPadding}white-space:nowrap;">${htmlEncode(r.documento || "-")}</td>
+      <td style="${cellBorder}${cellPadding}white-space:nowrap;">${htmlEncode(r.nd || "-")}</td>
+      <td style="${cellBorder}${cellPadding}word-break:break-word;">${htmlEncode(r.ref_cliente || "-")}</td>
+      <td style="${cellBorder}${cellPadding}white-space:nowrap;">${htmlEncode(r.nf_exibicao || "-")}</td>
+      <td style="${cellBorder}${cellPadding}white-space:nowrap;">${htmlEncode(r.modal || "-")}</td>
+      <td style="${cellBorder}${cellPadding}white-space:nowrap;">${htmlEncode(r.tipo_documento || "-")}</td>
+      <td style="${cellBorder}${cellPadding}white-space:nowrap;">${htmlEncode(r.data_emissao || "-")}</td>
+      <td style="${cellBorder}${cellPadding}white-space:nowrap;">${htmlEncode(r.data_vencimento || "-")}</td>
+      <td style="${cellBorder}${cellPadding}white-space:nowrap;">${htmlEncode(formatCnpj(r.cnpj))}</td>
+      <td style="${cellBorder}${cellPadding}word-break:break-word;">${htmlEncode(formatRazaoSocial(r.razao_social))}</td>
+      <td style="${cellBorder}${cellPadding}text-align:right;white-space:nowrap;">${formatValue(r.valor_nf)}</td>
+      <td style="${cellBorder}${cellPadding}white-space:nowrap;">${htmlEncode(r.processo || "-")}</td>
+      <td style="${cellBorder}${cellPadding}white-space:nowrap;">${htmlEncode(r.master || "-")}</td>
+      <td style="${cellBorder}${cellPadding}white-space:nowrap;">${htmlEncode(r.house || "-")}</td>
     </tr>`;
   }
 
   // Linha de total
-  rowsHtml += `<tr style="background-color:#ECECEC;font-weight:bold;">
-    <td colspan="10" style="border:1px solid #D0D0D0;padding:6px 8px;">TOTAL</td>
-    <td style="border:1px solid #D0D0D0;padding:6px 8px;text-align:right;">${formatValue(total)}</td>
-    <td colspan="3" style="border:1px solid #D0D0D0;padding:6px 8px;"></td>
+  rowsHtml += `<tr style="background-color:${headerBg};color:${headerColor};font-weight:bold;">
+    <td colspan="10" style="${cellBorder}${cellPadding}">TOTAL</td>
+    <td style="${cellBorder}${cellPadding}text-align:right;">${formatValue(total)}</td>
+    <td colspan="3" style="${cellBorder}${cellPadding}"></td>
   </tr>`;
 
   return `
-<table border="1" style="width:100%;border-collapse:collapse;mso-table-lspace:0pt;mso-table-rspace:0pt;border-spacing:0;font-family:Arial,Helvetica,sans-serif;font-size:13px;line-height:1.3;color:#111;" cellpadding="0" cellspacing="0">
+<table border="0" style="width:100%;border-collapse:collapse;mso-table-lspace:0pt;mso-table-rspace:0pt;border-spacing:0;font-family:Arial,Helvetica,sans-serif;font-size:12px;line-height:1.3;" cellpadding="0" cellspacing="0">
   <thead>
-    <tr>
-      <th style="background:#ECECEC;border:1px solid #D0D0D0;padding:6px 8px;text-align:left;white-space:nowrap;">DOC</th>
-      <th style="background:#ECECEC;border:1px solid #D0D0D0;padding:6px 8px;text-align:left;white-space:nowrap;">ND</th>
-      <th style="background:#ECECEC;border:1px solid #D0D0D0;padding:6px 8px;text-align:left;white-space:nowrap;">REF. CLIENTE</th>
-      <th style="background:#ECECEC;border:1px solid #D0D0D0;padding:6px 8px;text-align:left;white-space:nowrap;">NF</th>
-      <th style="background:#ECECEC;border:1px solid #D0D0D0;padding:6px 8px;text-align:left;white-space:nowrap;">MODAL</th>
-      <th style="background:#ECECEC;border:1px solid #D0D0D0;padding:6px 8px;text-align:left;white-space:nowrap;">TIPO DOC.</th>
-      <th style="background:#ECECEC;border:1px solid #D0D0D0;padding:6px 8px;text-align:left;white-space:nowrap;">EMISSÃO</th>
-      <th style="background:#ECECEC;border:1px solid #D0D0D0;padding:6px 8px;text-align:left;white-space:nowrap;">VENCTO</th>
-      <th style="background:#ECECEC;border:1px solid #D0D0D0;padding:6px 8px;text-align:left;white-space:nowrap;">C.N.P.J</th>
-      <th style="background:#ECECEC;border:1px solid #D0D0D0;padding:6px 8px;text-align:left;white-space:nowrap;">CLIENTE</th>
-      <th style="background:#ECECEC;border:1px solid #D0D0D0;padding:6px 8px;text-align:left;white-space:nowrap;">VALOR</th>
-      <th style="background:#ECECEC;border:1px solid #D0D0D0;padding:6px 8px;text-align:left;white-space:nowrap;">PROCESSO</th>
-      <th style="background:#ECECEC;border:1px solid #D0D0D0;padding:6px 8px;text-align:left;white-space:nowrap;">MASTER</th>
-      <th style="background:#ECECEC;border:1px solid #D0D0D0;padding:6px 8px;text-align:left;white-space:nowrap;">HOUSE</th>
+    <tr style="background-color:${headerBg};color:${headerColor};">
+      <th style="${cellBorder}${cellPadding}text-align:left;white-space:nowrap;">DOC</th>
+      <th style="${cellBorder}${cellPadding}text-align:left;white-space:nowrap;">ND</th>
+      <th style="${cellBorder}${cellPadding}text-align:left;white-space:nowrap;">REF. CLIENTE</th>
+      <th style="${cellBorder}${cellPadding}text-align:left;white-space:nowrap;">NF</th>
+      <th style="${cellBorder}${cellPadding}text-align:left;white-space:nowrap;">MODAL</th>
+      <th style="${cellBorder}${cellPadding}text-align:left;white-space:nowrap;">TIPO DOC.</th>
+      <th style="${cellBorder}${cellPadding}text-align:left;white-space:nowrap;">EMISSÃO</th>
+      <th style="${cellBorder}${cellPadding}text-align:left;white-space:nowrap;">VENCTO</th>
+      <th style="${cellBorder}${cellPadding}text-align:left;white-space:nowrap;">C.N.P.J</th>
+      <th style="${cellBorder}${cellPadding}text-align:left;white-space:nowrap;">CLIENTE</th>
+      <th style="${cellBorder}${cellPadding}text-align:left;white-space:nowrap;">VALOR</th>
+      <th style="${cellBorder}${cellPadding}text-align:left;white-space:nowrap;">PROCESSO</th>
+      <th style="${cellBorder}${cellPadding}text-align:left;white-space:nowrap;">MASTER</th>
+      <th style="${cellBorder}${cellPadding}text-align:left;white-space:nowrap;">HOUSE</th>
     </tr>
   </thead>
   <tbody>
