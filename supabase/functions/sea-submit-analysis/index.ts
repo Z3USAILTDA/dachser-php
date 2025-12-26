@@ -726,42 +726,80 @@ function determineFileType(analysisType: string, isBase: boolean, fileName: stri
  */
 function extractHblShippingData(resultText: string): { container: string; consignee: string; vessel: string; voyage: string; origem: string; destino: string; mbl_number: string; carrier: string; ata_date: string } | null {
   try {
-    // Look for JSON block between ```json and ``` markers
-    const jsonMatch = resultText.match(/```json\s*(\{[^`]+\})\s*```/);
-    if (jsonMatch && jsonMatch[1]) {
-      const parsed = JSON.parse(jsonMatch[1]);
-      if (parsed.hbl_shipping_data) {
-        return {
-          container: parsed.hbl_shipping_data.container || '',
-          consignee: parsed.hbl_shipping_data.consignee || '',
-          vessel: parsed.hbl_shipping_data.vessel || '',
-          voyage: parsed.hbl_shipping_data.voyage || '',
-          origem: parsed.hbl_shipping_data.origem || '',
-          destino: parsed.hbl_shipping_data.destino || '',
-          mbl_number: parsed.hbl_shipping_data.mbl_number || '',
-          carrier: parsed.hbl_shipping_data.carrier || '',
-          ata_date: parsed.hbl_shipping_data.ata_date || ''
-        };
+    let result = {
+      container: '',
+      consignee: '',
+      vessel: '',
+      voyage: '',
+      origem: '',
+      destino: '',
+      mbl_number: '',
+      carrier: '',
+      ata_date: ''
+    };
+    
+    // Extract all JSON blocks from the response
+    const jsonBlocks = resultText.matchAll(/```json\s*(\{[^`]+\})\s*```/g);
+    for (const match of jsonBlocks) {
+      try {
+        const parsed = JSON.parse(match[1]);
+        
+        // Extract hbl_shipping_data
+        if (parsed.hbl_shipping_data) {
+          result.container = parsed.hbl_shipping_data.container || result.container;
+          result.consignee = parsed.hbl_shipping_data.consignee || result.consignee;
+          result.vessel = parsed.hbl_shipping_data.vessel || result.vessel;
+          result.voyage = parsed.hbl_shipping_data.voyage || result.voyage;
+          result.origem = parsed.hbl_shipping_data.origem || result.origem;
+          result.destino = parsed.hbl_shipping_data.destino || result.destino;
+        }
+        
+        // Extract document_metadata (separate block for mbl/carrier/ata)
+        if (parsed.document_metadata) {
+          result.mbl_number = parsed.document_metadata.mbl_number || result.mbl_number;
+          result.carrier = parsed.document_metadata.carrier || result.carrier;
+          result.ata_date = parsed.document_metadata.ata_date || result.ata_date;
+        }
+      } catch (parseErr) {
+        console.warn('Failed to parse JSON block:', parseErr);
       }
     }
     
-    // Fallback: try to find the JSON object directly (extended regex for new fields)
-    const directMatch = resultText.match(/\{"hbl_shipping_data":\s*\{[^}]+\}\}/);
-    if (directMatch) {
-      const parsed = JSON.parse(directMatch[0]);
-      if (parsed.hbl_shipping_data) {
-        return {
-          container: parsed.hbl_shipping_data.container || '',
-          consignee: parsed.hbl_shipping_data.consignee || '',
-          vessel: parsed.hbl_shipping_data.vessel || '',
-          voyage: parsed.hbl_shipping_data.voyage || '',
-          origem: parsed.hbl_shipping_data.origem || '',
-          destino: parsed.hbl_shipping_data.destino || '',
-          mbl_number: parsed.hbl_shipping_data.mbl_number || '',
-          carrier: parsed.hbl_shipping_data.carrier || '',
-          ata_date: parsed.hbl_shipping_data.ata_date || ''
-        };
-      }
+    // If we found any data, return it
+    if (result.container || result.consignee || result.vessel || result.mbl_number || result.carrier) {
+      return result;
+    }
+    
+    // Fallback: try to find the JSON objects directly
+    const hblMatch = resultText.match(/\{"hbl_shipping_data":\s*\{[^}]+\}\}/);
+    if (hblMatch) {
+      try {
+        const parsed = JSON.parse(hblMatch[0]);
+        if (parsed.hbl_shipping_data) {
+          result.container = parsed.hbl_shipping_data.container || '';
+          result.consignee = parsed.hbl_shipping_data.consignee || '';
+          result.vessel = parsed.hbl_shipping_data.vessel || '';
+          result.voyage = parsed.hbl_shipping_data.voyage || '';
+          result.origem = parsed.hbl_shipping_data.origem || '';
+          result.destino = parsed.hbl_shipping_data.destino || '';
+        }
+      } catch (e) { /* ignore */ }
+    }
+    
+    const metaMatch = resultText.match(/\{"document_metadata":\s*\{[^}]+\}\}/);
+    if (metaMatch) {
+      try {
+        const parsed = JSON.parse(metaMatch[0]);
+        if (parsed.document_metadata) {
+          result.mbl_number = parsed.document_metadata.mbl_number || '';
+          result.carrier = parsed.document_metadata.carrier || '';
+          result.ata_date = parsed.document_metadata.ata_date || '';
+        }
+      } catch (e) { /* ignore */ }
+    }
+    
+    if (result.container || result.consignee || result.mbl_number || result.carrier) {
+      return result;
     }
     
     return null;
