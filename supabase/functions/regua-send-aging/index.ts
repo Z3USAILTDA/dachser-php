@@ -17,13 +17,18 @@ interface AgingRequest {
 interface InvoiceRow {
   documento: string;
   nd: string;
+  referencia_cliente: string;
   numero_nf: string;
+  modal: string;
   tipo_documento: string;
   data_emissao: string;
   data_vencimento: string;
   valor_nf: number;
   razao_social: string;
   cnpj: string;
+  numero_processo: string;
+  house: string;
+  master: string;
 }
 
 // Format CNPJ for display
@@ -114,29 +119,29 @@ function createSheetForCnpj(invoices: InvoiceRow[], clienteName: string, totalVa
   // Create worksheet data
   const wsData: any[][] = [];
   
-  // Row 1: Logo and "Valor total em atraso" label (9 columns now)
+  // Row 1: Logo and "Valor total em atraso" label (14 columns)
   wsData.push([
-    "DACHSER", "", "", "", "", "", "", "Valor total em atraso", ""
+    "DACHSER", "", "", "", "", "", "", "", "", "", "", "Valor total em atraso", "", ""
   ]);
   
   // Row 2: Title centered and total value
   wsData.push([
-    "", "", `${clienteName} - Demonstrativo de Faturamento`, "", "", "", "", `R$ ${totalValueFormatted}`, ""
+    "", "", "", `${clienteName} - Demonstrativo de Faturamento`, "", "", "", "", "", "", "", `R$ ${totalValueFormatted}`, "", ""
   ]);
   
   // Row 3: Empty with date on right
   wsData.push([
-    "", "", "", "", "", "", "", "", currentDate
+    "", "", "", "", "", "", "", "", "", "", "", "", "", currentDate
   ]);
   
   // Row 4: Período de Faturamento
   wsData.push([
-    "Período de Faturamento:", "01/01/2022 a 31/12/2027", "", "", "", "", "", "", ""
+    "Período de Faturamento:", "01/01/2022 a 31/12/2027", "", "", "", "", "", "", "", "", "", "", "", ""
   ]);
   
-  // Row 5: Column headers (red background) - using only available columns
+  // Row 5: Column headers (red background) - all 14 columns matching reference
   wsData.push([
-    "DOCUMENTO", "ND", "NOTA FISCAL", "TIPO DOC.", "EMISSÃO", "VENCTO", "C.N.P.J", "CLIENTE", "VALOR"
+    "DOCUMENTO", "ND", "REF. CLIENTE", "NOTA FISCAL DACHSER", "MODAL", "TIPO DOC.", "EMISSÃO", "VENCTO", "C.N.P.J", "CLIENTE", "VALOR", "PROCESSO", "MASTER", "HOUSE"
   ]);
   
   // Data rows
@@ -144,13 +149,18 @@ function createSheetForCnpj(invoices: InvoiceRow[], clienteName: string, totalVa
     wsData.push([
       inv.documento || "",
       inv.nd || "",
+      inv.referencia_cliente || "",
       inv.numero_nf || "",
+      inv.modal || "",
       inv.tipo_documento || "",
       inv.data_emissao || "",
       inv.data_vencimento || "",
       formatCnpj(inv.cnpj || ""),
       inv.razao_social || "",
-      Number(inv.valor_nf) || 0
+      Number(inv.valor_nf) || 0,
+      inv.numero_processo || "",
+      inv.master || "",
+      inv.house || ""
     ]);
   }
   
@@ -162,20 +172,20 @@ function createSheetForCnpj(invoices: InvoiceRow[], clienteName: string, totalVa
   
   // Style row 1 (logo and total label)
   if (ws['A1']) ws['A1'].s = logoStyle;
-  if (ws['H1']) ws['H1'].s = totalLabelStyle;
+  if (ws['L1']) ws['L1'].s = totalLabelStyle;
   
   // Style row 2 (title and total value)
-  if (ws['C2']) ws['C2'].s = titleStyle;
-  if (ws['H2']) ws['H2'].s = totalValueStyle;
+  if (ws['D2']) ws['D2'].s = titleStyle;
+  if (ws['L2']) ws['L2'].s = totalValueStyle;
   
   // Style row 3 (date)
-  if (ws['I3']) ws['I3'].s = dateStyle;
+  if (ws['N3']) ws['N3'].s = dateStyle;
   
   // Style row 4 (período)
   if (ws['A4']) ws['A4'].s = periodoStyle;
   
-  // Style header row (row 5) - 9 columns: A-I
-  const headerCols = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I'];
+  // Style header row (row 5) - 14 columns: A-N
+  const headerCols = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N'];
   headerCols.forEach(col => {
     const cell = `${col}5`;
     if (ws[cell]) ws[cell].s = headerRedStyle;
@@ -186,13 +196,15 @@ function createSheetForCnpj(invoices: InvoiceRow[], clienteName: string, totalVa
     headerCols.forEach((col, colIdx) => {
       const cell = `${col}${row}`;
       if (ws[cell]) {
-        if (colIdx === 8) { // VALOR column (I)
+        if (colIdx === 10) { // VALOR column (K)
           ws[cell].s = valorStyle;
           // Format as number
           if (typeof ws[cell].v === 'number') {
             ws[cell].t = 'n';
             ws[cell].z = '#,##0.00';
           }
+        } else if (colIdx === 13) { // HOUSE column (N)
+          ws[cell].s = houseStyle;
         } else {
           ws[cell].s = cellStyle;
         }
@@ -200,22 +212,27 @@ function createSheetForCnpj(invoices: InvoiceRow[], clienteName: string, totalVa
     });
   }
   
-  // Set column widths (9 columns)
+  // Set column widths (14 columns)
   ws['!cols'] = [
     { wch: 14 },  // DOCUMENTO
-    { wch: 12 },  // ND
-    { wch: 15 },  // NOTA FISCAL
-    { wch: 10 },  // TIPO DOC.
+    { wch: 14 },  // ND
+    { wch: 50 },  // REF. CLIENTE
+    { wch: 18 },  // NOTA FISCAL DACHSER
+    { wch: 6 },   // MODAL
+    { wch: 8 },   // TIPO DOC.
     { wch: 10 },  // EMISSÃO
     { wch: 10 },  // VENCTO
     { wch: 20 },  // C.N.P.J
-    { wch: 30 },  // CLIENTE
-    { wch: 12 }   // VALOR
+    { wch: 28 },  // CLIENTE
+    { wch: 12 },  // VALOR
+    { wch: 12 },  // PROCESSO
+    { wch: 14 },  // MASTER
+    { wch: 14 }   // HOUSE
   ];
   
-  // Merge cells for title (C2:G2)
+  // Merge cells for title (D2:J2)
   ws['!merges'] = [
-    { s: { r: 1, c: 2 }, e: { r: 1, c: 6 } }
+    { s: { r: 1, c: 3 }, e: { r: 1, c: 9 } }
   ];
   
   return ws;
@@ -288,14 +305,20 @@ serve(async (req: Request): Promise<Response> => {
       SELECT 
         t.documento,
         COALESCE(t.nd, '') AS nd,
+        COALESCE(t.referencia_cliente, '') AS referencia_cliente,
         COALESCE(NULLIF(t.numero_nf,''), '') AS numero_nf,
+        COALESCE(t.modal, '') AS modal,
         t.tipo_documento,
         DATE_FORMAT(t.data_emissao, '%m/%d/%y') AS data_emissao,
         DATE_FORMAT(t.data_vencimento, '%m/%d/%y') AS data_vencimento,
         t.valor_nf,
         t.razao_social,
-        t.cnpj
+        t.cnpj,
+        COALESCE(n.numero_processo, '') AS numero_processo,
+        COALESCE(n.house, '') AS house,
+        COALESCE(n.master, '') AS master
       FROM dados_dachser.t_dados_financeiro_nfs t
+      LEFT JOIN dados_dachser.t_dados_nfs n ON t.id_rm = n.id_rm
       LEFT JOIN ai_agente.t_financeiro_soft_delete sd ON sd.documento = t.documento
       WHERE t.cnpj IN (${placeholders})
         AND COALESCE(sd.active, 1) = 1
