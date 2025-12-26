@@ -110,13 +110,9 @@ serve(async (req: Request): Promise<Response> => {
         t.valor_nf,
         CASE WHEN t.tipo_documento='FAT_NF' THEN 'À vista' ELSE 'A prazo' END AS tipo_pagto,
         t.razao_social,
-        t.cnpj,
-        dnf.processo,
-        dnf.house,
-        dnf.master
+        t.cnpj
       FROM dados_dachser.t_dados_financeiro_nfs t
       LEFT JOIN ai_agente.t_financeiro_soft_delete sd ON sd.documento = t.documento
-      LEFT JOIN dados_dachser.t_dados_nfs dnf ON dnf.id_rm = t.id_rm
       WHERE t.cnpj IN (${placeholders})
         AND COALESCE(sd.active, 1) = 1
         AND DATEDIFF(CURDATE(), t.data_vencimento) >= 1
@@ -169,9 +165,6 @@ serve(async (req: Request): Promise<Response> => {
       <th>VALOR</th>
       <th>TIPO</th>
       <th>C.N.P.J</th>
-      <th>PROCESSO</th>
-      <th>MASTER</th>
-      <th>HOUSE</th>
     </tr>
   </thead>
   <tbody>
@@ -185,15 +178,12 @@ serve(async (req: Request): Promise<Response> => {
       <td>R$ ${Number(inv.valor_nf || 0).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
       <td>${inv.tipo_pagto || "-"}</td>
       <td>${formatCnpj(inv.cnpj || "")}</td>
-      <td>${inv.processo || "-"}</td>
-      <td>${inv.master || "-"}</td>
-      <td>${inv.house || "-"}</td>
     </tr>
     `).join("")}
     <tr class="total">
       <td colspan="5">TOTAL</td>
       <td>R$ ${totalValueFormatted}</td>
-      <td colspan="5"></td>
+      <td colspan="2"></td>
     </tr>
   </tbody>
 </table>

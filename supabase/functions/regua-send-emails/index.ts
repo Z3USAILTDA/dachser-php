@@ -128,17 +128,9 @@ serve(async (req: Request): Promise<Response> => {
         DATEDIFF(CURDATE(), t.data_vencimento) AS dias,
         t.valor_nf,
         t.tipo_documento,
-        t.cnpj,
-        COALESCE(dnf.processo, '') AS processo,
-        COALESCE(dnf.house, '') AS house,
-        COALESCE(dnf.master, '') AS master,
-        COALESCE(t.email_cliente, '') AS email_cliente,
-        COALESCE(t.nd, '') AS nd,
-        COALESCE(t.ref_cliente, '') AS ref_cliente,
-        COALESCE(t.modal, '') AS modal
+        t.cnpj
       FROM dados_dachser.t_dados_financeiro_nfs t
       LEFT JOIN ai_agente.t_financeiro_soft_delete sd ON sd.documento = t.documento
-      LEFT JOIN dados_dachser.t_dados_nfs dnf ON dnf.id_rm = t.id_rm
       WHERE COALESCE(sd.active, 1) = 1
         AND ${getStageCondition(stage)}
       ORDER BY t.razao_social ASC, t.data_vencimento ASC
@@ -218,44 +210,31 @@ serve(async (req: Request): Promise<Response> => {
   <thead>
     <tr style="background-color: #FFCC00;">
       <th style="border: 1px solid #000; padding: 8px; text-align: left;">DOC</th>
-      <th style="border: 1px solid #000; padding: 8px; text-align: left;">ND</th>
-      <th style="border: 1px solid #000; padding: 8px; text-align: left;">REF. CLIENTE</th>
       <th style="border: 1px solid #000; padding: 8px; text-align: left;">NF</th>
-      <th style="border: 1px solid #000; padding: 8px; text-align: left;">MODAL</th>
       <th style="border: 1px solid #000; padding: 8px; text-align: left;">TIPO DOC.</th>
       <th style="border: 1px solid #000; padding: 8px; text-align: left;">EMISSÃO</th>
       <th style="border: 1px solid #000; padding: 8px; text-align: left;">VENCTO</th>
       <th style="border: 1px solid #000; padding: 8px; text-align: left;">C.N.P.J</th>
       <th style="border: 1px solid #000; padding: 8px; text-align: left;">CLIENTE</th>
       <th style="border: 1px solid #000; padding: 8px; text-align: right;">VALOR</th>
-      <th style="border: 1px solid #000; padding: 8px; text-align: left;">PROCESSO</th>
-      <th style="border: 1px solid #000; padding: 8px; text-align: left;">MASTER</th>
-      <th style="border: 1px solid #000; padding: 8px; text-align: left;">HOUSE</th>
     </tr>
   </thead>
   <tbody>
     ${clientInvoices.map(inv => `
     <tr>
       <td style="border: 1px solid #ddd; padding: 6px;">${inv.documento || "-"}</td>
-      <td style="border: 1px solid #ddd; padding: 6px;">${inv.nd || "-"}</td>
-      <td style="border: 1px solid #ddd; padding: 6px;">${inv.ref_cliente || "-"}</td>
       <td style="border: 1px solid #ddd; padding: 6px;">${inv.numero_nf || "-"}</td>
-      <td style="border: 1px solid #ddd; padding: 6px;">${inv.modal || "-"}</td>
       <td style="border: 1px solid #ddd; padding: 6px;">${inv.tipo_documento === "FAT_NF" ? "À vista" : "A prazo"}</td>
       <td style="border: 1px solid #ddd; padding: 6px;">${inv.data_emissao || "-"}</td>
       <td style="border: 1px solid #ddd; padding: 6px;">${inv.data_vencimento || "-"}</td>
       <td style="border: 1px solid #ddd; padding: 6px;">${formatCnpj(inv.cnpj)}</td>
       <td style="border: 1px solid #ddd; padding: 6px;">${inv.razao_social || "-"}</td>
       <td style="border: 1px solid #ddd; padding: 6px; text-align: right;">${formatValue(inv.valor_nf)}</td>
-      <td style="border: 1px solid #ddd; padding: 6px;">${inv.processo || "-"}</td>
-      <td style="border: 1px solid #ddd; padding: 6px;">${inv.master || "-"}</td>
-      <td style="border: 1px solid #ddd; padding: 6px;">${inv.house || "-"}</td>
     </tr>
     `).join("")}
     <tr style="background-color: #f0f0f0; font-weight: bold;">
-      <td colspan="10" style="border: 1px solid #ddd; padding: 6px;">TOTAL</td>
+      <td colspan="7" style="border: 1px solid #ddd; padding: 6px;">TOTAL</td>
       <td style="border: 1px solid #ddd; padding: 6px; text-align: right;">${formatValue(totalValue)}</td>
-      <td colspan="3" style="border: 1px solid #ddd; padding: 6px;"></td>
     </tr>
   </tbody>
 </table>
