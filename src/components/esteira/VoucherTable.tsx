@@ -34,11 +34,13 @@ interface VoucherTableProps {
   onEdit: (voucher: Voucher) => void;
   onDelete: (voucher: Voucher) => void;
   onGoBack: (voucher: Voucher, justificativa: string) => void;
+  onCancel?: (voucher: Voucher) => void;
   filters: FilterValues;
   onFilterChange: (filters: FilterValues) => void;
   canEdit?: boolean;
   canDelete?: boolean;
   canGoBackStage?: boolean;
+  canCancelVoucher?: boolean;
 }
 
 const getEtapaColor = (etapa: string) => {
@@ -52,6 +54,7 @@ const getEtapaColor = (etapa: string) => {
     CONCLUIDO: "bg-green-500/10 text-green-500 border-green-500/20",
     AJUSTE_OPERACAO: "bg-orange-500/10 text-orange-500 border-orange-500/20",
     AJUSTE_FISCAL: "bg-red-500/10 text-red-500 border-red-500/20",
+    CANCELADO: "bg-gray-600/20 text-gray-500 border-gray-600/30 line-through",
   };
   return colors[etapa] || "bg-gray-500/10 text-gray-500";
 };
@@ -102,7 +105,7 @@ const getSlaColor = (status: "ok" | "warning" | "critical") => {
   return colors[status];
 };
 
-export const VoucherTable = ({ vouchers, onViewDetails, onEdit, onDelete, onGoBack, filters, onFilterChange, canEdit = true, canDelete = true, canGoBackStage = false }: VoucherTableProps) => {
+export const VoucherTable = ({ vouchers, onViewDetails, onEdit, onDelete, onGoBack, onCancel, filters, onFilterChange, canEdit = true, canDelete = true, canGoBackStage = false, canCancelVoucher = false }: VoucherTableProps) => {
   const [sortField, setSortField] = useState<SortField>("createdAt");
   const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
 
@@ -262,6 +265,7 @@ export const VoucherTable = ({ vouchers, onViewDetails, onEdit, onDelete, onGoBa
                       <SelectItem value="CONCLUIDO">Concluído</SelectItem>
                       <SelectItem value="AJUSTE_OPERACAO">Ajuste Voucher</SelectItem>
                       <SelectItem value="AJUSTE_FISCAL">Ajuste Fiscal</SelectItem>
+                      <SelectItem value="CANCELADO">Cancelado</SelectItem>
                     </SelectContent>
                   </Select>
                 </TableHead>
@@ -450,10 +454,13 @@ export const VoucherTable = ({ vouchers, onViewDetails, onEdit, onDelete, onGoBa
                             onEdit={() => onEdit(voucher)}
                             onDelete={() => onDelete(voucher)}
                             onGoBack={(justificativa) => onGoBack(voucher, justificativa)}
+                            onCancel={onCancel ? () => onCancel(voucher) : undefined}
                             canGoBack={canGoBack(voucher)}
                             canGoBackStage={canGoBackStage}
-                            canEdit={canEdit}
-                            canDelete={canDelete}
+                            canEdit={canEdit && voucher.etapaAtual !== "CANCELADO"}
+                            canDelete={canDelete && voucher.etapaAtual !== "CANCELADO"}
+                            canCancelVoucher={canCancelVoucher && voucher.etapaAtual !== "CANCELADO" && voucher.etapaAtual !== "CONCLUIDO"}
+                            isCancelled={voucher.etapaAtual === "CANCELADO"}
                           />
                         </div>
                       </TableCell>

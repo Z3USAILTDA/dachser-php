@@ -1,4 +1,4 @@
-import { MoreHorizontal, Edit, Trash2, Undo2 } from "lucide-react";
+import { MoreHorizontal, Edit, Trash2, Undo2, XCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -33,27 +33,38 @@ interface VoucherActionsMenuProps {
   onEdit: () => void;
   onDelete: () => void;
   onGoBack: (justificativa: string) => void;
+  onCancel?: () => void;
   canGoBack: boolean;
   canGoBackStage?: boolean;
   canEdit?: boolean;
   canDelete?: boolean;
+  canCancelVoucher?: boolean;
+  isCancelled?: boolean;
 }
 
 export const VoucherActionsMenu = ({
   onEdit,
   onDelete,
   onGoBack,
+  onCancel,
   canGoBack,
   canGoBackStage = false,
   canEdit = true,
   canDelete = true,
+  canCancelVoucher = false,
+  isCancelled = false,
 }: VoucherActionsMenuProps) => {
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [showGoBackDialog, setShowGoBackDialog] = useState(false);
   const [justificativa, setJustificativa] = useState("");
 
-  // If user can't edit or delete, don't show the menu at all
-  if (!canEdit && !canDelete && !(canGoBack && canGoBackStage)) {
+  // If voucher is cancelled, only show view (no actions)
+  if (isCancelled) {
+    return null;
+  }
+
+  // If user can't perform any action, don't show the menu at all
+  if (!canEdit && !canDelete && !(canGoBack && canGoBackStage) && !canCancelVoucher) {
     return null;
   }
 
@@ -87,9 +98,21 @@ export const VoucherActionsMenu = ({
               Voltar Etapa
             </DropdownMenuItem>
           )}
-          {canDelete && (
+          {canCancelVoucher && onCancel && (
             <>
               {(canEdit || (canGoBack && canGoBackStage)) && <DropdownMenuSeparator />}
+              <DropdownMenuItem
+                onClick={onCancel}
+                className="text-destructive focus:text-destructive"
+              >
+                <XCircle className="mr-2 h-4 w-4" />
+                Cancelar Voucher
+              </DropdownMenuItem>
+            </>
+          )}
+          {canDelete && (
+            <>
+              {(canEdit || (canGoBack && canGoBackStage) || canCancelVoucher) && <DropdownMenuSeparator />}
               <DropdownMenuItem
                 onClick={() => setShowDeleteDialog(true)}
                 className="text-destructive focus:text-destructive"

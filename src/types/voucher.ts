@@ -9,7 +9,8 @@ export type EtapaAtual =
   | "ROBO" 
   | "CONCLUIDO"
   | "AJUSTE_OPERACAO"
-  | "AJUSTE_FISCAL";
+  | "AJUSTE_FISCAL"
+  | "CANCELADO";
 
 export type StatusBaixa = 
   | "PENDENTE" 
@@ -104,6 +105,7 @@ export const ETAPA_LABELS: Record<EtapaAtual, string> = {
   CONCLUIDO: "Concluído",
   AJUSTE_OPERACAO: "Ajuste Voucher",
   AJUSTE_FISCAL: "Ajuste Fiscal",
+  CANCELADO: "Cancelado",
 };
 
 export const SLA_POR_ETAPA: Record<EtapaAtual, number> = {
@@ -116,6 +118,7 @@ export const SLA_POR_ETAPA: Record<EtapaAtual, number> = {
   CONCLUIDO: 0,
   AJUSTE_OPERACAO: 24,
   AJUSTE_FISCAL: 24,
+  CANCELADO: 0,
 };
 
 export const STATUS_PAGAMENTO_LABELS: Record<StatusPagamento, string> = {
@@ -280,6 +283,17 @@ export interface Voucher {
   loteRemessaId?: string;
   dadosBancarios?: DadosBancarios;
   statusIntegracaoRm?: StatusIntegracaoRM;
+  // Consolidation (Voucher Master) fields
+  voucherMasterId?: string;
+  isMaster?: boolean;
+  consolidacaoRmNumero?: string;
+  vouchersFilhos?: Voucher[];
+  // Cancellation fields
+  cancelamentoMotivo?: string;
+  cancelamentoVoucherCredito?: string;
+  canceladoPorUserId?: string;
+  canceladoPorUserName?: string;
+  canceladoEm?: Date;
 }
 
 export interface RemessaItem {
