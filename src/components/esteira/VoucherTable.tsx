@@ -258,6 +258,7 @@ export const VoucherTable = ({ vouchers, onViewDetails, onEdit, onDelete, onGoBa
                     </SelectTrigger>
                     <SelectContent className="bg-card border-border">
                       <SelectItem value="all">Todas</SelectItem>
+                      <SelectItem value="A_PROCESSAR">A Processar</SelectItem>
                       <SelectItem value="OPERACAO">Voucher</SelectItem>
                       <SelectItem value="FISCAL">Fiscal</SelectItem>
                       <SelectItem value="SUPERVISOR">Supervisor</SelectItem>
@@ -310,22 +311,7 @@ export const VoucherTable = ({ vouchers, onViewDetails, onEdit, onDelete, onGoBa
                       onClick={() => onViewDetails(voucher)}
                     >
                       <TableCell className="font-mono font-medium">
-                        <div className="flex items-center gap-2">
-                          {voucher.numeroSPO}
-                          {voucher.fonteDados === "RM_PENDENTE" && (
-                            <Tooltip>
-                              <TooltipTrigger onClick={(e) => e.stopPropagation()}>
-                                <Badge variant="outline" className="bg-warning/10 text-warning border-warning/30 text-[10px] px-1.5 py-0">
-                                  RM Pendente
-                                </Badge>
-                              </TooltipTrigger>
-                              <TooltipContent>
-                                <p className="text-xs">Dados do RM ainda não sincronizados.</p>
-                                <p className="text-xs text-warning">Voucher bloqueado até sincronização.</p>
-                              </TooltipContent>
-                            </Tooltip>
-                          )}
-                        </div>
+                        {voucher.numeroSPO}
                       </TableCell>
                       <TableCell className="font-mono text-xs">
                         {voucher.processoId || "-"}

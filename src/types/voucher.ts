@@ -297,6 +297,8 @@ export interface Voucher {
   canceladoPorUserId?: string;
   canceladoPorUserName?: string;
   canceladoEm?: Date;
+  // RM Pending tracking (internal use)
+  idRm?: number;
 }
 
 export interface RemessaItem {

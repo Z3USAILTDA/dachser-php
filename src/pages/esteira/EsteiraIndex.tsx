@@ -62,7 +62,7 @@ import { RoboTab } from "@/components/tabs/RoboTab";
 import { ReportsTab } from "@/components/tabs/ReportsTab";
 // Removed: FaturasDoDiaTab - apenas Pagamentos agora
 import { PagamentosTab } from "@/components/esteira/PagamentosTab";
-import { BacklogTab } from "@/components/esteira/BacklogTab";
+// BacklogTab removed - RM pending vouchers now shown in main grid as A_PROCESSAR
 import { MetricCard } from "@/components/cct/MetricCard";
 import {
   DropdownMenu,
@@ -752,7 +752,7 @@ const EsteiraIndex = () => {
   const [vouchers, setVouchers] = useState<Voucher[]>([]);
   const [loading, setLoading] = useState(true);
   const [isRefetching, setIsRefetching] = useState(false);
-  const [activeTab, setActiveTab] = useState<"backlog" | "processos" | "dashboard" | "analytics" | "robo" | "relatorios" | "faturas" | "pagamentos">(
+  const [activeTab, setActiveTab] = useState<"processos" | "dashboard" | "analytics" | "robo" | "relatorios" | "pagamentos">(
     "processos",
   );
   const [filters, setFilters] = useState<FilterValues>({
@@ -833,15 +833,26 @@ const EsteiraIndex = () => {
       setLoading(true);
       setIsRefetching(true);
 
-      // Load from MariaDB t_vouchers exclusively
-      const { data, error } = await supabase.functions.invoke("mariadb-proxy", {
-        body: {
-          action: "get_vouchers_esteira",
-          limit: 500,
-        },
-      });
-      if (error) throw error;
-      const mappedVouchers: Voucher[] = (data?.data || []).map((v: any) => ({
+      // Load from MariaDB t_vouchers AND pending RM vouchers in parallel
+      const [esteiraResult, rmPendingResult] = await Promise.all([
+        supabase.functions.invoke("mariadb-proxy", {
+          body: {
+            action: "get_vouchers_esteira",
+            limit: 500,
+          },
+        }),
+        supabase.functions.invoke("mariadb-proxy", {
+          body: {
+            action: "get_vouchers_pendentes_rm",
+            limit: 200,
+          },
+        }),
+      ]);
+
+      if (esteiraResult.error) throw esteiraResult.error;
+
+      // Map vouchers from esteira
+      const mappedVouchers: Voucher[] = (esteiraResult.data?.data || []).map((v: any) => ({
         id: v.id,
         numeroSPO: v.numero_spo,
         fornecedor: v.fornecedor,
@@ -881,7 +892,71 @@ const EsteiraIndex = () => {
         anexos: [],
         logs: [],
       }));
-      setVouchers(mappedVouchers);
+
+      // Map pending RM vouchers to Voucher format with etapaAtual = A_PROCESSAR
+      const rmPendingVouchers: Voucher[] = (rmPendingResult.data?.data || []).map((rm: any) => {
+        // Map forma_pag to FormaPagamento
+        const mapFormaPag = (fp: string | null): string => {
+          const mapping: Record<string, string> = {
+            'BOL': 'BOLETO',
+            'BOLETO': 'BOLETO',
+            'PIX': 'PIX',
+            'TED': 'TRANSFERENCIA',
+            'TRANSF': 'TRANSFERENCIA',
+            'DEBITO': 'DEBITO',
+            'CAMBIO': 'CAMBIO',
+            'DARF': 'DARF',
+            'GPS': 'GPS',
+          };
+          return mapping[(fp || '').toUpperCase()] || 'BOLETO';
+        };
+
+        // Map tipo_pag to TipoDocumento
+        const mapTipoDoc = (tp: string | null): string => {
+          const mapping: Record<string, string> = {
+            'NF': 'NOTA_FISCAL',
+            'FAT': 'FATURA',
+            'FATURA': 'FATURA',
+            'DEM': 'DEMONSTRATIVO',
+            'NFS': 'NF_SERVICO',
+          };
+          return mapping[(tp || '').toUpperCase()] || 'FATURA';
+        };
+
+        return {
+          id: `rm_pending_${rm.nd}`, // Temporary ID for RM pending vouchers
+          numeroSPO: rm.nd,
+          fornecedor: rm.nome_beneficiario || rm.razao_social || '',
+          cnpjFornecedor: rm.cnpj,
+          valor: rm.valor_nf ? parseFloat(rm.valor_nf) : null,
+          moeda: rm.moeda || "BRL",
+          vencimento: parseMariaDBDate(rm.data_vencimento) || new Date(),
+          dataEmissaoDocumento: parseMariaDBDate(rm.data_emissao) || undefined,
+          cobrancaEmNomeDe: rm.nome_cobranca === "CLIENTE" ? "CLIENTE" : "DACHSER",
+          formaPagamento: mapFormaPag(rm.forma_pag) as any,
+          tipoDocumento: mapTipoDoc(rm.tipo_pag) as any,
+          filial: undefined,
+          remessa: "NENHUM" as any,
+          urgente: false,
+          urgenciaTipo: "NORMAL" as any,
+          etapaAtual: "A_PROCESSAR" as any,
+          statusBaixa: "PENDENTE" as any,
+          statusFinanceiro: "PENDENTE" as any,
+          origemCriacao: "RM" as any,
+          processoId: rm.numero_processo || null,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+          anexos: [],
+          logs: [],
+          // Internal tracking
+          idRm: rm.id_rm,
+          fonteDados: "RM_PENDENTE",
+        } as Voucher;
+      });
+
+      // Merge both arrays: RM pending vouchers first (A_PROCESSAR), then esteira vouchers
+      const allVouchers = [...rmPendingVouchers, ...mappedVouchers];
+      setVouchers(allVouchers);
 
       // Calculate metrics (consolidated)
       const now = new Date();
@@ -890,26 +965,26 @@ const EsteiraIndex = () => {
       const yesterday = new Date(now);
       yesterday.setDate(yesterday.getDate() - 1);
 
-      // Ativos = todos não concluídos
-      const ativos = mappedVouchers.filter((v) => v.etapaAtual !== "CONCLUIDO");
+      // Ativos = todos não concluídos (including A_PROCESSAR)
+      const ativos = allVouchers.filter((v) => v.etapaAtual !== "CONCLUIDO" && v.etapaAtual !== "A_PROCESSAR");
 
       // SLA Atenção = vencendo em 24h + já vencidos
-      const slaAtencao = mappedVouchers.filter((v) => {
+      const slaAtencao = allVouchers.filter((v) => {
         if (v.etapaAtual === "CONCLUIDO") return false;
         const vencimento = v.vencimento;
         return vencimento <= tomorrow;
       });
 
       // Pendências Financeiras = sem accrual + aguardando comprovante + exceções
-      const pendenciasFinanceiras = mappedVouchers.filter((v) => {
-        if (v.etapaAtual === "CONCLUIDO") return false;
+      const pendenciasFinanceiras = allVouchers.filter((v) => {
+        if (v.etapaAtual === "CONCLUIDO" || v.etapaAtual === "A_PROCESSAR") return false;
         const aguardandoComprovante = v.etapaAtual === "FINANCEIRO" || v.etapaAtual === "ROBO";
         const emExcecao = v.urgenciaTipo === "URGENTE_REAL";
         return aguardandoComprovante || emExcecao;
       });
 
       // Eventos 24h
-      const recentVouchers = mappedVouchers.filter((v) => v.updatedAt >= yesterday);
+      const recentVouchers = allVouchers.filter((v) => v.updatedAt >= yesterday);
       setMetrics({
         ativos: ativos.length,
         slaAtencao: slaAtencao.length,
@@ -1108,10 +1183,85 @@ const EsteiraIndex = () => {
       </div>
     );
   }
-  const handleViewDetails = (voucher: Voucher) => {
+  const handleViewDetails = async (voucher: Voucher) => {
+    // If voucher is from RM pending (A_PROCESSAR), import it first
+    if (voucher.etapaAtual === "A_PROCESSAR" && voucher.fonteDados === "RM_PENDENTE") {
+      try {
+        const { data, error } = await supabase.functions.invoke("mariadb-proxy", {
+          body: {
+            action: "import_voucher_from_rm",
+            nd: voucher.numeroSPO,
+            user_id: user?.id,
+            user_name: user?.username || user?.email,
+          },
+        });
+
+        if (error) throw error;
+        if (!data?.success) throw new Error(data?.error || "Erro ao importar voucher");
+
+        toast({
+          title: "Voucher importado",
+          description: `Voucher ${voucher.numeroSPO} foi adicionado à esteira.`,
+        });
+
+        // Navigate to the newly created voucher
+        if (data?.voucher_id) {
+          navigate(`/fin/esteira/voucher/${data.voucher_id}`);
+        } else {
+          // Reload and try to find the voucher
+          loadVouchers();
+        }
+        return;
+      } catch (error: any) {
+        toast({
+          title: "Erro ao importar voucher",
+          description: error.message,
+          variant: "destructive",
+        });
+        return;
+      }
+    }
     navigate(`/fin/esteira/voucher/${voucher.id}`);
   };
-  const handleEdit = (voucher: Voucher) => {
+
+  const handleEdit = async (voucher: Voucher) => {
+    // If voucher is from RM pending (A_PROCESSAR), import it first
+    if (voucher.etapaAtual === "A_PROCESSAR" && voucher.fonteDados === "RM_PENDENTE") {
+      try {
+        const { data, error } = await supabase.functions.invoke("mariadb-proxy", {
+          body: {
+            action: "import_voucher_from_rm",
+            nd: voucher.numeroSPO,
+            user_id: user?.id,
+            user_name: user?.username || user?.email,
+          },
+        });
+
+        if (error) throw error;
+        if (!data?.success) throw new Error(data?.error || "Erro ao importar voucher");
+
+        toast({
+          title: "Voucher importado",
+          description: `Voucher ${voucher.numeroSPO} foi adicionado à esteira. Abrindo edição...`,
+        });
+
+        // Update local voucher with new ID and open edit dialog
+        if (data?.voucher_id) {
+          const updatedVoucher = { ...voucher, id: data.voucher_id, etapaAtual: "OPERACAO" as const, fonteDados: undefined };
+          setSelectedVoucher(updatedVoucher);
+          setShowEditDialog(true);
+          loadVouchers();
+        }
+        return;
+      } catch (error: any) {
+        toast({
+          title: "Erro ao importar voucher",
+          description: error.message,
+          variant: "destructive",
+        });
+        return;
+      }
+    }
     setSelectedVoucher(voucher);
     setShowEditDialog(true);
   };
@@ -1438,11 +1588,6 @@ const EsteiraIndex = () => {
           <nav className="flex items-center gap-1 px-2 py-1.5 rounded-full bg-[rgba(5,6,18,0.85)] border border-white/10 backdrop-blur-sm w-fit">
             {[
               {
-                id: "backlog" as const,
-                label: "A Processar",
-                icon: Package,
-              },
-              {
                 id: "processos" as const,
                 label: "Processos",
                 icon: List,
@@ -1576,11 +1721,6 @@ const EsteiraIndex = () => {
             </div>
           )}
 
-          {activeTab === "backlog" && (
-            <div className="rounded-2xl p-5 bg-[rgba(5,6,18,0.9)] border border-[rgba(255,255,255,0.12)] backdrop-blur-[18px] shadow-[0_18px_40px_rgba(0,0,0,0.85)]">
-              <BacklogTab onVoucherImported={loadVouchers} />
-            </div>
-          )}
           {activeTab === "dashboard" && <DashboardTab vouchers={vouchers} />}
           {activeTab === "analytics" && <AnalyticsDashboard vouchers={vouchers} />}
           {activeTab === "robo" && <RoboTab />}
