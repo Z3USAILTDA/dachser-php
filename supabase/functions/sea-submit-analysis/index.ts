@@ -346,7 +346,7 @@ Your output MUST follow the MANDATORY OUTPUT STRUCTURE from the main prompt.
 async function analyzeWithAnthropic(
   prompt: string, 
   manifestText: string,
-  pdfFiles: Array<{ base64: string; name: string }>,
+  pdfFiles: Array<{ base64: string; name: string; file_type?: string }>,
   metadata: { consignee?: string; container?: string },
   approvedExamplesText: string = '',
   analysisType: string = ''
@@ -380,7 +380,20 @@ async function analyzeWithAnthropic(
   ];
   
   // Add PDFs as base64 documents (Claude supports PDF natively)
-  for (const file of pdfFiles) {
+  // CRITICAL: Identify each document explicitly for HBL vs MBL analysis
+  for (let i = 0; i < pdfFiles.length; i++) {
+    const file = pdfFiles[i];
+    
+    // Determine document type based on file_type passed from analysis
+    let docLabel = `Document ${i + 1}`;
+    if (file.file_type === 'base') {
+      docLabel = '★★★ THIS IS THE HBL (House Bill of Lading) - Extract NCM codes FROM THIS DOCUMENT for "HBL NCMs" ★★★';
+    } else if (file.file_type === 'mbl') {
+      docLabel = '★★★ THIS IS THE MBL (Master Bill of Lading) - Extract NCM codes FROM THIS DOCUMENT for "MBL NCMs" ★★★';
+    } else if (file.file_type === 'hbl') {
+      docLabel = '★★★ THIS IS THE HBL (House Bill of Lading) ★★★';
+    }
+    
     contentParts.push({ 
       type: 'document', 
       source: { 
@@ -389,7 +402,7 @@ async function analyzeWithAnthropic(
         data: file.base64 
       } 
     });
-    contentParts.push({ type: 'text', text: `[Arquivo PDF: ${file.name}]` });
+    contentParts.push({ type: 'text', text: `[${docLabel}]\n[Arquivo PDF: ${file.name}]` });
   }
   
   console.log(`🤖 Calling Anthropic Claude with ${pdfFiles.length} PDFs + manifest text (${manifestText.length} chars) + examples (${approvedExamplesText.length} chars)`);
@@ -563,7 +576,7 @@ If your "Total exporters identified" is LESS than the actual count in the manife
 async function analyzeWithGeminiPro(
   prompt: string, 
   manifestText: string,
-  pdfFiles: Array<{ base64: string; name: string }>,
+  pdfFiles: Array<{ base64: string; name: string; file_type?: string }>,
   metadata: { consignee?: string; container?: string },
   approvedExamplesText: string = '',
   analysisType: string = ''
@@ -591,7 +604,20 @@ async function analyzeWithGeminiPro(
   
   const contentParts: any[] = [{ type: 'text', text: fullPrompt }];
   
-  for (const file of pdfFiles) {
+  for (let i = 0; i < pdfFiles.length; i++) {
+    const file = pdfFiles[i];
+    
+    // Determine document type based on file_type
+    let docLabel = `Document ${i + 1}`;
+    if (file.file_type === 'base') {
+      docLabel = '★★★ THIS IS THE HBL (House Bill of Lading) - Extract NCM codes FROM THIS DOCUMENT for "HBL NCMs" ★★★';
+    } else if (file.file_type === 'mbl') {
+      docLabel = '★★★ THIS IS THE MBL (Master Bill of Lading) - Extract NCM codes FROM THIS DOCUMENT for "MBL NCMs" ★★★';
+    } else if (file.file_type === 'hbl') {
+      docLabel = '★★★ THIS IS THE HBL (House Bill of Lading) ★★★';
+    }
+    
+    contentParts.push({ type: 'text', text: `[${docLabel}]\n[Arquivo PDF: ${file.name}]` });
     contentParts.push({
       type: 'image_url',
       image_url: { url: `data:application/pdf;base64,${file.base64}` }
@@ -667,11 +693,19 @@ async function analyzeWithLLM(
   
   console.log(`📊 Manifest text extracted: ${manifestText.length} chars`);
   
-  const pdfPromises = pdfUrls.map(f => fetchFileAsBase64(f.file_url, f.file_name));
+  // Fetch PDFs and preserve file_type information
+  const pdfPromises = pdfUrls.map(async f => {
+    const result = await fetchFileAsBase64(f.file_url, f.file_name);
+    if (result) {
+      return { ...result, file_type: f.file_type };
+    }
+    return null;
+  });
   const pdfResults = await Promise.all(pdfPromises);
-  const validPdfs = pdfResults.filter((f): f is { base64: string; name: string; mediaType: string; ext: string } => f !== null);
+  const validPdfs = pdfResults.filter((f): f is { base64: string; name: string; mediaType: string; ext: string; file_type: string } => f !== null);
   
   console.log(`📎 PDFs loaded: ${validPdfs.length}`);
+  console.log(`📎 PDF types: ${validPdfs.map(f => `${f.name} -> ${f.file_type}`).join(', ')}`);
   
   // Wait for approved examples
   const approvedExamplesText = await approvedExamplesPromise;
@@ -687,7 +721,7 @@ async function analyzeWithLLM(
     result = await analyzeWithAnthropic(
       basePrompt, 
       manifestText,
-      validPdfs.map(f => ({ base64: f.base64, name: f.name })),
+      validPdfs.map(f => ({ base64: f.base64, name: f.name, file_type: f.file_type })),
       metadata,
       approvedExamplesText,
       analysisType
@@ -698,7 +732,7 @@ async function analyzeWithLLM(
     result = await analyzeWithGeminiPro(
       basePrompt, 
       manifestText,
-      validPdfs.map(f => ({ base64: f.base64, name: f.name })),
+      validPdfs.map(f => ({ base64: f.base64, name: f.name, file_type: f.file_type })),
       metadata,
       approvedExamplesText,
       analysisType
