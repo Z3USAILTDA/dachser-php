@@ -11,6 +11,9 @@ import { format, isToday, isPast } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { cn } from "@/lib/utils";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { TablePagination } from "@/components/layout/TablePagination";
+
+const PAGE_SIZE = 20;
 
 export interface FilterValues {
   search: string;
@@ -109,9 +112,11 @@ const getSlaColor = (status: "ok" | "warning" | "critical") => {
 export const VoucherTable = ({ vouchers, onViewDetails, onEdit, onDelete, onGoBack, onCancel, filters, onFilterChange, canEdit = true, canDelete = true, canGoBackStage = false, canCancelVoucher = false }: VoucherTableProps) => {
   const [sortField, setSortField] = useState<SortField>("createdAt");
   const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
+  const [currentPage, setCurrentPage] = useState(1);
 
   const handleFilterChange = (key: keyof FilterValues, value: string) => {
     onFilterChange({ ...filters, [key]: value });
+    setCurrentPage(1); // Reset page when filter changes
   };
 
   const handleSort = (field: SortField) => {
@@ -157,6 +162,10 @@ export const VoucherTable = ({ vouchers, onViewDetails, onEdit, onDelete, onGoBa
     
     return sortDirection === "asc" ? comparison : -comparison;
   });
+
+  // Pagination
+  const totalPages = Math.max(1, Math.ceil(sortedVouchers.length / PAGE_SIZE));
+  const paginatedVouchers = sortedVouchers.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
 
   const canGoBack = (voucher: Voucher): boolean => {
     if (voucher.etapaAtual === "OPERACAO" || voucher.etapaAtual === "CONCLUIDO") {
@@ -289,14 +298,14 @@ export const VoucherTable = ({ vouchers, onViewDetails, onEdit, onDelete, onGoBa
               </TableRow>
             </TableHeader>
             <TableBody>
-              {sortedVouchers.length === 0 ? (
+              {paginatedVouchers.length === 0 ? (
                 <TableRow>
                   <TableCell colSpan={11} className="text-center text-muted-foreground py-8">
                     Nenhum voucher encontrado
                   </TableCell>
                 </TableRow>
               ) : (
-                sortedVouchers.map((voucher) => {
+                paginatedVouchers.map((voucher) => {
                   const tempoNaEtapa = calcularTempoNaEtapa(voucher);
                   const slaStatus = getSlaStatus(tempoNaEtapa, voucher.etapaAtual);
                   const slaLimit = SLA_POR_ETAPA[voucher.etapaAtual as keyof typeof SLA_POR_ETAPA] || 24;
@@ -458,6 +467,21 @@ export const VoucherTable = ({ vouchers, onViewDetails, onEdit, onDelete, onGoBa
             </TableBody>
           </Table>
         </div>
+
+        {/* Pagination */}
+        {sortedVouchers.length > PAGE_SIZE && (
+          <div className="p-4 border-t border-[rgba(255,255,255,.08)] flex items-center justify-between bg-[rgba(0,0,0,.3)]">
+            <div className="text-[0.78rem] text-[#aaaaaa]">
+              Página {currentPage} de {totalPages} | Total: {sortedVouchers.length} vouchers
+            </div>
+            <TablePagination
+              currentPage={currentPage}
+              totalPages={totalPages}
+              onPageChange={setCurrentPage}
+              showFirstLast={false}
+            />
+          </div>
+        )}
       </div>
     </TooltipProvider>
   );
