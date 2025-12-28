@@ -20,29 +20,63 @@ const MAX_TOTAL_CHARS = 200000;
 /**
  * Extract NCM codes from text using various patterns
  */
+/**
+ * Extract NCM codes from text - ONLY NCM, never HS Code
+ * NCM codes are typically 4 or 8 digits
+ * HS Codes should NOT be extracted as they are a different system
+ */
 function extractNCMCodes(text: string): string[] {
+  // ONLY extract values that are labeled as NCM - NEVER HS Code
   const ncmPatterns = [
-    /\b(\d{4}[\.\-\s]?\d{2}[\.\-\s]?\d{2}(?:[\.\-\s]?\d{2})?)\b/g, // 8-10 digit NCM with optional separators
-    /\b(\d{8,10})\b/g, // Plain 8-10 digit numbers
-    /NCM[:\s]*(\d{4,10})/gi, // After "NCM:" label
-    /HS\s*CODE[:\s]*(\d{4,10})/gi, // HS Code variations
+    /NCM[:\s]*(\d{4,10})/gi, // After "NCM:" label explicitly
+    /NCM\s*Code[:\s]*(\d{4,10})/gi, // After "NCM Code:" label
+    /Codigo\s*NCM[:\s]*(\d{4,10})/gi, // Portuguese variation
+    /Código\s*NCM[:\s]*(\d{4,10})/gi, // Portuguese variation with accent
   ];
+  
+  // Patterns to EXCLUDE - these are HS Codes, not NCMs
+  const hsCodeContext = /HS\s*CODE/gi;
   
   const ncmSet = new Set<string>();
   
+  // First check if text contains explicit NCM labels
+  let hasExplicitNCM = false;
   for (const pattern of ncmPatterns) {
+    if (pattern.test(text)) {
+      hasExplicitNCM = true;
+      break;
+    }
+  }
+  
+  // Extract from explicit NCM labels
+  for (const pattern of ncmPatterns) {
+    // Reset regex lastIndex
+    pattern.lastIndex = 0;
     const matches = text.matchAll(pattern);
     for (const match of matches) {
-      // Clean the NCM code - remove dots, dashes, spaces
       const cleanNCM = match[1].replace(/[\.\-\s]/g, '');
       
-      // Validate it looks like an NCM (4-10 digits starting with valid chapters)
+      // Validate it looks like an NCM (4-10 digits)
       if (cleanNCM.length >= 4 && cleanNCM.length <= 10) {
         const chapter = parseInt(cleanNCM.substring(0, 2));
-        // Valid HS chapters are 01-99
         if (chapter >= 1 && chapter <= 99) {
           ncmSet.add(cleanNCM);
         }
+      }
+    }
+  }
+  
+  // Only extract from general number patterns if no explicit NCM labels found
+  // AND if text doesn't contain HS Code context (to avoid mixing systems)
+  if (ncmSet.size === 0 && !hasExplicitNCM && !hsCodeContext.test(text)) {
+    // Look for 4-digit codes in cells (typical short NCM)
+    const shortNCMPattern = /\b(\d{4})\b/g;
+    const matches = text.matchAll(shortNCMPattern);
+    for (const match of matches) {
+      const cleanNCM = match[1];
+      const chapter = parseInt(cleanNCM.substring(0, 2));
+      if (chapter >= 1 && chapter <= 99) {
+        ncmSet.add(cleanNCM);
       }
     }
   }
@@ -51,45 +85,45 @@ function extractNCMCodes(text: string): string[] {
 }
 
 /**
- * Find columns that likely contain NCM data
- * PRIORITY: "NCM Code" columns take precedence over "HS Code" columns
+ * Find columns that contain NCM data
+ * IMPORTANT: Only use "NCM Code" columns - NEVER use "HS Code" columns
+ * HS Code is a different classification system (4 digits) that should not be mixed with NCM (8 digits)
  */
 function findNCMColumns(headers: string[]): number[] {
-  // Priority 1: Exact NCM columns (highest priority)
-  const ncmPrimaryKeywords = ['ncm code', 'ncm_code', 'ncmcode', 'codigo ncm', 'código ncm', 'ncm'];
-  // Priority 2: HS Code columns (only if no NCM columns found)
-  const hsCodeKeywords = ['hscode', 'hs code', 'hs-code', 'hs_code', 'tariff', 'harmonized'];
+  // ONLY look for NCM-specific columns - never HS Code
+  const ncmKeywords = ['ncm code', 'ncm_code', 'ncmcode', 'codigo ncm', 'código ncm'];
+  // Columns to explicitly EXCLUDE (these contain HS codes, not NCMs)
+  const excludeKeywords = ['hs code', 'hscode', 'hs-code', 'hs_code', 'harmonized'];
   
   const ncmIndices: number[] = [];
-  const hsIndices: number[] = [];
   
   headers.forEach((header, index) => {
     const lowerHeader = header.toLowerCase().trim();
     
-    // Check for NCM-specific columns first
-    if (ncmPrimaryKeywords.some(kw => lowerHeader.includes(kw) && !lowerHeader.includes('hs'))) {
+    // Skip if this is an HS Code column
+    if (excludeKeywords.some(kw => lowerHeader.includes(kw))) {
+      console.log(`[XLSX] SKIPPING HS Code column at index ${index}: "${header}" (not NCM)`);
+      return;
+    }
+    
+    // Check for NCM-specific columns only
+    if (ncmKeywords.some(kw => lowerHeader.includes(kw))) {
       ncmIndices.push(index);
       console.log(`[XLSX] Found NCM column at index ${index}: "${header}"`);
     }
-    // Check for HS Code columns separately
-    else if (hsCodeKeywords.some(kw => lowerHeader.includes(kw))) {
-      hsIndices.push(index);
-      console.log(`[XLSX] Found HS Code column at index ${index}: "${header}"`);
+    // Also check for standalone "ncm" but NOT if it's part of "hs" context
+    else if (lowerHeader === 'ncm' || (lowerHeader.includes('ncm') && !lowerHeader.includes('hs'))) {
+      ncmIndices.push(index);
+      console.log(`[XLSX] Found NCM column at index ${index}: "${header}"`);
     }
   });
   
-  // Return NCM columns if found, otherwise fall back to HS Code columns
   if (ncmIndices.length > 0) {
-    console.log(`[XLSX] Using NCM columns: ${ncmIndices.join(', ')}`);
+    console.log(`[XLSX] Using NCM columns ONLY: ${ncmIndices.join(', ')}`);
     return ncmIndices;
   }
   
-  if (hsIndices.length > 0) {
-    console.log(`[XLSX] No NCM columns found, falling back to HS Code columns: ${hsIndices.join(', ')}`);
-    return hsIndices;
-  }
-  
-  console.log(`[XLSX] WARNING: No NCM or HS Code columns found in headers`);
+  console.log(`[XLSX] WARNING: No NCM Code columns found in headers - HS Code columns are NOT used`);
   return [];
 }
 

@@ -360,14 +360,17 @@ export default function SubmeterManifestHbl() {
     // Pattern to detect Delta: 0 (not a real divergence)
     const zeroDeltaPattern = /Delta:\s*[+-]?0[.,]?0*\s*(kg|m³|m3)/i;
     
-    // Expanded patterns to catch more divergence indicators
+    // Expanded patterns to catch more divergence indicators including NCM format
     const divergencePatterns = [
       /UPDATE REQUIRED/i,
       /Status:\s*DIFFERENT/i,
       /Status:\s*UPDATE/i,
       /Status:\s*MISMATCH/i,
       /Status:\s*NOT FOUND/i,
+      /Status:\s*DIVERGENCE/i,  // NCM divergence status
       /Delta:\s*[+-]?[0-9,.]+\s*(kg|m³|m3)/i,
+      /Missing in HBL:/i,  // NCM missing format
+      /Extra in HBL:/i,    // NCM extra format
       /Missing:/i,
       /Extra:/i,
       /→\s*Update:/i,
@@ -387,6 +390,8 @@ export default function SubmeterManifestHbl() {
       /MATCH\s*✓/i,
       /No changes required/i,
       /No discrepancies/i,
+      /Missing in HBL:\s*none/i,   // NCM - no missing = not a divergence
+      /Extra in HBL:\s*none/i,     // NCM - no extra = not a divergence
     ];
     
     const summaryStartPatterns = [
@@ -396,8 +401,17 @@ export default function SubmeterManifestHbl() {
       /Fields with discrepancies/i,
     ];
     
+    // Patterns for NCM section headers
+    const ncmSectionPatterns = [
+      /NCM CODES:/i,
+      /Manifest NCMs:/i,
+      /HBL NCMs:/i,
+    ];
+    
     const divergentLines: string[] = [];
     let inSummarySection = false;
+    let inNCMSection = false;
+    let ncmSectionLines: string[] = [];
     let currentHbl: string | null = null;
     let hblAddedForSection = false;
     
@@ -405,11 +419,56 @@ export default function SubmeterManifestHbl() {
       const line = lines[i];
       
       // Track current HBL context - expanded patterns
-      const hblMatch = line.match(/(?:DRAFT HBL|HBL):\s*["']?(.+?\.pdf)["']?/i) ||
+      const hblMatch = line.match(/(?:DRAFT HBL|HBL):\s*["']?(.+?)["']?$/i) ||
                        line.match(/Comparing.*?["'](.+?\.pdf)["']/i);
       if (hblMatch) {
         currentHbl = hblMatch[1];
         hblAddedForSection = false;
+      }
+      
+      // Detect NCM section
+      if (ncmSectionPatterns.some(p => p.test(line))) {
+        inNCMSection = true;
+        ncmSectionLines = [line];
+        continue;
+      }
+      
+      // If in NCM section, collect lines until we determine if there's a divergence
+      if (inNCMSection) {
+        ncmSectionLines.push(line);
+        
+        // Check if NCM section ends (new major section or empty lines)
+        const isEndOfNCMSection = /^(INVOICE|EXPORTER|ANALYSIS|VERIFICATION|━)/i.test(line.trim()) || 
+                                   (line.trim() === '' && ncmSectionLines.length > 5);
+        
+        if (isEndOfNCMSection || /Status:\s*(MATCH|DIVERGENCE)/i.test(line)) {
+          // Check if NCM section has divergence
+          const sectionText = ncmSectionLines.join('\n');
+          const hasNCMDivergence = /Status:\s*DIVERGENCE/i.test(sectionText) ||
+                                   (/Extra in HBL:/i.test(sectionText) && !/Extra in HBL:\s*none/i.test(sectionText)) ||
+                                   (/Missing in HBL:/i.test(sectionText) && !/Missing in HBL:\s*none/i.test(sectionText));
+          
+          if (hasNCMDivergence) {
+            if (currentHbl && !hblAddedForSection) {
+              divergentLines.push(`\n📄 HBL: ${currentHbl}`);
+              hblAddedForSection = true;
+            }
+            divergentLines.push('\n--- NCM CODES ---');
+            divergentLines.push(...ncmSectionLines.filter(l => l.trim() !== ''));
+          }
+          
+          inNCMSection = false;
+          ncmSectionLines = [];
+          
+          // Continue processing this line normally if it's a new section
+          if (isEndOfNCMSection) {
+            // Let it fall through to normal processing
+          } else {
+            continue;
+          }
+        } else {
+          continue; // Keep collecting NCM section lines
+        }
       }
       
       // Check if entering summary section
@@ -433,7 +492,7 @@ export default function SubmeterManifestHbl() {
       
       if (hasDivergence) {
         // Skip lines that are just "Delta: 0" (not real divergences)
-        if (zeroDeltaPattern.test(line) && !/UPDATE|DIFFERENT|Missing:|Extra:|DISCREPANCY|adjust/i.test(line)) {
+        if (zeroDeltaPattern.test(line) && !/UPDATE|DIFFERENT|Missing:|Extra:|DISCREPANCY|adjust|DIVERGENCE/i.test(line)) {
           continue;
         }
         
