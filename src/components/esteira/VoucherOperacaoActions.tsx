@@ -3,9 +3,10 @@ import { Voucher, TipoAnexo } from "@/types/voucher";
 import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
-import { Send, AlertTriangle, RefreshCw, Loader2, Upload, MessageSquare } from "lucide-react";
+import { Send, AlertTriangle, RefreshCw, Loader2, Upload, MessageSquare, Edit } from "lucide-react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { FileUpload } from "./FileUpload";
+import { EditVoucherDialog } from "./EditVoucherDialog";
 import { useAuth } from "@/hooks/useAuth";
 import {
   AlertDialog,
@@ -37,6 +38,7 @@ export const VoucherOperacaoActions = ({ voucher, onUpdate }: VoucherOperacaoAct
   const [loading, setLoading] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
+  const [showEditDialog, setShowEditDialog] = useState(false);
   const [selectedTipo, setSelectedTipo] = useState<TipoAnexo>("FATURA_DEMONSTRATIVO");
   const [respostaAjuste, setRespostaAjuste] = useState(voucher.comentariosOperacao || "");
   const { toast } = useToast();
@@ -395,7 +397,15 @@ export const VoucherOperacaoActions = ({ voucher, onUpdate }: VoucherOperacaoAct
         </div>
       </div>
 
-      <div className="flex gap-3">
+      <div className="flex gap-3 flex-wrap">
+        <Button
+          variant="outline"
+          onClick={() => setShowEditDialog(true)}
+          className="gap-2"
+        >
+          <Edit className="h-4 w-4" />
+          Editar Dados
+        </Button>
         <Button
           onClick={() => setShowConfirm(true)}
           disabled={loading || isRmPendente}
@@ -411,6 +421,13 @@ export const VoucherOperacaoActions = ({ voucher, onUpdate }: VoucherOperacaoAct
                 : "Enviar para Financeiro"}
         </Button>
       </div>
+
+      <EditVoucherDialog
+        open={showEditDialog}
+        onOpenChange={setShowEditDialog}
+        voucher={voucher}
+        onSuccess={onUpdate}
+      />
 
       <AlertDialog open={showConfirm} onOpenChange={setShowConfirm}>
         <AlertDialogContent>
