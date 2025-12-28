@@ -17,13 +17,24 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Textarea } from "@/components/ui/textarea";
+import { Label } from "@/components/ui/label";
 import { useState } from "react";
 
 interface VoucherActionsMenuProps {
   onEdit: () => void;
   onDelete: () => void;
-  onGoBack: () => void;
+  onGoBack: (justificativa: string) => void;
   canGoBack: boolean;
+  canGoBackStage?: boolean;
   canEdit?: boolean;
   canDelete?: boolean;
 }
@@ -33,16 +44,27 @@ export const VoucherActionsMenu = ({
   onDelete,
   onGoBack,
   canGoBack,
+  canGoBackStage = false,
   canEdit = true,
   canDelete = true,
 }: VoucherActionsMenuProps) => {
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [showGoBackDialog, setShowGoBackDialog] = useState(false);
+  const [justificativa, setJustificativa] = useState("");
 
   // If user can't edit or delete, don't show the menu at all
-  if (!canEdit && !canDelete && !canGoBack) {
+  if (!canEdit && !canDelete && !(canGoBack && canGoBackStage)) {
     return null;
   }
+
+  const handleGoBackConfirm = () => {
+    if (!justificativa.trim()) {
+      return;
+    }
+    onGoBack(justificativa);
+    setShowGoBackDialog(false);
+    setJustificativa("");
+  };
 
   return (
     <>
@@ -59,7 +81,7 @@ export const VoucherActionsMenu = ({
               Editar
             </DropdownMenuItem>
           )}
-          {canGoBack && (
+          {canGoBack && canGoBackStage && (
             <DropdownMenuItem onClick={() => setShowGoBackDialog(true)}>
               <Undo2 className="mr-2 h-4 w-4" />
               Voltar Etapa
@@ -67,7 +89,7 @@ export const VoucherActionsMenu = ({
           )}
           {canDelete && (
             <>
-              {(canEdit || canGoBack) && <DropdownMenuSeparator />}
+              {(canEdit || (canGoBack && canGoBackStage)) && <DropdownMenuSeparator />}
               <DropdownMenuItem
                 onClick={() => setShowDeleteDialog(true)}
                 className="text-destructive focus:text-destructive"
@@ -104,28 +126,44 @@ export const VoucherActionsMenu = ({
         </AlertDialogContent>
       </AlertDialog>
 
-      <AlertDialog open={showGoBackDialog} onOpenChange={setShowGoBackDialog}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Voltar Etapa Anterior</AlertDialogTitle>
-            <AlertDialogDescription>
-              Tem certeza que deseja retornar este voucher para a etapa anterior? O status será
-              atualizado e um registro será adicionado ao histórico.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancelar</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={() => {
-                onGoBack();
-                setShowGoBackDialog(false);
-              }}
+      <Dialog open={showGoBackDialog} onOpenChange={(open) => {
+        setShowGoBackDialog(open);
+        if (!open) setJustificativa("");
+      }}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Voltar Etapa Anterior</DialogTitle>
+            <DialogDescription>
+              Informe a justificativa para retornar este voucher à etapa anterior. 
+              Esta informação será registrada no histórico do voucher.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="justificativa">Justificativa *</Label>
+              <Textarea
+                id="justificativa"
+                placeholder="Descreva o motivo para retornar o voucher à etapa anterior..."
+                value={justificativa}
+                onChange={(e) => setJustificativa(e.target.value)}
+                rows={4}
+                className="resize-none"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowGoBackDialog(false)}>
+              Cancelar
+            </Button>
+            <Button 
+              onClick={handleGoBackConfirm}
+              disabled={!justificativa.trim()}
             >
               Confirmar
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </>
   );
 };

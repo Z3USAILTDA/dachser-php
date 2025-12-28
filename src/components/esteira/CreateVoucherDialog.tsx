@@ -100,6 +100,7 @@ const formSchema = z.object({
   filial: z.string().optional(),
   urgente: z.boolean().default(false),
   comentariosOperacao: z.string().optional(),
+  chavePix: z.string().optional(),
 });
 
 type FormValues = z.infer<typeof formSchema>;
@@ -158,11 +159,8 @@ export const CreateVoucherDialog = ({
   const [origemProcesso, setOrigemProcesso] = useState<OrigemProcesso | null>(null);
   const [faturaFiles, setFaturaFiles] = useState<File[]>([]);
   const [boletoFiles, setBoletoFiles] = useState<File[]>([]);
-  const [hasDraft, setHasDraft] = useState(false);
   const [idRM, setIdRM] = useState<string | null>(null);
   const { toast } = useToast();
-
-  const DRAFT_KEY = "voucher_draft";
 
   const form = useForm<FormValues>({
     resolver: zodResolver(formSchema),
@@ -175,104 +173,28 @@ export const CreateVoucherDialog = ({
       valor: "",
       moeda: "BRL",
       cobrancaEmNomeDe: "DACHSER",
-      formaPagamento: "TRANSFERENCIA_PIX",
+      formaPagamento: "BOLETO",
       tipoDocumento: "",
       filial: "",
       urgente: false,
       comentariosOperacao: "",
+      chavePix: "",
     },
   });
 
-  // Load draft from localStorage when dialog opens
+  // Reset form when dialog opens
   useEffect(() => {
     if (open) {
-      const savedDraft = localStorage.getItem(DRAFT_KEY);
-      if (savedDraft) {
-        try {
-          const draft = JSON.parse(savedDraft);
-          setHasDraft(true);
-          
-          // Restore form values
-          if (draft.formValues) {
-            Object.entries(draft.formValues).forEach(([key, value]) => {
-              if (key === "vencimento" || key === "dataEmissaoDocumento") {
-                if (value) {
-                  form.setValue(key as keyof FormValues, new Date(value as string));
-                }
-              } else {
-                form.setValue(key as keyof FormValues, value as any);
-              }
-            });
-          }
-          
-          // Restore other state
-          if (draft.entryMode) setEntryMode(draft.entryMode);
-          if (draft.origemProcesso) setOrigemProcesso(draft.origemProcesso);
-          if (draft.rmDataLoaded) setRmDataLoaded(draft.rmDataLoaded);
-          
-          toast({
-            title: "📝 Rascunho recuperado",
-            description: "Os dados do voucher foram restaurados automaticamente.",
-          });
-        } catch (e) {
-          console.error("Erro ao carregar rascunho:", e);
-          localStorage.removeItem(DRAFT_KEY);
-        }
-      }
+      form.reset();
+      setFaturaFiles([]);
+      setBoletoFiles([]);
+      setOrigemProcesso(null);
+      setEntryMode("rm");
+      setRmDataLoaded(false);
+      setCnpjNotFound(false);
+      setIdRM(null);
     }
   }, [open]);
-
-  // Auto-save draft when form values change
-  const saveDraft = useCallback(() => {
-    const formValues = form.getValues();
-    const draft = {
-      formValues: {
-        ...formValues,
-        vencimento: formValues.vencimento?.toISOString(),
-        dataEmissaoDocumento: formValues.dataEmissaoDocumento?.toISOString(),
-      },
-      entryMode,
-      origemProcesso,
-      rmDataLoaded,
-      savedAt: new Date().toISOString(),
-    };
-    localStorage.setItem(DRAFT_KEY, JSON.stringify(draft));
-    setHasDraft(true);
-  }, [form, entryMode, origemProcesso, rmDataLoaded]);
-
-  // Watch form changes and auto-save
-  useEffect(() => {
-    const subscription = form.watch(() => {
-      if (open) {
-        saveDraft();
-      }
-    });
-    return () => subscription.unsubscribe();
-  }, [form, open, saveDraft]);
-
-  // Also save when entryMode or origemProcesso changes
-  useEffect(() => {
-    if (open) {
-      saveDraft();
-    }
-  }, [entryMode, origemProcesso, open, saveDraft]);
-
-  // Clear draft function
-  const clearDraft = () => {
-    localStorage.removeItem(DRAFT_KEY);
-    setHasDraft(false);
-    form.reset();
-    setFaturaFiles([]);
-    setBoletoFiles([]);
-    setOrigemProcesso(null);
-    setEntryMode("rm");
-    setRmDataLoaded(false);
-    setCnpjNotFound(false);
-    toast({
-      title: "🗑️ Rascunho limpo",
-      description: "Os dados do rascunho foram removidos.",
-    });
-  };
 
   const handleSearchRM = async () => {
     const numeroRM = form.getValues("numeroRM");
@@ -443,14 +365,7 @@ export const CreateVoucherDialog = ({
         return;
       }
 
-      if (boletoFiles.length === 0) {
-        toast({
-          title: "Erro de validação",
-          description: "Boleto ou Instruções de Pagamento é obrigatório",
-          variant: "destructive",
-        });
-        return;
-      }
+      // Boleto é opcional - removida obrigatoriedade
     } else {
       // Draft requires at least a voucher number
       if (!values.numeroRM?.trim()) {
@@ -666,9 +581,7 @@ export const CreateVoucherDialog = ({
         description: `O voucher foi criado com sucesso.`,
       });
 
-      // Clear draft on success
-      localStorage.removeItem(DRAFT_KEY);
-      setHasDraft(false);
+      // Reset form after success
       
       form.reset();
       setFaturaFiles([]);
@@ -710,29 +623,10 @@ export const CreateVoucherDialog = ({
       )}
       <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto bg-[rgba(5,6,18,0.95)] border-border/50 backdrop-blur-xl shadow-[0_18px_40px_rgba(0,0,0,.85)]">
         <DialogHeader>
-          <div className="flex items-center justify-between">
-            <DialogTitle className="text-xl font-semibold text-foreground flex items-center gap-2">
-              <FileText className="h-5 w-5 text-primary" />
-              Novo Voucher
-            </DialogTitle>
-            {hasDraft && (
-              <div className="flex items-center gap-2">
-                <Badge variant="outline" className="bg-amber-500/10 text-amber-400 border-amber-500/30">
-                  📝 Rascunho salvo
-                </Badge>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  onClick={clearDraft}
-                  className="text-muted-foreground hover:text-destructive h-7 px-2"
-                >
-                  <X className="h-3 w-3 mr-1" />
-                  Limpar
-                </Button>
-              </div>
-            )}
-          </div>
+          <DialogTitle className="text-xl font-semibold text-foreground flex items-center gap-2">
+            <FileText className="h-5 w-5 text-primary" />
+            Novo Voucher
+          </DialogTitle>
           <DialogDescription className="text-muted-foreground">
             Busque os dados do voucher no RM ou preencha manualmente
           </DialogDescription>
@@ -814,7 +708,7 @@ export const CreateVoucherDialog = ({
               <div className="p-4 rounded-xl border border-primary/20 bg-primary/5 backdrop-blur-sm">
                 <div className="flex items-center gap-2 mb-3">
                   <Search className="h-4 w-4 text-primary" />
-                  <span className="text-sm font-medium text-primary">Buscar Voucher no RM</span>
+                  <span className="text-sm font-medium text-primary">Buscar Voucher/SPO no RM</span>
                   <span className="text-destructive">*</span>
                   {rmDataLoaded && (
                     <Badge className="ml-2 bg-green-500/10 text-green-400 border-green-500/20">
@@ -1188,8 +1082,9 @@ export const CreateVoucherDialog = ({
                           </SelectTrigger>
                         </FormControl>
                         <SelectContent>
-                          <SelectItem value="TRANSFERENCIA_PIX">Transferência/Pix</SelectItem>
                           <SelectItem value="BOLETO">Boleto</SelectItem>
+                          <SelectItem value="PIX">PIX</SelectItem>
+                          <SelectItem value="TRANSFERENCIA">Transferência</SelectItem>
                           <SelectItem value="DARF">DARF</SelectItem>
                           <SelectItem value="GPS">GPS</SelectItem>
                           <SelectItem value="DEBITO">Débito</SelectItem>
@@ -1201,6 +1096,32 @@ export const CreateVoucherDialog = ({
                   )}
                 />
               </div>
+              
+              {/* Campo Chave PIX - aparece quando forma de pagamento é PIX */}
+              {form.watch("formaPagamento") === "PIX" && (
+                <div className="p-4 rounded-xl border border-cyan-500/20 bg-cyan-500/5">
+                  <FormField
+                    control={form.control}
+                    name="chavePix"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel className="text-sm flex items-center gap-2">
+                          <span className="text-cyan-400">Chave PIX</span>
+                          <span className="text-destructive">*</span>
+                        </FormLabel>
+                        <FormControl>
+                          <Input 
+                            placeholder="CPF, CNPJ, e-mail, telefone ou chave aleatória" 
+                            className="bg-background/50 border-border"
+                            {...field} 
+                          />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                </div>
+              )}
             </div>
 
             {/* Urgency Checkbox */}

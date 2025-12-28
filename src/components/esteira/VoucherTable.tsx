@@ -33,11 +33,12 @@ interface VoucherTableProps {
   onViewDetails: (voucher: Voucher) => void;
   onEdit: (voucher: Voucher) => void;
   onDelete: (voucher: Voucher) => void;
-  onGoBack: (voucher: Voucher) => void;
+  onGoBack: (voucher: Voucher, justificativa: string) => void;
   filters: FilterValues;
   onFilterChange: (filters: FilterValues) => void;
   canEdit?: boolean;
   canDelete?: boolean;
+  canGoBackStage?: boolean;
 }
 
 const getEtapaColor = (etapa: string) => {
@@ -101,7 +102,7 @@ const getSlaColor = (status: "ok" | "warning" | "critical") => {
   return colors[status];
 };
 
-export const VoucherTable = ({ vouchers, onViewDetails, onEdit, onDelete, onGoBack, filters, onFilterChange, canEdit = true, canDelete = true }: VoucherTableProps) => {
+export const VoucherTable = ({ vouchers, onViewDetails, onEdit, onDelete, onGoBack, filters, onFilterChange, canEdit = true, canDelete = true, canGoBackStage = false }: VoucherTableProps) => {
   const [sortField, setSortField] = useState<SortField>("createdAt");
   const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
 
@@ -448,8 +449,9 @@ export const VoucherTable = ({ vouchers, onViewDetails, onEdit, onDelete, onGoBa
                           <VoucherActionsMenu
                             onEdit={() => onEdit(voucher)}
                             onDelete={() => onDelete(voucher)}
-                            onGoBack={() => onGoBack(voucher)}
+                            onGoBack={(justificativa) => onGoBack(voucher, justificativa)}
                             canGoBack={canGoBack(voucher)}
+                            canGoBackStage={canGoBackStage}
                             canEdit={canEdit}
                             canDelete={canDelete}
                           />

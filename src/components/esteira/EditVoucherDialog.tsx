@@ -292,7 +292,8 @@ export const EditVoucherDialog = ({ open, onOpenChange, onSuccess, voucher }: Ed
                 <SelectContent>
                   <SelectItem value="BOLETO">Boleto</SelectItem>
                   <SelectItem value="PIX">PIX</SelectItem>
-                  <SelectItem value="TRANSFERENCIA_PIX">Transferência/Pix</SelectItem>
+                  <SelectItem value="TRANSFERENCIA">Transferência</SelectItem>
+                  <SelectItem value="TRANSFERENCIA_PIX">Transferência/Pix (legado)</SelectItem>
                   <SelectItem value="CARTAO">Cartão</SelectItem>
                   <SelectItem value="DEPOSITO">Depósito</SelectItem>
                   <SelectItem value="DARF">DARF</SelectItem>
