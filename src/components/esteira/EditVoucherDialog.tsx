@@ -104,6 +104,9 @@ export const EditVoucherDialog = ({ open, onOpenChange, onSuccess, voucher }: Ed
         description: "As alterações foram salvas com sucesso.",
       });
 
+      // Small delay to ensure database has committed the transaction
+      await new Promise(resolve => setTimeout(resolve, 300));
+      
       onSuccess();
       onOpenChange(false);
     } catch (error: any) {

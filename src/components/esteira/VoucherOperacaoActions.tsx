@@ -51,7 +51,9 @@ export const VoucherOperacaoActions = ({ voucher, onUpdate }: VoucherOperacaoAct
   // Verificar anexos obrigatórios
   const hasFatura = voucher.anexos.some(a => a.tipo === "FATURA_DEMONSTRATIVO" || a.tipo === "FATURA");
   const hasBoleto = voucher.anexos.some(a => a.tipo === "BOLETO_INSTRUCOES" || a.tipo === "BOLETO");
-  const canEnviar = hasFatura && hasBoleto && !isRmPendente;
+  // Boleto só é obrigatório se forma de pagamento for BOLETO
+  const boletoObrigatorio = voucher.formaPagamento === "BOLETO";
+  const canEnviar = hasFatura && (!boletoObrigatorio || hasBoleto) && !isRmPendente;
 
   // Get user data from localStorage (MariaDB auth)
   const getUserData = () => {
@@ -357,7 +359,7 @@ export const VoucherOperacaoActions = ({ voucher, onUpdate }: VoucherOperacaoAct
         <CardHeader className="pb-3">
           <CardTitle className="text-base flex items-center gap-2">
             <FileText className="h-5 w-5 text-primary" />
-            Anexos Obrigatórios
+            Anexos {boletoObrigatorio ? "Obrigatórios" : ""}
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-3">
@@ -366,15 +368,18 @@ export const VoucherOperacaoActions = ({ voucher, onUpdate }: VoucherOperacaoAct
               {hasFatura ? <CheckCircle2 className="h-4 w-4" /> : '○'}
             </div>
             <span className={hasFatura ? 'text-foreground' : 'text-muted-foreground'}>
-              Fatura / Demonstrativo
+              Fatura / Demonstrativo <span className="text-xs text-muted-foreground">(obrigatório)</span>
             </span>
           </div>
           <div className="flex items-center gap-3">
-            <div className={`w-5 h-5 rounded-full flex items-center justify-center ${hasBoleto ? 'bg-green-500/20 text-green-500' : 'bg-muted text-muted-foreground'}`}>
+            <div className={`w-5 h-5 rounded-full flex items-center justify-center ${hasBoleto ? 'bg-green-500/20 text-green-500' : boletoObrigatorio ? 'bg-muted text-muted-foreground' : 'bg-muted/50 text-muted-foreground/50'}`}>
               {hasBoleto ? <CheckCircle2 className="h-4 w-4" /> : '○'}
             </div>
-            <span className={hasBoleto ? 'text-foreground' : 'text-muted-foreground'}>
-              Boleto / Instruções de Pagamento
+            <span className={hasBoleto ? 'text-foreground' : boletoObrigatorio ? 'text-muted-foreground' : 'text-muted-foreground/70'}>
+              Boleto / Instruções de Pagamento{' '}
+              <span className="text-xs text-muted-foreground">
+                {boletoObrigatorio ? "(obrigatório)" : "(opcional)"}
+              </span>
             </span>
           </div>
         </CardContent>
@@ -414,7 +419,7 @@ export const VoucherOperacaoActions = ({ voucher, onUpdate }: VoucherOperacaoAct
 
       <div className="flex items-center justify-between">
         <div>
-          <h3 className="text-lg font-semibold">Ações - Voucher</h3>
+          <h3 className="text-lg font-semibold">Ações - Operacional</h3>
           <p className="text-sm text-muted-foreground">
             {isRmPendente 
               ? "Sincronize os dados do RM para liberar o envio" 
