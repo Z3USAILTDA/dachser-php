@@ -173,6 +173,17 @@ interface QueryRequest {
   cobrancaEmNomeDe?: string;
   dataInicio?: string;
   dataFim?: string;
+  // Robo comprovantes
+  numero_spo?: string;
+  numero_nd?: string;
+  comprovantes?: Array<{
+    voucher_id: string;
+    file_name: string;
+    file_url: string;
+    file_size?: number;
+    user_id?: string;
+    user_name?: string;
+  }>;
 }
 
 serve(async (req) => {
@@ -5758,6 +5769,162 @@ serve(async (req) => {
 
         result = { success: true, vouchers: pendingVouchers };
         console.log(`Found ${pendingVouchers.length} pending vouchers for daily report`);
+        break;
+      }
+
+      // ==================== ROBO COMPROVANTES ====================
+      case 'find_voucher_by_spo': {
+        const { numero_spo } = body as { numero_spo: string };
+        console.log('Finding voucher by SPO:', numero_spo);
+        
+        if (!numero_spo) {
+          return new Response(
+            JSON.stringify({ error: 'numero_spo é obrigatório' }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+
+        const vouchers = await client.query(`
+          SELECT 
+            id, numero_spo, fornecedor, valor, vencimento, etapa_atual, 
+            status_comprovante, cobranca_em_nome_de, moeda
+          FROM dados_dachser.t_vouchers
+          WHERE numero_spo = ? OR numero_spo LIKE ?
+          ORDER BY created_at DESC
+          LIMIT 5
+        `, [numero_spo, `%${numero_spo}%`]);
+
+        result = { success: true, vouchers: vouchers || [] };
+        console.log(`Found ${vouchers?.length || 0} vouchers for SPO ${numero_spo}`);
+        break;
+      }
+
+      case 'find_voucher_by_nd': {
+        const { numero_nd } = body as { numero_nd: string };
+        console.log('Finding voucher by ND:', numero_nd);
+        
+        if (!numero_nd) {
+          return new Response(
+            JSON.stringify({ error: 'numero_nd é obrigatório' }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+
+        // ND is stored in id_rm or can be searched in processo_id
+        const vouchers = await client.query(`
+          SELECT 
+            id, numero_spo, fornecedor, valor, vencimento, etapa_atual,
+            status_comprovante, cobranca_em_nome_de, moeda, id_rm, processo_id
+          FROM dados_dachser.t_vouchers
+          WHERE id_rm = ? OR id_rm LIKE ? OR processo_id LIKE ?
+          ORDER BY created_at DESC
+          LIMIT 5
+        `, [numero_nd, `%${numero_nd}%`, `%${numero_nd}%`]);
+
+        result = { success: true, vouchers: vouchers || [] };
+        console.log(`Found ${vouchers?.length || 0} vouchers for ND ${numero_nd}`);
+        break;
+      }
+
+      case 'get_vouchers_for_comprovante': {
+        // Get vouchers that are in FINANCEIRO stage and need comprovantes
+        const { search, limit = 50 } = body as { search?: string; limit?: number };
+        console.log('Fetching vouchers for comprovante attachment');
+        
+        let whereConditions = [`etapa_atual = 'FINANCEIRO'`];
+        let params: any[] = [];
+        
+        if (search) {
+          whereConditions.push('(numero_spo LIKE ? OR fornecedor LIKE ? OR id_rm LIKE ?)');
+          params.push(`%${search}%`, `%${search}%`, `%${search}%`);
+        }
+        
+        const whereClause = whereConditions.join(' AND ');
+        
+        const vouchers = await client.query(`
+          SELECT 
+            id, numero_spo, fornecedor, valor, vencimento, etapa_atual,
+            status_comprovante, cobranca_em_nome_de, moeda, id_rm
+          FROM dados_dachser.t_vouchers
+          WHERE ${whereClause}
+          ORDER BY vencimento ASC
+          LIMIT ?
+        `, [...params, limit]);
+
+        result = { success: true, vouchers: vouchers || [] };
+        console.log(`Found ${vouchers?.length || 0} vouchers for comprovante`);
+        break;
+      }
+
+      case 'attach_comprovante_batch': {
+        const { comprovantes } = body as {
+          comprovantes: Array<{
+            voucher_id: string;
+            file_name: string;
+            file_url: string;
+            file_size?: number;
+            user_id?: string;
+            user_name?: string;
+          }>;
+        };
+        
+        if (!comprovantes || !Array.isArray(comprovantes) || comprovantes.length === 0) {
+          return new Response(
+            JSON.stringify({ error: 'comprovantes array é obrigatório' }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+
+        console.log(`Attaching ${comprovantes.length} comprovantes in batch`);
+        
+        const results: Array<{ voucher_id: string; success: boolean; error?: string }> = [];
+        
+        for (const comp of comprovantes) {
+          try {
+            const anexoId = crypto.randomUUID();
+            
+            // Insert attachment
+            await client.execute(`
+              INSERT INTO dados_dachser.t_voucher_anexos (
+                id, voucher_id, tipo, file_name, file_url, file_size, created_at
+              ) VALUES (?, ?, 'COMPROVANTE', ?, ?, ?, NOW())
+            `, [anexoId, comp.voucher_id, comp.file_name, comp.file_url, comp.file_size || 0]);
+
+            // Update voucher status_comprovante
+            await client.execute(`
+              UPDATE dados_dachser.t_vouchers 
+              SET status_comprovante = 'ANEXADO', updated_at = NOW()
+              WHERE id = ?
+            `, [comp.voucher_id]);
+
+            // Add log entry
+            await client.execute(`
+              INSERT INTO dados_dachser.t_voucher_logs (
+                id, voucher_id, user_id, user_name, acao, detalhe, data_hora
+              ) VALUES (?, ?, ?, ?, 'COMPROVANTE_ANEXADO', ?, NOW())
+            `, [
+              crypto.randomUUID(),
+              comp.voucher_id,
+              comp.user_id || null,
+              comp.user_name || 'Sistema Robô',
+              `Comprovante ${comp.file_name} anexado automaticamente pelo robô`
+            ]);
+
+            results.push({ voucher_id: comp.voucher_id, success: true });
+          } catch (err) {
+            console.error(`Error attaching comprovante to ${comp.voucher_id}:`, err);
+            results.push({ 
+              voucher_id: comp.voucher_id, 
+              success: false, 
+              error: err instanceof Error ? err.message : 'Unknown error' 
+            });
+          }
+        }
+
+        const successCount = results.filter(r => r.success).length;
+        console.log(`Batch attach completed: ${successCount}/${comprovantes.length} successful`);
+        
+        result = { success: true, results, successCount, totalCount: comprovantes.length };
         break;
       }
 

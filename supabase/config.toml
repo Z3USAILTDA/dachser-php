@@ -212,3 +212,6 @@ verify_jwt = false
 
 [functions.regua-send-aging]
 verify_jwt = false
+
+[functions.parse-comprovante-pdf]
+verify_jwt = false

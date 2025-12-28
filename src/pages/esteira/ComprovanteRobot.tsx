@@ -1,5 +1,4 @@
-import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useState, useEffect } from "react";
 import { PageLayout } from "@/components/layout/PageLayout";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Button } from "@/components/ui/button";
@@ -8,151 +7,282 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
-import { Bot, Upload, CheckCircle2, XCircle, AlertCircle, FileText } from "lucide-react";
-import { TipoAnexo } from "@/types/voucher";
+import { Bot, Upload, CheckCircle2, XCircle, AlertCircle, FileText, Search, Link2 } from "lucide-react";
+import { useAuth } from "@/hooks/useAuth";
 
+interface VoucherMatch {
+  id: string;
+  numero_spo: string;
+  fornecedor: string | null;
+  valor: number | null;
+  vencimento: string;
+  etapa_atual: string;
+  moeda: string | null;
+  id_rm?: string;
+}
 
 interface FileMatch {
   file: File;
   fileName: string;
-  numeroSPO: string | null;
+  extractedSPO: string | null;
+  extractedND: string | null;
   voucherId: string | null;
-  status: "pending" | "processing" | "success" | "error";
+  voucherInfo: VoucherMatch | null;
+  status: "pending" | "identifying" | "identified" | "not_identified" | "processing" | "success" | "error";
   error?: string;
+  confidence: number;
+  source: "filename" | "content" | "manual";
 }
 
 export default function ComprovanteRobot() {
-  const navigate = useNavigate();
   const { toast } = useToast();
+  const { user } = useAuth();
   const [files, setFiles] = useState<FileMatch[]>([]);
   const [processing, setProcessing] = useState(false);
+  const [identifying, setIdentifying] = useState(false);
   const [progress, setProgress] = useState(0);
+  const [availableVouchers, setAvailableVouchers] = useState<VoucherMatch[]>([]);
+  const [searchVoucher, setSearchVoucher] = useState("");
 
-  const extractSPOFromFilename = (filename: string): string | null => {
-    const patterns = [
-      /^(\d{5,})[-_]/,
-      /SPO[-_]?(\d{5,})/i,
-      /[-_](\d{5,})\./,
-    ];
+  // Load available vouchers on mount
+  useEffect(() => {
+    loadAvailableVouchers();
+  }, []);
 
-    for (const pattern of patterns) {
-      const match = filename.match(pattern);
-      if (match && match[1]) {
-        return match[1];
-      }
+  const loadAvailableVouchers = async (search?: string) => {
+    try {
+      const { data, error } = await supabase.functions.invoke("mariadb-proxy", {
+        body: {
+          action: "get_vouchers_for_comprovante",
+          search: search || undefined,
+          limit: 100,
+        },
+      });
+
+      if (error) throw error;
+      setAvailableVouchers(data?.vouchers || []);
+    } catch (err) {
+      console.error("Error loading vouchers:", err);
     }
-
-    return null;
   };
+
+  // Debounced search
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      if (searchVoucher) {
+        loadAvailableVouchers(searchVoucher);
+      }
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [searchVoucher]);
 
   const handleFileSelect = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const selectedFiles = Array.from(event.target.files || []);
-    
     if (selectedFiles.length === 0) return;
 
-    const fileMatches: FileMatch[] = await Promise.all(
-      selectedFiles.map(async (file) => {
-        const numeroSPO = extractSPOFromFilename(file.name);
-        let voucherId = null;
+    const initialFiles: FileMatch[] = selectedFiles.map((file) => ({
+      file,
+      fileName: file.name,
+      extractedSPO: null,
+      extractedND: null,
+      voucherId: null,
+      voucherInfo: null,
+      status: "pending",
+      confidence: 0,
+      source: "filename",
+    }));
 
-        if (numeroSPO) {
-          const { data } = await (supabase as any)
-            .from("vouchers")
-            .select("id, numero_spo, etapa_atual")
-            .eq("numero_spo", numeroSPO)
-            .eq("etapa_atual", "ROBO")
-            .single();
-
-          if (data) {
-            voucherId = data.id;
-          }
-        }
-
-        return {
-          file,
-          fileName: file.name,
-          numeroSPO,
-          voucherId,
-          status: "pending" as const,
-        };
-      })
-    );
-
-    setFiles(fileMatches);
+    setFiles(initialFiles);
 
     toast({
       title: "Arquivos carregados",
-      description: `${selectedFiles.length} arquivo(s) prontos para processamento`,
+      description: `${selectedFiles.length} arquivo(s) prontos para identificação`,
     });
   };
 
-  const processFiles = async () => {
-    setProcessing(true);
+  const identifyFiles = async () => {
+    setIdentifying(true);
     setProgress(0);
 
-    const { data: userData } = await supabase.auth.getUser();
-    let processed = 0;
+    let identified = 0;
+    const totalFiles = files.length;
 
-    for (const fileMatch of files) {
+    for (let i = 0; i < files.length; i++) {
+      const fileMatch = files[i];
+      
       setFiles((prev) =>
-        prev.map((f) =>
-          f.fileName === fileMatch.fileName
-            ? { ...f, status: "processing" }
-            : f
+        prev.map((f, idx) =>
+          idx === i ? { ...f, status: "identifying" } : f
         )
       );
 
       try {
-        if (!fileMatch.voucherId) {
-          throw new Error("Voucher não encontrado ou não está na etapa ROBO");
+        // Convert file to base64 for PDF analysis
+        const base64 = await fileToBase64(fileMatch.file);
+
+        // Call edge function to parse the comprovante
+        const { data, error } = await supabase.functions.invoke("parse-comprovante-pdf", {
+          body: {
+            pdfBase64: base64,
+            fileName: fileMatch.fileName,
+          },
+        });
+
+        if (error) throw error;
+
+        const extractedData = data?.data;
+        let foundVoucher: VoucherMatch | null = null;
+
+        // Try to find voucher by SPO
+        if (extractedData?.numeroSPO) {
+          const { data: spoResult } = await supabase.functions.invoke("mariadb-proxy", {
+            body: {
+              action: "find_voucher_by_spo",
+              numero_spo: extractedData.numeroSPO,
+            },
+          });
+          if (spoResult?.vouchers?.length > 0) {
+            foundVoucher = spoResult.vouchers[0];
+          }
         }
 
+        // Try to find voucher by ND if SPO didn't work
+        if (!foundVoucher && extractedData?.numeroND) {
+          const { data: ndResult } = await supabase.functions.invoke("mariadb-proxy", {
+            body: {
+              action: "find_voucher_by_nd",
+              numero_nd: extractedData.numeroND,
+            },
+          });
+          if (ndResult?.vouchers?.length > 0) {
+            foundVoucher = ndResult.vouchers[0];
+          }
+        }
+
+        setFiles((prev) =>
+          prev.map((f, idx) =>
+            idx === i
+              ? {
+                  ...f,
+                  extractedSPO: extractedData?.numeroSPO || null,
+                  extractedND: extractedData?.numeroND || null,
+                  voucherId: foundVoucher?.id || null,
+                  voucherInfo: foundVoucher,
+                  status: foundVoucher ? "identified" : "not_identified",
+                  confidence: extractedData?.confidence || 0,
+                  source: extractedData?.source || "filename",
+                }
+              : f
+          )
+        );
+      } catch (err) {
+        console.error("Identification error:", err);
+        setFiles((prev) =>
+          prev.map((f, idx) =>
+            idx === i
+              ? { ...f, status: "not_identified", error: "Erro na identificação" }
+              : f
+          )
+        );
+      }
+
+      identified++;
+      setProgress((identified / totalFiles) * 100);
+    }
+
+    setIdentifying(false);
+    
+    const identifiedCount = files.filter(f => f.status === "identified").length;
+    toast({
+      title: "Identificação concluída",
+      description: `${identifiedCount} de ${totalFiles} arquivo(s) identificado(s)`,
+    });
+  };
+
+  const manualAssign = (fileIndex: number, voucherId: string) => {
+    const voucher = availableVouchers.find(v => v.id === voucherId);
+    setFiles((prev) =>
+      prev.map((f, idx) =>
+        idx === fileIndex
+          ? {
+              ...f,
+              voucherId,
+              voucherInfo: voucher || null,
+              status: voucher ? "identified" : "not_identified",
+              source: "manual",
+            }
+          : f
+      )
+    );
+  };
+
+  const processFiles = async () => {
+    const identifiedFiles = files.filter(f => f.voucherId && f.status === "identified");
+    
+    if (identifiedFiles.length === 0) {
+      toast({
+        title: "Nenhum arquivo para processar",
+        description: "Identifique ou associe manualmente os comprovantes primeiro",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setProcessing(true);
+    setProgress(0);
+
+    let processed = 0;
+    const comprovantesToUpload: Array<{
+      voucher_id: string;
+      file_name: string;
+      file_url: string;
+      file_size: number;
+      user_id: string;
+      user_name: string;
+    }> = [];
+
+    // First, upload all files to storage
+    for (const fileMatch of identifiedFiles) {
+      setFiles((prev) =>
+        prev.map((f) =>
+          f.fileName === fileMatch.fileName ? { ...f, status: "processing" } : f
+        )
+      );
+
+      try {
         const fileExt = fileMatch.file.name.split(".").pop();
-        const fileName = `${Math.random()}.${fileExt}`;
-        const filePath = `${fileName}`;
+        const fileName = `${Date.now()}_${Math.random().toString(36).substring(7)}.${fileExt}`;
+        const filePath = `comprovantes/${fileName}`;
 
         const { error: uploadError } = await supabase.storage
-          .from("voucher-attachments")
+          .from("voucher-anexos")
           .upload(filePath, fileMatch.file);
 
         if (uploadError) throw uploadError;
 
         const { data: { publicUrl } } = supabase.storage
-          .from("voucher-attachments")
+          .from("voucher-anexos")
           .getPublicUrl(filePath);
 
-        const { error: attachmentError } = await (supabase as any)
-          .from("attachments")
-          .insert({
-            voucher_id: fileMatch.voucherId,
-            tipo: "COMPROVANTE" as TipoAnexo,
-            file_url: publicUrl,
-            file_name: fileMatch.file.name,
-            file_size: fileMatch.file.size,
-            uploaded_by_user_id: userData.user?.id,
-          });
-
-        if (attachmentError) throw attachmentError;
-
-        await (supabase as any).from("log_entries").insert({
-          voucher_id: fileMatch.voucherId,
-          user_id: userData.user?.id,
-          acao: "COMPROVANTE_ANEXADO",
-          detalhe: `Comprovante ${fileMatch.file.name} anexado automaticamente pelo robô`,
+        comprovantesToUpload.push({
+          voucher_id: fileMatch.voucherId!,
+          file_name: fileMatch.file.name,
+          file_url: publicUrl,
+          file_size: fileMatch.file.size,
+          user_id: user?.id?.toString() || "",
+          user_name: (user as any)?.username || (user as any)?.email || "Sistema Robô",
         });
 
         setFiles((prev) =>
           prev.map((f) =>
-            f.fileName === fileMatch.fileName
-              ? { ...f, status: "success" }
-              : f
+            f.fileName === fileMatch.fileName ? { ...f, status: "success" } : f
           )
         );
       } catch (error: any) {
-        console.error("Erro ao processar arquivo:", error);
-        
+        console.error("Upload error:", error);
         setFiles((prev) =>
           prev.map((f) =>
             f.fileName === fileMatch.fileName
@@ -163,52 +293,102 @@ export default function ComprovanteRobot() {
       }
 
       processed++;
-      setProgress((processed / files.length) * 100);
+      setProgress((processed / identifiedFiles.length) * 100);
+    }
+
+    // Now attach all comprovantes in batch
+    if (comprovantesToUpload.length > 0) {
+      try {
+        const { data, error } = await supabase.functions.invoke("mariadb-proxy", {
+          body: {
+            action: "attach_comprovante_batch",
+            comprovantes: comprovantesToUpload,
+          },
+        });
+
+        if (error) throw error;
+
+        toast({
+          title: "Processamento concluído",
+          description: `${data?.successCount || 0} comprovante(s) anexado(s) com sucesso`,
+        });
+      } catch (err) {
+        console.error("Batch attach error:", err);
+        toast({
+          title: "Erro ao anexar comprovantes",
+          description: "Alguns comprovantes podem não ter sido anexados",
+          variant: "destructive",
+        });
+      }
     }
 
     setProcessing(false);
+  };
 
-    const successCount = files.filter((f) => f.status === "success").length;
-    const errorCount = files.filter((f) => f.status === "error").length;
-
-    toast({
-      title: "Processamento concluído",
-      description: `${successCount} arquivo(s) enviado(s) com sucesso. ${errorCount} erro(s).`,
-      variant: errorCount > 0 ? "destructive" : "default",
+  const fileToBase64 = (file: File): Promise<string> => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.readAsDataURL(file);
+      reader.onload = () => {
+        const result = reader.result as string;
+        const base64 = result.split(",")[1];
+        resolve(base64);
+      };
+      reader.onerror = reject;
     });
   };
 
   const getStatusIcon = (status: FileMatch["status"]) => {
     switch (status) {
       case "success":
-        return <CheckCircle2 className="h-5 w-5 text-success" />;
+        return <CheckCircle2 className="h-5 w-5 text-green-500" />;
       case "error":
         return <XCircle className="h-5 w-5 text-destructive" />;
+      case "identifying":
       case "processing":
         return <div className="h-5 w-5 animate-spin rounded-full border-2 border-primary border-t-transparent" />;
+      case "identified":
+        return <CheckCircle2 className="h-5 w-5 text-primary" />;
+      case "not_identified":
+        return <AlertCircle className="h-5 w-5 text-warning" />;
       default:
-        return <AlertCircle className="h-5 w-5 text-muted-foreground" />;
+        return <FileText className="h-5 w-5 text-muted-foreground" />;
     }
   };
 
   const getStatusBadge = (fileMatch: FileMatch) => {
-    if (!fileMatch.numeroSPO) {
-      return <Badge className="bg-destructive text-destructive-foreground">SPO não identificado</Badge>;
+    if (fileMatch.status === "identified" && fileMatch.voucherInfo) {
+      return (
+        <Badge className="bg-primary text-primary-foreground">
+          SPO {fileMatch.voucherInfo.numero_spo}
+        </Badge>
+      );
     }
-    if (!fileMatch.voucherId) {
-      return <Badge variant="secondary">Voucher não encontrado</Badge>;
+    if (fileMatch.extractedSPO || fileMatch.extractedND) {
+      return (
+        <Badge variant="secondary">
+          {fileMatch.extractedSPO ? `SPO ${fileMatch.extractedSPO}` : `ND ${fileMatch.extractedND}`}
+        </Badge>
+      );
     }
-    return <Badge className="bg-primary text-primary-foreground">SPO {fileMatch.numeroSPO}</Badge>;
+    if (fileMatch.status === "not_identified") {
+      return <Badge variant="destructive">Não identificado</Badge>;
+    }
+    return <Badge variant="outline">Pendente</Badge>;
   };
+
+  const identifiedCount = files.filter(f => f.voucherId).length;
+  const notIdentifiedCount = files.filter(f => f.status === "not_identified" && !f.voucherId).length;
 
   return (
     <PageLayout backTo="/fin/esteira">
       <PageHeader 
         title="Robô de Comprovantes"
-        subtitle="Upload em lote de comprovantes com associação automática"
+        subtitle="Upload em lote com identificação inteligente"
       />
 
       <main className="container mx-auto px-4 py-6 space-y-6">
+        {/* Upload Card */}
         <Card className="bg-card/80 backdrop-blur-sm border-border/50 animate-fade-in">
           <CardHeader>
             <div className="flex items-center gap-3">
@@ -218,8 +398,7 @@ export default function ComprovanteRobot() {
               <div>
                 <CardTitle>Upload em Lote</CardTitle>
                 <CardDescription>
-                  Selecione múltiplos arquivos de comprovantes. O sistema identificará automaticamente 
-                  o número SPO no nome do arquivo.
+                  O sistema identifica automaticamente o número SPO/ND no nome do arquivo e no conteúdo do PDF.
                 </CardDescription>
               </div>
             </div>
@@ -235,12 +414,30 @@ export default function ComprovanteRobot() {
                   multiple
                   accept=".pdf,.jpg,.jpeg,.png"
                   onChange={handleFileSelect}
-                  disabled={processing}
+                  disabled={processing || identifying}
                   className="flex-1 bg-input/50 border-border/50"
                 />
                 <Button
+                  onClick={identifyFiles}
+                  disabled={files.length === 0 || processing || identifying}
+                  variant="secondary"
+                  className="gap-2"
+                >
+                  {identifying ? (
+                    <>
+                      <div className="h-4 w-4 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+                      Identificando...
+                    </>
+                  ) : (
+                    <>
+                      <Search className="h-4 w-4" />
+                      Identificar
+                    </>
+                  )}
+                </Button>
+                <Button
                   onClick={processFiles}
-                  disabled={files.length === 0 || processing}
+                  disabled={identifiedCount === 0 || processing || identifying}
                   className="gap-2 bg-primary text-primary-foreground hover:bg-primary/90 shadow-lg shadow-primary/20"
                 >
                   {processing ? (
@@ -251,23 +448,45 @@ export default function ComprovanteRobot() {
                   ) : (
                     <>
                       <Upload className="h-4 w-4" />
-                      Processar {files.length > 0 && `(${files.length})`}
+                      Processar ({identifiedCount})
                     </>
                   )}
                 </Button>
               </div>
             </div>
 
-            {processing && (
+            {(processing || identifying) && (
               <div className="space-y-2">
                 <div className="flex justify-between text-sm">
-                  <span className="text-muted-foreground">Progresso</span>
+                  <span className="text-muted-foreground">
+                    {identifying ? "Identificando..." : "Enviando..."}
+                  </span>
                   <span className="text-primary font-medium">{Math.round(progress)}%</span>
                 </div>
                 <Progress value={progress} className="h-2" />
               </div>
             )}
 
+            {/* Summary badges */}
+            {files.length > 0 && (
+              <div className="flex gap-2">
+                <Badge variant="outline" className="text-xs">
+                  Total: {files.length}
+                </Badge>
+                {identifiedCount > 0 && (
+                  <Badge className="bg-green-500/10 text-green-600 text-xs">
+                    Identificados: {identifiedCount}
+                  </Badge>
+                )}
+                {notIdentifiedCount > 0 && (
+                  <Badge className="bg-orange-500/10 text-orange-600 text-xs">
+                    Não identificados: {notIdentifiedCount}
+                  </Badge>
+                )}
+              </div>
+            )}
+
+            {/* Files list */}
             {files.length > 0 && (
               <div className="space-y-3">
                 <h3 className="font-semibold text-foreground">Arquivos ({files.length})</h3>
@@ -276,44 +495,99 @@ export default function ComprovanteRobot() {
                     <div
                       key={index}
                       className="flex items-center gap-3 p-3 border border-border/50 rounded-lg bg-muted/30 hover:bg-muted/50 transition-colors animate-fade-in"
-                      style={{ animationDelay: `${index * 50}ms` }}
+                      style={{ animationDelay: `${index * 30}ms` }}
                     >
-                      <FileText className="h-5 w-5 text-muted-foreground flex-shrink-0" />
+                      {getStatusIcon(fileMatch.status)}
                       <div className="flex-1 min-w-0">
                         <p className="font-medium text-sm truncate text-foreground">
                           {fileMatch.fileName}
                         </p>
-                        <div className="flex items-center gap-2 mt-1">
+                        <div className="flex items-center gap-2 mt-1 flex-wrap">
                           {getStatusBadge(fileMatch)}
+                          {fileMatch.voucherInfo && (
+                            <span className="text-xs text-muted-foreground">
+                              {fileMatch.voucherInfo.fornecedor} - R$ {fileMatch.voucherInfo.valor?.toLocaleString("pt-BR")}
+                            </span>
+                          )}
+                          {fileMatch.source === "manual" && (
+                            <Badge variant="outline" className="text-xs">Manual</Badge>
+                          )}
                           {fileMatch.error && (
                             <span className="text-xs text-destructive">{fileMatch.error}</span>
                           )}
                         </div>
                       </div>
-                      {getStatusIcon(fileMatch.status)}
+                      
+                      {/* Manual association for unidentified files */}
+                      {fileMatch.status === "not_identified" && !fileMatch.voucherId && (
+                        <div className="flex items-center gap-2">
+                          <Select onValueChange={(value) => manualAssign(index, value)}>
+                            <SelectTrigger className="w-48 h-8 text-xs">
+                              <SelectValue placeholder="Associar a voucher..." />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {availableVouchers.map((v) => (
+                                <SelectItem key={v.id} value={v.id} className="text-xs">
+                                  SPO {v.numero_spo} - {v.fornecedor?.substring(0, 20)}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                          <Link2 className="h-4 w-4 text-muted-foreground" />
+                        </div>
+                      )}
                     </div>
                   ))}
                 </div>
               </div>
             )}
 
+            {/* Help section */}
             <div className="p-4 bg-muted/30 rounded-lg border border-border/30">
               <h4 className="font-semibold mb-2 flex items-center gap-2 text-foreground">
                 <AlertCircle className="h-4 w-4 text-primary" />
-                Padrões de Nome Aceitos
+                Padrões de Nome Reconhecidos
               </h4>
               <ul className="text-sm text-muted-foreground space-y-1 ml-6">
-                <li>• <code className="bg-muted px-1 rounded">12345_comprovante.pdf</code> - SPO no início</li>
-                <li>• <code className="bg-muted px-1 rounded">SPO12345.pdf</code> ou <code className="bg-muted px-1 rounded">SPO-12345.pdf</code> - Com prefixo SPO</li>
-                <li>• <code className="bg-muted px-1 rounded">comprovante_12345.pdf</code> - SPO no meio/fim</li>
+                <li>• <code className="bg-muted px-1 rounded">101-286102D26122025.35</code> - SPO Remessa</li>
+                <li>• <code className="bg-muted px-1 rounded">101-286105</code> - SPO Manual</li>
+                <li>• <code className="bg-muted px-1 rounded">2025156579326122025.53</code> - Voucher Remessa</li>
+                <li>• <code className="bg-muted px-1 rounded">OT 433-20251877370</code> - Voucher Manual</li>
               </ul>
               <p className="text-sm text-muted-foreground mt-3 flex items-center gap-1">
                 <AlertCircle className="h-3 w-3 text-warning" />
-                O voucher deve estar na etapa <strong className="text-foreground">ROBO</strong> para receber comprovantes automaticamente.
+                Vouchers na etapa <strong className="text-foreground">FINANCEIRO</strong> são elegíveis para receber comprovantes.
               </p>
             </div>
           </CardContent>
         </Card>
+
+        {/* Manual search section */}
+        {notIdentifiedCount > 0 && (
+          <Card className="bg-card/80 backdrop-blur-sm border-border/50">
+            <CardHeader>
+              <CardTitle className="text-base">Buscar Voucher para Associação Manual</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="flex gap-3">
+                <Input
+                  placeholder="Buscar por SPO, fornecedor ou ND..."
+                  value={searchVoucher}
+                  onChange={(e) => setSearchVoucher(e.target.value)}
+                  className="flex-1"
+                />
+                <Button variant="secondary" onClick={() => loadAvailableVouchers(searchVoucher)}>
+                  <Search className="h-4 w-4" />
+                </Button>
+              </div>
+              {availableVouchers.length > 0 && (
+                <p className="text-xs text-muted-foreground mt-2">
+                  {availableVouchers.length} voucher(es) disponível(is) para associação
+                </p>
+              )}
+            </CardContent>
+          </Card>
+        )}
       </main>
     </PageLayout>
   );
