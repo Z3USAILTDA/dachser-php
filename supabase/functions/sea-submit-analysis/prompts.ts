@@ -1261,6 +1261,59 @@ NCMs match ONLY if they are 100% IDENTICAL strings.
 - Different lengths = different NCMs = DIVERGENCE
 
 ███████████████████████████████████████████████████████████████████████████████
+███ ⚠️ CRITICAL: NCM LIST EXTRACTION - HANDLE PAGE BREAKS ⚠️                   ███
+███████████████████████████████████████████████████████████████████████████████
+
+★★★ NCM LISTS MAY SPAN MULTIPLE PAGES - EXTRACT FROM ALL PAGES ★★★
+
+CRITICAL: NCM/HS Code lists are often split across PAGE BREAKS. You MUST:
+
+1. SCAN ALL PAGES: Look for "NCM-CODES:", "NCM CODES:", "HS-CODE:", "HS CODE:" labels
+   - These labels may appear on any page
+   - The list of codes may START on one page and CONTINUE on the next page
+
+2. CONCATENATE LISTS: If a list starts on page N and continues on page N+1:
+   - The codes on page N are PART OF THE SAME LIST as codes on page N+1
+   - "Continued From Previous Sheet" or similar text indicates continuation
+   - DO NOT treat them as separate lists
+
+3. EXAMPLE - PAGE BREAK IN NCM LIST:
+   Page 9 shows:
+     NCM-CODES:
+     8708
+     8481
+     8421
+     8543
+     8481
+     4016
+     8531
+     3917
+   Page 10 shows:
+     7412
+     9032
+     3926
+     7419
+     8536
+     8414
+     ...
+
+   CORRECT extraction: [8708, 8481, 8421, 8543, 4016, 8531, 3917, 7412, 9032, 3926, 7419, 8536, 8414, ...]
+   WRONG extraction: [7412, 9032, 3926, 7419, 8536, 8414, ...] (missing page 9 codes!)
+
+4. LOOK FOR CONTINUATION INDICATORS:
+   - "Continued on Next Sheet" / "Continued From Previous Sheet"
+   - "Sheet X of Y" where Y > 1
+   - NCM list that starts mid-page without a header (continuation from previous page)
+
+5. VERIFY COMPLETE EXTRACTION:
+   - If the document has multiple pages with cargo descriptions, check ALL pages for NCM codes
+   - MBL/HBL documents often have "Sheet 1 of 10", "Sheet 2 of 10" - check EVERY sheet
+   - NCMs may appear in different sections: header, cargo description, summary pages
+
+★★★ NEVER report "Missing NCMs" if you only extracted from SOME pages ★★★
+★★★ ALWAYS consolidate NCMs from ALL pages before comparing ★★★
+
+███████████████████████████████████████████████████████████████████████████████
 ███ GROSS WEIGHT SOURCE PRIORITY (MANDATORY HIERARCHY)                      ███
 ███████████████████████████████████████████████████████████████████████████████
 
