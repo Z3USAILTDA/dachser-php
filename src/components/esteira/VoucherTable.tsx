@@ -268,13 +268,13 @@ export const VoucherTable = ({ vouchers, onViewDetails, onEdit, onDelete, onGoBa
                     <SelectContent className="bg-card border-border">
                       <SelectItem value="all">Todas</SelectItem>
                       <SelectItem value="A_PROCESSAR">A Processar</SelectItem>
-                      <SelectItem value="OPERACAO">Voucher</SelectItem>
+                      <SelectItem value="OPERACAO">Operacional</SelectItem>
                       <SelectItem value="FISCAL">Fiscal</SelectItem>
                       <SelectItem value="SUPERVISOR">Supervisor</SelectItem>
                       <SelectItem value="FINANCEIRO">Financeiro</SelectItem>
                       <SelectItem value="ROBO">Robô</SelectItem>
                       <SelectItem value="CONCLUIDO">Concluído</SelectItem>
-                      <SelectItem value="AJUSTE_OPERACAO">Ajuste Voucher</SelectItem>
+                      <SelectItem value="AJUSTE_OPERACAO">Ajuste Operacional</SelectItem>
                       <SelectItem value="AJUSTE_FISCAL">Ajuste Fiscal</SelectItem>
                       <SelectItem value="CANCELADO">Cancelado</SelectItem>
                     </SelectContent>
