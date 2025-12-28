@@ -356,168 +356,96 @@ export default function SubmeterManifestHbl() {
   // Extract only divergences from analysis result
   const extractDivergences = (text: string): string => {
     const lines = text.split('\n');
+    const divergentSections: string[] = [];
     
-    // Pattern to detect Delta: 0 (not a real divergence)
-    const zeroDeltaPattern = /Delta:\s*[+-]?0[.,]?0*\s*(kg|m³|m3)/i;
-    
-    // Expanded patterns to catch more divergence indicators including NCM format
-    const divergencePatterns = [
-      /UPDATE REQUIRED/i,
+    // Patterns that indicate START of a divergence section
+    const divergenceSectionStartPatterns = [
+      /Status:\s*DIVERGENCE/i,
       /Status:\s*DIFFERENT/i,
-      /Status:\s*UPDATE/i,
       /Status:\s*MISMATCH/i,
-      /Status:\s*NOT FOUND/i,
-      /Status:\s*DIVERGENCE/i,  // NCM divergence status
-      /Delta:\s*[+-]?[0-9,.]+\s*(kg|m³|m3)/i,
-      /Missing in HBL:/i,  // NCM missing format
-      /Extra in HBL:/i,    // NCM extra format
-      /Missing:/i,
-      /Extra:/i,
-      /→\s*Update:/i,
+      /Extra in HBL:/i,
+      /Missing in HBL:/i,
       /Update:/i,
-      /DISCREPANCY/i,
-      /DISCREPANCIES FOUND/i,
-      /⚠️ WARNING/i,
       /⚠️/,
-      /requires? update/i,
-      /needs? correction/i,
-      /adjust/i,
     ];
     
-    // Patterns to explicitly EXCLUDE (matches, not divergences)
-    const matchPatterns = [
+    // Patterns to EXCLUDE (these are matches, not divergences)
+    const excludePatterns = [
       /Status:\s*MATCH/i,
-      /MATCH\s*✓/i,
-      /No changes required/i,
-      /No discrepancies/i,
-      /Missing in HBL:\s*none/i,   // NCM - no missing = not a divergence
-      /Extra in HBL:\s*none/i,     // NCM - no extra = not a divergence
+      /Missing in HBL:\s*none/i,
+      /Extra in HBL:\s*none/i,
     ];
     
-    const summaryStartPatterns = [
-      /SUMMARY FOR EXTERNAL COMMUNICATION/i,
-      /═══.*SUMMARY/i,
-      /ANALYSIS SUMMARY/i,
-      /Fields with discrepancies/i,
+    // Section headers to capture context
+    const sectionHeaders = [
+      /^NCM CODES:/i,
+      /^TOTAL WEIGHT:/i,
+      /^TOTAL CBM:/i,
+      /^TOTAL VOLUMES:/i,
+      /^SEAL NUMBER:/i,
+      /^CONSIGNEE CNPJ:/i,
+      /^CONTAINER VERIFICATION:/i,
+      /^INVOICE REFERENCES:/i,
+      /^EXPORTER.*:/i,
     ];
     
-    // Patterns for NCM section headers
-    const ncmSectionPatterns = [
-      /NCM CODES:/i,
-      /Manifest NCMs:/i,
-      /HBL NCMs:/i,
-    ];
-    
-    const divergentLines: string[] = [];
-    let inSummarySection = false;
-    let inNCMSection = false;
-    let ncmSectionLines: string[] = [];
-    let currentHbl: string | null = null;
-    let hblAddedForSection = false;
+    let currentSection: string[] = [];
+    let currentHeader = '';
+    let hasDivergenceInSection = false;
     
     for (let i = 0; i < lines.length; i++) {
       const line = lines[i];
+      const trimmedLine = line.trim();
       
-      // Track current HBL context - expanded patterns
-      const hblMatch = line.match(/(?:DRAFT HBL|HBL):\s*["']?(.+?)["']?$/i) ||
-                       line.match(/Comparing.*?["'](.+?\.pdf)["']/i);
-      if (hblMatch) {
-        currentHbl = hblMatch[1];
-        hblAddedForSection = false;
-      }
+      // Check if this is a new section header
+      const isNewSection = sectionHeaders.some(p => p.test(trimmedLine));
       
-      // Detect NCM section
-      if (ncmSectionPatterns.some(p => p.test(line))) {
-        inNCMSection = true;
-        ncmSectionLines = [line];
+      if (isNewSection) {
+        // Save previous section if it had divergence
+        if (hasDivergenceInSection && currentSection.length > 0) {
+          divergentSections.push(currentSection.join('\n'));
+        }
+        
+        // Start new section
+        currentSection = [line];
+        currentHeader = trimmedLine;
+        hasDivergenceInSection = false;
         continue;
       }
       
-      // If in NCM section, collect lines until we determine if there's a divergence
-      if (inNCMSection) {
-        ncmSectionLines.push(line);
-        
-        // Check if NCM section ends (new major section or empty lines)
-        const isEndOfNCMSection = /^(INVOICE|EXPORTER|ANALYSIS|VERIFICATION|━)/i.test(line.trim()) || 
-                                   (line.trim() === '' && ncmSectionLines.length > 5);
-        
-        if (isEndOfNCMSection || /Status:\s*(MATCH|DIVERGENCE)/i.test(line)) {
-          // Check if NCM section has divergence
-          const sectionText = ncmSectionLines.join('\n');
-          const hasNCMDivergence = /Status:\s*DIVERGENCE/i.test(sectionText) ||
-                                   (/Extra in HBL:/i.test(sectionText) && !/Extra in HBL:\s*none/i.test(sectionText)) ||
-                                   (/Missing in HBL:/i.test(sectionText) && !/Missing in HBL:\s*none/i.test(sectionText));
-          
-          if (hasNCMDivergence) {
-            if (currentHbl && !hblAddedForSection) {
-              divergentLines.push(`\n📄 HBL: ${currentHbl}`);
-              hblAddedForSection = true;
-            }
-            divergentLines.push('\n--- NCM CODES ---');
-            divergentLines.push(...ncmSectionLines.filter(l => l.trim() !== ''));
-          }
-          
-          inNCMSection = false;
-          ncmSectionLines = [];
-          
-          // Continue processing this line normally if it's a new section
-          if (isEndOfNCMSection) {
-            // Let it fall through to normal processing
-          } else {
-            continue;
-          }
-        } else {
-          continue; // Keep collecting NCM section lines
+      // Add line to current section
+      if (currentHeader) {
+        currentSection.push(line);
+      }
+      
+      // Check if this line indicates a divergence (but exclude matches)
+      const hasExclude = excludePatterns.some(p => p.test(trimmedLine));
+      if (!hasExclude) {
+        const hasDivergence = divergenceSectionStartPatterns.some(p => p.test(trimmedLine));
+        if (hasDivergence) {
+          hasDivergenceInSection = true;
         }
       }
       
-      // Check if entering summary section
-      if (summaryStartPatterns.some(p => p.test(line))) {
-        inSummarySection = true;
+      // Also check for "Extra in HBL" that has actual values (not "none")
+      if (/Extra in HBL:/i.test(trimmedLine) && !/none/i.test(trimmedLine)) {
+        hasDivergenceInSection = true;
       }
-      
-      // Include summary section lines that contain discrepancy counts
-      if (inSummarySection && /discrepanc|update|differ/i.test(line)) {
-        divergentLines.push(line);
-        continue;
-      }
-      
-      // Skip lines that are explicit matches
-      if (matchPatterns.some(p => p.test(line))) {
-        continue;
-      }
-      
-      // Check for divergence patterns
-      const hasDivergence = divergencePatterns.some(pattern => pattern.test(line));
-      
-      if (hasDivergence) {
-        // Skip lines that are just "Delta: 0" (not real divergences)
-        if (zeroDeltaPattern.test(line) && !/UPDATE|DIFFERENT|Missing:|Extra:|DISCREPANCY|adjust|DIVERGENCE/i.test(line)) {
-          continue;
-        }
-        
-        // Add HBL header context if not yet added
-        if (currentHbl && !hblAddedForSection) {
-          divergentLines.push(`\n📄 HBL: ${currentHbl}`);
-          hblAddedForSection = true;
-        }
-        
-        // Include context - add preceding line if it contains exporter/item info
-        if (i > 0) {
-          const prevLine = lines[i - 1];
-          if (/EXPORTER|Item \d+:|Subtotals/i.test(prevLine) && !divergentLines.includes(prevLine)) {
-            divergentLines.push(prevLine);
-          }
-        }
-        divergentLines.push(line);
+      if (/Missing in HBL:/i.test(trimmedLine) && !/none/i.test(trimmedLine)) {
+        hasDivergenceInSection = true;
       }
     }
     
-    if (divergentLines.length === 0) {
+    // Don't forget the last section
+    if (hasDivergenceInSection && currentSection.length > 0) {
+      divergentSections.push(currentSection.join('\n'));
+    }
+    
+    if (divergentSections.length === 0) {
       return "Nenhuma divergência encontrada - todos os documentos estão reconciliados.";
     }
     
-    return divergentLines.join('\n').trim();
+    return divergentSections.join('\n\n').trim();
   };
 
   const handleCopyDivergences = () => {
