@@ -126,12 +126,12 @@ export default function VoucherRules() {
   };
 
   const ETAPA_LABELS: Record<string, string> = {
-    OPERACAO: "Voucher",
+    OPERACAO: "Operacional",
     FISCAL: "Fiscal",
     SUPERVISOR: "Supervisor",
     FINANCEIRO: "Financeiro",
     ROBO: "Robô",
-    AJUSTE_OPERACAO: "Ajuste Voucher",
+    AJUSTE_OPERACAO: "Ajuste Operacional",
     AJUSTE_FISCAL: "Ajuste Fiscal",
   };
 
