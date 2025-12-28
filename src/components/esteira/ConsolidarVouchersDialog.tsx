@@ -227,7 +227,9 @@ export const ConsolidarVouchersDialog = ({
                         </p>
                       </div>
                       <div className="text-right text-xs text-muted-foreground">
-                        <p>Venc: {format(new Date(voucher.vencimento), "dd/MM/yyyy")}</p>
+                        <p>Venc: {voucher.vencimento && !isNaN(new Date(voucher.vencimento).getTime()) 
+                          ? format(new Date(voucher.vencimento), "dd/MM/yyyy") 
+                          : "-"}</p>
                         <p>{voucher.etapaAtual}</p>
                       </div>
                       {isSelected && !isMaster && (
