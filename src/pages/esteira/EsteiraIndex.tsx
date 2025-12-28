@@ -779,6 +779,7 @@ const EsteiraIndex = () => {
   const [quickFilterFornecedor, setQuickFilterFornecedor] = useState<string>("all");
   const [quickFilterCobranca, setQuickFilterCobranca] = useState<string>("all");
   const [drillDownFilter, setDrillDownFilter] = useState<DrillDownFilter>("all");
+  const [lastUpdateTime, setLastUpdateTime] = useState<Date | null>(null);
 
   // Dialog states
   const [showCreateDialog, setShowCreateDialog] = useState(false);
@@ -1000,6 +1001,7 @@ const EsteiraIndex = () => {
     } finally {
       setLoading(false);
       setIsRefetching(false);
+      setLastUpdateTime(new Date());
     }
   };
 
@@ -1468,14 +1470,21 @@ const EsteiraIndex = () => {
 
         {/* Right - Actions and user */}
         <div className="flex items-center gap-2.5 text-[0.85rem]">
-          <button
-            onClick={() => loadVouchers()}
-            disabled={isRefetching}
-            className="flex items-center gap-2 px-4 py-2 rounded-full border border-[rgba(255,255,255,.25)] bg-[rgba(0,0,0,.7)] text-[#aaaaaa] hover:text-white hover:bg-[rgba(0,0,0,.9)] transition disabled:opacity-50 text-[0.8rem]"
-          >
-            <RefreshCw className={`h-4 w-4 ${isRefetching ? "animate-spin" : ""}`} />
-            Atualizar
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => loadVouchers()}
+              disabled={isRefetching}
+              className="flex items-center gap-2 px-4 py-2 rounded-full border border-[rgba(255,255,255,.25)] bg-[rgba(0,0,0,.7)] text-[#aaaaaa] hover:text-white hover:bg-[rgba(0,0,0,.9)] transition disabled:opacity-50 text-[0.8rem]"
+            >
+              <RefreshCw className={`h-4 w-4 ${isRefetching ? "animate-spin" : ""}`} />
+              Atualizar
+            </button>
+            {lastUpdateTime && (
+              <span className="text-[0.7rem] text-[#777] whitespace-nowrap">
+                Última atualização: {lastUpdateTime.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+              </span>
+            )}
+          </div>
 
           {canCreateVoucher && (
             <Button
