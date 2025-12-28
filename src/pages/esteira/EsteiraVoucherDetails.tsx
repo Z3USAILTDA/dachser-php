@@ -147,7 +147,7 @@ const EsteiraVoucherDetails = () => {
       // Load all vouchers for consolidation feature
       try {
         const { data: allVouchersData } = await supabase.functions.invoke('mariadb-proxy', {
-          body: { action: 'get_vouchers', limit: 500 }
+          body: { action: 'get_vouchers_esteira', limit: 500 }
         });
         if (allVouchersData?.success && allVouchersData?.data) {
           const mapped = allVouchersData.data.map((v: any) => ({
