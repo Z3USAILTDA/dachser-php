@@ -6,18 +6,21 @@ import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
-import { CheckCircle2, XCircle } from "lucide-react";
+import { CheckCircle2, XCircle, Layers } from "lucide-react";
+import { ConsolidarVouchersDialog } from "./ConsolidarVouchersDialog";
 
 interface VoucherFiscalActionsProps {
   voucher: Voucher;
   onUpdate: () => void;
+  allVouchers?: Voucher[];
 }
 
-export const VoucherFiscalActions = ({ voucher, onUpdate }: VoucherFiscalActionsProps) => {
+export const VoucherFiscalActions = ({ voucher, onUpdate, allVouchers = [] }: VoucherFiscalActionsProps) => {
   const [loading, setLoading] = useState(false);
   const [comentarios, setComentarios] = useState(voucher.comentariosFiscal || "");
   const [necessitaAjuste, setNecessitaAjuste] = useState(false);
   const [motivoAjuste, setMotivoAjuste] = useState("");
+  const [showConsolidateDialog, setShowConsolidateDialog] = useState(false);
   const { toast } = useToast();
 
   // Get user data from localStorage (MariaDB auth)
@@ -195,7 +198,7 @@ export const VoucherFiscalActions = ({ voucher, onUpdate }: VoucherFiscalActions
         )}
       </div>
 
-      <div className="flex gap-3">
+      <div className="flex flex-wrap gap-3">
         {necessitaAjuste ? (
           <Button
             onClick={handleDevolver}
@@ -216,7 +219,26 @@ export const VoucherFiscalActions = ({ voucher, onUpdate }: VoucherFiscalActions
             Aprovar e Enviar para Financeiro
           </Button>
         )}
+
+        {/* Consolidation button - only if there are other vouchers available */}
+        {allVouchers.length > 1 && (
+          <Button
+            variant="outline"
+            onClick={() => setShowConsolidateDialog(true)}
+            className="gap-2"
+          >
+            <Layers className="h-4 w-4" />
+            Consolidar Vouchers
+          </Button>
+        )}
       </div>
+
+      <ConsolidarVouchersDialog
+        open={showConsolidateDialog}
+        onOpenChange={setShowConsolidateDialog}
+        vouchers={allVouchers}
+        onSuccess={onUpdate}
+      />
     </div>
   );
 };

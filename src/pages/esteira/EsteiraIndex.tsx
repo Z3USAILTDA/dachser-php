@@ -57,6 +57,7 @@ import {
 import { VoucherTable, FilterValues } from "@/components/esteira/VoucherTable";
 import { CreateVoucherDialog } from "@/components/esteira/CreateVoucherDialog";
 import { EditVoucherDialog } from "@/components/esteira/EditVoucherDialog";
+import { CancelarVoucherDialog } from "@/components/esteira/CancelarVoucherDialog";
 import { RoboTab } from "@/components/tabs/RoboTab";
 import { ReportsTab } from "@/components/tabs/ReportsTab";
 // Removed: FaturasDoDiaTab - apenas Pagamentos agora
@@ -781,6 +782,7 @@ const EsteiraIndex = () => {
   // Dialog states
   const [showCreateDialog, setShowCreateDialog] = useState(false);
   const [showEditDialog, setShowEditDialog] = useState(false);
+  const [showCancelDialog, setShowCancelDialog] = useState(false);
   const [selectedVoucher, setSelectedVoucher] = useState<Voucher | null>(null);
   const [showUsersDialog, setShowUsersDialog] = useState(false);
   const [esteiraUsers, setEsteiraUsers] = useState<
@@ -805,6 +807,7 @@ const EsteiraIndex = () => {
     canDeleteVoucher,
     canGoBackStage,
     canManageUsers,
+    canCancelVoucher,
   } = useUserRole();
   const storedUser = localStorage.getItem("user") || localStorage.getItem("dachser_user");
   const user = storedUser ? JSON.parse(storedUser) : null;
@@ -1213,6 +1216,12 @@ const EsteiraIndex = () => {
       });
     }
   };
+
+  const handleCancel = (voucher: Voucher) => {
+    setSelectedVoucher(voucher);
+    setShowCancelDialog(true);
+  };
+
   return (
     <div className="min-h-screen relative overflow-x-hidden">
       {/* Background with image and gradient overlay */}
@@ -1548,11 +1557,13 @@ const EsteiraIndex = () => {
                       onEdit={handleEdit}
                       onDelete={handleDelete}
                       onGoBack={handleGoBack}
+                      onCancel={handleCancel}
                       filters={filters}
                       onFilterChange={setFilters}
                       canEdit={canEditVoucher}
                       canDelete={canDeleteVoucher}
                       canGoBackStage={canGoBackStage}
+                      canCancelVoucher={canCancelVoucher}
                     />
                 </div>
               )}
@@ -1583,6 +1594,14 @@ const EsteiraIndex = () => {
         onSuccess={loadVouchers}
         voucher={selectedVoucher}
       />
+      {selectedVoucher && (
+        <CancelarVoucherDialog
+          open={showCancelDialog}
+          onOpenChange={setShowCancelDialog}
+          voucher={selectedVoucher}
+          onSuccess={loadVouchers}
+        />
+      )}
 
       {/* Read-only Users Dialog */}
       <Dialog
