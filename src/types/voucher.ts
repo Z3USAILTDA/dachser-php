@@ -28,11 +28,12 @@ export type AccrualStatus = "MATCH_OK" | "MATCH_PARCIAL" | "SEM_ACCRUAL";
 export type FormaPagamento = 
   | "BOLETO" 
   | "PIX" 
+  | "TRANSFERENCIA"
   | "CARTAO" 
   | "DEPOSITO"
   | "DARF"
   | "GPS"
-  | "TRANSFERENCIA_PIX"
+  | "TRANSFERENCIA_PIX" // Mantido para compatibilidade com dados existentes
   | "DEBITO"
   | "CAMBIO"
   | "ADF";

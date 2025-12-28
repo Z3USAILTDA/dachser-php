@@ -189,6 +189,12 @@ export function useUserRole() {
   // Verifica se pode autorizar exceções (Supervisor, Financeiro, Admin)
   const canAuthorizeExceptions = isAdmin || isSupervisor || isFinanceiro;
 
+  // Verifica se pode voltar etapa (Admin, Supervisor, Financeiro)
+  const canGoBackStage = isAdmin || isSupervisor || isFinanceiro;
+
+  // Verifica se pode cancelar voucher (Admin, Supervisor, Financeiro)
+  const canCancelVoucher = isAdmin || isSupervisor || isFinanceiro;
+
   // Verifica se pode gerenciar usuários (Admin apenas)
   const canManageUsers = isAdmin;
 
@@ -219,6 +225,8 @@ export function useUserRole() {
     canManageBaixa,
     canAttachDocuments,
     canAuthorizeExceptions,
+    canGoBackStage,
+    canCancelVoucher,
     canManageUsers,
   };
 }

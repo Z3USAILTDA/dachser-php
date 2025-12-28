@@ -803,6 +803,7 @@ const EsteiraIndex = () => {
     canCreateVoucher,
     canEditVoucher,
     canDeleteVoucher,
+    canGoBackStage,
     canManageUsers,
   } = useUserRole();
   const storedUser = localStorage.getItem("user") || localStorage.getItem("dachser_user");
@@ -1132,44 +1133,59 @@ const EsteiraIndex = () => {
       });
     }
   };
-  const handleGoBack = async (voucher: Voucher) => {
+  const handleGoBack = async (voucher: Voucher, justificativa: string) => {
     try {
       let previousStage: EtapaAtual;
+      let ajusteField: string | null = null;
+      
       switch (voucher.etapaAtual) {
         case "FISCAL":
           previousStage = "OPERACAO";
+          ajusteField = "ajuste_operacao";
           break;
         case "SUPERVISOR":
           previousStage = "FISCAL";
+          ajusteField = "ajuste_fiscal";
           break;
         case "FINANCEIRO":
           previousStage = voucher.cobrancaEmNomeDe === "CLIENTE" ? "OPERACAO" : "FISCAL";
+          ajusteField = voucher.cobrancaEmNomeDe === "CLIENTE" ? "ajuste_operacao" : "ajuste_fiscal";
           break;
         case "ROBO":
           previousStage = "FINANCEIRO";
+          ajusteField = null; // Não precisa de ajuste
           break;
         case "AJUSTE_OPERACAO":
           previousStage = "FISCAL";
+          ajusteField = null;
           break;
         case "AJUSTE_FISCAL":
           previousStage = "FINANCEIRO";
+          ajusteField = null;
           break;
         default:
           throw new Error("Não é possível voltar desta etapa");
       }
       
+      // Build update payload with justification in the appropriate field
+      const updatePayload: Record<string, any> = {
+        action: "update_voucher_esteira",
+        voucher_id: voucher.id,
+        etapa_atual: previousStage,
+      };
+      
+      if (ajusteField) {
+        updatePayload[ajusteField] = justificativa;
+      }
+      
       // Use MariaDB proxy instead of Supabase directly
       const { data, error } = await supabase.functions.invoke("mariadb-proxy", {
-        body: {
-          action: "update_voucher_esteira",
-          voucher_id: voucher.id,
-          etapa_atual: previousStage,
-        },
+        body: updatePayload,
       });
 
       if (error || !data?.success) throw new Error(data?.error || error?.message || "Erro ao atualizar");
 
-      // Log the action
+      // Log the action with justification
       const storedUser = localStorage.getItem("user") || localStorage.getItem("dachser_user");
       const userData = storedUser ? JSON.parse(storedUser) : { id: 0, username: "sistema" };
       
@@ -1180,7 +1196,7 @@ const EsteiraIndex = () => {
           user_id: userData.id?.toString(),
           user_name: userData.username,
           acao: "ETAPA_RETORNADA",
-          detalhe: `Voucher retornou para etapa ${previousStage.replace("_", " ")}`,
+          detalhe: `Voucher retornou para etapa ${previousStage.replace("_", " ")}. Justificativa: ${justificativa}`,
         },
       });
 
@@ -1536,6 +1552,7 @@ const EsteiraIndex = () => {
                       onFilterChange={setFilters}
                       canEdit={canEditVoucher}
                       canDelete={canDeleteVoucher}
+                      canGoBackStage={canGoBackStage}
                     />
                 </div>
               )}
