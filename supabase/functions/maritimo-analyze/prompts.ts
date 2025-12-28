@@ -1537,14 +1537,42 @@ NOTE: Extract Vessel and Voyage SEPARATELY. If HBL has combined "VESSEL / VOYAGE
 
 ★★★ CRITICAL: YOU MUST ALWAYS INCLUDE THIS EXACT NCM CODES SECTION ★★★
 
+★★★ NCM/HS CODE EXTRACTION FROM PDFs - READ CAREFULLY ★★★
+
+STEP 1: LOCATE NCM CODES IN EACH PDF
+Both HBL and MBL documents typically contain NCM codes in:
+- A dedicated "NCM-CODES:" section (often on later pages, like page 4-6 of multi-page BLs)
+- Listed vertically as a series of 4-digit or 8-digit numbers (e.g., 8481, 8483, 8414...)
+- Near "HS-CODE:" labels in cargo description sections
+- Sometimes in "Marks and Numbers" column as a series of numbers
+- Look for semicolon-separated 8-digit codes (e.g., "74152900; 84819090; 84818092; 85443000")
+
+STEP 2: SCAN ALL PAGES OF EACH DOCUMENT
+- NCM codes are often on LATER pages (page 4, 5, 6, etc.), NOT on page 1
+- HBL and MBL often have "Rider" or "Continuation" pages with NCM lists
+- Search for the keyword "NCM" or "NCM-CODES:" to find the section
+- Also look for "HS-CODE:" labels in cargo line items
+
+STEP 3: EXTRACT ALL UNIQUE NCM CODES
+From HBL: Extract ALL NCM codes, including:
+- 4-digit codes: 8481, 8483, 8414, 8708, 3926, 7318, 8526, 8543, 8536, 8421, 7419, 9026, 9032, 3917, 7412, 7326, 8412, 8544, 7320
+- 8-digit codes: 74152900, 84819090, 84818092, 85443000
+
+From MBL: Extract ALL NCM codes using the same method
+
+STEP 4: DEDUPLICATE AND SORT
+- Remove duplicate codes from each list
+- Sort codes numerically
+
+STEP 5: OUTPUT FORMAT (MANDATORY)
 NCM CODES
-- HBL NCMs: [list ALL NCM codes exactly as they appear in HBL, sorted - include ALL codes: 4-digit, 8-digit, any length]
-- MBL NCMs: [list ALL NCM codes exactly as they appear in MBL, sorted - include ALL codes: 4-digit, 8-digit, any length]
-- Missing in MBL: [NCMs that appear in HBL but NOT in MBL, or "none"]
-- Extra in MBL: [NCMs that appear in MBL but NOT in HBL, or "none"]
+- HBL NCMs: [comma-separated list of ALL unique NCM codes from HBL]
+- MBL NCMs: [comma-separated list of ALL unique NCM codes from MBL]  
+- Missing in MBL: [codes in HBL but NOT in MBL, or "none"]
+- Extra in MBL: [codes in MBL but NOT in HBL, or "none"]
 - Status: MATCH (if lists are 100% identical) or UPDATE REQUIRED (if ANY difference)
 
-★★★ NCM EXTRACTION RULES FOR HBL x MBL ★★★
+★★★ COMPARISON RULES ★★★
 1. Extract ALL NCM/HS codes from both documents exactly as they appear
 2. Include codes of ANY length: 4-digit (8481), 8-digit (84819090), or any other format
 3. DO NOT truncate or normalize code lengths - preserve exactly as written
@@ -1552,10 +1580,10 @@ NCM CODES
 5. A code is "Missing in MBL" if it appears in HBL but not in MBL
 6. A code is "Extra in MBL" if it appears in MBL but not in HBL
 
-EXAMPLE OUTPUT:
+★★★ EXAMPLE OUTPUT ★★★
 NCM CODES
 - HBL NCMs: 8481, 8483, 8414, 8708, 3926, 7318, 8526, 8543, 8536, 8421, 7419, 9026, 9032, 3917, 7412, 7326, 8412, 8544, 7320, 74152900, 84819090, 84818092, 85443000
-- MBL NCMs: 8481, 8483, 8414, 8708, 3926, 7318, 8526, 8421, 7419, 9026, 9032, 3917, 7412, 7326, 8412, 7320, 9032
+- MBL NCMs: 8481, 8483, 8414, 8708, 3926, 7318, 8526, 8421, 7419, 9026, 9032, 3917, 7412, 7326, 8412, 7320
 - Missing in MBL: 8543, 8536, 8544, 74152900, 84819090, 84818092, 85443000
 - Extra in MBL: none
 - Status: UPDATE REQUIRED
@@ -1568,10 +1596,11 @@ NCM CODES
 - Fields requiring update: [count] ⚠
 
 HARD REQUIREMENTS
-- Always emit the plain-text email body above, starting with "Hello, team." and "Please update…".
+- Always emit the plain-text email body above, starting with "Hello, team." and "Complete BL Comparison Report".
 - Quote exact strings from the documents when flagging.
-- Section 3) Container & Seal and Section 3a) NCM/HS Codes are MANDATORY and must ALWAYS be included with match status.
-- Extract NCM codes using ±60 character context window around keywords (NCM, HS, HS CODE, HSCODE, H.S., TARIC).
+- Section 3) Container & Seal and NCM CODES sections are MANDATORY and must ALWAYS be included with match status.
+- SCAN ALL PAGES of each PDF to find NCM codes - they are often on later pages.
+- Look for "NCM-CODES:" or "NCM CODES:" section labels in the documents.
 - NCM comparison uses 100% literal string matching. No prefix matching allowed.`;
 
 export const PROMPT_INVOICES_HBL = `SYSTEM — CRONOS (Invoices × Draft HBL Auditor)
