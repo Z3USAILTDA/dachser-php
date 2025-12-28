@@ -184,6 +184,12 @@ interface QueryRequest {
     user_id?: string;
     user_name?: string;
   }>;
+  // Cancelamento
+  motivo?: string;
+  voucher_credito?: string;
+  // Consolidação
+  master_id?: string;
+  numero_rm?: string;
 }
 
 serve(async (req) => {
@@ -5925,6 +5931,180 @@ serve(async (req) => {
         console.log(`Batch attach completed: ${successCount}/${comprovantes.length} successful`);
         
         result = { success: true, results, successCount, totalCount: comprovantes.length };
+        break;
+      }
+
+      // ==================== VOUCHER CANCELAMENTO ====================
+      case 'cancelar_voucher': {
+        const { voucher_id, motivo, voucher_credito, user_id, user_name } = body as {
+          voucher_id: string;
+          motivo: string;
+          voucher_credito: string;
+          user_id?: string;
+          user_name?: string;
+        };
+
+        if (!voucher_id || !motivo || !voucher_credito) {
+          return new Response(
+            JSON.stringify({ error: 'voucher_id, motivo e voucher_credito são obrigatórios' }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+
+        console.log(`Canceling voucher ${voucher_id} with credit to ${voucher_credito}`);
+
+        // First, ensure cancellation columns exist
+        try {
+          await client.query(`
+            ALTER TABLE dados_dachser.t_vouchers 
+            ADD COLUMN IF NOT EXISTS cancelamento_motivo TEXT,
+            ADD COLUMN IF NOT EXISTS cancelamento_voucher_credito VARCHAR(100),
+            ADD COLUMN IF NOT EXISTS cancelado_por_user_id VARCHAR(36),
+            ADD COLUMN IF NOT EXISTS cancelado_por_user_name VARCHAR(100),
+            ADD COLUMN IF NOT EXISTS cancelado_em DATETIME
+          `);
+        } catch (alterErr) {
+          console.log('Note: Cancellation columns may already exist');
+        }
+
+        // Update voucher to CANCELADO
+        await client.execute(`
+          UPDATE dados_dachser.t_vouchers 
+          SET 
+            etapa_atual = 'CANCELADO',
+            cancelamento_motivo = ?,
+            cancelamento_voucher_credito = ?,
+            cancelado_por_user_id = ?,
+            cancelado_por_user_name = ?,
+            cancelado_em = NOW(),
+            updated_at = NOW()
+          WHERE id = ?
+        `, [motivo, voucher_credito, user_id || null, user_name || 'Sistema', voucher_id]);
+
+        // Log the cancellation
+        await client.execute(`
+          INSERT INTO dados_dachser.t_voucher_logs (
+            id, voucher_id, user_id, user_name, acao, detalhe, data_hora
+          ) VALUES (?, ?, ?, ?, 'VOUCHER_CANCELADO', ?, NOW())
+        `, [
+          crypto.randomUUID(),
+          voucher_id,
+          user_id || null,
+          user_name || 'Sistema',
+          `Voucher cancelado. Motivo: ${motivo}. Crédito em: ${voucher_credito}`
+        ]);
+
+        console.log(`Voucher ${voucher_id} canceled successfully`);
+        result = { success: true };
+        break;
+      }
+
+      // ==================== VOUCHER CONSOLIDAÇÃO (MASTER) ====================
+      case 'consolidar_vouchers': {
+        const { voucher_ids, master_id, numero_rm, user_id, user_name } = body as {
+          voucher_ids: string[];
+          master_id: string;
+          numero_rm: string;
+          user_id?: string;
+          user_name?: string;
+        };
+
+        if (!voucher_ids || voucher_ids.length < 2 || !master_id || !numero_rm) {
+          return new Response(
+            JSON.stringify({ error: 'voucher_ids (min 2), master_id e numero_rm são obrigatórios' }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+
+        console.log(`Consolidating ${voucher_ids.length} vouchers into master ${master_id}`);
+
+        // First, ensure consolidation columns exist
+        try {
+          await client.query(`
+            ALTER TABLE dados_dachser.t_vouchers 
+            ADD COLUMN IF NOT EXISTS voucher_master_id VARCHAR(36),
+            ADD COLUMN IF NOT EXISTS is_master TINYINT(1) DEFAULT 0,
+            ADD COLUMN IF NOT EXISTS consolidacao_rm_numero VARCHAR(100)
+          `);
+        } catch (alterErr) {
+          console.log('Note: Consolidation columns may already exist');
+        }
+
+        // Mark the master voucher
+        await client.execute(`
+          UPDATE dados_dachser.t_vouchers 
+          SET 
+            is_master = 1,
+            consolidacao_rm_numero = ?,
+            updated_at = NOW()
+          WHERE id = ?
+        `, [numero_rm, master_id]);
+
+        // Mark all child vouchers (excluding master)
+        const childIds = voucher_ids.filter(id => id !== master_id);
+        for (const childId of childIds) {
+          await client.execute(`
+            UPDATE dados_dachser.t_vouchers 
+            SET 
+              voucher_master_id = ?,
+              consolidacao_rm_numero = ?,
+              updated_at = NOW()
+            WHERE id = ?
+          `, [master_id, numero_rm, childId]);
+
+          // Log consolidation for each child
+          await client.execute(`
+            INSERT INTO dados_dachser.t_voucher_logs (
+              id, voucher_id, user_id, user_name, acao, detalhe, data_hora
+            ) VALUES (?, ?, ?, ?, 'VOUCHER_CONSOLIDADO', ?, NOW())
+          `, [
+            crypto.randomUUID(),
+            childId,
+            user_id || null,
+            user_name || 'Sistema',
+            `Consolidado no voucher master. RM: ${numero_rm}`
+          ]);
+        }
+
+        // Log for master
+        await client.execute(`
+          INSERT INTO dados_dachser.t_voucher_logs (
+            id, voucher_id, user_id, user_name, acao, detalhe, data_hora
+          ) VALUES (?, ?, ?, ?, 'VOUCHER_MASTER_CRIADO', ?, NOW())
+        `, [
+          crypto.randomUUID(),
+          master_id,
+          user_id || null,
+          user_name || 'Sistema',
+          `Consolidou ${childIds.length} vouchers. RM: ${numero_rm}`
+        ]);
+
+        console.log(`Consolidated ${voucher_ids.length} vouchers into master ${master_id}`);
+        result = { success: true, masterVoucherId: master_id, childrenCount: childIds.length };
+        break;
+      }
+
+      // ==================== GET VOUCHERS FILHOS ====================
+      case 'get_vouchers_filhos': {
+        const { master_id } = body as { master_id: string };
+        
+        if (!master_id) {
+          return new Response(
+            JSON.stringify({ error: 'master_id é obrigatório' }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+
+        const filhos = await client.query(`
+          SELECT 
+            id, numero_spo, fornecedor, valor, moeda, vencimento, 
+            etapa_atual, consolidacao_rm_numero
+          FROM dados_dachser.t_vouchers
+          WHERE voucher_master_id = ?
+          ORDER BY created_at ASC
+        `, [master_id]);
+
+        result = { success: true, vouchers: filhos || [] };
         break;
       }
 
