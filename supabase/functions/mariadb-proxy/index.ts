@@ -3814,6 +3814,58 @@ serve(async (req) => {
         break;
       }
 
+      // Admin action: Move all vouchers from one stage to another
+      case 'admin_bulk_update_etapa': {
+        const bulkBody = body as any;
+        const from_etapa = bulkBody.from_etapa as string;
+        const to_etapa = bulkBody.to_etapa as string;
+        const bulk_user_id = bulkBody.user_id as string | undefined;
+        const bulk_user_name = bulkBody.user_name as string | undefined;
+        
+        if (!from_etapa || !to_etapa) {
+          return new Response(
+            JSON.stringify({ error: 'from_etapa e to_etapa são obrigatórios' }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+        
+        console.log(`Admin bulk update: Moving vouchers from ${from_etapa} to ${to_etapa}`);
+        
+        // Count affected vouchers first
+        const countResult = await client.execute(`
+          SELECT COUNT(*) as total FROM dados_dachser.t_vouchers WHERE etapa_atual = ?
+        `, [from_etapa]);
+        
+        const affectedCount = (countResult.rows?.[0] as any)?.total || 0;
+        console.log(`Found ${affectedCount} vouchers in stage ${from_etapa}`);
+        
+        if (affectedCount > 0) {
+          // Update all vouchers
+          await client.execute(`
+            UPDATE dados_dachser.t_vouchers 
+            SET etapa_atual = ?, updated_at = NOW() 
+            WHERE etapa_atual = ?
+          `, [to_etapa, from_etapa]);
+          
+          // Log the bulk action
+          await client.execute(`
+            INSERT INTO dados_dachser.t_voucher_logs (
+              id, voucher_id, user_id, user_name, acao, detalhe, data_hora
+            ) VALUES (?, 'BULK_ACTION', ?, ?, 'BULK_ETAPA_CHANGE', ?, NOW())
+          `, [
+            crypto.randomUUID(),
+            bulk_user_id || null,
+            bulk_user_name || 'Admin',
+            `Alteração em massa: ${affectedCount} vouchers movidos de ${from_etapa} para ${to_etapa}`
+          ]);
+          
+          console.log(`Successfully moved ${affectedCount} vouchers from ${from_etapa} to ${to_etapa}`);
+        }
+        
+        result = { success: true, affectedCount };
+        break;
+      }
+
       case 'get_vouchers_esteira': {
         const { search, etapa, limit = 100, offset = 0 } = body as any;
         console.log('Fetching vouchers from dados_dachser.t_vouchers');
