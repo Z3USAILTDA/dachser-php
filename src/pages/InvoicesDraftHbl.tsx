@@ -1257,7 +1257,10 @@ export default function InvoicesDraftHbl() {
         <div id="analysis-results" className="space-y-6">
           <PageCard>
             <pre className="text-sm text-foreground whitespace-pre-wrap font-mono max-h-[600px] overflow-y-auto bg-black/30 p-4 rounded-lg">
-              {analysisResult.text?.replace(/```json\s*\{[^`]*"hbl_shipping_data"[^`]*\}\s*```/g, '').trim()}
+              {analysisResult.text
+                ?.replace(/```json\s*\{[^`]*"hbl_shipping_data"[^`]*\}\s*```/g, '')
+                .replace(/===\s*NCM_EXTRACTION_START\s*===[\s\S]*?===\s*NCM_EXTRACTION_END\s*===/g, '')
+                .trim()}
             </pre>
           </PageCard>
 
