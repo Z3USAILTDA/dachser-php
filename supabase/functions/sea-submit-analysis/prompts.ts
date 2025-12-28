@@ -1519,18 +1519,35 @@ DO NOT use placeholder text like "[Same structure]" - show FULL details for ALL.
 
 ★★★ CRITICAL: YOU MUST ALWAYS INCLUDE THIS EXACT NCM CODES SECTION ★★★
 
-At the end of EVERY analysis (before the final summary), include this section:
+At the end of EVERY analysis (before the final summary), include this section WITH EXACT MARKERS:
 
-NCM CODES:
-- HBL NCMs: [list of all unique 4-digit NCM prefixes found in HBL, sorted]
-- MBL NCMs: [list of all unique 4-digit NCM prefixes found in MBL, sorted]
-- Missing in MBL: [list of NCMs in HBL but not in MBL, or "none"]
-- Extra in MBL: [list of NCMs in MBL but not in HBL, or "none"]
-- Status: MATCH (if no missing/extra) or UPDATE REQUIRED (if discrepancies)
+=== NCM_EXTRACTION_START ===
+HBL_NCMs: [comma-separated list of ALL NCMs from HBL, both 4-digit and 8-digit, sorted alphabetically]
+MBL_NCMs: [comma-separated list of ALL NCMs from MBL, both 4-digit and 8-digit, sorted alphabetically]
+MISSING_IN_MBL: [comma-separated list of NCMs present in HBL but missing in MBL, or "none"]
+EXTRA_IN_MBL: [comma-separated list of NCMs present in MBL but not in HBL, or "none"]
+NCM_STATUS: MATCH | UPDATE_REQUIRED
+=== NCM_EXTRACTION_END ===
+
+EXAMPLE (correct):
+=== NCM_EXTRACTION_START ===
+HBL_NCMs: 3917, 3926, 4016, 40169990, 7307, 7318, 73182900, 7320, 7326, 7412, 7415, 74152900, 7419, 7616, 8302, 8412, 8414, 84149039, 8421, 8481, 84812090, 84818092, 8483, 8531, 8536, 8543, 8708, 9032
+MBL_NCMs: 3917, 3926, 4016, 7307, 7318, 7320, 7326, 7412, 7415, 7419, 7616, 8302, 8412, 8414, 8421, 8481, 8483, 8531, 8536, 8543, 8708, 9032
+MISSING_IN_MBL: 40169990, 73182900, 74152900, 84149039, 84812090, 84818092
+EXTRA_IN_MBL: none
+NCM_STATUS: UPDATE_REQUIRED
+=== NCM_EXTRACTION_END ===
+
+★★★ IMPORTANT RULES FOR NCM SECTION ★★★
+1. Include BOTH 4-digit and 8-digit NCMs - they are DIFFERENT codes
+2. Sort all lists alphabetically for consistency
+3. Compare as EXACT strings: "8481" ≠ "84812090"
+4. Never truncate or skip NCMs - list ALL of them
+5. Use the EXACT markers shown above for reliable parsing
 
 ★★★ THIS SECTION IS MANDATORY - NEVER SKIP IT ★★★
 
-6) NCM/HS CODES
+6) NCM/HS CODES (human-readable summary):
 - HBL NCMs: [list]
 - MBL NCMs: [list]
 - Missing in MBL: [list or "none"]

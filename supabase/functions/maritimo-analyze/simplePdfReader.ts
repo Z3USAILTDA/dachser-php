@@ -80,6 +80,7 @@ Return COMPLETE text extraction from ALL PAGES. Preserve structure.`;
       body: JSON.stringify({
         model: 'claude-3-5-haiku-20241022',
         max_tokens: 12000,
+        temperature: 0, // Zero for deterministic/consistent extraction
         messages: [
           {
             role: 'user',
@@ -193,6 +194,7 @@ Preserve the document structure and layout. Return COMPLETE, THOROUGH text extra
       body: JSON.stringify({
         model: 'claude-sonnet-4-5',
         max_tokens: 16000,
+        temperature: 0, // Zero for deterministic/consistent extraction
         messages: [
           {
             role: 'user',
