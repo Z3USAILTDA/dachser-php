@@ -1071,7 +1071,7 @@ NCM CODES:
 - Missing in HBL: none
 - Extra in HBL: 74152900, 84819090, 84818092, 85443000
 - Status: DIVERGENCE
-  → Update: Remove extra NCMs from HBL that are not in Manifest.
+  → Update: Remove extra NCM codes from HBL that are not in Manifest.
 
 EXAMPLE OF DIVERGENCE (HBL has extra 4-digit values):
 
@@ -1081,7 +1081,7 @@ NCM CODES:
 - Missing in HBL: none
 - Extra in HBL: 3926, 7318
 - Status: DIVERGENCE
-  → Update: Remove extra NCMs from HBL that are not in Manifest.
+  → Update: Remove extra NCM codes from HBL that are not in Manifest.
 
 EXAMPLE OF DIVERGENCE (Manifest has values missing in HBL):
 
@@ -1091,7 +1091,7 @@ NCM CODES:
 - Missing in HBL: 3926, 7318
 - Extra in HBL: none
 - Status: DIVERGENCE
-  → Update: Add missing NCMs to HBL to match Manifest.
+  → Update: Add missing NCM codes to HBL that are in Manifest.
 
 EXTRACTION RULES FOR NCM CODES:
 1. From MANIFEST: Extract ALL values from "HS Code" or "NCM Code" columns EXACTLY as they appear.
@@ -1100,6 +1100,10 @@ EXTRACTION RULES FOR NCM CODES:
 4. COMPARE AS LITERAL STRINGS - each value must be identical to be a match.
 5. Report Missing = items in Manifest not found in HBL.
 6. Report Extra = items in HBL not found in Manifest.
+7. ★★★ CRITICAL FOR UPDATE SUGGESTION ★★★: The Update text MUST be EXACTLY one of these two options:
+   - "Remove extra NCM codes from HBL that are not in Manifest."
+   - "Add missing NCM codes to HBL that are in Manifest."
+   NEVER mention "8-digit", "4-digit", "HS codes", or any digit count. Use ONLY the exact phrases above.
 
 ★★★ THIS SECTION IS MANDATORY - NEVER SKIP IT ★★★
 
