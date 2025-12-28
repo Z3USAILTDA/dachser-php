@@ -72,36 +72,32 @@ export const EditVoucherDialog = ({ open, onOpenChange, onSuccess, voucher }: Ed
         urgenciaTipo = "URGENTE_REAL";
       }
 
-      const { error } = await (supabase as any)
-        .from("vouchers")
-        .update({
-          numero_spo: formData.numeroSPO,
-          fornecedor: formData.fornecedor || null,
-          cnpj_fornecedor: formData.cnpjFornecedor || null,
-          valor: formData.valor ? parseFloat(formData.valor.replace(",", ".")) : null,
-          moeda: formData.moeda,
-          vencimento: new Date(formData.vencimento).toISOString(),
-          data_emissao_documento: formData.dataEmissaoDocumento ? new Date(formData.dataEmissaoDocumento).toISOString() : null,
-          cobranca_em_nome_de: formData.cobrancaEmNomeDe,
-          forma_pagamento: formData.formaPagamento,
-          tipo_documento: formData.tipoDocumento || null,
-          filial: formData.filial || null,
-          urgencia_tipo: urgenciaTipo,
-          updated_at: new Date().toISOString(),
-        })
-        .eq("id", voucher.id);
+      // Use mariadb-proxy to update voucher in MariaDB
+      const { data, error } = await supabase.functions.invoke("mariadb-proxy", {
+        body: {
+          action: "update_voucher_esteira",
+          voucher_id: voucher.id,
+          updates: {
+            numero_spo: formData.numeroSPO,
+            fornecedor: formData.fornecedor || null,
+            cnpj_fornecedor: formData.cnpjFornecedor || null,
+            valor: formData.valor ? parseFloat(formData.valor.replace(",", ".")) : null,
+            moeda: formData.moeda,
+            vencimento: formData.vencimento,
+            data_emissao_documento: formData.dataEmissaoDocumento || null,
+            cobranca_em_nome_de: formData.cobrancaEmNomeDe,
+            forma_pagamento: formData.formaPagamento,
+            tipo_documento: formData.tipoDocumento || null,
+            filial: formData.filial || null,
+            urgencia_tipo: urgenciaTipo,
+          },
+          user_id: userData?.user?.id,
+          user_name: userData?.user?.email,
+        },
+      });
 
       if (error) throw error;
-
-      // Log update
-      if (userData?.user) {
-        await (supabase as any).from("voucher_logs").insert({
-          voucher_id: voucher.id,
-          user_id: userData.user.id,
-          acao: "VOUCHER_EDITADO",
-          detalhe: `Voucher ${formData.numeroSPO} editado`,
-        });
-      }
+      if (!data?.success) throw new Error(data?.error || "Erro ao atualizar voucher");
 
       toast({
         title: "Voucher atualizado!",
