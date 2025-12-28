@@ -1284,6 +1284,26 @@ NCMs match ONLY if they are 100% IDENTICAL strings.
 - NO prefix matching, NO length normalization
 - Different lengths = different NCMs = DIVERGENCE
 
+STEP 4 - HANDLE 4-DIGIT vs 8-DIGIT NCMs SEPARATELY:
+HBL documents often contain BOTH short (4-digit) AND full (8-digit) NCM codes.
+MBL documents may only contain the short versions.
+
+CRITICAL RULE: A 4-digit NCM is NOT equivalent to an 8-digit NCM!
+- HBL has: 8708, 84812090, 84818092, 74152900
+- MBL has: 8708, 8481, 7415
+- Missing in MBL: 84812090, 84818092, 74152900 (these are DIFFERENT from 8481, 7415!)
+
+REAL EXAMPLE:
+- HBL NCMs: 8708, 8481, 8421, 8543, 4016, 8531, 3917, 7412, 9032, 3926, 7419, 8536, 8414, 8483, 7320, 7326, 7616, 4823, 8412, 7318, 7415, 8302, 7307, 84812090, 84818092, 74152900, 84149039, 40169990, 73182900
+- MBL NCMs: 8708, 8481, 8421, 8543, 4016, 8531, 3917, 7412, 9032, 3926, 7419, 8536, 8414, 8483, 7320, 7326, 7616, 4823, 8412, 7318, 7415, 8302, 7307
+- Missing in MBL: 84812090, 84818092, 74152900, 84149039, 40169990, 73182900
+- Extra in MBL: none
+- Status: UPDATE REQUIRED
+
+★ 8481 ≠ 84812090 - they are DIFFERENT NCMs! ★
+★ 7415 ≠ 74152900 - they are DIFFERENT NCMs! ★
+★ Always compare NCMs as exact strings, never as prefixes! ★
+
 ███████████████████████████████████████████████████████████████████████████████
 ███ ⚠️ CRITICAL: NCM LIST EXTRACTION - HANDLE PAGE BREAKS ⚠️                   ███
 ███████████████████████████████████████████████████████████████████████████████
