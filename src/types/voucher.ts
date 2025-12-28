@@ -1,6 +1,7 @@
 // DACHSER Voucher Types
 
 export type EtapaAtual = 
+  | "A_PROCESSAR"
   | "RASCUNHO"
   | "OPERACAO" 
   | "FISCAL" 
@@ -96,6 +97,7 @@ export type StatusIntegracaoRM = "PENDENTE" | "ENVIADO_T_DADOS_RM" | "PROCESSADO
 
 // Labels e SLAs configuráveis
 export const ETAPA_LABELS: Record<EtapaAtual, string> = {
+  A_PROCESSAR: "A Processar",
   RASCUNHO: "Rascunho",
   OPERACAO: "Voucher",
   FISCAL: "Fiscal",
@@ -109,6 +111,7 @@ export const ETAPA_LABELS: Record<EtapaAtual, string> = {
 };
 
 export const SLA_POR_ETAPA: Record<EtapaAtual, number> = {
+  A_PROCESSAR: 0,
   RASCUNHO: 0,
   OPERACAO: 24,
   FISCAL: 48,
