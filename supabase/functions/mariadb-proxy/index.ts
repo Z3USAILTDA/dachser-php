@@ -6135,7 +6135,7 @@ serve(async (req) => {
             dfv.cnpj,
             dfv.razao_social
           FROM dados_dachser.t_dados_financeiro_voucher dfv
-          LEFT JOIN dados_dachser.t_vouchers v ON dfv.nd = v.numero_spo
+          LEFT JOIN dados_dachser.t_vouchers v ON dfv.nd COLLATE utf8mb4_unicode_ci = v.numero_spo COLLATE utf8mb4_unicode_ci
           WHERE v.id IS NULL
           ORDER BY dfv.data_vencimento ASC
           LIMIT ?
