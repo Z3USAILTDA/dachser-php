@@ -3,7 +3,7 @@ import { Voucher, TipoAnexo } from "@/types/voucher";
 import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
-import { Send, AlertTriangle, RefreshCw, Loader2, Upload, MessageSquare, Edit } from "lucide-react";
+import { Send, AlertTriangle, RefreshCw, Loader2, Upload, MessageSquare, Edit, FileText, CheckCircle2 } from "lucide-react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { FileUpload } from "./FileUpload";
 import { EditVoucherDialog } from "./EditVoucherDialog";
@@ -47,6 +47,11 @@ export const VoucherOperacaoActions = ({ voucher, onUpdate }: VoucherOperacaoAct
   // Verificar se voucher está com RM pendente
   const isRmPendente = voucher.fonteDados === "RM_PENDENTE";
   const isAjusteOperacao = voucher.etapaAtual === "AJUSTE_OPERACAO";
+
+  // Verificar anexos obrigatórios
+  const hasFatura = voucher.anexos.some(a => a.tipo === "FATURA_DEMONSTRATIVO" || a.tipo === "FATURA");
+  const hasBoleto = voucher.anexos.some(a => a.tipo === "BOLETO_INSTRUCOES" || a.tipo === "BOLETO");
+  const canEnviar = hasFatura && hasBoleto && !isRmPendente;
 
   // Get user data from localStorage (MariaDB auth)
   const getUserData = () => {
@@ -313,76 +318,99 @@ export const VoucherOperacaoActions = ({ voucher, onUpdate }: VoucherOperacaoAct
         </Alert>
       )}
 
-      {/* Seção de Ajuste */}
-      {isAjusteOperacao && (
-        <>
-          {voucher.ajusteFiscal && (
-            <Alert className="bg-destructive/10 border-destructive/30">
-              <AlertTriangle className="h-4 w-4 text-destructive" />
-              <AlertTitle className="text-destructive">Ajuste solicitado pelo Fiscal</AlertTitle>
-              <AlertDescription className="mt-2 text-foreground">
-                {voucher.ajusteFiscal}
-              </AlertDescription>
-            </Alert>
-          )}
-
-          <Card className="border-primary/30 bg-primary/5">
-            <CardHeader className="pb-3">
-              <CardTitle className="text-base flex items-center gap-2 text-primary">
-                <MessageSquare className="h-5 w-5" />
-                Resposta ao Ajuste
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="resposta-ajuste">Descreva o que foi corrigido</Label>
-                <Textarea
-                  id="resposta-ajuste"
-                  placeholder="Ex: Anexos corrigidos conforme solicitado..."
-                  value={respostaAjuste}
-                  onChange={(e) => setRespostaAjuste(e.target.value)}
-                  className="min-h-[100px] bg-background"
-                />
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card className="border-warning/30 bg-warning/5">
-            <CardHeader className="pb-3">
-              <CardTitle className="text-base flex items-center gap-2 text-warning">
-                <Upload className="h-5 w-5" />
-                Adicionar Novos Anexos
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <p className="text-sm text-muted-foreground">
-                Exclua os anexos incorretos e adicione os novos aqui.
-              </p>
-              
-              <div className="flex items-center gap-3">
-                <label className="text-sm font-medium whitespace-nowrap">Tipo do anexo:</label>
-                <Select value={selectedTipo} onValueChange={(v) => setSelectedTipo(v as TipoAnexo)}>
-                  <SelectTrigger className="w-[200px]">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="FATURA_DEMONSTRATIVO">Fatura/Demonstrativo</SelectItem>
-                    <SelectItem value="BOLETO_INSTRUCOES">Boleto/Instruções</SelectItem>
-                    <SelectItem value="COMPROVANTE">Comprovante</SelectItem>
-                    <SelectItem value="OUTROS">Outros</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <FileUpload
-                label="Novo anexo"
-                multiple
-                onFileUpload={handleFileUpload}
-              />
-            </CardContent>
-          </Card>
-        </>
+      {/* Seção de Ajuste (quando retornado do Fiscal) */}
+      {isAjusteOperacao && voucher.ajusteFiscal && (
+        <Alert className="bg-destructive/10 border-destructive/30">
+          <AlertTriangle className="h-4 w-4 text-destructive" />
+          <AlertTitle className="text-destructive">Ajuste solicitado pelo Fiscal</AlertTitle>
+          <AlertDescription className="mt-2 text-foreground">
+            {voucher.ajusteFiscal}
+          </AlertDescription>
+        </Alert>
       )}
+
+      {isAjusteOperacao && (
+        <Card className="border-primary/30 bg-primary/5">
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base flex items-center gap-2 text-primary">
+              <MessageSquare className="h-5 w-5" />
+              Resposta ao Ajuste
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="resposta-ajuste">Descreva o que foi corrigido</Label>
+              <Textarea
+                id="resposta-ajuste"
+                placeholder="Ex: Anexos corrigidos conforme solicitado..."
+                value={respostaAjuste}
+                onChange={(e) => setRespostaAjuste(e.target.value)}
+                className="min-h-[100px] bg-background"
+              />
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Checklist de Anexos Obrigatórios */}
+      <Card className="border-[rgba(255,255,255,0.12)]" style={{ backgroundColor: 'rgba(5,6,18,0.9)' }}>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base flex items-center gap-2">
+            <FileText className="h-5 w-5 text-primary" />
+            Anexos Obrigatórios
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <div className="flex items-center gap-3">
+            <div className={`w-5 h-5 rounded-full flex items-center justify-center ${hasFatura ? 'bg-green-500/20 text-green-500' : 'bg-muted text-muted-foreground'}`}>
+              {hasFatura ? <CheckCircle2 className="h-4 w-4" /> : '○'}
+            </div>
+            <span className={hasFatura ? 'text-foreground' : 'text-muted-foreground'}>
+              Fatura / Demonstrativo
+            </span>
+          </div>
+          <div className="flex items-center gap-3">
+            <div className={`w-5 h-5 rounded-full flex items-center justify-center ${hasBoleto ? 'bg-green-500/20 text-green-500' : 'bg-muted text-muted-foreground'}`}>
+              {hasBoleto ? <CheckCircle2 className="h-4 w-4" /> : '○'}
+            </div>
+            <span className={hasBoleto ? 'text-foreground' : 'text-muted-foreground'}>
+              Boleto / Instruções de Pagamento
+            </span>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Seção de Upload de Anexos - Sempre Visível */}
+      <Card className="border-primary/30 bg-primary/5">
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base flex items-center gap-2 text-primary">
+            <Upload className="h-5 w-5" />
+            Adicionar Anexos
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="flex items-center gap-3">
+            <label className="text-sm font-medium whitespace-nowrap">Tipo do anexo:</label>
+            <Select value={selectedTipo} onValueChange={(v) => setSelectedTipo(v as TipoAnexo)}>
+              <SelectTrigger className="w-[200px]">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="FATURA_DEMONSTRATIVO">Fatura/Demonstrativo</SelectItem>
+                <SelectItem value="BOLETO_INSTRUCOES">Boleto/Instruções</SelectItem>
+                <SelectItem value="COMPROVANTE">Comprovante</SelectItem>
+                <SelectItem value="OUTROS">Outros</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          <FileUpload
+            label="Selecionar arquivo"
+            multiple
+            onFileUpload={handleFileUpload}
+          />
+        </CardContent>
+      </Card>
 
       <div className="flex items-center justify-between">
         <div>
@@ -392,7 +420,9 @@ export const VoucherOperacaoActions = ({ voucher, onUpdate }: VoucherOperacaoAct
               ? "Sincronize os dados do RM para liberar o envio" 
               : isAjusteOperacao
                 ? "Corrija os anexos e reenvie o voucher"
-                : "Revise os dados e anexos antes de enviar"}
+                : canEnviar 
+                  ? "Anexos completos! Você pode enviar o voucher." 
+                  : "Adicione os anexos obrigatórios para enviar."}
           </p>
         </div>
       </div>
@@ -408,7 +438,7 @@ export const VoucherOperacaoActions = ({ voucher, onUpdate }: VoucherOperacaoAct
         </Button>
         <Button
           onClick={() => setShowConfirm(true)}
-          disabled={loading || isRmPendente}
+          disabled={loading || !canEnviar}
           className="gap-2 bg-primary hover:bg-primary/90"
         >
           <Send className="h-4 w-4" />
