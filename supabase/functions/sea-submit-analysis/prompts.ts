@@ -1094,13 +1094,12 @@ NCM CODES:
   → Update: Add missing NCMs to HBL to match Manifest.
 
 EXTRACTION RULES FOR NCM CODES:
-1. From MANIFEST: Extract ALL values from "NCM Code" column EXACTLY as they appear. Do NOT use "HS Code" column.
+1. From MANIFEST: Extract ALL values from "HS Code" or "NCM Code" columns EXACTLY as they appear.
 2. From HBL: Extract ALL NCM values from NCM-CODES section and cargo descriptions EXACTLY as they appear.
 3. DEDUPLICATE before comparison.
 4. COMPARE AS LITERAL STRINGS - each value must be identical to be a match.
 5. Report Missing = items in Manifest not found in HBL.
 6. Report Extra = items in HBL not found in Manifest.
-7. For Update suggestion, NEVER mention digit counts or HS codes. Just say "Remove extra NCMs from HBL" or "Add missing NCMs to HBL".
 
 ★★★ THIS SECTION IS MANDATORY - NEVER SKIP IT ★★★
 
