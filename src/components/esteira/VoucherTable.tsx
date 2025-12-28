@@ -44,6 +44,7 @@ interface VoucherTableProps {
   canDelete?: boolean;
   canGoBackStage?: boolean;
   canCancelVoucher?: boolean;
+  lastUpdateTime?: Date | null;
 }
 
 const getEtapaColor = (etapa: string) => {
@@ -109,7 +110,7 @@ const getSlaColor = (status: "ok" | "warning" | "critical") => {
   return colors[status];
 };
 
-export const VoucherTable = ({ vouchers, onViewDetails, onEdit, onDelete, onGoBack, onCancel, filters, onFilterChange, canEdit = true, canDelete = true, canGoBackStage = false, canCancelVoucher = false }: VoucherTableProps) => {
+export const VoucherTable = ({ vouchers, onViewDetails, onEdit, onDelete, onGoBack, onCancel, filters, onFilterChange, canEdit = true, canDelete = true, canGoBackStage = false, canCancelVoucher = false, lastUpdateTime }: VoucherTableProps) => {
   const [sortField, setSortField] = useState<SortField>("createdAt");
   const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
   const [currentPage, setCurrentPage] = useState(1);
@@ -471,8 +472,13 @@ export const VoucherTable = ({ vouchers, onViewDetails, onEdit, onDelete, onGoBa
         {/* Pagination */}
         {sortedVouchers.length > PAGE_SIZE && (
           <div className="p-4 border-t border-[rgba(255,255,255,.08)] flex items-center justify-between bg-[rgba(0,0,0,.3)]">
-            <div className="text-[0.78rem] text-[#aaaaaa]">
-              Página {currentPage} de {totalPages} | Total: {sortedVouchers.length} vouchers
+            <div className="text-[0.78rem] text-[#aaaaaa] flex items-center gap-3">
+              <span>Página {currentPage} de {totalPages} | Total: {sortedVouchers.length} vouchers</span>
+              {lastUpdateTime && (
+                <span className="text-[#666]">
+                  | Última atualização: {lastUpdateTime.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+                </span>
+              )}
             </div>
             <TablePagination
               currentPage={currentPage}

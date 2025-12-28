@@ -1729,14 +1729,8 @@ const EsteiraIndex = () => {
                       canDelete={canDeleteVoucher}
                       canGoBackStage={canGoBackStage}
                       canCancelVoucher={canCancelVoucher}
+                      lastUpdateTime={lastUpdateTime}
                     />
-                    {lastUpdateTime && (
-                      <div className="flex justify-end px-4 py-2 border-t border-[rgba(255,255,255,0.08)]">
-                        <span className="text-[0.7rem] text-[#666] whitespace-nowrap">
-                          Última atualização: {lastUpdateTime.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
-                        </span>
-                      </div>
-                    )}
                 </div>
               )}
             </div>
