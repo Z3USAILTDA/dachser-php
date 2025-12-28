@@ -62,6 +62,7 @@ import { RoboTab } from "@/components/tabs/RoboTab";
 import { ReportsTab } from "@/components/tabs/ReportsTab";
 // Removed: FaturasDoDiaTab - apenas Pagamentos agora
 import { PagamentosTab } from "@/components/esteira/PagamentosTab";
+import { BacklogTab } from "@/components/esteira/BacklogTab";
 import { MetricCard } from "@/components/cct/MetricCard";
 import {
   DropdownMenu,
@@ -751,7 +752,7 @@ const EsteiraIndex = () => {
   const [vouchers, setVouchers] = useState<Voucher[]>([]);
   const [loading, setLoading] = useState(true);
   const [isRefetching, setIsRefetching] = useState(false);
-  const [activeTab, setActiveTab] = useState<"processos" | "dashboard" | "analytics" | "robo" | "relatorios" | "faturas" | "pagamentos">(
+  const [activeTab, setActiveTab] = useState<"backlog" | "processos" | "dashboard" | "analytics" | "robo" | "relatorios" | "faturas" | "pagamentos">(
     "processos",
   );
   const [filters, setFilters] = useState<FilterValues>({
@@ -1437,6 +1438,11 @@ const EsteiraIndex = () => {
           <nav className="flex items-center gap-1 px-2 py-1.5 rounded-full bg-[rgba(5,6,18,0.85)] border border-white/10 backdrop-blur-sm w-fit">
             {[
               {
+                id: "backlog" as const,
+                label: "A Processar",
+                icon: Package,
+              },
+              {
                 id: "processos" as const,
                 label: "Processos",
                 icon: List,
@@ -1570,6 +1576,11 @@ const EsteiraIndex = () => {
             </div>
           )}
 
+          {activeTab === "backlog" && (
+            <div className="rounded-2xl p-5 bg-[rgba(5,6,18,0.9)] border border-[rgba(255,255,255,0.12)] backdrop-blur-[18px] shadow-[0_18px_40px_rgba(0,0,0,0.85)]">
+              <BacklogTab onVoucherImported={loadVouchers} />
+            </div>
+          )}
           {activeTab === "dashboard" && <DashboardTab vouchers={vouchers} />}
           {activeTab === "analytics" && <AnalyticsDashboard vouchers={vouchers} />}
           {activeTab === "robo" && <RoboTab />}

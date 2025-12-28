@@ -6108,6 +6108,154 @@ serve(async (req) => {
         break;
       }
 
+      // ==================== GET VOUCHERS PENDENTES RM ====================
+      case 'get_vouchers_pendentes_rm': {
+        // Busca vouchers da t_dados_financeiro_voucher que não existem na t_vouchers
+        // Esses são os vouchers "A Processar" - backlog do RM
+        console.log('Fetching pending RM vouchers not yet in esteira...');
+        
+        const { limit = 100 } = body as { limit?: number };
+
+        const pendentes = await client.query(`
+          SELECT 
+            dfv.id_rm,
+            dfv.nd,
+            dfv.documento,
+            dfv.nome_beneficiario,
+            dfv.nome_cobranca,
+            dfv.numero_nf,
+            dfv.numero_processo,
+            dfv.modal,
+            dfv.tipo_pag,
+            dfv.forma_pag,
+            dfv.data_emissao,
+            dfv.data_vencimento,
+            dfv.valor_nf,
+            dfv.moeda,
+            dfv.cnpj,
+            dfv.razao_social
+          FROM dados_dachser.t_dados_financeiro_voucher dfv
+          LEFT JOIN dados_dachser.t_vouchers v ON dfv.nd = v.numero_spo
+          WHERE v.id IS NULL
+          ORDER BY dfv.data_vencimento ASC
+          LIMIT ?
+        `, [limit]);
+
+        console.log(`Found ${pendentes?.length || 0} pending RM vouchers`);
+        result = { success: true, data: pendentes || [], count: pendentes?.length || 0 };
+        break;
+      }
+
+      // ==================== IMPORT VOUCHER FROM RM ====================
+      case 'import_voucher_from_rm': {
+        // Importa um voucher pendente do RM para a esteira como OPERACAO
+        const importBody = body as unknown as { 
+          nd?: string; 
+          user_id?: string; 
+          user_name?: string;
+        };
+        const nd = importBody.nd;
+        const user_id = importBody.user_id;
+        const user_name = importBody.user_name;
+
+        if (!nd) {
+          return new Response(
+            JSON.stringify({ error: 'nd (número documento) é obrigatório' }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+
+        // Buscar dados do RM
+        const rmData = await client.query(`
+          SELECT 
+            id_rm, nd, documento, nome_beneficiario, nome_cobranca, numero_nf,
+            numero_processo, modal, tipo_pag, forma_pag, data_emissao,
+            data_vencimento, valor_nf, moeda, cnpj, razao_social
+          FROM dados_dachser.t_dados_financeiro_voucher
+          WHERE nd = ?
+          LIMIT 1
+        `, [nd]);
+
+        if (!rmData || rmData.length === 0) {
+          return new Response(
+            JSON.stringify({ error: 'Voucher não encontrado no RM' }),
+            { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+
+        const rm = rmData[0];
+        const voucherId = crypto.randomUUID();
+
+        // Mapear forma_pag para FormaPagamento
+        const mapFormaPag = (fp: string | null): string => {
+          const mapping: Record<string, string> = {
+            'BOL': 'BOLETO',
+            'BOLETO': 'BOLETO',
+            'PIX': 'PIX',
+            'TED': 'TRANSFERENCIA',
+            'TRANSF': 'TRANSFERENCIA',
+            'DEBITO': 'DEBITO',
+            'CAMBIO': 'CAMBIO',
+            'DARF': 'DARF',
+            'GPS': 'GPS',
+          };
+          return mapping[(fp || '').toUpperCase()] || 'BOLETO';
+        };
+
+        // Mapear tipo_pag para TipoDocumento  
+        const mapTipoDoc = (tp: string | null): string => {
+          const mapping: Record<string, string> = {
+            'NF': 'NOTA_FISCAL',
+            'FAT': 'FATURA',
+            'FATURA': 'FATURA',
+            'DEM': 'DEMONSTRATIVO',
+            'NFS': 'NF_SERVICO',
+          };
+          return mapping[(tp || '').toUpperCase()] || 'FATURA';
+        };
+
+        // Inserir na t_vouchers
+        await client.execute(`
+          INSERT INTO dados_dachser.t_vouchers (
+            id, numero_spo, fornecedor, cnpj_fornecedor, valor, moeda,
+            vencimento, data_emissao_documento, forma_pagamento, tipo_documento,
+            cobranca_em_nome_de, etapa_atual, status_baixa, urgencia_tipo,
+            origem_criacao, processo_id, criado_por_user_id, created_at, updated_at
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'OPERACAO', 'PENDENTE', 'NORMAL', 'RM', ?, ?, NOW(), NOW())
+        `, [
+          voucherId,
+          rm.nd,
+          rm.nome_beneficiario || rm.razao_social,
+          rm.cnpj,
+          rm.valor_nf || 0,
+          rm.moeda || 'BRL',
+          rm.data_vencimento,
+          rm.data_emissao,
+          mapFormaPag(rm.forma_pag),
+          mapTipoDoc(rm.tipo_pag),
+          rm.nome_cobranca === 'CLIENTE' ? 'CLIENTE' : 'DACHSER',
+          rm.numero_processo,
+          user_id
+        ]);
+
+        // Log de criação
+        await client.execute(`
+          INSERT INTO dados_dachser.t_voucher_logs (
+            id, voucher_id, user_id, user_name, acao, detalhe, data_hora
+          ) VALUES (?, ?, ?, ?, 'IMPORTADO_RM', ?, NOW())
+        `, [
+          crypto.randomUUID(),
+          voucherId,
+          user_id || null,
+          user_name || 'Sistema',
+          `Voucher importado do RM. ND: ${rm.nd}, ID_RM: ${rm.id_rm || 'N/A'}`
+        ]);
+
+        console.log(`Imported voucher ${rm.nd} from RM as ${voucherId}`);
+        result = { success: true, voucherId, numeroSPO: rm.nd };
+        break;
+      }
+
       default:
         return new Response(
           JSON.stringify({ error: `Ação não suportada: ${action}` }),
