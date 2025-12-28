@@ -47,15 +47,26 @@ async function extractWithHaiku(fileUrl: string, fileName: string, pdfBuffer: Ar
     
     const base64Pdf = arrayBufferToBase64Chunked(pdfBuffer);
 
-    const extractionPrompt = `Extract ALL visible text from this maritime document. Include:
+    const extractionPrompt = `Extract ALL visible text from this maritime document. SCAN EVERY PAGE (1 to N).
+
+CRITICAL - NCM/HS CODES EXTRACTION:
+- NCM codes may span MULTIPLE PAGES (e.g., starts on page 9, continues on page 10)
+- Look for "NCM-CODES:", "NCM CODES:", "HS-CODE:" labels on ANY page
+- Look for "Sheet X of Y" or "Continued From Previous Sheet" indicators
+- Extract EVERY NCM code from ALL pages - do NOT stop at page breaks
+- NCMs are typically 4 or 8 digit numbers like: 8708, 8481, 84812090, 73182900
+
+Include ALL of:
 - Company names, addresses
 - Shipper, Consignee, Notify Party
 - Container numbers (4 letters + 7 digits)
 - Vessel, voyage, ports
 - Weights, measurements, package counts
-- Invoice numbers, NCM/HS codes
+- Invoice numbers
+- ALL NCM/HS codes from ALL pages
 - All dates and reference numbers
-Return complete text extraction, preserve structure.`;
+
+Return COMPLETE text extraction from ALL PAGES. Preserve structure.`;
 
     const startTime = Date.now();
     
@@ -132,9 +143,25 @@ async function extractWithSonnet(fileUrl: string, fileName: string, pdfBuffer: A
     
     const base64Pdf = arrayBufferToBase64Chunked(pdfBuffer);
 
-    const extractionPrompt = `Extract ALL text content from this maritime shipping document (Bill of Lading, Manifest, Invoice, etc.). 
+    const extractionPrompt = `Extract ALL text content from this maritime shipping document (Bill of Lading, Manifest, Invoice, etc.).
+SCAN EVERY PAGE from first to last.
 
-CRITICAL: Extract EVERY piece of visible text including:
+╔══════════════════════════════════════════════════════════════════════════════╗
+║ CRITICAL: NCM/HS CODES EXTRACTION - READ ALL PAGES                          ║
+╚══════════════════════════════════════════════════════════════════════════════╝
+
+NCM codes are OFTEN SPLIT ACROSS MULTIPLE PAGES. You MUST:
+1. Look for "NCM-CODES:", "NCM CODES:", "HS-CODE:" on ANY page
+2. Look for "Sheet X of Y" - if Y > 1, check ALL sheets
+3. Look for "Continued From Previous Sheet" indicators
+4. Extract NCMs from EVERY page where they appear
+
+EXAMPLE from real document:
+- Page 9: NCM-CODES: 8708, 8481, 8421, 8543, 4016, 8531, 3917 (Sheet 9 of 10)
+- Page 10: 7412, 9032, 3926, 7419, 8536, 8414, 8483... (Sheet 10 of 10)
+- COMPLETE LIST: [8708, 8481, 8421, 8543, 4016, 8531, 3917, 7412, 9032, 3926, ...]
+
+Extract EVERY piece of visible text including:
 - Company names, addresses, contact information
 - Shipper, Consignee, Notify Party details
 - Container numbers (format: 4 letters + 7 digits)
@@ -145,14 +172,14 @@ CRITICAL: Extract EVERY piece of visible text including:
 - Gross weight, net weight, measurements (CBM/volume)
 - Freight terms and charges
 - Invoice numbers, reference numbers, PO numbers
-- NCM/HS codes (8-digit codes)
+- NCM/HS codes (4-digit AND 8-digit codes from ALL pages)
 - Dates: Shipped on Board, Date of Issue, ETD, ETA
 - Bill of Lading numbers (HBL, MBL, Master BL)
 - Marks and numbers
 - Any tables, lists, or structured data
 - Footer information, page numbers, document identifiers
 
-Preserve the document structure and layout. Return COMPLETE, THOROUGH text extraction - do not summarize or skip any information.`;
+Preserve the document structure and layout. Return COMPLETE, THOROUGH text extraction - do not summarize or skip any page.`;
 
     const startTime = Date.now();
 
