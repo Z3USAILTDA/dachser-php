@@ -1024,6 +1024,29 @@ const EsteiraIndex = () => {
     }
   }, [hasEsteiraAccess]);
 
+  // Reload vouchers when page becomes visible (tab switch, window focus, page refresh)
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible' && hasEsteiraAccess && !loading) {
+        loadVouchers();
+      }
+    };
+
+    const handleFocus = () => {
+      if (hasEsteiraAccess && !loading) {
+        loadVouchers();
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    window.addEventListener('focus', handleFocus);
+
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('focus', handleFocus);
+    };
+  }, [hasEsteiraAccess, loading]);
+
   // Apply role-based filtering first
   const roleFilteredVouchers = useMemo(() => {
     if (isAdmin || isGestor) {
