@@ -1199,16 +1199,10 @@ const EsteiraIndex = () => {
         if (error) throw error;
         if (!data?.success) throw new Error(data?.error || "Erro ao importar voucher");
 
-        toast({
-          title: "Voucher importado",
-          description: `Voucher ${voucher.numeroSPO} foi adicionado à esteira.`,
-        });
-
         // Navigate to the newly created voucher
-        if (data?.voucher_id) {
-          navigate(`/fin/esteira/voucher/${data.voucher_id}`);
+        if (data?.voucherId) {
+          navigate(`/fin/esteira/voucher/${data.voucherId}`);
         } else {
-          // Reload and try to find the voucher
           loadVouchers();
         }
         return;
@@ -1240,14 +1234,9 @@ const EsteiraIndex = () => {
         if (error) throw error;
         if (!data?.success) throw new Error(data?.error || "Erro ao importar voucher");
 
-        toast({
-          title: "Voucher importado",
-          description: `Voucher ${voucher.numeroSPO} foi adicionado à esteira. Abrindo edição...`,
-        });
-
         // Update local voucher with new ID and open edit dialog
-        if (data?.voucher_id) {
-          const updatedVoucher = { ...voucher, id: data.voucher_id, etapaAtual: "OPERACAO" as const, fonteDados: undefined };
+        if (data?.voucherId) {
+          const updatedVoucher = { ...voucher, id: data.voucherId, etapaAtual: "OPERACAO" as const, fonteDados: undefined };
           setSelectedVoucher(updatedVoucher);
           setShowEditDialog(true);
           loadVouchers();
