@@ -6256,6 +6256,115 @@ serve(async (req) => {
         break;
       }
 
+      case 'update_voucher_esteira': {
+        const { voucher_id, updates, user_id, user_name } = body as {
+          voucher_id: string;
+          updates: {
+            numero_spo?: string;
+            fornecedor?: string;
+            cnpj_fornecedor?: string;
+            valor?: number;
+            moeda?: string;
+            vencimento?: string;
+            data_emissao_documento?: string;
+            cobranca_em_nome_de?: string;
+            forma_pagamento?: string;
+            tipo_documento?: string;
+            filial?: string;
+            urgencia_tipo?: string;
+          };
+          user_id?: string;
+          user_name?: string;
+        };
+
+        if (!voucher_id) {
+          return new Response(
+            JSON.stringify({ error: 'voucher_id é obrigatório' }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+
+        console.log(`Updating voucher ${voucher_id} with:`, updates);
+
+        const setClauses: string[] = [];
+        const params: any[] = [];
+
+        if (updates.numero_spo !== undefined) {
+          setClauses.push('numero_spo = ?');
+          params.push(updates.numero_spo);
+        }
+        if (updates.fornecedor !== undefined) {
+          setClauses.push('fornecedor = ?');
+          params.push(updates.fornecedor);
+        }
+        if (updates.cnpj_fornecedor !== undefined) {
+          setClauses.push('cnpj_fornecedor = ?');
+          params.push(updates.cnpj_fornecedor);
+        }
+        if (updates.valor !== undefined) {
+          setClauses.push('valor = ?');
+          params.push(updates.valor);
+        }
+        if (updates.moeda !== undefined) {
+          setClauses.push('moeda = ?');
+          params.push(updates.moeda);
+        }
+        if (updates.vencimento !== undefined) {
+          setClauses.push('vencimento = ?');
+          params.push(updates.vencimento);
+        }
+        if (updates.data_emissao_documento !== undefined) {
+          setClauses.push('data_emissao_documento = ?');
+          params.push(updates.data_emissao_documento);
+        }
+        if (updates.cobranca_em_nome_de !== undefined) {
+          setClauses.push('cobranca_em_nome_de = ?');
+          params.push(updates.cobranca_em_nome_de);
+        }
+        if (updates.forma_pagamento !== undefined) {
+          setClauses.push('forma_pagamento = ?');
+          params.push(updates.forma_pagamento);
+        }
+        if (updates.tipo_documento !== undefined) {
+          setClauses.push('tipo_documento = ?');
+          params.push(updates.tipo_documento);
+        }
+        if (updates.filial !== undefined) {
+          setClauses.push('filial = ?');
+          params.push(updates.filial);
+        }
+        if (updates.urgencia_tipo !== undefined) {
+          setClauses.push('urgencia_tipo = ?');
+          params.push(updates.urgencia_tipo);
+        }
+
+        setClauses.push('updated_at = NOW()');
+        params.push(voucher_id);
+
+        await client.execute(`
+          UPDATE dados_dachser.t_vouchers
+          SET ${setClauses.join(', ')}
+          WHERE id = ?
+        `, params);
+
+        // Log the update
+        await client.execute(`
+          INSERT INTO dados_dachser.t_voucher_logs (
+            id, voucher_id, user_id, user_name, acao, detalhe, data_hora
+          ) VALUES (?, ?, ?, ?, 'VOUCHER_EDITADO', ?, NOW())
+        `, [
+          crypto.randomUUID(),
+          voucher_id,
+          user_id || null,
+          user_name || 'Sistema',
+          `Voucher editado. Campos alterados: ${Object.keys(updates).filter(k => (updates as any)[k] !== undefined).join(', ')}`
+        ]);
+
+        console.log(`Voucher ${voucher_id} updated successfully`);
+        result = { success: true };
+        break;
+      }
+
       default:
         return new Response(
           JSON.stringify({ error: `Ação não suportada: ${action}` }),
