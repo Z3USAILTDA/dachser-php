@@ -205,7 +205,7 @@ export async function extractXlsxText(fileUrl: string, fileName: string): Promis
             }
           }
           
-          // Convert to CSV for full text extraction
+          // Convert to CSV for full text extraction (for AI analysis context)
           const csv = XLSX.utils.sheet_to_csv(sheet);
           const lines = csv.split('\n')
             .filter(line => line.trim().length > 0)
@@ -217,9 +217,8 @@ export async function extractXlsxText(fileUrl: string, fileName: string): Promis
             fullText += sheetText.substring(0, remainingChars);
             totalRows += lines.length;
             
-            // Also extract NCMs from full text as fallback
-            const textNCMs = extractNCMCodes(sheetText);
-            allNCMCodes.push(...textNCMs);
+            // DO NOT extract NCMs from full text - ONLY use identified NCM columns
+            // The HS Code column values would pollute the NCM list
           }
           
           console.log(`[XLSX] "${sheetName}": ${lines.length} rows`);
