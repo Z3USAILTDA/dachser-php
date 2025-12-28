@@ -1424,11 +1424,12 @@ DOCUMENT STRUCTURE DIFFERENCES:
    - COMPARISON RULE: Normalize to PREPAID or COLLECT before comparing
 
 9) NCM/HS CODES - CRITICAL EXTRACTION RULE:
-   - Look for 8-digit codes in cargo/goods description area
+   - Look for NCM/HS codes in cargo/goods description area of ANY length (4-digit, 8-digit, etc.)
    - Search keywords: "NCM", "HS", "HS CODE", "HSCODE", "H.S.", "TARIC", "TARIFF"
    - Use ±60 character context window around keywords
-   - Extract ALL unique 8-digit codes from each document
-   - COMPARISON RULE: Compare the SETS of codes, not their order or formatting
+   - Extract ALL unique codes from each document EXACTLY as they appear (preserve original length)
+   - Include BOTH 4-digit codes (like 8481) AND 8-digit codes (like 84819090)
+   - COMPARISON RULE: Compare as literal strings - "8481" ≠ "84819090" (different values!)
 
 ███████████████████████████████████████████████████████████████████████████████
 ███ MASTER EXTRACTION RULE - APPLY TO ALL FIELDS                            ███
@@ -1457,7 +1458,7 @@ WHAT IS VERIFIED IN HBL × MBL ANALYSIS:
 - Routing & Vessel/Voyage (Vessel name, Voyage number, Port of Loading, Port of Discharge)
 - Container & Seal (Container ISO 6346 number - MANDATORY, Seal number)
 - Totals (Packages, Gross Weight, Measurement/CBM)
-- NCM/HS Codes (8-digit codes extracted from cargo descriptions - MANDATORY)
+- NCM/HS Codes (codes of any length extracted from cargo descriptions - MANDATORY)
 - Freight Terms
 - Dates (Shipped on Board, Date of Issue, chronology check)
 
@@ -1508,11 +1509,12 @@ NOTE: Extract Vessel and Voyage SEPARATELY. If HBL has combined "VESSEL / VOYAGE
 - Container Nº: HBL = "<XXXX1234567>"  |  MBL = "<XXXX1234567>"  → Status: [MATCH ✓ or UPDATE REQUIRED: …]
 - Seal Nº: HBL = "<…>"  |  MBL = "<…>"  → Status: [MATCH ✓ or UPDATE REQUIRED: …]
 
-3a) NCM/HS Codes (MANDATORY - ALWAYS INCLUDE)
-- MBL NCMs (reference): [sorted unique list of 8-digit codes]
-- HBL NCMs detected: [sorted unique list of 8-digit codes]
-- Missing in HBL: [list or "none"]  |  Extra in HBL: [list or "none"]
-- Status: [MATCH ✓ or DISCREPANCIES FOUND - Update: Align HBL NCM codes to match MBL: [target list]]
+3a) NCM CODES (MANDATORY - ALWAYS INCLUDE)
+- HBL NCMs: [list ALL NCM codes exactly as they appear in HBL, sorted - include both 4-digit and 8-digit codes]
+- MBL NCMs: [list ALL NCM codes exactly as they appear in MBL, sorted - include both 4-digit and 8-digit codes]
+- Missing in MBL: [NCMs that appear in HBL but have NO 100% identical match in MBL, or "none"]
+- Extra in MBL: [NCMs that appear in MBL but have NO 100% identical match in HBL, or "none"]
+- Status: MATCH (if lists are 100% identical) or UPDATE REQUIRED (if ANY difference)
 
 4) Totals (MANDATORY - ALWAYS INCLUDE)
 - Packages: HBL = <n>  |  MBL = <n>  |  Delta: <signed n>  → Status: [MATCH ✓ or UPDATE REQUIRED: Set <doc> to <n>]
@@ -1535,14 +1537,28 @@ NOTE: Extract Vessel and Voyage SEPARATELY. If HBL has combined "VESSEL / VOYAGE
 
 ★★★ CRITICAL: YOU MUST ALWAYS INCLUDE THIS EXACT NCM CODES SECTION ★★★
 
-NCM CODES:
-- HBL NCMs: [list ALL NCM codes exactly as they appear in HBL, sorted]
-- MBL NCMs: [list ALL NCM codes exactly as they appear in MBL, sorted]
-- Missing in MBL: [NCMs in HBL with NO 100% identical match in MBL, or "none"]
-- Extra in MBL: [NCMs in MBL with NO 100% identical match in HBL, or "none"]
-- Status: MATCH (if lists are 100% identical) or DIVERGENCE (if ANY difference)
+NCM CODES
+- HBL NCMs: [list ALL NCM codes exactly as they appear in HBL, sorted - include ALL codes: 4-digit, 8-digit, any length]
+- MBL NCMs: [list ALL NCM codes exactly as they appear in MBL, sorted - include ALL codes: 4-digit, 8-digit, any length]
+- Missing in MBL: [NCMs that appear in HBL but NOT in MBL, or "none"]
+- Extra in MBL: [NCMs that appear in MBL but NOT in HBL, or "none"]
+- Status: MATCH (if lists are 100% identical) or UPDATE REQUIRED (if ANY difference)
 
-COMPARISON RULE: NCMs match ONLY if 100% identical strings. "8708" ≠ "87089900"
+★★★ NCM EXTRACTION RULES FOR HBL x MBL ★★★
+1. Extract ALL NCM/HS codes from both documents exactly as they appear
+2. Include codes of ANY length: 4-digit (8481), 8-digit (84819090), or any other format
+3. DO NOT truncate or normalize code lengths - preserve exactly as written
+4. Compare as literal strings: "8481" ≠ "84819090" (different codes!)
+5. A code is "Missing in MBL" if it appears in HBL but not in MBL
+6. A code is "Extra in MBL" if it appears in MBL but not in HBL
+
+EXAMPLE OUTPUT:
+NCM CODES
+- HBL NCMs: 8481, 8483, 8414, 8708, 3926, 7318, 8526, 8543, 8536, 8421, 7419, 9026, 9032, 3917, 7412, 7326, 8412, 8544, 7320, 74152900, 84819090, 84818092, 85443000
+- MBL NCMs: 8481, 8483, 8414, 8708, 3926, 7318, 8526, 8421, 7419, 9026, 9032, 3917, 7412, 7326, 8412, 7320, 9032
+- Missing in MBL: 8543, 8536, 8544, 74152900, 84819090, 84818092, 85443000
+- Extra in MBL: none
+- Status: UPDATE REQUIRED
 
 ★★★ THIS SECTION IS MANDATORY - NEVER SKIP IT ★★★
 
