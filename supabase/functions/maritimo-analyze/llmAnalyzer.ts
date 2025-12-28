@@ -20,6 +20,98 @@ interface FileInfo {
 }
 
 /**
+ * Normalize NCM codes for consistent comparison
+ * - Removes non-numeric characters (dots, dashes, spaces, slashes)
+ * - Deduplicates entries
+ * - Sorts alphabetically
+ * - Validates format (only digits, 4-8 characters)
+ */
+export function normalizeNCMList(ncmCodes: string[]): string[] {
+  const normalized = ncmCodes
+    .map(ncm => {
+      // Remove all non-digit characters
+      const cleaned = ncm.replace(/\D/g, '');
+      return cleaned;
+    })
+    .filter(ncm => {
+      // Valid NCM: only digits, 4-8 characters
+      const isValid = /^\d{4,8}$/.test(ncm);
+      if (!isValid && ncm.length > 0) {
+        console.log(`[NCM] Invalid format rejected: "${ncm}"`);
+      }
+      return isValid;
+    });
+
+  // Deduplicate
+  const unique = [...new Set(normalized)];
+  
+  // Sort for consistent ordering
+  unique.sort((a, b) => a.localeCompare(b));
+  
+  console.log(`[NCM] Normalized: ${ncmCodes.length} input → ${unique.length} unique valid codes`);
+  return unique;
+}
+
+/**
+ * Check NCM extraction completeness
+ * Returns warning if one document has significantly fewer NCMs than expected
+ */
+export function checkNCMCompleteness(
+  doc1NCMs: string[],
+  doc1Name: string,
+  doc2NCMs: string[],
+  doc2Name: string
+): { isComplete: boolean; warning?: string } {
+  const count1 = doc1NCMs.length;
+  const count2 = doc2NCMs.length;
+  
+  console.log(`[NCM Completeness] ${doc1Name}: ${count1} NCMs, ${doc2Name}: ${count2} NCMs`);
+  
+  // If one has zero and the other doesn't, that's suspicious
+  if ((count1 === 0 && count2 > 0) || (count2 === 0 && count1 > 0)) {
+    const warning = `⚠️ NCM extraction may be incomplete: ${doc1Name} has ${count1} NCMs, ${doc2Name} has ${count2} NCMs`;
+    console.warn(`[NCM Completeness] ${warning}`);
+    return { isComplete: false, warning };
+  }
+  
+  // If difference is more than 50% of the larger count, warn
+  const maxCount = Math.max(count1, count2);
+  const diff = Math.abs(count1 - count2);
+  
+  if (maxCount > 5 && diff > maxCount * 0.5) {
+    const warning = `⚠️ NCM count difference is significant: ${doc1Name} has ${count1} NCMs, ${doc2Name} has ${count2} NCMs (${diff} difference)`;
+    console.warn(`[NCM Completeness] ${warning}`);
+    return { isComplete: false, warning };
+  }
+  
+  return { isComplete: true };
+}
+
+/**
+ * Extract NCM codes from text using regex patterns
+ */
+export function extractNCMFromText(text: string): string[] {
+  const ncmPatterns = [
+    /\bNCM[:\s-]*(\d{4,8})/gi,
+    /\bHS[:\s-]*(\d{4,8})/gi,
+    /\b(\d{4}\.\d{2}\.\d{2})\b/g,  // 8-digit with dots
+    /\b(\d{8})\b/g,                 // 8-digit plain
+  ];
+  
+  const found: string[] = [];
+  
+  for (const pattern of ncmPatterns) {
+    const matches = text.matchAll(pattern);
+    for (const match of matches) {
+      const ncm = match[1] || match[0];
+      found.push(ncm);
+    }
+  }
+  
+  return normalizeNCMList(found);
+}
+
+/**
  * Convert ArrayBuffer to base64 in chunks
  */
 function arrayBufferToBase64Chunked(buffer: ArrayBuffer): string {
@@ -76,9 +168,13 @@ async function extractTextFromFile(file: FileInfo): Promise<{ text: string; ncmC
     if (result.debugInfo) {
       console.log(`[Extract] Debug info: ${result.debugInfo}`);
     }
+    
+    // Normalize NCMs from XLSX
+    const normalizedNCMs = result.ncmCodes ? normalizeNCMList(result.ncmCodes) : [];
+    
     return { 
       text: result.text, 
-      ncmCodes: result.ncmCodes,
+      ncmCodes: normalizedNCMs,
       debugInfo: result.debugInfo 
     };
   } else if (extension === 'csv') {
@@ -179,7 +275,7 @@ async function analyzeWithAnthropic(
         body: JSON.stringify({
           model: 'claude-sonnet-4-20250514',
           max_tokens: 8000,
-          temperature: 0.1,
+          temperature: 0, // Zero for deterministic/consistent output
           messages: [{ role: 'user', content: contentParts }]
         }),
         signal: controller.signal,
@@ -294,7 +390,7 @@ async function analyzeWithGemini(
           model: 'google/gemini-2.5-flash',
           messages: [{ role: 'user', content: contentParts }],
           max_tokens: 8000,
-          temperature: 0.1,
+          temperature: 0, // Zero for deterministic/consistent output
         }),
         signal: controller.signal,
       });
