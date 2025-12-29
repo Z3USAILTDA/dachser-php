@@ -66,54 +66,63 @@ const htmlEncode = (s: string): string => {
 };
 
 // Constrói tabela HTML - Design escuro igual ao modelo com PROCESSO, MASTER, HOUSE
+// Cores conforme especificação:
+// - Cabeçalho: preto (#000000) para colunas 1-11, azul (#0070C0) para PROCESSO/MASTER/HOUSE
+// - Linhas de dados: cinza muito escuro (#1A1A1A), bordas #2A2A2A
 const buildTableHtml = (rows: InvoiceRow[]): string => {
   let rowsHtml = "";
 
-  // Estilo dark header
-  const headerBg = "#2D2D2D";
+  // Cores do design
+  const headerBgBlack = "#000000";
+  const headerBgBlue = "#0070C0";
   const headerColor = "#FFFFFF";
-  const cellBorder = "border:1px solid #555;";
-  const cellPadding = "padding:6px 8px;";
-  const rowBg = "#3A3A3A";
+  const headerBorder = "border:1px solid #333333;";
+  const rowBg = "#1A1A1A";
   const rowColor = "#FFFFFF";
+  const rowBorder = "border:1px solid #2A2A2A;";
+  const cellPadding = "padding:6px 8px;";
 
   for (const r of rows) {
     rowsHtml += `<tr style="background-color:${rowBg};color:${rowColor};">
-      <td style="${cellBorder}${cellPadding}white-space:nowrap;">${htmlEncode(r.documento || "-")}</td>
-      <td style="${cellBorder}${cellPadding}white-space:nowrap;">${htmlEncode(r.nd || "-")}</td>
-      <td style="${cellBorder}${cellPadding}word-break:break-word;">${htmlEncode(r.ref_cliente || "-")}</td>
-      <td style="${cellBorder}${cellPadding}white-space:nowrap;">${htmlEncode(r.nf_exibicao || "-")}</td>
-      <td style="${cellBorder}${cellPadding}white-space:nowrap;">${htmlEncode(r.modal || "-")}</td>
-      <td style="${cellBorder}${cellPadding}white-space:nowrap;">${htmlEncode(r.tipo_documento || "-")}</td>
-      <td style="${cellBorder}${cellPadding}white-space:nowrap;">${htmlEncode(r.data_emissao || "-")}</td>
-      <td style="${cellBorder}${cellPadding}white-space:nowrap;">${htmlEncode(r.data_vencimento || "-")}</td>
-      <td style="${cellBorder}${cellPadding}white-space:nowrap;">${htmlEncode(formatCnpj(r.cnpj))}</td>
-      <td style="${cellBorder}${cellPadding}word-break:break-word;">${htmlEncode(formatRazaoSocial(r.razao_social))}</td>
-      <td style="${cellBorder}${cellPadding}text-align:right;white-space:nowrap;">${formatValue(r.valor_nf)}</td>
-      <td style="${cellBorder}${cellPadding}white-space:nowrap;">${htmlEncode(r.processo || "-")}</td>
-      <td style="${cellBorder}${cellPadding}white-space:nowrap;">${htmlEncode(r.master || "-")}</td>
-      <td style="${cellBorder}${cellPadding}white-space:nowrap;">${htmlEncode(r.house || "-")}</td>
+      <td style="${rowBorder}${cellPadding}white-space:nowrap;">${htmlEncode(r.documento || "-")}</td>
+      <td style="${rowBorder}${cellPadding}white-space:nowrap;">${htmlEncode(r.nd || "-")}</td>
+      <td style="${rowBorder}${cellPadding}word-break:break-word;">${htmlEncode(r.ref_cliente || "-")}</td>
+      <td style="${rowBorder}${cellPadding}white-space:nowrap;">${htmlEncode(r.nf_exibicao || "-")}</td>
+      <td style="${rowBorder}${cellPadding}white-space:nowrap;">${htmlEncode(r.modal || "-")}</td>
+      <td style="${rowBorder}${cellPadding}white-space:nowrap;">${htmlEncode(r.tipo_documento || "-")}</td>
+      <td style="${rowBorder}${cellPadding}white-space:nowrap;text-align:center;">${htmlEncode(r.data_emissao || "-")}</td>
+      <td style="${rowBorder}${cellPadding}white-space:nowrap;text-align:center;">${htmlEncode(r.data_vencimento || "-")}</td>
+      <td style="${rowBorder}${cellPadding}white-space:nowrap;">${htmlEncode(formatCnpj(r.cnpj))}</td>
+      <td style="${rowBorder}${cellPadding}word-break:break-word;">${htmlEncode(formatRazaoSocial(r.razao_social))}</td>
+      <td style="${rowBorder}${cellPadding}text-align:right;white-space:nowrap;">${Number(r.valor_nf || 0).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+      <td style="${rowBorder}${cellPadding}white-space:nowrap;">${htmlEncode(r.processo || "-")}</td>
+      <td style="${rowBorder}${cellPadding}white-space:nowrap;">${htmlEncode(r.master || "-")}</td>
+      <td style="${rowBorder}${cellPadding}white-space:nowrap;">${htmlEncode(r.house || "-")}</td>
     </tr>`;
   }
+
+  // Header com cores diferenciadas: preto para colunas 1-11, azul para PROCESSO/MASTER/HOUSE
+  const thStyleBlack = `background-color:${headerBgBlack};color:${headerColor};${headerBorder}${cellPadding}text-align:left;white-space:nowrap;font-weight:bold;`;
+  const thStyleBlue = `background-color:${headerBgBlue};color:${headerColor};${headerBorder}${cellPadding}text-align:left;white-space:nowrap;font-weight:bold;`;
 
   return `
 <table border="0" style="width:100%;border-collapse:collapse;mso-table-lspace:0pt;mso-table-rspace:0pt;border-spacing:0;font-family:Arial,Helvetica,sans-serif;font-size:12px;line-height:1.3;" cellpadding="0" cellspacing="0">
   <thead>
-    <tr style="background-color:${headerBg};color:${headerColor};">
-      <th style="${cellBorder}${cellPadding}text-align:left;white-space:nowrap;">DOC</th>
-      <th style="${cellBorder}${cellPadding}text-align:left;white-space:nowrap;">ND</th>
-      <th style="${cellBorder}${cellPadding}text-align:left;white-space:nowrap;">REF. CLIENTE</th>
-      <th style="${cellBorder}${cellPadding}text-align:left;white-space:nowrap;">NF</th>
-      <th style="${cellBorder}${cellPadding}text-align:left;white-space:nowrap;">MODAL</th>
-      <th style="${cellBorder}${cellPadding}text-align:left;white-space:nowrap;">TIPO DOC.</th>
-      <th style="${cellBorder}${cellPadding}text-align:left;white-space:nowrap;">EMISSÃO</th>
-      <th style="${cellBorder}${cellPadding}text-align:left;white-space:nowrap;">VENCTO</th>
-      <th style="${cellBorder}${cellPadding}text-align:left;white-space:nowrap;">C.N.P.J</th>
-      <th style="${cellBorder}${cellPadding}text-align:left;white-space:nowrap;">CLIENTE</th>
-      <th style="${cellBorder}${cellPadding}text-align:left;white-space:nowrap;">VALOR</th>
-      <th style="${cellBorder}${cellPadding}text-align:left;white-space:nowrap;">PROCESSO</th>
-      <th style="${cellBorder}${cellPadding}text-align:left;white-space:nowrap;">MASTER</th>
-      <th style="${cellBorder}${cellPadding}text-align:left;white-space:nowrap;">HOUSE</th>
+    <tr>
+      <th style="${thStyleBlack}">DOC</th>
+      <th style="${thStyleBlack}">ND</th>
+      <th style="${thStyleBlack}">REF. CLIENTE</th>
+      <th style="${thStyleBlack}">NF</th>
+      <th style="${thStyleBlack}">MODAL</th>
+      <th style="${thStyleBlack}">TIPO DOC.</th>
+      <th style="${thStyleBlack}">EMISSÃO</th>
+      <th style="${thStyleBlack}">VENCTO</th>
+      <th style="${thStyleBlack}">C.N.P.J</th>
+      <th style="${thStyleBlack}">CLIENTE</th>
+      <th style="${thStyleBlack}">VALOR</th>
+      <th style="${thStyleBlue}">PROCESSO</th>
+      <th style="${thStyleBlue}">MASTER</th>
+      <th style="${thStyleBlue}">HOUSE</th>
     </tr>
   </thead>
   <tbody>
