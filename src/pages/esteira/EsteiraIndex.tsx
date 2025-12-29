@@ -1030,26 +1030,28 @@ const EsteiraIndex = () => {
     }
   }, [hasEsteiraAccess]);
 
-  // Reload vouchers when page becomes visible (tab switch, window focus, page refresh)
+  // Reload vouchers when tab becomes visible after being hidden (tab switch only)
+  // Removed window focus listener as it was triggering too frequently (e.g., when closing dialogs)
   useEffect(() => {
-    const handleVisibilityChange = () => {
-      if (document.visibilityState === 'visible' && hasEsteiraAccess && !loading) {
-        loadVouchers();
-      }
-    };
+    let lastHiddenTime: number | null = null;
+    const MIN_HIDDEN_TIME = 5000; // Only reload if tab was hidden for more than 5 seconds
 
-    const handleFocus = () => {
-      if (hasEsteiraAccess && !loading) {
-        loadVouchers();
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'hidden') {
+        lastHiddenTime = Date.now();
+      } else if (document.visibilityState === 'visible' && hasEsteiraAccess && !loading) {
+        // Only reload if tab was hidden for at least 5 seconds
+        if (lastHiddenTime && (Date.now() - lastHiddenTime) > MIN_HIDDEN_TIME) {
+          loadVouchers();
+        }
+        lastHiddenTime = null;
       }
     };
 
     document.addEventListener('visibilitychange', handleVisibilityChange);
-    window.addEventListener('focus', handleFocus);
 
     return () => {
       document.removeEventListener('visibilitychange', handleVisibilityChange);
-      window.removeEventListener('focus', handleFocus);
     };
   }, [hasEsteiraAccess, loading]);
 
