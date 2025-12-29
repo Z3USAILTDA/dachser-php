@@ -454,6 +454,7 @@ export const CreateVoucherDialog = ({
           criado_por_user_id: userData.id,
           processo_id: values.processoId || null,
           origem_processo: origemProcesso || null,
+          chave_pix: values.formaPagamento === "PIX" ? (values.chavePix || null) : null,
         },
       });
 

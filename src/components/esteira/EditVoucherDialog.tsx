@@ -34,6 +34,7 @@ export const EditVoucherDialog = ({ open, onOpenChange, onSuccess, voucher }: Ed
     tipoDocumento: "",
     filial: "",
     urgente: false,
+    chavePix: "",
   });
 
   // Update form data when voucher changes
@@ -52,6 +53,7 @@ export const EditVoucherDialog = ({ open, onOpenChange, onSuccess, voucher }: Ed
         tipoDocumento: voucher.tipoDocumento || "",
         filial: voucher.filial || "",
         urgente: voucher.urgenciaTipo === "URGENTE_REAL",
+        chavePix: voucher.chavePix || "",
       });
     }
   }, [voucher]);
@@ -90,6 +92,7 @@ export const EditVoucherDialog = ({ open, onOpenChange, onSuccess, voucher }: Ed
             tipo_documento: formData.tipoDocumento || null,
             filial: formData.filial || null,
             urgencia_tipo: urgenciaTipo,
+            chave_pix: formData.formaPagamento === "PIX" ? (formData.chavePix || null) : null,
           },
           user_id: userData?.user?.id,
           user_name: userData?.user?.email,
@@ -304,6 +307,22 @@ export const EditVoucherDialog = ({ open, onOpenChange, onSuccess, voucher }: Ed
               </Select>
             </div>
           </div>
+
+          {/* Campo Chave PIX - aparece quando forma de pagamento é PIX */}
+          {formData.formaPagamento === "PIX" && (
+            <div className="space-y-2 p-3 rounded-lg border border-cyan-500/20 bg-cyan-500/5">
+              <Label htmlFor="edit-chavePix" className="text-sm flex items-center gap-2">
+                <span className="text-cyan-400">Chave PIX</span>
+                <span className="text-destructive">*</span>
+              </Label>
+              <Input
+                id="edit-chavePix"
+                value={formData.chavePix}
+                onChange={(e) => setFormData({ ...formData, chavePix: e.target.value })}
+                placeholder="CPF, CNPJ, e-mail, telefone ou chave aleatória"
+              />
+            </div>
+          )}
 
           <div className="flex items-center space-x-2">
             <Switch

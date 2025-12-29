@@ -3621,10 +3621,11 @@ serve(async (req) => {
         };
         
         // Insert voucher data into existing t_vouchers table (with id_rm support)
-        // Ensure processo_id and origem_processo columns exist
+        // Ensure processo_id, origem_processo and chave_pix columns exist
         try {
           await client.execute(`ALTER TABLE dados_dachser.t_vouchers ADD COLUMN IF NOT EXISTS processo_id VARCHAR(100) DEFAULT NULL`);
           await client.execute(`ALTER TABLE dados_dachser.t_vouchers ADD COLUMN IF NOT EXISTS origem_processo VARCHAR(10) DEFAULT NULL`);
+          await client.execute(`ALTER TABLE dados_dachser.t_vouchers ADD COLUMN IF NOT EXISTS chave_pix VARCHAR(255) DEFAULT NULL`);
         } catch (e) {
           console.log('Columns may already exist:', e);
         }
@@ -3638,8 +3639,8 @@ serve(async (req) => {
             cliente_email, filial, data_emissao_documento,
             comentarios_operacao, comentarios_fiscal, comentarios_financeiro,
             ajuste_operacao, ajuste_fiscal, criado_por_user_id,
-            processo_id, origem_processo
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            processo_id, origem_processo, chave_pix
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `, [
           voucherId,
           emptyToNull(voucherData.id_rm),
@@ -3669,7 +3670,8 @@ serve(async (req) => {
           emptyToNull(voucherData.ajuste_fiscal),
           emptyToNull(voucherData.criado_por_user_id),
           emptyToNull(voucherData.processo_id),
-          emptyToNull(voucherData.origem_processo)
+          emptyToNull(voucherData.origem_processo),
+          emptyToNull(voucherData.chave_pix)
         ]);
         
         console.log('Voucher saved to MariaDB t_vouchers, ID:', voucherId, 'id_rm:', voucherData.id_rm);
@@ -3774,6 +3776,8 @@ serve(async (req) => {
           urgencia_tipo: 'urgencia_tipo',
           cliente_email: 'cliente_email',
           remessa: 'remessa',
+          // PIX field
+          chave_pix: 'chave_pix',
         };
         
         for (const [key, dbField] of Object.entries(fieldMapping)) {

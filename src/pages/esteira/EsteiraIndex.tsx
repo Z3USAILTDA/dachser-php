@@ -888,6 +888,7 @@ const EsteiraIndex = () => {
         origemCriacao: v.origem_criacao || "MANUAL",
         processoId: v.processo_id || null,
         origemProcesso: v.origem_processo || null,
+        chavePix: v.chave_pix || null,
         createdAt: parseMariaDBDate(v.created_at) || new Date(),
         updatedAt: parseMariaDBDate(v.updated_at || v.created_at) || new Date(),
         anexos: [],

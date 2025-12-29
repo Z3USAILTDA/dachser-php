@@ -286,6 +286,8 @@ export interface Voucher {
   loteRemessaId?: string;
   dadosBancarios?: DadosBancarios;
   statusIntegracaoRm?: StatusIntegracaoRM;
+  // PIX field
+  chavePix?: string;
   // Cancellation fields
   cancelamentoMotivo?: string;
   cancelamentoVoucherCredito?: string;
