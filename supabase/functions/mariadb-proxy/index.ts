@@ -2984,8 +2984,9 @@ serve(async (req) => {
       }
 
       case 'update_chb_item': {
-        const { id: itemId, status_macro, step1_status, step2_status, step3_status, consignee, modal } = body;
-        console.log('Updating CHB item:', itemId, { consignee, modal });
+        // Note: modal column does not exist in database - removed to prevent error
+        const { id: itemId, status_macro, step1_status, step2_status, step3_status, consignee } = body;
+        console.log('Updating CHB item:', itemId, { consignee });
         
         const fields: string[] = [];
         const values: any[] = [];
@@ -2994,7 +2995,6 @@ serve(async (req) => {
         if (step2_status !== undefined) { fields.push('step2_status = ?'); values.push(step2_status); }
         if (step3_status !== undefined) { fields.push('step3_status = ?'); values.push(step3_status); }
         if (consignee !== undefined) { fields.push('consignee = ?'); values.push(consignee); }
-        if (modal !== undefined) { fields.push('modal = ?'); values.push(modal); }
         
         if (fields.length > 0) {
           values.push(itemId);
@@ -3044,8 +3044,20 @@ serve(async (req) => {
         
         const fileId = fileResult.lastInsertId;
         
-        // Truncate doc_role to fit database column (max 10 chars based on error)
-        const safeDocRole = (docRole || 'pre_alert').substring(0, 10);
+        // Map doc_role to short codes (max 4 chars to be safe with any DB column limit)
+        const docRoleMap: Record<string, string> = {
+          'Invoice': 'INV',
+          'PackList': 'PL',
+          'Instrucao': 'INST',
+          'HBL': 'HBL',
+          'DI': 'DI',
+          'AWB': 'AWB',
+          'Cert': 'CERT',
+          'Doc': 'DOC',
+          'pre_alert': 'PRE',
+          'Other': 'OTH',
+        };
+        const safeDocRole = docRoleMap[docRole] || (docRole || 'DOC').substring(0, 4);
         
         // Link file to item
         await client.execute(`

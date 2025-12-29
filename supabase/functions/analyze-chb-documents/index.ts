@@ -5,6 +5,71 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
+// ============================================================================
+// EXCEL READER - Extract text from XLSX/XLS files for CHB analysis
+// ============================================================================
+
+async function extractExcelText(base64Content: string, fileName: string): Promise<string> {
+  console.log(`[XLSX] Extracting text from: ${fileName}`);
+  
+  try {
+    // Convert base64 to Uint8Array
+    const binaryString = atob(base64Content);
+    const bytes = new Uint8Array(binaryString.length);
+    for (let i = 0; i < binaryString.length; i++) {
+      bytes[i] = binaryString.charCodeAt(i);
+    }
+    
+    // Dynamic import of xlsx library
+    const XLSX = await import('https://esm.sh/xlsx@0.18.5');
+    
+    // Read workbook
+    const workbook = XLSX.read(bytes, { 
+      type: 'array',
+      sheetRows: 500 // Limit rows per sheet
+    });
+    
+    console.log(`[XLSX] ${workbook.SheetNames.length} sheets: ${workbook.SheetNames.join(', ')}`);
+    
+    let fullText = `[Arquivo Excel: ${fileName}]\n\n`;
+    
+    // Process each sheet
+    for (const sheetName of workbook.SheetNames.slice(0, 5)) {
+      const sheet = workbook.Sheets[sheetName];
+      if (sheet) {
+        // Get data as array of arrays
+        const data = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '' }) as string[][];
+        
+        if (data.length > 0) {
+          fullText += `=== ABA: ${sheetName} ===\n`;
+          
+          // Convert to readable format
+          for (let rowIdx = 0; rowIdx < Math.min(data.length, 300); rowIdx++) {
+            const row = data[rowIdx];
+            if (row && Array.isArray(row)) {
+              const rowText = row
+                .map(cell => String(cell || '').trim())
+                .filter(cell => cell.length > 0)
+                .join(' | ');
+              if (rowText.trim().length > 0) {
+                fullText += `${rowText}\n`;
+              }
+            }
+          }
+          fullText += '\n';
+        }
+      }
+    }
+    
+    console.log(`[XLSX] Extracted ${fullText.length} chars from ${fileName}`);
+    return fullText;
+    
+  } catch (error) {
+    console.error(`[XLSX] Error extracting from ${fileName}:`, error);
+    return `[Arquivo: ${fileName}] - Erro ao processar planilha Excel: ${error instanceof Error ? error.message : 'Erro desconhecido'}`;
+  }
+}
+
 // =============================================================================
 // Prompts para a esteira CHB (Desembaraço) — revisão 2025-10 (HTML)
 // =============================================================================
@@ -292,6 +357,63 @@ SUA MISSÃO: Extrair TODOS os dados possíveis. "ND" é FRACASSO.
 ║  REGRA DE OURO: CADA "ND" DESNECESSÁRIO É UMA FALHA CRÍTICA DO AUDITOR       ║
 ║  Sua taxa de ND deve ser < 5%. Acima disso = análise rejeitada.              ║
 ╚═══════════════════════════════════════════════════════════════════════════════╝
+
+═══════════════════════════════════════════════════════════════════════════════
+EXEMPLOS REAIS DE DOCUMENTOS — REFERÊNCIA OBRIGATÓRIA
+═══════════════════════════════════════════════════════════════════════════════
+
+EXEMPLO 1 — INVOICE (UWT do Brasil):
+Estrutura típica de Invoice alemã (UWT GmbH):
+- Cabeçalho: "Invoice" + número (ex: 0100000249), data no formato DD.MM.YYYY
+- Shipper: UWT GmbH, endereço na Alemanha (Betzigau)
+- Consignee/Importador: UWT do Brasil Instrumentos de Medição Ltda.
+- Incoterm: no campo "Delivery terms" (ex: "FCA Betzigau")
+- Carrier/Transportadora: no campo próximo a "forwarded by" (ex: Dachser)
+- Tabela de itens com colunas: Pos, Part No, Description, Quantity, Unit Price, Total
+- NCM: pode estar como "HS Code" ou na descrição do item (ex: 9026.10.29)
+- Valor total: na última linha da tabela, geralmente em EUR
+- Peso: pode estar em "Net Weight" / "Gross Weight" no rodapé ou por item
+
+EXTRAIR DA INVOICE:
+- Invoice number: campo "Invoice" ou "Rechnung" no cabeçalho
+- Date: campo "Date" no cabeçalho (converter DD.MM.YYYY → DD/MM/YYYY)
+- Consignee: nome completo após "Consignee:" ou "Ship to:"
+- Incoterm: campo "Delivery terms", "Terms", "Incoterms"
+- Carrier: campo "forwarded by", "Carrier", "Via"
+- Items: TODAS as linhas da tabela (Part No, Description, Qty, Price, Total)
+- NCM/HS Code: buscar em cada linha de item ou no rodapé
+- Total Value: última linha, campo "Total" ou "Grand Total" + moeda
+- Currency: EUR, USD, etc. (sempre especificar)
+
+EXEMPLO 2 — PACKING LIST:
+Estrutura típica:
+- Referência à Invoice correspondente
+- Lista de volumes/caixas com dimensões
+- Peso bruto e líquido POR CAIXA e TOTAL
+- Quantidades por item
+- Descrição simplificada dos produtos
+
+EXTRAIR DO PACKING LIST:
+- Gross Weight: campo "Gross Weight", "Brutto", somar se por caixa
+- Net Weight: campo "Net Weight", "Netto", somar se por caixa  
+- Dimensions: L x W x H em cm ou m
+- Packages: número de volumes
+- Quantities: validar contra Invoice
+
+EXEMPLO 3 — INSTRUÇÃO DE EMBARQUE (Excel):
+Estrutura típica de instrução Dachser:
+- Aba ou seção com dados do importador (CNPJ, razão social)
+- NCMs com descrições detalhadas
+- Quantidades, pesos, valores
+- Referências de PO/pedido
+- Dados fiscais (CFOP, CST, etc.)
+
+EXTRAIR DA INSTRUÇÃO:
+- Todos os NCMs listados (fonte primária de NCMs!)
+- CNPJ do importador
+- Valores declarados (comparar com Invoice)
+- Pesos declarados (comparar com Packing List)
+- Referências de pedido/PO
 
 ═══════════════════════════════════════════════════════════════════════════════
 CHECKLIST OBRIGATÓRIO ANTES DE COLOCAR "ND"
@@ -730,12 +852,30 @@ async function callAnthropicAPI(prompt: string, filesContent: { name: string; co
         },
       });
     } else if (file.mimeType.includes('spreadsheet') || file.mimeType.includes('excel') || file.name.endsWith('.xlsx') || file.name.endsWith('.xls')) {
-      // Excel files - add warning
-      warnings.push(createFileError(file, 'binary_not_readable'));
-      content.push({
-        type: 'text',
-        text: `[Arquivo: ${file.name}] - Planilha Excel (não legível diretamente). Análise pode ser incompleta para este arquivo.`,
-      });
+      // Excel files - extract text content using the Excel reader
+      try {
+        const excelText = await extractExcelText(file.content, file.name);
+        if (excelText && excelText.length > 100) {
+          console.log(`[CHB] Excel "${file.name}" extracted ${excelText.length} chars`);
+          content.push({
+            type: 'text',
+            text: excelText,
+          });
+        } else {
+          warnings.push(createFileError(file, 'empty_content'));
+          content.push({
+            type: 'text',
+            text: `[Arquivo: ${file.name}] - Planilha Excel com pouco conteúdo legível.`,
+          });
+        }
+      } catch (xlsxError) {
+        console.error(`[CHB] Error reading Excel ${file.name}:`, xlsxError);
+        warnings.push(createFileError(file, 'binary_not_readable'));
+        content.push({
+          type: 'text',
+          text: `[Arquivo: ${file.name}] - Erro ao ler planilha Excel.`,
+        });
+      }
     } else {
       // For other types, try to send as text
       try {
@@ -829,11 +969,30 @@ async function callLovableAI(prompt: string, filesContent: { name: string; conte
         },
       });
     } else if (file.mimeType.includes('spreadsheet') || file.mimeType.includes('excel') || file.name.endsWith('.xlsx') || file.name.endsWith('.xls')) {
-      warnings.push(createFileError(file, 'binary_not_readable'));
-      content.push({
-        type: 'text',
-        text: `[Arquivo: ${file.name}] - Planilha Excel (dados binários). Análise pode ser limitada.`,
-      });
+      // Excel files - extract text content
+      try {
+        const excelText = await extractExcelText(file.content, file.name);
+        if (excelText && excelText.length > 100) {
+          console.log(`[CHB-Gemini] Excel "${file.name}" extracted ${excelText.length} chars`);
+          content.push({
+            type: 'text',
+            text: excelText,
+          });
+        } else {
+          warnings.push(createFileError(file, 'empty_content'));
+          content.push({
+            type: 'text',
+            text: `[Arquivo: ${file.name}] - Planilha Excel com pouco conteúdo legível.`,
+          });
+        }
+      } catch (xlsxError) {
+        console.error(`[CHB-Gemini] Error reading Excel ${file.name}:`, xlsxError);
+        warnings.push(createFileError(file, 'binary_not_readable'));
+        content.push({
+          type: 'text',
+          text: `[Arquivo: ${file.name}] - Erro ao ler planilha Excel.`,
+        });
+      }
     } else {
       try {
         const decoded = atob(file.content);

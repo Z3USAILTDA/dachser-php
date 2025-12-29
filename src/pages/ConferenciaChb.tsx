@@ -426,12 +426,13 @@ export default function ConferenciaChb() {
     }
   };
 
-  // Helper to detect document type from filename (max 10 chars for DB)
+  // Helper to detect document type from filename - returns short codes for DB compatibility
   const detectDocumentType = (filename: string): string => {
     const lower = filename.toLowerCase();
     if (lower.includes('hbl') || lower.includes('house')) return 'HBL';
-    if (lower.includes('invoice') || lower.includes('fatura')) return 'Invoice';
-    if (lower.includes('packing') || lower.includes('romaneio')) return 'PackList';
+    if (lower.includes('inv') || lower.includes('fatura') || lower.includes('invoice')) return 'Invoice';
+    if (lower.includes('pack') || lower.includes('romaneio') || lower.includes('packing')) return 'PackList';
+    if (lower.includes('inst') || lower.includes('instruc')) return 'Instrucao';
     if (lower.includes('di') || lower.includes('declaracao')) return 'DI';
     if (lower.includes('awb') || lower.includes('conhecimento')) return 'AWB';
     if (lower.includes('cert') || lower.includes('certificado')) return 'Cert';
