@@ -3041,12 +3041,15 @@ serve(async (req) => {
         
         const fileId = fileResult.lastInsertId;
         
+        // Truncate doc_role to fit database column (max 10 chars based on error)
+        const safeDocRole = (docRole || 'pre_alert').substring(0, 10);
+        
         // Link file to item
         await client.execute(`
           INSERT INTO ai_agente.t_dachser_chb_docs 
           (item_id, file_id, etapa, doc_role, version, is_active, created_by)
           VALUES (?, ?, ?, ?, 1, 1, ?)
-        `, [itemId, fileId, etapa || '1', docRole || 'pre_alert', userId || null]);
+        `, [itemId, fileId, etapa || '1', safeDocRole, userId || null]);
         
         result = { success: true, fileId };
         break;
