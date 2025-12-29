@@ -57,32 +57,47 @@ export default function ConferenciaChb() {
 
   const currentUser = localStorage.getItem('user_email') || localStorage.getItem('username') || 'Usuário';
 
+  // Function to load files from Supabase
+  const loadSupabaseFiles = useCallback(async () => {
+    if (!itemId) return;
+    
+    const { data, error } = await supabase
+      .from('chb_documents')
+      .select('*')
+      .eq('item_id', itemId)
+      .order('created_at', { ascending: true });
+    
+    if (error) {
+      console.error('Error loading CHB documents:', error);
+      return;
+    }
+    
+    const newDocs: Record<number, ChbDocument[]> = { 1: [], 2: [], 3: [] };
+    (data || []).forEach((f: any) => {
+      const stepId = parseInt(f.etapa) as 1 | 2 | 3;
+      if (stepId >= 1 && stepId <= 3) {
+        newDocs[stepId].push({
+          id: f.id,
+          name: f.filename,
+          type: f.doc_role || 'O',
+          uploadedAt: new Date(f.created_at).toLocaleString('pt-BR'),
+          size: f.file_size ? formatFileSize(f.file_size) : '',
+          stepId,
+          dbId: undefined,
+          url: f.file_url || undefined,
+        });
+      }
+    });
+    setDocuments(newDocs);
+  }, [itemId]);
+
   // Load data from database
   useEffect(() => {
     if (itemId) {
-      fetchFiles();
+      loadSupabaseFiles();
       fetchRuns();
     }
-  }, [itemId, fetchFiles, fetchRuns]);
-
-  // Convert DB files to documents
-  useEffect(() => {
-    const newDocs: Record<number, ChbDocument[]> = { 1: [], 2: [], 3: [] };
-    dbFiles.forEach((f: ChbFile) => {
-      const stepId = parseInt(f.etapa) as 1 | 2 | 3;
-      newDocs[stepId].push({
-        id: `db-${f.id}`,
-        name: f.filename,
-        type: 'Invoice',
-        uploadedAt: f.created_at,
-        size: f.size_bytes ? formatFileSize(f.size_bytes) : '',
-        stepId,
-        dbId: f.id,
-        url: f.url || undefined,
-      });
-    });
-    setDocuments(newDocs);
-  }, [dbFiles]);
+  }, [itemId, loadSupabaseFiles, fetchRuns]);
 
   // Convert DB runs to approved history, restore step state, and populate analysis results
   useEffect(() => {
@@ -290,7 +305,7 @@ export default function ConferenciaChb() {
       if (currentStepFiles.length > 0) {
         const savedDocs: typeof documents[number] = [];
         
-        // Upload files to Supabase storage and save metadata to MariaDB
+        // Upload files to Supabase storage and save metadata directly to Supabase
         for (const file of currentStepFiles) {
           try {
             // Generate unique file path
@@ -319,17 +334,23 @@ export default function ConferenciaChb() {
             
             const publicUrl = urlData?.publicUrl;
             
-            // Save metadata to MariaDB with storage URL
-            await createFile(
-              file.name,
-              activeStep.toString() as '1' | '2' | '3',
-              detectDocumentType(file.name),
-              {
-                mime: file.type,
-                sizeBytes: file.size,
-                url: publicUrl,
-              }
-            );
+            // Save metadata directly to Supabase table (no MariaDB)
+            const { error: insertError } = await supabase.from('chb_documents').insert({
+              item_id: itemId,
+              filename: file.name,
+              file_url: publicUrl || '',
+              file_size: file.size,
+              mime_type: file.type,
+              etapa: activeStep.toString(),
+              doc_role: detectDocumentType(file.name),
+              created_by: currentUser,
+            });
+            
+            if (insertError) {
+              console.error('Error saving file metadata:', insertError);
+              toast.error(`Erro ao salvar metadados de ${file.name}`);
+              continue;
+            }
             
             savedDocs.push({
               id: `doc-${activeStep}-${timestamp}`,
@@ -341,6 +362,8 @@ export default function ConferenciaChb() {
               file: file,
               url: publicUrl,
             });
+            
+            console.log(`[CHB] File saved successfully: ${file.name}`);
           } catch (err) {
             console.error('Error saving file:', err);
             toast.error(`Erro ao salvar ${file.name}`);
@@ -353,10 +376,11 @@ export default function ConferenciaChb() {
             ...prev,
             [activeStep]: [...(prev[activeStep] || []), ...savedDocs],
           }));
+          toast.success(`${savedDocs.length} arquivo(s) salvo(s) com sucesso!`);
         }
 
-        // Refresh files from database to get IDs
-        await fetchFiles();
+        // Refresh files from Supabase
+        await loadSupabaseFiles();
 
         // Clear only current step uploaded files
         setUploadedFiles(prev => ({
@@ -527,7 +551,19 @@ export default function ConferenciaChb() {
   };
 
 
-  const handleDeleteDocument = (docId: string) => {
+  const handleDeleteDocument = async (docId: string) => {
+    // Delete from Supabase
+    const { error } = await supabase
+      .from('chb_documents')
+      .delete()
+      .eq('id', docId);
+    
+    if (error) {
+      console.error('Error deleting document:', error);
+      toast.error('Erro ao excluir documento');
+      return;
+    }
+    
     setDocuments((prev) => ({
       ...prev,
       [activeStep]: (prev[activeStep] || []).filter((doc) => doc.id !== docId),

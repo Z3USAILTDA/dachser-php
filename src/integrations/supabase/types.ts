@@ -260,6 +260,45 @@ export type Database = {
         }
         Relationships: []
       }
+      chb_documents: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          doc_role: string | null
+          etapa: string
+          file_size: number | null
+          file_url: string
+          filename: string
+          id: string
+          item_id: number
+          mime_type: string | null
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          doc_role?: string | null
+          etapa?: string
+          file_size?: number | null
+          file_url: string
+          filename: string
+          id?: string
+          item_id: number
+          mime_type?: string | null
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          doc_role?: string | null
+          etapa?: string
+          file_size?: number | null
+          file_url?: string
+          filename?: string
+          id?: string
+          item_id?: number
+          mime_type?: string | null
+        }
+        Relationships: []
+      }
       profiles: {
         Row: {
           active: boolean | null
