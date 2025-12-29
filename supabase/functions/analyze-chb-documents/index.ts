@@ -60,8 +60,19 @@ FORMATO DE SAÍDA — HTML ESTRITO
    <p><strong>Nível de risco consolidado:</strong> 🔴 ou 🟨 ou ✅</p>
    <p><strong>Principal(ais) causa(s) crítica(s):</strong> [Descrição detalhada citando o campo/linha da tabela]</p>
 
+4) SEÇÃO PRÓXIMAS AÇÕES (quando aplicável):
+   <h4>Próximas Ações</h4>
+   <ul>
+     <li>[Documento pendente ou ação corretiva necessária]</li>
+   </ul>
+   
+   Incluir sempre que houver:
+   - Documentos faltantes (Packing List, CE Mercante, etc.)
+   - Ações corretivas antes do registro da DI
+   - Validações pendentes com armador/agente
+
 - Proibido: Markdown, <script>, estilos inline.
-- Permitido SOMENTE: h4, p, strong, table, thead, tbody, tr, th, td.
+- Permitido SOMENTE: h4, p, strong, ul, li, table, thead, tbody, tr, th, td.
 `;
 
 // Client config interface for personalized validation
@@ -247,6 +258,58 @@ REGRAS POR CAMPO:
 - Frete: linha separada; ✅ valores convergem; 🟨 faltante em uma fonte; 🔴 valores divergentes.
 - Container: ✅ coerente entre docs; 🟨 só em uma fonte; 🔴 conflitante.
 - NCM: ✅ raiz 4 dígitos coincide; 🟨 listado em uma fonte; 🔴 códigos distintos com impacto.
+
+VALIDAÇÕES ADUANEIRAS BRASILEIRAS (aplicar automaticamente quando relevante):
+
+1) ICMS POR ESTADO (detectar UF do consignatário):
+   - Estados com ICMS DIFERIDO: MG, SC, ES
+     → Se DI indica ICMS integral em estado com diferimento → 🟨 Alertar para verificação
+   - Demais estados: ICMS integral esperado
+   - Se benefício fiscal declarado sem fundamento legal → 🔴 CRÍTICO
+
+2) BENEFÍCIOS FISCAIS (detectar automaticamente nos documentos):
+   - RECOF: CFOP deve ser 3129 + ICMS suspenso
+     → Se RECOF declarado mas CFOP ≠ 3129 → 🔴 CRÍTICO
+   - DRAWBACK ISENÇÃO: verificar Ato Concessório no draft DI
+     → Se Drawback mas sem Ato Concessório → 🔴 CRÍTICO
+     → CFOP esperado: 3127
+   - EX-TARIFÁRIO: II deve ser 0% com fundamento legal 59
+     → Se Ex-Tarifário mas II ≠ 0% → 🔴 CRÍTICO
+
+3) VALIDAÇÃO DE CFOPs (quando presentes):
+   - 3101: Compra para industrialização/consumo
+   - 3102: Compra para comercialização/revenda
+   - 3127: Compra para industrialização sob Drawback
+   - 3129: Compra de mercadoria para RECOF
+   - 3556: Compra de material para uso/consumo (outros)
+   → CFOP incompatível com natureza da operação → 🔴
+
+4) VALIDAÇÕES CRÍTICAS NO DRAFT DI:
+   - 🔴 CRÍTICO: Se Peso Líquido > Peso Bruto (impossível fisicamente)
+   - 🔴 CRÍTICO: Se volumes divergem significativamente (>10%) do BL/Packing List
+   - 🟨 ALERTA: Se embalagem "Outros" com qtd=1 mas documentos mostram múltiplos volumes
+   - 🟨 ALERTA: Se país de aquisição ≠ país de origem sem justificativa
+
+5) CE MERCANTE / CONHECIMENTO (marítimo):
+   - 🟨 ALERTA: Recomendar validação de despesas acessórias via CE Mercante
+   - Verificar coerência: Incoterm × Frete declarado × CE Mercante
+   - Se frete no CE Mercante diverge do declarado → 🔴
+
+6) FATURA DE EMBALAGEM (quando presente):
+   - Identificar faturas separadas de embalagem
+   - 🟨 ALERTA: Se CFOP/tributação de embalagem inadequados
+   - Embalagem deve ser tributada separadamente quando faturada à parte
+
+7) NCM — VALIDAÇÃO ADUANEIRA APROFUNDADA:
+   - Divergência na RAIZ (4 primeiros dígitos) → 🔴 CRÍTICO (muda classificação fiscal)
+   - Divergência apenas no sufixo (5º-8º dígitos) com descrição compatível → 🟨
+   - NCM genérico (ex.: terminando em 00) quando existem específicos → 🟨
+
+8) VALOR ADUANEIRO:
+   - Verificar se VMLE (Valor da Mercadoria no Local de Embarque) está correto
+   - Frete + Seguro devem ser somados ao VMLE para CIF
+   - Se Incoterm FOB mas frete somado ao valor → 🟨 Verificar
+   - Se Incoterm CIF mas frete declarado separado → 🟨 Verificar consistência
 
 CÁLCULOS PERMITIDOS (para evitar ND):
 - Some itens quando total não vier fechado (informe "(soma)" na observação).
