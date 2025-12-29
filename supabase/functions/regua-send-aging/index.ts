@@ -480,14 +480,12 @@ serve(async (req: Request): Promise<Response> => {
 `;
 
     // Send email with attachment
-    // TESTING: Force destination to devs@z3us.ai
-    const testEmail = "devs@z3us.ai";
     const dateForFile = new Date().toLocaleDateString("pt-BR").replace(/\//g, ".");
     
     const emailResponse = await resend.emails.send({
       from: "Financeiro Dachser <noreply@hermes.z3us.ai>",
-      to: [testEmail], // Using test email
-      subject: `[TESTE] Aging List - ${clienteName}`,
+      to: [email_to],
+      subject: `Aging List - ${clienteName}`,
       html: emailHtml,
       attachments: [
         {
