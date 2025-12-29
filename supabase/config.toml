@@ -215,3 +215,6 @@ verify_jwt = false
 
 [functions.parse-comprovante-pdf]
 verify_jwt = false
+
+[functions.get-mapbox-token]
+verify_jwt = false
