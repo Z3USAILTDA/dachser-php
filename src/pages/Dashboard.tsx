@@ -29,7 +29,7 @@ interface MenuItem {
 const menuItems: MenuItem[] = [
   {
     id: "admin",
-    icon: <UserCog size={28} />,
+    icon: <UserCog size={32} />,
     label: "ADMIN",
     subtitle: "Gestão da plataforma",
     adminOnly: true,
@@ -50,7 +50,7 @@ const menuItems: MenuItem[] = [
   },
   {
     id: "air",
-    icon: <Plane size={28} />,
+    icon: <Plane size={32} />,
     label: "AIR",
     subtitle: "Operações Aéreas",
     children: [
@@ -70,7 +70,7 @@ const menuItems: MenuItem[] = [
   },
   {
     id: "sea",
-    icon: <Ship size={28} />,
+    icon: <Ship size={32} />,
     label: "SEA",
     subtitle: "Operações Marítimas",
     children: [
@@ -91,7 +91,7 @@ const menuItems: MenuItem[] = [
   },
   {
     id: "fin",
-    icon: <CreditCard size={28} />,
+    icon: <CreditCard size={32} />,
     label: "FIN",
     subtitle: "Financeiro & Billing",
     children: [
@@ -117,7 +117,7 @@ const menuItems: MenuItem[] = [
   },
   {
     id: "chb",
-    icon: <FileText size={28} />,
+    icon: <FileText size={32} />,
     label: "CHB",
     subtitle: "Customs House Brokerage",
     children: [
@@ -129,7 +129,7 @@ const menuItems: MenuItem[] = [
   },
   {
     id: "olimpo",
-    icon: <Building2 size={28} />,
+    icon: <Building2 size={32} />,
     label: "OLIMPO",
     subtitle: "Visão Estratégica",
     href: "/olimpo",
@@ -288,18 +288,18 @@ const Dashboard = () => {
         </div>
 
         {/* Menu Cards Row */}
-        <div className="flex justify-center items-start gap-1.5 px-3">
+        <div className="flex justify-center items-start gap-2 px-3">
           {filteredMenuItems.map((item) => (
             <div
               key={item.id}
               className="relative flex flex-col items-center"
-              style={{ width: "140px" }}
+              style={{ width: "154px" }}
             >
               {/* Card */}
               <div
                 onClick={() => (item.href ? navigate(item.href) : toggleMenu(item.id))}
                 className={`
-                  w-[140px] h-[150px] rounded-[18px] flex flex-col items-center justify-center gap-2.5 cursor-pointer
+                  w-[154px] h-[165px] rounded-[20px] flex flex-col items-center justify-center gap-3 cursor-pointer
                   transition-all duration-200 
                   ${activeMenu === item.id ? "text-primary-foreground -translate-y-1" : "text-foreground hover:-translate-y-1"}
                 `}
@@ -316,15 +316,15 @@ const Dashboard = () => {
               >
                 <div
                   className={`
-                    w-10 h-10 rounded-xl flex items-center justify-center
+                    w-11 h-11 rounded-xl flex items-center justify-center
                     ${activeMenu === item.id ? "bg-background/12 border border-background/60 text-primary-foreground" : "bg-primary/12 border border-primary/60 text-primary"}
                   `}
                 >
                   {item.icon}
                 </div>
-                <span className="text-[11px] font-semibold tracking-[0.16em] uppercase">{item.label}</span>
+                <span className="text-xs font-semibold tracking-[0.16em] uppercase">{item.label}</span>
                 <span
-                  className={`text-[9px] text-center px-1 ${activeMenu === item.id ? "text-primary-foreground/70" : "text-muted-foreground"}`}
+                  className={`text-[10px] text-center px-1 ${activeMenu === item.id ? "text-primary-foreground/70" : "text-muted-foreground"}`}
                 >
                   {item.subtitle}
                 </span>
