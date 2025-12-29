@@ -398,7 +398,7 @@ const EsteiraVoucherDetails = () => {
                 className="p-6 border border-[rgba(255,255,255,0.12)] backdrop-blur-[18px]"
                 style={{ backgroundColor: 'rgba(5,6,18,0.9)' }}
               >
-                <VoucherOperacaoActions voucher={voucher} onUpdate={loadVoucher} />
+                <VoucherOperacaoActions voucher={voucher} onUpdate={loadVoucher} allVouchers={allVouchers} />
               </Card>
             )}
 

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { Voucher, ETAPA_LABELS, calcularTempoNaEtapa, formatarTempoNaEtapa, SLA_POR_ETAPA } from "@/types/voucher";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
@@ -6,12 +6,13 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { VoucherActionsMenu } from "./VoucherActionsMenu";
-import { AlertCircle, Eye, Clock, Building2, User, Plane, Ship, Package, FileCheck, FileClock, ArrowUpDown, ArrowUp, ArrowDown } from "lucide-react";
+import { AlertCircle, Eye, Clock, Building2, User, Plane, Ship, Package, FileCheck, FileClock, ArrowUpDown, ArrowUp, ArrowDown, Layers } from "lucide-react";
 import { format, isToday, isPast } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { cn } from "@/lib/utils";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { TablePagination } from "@/components/layout/TablePagination";
+import { ConsolidarVouchersDialog } from "./ConsolidarVouchersDialog";
 
 const PAGE_SIZE = 20;
 
@@ -114,6 +115,15 @@ export const VoucherTable = ({ vouchers, onViewDetails, onEdit, onDelete, onGoBa
   const [sortField, setSortField] = useState<SortField>("createdAt");
   const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
   const [currentPage, setCurrentPage] = useState(1);
+  const [showConsolidateDialog, setShowConsolidateDialog] = useState(false);
+
+  // Count eligible vouchers for consolidation
+  const eligibleVouchersCount = useMemo(() => {
+    return vouchers.filter(v => 
+      ["OPERACAO", "FISCAL", "SUPERVISOR"].includes(v.etapaAtual) && 
+      !v.voucherMasterId
+    ).length;
+  }, [vouchers]);
 
   const handleFilterChange = (key: keyof FilterValues, value: string) => {
     onFilterChange({ ...filters, [key]: value });
@@ -190,6 +200,23 @@ export const VoucherTable = ({ vouchers, onViewDetails, onEdit, onDelete, onGoBa
   return (
     <TooltipProvider>
       <div className="border border-primary/20 rounded-xl overflow-hidden bg-card/80 backdrop-blur-sm shadow-lg shadow-primary/5">
+        {/* Toolbar with consolidation button */}
+        {eligibleVouchersCount >= 2 && (
+          <div className="flex items-center justify-between px-4 py-3 border-b border-primary/10 bg-muted/30">
+            <span className="text-sm text-muted-foreground">
+              {eligibleVouchersCount} voucher(s) elegíveis para consolidação
+            </span>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setShowConsolidateDialog(true)}
+              className="gap-2"
+            >
+              <Layers className="h-4 w-4" />
+              Consolidar Vouchers
+            </Button>
+          </div>
+        )}
         <div className="overflow-x-auto">
           <Table>
             <TableHeader>
@@ -489,6 +516,17 @@ export const VoucherTable = ({ vouchers, onViewDetails, onEdit, onDelete, onGoBa
           </div>
         )}
       </div>
+
+      {/* Consolidation Dialog */}
+      <ConsolidarVouchersDialog
+        open={showConsolidateDialog}
+        onOpenChange={setShowConsolidateDialog}
+        vouchers={vouchers}
+        onSuccess={() => {
+          // Trigger a refresh by changing filters slightly and back
+          onFilterChange({ ...filters });
+        }}
+      />
     </TooltipProvider>
   );
 };
