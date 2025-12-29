@@ -3044,20 +3044,11 @@ serve(async (req) => {
         
         const fileId = fileResult.lastInsertId;
         
-        // Map doc_role to short codes (max 4 chars to be safe with any DB column limit)
-        const docRoleMap: Record<string, string> = {
-          'Invoice': 'INV',
-          'PackList': 'PL',
-          'Instrucao': 'INST',
-          'HBL': 'HBL',
-          'DI': 'DI',
-          'AWB': 'AWB',
-          'Cert': 'CERT',
-          'Doc': 'DOC',
-          'pre_alert': 'PRE',
-          'Other': 'OTH',
-        };
-        const safeDocRole = docRoleMap[docRole] || (docRole || 'DOC').substring(0, 4);
+        // Ensure doc_role is max 4 chars - truncate any value that's too long
+        // The DB column appears to be VARCHAR(4) or similar
+        const rawDocRole = docRole || 'DOC';
+        const safeDocRole = rawDocRole.substring(0, 4);
+        console.log(`[CHB] Saving file with doc_role: "${rawDocRole}" -> "${safeDocRole}"`);
         
         // Link file to item
         await client.execute(`
