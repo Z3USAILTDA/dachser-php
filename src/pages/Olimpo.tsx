@@ -7,8 +7,8 @@ import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { TablePagination } from "@/components/layout/TablePagination";
 import dachserBg from "@/assets/dachser-background.jpg";
-import L from "leaflet";
-import "leaflet/dist/leaflet.css";
+import mapboxgl from "mapbox-gl";
+import "mapbox-gl/dist/mapbox-gl.css";
 
 // Olimpo mantém seu próprio layout devido ao mapa fullscreen
 // Mas usa os mesmos estilos de card e cores do PageLayout
@@ -171,23 +171,30 @@ function maritimeWaypoints(orig: [number, number], dest: [number, number]): [num
   return [];
 }
 
-function pointAtFraction(line: [number, number][], t: number, map: L.Map): [number, number] {
+function pointAtFraction(line: [number, number][], t: number): [number, number] {
+  if (line.length < 2) return line[0] || [0, 0];
+  
+  // Calculate total distance
   const segLen: number[] = [];
   let total = 0;
   for (let i = 1; i < line.length; i++) {
-    const d = map.distance(line[i - 1], line[i]);
+    const [lat1, lon1] = line[i - 1];
+    const [lat2, lon2] = line[i];
+    // Simple euclidean approximation for distance
+    const d = Math.sqrt((lat2 - lat1) ** 2 + (lon2 - lon1) ** 2);
     segLen.push(d);
     total += d;
   }
+  
   const target = t * total;
   let acc = 0;
   for (let i = 1; i < line.length; i++) {
-    const p = L.latLng(line[i - 1]);
-    const q = L.latLng(line[i]);
+    const [lat1, lon1] = line[i - 1];
+    const [lat2, lon2] = line[i];
     const d = segLen[i - 1];
     if (acc + d >= target) {
       const r = (target - acc) / d;
-      return [p.lat + (q.lat - p.lat) * r, p.lng + (q.lng - p.lng) * r];
+      return [lat1 + (lat2 - lat1) * r, lon1 + (lon2 - lon1) * r];
     }
     acc += d;
   }
@@ -198,10 +205,11 @@ export default function Olimpo() {
   useUsageLog({ endpoint: "/olimpo" });
   const navigate = useNavigate();
   const mapContainerRef = useRef<HTMLDivElement>(null);
-  const mapRef = useRef<L.Map | null>(null);
-  const activeRouteRef = useRef<L.Polyline | null>(null);
-  const activeMarkersRef = useRef<L.CircleMarker[]>([]);
+  const mapRef = useRef<mapboxgl.Map | null>(null);
+  const markersRef = useRef<mapboxgl.Marker[]>([]);
+  const activeSourcesRef = useRef<string[]>([]);
 
+  const [mapboxToken, setMapboxToken] = useState<string | null>(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [data, setData] = useState<DataItem[]>([]);
@@ -309,6 +317,19 @@ export default function Olimpo() {
   // Pagination
   const totalPages = Math.max(1, Math.ceil(aggregatedData.length / pageSize));
   const paginatedData = aggregatedData.slice((currentPage - 1) * pageSize, currentPage * pageSize);
+
+  // Load Mapbox token
+  const loadMapboxToken = useCallback(async () => {
+    try {
+      const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/get-mapbox-token`);
+      const json = await res.json();
+      if (json?.token) {
+        setMapboxToken(json.token);
+      }
+    } catch (err) {
+      console.error("Error loading Mapbox token:", err);
+    }
+  }, []);
 
   // Load container count from master table (fallback when API is paused)
   const loadMasterContainerCount = useCallback(async () => {
@@ -470,32 +491,68 @@ export default function Olimpo() {
         }
       }
 
-      // Load SEA data with smart cache
-      const seaSeedRes = await fetch(`${baseUrl}?action=sea_seed_smart`);
-      const seaSeedJson = await seaSeedRes.json();
-      const seedSea = Array.isArray(seaSeedJson?.data) ? seaSeedJson.data : [];
+      // SEA data
+      const seaRes = await fetch(`${baseUrl}?action=seed_sea`);
+      const seaJson = await seaRes.json();
+      const seaArr = Array.isArray(seaJson?.data) ? seaJson.data : [];
+      
+      // Get ports for coordinates
+      const portCodes = new Set<string>();
+      for (const s of seaArr) {
+        if (s.pol) portCodes.add(s.pol);
+        if (s.pod) portCodes.add(s.pod);
+      }
+      
+      let ports: Record<string, any> = {};
+      if (portCodes.size > 0) {
+        const portsRes = await fetch(`${baseUrl}?action=ports&codes=${encodeURIComponent(Array.from(portCodes).join(","))}`);
+        const portsJson = await portsRes.json();
+        ports = portsJson?.data || {};
+      }
 
-      for (const s of seedSea) {
-        const containerId = s.container;
-        const etaIso = s.eta_final_destination ? new Date(s.eta_final_destination).toISOString() : null;
+      const nowTs = Date.now();
+
+      for (const s of seaArr) {
+        const oCode = (s.pol || "").toUpperCase();
+        const dCode = (s.pod || "").toUpperCase();
         
+        if (!oCode || !dCode) continue;
+        
+        const o = ports[oCode];
+        const d = ports[dCode];
+        
+        if (!o || !d) continue;
+        
+        const orig: [number, number] | null = Number.isFinite(+o.lat) && Number.isFinite(+o.lon) 
+          ? [Number(o.lat), Number(o.lon)] : null;
+        const dest: [number, number] | null = Number.isFinite(+d.lat) && Number.isFinite(+d.lon) 
+          ? [Number(d.lat), Number(d.lon)] : null;
+          
+        if (!orig || !dest) continue;
+
+        const etaIso = s.eta ? new Date(s.eta).toISOString() : null;
+        const containerId = s.container || s.id || `sea-${newData.length}`;
+        
+        // Calculate status
         let status: "Em trânsito" | "Atraso" | "Entregue" = "Em trânsito";
-        const stText = (s.container_status || "").toLowerCase();
-        if (/delivered|gate out|empty received/.test(stText)) status = "Entregue";
-        else if (etaIso && Date.now() > new Date(etaIso).getTime()) status = "Atraso";
+        let deliveredUntilTs: number | null = null;
+        
+        if (etaIso) {
+          const etaTs = new Date(etaIso).getTime();
+          if (s.ata || s.actual_arrival) {
+            status = "Entregue";
+            const ataTs = new Date(s.ata || s.actual_arrival).getTime();
+            deliveredUntilTs = ataTs + 24 * 60 * 60 * 1000;
+          } else if (nowTs > etaTs) {
+            status = "Atraso";
+          }
+        }
 
-        const lastMovIso = s.last_movement_timestamp ? new Date(s.last_movement_timestamp).toISOString() : null;
-        const deliveredUntilTs = status === "Entregue" && lastMovIso ? new Date(lastMovIso).getTime() + 24 * 60 * 60 * 1000 : null;
-
-        const orig: [number, number] | null = 
-          s.origin_lat && s.origin_lon ? [Number(s.origin_lat), Number(s.origin_lon)] : null;
-        const dest: [number, number] | null = 
-          s.dest_lat && s.dest_lon ? [Number(s.dest_lat), Number(s.dest_lon)] : null;
-        const pos: [number, number] | null = 
-          s.vessel_lat && s.vessel_lon && status !== "Entregue" ? [Number(s.vessel_lat), Number(s.vessel_lon)] : null;
-
-        const oCode = s.origin_unlocode || "—";
-        const dCode = s.dest_unlocode || "—";
+        // Calculate position along route
+        let pos: [number, number] | null = null;
+        if (s.lat && s.lon) {
+          pos = [Number(s.lat), Number(s.lon)];
+        }
 
         newData.push({
           id: `sea:${containerId}`,
@@ -532,278 +589,261 @@ export default function Olimpo() {
     setIsLoading(false);
   }, []);
 
-  // Initialize map - recreate when switching fullscreen mode
+  // Initialize map
   useEffect(() => {
+    if (!mapboxToken || !mapContainerRef.current) return;
+
     // Cleanup previous map if exists
     if (mapRef.current) {
       mapRef.current.remove();
       mapRef.current = null;
     }
 
-    if (!mapContainerRef.current) return;
+    mapboxgl.accessToken = mapboxToken;
 
-    const map = L.map(mapContainerRef.current, {
-      worldCopyJump: true,
-      zoomSnap: 0.25,
-      zoomDelta: 0.5,
-      zoomAnimation: true,
-      markerZoomAnimation: true,
-      fadeAnimation: true,
-      doubleClickZoom: false,
-      scrollWheelZoom: true,
-      maxBoundsViscosity: 1.0,
+    const map = new mapboxgl.Map({
+      container: mapContainerRef.current,
+      style: "mapbox://styles/mapbox/dark-v11",
+      center: [0, 20],
+      zoom: 1.5,
+      projection: "globe",
+      pitch: 20,
     });
 
-    L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png", {
-      attribution: "&copy; OpenStreetMap, &copy; CARTO",
-      subdomains: "abcd",
-      noWrap: false,
-    }).addTo(map);
+    // Add navigation controls
+    map.addControl(
+      new mapboxgl.NavigationControl({
+        visualizePitch: true,
+      }),
+      "top-right"
+    );
 
-    // Set initial view to show the world
-    map.setView([20, 0], 2);
+    // Add atmosphere and fog effects
+    map.on("style.load", () => {
+      map.setFog({
+        color: "rgb(10, 10, 20)",
+        "high-color": "rgb(30, 30, 50)",
+        "horizon-blend": 0.1,
+        "star-intensity": 0.15,
+      });
+    });
+
+    // Slow rotation
+    let userInteracting = false;
+    const secondsPerRevolution = 360;
+
+    function spinGlobe() {
+      if (!map) return;
+      const zoom = map.getZoom();
+      if (!userInteracting && zoom < 3) {
+        const distancePerSecond = 360 / secondsPerRevolution;
+        const center = map.getCenter();
+        center.lng -= distancePerSecond / 60;
+        map.easeTo({ center, duration: 1000 / 60, easing: (n) => n });
+      }
+    }
+
+    map.on("mousedown", () => { userInteracting = true; });
+    map.on("mouseup", () => { userInteracting = false; });
+    map.on("dragstart", () => { userInteracting = true; });
+    map.on("dragend", () => { userInteracting = false; });
+
+    const spinInterval = setInterval(spinGlobe, 1000 / 60);
 
     mapRef.current = map;
 
-    // Force invalidateSize after a short delay to ensure proper rendering
-    setTimeout(() => {
-      map.invalidateSize();
-    }, 100);
-
     return () => {
-      if (mapRef.current) {
-        mapRef.current.remove();
-        mapRef.current = null;
-      }
+      clearInterval(spinInterval);
+      map.remove();
+      mapRef.current = null;
     };
-  }, [isFullscreen]);
+  }, [mapboxToken, isFullscreen]);
 
-  // Update map markers
+  // Update map markers and routes
   useEffect(() => {
     const map = mapRef.current;
-    if (!map) return;
-
-    // Clear existing layers
-    map.eachLayer((layer) => {
-      if (layer instanceof L.Marker || layer instanceof L.Polyline || layer instanceof L.CircleMarker) {
-        map.removeLayer(layer);
-      }
-    });
-    activeRouteRef.current = null;
-    activeMarkersRef.current = [];
-
-    // Helper function to build route line
-    const buildRouteLine = (item: DataItem, routeIndex: number): [number, number][] => {
-      let line: [number, number][] = [];
-      if (!item.orig || !item.dest) return line;
-      
-      if (item.mode === "sea") {
-        const way = maritimeWaypoints(item.orig, item.dest);
-        const seed = hashStr(String(item.asset || item.rota || "sea"));
-        const pts = [item.orig, ...way, item.dest];
-        for (let i = 1; i < pts.length; i++) {
-          const seg = bezierArc(pts[i - 1], pts[i], seed + i, 96, routeIndex);
-          if (i > 1) seg.shift();
-          line = line.concat(seg);
+    if (!map || !map.isStyleLoaded()) {
+      // Wait for style to load
+      const checkStyle = () => {
+        if (map && map.isStyleLoaded()) {
+          updateMapData();
         }
-      } else {
-        const seed = hashStr(String(item.asset || item.flight || item.rota || "air"));
-        line = bezierArc(item.orig, item.dest, seed, 100, routeIndex);
-      }
-      return line;
-    };
+      };
+      map?.on("style.load", checkStyle);
+      return () => {
+        map?.off("style.load", checkStyle);
+      };
+    }
+    updateMapData();
 
-    // Helper to show route for selected item
-    const showRoute = (item: DataItem, routeIndex: number, allGroups: Map<string, DataItem[]>) => {
-      // Clear previous route
-      if (activeRouteRef.current) {
-        map.removeLayer(activeRouteRef.current);
-      }
-      activeMarkersRef.current.forEach(m => map.removeLayer(m));
-      activeMarkersRef.current = [];
+    function updateMapData() {
+      if (!map) return;
 
-      if (!item.orig || !item.dest) return;
+      // Clear existing markers
+      markersRef.current.forEach(m => m.remove());
+      markersRef.current = [];
 
-      const line = buildRouteLine(item, routeIndex);
-      const baseColor = item.mode === "air" ? "#7fd0ff" : "#ffc800";
-
-      if (line.length > 1) {
-        // Draw base route line (solid, subtle)
-        const baseLine = L.polyline(line, { 
-          color: baseColor, 
-          weight: 2, 
-          opacity: 0.3,
-          lineCap: 'round',
-          lineJoin: 'round'
-        }).addTo(map);
-
-        // Draw animated dashed line on top
-        const animatedLine = L.polyline(line, { 
-          color: baseColor, 
-          weight: 3, 
-          opacity: 0.9,
-          lineCap: 'round',
-          lineJoin: 'round',
-          dashArray: '12, 8',
-          className: 'animated-route-line'
-        }).addTo(map);
-
-        // Store both lines for cleanup
-        activeRouteRef.current = baseLine;
-        // Store animated line in markers array for cleanup
-        const animatedMarker = animatedLine as unknown as L.CircleMarker;
-
-        // Add origin marker (green)
-        const originMarker = L.circleMarker(item.orig, {
-          radius: 8,
-          fillColor: "#22c55e",
-          fillOpacity: 1,
-          color: "#fff",
-          weight: 2,
-        }).addTo(map);
-
-        // Add destination marker (red)
-        const destMarker = L.circleMarker(item.dest, {
-          radius: 8,
-          fillColor: "#ef4444",
-          fillOpacity: 1,
-          color: "#fff",
-          weight: 2,
-        }).addTo(map);
-
-        activeMarkersRef.current = [originMarker, destMarker, animatedMarker];
-        
-        // Pan to fit the route in view
-        const bounds = L.latLngBounds([item.orig, item.dest]);
-        map.flyToBounds(bounds.pad(0.3), { duration: 0.5, maxZoom: 5 });
-      }
-
-      // Collect all AWBs/containers in this group
-      const groupKey = item.asset || `${item.mode}|${item.rota}`;
-      const groupItems = allGroups.get(groupKey) || [item];
-      const processos = groupItems.map(it => it.asset).filter(Boolean) as string[];
-
-      setSelectedAssetDetails({
-        mode: item.mode,
-        asset: item.asset,
-        flight: item.flight,
-        tipo_label: item.tipo_label,
-        cliente: item.cliente,
-        rota: item.rota,
-        eta_api: item.eta_api,
-        status: item.status,
-        processos: [...new Set(processos)],
+      // Clear existing sources and layers
+      activeSourcesRef.current.forEach(sourceId => {
+        if (map.getLayer(`${sourceId}-layer`)) {
+          map.removeLayer(`${sourceId}-layer`);
+        }
+        if (map.getSource(sourceId)) {
+          map.removeSource(sourceId);
+        }
       });
-    };
+      activeSourcesRef.current = [];
 
-    // Clear route when clicking on map (not marker)
-    const clearRoute = () => {
-      if (activeRouteRef.current) {
-        map.removeLayer(activeRouteRef.current);
-        activeRouteRef.current = null;
-      }
-      activeMarkersRef.current.forEach(m => map.removeLayer(m));
-      activeMarkersRef.current = [];
-      setSelectedAssetDetails(null);
-    };
-
-    map.on('click', clearRoute);
-
-    // Group items by asset
-    const groups = new Map<string, DataItem[]>();
-    for (const item of filteredData) {
-      const key = item.asset || `${item.mode}|${item.rota}`;
-      if (!groups.has(key)) groups.set(key, []);
-      groups.get(key)!.push(item);
-    }
-
-    const markers: L.Marker[] = [];
-    let routeIndex = 0;
-
-    // Sort groups by destination to cluster similar routes
-    const sortedGroups = Array.from(groups.entries()).sort((a, b) => {
-      const aItem = a[1][0];
-      const bItem = b[1][0];
-      const aDest = aItem.dest ? aItem.dest[0] * 1000 + aItem.dest[1] : 0;
-      const bDest = bItem.dest ? bItem.dest[0] * 1000 + bItem.dest[1] : 0;
-      return aDest - bDest;
-    });
-
-    for (const [, items] of sortedGroups) {
-      const item = items[0];
-      if (!item.orig || !item.dest) continue;
-
-      const currentRouteIndex = routeIndex;
-      routeIndex++;
-
-      // Calculate position along route
-      const line = buildRouteLine(item, currentRouteIndex);
-      let pos = item.pos;
-      if (!pos && line.length > 1) {
-        pos = pointAtFraction(line, item.prog, map);
-      }
-
-      if (pos) {
-        // Use deterministic offset based on route index to spread overlapping markers significantly
-        // Use golden angle (137.5°) for better distribution across the circle
-        const goldenAngle = 137.508 * (Math.PI / 180);
-        const offsetAngle = currentRouteIndex * goldenAngle;
-        // Spiral outward with each marker - minimum 2 degrees, max ~6 degrees
-        const offsetDistance = 2.0 + (currentRouteIndex % 8) * 0.5;
-        const latOffset = item.mode === "air" ? Math.sin(offsetAngle) * offsetDistance : 0;
-        const lngOffset = item.mode === "air" ? Math.cos(offsetAngle) * offsetDistance : 0;
-        const offsetPos: [number, number] = [pos[0] + latOffset, pos[1] + lngOffset];
-
-        const icon = L.divIcon({
-          html: item.mode === "air" ? "✈️" : "🚢",
-          className: "cursor-pointer",
-          iconSize: [24, 24],
-          iconAnchor: [12, 12],
-        });
+      // Helper function to build route line
+      const buildRouteLine = (item: DataItem, routeIndex: number): [number, number][] => {
+        let line: [number, number][] = [];
+        if (!item.orig || !item.dest) return line;
         
-        const marker = L.marker(offsetPos, { icon, zIndexOffset: currentRouteIndex * 10 }).addTo(map);
-        
-        // Show route on click
-        marker.on('click', (e) => {
-          L.DomEvent.stopPropagation(e);
-          showRoute(item, currentRouteIndex, groups);
-        });
-
-        // Tooltip with info
-        marker.bindTooltip(
-          `<div class="text-xs">
-            <strong>${item.asset || item.tipo_label}</strong><br/>
-            ${item.cliente}<br/>
-            ${item.rota}<br/>
-            <span class="${item.status === 'Atraso' ? 'text-red-400' : 'text-green-400'}">${item.status}</span>
-          </div>`,
-          { 
-            direction: 'top', 
-            offset: [0, -10],
-            className: 'bg-[#0a0a0a] border border-white/20 rounded-lg shadow-lg'
+        if (item.mode === "sea") {
+          const way = maritimeWaypoints(item.orig, item.dest);
+          const seed = hashStr(String(item.asset || item.rota || "sea"));
+          const pts = [item.orig, ...way, item.dest];
+          for (let i = 1; i < pts.length; i++) {
+            const seg = bezierArc(pts[i - 1], pts[i], seed + i, 96, routeIndex);
+            if (i > 1) seg.shift();
+            line = line.concat(seg);
           }
-        );
+        } else {
+          const seed = hashStr(String(item.asset || item.flight || item.rota || "air"));
+          line = bezierArc(item.orig, item.dest, seed, 100, routeIndex);
+        }
+        return line;
+      };
 
-        markers.push(marker);
+      // Group items by asset
+      const groups = new Map<string, DataItem[]>();
+      for (const item of filteredData) {
+        const key = item.asset || `${item.mode}|${item.rota}`;
+        if (!groups.has(key)) groups.set(key, []);
+        groups.get(key)!.push(item);
+      }
+
+      let routeIndex = 0;
+
+      for (const [key, items] of groups.entries()) {
+        const item = items[0];
+        if (!item.orig || !item.dest) continue;
+
+        const currentRouteIndex = routeIndex;
+        routeIndex++;
+
+        // Build route line
+        const line = buildRouteLine(item, currentRouteIndex);
+        
+        if (line.length > 1) {
+          // Convert to GeoJSON format [lng, lat]
+          const coordinates = line.map(([lat, lng]) => [lng, lat]);
+          
+          const sourceId = `route-${key}-${currentRouteIndex}`;
+          
+          // Add route source
+          map.addSource(sourceId, {
+            type: "geojson",
+            data: {
+              type: "Feature",
+              properties: {},
+              geometry: {
+                type: "LineString",
+                coordinates,
+              },
+            },
+          });
+
+          // Add route layer
+          map.addLayer({
+            id: `${sourceId}-layer`,
+            type: "line",
+            source: sourceId,
+            layout: {
+              "line-join": "round",
+              "line-cap": "round",
+            },
+            paint: {
+              "line-color": item.mode === "air" ? "#7fd0ff" : "#ffc800",
+              "line-width": 2,
+              "line-opacity": 0.6,
+            },
+          });
+
+          activeSourcesRef.current.push(sourceId);
+        }
+
+        // Calculate marker position
+        let pos = item.pos;
+        if (!pos && line.length > 1) {
+          pos = pointAtFraction(line, item.prog);
+        }
+
+        if (pos) {
+          // Create marker element
+          const el = document.createElement("div");
+          el.className = "cursor-pointer text-2xl";
+          el.innerHTML = item.mode === "air" ? "✈️" : "🚢";
+          el.style.filter = "drop-shadow(0 2px 4px rgba(0,0,0,0.5))";
+
+          const marker = new mapboxgl.Marker({ element: el })
+            .setLngLat([pos[1], pos[0]])
+            .addTo(map);
+
+          // Create popup
+          const popup = new mapboxgl.Popup({ offset: 25, closeButton: false })
+            .setHTML(`
+              <div style="background: rgba(5,6,18,0.95); color: white; padding: 8px 12px; border-radius: 8px; font-size: 12px;">
+                <strong>${item.asset || item.tipo_label}</strong><br/>
+                ${item.cliente}<br/>
+                ${item.rota}<br/>
+                <span style="color: ${item.status === 'Atraso' ? '#ff8b8b' : '#7fd0ff'};">${item.status}</span>
+              </div>
+            `);
+
+          marker.setPopup(popup);
+
+          // Click handler
+          el.addEventListener("click", () => {
+            const processos = items.map(it => it.asset).filter(Boolean) as string[];
+            setSelectedAssetDetails({
+              mode: item.mode,
+              asset: item.asset,
+              flight: item.flight,
+              tipo_label: item.tipo_label,
+              cliente: item.cliente,
+              rota: item.rota,
+              eta_api: item.eta_api,
+              status: item.status,
+              processos: [...new Set(processos)],
+            });
+          });
+
+          markersRef.current.push(marker);
+        }
+      }
+
+      // Fit bounds to show all markers
+      if (markersRef.current.length > 0) {
+        const bounds = new mapboxgl.LngLatBounds();
+        markersRef.current.forEach(m => bounds.extend(m.getLngLat()));
+        map.fitBounds(bounds, { padding: 50, maxZoom: 4 });
       }
     }
+  }, [filteredData, mapboxToken]);
 
-    // Fit bounds with better padding
-    if (markers.length > 0) {
-      const fg = L.featureGroup(markers);
-      map.flyToBounds(fg.getBounds().pad(0.25), { maxZoom: 4, duration: 0.5 });
-    }
+  // Load data on mount
+  useEffect(() => {
+    loadMapboxToken();
+    loadData();
+    loadMasterContainerCount();
+  }, [loadMapboxToken, loadData, loadMasterContainerCount]);
 
-    return () => {
-      map.off('click', clearRoute);
-    };
-  }, [filteredData]);
-
-  // Resize map on fullscreen toggle or window resize
+  // Handle resize
   useEffect(() => {
     const handleResize = () => {
       setTimeout(() => {
-        mapRef.current?.invalidateSize();
+        mapRef.current?.resize();
       }, 100);
     };
     
@@ -813,17 +853,10 @@ export default function Olimpo() {
     return () => window.removeEventListener('resize', handleResize);
   }, [isFullscreen]);
 
-  // Load data on mount
-  useEffect(() => {
-    loadData();
-    loadMasterContainerCount();
-  }, [loadData, loadMasterContainerCount]);
-
-  // Fullscreen mode - map takes entire screen
-  // Fullscreen overlay content (renders inside portal-like structure)
+  // Fullscreen overlay content
   const fullscreenOverlay = isFullscreen ? (
     <>
-      {/* Floating panel - filters + KPIs at top center - wide rectangle */}
+      {/* Floating panel - filters + KPIs at top center */}
       <div 
         className="absolute top-4 left-1/2 -translate-x-1/2 z-[1000] rounded-xl flex flex-col w-[95vw] max-w-[900px]"
         style={{
@@ -879,7 +912,7 @@ export default function Olimpo() {
           </button>
         </div>
 
-        {/* KPI cards row - larger */}
+        {/* KPI cards row */}
         <div className="flex gap-3 p-3">
           <div className="bg-[#151515] rounded-lg px-4 py-3 border border-white/[0.06] flex-1">
             <p className="text-[10px] text-muted-foreground uppercase tracking-[0.14em]">Containers</p>
@@ -906,7 +939,7 @@ export default function Olimpo() {
         <span className="w-2 h-2 rounded-full bg-[#7fd0ff]" /> AIR
       </div>
 
-      {/* Asset Details Panel - fullscreen - aligned top right */}
+      {/* Asset Details Panel */}
       {selectedAssetDetails && (
         <div 
           className="absolute right-4 top-4 w-72 max-h-[50vh] z-[1000] rounded-xl flex flex-col overflow-hidden"
@@ -954,7 +987,11 @@ export default function Olimpo() {
           </div>
 
           {/* Details */}
-          <div className="p-3 space-y-2 text-sm">
+          <div className="p-3 space-y-2 text-sm overflow-y-auto">
+            <div className="flex justify-between">
+              <span className="text-muted-foreground">Cliente</span>
+              <span className="font-medium">{selectedAssetDetails.cliente}</span>
+            </div>
             <div className="flex justify-between">
               <span className="text-muted-foreground">Rota</span>
               <span className="font-medium">{selectedAssetDetails.rota}</span>
@@ -965,41 +1002,35 @@ export default function Olimpo() {
             </div>
             <div className="flex justify-between">
               <span className="text-muted-foreground">Status</span>
-              <span className={`px-2 py-0.5 rounded-lg text-xs ${selectedAssetDetails.status === 'Atraso' ? 'bg-red-500/20 text-red-400' : selectedAssetDetails.status === 'Entregue' ? 'bg-green-500/20 text-green-400' : 'bg-blue-500/20 text-blue-400'}`}>
+              <span className={`px-2 py-0.5 rounded text-xs ${selectedAssetDetails.status === 'Atraso' ? 'bg-red-500/20 text-red-400' : selectedAssetDetails.status === 'Entregue' ? 'bg-green-500/20 text-green-400' : 'bg-blue-500/20 text-blue-400'}`}>
                 {selectedAssetDetails.status}
               </span>
             </div>
-          </div>
 
-          {/* Processos */}
-          <div className="p-3 border-t border-white/[0.05]">
-            <p className="text-xs text-muted-foreground uppercase tracking-wider mb-2">
-              Processos ({selectedAssetDetails.processos.length})
-            </p>
-            <div className="max-h-32 overflow-y-auto space-y-1">
-              {selectedAssetDetails.processos.length > 0 ? (
-                selectedAssetDetails.processos.map((awb, idx) => (
-                  <div key={idx} className="text-xs px-2 py-1.5 bg-white/[0.03] rounded-lg border border-white/[0.06]">
-                    {awb}
-                  </div>
-                ))
-              ) : (
-                <p className="text-xs text-muted-foreground italic">Nenhum processo</p>
-              )}
+            {/* Processos */}
+            <div className="pt-2 border-t border-white/[0.05]">
+              <p className="text-xs text-muted-foreground uppercase tracking-wider mb-2">
+                Processos ({selectedAssetDetails.processos.length})
+              </p>
+              <div className="space-y-1 max-h-32 overflow-y-auto">
+                {selectedAssetDetails.processos.length > 0 ? (
+                  selectedAssetDetails.processos.map((awb, idx) => (
+                    <div key={idx} className="text-xs px-2 py-1 bg-white/[0.03] rounded border border-white/[0.06]">
+                      {awb}
+                    </div>
+                  ))
+                ) : (
+                  <p className="text-xs text-muted-foreground italic">Nenhum processo</p>
+                )}
+              </div>
             </div>
-          </div>
-
-          {/* Faturamento */}
-          <div className="p-3 border-t border-white/[0.05]">
-            <p className="text-xs text-muted-foreground uppercase tracking-wider mb-2">Faturamento</p>
-            <p className="text-xs text-muted-foreground italic">Em desenvolvimento...</p>
           </div>
         </div>
       )}
     </>
   ) : null;
 
-  // Fullscreen mode - map takes entire screen
+  // Fullscreen mode
   if (isFullscreen) {
     return (
       <div className="fixed inset-0 z-50 bg-[#02040a]">
@@ -1012,7 +1043,7 @@ export default function Olimpo() {
   // Normal mode
   return (
     <div className="min-h-screen relative">
-      {/* Background - consistente com PageLayout */}
+      {/* Background */}
       <div className="fixed inset-0 z-0">
         <div
           className="absolute inset-0"
@@ -1146,7 +1177,7 @@ export default function Olimpo() {
                 <span className="w-2 h-2 rounded-full bg-[#7fd0ff]" /> AIR
               </div>
 
-              {/* Asset Details Panel - floating on map with scroll */}
+              {/* Asset Details Panel */}
               {selectedAssetDetails && (
                 <div 
                   className="absolute right-3 top-3 w-72 max-h-[calc(100%-24px)] z-[1000] rounded-xl flex flex-col overflow-hidden"
@@ -1332,77 +1363,66 @@ export default function Olimpo() {
             boxShadow: '0 18px 40px rgba(0,0,0,.85)',
           }}
         >
-          <div className="p-4 border-b border-white/[0.08]">
-            <h2 className="text-sm tracking-[0.16em] uppercase text-white/90">Resumo de Movimentações</h2>
-            <p className="text-xs text-muted-foreground">Principais embarques por origem, destino, modal e status</p>
+          <div className="flex items-center justify-between p-3 md:p-4 border-b border-white/[0.08] shrink-0">
+            <div>
+              <h2 className="text-xs md:text-sm tracking-[0.16em] uppercase text-white/90">Resumo de Movimentações</h2>
+              <p className="text-[10px] md:text-xs text-muted-foreground">{aggregatedData.length} registros agrupados</p>
+            </div>
+            <TablePagination
+              currentPage={currentPage}
+              totalPages={totalPages}
+              onPageChange={setCurrentPage}
+            />
           </div>
 
           <div className="flex-1 overflow-auto">
             <Table>
               <TableHeader>
-                <TableRow className="border-b border-white/[0.06] hover:bg-transparent">
-                  <TableHead className="text-xs uppercase tracking-[0.12em] text-muted-foreground sticky top-0 bg-card">
-                    Cliente
-                  </TableHead>
-                  <TableHead className="text-xs uppercase tracking-[0.12em] text-muted-foreground sticky top-0 bg-card">
-                    Modal
-                  </TableHead>
-                  <TableHead className="text-xs uppercase tracking-[0.12em] text-muted-foreground sticky top-0 bg-card">
-                    Origem → Destino
-                  </TableHead>
-                  <TableHead className="text-xs uppercase tracking-[0.12em] text-muted-foreground sticky top-0 bg-card">
-                    ETA
-                  </TableHead>
-                  <TableHead className="text-xs uppercase tracking-[0.12em] text-muted-foreground sticky top-0 bg-card">
-                    Status
-                  </TableHead>
+                <TableRow className="border-white/[0.06] hover:bg-transparent">
+                  <TableHead className="text-[10px] md:text-xs text-muted-foreground">Tipo</TableHead>
+                  <TableHead className="text-[10px] md:text-xs text-muted-foreground">Cliente</TableHead>
+                  <TableHead className="text-[10px] md:text-xs text-muted-foreground">Rota</TableHead>
+                  <TableHead className="text-[10px] md:text-xs text-muted-foreground">Previsão</TableHead>
+                  <TableHead className="text-[10px] md:text-xs text-muted-foreground">Status</TableHead>
+                  <TableHead className="text-[10px] md:text-xs text-muted-foreground text-right">Qtd</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {paginatedData.map((row) => (
-                  <TableRow key={row.key} className="border-b border-white/[0.04] hover:bg-white/[0.03]">
-                    <TableCell className="py-2">{row.cliente}</TableCell>
-                    <TableCell className="py-2">
-                      <Badge variant="outline" className={`text-[10px] ${row.mode === "air" ? "border-[#7fd0ff]/60 text-[#b7e2ff]" : "border-primary/60 text-primary"}`}>
-                        {row.mode === "air" ? "AIR" : "SEA"}
-                      </Badge>
-                    </TableCell>
-                    <TableCell className="py-2">{row.rota}</TableCell>
-                    <TableCell className="py-2 text-muted-foreground">{row.eta_api}</TableCell>
-                    <TableCell className="py-2">
-                      <Badge
-                        variant="outline"
-                        className={
-                          row.status === "Atraso"
-                            ? "border-red-500/60 text-red-400"
-                            : row.status === "Entregue"
-                            ? "border-green-500/60 text-green-400"
-                            : "border-blue-500/60 text-blue-400"
-                        }
-                      >
-                        {row.status}
-                      </Badge>
+                {isLoading ? (
+                  <TableRow>
+                    <TableCell colSpan={6} className="text-center text-muted-foreground py-8">
+                      Carregando dados...
                     </TableCell>
                   </TableRow>
-                ))}
+                ) : paginatedData.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={6} className="text-center text-muted-foreground py-8">
+                      Nenhum registro encontrado
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  paginatedData.map((row) => (
+                    <TableRow key={row.key} className="border-white/[0.04] hover:bg-white/[0.02]">
+                      <TableCell className="text-[10px] md:text-xs">
+                        <Badge variant="outline" className={`text-[9px] md:text-[10px] ${row.mode === 'air' ? 'border-[#7fd0ff]/50 text-[#b7e2ff]' : 'border-primary/50 text-primary'}`}>
+                          {row.tipo_label}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="text-[10px] md:text-xs max-w-[120px] md:max-w-[150px] truncate">{row.cliente}</TableCell>
+                      <TableCell className="text-[10px] md:text-xs">{row.rota}</TableCell>
+                      <TableCell className="text-[10px] md:text-xs">{row.eta_api}</TableCell>
+                      <TableCell>
+                        <span className={`text-[9px] md:text-[10px] px-1.5 py-0.5 rounded ${row.status === 'Atraso' ? 'bg-red-500/20 text-red-400' : row.status === 'Entregue' ? 'bg-green-500/20 text-green-400' : 'bg-blue-500/20 text-blue-400'}`}>
+                          {row.status}
+                        </span>
+                      </TableCell>
+                      <TableCell className="text-[10px] md:text-xs text-right font-medium">{row.count}</TableCell>
+                    </TableRow>
+                  ))
+                )}
               </TableBody>
             </Table>
           </div>
-
-          {/* Pagination */}
-          <div className="p-2 border-t border-white/[0.05]">
-            <TablePagination
-              currentPage={currentPage}
-              totalPages={totalPages}
-              onPageChange={setCurrentPage}
-              maxVisiblePages={5}
-            />
-          </div>
-        </div>
-
-        {/* Footer */}
-        <div className="text-center text-xs text-muted-foreground tracking-[0.18em] uppercase">
-          Z3US.AI · for logistics
         </div>
       </div>
     </div>
