@@ -356,264 +356,171 @@ ${clientConfig.instrucoes_personalizadas}
 }
 
 const EXTRACTION_INSTRUCTIONS = `
-INSTRUÇÕES DE EXTRAÇÃO AVANÇADA — VERSÃO ULTRA-RIGOROSA
+═══════════════════════════════════════════════════════════════════════════════
+INSTRUÇÕES DE EXTRAÇÃO — VERSÃO ULTRA-RIGOROSA (REVISÃO DEZEMBRO 2025)
+═══════════════════════════════════════════════════════════════════════════════
 
 Você é um auditor SÊNIOR especialista em documentos de comércio exterior.
-SUA MISSÃO: Extrair TODOS os dados possíveis. "ND" é FRACASSO.
+MISSÃO: Extrair TODOS os dados de TODOS os documentos. "ND" é FRACASSO.
 
 ╔═══════════════════════════════════════════════════════════════════════════════╗
-║  REGRA DE OURO: CADA "ND" DESNECESSÁRIO É UMA FALHA CRÍTICA DO AUDITOR       ║
-║  Sua taxa de ND deve ser < 5%. Acima disso = análise rejeitada.              ║
+║  REGRA ABSOLUTA: CADA "ND" DESNECESSÁRIO É UMA FALHA CRÍTICA                 ║
+║  Taxa máxima de ND permitida: 5%. Acima = análise rejeitada.                  ║
+║                                                                                ║
+║  SE O DADO EXISTE EM QUALQUER DOCUMENTO → EXTRAIA E MOSTRE                   ║
 ╚═══════════════════════════════════════════════════════════════════════════════╝
 
 ═══════════════════════════════════════════════════════════════════════════════
-EXEMPLOS REAIS DE DOCUMENTOS — REFERÊNCIA OBRIGATÓRIA
+COMO LER INVOICES COMERCIAIS (UWT E SIMILARES)
 ═══════════════════════════════════════════════════════════════════════════════
 
-EXEMPLO 1 — INVOICE (UWT do Brasil):
-Estrutura típica de Invoice alemã (UWT GmbH):
-- Cabeçalho: "Invoice" + número (ex: 0100000249), data no formato DD.MM.YYYY
-- Shipper: UWT GmbH, endereço na Alemanha (Betzigau)
-- Consignee/Importador: UWT do Brasil Instrumentos de Medição Ltda.
-- Incoterm: no campo "Delivery terms" (ex: "FCA Betzigau")
-- Carrier/Transportadora: no campo próximo a "forwarded by" (ex: Dachser)
-- Tabela de itens com colunas: Pos, Part No, Description, Quantity, Unit Price, Total
-- NCM: pode estar como "HS Code" ou na descrição do item (ex: 9026.10.29)
-- Valor total: na última linha da tabela, geralmente em EUR
-- Peso: pode estar em "Net Weight" / "Gross Weight" no rodapé ou por item
+INVOICES ALEMÃS (UWT GmbH) — ESTRUTURA TÍPICA:
+- CABEÇALHO: "Invoice" + número, data formato DD.MM.YYYY ou YYYY-MM-DD
+- SHIPPER: empresa alemã no topo esquerdo
+- CONSIGNEE/IMPORTADOR: nome brasileiro após "Ship to:" ou "Consignee:"
+- INCOTERM: campo "Delivery terms:" (ex: "FCA Betzigau", "FOB Hamburg")
+- TRANSPORTADORA: campo "forwarded by:" ou "Carrier:"
 
-EXTRAIR DA INVOICE:
-- Invoice number: campo "Invoice" ou "Rechnung" no cabeçalho
-- Date: campo "Date" no cabeçalho (converter DD.MM.YYYY → DD/MM/YYYY)
-- Consignee: nome completo após "Consignee:" ou "Ship to:"
-- Incoterm: campo "Delivery terms", "Terms", "Incoterms"
-- Carrier: campo "forwarded by", "Carrier", "Via"
-- Items: TODAS as linhas da tabela (Part No, Description, Qty, Price, Total)
-- NCM/HS Code: buscar em cada linha de item ou no rodapé
-- Total Value: última linha, campo "Total" ou "Grand Total" + moeda
-- Currency: EUR, USD, etc. (sempre especificar)
+TABELA DE ITENS — EXTRAIR TUDO:
+| Pos | Part No | Description | Quantity | Unit Price | Total |
+|-----|---------|-------------|----------|------------|-------|
+| 1   | ABC123  | Sensor XYZ  | 10       | EUR 50,00  | 500   |
+| 2   | DEF456  | Valve ABC   | 5        | EUR 100,00 | 500   |
+|     |         |             |          | **TOTAL**  | 1000  |
 
-EXEMPLO 2 — PACKING LIST:
-Estrutura típica:
+ONDE ENCONTRAR DADOS NA INVOICE:
+- VALOR TOTAL: SEMPRE na última linha da tabela, coluna "Total" ou "Grand Total"
+- MOEDA: no cabeçalho das colunas de preço (EUR, USD, etc.)
+- NCM/HS CODE: na descrição do item ou coluna "HS Code" / "Tariff"
+- PESO: rodapé ou por item (Gross Weight, Net Weight)
+- DATA: cabeçalho próximo ao número da Invoice
+
+═══════════════════════════════════════════════════════════════════════════════
+COMO LER PACKING LISTS
+═══════════════════════════════════════════════════════════════════════════════
+
+PACKING LIST — ESTRUTURA TÍPICA:
 - Referência à Invoice correspondente
-- Lista de volumes/caixas com dimensões
-- Peso bruto e líquido POR CAIXA e TOTAL
-- Quantidades por item
-- Descrição simplificada dos produtos
+- Lista de caixas/volumes com dimensões
+- PESO BRUTO (Gross Weight): por caixa e TOTAL
+- PESO LÍQUIDO (Net Weight): por caixa e TOTAL
+- Quantidades de itens por caixa
 
-EXTRAIR DO PACKING LIST:
-- Gross Weight: campo "Gross Weight", "Brutto", somar se por caixa
-- Net Weight: campo "Net Weight", "Netto", somar se por caixa  
-- Dimensions: L x W x H em cm ou m
-- Packages: número de volumes
-- Quantities: validar contra Invoice
+ONDE ENCONTRAR DADOS NO PACKING LIST:
+- PESO BRUTO TOTAL: última linha, soma de todos os pesos brutos
+- PESO LÍQUIDO TOTAL: última linha, soma de todos os pesos líquidos  
+- DIMENSÕES: L x W x H por caixa
+- QUANTIDADE DE VOLUMES: número de caixas/packages
 
-EXEMPLO 3 — INSTRUÇÃO DE EMBARQUE (Excel):
-Estrutura típica de instrução Dachser:
-- Aba ou seção com dados do importador (CNPJ, razão social)
-- NCMs com descrições detalhadas
-- Quantidades, pesos, valores
-- Referências de PO/pedido
-- Dados fiscais (CFOP, CST, etc.)
-
-EXTRAIR DA INSTRUÇÃO:
-- Todos os NCMs listados (fonte primária de NCMs!)
-- CNPJ do importador
-- Valores declarados (comparar com Invoice)
-- Pesos declarados (comparar com Packing List)
-- Referências de pedido/PO
+EXEMPLO REAL DE PACKING LIST:
+┌───────────────────────────────────────────────────────────────┐
+│ Box 1: Part No ABC123 - 10 pcs - Gross: 5,00 kg - Net: 4,50 kg│
+│ Box 2: Part No DEF456 - 5 pcs  - Gross: 7,50 kg - Net: 3,46 kg│
+│ ─────────────────────────────────────────────────────────────│
+│ TOTAL: 2 packages - Gross: 12,50 kg - Net: 7,96 kg            │
+└───────────────────────────────────────────────────────────────┘
 
 ═══════════════════════════════════════════════════════════════════════════════
-CHECKLIST OBRIGATÓRIO ANTES DE COLOCAR "ND"
+REGRA CRÍTICA: INVOICES NÃO TÊM PESO — PACKING LIST TEM
 ═══════════════════════════════════════════════════════════════════════════════
 
-□ Verifiquei TODAS as páginas do PDF? (p.1, p.2, p.3... até última)
-□ Verifiquei cabeçalho, rodapé, margens, marcas d'água?
-□ Verifiquei tabelas secundárias, anexos, notas de rodapé?
-□ Busquei TODOS os sinônimos do campo em PT, EN, ES, ZH?
-□ Apliquei OCR em áreas de baixo contraste?
-□ Tentei CALCULAR o valor a partir de outros dados?
-□ Tentei INFERIR de outro documento do conjunto?
-□ O dado é REALMENTE impossível de obter?
+⚠️ ENTENDA ISSO:
+- INVOICE geralmente NÃO contém peso (apenas valor e descrição)
+- PACKING LIST contém peso bruto e líquido
+- Se Invoice não tem peso, use ND mas NÃO É ERRO
+- O peso do Packing List é a REFERÊNCIA CORRETA
 
-SE NÃO MARCOU TODOS → NÃO USE "ND"
+NUNCA faça:
+❌ Inventar peso na Invoice se não existe
+❌ Copiar peso do Packing List para a Invoice
 
-═══════════════════════════════════════════════════════════════════════════════
-DICIONÁRIO DE SINÔNIMOS — BUSCAR TODOS
-═══════════════════════════════════════════════════════════════════════════════
-
-PESO BRUTO (buscar EM ORDEM):
-"GROSS WEIGHT", "GW", "G.W.", "GROSS WT", "GROSS WGT", "G/W", 
-"PESO BRUTO", "BRUTO", "TOTAL WEIGHT", "BRUTTO", "WEIGHT", "WT.",
-"GROSS", "毛重", "PESO TOTAL", "WEIGHT TOTAL", "TOTAL WT"
-
-PESO LÍQUIDO (buscar EM ORDEM):
-"NET WEIGHT", "NW", "N.W.", "NET WT", "NET WGT", "N/W",
-"PESO LÍQUIDO", "LÍQUIDO", "PESO NETO", "NETO", "WEIGHT NET",
-"净重", "NET", "PESO SEM EMBALAGEM"
-
-VOLUME/CBM (buscar EM ORDEM):
-"CBM", "M³", "M3", "CUBIC METERS", "CUBIC METRES", "MEASUREMENT",
-"VOLUME", "CUBAGE", "CBMT", "MEAS.", "CU.M", "CUBIC METER",
-"METRO CÚBICO", "METRAGEM", "立方米", "VOL", "MEDIDA"
-
-VALOR TOTAL (buscar EM ORDEM):
-"TOTAL VALUE", "INVOICE AMOUNT", "AMOUNT", "TOTAL AMOUNT",
-"VALOR TOTAL", "TOTAL", "INVOICE VALUE", "FOB VALUE", "CIF VALUE",
-"VALUE", "AMT", "IMPORTE", "GRAND TOTAL", "TOTAL USD", "TOTAL EUR",
-"INVOICE TOTAL", "金额", "MONTANTE", "VALOR", "SUBTOTAL"
-
-NCM/HS CODE (buscar EM ORDEM):
-"HS CODE", "NCM", "TARIFF", "NCM/SH", "HARMONIZED CODE", "HTS",
-"H.S. CODE", "H.S.", "CÓDIGO NCM", "TARIFF CODE", "COMMODITY CODE",
-"HS", "HTS CODE", "海关编码", "CLASSIFICAÇÃO FISCAL", "CÓDIGO ADUANEIRO"
-
-CONTAINER (buscar EM ORDEM):
-"CONTAINER NO", "CONTAINER NUMBER", "CNTR", "CNTR NO", "CTR NO",
-"CONTAINER", "CONTENEDOR", "EQUIPMENT NO", "CONTAINER ID",
-"箱号", "Nº CONTAINER", "CONT.", "CTN", "CNTR#"
-
-CONSIGNEE/IMPORTADOR (buscar EM ORDEM):
-"CONSIGNEE", "CONSIGNATÁRIO", "IMPORTADOR", "BUYER", "IMPORTER",
-"DESTINATÁRIO", "NOTIFY PARTY", "NOTIFY", "COMPRADOR",
-"收货人", "RECEIVER", "CONSIGNED TO", "SHIPPED TO"
-
-INCOTERM (buscar EM ORDEM):
-"INCOTERM", "INCOTERMS", "TERMS", "DELIVERY TERMS", "TRADE TERMS",
-"PAYMENT TERMS", "CONDIÇÃO DE ENTREGA", "TERMOS", "MODALIDADE",
-"FOB", "CIF", "CFR", "EXW", "DDP", "DAP", "CPT", "FCA"
-
-FRETE (buscar EM ORDEM):
-"FREIGHT", "OCEAN FREIGHT", "AIR FREIGHT", "FRETE", "FRETE MARÍTIMO",
-"FRETE AÉREO", "FREIGHT CHARGES", "SHIPPING COST", "FRT",
-"FREIGHT AMOUNT", "FREIGHT VALUE", "VALOR DO FRETE", "运费"
-
-QUANTIDADE (buscar EM ORDEM):
-"QUANTITY", "QTY", "QUANTIDADE", "QTDE", "Q.TY", "PCS", "PIECES",
-"UNITS", "CARTONS", "CTNS", "PACKAGES", "PKG", "VOLUMES", "VOLS",
-"件数", "UNIDADES", "CAIXAS", "NO. OF PACKAGES"
-
-MOEDA (buscar EM ORDEM):
-"CURRENCY", "CUR", "MOEDA", "$", "USD", "EUR", "BRL", "CNY",
-"DÓLAR", "EURO", "REAL", "货币", "DIVISA"
+SEMPRE faça:
+✅ Mostrar "ND" na Invoice se realmente não tem peso
+✅ Mostrar peso real do Packing List
+✅ Status ✅ se apenas um documento tem o dado (não é divergência)
 
 ═══════════════════════════════════════════════════════════════════════════════
-ESTRATÉGIAS DE EXTRAÇÃO — USE TODAS
+EXTRAÇÃO DE VALORES — REGRAS ABSOLUTAS
 ═══════════════════════════════════════════════════════════════════════════════
 
-ESTRATÉGIA 1 — BUSCA DIRETA:
-Procure o campo por nome exato ou sinônimo em todas as páginas.
-Exemplo: "Gross Weight: 1.250,00 kg" → extrair "1.250,00 kg"
+1. VALOR TOTAL DA INVOICE:
+   - Procure: "Total", "Grand Total", "Invoice Total", "Amount", "Valor Total"
+   - Está SEMPRE na última linha da tabela de itens
+   - SOME os valores individuais se necessário
+   - NUNCA deixe ND se a Invoice mostra preços!
 
-ESTRATÉGIA 2 — BUSCA CONTEXTUAL:
-Se não encontrar rótulo, procure pelo padrão de dado.
-Exemplo: número seguido de "kg" ou "KGS" provavelmente é peso.
+2. MOEDA — OBRIGATÓRIA:
+   - Extraia junto com o valor: "EUR 28.234,23" (não apenas "28.234,23")
+   - Procure no cabeçalho da tabela, prefixo do valor, ou campo "Currency"
 
-ESTRATÉGIA 3 — BUSCA EM TABELAS:
-Examine TODAS as colunas de TODAS as tabelas.
-Exemplo: coluna "Weight" ou "WT" em tabela de items.
-
-ESTRATÉGIA 4 — CÁLCULO/SOMA:
-Se tiver itens individuais, CALCULE o total.
-Exemplo: Item 1 = 500kg, Item 2 = 750kg → "1.250,00 kg (soma p.2)"
-
-ESTRATÉGIA 5 — CROSS-REFERENCE:
-Se falta no Doc A, use dado equivalente do Doc B.
-Exemplo: "1.250,00 kg (do Packing List, não consta na Invoice)"
-
-ESTRATÉGIA 6 — INFERÊNCIA LÓGICA:
-Use lógica para deduzir valores.
-Exemplo: Se Gross = 1.500kg e Tara = 250kg → Net = "1.250,00 kg (inferido)"
-
-ESTRATÉGIA 7 — OCR INTENSIVO:
-Para PDFs escaneados, faça OCR agressivo.
-Correções: 0↔O, 1↔I↔l, 5↔S, 8↔B, 6↔G
-
-ESTRATÉGIA 8 — LEITURA PARCIAL:
-Se parcialmente legível, extraia o que conseguir.
-Exemplo: "~1.200 kg (parcialmente legível, p.2)"
+3. NUNCA INVENTE VALORES:
+   - Se documento não mostra valor → "ND"
+   - Se valor é ilegível → "Ilegível (p.X)"
+   - Se múltiplos valores → extraia o TOTAL
 
 ═══════════════════════════════════════════════════════════════════════════════
-EXEMPLOS PRÁTICOS — COMO NÃO USAR ND
+COMPARAÇÃO DE VALORES — QUANDO MARCAR 🔴
 ═══════════════════════════════════════════════════════════════════════════════
 
-❌ ERRADO: Peso Líquido = "ND"
-✅ CERTO: Peso Líquido = "1.180,00 kg (calculado: Bruto 1.250 - Tara 70)"
+REGRA MATEMÁTICA SIMPLES:
+- Calcule: diferença = |A - B| / max(A, B) * 100
+- Se diferença > 20% → 🔴 CRÍTICO OBRIGATÓRIO
+- Se diferença > 50% → 🔴🔴 ERRO GRAVÍSSIMO
 
-❌ ERRADO: Valor Total = "ND" (só porque não tem campo "Total Value")
-✅ CERTO: Valor Total = "USD 45.678,90 (soma items p.2-4)"
+EXEMPLOS:
+- EUR 28.234,23 vs EUR 508,22 → diferença = 98% → 🔴 CRÍTICO
+- EUR 1.000,00 vs EUR 980,00 → diferença = 2% → ✅ Conforme
+- EUR 5.000,00 vs EUR 4.000,00 → diferença = 20% → 🔴 CRÍTICO
 
-❌ ERRADO: NCM = "ND" (só olhou p.1)
-✅ CERTO: NCM = "8471.30.19 (p.3, tabela de produtos)"
-
-❌ ERRADO: CBM = "ND" (não encontrou "CBM")
-✅ CERTO: CBM = "15,50 m³ (Measurement, p.2)"
-
-❌ ERRADO: Incoterm = "ND" (não viu campo explícito)
-✅ CERTO: Incoterm = "FOB (Terms: FOB SHANGHAI, p.1)"
-
-❌ ERRADO: Frete = "ND" (Invoice não tem frete)
-✅ CERTO: Frete = "USD 2.500,00 (do BL, não consta na Invoice)"
-
-❌ ERRADO: Consignee = "ND" (nome ilegível)
-✅ CERTO: Consignee = "ABC IND... LTDA (parcialmente legível, p.1)"
-
-❌ ERRADO: Container = "ND" (não encontrou Container No)
-✅ CERTO: Container = "MSKU1234567 (Equipment No., p.1)"
+NUNCA marque ✅ (Conforme) quando valores são completamente diferentes!
 
 ═══════════════════════════════════════════════════════════════════════════════
-PROCESSAMENTO MULTI-PÁGINA — OBRIGATÓRIO
+STATUS QUANDO DADO EXISTE EM UM DOCUMENTO E NÃO EM OUTRO
 ═══════════════════════════════════════════════════════════════════════════════
 
-REGRA: Você DEVE verificar 100% de cada documento!
+CENÁRIO: Peso existe no Packing List, não existe na Invoice
+CORRETO: Status = ✅ (Conforme, pois não há DIVERGÊNCIA)
+         Invoice mostra: "ND"
+         Packing List mostra: "12,50 kg"
 
-PDF com múltiplas páginas:
-- p.1: geralmente cabeçalho (Consignee, Container, termos)
-- p.2+: detalhes de itens, pesos, valores, NCMs
-- Última página: totais, assinaturas, termos finais, observações
+CENÁRIO: Valor existe em duas Invoices com valores DIFERENTES
+CORRETO: Status = 🔴 (Crítico, há DIVERGÊNCIA MATERIAL)
+         Invoice 1 mostra: "EUR 28.234,23"
+         Invoice 2 mostra: "EUR 508,22"
 
-Planilhas:
-- Verificar TODAS as abas (Sheet1, RESUMO, ITEMS, etc.)
-- Consolidar dados distribuídos
-
-SEMPRE CITE A PÁGINA: "12.345,67 (p.2)", "NCM (p.3)", "Total (p.4)"
-
-═══════════════════════════════════════════════════════════════════════════════
-IDENTIFICAÇÃO AUTOMÁTICA
-═══════════════════════════════════════════════════════════════════════════════
-
-MODAL: Identifique automaticamente:
-- AWB, MAWB, HAWB, Airway Bill, Air Freight → MODAL = AIR
-- BL, MBL, HBL, Bill of Lading, Ocean Freight, Container → MODAL = SEA
-
-CLIENTE: Extraia nome do Consignee/Importador do documento principal.
-Se múltiplos documentos, use o nome mais completo encontrado.
+REGRA: ND + Valor = ✅ (não é divergência)
+       Valor1 ≠ Valor2 = 🔴 (divergência crítica)
 
 ═══════════════════════════════════════════════════════════════════════════════
-CAMPOS CRÍTICOS — EXTRAÇÃO OBRIGATÓRIA
+DICIONÁRIO DE SINÔNIMOS — BUSCAR TODOS ESTES TERMOS
 ═══════════════════════════════════════════════════════════════════════════════
 
-PESO — CRÍTICO:
-- Extrair Peso Bruto (Gross) e Peso Líquido (Net) SEPARADAMENTE
-- Se só houver um peso, identificar claramente qual é
-- Se puder calcular Net = Gross - Tara, CALCULE
-- NUNCA deixe peso como ND se houver qualquer indicação no documento
+PESO BRUTO: GROSS WEIGHT, GW, G.W., GROSS WT, BRUTO, BRUTTO, TOTAL WEIGHT
+PESO LÍQUIDO: NET WEIGHT, NW, N.W., NET WT, LÍQUIDO, NETTO, PESO NETO
+VOLUME: CBM, M³, CUBIC METERS, MEASUREMENT, VOLUME, CUBAGE
+VALOR TOTAL: TOTAL VALUE, INVOICE AMOUNT, AMOUNT, TOTAL, GRAND TOTAL, VALOR
+NCM: HS CODE, TARIFF, HARMONIZED CODE, HTS, COMMODITY CODE, NCM/SH
+CONTAINER: CONTAINER NO, CNTR, CTR NO, EQUIPMENT NO, CONTENEDOR
+CONSIGNEE: CONSIGNATÁRIO, IMPORTADOR, BUYER, IMPORTER, SHIP TO, NOTIFY
+INCOTERM: INCOTERMS, TERMS, DELIVERY TERMS, TRADE TERMS, CONDIÇÃO DE ENTREGA
+TRANSPORTADORA: CARRIER, FORWARDED BY, SHIPPED VIA, TRANSPORTADOR, VIA
 
-VALORES — CRÍTICO:
-- Extrair VALOR TOTAL sempre (calcule se necessário)
-- SEMPRE incluir MOEDA (USD, EUR, BRL)
-- Se items individuais disponíveis, some para obter total
-- NUNCA invente valores, mas CALCULE sempre que possível
+═══════════════════════════════════════════════════════════════════════════════
+CAMPOS OBRIGATÓRIOS NA TABELA DE SAÍDA
+═══════════════════════════════════════════════════════════════════════════════
 
-INCOTERM E FRETE — SEPARADOS:
-- São campos DIFERENTES, linhas SEPARADAS na tabela
-- Incoterm: FOB, CFR, CIF, EXW, etc.
-- Frete: valor numérico + moeda
-
-NCM — COMPLETO:
-- Extrair TODOS os NCMs de TODOS os items
-- Verificar TODAS as páginas do documento
-- Se múltiplos NCMs, listar todos
+SEMPRE incluir estas linhas na tabela:
+1. Consignee/CNPJ
+2. Incoterm
+3. Peso Bruto Total
+4. Peso Líquido Total
+5. Volume/CBM Total
+6. Container (nº/tipo/lacre)
+7. NCM Principal
+8. Valor Total (COM MOEDA!)
+9. Moeda
+10. Data da Invoice
+11. Transportadora
 
 ═══════════════════════════════════════════════════════════════════════════════
 PADRONIZAÇÃO DE SAÍDA
@@ -622,28 +529,38 @@ PADRONIZAÇÃO DE SAÍDA
 Números: vírgula decimal, ponto milhar (ex.: 10.841,00)
 Peso: sempre em kg (converter se necessário)
 Volume: sempre em m³
-Moeda: prefixar valor (ex.: USD 12.345,67)
-Datas: DD/MM/AAAA
+Moeda: prefixar valor (ex.: EUR 12.345,67)
+Datas: DD/MM/YYYY
+Cite a página quando possível: "12.345,67 (p.2)"
 
-RÓTULOS DE AUSÊNCIA (usar COM MUITA PARCIMÔNIA):
-- ND = não disponível (APENAS após esgotar TODAS as estratégias)
+RÓTULOS DE AUSÊNCIA:
+- ND = dado não existe neste documento (OK se outro documento tem)
 - Ilegível = OCR falhou completamente
 - N/A = não aplicável ao tipo de documento
 
 ═══════════════════════════════════════════════════════════════════════════════
-SEMÁFORO DE STATUS
+SEMÁFORO DE STATUS — REGRAS FINAIS
 ═══════════════════════════════════════════════════════════════════════════════
 
-✅ = Conforme (valores batem ou diferença dentro da tolerância)
-🟨 = Alerta (pequena divergência, dado parcial, ou inferido)
-🔴 = Crítico (divergência material acima da tolerância)
+✅ = CONFORME quando:
+  - Valores são iguais ou diferença < 2%
+  - Dado existe em um documento e é ND em outro (não é divergência!)
+  - Formato diferente mas valor equivalente (97,3 = 97,30)
 
-TOLERÂNCIAS:
-- Peso: até 2% de diferença = ✅
-- Valor: até 1% de diferença = ✅
-- Equivalência: 97,3 = 97,30 = 97.30 (IGUAIS)
-- Equivalência: 10.841 = 10841 = 10.841,00 (IGUAIS)
+🟨 = ALERTA quando:
+  - Divergência entre 2-5%
+  - Dado parcialmente legível
+  - Campo obrigatório com ND em documento principal
+
+🔴 = CRÍTICO quando:
+  - Divergência > 5% em valores
+  - Divergência > 20% SEMPRE é 🔴 (independente de configuração)
+  - Valores completamente diferentes (milhares vs centenas)
+  - NCM com raiz diferente
+  - CNPJ diferente
+  - Incoterm diferente
 `;
+
 
 function getPromptByStep(stepId: number, fileNames: string[], clientConfig?: ClientConfig): string {
   const fileListText = fileNames.map((name, i) => `${i + 1}. ${name}`).join('\n');
@@ -921,8 +838,9 @@ async function callAnthropicAPI(prompt: string, filesContent: { name: string; co
       'anthropic-version': '2023-06-01',
     },
     body: JSON.stringify({
-      model: 'claude-sonnet-4-20250514',
+      model: 'claude-sonnet-4-5-20241022',
       max_tokens: 16000,
+      temperature: 0, // Maximum determinism for data extraction
       messages: [
         {
           role: 'user',
