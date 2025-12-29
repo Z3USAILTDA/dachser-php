@@ -3,7 +3,7 @@ import { Voucher, TipoAnexo } from "@/types/voucher";
 import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
-import { Send, AlertTriangle, RefreshCw, Loader2, Upload, MessageSquare, Edit, FileText, CheckCircle2 } from "lucide-react";
+import { Send, AlertTriangle, RefreshCw, Loader2, Upload, MessageSquare, Edit, FileText, CheckCircle2, Layers } from "lucide-react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { FileUpload } from "./FileUpload";
 import { EditVoucherDialog } from "./EditVoucherDialog";
@@ -28,17 +28,20 @@ import {
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
+import { ConsolidarVouchersDialog } from "./ConsolidarVouchersDialog";
 
 interface VoucherOperacaoActionsProps {
   voucher: Voucher;
   onUpdate: () => void;
+  allVouchers?: Voucher[];
 }
 
-export const VoucherOperacaoActions = ({ voucher, onUpdate }: VoucherOperacaoActionsProps) => {
+export const VoucherOperacaoActions = ({ voucher, onUpdate, allVouchers = [] }: VoucherOperacaoActionsProps) => {
   const [loading, setLoading] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
   const [showEditDialog, setShowEditDialog] = useState(false);
+  const [showConsolidateDialog, setShowConsolidateDialog] = useState(false);
   const [selectedTipo, setSelectedTipo] = useState<TipoAnexo>("FATURA_DEMONSTRATIVO");
   const [respostaAjuste, setRespostaAjuste] = useState(voucher.comentariosOperacao || "");
   const { toast } = useToast();
@@ -455,12 +458,31 @@ export const VoucherOperacaoActions = ({ voucher, onUpdate }: VoucherOperacaoAct
                 ? "Enviar para Fiscal" 
                 : "Enviar para Financeiro"}
         </Button>
+
+        {/* Consolidation button - only if there are other vouchers available */}
+        {allVouchers.length > 1 && (
+          <Button
+            variant="outline"
+            onClick={() => setShowConsolidateDialog(true)}
+            className="gap-2"
+          >
+            <Layers className="h-4 w-4" />
+            Consolidar Vouchers
+          </Button>
+        )}
       </div>
 
       <EditVoucherDialog
         open={showEditDialog}
         onOpenChange={setShowEditDialog}
         voucher={voucher}
+        onSuccess={onUpdate}
+      />
+
+      <ConsolidarVouchersDialog
+        open={showConsolidateDialog}
+        onOpenChange={setShowConsolidateDialog}
+        vouchers={allVouchers}
         onSuccess={onUpdate}
       />
 

@@ -41,8 +41,8 @@ export const ConsolidarVouchersDialog = ({
   // Filter vouchers available for consolidation (same stage, not already consolidated)
   const availableVouchers = useMemo(() => {
     return vouchers.filter((v) => {
-      // Only FISCAL or SUPERVISOR stage vouchers can be consolidated
-      if (!["FISCAL", "SUPERVISOR"].includes(v.etapaAtual)) return false;
+      // Only OPERACAO, FISCAL or SUPERVISOR stage vouchers can be consolidated
+      if (!["OPERACAO", "FISCAL", "SUPERVISOR"].includes(v.etapaAtual)) return false;
       // Already a child of a master
       if (v.voucherMasterId) return false;
       // Match search
