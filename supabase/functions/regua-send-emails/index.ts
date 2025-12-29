@@ -131,6 +131,17 @@ const buildTableHtml = (rows: InvoiceRow[]): string => {
 </table>`;
 };
 
+// Rodapé padrão - igual ao do aging
+const FOOTER_LEGAL = `
+Atenciosamente,
+Financeiro Dachser
+
+──────────────────────────────────────────────────────────────────────────
+
+Nossos serviços são regidos pelas CONDIÇÕES GERAIS DE NEGÓCIOS, registradas no 1º RTD - Oficial de Registro de Títulos e Documentos e Civil de Pessoa Jurídica da Comarca de Campinas, SP, sob nº 1.216.692 e também disponível em nosso website dachser.com.br. Consideração especial é feita para a regra a qual limita a responsabilidade civil do freight forwarder, na ocorrência de falta ou avaria nas mercadorias, em 2 Direitos Especiais de Saque (DES) por quilograma. Para qualquer tipo de perda não mencionada nas regras FIATA, a responsabilidade não excederá 50.000 DES por ocorrência.
+
+Our legal services are governed by the GENERAL CONDITIONS OF BUSINESS, registered in the 1º RTD - Oficial de Registro de Títulos e Documentos e Civil de Pessoa Jurídica of the County of Campinas, SP, under No. 1.216.692, also available in our website dachser.com.br. Special remark is made to the FIATA Model Rules limits the liability of the freight forwarder, in case of loss or damage to goods, to 2 Special Drawing Rights (SDR) per kilogram. For any other loss not mentioned in FIATA rules, the liability shall not exceed 50,000 SDR per occurrence.`;
+
 // Textos por estágio - SEMPRE usa formato consolidado (tabela de faturas)
 const buildTemplateText = (
   tipoPagto: string,
@@ -153,7 +164,8 @@ Segue relação de faturas até o momento:`;
     bodyAfter = `
 Recomendamos verificar o agendamento dos pagamentos para evitar qualquer imprevisto quanto ao prazo. Caso já estejam programados, pedimos a gentileza de desconsiderar esta mensagem.
 Em caso de dúvidas ou necessidade de esclarecimentos, a nossa equipa está à disposição através do e-mail jessica.costa@dachser.com ou pelo telefone +55 (19) 3312-6185.
-Agradecemos a sua atenção e permanecemos à disposição.`;
+Agradecemos a sua atenção e permanecemos à disposição.
+${FOOTER_LEGAL}`;
     return { subject, bodyBefore, bodyAfter };
   }
 
@@ -169,11 +181,7 @@ Verificamos em nosso sistema que a(s) fatura(s) abaixo encontram-se em atraso.`;
 Solicitamos, por gentileza, a regularização dos pagamentos no menor prazo possível. Caso já tenham sido efetuados, favor desconsiderar este aviso.
 Havendo qualquer divergência ou necessidade de esclarecimentos, pedimos que nos informem para conferência imediata. Nossa equipa está à disposição através do e-mail jessica.costa@dachser.com ou pelo telefone +55 (19) 3312-6185.
 Agradecemos a sua atenção e contamos com a sua colaboração para a regularização destas pendências.
-
-Atenciosamente,
-Jessica Costa
-Accounts Receivable Analyst
-Air & Sea Logistics Brazil`;
+${FOOTER_LEGAL}`;
         return { subject, bodyBefore, bodyAfter };
 
       case "D7":
@@ -182,15 +190,10 @@ Air & Sea Logistics Brazil`;
 
 Até o momento, não identificamos o pagamento das faturas listadas abaixo:`;
         bodyAfter = `
-
 Solicitamos a regularização destas pendências no menor prazo possível. Caso os pagamentos já tenham sido realizados, pedimos a gentileza de desconsiderar esta mensagem.
 Em caso de dúvidas ou divergências, nossa equipa encontra-se à disposição através do e-mail jessica.costa@dachser.com ou pelo telefone +55 (19) 3312-6185.
 Agradecemos a sua atenção e colaboração.
-
-Atenciosamente,
-Jessica Costa
-Accounts Receivable Analyst
-Air & Sea Logistics Brazil`;
+${FOOTER_LEGAL}`;
         return { subject, bodyBefore, bodyAfter };
 
       case "D15":
@@ -199,16 +202,11 @@ Air & Sea Logistics Brazil`;
 
 Esta é a segunda notificação referente às faturas listadas abaixo, que permanecem em aberto:`;
         bodyAfter = `
-
 Informamos que, caso a regularização não seja efetuada nos próximos dias, poderemos adotar medidas administrativas, incluindo a possível suspensão de serviços e/ou protesto dos títulos.
 
 Solicitamos a regularização imediata. Caso os pagamentos já tenham sido realizados, favor nos enviar os comprovantes para baixa em nosso sistema.
 Em caso de dúvidas ou necessidade de negociação, nossa equipa está à disposição através do e-mail jessica.costa@dachser.com ou pelo telefone +55 (19) 3312-6185.
-
-Atenciosamente,
-Jessica Costa
-Accounts Receivable Analyst
-Air & Sea Logistics Brazil`;
+${FOOTER_LEGAL}`;
         return { subject, bodyBefore, bodyAfter };
 
       case "D30":
@@ -217,18 +215,13 @@ Air & Sea Logistics Brazil`;
 
 Informamos que as faturas listadas abaixo permanecem em aberto há mais de 30 dias:`;
         bodyAfter = `
-
 Informamos que medidas administrativas serão iniciadas caso a regularização não ocorra em até 5 (cinco) dias úteis, incluindo:
 • Suspensão de novos embarques e serviços
 • Inclusão do débito em órgãos de proteção ao crédito
 • Protesto dos títulos em cartório
 
 Caso deseje negociar os débitos ou esclarecer qualquer divergência, solicitamos contato imediato através do e-mail jessica.costa@dachser.com ou pelo telefone +55 (19) 3312-6185.
-
-Atenciosamente,
-Jessica Costa
-Accounts Receivable Analyst
-Air & Sea Logistics Brazil`;
+${FOOTER_LEGAL}`;
         return { subject, bodyBefore, bodyAfter };
 
       case "D45":
@@ -237,7 +230,6 @@ Air & Sea Logistics Brazil`;
 
 Esta é a última notificação referente às faturas listadas abaixo, que permanecem em aberto:`;
         bodyAfter = `
-
 Comunicamos que seu cadastro encontra-se BLOQUEADO para novos serviços até a quitação dos débitos.
 
 Além disso, informamos que:
@@ -245,11 +237,7 @@ Além disso, informamos que:
 • Os débitos serão incluídos nos órgãos de proteção ao crédito (SPC/SERASA)
 
 Solicitamos a regularização urgente para evitar maiores transtornos. Para negociação ou esclarecimentos, entre em contato através do e-mail jessica.costa@dachser.com ou pelo telefone +55 (19) 3312-6185.
-
-Atenciosamente,
-Jessica Costa
-Accounts Receivable Analyst
-Air & Sea Logistics Brazil`;
+${FOOTER_LEGAL}`;
         return { subject, bodyBefore, bodyAfter };
 
       case "D60":
@@ -258,7 +246,6 @@ Air & Sea Logistics Brazil`;
 
 Esta é a ÚLTIMA NOTIFICAÇÃO referente às faturas listadas abaixo, que encontram-se em aberto há mais de 60 dias:`;
         bodyAfter = `
-
 Informamos que, caso a regularização não seja efetuada em até 48 (quarenta e oito) horas, os débitos serão encaminhados ao nosso departamento jurídico para adoção das medidas cabíveis, incluindo:
 • Execução judicial dos débitos
 • Penhora de bens
@@ -266,12 +253,7 @@ Informamos que, caso a regularização não seja efetuada em até 48 (quarenta e
 
 Até o momento, não recebemos nenhuma notificação informando o motivo do atraso. Dessa forma, solicitamos que entre em contato conosco, gentilmente.
 Em caso de dúvidas ou necessidade de esclarecimentos, nossa equipa está à disposição através do e-mail jessica.costa@dachser.com ou pelo telefone +55 (19) 3312-6185.
-Agradecemos a sua atenção e colaboração.
-
-Atenciosamente,
-Jessica Costa
-Accounts Receivable Analyst
-Air & Sea Logistics Brazil`;
+${FOOTER_LEGAL}`;
         return { subject, bodyBefore, bodyAfter };
     }
   } else {
@@ -285,11 +267,7 @@ Verificamos em nosso sistema que as faturas à vista abaixo encontram-se em atra
         bodyAfter = `
 Por se tratarem de faturas à vista, solicitamos a regularização imediata dos pagamentos.
 Havendo qualquer divergência ou necessidade de esclarecimentos, pedimos que nos informem. Nossa equipa está à disposição através do e-mail jessica.costa@dachser.com ou pelo telefone +55 (19) 3312-6185.
-
-Atenciosamente,
-Jessica Costa
-Accounts Receivable Analyst
-Air & Sea Logistics Brazil`;
+${FOOTER_LEGAL}`;
         return { subject, bodyBefore, bodyAfter };
 
       case "D7":
@@ -298,15 +276,10 @@ Air & Sea Logistics Brazil`;
 
 As faturas à vista listadas abaixo permanecem em aberto:`;
         bodyAfter = `
-
 Por se tratarem de faturas à vista, informamos que medidas administrativas poderão ser adotadas caso a regularização não ocorra nos próximos dias.
 
 Solicitamos a regularização imediata. Em caso de dúvidas, nossa equipa está à disposição através do e-mail jessica.costa@dachser.com ou pelo telefone +55 (19) 3312-6185.
-
-Atenciosamente,
-Jessica Costa
-Accounts Receivable Analyst
-Air & Sea Logistics Brazil`;
+${FOOTER_LEGAL}`;
         return { subject, bodyBefore, bodyAfter };
 
       case "D15":
@@ -315,15 +288,10 @@ Air & Sea Logistics Brazil`;
 
 As faturas à vista listadas abaixo encontram-se em aberto:`;
         bodyAfter = `
-
 Informamos que, por se tratarem de faturas à vista, os débitos serão encaminhados para as medidas cabíveis caso não sejam regularizados.
 
 Para negociação ou esclarecimentos, entre em contato através do e-mail jessica.costa@dachser.com ou pelo telefone +55 (19) 3312-6185.
-
-Atenciosamente,
-Jessica Costa
-Accounts Receivable Analyst
-Air & Sea Logistics Brazil`;
+${FOOTER_LEGAL}`;
         return { subject, bodyBefore, bodyAfter };
 
       case "D30":
@@ -332,13 +300,8 @@ Air & Sea Logistics Brazil`;
 
 ÚLTIMA NOTIFICAÇÃO: As faturas à vista listadas abaixo serão encaminhadas ao departamento jurídico caso não sejam regularizadas em até 48 horas:`;
         bodyAfter = `
-
 Para regularização imediata ou negociação, entre em contato através do e-mail jessica.costa@dachser.com ou pelo telefone +55 (19) 3312-6185.
-
-Atenciosamente,
-Jessica Costa
-Accounts Receivable Analyst
-Air & Sea Logistics Brazil`;
+${FOOTER_LEGAL}`;
         return { subject, bodyBefore, bodyAfter };
     }
   }
@@ -346,7 +309,7 @@ Air & Sea Logistics Brazil`;
   // Default
   subject = "Aviso Financeiro";
   bodyBefore = "Prezados(as),\n\nSegue relação de faturas em aberto:";
-  bodyAfter = "\n\nAtenciosamente,\nDachser";
+  bodyAfter = FOOTER_LEGAL;
   return { subject, bodyBefore, bodyAfter };
 };
 
