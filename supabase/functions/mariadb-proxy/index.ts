@@ -3044,10 +3044,19 @@ serve(async (req) => {
         
         const fileId = fileResult.lastInsertId;
         
-        // Ensure doc_role is max 4 chars - truncate any value that's too long
-        // The DB column appears to be VARCHAR(4) or similar
-        const rawDocRole = docRole || 'DOC';
-        const safeDocRole = rawDocRole.substring(0, 4);
+        // Map doc_role to 1 character - DB column is CHAR(1)
+        const docRoleMap: Record<string, string> = {
+          'INV': 'I', 'Invoice': 'I', 'I': 'I',
+          'PL': 'P', 'PackList': 'P', 'Packing': 'P', 'P': 'P',
+          'INST': 'X', 'Instrucao': 'X', 'X': 'X',
+          'HBL': 'H', 'BL': 'H', 'H': 'H',
+          'DI': 'D', 'D': 'D',
+          'AWB': 'A', 'A': 'A',
+          'CERT': 'C', 'C': 'C',
+          'DOC': 'O', 'O': 'O',
+        };
+        const rawDocRole = (docRole || 'O').toString();
+        const safeDocRole = docRoleMap[rawDocRole] || docRoleMap[rawDocRole.toUpperCase()] || 'O';
         console.log(`[CHB] Saving file with doc_role: "${rawDocRole}" -> "${safeDocRole}"`);
         
         // Link file to item
