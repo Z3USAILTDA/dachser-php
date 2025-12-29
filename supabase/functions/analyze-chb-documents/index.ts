@@ -838,7 +838,7 @@ async function callAnthropicAPI(prompt: string, filesContent: { name: string; co
       'anthropic-version': '2023-06-01',
     },
     body: JSON.stringify({
-      model: 'claude-sonnet-4-5-20241022',
+      model: 'claude-sonnet-4-20250514',
       max_tokens: 16000,
       temperature: 0, // Maximum determinism for data extraction
       messages: [

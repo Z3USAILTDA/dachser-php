@@ -2988,27 +2988,31 @@ serve(async (req) => {
         const { id: itemId, status_macro, step1_status, step2_status, step3_status, consignee } = body;
         console.log('Updating CHB item:', itemId, { status_macro, step1_status, step2_status, step3_status, consignee });
         
-        // First, ensure the status columns can accept longer values
-        try {
-          await client.execute(`
-            ALTER TABLE ai_agente.t_dachser_chb_items 
-            MODIFY COLUMN status_macro VARCHAR(50) NULL,
-            MODIFY COLUMN step1_status VARCHAR(50) NULL,
-            MODIFY COLUMN step2_status VARCHAR(50) NULL,
-            MODIFY COLUMN step3_status VARCHAR(50) NULL
-          `);
-          console.log('[CHB] Successfully altered status columns to VARCHAR(50)');
-        } catch (alterErr) {
-          console.log('[CHB] ALTER TABLE note (may already be correct):', (alterErr as Error).message?.substring(0, 100));
+        // First, ensure ALL status columns can accept longer values - run each ALTER separately
+        const alterColumns = [
+          { col: 'status_macro', type: 'VARCHAR(100)' },
+          { col: 'step1_status', type: 'VARCHAR(100)' },
+          { col: 'step2_status', type: 'VARCHAR(100)' },
+          { col: 'step3_status', type: 'VARCHAR(100)' },
+          { col: 'consignee', type: 'VARCHAR(255)' },
+        ];
+        
+        for (const { col, type } of alterColumns) {
+          try {
+            await client.execute(`ALTER TABLE ai_agente.t_dachser_chb_items MODIFY COLUMN ${col} ${type} NULL`);
+            console.log(`[CHB] Column ${col} altered to ${type}`);
+          } catch (alterErr) {
+            // Ignore - column might already be correct or doesn't exist
+          }
         }
         
         const fields: string[] = [];
         const values: any[] = [];
-        if (status_macro !== undefined) { fields.push('status_macro = ?'); values.push(status_macro); }
-        if (step1_status !== undefined) { fields.push('step1_status = ?'); values.push(step1_status); }
-        if (step2_status !== undefined) { fields.push('step2_status = ?'); values.push(step2_status); }
-        if (step3_status !== undefined) { fields.push('step3_status = ?'); values.push(step3_status); }
-        if (consignee !== undefined) { fields.push('consignee = ?'); values.push(consignee); }
+        if (status_macro !== undefined) { fields.push('status_macro = ?'); values.push(status_macro || null); }
+        if (step1_status !== undefined) { fields.push('step1_status = ?'); values.push(step1_status || null); }
+        if (step2_status !== undefined) { fields.push('step2_status = ?'); values.push(step2_status || null); }
+        if (step3_status !== undefined) { fields.push('step3_status = ?'); values.push(step3_status || null); }
+        if (consignee !== undefined) { fields.push('consignee = ?'); values.push(consignee || null); }
         
         if (fields.length > 0) {
           values.push(itemId);
