@@ -29,6 +29,7 @@ interface Section {
 const sections: Section[] = [
   { id: 'visao-geral', title: 'Visão Geral', icon: <BookOpen className="h-4 w-4" /> },
   { id: 'lista-analises', title: 'Lista de Análises', icon: <LayoutDashboard className="h-4 w-4" /> },
+  { id: 'sop', title: 'SOP por Cliente', icon: <FileCheck className="h-4 w-4" /> },
   { id: 'conferencia', title: 'Conferência', icon: <FileCheck className="h-4 w-4" /> },
   { id: 'upload-docs', title: 'Upload de Documentos', icon: <Upload className="h-4 w-4" /> },
   { id: 'resultados', title: 'Resultados', icon: <Eye className="h-4 w-4" /> },
@@ -39,23 +40,35 @@ const sections: Section[] = [
 const faqItems = [
   { 
     q: 'Como iniciar uma nova conferência?', 
-    a: 'Na lista de análises, clique em "Nova Análise" para criar uma conferência. Você pode associar a um processo existente ou criar do zero.' 
+    a: 'Na lista de análises, clique em "Novo Processo" para criar uma conferência. Informe a referência do processo e será redirecionado para a tela de conferência.' 
   },
   { 
     q: 'Quais documentos são aceitos?', 
-    a: 'O sistema aceita arquivos PDF para documentos de embarque como BL, Invoice e Packing List.' 
+    a: 'O sistema aceita arquivos PDF, imagens (PNG, JPG, JPEG, WebP) e planilhas Excel (XLSX, XLS) para documentos de embarque como BL, Invoice e Packing List.' 
   },
   { 
     q: 'Como funciona a análise automática?', 
-    a: 'O sistema utiliza IA para extrair informações dos documentos e comparar com os dados esperados, identificando divergências automaticamente.' 
+    a: 'O sistema utiliza IA para extrair informações dos documentos e comparar com os dados esperados, identificando divergências automaticamente. A IA reconhece texto em imagens e extrai dados de planilhas.' 
   },
   { 
     q: 'O que fazer quando há divergência?', 
-    a: 'Revise os campos marcados em vermelho, verifique os documentos originais e corrija manualmente se necessário. Adicione observações para registro.' 
+    a: 'Revise os campos marcados com indicador vermelho (🔴), verifique os documentos originais e considere as observações da IA. Você pode re-analisar após corrigir os documentos.' 
   },
   { 
     q: 'Como exportar os resultados?', 
-    a: 'Na tela de resultados, clique em "Exportar PDF" para gerar um relatório completo da conferência com todos os campos analisados.' 
+    a: 'No histórico de análises aprovadas, clique no botão "PDF" para exportar um relatório completo da conferência com todos os campos analisados.' 
+  },
+  { 
+    q: 'O que é o SOP por Cliente?', 
+    a: 'SOP (Standard Operating Procedure) permite configurar regras específicas por cliente, como tolerâncias de peso/valor, campos obrigatórios, regras fiscais e instruções personalizadas para a análise.' 
+  },
+  { 
+    q: 'Como a IA identifica o cliente automaticamente?', 
+    a: 'Durante a primeira análise, a IA extrai o nome do consignatário/cliente dos documentos. Se houver um SOP configurado para esse cliente, as regras são aplicadas automaticamente nas próximas análises.' 
+  },
+  { 
+    q: 'Posso re-analisar documentos?', 
+    a: 'Sim, após aprovar uma análise ou identificar erros, você pode clicar em "Re-analisar" para executar novamente a conferência com os mesmos documentos ou adicionar novos.' 
   },
 ];
 
@@ -70,6 +83,11 @@ const glossaryItems = [
   { term: 'FCL', definition: 'Full Container Load - Container completo de um único embarcador.' },
   { term: 'LCL', definition: 'Less than Container Load - Carga consolidada de múltiplos embarcadores.' },
   { term: 'Invoice', definition: 'Fatura comercial com descrição e valor das mercadorias.' },
+  { term: 'SOP', definition: 'Standard Operating Procedure - Procedimento operacional padrão com regras específicas por cliente.' },
+  { term: 'DI', definition: 'Declaração de Importação - Documento oficial de registro da importação junto à Receita Federal.' },
+  { term: 'Packing List', definition: 'Romaneio de carga - Lista detalhada dos volumes e itens embarcados.' },
+  { term: 'CFOP', definition: 'Código Fiscal de Operações e Prestações - Código que identifica a natureza da operação fiscal.' },
+  { term: 'ICMS', definition: 'Imposto sobre Circulação de Mercadorias e Serviços - Imposto estadual sobre movimentação de mercadorias.' },
 ];
 
 export default function ManualChb() {
@@ -212,27 +230,27 @@ export default function ManualChb() {
               </CardHeader>
               <CardContent className="space-y-4 text-white/80">
                 <p>
-                  A lista de análises apresenta todas as conferências realizadas, permitindo filtrar por status, 
-                  período e processo. Cada análise mostra o progresso e resultado da conferência.
+                  A lista de análises apresenta todas as conferências realizadas, permitindo filtrar por status 
+                  e buscar por referência ou consignatário. Cada análise mostra o progresso das 3 etapas e o status atual.
                 </p>
 
                 <h4 className="text-white font-medium mt-4">Status das Análises</h4>
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                   <div className="p-3 rounded bg-amber-500/10 border border-amber-500/20">
                     <Badge className="bg-amber-500 mb-2">PRÉ-ALERTA PENDENTE</Badge>
-                    <p className="text-xs text-white/60">Aguardando pré-alerta</p>
+                    <p className="text-xs text-white/60">Etapa 1 aguardando análise</p>
                   </div>
                   <div className="p-3 rounded bg-blue-500/10 border border-blue-500/20">
                     <Badge className="bg-blue-500 mb-2">INSTRUÇÃO PENDENTE</Badge>
-                    <p className="text-xs text-white/60">Aguardando instrução</p>
+                    <p className="text-xs text-white/60">Etapa 2 aguardando análise</p>
                   </div>
                   <div className="p-3 rounded bg-purple-500/10 border border-purple-500/20">
                     <Badge className="bg-purple-500 mb-2">DI PENDENTE</Badge>
-                    <p className="text-xs text-white/60">Aguardando DI/Fechamento</p>
+                    <p className="text-xs text-white/60">Etapa 3 aguardando análise</p>
                   </div>
                   <div className="p-3 rounded bg-green-500/10 border border-green-500/20">
                     <Badge className="bg-green-500 mb-2">CONCLUÍDA</Badge>
-                    <p className="text-xs text-white/60">Conferência finalizada</p>
+                    <p className="text-xs text-white/60">Todas as etapas aprovadas</p>
                   </div>
                 </div>
 
@@ -240,21 +258,89 @@ export default function ManualChb() {
                 <ul className="space-y-2 text-sm">
                   <li className="flex items-start gap-2">
                     <CheckCircle2 className="h-4 w-4 text-green-400 mt-0.5 shrink-0" />
-                    <span>Filtros por status, período e processo</span>
+                    <span>Filtro por status (Pendente Pré-Alerta, Instrução, DI ou Concluída)</span>
                   </li>
                   <li className="flex items-start gap-2">
                     <CheckCircle2 className="h-4 w-4 text-green-400 mt-0.5 shrink-0" />
-                    <span>Busca por número de BL ou container</span>
+                    <span>Busca por referência do processo ou nome do consignatário</span>
                   </li>
                   <li className="flex items-start gap-2">
                     <CheckCircle2 className="h-4 w-4 text-green-400 mt-0.5 shrink-0" />
-                    <span>Criação de nova análise</span>
+                    <span>Criação de novo processo com referência personalizada</span>
                   </li>
                   <li className="flex items-start gap-2">
                     <CheckCircle2 className="h-4 w-4 text-green-400 mt-0.5 shrink-0" />
-                    <span>Exportação de resultados</span>
+                    <span>Visualização do histórico de análises aprovadas</span>
+                  </li>
+                  <li className="flex items-start gap-2">
+                    <CheckCircle2 className="h-4 w-4 text-green-400 mt-0.5 shrink-0" />
+                    <span>Exportação do histórico em PDF</span>
+                  </li>
+                  <li className="flex items-start gap-2">
+                    <CheckCircle2 className="h-4 w-4 text-green-400 mt-0.5 shrink-0" />
+                    <span>Identificação automática do modal (Marítimo 🚢 ou Aéreo ✈️)</span>
                   </li>
                 </ul>
+              </CardContent>
+            </Card>
+          </section>
+
+          {/* SOP por Cliente */}
+          <section ref={el => sectionRefs.current['sop'] = el} id="sop">
+            <Card className="bg-[rgba(5,6,18,0.9)] border-white/12">
+              <CardHeader>
+                <CardTitle className="text-white flex items-center gap-2">
+                  <FileCheck className="h-5 w-5 text-amber-400" />
+                  SOP por Cliente
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4 text-white/80">
+                <p>
+                  O <strong className="text-amber-300">SOP (Standard Operating Procedure)</strong> permite configurar 
+                  regras específicas de conferência para cada cliente. A IA utilizará essas regras durante a análise 
+                  para validar campos de acordo com as particularidades de cada importador.
+                </p>
+
+                <h4 className="text-white font-medium mt-4">Como acessar</h4>
+                <p className="text-sm">
+                  Clique no botão <strong className="text-amber-300">"SOP"</strong> na barra de ações da lista de análises. 
+                  Um painel lateral será aberto com todas as configurações cadastradas.
+                </p>
+
+                <h4 className="text-white font-medium mt-4">Configurações disponíveis</h4>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  <div className="p-3 rounded bg-white/5 border border-white/10">
+                    <h5 className="text-white text-sm font-medium mb-1">Identificação</h5>
+                    <p className="text-xs text-white/60">CNPJ e nome do cliente para associação automática</p>
+                  </div>
+                  <div className="p-3 rounded bg-white/5 border border-white/10">
+                    <h5 className="text-white text-sm font-medium mb-1">Tolerâncias</h5>
+                    <p className="text-xs text-white/60">Peso (kg), valor (%) e taxas acessórias aceitas</p>
+                  </div>
+                  <div className="p-3 rounded bg-white/5 border border-white/10">
+                    <h5 className="text-white text-sm font-medium mb-1">Dados do Armador</h5>
+                    <p className="text-xs text-white/60">Armador, agente de destino, porto e prazo de resposta</p>
+                  </div>
+                  <div className="p-3 rounded bg-white/5 border border-white/10">
+                    <h5 className="text-white text-sm font-medium mb-1">Regras Fiscais</h5>
+                    <p className="text-xs text-white/60">Benefício fiscal, CFOP, UF e ICMS diferido</p>
+                  </div>
+                  <div className="p-3 rounded bg-white/5 border border-white/10">
+                    <h5 className="text-white text-sm font-medium mb-1">Campos Obrigatórios</h5>
+                    <p className="text-xs text-white/60">Lista de campos que devem estar presentes nos documentos</p>
+                  </div>
+                  <div className="p-3 rounded bg-white/5 border border-white/10">
+                    <h5 className="text-white text-sm font-medium mb-1">Instruções Personalizadas</h5>
+                    <p className="text-xs text-white/60">Orientações adicionais em texto livre para a IA</p>
+                  </div>
+                </div>
+
+                <h4 className="text-white font-medium mt-4">Associação automática</h4>
+                <p className="text-sm">
+                  Quando a IA identifica o cliente nos documentos (consignatário), ela busca automaticamente 
+                  o SOP correspondente pelo CNPJ ou nome. Se encontrado, as regras são aplicadas e uma notificação 
+                  é exibida indicando qual configuração foi carregada.
+                </p>
               </CardContent>
             </Card>
           </section>
@@ -305,32 +391,78 @@ export default function ManualChb() {
               <CardContent className="space-y-4 text-white/80">
                 <p>
                   O upload de documentos é feito através de drag-and-drop ou clicando na área de upload. 
-                  O sistema aceita arquivos PDF e valida automaticamente o formato.
+                  O sistema aceita múltiplos formatos e utiliza IA para extrair informações de todos eles.
                 </p>
 
-                <h4 className="text-white font-medium mt-4">Documentos Aceitos</h4>
+                <h4 className="text-white font-medium mt-4">Formatos Aceitos</h4>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-4">
+                  <div className="p-3 rounded bg-red-500/10 border border-red-500/20">
+                    <p className="text-sm font-medium text-white">PDF</p>
+                    <p className="text-xs text-white/60">.pdf</p>
+                  </div>
+                  <div className="p-3 rounded bg-blue-500/10 border border-blue-500/20">
+                    <p className="text-sm font-medium text-white">Imagens</p>
+                    <p className="text-xs text-white/60">.png, .jpg, .jpeg, .webp</p>
+                  </div>
+                  <div className="p-3 rounded bg-green-500/10 border border-green-500/20">
+                    <p className="text-sm font-medium text-white">Planilhas Excel</p>
+                    <p className="text-xs text-white/60">.xlsx, .xls</p>
+                  </div>
+                </div>
+
+                <h4 className="text-white font-medium mt-4">Tipos de Documentos</h4>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                   <div className="p-3 rounded bg-white/5 border border-white/10">
                     <FileText className="h-5 w-5 text-amber-400 mb-2" />
                     <p className="text-sm font-medium text-white">House Bill of Lading (HBL)</p>
-                    <p className="text-xs text-white/60">Formato: PDF</p>
+                    <p className="text-xs text-white/60">Conhecimento de embarque do consolidador</p>
                   </div>
                   <div className="p-3 rounded bg-white/5 border border-white/10">
                     <FileText className="h-5 w-5 text-amber-400 mb-2" />
                     <p className="text-sm font-medium text-white">Master Bill of Lading (MBL)</p>
-                    <p className="text-xs text-white/60">Formato: PDF</p>
+                    <p className="text-xs text-white/60">Conhecimento principal do armador</p>
                   </div>
                   <div className="p-3 rounded bg-white/5 border border-white/10">
                     <FileText className="h-5 w-5 text-amber-400 mb-2" />
                     <p className="text-sm font-medium text-white">Invoice Comercial</p>
-                    <p className="text-xs text-white/60">Formato: PDF</p>
+                    <p className="text-xs text-white/60">Fatura com valores e descrição das mercadorias</p>
                   </div>
                   <div className="p-3 rounded bg-white/5 border border-white/10">
                     <FileText className="h-5 w-5 text-amber-400 mb-2" />
                     <p className="text-sm font-medium text-white">Packing List</p>
-                    <p className="text-xs text-white/60">Formato: PDF</p>
+                    <p className="text-xs text-white/60">Romaneio com detalhes dos volumes</p>
+                  </div>
+                  <div className="p-3 rounded bg-white/5 border border-white/10">
+                    <FileText className="h-5 w-5 text-amber-400 mb-2" />
+                    <p className="text-sm font-medium text-white">Certificados e Laudos</p>
+                    <p className="text-xs text-white/60">Certificado de origem, fitossanitário, etc.</p>
+                  </div>
+                  <div className="p-3 rounded bg-white/5 border border-white/10">
+                    <FileText className="h-5 w-5 text-amber-400 mb-2" />
+                    <p className="text-sm font-medium text-white">DI / Extrato DI</p>
+                    <p className="text-xs text-white/60">Declaração de Importação e extratos</p>
                   </div>
                 </div>
+
+                <h4 className="text-white font-medium mt-4">Dicas de Upload</h4>
+                <ul className="space-y-2 text-sm">
+                  <li className="flex items-start gap-2">
+                    <CheckCircle2 className="h-4 w-4 text-green-400 mt-0.5 shrink-0" />
+                    <span>Nomeie os arquivos de forma descritiva (ex: HBL_123456.pdf)</span>
+                  </li>
+                  <li className="flex items-start gap-2">
+                    <CheckCircle2 className="h-4 w-4 text-green-400 mt-0.5 shrink-0" />
+                    <span>Imagens devem estar legíveis e com boa resolução</span>
+                  </li>
+                  <li className="flex items-start gap-2">
+                    <CheckCircle2 className="h-4 w-4 text-green-400 mt-0.5 shrink-0" />
+                    <span>Planilhas Excel são úteis para dados tabulares extensos</span>
+                  </li>
+                  <li className="flex items-start gap-2">
+                    <CheckCircle2 className="h-4 w-4 text-green-400 mt-0.5 shrink-0" />
+                    <span>Documentos são herdados entre etapas automaticamente</span>
+                  </li>
+                </ul>
               </CardContent>
             </Card>
           </section>
