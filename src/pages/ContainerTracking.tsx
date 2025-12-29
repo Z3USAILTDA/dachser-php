@@ -1,133 +1,38 @@
-import React, { useState, useEffect, useRef, useMemo } from "react";
+import React, { useState, useEffect, useMemo, Fragment } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useUsageLog } from "@/hooks/useUsageLog";
 import { useUserRole } from "@/hooks/useUserRole";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
+import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Textarea } from "@/components/ui/textarea";
+import { Label } from "@/components/ui/label";
 import {
   Search,
-  Plus,
   RefreshCw,
   Ship,
   Trash2,
-  ExternalLink,
   Database,
-  LogOut,
   Mail,
-  Edit2,
   Check,
   ArrowLeft,
-  User as UserIcon,
   Loader2,
   Anchor,
   AlertTriangle,
   HelpCircle,
+  ChevronDown,
+  ChevronUp,
+  Package,
 } from "lucide-react";
-import { Checkbox } from "@/components/ui/checkbox";
 import { useToast } from "@/hooks/use-toast";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import type { User, Session } from "@supabase/supabase-js";
 import dachserBg from "@/assets/dachser-background.jpg";
 import { TablePagination } from "@/components/layout/TablePagination";
 import { Filter as FilterIcon } from "lucide-react";
-
-// Base shipping lines list (fallback)
-const BASE_SHIPPING_LINES = [
-  "HAPAG-LLOYD", "CMA CGM", "HMM", "ONE", "MSC", "MAERSK"
-];
-
-// Container prefix to shipping line mapping (primeiros 4 caracteres do container)
-const CONTAINER_PREFIX_MAP: Record<string, string> = {
-  // MAERSK (inclui Hamburg Süd, Sealand, Safmarine)
-  "MAEU": "MAERSK", "MSKU": "MAERSK", "MRKU": "MAERSK", "MRSU": "MAERSK", 
-  "SUDU": "MAERSK", "SEAU": "MAERSK", "SFCU": "MAERSK",
-  
-  // HAPAG-LLOYD
-  "HLCU": "HAPAG-LLOYD", "HLXU": "HAPAG-LLOYD", "HJCU": "HAPAG-LLOYD", "HASU": "HAPAG-LLOYD",
-  
-  // CMA CGM (inclui APL, ANL)
-  "CMAU": "CMA CGM", "CGMU": "CMA CGM", "APLU": "CMA CGM", "ANLU": "CMA CGM", "ECMU": "CMA CGM",
-  "APHU": "CMA CGM", "CXDU": "CMA CGM",
-  
-  // MSC
-  "MSCU": "MSC", "MEDU": "MSC", "MSCZ": "MSC", "MSDU": "MSC",
-  
-  // ONE (Ocean Network Express - fusão de NYK, MOL, K-Line)
-  "ONEY": "ONE", "NYKU": "ONE", "MOLU": "ONE", "KSTU": "ONE", "KKFU": "ONE",
-  
-  // HMM (Hyundai Merchant Marine)
-  "HDMU": "HMM", "HMMU": "HMM",
-  
-  // COSCO / OOCL
-  "CSLU": "COSCO", "CCLU": "COSCO", "COSU": "COSCO", "CBHU": "COSCO",
-  "OOLU": "COSCO", "OOCU": "COSCO",
-  
-  // EVERGREEN
-  "EGHU": "EVERGREEN", "EMCU": "EVERGREEN", "EISU": "EVERGREEN", "EGLV": "EVERGREEN",
-  "EGSU": "EVERGREEN", "EITU": "EVERGREEN",
-  
-  // YANG MING
-  "YMLU": "YANG MING", "YMMU": "YANG MING", "YMJU": "YANG MING",
-  
-  // ZIM
-  "ZIMU": "ZIM", "ZCSU": "ZIM",
-  
-  // PIL (Pacific International Lines)
-  "PCIU": "PIL", "PONU": "PIL",
-  
-  // WAN HAI
-  "WHLU": "WAN HAI", "WHSU": "WAN HAI",
-  
-  // SM LINE
-  "SMCU": "SM LINE", "SMLM": "SM LINE",
-  
-  // SINOKOR
-  "SKHU": "SINOKOR", "SNKU": "SINOKOR",
-  
-  // TS LINES
-  "TSLU": "TS LINES",
-  
-  // ARKAS
-  "ARKU": "ARKAS",
-  
-  // ANTONG
-  "ATHU": "ANTONG",
-  
-  // SITC
-  "SITU": "SITC",
-  
-  // HEUNG-A
-  "HAEU": "HEUNG-A",
-  
-  // NAMSUNG
-  "NAMU": "NAMSUNG",
-  
-  // Container lessors (empresas de leasing de containers)
-  "TRHU": "TRITON", "TCKU": "TRITON", "TLLU": "TRITON",
-  "TCLU": "TEXTAINER", "TXGU": "TEXTAINER",
-  "TEMU": "TOUAX", 
-  "GESU": "GESEACO", "GATU": "GATE",
-  "FCIU": "FLORENS", "FBLU": "FLORENS",
-  "CAIU": "CAI", "CARU": "CAI",
-  "SEGU": "SEACO", "SCMU": "SEACO",
-  "BEAU": "BEACON", "BICU": "BEACON",
-  "DFSU": "DONG FANG", "DFDL": "DONG FANG",
-  "UETU": "UNIT", "UTCU": "UNIT",
-  "TGBU": "TGS", "TGCU": "TGS",
-  "BMOU": "BLUE SKY",
-  "DRYU": "DRY",
-  "CLHU": "CLOU",
-  "SEKU": "SEKO",
-  "TCNU": "CONTAINER LEASING",
-};
 
 // Normaliza códigos de armadores do banco para nomes legíveis
 const normalizeShippingLine = (code: string | null | undefined): string => {
@@ -142,71 +47,15 @@ const normalizeShippingLine = (code: string | null | undefined): string => {
   return map[upper] || code;
 };
 
-// Detect armador from vessel name AND container prefix
-const detectArmadorFromVessel = (vessel: string | null | undefined, container?: string | null): string => {
-  // First try to detect from container prefix (most reliable)
-  if (container) {
-    const prefix = container.trim().substring(0, 4).toUpperCase();
-    if (CONTAINER_PREFIX_MAP[prefix]) {
-      return CONTAINER_PREFIX_MAP[prefix];
-    }
-  }
-
-  // Then try to detect from vessel name
-  if (vessel) {
-    const upperVessel = vessel.toUpperCase();
-    
-    // MAERSK patterns
-    if (upperVessel.includes("MAERSK") || upperVessel.includes("MAEU") || 
-        upperVessel.includes("SEALAND") || upperVessel.includes("SAFMARINE")) {
-      return "MAERSK";
-    }
-    // HAPAG-LLOYD patterns
-    if (upperVessel.includes("HAPAG") || upperVessel.includes("LLOYD") || 
-        upperVessel.includes("HAMBURG") || upperVessel.includes("HLCU")) {
-      return "HAPAG-LLOYD";
-    }
-    // CMA CGM patterns
-    if (upperVessel.includes("CMA") || upperVessel.includes("CGM") || 
-        upperVessel.includes("APL") || upperVessel.includes("ANL")) {
-      return "CMA CGM";
-    }
-    // HMM patterns
-    if (upperVessel.includes("HMM") || upperVessel.includes("HYUNDAI")) {
-      return "HMM";
-    }
-    // ONE patterns
-    if (upperVessel.includes("ONE ") || upperVessel.startsWith("ONE") ||
-        upperVessel.includes("OCEAN NETWORK")) {
-      return "ONE";
-    }
-    // MSC patterns
-    if (upperVessel.includes("MSC")) {
-      return "MSC";
-    }
-    // COSCO patterns
-    if (upperVessel.includes("COSCO") || upperVessel.includes("OOCL")) {
-      return "COSCO";
-    }
-    // EVERGREEN patterns
-    if (upperVessel.includes("EVERGREEN") || upperVessel.includes("EVER ")) {
-      return "EVERGREEN";
-    }
-  }
-  
-  return "N/D";
-};
-
 // ========== REPORT STATUS SYSTEM (12 statuses) ==========
 export interface ReportStatus {
   code: string;
   label: string;
   etapa: 'PRE_EMBARQUE' | 'EMBARQUE' | 'TRANSITO' | 'CHEGADA' | 'LIBERACAO' | 'ENTREGA';
-  etapaIndex: number; // 0-5 for progress calculation
+  etapaIndex: number;
   color: string;
 }
 
-// 12 Report Status definitions
 const REPORT_STATUSES: Record<string, ReportStatus> = {
   BKG: { code: 'BKG', label: 'Booking criado', etapa: 'PRE_EMBARQUE', etapaIndex: 0, color: '#94a3b8' },
   CLT: { code: 'CLT', label: 'Coleta da carga', etapa: 'PRE_EMBARQUE', etapaIndex: 0, color: '#a78bfa' },
@@ -222,98 +71,26 @@ const REPORT_STATUSES: Record<string, ReportStatus> = {
   AGD: { code: 'AGD', label: 'Aguardando', etapa: 'PRE_EMBARQUE', etapaIndex: 0, color: '#64748b' },
 };
 
-// JSONCargo event to Report Status mapping
 const EVENT_TO_REPORT_STATUS: Record<string, string> = {
-  // Booking criado (BKG)
-  'BOOKED': 'BKG',
-  'BOOKING': 'BKG',
-  'BOOKING_CONFIRMED': 'BKG',
-  'BOOKING_CREATED': 'BKG',
-  'PENDING': 'BKG',
-  
-  // Coleta da carga (CLT)
-  'EMPTY_TO_SHIPPER': 'CLT',
-  'EMPTY_PICK_UP': 'CLT',
-  'GATE_OUT_EMPTY': 'CLT',
-  'PICKED_UP': 'CLT',
-  'PICKUP': 'CLT',
-  
-  // Gate-in origem (GIO)
-  'GATE_IN_FULL': 'GIO',
-  'FULL_IN': 'GIO',
-  'RECEIVED': 'GIO',
-  'RECEIVED_FOR_EXPORT': 'GIO',
-  'RECEIVED_FOR_EXPORT_TRANSFER': 'GIO',
-  
-  // Carregado no navio (CRG)
-  'LOADED': 'CRG',
-  'LOAD': 'CRG',
-  'LOADED_ON_VESSEL': 'CRG',
-  'LOADING': 'CRG',
-  
-  // Partida do navio (DEP)
-  'VESSEL_DEPARTED': 'DEP',
-  'DEPARTED': 'DEP',
-  'DEPARTURE': 'DEP',
-  'VESSEL_DEPARTURE': 'DEP',
-  
-  // Transbordo (TSP)
-  'TRANSSHIPMENT': 'TSP',
-  'TRANSSHIPMENT_DISCHARGED': 'TSP',
-  'TRANSSHIPMENT_LOADED': 'TSP',
-  'IN_TRANSIT': 'TSP',
-  'ON_RAIL': 'TSP',
-  
-  // Chegada do navio (ARR)
-  'VESSEL_ARRIVED': 'ARR',
-  'ARRIVED': 'ARR',
-  'ARRIVAL': 'ARR',
-  'VESSEL_ARRIVAL': 'ARR',
-  
-  // Descarga (DCH)
-  'DISCHARGED': 'DCH',
-  'DISCHARGE': 'DCH',
-  'UNLOADED': 'DCH',
-  'OFFLOADED': 'DCH',
-  
-  // Inspeção/Liberação aduaneira (INS)
-  'CUSTOMS_RELEASED': 'INS',
-  'CUSTOMS_CLEARED': 'INS',
-  'RELEASED': 'INS',
-  'CUSTOMS': 'INS',
-  'CUSTOMS_HOLD': 'INS',
-  'INSPECTION': 'INS',
-  'AVAILABLE': 'INS',
-  'READY_FOR_PICKUP': 'INS',
-  
-  // Gate-out destino (GOD)
-  'GATE_OUT_FULL': 'GOD',
-  'FULL_OUT': 'GOD',
-  'OUT_GATE': 'GOD',
-  'CONTAINER_TO_CONSIGNEE': 'GOD',
-  
-  // Entrega final (DLV)
-  'DELIVERED': 'DLV',
-  'DELIVERY': 'DLV',
-  'EMPTY_RETURN': 'DLV',
-  'EMPTY_RETURNED': 'DLV',
-  'EMPTY_IN_DEPOT': 'DLV',
-  'EMPTY_RECEIVED_AT_CY': 'DLV',
+  'BOOKED': 'BKG', 'BOOKING': 'BKG', 'BOOKING_CONFIRMED': 'BKG', 'PENDING': 'BKG',
+  'EMPTY_TO_SHIPPER': 'CLT', 'EMPTY_PICK_UP': 'CLT', 'GATE_OUT_EMPTY': 'CLT', 'PICKED_UP': 'CLT',
+  'GATE_IN_FULL': 'GIO', 'FULL_IN': 'GIO', 'RECEIVED': 'GIO', 'RECEIVED_FOR_EXPORT': 'GIO',
+  'LOADED': 'CRG', 'LOAD': 'CRG', 'LOADED_ON_VESSEL': 'CRG', 'LOADING': 'CRG',
+  'VESSEL_DEPARTED': 'DEP', 'DEPARTED': 'DEP', 'DEPARTURE': 'DEP', 'VESSEL_DEPARTURE': 'DEP',
+  'TRANSSHIPMENT': 'TSP', 'TRANSSHIPMENT_DISCHARGED': 'TSP', 'TRANSSHIPMENT_LOADED': 'TSP', 'IN_TRANSIT': 'TSP', 'ON_RAIL': 'TSP',
+  'VESSEL_ARRIVED': 'ARR', 'ARRIVED': 'ARR', 'ARRIVAL': 'ARR', 'VESSEL_ARRIVAL': 'ARR',
+  'DISCHARGED': 'DCH', 'DISCHARGE': 'DCH', 'UNLOADED': 'DCH', 'OFFLOADED': 'DCH',
+  'CUSTOMS_RELEASED': 'INS', 'CUSTOMS_CLEARED': 'INS', 'RELEASED': 'INS', 'CUSTOMS': 'INS', 'AVAILABLE': 'INS', 'READY_FOR_PICKUP': 'INS',
+  'GATE_OUT_FULL': 'GOD', 'FULL_OUT': 'GOD', 'OUT_GATE': 'GOD', 'CONTAINER_TO_CONSIGNEE': 'GOD',
+  'DELIVERED': 'DLV', 'DELIVERY': 'DLV', 'EMPTY_RETURN': 'DLV', 'EMPTY_RETURNED': 'DLV', 'EMPTY_RECEIVED_AT_CY': 'DLV',
 };
 
-// Get report status from JSONCargo event
 const getReportStatus = (lastEvent: string | null): ReportStatus => {
   if (!lastEvent) return REPORT_STATUSES.AGD;
-  
-  // Normalize the event: uppercase, remove spaces/underscores/dashes
   const normalizedEvent = lastEvent.toUpperCase().replace(/[\s-]/g, '_');
-  
-  // Direct match
   if (EVENT_TO_REPORT_STATUS[normalizedEvent]) {
     return REPORT_STATUSES[EVENT_TO_REPORT_STATUS[normalizedEvent]];
   }
-  
-  // Partial match - check if any key is contained in the event
   for (const [eventKey, statusCode] of Object.entries(EVENT_TO_REPORT_STATUS)) {
     const normalizedKey = eventKey.replace(/_/g, '');
     const cleanEvent = normalizedEvent.replace(/_/g, '');
@@ -321,29 +98,19 @@ const getReportStatus = (lastEvent: string | null): ReportStatus => {
       return REPORT_STATUSES[statusCode];
     }
   }
-  
   return REPORT_STATUSES.AGD;
 };
 
-// Timeline progress calculation based on etapa (6 stages: 0-100%)
 const getTimelineProgress = (lastEvent: string | null): number => {
   const status = getReportStatus(lastEvent);
-  // Map etapaIndex (0-5) to progress (0-100%)
   return (status.etapaIndex / 5) * 100;
 };
 
-// Get status code (for backwards compatibility)
-const getStatusCode = (lastEvent: string | null): string => {
-  return getReportStatus(lastEvent).code;
-};
-
-// Get human-readable status description
 const getStatusDescription = (lastEvent: string | null): string => {
   const status = getReportStatus(lastEvent);
   return status.label;
 };
 
-// Timeline stage labels
 const TIMELINE_STAGES = [
   { position: 0, label: 'Pré-Embarque', statuses: ['BKG', 'CLT', 'GIO'] },
   { position: 20, label: 'Embarque', statuses: ['CRG', 'DEP'] },
@@ -353,23 +120,38 @@ const TIMELINE_STAGES = [
   { position: 100, label: 'Entrega', statuses: ['GOD', 'DLV'] },
 ];
 
-interface ContainerData {
-  id: string;
-  container: string;
-  bl?: string;
+// MBL data interface (grouped view)
+interface MblTrackingData {
+  mbl_id: string;
+  tipo_processo: string;
+  consignee: string;
   shipping_line: string;
-  consignee_name: string;
+  origem: string;
+  destino: string;
+  navio: string;
+  eta: string;
+  email_analista: string;
+  email_cliente: string;
+  container_count: number;
+  container_status: string;
   last_event: string;
-  status: string;
-  created_at?: string;
-  last_check?: string;
-  nome_analista?: string;
-  email_analista?: string;
-  email_cliente?: string;
-  origem?: string;
-  destino?: string;
-  vessel?: string;
-  eta?: string;
+  last_check: string;
+}
+
+// Container detail interface (expanded view)
+interface ContainerDetail {
+  id: number;
+  mbl_id: string;
+  container: string;
+  shipping_line: string;
+  container_status: string;
+  last_event: string;
+  last_check: string;
+  eta: string;
+  navio: string;
+  origem: string;
+  destino: string;
+  consignee: string;
 }
 
 const ContainerTracking = () => {
@@ -379,63 +161,52 @@ const ContainerTracking = () => {
   const [user, setUser] = useState<User | null>(null);
   const [session, setSession] = useState<Session | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const [containerNumber, setContainerNumber] = useState("");
-  const [selectedLine, setSelectedLine] = useState("");
-  const [consigneeName, setConsigneeName] = useState("");
   const [searchTerm, setSearchTerm] = useState("");
   const [filterLine, setFilterLine] = useState("all");
   
   const [activeCardFilter, setActiveCardFilter] = useState<"all" | "transito" | "alerta" | "entregues">("all");
-  const [sortAnalyst, setSortAnalyst] = useState<"asc" | "desc" | null>(null);
-  const [sortContainer, setSortContainer] = useState<"asc" | "desc" | null>(null);
-  const [sortClient, setSortClient] = useState<"asc" | "desc" | null>(null);
-  const [sortLastCheck, setSortLastCheck] = useState<"asc" | "desc" | null>(null);
-  const [containersList, setContainersList] = useState<ContainerData[]>([]);
+  const [mblList, setMblList] = useState<MblTrackingData[]>([]);
   const [currentPage, setCurrentPage] = useState(1);
-  const [trackingContainer, setTrackingContainer] = useState<string | null>(null);
   const [isLoadingData, setIsLoadingData] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
-  const [isLoadingSeaItems, setIsLoadingSeaItems] = useState(false);
+  const [isSyncing, setIsSyncing] = useState(false);
   const { toast } = useToast();
+  
+  // Expansion state
+  const [expandedMbl, setExpandedMbl] = useState<string | null>(null);
+  const [mblContainers, setMblContainers] = useState<ContainerDetail[]>([]);
+  const [loadingContainers, setLoadingContainers] = useState(false);
+  const [trackingContainer, setTrackingContainer] = useState<string | null>(null);
   
   // Email modal state
   const [emailModalOpen, setEmailModalOpen] = useState(false);
-  const [emailContainer, setEmailContainer] = useState<ContainerData | null>(null);
+  const [emailMbl, setEmailMbl] = useState<MblTrackingData | null>(null);
   const [emailType, setEmailType] = useState<"interno" | "cliente">("interno");
   const [emailCustomMessage, setEmailCustomMessage] = useState("");
   const [isSendingEmail, setIsSendingEmail] = useState(false);
 
   const itemsPerPage = 10;
 
-  // Helper functions for status categorization based on new 12-status system
+  // Status categorization
   const isEmTransito = (lastEvent: string | null): boolean => {
     const status = getReportStatus(lastEvent);
-    // Em trânsito: Embarque (CRG, DEP) + Trânsito (TSP) + Chegada (ARR, DCH)
     return ['CRG', 'DEP', 'TSP', 'ARR', 'DCH'].includes(status.code);
   };
 
   const isEmAlerta = (lastEvent: string | null): boolean => {
     if (!lastEvent) return false;
     const upper = lastEvent.toUpperCase().replace(/[_\s-]/g, "");
-    // Alerts remain based on specific keywords
     return upper.includes("DELAYED") || upper.includes("DELAY") ||
            upper.includes("CANCELLED") || upper.includes("CANCEL") ||
-           upper.includes("CUSTOMSHOLD") || 
-           upper.includes("MISSEDCONNECTION") || upper.includes("MISSED");
+           upper.includes("CUSTOMSHOLD") || upper.includes("MISSED");
   };
 
   const isEntregue = (lastEvent: string | null): boolean => {
     const status = getReportStatus(lastEvent);
-    // Entregue: Gate-out destino (GOD) + Entrega final (DLV)
     return ['GOD', 'DLV'].includes(status.code);
   };
-  
-  const isEmLiberacao = (lastEvent: string | null): boolean => {
-    const status = getReportStatus(lastEvent);
-    return status.code === 'INS';
-  };
 
-  // Check admin access from localStorage
+  // Check admin access
   useEffect(() => {
     const storedUser = localStorage.getItem("user");
     if (storedUser) {
@@ -452,9 +223,7 @@ const ContainerTracking = () => {
 
   // Check authentication
   useEffect(() => {
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange((event, session) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       setSession(session);
       setUser(session?.user ?? null);
       setIsLoading(false);
@@ -469,12 +238,12 @@ const ContainerTracking = () => {
     return () => subscription.unsubscribe();
   }, []);
 
-  // Fetch containers from MariaDB via olimpo-proxy
-  const fetchContainersData = React.useCallback(async () => {
+  // Fetch MBL data from t_tracking_sea
+  const fetchMblData = React.useCallback(async () => {
     setIsLoadingData(true);
     try {
       const res = await fetch(
-        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/olimpo-proxy?action=get_tracked_containers`,
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/olimpo-proxy?action=get_sea_tracking`,
         {
           method: 'GET',
           headers: {
@@ -487,36 +256,58 @@ const ContainerTracking = () => {
       const result = await res.json();
       
       if (result.success && result.data) {
-        const mapped = result.data.map((row: any) => ({
-          id: String(row.id),
-          container: row.container,
-          bl: row.bl,
-          shipping_line: row.shipping_line || '',
-          consignee_name: row.consignee_name || '',
-          last_event: row.last_event || 'Aguardando rastreio...',
-          status: row.container_status || 'PENDING',
-          created_at: row.created_at,
-          last_check: row.last_check,
-          nome_analista: row.nome_analista,
-          email_analista: row.email_analista,
-          email_cliente: row.email_cliente,
-          origem: row.origem,
-          destino: row.destino,
-          vessel: row.vessel,
-          eta: row.eta,
-        }));
-        setContainersList(mapped);
+        setMblList(result.data);
+      } else if (result.error) {
+        console.error("Error fetching MBL data:", result.error);
       }
     } catch (error) {
-      console.error("Error fetching containers:", error);
+      console.error("Error fetching MBL data:", error);
     } finally {
       setIsLoadingData(false);
     }
   }, []);
 
   useEffect(() => {
-    fetchContainersData();
-  }, [fetchContainersData]);
+    fetchMblData();
+  }, [fetchMblData]);
+
+  // Fetch containers for expanded MBL
+  const fetchMblContainers = async (mbl_id: string) => {
+    setLoadingContainers(true);
+    try {
+      const res = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/olimpo-proxy?action=get_sea_tracking_containers&mbl_id=${encodeURIComponent(mbl_id)}`,
+        {
+          method: 'GET',
+          headers: {
+            'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
+            'Content-Type': 'application/json',
+          }
+        }
+      );
+      
+      const result = await res.json();
+      
+      if (result.success && result.data) {
+        setMblContainers(result.data);
+      }
+    } catch (error) {
+      console.error("Error fetching containers:", error);
+    } finally {
+      setLoadingContainers(false);
+    }
+  };
+
+  // Toggle MBL expansion
+  const handleToggleExpand = async (mbl_id: string) => {
+    if (expandedMbl === mbl_id) {
+      setExpandedMbl(null);
+      setMblContainers([]);
+    } else {
+      setExpandedMbl(mbl_id);
+      await fetchMblContainers(mbl_id);
+    }
+  };
 
   // Refresh all containers via JSONCargo API
   const handleRefresh = async () => {
@@ -528,7 +319,7 @@ const ContainerTracking = () => {
     
     try {
       const res = await fetch(
-        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/olimpo-proxy?action=refresh_all_containers`,
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/olimpo-proxy?action=refresh_sea_tracking`,
         {
           method: 'GET',
           headers: {
@@ -545,7 +336,10 @@ const ContainerTracking = () => {
           title: "Dados atualizados",
           description: `${result.updated} containers atualizados${result.errors > 0 ? `, ${result.errors} com erro` : ''}.`,
         });
-        await fetchContainersData();
+        await fetchMblData();
+        if (expandedMbl) {
+          await fetchMblContainers(expandedMbl);
+        }
       } else {
         toast({
           title: "Erro ao atualizar",
@@ -565,17 +359,17 @@ const ContainerTracking = () => {
     }
   };
 
-  // Load containers from t_dachser_sea_items
-  const handleLoadFromSeaItems = async () => {
-    setIsLoadingSeaItems(true);
+  // Sync from t_master_dados
+  const handleSync = async () => {
+    setIsSyncing(true);
     toast({
-      title: "Carregando containers",
-      description: "Buscando containers das análises SEA...",
+      title: "Sincronizando",
+      description: "Buscando dados de t_master_dados...",
     });
     
     try {
       const res = await fetch(
-        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/olimpo-proxy?action=load_containers_from_sea_items`,
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/olimpo-proxy?action=sync_sea_tracking`,
         {
           method: 'GET',
           headers: {
@@ -589,26 +383,26 @@ const ContainerTracking = () => {
       
       if (result.success) {
         toast({
-          title: "Containers carregados",
-          description: result.message || `${result.added} container(s) adicionado(s)`,
+          title: "Sincronizado",
+          description: result.message || `${result.synced} registros sincronizados`,
         });
-        await fetchContainersData();
+        await fetchMblData();
       } else {
         toast({
-          title: "Erro ao carregar",
-          description: result.error || "Falha ao carregar containers",
+          title: "Erro ao sincronizar",
+          description: result.error || "Falha na sincronização",
           variant: "destructive",
         });
       }
     } catch (error) {
-      console.error("Error loading from sea items:", error);
+      console.error("Error syncing:", error);
       toast({
         title: "Erro",
-        description: "Falha ao carregar containers das análises SEA",
+        description: "Falha ao sincronizar",
         variant: "destructive",
       });
     } finally {
-      setIsLoadingSeaItems(false);
+      setIsSyncing(false);
     }
   };
 
@@ -617,7 +411,7 @@ const ContainerTracking = () => {
     setTrackingContainer(containerId);
     try {
       const res = await fetch(
-        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/olimpo-proxy?action=track_container&container=${encodeURIComponent(containerId)}&shipping_line=${encodeURIComponent(shippingLine)}`,
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/olimpo-proxy?action=track_sea_container&container=${encodeURIComponent(containerId)}&shipping_line=${encodeURIComponent(shippingLine)}`,
         {
           method: 'GET',
           headers: {
@@ -632,9 +426,12 @@ const ContainerTracking = () => {
       if (result.success) {
         toast({
           title: "Container rastreado",
-          description: `Status: ${result.data.container_status || 'N/A'}`,
+          description: `Status: ${result.data?.container_status || 'N/A'}`,
         });
-        await fetchContainersData();
+        if (expandedMbl) {
+          await fetchMblContainers(expandedMbl);
+        }
+        await fetchMblData();
       } else {
         toast({
           title: "Erro no rastreio",
@@ -649,31 +446,18 @@ const ContainerTracking = () => {
     }
   };
 
-  // Add container to tracking
-  const handleAddContainer = async () => {
-    if (!containerNumber || !selectedLine || !consigneeName) {
-      toast({
-        title: "Campos obrigatórios",
-        description: "Preencha todos os campos para cadastrar o Container.",
-        variant: "destructive",
-      });
-      return;
-    }
-
+  // Delete MBL from tracking
+  const handleDeleteMbl = async (mbl_id: string) => {
     try {
       const res = await fetch(
-        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/olimpo-proxy?action=add_tracked_container`,
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/olimpo-proxy?action=delete_sea_tracking`,
         {
           method: 'POST',
           headers: {
             'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
             'Content-Type': 'application/json',
           },
-          body: JSON.stringify({
-            container: containerNumber.toUpperCase(),
-            shipping_line: selectedLine,
-            consignee_name: consigneeName,
-          })
+          body: JSON.stringify({ mbl_id })
         }
       );
       
@@ -681,73 +465,26 @@ const ContainerTracking = () => {
       
       if (result.success) {
         toast({
-          title: "Container cadastrado",
-          description: "Container adicionado à lista de monitoramento.",
+          title: "MBL removido",
+          description: "MBL removido do monitoramento.",
         });
-        
-        // Track container immediately after adding
-        await handleTrackContainer(containerNumber.toUpperCase(), selectedLine);
-        
-        setContainerNumber("");
-        setSelectedLine("");
-        setConsigneeName("");
-        await fetchContainersData();
-      } else {
-        toast({
-          title: "Erro ao cadastrar",
-          description: result.error || "Falha ao cadastrar container",
-          variant: "destructive",
-        });
+        await fetchMblData();
       }
     } catch (error) {
-      console.error("Error adding container:", error);
-      toast({
-        title: "Erro",
-        description: "Falha ao cadastrar container",
-        variant: "destructive",
-      });
+      console.error("Error deleting MBL:", error);
     }
   };
 
-  // Delete container from tracking
-  const handleDeleteContainer = async (containerId: string, containerNumber: string) => {
-    try {
-      const res = await fetch(
-        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/olimpo-proxy?action=delete_tracked_container`,
-        {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({ container: containerNumber })
-        }
-      );
-      
-      const result = await res.json();
-      
-      if (result.success) {
-        toast({
-          title: "Container removido",
-          description: "Container removido da lista de monitoramento.",
-        });
-        await fetchContainersData();
-      }
-    } catch (error) {
-      console.error("Error deleting container:", error);
-    }
-  };
-
-  // Send email for container
-  const handleOpenEmailModal = (container: ContainerData) => {
-    setEmailContainer(container);
+  // Email modal
+  const handleOpenEmailModal = (mbl: MblTrackingData) => {
+    setEmailMbl(mbl);
     setEmailType("interno");
     setEmailCustomMessage("");
     setEmailModalOpen(true);
   };
 
   const handleSendEmail = async () => {
-    if (!emailContainer) return;
+    if (!emailMbl) return;
     
     setIsSendingEmail(true);
     try {
@@ -760,15 +497,15 @@ const ContainerTracking = () => {
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({
-            to: emailType === "interno" ? emailContainer.email_analista : emailContainer.email_cliente,
-            container: emailContainer.container,
-            vessel: emailContainer.vessel,
-            shipping_line: emailContainer.shipping_line,
-            status: emailContainer.last_event,
-            eta: emailContainer.eta,
-            consignee: emailContainer.consignee_name,
-            origem: emailContainer.origem,
-            destino: emailContainer.destino,
+            to: emailType === "interno" ? emailMbl.email_analista : emailMbl.email_cliente,
+            container: emailMbl.mbl_id,
+            vessel: emailMbl.navio,
+            shipping_line: emailMbl.shipping_line,
+            status: emailMbl.last_event,
+            eta: emailMbl.eta,
+            consignee: emailMbl.consignee,
+            origem: emailMbl.origem,
+            destino: emailMbl.destino,
             custom_message: emailCustomMessage || undefined,
             email_type: emailType,
           })
@@ -802,7 +539,6 @@ const ContainerTracking = () => {
     }
   };
 
-
   const abbreviateName = (name: string): string => {
     if (!name || name === "-") return "-";
     if (name.length > 20) {
@@ -811,172 +547,61 @@ const ContainerTracking = () => {
     return name;
   };
 
-  const handleAnalystSort = () => {
-    setSortContainer(null);
-    setSortClient(null);
-    setSortLastCheck(null);
-    if (sortAnalyst === null) {
-      setSortAnalyst("asc");
-    } else if (sortAnalyst === "asc") {
-      setSortAnalyst("desc");
-    } else {
-      setSortAnalyst(null);
-    }
-  };
-
-  const handleContainerSort = () => {
-    setSortAnalyst(null);
-    setSortClient(null);
-    setSortLastCheck(null);
-    if (sortContainer === null) {
-      setSortContainer("asc");
-    } else if (sortContainer === "asc") {
-      setSortContainer("desc");
-    } else {
-      setSortContainer(null);
-    }
-  };
-
-  const handleClientSort = () => {
-    setSortAnalyst(null);
-    setSortContainer(null);
-    setSortLastCheck(null);
-    if (sortClient === null) {
-      setSortClient("asc");
-    } else if (sortClient === "asc") {
-      setSortClient("desc");
-    } else {
-      setSortClient(null);
-    }
-  };
-
-  const handleLastCheckSort = () => {
-    setSortAnalyst(null);
-    setSortContainer(null);
-    setSortClient(null);
-    if (sortLastCheck === null) {
-      setSortLastCheck("asc");
-    } else if (sortLastCheck === "asc") {
-      setSortLastCheck("desc");
-    } else {
-      setSortLastCheck(null);
-    }
-  };
-
-  // Filter and sort containers
-  // Containers excluídos da exibição visual
-  const EXCLUDED_CONTAINERS = [
-    'TCKU2140363',
-    'SEKU5762065',
-    'BEAU4076927',
-    'ECMU5599537',
-    'CMAU8531522',
-    'TCNU7706015',
-    'TRHU2388168'
-  ];
-
-  const filteredContainers = useMemo(() => {
-    let containers = containersList.filter((c) => {
-      // Excluir containers específicos
-      if (EXCLUDED_CONTAINERS.includes(c.container?.trim().toUpperCase())) {
-        return false;
-      }
-      
+  // Filter MBL list
+  const filteredMbls = useMemo(() => {
+    let mbls = mblList.filter((m) => {
       const searchLower = searchTerm.toLowerCase();
       const matchesSearch =
         !searchTerm ||
-        c.container.toLowerCase().includes(searchLower) ||
-        (c.bl && c.bl.toLowerCase().includes(searchLower)) ||
-        (c.consignee_name && c.consignee_name.toLowerCase().includes(searchLower)) ||
-        (c.shipping_line && c.shipping_line.toLowerCase().includes(searchLower)) ||
-        (c.nome_analista && c.nome_analista.toLowerCase().includes(searchLower));
-      const armador = normalizeShippingLine(c.shipping_line) !== "N/D" ? normalizeShippingLine(c.shipping_line) : detectArmadorFromVessel(c.vessel, c.container);
+        m.mbl_id.toLowerCase().includes(searchLower) ||
+        (m.consignee && m.consignee.toLowerCase().includes(searchLower)) ||
+        (m.shipping_line && m.shipping_line.toLowerCase().includes(searchLower)) ||
+        (m.navio && m.navio.toLowerCase().includes(searchLower));
+      
+      const armador = normalizeShippingLine(m.shipping_line);
       const matchesLine = filterLine === "all" || armador === filterLine;
       
-      // Card filter
       let matchesCardFilter = true;
       if (activeCardFilter === "transito") {
-        matchesCardFilter = isEmTransito(c.last_event) && !isEntregue(c.last_event) && !isEmAlerta(c.last_event);
+        matchesCardFilter = isEmTransito(m.last_event) && !isEntregue(m.last_event) && !isEmAlerta(m.last_event);
       } else if (activeCardFilter === "alerta") {
-        matchesCardFilter = isEmAlerta(c.last_event);
+        matchesCardFilter = isEmAlerta(m.last_event);
       } else if (activeCardFilter === "entregues") {
-        matchesCardFilter = isEntregue(c.last_event);
+        matchesCardFilter = isEntregue(m.last_event);
       }
 
       return matchesSearch && matchesLine && matchesCardFilter;
     });
 
-    // Apply sorting
-    if (sortAnalyst !== null) {
-      containers = [...containers].sort((a, b) => {
-        const nameA = a.nome_analista || "";
-        const nameB = b.nome_analista || "";
-        const comparison = nameA.localeCompare(nameB);
-        return sortAnalyst === "asc" ? comparison : -comparison;
-      });
-    } else if (sortContainer !== null) {
-      containers = [...containers].sort((a, b) => {
-        const containerA = a.container || "";
-        const containerB = b.container || "";
-        const comparison = containerA.localeCompare(containerB);
-        return sortContainer === "asc" ? comparison : -comparison;
-      });
-    } else if (sortClient !== null) {
-      containers = [...containers].sort((a, b) => {
-        const clientA = a.consignee_name || "";
-        const clientB = b.consignee_name || "";
-        const comparison = clientA.localeCompare(clientB);
-        return sortClient === "asc" ? comparison : -comparison;
-      });
-    } else if (sortLastCheck !== null) {
-      containers = [...containers].sort((a, b) => {
-        const dateA = a.last_check ? new Date(a.last_check).getTime() : 0;
-        const dateB = b.last_check ? new Date(b.last_check).getTime() : 0;
-        const comparison = dateA - dateB;
-        return sortLastCheck === "asc" ? comparison : -comparison;
-      });
-    }
+    return mbls;
+  }, [mblList, searchTerm, filterLine, activeCardFilter]);
 
-    return containers;
-  }, [containersList, searchTerm, filterLine, activeCardFilter, sortAnalyst, sortContainer, sortClient, sortLastCheck]);
-
-  const totalPages = Math.ceil(filteredContainers.length / itemsPerPage);
+  const totalPages = Math.ceil(filteredMbls.length / itemsPerPage);
   const startIndex = (currentPage - 1) * itemsPerPage;
   const endIndex = startIndex + itemsPerPage;
-  const currentContainers = filteredContainers.slice(startIndex, endIndex);
+  const currentMbls = filteredMbls.slice(startIndex, endIndex);
 
-  // Dashboard stats with new categories - exclude EXCLUDED_CONTAINERS for consistency with table
+  // Dashboard stats
   const stats = useMemo(() => {
-    const containersAtivos = containersList.filter(
-      c => !EXCLUDED_CONTAINERS.includes(c.container?.trim().toUpperCase())
-    );
-    
-    const total = containersAtivos.length;
-    const emTransito = containersAtivos.filter((c) => isEmTransito(c.last_event) && !isEntregue(c.last_event) && !isEmAlerta(c.last_event)).length;
-    const emAlerta = containersAtivos.filter((c) => isEmAlerta(c.last_event)).length;
-    const entregues = containersAtivos.filter((c) => isEntregue(c.last_event)).length;
+    const total = mblList.length;
+    const emTransito = mblList.filter((m) => isEmTransito(m.last_event) && !isEntregue(m.last_event) && !isEmAlerta(m.last_event)).length;
+    const emAlerta = mblList.filter((m) => isEmAlerta(m.last_event)).length;
+    const entregues = mblList.filter((m) => isEntregue(m.last_event)).length;
 
     return { total, emTransito, emAlerta, entregues };
-  }, [containersList]);
+  }, [mblList]);
 
-  // Dynamic list of armadores based on containers data
+  // Dynamic list of armadores
   const dynamicArmadores = useMemo(() => {
-    const containersAtivos = containersList.filter(
-      c => !EXCLUDED_CONTAINERS.includes(c.container?.trim().toUpperCase())
-    );
-    
     const armadoresSet = new Set<string>();
-    containersAtivos.forEach(c => {
-      // Prioritize shipping_line from database (normalized), fallback to detection
-      const armador = normalizeShippingLine(c.shipping_line) !== "N/D" ? normalizeShippingLine(c.shipping_line) : detectArmadorFromVessel(c.vessel, c.container);
-      if (armador && armador !== "N/D" && armador !== "OUTRO") {
+    mblList.forEach(m => {
+      const armador = normalizeShippingLine(m.shipping_line);
+      if (armador && armador !== "N/D") {
         armadoresSet.add(armador);
       }
     });
-    
-    // Sort alphabetically
     return Array.from(armadoresSet).sort();
-  }, [containersList]);
+  }, [mblList]);
 
   if (isLoading) {
     return (
@@ -1004,8 +629,6 @@ const ContainerTracking = () => {
             background: 'linear-gradient(120deg, rgba(4, 17, 45, 0.92), rgba(26, 93, 173, 0.55))',
           }}
         />
-        
-        {/* Radial gradient overlay */}
         <div 
           className="absolute inset-0"
           style={{
@@ -1015,8 +638,6 @@ const ContainerTracking = () => {
             `
           }}
         />
-        
-        {/* Animated Lines */}
         <div className="absolute inset-0 opacity-20">
           {[...Array(6)].map((_, i) => (
             <div
@@ -1029,8 +650,6 @@ const ContainerTracking = () => {
             />
           ))}
         </div>
-
-        {/* Floating Particles */}
         {[...Array(20)].map((_, i) => (
           <div
             key={`particle-${i}`}
@@ -1047,7 +666,6 @@ const ContainerTracking = () => {
 
       {/* Top Header Bar */}
       <div className="relative z-10 max-w-[95%] mx-auto px-2 pt-5 pb-4 flex items-center justify-between">
-        {/* Left - Back + Header */}
         <div className="flex items-center gap-[18px]">
           <button
             onClick={() => navigate("/dashboard")}
@@ -1059,7 +677,7 @@ const ContainerTracking = () => {
           <header>
             <h1 className="text-[1.6rem] tracking-[0.24em] uppercase text-[#f5f5f5]">DACHSER</h1>
             <p className="text-[0.9rem] text-[#aaaaaa] mt-0.5">
-              Intelligent Logistics – Rastreio de Containers
+              Intelligent Logistics – Rastreio Marítimo (MBL)
             </p>
             <div className="flex gap-1.5 mt-1.5">
               <span className="w-1.5 h-1.5 rounded-full bg-[#ffc800] shadow-[0_0_10px_rgba(255,200,0,.9)]" />
@@ -1069,7 +687,6 @@ const ContainerTracking = () => {
           </header>
         </div>
 
-        {/* Right - User */}
         <div className="flex items-center gap-2.5 text-[0.85rem]">
           <div className="px-[14px] py-1.5 rounded-full bg-[rgba(0,0,0,.70)] border border-[rgba(255,255,255,.18)] text-[#aaaaaa] max-w-[220px] truncate">
             @{user?.email?.split("@")[0] || "admin"}
@@ -1093,9 +710,8 @@ const ContainerTracking = () => {
       {/* Main Content */}
       <main className="relative z-10 max-w-[95%] mx-auto mb-12 px-2 space-y-[18px]">
 
-        {/* Dashboard Cards - AWB Style */}
+        {/* Dashboard Cards */}
         <section className="grid grid-cols-1 md:grid-cols-4 gap-4">
-          {/* Total Monitorados */}
           <Card 
             className={`bg-card/90 border-border backdrop-blur-sm shadow-lg cursor-pointer transition-all hover:scale-[1.02] ${activeCardFilter === "all" ? "ring-2 ring-primary" : ""}`}
             onClick={() => { setActiveCardFilter("all"); setCurrentPage(1); }}
@@ -1103,7 +719,7 @@ const ContainerTracking = () => {
             <div className="p-4 flex flex-col h-full">
               <div className="flex items-center justify-between mb-2">
                 <span className="text-xs uppercase tracking-wide text-muted-foreground">
-                  Total Monitorados
+                  Total MBLs
                 </span>
                 <span className="inline-flex items-center justify-center w-8 h-8 rounded-full bg-muted text-primary">
                   <Anchor className="w-4 h-4" />
@@ -1113,12 +729,11 @@ const ContainerTracking = () => {
                 <span className="text-3xl font-semibold text-foreground">
                   {stats.total}
                 </span>
-                <span className="text-xs text-muted-foreground">Containers ativos</span>
+                <span className="text-xs text-muted-foreground">Masters ativos</span>
               </div>
             </div>
           </Card>
 
-          {/* Em Trânsito */}
           <Card 
             className={`bg-gradient-to-br from-blue-900/40 via-blue-900/10 to-card border-blue-700/50 shadow-lg cursor-pointer transition-all hover:scale-[1.02] ${activeCardFilter === "transito" ? "ring-2 ring-blue-400" : ""}`}
             onClick={() => { setActiveCardFilter("transito"); setCurrentPage(1); }}
@@ -1141,7 +756,6 @@ const ContainerTracking = () => {
             </div>
           </Card>
 
-          {/* Em Alerta */}
           <Card 
             className={`bg-gradient-to-br from-primary/30 via-primary/10 to-card border-primary/50 shadow-lg cursor-pointer transition-all hover:scale-[1.02] ${activeCardFilter === "alerta" ? "ring-2 ring-primary" : ""}`}
             onClick={() => { setActiveCardFilter("alerta"); setCurrentPage(1); }}
@@ -1159,12 +773,11 @@ const ContainerTracking = () => {
                 <span className="text-3xl font-semibold text-primary">
                   {stats.emAlerta}
                 </span>
-                <span className="text-xs text-primary/80">DELAYED, HOLD, CANCELLED</span>
+                <span className="text-xs text-primary/80">DELAYED, HOLD</span>
               </div>
             </div>
           </Card>
 
-          {/* Entregues */}
           <Card 
             className={`bg-gradient-to-br from-green-900/40 via-green-900/10 to-card border-green-700/50 shadow-lg cursor-pointer transition-all hover:scale-[1.02] ${activeCardFilter === "entregues" ? "ring-2 ring-green-400" : ""}`}
             onClick={() => { setActiveCardFilter("entregues"); setCurrentPage(1); }}
@@ -1182,7 +795,7 @@ const ContainerTracking = () => {
                 <span className="text-3xl font-semibold text-green-300">
                   {stats.entregues}
                 </span>
-                <span className="text-xs text-green-200/80">GOD, DLV (Gate-out, Entrega)</span>
+                <span className="text-xs text-green-200/80">GOD, DLV</span>
               </div>
             </div>
           </Card>
@@ -1202,7 +815,7 @@ const ContainerTracking = () => {
               <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-[#aaaaaa]" />
               <input
                 type="text"
-                placeholder="Buscar por Container, BL, Consignee ou Armador"
+                placeholder="Buscar por MBL, Consignee, Armador ou Navio"
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 className="h-9 w-full pl-10 pr-4 rounded-full border border-[rgba(255,255,255,.14)] bg-[#13141a] text-[#f5f5f5] text-[0.78rem] placeholder:text-[#666] focus:outline-none focus:border-[#ffc800] focus:shadow-[0_0_0_1px_rgba(255,200,0,.8)]"
@@ -1230,7 +843,6 @@ const ContainerTracking = () => {
                     </SelectContent>
                   </Select>
                 </div>
-
               </div>
 
               <div className="flex items-center gap-2">
@@ -1238,20 +850,20 @@ const ContainerTracking = () => {
                   <Tooltip>
                     <TooltipTrigger asChild>
                       <button
-                        onClick={handleLoadFromSeaItems}
-                        disabled={isLoadingSeaItems}
+                        onClick={handleSync}
+                        disabled={isSyncing}
                         className="h-8 px-4 rounded-full bg-blue-600 text-white text-[0.75rem] font-medium flex items-center gap-1.5 hover:bg-blue-500 transition shadow-[0_0_20px_rgba(59,130,246,.3)] disabled:opacity-50"
                       >
-                        {isLoadingSeaItems ? (
+                        {isSyncing ? (
                           <Loader2 className="w-3.5 h-3.5 animate-spin" />
                         ) : (
                           <Database className="w-3.5 h-3.5" />
                         )}
-                        Carregar SEA
+                        Sincronizar
                       </button>
                     </TooltipTrigger>
                     <TooltipContent>
-                      <p className="text-xs">Carregar containers das análises HBL</p>
+                      <p className="text-xs">Sincronizar dados de t_master_dados</p>
                     </TooltipContent>
                   </Tooltip>
                 </TooltipProvider>
@@ -1273,7 +885,7 @@ const ContainerTracking = () => {
           </div>
         </section>
 
-        {/* Containers Table */}
+        {/* MBL Table */}
         <section 
           className="rounded-2xl overflow-hidden"
           style={{
@@ -1282,32 +894,15 @@ const ContainerTracking = () => {
             boxShadow: '0 18px 40px rgba(0,0,0,.85)',
           }}
         >
-          {filteredContainers.length > 0 ? (
+          {filteredMbls.length > 0 ? (
             <>
               <div className="overflow-x-auto">
                 <table className="w-full border-collapse">
                   <thead>
                     <tr className="bg-[rgba(0,0,0,.4)] border-b border-[rgba(255,255,255,.08)]">
-                      <th
-                        className="px-4 py-3 text-left text-[#aaaaaa] uppercase text-[0.68rem] tracking-[0.1em] font-medium cursor-pointer select-none hover:text-[#ffc800] transition"
-                        onClick={handleContainerSort}
-                      >
-                        <span className="flex items-center gap-1">
-                          Container
-                          {sortContainer === "asc" && <span className="text-[#ffc800]">↑</span>}
-                          {sortContainer === "desc" && <span className="text-[#ffc800]">↓</span>}
-                        </span>
-                      </th>
-                      <th
-                        className="px-4 py-3 text-left text-[#aaaaaa] uppercase text-[0.68rem] tracking-[0.1em] font-medium cursor-pointer select-none hover:text-[#ffc800] transition"
-                        onClick={handleClientSort}
-                      >
-                        <span className="flex items-center gap-1">
-                          Consignee
-                          {sortClient === "asc" && <span className="text-[#ffc800]">↑</span>}
-                          {sortClient === "desc" && <span className="text-[#ffc800]">↓</span>}
-                        </span>
-                      </th>
+                      <th className="px-4 py-3 text-left text-[#aaaaaa] uppercase text-[0.68rem] tracking-[0.1em] font-medium">MBL</th>
+                      <th className="px-4 py-3 text-center text-[#aaaaaa] uppercase text-[0.68rem] tracking-[0.1em] font-medium">Containers</th>
+                      <th className="px-4 py-3 text-left text-[#aaaaaa] uppercase text-[0.68rem] tracking-[0.1em] font-medium">Consignee</th>
                       <th className="px-4 py-3 text-left text-[#aaaaaa] uppercase text-[0.68rem] tracking-[0.1em] font-medium">Armador</th>
                       <th className="px-4 py-3 text-left text-[#aaaaaa] uppercase text-[0.68rem] tracking-[0.1em] font-medium">Origem</th>
                       <th className="px-4 py-3 text-left text-[#aaaaaa] uppercase text-[0.68rem] tracking-[0.1em] font-medium">Destino</th>
@@ -1319,181 +914,257 @@ const ContainerTracking = () => {
                     </tr>
                   </thead>
                   <tbody>
-                    {currentContainers.map((container, idx) => {
-                      // Get full report status for colors
-                      const reportStatus = getReportStatus(container.last_event);
+                    {currentMbls.map((mbl, idx) => {
+                      const reportStatus = getReportStatus(mbl.last_event);
                       const statusCode = reportStatus.code;
-                      const progress = getTimelineProgress(container.last_event);
+                      const progress = getTimelineProgress(mbl.last_event);
                       const statusColor = reportStatus.color;
-                      
-                      // Timeline colors based on etapa
-                      let progressColor = statusColor;
-                      let shipColor = statusColor;
+                      const isExpanded = expandedMbl === mbl.mbl_id;
 
                       return (
-                        <tr
-                          key={`${container.id}-${container.container}-${idx}`}
-                          className="border-b border-[rgba(255,255,255,.05)] hover:bg-[rgba(255,255,255,.03)] transition"
-                        >
-                          <td className="px-4 py-3">
-                            <span className="text-[#f5f5f5] font-mono text-sm">{container.container}</span>
-                          </td>
-                          <td className="px-4 py-3">
-                            <TooltipProvider>
-                              <Tooltip>
-                                <TooltipTrigger asChild>
-                                  <span className="text-[#aaaaaa] text-sm cursor-help">
-                                    {abbreviateName(container.consignee_name)}
-                                  </span>
-                                </TooltipTrigger>
-                                <TooltipContent>
-                                  <p>{container.consignee_name}</p>
-                                </TooltipContent>
-                              </Tooltip>
-                            </TooltipProvider>
-                          </td>
-                          <td className="px-4 py-3">
-                            <span className="px-2 py-1 rounded-full text-xs font-medium bg-[rgba(255,200,0,.15)] text-[#ffc800] border border-[rgba(255,200,0,.3)]">
-                              {normalizeShippingLine(container.shipping_line) !== "N/D" ? normalizeShippingLine(container.shipping_line) : detectArmadorFromVessel(container.vessel, container.container)}
-                            </span>
-                          </td>
-                          <td className="px-4 py-3 text-[#aaaaaa] text-sm">{container.origem || "-"}</td>
-                          <td className="px-4 py-3 text-[#aaaaaa] text-sm">{container.destino || "-"}</td>
-                          <td className="px-3 py-3 min-w-[280px]">
-                            {/* Timeline visualization */}
-                            <div className="relative h-1.5 w-full flex items-center">
-                              {/* Background bar */}
-                              <div className="absolute inset-0 bg-gray-800/50 rounded-full" />
-
-                              {/* Progress bar */}
-                              <div
-                                className="absolute left-0 h-full rounded-l-full transition-all duration-700 ease-out"
-                                style={{
-                                  width: `${progress}%`,
-                                  background: `linear-gradient(90deg, ${progressColor}80 0%, ${progressColor} 100%)`,
-                                  borderTopRightRadius: progress === 100 ? "9999px" : "0",
-                                  borderBottomRightRadius: progress === 100 ? "9999px" : "0",
-                                  boxShadow: `0 0 12px ${progressColor}60`,
-                                }}
-                              />
-
-                              {/* Timeline dots - 6 stages based on new report status system */}
-                              <TooltipProvider>
-                                {TIMELINE_STAGES.map((stage, i) => (
-                                  <Tooltip key={stage.label}>
-                                    <TooltipTrigger asChild>
-                                      <div 
-                                        className={`absolute w-1.5 h-1.5 rounded-full shadow-sm z-10 cursor-pointer hover:scale-150 transition-transform ${
-                                          progress >= stage.position ? 'bg-white/90' : 'bg-white/40'
-                                        }`}
-                                        style={{ left: stage.position === 0 ? '0%' : stage.position === 100 ? 'auto' : `${stage.position}%`, right: stage.position === 100 ? '0%' : 'auto' }} 
-                                      />
-                                    </TooltipTrigger>
-                                    <TooltipContent>
-                                      <p className="text-xs font-medium">{stage.label}</p>
-                                      <p className="text-xs text-muted-foreground">{stage.statuses.join(', ')}</p>
-                                    </TooltipContent>
-                                  </Tooltip>
-                                ))}
-                              </TooltipProvider>
-
-                              {/* Ship icon at progress position */}
+                        <Fragment key={`${mbl.mbl_id}-${idx}`}>
+                          <tr className="border-b border-[rgba(255,255,255,.05)] hover:bg-[rgba(255,255,255,.03)] transition">
+                            <td className="px-4 py-3">
+                              <span className="text-[#f5f5f5] font-mono text-sm">{mbl.mbl_id}</span>
+                            </td>
+                            <td className="px-4 py-3 text-center">
+                              <button
+                                onClick={() => handleToggleExpand(mbl.mbl_id)}
+                                className="inline-flex items-center gap-1.5 px-2 py-1 rounded-full bg-[rgba(255,200,0,.1)] text-[#ffc800] hover:bg-[rgba(255,200,0,.2)] transition text-sm"
+                              >
+                                <Package className="w-3.5 h-3.5" />
+                                {mbl.container_count}
+                                {isExpanded ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+                              </button>
+                            </td>
+                            <td className="px-4 py-3">
                               <TooltipProvider>
                                 <Tooltip>
                                   <TooltipTrigger asChild>
-                                    <div
-                                      className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 transition-all duration-700 ease-out z-20 cursor-pointer"
-                                      style={{ left: `${progress}%` }}
-                                    >
-                                      <Ship
-                                        className="w-4 h-4"
-                                        style={{
-                                          color: shipColor,
-                                          fill: shipColor,
-                                          filter: `drop-shadow(0 0 4px ${shipColor}) drop-shadow(0 2px 6px rgba(0, 0, 0, 0.6))`,
-                                        }}
-                                      />
-                                    </div>
+                                    <span className="text-[#aaaaaa] text-sm cursor-help">
+                                      {abbreviateName(mbl.consignee || "-")}
+                                    </span>
                                   </TooltipTrigger>
                                   <TooltipContent>
-                                    <p className="text-xs font-medium">{statusCode}</p>
-                                    <p className="text-xs text-muted-foreground">{getStatusDescription(container.last_event)}</p>
+                                    <p>{mbl.consignee || "-"}</p>
                                   </TooltipContent>
                                 </Tooltip>
                               </TooltipProvider>
-                            </div>
-                          </td>
-                          <td className="px-3 py-3">
-                            <TooltipProvider>
-                              <Tooltip>
-                                <TooltipTrigger asChild>
-                                  <span 
-                                    className="text-sm font-bold px-2 py-1 rounded-md cursor-help"
-                                    style={{ 
-                                      color: statusColor,
-                                      backgroundColor: `${statusColor}20`,
-                                    }}
-                                  >
-                                    {statusCode}
-                                  </span>
-                                </TooltipTrigger>
-                                <TooltipContent>
-                                  <p className="text-xs font-medium">{reportStatus.label}</p>
-                                  <p className="text-xs text-muted-foreground">Etapa: {reportStatus.etapa.replace('_', ' ')}</p>
-                                </TooltipContent>
-                              </Tooltip>
-                            </TooltipProvider>
-                          </td>
-                          {isAdmin && (
-                            <td className="px-3 py-3 text-center">
-                              <div className="flex items-center justify-center gap-1">
+                            </td>
+                            <td className="px-4 py-3">
+                              <span className="px-2 py-1 rounded-full text-xs font-medium bg-[rgba(255,200,0,.15)] text-[#ffc800] border border-[rgba(255,200,0,.3)]">
+                                {normalizeShippingLine(mbl.shipping_line)}
+                              </span>
+                            </td>
+                            <td className="px-4 py-3 text-[#aaaaaa] text-sm">{mbl.origem || "-"}</td>
+                            <td className="px-4 py-3 text-[#aaaaaa] text-sm">{mbl.destino || "-"}</td>
+                            <td className="px-3 py-3 min-w-[280px]">
+                              <div className="relative h-1.5 w-full flex items-center">
+                                <div className="absolute inset-0 bg-gray-800/50 rounded-full" />
+                                <div
+                                  className="absolute left-0 h-full rounded-l-full transition-all duration-700 ease-out"
+                                  style={{
+                                    width: `${progress}%`,
+                                    background: `linear-gradient(90deg, ${statusColor}80 0%, ${statusColor} 100%)`,
+                                    borderTopRightRadius: progress === 100 ? "9999px" : "0",
+                                    borderBottomRightRadius: progress === 100 ? "9999px" : "0",
+                                    boxShadow: `0 0 12px ${statusColor}60`,
+                                  }}
+                                />
                                 <TooltipProvider>
-                                  <Tooltip>
-                                    <TooltipTrigger asChild>
-                                      <Button
-                                        variant="ghost"
-                                        size="icon"
-                                        onClick={() => handleOpenEmailModal(container)}
-                                        className="h-8 w-8 text-blue-400 hover:text-blue-300 hover:bg-blue-500/10"
-                                      >
-                                        <Mail className="h-4 w-4" />
-                                      </Button>
-                                    </TooltipTrigger>
-                                    <TooltipContent>
-                                      <p className="text-xs">Enviar e-mail de status</p>
-                                    </TooltipContent>
-                                  </Tooltip>
+                                  {TIMELINE_STAGES.map((stage) => (
+                                    <Tooltip key={stage.label}>
+                                      <TooltipTrigger asChild>
+                                        <div 
+                                          className={`absolute w-1.5 h-1.5 rounded-full shadow-sm z-10 cursor-pointer hover:scale-150 transition-transform ${
+                                            progress >= stage.position ? 'bg-white/90' : 'bg-white/40'
+                                          }`}
+                                          style={{ left: stage.position === 0 ? '0%' : stage.position === 100 ? 'auto' : `${stage.position}%`, right: stage.position === 100 ? '0%' : 'auto' }} 
+                                        />
+                                      </TooltipTrigger>
+                                      <TooltipContent>
+                                        <p className="text-xs font-medium">{stage.label}</p>
+                                        <p className="text-xs text-muted-foreground">{stage.statuses.join(', ')}</p>
+                                      </TooltipContent>
+                                    </Tooltip>
+                                  ))}
                                 </TooltipProvider>
                                 <TooltipProvider>
                                   <Tooltip>
                                     <TooltipTrigger asChild>
-                                      <Button
-                                        variant="ghost"
-                                        size="icon"
-                                        onClick={() => handleDeleteContainer(container.id, container.container)}
-                                        className="h-8 w-8 text-red-500 hover:text-red-400 hover:bg-red-500/10"
+                                      <div
+                                        className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 transition-all duration-700 ease-out z-20 cursor-pointer"
+                                        style={{ left: `${progress}%` }}
                                       >
-                                        <Trash2 className="h-4 w-4" />
-                                      </Button>
+                                        <Ship
+                                          className="w-4 h-4"
+                                          style={{
+                                            color: statusColor,
+                                            fill: statusColor,
+                                            filter: `drop-shadow(0 0 4px ${statusColor}) drop-shadow(0 2px 6px rgba(0, 0, 0, 0.6))`,
+                                          }}
+                                        />
+                                      </div>
                                     </TooltipTrigger>
                                     <TooltipContent>
-                                      <p className="text-xs">Remover container do monitoramento</p>
+                                      <p className="text-xs font-medium">{statusCode}</p>
+                                      <p className="text-xs text-muted-foreground">{getStatusDescription(mbl.last_event)}</p>
                                     </TooltipContent>
                                   </Tooltip>
                                 </TooltipProvider>
                               </div>
                             </td>
+                            <td className="px-3 py-3">
+                              <TooltipProvider>
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <span 
+                                      className="text-sm font-bold px-2 py-1 rounded-md cursor-help"
+                                      style={{ 
+                                        color: statusColor,
+                                        backgroundColor: `${statusColor}20`,
+                                      }}
+                                    >
+                                      {statusCode}
+                                    </span>
+                                  </TooltipTrigger>
+                                  <TooltipContent>
+                                    <p className="text-xs font-medium">{reportStatus.label}</p>
+                                    <p className="text-xs text-muted-foreground">Etapa: {reportStatus.etapa.replace('_', ' ')}</p>
+                                  </TooltipContent>
+                                </Tooltip>
+                              </TooltipProvider>
+                            </td>
+                            {isAdmin && (
+                              <td className="px-3 py-3 text-center">
+                                <div className="flex items-center justify-center gap-1">
+                                  <TooltipProvider>
+                                    <Tooltip>
+                                      <TooltipTrigger asChild>
+                                        <Button
+                                          variant="ghost"
+                                          size="icon"
+                                          onClick={() => handleOpenEmailModal(mbl)}
+                                          className="h-8 w-8 text-blue-400 hover:text-blue-300 hover:bg-blue-500/10"
+                                        >
+                                          <Mail className="h-4 w-4" />
+                                        </Button>
+                                      </TooltipTrigger>
+                                      <TooltipContent>
+                                        <p className="text-xs">Enviar e-mail de status</p>
+                                      </TooltipContent>
+                                    </Tooltip>
+                                  </TooltipProvider>
+                                  <TooltipProvider>
+                                    <Tooltip>
+                                      <TooltipTrigger asChild>
+                                        <Button
+                                          variant="ghost"
+                                          size="icon"
+                                          onClick={() => handleDeleteMbl(mbl.mbl_id)}
+                                          className="h-8 w-8 text-red-500 hover:text-red-400 hover:bg-red-500/10"
+                                        >
+                                          <Trash2 className="h-4 w-4" />
+                                        </Button>
+                                      </TooltipTrigger>
+                                      <TooltipContent>
+                                        <p className="text-xs">Remover MBL do monitoramento</p>
+                                      </TooltipContent>
+                                    </Tooltip>
+                                  </TooltipProvider>
+                                </div>
+                              </td>
+                            )}
+                          </tr>
+                          
+                          {/* Expanded containers row */}
+                          {isExpanded && (
+                            <tr className="bg-[rgba(0,0,0,.3)]">
+                              <td colSpan={isAdmin ? 9 : 8} className="px-4 py-4">
+                                {loadingContainers ? (
+                                  <div className="flex items-center justify-center py-4">
+                                    <Loader2 className="w-6 h-6 animate-spin text-[#ffc800]" />
+                                    <span className="ml-2 text-[#aaaaaa]">Carregando containers...</span>
+                                  </div>
+                                ) : (
+                                  <div className="space-y-2">
+                                    <div className="text-xs text-[#aaaaaa] uppercase tracking-wide mb-2 flex items-center gap-2">
+                                      <Package className="w-4 h-4" />
+                                      Containers do MBL {mbl.mbl_id}
+                                    </div>
+                                    <div className="overflow-x-auto">
+                                      <table className="w-full text-sm">
+                                        <thead>
+                                          <tr className="text-[#666] text-xs uppercase">
+                                            <th className="px-3 py-2 text-left">Container</th>
+                                            <th className="px-3 py-2 text-left">Armador</th>
+                                            <th className="px-3 py-2 text-left">Status</th>
+                                            <th className="px-3 py-2 text-left">Último Evento</th>
+                                            <th className="px-3 py-2 text-left">ETA</th>
+                                            <th className="px-3 py-2 text-center">Ações</th>
+                                          </tr>
+                                        </thead>
+                                        <tbody>
+                                          {mblContainers.map((cnt) => {
+                                            const cntStatus = getReportStatus(cnt.last_event);
+                                            return (
+                                              <tr key={cnt.id} className="border-t border-[rgba(255,255,255,.05)] hover:bg-[rgba(255,255,255,.02)]">
+                                                <td className="px-3 py-2 font-mono text-[#f5f5f5]">{cnt.container}</td>
+                                                <td className="px-3 py-2 text-[#aaaaaa]">{normalizeShippingLine(cnt.shipping_line)}</td>
+                                                <td className="px-3 py-2">
+                                                  <span 
+                                                    className="text-xs font-bold px-2 py-0.5 rounded"
+                                                    style={{ 
+                                                      color: cntStatus.color,
+                                                      backgroundColor: `${cntStatus.color}20`,
+                                                    }}
+                                                  >
+                                                    {cntStatus.code}
+                                                  </span>
+                                                </td>
+                                                <td className="px-3 py-2 text-[#aaaaaa] max-w-[200px] truncate">
+                                                  {cnt.last_event || "Aguardando..."}
+                                                </td>
+                                                <td className="px-3 py-2 text-[#aaaaaa]">
+                                                  {cnt.eta ? new Date(cnt.eta).toLocaleDateString('pt-BR') : "-"}
+                                                </td>
+                                                <td className="px-3 py-2 text-center">
+                                                  <Button
+                                                    variant="ghost"
+                                                    size="sm"
+                                                    onClick={() => handleTrackContainer(cnt.container, cnt.shipping_line || '')}
+                                                    disabled={trackingContainer === cnt.container}
+                                                    className="h-7 px-2 text-[#ffc800] hover:text-[#ffdc50] hover:bg-[rgba(255,200,0,.1)]"
+                                                  >
+                                                    {trackingContainer === cnt.container ? (
+                                                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                                    ) : (
+                                                      <RefreshCw className="w-3.5 h-3.5" />
+                                                    )}
+                                                  </Button>
+                                                </td>
+                                              </tr>
+                                            );
+                                          })}
+                                        </tbody>
+                                      </table>
+                                    </div>
+                                  </div>
+                                )}
+                              </td>
+                            </tr>
                           )}
-                        </tr>
+                        </Fragment>
                       );
                     })}
                   </tbody>
                 </table>
               </div>
+              
               {/* Pagination */}
               <div className="p-4 border-t border-[rgba(255,255,255,.08)] flex items-center justify-between bg-[rgba(0,0,0,.3)]">
                 <div className="text-[0.78rem] text-[#aaaaaa]">
-                  Página {currentPage} de {totalPages} | Total: {filteredContainers.length} registros
+                  Página {currentPage} de {totalPages} | Total: {filteredMbls.length} MBLs
                 </div>
                 <TablePagination
                   currentPage={currentPage}
@@ -1505,9 +1176,9 @@ const ContainerTracking = () => {
             </>
           ) : (
             <div className="p-12 text-center">
-              <p className="text-[#f5f5f5] uppercase tracking-[0.15em] font-medium">NENHUM CONTAINER MONITORADO</p>
+              <p className="text-[#f5f5f5] uppercase tracking-[0.15em] font-medium">NENHUM MBL MONITORADO</p>
               <p className="text-[0.85rem] text-[#aaaaaa] mt-2">
-                Os dados serão carregados automaticamente do banco de dados
+                Clique em "Sincronizar" para carregar dados de t_master_dados
               </p>
             </div>
           )}
@@ -1520,7 +1191,7 @@ const ContainerTracking = () => {
           <DialogHeader>
             <DialogTitle className="text-white flex items-center gap-2">
               <Mail className="h-5 w-5 text-blue-400" />
-              Enviar E-mail - {emailContainer?.container}
+              Enviar E-mail - {emailMbl?.mbl_id}
             </DialogTitle>
             <DialogDescription className="text-gray-400">
               Selecione o tipo de destinatário e adicione uma mensagem personalizada (opcional).
@@ -1540,7 +1211,7 @@ const ContainerTracking = () => {
                   <Label htmlFor="interno" className="text-white cursor-pointer flex-1">
                     Interno (Analista)
                     <span className="block text-xs text-gray-400 mt-0.5">
-                      {emailContainer?.email_analista || "Não configurado"}
+                      {emailMbl?.email_analista || "Não configurado"}
                     </span>
                   </Label>
                 </div>
@@ -1549,7 +1220,7 @@ const ContainerTracking = () => {
                   <Label htmlFor="cliente" className="text-white cursor-pointer flex-1">
                     Cliente
                     <span className="block text-xs text-gray-400 mt-0.5">
-                      {emailContainer?.email_cliente || "Não configurado"}
+                      {emailMbl?.email_cliente || "Não configurado"}
                     </span>
                   </Label>
                 </div>
@@ -1569,16 +1240,20 @@ const ContainerTracking = () => {
 
             <div className="bg-[rgba(0,0,0,.3)] rounded-lg p-3 space-y-1 text-sm">
               <div className="flex justify-between">
-                <span className="text-gray-400">Container:</span>
-                <span className="text-white font-mono">{emailContainer?.container}</span>
+                <span className="text-gray-400">MBL:</span>
+                <span className="text-white font-mono">{emailMbl?.mbl_id}</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-gray-400">Consignee:</span>
-                <span className="text-white">{emailContainer?.consignee_name || "-"}</span>
+                <span className="text-white">{emailMbl?.consignee || "-"}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-gray-400">Containers:</span>
+                <span className="text-white">{emailMbl?.container_count || 0}</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-gray-400">Status:</span>
-                <span className="text-white">{emailContainer?.last_event || "-"}</span>
+                <span className="text-white">{emailMbl?.last_event || "-"}</span>
               </div>
             </div>
           </div>
