@@ -766,6 +766,7 @@ const EsteiraIndex = () => {
     vencimentoInicio: "",
     vencimentoFim: "",
     origemCriacao: "all",
+    agrupamento: "all",
   });
   const [metrics, setMetrics] = useState<DashboardMetrics>({
     ativos: 0,
@@ -1153,6 +1154,11 @@ const EsteiraIndex = () => {
       // Filtro de origem
       if (filters.origemCriacao && filters.origemCriacao !== "all" && voucher.origemCriacao !== filters.origemCriacao) {
         return false;
+      }
+      // Filtro de agrupamento
+      if (filters.agrupamento && filters.agrupamento !== "all") {
+        if (filters.agrupamento === "agrupados" && !voucher.consolidacaoRmNumero) return false;
+        if (filters.agrupamento === "nao_agrupados" && voucher.consolidacaoRmNumero) return false;
       }
       // Quick filter: Fornecedor
       if (quickFilterFornecedor !== "all" && voucher.fornecedor !== quickFilterFornecedor) {
