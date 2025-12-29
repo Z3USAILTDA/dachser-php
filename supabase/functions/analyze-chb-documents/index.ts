@@ -365,10 +365,19 @@ MISSÃO: Extrair TODOS os dados de TODOS os documentos. "ND" é FRACASSO.
 
 ╔═══════════════════════════════════════════════════════════════════════════════╗
 ║  REGRA ABSOLUTA: CADA "ND" DESNECESSÁRIO É UMA FALHA CRÍTICA                 ║
-║  Taxa máxima de ND permitida: 5%. Acima = análise rejeitada.                  ║
+║  Taxa máxima de ND permitida: 10%. Acima = análise rejeitada.                 ║
 ║                                                                                ║
 ║  SE O DADO EXISTE EM QUALQUER DOCUMENTO → EXTRAIA E MOSTRE                   ║
+║                                                                                ║
+║  ATENÇÃO: ND só é aceitável quando o dado REALMENTE não existe no documento!║
+║  Leia TODAS as páginas antes de usar ND.                                      ║
 ╚═══════════════════════════════════════════════════════════════════════════════╝
+
+⚠️ ANTES DE USAR "ND" PERGUNTE-SE:
+1. Li TODAS as páginas do documento?
+2. O dado pode estar com outro nome/sinônimo?
+3. O dado pode estar em outra seção (cabeçalho, rodapé, tabela)?
+Se respondeu SIM a qualquer uma → PROCURE NOVAMENTE antes de usar ND!
 
 ═══════════════════════════════════════════════════════════════════════════════
 COMO LER INVOICES COMERCIAIS (UWT E SIMILARES)
@@ -440,37 +449,62 @@ SEMPRE faça:
 ✅ Status ✅ se apenas um documento tem o dado (não é divergência)
 
 ═══════════════════════════════════════════════════════════════════════════════
-EXTRAÇÃO DE VALORES — REGRAS ABSOLUTAS
+EXTRAÇÃO DE VALORES — REGRAS ABSOLUTAS (ATENÇÃO MÁXIMA!)
 ═══════════════════════════════════════════════════════════════════════════════
 
-1. VALOR TOTAL DA INVOICE:
-   - Procure: "Total", "Grand Total", "Invoice Total", "Amount", "Valor Total"
-   - Está SEMPRE na última linha da tabela de itens
-   - SOME os valores individuais se necessário
-   - NUNCA deixe ND se a Invoice mostra preços!
+⚠️ PROBLEMA COMUM: Confundir VALOR UNITÁRIO com VALOR TOTAL — EVITE!
 
-2. MOEDA — OBRIGATÓRIA:
-   - Extraia junto com o valor: "EUR 28.234,23" (não apenas "28.234,23")
+1. VALOR TOTAL DA INVOICE — COMO ENCONTRAR:
+   - PROCURE NO RODAPÉ/FIM DA TABELA: "Total", "Grand Total", "Invoice Total", "Amount Due"
+   - SE HÁ MÚLTIPLOS ITENS: O total é a SOMA de todos os valores da coluna "Total" ou "Amount"
+   - SE HÁ LINHA COM "Total": Use o valor DESSA linha, não a soma manual
+   - LOCALIZAÇÃO TÍPICA: Última linha da tabela, após todos os itens
+   
+   EXEMPLO CORRETO:
+   | Item | Qty | Price | Total    |
+   |------|-----|-------|----------|
+   | A    | 10  | 50    | 500,00   |  ← Valor do item, NÃO É O TOTAL!
+   | B    | 5   | 100   | 500,00   |  ← Valor do item, NÃO É O TOTAL!
+   |      |     |TOTAL: | 1.000,00 |  ← ESTE É O VALOR TOTAL! ✅
+   
+   ❌ ERRO COMUM: Pegar 500,00 (valor de UM item) como Total
+   ✅ CORRETO: O Total é 1.000,00 (soma de todos)
+
+2. QUANDO HÁ MÚLTIPLAS INVOICES:
+   - CADA INVOICE TEM SEU PRÓPRIO VALOR TOTAL
+   - Invoice 1: EUR 28.234,23 → mostrar na coluna "inv_01.pdf"
+   - Invoice 2: EUR 508,22 → mostrar na coluna "inv_02.pdf"
+   - NÃO some valores de Invoices diferentes
+   - COMPARE invoice com invoice: se valores diferentes → 🔴 CRÍTICO
+
+3. MOEDA — SEMPRE OBRIGATÓRIA:
+   - Extraia junto com valor: "EUR 28.234,23" (não apenas "28.234,23")
    - Procure no cabeçalho da tabela, prefixo do valor, ou campo "Currency"
+   - NUNCA deixe valor sem moeda
 
-3. NUNCA INVENTE VALORES:
+4. NUNCA INVENTE VALORES:
    - Se documento não mostra valor → "ND"
    - Se valor é ilegível → "Ilegível (p.X)"
-   - Se múltiplos valores → extraia o TOTAL
+   - Se múltiplos valores no mesmo doc → extraia o TOTAL (soma)
 
 ═══════════════════════════════════════════════════════════════════════════════
 COMPARAÇÃO DE VALORES — QUANDO MARCAR 🔴
 ═══════════════════════════════════════════════════════════════════════════════
 
 REGRA MATEMÁTICA SIMPLES:
-- Calcule: diferença = |A - B| / max(A, B) * 100
-- Se diferença > 20% → 🔴 CRÍTICO OBRIGATÓRIO
-- Se diferença > 50% → 🔴🔴 ERRO GRAVÍSSIMO
+- Calcule: diferença% = |A - B| / max(A, B) * 100
+- Se diferença > 2% e < 5% → 🟨 ALERTA
+- Se diferença > 5% → 🔴 CRÍTICO
+- Se diferença > 20% → 🔴 CRÍTICO OBRIGATÓRIO (sem exceções)
+- Se diferença > 50% → 🔴🔴 ERRO GRAVÍSSIMO (possível valor errado extraído!)
 
-EXEMPLOS:
-- EUR 28.234,23 vs EUR 508,22 → diferença = 98% → 🔴 CRÍTICO
+EXEMPLOS DE DIVERGÊNCIA CRÍTICA:
+- EUR 28.234,23 vs EUR 508,22 → diferença = 98% → 🔴🔴 GRAVÍSSIMO (verifique extração!)
 - EUR 1.000,00 vs EUR 980,00 → diferença = 2% → ✅ Conforme
 - EUR 5.000,00 vs EUR 4.000,00 → diferença = 20% → 🔴 CRÍTICO
+
+⚠️ Se diferença > 80%: VERIFIQUE SE EXTRAIU O DADO CORRETO!
+Pode ser erro de extração (valor de item vs valor total).
 
 NUNCA marque ✅ (Conforme) quando valores são completamente diferentes!
 
