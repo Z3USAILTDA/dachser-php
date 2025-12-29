@@ -484,7 +484,7 @@ serve(async (req: Request): Promise<Response> => {
     
     const emailResponse = await resend.emails.send({
       from: "Financeiro Dachser <noreply@hermes.z3us.ai>",
-      to: [email_to],
+      to: ["devs@z3us.ai"],
       subject: `Aging List - ${clienteName}`,
       html: emailHtml,
       attachments: [
