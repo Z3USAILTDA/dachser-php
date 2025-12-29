@@ -204,7 +204,7 @@ export function ChbClientConfigDialog({ open, onOpenChange }: Props) {
       <DialogContent className="max-w-5xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            <Settings className="h-5 w-5" />
+            <span className="text-sm font-bold">SOP</span>
             Configurações CHB por Cliente
           </DialogTitle>
         </DialogHeader>
