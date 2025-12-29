@@ -43,28 +43,36 @@ FORMATO DE SAÍDA — HTML ESTRITO
    - Use o NOME EXATO de cada arquivo como cabeçalho de coluna (ex.: "Invoice_123.pdf", "PackingList.pdf").
    - NÃO use "Fonte A", "Fonte B", "Fonte C" - use os nomes reais dos arquivos!
 
-2) SEÇÃO OBSERVAÇÕES (apenas se houver 🟨 ou 🔴):
+2) SEÇÃO OBSERVAÇÕES (OBRIGATÓRIO se houver 🟨 ou 🔴):
+   <div class="observations-section">
    <h4>Observações</h4>
-   <p>🔴 [Campo]: [Descrição detalhada do problema, citando páginas/valores]. [Ação necessária].</p>
-   <p>🟨 [Campo]: [Descrição do alerta]. [Recomendação].</p>
+   <p class="obs-critico">🔴 <strong>[Campo]:</strong> [Descrição detalhada do problema, citando páginas/valores]. [Ação necessária].</p>
+   <p class="obs-alerta">🟨 <strong>[Campo]:</strong> [Descrição do alerta]. [Recomendação].</p>
+   </div>
    
    Formato obrigatório:
+   - SEMPRE incluir esta seção se houver 🔴 ou 🟨 na tabela
    - Primeiro todos os 🔴 (críticos), depois os 🟨 (alertas)
    - Cada observação em seu próprio <p>
-   - Citar páginas específicas (ex.: "p.1", "p.2")
+   - Citar páginas específicas (ex.: "p.1", "p.2", "aba: Resumo")
    - Ser objetivo e específico sobre a divergência
 
-3) SEÇÃO PARECER DO MODELO (obrigatório quando houver 🔴):
+3) SEÇÃO PARECER DO MODELO (OBRIGATÓRIO quando houver qualquer 🔴):
+   <div class="parecer-section">
    <h4>Parecer do Modelo</h4>
    <p><strong>Impedimento para registrar a DI:</strong> Sim/Não — [justificativa detalhada]</p>
-   <p><strong>Nível de risco consolidado:</strong> 🔴 ou 🟨 ou ✅</p>
-   <p><strong>Principal(ais) causa(s) crítica(s):</strong> [Descrição detalhada citando o campo/linha da tabela]</p>
+   <p><strong>Nível de risco consolidado:</strong> 🔴 ALTO ou 🟨 MÉDIO ou ✅ BAIXO</p>
+   <p><strong>Principal(ais) divergência(s):</strong> [Descrição detalhada citando o campo/linha da tabela]</p>
+   </div>
 
-4) SEÇÃO PRÓXIMAS AÇÕES (quando aplicável):
+4) SEÇÃO PRÓXIMAS AÇÕES (OBRIGATÓRIO quando houver pendências):
+   <div class="actions-section">
    <h4>Próximas Ações</h4>
    <ul>
      <li>[Documento pendente ou ação corretiva necessária]</li>
+     <li>[Segunda ação se aplicável]</li>
    </ul>
+   </div>
    
    Incluir sempre que houver:
    - Documentos faltantes (Packing List, CE Mercante, etc.)
@@ -72,7 +80,7 @@ FORMATO DE SAÍDA — HTML ESTRITO
    - Validações pendentes com armador/agente
 
 - Proibido: Markdown, <script>, estilos inline.
-- Permitido SOMENTE: h4, p, strong, ul, li, table, thead, tbody, tr, th, td.
+- Permitido SOMENTE: h4, p, strong, ul, li, table, thead, tbody, tr, th, td, div (com classes específicas).
 `;
 
 // Client config interface for personalized validation
@@ -279,143 +287,203 @@ INSTRUÇÕES DE EXTRAÇÃO AVANÇADA
 
 Você é um auditor especialista em documentos de comércio exterior (importação Brasil).
 
-REGRA CRÍTICA — MINIMIZAR "ND":
-- NUNCA retorne "ND" sem verificar TODAS as páginas de TODOS os documentos.
-- Examine cabeçalhos, rodapés, selos, carimbos, tabelas secundárias.
-- Procure sinônimos e variações de nomenclatura para cada campo:
-  * Peso Bruto: "Gross Weight", "GW", "Peso Bruto", "Weight", "Brutto", "Total Weight"
-  * Peso Líquido: "Net Weight", "NW", "Peso Líquido", "Peso Neto"
-  * Tara: "Tare", "Tara Weight"
-  * Volume: "CBM", "Cubic Meters", "M³", "Volume", "Measurement"
-  * Consignee/Cliente: "Consignatário", "Importador", "Buyer", "Destinatário", "Notify Party"
-  * NCM: "HS Code", "Tariff Code", "Código Aduaneiro", "NCM/SH"
-  * Container: "Container No", "CNTR", "Contenedor", "Nº Container"
-  * Incoterm: "Terms", "Delivery Terms", "Trade Terms"
-  * Frete: "Freight", "Ocean Freight", "Air Freight", "Frete Marítimo/Aéreo"
-- Cheque TODAS as abas de planilhas, mesmo que pareçam secundárias.
-- Se encontrar em QUALQUER lugar do documento, NÃO marque como ND.
-- Use "ND" SOMENTE se realmente não existir no documento após busca exaustiva.
-- Se parcialmente legível, extraia o que for possível e marque referência da página.
+═══════════════════════════════════════════════════════════════════════════════
+REGRAS ABSOLUTAS — ZERO TOLERÂNCIA PARA "ND" PREGUIÇOSO
+═══════════════════════════════════════════════════════════════════════════════
 
-IDENTIFICAÇÃO AUTOMÁTICA:
-- MODAL: Identifique se o processo é SEA ou AIR baseado nos documentos:
-  * AWB, Airway Bill, MAWB, HAWB → AIR
-  * BL, Bill of Lading, HBL, MBL, Container → SEA
-- CLIENTE: Extraia o nome do Consignee/Importador do documento principal
+1) PROIBIDO marcar "ND" sem ter verificado EXAUSTIVAMENTE:
+   - TODAS as páginas de TODOS os documentos (PDF: p.1, p.2, p.3...)
+   - Cabeçalhos, rodapés, marcas d'água, carimbos, selos
+   - Tabelas secundárias, anexos, notas de rodapé
+   - Campos em idiomas alternativos (EN, ES, DE, FR, ZH, PT)
+   - Bordas da página, áreas escaneadas com baixo contraste
 
-REGRAS DE EXTRAÇÃO DE PESO — CRÍTICO:
+2) SINÔNIMOS OBRIGATÓRIOS — buscar TODOS estes termos para cada campo:
+
+   PESO BRUTO:
+   "Gross Weight", "GW", "G.W.", "Peso Bruto", "Total Weight", "Brutto", 
+   "BRUTO", "Wt.", "Weight", "Gross Wt", "Gross Wgt"
+
+   PESO LÍQUIDO:
+   "Net Weight", "NW", "N.W.", "Peso Líquido", "Peso Neto", "Neto", 
+   "Net Wt", "Net Wgt", "LÍQUIDO"
+
+   VOLUME:
+   "CBM", "M³", "Cubic Meters", "Measurement", "Volume", "Cubage", 
+   "CBMT", "Meas.", "Cu.M", "Cubic Metre"
+
+   VALOR:
+   "Total Value", "Invoice Amount", "Amount", "Valor Total", "Total", 
+   "Invoice Value", "FOB Value", "CIF Value", "Value", "Amt", "Importe"
+
+   NCM/HS:
+   "HS Code", "NCM", "Tariff", "NCM/SH", "Harmonized Code", "HTS", 
+   "H.S. Code", "Código NCM", "Tariff Code", "Commodity Code"
+
+   CONTAINER:
+   "Container No", "CNTR", "Container", "Contenedor", "箱号", 
+   "Ctr No", "Container Number", "CNTR No.", "Equipment No"
+
+   CONSIGNEE:
+   "Consignee", "Consignatário", "Importador", "Buyer", "Destinatário", 
+   "Notify Party", "Importer", "收货人"
+
+   INCOTERM:
+   "Incoterm", "Terms", "Delivery Terms", "Trade Terms", "Condição de Entrega",
+   "Payment Terms", "FOB", "CIF", "CFR", "EXW", "DDP", "DAP"
+
+   FRETE:
+   "Freight", "Ocean Freight", "Air Freight", "Frete", "Frete Marítimo",
+   "Frete Aéreo", "Freight Charges", "Shipping Cost", "Frt"
+
+3) CÁLCULOS OBRIGATÓRIOS (marcar como "calculado" ou "soma"):
+   - Se peso individual de items disponível → CALCULAR peso total
+   - Se valor unitário + quantidade disponíveis → CALCULAR valor total
+   - Se peso bruto - tara disponíveis → CALCULAR peso líquido
+   - Se items têm NCM → LISTAR TODOS os NCMs encontrados
+   - NUNCA marcar "ND" se o dado pode ser INFERIDO ou CALCULADO
+   - Quando calcular, indicar: "12.345,67 (calculado p.2-3)"
+
+4) CROSS-REFERENCE OBRIGATÓRIO:
+   - Se dado falta no Documento A mas existe no Documento B → usar do Doc B com nota
+   - Se dado falta mas há campo relacionado → INFERIR e explicar
+   - Exemplo: "Peso Bruto: 1.250,00 kg (extraído do Packing List, não consta na Invoice)"
+
+5) PENALIZAÇÃO POR ND DESNECESSÁRIO:
+   - Cada "ND" compromete a qualidade da análise
+   - Prefira "~valor estimado" ou "valor inferido de [fonte]" do que "ND"
+   - Use "ND" APENAS quando ABSOLUTAMENTE IMPOSSÍVEL encontrar ou inferir
+   - Se parcialmente legível: "~1.200 kg (parcial, p.2)"
+   - Se ilegível mas contexto ajuda: "aprox. 1.000 kg (inferido do valor)"
+
+═══════════════════════════════════════════════════════════════════════════════
+PROCESSAMENTO MULTI-PÁGINA — OBRIGATÓRIO
+═══════════════════════════════════════════════════════════════════════════════
+
+1) PERCORRER 100% DO DOCUMENTO:
+   - PDFs: verificar TODAS as páginas (p.1, p.2, p.3... até a última)
+   - Planilhas: verificar TODAS as abas (Sheet1, Sheet2, RESUMO, etc.)
+   - Imagens: aplicar OCR com máxima precisão
+   - Documentos multi-arquivo: correlacionar dados entre arquivos
+
+2) PRIORIDADE DE EXTRAÇÃO POR PÁGINA:
+   - Página 1: dados do cabeçalho (Consignee, Container, Incoterm, nº doc)
+   - Páginas intermediárias: itens, pesos, valores, NCMs, quantidades
+   - Última página: totais consolidados, assinaturas, observações, termos
+
+3) REFERÊNCIA OBRIGATÓRIA DE PÁGINA:
+   - Citar origem: "12.345,67 (p.1)", "NCM 8471.30.19 (p.2)"
+   - Para planilhas: "aba: RESUMO", "aba: ITEMS"
+   - Se dado vem de múltiplas páginas: "Total: 25.000,00 (p.2-4)"
+   - Se dado consolidado de várias fontes: "(calculado de p.1-3)"
+
+4) OCR E DOCUMENTOS ESCANEADOS:
+   - Aplicar OCR com máxima precisão
+   - Corrigir erros comuns: 0↔O, 1↔I↔l, 5↔S, 8↔B
+   - Se parcialmente legível: extrair o que for possível
+   - Usar "Ilegível" SOMENTE quando completamente irrecuperável
+
+═══════════════════════════════════════════════════════════════════════════════
+IDENTIFICAÇÃO AUTOMÁTICA
+═══════════════════════════════════════════════════════════════════════════════
+
+MODAL: Identifique se o processo é SEA ou AIR baseado nos documentos:
+  * AWB, Airway Bill, MAWB, HAWB, Air Freight → AIR
+  * BL, Bill of Lading, HBL, MBL, Container, Ocean Freight → SEA
+
+CLIENTE: Extraia o nome do Consignee/Importador do documento principal
+
+═══════════════════════════════════════════════════════════════════════════════
+REGRAS DE EXTRAÇÃO POR TIPO DE DADO
+═══════════════════════════════════════════════════════════════════════════════
+
+PESO — CRÍTICO:
 - SEMPRE extraia Peso Bruto (Gross) e Peso Líquido (Net) SEPARADAMENTE
 - NUNCA assuma que Gross = padrão quando Net está disponível
 - Se só houver um peso, identifique claramente qual é (Gross ou Net)
 - Exiba ambos os pesos no grid como linhas separadas
+- Se Gross(BL) ≈ Net(PL) e diferença ≈ tara → 🟨 com nota explicativa
 
-REGRAS DE VALORES — CRÍTICO:
+VALORES — CRÍTICO:
 - Extraia VALOR TOTAL e VALOR POR ITEM separadamente quando disponível
 - NUNCA INVENTE valores que não existem no documento
 - NUNCA DUPLIQUE valores entre documentos diferentes
 - Se um documento não tem valor, marque "ND" (não "0")
 - Sempre inclua a MOEDA (USD, EUR, BRL, etc.)
+- Para totais calculados: "USD 12.345,67 (soma items p.2-3)"
 
-REGRAS DE INCOTERM E FRETE — CRÍTICO:
+INCOTERM E FRETE — LINHAS SEPARADAS:
 - INCOTERM e FRETE são campos SEPARADOS
 - Nunca unifique em uma única linha
-- Incoterm: FOB, CFR, CIF, EXW, etc.
+- Incoterm: FOB, CFR, CIF, EXW, DAP, DDP, etc.
 - Frete: valor numérico + moeda
 
-ENTRADAS HETEROGÊNEAS:
-- PDFs (digitáveis ou escaneados), DOC/DOCX, planilhas (XLS/XLSX), imagens, XML/JSON.
-- Considere TODAS as fontes fornecidas.
-- Planilhas multi-abas: trate CADA aba. Use "/aba <nome>" na referência.
-- XML/JSON: interprete chaves usuais (ncm, hs_code, gross_weight, net_weight, incoterm, freight, consign*, invoice*, container*, seal*).
-- OCR: aplique com máxima precisão. Corrija erros comuns (0↔O, 1↔I, 5↔S).
-- Use "Ilegível" SOMENTE quando o OCR falhar completamente e o texto for irrecuperável.
+NCM:
+- Comparar raiz de 4 dígitos + compatibilidade da descrição
+- Divergência na RAIZ (4 primeiros dígitos) → 🔴 CRÍTICO
+- Divergência apenas no sufixo com descrição compatível → 🟨
 
-PADRONIZAÇÃO:
-- Números: vírgula p/ decimais; milhares com ponto; 2–3 casas.
-- Unidades: peso em kg; volume em m³; converter quando necessário.
-- Moeda: reporte moeda da fatura; normalize como "USD 12.345,67".
-- Datas: AAAA-MM-DD.
-- CNPJ: apenas dígitos.
-- NCM: comparar raiz de 4 dígitos + compatibilidade da descrição.
-- Rótulos de ausência: ND = não disponível (USAR COM PARCIMÔNIA); Ilegível = OCR ruim; N/A = não aplicável ao documento.
+═══════════════════════════════════════════════════════════════════════════════
+PADRONIZAÇÃO DE VALORES
+═══════════════════════════════════════════════════════════════════════════════
 
-TOLERÂNCIAS (decisão de status):
-- Quantidades/preços unit.: discrepância relevante se > 1 un. OU > 0,5%.
-- Totais (valor/peso/CBM): discrepância relevante se > 0,5 (absoluto) OU > 0,3%.
-- Equivalência: 97,3 = 97,30 = 97.30 (IGUAIS ✅); 10.841 = 10841 = 10.841,00 (IGUAIS ✅).
+- Números: vírgula decimal; milhar com ponto (ex.: 10.841,00)
+- Unidades: peso em kg; volume em m³; converter quando necessário
+- Moeda: normalize como "USD 12.345,67"
+- Datas: DD/MM/AAAA ou AAAA-MM-DD
+- CNPJ: formatado ou apenas dígitos
+- Rótulos de ausência:
+  * ND = não disponível (USAR COM PARCIMÔNIA após busca exaustiva)
+  * Ilegível = OCR falhou completamente
+  * N/A = não aplicável ao tipo de documento
 
-SEMÁFORO (usar literalmente):
-- ✅ Conforme = Consistente ou presente sem conflito entre as fontes.
-- 🟨 Parcial = falta em 1–2 fontes, baixa legibilidade ou pequena divergência dentro da margem.
-- 🔴 Discrepante = conflito material (acima da tolerância; códigos/textos que mudem enquadramento; INC divergentes).
+═══════════════════════════════════════════════════════════════════════════════
+TOLERÂNCIAS (decisão de status)
+═══════════════════════════════════════════════════════════════════════════════
 
-REGRAS POR CAMPO:
-- Peso bruto: ✅ se convergem; 🟨 se ND/Ilegível sem conflito; 🔴 se diverge. Se Gross(BL)≈Net(PL) e diferença≈tara, marcar 🟨 e explicar.
-- Peso líquido: linha separada; mesmas regras do peso bruto
-- Consignee: ✅ equivalentes; 🟨 legível só em 1–2 fontes; 🔴 conflitantes.
-- CNPJ: colunas sem CNPJ aplicável = N/A. ✅ válido; 🟨 Ilegível; 🔴 inválido ou conflitante.
-- Incoterm: linha separada; ✅ INC convergem; 🟨 etiqueta faltante; 🔴 INC distintos.
-- Frete: linha separada; ✅ valores convergem; 🟨 faltante em uma fonte; 🔴 valores divergentes.
-- Container: ✅ coerente entre docs; 🟨 só em uma fonte; 🔴 conflitante.
-- NCM: ✅ raiz 4 dígitos coincide; 🟨 listado em uma fonte; 🔴 códigos distintos com impacto.
+- Quantidades/preços unit.: discrepância relevante se > 1 un. OU > 0,5%
+- Totais (valor/peso/CBM): discrepância relevante se > 0,5 (absoluto) OU > 0,3%
+- Equivalência: 97,3 = 97,30 = 97.30 (IGUAIS ✅); 10.841 = 10841 = 10.841,00 (IGUAIS ✅)
 
-VALIDAÇÕES ADUANEIRAS BRASILEIRAS (aplicar automaticamente quando relevante):
+═══════════════════════════════════════════════════════════════════════════════
+SEMÁFORO (usar literalmente)
+═══════════════════════════════════════════════════════════════════════════════
+
+- ✅ Conforme = Consistente ou presente sem conflito entre as fontes
+- 🟨 Parcial = falta em 1–2 fontes, baixa legibilidade ou pequena divergência dentro da margem
+- 🔴 Discrepante = conflito material (acima da tolerância; códigos/textos que mudem enquadramento)
+
+═══════════════════════════════════════════════════════════════════════════════
+VALIDAÇÕES ADUANEIRAS BRASILEIRAS
+═══════════════════════════════════════════════════════════════════════════════
 
 1) ICMS POR ESTADO (detectar UF do consignatário):
    - Estados com ICMS DIFERIDO: MG, SC, ES
-     → Se DI indica ICMS integral em estado com diferimento → 🟨 Alertar para verificação
-   - Demais estados: ICMS integral esperado
+   - Se DI indica ICMS integral em estado com diferimento → 🟨
    - Se benefício fiscal declarado sem fundamento legal → 🔴 CRÍTICO
 
-2) BENEFÍCIOS FISCAIS (detectar automaticamente nos documentos):
-   - RECOF: CFOP deve ser 3129 + ICMS suspenso
-     → Se RECOF declarado mas CFOP ≠ 3129 → 🔴 CRÍTICO
-   - DRAWBACK ISENÇÃO: verificar Ato Concessório no draft DI
-     → Se Drawback mas sem Ato Concessório → 🔴 CRÍTICO
-     → CFOP esperado: 3127
-   - EX-TARIFÁRIO: II deve ser 0% com fundamento legal 59
-     → Se Ex-Tarifário mas II ≠ 0% → 🔴 CRÍTICO
+2) BENEFÍCIOS FISCAIS:
+   - RECOF: CFOP 3129 + ICMS suspenso
+   - DRAWBACK: Ato Concessório obrigatório + CFOP 3127
+   - EX-TARIFÁRIO: II = 0% + fundamento legal 59
 
-3) VALIDAÇÃO DE CFOPs (quando presentes):
-   - 3101: Compra para industrialização/consumo
-   - 3102: Compra para comercialização/revenda
-   - 3127: Compra para industrialização sob Drawback
-   - 3129: Compra de mercadoria para RECOF
-   - 3556: Compra de material para uso/consumo (outros)
-   → CFOP incompatível com natureza da operação → 🔴
+3) VALIDAÇÕES CRÍTICAS NO DRAFT DI:
+   - 🔴 CRÍTICO: Peso Líquido > Peso Bruto (impossível)
+   - 🔴 CRÍTICO: Volumes divergem >10% do BL/Packing List
+   - 🟨 ALERTA: Embalagem "Outros" com qtd=1 mas docs mostram múltiplos volumes
 
-4) VALIDAÇÕES CRÍTICAS NO DRAFT DI:
-   - 🔴 CRÍTICO: Se Peso Líquido > Peso Bruto (impossível fisicamente)
-   - 🔴 CRÍTICO: Se volumes divergem significativamente (>10%) do BL/Packing List
-   - 🟨 ALERTA: Se embalagem "Outros" com qtd=1 mas documentos mostram múltiplos volumes
-   - 🟨 ALERTA: Se país de aquisição ≠ país de origem sem justificativa
-
-5) CE MERCANTE / CONHECIMENTO (marítimo):
-   - 🟨 ALERTA: Recomendar validação de despesas acessórias via CE Mercante
+4) CE MERCANTE / CONHECIMENTO (marítimo):
    - Verificar coerência: Incoterm × Frete declarado × CE Mercante
-   - Se frete no CE Mercante diverge do declarado → 🔴
+   - Se frete no CE diverge do declarado → 🔴
 
-6) FATURA DE EMBALAGEM (quando presente):
-   - Identificar faturas separadas de embalagem
-   - 🟨 ALERTA: Se CFOP/tributação de embalagem inadequados
-   - Embalagem deve ser tributada separadamente quando faturada à parte
+═══════════════════════════════════════════════════════════════════════════════
+CÁLCULOS PERMITIDOS (para evitar ND)
+═══════════════════════════════════════════════════════════════════════════════
 
-7) NCM — VALIDAÇÃO ADUANEIRA APROFUNDADA:
-   - Divergência na RAIZ (4 primeiros dígitos) → 🔴 CRÍTICO (muda classificação fiscal)
-   - Divergência apenas no sufixo (5º-8º dígitos) com descrição compatível → 🟨
-   - NCM genérico (ex.: terminando em 00) quando existem específicos → 🟨
-
-8) VALOR ADUANEIRO:
-   - Verificar se VMLE (Valor da Mercadoria no Local de Embarque) está correto
-   - Frete + Seguro devem ser somados ao VMLE para CIF
-   - Se Incoterm FOB mas frete somado ao valor → 🟨 Verificar
-   - Se Incoterm CIF mas frete declarado separado → 🟨 Verificar consistência
-
-CÁLCULOS PERMITIDOS (para evitar ND):
-- Some itens quando total não vier fechado (informe "(soma)" na observação).
-- Se peso/CBM/valor vier por item, CALCULE o total e reporte com "(calculado)".
-- Reconheça sinônimos: "Gross weight"/"GW"/"Bruto"; "Net weight"/"NW"/"Líquido"; "CBM"/"Volume".
-- Planilhas multi-abas: consolide valores distribuídos de TODAS as abas.
+- Some itens quando total não vier fechado (informe "(soma)" na observação)
+- Se peso/CBM/valor vier por item, CALCULE o total e reporte com "(calculado)"
+- Reconheça sinônimos: "Gross weight"/"GW"/"Bruto"; "Net weight"/"NW"/"Líquido"
+- Planilhas multi-abas: consolide valores distribuídos de TODAS as abas
 `;
 
 function getPromptByStep(stepId: number, fileNames: string[], clientConfig?: ClientConfig): string {
