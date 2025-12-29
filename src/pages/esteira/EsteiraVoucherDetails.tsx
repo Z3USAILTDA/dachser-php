@@ -134,6 +134,7 @@ const EsteiraVoucherDetails = () => {
         cancelamentoVoucherCredito: data.cancelamento_voucher_credito,
         canceladoPorUserId: data.cancelado_por_user_id,
         canceladoEm: parseMariaDBDate(data.cancelado_em) || undefined,
+        chavePix: data.chave_pix || null,
       };
 
       setVoucher(mappedVoucher);
