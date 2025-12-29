@@ -426,16 +426,16 @@ export default function ConferenciaChb() {
     }
   };
 
-  // Helper to detect document type from filename
-  const detectDocumentType = (filename: string): 'HBL' | 'Invoice' | 'Packing List' | 'DI' | 'AWB' | 'Certificado' => {
+  // Helper to detect document type from filename (max 10 chars for DB)
+  const detectDocumentType = (filename: string): string => {
     const lower = filename.toLowerCase();
     if (lower.includes('hbl') || lower.includes('house')) return 'HBL';
     if (lower.includes('invoice') || lower.includes('fatura')) return 'Invoice';
-    if (lower.includes('packing') || lower.includes('romaneio')) return 'Packing List';
+    if (lower.includes('packing') || lower.includes('romaneio')) return 'PackList';
     if (lower.includes('di') || lower.includes('declaracao')) return 'DI';
     if (lower.includes('awb') || lower.includes('conhecimento')) return 'AWB';
-    if (lower.includes('cert') || lower.includes('certificado')) return 'Certificado';
-    return 'Invoice'; // default
+    if (lower.includes('cert') || lower.includes('certificado')) return 'Cert';
+    return 'Doc'; // default
   };
 
 

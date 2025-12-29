@@ -104,6 +104,7 @@ interface QueryRequest {
   step1_status?: string;
   step2_status?: string;
   step3_status?: string;
+  modal?: string;
   fileId?: number;
   filename?: string;
   mime?: string;
@@ -2983,8 +2984,8 @@ serve(async (req) => {
       }
 
       case 'update_chb_item': {
-        const { id: itemId, status_macro, step1_status, step2_status, step3_status } = body;
-        console.log('Updating CHB item:', itemId);
+        const { id: itemId, status_macro, step1_status, step2_status, step3_status, consignee, modal } = body;
+        console.log('Updating CHB item:', itemId, { consignee, modal });
         
         const fields: string[] = [];
         const values: any[] = [];
@@ -2992,6 +2993,8 @@ serve(async (req) => {
         if (step1_status !== undefined) { fields.push('step1_status = ?'); values.push(step1_status); }
         if (step2_status !== undefined) { fields.push('step2_status = ?'); values.push(step2_status); }
         if (step3_status !== undefined) { fields.push('step3_status = ?'); values.push(step3_status); }
+        if (consignee !== undefined) { fields.push('consignee = ?'); values.push(consignee); }
+        if (modal !== undefined) { fields.push('modal = ?'); values.push(modal); }
         
         if (fields.length > 0) {
           values.push(itemId);
