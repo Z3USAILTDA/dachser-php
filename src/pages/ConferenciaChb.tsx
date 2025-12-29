@@ -264,6 +264,20 @@ export default function ConferenciaChb() {
             campos_obrigatorios: clientConfig.campos_obrigatorios,
             cliente_nome: clientConfig.cliente_nome,
             instrucoes_personalizadas: clientConfig.instrucoes_personalizadas,
+            // Novos campos de armador
+            armador: clientConfig.armador,
+            agente_destino: clientConfig.agente_destino,
+            contato_email: clientConfig.contato_email,
+            prazo_resposta_dias: clientConfig.prazo_resposta_dias,
+            porto_descarga_real: clientConfig.porto_descarga_real,
+            // Tolerâncias de taxas acessórias
+            tolerancia_taxas_acessorias_abs: clientConfig.tolerancia_taxas_acessorias_abs,
+            tolerancia_taxas_acessorias_pct: clientConfig.tolerancia_taxas_acessorias_pct,
+            // Regras fiscais
+            beneficio_fiscal: clientConfig.beneficio_fiscal,
+            cfop_padrao: clientConfig.cfop_padrao,
+            estado_uf: clientConfig.estado_uf,
+            icms_diferido: clientConfig.icms_diferido,
           } : undefined,
         },
       });
@@ -360,16 +374,30 @@ export default function ConferenciaChb() {
 
       // Try to load client config if cliente was identified and we dont have one yet
       if (analysisData.cliente && !clientConfig) {
-        // Try to find config by client name (partial match via CNPJ would be better but we use name for now)
+        // Try to find config by client name or CNPJ (partial match)
         const configs = await supabase.from('chb_client_config').select('*').eq('ativo', true);
         if (configs.data) {
-          const match = configs.data.find((c: any) => 
-            analysisData.cliente?.toLowerCase().includes(c.cliente_nome?.toLowerCase()) ||
-            c.cliente_nome?.toLowerCase().includes(analysisData.cliente?.toLowerCase())
-          );
+          const clienteLower = analysisData.cliente?.toLowerCase() || '';
+          const match = configs.data.find((c: any) => {
+            const nomeLower = c.cliente_nome?.toLowerCase() || '';
+            const cnpj = c.cliente_cnpj || '';
+            // Match by name (partial) or by CNPJ appearing in the client string
+            return clienteLower.includes(nomeLower) ||
+                   nomeLower.includes(clienteLower) ||
+                   clienteLower.includes(cnpj.replace(/\D/g, '')) ||
+                   (c.cliente_cnpj && clienteLower.includes(c.cliente_cnpj));
+          });
           if (match) {
             setClientConfig(match as ChbClientConfig);
-            toast.info(`Configuração do cliente "${match.cliente_nome}" carregada automaticamente.`);
+            const hasSpecialRules = match.beneficio_fiscal || match.armador || match.estado_uf;
+            if (hasSpecialRules) {
+              toast.info(
+                `Configuração do cliente "${match.cliente_nome}" carregada. Clique em "Re-analisar" para aplicar as regras específicas (${match.beneficio_fiscal ? `${match.beneficio_fiscal}, ` : ''}${match.estado_uf ? `UF: ${match.estado_uf}, ` : ''}${match.armador ? 'Armador configurado' : ''})`.replace(/, $/, '.'),
+                { duration: 8000 }
+              );
+            } else {
+              toast.info(`Configuração do cliente "${match.cliente_nome}" carregada automaticamente.`);
+            }
           }
         }
       }
