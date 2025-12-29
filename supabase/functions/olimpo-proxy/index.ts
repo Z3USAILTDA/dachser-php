@@ -581,8 +581,6 @@ serve(async (req) => {
             AND TRIM(af.num_voo) <> '0'
             AND dm.cliente IS NOT NULL
             AND TRIM(dm.cliente) <> ''
-            AND dm.tipo_processo IS NOT NULL
-            AND TRIM(dm.tipo_processo) <> ''
         `);
 
         const out: any[] = [];
