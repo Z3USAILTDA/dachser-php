@@ -81,8 +81,8 @@ export const VoucherFinanceiroActions = ({ voucher, onUpdate }: VoucherFinanceir
             action: "insert_dados_rm",
             id_rm: voucher.numeroSPO,
             voucher_boleto: voucher.linhaDigitavel || voucher.codigoBarras || null,
-            chave_pix: voucher.dadosBancarios?.chavePix || null,
-            pix_tipo_chave: voucher.dadosBancarios?.pixTipoChave || null,
+            chave_pix: voucher.chavePix || null,
+            pix_tipo_chave: null, // Could be derived from chavePix format if needed
             forma_pag: voucher.formaPagamento,
             fornecedor: voucher.fornecedor,
             cnpj_fornecedor: voucher.cnpjFornecedor,
