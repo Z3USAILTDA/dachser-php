@@ -172,8 +172,8 @@ export default function ChbAnalises() {
     }
   };
   const rightContent = <div className="flex items-center gap-3">
-      <button onClick={() => setConfigDialogOpen(true)} className="w-8 h-8 rounded-full border border-white/25 flex items-center justify-center bg-black/70 text-gray-400 hover:text-[#ffc800] transition-colors" title="Configurações por cliente">
-        <Settings className="h-4 w-4" />
+      <button onClick={() => setConfigDialogOpen(true)} className="px-2 h-8 rounded-full border border-white/25 flex items-center justify-center bg-black/70 text-gray-400 hover:text-[#ffc800] transition-colors text-xs font-bold" title="Configurações por cliente">
+        SOP
       </button>
       <button onClick={() => navigate("/chb/manual")} className="w-8 h-8 rounded-full border border-white/25 flex items-center justify-center bg-black/70 text-gray-400 hover:text-[#ffc800] transition-colors" title="Manual do usuário">
         <HelpCircle className="h-4 w-4" />
