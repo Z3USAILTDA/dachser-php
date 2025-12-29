@@ -970,7 +970,461 @@ serve(async (req) => {
       });
     }
 
-    // ===== SEA TRACKING: Get tracked containers =====
+    // ===== SEA TRACKING: Get MBL tracking data from t_tracking_sea (grouped by MBL) =====
+    if (action === 'get_sea_tracking') {
+      const mariadbHost = Deno.env.get('MARIADB_HOST');
+      const mariadbPort = Deno.env.get('MARIADB_PORT') || '3306';
+      const mariadbUser = Deno.env.get('MARIADB_USER');
+      const mariadbPass = Deno.env.get('MARIADB_PASSWORD');
+
+      if (!mariadbHost || !mariadbUser || !mariadbPass) {
+        return new Response(JSON.stringify({ error: 'MariaDB não configurado', data: [] }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      }
+
+      const { Client } = await import("https://deno.land/x/mysql@v2.12.1/mod.ts");
+      const client = await new Client().connect({
+        hostname: mariadbHost,
+        port: parseInt(mariadbPort, 10),
+        username: mariadbUser,
+        password: mariadbPass,
+        db: 'dados_dachser',
+      });
+
+      try {
+        const rows = await client.query(`
+          SELECT 
+            ts.mbl_id,
+            MAX(ts.tipo_processo) as tipo_processo,
+            MAX(ts.consignee) as consignee,
+            MAX(ts.shipping_line) as shipping_line,
+            MAX(ts.origem) as origem,
+            MAX(ts.destino) as destino,
+            MAX(ts.navio) as navio,
+            MAX(ts.eta) as eta,
+            MAX(ts.email_analista) as email_analista,
+            MAX(ts.email_cliente) as email_cliente,
+            COUNT(DISTINCT ts.container) as container_count,
+            MAX(ts.container_status) as container_status,
+            MAX(ts.last_event) as last_event,
+            MAX(ts.last_check) as last_check,
+            MAX(ts.active) as active,
+            MAX(ts.created_at) as created_at,
+            MAX(ts.updated_at) as updated_at
+          FROM dados_dachser.t_tracking_sea ts
+          WHERE ts.active = 1
+          GROUP BY ts.mbl_id
+          ORDER BY MAX(ts.last_check) DESC, ts.mbl_id
+        `);
+
+        await client.close();
+        console.log(`[get_sea_tracking] Returning ${rows.length} MBLs from t_tracking_sea`);
+        return new Response(JSON.stringify({ success: true, data: rows }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      } catch (e: any) {
+        await client.close();
+        console.error('[get_sea_tracking] Error:', e);
+        return new Response(JSON.stringify({ error: e.message, data: [] }), {
+          status: 500,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      }
+    }
+
+    // ===== SEA TRACKING: Get containers for a specific MBL =====
+    if (action === 'get_sea_tracking_containers') {
+      const mbl_id = url.searchParams.get('mbl_id') || '';
+
+      if (!mbl_id) {
+        return new Response(JSON.stringify({ error: 'mbl_id obrigatório', data: [] }), {
+          status: 400,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      }
+
+      const mariadbHost = Deno.env.get('MARIADB_HOST');
+      const mariadbPort = Deno.env.get('MARIADB_PORT') || '3306';
+      const mariadbUser = Deno.env.get('MARIADB_USER');
+      const mariadbPass = Deno.env.get('MARIADB_PASSWORD');
+
+      if (!mariadbHost || !mariadbUser || !mariadbPass) {
+        return new Response(JSON.stringify({ error: 'MariaDB não configurado', data: [] }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      }
+
+      const { Client } = await import("https://deno.land/x/mysql@v2.12.1/mod.ts");
+      const client = await new Client().connect({
+        hostname: mariadbHost,
+        port: parseInt(mariadbPort, 10),
+        username: mariadbUser,
+        password: mariadbPass,
+        db: 'dados_dachser',
+      });
+
+      try {
+        const rows = await client.query(`
+          SELECT 
+            id, mbl_id, container, shipping_line, 
+            container_status, last_event, last_check, 
+            eta, navio, origem, destino, consignee
+          FROM dados_dachser.t_tracking_sea
+          WHERE mbl_id = ?
+          ORDER BY container
+        `, [mbl_id]);
+
+        await client.close();
+        console.log(`[get_sea_tracking_containers] Returning ${rows.length} containers for MBL ${mbl_id}`);
+        return new Response(JSON.stringify({ success: true, data: rows }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      } catch (e: any) {
+        await client.close();
+        console.error('[get_sea_tracking_containers] Error:', e);
+        return new Response(JSON.stringify({ error: e.message, data: [] }), {
+          status: 500,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      }
+    }
+
+    // ===== SEA TRACKING: Sync from t_master_dados to t_tracking_sea =====
+    if (action === 'sync_sea_tracking') {
+      const mariadbHost = Deno.env.get('MARIADB_HOST');
+      const mariadbPort = Deno.env.get('MARIADB_PORT') || '3306';
+      const mariadbUser = Deno.env.get('MARIADB_USER');
+      const mariadbPass = Deno.env.get('MARIADB_PASSWORD');
+
+      if (!mariadbHost || !mariadbUser || !mariadbPass) {
+        return new Response(JSON.stringify({ error: 'MariaDB não configurado' }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      }
+
+      const { Client } = await import("https://deno.land/x/mysql@v2.12.1/mod.ts");
+      const client = await new Client().connect({
+        hostname: mariadbHost,
+        port: parseInt(mariadbPort, 10),
+        username: mariadbUser,
+        password: mariadbPass,
+        db: 'dados_dachser',
+      });
+
+      try {
+        const result = await client.execute(`
+          INSERT INTO dados_dachser.t_tracking_sea (
+            mbl_id, tipo_processo, container,
+            shipping_line, consignee, origem, destino,
+            navio, eta, last_event, container_status,
+            last_check, email_analista, email_cliente, active
+          )
+          SELECT
+            md.mawb AS mbl_id,
+            md.tipo_processo,
+            md.container,
+            NULL AS shipping_line,
+            md.cliente AS consignee,
+            NULL AS origem,
+            NULL AS destino,
+            NULL AS navio,
+            NULL AS eta,
+            NULL AS last_event,
+            NULL AS container_status,
+            NULL AS last_check,
+            md.email_analista,
+            md.emails_cliente AS email_cliente,
+            COALESCE(md.active, 1) AS active
+          FROM dados_dachser.t_master_dados md
+          WHERE md.mawb IS NOT NULL AND md.container IS NOT NULL
+          ON DUPLICATE KEY UPDATE
+            tipo_processo = VALUES(tipo_processo),
+            consignee = VALUES(consignee),
+            email_analista = VALUES(email_analista),
+            email_cliente = VALUES(email_cliente),
+            active = VALUES(active)
+        `);
+
+        await client.close();
+        console.log(`[sync_sea_tracking] Synced ${result.affectedRows || 0} rows`);
+        return new Response(JSON.stringify({ 
+          success: true, 
+          synced: result.affectedRows || 0,
+          message: `${result.affectedRows || 0} registros sincronizados de t_master_dados`
+        }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      } catch (e: any) {
+        await client.close();
+        console.error('[sync_sea_tracking] Error:', e);
+        return new Response(JSON.stringify({ error: e.message }), {
+          status: 500,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      }
+    }
+
+    // ===== SEA TRACKING: Refresh all containers in t_tracking_sea =====
+    if (action === 'refresh_sea_tracking') {
+      const mariadbHost = Deno.env.get('MARIADB_HOST');
+      const mariadbPort = Deno.env.get('MARIADB_PORT') || '3306';
+      const mariadbUser = Deno.env.get('MARIADB_USER');
+      const mariadbPass = Deno.env.get('MARIADB_PASSWORD');
+
+      if (!mariadbHost || !mariadbUser || !mariadbPass) {
+        return new Response(JSON.stringify({ error: 'MariaDB não configurado' }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      }
+
+      const { Client } = await import("https://deno.land/x/mysql@v2.12.1/mod.ts");
+      const client = await new Client().connect({
+        hostname: mariadbHost,
+        port: parseInt(mariadbPort, 10),
+        username: mariadbUser,
+        password: mariadbPass,
+        db: 'dados_dachser',
+      });
+
+      try {
+        const containers = await client.query(`
+          SELECT id, container, shipping_line, navio FROM dados_dachser.t_tracking_sea WHERE active = 1
+        `);
+
+        let updated = 0;
+        let errors = 0;
+
+        for (const row of containers) {
+          const containerId = row.container;
+          let shippingLine = row.shipping_line || '';
+          
+          if (!shippingLine && containerId) {
+            const prefix = containerId.substring(0, 4).toUpperCase();
+            if (prefix === 'CMAU' || prefix === 'CCLU' || prefix === 'CXDU') shippingLine = 'CMA_CGM';
+            else if (prefix === 'MSCU' || prefix === 'MEDU') shippingLine = 'MSC';
+            else if (prefix === 'MAEU' || prefix === 'MRKU' || prefix === 'MSKU') shippingLine = 'MAERSK';
+            else if (prefix === 'HLCU' || prefix === 'HLXU') shippingLine = 'HAPAG_LLOYD';
+            else if (prefix === 'ONEY' || prefix === 'ONEU') shippingLine = 'ONE';
+            else if (prefix === 'HDMU' || prefix === 'HMMU') shippingLine = 'HMM';
+            else if (prefix === 'EISU' || prefix === 'EITU' || prefix === 'EGSU' || prefix === 'EGHU') shippingLine = 'EVERGREEN';
+            else if (prefix === 'YMLU' || prefix === 'YMMU') shippingLine = 'YANG_MING';
+            else if (prefix === 'COSU' || prefix === 'CSNU') shippingLine = 'COSCO';
+            else if (prefix === 'ZIMU' || prefix === 'ZCSU') shippingLine = 'ZIM';
+          }
+          
+          const qs: Record<string, string> = {};
+          if (shippingLine) qs['shipping_line'] = shippingLine;
+          
+          const apiRes = await jcJson(`http://api.jsoncargo.com/api/v1/containers/${encodeURIComponent(containerId)}`, qs, 15000);
+          
+          if (!apiRes.__curl_error && !apiRes.error && (apiRes.data || apiRes.container_status)) {
+            const data = apiRes.data || apiRes;
+            
+            let lastEventDescription = data.container_status || null;
+            if (data.events && Array.isArray(data.events) && data.events.length > 0) {
+              lastEventDescription = data.events[0].description || data.events[0].event_type || lastEventDescription;
+            } else if (data.last_movement?.description) {
+              lastEventDescription = data.last_movement.description;
+            }
+            
+            await client.execute(`
+              UPDATE dados_dachser.t_tracking_sea 
+              SET 
+                container_status = ?,
+                origem = COALESCE(?, origem),
+                destino = COALESCE(?, destino),
+                eta = ?,
+                navio = COALESCE(?, navio),
+                last_event = ?,
+                shipping_line = COALESCE(?, shipping_line),
+                last_check = NOW()
+              WHERE id = ?
+            `, [
+              data.container_status || null,
+              data.loading_port || data.shipped_from || null,
+              data.discharging_port || data.shipped_to || null,
+              data.eta_final_destination || data.eta ? new Date(data.eta_final_destination || data.eta) : null,
+              data.current_vessel_name || data.last_vessel_name || null,
+              lastEventDescription,
+              shippingLine ? normalizeShippingLine(shippingLine) : null,
+              row.id
+            ]);
+            updated++;
+          } else {
+            errors++;
+          }
+
+          await new Promise(r => setTimeout(r, 300));
+        }
+
+        await client.close();
+        return new Response(JSON.stringify({ success: true, updated, errors, total: containers.length }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      } catch (e: any) {
+        await client.close();
+        console.error('[refresh_sea_tracking] Error:', e);
+        return new Response(JSON.stringify({ error: e.message }), {
+          status: 500,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      }
+    }
+
+    // ===== SEA TRACKING: Track single container and update t_tracking_sea =====
+    if (action === 'track_sea_container') {
+      const containerId = url.searchParams.get('container') || '';
+      let shippingLine = url.searchParams.get('shipping_line') || '';
+
+      if (!containerId) {
+        return new Response(JSON.stringify({ error: 'container obrigatório' }), {
+          status: 400,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      }
+
+      if (!shippingLine) {
+        const prefix = containerId.substring(0, 4).toUpperCase();
+        if (prefix === 'CMAU' || prefix === 'CCLU' || prefix === 'CXDU') shippingLine = 'CMA_CGM';
+        else if (prefix === 'MSCU' || prefix === 'MEDU') shippingLine = 'MSC';
+        else if (prefix === 'MAEU' || prefix === 'MRKU' || prefix === 'MSKU') shippingLine = 'MAERSK';
+        else if (prefix === 'HLCU' || prefix === 'HLXU') shippingLine = 'HAPAG_LLOYD';
+        else if (prefix === 'ONEY' || prefix === 'ONEU') shippingLine = 'ONE';
+        else if (prefix === 'HDMU' || prefix === 'HMMU') shippingLine = 'HMM';
+        else if (prefix === 'EISU' || prefix === 'EITU' || prefix === 'EGSU' || prefix === 'EGHU') shippingLine = 'EVERGREEN';
+        else if (prefix === 'YMLU' || prefix === 'YMMU') shippingLine = 'YANG_MING';
+        else if (prefix === 'COSU' || prefix === 'CSNU') shippingLine = 'COSCO';
+        else if (prefix === 'ZIMU' || prefix === 'ZCSU') shippingLine = 'ZIM';
+      }
+
+      const qs: Record<string, string> = {};
+      if (shippingLine) qs['shipping_line'] = shippingLine;
+      
+      const apiRes = await jcJson(`http://api.jsoncargo.com/api/v1/containers/${encodeURIComponent(containerId)}`, qs);
+
+      if (apiRes.__curl_error) {
+        return new Response(JSON.stringify({ error: apiRes.__curl_error, data: null }), {
+          status: 500,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      }
+
+      const data = apiRes.data || apiRes;
+      
+      let lastEventDescription = data.container_status || null;
+      if (data.events && Array.isArray(data.events) && data.events.length > 0) {
+        lastEventDescription = data.events[0].description || data.events[0].event_type || lastEventDescription;
+      } else if (data.last_movement?.description) {
+        lastEventDescription = data.last_movement.description;
+      }
+
+      const trackingData = {
+        container: containerId,
+        container_status: data.container_status || null,
+        loading_port: data.loading_port?.name || data.pol || data.loading_port || null,
+        discharging_port: data.discharging_port?.name || data.pod || data.discharging_port || null,
+        eta: data.eta_final_destination || data.eta || null,
+        vessel: data.vessel?.name || data.current_vessel_name || null,
+        last_event: lastEventDescription,
+      };
+
+      const mariadbHost = Deno.env.get('MARIADB_HOST');
+      const mariadbPort = Deno.env.get('MARIADB_PORT') || '3306';
+      const mariadbUser = Deno.env.get('MARIADB_USER');
+      const mariadbPass = Deno.env.get('MARIADB_PASSWORD');
+
+      if (mariadbHost && mariadbUser && mariadbPass) {
+        const { Client } = await import("https://deno.land/x/mysql@v2.12.1/mod.ts");
+        const client = await new Client().connect({
+          hostname: mariadbHost,
+          port: parseInt(mariadbPort, 10),
+          username: mariadbUser,
+          password: mariadbPass,
+          db: 'dados_dachser',
+        });
+
+        try {
+          await client.execute(`
+            UPDATE dados_dachser.t_tracking_sea 
+            SET 
+              container_status = ?,
+              origem = COALESCE(?, origem),
+              destino = COALESCE(?, destino),
+              eta = ?,
+              navio = COALESCE(?, navio),
+              last_event = ?,
+              shipping_line = COALESCE(?, shipping_line),
+              last_check = NOW()
+            WHERE container = ?
+          `, [
+            trackingData.container_status,
+            trackingData.loading_port,
+            trackingData.discharging_port,
+            trackingData.eta ? new Date(trackingData.eta) : null,
+            trackingData.vessel,
+            trackingData.last_event,
+            shippingLine ? normalizeShippingLine(shippingLine) : null,
+            containerId.toUpperCase().trim()
+          ]);
+          await client.close();
+        } catch (e: any) {
+          console.error('[track_sea_container] DB update error:', e);
+          await client.close();
+        }
+      }
+
+      return new Response(JSON.stringify({ success: true, data: trackingData }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      });
+    }
+
+    // ===== SEA TRACKING: Delete/Deactivate MBL from tracking =====
+    if (action === 'delete_sea_tracking') {
+      const body = await req.json();
+      const { mbl_id } = body;
+
+      if (!mbl_id) {
+        return new Response(JSON.stringify({ error: 'mbl_id obrigatório' }), {
+          status: 400,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      }
+
+      const mariadbHost = Deno.env.get('MARIADB_HOST');
+      const mariadbPort = Deno.env.get('MARIADB_PORT') || '3306';
+      const mariadbUser = Deno.env.get('MARIADB_USER');
+      const mariadbPass = Deno.env.get('MARIADB_PASSWORD');
+
+      const { Client } = await import("https://deno.land/x/mysql@v2.12.1/mod.ts");
+      const client = await new Client().connect({
+        hostname: mariadbHost,
+        port: parseInt(mariadbPort, 10),
+        username: mariadbUser,
+        password: mariadbPass,
+        db: 'dados_dachser',
+      });
+
+      try {
+        await client.execute(`
+          UPDATE dados_dachser.t_tracking_sea SET active = 0 WHERE mbl_id = ?
+        `, [mbl_id]);
+
+        await client.close();
+        return new Response(JSON.stringify({ success: true }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      } catch (e: any) {
+        await client.close();
+        console.error('[delete_sea_tracking] Error:', e);
+        return new Response(JSON.stringify({ error: e.message }), {
+          status: 500,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      }
+    }
+
+    // ===== SEA TRACKING (LEGACY): Get tracked containers =====
     if (action === 'get_tracked_containers') {
       const mariadbHost = Deno.env.get('MARIADB_HOST');
       const mariadbPort = Deno.env.get('MARIADB_PORT') || '3306';
