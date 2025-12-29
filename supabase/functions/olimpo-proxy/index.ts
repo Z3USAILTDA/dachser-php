@@ -970,6 +970,123 @@ serve(async (req) => {
       });
     }
 
+    // ===== SEA TRACKING DEBUG: Analyze t_master_dados data =====
+    if (action === 'debug_sea_tracking') {
+      const mariadbHost = Deno.env.get('MARIADB_HOST');
+      const mariadbPort = Deno.env.get('MARIADB_PORT') || '3306';
+      const mariadbUser = Deno.env.get('MARIADB_USER');
+      const mariadbPass = Deno.env.get('MARIADB_PASSWORD');
+
+      if (!mariadbHost || !mariadbUser || !mariadbPass) {
+        return new Response(JSON.stringify({ error: 'MariaDB não configurado' }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      }
+
+      const { Client } = await import("https://deno.land/x/mysql@v2.12.1/mod.ts");
+      const client = await new Client().connect({
+        hostname: mariadbHost,
+        port: parseInt(mariadbPort, 10),
+        username: mariadbUser,
+        password: mariadbPass,
+        db: 'dados_dachser',
+      });
+
+      try {
+        // 1. Total de registros em t_master_dados
+        const totalRows = await client.query(`SELECT COUNT(*) as total FROM dados_dachser.t_master_dados`);
+        
+        // 2. Registros com mawb e container preenchidos
+        const withMawbContainer = await client.query(`
+          SELECT COUNT(*) as total FROM dados_dachser.t_master_dados 
+          WHERE mawb IS NOT NULL AND mawb != '' AND container IS NOT NULL AND container != ''
+        `);
+        
+        // 3. Registros com ETD >= 2025-12-01
+        const withEtdFilter = await client.query(`
+          SELECT COUNT(*) as total FROM dados_dachser.t_master_dados 
+          WHERE mawb IS NOT NULL AND mawb != '' AND container IS NOT NULL AND container != ''
+          AND etd >= '2025-12-01'
+        `);
+        
+        // 4. Registros com formato de MBL válido (4 letras + números)
+        const withValidFormat = await client.query(`
+          SELECT COUNT(*) as total FROM dados_dachser.t_master_dados 
+          WHERE mawb IS NOT NULL AND mawb != '' AND container IS NOT NULL AND container != ''
+          AND etd >= '2025-12-01'
+          AND mawb REGEXP '^[A-Za-z]{4}[0-9]+$'
+        `);
+        
+        // 5. Exemplos de mawb existentes com container
+        const sampleMawbs = await client.query(`
+          SELECT DISTINCT mawb, etd, container, tipo_processo 
+          FROM dados_dachser.t_master_dados 
+          WHERE mawb IS NOT NULL AND mawb != ''
+            AND tipo_processo LIKE '%SEA%'
+          ORDER BY etd DESC
+          LIMIT 20
+        `);
+        
+        // 6. Estrutura da tabela - verificar colunas disponíveis
+        const tableColumns = await client.query(`
+          SELECT COLUMN_NAME, DATA_TYPE, IS_NULLABLE
+          FROM INFORMATION_SCHEMA.COLUMNS 
+          WHERE TABLE_SCHEMA = 'dados_dachser' AND TABLE_NAME = 't_master_dados'
+          ORDER BY ORDINAL_POSITION
+        `);
+        
+        // 7. Registros SEA IMPORT recentes com mais detalhes
+        const recentSeaImports = await client.query(`
+          SELECT mawb, container, tipo_processo, etd, eta, cliente, active
+          FROM dados_dachser.t_master_dados 
+          WHERE tipo_processo LIKE '%SEA%'
+          ORDER BY id DESC
+          LIMIT 30
+        `);
+        
+        // 8. Formatos de mawb encontrados
+        const mawbFormats = await client.query(`
+          SELECT 
+            mawb,
+            LENGTH(mawb) as len,
+            etd,
+            CASE 
+              WHEN mawb REGEXP '^[A-Za-z]{4}[0-9]+$' THEN 'VALIDO'
+              ELSE 'INVALIDO'
+            END as formato_status
+          FROM dados_dachser.t_master_dados 
+          WHERE mawb IS NOT NULL AND mawb != ''
+          ORDER BY etd DESC
+          LIMIT 30
+        `);
+
+        await client.close();
+        
+        return new Response(JSON.stringify({ 
+          success: true,
+          debug: {
+            total_registros: totalRows[0]?.total || 0,
+            com_mawb_e_container: withMawbContainer[0]?.total || 0,
+            com_etd_valido: withEtdFilter[0]?.total || 0,
+            com_formato_mbl_valido: withValidFormat[0]?.total || 0,
+            exemplos_mawb: sampleMawbs,
+            colunas_tabela: tableColumns,
+            sea_imports_recentes: recentSeaImports,
+            formatos_mawb: mawbFormats
+          }
+        }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      } catch (e: any) {
+        await client.close();
+        console.error('[debug_sea_tracking] Error:', e);
+        return new Response(JSON.stringify({ error: e.message }), {
+          status: 500,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      }
+    }
+
     // ===== SEA TRACKING: Get MBL tracking data from t_tracking_sea (grouped by MBL) =====
     if (action === 'get_sea_tracking') {
       const mariadbHost = Deno.env.get('MARIADB_HOST');
@@ -1113,8 +1230,11 @@ serve(async (req) => {
       });
 
       try {
-        // Validação: MBL deve ter formato válido (4 letras + números) e ETD >= 01/12/2025
-        // Regex em SQL: mawb deve começar com 4 letras seguidas de números
+        // Validação: 
+        // - MBL não pode ser vazio
+        // - MBL deve ter pelo menos 3 letras no início (formatos: HLCU, MEDU, SIJ, HBG, etc.)
+        // - ETD >= 01/12/2025
+        // - Apenas processos SEA (IMPORT ou EXPORT)
         const result = await client.execute(`
           INSERT INTO dados_dachser.t_tracking_sea (
             mbl_id, tipo_processo, container,
@@ -1123,9 +1243,9 @@ serve(async (req) => {
             last_check, email_analista, email_cliente, active
           )
           SELECT
-            md.mawb AS mbl_id,
+            TRIM(md.mawb) AS mbl_id,
             md.tipo_processo,
-            md.container,
+            COALESCE(md.container, 'PENDENTE') AS container,
             NULL AS shipping_line,
             md.cliente AS consignee,
             NULL AS origem,
@@ -1140,13 +1260,13 @@ serve(async (req) => {
             COALESCE(md.active, 1) AS active
           FROM dados_dachser.t_master_dados md
           WHERE md.mawb IS NOT NULL 
-            AND md.mawb != ''
-            AND md.container IS NOT NULL
-            AND md.container != ''
-            -- Validação de formato: 4 letras seguidas de números
-            AND md.mawb REGEXP '^[A-Za-z]{4}[0-9]+$'
+            AND TRIM(md.mawb) != ''
+            -- Validação de formato: deve começar com pelo menos 3 letras
+            AND TRIM(md.mawb) REGEXP '^[A-Za-z]{3,}'
             -- Filtro de antiguidade: ETD >= 01/12/2025
             AND md.etd >= '2025-12-01'
+            -- Apenas processos marítimos
+            AND md.tipo_processo LIKE '%SEA%'
           ON DUPLICATE KEY UPDATE
             tipo_processo = VALUES(tipo_processo),
             consignee = VALUES(consignee),
