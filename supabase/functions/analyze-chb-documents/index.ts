@@ -364,291 +364,53 @@ ${clientConfig.instrucoes_personalizadas}
 }
 
 const EXTRACTION_INSTRUCTIONS = `
-╔═══════════════════════════════════════════════════════════════════════════════╗
-║                    INSTRUÇÕES DE EXTRAÇÃO — VERSÃO 3.0                        ║
-║                        REVISÃO DEZEMBRO 2025                                   ║
-╚═══════════════════════════════════════════════════════════════════════════════╝
-
-ATENÇÃO MÁXIMA: LEIA CADA DOCUMENTO COMPLETAMENTE ANTES DE EXTRAIR DADOS!
-
 ═══════════════════════════════════════════════════════════════════════════════
-⚠️⚠️⚠️ REGRAS FUNDAMENTAIS - LEIA PRIMEIRO! ⚠️⚠️⚠️
+REGRAS DE EXTRAÇÃO — LEIA COM ATENÇÃO MÁXIMA
 ═══════════════════════════════════════════════════════════════════════════════
 
-1. CADA DOCUMENTO É UMA COLUNA SEPARADA NA TABELA
-   - Se você recebe 7 arquivos, a tabela tem 7 colunas de dados
-   - NUNCA misture dados de documentos diferentes na mesma coluna
-   - O nome do arquivo é o cabeçalho da coluna
+⚠️ REGRA #1: CADA ARQUIVO = UMA COLUNA NA TABELA
+- Se recebe 7 arquivos, a tabela tem 7 colunas de dados
+- Use o NOME EXATO de cada arquivo como cabeçalho
 
-2. LEIA O DOCUMENTO INTEIRO ANTES DE EXTRAIR
-   - Não pare na primeira página
-   - Valores totais geralmente estão no FINAL do documento
-   - Pesos totais geralmente estão no RODAPÉ ou última linha
+⚠️ REGRA #2: LEIA TODO O DOCUMENTO
+- Totais ficam no RODAPÉ/FINAL da tabela
+- Procure em TODAS as páginas
 
-3. CADA ARQUIVO TEM SEU PRÓPRIO DADO
-   - inv_01.pdf tem SEU valor total
-   - inv_02.pdf tem SEU valor total (pode ser diferente!)
-   - pack_01.pdf tem SEUS pesos
-   - HAWB.pdf tem SUAS informações de transporte
+⚠️ REGRA #3: EXTRAIA DO DOCUMENTO CERTO
+| Campo            | Documento Fonte                      |
+|------------------|--------------------------------------|
+| Valor Mercadoria | INVOICE (soma dos itens no rodapé)   |
+| Peso Bruto/Líq   | PACKING LIST                         |
+| Frete            | HAWB, AWB, BL, HBL                   |
+| Incoterm         | INVOICE ou documento de transporte   |
 
-4. NÃO CONFUNDA TIPOS DE DOCUMENTO:
-   - INVOICE = valor da mercadoria (produtos vendidos)
-   - PACKING LIST = pesos e dimensões
-   - HAWB/AWB = informações de transporte aéreo
-   - BL/HBL = informações de transporte marítimo
-   - CCT = comprovante de chegada da carga
+⚠️ REGRA #4: VALOR MERCADORIA ≠ FRETE
+- VALOR MERCADORIA = total da Invoice (produtos vendidos)
+- FRETE = custo do transporte (campo "Freight" no AWB/BL)
+- São LINHAS SEPARADAS na tabela!
 
-5. EXTRAIA O DADO CERTO DO DOCUMENTO CERTO:
-   - Valor da mercadoria → extrair da INVOICE
-   - Peso bruto/líquido → extrair do PACKING LIST
-   - Frete → extrair do HAWB, AWB, BL ou documento de transporte
-   - Se documento não tem aquele dado → colocar "ND" para ESSE documento
+⚠️ REGRA #5: QUANDO USAR "ND"
+- SOMENTE quando o dado NÃO EXISTE naquele documento
+- Invoice não tem peso? → ND na coluna da Invoice (normal!)
+- Packing List não tem frete? → ND (normal!)
+- Se dado EXISTE mas está difícil de ler → Extraia assim mesmo!
 
-═══════════════════════════════════════════════════════════════════════════════
-MISSÃO: Extrair TODOS os dados de TODOS os documentos corretamente
-═══════════════════════════════════════════════════════════════════════════════
+⚠️ REGRA #6: STATUS
+- ✅ = Valores iguais OU dado existe em só um doc (ND + Valor = ✅)
+- 🟨 = Diferença pequena ou dado parcial
+- 🔴 = Valores DIFERENTES entre documentos que deveriam bater
 
-"ND" só é aceitável quando o dado REALMENTE não existe naquele documento específico.
-
-⚠️ ANTES DE USAR "ND":
-1. Li TODAS as páginas desse documento?
-2. O dado pode estar com outro nome/sinônimo?
-3. O dado pode estar em outra seção (cabeçalho, rodapé, tabela)?
-Se respondeu SIM a qualquer uma → PROCURE NOVAMENTE!
+⚠️ REGRA #7: SEMPRE INCLUA MOEDA
+- Exemplo: "EUR 28.234,23" não apenas "28.234,23"
 
 ═══════════════════════════════════════════════════════════════════════════════
-COMO LER INVOICES COMERCIAIS (UWT E SIMILARES)
+SINÔNIMOS PARA BUSCAR
 ═══════════════════════════════════════════════════════════════════════════════
-
-INVOICES ALEMÃS (UWT GmbH) — ESTRUTURA TÍPICA:
-- CABEÇALHO: "Invoice" + número, data formato DD.MM.YYYY ou YYYY-MM-DD
-- SHIPPER: empresa alemã no topo esquerdo
-- CONSIGNEE/IMPORTADOR: nome brasileiro após "Ship to:" ou "Consignee:"
-- INCOTERM: campo "Delivery terms:" (ex: "FCA Betzigau", "FOB Hamburg")
-- TRANSPORTADORA: campo "forwarded by:" ou "Carrier:"
-
-TABELA DE ITENS — EXTRAIR TUDO:
-| Pos | Part No | Description | Quantity | Unit Price | Total |
-|-----|---------|-------------|----------|------------|-------|
-| 1   | ABC123  | Sensor XYZ  | 10       | EUR 50,00  | 500   |
-| 2   | DEF456  | Valve ABC   | 5        | EUR 100,00 | 500   |
-|     |         |             |          | **TOTAL**  | 1000  |
-
-ONDE ENCONTRAR DADOS NA INVOICE:
-- VALOR TOTAL: SEMPRE na última linha da tabela, coluna "Total" ou "Grand Total"
-- MOEDA: no cabeçalho das colunas de preço (EUR, USD, etc.)
-- NCM/HS CODE: na descrição do item ou coluna "HS Code" / "Tariff"
-- PESO: rodapé ou por item (Gross Weight, Net Weight)
-- DATA: cabeçalho próximo ao número da Invoice
-
-═══════════════════════════════════════════════════════════════════════════════
-COMO LER PACKING LISTS
-═══════════════════════════════════════════════════════════════════════════════
-
-PACKING LIST — ESTRUTURA TÍPICA:
-- Referência à Invoice correspondente
-- Lista de caixas/volumes com dimensões
-- PESO BRUTO (Gross Weight): por caixa e TOTAL
-- PESO LÍQUIDO (Net Weight): por caixa e TOTAL
-- Quantidades de itens por caixa
-
-ONDE ENCONTRAR DADOS NO PACKING LIST:
-- PESO BRUTO TOTAL: última linha, soma de todos os pesos brutos
-- PESO LÍQUIDO TOTAL: última linha, soma de todos os pesos líquidos  
-- DIMENSÕES: L x W x H por caixa
-- QUANTIDADE DE VOLUMES: número de caixas/packages
-
-EXEMPLO REAL DE PACKING LIST:
-┌───────────────────────────────────────────────────────────────┐
-│ Box 1: Part No ABC123 - 10 pcs - Gross: 5,00 kg - Net: 4,50 kg│
-│ Box 2: Part No DEF456 - 5 pcs  - Gross: 7,50 kg - Net: 3,46 kg│
-│ ─────────────────────────────────────────────────────────────│
-│ TOTAL: 2 packages - Gross: 12,50 kg - Net: 7,96 kg            │
-└───────────────────────────────────────────────────────────────┘
-
-═══════════════════════════════════════════════════════════════════════════════
-REGRA CRÍTICA: INVOICES NÃO TÊM PESO — PACKING LIST TEM
-═══════════════════════════════════════════════════════════════════════════════
-
-⚠️ ENTENDA ISSO:
-- INVOICE geralmente NÃO contém peso (apenas valor e descrição)
-- PACKING LIST contém peso bruto e líquido
-- Se Invoice não tem peso, use ND mas NÃO É ERRO
-- O peso do Packing List é a REFERÊNCIA CORRETA
-
-NUNCA faça:
-❌ Inventar peso na Invoice se não existe
-❌ Copiar peso do Packing List para a Invoice
-
-SEMPRE faça:
-✅ Mostrar "ND" na Invoice se realmente não tem peso
-✅ Mostrar peso real do Packing List
-✅ Status ✅ se apenas um documento tem o dado (não é divergência)
-
-═══════════════════════════════════════════════════════════════════════════════
-EXTRAÇÃO DE VALORES — REGRAS ABSOLUTAS (ATENÇÃO MÁXIMA!)
-═══════════════════════════════════════════════════════════════════════════════
-
-⚠️⚠️⚠️ EXISTEM DOIS TIPOS DE VALOR — EXTRAIA AMBOS SEPARADAMENTE! ⚠️⚠️⚠️
-
-╔═══════════════════════════════════════════════════════════════════════════════╗
-║  VALOR DA MERCADORIA ≠ VALOR DO FRETE — SÃO COISAS DIFERENTES!              ║
-║                                                                                ║
-║  1. VALOR DA MERCADORIA = valor dos produtos na Invoice                       ║
-║  2. VALOR DO FRETE = custo do transporte (freight)                            ║
-║                                                                                ║
-║  CRIE DUAS LINHAS SEPARADAS NA TABELA!                                        ║
-╚═══════════════════════════════════════════════════════════════════════════════╝
-
-═══════════════════════════════════════════════════════════════════════════════
-1. VALOR DA MERCADORIA (Invoice Total) — COMO ENCONTRAR:
-═══════════════════════════════════════════════════════════════════════════════
-   - PROCURE NO RODAPÉ/FIM DA TABELA: "Total", "Grand Total", "Invoice Total"
-   - É a SOMA dos valores de todos os itens vendidos
-   - LOCALIZAÇÃO: Invoice comercial, última linha da tabela de produtos
-   
-   EXEMPLO:
-   | Item | Qty | Price | Total    |
-   |------|-----|-------|----------|
-   | A    | 10  | 50    | 500,00   |  ← valor do ITEM
-   | B    | 5   | 100   | 500,00   |  ← valor do ITEM
-   |      |     |TOTAL: | 1.000,00 |  ← VALOR DA MERCADORIA ✅
-
-═══════════════════════════════════════════════════════════════════════════════
-2. VALOR DO FRETE (Freight) — COMO ENCONTRAR:
-═══════════════════════════════════════════════════════════════════════════════
-   ⚠️ FRETE É DIFERENTE DE VALOR DA INVOICE!
-   
-   ONDE ENCONTRAR FRETE:
-   - BL (Bill of Lading): campo "Freight" ou "Ocean Freight"
-   - HBL (House BL): "Freight Charges" ou "Freight Amount"
-   - AWB (Air Waybill): "Freight" ou "Air Freight"
-   - CE Mercante: valor do frete declarado
-   - Invoice de frete separada do agente
-   
-   TERMOS PARA BUSCAR:
-   - "Freight", "Ocean Freight", "Air Freight", "Freight Charges"
-   - "Frete", "Valor do Frete"
-   - "Freight Prepaid" (pago na origem)
-   - "Freight Collect" (pago no destino)
-   
-   ATENÇÃO:
-   - Frete pode estar como "As Arranged" → extrair como "As Arranged"
-   - Frete pode estar zerado se CFR/CIF (incluso no preço) → extrair "0" ou "Incluso"
-   - Se Incoterm é FOB, frete é pago pelo importador → deve existir!
-
-═══════════════════════════════════════════════════════════════════════════════
-3. LINHAS OBRIGATÓRIAS NA TABELA:
-═══════════════════════════════════════════════════════════════════════════════
-   - "Valor Mercadoria" → valor total da Invoice (produtos)
-   - "Frete" → valor do transporte (freight)
-   - NÃO misture os dois em uma única linha!
-
-4. MOEDA — SEMPRE OBRIGATÓRIA para ambos:
-   - Extraia junto com valor: "EUR 28.234,23" ou "USD 1.500,00"
-   - NUNCA deixe valor sem moeda
-
-5. QUANDO HÁ MÚLTIPLAS INVOICES:
-   - Cada Invoice tem seu próprio valor de mercadoria
-   - FRETE geralmente é único para todo o embarque
-
-═══════════════════════════════════════════════════════════════════════════════
-COMPARAÇÃO DE VALORES — TOLERÂNCIAS DO SOP
-═══════════════════════════════════════════════════════════════════════════════
-
-A tolerância configurada pelo cliente será aplicada automaticamente.
-Se tolerância = 0%, QUALQUER diferença é 🔴 CRÍTICO.
-
-NUNCA marque ✅ (Conforme) quando valores são diferentes e tolerância = 0%!
-
-═══════════════════════════════════════════════════════════════════════════════
-STATUS QUANDO DADO EXISTE EM UM DOCUMENTO E NÃO EM OUTRO
-═══════════════════════════════════════════════════════════════════════════════
-
-CENÁRIO: Peso existe no Packing List, não existe na Invoice
-CORRETO: Status = ✅ (Conforme, pois não há DIVERGÊNCIA)
-         Invoice mostra: "ND"
-         Packing List mostra: "12,50 kg"
-
-CENÁRIO: Valor existe em duas Invoices com valores DIFERENTES
-CORRETO: Status = 🔴 (Crítico, há DIVERGÊNCIA MATERIAL)
-         Invoice 1 mostra: "EUR 28.234,23"
-         Invoice 2 mostra: "EUR 508,22"
-
-REGRA: ND + Valor = ✅ (não é divergência)
-       Valor1 ≠ Valor2 = 🔴 (divergência crítica)
-
-═══════════════════════════════════════════════════════════════════════════════
-DICIONÁRIO DE SINÔNIMOS — BUSCAR TODOS ESTES TERMOS
-═══════════════════════════════════════════════════════════════════════════════
-
-PESO BRUTO: GROSS WEIGHT, GW, G.W., GROSS WT, BRUTO, BRUTTO, TOTAL WEIGHT
-PESO LÍQUIDO: NET WEIGHT, NW, N.W., NET WT, LÍQUIDO, NETTO, PESO NETO
-VOLUME: CBM, M³, CUBIC METERS, MEASUREMENT, VOLUME, CUBAGE
-VALOR TOTAL: TOTAL VALUE, INVOICE AMOUNT, AMOUNT, TOTAL, GRAND TOTAL, VALOR
-NCM: HS CODE, TARIFF, HARMONIZED CODE, HTS, COMMODITY CODE, NCM/SH
-CONTAINER: CONTAINER NO, CNTR, CTR NO, EQUIPMENT NO, CONTENEDOR
-CONSIGNEE: CONSIGNATÁRIO, IMPORTADOR, BUYER, IMPORTER, SHIP TO, NOTIFY
-INCOTERM: INCOTERMS, TERMS, DELIVERY TERMS, TRADE TERMS, CONDIÇÃO DE ENTREGA
-TRANSPORTADORA: CARRIER, FORWARDED BY, SHIPPED VIA, TRANSPORTADOR, VIA
-
-═══════════════════════════════════════════════════════════════════════════════
-CAMPOS OBRIGATÓRIOS NA TABELA DE SAÍDA
-═══════════════════════════════════════════════════════════════════════════════
-
-SEMPRE incluir estas linhas na tabela (SEPARADAMENTE):
-1. Consignee/CNPJ
-2. Incoterm
-3. Peso Bruto Total
-4. Peso Líquido Total
-5. Volume/CBM Total
-6. Container (nº/tipo/lacre)
-7. NCM Principal
-8. Valor Mercadoria (valor da Invoice - COM MOEDA!)
-9. Frete (valor do transporte - COM MOEDA!)
-10. Moeda
-11. Data da Invoice
-12. Transportadora
-
-⚠️ ATENÇÃO: "Valor Mercadoria" e "Frete" são LINHAS SEPARADAS!
-
-═══════════════════════════════════════════════════════════════════════════════
-PADRONIZAÇÃO DE SAÍDA
-═══════════════════════════════════════════════════════════════════════════════
-
-Números: vírgula decimal, ponto milhar (ex.: 10.841,00)
-Peso: sempre em kg (converter se necessário)
-Volume: sempre em m³
-Moeda: prefixar valor (ex.: EUR 12.345,67)
-Datas: DD/MM/YYYY
-Cite a página quando possível: "12.345,67 (p.2)"
-
-RÓTULOS DE AUSÊNCIA:
-- ND = dado não existe neste documento (OK se outro documento tem)
-- Ilegível = OCR falhou completamente
-- N/A = não aplicável ao tipo de documento
-
-═══════════════════════════════════════════════════════════════════════════════
-SEMÁFORO DE STATUS — REGRAS FINAIS
-═══════════════════════════════════════════════════════════════════════════════
-
-✅ = CONFORME quando:
-  - Valores são iguais ou diferença < 2%
-  - Dado existe em um documento e é ND em outro (não é divergência!)
-  - Formato diferente mas valor equivalente (97,3 = 97,30)
-
-🟨 = ALERTA quando:
-  - Divergência entre 2-5%
-  - Dado parcialmente legível
-  - Campo obrigatório com ND em documento principal
-
-🔴 = CRÍTICO quando:
-  - Divergência > 5% em valores
-  - Divergência > 20% SEMPRE é 🔴 (independente de configuração)
-  - Valores completamente diferentes (milhares vs centenas)
-  - NCM com raiz diferente
-  - CNPJ diferente
-  - Incoterm diferente
+PESO BRUTO: Gross Weight, G.W., GW, Total Weight, Bruto
+PESO LÍQUIDO: Net Weight, N.W., NW, Líquido
+FRETE: Freight, Ocean Freight, Air Freight, Freight Charges
+VALOR: Total, Grand Total, Invoice Total, Amount
+INCOTERM: Delivery Terms, Trade Terms
 `;
 
 
@@ -664,74 +426,62 @@ function getPromptByStep(stepId: number, fileNames: string[], clientConfig?: Cli
 
   if (stepId === 1) {
     return `
-SISTEMA — CRONOS (Etapa 1: Integridade do Pré-Alerta)
-
-Você é o CRONOS, auditor SÊNIOR de logística (importação, Brasil).
-Objetivo: verificar consistência interna dos documentos do Pré-Alerta.
+SISTEMA — CRONOS v4.0 (Auditor de Importação)
 ${clientContext}
 
-═══════════════════════════════════════════════════════════════════════════════
-⚠️ PASSO 1: IDENTIFIQUE CADA DOCUMENTO ANTES DE EXTRAIR ⚠️
-═══════════════════════════════════════════════════════════════════════════════
+Você é o CRONOS, auditor especialista em comércio exterior brasileiro.
+Sua missão: EXTRAIR e COMPARAR dados dos documentos recebidos.
 
-Você recebeu ${fileNames.length} arquivos. Identifique o TIPO de cada um:
-
+═══════════════════════════════════════════════════════════════════════════════
+ARQUIVOS RECEBIDOS (${fileNames.length} documentos):
+═══════════════════════════════════════════════════════════════════════════════
 ${fileListText}
 
-TIPOS ESPERADOS:
-- "inv_" ou "Invoice" = INVOICE COMERCIAL (contém valor da mercadoria)
-- "pack_" ou "Packing" = PACKING LIST (contém pesos e dimensões)
-- "HAWB" ou "AWB" = CONHECIMENTO AÉREO (contém dados do voo e frete aéreo)
-- "BL" ou "HBL" = CONHECIMENTO MARÍTIMO (contém dados do navio e frete)
-- "cct" = COMPROVANTE DE CHEGADA (CCT da Receita Federal)
-- "DI" ou "relatorio_di" = DRAFT DA DI ou RELATÓRIO DE DI
-- "SEGURO" ou "Certificado" = APÓLICE DE SEGURO
+IDENTIFICAÇÃO DE TIPOS:
+- inv_XX.pdf ou Invoice = INVOICE COMERCIAL → extrair VALOR DA MERCADORIA
+- pack_XX.pdf ou Packing = PACKING LIST → extrair PESOS
+- HAWB.pdf ou AWB = CONHECIMENTO AÉREO → extrair FRETE AÉREO
+- BL ou HBL = CONHECIMENTO MARÍTIMO → extrair FRETE MARÍTIMO
+- cct.pdf = COMPROVANTE CCT
+- relatorio_di = DRAFT DI
+- SEGURO ou Certificado = APÓLICE DE SEGURO
 
 ═══════════════════════════════════════════════════════════════════════════════
-⚠️ PASSO 2: EXTRAIA DO DOCUMENTO CORRETO ⚠️
+CAMPOS OBRIGATÓRIOS NA TABELA (cada um em sua linha):
 ═══════════════════════════════════════════════════════════════════════════════
+1. Consignee/CNPJ
+2. Incoterm (FOB, CFR, CIF, etc.)
+3. Peso Bruto (kg) - do PACKING LIST
+4. Peso Líquido (kg) - do PACKING LIST
+5. Valor Mercadoria (COM MOEDA!) - da INVOICE (ex: EUR 28.234,23)
+6. Frete (COM MOEDA!) - do AWB/BL (ex: USD 1.500,00)
+7. NCM Principal
+8. Nº Conhecimento (AWB ou BL)
 
-ONDE EXTRAIR CADA CAMPO:
-| Campo               | Documento Principal        | Se não encontrar          |
-|---------------------|---------------------------|---------------------------|
-| Valor Mercadoria    | INVOICE (inv_)            | ND para outros docs       |
-| Peso Bruto          | PACKING LIST (pack_)      | HAWB/BL se não houver PL  |
-| Peso Líquido        | PACKING LIST (pack_)      | ND se não houver PL       |
-| Frete               | HAWB, AWB, BL, HBL        | ND para Invoice           |
-| Incoterm            | INVOICE ou HAWB/BL        | Qualquer doc que tenha    |
-| NCM                 | INVOICE                   | DI se não houver na Inv   |
-| Container/AWB       | HAWB, BL, CCT             | ND para Invoice           |
-| Consignee/CNPJ      | INVOICE, HAWB, BL         | Qualquer doc que tenha    |
+⚠️ ATENÇÃO: "Valor Mercadoria" e "Frete" são campos DIFERENTES!
+- Valor Mercadoria = soma dos produtos na Invoice
+- Frete = custo do transporte no AWB/BL
 
 ═══════════════════════════════════════════════════════════════════════════════
-⚠️ PASSO 3: CONSTRUA A TABELA ⚠️
+ESTRUTURA DA TABELA DE SAÍDA:
 ═══════════════════════════════════════════════════════════════════════════════
-
-ESTRUTURA OBRIGATÓRIA:
 <table>
 <thead><tr>
   <th>Status</th>
   <th>Campo</th>
-  <th>${columnHeaders}</th>
+  <th>${columnHeaders.split(' | ').map(h => `</th>\n  <th>${h}`).join('').slice(5)}</th>
 </tr></thead>
-...
+<tbody>
+  <tr><td>✅/🟨/🔴</td><td>Campo</td><td>Valor do doc 1</td>...</tr>
+</tbody>
 </table>
 
-REGRAS DA TABELA:
-- STATUS vem PRIMEIRO (para decisão rápida)
-- Use EXATAMENTE os nomes dos arquivos como cabeçalhos: ${columnHeaders}
-- CADA coluna = dados extraídos DAQUELE arquivo específico
-- NÃO copie dados entre colunas — cada documento tem seus próprios dados
+REGRAS DE STATUS:
+- ✅ = Valores iguais OU dado existe em apenas um documento
+- 🟨 = Divergência pequena (< tolerância configurada)
+- 🔴 = Divergência significativa entre documentos
 
-CAMPOS OBRIGATÓRIOS NA TABELA:
-1. Consignee / CNPJ
-2. Incoterm
-3. Peso Bruto Total
-4. Peso Líquido Total
-5. Valor Mercadoria (da Invoice, COM MOEDA)
-6. Frete (do HAWB/BL, COM MOEDA)
-7. NCM Principal
-8. Número do Conhecimento (AWB/BL)
+REGRA CRÍTICA: "ND" em um documento + valor em outro = ✅ (não é divergência!)
 
 ${EXTRACTION_INSTRUCTIONS}
 ${CHB_FORMAT_HTML}
@@ -957,6 +707,7 @@ async function callAnthropicAPI(prompt: string, filesContent: { name: string; co
   });
 
   console.log(`Calling Anthropic API with ${filesContent.length} files...`);
+  console.log(`Prompt length: ${prompt.length} chars`);
 
   const response = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
