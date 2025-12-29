@@ -364,28 +364,57 @@ ${clientConfig.instrucoes_personalizadas}
 }
 
 const EXTRACTION_INSTRUCTIONS = `
-═══════════════════════════════════════════════════════════════════════════════
-INSTRUÇÕES DE EXTRAÇÃO — VERSÃO ULTRA-RIGOROSA (REVISÃO DEZEMBRO 2025)
-═══════════════════════════════════════════════════════════════════════════════
-
-Você é um auditor SÊNIOR especialista em documentos de comércio exterior.
-MISSÃO: Extrair TODOS os dados de TODOS os documentos. "ND" é FRACASSO.
-
 ╔═══════════════════════════════════════════════════════════════════════════════╗
-║  REGRA ABSOLUTA: CADA "ND" DESNECESSÁRIO É UMA FALHA CRÍTICA                 ║
-║  Taxa máxima de ND permitida: 10%. Acima = análise rejeitada.                 ║
-║                                                                                ║
-║  SE O DADO EXISTE EM QUALQUER DOCUMENTO → EXTRAIA E MOSTRE                   ║
-║                                                                                ║
-║  ATENÇÃO: ND só é aceitável quando o dado REALMENTE não existe no documento!║
-║  Leia TODAS as páginas antes de usar ND.                                      ║
+║                    INSTRUÇÕES DE EXTRAÇÃO — VERSÃO 3.0                        ║
+║                        REVISÃO DEZEMBRO 2025                                   ║
 ╚═══════════════════════════════════════════════════════════════════════════════╝
 
-⚠️ ANTES DE USAR "ND" PERGUNTE-SE:
-1. Li TODAS as páginas do documento?
+ATENÇÃO MÁXIMA: LEIA CADA DOCUMENTO COMPLETAMENTE ANTES DE EXTRAIR DADOS!
+
+═══════════════════════════════════════════════════════════════════════════════
+⚠️⚠️⚠️ REGRAS FUNDAMENTAIS - LEIA PRIMEIRO! ⚠️⚠️⚠️
+═══════════════════════════════════════════════════════════════════════════════
+
+1. CADA DOCUMENTO É UMA COLUNA SEPARADA NA TABELA
+   - Se você recebe 7 arquivos, a tabela tem 7 colunas de dados
+   - NUNCA misture dados de documentos diferentes na mesma coluna
+   - O nome do arquivo é o cabeçalho da coluna
+
+2. LEIA O DOCUMENTO INTEIRO ANTES DE EXTRAIR
+   - Não pare na primeira página
+   - Valores totais geralmente estão no FINAL do documento
+   - Pesos totais geralmente estão no RODAPÉ ou última linha
+
+3. CADA ARQUIVO TEM SEU PRÓPRIO DADO
+   - inv_01.pdf tem SEU valor total
+   - inv_02.pdf tem SEU valor total (pode ser diferente!)
+   - pack_01.pdf tem SEUS pesos
+   - HAWB.pdf tem SUAS informações de transporte
+
+4. NÃO CONFUNDA TIPOS DE DOCUMENTO:
+   - INVOICE = valor da mercadoria (produtos vendidos)
+   - PACKING LIST = pesos e dimensões
+   - HAWB/AWB = informações de transporte aéreo
+   - BL/HBL = informações de transporte marítimo
+   - CCT = comprovante de chegada da carga
+
+5. EXTRAIA O DADO CERTO DO DOCUMENTO CERTO:
+   - Valor da mercadoria → extrair da INVOICE
+   - Peso bruto/líquido → extrair do PACKING LIST
+   - Frete → extrair do HAWB, AWB, BL ou documento de transporte
+   - Se documento não tem aquele dado → colocar "ND" para ESSE documento
+
+═══════════════════════════════════════════════════════════════════════════════
+MISSÃO: Extrair TODOS os dados de TODOS os documentos corretamente
+═══════════════════════════════════════════════════════════════════════════════
+
+"ND" só é aceitável quando o dado REALMENTE não existe naquele documento específico.
+
+⚠️ ANTES DE USAR "ND":
+1. Li TODAS as páginas desse documento?
 2. O dado pode estar com outro nome/sinônimo?
 3. O dado pode estar em outra seção (cabeçalho, rodapé, tabela)?
-Se respondeu SIM a qualquer uma → PROCURE NOVAMENTE antes de usar ND!
+Se respondeu SIM a qualquer uma → PROCURE NOVAMENTE!
 
 ═══════════════════════════════════════════════════════════════════════════════
 COMO LER INVOICES COMERCIAIS (UWT E SIMILARES)
@@ -637,34 +666,72 @@ function getPromptByStep(stepId: number, fileNames: string[], clientConfig?: Cli
     return `
 SISTEMA — CRONOS (Etapa 1: Integridade do Pré-Alerta)
 
-Você é o CRONOS, auditor de logística (importação, Brasil).
-Objetivo: verificar consistência interna dos documentos do Pré-Alerta (entre si).
+Você é o CRONOS, auditor SÊNIOR de logística (importação, Brasil).
+Objetivo: verificar consistência interna dos documentos do Pré-Alerta.
 ${clientContext}
-ARQUIVOS PARA ANÁLISE:
+
+═══════════════════════════════════════════════════════════════════════════════
+⚠️ PASSO 1: IDENTIFIQUE CADA DOCUMENTO ANTES DE EXTRAIR ⚠️
+═══════════════════════════════════════════════════════════════════════════════
+
+Você recebeu ${fileNames.length} arquivos. Identifique o TIPO de cada um:
+
 ${fileListText}
 
-ESTRUTURA DA TABELA — CRÍTICO:
+TIPOS ESPERADOS:
+- "inv_" ou "Invoice" = INVOICE COMERCIAL (contém valor da mercadoria)
+- "pack_" ou "Packing" = PACKING LIST (contém pesos e dimensões)
+- "HAWB" ou "AWB" = CONHECIMENTO AÉREO (contém dados do voo e frete aéreo)
+- "BL" ou "HBL" = CONHECIMENTO MARÍTIMO (contém dados do navio e frete)
+- "cct" = COMPROVANTE DE CHEGADA (CCT da Receita Federal)
+- "DI" ou "relatorio_di" = DRAFT DA DI ou RELATÓRIO DE DI
+- "SEGURO" ou "Certificado" = APÓLICE DE SEGURO
+
+═══════════════════════════════════════════════════════════════════════════════
+⚠️ PASSO 2: EXTRAIA DO DOCUMENTO CORRETO ⚠️
+═══════════════════════════════════════════════════════════════════════════════
+
+ONDE EXTRAIR CADA CAMPO:
+| Campo               | Documento Principal        | Se não encontrar          |
+|---------------------|---------------------------|---------------------------|
+| Valor Mercadoria    | INVOICE (inv_)            | ND para outros docs       |
+| Peso Bruto          | PACKING LIST (pack_)      | HAWB/BL se não houver PL  |
+| Peso Líquido        | PACKING LIST (pack_)      | ND se não houver PL       |
+| Frete               | HAWB, AWB, BL, HBL        | ND para Invoice           |
+| Incoterm            | INVOICE ou HAWB/BL        | Qualquer doc que tenha    |
+| NCM                 | INVOICE                   | DI se não houver na Inv   |
+| Container/AWB       | HAWB, BL, CCT             | ND para Invoice           |
+| Consignee/CNPJ      | INVOICE, HAWB, BL         | Qualquer doc que tenha    |
+
+═══════════════════════════════════════════════════════════════════════════════
+⚠️ PASSO 3: CONSTRUA A TABELA ⚠️
+═══════════════════════════════════════════════════════════════════════════════
+
+ESTRUTURA OBRIGATÓRIA:
 <table>
 <thead><tr>
+  <th>Status</th>
   <th>Campo</th>
   <th>${columnHeaders}</th>
-  <th>Status</th>
 </tr></thead>
 ...
 </table>
 
-Use EXATAMENTE os nomes dos arquivos acima como cabeçalhos de coluna.
-NÃO use "Fonte A", "Fonte B" — use os nomes reais: ${columnHeaders}
+REGRAS DA TABELA:
+- STATUS vem PRIMEIRO (para decisão rápida)
+- Use EXATAMENTE os nomes dos arquivos como cabeçalhos: ${columnHeaders}
+- CADA coluna = dados extraídos DAQUELE arquivo específico
+- NÃO copie dados entre colunas — cada documento tem seus próprios dados
 
-CAMPOS A VERIFICAR:
-- Consignee / CNPJ
-- Incoterm / condição de frete
-- Peso bruto total
-- Volume/CBM total
-- Container (nº/tipo/lacre)
-- NCM (raiz + descrição)
-- Valor total (moeda)
-- Datas principais
+CAMPOS OBRIGATÓRIOS NA TABELA:
+1. Consignee / CNPJ
+2. Incoterm
+3. Peso Bruto Total
+4. Peso Líquido Total
+5. Valor Mercadoria (da Invoice, COM MOEDA)
+6. Frete (do HAWB/BL, COM MOEDA)
+7. NCM Principal
+8. Número do Conhecimento (AWB/BL)
 
 ${EXTRACTION_INSTRUCTIONS}
 ${CHB_FORMAT_HTML}
@@ -899,7 +966,7 @@ async function callAnthropicAPI(prompt: string, filesContent: { name: string; co
       'anthropic-version': '2023-06-01',
     },
     body: JSON.stringify({
-      model: 'claude-sonnet-4-20250514',
+      model: 'claude-sonnet-4-5',
       max_tokens: 16000,
       temperature: 0, // Maximum determinism for data extraction
       messages: [
