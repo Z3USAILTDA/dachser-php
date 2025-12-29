@@ -24,7 +24,7 @@ export default function ConferenciaChb() {
   
   const { files: dbFiles, fetchFiles, createFile, deleteFile } = useChbFiles(itemId);
   const { runs: dbRuns, fetchRuns, createRun } = useChbRuns(itemId);
-  const { updateItem } = useChbItems();
+  const { updateItem, updateItemClient } = useChbItems();
   const { getConfigByClient } = useChbClientConfig();
   
   const [steps, setSteps] = useState<ChbStep[]>(initialSteps);
@@ -365,12 +365,27 @@ export default function ConferenciaChb() {
         }));
       }
 
-      const analysisData = data as ChbAnalysisResult & { cliente?: string };
+      const analysisData = data as ChbAnalysisResult & { cliente?: string; modal?: 'SEA' | 'AIR' };
       
       setAnalysisResults(prev => ({
         ...prev,
         [activeStep]: analysisData,
       }));
+
+      // Update client and modal in database if identified
+      if (itemId && (analysisData.cliente || analysisData.modal)) {
+        try {
+          await updateItemClient(itemId, analysisData.cliente || '', analysisData.modal);
+          if (analysisData.cliente) {
+            console.log(`Cliente identificado e salvo: ${analysisData.cliente}`);
+          }
+          if (analysisData.modal) {
+            console.log(`Modal identificado e salvo: ${analysisData.modal}`);
+          }
+        } catch (err) {
+          console.error('Error updating client/modal:', err);
+        }
+      }
 
       // Try to load client config if cliente was identified and we dont have one yet
       if (analysisData.cliente && !clientConfig) {
