@@ -48,6 +48,7 @@ interface DadosPagamentoPanelProps {
   cnpjFornecedor?: string;
   dadosBancarios?: DadosBancarios;
   tipoExecucao?: TipoExecucaoPagamento;
+  chavePix?: string;
   onUpdate?: () => void;
 }
 
@@ -59,6 +60,7 @@ export const DadosPagamentoPanel = ({
   cnpjFornecedor,
   dadosBancarios,
   tipoExecucao,
+  chavePix,
   onUpdate
 }: DadosPagamentoPanelProps) => {
   const [copiedField, setCopiedField] = useState<string | null>(null);
@@ -121,14 +123,14 @@ export const DadosPagamentoPanel = ({
   };
 
   const showBoletoSection = isBoleto(formaPagamento as any);
-  const showBankSection = !showBoletoSection; // Sempre mostrar dados bancários para não-boleto
-  const showPixSection = false; // PIX como tipo de execução foi removido
+  const showPixSection = formaPagamento === "PIX";
+  const showBankSection = !showBoletoSection && !showPixSection; // Mostrar dados bancários para TED/DOC
 
   // Completeness indicators
   const hasLinhaDigitavel = !!linhaDigitavel;
   const hasCodigoBarras = !!codigoBarras;
   const hasBankData = dadosBancarios && dadosBancarios.banco && dadosBancarios.agencia && dadosBancarios.conta_corrente;
-  const hasPixKey = dadosBancarios?.chave_pix;
+  const hasPixKey = !!chavePix;
 
   const formatBankData = (dados: DadosBancarios) => {
     return `Banco: ${dados.banco}
@@ -368,20 +370,16 @@ CNPJ: ${dados.cnpj}`;
           </div>
           
           <div className="rounded-lg bg-card border border-border p-4">
-            {dadosBancarios?.chave_pix ? (
+            {chavePix ? (
               <div className="space-y-2">
-                <div className="text-sm">
-                  <span className="text-muted-foreground">Tipo:</span>{" "}
-                  <Badge variant="outline" className="text-xs">{dadosBancarios.pix_tipo_chave || "N/A"}</Badge>
-                </div>
                 <div className="flex items-center gap-2">
                   <code className="flex-1 text-sm font-mono bg-muted/50 px-3 py-2 rounded border border-border text-foreground">
-                    {dadosBancarios.chave_pix}
+                    {chavePix}
                   </code>
                   <Button
                     variant="outline"
                     size="icon"
-                    onClick={() => handleCopy(dadosBancarios.chave_pix!, "pix")}
+                    onClick={() => handleCopy(chavePix, "pix")}
                   >
                     {copiedField === "pix" ? (
                       <Check className="h-4 w-4 text-green-500" />
@@ -394,7 +392,7 @@ CNPJ: ${dados.cnpj}`;
             ) : (
               <div className="flex items-center gap-2 text-sm text-yellow-500">
                 <AlertCircle className="h-4 w-4" />
-                <span>Chave PIX não cadastrada para este fornecedor</span>
+                <span>Chave PIX não informada para este voucher</span>
               </div>
             )}
           </div>

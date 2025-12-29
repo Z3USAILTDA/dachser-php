@@ -418,6 +418,7 @@ const EsteiraVoucherDetails = () => {
                 linhaDigitavel={voucher.linhaDigitavel}
                 codigoBarras={voucher.codigoBarras}
                 cnpjFornecedor={voucher.cnpjFornecedor}
+                chavePix={voucher.chavePix}
                 dadosBancarios={voucher.dadosBancarios ? {
                   banco: voucher.dadosBancarios.banco || "",
                   agencia: voucher.dadosBancarios.agencia || "",
