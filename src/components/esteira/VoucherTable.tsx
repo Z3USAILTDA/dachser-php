@@ -117,11 +117,11 @@ export const VoucherTable = ({ vouchers, onViewDetails, onEdit, onDelete, onGoBa
   const [currentPage, setCurrentPage] = useState(1);
   const [showConsolidateDialog, setShowConsolidateDialog] = useState(false);
 
-  // Count eligible vouchers for consolidation
+  // Count eligible vouchers for consolidation (only OPERACAO or FISCAL, not already grouped)
   const eligibleVouchersCount = useMemo(() => {
     return vouchers.filter(v => 
-      ["OPERACAO", "FISCAL", "SUPERVISOR"].includes(v.etapaAtual) && 
-      !v.voucherMasterId
+      ["OPERACAO", "FISCAL"].includes(v.etapaAtual) && 
+      !v.consolidacaoRmNumero
     ).length;
   }, [vouchers]);
 
@@ -204,7 +204,7 @@ export const VoucherTable = ({ vouchers, onViewDetails, onEdit, onDelete, onGoBa
         {eligibleVouchersCount >= 2 && (
           <div className="flex items-center justify-between px-4 py-3 border-b border-primary/10 bg-muted/30">
             <span className="text-sm text-muted-foreground">
-              {eligibleVouchersCount} voucher(s) elegíveis para consolidação
+              {eligibleVouchersCount} voucher(s) elegíveis para agrupamento (OPERACAO/FISCAL)
             </span>
             <Button
               variant="outline"
@@ -213,7 +213,7 @@ export const VoucherTable = ({ vouchers, onViewDetails, onEdit, onDelete, onGoBa
               className="gap-2"
             >
               <Layers className="h-4 w-4" />
-              Consolidar Vouchers
+              Agrupar Vouchers
             </Button>
           </div>
         )}

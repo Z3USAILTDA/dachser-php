@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import {
   Dialog,
   DialogContent,
@@ -13,7 +13,8 @@ import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Layers, Star, Search } from "lucide-react";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Layers, Search, AlertTriangle } from "lucide-react";
 import { Voucher } from "@/types/voucher";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
@@ -24,6 +25,8 @@ interface ConsolidarVouchersDialogProps {
   onOpenChange: (open: boolean) => void;
   vouchers: Voucher[];
   onSuccess: () => void;
+  /** Opcional: Restringir a uma etapa específica */
+  etapaFiltro?: "OPERACAO" | "FISCAL";
 }
 
 export const ConsolidarVouchersDialog = ({
@@ -31,20 +34,32 @@ export const ConsolidarVouchersDialog = ({
   onOpenChange,
   vouchers,
   onSuccess,
+  etapaFiltro,
 }: ConsolidarVouchersDialogProps) => {
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
-  const [masterId, setMasterId] = useState<string>("");
   const [numeroRM, setNumeroRM] = useState("");
   const [loading, setLoading] = useState(false);
   const [search, setSearch] = useState("");
 
+  // Determina a etapa do primeiro voucher selecionado (para filtrar os demais)
+  const etapaSelecionada = useMemo(() => {
+    if (etapaFiltro) return etapaFiltro;
+    if (selectedIds.length === 0) return null;
+    const firstSelected = vouchers.find((v) => v.id === selectedIds[0]);
+    return firstSelected?.etapaAtual || null;
+  }, [selectedIds, vouchers, etapaFiltro]);
+
   // Filter vouchers available for consolidation (same stage, not already consolidated)
   const availableVouchers = useMemo(() => {
     return vouchers.filter((v) => {
-      // Only OPERACAO, FISCAL or SUPERVISOR stage vouchers can be consolidated
-      if (!["OPERACAO", "FISCAL", "SUPERVISOR"].includes(v.etapaAtual)) return false;
-      // Already a child of a master
-      if (v.voucherMasterId) return false;
+      // Only OPERACAO or FISCAL stage vouchers can be consolidated
+      if (!["OPERACAO", "FISCAL"].includes(v.etapaAtual)) return false;
+      // Already consolidated (tem consolidacao_rm_numero)
+      if (v.consolidacaoRmNumero) return false;
+      // Se há etapa filtro, só mostrar da mesma etapa
+      if (etapaFiltro && v.etapaAtual !== etapaFiltro) return false;
+      // Se já tem vouchers selecionados, só mostrar da mesma etapa
+      if (etapaSelecionada && v.etapaAtual !== etapaSelecionada) return false;
       // Match search
       if (search) {
         const searchLower = search.toLowerCase();
@@ -55,7 +70,7 @@ export const ConsolidarVouchersDialog = ({
       }
       return true;
     });
-  }, [vouchers, search]);
+  }, [vouchers, search, etapaFiltro, etapaSelecionada]);
 
   const selectedVouchers = useMemo(
     () => vouchers.filter((v) => selectedIds.includes(v.id)),
@@ -83,20 +98,10 @@ export const ConsolidarVouchersDialog = ({
   const handleToggle = (voucherId: string) => {
     setSelectedIds((prev) => {
       if (prev.includes(voucherId)) {
-        // If removing the master, clear master selection
-        if (masterId === voucherId) {
-          setMasterId("");
-        }
         return prev.filter((id) => id !== voucherId);
       }
       return [...prev, voucherId];
     });
-  };
-
-  const handleSetMaster = (voucherId: string) => {
-    if (selectedIds.includes(voucherId)) {
-      setMasterId(voucherId);
-    }
   };
 
   const handleConsolidar = async () => {
@@ -104,12 +109,15 @@ export const ConsolidarVouchersDialog = ({
       toast.error("Selecione pelo menos 2 vouchers para consolidar");
       return;
     }
-    if (!masterId) {
-      toast.error("Selecione qual voucher será o master");
-      return;
-    }
     if (!numeroRM.trim()) {
       toast.error("Informe o número RM definitivo");
+      return;
+    }
+
+    // Validar que todos são da mesma etapa
+    const etapas = new Set(selectedVouchers.map((v) => v.etapaAtual));
+    if (etapas.size > 1) {
+      toast.error("Todos os vouchers devem ser da mesma etapa");
       return;
     }
 
@@ -121,7 +129,6 @@ export const ConsolidarVouchersDialog = ({
         body: {
           action: "consolidar_vouchers",
           voucher_ids: selectedIds,
-          master_id: masterId,
           numero_rm: numeroRM.trim(),
           user_id: user.id,
           user_name: user.name,
@@ -132,9 +139,8 @@ export const ConsolidarVouchersDialog = ({
         throw new Error(data?.error || error?.message || "Erro ao consolidar vouchers");
       }
 
-      const masterVoucher = selectedVouchers.find((v) => v.id === masterId);
-      toast.success("Vouchers consolidados com sucesso", {
-        description: `${selectedIds.length} vouchers consolidados no master ${masterVoucher?.numeroSPO}`,
+      toast.success("Vouchers agrupados com sucesso", {
+        description: `${selectedIds.length} vouchers vinculados ao RM ${numeroRM.trim()}`,
       });
 
       onSuccess();
@@ -153,11 +159,19 @@ export const ConsolidarVouchersDialog = ({
     if (!loading) {
       onOpenChange(false);
       setSelectedIds([]);
-      setMasterId("");
       setNumeroRM("");
       setSearch("");
     }
   };
+
+  // Reset selection when dialog closes
+  useEffect(() => {
+    if (!open) {
+      setSelectedIds([]);
+      setNumeroRM("");
+      setSearch("");
+    }
+  }, [open]);
 
   return (
     <Dialog open={open} onOpenChange={handleClose}>
@@ -165,15 +179,25 @@ export const ConsolidarVouchersDialog = ({
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Layers className="h-5 w-5 text-primary" />
-            Consolidar Vouchers
+            Agrupar Vouchers
           </DialogTitle>
           <DialogDescription>
-            Selecione os vouchers que serão consolidados em um único voucher master.
-            Isso é útil quando o RM gera uma única fatura para múltiplos vouchers.
+            Selecione os vouchers que serão agrupados sob o mesmo número RM.
+            Apenas vouchers da mesma etapa podem ser agrupados.
           </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-4">
+          {/* Alerta de etapa */}
+          {etapaSelecionada && (
+            <Alert className="bg-primary/10 border-primary/30">
+              <AlertDescription className="flex items-center gap-2">
+                <Layers className="h-4 w-4" />
+                Agrupando vouchers da etapa: <strong>{etapaSelecionada}</strong>
+              </AlertDescription>
+            </Alert>
+          )}
+
           {/* Search */}
           <div className="relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -190,20 +214,19 @@ export const ConsolidarVouchersDialog = ({
             <div className="p-2 space-y-1">
               {availableVouchers.length === 0 ? (
                 <p className="text-center text-muted-foreground py-8 text-sm">
-                  Nenhum voucher disponível para consolidação
+                  {selectedIds.length > 0 
+                    ? `Não há mais vouchers na etapa ${etapaSelecionada} disponíveis`
+                    : "Nenhum voucher disponível para agrupamento"}
                 </p>
               ) : (
                 availableVouchers.map((voucher) => {
                   const isSelected = selectedIds.includes(voucher.id);
-                  const isMaster = masterId === voucher.id;
                   return (
                     <div
                       key={voucher.id}
                       className={`flex items-center gap-3 p-3 rounded-lg border transition-colors ${
                         isSelected
-                          ? isMaster
-                            ? "bg-primary/10 border-primary"
-                            : "bg-accent/50 border-accent"
+                          ? "bg-primary/10 border-primary"
                           : "hover:bg-muted/50"
                       }`}
                     >
@@ -214,12 +237,9 @@ export const ConsolidarVouchersDialog = ({
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2">
                           <span className="font-mono font-medium">{voucher.numeroSPO}</span>
-                          {isMaster && (
-                            <Badge className="bg-primary text-primary-foreground gap-1">
-                              <Star className="h-3 w-3" />
-                              Master
-                            </Badge>
-                          )}
+                          <Badge variant="outline" className="text-xs">
+                            {voucher.etapaAtual}
+                          </Badge>
                         </div>
                         <p className="text-sm text-muted-foreground truncate">
                           {voucher.fornecedor || "Sem fornecedor"} • {voucher.moeda}{" "}
@@ -230,18 +250,7 @@ export const ConsolidarVouchersDialog = ({
                         <p>Venc: {voucher.vencimento && !isNaN(new Date(voucher.vencimento).getTime()) 
                           ? format(new Date(voucher.vencimento), "dd/MM/yyyy") 
                           : "-"}</p>
-                        <p>{voucher.etapaAtual}</p>
                       </div>
-                      {isSelected && !isMaster && (
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => handleSetMaster(voucher.id)}
-                          className="text-xs"
-                        >
-                          Definir Master
-                        </Button>
-                      )}
                     </div>
                   );
                 })
@@ -262,27 +271,28 @@ export const ConsolidarVouchersDialog = ({
                   BRL {totalValor.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
                 </span>
               </div>
-              {masterId && (
-                <div className="flex justify-between text-sm">
-                  <span>Master:</span>
-                  <span className="font-medium text-primary">
-                    {selectedVouchers.find((v) => v.id === masterId)?.numeroSPO}
-                  </span>
-                </div>
-              )}
+              <div className="flex justify-between text-sm">
+                <span>Etapa:</span>
+                <span className="font-medium text-primary">
+                  {etapaSelecionada}
+                </span>
+              </div>
             </div>
           )}
 
           {/* RM Number */}
           <div className="space-y-2">
-            <Label htmlFor="numero-rm">Número RM Definitivo *</Label>
+            <Label htmlFor="numero-rm">Número RM (Identificador do Grupo) *</Label>
             <Input
               id="numero-rm"
-              placeholder="Informe o número RM gerado pelo sistema"
+              placeholder="Informe o número RM que identificará este grupo"
               value={numeroRM}
               onChange={(e) => setNumeroRM(e.target.value)}
               disabled={loading}
             />
+            <p className="text-xs text-muted-foreground">
+              Este número será usado para identificar todos os vouchers agrupados
+            </p>
           </div>
         </div>
 
@@ -292,9 +302,9 @@ export const ConsolidarVouchersDialog = ({
           </Button>
           <Button
             onClick={handleConsolidar}
-            disabled={loading || selectedIds.length < 2 || !masterId || !numeroRM.trim()}
+            disabled={loading || selectedIds.length < 2 || !numeroRM.trim()}
           >
-            {loading ? "Consolidando..." : "Consolidar Vouchers"}
+            {loading ? "Agrupando..." : "Agrupar Vouchers"}
           </Button>
         </DialogFooter>
       </DialogContent>
