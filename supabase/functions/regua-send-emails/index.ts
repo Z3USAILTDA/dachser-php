@@ -160,10 +160,12 @@ const buildTemplateText = (
     subject = "Lembrete de Vencimento – Faturas em Aberto";
     bodyBefore = `Prezados(as),
 
-Segue relação de faturas até o momento:`;
+Gostaríamos de informar que as faturas listadas abaixo têm vencimento previsto para os próximos dias.`;
     bodyAfter = `
-Recomendamos verificar o agendamento dos pagamentos para evitar qualquer imprevisto quanto ao prazo. Caso já estejam programados, pedimos a gentileza de desconsiderar esta mensagem.
+Recomendamos verificar o agendamento do pagamento para evitar qualquer imprevisto quanto ao prazo. Caso o pagamento já esteja programado, pedimos a gentileza de desconsiderar esta mensagem.
+
 Em caso de dúvidas ou necessidade de esclarecimentos, a nossa equipa está à disposição através do e-mail jessica.costa@dachser.com ou pelo telefone +55 (19) 3312-6185.
+
 Agradecemos a sua atenção e permanecemos à disposição.
 ${FOOTER_LEGAL}`;
     return { subject, bodyBefore, bodyAfter };
@@ -176,11 +178,13 @@ ${FOOTER_LEGAL}`;
         subject = "Aviso de Atraso – Faturas em Aberto";
         bodyBefore = `Prezados(as),
 
-Verificamos em nosso sistema que a(s) fatura(s) abaixo encontram-se em atraso.`;
+Verificamos que as faturas listadas abaixo, encontram-se em atraso.`;
         bodyAfter = `
-Solicitamos, por gentileza, a regularização dos pagamentos no menor prazo possível. Caso já tenham sido efetuados, favor desconsiderar este aviso.
+Solicitamos, por gentileza, a regularização do pagamento no menor prazo possível. Caso já tenha sido efetuado, favor desconsiderar este aviso.
+
 Havendo qualquer divergência ou necessidade de esclarecimentos, pedimos que nos informem para conferência imediata. Nossa equipa está à disposição através do e-mail jessica.costa@dachser.com ou pelo telefone +55 (19) 3312-6185.
-Agradecemos a sua atenção e contamos com a sua colaboração para a regularização destas pendências.
+
+Agradecemos a sua atenção e contamos com a sua colaboração para a regularização desta pendência.
 ${FOOTER_LEGAL}`;
         return { subject, bodyBefore, bodyAfter };
 
@@ -188,71 +192,78 @@ ${FOOTER_LEGAL}`;
         subject = "Pendência de Pagamento – Faturas em Aberto";
         bodyBefore = `Prezados(as),
 
-Até o momento, não identificamos o pagamento das faturas listadas abaixo:`;
+Até o presente momento, não identificamos o pagamento das faturas listadas abaixo.`;
         bodyAfter = `
-Solicitamos a regularização destas pendências no menor prazo possível. Caso os pagamentos já tenham sido realizados, pedimos a gentileza de desconsiderar esta mensagem.
+Solicitamos, por gentileza, a regularização desta pendência no menor prazo possível. Caso o pagamento já tenha sido efetuado, favor desconsiderar este aviso.
+
 Em caso de dúvidas ou divergências, nossa equipa encontra-se à disposição através do e-mail jessica.costa@dachser.com ou pelo telefone +55 (19) 3312-6185.
-Agradecemos a sua atenção e colaboração.
+
+Agradecemos a atenção e colaboração.
 ${FOOTER_LEGAL}`;
         return { subject, bodyBefore, bodyAfter };
 
       case "D15":
-        subject = "2ª Cobrança – Faturas em Aberto";
+        subject = "Urgente – Regularização de Faturas em Aberto";
         bodyBefore = `Prezados(as),
 
-Esta é a segunda notificação referente às faturas listadas abaixo, que permanecem em aberto:`;
+Constatamos que as faturas listadas abaixo permanecem em aberto até a presente data.`;
         bodyAfter = `
-Informamos que, caso a regularização não seja efetuada nos próximos dias, poderemos adotar medidas administrativas, incluindo a possível suspensão de serviços e/ou protesto dos títulos.
+Para evitar a incidência de encargos adicionais e o encaminhamento do título para protesto, solicitamos a regularização imediata do pagamento.
 
-Solicitamos a regularização imediata. Caso os pagamentos já tenham sido realizados, favor nos enviar os comprovantes para baixa em nosso sistema.
-Em caso de dúvidas ou necessidade de negociação, nossa equipa está à disposição através do e-mail jessica.costa@dachser.com ou pelo telefone +55 (19) 3312-6185.
+Caso o pagamento já tenha sido efetuado, pedimos a gentileza de desconsiderar este aviso.
+
+Em caso de dúvidas ou divergências, nossa equipa encontra-se à disposição através do e-mail jessica.costa@dachser.com ou pelo telefone +55 (19) 3312-6185.
+
+Agradecemos a atenção e aguardamos a sua colaboração.
 ${FOOTER_LEGAL}`;
         return { subject, bodyBefore, bodyAfter };
 
       case "D30":
-        subject = "3ª Cobrança – Faturas em Aberto";
+        subject = "Pendência de Pagamento – Faturas em Aberto";
         bodyBefore = `Prezados(as),
 
-Informamos que as faturas listadas abaixo permanecem em aberto há mais de 30 dias:`;
+Verificamos que as faturas listadas abaixo permanecem em aberto até a presente data.`;
         bodyAfter = `
-Informamos que medidas administrativas serão iniciadas caso a regularização não ocorra em até 5 (cinco) dias úteis, incluindo:
-• Suspensão de novos embarques e serviços
-• Inclusão do débito em órgãos de proteção ao crédito
-• Protesto dos títulos em cartório
+Ressaltamos a importância de que os pagamentos sejam efetuados dentro dos prazos estabelecidos, a fim de evitar a suspensão de prazos concedidos e o eventual bloqueio do cadastro em nosso sistema.
 
-Caso deseje negociar os débitos ou esclarecer qualquer divergência, solicitamos contato imediato através do e-mail jessica.costa@dachser.com ou pelo telefone +55 (19) 3312-6185.
+Caso o pagamento já tenha sido realizado, favor desconsiderar este aviso.
+
+Em caso de dúvidas ou divergências, nossa equipa encontra-se à disposição através do e-mail jessica.costa@dachser.com ou pelo telefone +55 (19) 3312-6185.
+
+Agradecemos a sua atenção e aguardamos a regularização desta pendência.
 ${FOOTER_LEGAL}`;
         return { subject, bodyBefore, bodyAfter };
 
       case "D45":
-        subject = "Última Notificação – Faturas em Aberto";
+        subject = "Notificação de Cobrança – Faturas em Aberto";
         bodyBefore = `Prezados(as),
 
-Esta é a última notificação referente às faturas listadas abaixo, que permanecem em aberto:`;
+Notificamos que as faturas listadas abaixo permanecem em aberto em nosso sistema.`;
         bodyAfter = `
-Comunicamos que seu cadastro encontra-se BLOQUEADO para novos serviços até a quitação dos débitos.
+Salientamos que, caso o pagamento não seja regularizado de forma imediata, poderemos adotar medidas cabíveis, incluindo:
+• Suspensão dos serviços prestados;
+• Inclusão do débito em órgãos de proteção ao crédito;
+• Encaminhamento do processo ao nosso departamento jurídico.
 
-Além disso, informamos que:
-• Os títulos serão encaminhados para protesto em cartório nos próximos dias
-• Os débitos serão incluídos nos órgãos de proteção ao crédito (SPC/SERASA)
+Caso o pagamento já tenha sido realizado, favor desconsiderar esta notificação.
 
-Solicitamos a regularização urgente para evitar maiores transtornos. Para negociação ou esclarecimentos, entre em contato através do e-mail jessica.costa@dachser.com ou pelo telefone +55 (19) 3312-6185.
+Em caso de dúvidas ou divergências, nossa equipa está à disposição através do e-mail jessica.costa@dachser.com ou pelo telefone +55 (19) 3312-6185.
+
+Aguardamos a sua colaboração para evitar a adoção das medidas acima mencionadas.
 ${FOOTER_LEGAL}`;
         return { subject, bodyBefore, bodyAfter };
 
       case "D60":
-        subject = "Última Notificação – Encaminhamento Jurídico";
+        subject = "Notificação Final – Faturas em Aberto";
         bodyBefore = `Prezados(as),
 
-Esta é a ÚLTIMA NOTIFICAÇÃO referente às faturas listadas abaixo, que encontram-se em aberto há mais de 60 dias:`;
+Conforme nossos registros, as faturas listadas abaixo permanecem em aberto até a presente data.`;
         bodyAfter = `
-Informamos que, caso a regularização não seja efetuada em até 48 (quarenta e oito) horas, os débitos serão encaminhados ao nosso departamento jurídico para adoção das medidas cabíveis, incluindo:
-• Execução judicial dos débitos
-• Penhora de bens
-• Custas processuais e honorários advocatícios a cargo do devedor
+Notificamos que, caso não ocorra a regularização imediata do débito, este será encaminhado para cobrança extrajudicial, podendo resultar na inclusão do nome da empresa em órgãos de proteção ao crédito.
 
-Até o momento, não recebemos nenhuma notificação informando o motivo do atraso. Dessa forma, solicitamos que entre em contato conosco, gentilmente.
-Em caso de dúvidas ou necessidade de esclarecimentos, nossa equipa está à disposição através do e-mail jessica.costa@dachser.com ou pelo telefone +55 (19) 3312-6185.
+Caso o pagamento já tenha sido efetuado, favor desconsiderar esta notificação.
+
+Em caso de dúvidas ou divergências, nossa equipa encontra-se à disposição através do e-mail jessica.costa@dachser.com ou pelo telefone +55 (19) 3312-6185.
 ${FOOTER_LEGAL}`;
         return { subject, bodyBefore, bodyAfter };
     }
@@ -263,44 +274,57 @@ ${FOOTER_LEGAL}`;
         subject = "Aviso de Atraso – Faturas à Vista em Aberto";
         bodyBefore = `Prezados(as),
 
-Verificamos em nosso sistema que as faturas à vista abaixo encontram-se em atraso:`;
+Identificamos que as faturas listadas abaixo, encontram-se em atraso.`;
         bodyAfter = `
-Por se tratarem de faturas à vista, solicitamos a regularização imediata dos pagamentos.
-Havendo qualquer divergência ou necessidade de esclarecimentos, pedimos que nos informem. Nossa equipa está à disposição através do e-mail jessica.costa@dachser.com ou pelo telefone +55 (19) 3312-6185.
+Solicitamos a regularização do pagamento no menor prazo possível. Caso já tenha sido efetuado, favor desconsiderar este aviso.
+
+Em caso de dúvidas ou divergências, nossa equipa encontra-se à disposição através do e-mail jessica.costa@dachser.com ou pelo telefone +55 (19) 3312-6185.
+
+Agradecemos a sua atenção e colaboração.
 ${FOOTER_LEGAL}`;
         return { subject, bodyBefore, bodyAfter };
 
       case "D7":
-        subject = "Pendência Urgente – Faturas à Vista em Aberto";
+        subject = "Pendência de Pagamento – Faturas à Vista em Aberto";
         bodyBefore = `Prezados(as),
 
-As faturas à vista listadas abaixo permanecem em aberto:`;
+Até o momento, não identificamos o pagamento das faturas listadas abaixo.`;
         bodyAfter = `
-Por se tratarem de faturas à vista, informamos que medidas administrativas poderão ser adotadas caso a regularização não ocorra nos próximos dias.
+Solicitamos a regularização desta pendência no menor prazo possível. Caso o pagamento já tenha sido efetuado, favor desconsiderar este aviso.
 
-Solicitamos a regularização imediata. Em caso de dúvidas, nossa equipa está à disposição através do e-mail jessica.costa@dachser.com ou pelo telefone +55 (19) 3312-6185.
+Em caso de dúvidas ou divergências, nossa equipa encontra-se à disposição através do e-mail jessica.costa@dachser.com ou pelo telefone +55 (19) 3312-6185.
+
+Agradecemos a sua atenção e colaboração.
 ${FOOTER_LEGAL}`;
         return { subject, bodyBefore, bodyAfter };
 
       case "D15":
-        subject = "Notificação – Faturas à Vista em Aberto";
+        subject = "Urgente – Regularização de Faturas à Vista";
         bodyBefore = `Prezados(as),
 
-As faturas à vista listadas abaixo encontram-se em aberto:`;
+Identificamos que as faturas listadas abaixo ainda não foram quitadas.`;
         bodyAfter = `
-Informamos que, por se tratarem de faturas à vista, os débitos serão encaminhados para as medidas cabíveis caso não sejam regularizados.
+Para evitar a incidência de encargos adicionais e o encaminhamento do boleto com instrução de protesto em 3 dias, solicitamos que a regularização seja feita imediatamente.
 
-Para negociação ou esclarecimentos, entre em contato através do e-mail jessica.costa@dachser.com ou pelo telefone +55 (19) 3312-6185.
+Caso o pagamento já tenha sido efetuado, favor desconsiderar este aviso.
+
+Em caso de dúvidas ou divergências, nossa equipa encontra-se à disposição através do e-mail jessica.costa@dachser.com ou pelo telefone +55 (19) 3312-6185.
+
+Agradecemos a sua atenção e colaboração.
 ${FOOTER_LEGAL}`;
         return { subject, bodyBefore, bodyAfter };
 
       case "D30":
-        subject = "Encaminhamento Jurídico – Faturas à Vista";
+        subject = "Notificação Final – Faturas à Vista em Aberto";
         bodyBefore = `Prezados(as),
 
-ÚLTIMA NOTIFICAÇÃO: As faturas à vista listadas abaixo serão encaminhadas ao departamento jurídico caso não sejam regularizadas em até 48 horas:`;
+De acordo com nossos registros, as faturas listadas abaixo ainda não foram regularizadas.`;
         bodyAfter = `
-Para regularização imediata ou negociação, entre em contato através do e-mail jessica.costa@dachser.com ou pelo telefone +55 (19) 3312-6185.
+Informamos que, caso o pagamento não seja efetuado imediatamente, o débito poderá ser encaminhado para cobrança extrajudicial ou judicial, podendo acarretar custos adicionais e inclusão em órgãos de proteção ao crédito.
+
+Caso o pagamento já tenha sido realizado, favor desconsiderar esta notificação.
+
+Em caso de dúvidas ou divergências, nossa equipa encontra-se à disposição através do e-mail jessica.costa@dachser.com ou pelo telefone +55 (19) 3312-6185.
 ${FOOTER_LEGAL}`;
         return { subject, bodyBefore, bodyAfter };
     }
