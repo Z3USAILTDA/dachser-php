@@ -18,6 +18,7 @@ export interface FilterValues {
   vencimentoInicio: string;
   vencimentoFim: string;
   origemCriacao: string;
+  agrupamento: string;
 }
 
 export const VoucherFilters = ({ onSearch }: VoucherFiltersProps) => {
@@ -30,6 +31,7 @@ export const VoucherFilters = ({ onSearch }: VoucherFiltersProps) => {
     vencimentoInicio: "",
     vencimentoFim: "",
     origemCriacao: "all",
+    agrupamento: "all",
   });
 
   const handleFilterChange = (key: keyof FilterValues, value: string) => {
@@ -48,6 +50,7 @@ export const VoucherFilters = ({ onSearch }: VoucherFiltersProps) => {
       vencimentoInicio: "",
       vencimentoFim: "",
       origemCriacao: "all",
+      agrupamento: "all",
     };
     setFilters(clearedFilters);
     onSearch(clearedFilters);
@@ -173,6 +176,20 @@ export const VoucherFilters = ({ onSearch }: VoucherFiltersProps) => {
               <SelectItem value="all">Todas</SelectItem>
               <SelectItem value="MANUAL">Manual</SelectItem>
               <SelectItem value="RM">Via RM</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+
+        <div>
+          <Label>Agrupamento</Label>
+          <Select value={filters.agrupamento} onValueChange={(v) => handleFilterChange("agrupamento", v)}>
+            <SelectTrigger>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Todos</SelectItem>
+              <SelectItem value="agrupados">Agrupados</SelectItem>
+              <SelectItem value="nao_agrupados">Não Agrupados</SelectItem>
             </SelectContent>
           </Select>
         </div>

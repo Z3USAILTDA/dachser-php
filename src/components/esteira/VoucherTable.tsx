@@ -28,6 +28,7 @@ export interface FilterValues {
   vencimentoInicio: string;
   vencimentoFim: string;
   origemCriacao: string;
+  agrupamento: string;
 }
 
 type SortField = "numeroSPO" | "fornecedor" | "valor" | "vencimento" | "etapaAtual" | "tempoNaEtapa" | "createdAt";
