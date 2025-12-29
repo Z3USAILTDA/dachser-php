@@ -1113,6 +1113,8 @@ serve(async (req) => {
       });
 
       try {
+        // Validação: MBL deve ter formato válido (4 letras + números) e ETD >= 01/12/2025
+        // Regex em SQL: mawb deve começar com 4 letras seguidas de números
         const result = await client.execute(`
           INSERT INTO dados_dachser.t_tracking_sea (
             mbl_id, tipo_processo, container,
@@ -1137,7 +1139,14 @@ serve(async (req) => {
             md.emails_cliente AS email_cliente,
             COALESCE(md.active, 1) AS active
           FROM dados_dachser.t_master_dados md
-          WHERE md.mawb IS NOT NULL AND md.container IS NOT NULL
+          WHERE md.mawb IS NOT NULL 
+            AND md.mawb != ''
+            AND md.container IS NOT NULL
+            AND md.container != ''
+            -- Validação de formato: 4 letras seguidas de números
+            AND md.mawb REGEXP '^[A-Za-z]{4}[0-9]+$'
+            -- Filtro de antiguidade: ETD >= 01/12/2025
+            AND md.etd >= '2025-12-01'
           ON DUPLICATE KEY UPDATE
             tipo_processo = VALUES(tipo_processo),
             consignee = VALUES(consignee),
