@@ -271,7 +271,7 @@ export default function ChbAnalises() {
                   <tr className="bg-[#14151c]">
                     <th className="px-[10px] py-[10px] text-left text-[0.75rem] uppercase tracking-[0.12em] text-[#aaaaaa] font-medium sticky top-0 bg-[#14151c] z-[5] border-b border-[rgba(255,255,255,.09)]">Referência</th>
                     <th className="px-[10px] py-[10px] text-left text-[0.75rem] uppercase tracking-[0.12em] text-[#aaaaaa] font-medium sticky top-0 bg-[#14151c] z-[5] border-b border-[rgba(255,255,255,.09)]">Cliente</th>
-                    <th className="px-[10px] py-[10px] text-left text-[0.75rem] uppercase tracking-[0.12em] text-[#aaaaaa] font-medium sticky top-0 bg-[#14151c] z-[5] border-b border-[rgba(255,255,255,.09)]">Modal</th>
+                    
                     <th className="px-[10px] py-[10px] text-left text-[0.75rem] uppercase tracking-[0.12em] text-[#aaaaaa] font-medium sticky top-0 bg-[#14151c] z-[5] border-b border-[rgba(255,255,255,.09)]">Status</th>
                     <th className="px-[10px] py-[10px] text-left text-[0.75rem] uppercase tracking-[0.12em] text-[#aaaaaa] font-medium sticky top-0 bg-[#14151c] z-[5] border-b border-[rgba(255,255,255,.09)]">Etapas</th>
                     <th className="px-[10px] py-[10px] text-left text-[0.75rem] uppercase tracking-[0.12em] text-[#aaaaaa] font-medium sticky top-0 bg-[#14151c] z-[5] border-b border-[rgba(255,255,255,.09)]">Submeter</th>
@@ -284,19 +284,6 @@ export default function ChbAnalises() {
                     <tr key={item.id} className="border-b border-[rgba(255,255,255,.09)] hover:bg-[rgba(255,255,255,.05)] transition-colors">
                       <td className="px-[10px] py-[9px] whitespace-nowrap font-mono">{item.reference || "—"}</td>
                       <td className="px-[10px] py-[9px] whitespace-nowrap">{item.consignee || <span className="text-[#777] italic">A identificar</span>}</td>
-                      <td className="px-[10px] py-[9px] whitespace-nowrap">
-                        {item.modal ? (
-                          <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[0.7rem] font-medium ${
-                            item.modal === 'SEA' 
-                              ? 'bg-blue-500/20 text-blue-400 border border-blue-500/30' 
-                              : 'bg-purple-500/20 text-purple-400 border border-purple-500/30'
-                          }`}>
-                            {item.modal === 'SEA' ? '🚢' : '✈️'} {item.modal}
-                          </span>
-                        ) : (
-                          <span className="text-[#777] italic text-[0.75rem]">—</span>
-                        )}
-                      </td>
                       <td className="px-[10px] py-[9px] whitespace-nowrap">
                         <span className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-full border border-[rgba(255,255,255,.14)] bg-[#111] text-[0.8rem] ${getStatusColor(item.status_macro)}`}>
                           {statusLabels[item.status_macro] || item.status_macro}
