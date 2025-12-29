@@ -6,14 +6,12 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { VoucherActionsMenu } from "./VoucherActionsMenu";
-import { AlertCircle, Eye, Clock, Building2, User, Plane, Ship, Package, FileCheck, FileClock, ArrowUpDown, ArrowUp, ArrowDown, Layers } from "lucide-react";
+import { AlertCircle, Eye, Clock, Building2, User, Plane, Ship, Package, FileCheck, FileClock, ArrowUpDown, ArrowUp, ArrowDown } from "lucide-react";
 import { format, isToday, isPast } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { cn } from "@/lib/utils";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { TablePagination } from "@/components/layout/TablePagination";
-import { ConsolidarVouchersDialog } from "./ConsolidarVouchersDialog";
-import { VouchersAgrupadosModal } from "./VouchersAgrupadosModal";
 
 const PAGE_SIZE = 20;
 
@@ -28,7 +26,6 @@ export interface FilterValues {
   vencimentoInicio: string;
   vencimentoFim: string;
   origemCriacao: string;
-  agrupamento: string;
 }
 
 type SortField = "numeroSPO" | "fornecedor" | "valor" | "vencimento" | "etapaAtual" | "tempoNaEtapa" | "createdAt";
@@ -117,17 +114,6 @@ export const VoucherTable = ({ vouchers, onViewDetails, onEdit, onDelete, onGoBa
   const [sortField, setSortField] = useState<SortField>("createdAt");
   const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
   const [currentPage, setCurrentPage] = useState(1);
-  const [showConsolidateDialog, setShowConsolidateDialog] = useState(false);
-  const [showAgrupadosModal, setShowAgrupadosModal] = useState(false);
-  const [selectedRmNumero, setSelectedRmNumero] = useState("");
-
-  // Count eligible vouchers for consolidation (only OPERACAO or FISCAL, not already grouped)
-  const eligibleVouchersCount = useMemo(() => {
-    return vouchers.filter(v => 
-      ["OPERACAO", "FISCAL"].includes(v.etapaAtual) && 
-      !v.consolidacaoRmNumero
-    ).length;
-  }, [vouchers]);
 
   const handleFilterChange = (key: keyof FilterValues, value: string) => {
     onFilterChange({ ...filters, [key]: value });
@@ -204,23 +190,6 @@ export const VoucherTable = ({ vouchers, onViewDetails, onEdit, onDelete, onGoBa
   return (
     <TooltipProvider>
       <div className="border border-primary/20 rounded-xl overflow-hidden bg-card/80 backdrop-blur-sm shadow-lg shadow-primary/5">
-        {/* Toolbar with consolidation button */}
-        {eligibleVouchersCount >= 2 && (
-          <div className="flex items-center justify-between px-4 py-3 border-b border-primary/10 bg-muted/30">
-            <span className="text-sm text-muted-foreground">
-              {eligibleVouchersCount} voucher(s) elegíveis para agrupamento (OPERACAO/FISCAL)
-            </span>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setShowConsolidateDialog(true)}
-              className="gap-2"
-            >
-              <Layers className="h-4 w-4" />
-              Agrupar Vouchers
-            </Button>
-          </div>
-        )}
         <div className="overflow-x-auto">
           <Table>
             <TableHeader>
@@ -352,23 +321,7 @@ export const VoucherTable = ({ vouchers, onViewDetails, onEdit, onDelete, onGoBa
                       onClick={() => onViewDetails(voucher)}
                     >
                       <TableCell className="font-mono font-medium">
-                        <div className="flex items-center gap-2">
-                          <span>{voucher.numeroSPO}</span>
-                          {voucher.consolidacaoRmNumero && (
-                            <Badge 
-                              variant="outline" 
-                              className="gap-1 bg-violet-500/10 text-violet-400 border-violet-500/30 text-[10px] px-1.5 py-0 cursor-pointer hover:bg-violet-500/20 transition-colors"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setSelectedRmNumero(voucher.consolidacaoRmNumero!);
-                                setShowAgrupadosModal(true);
-                              }}
-                            >
-                              <Layers className="h-3 w-3" />
-                              {voucher.consolidacaoRmNumero}
-                            </Badge>
-                          )}
-                        </div>
+                        {voucher.numeroSPO}
                       </TableCell>
                       <TableCell className="font-mono text-xs">
                         {voucher.processoId || "-"}
@@ -536,24 +489,6 @@ export const VoucherTable = ({ vouchers, onViewDetails, onEdit, onDelete, onGoBa
           </div>
         )}
       </div>
-
-      {/* Consolidation Dialog */}
-      <ConsolidarVouchersDialog
-        open={showConsolidateDialog}
-        onOpenChange={setShowConsolidateDialog}
-        vouchers={vouchers}
-        onSuccess={() => {
-          // Trigger a refresh by changing filters slightly and back
-          onFilterChange({ ...filters });
-        }}
-      />
-
-      {/* Vouchers Agrupados Modal */}
-      <VouchersAgrupadosModal
-        open={showAgrupadosModal}
-        onOpenChange={setShowAgrupadosModal}
-        rmNumero={selectedRmNumero}
-      />
     </TooltipProvider>
   );
 };
