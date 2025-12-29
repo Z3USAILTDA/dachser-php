@@ -6,8 +6,7 @@ import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
-import { CheckCircle2, XCircle, Layers } from "lucide-react";
-import { ConsolidarVouchersDialog } from "./ConsolidarVouchersDialog";
+import { CheckCircle2, XCircle } from "lucide-react";
 
 interface VoucherFiscalActionsProps {
   voucher: Voucher;
@@ -20,7 +19,6 @@ export const VoucherFiscalActions = ({ voucher, onUpdate, allVouchers = [] }: Vo
   const [comentarios, setComentarios] = useState(voucher.comentariosFiscal || "");
   const [necessitaAjuste, setNecessitaAjuste] = useState(false);
   const [motivoAjuste, setMotivoAjuste] = useState("");
-  const [showConsolidateDialog, setShowConsolidateDialog] = useState(false);
   const { toast } = useToast();
 
   // Get user data from localStorage (MariaDB auth)
@@ -220,26 +218,7 @@ export const VoucherFiscalActions = ({ voucher, onUpdate, allVouchers = [] }: Vo
           </Button>
         )}
 
-        {/* Consolidation button - only if there are other FISCAL vouchers available */}
-        {allVouchers.filter(v => v.etapaAtual === "FISCAL" && !v.consolidacaoRmNumero).length > 1 && (
-          <Button
-            variant="outline"
-            onClick={() => setShowConsolidateDialog(true)}
-            className="gap-2"
-          >
-            <Layers className="h-4 w-4" />
-            Agrupar Vouchers
-          </Button>
-        )}
       </div>
-
-      <ConsolidarVouchersDialog
-        open={showConsolidateDialog}
-        onOpenChange={setShowConsolidateDialog}
-        vouchers={allVouchers}
-        onSuccess={onUpdate}
-        etapaFiltro="FISCAL"
-      />
     </div>
   );
 };
