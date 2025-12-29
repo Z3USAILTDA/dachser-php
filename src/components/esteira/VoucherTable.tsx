@@ -348,7 +348,25 @@ export const VoucherTable = ({ vouchers, onViewDetails, onEdit, onDelete, onGoBa
                       onClick={() => onViewDetails(voucher)}
                     >
                       <TableCell className="font-mono font-medium">
-                        {voucher.numeroSPO}
+                        <div className="flex items-center gap-2">
+                          <span>{voucher.numeroSPO}</span>
+                          {voucher.consolidacaoRmNumero && (
+                            <Tooltip>
+                              <TooltipTrigger onClick={(e) => e.stopPropagation()}>
+                                <Badge 
+                                  variant="outline" 
+                                  className="gap-1 bg-violet-500/10 text-violet-400 border-violet-500/30 text-[10px] px-1.5 py-0"
+                                >
+                                  <Layers className="h-3 w-3" />
+                                  {voucher.consolidacaoRmNumero}
+                                </Badge>
+                              </TooltipTrigger>
+                              <TooltipContent>
+                                Agrupado no RM: {voucher.consolidacaoRmNumero}
+                              </TooltipContent>
+                            </Tooltip>
+                          )}
+                        </div>
                       </TableCell>
                       <TableCell className="font-mono text-xs">
                         {voucher.processoId || "-"}
