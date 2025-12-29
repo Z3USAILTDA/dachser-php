@@ -26,6 +26,9 @@ interface MenuItem {
   href?: string;
   adminOnly?: boolean;
 }
+// Usuários que só podem ver "Métricas de Uso" no menu ADMIN
+const ADMIN_METRICS_ONLY_USERS = ["ana.tozzo"];
+
 const menuItems: MenuItem[] = [
   {
     id: "admin",
@@ -178,6 +181,19 @@ const Dashboard = () => {
     setActiveMenu(activeMenu === menuId ? null : menuId);
   };
   const filteredMenuItems = menuItems.filter((item) => !item.adminOnly || isAdmin);
+  
+  // Função para filtrar children baseado em restrições de usuário
+  const getVisibleChildren = (item: MenuItem) => {
+    if (!item.children) return [];
+    
+    // Se for menu ADMIN e usuário está na lista de restritos, só mostrar "Métricas de Uso"
+    if (item.id === "admin" && user?.username && ADMIN_METRICS_ONLY_USERS.includes(user.username)) {
+      return item.children.filter(child => child.href === "/admin/metrics");
+    }
+    
+    // Caso contrário, aplicar filtro padrão de adminOnly
+    return item.children.filter(child => !child.adminOnly || isAdmin);
+  };
   return (
     <ScrollArea className="h-screen w-full">
     <div className="min-h-screen relative overflow-x-hidden">
@@ -347,7 +363,7 @@ const Dashboard = () => {
                   <div className="relative flex flex-col items-center">
                     {/* Horizontal connector line */}
                     {(() => {
-                      const visibleChildren = item.children.filter(child => !child.adminOnly || isAdmin);
+                      const visibleChildren = getVisibleChildren(item);
                       return visibleChildren.length > 1 && (
                         <div 
                           className="absolute h-0.5 bg-primary"
@@ -363,7 +379,7 @@ const Dashboard = () => {
 
                     {/* Vertical pins container */}
                     <div className="flex justify-center" style={{ gap: '20px' }}>
-                      {item.children.filter(child => !child.adminOnly || isAdmin).map((child, idx) => (
+                      {getVisibleChildren(item).map((child, idx) => (
                         <div 
                           key={idx} 
                           className="flex flex-col items-center"
