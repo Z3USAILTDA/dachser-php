@@ -175,8 +175,8 @@ export const ConsolidarVouchersDialog = ({
 
   return (
     <Dialog open={open} onOpenChange={handleClose}>
-      <DialogContent className="sm:max-w-2xl max-h-[90vh]">
-        <DialogHeader>
+      <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-hidden flex flex-col">
+        <DialogHeader className="flex-shrink-0">
           <DialogTitle className="flex items-center gap-2">
             <Layers className="h-5 w-5 text-primary" />
             Agrupar Vouchers
@@ -187,10 +187,10 @@ export const ConsolidarVouchersDialog = ({
           </DialogDescription>
         </DialogHeader>
 
-        <div className="space-y-4">
+        <div className="flex-1 min-h-0 space-y-4 overflow-hidden">
           {/* Alerta de etapa */}
           {etapaSelecionada && (
-            <Alert className="bg-primary/10 border-primary/30">
+            <Alert className="bg-primary/10 border-primary/30 flex-shrink-0">
               <AlertDescription className="flex items-center gap-2">
                 <Layers className="h-4 w-4" />
                 Agrupando vouchers da etapa: <strong>{etapaSelecionada}</strong>
@@ -199,7 +199,7 @@ export const ConsolidarVouchersDialog = ({
           )}
 
           {/* Search */}
-          <div className="relative">
+          <div className="relative flex-shrink-0">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
             <Input
               placeholder="Buscar por número SPO ou fornecedor..."
@@ -210,7 +210,7 @@ export const ConsolidarVouchersDialog = ({
           </div>
 
           {/* Voucher List */}
-          <ScrollArea className="h-[280px] border rounded-lg">
+          <ScrollArea className="h-[240px] border rounded-lg flex-shrink-0">
             <div className="p-2 space-y-1">
               {availableVouchers.length === 0 ? (
                 <p className="text-center text-muted-foreground py-8 text-sm">
@@ -235,18 +235,18 @@ export const ConsolidarVouchersDialog = ({
                         onCheckedChange={() => handleToggle(voucher.id)}
                       />
                       <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2">
-                          <span className="font-mono font-medium">{voucher.numeroSPO}</span>
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="font-mono font-medium text-sm">{voucher.numeroSPO}</span>
                           <Badge variant="outline" className="text-xs">
                             {voucher.etapaAtual}
                           </Badge>
                         </div>
-                        <p className="text-sm text-muted-foreground truncate">
+                        <p className="text-xs text-muted-foreground truncate">
                           {voucher.fornecedor || "Sem fornecedor"} • {voucher.moeda}{" "}
                           {(voucher.valor || 0).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
                         </p>
                       </div>
-                      <div className="text-right text-xs text-muted-foreground">
+                      <div className="text-right text-xs text-muted-foreground flex-shrink-0">
                         <p>Venc: {voucher.vencimento && !isNaN(new Date(voucher.vencimento).getTime()) 
                           ? format(new Date(voucher.vencimento), "dd/MM/yyyy") 
                           : "-"}</p>
@@ -260,7 +260,7 @@ export const ConsolidarVouchersDialog = ({
 
           {/* Selected Summary */}
           {selectedIds.length > 0 && (
-            <div className="bg-muted/50 rounded-lg p-3 space-y-3">
+            <div className="bg-muted/50 rounded-lg p-3 space-y-2 flex-shrink-0">
               <div className="flex justify-between text-sm">
                 <span>Vouchers selecionados:</span>
                 <span className="font-medium">{selectedIds.length}</span>
@@ -281,22 +281,19 @@ export const ConsolidarVouchersDialog = ({
           )}
 
           {/* RM Number */}
-          <div className="space-y-2">
+          <div className="space-y-2 flex-shrink-0">
             <Label htmlFor="numero-rm">Número RM (Identificador do Grupo) *</Label>
             <Input
               id="numero-rm"
-              placeholder="Informe o número RM que identificará este grupo"
+              placeholder="Informe o número RM"
               value={numeroRM}
               onChange={(e) => setNumeroRM(e.target.value)}
               disabled={loading}
             />
-            <p className="text-xs text-muted-foreground">
-              Este número será usado para identificar todos os vouchers agrupados
-            </p>
           </div>
         </div>
 
-        <DialogFooter>
+        <DialogFooter className="flex-shrink-0 pt-4">
           <Button variant="outline" onClick={handleClose} disabled={loading}>
             Cancelar
           </Button>
