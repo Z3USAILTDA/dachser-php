@@ -11,7 +11,7 @@ export interface ChbStep {
 export interface ChbDocument {
   id: string;
   name: string;
-  type: 'HBL' | 'Invoice' | 'Packing List' | 'DI' | 'AWB' | 'Certificado';
+  type: string;
   uploadedAt: string;
   size: string;
   stepId?: number;
