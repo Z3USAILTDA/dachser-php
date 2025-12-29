@@ -48,14 +48,22 @@ serve(async (req) => {
     try {
       const airResult = await client.execute(`
         INSERT INTO dados_dachser.t_olimpo_tracking 
-          (mode, asset, flight, tipo_processo, cliente, status, active)
+          (mode, asset, flight, tipo_processo, cliente, eta, etd, ata, atd, status, active)
         SELECT 
           'air' AS mode,
           af.awb AS asset,
           UPPER(REPLACE(af.num_voo, ' ', '')) AS flight,
           dm.tipo_processo,
           COALESCE(NULLIF(TRIM(dm.cliente), ''), 'N/A') AS cliente,
-          'Em trânsito' AS status,
+          COALESCE(dm.eta, af.eta) AS eta,
+          dm.etd AS etd,
+          af.pouso AS ata,
+          af.decolagem AS atd,
+          CASE 
+            WHEN af.pouso IS NOT NULL THEN 'Chegou'
+            WHEN af.decolagem IS NOT NULL THEN 'Em voo'
+            ELSE 'Em trânsito'
+          END AS status,
           TRUE AS active
         FROM dados_dachser.t_awb_voo af
         LEFT JOIN dados_dachser.t_master_dados dm ON TRIM(dm.mawb) = TRIM(af.awb)
@@ -68,6 +76,11 @@ serve(async (req) => {
           flight = VALUES(flight),
           tipo_processo = VALUES(tipo_processo),
           cliente = VALUES(cliente),
+          eta = VALUES(eta),
+          etd = VALUES(etd),
+          ata = VALUES(ata),
+          atd = VALUES(atd),
+          status = VALUES(status),
           updated_at = NOW()
       `);
 
