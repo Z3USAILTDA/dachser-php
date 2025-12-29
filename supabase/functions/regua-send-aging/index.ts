@@ -1,7 +1,7 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { Resend } from "https://esm.sh/resend@2.0.0";
 import { Client } from "https://deno.land/x/mysql@v2.12.1/mod.ts";
-import * as XLSX from "https://esm.sh/xlsx-js-style@1.2.0";
+import XLSX from "npm:xlsx-js-style@1.2.0";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
