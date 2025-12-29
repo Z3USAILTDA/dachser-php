@@ -85,7 +85,6 @@ const menuItems: MenuItem[] = [
       {
         label: "Monitoramento",
         href: "/sea/tracking",
-        adminOnly: true,
       },
     ],
   },
