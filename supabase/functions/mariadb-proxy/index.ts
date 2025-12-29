@@ -3037,7 +3037,7 @@ serve(async (req) => {
           INSERT INTO ai_agente.t_dachser_chb_files 
           (filename, mime, size_bytes, sha256, rel_path, url, created_by)
           VALUES (?, ?, ?, ?, ?, ?, ?)
-        `, [filename, mime || null, sizeBytes || null, sha256 || null, relPath || null, url || null, userId || null]);
+        `, [filename, mime || null, sizeBytes || null, sha256 || null, relPath || '', url || null, userId || null]);
         
         const fileId = fileResult.lastInsertId;
         
