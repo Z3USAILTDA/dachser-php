@@ -4922,13 +4922,17 @@ serve(async (req) => {
           voucher_boleto: voucherBoleto, 
           forma_pag: formaPag, 
           fornecedor: fornecedorRm,
-          cnpj_fornecedor: cnpjFornecedorRm
+          cnpj_fornecedor: cnpjFornecedorRm,
+          chave_pix: chavePix,
+          pix_tipo_chave: pixTipoChave
         } = body as { 
           id_rm?: string; 
           voucher_boleto?: string; 
           forma_pag?: string; 
           fornecedor?: string; 
           cnpj_fornecedor?: string;
+          chave_pix?: string;
+          pix_tipo_chave?: string;
         };
         
         if (!idRm) {
@@ -4963,7 +4967,7 @@ serve(async (req) => {
           }
         }
 
-        console.log('Inserting into t_dados_rm:', { idRm, formaPag, fornecedorRm, regrasFormaPag: regrasFormaPagFinal });
+        console.log('Inserting into t_dados_rm:', { idRm, formaPag, fornecedorRm, regrasFormaPag: regrasFormaPagFinal, chavePix, pixTipoChave });
         
         // Drop and recreate table if it has wrong structure
         try {
@@ -4978,13 +4982,15 @@ serve(async (req) => {
           console.log('Table does not exist yet, will create');
         }
         
-        // Create table with proper structure
+        // Create table with proper structure (includes chave_pix and pix_tipo_chave columns)
         await client.execute(`
           CREATE TABLE IF NOT EXISTS dados_dachser.t_dados_rm (
             id INT AUTO_INCREMENT PRIMARY KEY,
             id_rm VARCHAR(50) NOT NULL,
             nf_disputa TINYINT(1) DEFAULT 0,
             voucher_boleto VARCHAR(60) DEFAULT NULL,
+            chave_pix VARCHAR(255) DEFAULT NULL,
+            pix_tipo_chave VARCHAR(20) DEFAULT NULL,
             forma_pag VARCHAR(50) DEFAULT NULL,
             fornecedor VARCHAR(255) DEFAULT NULL,
             regras_forma_pag VARCHAR(100) DEFAULT NULL,
@@ -4996,11 +5002,23 @@ serve(async (req) => {
           )
         `);
 
+        // Add columns if they don't exist (for existing tables)
+        try {
+          await client.execute(`ALTER TABLE dados_dachser.t_dados_rm ADD COLUMN chave_pix VARCHAR(255) DEFAULT NULL AFTER voucher_boleto`);
+        } catch (alterErr) {
+          // Column might already exist
+        }
+        try {
+          await client.execute(`ALTER TABLE dados_dachser.t_dados_rm ADD COLUMN pix_tipo_chave VARCHAR(20) DEFAULT NULL AFTER chave_pix`);
+        } catch (alterErr) {
+          // Column might already exist
+        }
+
         await client.execute(`
           INSERT INTO dados_dachser.t_dados_rm 
-          (id_rm, nf_disputa, voucher_boleto, forma_pag, fornecedor, regras_forma_pag)
-          VALUES (?, 0, ?, ?, ?, ?)
-        `, [idRm, voucherBoleto || null, formaPag || null, fornecedorRm || null, regrasFormaPagFinal]);
+          (id_rm, nf_disputa, voucher_boleto, chave_pix, pix_tipo_chave, forma_pag, fornecedor, regras_forma_pag)
+          VALUES (?, 0, ?, ?, ?, ?, ?, ?)
+        `, [idRm, voucherBoleto || null, chavePix || null, pixTipoChave || null, formaPag || null, fornecedorRm || null, regrasFormaPagFinal]);
 
         console.log('Inserted into t_dados_rm successfully');
         result = { success: true };

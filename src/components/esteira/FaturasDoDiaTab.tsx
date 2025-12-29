@@ -42,6 +42,8 @@ interface DadosBancarios {
   digito_conta?: string;
   razao_social: string;
   cnpj: string;
+  chavePix?: string;
+  pixTipoChave?: string;
 }
 
 export const FaturasDoDiaTab = () => {
@@ -177,6 +179,8 @@ export const FaturasDoDiaTab = () => {
           action: "insert_dados_rm",
           id_rm: fatura.numero_spo,
           voucher_boleto: isBoleto(fatura.forma_pagamento) ? fatura.linha_digitavel : null,
+          chave_pix: dadosBancarios?.chavePix || null,
+          pix_tipo_chave: dadosBancarios?.pixTipoChave || null,
           forma_pag: fatura.forma_pagamento,
           fornecedor: fatura.fornecedor,
           regras_forma_pag: regraFormaPag
