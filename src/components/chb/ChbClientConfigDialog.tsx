@@ -5,12 +5,15 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Textarea } from '@/components/ui/textarea';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useChbClientConfig, ChbClientConfig, ChbClientConfigInput } from '@/hooks/useChbClientConfig';
 import { toast } from 'sonner';
-import { Settings, Trash2, Plus, Percent, Scale, FileText, MessageSquare } from 'lucide-react';
+import { Settings, Trash2, Plus, Percent, Scale, FileText, MessageSquare, Ship, MapPin, Mail, Clock, DollarSign, Building2, Receipt } from 'lucide-react';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Separator } from '@/components/ui/separator';
 
 interface Props {
   open: boolean;
@@ -30,6 +33,21 @@ const CAMPOS_DISPONIVEIS = [
   { id: 'descricao', label: 'Descrição' }
 ];
 
+const BENEFICIOS_FISCAIS = [
+  { value: '', label: 'Nenhum' },
+  { value: 'RECOF', label: 'RECOF' },
+  { value: 'DRAWBACK', label: 'Drawback Isenção' },
+  { value: 'EX_TARIFARIO', label: 'Ex-Tarifário' }
+];
+
+const ESTADOS_UF = [
+  'AC', 'AL', 'AP', 'AM', 'BA', 'CE', 'DF', 'ES', 'GO', 'MA', 
+  'MT', 'MS', 'MG', 'PA', 'PB', 'PR', 'PE', 'PI', 'RJ', 'RN',
+  'RS', 'RO', 'RR', 'SC', 'SP', 'SE', 'TO'
+];
+
+const ESTADOS_ICMS_DIFERIDO = ['MG', 'SC', 'ES'];
+
 export function ChbClientConfigDialog({ open, onOpenChange }: Props) {
   const { configs, loading, fetchConfigs, createConfig, updateConfig, deleteConfig } = useChbClientConfig();
   const [editingConfig, setEditingConfig] = useState<ChbClientConfig | null>(null);
@@ -43,7 +61,19 @@ export function ChbClientConfigDialog({ open, onOpenChange }: Props) {
     tolerancia_valor: 1.0,
     campos_obrigatorios: ['peso_bruto', 'peso_liquido', 'valor_total', 'moeda', 'incoterm'],
     instrucoes_personalizadas: '',
-    ativo: true
+    ativo: true,
+    // Novos campos
+    armador: '',
+    agente_destino: '',
+    contato_email: '',
+    prazo_resposta_dias: 2,
+    porto_descarga_real: '',
+    tolerancia_taxas_acessorias_abs: 50,
+    tolerancia_taxas_acessorias_pct: 1.0,
+    beneficio_fiscal: '',
+    cfop_padrao: '',
+    estado_uf: '',
+    icms_diferido: false
   });
 
   useEffect(() => {
@@ -51,6 +81,14 @@ export function ChbClientConfigDialog({ open, onOpenChange }: Props) {
       fetchConfigs();
     }
   }, [open, fetchConfigs]);
+
+  // Auto-set ICMS diferido when UF changes
+  useEffect(() => {
+    if (formData.estado_uf) {
+      const isDiferido = ESTADOS_ICMS_DIFERIDO.includes(formData.estado_uf);
+      setFormData(prev => ({ ...prev, icms_diferido: isDiferido }));
+    }
+  }, [formData.estado_uf]);
 
   const resetForm = () => {
     setFormData({
@@ -60,7 +98,18 @@ export function ChbClientConfigDialog({ open, onOpenChange }: Props) {
       tolerancia_valor: 1.0,
       campos_obrigatorios: ['peso_bruto', 'peso_liquido', 'valor_total', 'moeda', 'incoterm'],
       instrucoes_personalizadas: '',
-      ativo: true
+      ativo: true,
+      armador: '',
+      agente_destino: '',
+      contato_email: '',
+      prazo_resposta_dias: 2,
+      porto_descarga_real: '',
+      tolerancia_taxas_acessorias_abs: 50,
+      tolerancia_taxas_acessorias_pct: 1.0,
+      beneficio_fiscal: '',
+      cfop_padrao: '',
+      estado_uf: '',
+      icms_diferido: false
     });
     setEditingConfig(null);
     setIsCreating(false);
@@ -75,7 +124,18 @@ export function ChbClientConfigDialog({ open, onOpenChange }: Props) {
       tolerancia_valor: config.tolerancia_valor,
       campos_obrigatorios: config.campos_obrigatorios,
       instrucoes_personalizadas: config.instrucoes_personalizadas || '',
-      ativo: config.ativo
+      ativo: config.ativo,
+      armador: config.armador || '',
+      agente_destino: config.agente_destino || '',
+      contato_email: config.contato_email || '',
+      prazo_resposta_dias: config.prazo_resposta_dias || 2,
+      porto_descarga_real: config.porto_descarga_real || '',
+      tolerancia_taxas_acessorias_abs: config.tolerancia_taxas_acessorias_abs || 50,
+      tolerancia_taxas_acessorias_pct: config.tolerancia_taxas_acessorias_pct || 1.0,
+      beneficio_fiscal: config.beneficio_fiscal || '',
+      cfop_padrao: config.cfop_padrao || '',
+      estado_uf: config.estado_uf || '',
+      icms_diferido: config.icms_diferido || false
     });
     setIsCreating(false);
   };
@@ -135,7 +195,7 @@ export function ChbClientConfigDialog({ open, onOpenChange }: Props) {
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-4xl max-h-[85vh] overflow-y-auto">
+      <DialogContent className="max-w-5xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Settings className="h-5 w-5" />
@@ -143,9 +203,9 @@ export function ChbClientConfigDialog({ open, onOpenChange }: Props) {
           </DialogTitle>
         </DialogHeader>
 
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 lg:grid-cols-5 gap-4">
           {/* Lista de configurações */}
-          <Card>
+          <Card className="lg:col-span-2">
             <CardHeader className="pb-3">
               <div className="flex items-center justify-between">
                 <CardTitle className="text-sm font-medium">Clientes Configurados</CardTitle>
@@ -163,13 +223,13 @@ export function ChbClientConfigDialog({ open, onOpenChange }: Props) {
                   Nenhuma configuração cadastrada
                 </div>
               ) : (
-                <div className="max-h-[300px] overflow-y-auto">
+                <div className="max-h-[400px] overflow-y-auto">
                   <Table>
                     <TableHeader>
                       <TableRow>
                         <TableHead>Cliente</TableHead>
                         <TableHead className="w-20">Status</TableHead>
-                        <TableHead className="w-16"></TableHead>
+                        <TableHead className="w-12"></TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -182,6 +242,17 @@ export function ChbClientConfigDialog({ open, onOpenChange }: Props) {
                           <TableCell>
                             <div className="font-medium text-sm">{config.cliente_nome || 'Sem nome'}</div>
                             <div className="text-xs text-muted-foreground">{config.cliente_cnpj}</div>
+                            {config.estado_uf && (
+                              <div className="text-xs text-muted-foreground flex items-center gap-1 mt-0.5">
+                                <MapPin className="h-3 w-3" />
+                                {config.estado_uf}
+                                {config.beneficio_fiscal && (
+                                  <Badge variant="outline" className="text-[0.6rem] px-1 py-0 ml-1">
+                                    {config.beneficio_fiscal}
+                                  </Badge>
+                                )}
+                              </div>
+                            )}
                           </TableCell>
                           <TableCell>
                             <Badge variant={config.ativo ? 'default' : 'secondary'}>
@@ -208,131 +279,345 @@ export function ChbClientConfigDialog({ open, onOpenChange }: Props) {
           </Card>
 
           {/* Formulário de edição */}
-          <Card>
+          <Card className="lg:col-span-3">
             <CardHeader className="pb-3">
               <CardTitle className="text-sm font-medium">
                 {editingConfig ? 'Editar Configuração' : isCreating ? 'Nova Configuração' : 'Selecione um cliente'}
               </CardTitle>
               <CardDescription className="text-xs">
-                Defina tolerâncias e campos obrigatórios para validação
+                Defina tolerâncias, regras fiscais e informações do armador
               </CardDescription>
             </CardHeader>
             <CardContent>
               {showForm ? (
-                <div className="space-y-4">
-                  {/* CNPJ e Nome */}
-                  <div className="grid grid-cols-2 gap-3">
-                    <div className="space-y-1.5">
-                      <Label className="text-xs">CNPJ *</Label>
-                      <Input
-                        value={formData.cliente_cnpj}
-                        onChange={e => setFormData({ ...formData, cliente_cnpj: e.target.value })}
-                        placeholder="00.000.000/0000-00"
-                        disabled={!!editingConfig}
-                        className="h-9"
-                      />
-                    </div>
-                    <div className="space-y-1.5">
-                      <Label className="text-xs">Nome do Cliente</Label>
-                      <Input
-                        value={formData.cliente_nome || ''}
-                        onChange={e => setFormData({ ...formData, cliente_nome: e.target.value })}
-                        placeholder="Nome da empresa"
-                        className="h-9"
-                      />
-                    </div>
-                  </div>
+                <Tabs defaultValue="dados" className="w-full">
+                  <TabsList className="grid w-full grid-cols-4 mb-4">
+                    <TabsTrigger value="dados" className="text-xs">Dados</TabsTrigger>
+                    <TabsTrigger value="tolerancias" className="text-xs">Tolerâncias</TabsTrigger>
+                    <TabsTrigger value="armador" className="text-xs">Armador</TabsTrigger>
+                    <TabsTrigger value="fiscal" className="text-xs">Fiscal</TabsTrigger>
+                  </TabsList>
 
-                  {/* Tolerâncias */}
-                  <div className="grid grid-cols-2 gap-3">
-                    <div className="space-y-1.5">
-                      <Label className="text-xs flex items-center gap-1">
-                        <Scale className="h-3 w-3" />
-                        Tolerância Peso (%)
-                      </Label>
-                      <div className="relative">
+                  {/* Tab Dados Básicos */}
+                  <TabsContent value="dados" className="space-y-4">
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="space-y-1.5">
+                        <Label className="text-xs">CNPJ *</Label>
                         <Input
-                          type="number"
-                          step="0.1"
-                          min="0"
-                          max="100"
-                          value={formData.tolerancia_peso}
-                          onChange={e => setFormData({ ...formData, tolerancia_peso: parseFloat(e.target.value) || 0 })}
-                          className="h-9 pr-8"
+                          value={formData.cliente_cnpj}
+                          onChange={e => setFormData({ ...formData, cliente_cnpj: e.target.value })}
+                          placeholder="00.000.000/0000-00"
+                          disabled={!!editingConfig}
+                          className="h-9"
                         />
-                        <Percent className="absolute right-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                      </div>
+                      <div className="space-y-1.5">
+                        <Label className="text-xs">Nome do Cliente</Label>
+                        <Input
+                          value={formData.cliente_nome || ''}
+                          onChange={e => setFormData({ ...formData, cliente_nome: e.target.value })}
+                          placeholder="Nome da empresa"
+                          className="h-9"
+                        />
                       </div>
                     </div>
-                    <div className="space-y-1.5">
-                      <Label className="text-xs flex items-center gap-1">
-                        <FileText className="h-3 w-3" />
-                        Tolerância Valor (%)
-                      </Label>
-                      <div className="relative">
-                        <Input
-                          type="number"
-                          step="0.1"
-                          min="0"
-                          max="100"
-                          value={formData.tolerancia_valor}
-                          onChange={e => setFormData({ ...formData, tolerancia_valor: parseFloat(e.target.value) || 0 })}
-                          className="h-9 pr-8"
-                        />
-                        <Percent className="absolute right-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+
+                    <div className="space-y-2">
+                      <Label className="text-xs">Campos Obrigatórios na Validação</Label>
+                      <div className="grid grid-cols-2 gap-2 p-3 border rounded-md bg-muted/30">
+                        {CAMPOS_DISPONIVEIS.map(campo => (
+                          <div key={campo.id} className="flex items-center space-x-2">
+                            <Checkbox
+                              id={campo.id}
+                              checked={formData.campos_obrigatorios?.includes(campo.id)}
+                              onCheckedChange={() => toggleCampo(campo.id)}
+                            />
+                            <label htmlFor={campo.id} className="text-xs cursor-pointer">
+                              {campo.label}
+                            </label>
+                          </div>
+                        ))}
                       </div>
                     </div>
-                  </div>
 
-                  {/* Campos obrigatórios */}
-                  <div className="space-y-2">
-                    <Label className="text-xs">Campos Obrigatórios na Validação</Label>
-                    <div className="grid grid-cols-2 gap-2 p-3 border rounded-md bg-muted/30">
-                      {CAMPOS_DISPONIVEIS.map(campo => (
-                        <div key={campo.id} className="flex items-center space-x-2">
-                          <Checkbox
-                            id={campo.id}
-                            checked={formData.campos_obrigatorios?.includes(campo.id)}
-                            onCheckedChange={() => toggleCampo(campo.id)}
+                    <div className="space-y-2">
+                      <Label className="text-xs flex items-center gap-1">
+                        <MessageSquare className="h-3 w-3" />
+                        Instruções Personalizadas para Análise
+                      </Label>
+                      <Textarea
+                        value={formData.instrucoes_personalizadas || ''}
+                        onChange={e => setFormData({ ...formData, instrucoes_personalizadas: e.target.value })}
+                        placeholder="Instruções específicas para a análise deste cliente..."
+                        className="min-h-[80px] text-xs resize-y"
+                      />
+                    </div>
+
+                    <div className="flex items-center space-x-2">
+                      <Checkbox
+                        id="ativo"
+                        checked={formData.ativo}
+                        onCheckedChange={(checked) => setFormData({ ...formData, ativo: !!checked })}
+                      />
+                      <label htmlFor="ativo" className="text-xs cursor-pointer">
+                        Configuração ativa
+                      </label>
+                    </div>
+                  </TabsContent>
+
+                  {/* Tab Tolerâncias */}
+                  <TabsContent value="tolerancias" className="space-y-4">
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="space-y-1.5">
+                        <Label className="text-xs flex items-center gap-1">
+                          <Scale className="h-3 w-3" />
+                          Tolerância Peso (%)
+                        </Label>
+                        <div className="relative">
+                          <Input
+                            type="number"
+                            step="0.1"
+                            min="0"
+                            max="100"
+                            value={formData.tolerancia_peso}
+                            onChange={e => setFormData({ ...formData, tolerancia_peso: parseFloat(e.target.value) || 0 })}
+                            className="h-9 pr-8"
                           />
-                          <label htmlFor={campo.id} className="text-xs cursor-pointer">
-                            {campo.label}
-                          </label>
+                          <Percent className="absolute right-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
                         </div>
-                      ))}
+                      </div>
+                      <div className="space-y-1.5">
+                        <Label className="text-xs flex items-center gap-1">
+                          <FileText className="h-3 w-3" />
+                          Tolerância Valor (%)
+                        </Label>
+                        <div className="relative">
+                          <Input
+                            type="number"
+                            step="0.1"
+                            min="0"
+                            max="100"
+                            value={formData.tolerancia_valor}
+                            onChange={e => setFormData({ ...formData, tolerancia_valor: parseFloat(e.target.value) || 0 })}
+                            className="h-9 pr-8"
+                          />
+                          <Percent className="absolute right-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                        </div>
+                      </div>
                     </div>
-                  </div>
 
-                  {/* Instruções personalizadas */}
-                  <div className="space-y-2">
-                    <Label className="text-xs flex items-center gap-1">
-                      <MessageSquare className="h-3 w-3" />
-                      Instruções Personalizadas para Análise
-                    </Label>
-                    <Textarea
-                      value={formData.instrucoes_personalizadas || ''}
-                      onChange={e => setFormData({ ...formData, instrucoes_personalizadas: e.target.value })}
-                      placeholder="Escreva aqui instruções específicas para a análise deste cliente. Por exemplo: 'Sempre verificar se o NCM está correto para produtos químicos', 'Este cliente usa peso líquido como referência principal', 'Tolerância zero para divergências de container', etc."
-                      className="min-h-[120px] text-xs resize-y"
-                    />
-                    <p className="text-[0.65rem] text-muted-foreground">
-                      Este texto será enviado como instrução adicional ao modelo de IA durante as análises.
-                    </p>
-                  </div>
+                    <Separator />
 
-                  {/* Ativo */}
-                  <div className="flex items-center space-x-2">
-                    <Checkbox
-                      id="ativo"
-                      checked={formData.ativo}
-                      onCheckedChange={(checked) => setFormData({ ...formData, ativo: !!checked })}
-                    />
-                    <label htmlFor="ativo" className="text-xs cursor-pointer">
-                      Configuração ativa
-                    </label>
-                  </div>
+                    <div>
+                      <Label className="text-xs font-medium flex items-center gap-1 mb-3">
+                        <DollarSign className="h-3 w-3" />
+                        Tolerâncias para Taxas Acessórias
+                      </Label>
+                      <div className="grid grid-cols-2 gap-3">
+                        <div className="space-y-1.5">
+                          <Label className="text-xs text-muted-foreground">Valor Absoluto (USD/EUR)</Label>
+                          <div className="relative">
+                            <Input
+                              type="number"
+                              step="1"
+                              min="0"
+                              value={formData.tolerancia_taxas_acessorias_abs}
+                              onChange={e => setFormData({ ...formData, tolerancia_taxas_acessorias_abs: parseFloat(e.target.value) || 0 })}
+                              className="h-9 pl-8"
+                            />
+                            <DollarSign className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                          </div>
+                          <p className="text-[0.6rem] text-muted-foreground">
+                            Divergências até este valor serão toleradas
+                          </p>
+                        </div>
+                        <div className="space-y-1.5">
+                          <Label className="text-xs text-muted-foreground">Valor Percentual (%)</Label>
+                          <div className="relative">
+                            <Input
+                              type="number"
+                              step="0.1"
+                              min="0"
+                              max="100"
+                              value={formData.tolerancia_taxas_acessorias_pct}
+                              onChange={e => setFormData({ ...formData, tolerancia_taxas_acessorias_pct: parseFloat(e.target.value) || 0 })}
+                              className="h-9 pr-8"
+                            />
+                            <Percent className="absolute right-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                          </div>
+                          <p className="text-[0.6rem] text-muted-foreground">
+                            Ou divergências até este % do total
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  </TabsContent>
 
-                  {/* Botões */}
-                  <div className="flex gap-2 pt-2">
+                  {/* Tab Armador */}
+                  <TabsContent value="armador" className="space-y-4">
+                    <div className="space-y-1.5">
+                      <Label className="text-xs flex items-center gap-1">
+                        <Ship className="h-3 w-3" />
+                        Armador / Shipping Line
+                      </Label>
+                      <Input
+                        value={formData.armador || ''}
+                        onChange={e => setFormData({ ...formData, armador: e.target.value })}
+                        placeholder="Ex: MSC Mediterranean Shipping Company S.A."
+                        className="h-9"
+                      />
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <Label className="text-xs flex items-center gap-1">
+                        <Building2 className="h-3 w-3" />
+                        Agente de Destino
+                      </Label>
+                      <Input
+                        value={formData.agente_destino || ''}
+                        onChange={e => setFormData({ ...formData, agente_destino: e.target.value })}
+                        placeholder="Ex: MSC do Brasil – Santos"
+                        className="h-9"
+                      />
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="space-y-1.5">
+                        <Label className="text-xs flex items-center gap-1">
+                          <Mail className="h-3 w-3" />
+                          E-mail de Contato
+                        </Label>
+                        <Input
+                          type="email"
+                          value={formData.contato_email || ''}
+                          onChange={e => setFormData({ ...formData, contato_email: e.target.value })}
+                          placeholder="contato@armador.com"
+                          className="h-9"
+                        />
+                      </div>
+                      <div className="space-y-1.5">
+                        <Label className="text-xs flex items-center gap-1">
+                          <Clock className="h-3 w-3" />
+                          Prazo Resposta (dias)
+                        </Label>
+                        <Input
+                          type="number"
+                          min="1"
+                          max="30"
+                          value={formData.prazo_resposta_dias}
+                          onChange={e => setFormData({ ...formData, prazo_resposta_dias: parseInt(e.target.value) || 2 })}
+                          className="h-9"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <Label className="text-xs flex items-center gap-1">
+                        <MapPin className="h-3 w-3" />
+                        Porto de Descarga Real
+                      </Label>
+                      <Input
+                        value={formData.porto_descarga_real || ''}
+                        onChange={e => setFormData({ ...formData, porto_descarga_real: e.target.value })}
+                        placeholder="Ex: Santos, Paranaguá, Itajaí"
+                        className="h-9"
+                      />
+                      <p className="text-[0.6rem] text-muted-foreground">
+                        Preencha se diferente do porto declarado nos documentos
+                      </p>
+                    </div>
+                  </TabsContent>
+
+                  {/* Tab Fiscal */}
+                  <TabsContent value="fiscal" className="space-y-4">
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="space-y-1.5">
+                        <Label className="text-xs flex items-center gap-1">
+                          <MapPin className="h-3 w-3" />
+                          Estado (UF)
+                        </Label>
+                        <Select
+                          value={formData.estado_uf || ''}
+                          onValueChange={(value) => setFormData({ ...formData, estado_uf: value })}
+                        >
+                          <SelectTrigger className="h-9">
+                            <SelectValue placeholder="Selecione a UF" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {ESTADOS_UF.map(uf => (
+                              <SelectItem key={uf} value={uf}>
+                                {uf} {ESTADOS_ICMS_DIFERIDO.includes(uf) && '(ICMS Diferido)'}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="space-y-1.5">
+                        <Label className="text-xs flex items-center gap-1">
+                          <Receipt className="h-3 w-3" />
+                          Benefício Fiscal
+                        </Label>
+                        <Select
+                          value={formData.beneficio_fiscal || ''}
+                          onValueChange={(value) => setFormData({ ...formData, beneficio_fiscal: value })}
+                        >
+                          <SelectTrigger className="h-9">
+                            <SelectValue placeholder="Nenhum" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {BENEFICIOS_FISCAIS.map(bf => (
+                              <SelectItem key={bf.value} value={bf.value}>
+                                {bf.label}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <Label className="text-xs">CFOP Padrão</Label>
+                      <Input
+                        value={formData.cfop_padrao || ''}
+                        onChange={e => setFormData({ ...formData, cfop_padrao: e.target.value })}
+                        placeholder="Ex: 3101, 3102, 3127, 3129"
+                        className="h-9"
+                      />
+                      <p className="text-[0.6rem] text-muted-foreground">
+                        3101: Industrialização | 3102: Revenda | 3127: Drawback | 3129: RECOF
+                      </p>
+                    </div>
+
+                    <div className="flex items-center space-x-2 p-3 border rounded-md bg-muted/30">
+                      <Checkbox
+                        id="icms_diferido"
+                        checked={formData.icms_diferido}
+                        onCheckedChange={(checked) => setFormData({ ...formData, icms_diferido: !!checked })}
+                      />
+                      <div>
+                        <label htmlFor="icms_diferido" className="text-xs cursor-pointer font-medium">
+                          ICMS Diferido
+                        </label>
+                        <p className="text-[0.6rem] text-muted-foreground">
+                          Marque se o ICMS é diferido neste estado (MG, SC, ES)
+                        </p>
+                      </div>
+                    </div>
+
+                    {formData.beneficio_fiscal && (
+                      <div className="p-3 border rounded-md bg-blue-500/10 border-blue-500/30">
+                        <p className="text-xs text-blue-400">
+                          <strong>Atenção:</strong> Com benefício fiscal {formData.beneficio_fiscal}, a análise verificará automaticamente:
+                          {formData.beneficio_fiscal === 'RECOF' && ' CFOP 3129 + ICMS suspenso'}
+                          {formData.beneficio_fiscal === 'DRAWBACK' && ' Ato Concessório + CFOP 3127'}
+                          {formData.beneficio_fiscal === 'EX_TARIFARIO' && ' II = 0% + Fundamento Legal 59'}
+                        </p>
+                      </div>
+                    )}
+                  </TabsContent>
+
+                  {/* Botões de ação */}
+                  <div className="flex gap-2 pt-4 mt-4 border-t">
                     <Button onClick={handleSave} className="flex-1">
                       {editingConfig ? 'Salvar Alterações' : 'Criar Configuração'}
                     </Button>
@@ -340,7 +625,7 @@ export function ChbClientConfigDialog({ open, onOpenChange }: Props) {
                       Cancelar
                     </Button>
                   </div>
-                </div>
+                </Tabs>
               ) : (
                 <div className="text-center text-muted-foreground text-sm py-8">
                   Selecione um cliente na lista ou clique em "Novo" para criar uma configuração
