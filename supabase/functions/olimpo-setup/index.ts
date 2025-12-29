@@ -36,22 +36,25 @@ serve(async (req) => {
     console.log('[olimpo-setup] Criando tabela t_olimpo_tracking em dados_dachser...');
 
     // Criar tabela centralizada do Olimpo
+    // Drop and recreate table with correct collation
+    await client.execute(`DROP TABLE IF EXISTS dados_dachser.t_olimpo_tracking`);
+    
     await client.execute(`
-      CREATE TABLE IF NOT EXISTS dados_dachser.t_olimpo_tracking (
+      CREATE TABLE dados_dachser.t_olimpo_tracking (
         id INT AUTO_INCREMENT PRIMARY KEY,
         
         -- Identificação
         mode VARCHAR(10) NOT NULL,
-        asset VARCHAR(50) NOT NULL,
-        flight VARCHAR(20) DEFAULT NULL,
+        asset VARCHAR(100) NOT NULL,
+        flight VARCHAR(100) DEFAULT NULL,
         
         -- Dados do processo
-        tipo_processo VARCHAR(50) DEFAULT NULL,
+        tipo_processo VARCHAR(100) DEFAULT NULL,
         cliente VARCHAR(255) DEFAULT NULL,
         
         -- Rota
-        origem_code VARCHAR(10) DEFAULT NULL,
-        destino_code VARCHAR(10) DEFAULT NULL,
+        origem_code VARCHAR(20) DEFAULT NULL,
+        destino_code VARCHAR(20) DEFAULT NULL,
         origem_lat DECIMAL(10,6) DEFAULT NULL,
         origem_lon DECIMAL(10,6) DEFAULT NULL,
         destino_lat DECIMAL(10,6) DEFAULT NULL,
@@ -86,7 +89,7 @@ serve(async (req) => {
         INDEX idx_status (status),
         INDEX idx_eta (eta),
         INDEX idx_active (active)
-      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci
     `);
 
     console.log('[olimpo-setup] Tabela criada com sucesso!');
