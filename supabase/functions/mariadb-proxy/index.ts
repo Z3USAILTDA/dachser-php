@@ -2986,7 +2986,21 @@ serve(async (req) => {
       case 'update_chb_item': {
         // Note: modal column does not exist in database - removed to prevent error
         const { id: itemId, status_macro, step1_status, step2_status, step3_status, consignee } = body;
-        console.log('Updating CHB item:', itemId, { consignee });
+        console.log('Updating CHB item:', itemId, { status_macro, step1_status, step2_status, step3_status, consignee });
+        
+        // First, ensure the status columns can accept longer values
+        try {
+          await client.execute(`
+            ALTER TABLE ai_agente.t_dachser_chb_items 
+            MODIFY COLUMN status_macro VARCHAR(50) NULL,
+            MODIFY COLUMN step1_status VARCHAR(50) NULL,
+            MODIFY COLUMN step2_status VARCHAR(50) NULL,
+            MODIFY COLUMN step3_status VARCHAR(50) NULL
+          `);
+          console.log('[CHB] Successfully altered status columns to VARCHAR(50)');
+        } catch (alterErr) {
+          console.log('[CHB] ALTER TABLE note (may already be correct):', (alterErr as Error).message?.substring(0, 100));
+        }
         
         const fields: string[] = [];
         const values: any[] = [];
