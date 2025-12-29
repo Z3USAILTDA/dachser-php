@@ -13,7 +13,7 @@ import { cn } from "@/lib/utils";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { TablePagination } from "@/components/layout/TablePagination";
 
-const PAGE_SIZE = 20;
+const PAGE_SIZE = 10;
 
 export interface FilterValues {
   search: string;
