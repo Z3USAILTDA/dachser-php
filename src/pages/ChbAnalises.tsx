@@ -25,14 +25,12 @@ interface HistoryEntry {
   created_by_email: string;
   created_at: string;
 }
-
 const statusLabels: Record<string, string> = {
   pre_alerta_pendente: "Análise de Pré-Alerta Pendente",
   instrucao_pendente: "Análise de Instrução Pendente",
   di_pendente: "Análise de Itens de DI Pendente",
   concluida: "Concluída"
 };
-
 const stepStatusLabel = (s: string) => {
   const map: Record<string, string> = {
     aprovado: "Aprovado",
@@ -42,7 +40,6 @@ const stepStatusLabel = (s: string) => {
   };
   return map[s?.toLowerCase()] || s;
 };
-
 const getStatusColor = (macro: string) => {
   switch (macro) {
     case "pre_alerta_pendente":
@@ -57,18 +54,23 @@ const getStatusColor = (macro: string) => {
       return "text-[#aaaaaa]";
   }
 };
-
 const stepNames: Record<string, string> = {
   '1': 'Pré-Alerta',
   '2': 'Instrução',
-  '3': 'DI/Fechamento',
+  '3': 'DI/Fechamento'
 };
-
 export default function ChbAnalises() {
-  useUsageLog({ endpoint: "/chb/conferences" });
+  useUsageLog({
+    endpoint: "/chb/conferences"
+  });
   const navigate = useNavigate();
-  const { items, loading, fetchItems, createItem, deleteItem } = useChbItems();
-  
+  const {
+    items,
+    loading,
+    fetchItems,
+    createItem,
+    deleteItem
+  } = useChbItems();
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("todos");
   const [historyModal, setHistoryModal] = useState<{
@@ -96,35 +98,37 @@ export default function ChbAnalises() {
     reference: ''
   });
   const [configDialogOpen, setConfigDialogOpen] = useState(false);
-
   useEffect(() => {
     fetchItems();
   }, [fetchItems]);
-
   const pendingCount = items.filter(i => i.status_macro !== "concluida").length;
-
   const filteredItems = items.filter(item => {
-    const matchesSearch = search === "" || 
-      (item.reference?.toLowerCase() || '').includes(search.toLowerCase()) || 
-      (item.consignee?.toLowerCase() || '').includes(search.toLowerCase());
+    const matchesSearch = search === "" || (item.reference?.toLowerCase() || '').includes(search.toLowerCase()) || (item.consignee?.toLowerCase() || '').includes(search.toLowerCase());
     const matchesStatus = statusFilter === "todos" || item.status_macro === statusFilter;
     return matchesSearch && matchesStatus;
   });
-
   const handleRefresh = () => {
     fetchItems();
   };
-
   const handleOpenHistory = async (itemId: number, reference: string) => {
-    setHistoryModal({ open: true, itemId, reference, history: [], loading: true });
-    
+    setHistoryModal({
+      open: true,
+      itemId,
+      reference,
+      history: [],
+      loading: true
+    });
     try {
-      const { data, error } = await supabase.functions.invoke('mariadb-proxy', {
-        body: { action: 'get_chb_runs', itemId }
+      const {
+        data,
+        error
+      } = await supabase.functions.invoke('mariadb-proxy', {
+        body: {
+          action: 'get_chb_runs',
+          itemId
+        }
       });
-      
       if (error) throw error;
-      
       setHistoryModal(prev => ({
         ...prev,
         history: (data?.data || []).filter((r: any) => r.status === 'approved'),
@@ -132,102 +136,80 @@ export default function ChbAnalises() {
       }));
     } catch (error) {
       console.error('Error fetching history:', error);
-      setHistoryModal(prev => ({ ...prev, loading: false }));
+      setHistoryModal(prev => ({
+        ...prev,
+        loading: false
+      }));
     }
   };
-
   const handleCopyResult = (content: string) => {
     const tempDiv = document.createElement('div');
     tempDiv.innerHTML = content;
     // Remove excessive whitespace
-    const text = (tempDiv.textContent || tempDiv.innerText || content)
-      .replace(/\n{3,}/g, '\n\n')
-      .trim();
+    const text = (tempDiv.textContent || tempDiv.innerText || content).replace(/\n{3,}/g, '\n\n').trim();
     navigator.clipboard.writeText(text);
     toast.success("Resultado copiado!");
   };
-
   const handleDelete = async (itemId: number) => {
     await deleteItem(itemId);
-    setDeleteDialog({ open: false, itemId: null });
+    setDeleteDialog({
+      open: false,
+      itemId: null
+    });
   };
-
   const handleCreateNovoProcesso = async () => {
     if (!novoProcessoForm.reference.trim()) {
       toast.error("Preencha a referência do processo");
       return;
     }
-
     const newId = await createItem(novoProcessoForm.reference);
-    
     if (newId) {
       setNovoProcessoModal(false);
-      setNovoProcessoForm({ reference: '' });
+      setNovoProcessoForm({
+        reference: ''
+      });
       navigate(`/chb/conferences/${newId}`);
     }
   };
-
-  const rightContent = (
-    <div className="flex items-center gap-3">
-      <button
-        onClick={() => setConfigDialogOpen(true)}
-        className="w-8 h-8 rounded-full border border-white/25 flex items-center justify-center bg-black/70 text-gray-400 hover:text-[#ffc800] transition-colors"
-        title="Configurações por cliente"
-      >
+  const rightContent = <div className="flex items-center gap-3">
+      <button onClick={() => setConfigDialogOpen(true)} className="w-8 h-8 rounded-full border border-white/25 flex items-center justify-center bg-black/70 text-gray-400 hover:text-[#ffc800] transition-colors" title="Configurações por cliente">
         <Settings className="h-4 w-4" />
       </button>
-      <button
-        onClick={() => navigate("/chb/manual")}
-        className="w-8 h-8 rounded-full border border-white/25 flex items-center justify-center bg-black/70 text-gray-400 hover:text-[#ffc800] transition-colors"
-        title="Manual do usuário"
-      >
+      <button onClick={() => navigate("/chb/manual")} className="w-8 h-8 rounded-full border border-white/25 flex items-center justify-center bg-black/70 text-gray-400 hover:text-[#ffc800] transition-colors" title="Manual do usuário">
         <HelpCircle className="h-4 w-4" />
       </button>
-      <button
-        onClick={() => setNovoProcessoModal(true)}
-        className="h-8 rounded-full px-4 flex items-center gap-1.5 bg-[#ffc800] text-black font-semibold text-[0.78rem] shadow-[0_0_22px_rgba(255,200,0,.6)] hover:bg-[#f5b843]"
-      >
+      <button onClick={() => setNovoProcessoModal(true)} className="h-8 rounded-full px-4 flex items-center gap-1.5 bg-[#ffc800] text-black font-semibold text-[0.78rem] shadow-[0_0_22px_rgba(255,200,0,.6)] hover:bg-[#f5b843]">
         <Upload className="h-4 w-4" />
         Novo Processo
       </button>
-    </div>
-  );
-
-  return (
-    <PageLayout
-      title="DACHSER"
-      subtitle="Desembaraço — Esteira de Análises (CHB)"
-      rightContent={rightContent}
-      pageIcon={ClipboardList}
-      backTo="/dashboard"
-    >
+    </div>;
+  return <PageLayout title="DACHSER" subtitle="Desembaraço — Esteira de Análises (CHB)" rightContent={rightContent} pageIcon={ClipboardList} backTo="/dashboard">
       {/* CARD DE BUSCA + FILTROS */}
       <FilterCard>
-        <FilterBar
-          searchValue={search}
-          onSearchChange={setSearch}
-          searchPlaceholder="Buscar por referência ou consignee"
-          filters={[
-            {
-              id: "status",
-              label: "Status",
-              icon: FilterIcon,
-              value: statusFilter,
-              onChange: setStatusFilter,
-              options: [
-                { value: "todos", label: "Todos" },
-                { value: "pre_alerta_pendente", label: "Análise de Pré-Alerta Pendente" },
-                { value: "instrucao_pendente", label: "Análise de Instrução Pendente" },
-                { value: "di_pendente", label: "Análise de Itens de DI Pendente" },
-                { value: "concluida", label: "Concluída" },
-              ],
-              width: "200px",
-            },
-          ]}
-          showRefresh
-          onRefresh={handleRefresh}
-          isRefreshing={loading}
-        />
+        <FilterBar searchValue={search} onSearchChange={setSearch} searchPlaceholder="Buscar por referência ou consignee" filters={[{
+        id: "status",
+        label: "Status",
+        icon: FilterIcon,
+        value: statusFilter,
+        onChange: setStatusFilter,
+        options: [{
+          value: "todos",
+          label: "Todos"
+        }, {
+          value: "pre_alerta_pendente",
+          label: "Análise de Pré-Alerta Pendente"
+        }, {
+          value: "instrucao_pendente",
+          label: "Análise de Instrução Pendente"
+        }, {
+          value: "di_pendente",
+          label: "Análise de Itens de DI Pendente"
+        }, {
+          value: "concluida",
+          label: "Concluída"
+        }],
+        width: "200px"
+      }]} showRefresh onRefresh={handleRefresh} isRefreshing={loading} />
       </FilterCard>
 
       {/* CARD DA TABELA */}
@@ -252,26 +234,20 @@ export default function ChbAnalises() {
             </div>
           </div>
 
-          {filteredItems.length === 0 ? (
-            <div className="mt-4 p-6 rounded-xl border border-[rgba(255,255,255,.25)] bg-[rgba(255,255,255,.06)] text-center">
+          {filteredItems.length === 0 ? <div className="mt-4 p-6 rounded-xl border border-[rgba(255,255,255,.25)] bg-[rgba(255,255,255,.06)] text-center">
               <ClipboardList size={40} className="mx-auto mb-3 text-[#aaaaaa]" />
               <p className="text-[0.85rem] text-[#aaaaaa]">Nenhum processo encontrado.</p>
               <p className="text-[0.75rem] text-[#777] mt-1">Clique em "Novo Processo" para começar.</p>
-            </div>
-          ) : (
-            <div
-              className="mt-1.5 max-h-[52vh] overflow-auto rounded-xl border border-[rgba(255,255,255,.16)]"
-              style={{
-                scrollbarWidth: 'thin',
-                scrollbarColor: 'rgba(255,255,255,.35) rgba(255,255,255,.10)'
-              }}
-            >
+            </div> : <div className="mt-1.5 max-h-[52vh] overflow-auto rounded-xl border border-[rgba(255,255,255,.16)]" style={{
+          scrollbarWidth: 'thin',
+          scrollbarColor: 'rgba(255,255,255,.35) rgba(255,255,255,.10)'
+        }}>
               <table className="w-full text-[0.82rem]">
                 <thead>
                   <tr className="bg-[#14151c]">
                     <th className="px-[10px] py-[10px] text-left text-[0.75rem] uppercase tracking-[0.12em] text-[#aaaaaa] font-medium sticky top-0 bg-[#14151c] z-[5] border-b border-[rgba(255,255,255,.09)]">Referência</th>
                     <th className="px-[10px] py-[10px] text-left text-[0.75rem] uppercase tracking-[0.12em] text-[#aaaaaa] font-medium sticky top-0 bg-[#14151c] z-[5] border-b border-[rgba(255,255,255,.09)]">Cliente</th>
-                    
+                    <th className="px-[10px] py-[10px] text-left text-[0.75rem] uppercase tracking-[0.12em] text-[#aaaaaa] font-medium sticky top-0 bg-[#14151c] z-[5] border-b border-[rgba(255,255,255,.09)]">Modal</th>
                     <th className="px-[10px] py-[10px] text-left text-[0.75rem] uppercase tracking-[0.12em] text-[#aaaaaa] font-medium sticky top-0 bg-[#14151c] z-[5] border-b border-[rgba(255,255,255,.09)]">Status</th>
                     <th className="px-[10px] py-[10px] text-left text-[0.75rem] uppercase tracking-[0.12em] text-[#aaaaaa] font-medium sticky top-0 bg-[#14151c] z-[5] border-b border-[rgba(255,255,255,.09)]">Etapas</th>
                     <th className="px-[10px] py-[10px] text-left text-[0.75rem] uppercase tracking-[0.12em] text-[#aaaaaa] font-medium sticky top-0 bg-[#14151c] z-[5] border-b border-[rgba(255,255,255,.09)]">Submeter</th>
@@ -280,10 +256,14 @@ export default function ChbAnalises() {
                   </tr>
                 </thead>
                 <tbody>
-                  {filteredItems.map(item => (
-                    <tr key={item.id} className="border-b border-[rgba(255,255,255,.09)] hover:bg-[rgba(255,255,255,.05)] transition-colors">
+                  {filteredItems.map(item => <tr key={item.id} className="border-b border-[rgba(255,255,255,.09)] hover:bg-[rgba(255,255,255,.05)] transition-colors">
                       <td className="px-[10px] py-[9px] whitespace-nowrap font-mono">{item.reference || "—"}</td>
                       <td className="px-[10px] py-[9px] whitespace-nowrap">{item.consignee || <span className="text-[#777] italic">A identificar</span>}</td>
+                      <td className="px-[10px] py-[9px] whitespace-nowrap">
+                        {item.modal ? <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[0.7rem] font-medium ${item.modal === 'SEA' ? 'bg-blue-500/20 text-blue-400 border border-blue-500/30' : 'bg-purple-500/20 text-purple-400 border border-purple-500/30'}`}>
+                            {item.modal === 'SEA' ? '🚢' : '✈️'} {item.modal}
+                          </span> : <span className="text-[#777] italic text-[0.75rem]">—</span>}
+                      </td>
                       <td className="px-[10px] py-[9px] whitespace-nowrap">
                         <span className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-full border border-[rgba(255,255,255,.14)] bg-[#111] text-[0.8rem] ${getStatusColor(item.status_macro)}`}>
                           {statusLabels[item.status_macro] || item.status_macro}
@@ -293,10 +273,7 @@ export default function ChbAnalises() {
                         1: {stepStatusLabel(item.step1_status)} · 2: {stepStatusLabel(item.step2_status)} · 3: {stepStatusLabel(item.step3_status)}
                       </td>
                       <td className="px-[10px] py-[9px] whitespace-nowrap">
-                        <button
-                          onClick={() => navigate(`/chb/conferences/${item.id}`)}
-                          className="inline-flex items-center gap-1.5 h-7 px-3 rounded-full bg-[#ffc800] text-black font-semibold text-[0.72rem] hover:bg-[#f5b843]"
-                        >
+                        <button onClick={() => navigate(`/chb/conferences/${item.id}`)} className="inline-flex items-center gap-1.5 h-7 px-3 rounded-full bg-[#ffc800] text-black font-semibold text-[0.72rem] hover:bg-[#f5b843]">
                           <FileText size={12} />
                           Analisar
                         </button>
@@ -306,46 +283,35 @@ export default function ChbAnalises() {
                       </td>
                       <td className="px-[10px] py-[9px] whitespace-nowrap text-right">
                         <div className="flex items-center justify-end gap-2">
-                          <button
-                            onClick={() => handleOpenHistory(item.id, item.reference)}
-                            className="w-7 h-7 rounded-full border border-[rgba(255,255,255,.25)] flex items-center justify-center text-[#aaaaaa] hover:text-white hover:border-[rgba(255,255,255,.45)] transition-colors"
-                            title="Ver histórico"
-                          >
+                          <button onClick={() => handleOpenHistory(item.id, item.reference)} className="w-7 h-7 rounded-full border border-[rgba(255,255,255,.25)] flex items-center justify-center text-[#aaaaaa] hover:text-white hover:border-[rgba(255,255,255,.45)] transition-colors" title="Ver histórico">
                             <CheckCircle size={14} />
                           </button>
-                          <button
-                            onClick={() => setDeleteDialog({ open: true, itemId: item.id })}
-                            className="w-7 h-7 rounded-full border border-[rgba(255,255,255,.25)] flex items-center justify-center text-[#ff6666] hover:text-[#ff4444] hover:border-[#ff4444] transition-colors"
-                            title="Excluir"
-                          >
+                          <button onClick={() => setDeleteDialog({
+                      open: true,
+                      itemId: item.id
+                    })} className="w-7 h-7 rounded-full border border-[rgba(255,255,255,.25)] flex items-center justify-center text-[#ff6666] hover:text-[#ff4444] hover:border-[#ff4444] transition-colors" title="Excluir">
                             <Trash2 size={14} />
                           </button>
                         </div>
                       </td>
-                    </tr>
-                  ))}
+                    </tr>)}
                 </tbody>
               </table>
-            </div>
-          )}
+            </div>}
         </div>
       </TableCard>
 
       {/* Novo Processo Modal */}
       <Dialog open={novoProcessoModal} onOpenChange={setNovoProcessoModal}>
         <DialogContent className="max-w-md bg-[rgba(5,6,18,.98)] border border-[rgba(255,255,255,.12)]">
-          <DialogHeader>
-            <DialogTitle className="text-[#f5f5f5]">Novo Processo CHB</DialogTitle>
-          </DialogHeader>
+          
           <div className="space-y-4 mt-2">
             <div className="space-y-2">
               <Label className="text-[#aaaaaa]">Referência do Processo</Label>
-              <Input
-                placeholder="Ex: CHB-2025-001"
-                value={novoProcessoForm.reference}
-                onChange={(e) => setNovoProcessoForm(prev => ({ ...prev, reference: e.target.value }))}
-                className="bg-[rgba(255,255,255,.05)] border-[rgba(255,255,255,.15)] text-white"
-              />
+              <Input placeholder="Ex: CHB-2025-001" value={novoProcessoForm.reference} onChange={e => setNovoProcessoForm(prev => ({
+              ...prev,
+              reference: e.target.value
+            }))} className="bg-[rgba(255,255,255,.05)] border-[rgba(255,255,255,.15)] text-white" />
             </div>
             <div className="p-3 rounded-lg bg-[rgba(255,200,0,.08)] border border-[rgba(255,200,0,.2)]">
               <p className="text-[0.75rem] text-[#ffc800]">
@@ -353,16 +319,10 @@ export default function ChbAnalises() {
               </p>
             </div>
             <div className="flex justify-end gap-2 pt-2">
-              <button
-                onClick={() => setNovoProcessoModal(false)}
-                className="h-8 px-4 rounded-full border border-[rgba(255,255,255,.25)] text-[#aaaaaa] text-[0.78rem] hover:bg-[rgba(255,255,255,.05)]"
-              >
+              <button onClick={() => setNovoProcessoModal(false)} className="h-8 px-4 rounded-full border border-[rgba(255,255,255,.25)] text-[#aaaaaa] text-[0.78rem] hover:bg-[rgba(255,255,255,.05)]">
                 Cancelar
               </button>
-              <button
-                onClick={handleCreateNovoProcesso}
-                className="h-8 px-4 rounded-full bg-[#ffc800] text-black font-semibold text-[0.78rem] hover:bg-[#f5b843]"
-              >
+              <button onClick={handleCreateNovoProcesso} className="h-8 px-4 rounded-full bg-[#ffc800] text-black font-semibold text-[0.78rem] hover:bg-[#f5b843]">
                 Criar Processo
               </button>
             </div>
@@ -371,35 +331,28 @@ export default function ChbAnalises() {
       </Dialog>
 
       {/* History Modal */}
-      <Dialog open={historyModal.open} onOpenChange={(open) => setHistoryModal(prev => ({ ...prev, open }))}>
+      <Dialog open={historyModal.open} onOpenChange={open => setHistoryModal(prev => ({
+      ...prev,
+      open
+    }))}>
         <DialogContent className="max-w-3xl bg-[rgba(5,6,18,.98)] border border-[rgba(255,255,255,.12)]">
           <DialogHeader>
             <DialogTitle className="text-[#f5f5f5] flex items-center gap-3">
               <ClipboardList size={18} className="text-[#ffc800]" />
               Histórico de Análises
-              {historyModal.history.length > 0 && (
-                <button
-                  onClick={() => exportChbHistoryToPDF(historyModal.history, historyModal.reference)}
-                  className="flex items-center gap-1 px-2.5 py-1 rounded-full bg-[#ffc800] text-black text-[0.7rem] font-medium hover:bg-[#f5b843] transition-colors"
-                  title="Exportar para PDF"
-                >
+              {historyModal.history.length > 0 && <button onClick={() => exportChbHistoryToPDF(historyModal.history, historyModal.reference)} className="flex items-center gap-1 px-2.5 py-1 rounded-full bg-[#ffc800] text-black text-[0.7rem] font-medium hover:bg-[#f5b843] transition-colors" title="Exportar para PDF">
                   <FileDown size={12} />
                   PDF
-                </button>
-              )}
+                </button>}
             </DialogTitle>
           </DialogHeader>
           <div className="space-y-4 max-h-[600px] overflow-y-auto pr-2">
-            {historyModal.history.length === 0 ? (
-              <div className="p-6 text-center text-[#aaaaaa]">
+            {historyModal.history.length === 0 ? <div className="p-6 text-center text-[#aaaaaa]">
                 <ClipboardList size={40} className="mx-auto mb-3 text-[#555]" />
                 <p>Nenhuma análise aprovada ainda.</p>
                 <p className="text-[0.75rem] text-[#777] mt-1">Execute análises na página de conferência para ver o histórico.</p>
-              </div>
-            ) : (
-              <div className="space-y-4">
-                {historyModal.history.map((entry) => (
-                  <div key={entry.id} className="p-4 rounded-lg border border-[rgba(255,255,255,.12)] bg-[rgba(255,255,255,.03)]">
+              </div> : <div className="space-y-4">
+                {historyModal.history.map(entry => <div key={entry.id} className="p-4 rounded-lg border border-[rgba(255,255,255,.12)] bg-[rgba(255,255,255,.03)]">
                     <div className="flex items-center justify-between gap-2 mb-3">
                       <div className="flex items-center gap-2">
                         <span className="text-[0.65rem] px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-400 font-medium">
@@ -410,34 +363,26 @@ export default function ChbAnalises() {
                           {entry.created_at}
                         </span>
                       </div>
-                      <button
-                        onClick={() => handleCopyResult(entry.result_html || entry.result_text || '')}
-                        className="inline-flex items-center gap-1 text-[0.72rem] text-white/50 hover:text-white transition-colors"
-                        title="Copiar resultado"
-                      >
+                      <button onClick={() => handleCopyResult(entry.result_html || entry.result_text || '')} className="inline-flex items-center gap-1 text-[0.72rem] text-white/50 hover:text-white transition-colors" title="Copiar resultado">
                         <Copy size={14} />
                       </button>
                     </div>
                     
                     {/* Render HTML content if available */}
-                    {entry.result_html ? (
-                      <div 
-                        className="text-[0.85rem] text-[#f5f5f5] chb-analysis-content bg-black/20 p-4 rounded border border-white/5"
-                        dangerouslySetInnerHTML={{ __html: entry.result_html }}
-                      />
-                    ) : (
-                      <div className="text-[0.85rem] text-[#f5f5f5] bg-black/20 p-4 rounded border border-white/5">{entry.result_text}</div>
-                    )}
-                  </div>
-                ))}
-              </div>
-            )}
+                    {entry.result_html ? <div className="text-[0.85rem] text-[#f5f5f5] chb-analysis-content bg-black/20 p-4 rounded border border-white/5" dangerouslySetInnerHTML={{
+                __html: entry.result_html
+              }} /> : <div className="text-[0.85rem] text-[#f5f5f5] bg-black/20 p-4 rounded border border-white/5">{entry.result_text}</div>}
+                  </div>)}
+              </div>}
           </div>
         </DialogContent>
       </Dialog>
 
       {/* Delete Dialog */}
-      <AlertDialog open={deleteDialog.open} onOpenChange={(open) => setDeleteDialog(prev => ({ ...prev, open }))}>
+      <AlertDialog open={deleteDialog.open} onOpenChange={open => setDeleteDialog(prev => ({
+      ...prev,
+      open
+    }))}>
         <AlertDialogContent className="bg-[rgba(5,6,18,.98)] border border-[rgba(255,255,255,.12)]">
           <AlertDialogHeader>
             <AlertDialogTitle className="text-[#f5f5f5]">Confirmar exclusão</AlertDialogTitle>
@@ -449,10 +394,7 @@ export default function ChbAnalises() {
             <AlertDialogCancel className="bg-transparent border-[rgba(255,255,255,.25)] text-[#aaaaaa] hover:bg-[rgba(255,255,255,.05)]">
               Cancelar
             </AlertDialogCancel>
-            <AlertDialogAction
-              onClick={() => deleteDialog.itemId && handleDelete(deleteDialog.itemId)}
-              className="bg-red-600 text-white hover:bg-red-700"
-            >
+            <AlertDialogAction onClick={() => deleteDialog.itemId && handleDelete(deleteDialog.itemId)} className="bg-red-600 text-white hover:bg-red-700">
               Excluir
             </AlertDialogAction>
           </AlertDialogFooter>
@@ -499,6 +441,5 @@ export default function ChbAnalises() {
 
       {/* Client Config Dialog */}
       <ChbClientConfigDialog open={configDialogOpen} onOpenChange={setConfigDialogOpen} />
-    </PageLayout>
-  );
+    </PageLayout>;
 }
