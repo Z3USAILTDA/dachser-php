@@ -1,7 +1,7 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { Resend } from "https://esm.sh/resend@2.0.0";
 import { Client } from "https://deno.land/x/mysql@v2.12.1/mod.ts";
-import * as XLSX from "https://esm.sh/xlsx@0.18.5";
+import * as XLSX from "https://esm.sh/xlsx-js-style@1.2.0";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -29,6 +29,8 @@ interface InvoiceRow {
   numero_processo: string;
   house: string;
   master: string;
+  status_fatura: string;
+  responsavel: string;
 }
 
 // Format CNPJ for display
@@ -49,45 +51,196 @@ const formatCnpjShort = (c: string) => {
   return c;
 };
 
-// Format number as Brazilian currency
-const formatCurrency = (value: number) => {
+// Format number as Brazilian currency (without R$)
+const formatCurrencyNumber = (value: number) => {
   return value.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 };
+
+// Format number as Brazilian currency (with R$)
+const formatCurrency = (value: number) => {
+  return `R$ ${formatCurrencyNumber(value)}`;
+};
+
+// Cell styles
+const STYLES = {
+  // Logo placeholder style
+  logo: {
+    font: { name: "Arial", sz: 16, bold: true, color: { rgb: "FFCC00" } },
+    fill: { fgColor: { rgb: "003366" } },
+    alignment: { horizontal: "center", vertical: "center" },
+  },
+  // Title style
+  title: {
+    font: { name: "Arial", sz: 22, bold: true, color: { rgb: "333333" } },
+    alignment: { horizontal: "center", vertical: "center" },
+  },
+  // Box label "Valor total em atraso" 
+  boxLabel: {
+    font: { name: "Arial", sz: 11, bold: true, color: { rgb: "FFFFFF" } },
+    fill: { fgColor: { rgb: "0070C0" } },
+    alignment: { horizontal: "center", vertical: "center" },
+    border: {
+      top: { style: "thin", color: { rgb: "000000" } },
+      bottom: { style: "thin", color: { rgb: "000000" } },
+      left: { style: "thin", color: { rgb: "000000" } },
+      right: { style: "thin", color: { rgb: "000000" } },
+    },
+  },
+  // Box value (red amount)
+  boxValue: {
+    font: { name: "Arial", sz: 14, bold: true, color: { rgb: "FF0000" } },
+    fill: { fgColor: { rgb: "FFFFFF" } },
+    alignment: { horizontal: "center", vertical: "center" },
+    border: {
+      top: { style: "thin", color: { rgb: "000000" } },
+      bottom: { style: "thin", color: { rgb: "000000" } },
+      left: { style: "thin", color: { rgb: "000000" } },
+      right: { style: "thin", color: { rgb: "000000" } },
+    },
+  },
+  // Date style
+  date: {
+    font: { name: "Arial", sz: 10, color: { rgb: "333333" } },
+    alignment: { horizontal: "right", vertical: "center" },
+  },
+  // Período de Faturamento label
+  periodoLabel: {
+    font: { name: "Arial", sz: 11, bold: true, color: { rgb: "000000" } },
+    fill: { fgColor: { rgb: "B4C6E7" } },
+    alignment: { horizontal: "left", vertical: "center" },
+  },
+  // Período de Faturamento value
+  periodoValue: {
+    font: { name: "Arial", sz: 11, color: { rgb: "000000" } },
+    fill: { fgColor: { rgb: "B4C6E7" } },
+    alignment: { horizontal: "left", vertical: "center" },
+  },
+  // Header columns 1-11 (black background)
+  headerBlack: {
+    font: { name: "Arial", sz: 11, bold: true, color: { rgb: "FFFFFF" } },
+    fill: { fgColor: { rgb: "000000" } },
+    alignment: { horizontal: "center", vertical: "center" },
+    border: {
+      top: { style: "thin", color: { rgb: "333333" } },
+      bottom: { style: "thin", color: { rgb: "333333" } },
+      left: { style: "thin", color: { rgb: "333333" } },
+      right: { style: "thin", color: { rgb: "333333" } },
+    },
+  },
+  // Header columns 12-16 (blue background)
+  headerBlue: {
+    font: { name: "Arial", sz: 11, bold: true, color: { rgb: "FFFFFF" } },
+    fill: { fgColor: { rgb: "0070C0" } },
+    alignment: { horizontal: "center", vertical: "center" },
+    border: {
+      top: { style: "thin", color: { rgb: "333333" } },
+      bottom: { style: "thin", color: { rgb: "333333" } },
+      left: { style: "thin", color: { rgb: "333333" } },
+      right: { style: "thin", color: { rgb: "333333" } },
+    },
+  },
+  // Data cell (normal)
+  dataCell: {
+    font: { name: "Arial", sz: 10, color: { rgb: "000000" } },
+    alignment: { horizontal: "left", vertical: "center" },
+    border: {
+      top: { style: "thin", color: { rgb: "D0D0D0" } },
+      bottom: { style: "thin", color: { rgb: "D0D0D0" } },
+      left: { style: "thin", color: { rgb: "D0D0D0" } },
+      right: { style: "thin", color: { rgb: "D0D0D0" } },
+    },
+  },
+  // Data cell (value/number - right aligned)
+  dataCellNumber: {
+    font: { name: "Arial", sz: 10, color: { rgb: "000000" } },
+    alignment: { horizontal: "right", vertical: "center" },
+    border: {
+      top: { style: "thin", color: { rgb: "D0D0D0" } },
+      bottom: { style: "thin", color: { rgb: "D0D0D0" } },
+      left: { style: "thin", color: { rgb: "D0D0D0" } },
+      right: { style: "thin", color: { rgb: "D0D0D0" } },
+    },
+  },
+  // Data cell (overdue - red text)
+  dataCellOverdue: {
+    font: { name: "Arial", sz: 10, color: { rgb: "FF0000" } },
+    alignment: { horizontal: "right", vertical: "center" },
+    border: {
+      top: { style: "thin", color: { rgb: "D0D0D0" } },
+      bottom: { style: "thin", color: { rgb: "D0D0D0" } },
+      left: { style: "thin", color: { rgb: "D0D0D0" } },
+      right: { style: "thin", color: { rgb: "D0D0D0" } },
+    },
+  },
+  // Empty cell style
+  empty: {
+    font: { name: "Arial", sz: 10 },
+  },
+};
+
+// Column headers (16 columns)
+const HEADERS = [
+  "DOCUMENTO",
+  "ND",
+  "REF. CLIENTE",
+  "NOTA FISC",
+  "MODAL",
+  "TIPO DOC",
+  "EMISSÃO",
+  "VENCTO",
+  "C.N.P.J",
+  "CLIENTE",
+  "VALOR",
+  "PROCESSO",
+  "MASTER",
+  "HOUSE",
+  "STATUS",
+  "RESPONSÁVEL",
+];
 
 function createSheetForCnpj(invoices: InvoiceRow[], clienteName: string, totalValue: number, currentDate: string): XLSX.WorkSheet {
   const totalValueFormatted = formatCurrency(totalValue);
   
-  // Create worksheet data - matching exact structure from reference
-  const wsData: any[][] = [];
+  // Create worksheet data
+  const ws: XLSX.WorkSheet = {};
   
-  // Row 1: Logo and "Valor total em atraso" label (14 columns)
-  wsData.push([
-    "DACHSER", "", "", "", "", "", "", "", "", "", "", "Valor total em atraso", "", ""
-  ]);
+  // Row 1: Logo (A1) and "Valor total em atraso" label (O1-P1)
+  ws["A1"] = { v: "DACHSER", s: STYLES.logo };
+  ws["O1"] = { v: "Valor total em atraso", s: STYLES.boxLabel };
+  ws["P1"] = { v: "", s: STYLES.boxLabel }; // Merge continuation
   
-  // Row 2: Title centered and total value
-  wsData.push([
-    "", "", "", `${clienteName} - Demonstrativo de Faturamento`, "", "", "", "", "", "", "", `R$ ${totalValueFormatted}`, "", ""
-  ]);
+  // Row 2: Title (centered in D2) and total value (O2-P2)
+  ws["D2"] = { v: `${clienteName} - Demonstrativo de Faturamento`, s: STYLES.title };
+  ws["O2"] = { v: totalValueFormatted, s: STYLES.boxValue };
+  ws["P2"] = { v: "", s: STYLES.boxValue }; // Merge continuation
   
-  // Row 3: Empty with date on right
-  wsData.push([
-    "", "", "", "", "", "", "", "", "", "", "", "", "", currentDate
-  ]);
+  // Row 3: Date on the right (P3)
+  ws["P3"] = { v: currentDate, s: STYLES.date };
   
   // Row 4: Período de Faturamento
-  wsData.push([
-    "Período de Faturamento:", "01/01/2022 a 31/12/2027", "", "", "", "", "", "", "", "", "", "", "", ""
-  ]);
+  ws["A4"] = { v: "Período de Faturamento:", s: STYLES.periodoLabel };
+  ws["B4"] = { v: "01/01/2022 a 31/12/2027", s: STYLES.periodoValue };
+  // Fill remaining cells with periodo style
+  for (let col = 2; col < 16; col++) {
+    const cellRef = XLSX.utils.encode_cell({ r: 3, c: col });
+    if (!ws[cellRef]) {
+      ws[cellRef] = { v: "", s: STYLES.periodoValue };
+    }
+  }
   
-  // Row 5: Column headers - all 14 columns matching reference
-  wsData.push([
-    "DOCUMENTO", "ND", "REF. CLIENTE", "NOTA FISCAL DACHSER", "MODAL", "TIPO DOC.", "EMISSÃO", "VENCTO", "C.N.P.J", "CLIENTE", "VALOR", "PROCESSO", "MASTER", "HOUSE"
-  ]);
+  // Row 5: Headers (16 columns)
+  HEADERS.forEach((header, idx) => {
+    const cellRef = XLSX.utils.encode_cell({ r: 4, c: idx });
+    // Columns 0-10 use black header, columns 11-15 use blue header
+    const style = idx <= 10 ? STYLES.headerBlack : STYLES.headerBlue;
+    ws[cellRef] = { v: header, s: style };
+  });
   
-  // Data rows
-  for (const inv of invoices) {
-    wsData.push([
+  // Data rows (starting from row 6, index 5)
+  invoices.forEach((inv, rowIdx) => {
+    const row = 5 + rowIdx;
+    
+    const rowData = [
       inv.documento || "",
       inv.nd || "",
       inv.referencia_cliente || "",
@@ -98,33 +251,73 @@ function createSheetForCnpj(invoices: InvoiceRow[], clienteName: string, totalVa
       inv.data_vencimento || "",
       formatCnpj(inv.cnpj || ""),
       inv.razao_social || "",
-      Number(inv.valor_nf) || 0,
+      formatCurrencyNumber(Number(inv.valor_nf) || 0),
       inv.numero_processo || "",
       inv.master || "",
-      inv.house || ""
-    ]);
-  }
+      inv.house || "",
+      inv.status_fatura || "Em atraso",
+      inv.responsavel || "",
+    ];
+    
+    rowData.forEach((value, colIdx) => {
+      const cellRef = XLSX.utils.encode_cell({ r: row, c: colIdx });
+      
+      // Use different styles based on column
+      let style = STYLES.dataCell;
+      if (colIdx === 10) {
+        // VALOR column - use overdue style (red) since all are overdue
+        style = STYLES.dataCellOverdue;
+      } else if (colIdx === 7) {
+        // VENCTO column - also red for overdue
+        style = { ...STYLES.dataCell, font: { ...STYLES.dataCell.font, color: { rgb: "FF0000" } } };
+      }
+      
+      ws[cellRef] = { v: value, s: style };
+    });
+  });
   
-  // Create worksheet
-  const ws = XLSX.utils.aoa_to_sheet(wsData);
-  
-  // Set column widths (14 columns)
+  // Set column widths (16 columns)
   ws['!cols'] = [
     { wch: 14 },  // DOCUMENTO
     { wch: 14 },  // ND
     { wch: 50 },  // REF. CLIENTE
-    { wch: 18 },  // NOTA FISCAL DACHSER
+    { wch: 18 },  // NOTA FISC
     { wch: 6 },   // MODAL
-    { wch: 8 },   // TIPO DOC.
-    { wch: 10 },  // EMISSÃO
-    { wch: 10 },  // VENCTO
+    { wch: 10 },  // TIPO DOC
+    { wch: 12 },  // EMISSÃO
+    { wch: 12 },  // VENCTO
     { wch: 20 },  // C.N.P.J
     { wch: 28 },  // CLIENTE
-    { wch: 12 },  // VALOR
+    { wch: 14 },  // VALOR
     { wch: 12 },  // PROCESSO
     { wch: 14 },  // MASTER
-    { wch: 14 }   // HOUSE
+    { wch: 14 },  // HOUSE
+    { wch: 12 },  // STATUS
+    { wch: 16 },  // RESPONSÁVEL
   ];
+  
+  // Set row heights
+  ws['!rows'] = [
+    { hpt: 30 },  // Row 1
+    { hpt: 35 },  // Row 2 (title)
+    { hpt: 20 },  // Row 3
+    { hpt: 22 },  // Row 4 (período)
+    { hpt: 25 },  // Row 5 (headers)
+  ];
+  
+  // Define merges
+  ws['!merges'] = [
+    { s: { r: 0, c: 14 }, e: { r: 0, c: 15 } }, // O1:P1 merge
+    { s: { r: 1, c: 14 }, e: { r: 1, c: 15 } }, // O2:P2 merge
+    { s: { r: 1, c: 3 }, e: { r: 1, c: 10 } },  // D2:K2 merge for title
+  ];
+  
+  // Set range
+  const lastRow = 5 + invoices.length;
+  ws['!ref'] = XLSX.utils.encode_range({ s: { r: 0, c: 0 }, e: { r: lastRow, c: 15 } });
+  
+  // Add AutoFilter to the table (row 5, columns A-P)
+  ws['!autofilter'] = { ref: `A5:P5` };
   
   return ws;
 }
@@ -190,7 +383,7 @@ serve(async (req: Request): Promise<Response> => {
       allCnpjs.push(cnpj);
     }
 
-    // Fetch all overdue invoices for these CNPJs with all required columns
+    // Fetch all overdue invoices for these CNPJs with all required columns (16 columns)
     const placeholders = allCnpjs.map(() => "?").join(",");
     const invoicesResult = await client.query(`
       SELECT 
@@ -200,14 +393,16 @@ serve(async (req: Request): Promise<Response> => {
         COALESCE(NULLIF(t.numero_nf,''), '') AS numero_nf,
         COALESCE(t.modal, '') AS modal,
         t.tipo_documento,
-        DATE_FORMAT(t.data_emissao, '%m/%d/%y') AS data_emissao,
-        DATE_FORMAT(t.data_vencimento, '%m/%d/%y') AS data_vencimento,
+        DATE_FORMAT(t.data_emissao, '%d/%m/%Y') AS data_emissao,
+        DATE_FORMAT(t.data_vencimento, '%d/%m/%Y') AS data_vencimento,
         t.valor_nf,
         t.razao_social,
         t.cnpj,
         COALESCE(n.numero_processo, '') AS numero_processo,
         COALESCE(n.house, '') AS house,
-        COALESCE(n.master, '') AS master
+        COALESCE(n.master, '') AS master,
+        'Em atraso' AS status_fatura,
+        'Financeiro' AS responsavel
       FROM dados_dachser.t_dados_financeiro_nfs t
       LEFT JOIN dados_dachser.t_dados_nfs n ON t.id_rm = n.id_rm
       LEFT JOIN ai_agente.t_financeiro_soft_delete sd ON sd.documento = t.documento
@@ -235,7 +430,7 @@ serve(async (req: Request): Promise<Response> => {
     }
 
     const clienteName = cliente || invoicesResult[0]?.razao_social || "Cliente";
-    const currentDate = new Date().toLocaleDateString("en-US", { month: "2-digit", day: "2-digit", year: "numeric" });
+    const currentDate = new Date().toLocaleDateString("pt-BR");
 
     // Create workbook with multiple sheets (one per CNPJ)
     const wb = XLSX.utils.book_new();
