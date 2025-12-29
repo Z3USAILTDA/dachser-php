@@ -187,9 +187,10 @@ interface QueryRequest {
   // Cancelamento
   motivo?: string;
   voucher_credito?: string;
-  // Consolidação
+  // Consolidação / Agrupamento
   master_id?: string;
   numero_rm?: string;
+  consolidacao_rm_numero?: string;
 }
 
 serve(async (req) => {
@@ -6091,92 +6092,88 @@ serve(async (req) => {
         break;
       }
 
-      // ==================== VOUCHER CONSOLIDAÇÃO (MASTER) ====================
+      // ==================== VOUCHER AGRUPAMENTO (SEM MASTER) ====================
       case 'consolidar_vouchers': {
-        const { voucher_ids, master_id, numero_rm, user_id, user_name } = body as {
+        const { voucher_ids, numero_rm, user_id, user_name } = body as {
           voucher_ids: string[];
-          master_id: string;
           numero_rm: string;
           user_id?: string;
           user_name?: string;
         };
 
-        if (!voucher_ids || voucher_ids.length < 2 || !master_id || !numero_rm) {
+        if (!voucher_ids || voucher_ids.length < 2 || !numero_rm) {
           return new Response(
-            JSON.stringify({ error: 'voucher_ids (min 2), master_id e numero_rm são obrigatórios' }),
+            JSON.stringify({ error: 'voucher_ids (min 2) e numero_rm são obrigatórios' }),
             { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
           );
         }
 
-        console.log(`Consolidating ${voucher_ids.length} vouchers into master ${master_id}`);
+        console.log(`Agrupando ${voucher_ids.length} vouchers com RM: ${numero_rm}`);
 
-        // First, ensure consolidation columns exist
+        // First, ensure consolidation column exists
         try {
           await client.query(`
             ALTER TABLE dados_dachser.t_vouchers 
-            ADD COLUMN IF NOT EXISTS voucher_master_id VARCHAR(36),
-            ADD COLUMN IF NOT EXISTS is_master TINYINT(1) DEFAULT 0,
             ADD COLUMN IF NOT EXISTS consolidacao_rm_numero VARCHAR(100)
           `);
         } catch (alterErr) {
-          console.log('Note: Consolidation columns may already exist');
+          console.log('Note: Consolidation column may already exist');
         }
 
-        // Mark the master voucher
-        await client.execute(`
-          UPDATE dados_dachser.t_vouchers 
-          SET 
-            is_master = 1,
-            consolidacao_rm_numero = ?,
-            updated_at = NOW()
-          WHERE id = ?
-        `, [numero_rm, master_id]);
-
-        // Mark all child vouchers (excluding master)
-        const childIds = voucher_ids.filter(id => id !== master_id);
-        for (const childId of childIds) {
+        // Update all vouchers with the same RM number
+        for (const voucherId of voucher_ids) {
           await client.execute(`
             UPDATE dados_dachser.t_vouchers 
             SET 
-              voucher_master_id = ?,
               consolidacao_rm_numero = ?,
               updated_at = NOW()
             WHERE id = ?
-          `, [master_id, numero_rm, childId]);
+          `, [numero_rm, voucherId]);
 
-          // Log consolidation for each child
+          // Log consolidation for each voucher
           await client.execute(`
             INSERT INTO dados_dachser.t_voucher_logs (
               id, voucher_id, user_id, user_name, acao, detalhe, data_hora
-            ) VALUES (?, ?, ?, ?, 'VOUCHER_CONSOLIDADO', ?, NOW())
+            ) VALUES (?, ?, ?, ?, 'VOUCHER_AGRUPADO', ?, NOW())
           `, [
             crypto.randomUUID(),
-            childId,
+            voucherId,
             user_id || null,
             user_name || 'Sistema',
-            `Consolidado no voucher master. RM: ${numero_rm}`
+            `Agrupado com RM: ${numero_rm}. Total de ${voucher_ids.length} vouchers no grupo.`
           ]);
         }
 
-        // Log for master
-        await client.execute(`
-          INSERT INTO dados_dachser.t_voucher_logs (
-            id, voucher_id, user_id, user_name, acao, detalhe, data_hora
-          ) VALUES (?, ?, ?, ?, 'VOUCHER_MASTER_CRIADO', ?, NOW())
-        `, [
-          crypto.randomUUID(),
-          master_id,
-          user_id || null,
-          user_name || 'Sistema',
-          `Consolidou ${childIds.length} vouchers. RM: ${numero_rm}`
-        ]);
-
-        console.log(`Consolidated ${voucher_ids.length} vouchers into master ${master_id}`);
-        result = { success: true, masterVoucherId: master_id, childrenCount: childIds.length };
+        console.log(`Agrupados ${voucher_ids.length} vouchers com RM: ${numero_rm}`);
+        result = { success: true, rmNumero: numero_rm, vouchersCount: voucher_ids.length };
         break;
       }
 
-      // ==================== GET VOUCHERS FILHOS ====================
+      // ==================== GET VOUCHERS AGRUPADOS (POR RM) ====================
+      case 'get_vouchers_agrupados': {
+        const { consolidacao_rm_numero } = body as { consolidacao_rm_numero: string };
+        
+        if (!consolidacao_rm_numero) {
+          return new Response(
+            JSON.stringify({ error: 'consolidacao_rm_numero é obrigatório' }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+
+        const agrupados = await client.query(`
+          SELECT 
+            id, numero_spo, fornecedor, valor, moeda, vencimento, 
+            etapa_atual, consolidacao_rm_numero
+          FROM dados_dachser.t_vouchers
+          WHERE consolidacao_rm_numero = ?
+          ORDER BY created_at ASC
+        `, [consolidacao_rm_numero]);
+
+        result = { success: true, vouchers: agrupados || [] };
+        break;
+      }
+
+      // ==================== GET VOUCHERS FILHOS (LEGADO - MANTIDO PARA COMPATIBILIDADE) ====================
       case 'get_vouchers_filhos': {
         const { master_id } = body as { master_id: string };
         

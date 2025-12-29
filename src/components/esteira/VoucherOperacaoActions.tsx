@@ -459,15 +459,15 @@ export const VoucherOperacaoActions = ({ voucher, onUpdate, allVouchers = [] }: 
                 : "Enviar para Financeiro"}
         </Button>
 
-        {/* Consolidation button - only if there are other vouchers available */}
-        {allVouchers.length > 1 && (
+        {/* Consolidation button - only if there are other OPERACAO vouchers available */}
+        {allVouchers.filter(v => v.etapaAtual === "OPERACAO" && !v.consolidacaoRmNumero).length > 1 && (
           <Button
             variant="outline"
             onClick={() => setShowConsolidateDialog(true)}
             className="gap-2"
           >
             <Layers className="h-4 w-4" />
-            Consolidar Vouchers
+            Agrupar Vouchers
           </Button>
         )}
       </div>
@@ -484,6 +484,7 @@ export const VoucherOperacaoActions = ({ voucher, onUpdate, allVouchers = [] }: 
         onOpenChange={setShowConsolidateDialog}
         vouchers={allVouchers}
         onSuccess={onUpdate}
+        etapaFiltro="OPERACAO"
       />
 
       <AlertDialog open={showConfirm} onOpenChange={setShowConfirm}>

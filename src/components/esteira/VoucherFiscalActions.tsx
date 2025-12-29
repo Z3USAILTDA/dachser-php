@@ -220,15 +220,15 @@ export const VoucherFiscalActions = ({ voucher, onUpdate, allVouchers = [] }: Vo
           </Button>
         )}
 
-        {/* Consolidation button - only if there are other vouchers available */}
-        {allVouchers.length > 1 && (
+        {/* Consolidation button - only if there are other FISCAL vouchers available */}
+        {allVouchers.filter(v => v.etapaAtual === "FISCAL" && !v.consolidacaoRmNumero).length > 1 && (
           <Button
             variant="outline"
             onClick={() => setShowConsolidateDialog(true)}
             className="gap-2"
           >
             <Layers className="h-4 w-4" />
-            Consolidar Vouchers
+            Agrupar Vouchers
           </Button>
         )}
       </div>
@@ -238,6 +238,7 @@ export const VoucherFiscalActions = ({ voucher, onUpdate, allVouchers = [] }: Vo
         onOpenChange={setShowConsolidateDialog}
         vouchers={allVouchers}
         onSuccess={onUpdate}
+        etapaFiltro="FISCAL"
       />
     </div>
   );
