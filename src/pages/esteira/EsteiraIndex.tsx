@@ -1105,7 +1105,7 @@ const EsteiraIndex = () => {
       if (drillDownFilter !== "all") {
         switch (drillDownFilter) {
           case "ativos":
-            if (voucher.etapaAtual === "CONCLUIDO") return false;
+            if (voucher.etapaAtual === "CONCLUIDO" || voucher.etapaAtual === "A_PROCESSAR") return false;
             break;
           case "sla":
             if (voucher.etapaAtual === "CONCLUIDO") return false;
