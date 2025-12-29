@@ -13,6 +13,7 @@ import { cn } from "@/lib/utils";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { TablePagination } from "@/components/layout/TablePagination";
 import { ConsolidarVouchersDialog } from "./ConsolidarVouchersDialog";
+import { VouchersAgrupadosModal } from "./VouchersAgrupadosModal";
 
 const PAGE_SIZE = 20;
 
@@ -116,6 +117,8 @@ export const VoucherTable = ({ vouchers, onViewDetails, onEdit, onDelete, onGoBa
   const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
   const [currentPage, setCurrentPage] = useState(1);
   const [showConsolidateDialog, setShowConsolidateDialog] = useState(false);
+  const [showAgrupadosModal, setShowAgrupadosModal] = useState(false);
+  const [selectedRmNumero, setSelectedRmNumero] = useState("");
 
   // Count eligible vouchers for consolidation (only OPERACAO or FISCAL, not already grouped)
   const eligibleVouchersCount = useMemo(() => {
@@ -351,20 +354,18 @@ export const VoucherTable = ({ vouchers, onViewDetails, onEdit, onDelete, onGoBa
                         <div className="flex items-center gap-2">
                           <span>{voucher.numeroSPO}</span>
                           {voucher.consolidacaoRmNumero && (
-                            <Tooltip>
-                              <TooltipTrigger onClick={(e) => e.stopPropagation()}>
-                                <Badge 
-                                  variant="outline" 
-                                  className="gap-1 bg-violet-500/10 text-violet-400 border-violet-500/30 text-[10px] px-1.5 py-0"
-                                >
-                                  <Layers className="h-3 w-3" />
-                                  {voucher.consolidacaoRmNumero}
-                                </Badge>
-                              </TooltipTrigger>
-                              <TooltipContent>
-                                Agrupado no RM: {voucher.consolidacaoRmNumero}
-                              </TooltipContent>
-                            </Tooltip>
+                            <Badge 
+                              variant="outline" 
+                              className="gap-1 bg-violet-500/10 text-violet-400 border-violet-500/30 text-[10px] px-1.5 py-0 cursor-pointer hover:bg-violet-500/20 transition-colors"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setSelectedRmNumero(voucher.consolidacaoRmNumero!);
+                                setShowAgrupadosModal(true);
+                              }}
+                            >
+                              <Layers className="h-3 w-3" />
+                              {voucher.consolidacaoRmNumero}
+                            </Badge>
                           )}
                         </div>
                       </TableCell>
@@ -544,6 +545,13 @@ export const VoucherTable = ({ vouchers, onViewDetails, onEdit, onDelete, onGoBa
           // Trigger a refresh by changing filters slightly and back
           onFilterChange({ ...filters });
         }}
+      />
+
+      {/* Vouchers Agrupados Modal */}
+      <VouchersAgrupadosModal
+        open={showAgrupadosModal}
+        onOpenChange={setShowAgrupadosModal}
+        rmNumero={selectedRmNumero}
       />
     </TooltipProvider>
   );
