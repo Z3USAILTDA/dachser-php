@@ -492,7 +492,7 @@ export default function Olimpo() {
       }
 
       // SEA data
-      const seaRes = await fetch(`${baseUrl}?action=seed_sea`);
+      const seaRes = await fetch(`${baseUrl}?action=sea_seed`);
       const seaJson = await seaRes.json();
       const seaArr = Array.isArray(seaJson?.data) ? seaJson.data : [];
       
