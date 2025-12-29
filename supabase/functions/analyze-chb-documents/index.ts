@@ -82,11 +82,27 @@ interface ClientConfig {
   campos_obrigatorios?: string[];
   cliente_nome?: string;
   instrucoes_personalizadas?: string;
+  // Novos campos de armador
+  armador?: string;
+  agente_destino?: string;
+  contato_email?: string;
+  prazo_resposta_dias?: number;
+  porto_descarga_real?: string;
+  // Tolerâncias de taxas acessórias
+  tolerancia_taxas_acessorias_abs?: number;
+  tolerancia_taxas_acessorias_pct?: number;
+  // Regras fiscais
+  beneficio_fiscal?: string;
+  cfop_padrao?: string;
+  estado_uf?: string;
+  icms_diferido?: boolean;
 }
 
 function buildTableSpec(clientConfig?: ClientConfig): string {
   const toleranciaPeso = clientConfig?.tolerancia_peso ?? 2.0;
   const toleranciaValor = clientConfig?.tolerancia_valor ?? 1.0;
+  const toleranciaTaxasAbs = clientConfig?.tolerancia_taxas_acessorias_abs ?? 50;
+  const toleranciaTaxasPct = clientConfig?.tolerancia_taxas_acessorias_pct ?? 1.0;
   const camposObrigatorios = clientConfig?.campos_obrigatorios || ['peso_bruto', 'peso_liquido', 'valor_total', 'moeda', 'incoterm'];
   
   const camposLabel: Record<string, string> = {
@@ -103,6 +119,88 @@ function buildTableSpec(clientConfig?: ClientConfig): string {
   };
   
   const camposObrigatoriosText = camposObrigatorios.map(c => camposLabel[c] || c).join(', ');
+  
+  // Build fiscal rules section based on client config
+  let fiscalRulesSection = '';
+  if (clientConfig?.beneficio_fiscal || clientConfig?.estado_uf || clientConfig?.cfop_padrao) {
+    fiscalRulesSection = `
+
+11) REGRAS FISCAIS ESPECÍFICAS DO CLIENTE:`;
+    
+    if (clientConfig?.estado_uf) {
+      const isDiferido = clientConfig?.icms_diferido || ['MG', 'SC', 'ES'].includes(clientConfig.estado_uf);
+      fiscalRulesSection += `
+   - ESTADO DO CLIENTE: ${clientConfig.estado_uf}
+   - ICMS: ${isDiferido ? 'DIFERIDO (alertar se DI indica ICMS integral)' : 'INTEGRAL esperado'}`;
+    }
+    
+    if (clientConfig?.beneficio_fiscal) {
+      fiscalRulesSection += `
+   - BENEFÍCIO FISCAL ATIVO: ${clientConfig.beneficio_fiscal}`;
+      
+      if (clientConfig.beneficio_fiscal === 'RECOF') {
+        fiscalRulesSection += `
+     → CFOP esperado: 3129 (se diferente → 🔴 CRÍTICO)
+     → ICMS deve estar SUSPENSO (se integral → 🔴 CRÍTICO)
+     → Verificar regime especial no draft DI`;
+      } else if (clientConfig.beneficio_fiscal === 'DRAWBACK') {
+        fiscalRulesSection += `
+     → CFOP esperado: 3127 (se diferente → 🔴 CRÍTICO)
+     → OBRIGATÓRIO: Ato Concessório no draft DI (se ausente → 🔴 CRÍTICO)
+     → II e IPI isentos conforme ato`;
+      } else if (clientConfig.beneficio_fiscal === 'EX_TARIFARIO') {
+        fiscalRulesSection += `
+     → II deve ser 0% (se diferente → 🔴 CRÍTICO)
+     → Fundamento Legal obrigatório: 59 (se ausente → 🔴 CRÍTICO)
+     → Verificar Ex-Tarifário válido para o NCM`;
+      }
+    }
+    
+    if (clientConfig?.cfop_padrao) {
+      fiscalRulesSection += `
+   - CFOP PADRÃO: ${clientConfig.cfop_padrao} (divergência = 🟨 alerta para verificação)`;
+    }
+  }
+  
+  // Build armador section based on client config
+  let armadorSection = '';
+  if (clientConfig?.armador || clientConfig?.agente_destino || clientConfig?.porto_descarga_real) {
+    armadorSection = `
+
+12) CONFIGURAÇÕES DE ARMADOR/AGENTE:`;
+    
+    if (clientConfig?.armador) {
+      armadorSection += `
+   - ARMADOR PADRÃO: ${clientConfig.armador}
+     → Se BL indica armador diferente → 🟨 alertar para verificação`;
+    }
+    
+    if (clientConfig?.agente_destino) {
+      armadorSection += `
+   - AGENTE DE DESTINO: ${clientConfig.agente_destino}`;
+    }
+    
+    if (clientConfig?.porto_descarga_real) {
+      armadorSection += `
+   - PORTO DE DESCARGA REAL: ${clientConfig.porto_descarga_real}
+     → Se documentos indicam porto diferente → 🟨 alertar discrepância`;
+    }
+    
+    if (clientConfig?.contato_email && clientConfig?.prazo_resposta_dias) {
+      armadorSection += `
+   - Para divergências com armador, sugerir contato: ${clientConfig.contato_email}
+   - Prazo de resposta esperado: ${clientConfig.prazo_resposta_dias} dias`;
+    }
+  }
+  
+  // Build taxas acessórias section
+  let taxasSection = `
+
+13) TOLERÂNCIA PARA TAXAS ACESSÓRIAS:
+   - Valor absoluto: até USD/EUR ${toleranciaTaxasAbs} de diferença = ✅ tolerado
+   - Valor percentual: até ${toleranciaTaxasPct}% do total = ✅ tolerado
+   - Taxas acima desses limites → 🔴 CRÍTICO
+   - Sempre validar despesas acessórias contra CE Mercante quando disponível`;
   
   return `
 REGRAS DE CONTEÚDO DA TABELA
@@ -168,8 +266,10 @@ REGRAS DE CONTEÚDO DA TABELA
    - Se documento contém "AWB", "Airway Bill", "MAWB", "HAWB" → MODAL = AIR
    - Se documento contém "BL", "Bill of Lading", "HBL", "MBL", "Container" → MODAL = SEA
    - Reportar o modal detectado no bloco METADATA
+${fiscalRulesSection}${armadorSection}${taxasSection}
 ${clientConfig?.instrucoes_personalizadas ? `
-11) INSTRUÇÕES ESPECÍFICAS DO CLIENTE:
+
+14) INSTRUÇÕES ESPECÍFICAS DO CLIENTE:
 ${clientConfig.instrucoes_personalizadas}
 ` : ''}`;
 }
