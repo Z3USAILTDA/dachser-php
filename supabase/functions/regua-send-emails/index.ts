@@ -573,7 +573,7 @@ serve(async (req: Request): Promise<Response> => {
         const emailResponse = await resend!.emails.send({
           from: "Dachser <noreply@hermes.z3us.ai>",
           to: [clientEmail],
-          subject: `[TESTE] ${subject}`,
+          subject: subject,
           html: htmlBody,
         });
 
