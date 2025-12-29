@@ -86,14 +86,14 @@ const buildTableHtml = (rows: InvoiceRow[]): string => {
     rowsHtml += `<tr style="background-color:${rowBg};color:${rowColor};">
       <td style="${rowBorder}${cellPadding}white-space:nowrap;">${htmlEncode(r.documento || "-")}</td>
       <td style="${rowBorder}${cellPadding}white-space:nowrap;">${htmlEncode(r.nd || "-")}</td>
-      <td style="${rowBorder}${cellPadding}word-break:break-word;">${htmlEncode(r.ref_cliente || "-")}</td>
+      <td style="${rowBorder}${cellPadding}white-space:nowrap;">${htmlEncode(r.ref_cliente || "-")}</td>
       <td style="${rowBorder}${cellPadding}white-space:nowrap;">${htmlEncode(r.nf_exibicao || "-")}</td>
       <td style="${rowBorder}${cellPadding}white-space:nowrap;">${htmlEncode(r.modal || "-")}</td>
       <td style="${rowBorder}${cellPadding}white-space:nowrap;">${htmlEncode(r.tipo_documento || "-")}</td>
       <td style="${rowBorder}${cellPadding}white-space:nowrap;text-align:center;">${htmlEncode(r.data_emissao || "-")}</td>
       <td style="${rowBorder}${cellPadding}white-space:nowrap;text-align:center;">${htmlEncode(r.data_vencimento || "-")}</td>
       <td style="${rowBorder}${cellPadding}white-space:nowrap;">${htmlEncode(formatCnpj(r.cnpj))}</td>
-      <td style="${rowBorder}${cellPadding}word-break:break-word;">${htmlEncode(formatRazaoSocial(r.razao_social))}</td>
+      <td style="${rowBorder}${cellPadding}white-space:nowrap;">${htmlEncode(formatRazaoSocial(r.razao_social))}</td>
       <td style="${rowBorder}${cellPadding}text-align:right;white-space:nowrap;">${Number(r.valor_nf || 0).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
       <td style="${rowBorder}${cellPadding}white-space:nowrap;">${htmlEncode(r.processo || "-")}</td>
       <td style="${rowBorder}${cellPadding}white-space:nowrap;">${htmlEncode(r.master || "-")}</td>
@@ -648,6 +648,7 @@ serve(async (req: Request): Promise<Response> => {
     };
 
     // Fetch invoices com JOIN para t_dados_nfs para pegar processo, house, master
+    // A conexão é feita por documento (numero NF) pois id_rm pode estar vazio ou diferente
     const sql = `
       SELECT 
         SUBSTRING_INDEX(t.razao_social, ' - ', 1) AS razao_base,
@@ -669,6 +670,7 @@ serve(async (req: Request): Promise<Response> => {
         COALESCE(nf.numero_processo, '') AS processo,
         COALESCE(nf.house, '') AS house,
         COALESCE(nf.master, '') AS master,
+        t.id_rm AS debug_id_rm,
         (
           SELECT GROUP_CONCAT(DISTINCT c.email_contato SEPARATOR ';')
           FROM dados_dachser.t_dados_financeiro_contatos c
@@ -677,7 +679,7 @@ serve(async (req: Request): Promise<Response> => {
         ) AS email_cliente
       FROM dados_dachser.t_dados_financeiro_nfs t
       LEFT JOIN ai_agente.t_financeiro_soft_delete sd ON sd.documento = t.documento
-      LEFT JOIN dados_dachser.t_dados_nfs nf ON nf.id_rm = t.id_rm
+      LEFT JOIN dados_dachser.t_dados_nfs nf ON CAST(nf.id_rm AS CHAR) = CAST(t.id_rm AS CHAR)
       WHERE COALESCE(sd.active, 1) = 1
         AND (t.disputa IS NULL OR t.disputa = 0)
         AND ${getStageCondition(stage)}
@@ -694,10 +696,24 @@ serve(async (req: Request): Promise<Response> => {
       console.log(`[regua-send-emails] DEBUG primeira fatura:`, JSON.stringify({
         documento: first.documento,
         id_rm_financeiro: first.id_rm_financeiro,
+        debug_id_rm: first.debug_id_rm,
         processo: first.processo,
         house: first.house,
         master: first.master
       }));
+      
+      // Query para verificar se existe correspondência em t_dados_nfs
+      try {
+        const checkNfs = await client.query(`
+          SELECT id_rm, numero_processo, house, master 
+          FROM dados_dachser.t_dados_nfs 
+          WHERE id_rm = ? 
+          LIMIT 1
+        `, [first.debug_id_rm]);
+        console.log(`[regua-send-emails] DEBUG t_dados_nfs para id_rm ${first.debug_id_rm}:`, JSON.stringify(checkNfs));
+      } catch (e) {
+        console.log(`[regua-send-emails] DEBUG erro ao buscar t_dados_nfs:`, e);
+      }
     }
 
     if (invoices.length === 0) {
