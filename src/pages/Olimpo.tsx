@@ -1384,19 +1384,18 @@ export default function Olimpo() {
                   <TableHead className="text-[10px] md:text-xs text-muted-foreground">Rota</TableHead>
                   <TableHead className="text-[10px] md:text-xs text-muted-foreground">Previsão</TableHead>
                   <TableHead className="text-[10px] md:text-xs text-muted-foreground">Status</TableHead>
-                  <TableHead className="text-[10px] md:text-xs text-muted-foreground text-right">Qtd</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {isLoading ? (
                   <TableRow>
-                    <TableCell colSpan={6} className="text-center text-muted-foreground py-8">
+                    <TableCell colSpan={5} className="text-center text-muted-foreground py-8">
                       Carregando dados...
                     </TableCell>
                   </TableRow>
                 ) : paginatedData.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={6} className="text-center text-muted-foreground py-8">
+                    <TableCell colSpan={5} className="text-center text-muted-foreground py-8">
                       Nenhum registro encontrado
                     </TableCell>
                   </TableRow>
@@ -1416,7 +1415,6 @@ export default function Olimpo() {
                           {row.status}
                         </span>
                       </TableCell>
-                      <TableCell className="text-[10px] md:text-xs text-right font-medium">{row.count}</TableCell>
                     </TableRow>
                   ))
                 )}
