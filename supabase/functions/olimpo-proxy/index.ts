@@ -80,6 +80,91 @@ serve(async (req) => {
 
     console.log(`[olimpo-proxy] Action: ${action}`);
 
+    // ===== SEED_ALL: Leitura unificada da tabela centralizada t_olimpo_tracking =====
+    if (action === 'seed_all') {
+      const mariadbHost = Deno.env.get('MARIADB_HOST');
+      const mariadbPort = Deno.env.get('MARIADB_PORT') || '3306';
+      const mariadbUser = Deno.env.get('MARIADB_USER');
+      const mariadbPass = Deno.env.get('MARIADB_PASSWORD');
+
+      if (!mariadbHost || !mariadbUser || !mariadbPass) {
+        return new Response(JSON.stringify({ error: 'MariaDB não configurado', data: [] }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      }
+
+      const { Client } = await import("https://deno.land/x/mysql@v2.12.1/mod.ts");
+      const client = await new Client().connect({
+        hostname: mariadbHost,
+        port: parseInt(mariadbPort, 10),
+        username: mariadbUser,
+        password: mariadbPass,
+        db: 'dados_dachser',
+      });
+
+      try {
+        const rows = await client.query(`
+          SELECT 
+            id, mode, asset, flight, tipo_processo, cliente,
+            origem_code, destino_code, origem_lat, origem_lon,
+            destino_lat, destino_lon, status, eta, ata, etd, atd,
+            current_lat, current_lon,
+            vessel_name, shipping_line, container_status,
+            last_api_update, active, updated_at
+          FROM dados_dachser.t_olimpo_tracking
+          WHERE active = TRUE
+          ORDER BY updated_at DESC
+        `);
+
+        const out = rows.map((r: any) => ({
+          id: r.id,
+          mode: r.mode,
+          asset: r.asset,
+          flight: r.flight,
+          tipo_processo: r.tipo_processo,
+          cliente: r.cliente || 'N/A',
+          origem_code: r.origem_code,
+          destino_code: r.destino_code,
+          origem_lat: r.origem_lat ? Number(r.origem_lat) : null,
+          origem_lon: r.origem_lon ? Number(r.origem_lon) : null,
+          destino_lat: r.destino_lat ? Number(r.destino_lat) : null,
+          destino_lon: r.destino_lon ? Number(r.destino_lon) : null,
+          status: r.status || 'Em trânsito',
+          eta: r.eta,
+          ata: r.ata,
+          etd: r.etd,
+          atd: r.atd,
+          current_lat: r.current_lat ? Number(r.current_lat) : null,
+          current_lon: r.current_lon ? Number(r.current_lon) : null,
+          vessel_name: r.vessel_name,
+          shipping_line: r.shipping_line,
+          container_status: r.container_status,
+          last_api_update: r.last_api_update,
+          updated_at: r.updated_at,
+        }));
+
+        await client.close();
+        console.log(`[seed_all] Returning ${out.length} items from t_olimpo_tracking`);
+        return new Response(JSON.stringify({ 
+          data: out,
+          counts: {
+            total: out.length,
+            air: out.filter((x: any) => x.mode === 'air').length,
+            sea: out.filter((x: any) => x.mode === 'sea').length,
+          }
+        }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      } catch (e: any) {
+        await client.close();
+        console.error('[seed_all] Error:', e);
+        return new Response(JSON.stringify({ error: 'Falha seed_all', detail: e.message, data: [] }), {
+          status: 500,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      }
+    }
+
     // ===== SEA: seed do banco de containers =====
     if (action === 'sea_seed') {
       const mariadbHost = Deno.env.get('MARIADB_HOST');
