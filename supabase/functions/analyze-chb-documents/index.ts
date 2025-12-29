@@ -314,26 +314,34 @@ REGRAS DE CONTEÚDO DA TABELA
 
 6) INCOTERM e FRETE — LINHAS SEPARADAS OBRIGATÓRIAS:
    - INCOTERM: linha própria (ex.: FOB, CFR, CIF, EXW, etc.)
-   - FRETE: linha própria (valor e moeda)
+   - FRETE/FREIGHT: linha própria com VALOR DO FRETE (não confundir com valor da mercadoria!)
    - NUNCA unificar em uma única linha de validação
    - Incoterms diferentes (ex.: CFR × FOB) → 🔴
    - Incoterm coerente mas rótulo faltante → 🟨
 
-7) VALORES — REGRAS CRÍTICAS (ATENÇÃO MÁXIMA):
-   - VALOR TOTAL: uma linha com valor total por documento
-   - MOEDA: sempre especificar (USD, EUR, BRL, etc.)
-   - NUNCA inventar valores que não existam no documento
-   - NUNCA duplicar valores entre documentos diferentes
-   - Se documento não tem valor → "ND" (não "0" ou valor inventado)
-   - Divergência de valor > ${toleranciaValor}% → 🔴 CRÍTICO
+7) VALORES — REGRAS CRÍTICAS (ATENÇÃO MÁXIMA — DIFERENCIE CLARAMENTE):
+
+   ⚠️ EXISTEM DOIS VALORES DISTINTOS — NÃO CONFUNDA!
    
-   ⚠️ REGRA DE OURO PARA VALORES:
-   - Se dois valores são COMPLETAMENTE DIFERENTES (ex: 28.234 vs 508) → 🔴 CRÍTICO IMEDIATO
-   - NÃO aplicar tolerância quando a diferença é > 50% — isso é ERRO GRAVE
-   - Calcule SEMPRE: |valor1 - valor2| / max(valor1, valor2) * 100
-   - Diferença > ${toleranciaValor}% → 🔴
-   - Diferença > 20% → 🔴 OBRIGATÓRIO (independente da tolerância configurada)
-   - Valores de ordens de magnitude diferentes (milhares vs centenas) → 🔴 CRÍTICO
+   A) VALOR DA MERCADORIA (Invoice Amount / Merchandise Value):
+      - É o valor TOTAL da Invoice comercial (soma dos itens)
+      - Aparece na INVOICE, geralmente na última linha como "Total" ou "Grand Total"
+      - Linha da tabela: "Valor Mercadoria" ou "Invoice Total"
+   
+   B) VALOR DO FRETE (Freight / Ocean Freight / Air Freight):
+      - É o custo do TRANSPORTE da carga
+      - Aparece no BL, HBL, AWB, ou documentos de frete
+      - Linha da tabela: "Frete" ou "Freight"
+      - ATENÇÃO: Frete pode ser "COLLECT" ou "PREPAID" — indicar na observação
+   
+   MOEDA: sempre especificar (USD, EUR, BRL, etc.)
+   NUNCA inventar valores que não existam no documento
+   Se documento não tem valor → "ND" (não "0" ou valor inventado)
+   
+   TOLERÂNCIA DE VALOR (configurada pelo cliente): ${toleranciaValor}%
+   - Divergência > ${toleranciaValor}% → 🔴 CRÍTICO
+   - Divergência > 20% → 🔴 OBRIGATÓRIO (independente da tolerância)
+   - Valores de ordens de magnitude diferentes → 🔴 CRÍTICO (verificar extração!)
 
 8) NCM — Regra aduaneira:
    - Divergência na RAIZ (4 primeiros dígitos) → 🔴 CRÍTICO
@@ -452,61 +460,77 @@ SEMPRE faça:
 EXTRAÇÃO DE VALORES — REGRAS ABSOLUTAS (ATENÇÃO MÁXIMA!)
 ═══════════════════════════════════════════════════════════════════════════════
 
-⚠️ PROBLEMA COMUM: Confundir VALOR UNITÁRIO com VALOR TOTAL — EVITE!
+⚠️⚠️⚠️ EXISTEM DOIS TIPOS DE VALOR — EXTRAIA AMBOS SEPARADAMENTE! ⚠️⚠️⚠️
 
-1. VALOR TOTAL DA INVOICE — COMO ENCONTRAR:
-   - PROCURE NO RODAPÉ/FIM DA TABELA: "Total", "Grand Total", "Invoice Total", "Amount Due"
-   - SE HÁ MÚLTIPLOS ITENS: O total é a SOMA de todos os valores da coluna "Total" ou "Amount"
-   - SE HÁ LINHA COM "Total": Use o valor DESSA linha, não a soma manual
-   - LOCALIZAÇÃO TÍPICA: Última linha da tabela, após todos os itens
+╔═══════════════════════════════════════════════════════════════════════════════╗
+║  VALOR DA MERCADORIA ≠ VALOR DO FRETE — SÃO COISAS DIFERENTES!              ║
+║                                                                                ║
+║  1. VALOR DA MERCADORIA = valor dos produtos na Invoice                       ║
+║  2. VALOR DO FRETE = custo do transporte (freight)                            ║
+║                                                                                ║
+║  CRIE DUAS LINHAS SEPARADAS NA TABELA!                                        ║
+╚═══════════════════════════════════════════════════════════════════════════════╝
+
+═══════════════════════════════════════════════════════════════════════════════
+1. VALOR DA MERCADORIA (Invoice Total) — COMO ENCONTRAR:
+═══════════════════════════════════════════════════════════════════════════════
+   - PROCURE NO RODAPÉ/FIM DA TABELA: "Total", "Grand Total", "Invoice Total"
+   - É a SOMA dos valores de todos os itens vendidos
+   - LOCALIZAÇÃO: Invoice comercial, última linha da tabela de produtos
    
-   EXEMPLO CORRETO:
+   EXEMPLO:
    | Item | Qty | Price | Total    |
    |------|-----|-------|----------|
-   | A    | 10  | 50    | 500,00   |  ← Valor do item, NÃO É O TOTAL!
-   | B    | 5   | 100   | 500,00   |  ← Valor do item, NÃO É O TOTAL!
-   |      |     |TOTAL: | 1.000,00 |  ← ESTE É O VALOR TOTAL! ✅
+   | A    | 10  | 50    | 500,00   |  ← valor do ITEM
+   | B    | 5   | 100   | 500,00   |  ← valor do ITEM
+   |      |     |TOTAL: | 1.000,00 |  ← VALOR DA MERCADORIA ✅
+
+═══════════════════════════════════════════════════════════════════════════════
+2. VALOR DO FRETE (Freight) — COMO ENCONTRAR:
+═══════════════════════════════════════════════════════════════════════════════
+   ⚠️ FRETE É DIFERENTE DE VALOR DA INVOICE!
    
-   ❌ ERRO COMUM: Pegar 500,00 (valor de UM item) como Total
-   ✅ CORRETO: O Total é 1.000,00 (soma de todos)
+   ONDE ENCONTRAR FRETE:
+   - BL (Bill of Lading): campo "Freight" ou "Ocean Freight"
+   - HBL (House BL): "Freight Charges" ou "Freight Amount"
+   - AWB (Air Waybill): "Freight" ou "Air Freight"
+   - CE Mercante: valor do frete declarado
+   - Invoice de frete separada do agente
+   
+   TERMOS PARA BUSCAR:
+   - "Freight", "Ocean Freight", "Air Freight", "Freight Charges"
+   - "Frete", "Valor do Frete"
+   - "Freight Prepaid" (pago na origem)
+   - "Freight Collect" (pago no destino)
+   
+   ATENÇÃO:
+   - Frete pode estar como "As Arranged" → extrair como "As Arranged"
+   - Frete pode estar zerado se CFR/CIF (incluso no preço) → extrair "0" ou "Incluso"
+   - Se Incoterm é FOB, frete é pago pelo importador → deve existir!
 
-2. QUANDO HÁ MÚLTIPLAS INVOICES:
-   - CADA INVOICE TEM SEU PRÓPRIO VALOR TOTAL
-   - Invoice 1: EUR 28.234,23 → mostrar na coluna "inv_01.pdf"
-   - Invoice 2: EUR 508,22 → mostrar na coluna "inv_02.pdf"
-   - NÃO some valores de Invoices diferentes
-   - COMPARE invoice com invoice: se valores diferentes → 🔴 CRÍTICO
+═══════════════════════════════════════════════════════════════════════════════
+3. LINHAS OBRIGATÓRIAS NA TABELA:
+═══════════════════════════════════════════════════════════════════════════════
+   - "Valor Mercadoria" → valor total da Invoice (produtos)
+   - "Frete" → valor do transporte (freight)
+   - NÃO misture os dois em uma única linha!
 
-3. MOEDA — SEMPRE OBRIGATÓRIA:
-   - Extraia junto com valor: "EUR 28.234,23" (não apenas "28.234,23")
-   - Procure no cabeçalho da tabela, prefixo do valor, ou campo "Currency"
+4. MOEDA — SEMPRE OBRIGATÓRIA para ambos:
+   - Extraia junto com valor: "EUR 28.234,23" ou "USD 1.500,00"
    - NUNCA deixe valor sem moeda
 
-4. NUNCA INVENTE VALORES:
-   - Se documento não mostra valor → "ND"
-   - Se valor é ilegível → "Ilegível (p.X)"
-   - Se múltiplos valores no mesmo doc → extraia o TOTAL (soma)
+5. QUANDO HÁ MÚLTIPLAS INVOICES:
+   - Cada Invoice tem seu próprio valor de mercadoria
+   - FRETE geralmente é único para todo o embarque
 
 ═══════════════════════════════════════════════════════════════════════════════
-COMPARAÇÃO DE VALORES — QUANDO MARCAR 🔴
+COMPARAÇÃO DE VALORES — TOLERÂNCIAS DO SOP
 ═══════════════════════════════════════════════════════════════════════════════
 
-REGRA MATEMÁTICA SIMPLES:
-- Calcule: diferença% = |A - B| / max(A, B) * 100
-- Se diferença > 2% e < 5% → 🟨 ALERTA
-- Se diferença > 5% → 🔴 CRÍTICO
-- Se diferença > 20% → 🔴 CRÍTICO OBRIGATÓRIO (sem exceções)
-- Se diferença > 50% → 🔴🔴 ERRO GRAVÍSSIMO (possível valor errado extraído!)
+A tolerância configurada pelo cliente será aplicada automaticamente.
+Se tolerância = 0%, QUALQUER diferença é 🔴 CRÍTICO.
 
-EXEMPLOS DE DIVERGÊNCIA CRÍTICA:
-- EUR 28.234,23 vs EUR 508,22 → diferença = 98% → 🔴🔴 GRAVÍSSIMO (verifique extração!)
-- EUR 1.000,00 vs EUR 980,00 → diferença = 2% → ✅ Conforme
-- EUR 5.000,00 vs EUR 4.000,00 → diferença = 20% → 🔴 CRÍTICO
-
-⚠️ Se diferença > 80%: VERIFIQUE SE EXTRAIU O DADO CORRETO!
-Pode ser erro de extração (valor de item vs valor total).
-
-NUNCA marque ✅ (Conforme) quando valores são completamente diferentes!
+NUNCA marque ✅ (Conforme) quando valores são diferentes e tolerância = 0%!
 
 ═══════════════════════════════════════════════════════════════════════════════
 STATUS QUANDO DADO EXISTE EM UM DOCUMENTO E NÃO EM OUTRO
@@ -543,7 +567,7 @@ TRANSPORTADORA: CARRIER, FORWARDED BY, SHIPPED VIA, TRANSPORTADOR, VIA
 CAMPOS OBRIGATÓRIOS NA TABELA DE SAÍDA
 ═══════════════════════════════════════════════════════════════════════════════
 
-SEMPRE incluir estas linhas na tabela:
+SEMPRE incluir estas linhas na tabela (SEPARADAMENTE):
 1. Consignee/CNPJ
 2. Incoterm
 3. Peso Bruto Total
@@ -551,10 +575,13 @@ SEMPRE incluir estas linhas na tabela:
 5. Volume/CBM Total
 6. Container (nº/tipo/lacre)
 7. NCM Principal
-8. Valor Total (COM MOEDA!)
-9. Moeda
-10. Data da Invoice
-11. Transportadora
+8. Valor Mercadoria (valor da Invoice - COM MOEDA!)
+9. Frete (valor do transporte - COM MOEDA!)
+10. Moeda
+11. Data da Invoice
+12. Transportadora
+
+⚠️ ATENÇÃO: "Valor Mercadoria" e "Frete" são LINHAS SEPARADAS!
 
 ═══════════════════════════════════════════════════════════════════════════════
 PADRONIZAÇÃO DE SAÍDA
