@@ -206,6 +206,53 @@ export default function ConferenciaChb() {
     });
   };
 
+  // Fetch file from URL and convert to base64
+  const fetchFileAsBase64 = async (url: string, filename: string): Promise<{ content: string; mimeType: string } | null> => {
+    try {
+      const response = await fetch(url);
+      if (!response.ok) {
+        console.error(`Failed to fetch file ${filename}: ${response.status}`);
+        return null;
+      }
+      const blob = await response.blob();
+      const mimeType = blob.type || getMimeTypeFromFilename(filename);
+      
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.readAsDataURL(blob);
+        reader.onload = () => {
+          const result = reader.result as string;
+          const base64 = result.split(',')[1];
+          resolve({ content: base64, mimeType });
+        };
+        reader.onerror = () => reject(new Error('Failed to read blob'));
+      });
+    } catch (error) {
+      console.error(`Error fetching file ${filename}:`, error);
+      return null;
+    }
+  };
+
+  // Helper to determine MIME type from filename
+  const getMimeTypeFromFilename = (filename: string): string => {
+    const ext = filename.toLowerCase().split('.').pop();
+    const mimeTypes: Record<string, string> = {
+      'pdf': 'application/pdf',
+      'png': 'image/png',
+      'jpg': 'image/jpeg',
+      'jpeg': 'image/jpeg',
+      'gif': 'image/gif',
+      'webp': 'image/webp',
+      'xlsx': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      'xls': 'application/vnd.ms-excel',
+      'doc': 'application/msword',
+      'docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      'txt': 'text/plain',
+      'csv': 'text/csv',
+    };
+    return mimeTypes[ext || ''] || 'application/octet-stream';
+  };
+
   const handleStartAnalysis = async (isRerun = false) => {
     // Get NEW files uploaded for current step only
     const currentStepFiles = uploadedFiles[activeStep] || [];
@@ -247,24 +294,45 @@ export default function ConferenciaChb() {
         }))
       );
 
-      // Convert existing documents (all steps) with file reference to base64
-      const existingDocsContent = await Promise.all(
-        allDocs
-          .filter(doc => doc.file) // Only include docs with file reference
-          .map(async (doc) => ({
+      // Convert existing documents (all steps) - fetch from URL if no local file
+      const existingDocsPromises = allDocs.map(async (doc) => {
+        // If we have a local File reference, use it
+        if (doc.file) {
+          return {
             name: doc.name,
-            content: await fileToBase64(doc.file!),
-            mimeType: doc.file!.type || 'application/octet-stream',
+            content: await fileToBase64(doc.file),
+            mimeType: doc.file.type || 'application/octet-stream',
             stepId: doc.stepId,
-          }))
-      );
+          };
+        }
+        
+        // Otherwise, fetch from URL if available
+        if (doc.url) {
+          const result = await fetchFileAsBase64(doc.url, doc.name);
+          if (result) {
+            return {
+              name: doc.name,
+              content: result.content,
+              mimeType: result.mimeType,
+              stepId: doc.stepId,
+            };
+          }
+        }
+        
+        // Couldn't get content for this doc
+        console.warn(`Could not get content for document: ${doc.name}`);
+        return null;
+      });
+
+      const existingDocsResults = await Promise.all(existingDocsPromises);
+      const existingDocsContent = existingDocsResults.filter((doc): doc is NonNullable<typeof doc> => doc !== null);
 
       // Combine: existing docs first, then new files (avoiding duplicates)
       const existingNames = new Set(existingDocsContent.map(d => d.name));
       const uniqueNewFiles = newFilesContent.filter(f => !existingNames.has(f.name));
       const allFilesContent = [...existingDocsContent, ...uniqueNewFiles];
 
-      console.log(`Sending ${allFilesContent.length} files for analysis (${existingDocsContent.length} existing, ${uniqueNewFiles.length} new)`);
+      console.log(`Sending ${allFilesContent.length} files for analysis (${existingDocsContent.length} from DB/storage, ${uniqueNewFiles.length} new uploads)`);
       if (clientConfig) {
         console.log(`Using client config for: ${clientConfig.cliente_nome || clientConfig.cliente_cnpj}`);
       }
