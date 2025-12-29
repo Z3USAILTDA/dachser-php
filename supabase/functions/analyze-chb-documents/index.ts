@@ -319,13 +319,21 @@ REGRAS DE CONTEÚDO DA TABELA
    - Incoterms diferentes (ex.: CFR × FOB) → 🔴
    - Incoterm coerente mas rótulo faltante → 🟨
 
-7) VALORES — REGRAS CRÍTICAS:
+7) VALORES — REGRAS CRÍTICAS (ATENÇÃO MÁXIMA):
    - VALOR TOTAL: uma linha com valor total por documento
    - MOEDA: sempre especificar (USD, EUR, BRL, etc.)
    - NUNCA inventar valores que não existam no documento
    - NUNCA duplicar valores entre documentos diferentes
    - Se documento não tem valor → "ND" (não "0" ou valor inventado)
-   - Divergência de valor > ${toleranciaValor}% → 🔴
+   - Divergência de valor > ${toleranciaValor}% → 🔴 CRÍTICO
+   
+   ⚠️ REGRA DE OURO PARA VALORES:
+   - Se dois valores são COMPLETAMENTE DIFERENTES (ex: 28.234 vs 508) → 🔴 CRÍTICO IMEDIATO
+   - NÃO aplicar tolerância quando a diferença é > 50% — isso é ERRO GRAVE
+   - Calcule SEMPRE: |valor1 - valor2| / max(valor1, valor2) * 100
+   - Diferença > ${toleranciaValor}% → 🔴
+   - Diferença > 20% → 🔴 OBRIGATÓRIO (independente da tolerância configurada)
+   - Valores de ordens de magnitude diferentes (milhares vs centenas) → 🔴 CRÍTICO
 
 8) NCM — Regra aduaneira:
    - Divergência na RAIZ (4 primeiros dígitos) → 🔴 CRÍTICO
