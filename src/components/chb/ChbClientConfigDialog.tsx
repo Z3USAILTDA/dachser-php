@@ -34,7 +34,7 @@ const CAMPOS_DISPONIVEIS = [
 ];
 
 const BENEFICIOS_FISCAIS = [
-  { value: '', label: 'Nenhum' },
+  { value: 'NENHUM', label: 'Nenhum' },
   { value: 'RECOF', label: 'RECOF' },
   { value: 'DRAWBACK', label: 'Drawback Isenção' },
   { value: 'EX_TARIFARIO', label: 'Ex-Tarifário' }
@@ -70,7 +70,7 @@ export function ChbClientConfigDialog({ open, onOpenChange }: Props) {
     porto_descarga_real: '',
     tolerancia_taxas_acessorias_abs: 50,
     tolerancia_taxas_acessorias_pct: 1.0,
-    beneficio_fiscal: '',
+    beneficio_fiscal: 'NENHUM',
     cfop_padrao: '',
     estado_uf: '',
     icms_diferido: false
@@ -106,7 +106,7 @@ export function ChbClientConfigDialog({ open, onOpenChange }: Props) {
       porto_descarga_real: '',
       tolerancia_taxas_acessorias_abs: 50,
       tolerancia_taxas_acessorias_pct: 1.0,
-      beneficio_fiscal: '',
+      beneficio_fiscal: 'NENHUM',
       cfop_padrao: '',
       estado_uf: '',
       icms_diferido: false
@@ -132,7 +132,7 @@ export function ChbClientConfigDialog({ open, onOpenChange }: Props) {
       porto_descarga_real: config.porto_descarga_real || '',
       tolerancia_taxas_acessorias_abs: config.tolerancia_taxas_acessorias_abs || 50,
       tolerancia_taxas_acessorias_pct: config.tolerancia_taxas_acessorias_pct || 1.0,
-      beneficio_fiscal: config.beneficio_fiscal || '',
+      beneficio_fiscal: config.beneficio_fiscal || 'NENHUM',
       cfop_padrao: config.cfop_padrao || '',
       estado_uf: config.estado_uf || '',
       icms_diferido: config.icms_diferido || false
@@ -152,11 +152,17 @@ export function ChbClientConfigDialog({ open, onOpenChange }: Props) {
         return;
       }
 
+      // Converter 'NENHUM' para null ao salvar
+      const dataToSave = {
+        ...formData,
+        beneficio_fiscal: formData.beneficio_fiscal === 'NENHUM' ? null : formData.beneficio_fiscal
+      };
+
       if (editingConfig) {
-        await updateConfig(editingConfig.id, formData);
+        await updateConfig(editingConfig.id, dataToSave);
         toast.success('Configuração atualizada');
       } else {
-        await createConfig(formData);
+        await createConfig(dataToSave);
         toast.success('Configuração criada');
       }
       resetForm();
@@ -558,7 +564,7 @@ export function ChbClientConfigDialog({ open, onOpenChange }: Props) {
                           Benefício Fiscal
                         </Label>
                         <Select
-                          value={formData.beneficio_fiscal || ''}
+                          value={formData.beneficio_fiscal || 'NENHUM'}
                           onValueChange={(value) => setFormData({ ...formData, beneficio_fiscal: value })}
                         >
                           <SelectTrigger className="h-9">
@@ -604,7 +610,7 @@ export function ChbClientConfigDialog({ open, onOpenChange }: Props) {
                       </div>
                     </div>
 
-                    {formData.beneficio_fiscal && (
+                    {formData.beneficio_fiscal && formData.beneficio_fiscal !== 'NENHUM' && (
                       <div className="p-3 border rounded-md bg-blue-500/10 border-blue-500/30">
                         <p className="text-xs text-blue-400">
                           <strong>Atenção:</strong> Com benefício fiscal {formData.beneficio_fiscal}, a análise verificará automaticamente:
