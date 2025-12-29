@@ -187,41 +187,74 @@ export type Database = {
       }
       chb_client_config: {
         Row: {
+          agente_destino: string | null
+          armador: string | null
           ativo: boolean | null
+          beneficio_fiscal: string | null
           campos_obrigatorios: Json | null
+          cfop_padrao: string | null
           cliente_cnpj: string
           cliente_nome: string | null
+          contato_email: string | null
           created_at: string
+          estado_uf: string | null
+          icms_diferido: boolean | null
           id: string
           instrucoes_personalizadas: string | null
+          porto_descarga_real: string | null
+          prazo_resposta_dias: number | null
           regras_comparacao: Json | null
           tolerancia_peso: number | null
+          tolerancia_taxas_acessorias_abs: number | null
+          tolerancia_taxas_acessorias_pct: number | null
           tolerancia_valor: number | null
           updated_at: string
         }
         Insert: {
+          agente_destino?: string | null
+          armador?: string | null
           ativo?: boolean | null
+          beneficio_fiscal?: string | null
           campos_obrigatorios?: Json | null
+          cfop_padrao?: string | null
           cliente_cnpj: string
           cliente_nome?: string | null
+          contato_email?: string | null
           created_at?: string
+          estado_uf?: string | null
+          icms_diferido?: boolean | null
           id?: string
           instrucoes_personalizadas?: string | null
+          porto_descarga_real?: string | null
+          prazo_resposta_dias?: number | null
           regras_comparacao?: Json | null
           tolerancia_peso?: number | null
+          tolerancia_taxas_acessorias_abs?: number | null
+          tolerancia_taxas_acessorias_pct?: number | null
           tolerancia_valor?: number | null
           updated_at?: string
         }
         Update: {
+          agente_destino?: string | null
+          armador?: string | null
           ativo?: boolean | null
+          beneficio_fiscal?: string | null
           campos_obrigatorios?: Json | null
+          cfop_padrao?: string | null
           cliente_cnpj?: string
           cliente_nome?: string | null
+          contato_email?: string | null
           created_at?: string
+          estado_uf?: string | null
+          icms_diferido?: boolean | null
           id?: string
           instrucoes_personalizadas?: string | null
+          porto_descarga_real?: string | null
+          prazo_resposta_dias?: number | null
           regras_comparacao?: Json | null
           tolerancia_peso?: number | null
+          tolerancia_taxas_acessorias_abs?: number | null
+          tolerancia_taxas_acessorias_pct?: number | null
           tolerancia_valor?: number | null
           updated_at?: string
         }

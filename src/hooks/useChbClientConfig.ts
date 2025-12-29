@@ -13,6 +13,20 @@ export interface ChbClientConfig {
   ativo: boolean;
   created_at: string;
   updated_at: string;
+  // Novos campos de armador e agente
+  armador: string | null;
+  agente_destino: string | null;
+  contato_email: string | null;
+  prazo_resposta_dias: number | null;
+  porto_descarga_real: string | null;
+  // Tolerâncias de taxas acessórias
+  tolerancia_taxas_acessorias_abs: number | null;
+  tolerancia_taxas_acessorias_pct: number | null;
+  // Regras fiscais
+  beneficio_fiscal: string | null;
+  cfop_padrao: string | null;
+  estado_uf: string | null;
+  icms_diferido: boolean | null;
 }
 
 export interface ChbClientConfigInput {
@@ -24,6 +38,18 @@ export interface ChbClientConfigInput {
   regras_comparacao?: Record<string, any>;
   instrucoes_personalizadas?: string;
   ativo?: boolean;
+  // Novos campos
+  armador?: string;
+  agente_destino?: string;
+  contato_email?: string;
+  prazo_resposta_dias?: number;
+  porto_descarga_real?: string;
+  tolerancia_taxas_acessorias_abs?: number;
+  tolerancia_taxas_acessorias_pct?: number;
+  beneficio_fiscal?: string;
+  cfop_padrao?: string;
+  estado_uf?: string;
+  icms_diferido?: boolean;
 }
 
 export function useChbClientConfig() {
