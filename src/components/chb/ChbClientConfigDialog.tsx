@@ -297,10 +297,9 @@ export function ChbClientConfigDialog({ open, onOpenChange }: Props) {
             <CardContent>
               {showForm ? (
                 <Tabs defaultValue="dados" className="w-full">
-                  <TabsList className="grid w-full grid-cols-4 mb-4">
+                  <TabsList className="grid w-full grid-cols-3 mb-4">
                     <TabsTrigger value="dados" className="text-xs">Dados</TabsTrigger>
                     <TabsTrigger value="tolerancias" className="text-xs">Tolerâncias</TabsTrigger>
-                    <TabsTrigger value="armador" className="text-xs">Armador</TabsTrigger>
                     <TabsTrigger value="fiscal" className="text-xs">Fiscal</TabsTrigger>
                   </TabsList>
 
@@ -459,80 +458,6 @@ export function ChbClientConfigDialog({ open, onOpenChange }: Props) {
                     </div>
                   </TabsContent>
 
-                  {/* Tab Armador */}
-                  <TabsContent value="armador" className="space-y-4">
-                    <div className="space-y-1.5">
-                      <Label className="text-xs flex items-center gap-1">
-                        <Ship className="h-3 w-3" />
-                        Armador / Shipping Line
-                      </Label>
-                      <Input
-                        value={formData.armador || ''}
-                        onChange={e => setFormData({ ...formData, armador: e.target.value })}
-                        placeholder="Ex: MSC Mediterranean Shipping Company S.A."
-                        className="h-9"
-                      />
-                    </div>
-
-                    <div className="space-y-1.5">
-                      <Label className="text-xs flex items-center gap-1">
-                        <Building2 className="h-3 w-3" />
-                        Agente de Destino
-                      </Label>
-                      <Input
-                        value={formData.agente_destino || ''}
-                        onChange={e => setFormData({ ...formData, agente_destino: e.target.value })}
-                        placeholder="Ex: MSC do Brasil – Santos"
-                        className="h-9"
-                      />
-                    </div>
-
-                    <div className="grid grid-cols-2 gap-3">
-                      <div className="space-y-1.5">
-                        <Label className="text-xs flex items-center gap-1">
-                          <Mail className="h-3 w-3" />
-                          E-mail de Contato
-                        </Label>
-                        <Input
-                          type="email"
-                          value={formData.contato_email || ''}
-                          onChange={e => setFormData({ ...formData, contato_email: e.target.value })}
-                          placeholder="contato@armador.com"
-                          className="h-9"
-                        />
-                      </div>
-                      <div className="space-y-1.5">
-                        <Label className="text-xs flex items-center gap-1">
-                          <Clock className="h-3 w-3" />
-                          Prazo Resposta (dias)
-                        </Label>
-                        <Input
-                          type="number"
-                          min="1"
-                          max="30"
-                          value={formData.prazo_resposta_dias}
-                          onChange={e => setFormData({ ...formData, prazo_resposta_dias: parseInt(e.target.value) || 2 })}
-                          className="h-9"
-                        />
-                      </div>
-                    </div>
-
-                    <div className="space-y-1.5">
-                      <Label className="text-xs flex items-center gap-1">
-                        <MapPin className="h-3 w-3" />
-                        Porto de Descarga Real
-                      </Label>
-                      <Input
-                        value={formData.porto_descarga_real || ''}
-                        onChange={e => setFormData({ ...formData, porto_descarga_real: e.target.value })}
-                        placeholder="Ex: Santos, Paranaguá, Itajaí"
-                        className="h-9"
-                      />
-                      <p className="text-[0.6rem] text-muted-foreground">
-                        Preencha se diferente do porto declarado nos documentos
-                      </p>
-                    </div>
-                  </TabsContent>
 
                   {/* Tab Fiscal */}
                   <TabsContent value="fiscal" className="space-y-4">
