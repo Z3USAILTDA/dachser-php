@@ -313,11 +313,6 @@ export default function ChbAnalises() {
               reference: e.target.value
             }))} className="bg-[rgba(255,255,255,.05)] border-[rgba(255,255,255,.15)] text-white" />
             </div>
-            <div className="p-3 rounded-lg bg-[rgba(255,200,0,.08)] border border-[rgba(255,200,0,.2)]">
-              <p className="text-[0.75rem] text-[#ffc800]">
-                💡 O Cliente e Modal (SEA/AIR) serão identificados automaticamente a partir dos documentos na análise.
-              </p>
-            </div>
             <div className="flex justify-end gap-2 pt-2">
               <button onClick={() => setNovoProcessoModal(false)} className="h-8 px-4 rounded-full border border-[rgba(255,255,255,.25)] text-[#aaaaaa] text-[0.78rem] hover:bg-[rgba(255,255,255,.05)]">
                 Cancelar
