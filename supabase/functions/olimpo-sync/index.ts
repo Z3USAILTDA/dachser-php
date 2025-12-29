@@ -121,7 +121,7 @@ serve(async (req) => {
             END AS status,
             si.active
           FROM ai_agente.t_dachser_sea_items si
-          LEFT JOIN ai_agente.t_dachser_sea_tracking_cache tc ON tc.container = si.container
+          LEFT JOIN ai_agente.t_dachser_sea_tracking_cache tc ON tc.container COLLATE utf8mb4_general_ci = si.container COLLATE utf8mb4_general_ci
           WHERE si.container IS NOT NULL
             AND TRIM(si.container) <> ''
           ON DUPLICATE KEY UPDATE
