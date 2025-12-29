@@ -323,10 +323,11 @@ REGRAS DE CONTEÚDO DA TABELA
 
    ⚠️ EXISTEM DOIS VALORES DISTINTOS — NÃO CONFUNDA!
    
-   A) VALOR DA MERCADORIA (Invoice Amount / Merchandise Value):
+   A) VALOR TOTAL DA MERCADORIA (Invoice Amount / Merchandise Value):
       - É o valor TOTAL da Invoice comercial (soma dos itens)
-      - Aparece na INVOICE, geralmente na última linha como "Total" ou "Grand Total"
-      - Linha da tabela: "Valor Mercadoria" ou "Invoice Total"
+      - Aparece na INVOICE, geralmente na última linha como "Total", "Grand Total", "Final Amount" ou "Total Amount"
+      - Linha da tabela: "Valor Total" ou "Valor Mercadoria"
+      - PROCURE ESPECIFICAMENTE por "Final Amount" que é o valor total final da invoice
    
    B) VALOR DO FRETE (Freight / Ocean Freight / Air Freight):
       - É o custo do TRANSPORTE da carga
@@ -409,7 +410,7 @@ SINÔNIMOS PARA BUSCAR
 PESO BRUTO: Gross Weight, G.W., GW, Total Weight, Bruto
 PESO LÍQUIDO: Net Weight, N.W., NW, Líquido
 FRETE: Freight, Ocean Freight, Air Freight, Freight Charges
-VALOR: Total, Grand Total, Invoice Total, Amount
+VALOR TOTAL: Total, Grand Total, Invoice Total, Amount, Final Amount, Total Amount, Total Value, Valor Total
 INCOTERM: Delivery Terms, Trade Terms
 `;
 
