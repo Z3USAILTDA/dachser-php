@@ -3033,7 +3033,18 @@ serve(async (req) => {
 
       case 'create_chb_file': {
         const { itemId, filename, mime, sizeBytes, sha256, relPath, url, etapa, docRole, userId } = body as any;
-        console.log('Creating CHB file:', { filename, itemId, etapa });
+        console.log('Creating CHB file:', { filename, itemId, etapa, docRole });
+        
+        // First, ensure the doc_role column can accept longer values (ALTER TABLE if needed)
+        try {
+          await client.execute(`
+            ALTER TABLE ai_agente.t_dachser_chb_docs MODIFY COLUMN doc_role VARCHAR(50) NULL
+          `);
+          console.log('[CHB] Successfully altered doc_role column to VARCHAR(50)');
+        } catch (alterErr) {
+          // Column might already be correct or we lack permissions - continue anyway
+          console.log('[CHB] ALTER TABLE note (may already be correct):', (alterErr as Error).message?.substring(0, 100));
+        }
         
         // Insert file
         const fileResult = await client.execute(`
@@ -3043,29 +3054,20 @@ serve(async (req) => {
         `, [filename, mime || null, sizeBytes || null, sha256 || null, relPath || '', url || null, userId || null]);
         
         const fileId = fileResult.lastInsertId;
+        console.log('[CHB] File inserted with ID:', fileId);
         
-        // Map doc_role to 1 character - DB column is CHAR(1)
-        const docRoleMap: Record<string, string> = {
-          'INV': 'I', 'Invoice': 'I', 'I': 'I',
-          'PL': 'P', 'PackList': 'P', 'Packing': 'P', 'P': 'P',
-          'INST': 'X', 'Instrucao': 'X', 'X': 'X',
-          'HBL': 'H', 'BL': 'H', 'H': 'H',
-          'DI': 'D', 'D': 'D',
-          'AWB': 'A', 'A': 'A',
-          'CERT': 'C', 'C': 'C',
-          'DOC': 'O', 'O': 'O',
-        };
-        const rawDocRole = (docRole || 'O').toString();
-        const safeDocRole = docRoleMap[rawDocRole] || docRoleMap[rawDocRole.toUpperCase()] || 'O';
-        console.log(`[CHB] Saving file with doc_role: "${rawDocRole}" -> "${safeDocRole}"`);
+        // Normalize doc_role - accept any format and store as-is (column is now VARCHAR(50))
+        const rawDocRole = (docRole || 'O').toString().trim();
+        console.log(`[CHB] Saving file with doc_role: "${rawDocRole}"`);
         
         // Link file to item
         await client.execute(`
           INSERT INTO ai_agente.t_dachser_chb_docs 
           (item_id, file_id, etapa, doc_role, version, is_active, created_by)
           VALUES (?, ?, ?, ?, 1, 1, ?)
-        `, [itemId, fileId, etapa || '1', safeDocRole, userId || null]);
+        `, [itemId, fileId, etapa || '1', rawDocRole, userId || null]);
         
+        console.log('[CHB] Document linked successfully to item:', itemId);
         result = { success: true, fileId };
         break;
       }
