@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -52,6 +53,7 @@ export function ChbClientConfigDialog({ open, onOpenChange }: Props) {
   const { configs, loading, fetchConfigs, createConfig, updateConfig, deleteConfig } = useChbClientConfig();
   const [editingConfig, setEditingConfig] = useState<ChbClientConfig | null>(null);
   const [isCreating, setIsCreating] = useState(false);
+  const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
   
   // Form state
   const [formData, setFormData] = useState<ChbClientConfigInput>({
@@ -175,16 +177,18 @@ export function ChbClientConfigDialog({ open, onOpenChange }: Props) {
     }
   };
 
-  const handleDelete = async (id: string) => {
-    if (!confirm('Deseja realmente excluir esta configuração?')) return;
+  const confirmDelete = async () => {
+    if (!deleteConfirmId) return;
     try {
-      await deleteConfig(id);
+      await deleteConfig(deleteConfirmId);
       toast.success('Configuração excluída');
-      if (editingConfig?.id === id) {
+      if (editingConfig?.id === deleteConfirmId) {
         resetForm();
       }
     } catch {
       toast.error('Erro ao excluir');
+    } finally {
+      setDeleteConfirmId(null);
     }
   };
 
@@ -200,6 +204,7 @@ export function ChbClientConfigDialog({ open, onOpenChange }: Props) {
   const showForm = isCreating || editingConfig;
 
   return (
+    <>
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-5xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
@@ -270,7 +275,7 @@ export function ChbClientConfigDialog({ open, onOpenChange }: Props) {
                               size="icon"
                               variant="ghost"
                               className="h-7 w-7 text-destructive"
-                              onClick={(e) => { e.stopPropagation(); handleDelete(config.id); }}
+                              onClick={(e) => { e.stopPropagation(); setDeleteConfirmId(config.id); }}
                             >
                               <Trash2 className="h-4 w-4" />
                             </Button>
@@ -573,5 +578,25 @@ export function ChbClientConfigDialog({ open, onOpenChange }: Props) {
         </DialogFooter>
       </DialogContent>
     </Dialog>
+
+    <AlertDialog open={!!deleteConfirmId} onOpenChange={(open) => !open && setDeleteConfirmId(null)}>
+      <AlertDialogContent className="bg-zinc-900 border-white/10">
+        <AlertDialogHeader>
+          <AlertDialogTitle className="text-white">Confirmar exclusão</AlertDialogTitle>
+          <AlertDialogDescription className="text-gray-400">
+            Deseja realmente excluir esta configuração? Esta ação não pode ser desfeita.
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel className="bg-transparent border-white/20 text-gray-400 hover:bg-white/5">
+            Cancelar
+          </AlertDialogCancel>
+          <AlertDialogAction onClick={confirmDelete} className="bg-red-600 text-white hover:bg-red-700">
+            Excluir
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+    </>
   );
 }
