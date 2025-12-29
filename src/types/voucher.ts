@@ -286,11 +286,6 @@ export interface Voucher {
   loteRemessaId?: string;
   dadosBancarios?: DadosBancarios;
   statusIntegracaoRm?: StatusIntegracaoRM;
-  // Consolidation (Voucher Master) fields
-  voucherMasterId?: string;
-  isMaster?: boolean;
-  consolidacaoRmNumero?: string;
-  vouchersFilhos?: Voucher[];
   // Cancellation fields
   cancelamentoMotivo?: string;
   cancelamentoVoucherCredito?: string;

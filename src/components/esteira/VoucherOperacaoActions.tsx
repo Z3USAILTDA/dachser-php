@@ -33,10 +33,9 @@ import { Label } from "@/components/ui/label";
 interface VoucherOperacaoActionsProps {
   voucher: Voucher;
   onUpdate: () => void;
-  allVouchers?: Voucher[];
 }
 
-export const VoucherOperacaoActions = ({ voucher, onUpdate, allVouchers = [] }: VoucherOperacaoActionsProps) => {
+export const VoucherOperacaoActions = ({ voucher, onUpdate }: VoucherOperacaoActionsProps) => {
   const [loading, setLoading] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);

@@ -11,10 +11,9 @@ import { CheckCircle2, XCircle } from "lucide-react";
 interface VoucherFiscalActionsProps {
   voucher: Voucher;
   onUpdate: () => void;
-  allVouchers?: Voucher[];
 }
 
-export const VoucherFiscalActions = ({ voucher, onUpdate, allVouchers = [] }: VoucherFiscalActionsProps) => {
+export const VoucherFiscalActions = ({ voucher, onUpdate }: VoucherFiscalActionsProps) => {
   const [loading, setLoading] = useState(false);
   const [comentarios, setComentarios] = useState(voucher.comentariosFiscal || "");
   const [necessitaAjuste, setNecessitaAjuste] = useState(false);

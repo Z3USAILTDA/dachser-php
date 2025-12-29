@@ -5,7 +5,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { useUserRole } from "@/hooks/useUserRole";
 import { Voucher, STATUS_INTEGRACAO_RM_LABELS, StatusIntegracaoRM } from "@/types/voucher";
-import { Loader2, Receipt, AlertCircle, Clock, Layers, ExternalLink } from "lucide-react";
+import { Loader2, Receipt, AlertCircle, Clock } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
@@ -26,8 +26,6 @@ const EsteiraVoucherDetails = () => {
   const { role, isAdmin, hasRole } = useUserRole();
   const [voucher, setVoucher] = useState<Voucher | null>(null);
   const [loading, setLoading] = useState(true);
-  const [allVouchers, setAllVouchers] = useState<Voucher[]>([]);
-  const [vouchersFilhos, setVouchersFilhos] = useState<Voucher[]>([]);
 
   // Helper para parsear datas do MariaDB como UTC
   const parseMariaDBDate = (dateStr: string | null | undefined): Date | null => {
@@ -131,10 +129,6 @@ const EsteiraVoucherDetails = () => {
         codigoBarras: data.codigo_barras,
         statusIntegracaoRm: data.status_integracao_rm as StatusIntegracaoRM | undefined,
         dadosBancarios: responseData.dadosBancarios || undefined,
-        // Consolidation fields
-        isMaster: data.is_master === 1 || data.is_master === true,
-        voucherMasterId: data.voucher_master_id,
-        consolidacaoRmNumero: data.consolidacao_rm_numero,
         // Cancellation fields
         cancelamentoMotivo: data.cancelamento_motivo,
         cancelamentoVoucherCredito: data.cancelamento_voucher_credito,
@@ -143,49 +137,6 @@ const EsteiraVoucherDetails = () => {
       };
 
       setVoucher(mappedVoucher);
-
-      // Load all vouchers for consolidation feature
-      try {
-        const { data: allVouchersData } = await supabase.functions.invoke('mariadb-proxy', {
-          body: { action: 'get_vouchers_esteira', limit: 500 }
-        });
-        if (allVouchersData?.success && allVouchersData?.data) {
-          const mapped = allVouchersData.data.map((v: any) => ({
-            id: v.id,
-            numeroSPO: v.numero_spo,
-            fornecedor: v.fornecedor,
-            valor: v.valor ? parseFloat(v.valor) : undefined,
-            etapaAtual: v.etapa_atual,
-            voucherMasterId: v.voucher_master_id,
-            isMaster: v.is_master === 1 || v.is_master === true,
-          }));
-          setAllVouchers(mapped);
-        }
-      } catch (e) {
-        console.error('Error loading all vouchers:', e);
-      }
-
-      // If this voucher is a master, load its child vouchers
-      if (mappedVoucher.isMaster) {
-        try {
-          const { data: filhosData } = await supabase.functions.invoke('mariadb-proxy', {
-            body: { action: 'get_vouchers_filhos', master_id: id }
-          });
-          if (filhosData?.success && filhosData?.data) {
-            const filhosMapped = filhosData.data.map((v: any) => ({
-              id: v.id,
-              numeroSPO: v.numero_spo,
-              fornecedor: v.fornecedor,
-              valor: v.valor ? parseFloat(v.valor) : undefined,
-              etapaAtual: v.etapa_atual,
-              createdAt: parseMariaDBDate(v.created_at) || new Date(),
-            }));
-            setVouchersFilhos(filhosMapped);
-          }
-        } catch (e) {
-          console.error('Error loading child vouchers:', e);
-        }
-      }
     } catch (error: any) {
       console.error('Error loading voucher:', error);
       toast({
@@ -398,7 +349,7 @@ const EsteiraVoucherDetails = () => {
                 className="p-6 border border-[rgba(255,255,255,0.12)] backdrop-blur-[18px]"
                 style={{ backgroundColor: 'rgba(5,6,18,0.9)' }}
               >
-                <VoucherOperacaoActions voucher={voucher} onUpdate={loadVoucher} allVouchers={allVouchers} />
+                <VoucherOperacaoActions voucher={voucher} onUpdate={loadVoucher} />
               </Card>
             )}
 
@@ -407,7 +358,7 @@ const EsteiraVoucherDetails = () => {
                 className="p-6 border border-[rgba(255,255,255,0.12)] backdrop-blur-[18px]"
                 style={{ backgroundColor: 'rgba(5,6,18,0.9)' }}
               >
-                <VoucherFiscalActions voucher={voucher} onUpdate={loadVoucher} allVouchers={allVouchers} />
+                <VoucherFiscalActions voucher={voucher} onUpdate={loadVoucher} />
               </Card>
             )}
 
@@ -450,72 +401,6 @@ const EsteiraVoucherDetails = () => {
               <Card className="p-4 bg-red-500/10 border-red-500/30">
                 <h4 className="font-semibold text-red-500 mb-2">Ajuste Fiscal Solicitado</h4>
                 <p className="text-foreground">{voucher.ajusteFiscal}</p>
-              </Card>
-            )}
-
-            {/* Vouchers Filhos Consolidados */}
-            {voucher.isMaster && vouchersFilhos.length > 0 && (
-              <Card 
-                className="p-6 border border-[rgba(255,255,255,0.12)] backdrop-blur-[18px]"
-                style={{ backgroundColor: 'rgba(5,6,18,0.9)' }}
-              >
-                <div className="flex items-center gap-2 mb-4">
-                  <Layers className="h-5 w-5 text-primary" />
-                  <h3 className="text-lg font-semibold text-foreground">Vouchers Consolidados</h3>
-                  <Badge variant="secondary" className="ml-2">{vouchersFilhos.length} voucher(s)</Badge>
-                </div>
-                {voucher.consolidacaoRmNumero && (
-                  <p className="text-sm text-muted-foreground mb-4">
-                    Número RM Definitivo: <span className="text-foreground font-medium">{voucher.consolidacaoRmNumero}</span>
-                  </p>
-                )}
-                <div className="space-y-2">
-                  {vouchersFilhos.map((filho) => (
-                    <div 
-                      key={filho.id}
-                      className="flex items-center justify-between p-3 rounded-lg bg-background/50 border border-border/50 hover:border-primary/50 transition-colors"
-                    >
-                      <div className="flex items-center gap-3">
-                        <Receipt className="h-4 w-4 text-muted-foreground" />
-                        <div>
-                          <p className="font-medium text-foreground">{filho.numeroSPO}</p>
-                          <p className="text-sm text-muted-foreground">{filho.fornecedor}</p>
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-3">
-                        {filho.valor && (
-                          <span className="text-sm font-medium text-foreground">
-                            {filho.valor.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
-                          </span>
-                        )}
-                        <button
-                          onClick={() => navigate(`/fin/esteira/${filho.id}`)}
-                          className="p-1.5 rounded-md hover:bg-primary/20 transition-colors"
-                        >
-                          <ExternalLink className="h-4 w-4 text-primary" />
-                        </button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </Card>
-            )}
-
-            {/* Info se é voucher filho */}
-            {voucher.voucherMasterId && (
-              <Card className="p-4 bg-blue-500/10 border-blue-500/30">
-                <div className="flex items-center gap-2">
-                  <Layers className="h-4 w-4 text-blue-500" />
-                  <span className="text-blue-500 font-medium">
-                    Este voucher está consolidado em um Voucher Master
-                  </span>
-                  <button
-                    onClick={() => navigate(`/fin/esteira/${voucher.voucherMasterId}`)}
-                    className="ml-2 text-blue-400 hover:text-blue-300 underline flex items-center gap-1"
-                  >
-                    Ver Master <ExternalLink className="h-3 w-3" />
-                  </button>
-                </div>
               </Card>
             )}
           </TabsContent>

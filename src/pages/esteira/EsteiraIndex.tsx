@@ -766,7 +766,6 @@ const EsteiraIndex = () => {
     vencimentoInicio: "",
     vencimentoFim: "",
     origemCriacao: "all",
-    agrupamento: "all",
   });
   const [metrics, setMetrics] = useState<DashboardMetrics>({
     ativos: 0,
@@ -889,9 +888,6 @@ const EsteiraIndex = () => {
         origemCriacao: v.origem_criacao || "MANUAL",
         processoId: v.processo_id || null,
         origemProcesso: v.origem_processo || null,
-        consolidacaoRmNumero: v.consolidacao_rm_numero || null,
-        isMaster: v.is_master === 1 || v.is_master === true,
-        voucherMasterId: v.voucher_master_id || null,
         createdAt: parseMariaDBDate(v.created_at) || new Date(),
         updatedAt: parseMariaDBDate(v.updated_at || v.created_at) || new Date(),
         anexos: [],
@@ -1159,11 +1155,6 @@ const EsteiraIndex = () => {
       // Filtro de origem
       if (filters.origemCriacao && filters.origemCriacao !== "all" && voucher.origemCriacao !== filters.origemCriacao) {
         return false;
-      }
-      // Filtro de agrupamento
-      if (filters.agrupamento && filters.agrupamento !== "all") {
-        if (filters.agrupamento === "agrupados" && !voucher.consolidacaoRmNumero) return false;
-        if (filters.agrupamento === "nao_agrupados" && voucher.consolidacaoRmNumero) return false;
       }
       // Quick filter: Fornecedor
       if (quickFilterFornecedor !== "all" && voucher.fornecedor !== quickFilterFornecedor) {
