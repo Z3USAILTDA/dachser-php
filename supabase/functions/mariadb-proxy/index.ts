@@ -3867,6 +3867,48 @@ serve(async (req) => {
         break;
       }
 
+      case 'admin_reset_all_to_a_processar': {
+        const resetBody = body as any;
+        const reset_user_id = resetBody.user_id as string | undefined;
+        const reset_user_name = resetBody.user_name as string | undefined;
+        
+        console.log('Admin reset: Moving ALL non-A_PROCESSAR vouchers to A_PROCESSAR');
+        
+        // Count affected vouchers first
+        const countResult = await client.execute(`
+          SELECT COUNT(*) as total FROM dados_dachser.t_vouchers WHERE etapa_atual != 'A_PROCESSAR'
+        `);
+        
+        const affectedCount = (countResult.rows?.[0] as any)?.total || 0;
+        console.log(`Found ${affectedCount} vouchers to reset to A_PROCESSAR`);
+        
+        if (affectedCount > 0) {
+          // Update all vouchers
+          await client.execute(`
+            UPDATE dados_dachser.t_vouchers 
+            SET etapa_atual = 'A_PROCESSAR', updated_at = NOW() 
+            WHERE etapa_atual != 'A_PROCESSAR'
+          `);
+          
+          // Log the bulk action
+          await client.execute(`
+            INSERT INTO dados_dachser.t_voucher_logs (
+              id, voucher_id, user_id, user_name, acao, detalhe, data_hora
+            ) VALUES (?, 'BULK_ACTION', ?, ?, 'RESET_ETAPA_A_PROCESSAR', ?, NOW())
+          `, [
+            crypto.randomUUID(),
+            reset_user_id || null,
+            reset_user_name || 'Admin',
+            `Reset em massa: ${affectedCount} vouchers movidos para A_PROCESSAR`
+          ]);
+          
+          console.log(`Successfully reset ${affectedCount} vouchers to A_PROCESSAR`);
+        }
+        
+        result = { success: true, affectedCount };
+        break;
+      }
+
       case 'get_vouchers_esteira': {
         const { search, etapa, limit = 100, offset = 0 } = body as any;
         console.log('Fetching vouchers from dados_dachser.t_vouchers');
