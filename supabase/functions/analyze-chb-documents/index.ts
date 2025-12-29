@@ -839,6 +839,7 @@ async function callLovableAI(prompt: string, filesContent: { name: string; conte
           content: content,
         },
       ],
+      max_tokens: 16000,
     }),
   });
 
@@ -974,6 +975,52 @@ function extractHtmlAndTags(response: string, stepId: number): {
   return { html, tags, summary, detailedSummary, parecer, modal, cliente };
 }
 
+/**
+ * Estimate token count from text (approximately 4 chars per token for Portuguese)
+ */
+function estimateTokenCount(text: string): number {
+  return Math.ceil(text.length / 4);
+}
+
+/**
+ * Validate input size before sending to LLM
+ */
+function validateInputSize(
+  files: { name: string; content: string; mimeType: string }[],
+  maxInputTokens: number = 150000
+): { isValid: boolean; estimatedTokens: number; warning?: string } {
+  let totalEstimate = 0;
+  
+  for (const file of files) {
+    if (file.mimeType === 'application/pdf') {
+      // PDF: estimate ~1500 tokens per 50KB of base64
+      const sizeKB = (file.content.length * 0.75) / 1024; // base64 to actual bytes
+      totalEstimate += Math.ceil((sizeKB / 50) * 1500);
+    } else if (file.mimeType.includes('image/')) {
+      // Images: estimate ~500 tokens per image
+      totalEstimate += 500;
+    } else {
+      // Text content
+      try {
+        const decoded = atob(file.content);
+        totalEstimate += estimateTokenCount(decoded);
+      } catch {
+        totalEstimate += estimateTokenCount(file.content);
+      }
+    }
+  }
+  
+  const isValid = totalEstimate <= maxInputTokens;
+  
+  return {
+    isValid,
+    estimatedTokens: totalEstimate,
+    warning: !isValid 
+      ? `⚠️ Input estimado (${totalEstimate} tokens) excede limite recomendado (${maxInputTokens}). Considere reduzir número de arquivos.`
+      : undefined
+  };
+}
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
@@ -989,8 +1036,19 @@ serve(async (req) => {
       );
     }
 
-    console.log(`Analyzing ${files.length} files for step ${stepId}`);
-    console.log('Files:', files.map((f: any) => `${f.name} (${f.mimeType})`).join(', '));
+    console.log(`═══ CHB ANALYSIS ═══`);
+    console.log(`[Input Size] Total files: ${files.length}`);
+    console.log(`[Input Size] Files: ${files.map((f: any) => `${f.name} (${f.mimeType})`).join(', ')}`);
+    
+    // Validate input size
+    const inputValidation = validateInputSize(files);
+    console.log(`[Input Size] Estimated input tokens: ${inputValidation.estimatedTokens}`);
+    console.log(`[Input Size] Max output tokens: 16000`);
+    
+    if (!inputValidation.isValid) {
+      console.warn(`[Input Size] ${inputValidation.warning}`);
+    }
+    
     if (clientConfig) {
       console.log('Using client config:', JSON.stringify(clientConfig));
     }

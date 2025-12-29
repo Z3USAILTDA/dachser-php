@@ -274,7 +274,7 @@ async function analyzeWithAnthropic(
         },
         body: JSON.stringify({
           model: 'claude-sonnet-4-20250514',
-          max_tokens: 8000,
+          max_tokens: 16000,
           temperature: 0, // Zero for deterministic/consistent output
           messages: [{ role: 'user', content: contentParts }]
         }),
@@ -389,7 +389,7 @@ async function analyzeWithGemini(
         body: JSON.stringify({
           model: 'google/gemini-2.5-flash',
           messages: [{ role: 'user', content: contentParts }],
-          max_tokens: 8000,
+          max_tokens: 16000,
           temperature: 0, // Zero for deterministic/consistent output
         }),
         signal: controller.signal,
@@ -431,6 +431,44 @@ async function analyzeWithGemini(
   throw lastError || new Error('Falha após múltiplas tentativas');
 }
 
+/**
+ * Estimate token count from text (approximately 4 chars per token for Portuguese)
+ */
+function estimateTokenCount(text: string): number {
+  return Math.ceil(text.length / 4);
+}
+
+/**
+ * Validate input size before sending to LLM
+ * Returns warning if input is too large for reliable processing
+ */
+function validateInputSize(
+  files: FileInfo[],
+  manifestText: string,
+  maxInputTokens: number = 150000
+): { isValid: boolean; estimatedTokens: number; warning?: string } {
+  let totalEstimate = estimateTokenCount(manifestText);
+  
+  // Estimate PDF size: ~1500 tokens per 50KB
+  for (const file of files) {
+    const ext = file.file_name.toLowerCase().split('.').pop();
+    if (ext === 'pdf') {
+      // Conservative estimate for PDF: assume 100KB avg = 3000 tokens
+      totalEstimate += 3000;
+    }
+  }
+  
+  const isValid = totalEstimate <= maxInputTokens;
+  
+  return {
+    isValid,
+    estimatedTokens: totalEstimate,
+    warning: !isValid 
+      ? `⚠️ Input estimado (${totalEstimate} tokens) excede limite recomendado (${maxInputTokens}). Considere reduzir número de arquivos.`
+      : undefined
+  };
+}
+
 export async function analyzeWithLLM(
   analysisType: string,
   files: FileInfo[],
@@ -440,6 +478,7 @@ export async function analyzeWithLLM(
   
   console.log(`═══ SINGLE-STEP ANALYSIS ═══`);
   console.log(`Analysis type: ${analysisType}, Files: ${files.length}`);
+  console.log(`[Input Size] Total files: ${files.length}`);
   
   const basePrompt = getPromptForAnalysisType(analysisType);
   const startTime = Date.now();
@@ -476,6 +515,15 @@ export async function analyzeWithLLM(
       }
     }
     console.log(`[Analysis] Manifest text extracted: ${manifestText.length} chars, Total NCMs: ${allNCMCodes.length}`);
+  }
+  
+  // Validate input size after manifest extraction
+  const inputValidation = validateInputSize(files, manifestText);
+  console.log(`[Input Size] Estimated input tokens: ${inputValidation.estimatedTokens}`);
+  console.log(`[Input Size] Max output tokens: 16000`);
+  
+  if (!inputValidation.isValid) {
+    console.warn(`[Input Size] ${inputValidation.warning}`);
   }
   
   // If no manifest but we have PDFs, one might be the base document
