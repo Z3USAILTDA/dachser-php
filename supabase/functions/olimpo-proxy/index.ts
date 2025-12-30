@@ -1753,6 +1753,7 @@ serve(async (req) => {
               lastEventDescription = data.last_movement.description;
             }
             
+            // Update main tracking table
             await client.execute(`
               UPDATE dados_dachser.t_tracking_sea 
               SET 
@@ -1776,6 +1777,71 @@ serve(async (req) => {
               shippingLine ? normalizeShippingLine(shippingLine) : null,
               row.id
             ]);
+            
+            // ===== PHASE 2: Record history events =====
+            try {
+              const etaValue = data.eta_final_destination || data.eta || null;
+              const vesselName = data.current_vessel_name || data.last_vessel_name || null;
+              const voyage = data.voyage || data.voyage_number || null;
+              
+              // If API returns events array, record each event
+              if (data.events && Array.isArray(data.events) && data.events.length > 0) {
+                for (const event of data.events) {
+                  const eventCode = event.event_code || event.event_type || event.code || 'UNK';
+                  const eventDesc = event.description || event.event_description || event.event_type || null;
+                  const eventLocation = event.location || event.port || event.terminal || null;
+                  let eventDatetime = null;
+                  
+                  // Parse event datetime (try multiple formats)
+                  if (event.datetime || event.date || event.event_datetime || event.timestamp) {
+                    try {
+                      eventDatetime = new Date(event.datetime || event.date || event.event_datetime || event.timestamp);
+                      if (isNaN(eventDatetime.getTime())) eventDatetime = null;
+                    } catch { eventDatetime = null; }
+                  }
+                  
+                  // Insert with IGNORE to avoid duplicates
+                  await client.execute(`
+                    INSERT IGNORE INTO dados_dachser.t_tracking_sea_history 
+                    (mbl_id, container, event_code, event_description, event_datetime, location, vessel_name, voyage, container_status, eta, source, raw_data)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'API', ?)
+                  `, [
+                    mblId || 'UNKNOWN',
+                    containerId,
+                    eventCode.substring(0, 50),
+                    eventDesc ? eventDesc.substring(0, 500) : null,
+                    eventDatetime,
+                    eventLocation ? eventLocation.substring(0, 200) : null,
+                    vesselName ? vesselName.substring(0, 100) : null,
+                    voyage ? voyage.substring(0, 50) : null,
+                    data.container_status || null,
+                    etaValue ? new Date(etaValue) : null,
+                    JSON.stringify(event)
+                  ]);
+                }
+              } else {
+                // No events array - record current status as a single event
+                await client.execute(`
+                  INSERT IGNORE INTO dados_dachser.t_tracking_sea_history 
+                  (mbl_id, container, event_code, event_description, event_datetime, location, vessel_name, voyage, container_status, eta, source, raw_data)
+                  VALUES (?, ?, 'STATUS_UPDATE', ?, NOW(), ?, ?, ?, ?, ?, 'API', ?)
+                `, [
+                  mblId || 'UNKNOWN',
+                  containerId,
+                  lastEventDescription ? lastEventDescription.substring(0, 500) : 'Status atualizado',
+                  data.discharging_port || data.shipped_to || null,
+                  vesselName ? vesselName.substring(0, 100) : null,
+                  voyage ? voyage.substring(0, 50) : null,
+                  data.container_status || null,
+                  etaValue ? new Date(etaValue) : null,
+                  JSON.stringify({ container_status: data.container_status, eta: etaValue })
+                ]);
+              }
+            } catch (historyError: any) {
+              // Don't fail the main update if history fails
+              console.log(`[refresh_sea_tracking] History insert failed for ${containerId}: ${historyError.message}`);
+            }
+            
             updated++;
           } else {
             // Categorize error type for better diagnostics
@@ -3308,6 +3374,291 @@ serve(async (req) => {
         await client.close();
         console.error('[get_available_containers] Error:', e);
         return new Response(JSON.stringify({ error: e.message, data: [] }), {
+          status: 500,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      }
+    }
+
+    // ===== SEA TRACKING HISTORY: Setup history table =====
+    if (action === 'setup_tracking_history_table') {
+      const mariadbHost = Deno.env.get('MARIADB_HOST');
+      const mariadbPort = Deno.env.get('MARIADB_PORT') || '3306';
+      const mariadbUser = Deno.env.get('MARIADB_USER');
+      const mariadbPass = Deno.env.get('MARIADB_PASSWORD');
+
+      if (!mariadbHost || !mariadbUser || !mariadbPass) {
+        return new Response(JSON.stringify({ error: 'MariaDB não configurado' }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      }
+
+      const { Client } = await import("https://deno.land/x/mysql@v2.12.1/mod.ts");
+      const client = await new Client().connect({
+        hostname: mariadbHost,
+        port: parseInt(mariadbPort, 10),
+        username: mariadbUser,
+        password: mariadbPass,
+        db: 'dados_dachser',
+      });
+
+      try {
+        // Create the history table
+        await client.execute(`
+          CREATE TABLE IF NOT EXISTS dados_dachser.t_tracking_sea_history (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            mbl_id VARCHAR(100) NOT NULL COMMENT 'FK to t_tracking_sea.mbl_id',
+            container VARCHAR(50) NOT NULL,
+            event_code VARCHAR(50) NULL COMMENT 'Normalized event code (ARR, DEP, BKG, etc)',
+            event_description VARCHAR(500) NULL,
+            event_datetime DATETIME NULL,
+            location VARCHAR(200) NULL COMMENT 'Port/terminal location',
+            vessel_name VARCHAR(100) NULL,
+            voyage VARCHAR(50) NULL,
+            container_status VARCHAR(100) NULL,
+            eta DATETIME NULL COMMENT 'ETA at time of event',
+            source VARCHAR(20) DEFAULT 'API' COMMENT 'API, MANUAL, WEBHOOK',
+            raw_data JSON NULL COMMENT 'Full API response for debugging',
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            
+            INDEX idx_mbl_id (mbl_id),
+            INDEX idx_container (container),
+            INDEX idx_event_datetime (event_datetime),
+            INDEX idx_created_at (created_at),
+            UNIQUE INDEX idx_unique_event (mbl_id, container, event_code, event_datetime)
+          ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+          COMMENT='Historical tracking events for sea containers'
+        `);
+
+        console.log('[setup_tracking_history_table] Table created/verified');
+
+        // Get table info
+        const columns = await client.query(`
+          SELECT COLUMN_NAME, DATA_TYPE, IS_NULLABLE, COLUMN_DEFAULT, COLUMN_COMMENT
+          FROM INFORMATION_SCHEMA.COLUMNS 
+          WHERE TABLE_SCHEMA = 'dados_dachser' AND TABLE_NAME = 't_tracking_sea_history'
+          ORDER BY ORDINAL_POSITION
+        `);
+
+        // Get current row count
+        const countResult = await client.query(`
+          SELECT COUNT(*) as total FROM dados_dachser.t_tracking_sea_history
+        `);
+
+        await client.close();
+        return new Response(JSON.stringify({ 
+          success: true, 
+          message: 'Tabela t_tracking_sea_history criada/verificada com sucesso',
+          columns,
+          totalRows: countResult[0]?.total || 0
+        }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      } catch (e: any) {
+        await client.close();
+        console.error('[setup_tracking_history_table] Error:', e);
+        return new Response(JSON.stringify({ error: e.message }), {
+          status: 500,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      }
+    }
+
+    // ===== SEA TRACKING HISTORY: Get history for a container/MBL =====
+    if (action === 'get_tracking_history') {
+      const body = await req.json();
+      const { mbl_id, container, limit = 100 } = body;
+
+      if (!mbl_id && !container) {
+        return new Response(JSON.stringify({ error: 'mbl_id ou container é obrigatório' }), {
+          status: 400,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      }
+
+      const mariadbHost = Deno.env.get('MARIADB_HOST');
+      const mariadbPort = Deno.env.get('MARIADB_PORT') || '3306';
+      const mariadbUser = Deno.env.get('MARIADB_USER');
+      const mariadbPass = Deno.env.get('MARIADB_PASSWORD');
+
+      if (!mariadbHost || !mariadbUser || !mariadbPass) {
+        return new Response(JSON.stringify({ error: 'MariaDB não configurado' }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      }
+
+      const { Client } = await import("https://deno.land/x/mysql@v2.12.1/mod.ts");
+      const client = await new Client().connect({
+        hostname: mariadbHost,
+        port: parseInt(mariadbPort, 10),
+        username: mariadbUser,
+        password: mariadbPass,
+        db: 'dados_dachser',
+      });
+
+      try {
+        let query = `
+          SELECT 
+            h.id,
+            h.mbl_id,
+            h.container,
+            h.event_code,
+            h.event_description,
+            h.event_datetime,
+            h.location,
+            h.vessel_name,
+            h.voyage,
+            h.container_status,
+            h.eta,
+            h.source,
+            h.created_at,
+            t.consignee,
+            t.tipo_processo,
+            t.shipping_line
+          FROM dados_dachser.t_tracking_sea_history h
+          LEFT JOIN dados_dachser.t_tracking_sea t ON h.mbl_id = t.mbl_id
+          WHERE 1=1
+        `;
+        const params: any[] = [];
+
+        if (mbl_id) {
+          query += ` AND h.mbl_id = ?`;
+          params.push(mbl_id);
+        }
+        if (container) {
+          query += ` AND h.container = ?`;
+          params.push(container);
+        }
+
+        query += ` ORDER BY h.event_datetime DESC, h.created_at DESC LIMIT ?`;
+        params.push(limit);
+
+        const history = await client.query(query, params);
+
+        // Get summary stats
+        let statsQuery = `
+          SELECT 
+            COUNT(*) as total_events,
+            MIN(event_datetime) as first_event,
+            MAX(event_datetime) as last_event,
+            COUNT(DISTINCT event_code) as unique_event_types
+          FROM dados_dachser.t_tracking_sea_history
+          WHERE 1=1
+        `;
+        const statsParams: any[] = [];
+        if (mbl_id) {
+          statsQuery += ` AND mbl_id = ?`;
+          statsParams.push(mbl_id);
+        }
+        if (container) {
+          statsQuery += ` AND container = ?`;
+          statsParams.push(container);
+        }
+
+        const statsResult = await client.query(statsQuery, statsParams);
+
+        await client.close();
+        return new Response(JSON.stringify({ 
+          success: true, 
+          data: history,
+          stats: statsResult[0] || null
+        }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      } catch (e: any) {
+        await client.close();
+        console.error('[get_tracking_history] Error:', e);
+        return new Response(JSON.stringify({ error: e.message }), {
+          status: 500,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      }
+    }
+
+    // ===== SEA TRACKING HISTORY: Get history summary (all containers) =====
+    if (action === 'get_tracking_history_summary') {
+      const mariadbHost = Deno.env.get('MARIADB_HOST');
+      const mariadbPort = Deno.env.get('MARIADB_PORT') || '3306';
+      const mariadbUser = Deno.env.get('MARIADB_USER');
+      const mariadbPass = Deno.env.get('MARIADB_PASSWORD');
+
+      if (!mariadbHost || !mariadbUser || !mariadbPass) {
+        return new Response(JSON.stringify({ error: 'MariaDB não configurado' }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      }
+
+      const { Client } = await import("https://deno.land/x/mysql@v2.12.1/mod.ts");
+      const client = await new Client().connect({
+        hostname: mariadbHost,
+        port: parseInt(mariadbPort, 10),
+        username: mariadbUser,
+        password: mariadbPass,
+        db: 'dados_dachser',
+      });
+
+      try {
+        // Overall stats
+        const overallStats = await client.query(`
+          SELECT 
+            COUNT(*) as total_events,
+            COUNT(DISTINCT mbl_id) as unique_mbls,
+            COUNT(DISTINCT container) as unique_containers,
+            MIN(event_datetime) as earliest_event,
+            MAX(event_datetime) as latest_event,
+            MIN(created_at) as first_record,
+            MAX(created_at) as last_record
+          FROM dados_dachser.t_tracking_sea_history
+        `);
+
+        // Events by type
+        const eventsByType = await client.query(`
+          SELECT 
+            COALESCE(event_code, 'UNKNOWN') as event_code,
+            COUNT(*) as count
+          FROM dados_dachser.t_tracking_sea_history
+          GROUP BY event_code
+          ORDER BY count DESC
+        `);
+
+        // Events by day (last 30 days)
+        const eventsByDay = await client.query(`
+          SELECT 
+            DATE(created_at) as date,
+            COUNT(*) as count
+          FROM dados_dachser.t_tracking_sea_history
+          WHERE created_at >= DATE_SUB(NOW(), INTERVAL 30 DAY)
+          GROUP BY DATE(created_at)
+          ORDER BY date DESC
+        `);
+
+        // Top containers by event count
+        const topContainers = await client.query(`
+          SELECT 
+            container,
+            mbl_id,
+            COUNT(*) as event_count,
+            MAX(event_datetime) as last_event
+          FROM dados_dachser.t_tracking_sea_history
+          GROUP BY container, mbl_id
+          ORDER BY event_count DESC
+          LIMIT 20
+        `);
+
+        await client.close();
+        return new Response(JSON.stringify({ 
+          success: true, 
+          overall: overallStats[0] || null,
+          eventsByType,
+          eventsByDay,
+          topContainers
+        }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      } catch (e: any) {
+        await client.close();
+        console.error('[get_tracking_history_summary] Error:', e);
+        return new Response(JSON.stringify({ error: e.message }), {
           status: 500,
           headers: { ...corsHeaders, 'Content-Type': 'application/json' }
         });
