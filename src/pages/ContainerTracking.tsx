@@ -175,6 +175,7 @@ const ContainerTracking = () => {
   const [isSyncing, setIsSyncing] = useState(false);
   const [isCleaning, setIsCleaning] = useState(false);
   const [isEnriching, setIsEnriching] = useState(false);
+  const [isForceRefreshing, setIsForceRefreshing] = useState(false);
   const { toast } = useToast();
   
   // Expansion state
@@ -398,6 +399,81 @@ const ContainerTracking = () => {
       });
     } finally {
       setIsRefreshing(false);
+    }
+  };
+
+  // Force re-track pending/error containers
+  const handleForceRefresh = async () => {
+    setIsForceRefreshing(true);
+    let totalUpdated = 0;
+    let totalErrors = 0;
+    let remaining = 1;
+    let iteration = 0;
+    const maxIterations = 50;
+    
+    toast({
+      title: "Forçando re-rastreio",
+      description: "Re-processando containers pendentes e com erro...",
+    });
+    
+    try {
+      while (remaining > 0 && iteration < maxIterations) {
+        iteration++;
+        
+        const res = await fetch(
+          `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/olimpo-proxy?action=refresh_sea_tracking&batch_size=10&max_time_ms=45000&force=1`,
+          {
+            method: 'GET',
+            headers: {
+              'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
+              'Content-Type': 'application/json',
+            }
+          }
+        );
+        
+        const result = await res.json();
+        
+        if (result.success) {
+          totalUpdated += result.updated || 0;
+          totalErrors += result.errors || 0;
+          remaining = result.remaining || 0;
+          
+          toast({
+            title: `Re-rastreando... (${iteration})`,
+            description: `${totalUpdated} atualizados, ${remaining} restantes`,
+          });
+          
+          if (result.processed === 0) {
+            break;
+          }
+        } else {
+          toast({
+            title: "Erro ao re-rastrear",
+            description: result.error || "Falha no re-rastreio",
+            variant: "destructive",
+          });
+          break;
+        }
+      }
+      
+      toast({
+        title: "Re-rastreio concluído",
+        description: `${totalUpdated} containers atualizados${totalErrors > 0 ? `, ${totalErrors} com erro` : ''}`,
+      });
+      
+      await fetchMblData();
+      if (expandedMbl) {
+        await fetchMblContainers(expandedMbl);
+      }
+    } catch (error) {
+      console.error("Error force refreshing:", error);
+      toast({
+        title: "Erro",
+        description: "Falha ao re-rastrear containers",
+        variant: "destructive",
+      });
+    } finally {
+      setIsForceRefreshing(false);
     }
   };
 
@@ -1076,6 +1152,28 @@ const ContainerTracking = () => {
                         </TooltipTrigger>
                         <TooltipContent>
                           <p className="text-xs">Buscar containers para MBLs pendentes via API JsonCargo</p>
+                        </TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
+
+                    <TooltipProvider>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <button
+                            onClick={handleForceRefresh}
+                            disabled={isForceRefreshing}
+                            className="h-8 px-4 rounded-full bg-orange-600 text-white text-[0.75rem] font-medium flex items-center gap-1.5 hover:bg-orange-500 transition shadow-[0_0_20px_rgba(234,88,12,.3)] disabled:opacity-50"
+                          >
+                            {isForceRefreshing ? (
+                              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                            ) : (
+                              <RefreshCw className="w-3.5 h-3.5" />
+                            )}
+                            Forçar Re-rastreio
+                          </button>
+                        </TooltipTrigger>
+                        <TooltipContent>
+                          <p className="text-xs">Re-rastrear todos containers pendentes/com erro (ignora tempo)</p>
                         </TooltipContent>
                       </Tooltip>
                     </TooltipProvider>

@@ -1492,6 +1492,7 @@ serve(async (req) => {
       const batchSize = parseInt(url.searchParams.get('batch_size') || '20');
       const maxTimeMs = parseInt(url.searchParams.get('max_time_ms') || '45000');
       const staleHours = parseInt(url.searchParams.get('stale_hours') || '4');
+      const forceRefresh = url.searchParams.get('force') === '1';
       const startTime = Date.now();
 
       const { Client } = await import("https://deno.land/x/mysql@v2.12.1/mod.ts");
@@ -1519,30 +1520,53 @@ serve(async (req) => {
           console.log('[refresh_sea_tracking] column check:', alterErr.message);
         }
 
-        // Query containers that need update: valid ISO format AND (never checked OR checked > N hours ago)
-        // Include mbl_id to detect shipping line from MBL prefix for leasing containers
-        // ONLY select containers with "Aguardando" status (pending, no events yet)
-        const containers = await client.query(`
-          SELECT id, mbl_id, container, shipping_line, navio 
-          FROM dados_dachser.t_tracking_sea 
-          WHERE active = 1
-            AND container IS NOT NULL
-            AND container NOT IN ('PENDENTE', 'NAO_ENCONTRADO', 'IGNORADO', '')
-            AND container REGEXP '^[A-Za-z]{4}[0-9]{7}$'
-            AND (last_check IS NULL OR last_check < DATE_SUB(NOW(), INTERVAL ? HOUR))
-            AND (
-              container_status IS NULL 
-              OR container_status = '' 
-              OR container_status = 'PENDING'
-              OR last_event IS NULL 
-              OR last_event = '' 
-              OR last_event LIKE '%Aguardando%'
-            )
-          ORDER BY last_check ASC
-          LIMIT ?
-        `, [staleHours, batchSize]);
+        // Query containers that need update
+        // If force=1, include containers with errors or pending status regardless of last_check
+        // If force=0, use normal staleness check
+        let containers;
+        if (forceRefresh) {
+          containers = await client.query(`
+            SELECT id, mbl_id, container, shipping_line, navio, last_error
+            FROM dados_dachser.t_tracking_sea 
+            WHERE active = 1
+              AND container IS NOT NULL
+              AND container NOT IN ('PENDENTE', 'NAO_ENCONTRADO', 'IGNORADO', '')
+              AND container REGEXP '^[A-Za-z]{4}[0-9]{7}$'
+              AND (
+                container_status IS NULL 
+                OR container_status = '' 
+                OR container_status = 'PENDING'
+                OR last_event IS NULL 
+                OR last_event = '' 
+                OR last_event LIKE '%Aguardando%'
+                OR last_error IS NOT NULL
+              )
+            ORDER BY last_error DESC, last_check ASC
+            LIMIT ?
+          `, [batchSize]);
+        } else {
+          containers = await client.query(`
+            SELECT id, mbl_id, container, shipping_line, navio, last_error
+            FROM dados_dachser.t_tracking_sea 
+            WHERE active = 1
+              AND container IS NOT NULL
+              AND container NOT IN ('PENDENTE', 'NAO_ENCONTRADO', 'IGNORADO', '')
+              AND container REGEXP '^[A-Za-z]{4}[0-9]{7}$'
+              AND (last_check IS NULL OR last_check < DATE_SUB(NOW(), INTERVAL ? HOUR))
+              AND (
+                container_status IS NULL 
+                OR container_status = '' 
+                OR container_status = 'PENDING'
+                OR last_event IS NULL 
+                OR last_event = '' 
+                OR last_event LIKE '%Aguardando%'
+              )
+            ORDER BY last_check ASC
+            LIMIT ?
+          `, [staleHours, batchSize]);
+        }
 
-        console.log(`[refresh_sea_tracking] Processing ${containers.length} pending containers (status=AGD, stale > ${staleHours}h)`);
+        console.log(`[refresh_sea_tracking] Processing ${containers.length} containers (force=${forceRefresh}, stale > ${staleHours}h)`);
 
         let updated = 0;
         let errors = 0;
