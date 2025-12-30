@@ -330,7 +330,7 @@ const ContainerTracking = () => {
         iteration++;
         
         const res = await fetch(
-          `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/olimpo-proxy?action=refresh_sea_tracking&batch_size=20&max_time_ms=45000&stale_hours=4`,
+          `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/olimpo-proxy?action=refresh_sea_tracking&batch_size=10&max_time_ms=45000&stale_hours=0`,
           {
             method: 'GET',
             headers: {
