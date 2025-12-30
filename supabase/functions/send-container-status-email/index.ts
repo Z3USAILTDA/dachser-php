@@ -418,6 +418,7 @@ Dachser - Intelligent Logistics
 
     console.log(`[send-container-status-email] Sending email via Resend API...`);
     
+    const startTime = Date.now();
     const response = await fetch('https://api.resend.com/emails', {
       method: 'POST',
       headers: {
@@ -432,6 +433,37 @@ Dachser - Intelligent Logistics
         text: plainText,
       }),
     });
+    const elapsed = Date.now() - startTime;
+
+    // Log API call
+    const logApiCall = async () => {
+      try {
+        const supabaseUrl = Deno.env.get('SUPABASE_URL');
+        const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+        if (!supabaseUrl || !supabaseKey) return;
+        
+        await fetch(`${supabaseUrl}/functions/v1/mariadb-proxy`, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${supabaseKey}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            action: 'log_api_call',
+            api_name: 'Resend (Email)',
+            endpoint: '/emails',
+            method: 'POST',
+            status_code: response.status,
+            response_time_ms: elapsed,
+            error_message: response.ok ? undefined : 'Email send failed',
+            edge_function: 'send-container-status-email'
+          }),
+        });
+      } catch (e) {
+        console.error('[logApiCall] Failed:', e);
+      }
+    };
+    logApiCall(); // Fire and forget
 
     if (!response.ok) {
       const errorText = await response.text();
