@@ -1293,10 +1293,7 @@ serve(async (req) => {
             AND md.tipo_processo LIKE '%SEA%'
           ON DUPLICATE KEY UPDATE
             tipo_processo = VALUES(tipo_processo),
-            container = CASE 
-              WHEN VALUES(container) != 'PENDENTE' THEN VALUES(container)
-              ELSE t_tracking_sea.container
-            END,
+            container = VALUES(container),
             consignee = VALUES(consignee),
             email_analista = VALUES(email_analista),
             email_cliente = VALUES(email_cliente),
