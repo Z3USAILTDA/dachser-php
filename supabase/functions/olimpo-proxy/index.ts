@@ -37,6 +37,43 @@ function normalizeShippingLine(code: string): string {
   return map[code] || code;
 }
 
+// Helper to log API calls asynchronously (fire-and-forget)
+async function logApiCall(
+  api_name: string,
+  endpoint: string,
+  method: string,
+  status_code: number,
+  response_time_ms: number,
+  error_message?: string
+): Promise<void> {
+  try {
+    const supabaseUrl = Deno.env.get('SUPABASE_URL');
+    const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+    if (!supabaseUrl || !supabaseKey) return;
+    
+    await fetch(`${supabaseUrl}/functions/v1/mariadb-proxy`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${supabaseKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        action: 'log_api_call',
+        api_name,
+        endpoint,
+        method,
+        status_code,
+        response_time_ms,
+        error_message,
+        edge_function: 'olimpo-proxy'
+      }),
+    });
+  } catch (e) {
+    // Silently fail - logging should not break main flow
+    console.error('[logApiCall] Failed to log:', e);
+  }
+}
+
 async function curlJson(url: string, headers: Record<string, string> = {}, timeout = 25000): Promise<any> {
   try {
     const controller = new AbortController();
@@ -63,10 +100,24 @@ async function jcJson(url: string, qs: Record<string, string> = {}, timeout = 25
   const params = new URLSearchParams(qs);
   const fullUrl = params.toString() ? `${url}?${params}` : url;
   
-  return curlJson(fullUrl, {
+  const startTime = Date.now();
+  const result = await curlJson(fullUrl, {
     'x-api-key': apiKey,
     'Accept': 'application/json'
   }, timeout);
+  const elapsed = Date.now() - startTime;
+  
+  // Log the API call asynchronously
+  logApiCall(
+    'JSONCargo',
+    url.replace('http://api.jsoncargo.com', ''),
+    'GET',
+    result.__status || 0,
+    elapsed,
+    result.__curl_error || (result.error ? JSON.stringify(result.error) : undefined)
+  );
+  
+  return result;
 }
 
 serve(async (req) => {

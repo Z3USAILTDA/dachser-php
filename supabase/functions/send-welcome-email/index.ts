@@ -153,6 +153,7 @@ const handler = async (req: Request): Promise<Response> => {
 
     const resend = new Resend(resendApiKey);
 
+    const startTime = Date.now();
     const { data, error } = await resend.emails.send({
       from: "Z3US.AI - DACHSER <noreply@hermes.z3us.ai>",
       to: [email],
@@ -160,6 +161,37 @@ const handler = async (req: Request): Promise<Response> => {
       html: generateEmailHtml(username, password),
       text: generateEmailText(username, password),
     });
+    const elapsed = Date.now() - startTime;
+
+    // Log API call
+    const logApiCall = async () => {
+      try {
+        const supabaseUrl = Deno.env.get("SUPABASE_URL");
+        const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+        if (!supabaseUrl || !supabaseKey) return;
+        
+        await fetch(`${supabaseUrl}/functions/v1/mariadb-proxy`, {
+          method: "POST",
+          headers: {
+            "Authorization": `Bearer ${supabaseKey}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            action: "log_api_call",
+            api_name: "Resend (Email)",
+            endpoint: "/emails",
+            method: "POST",
+            status_code: error ? 500 : 200,
+            response_time_ms: elapsed,
+            error_message: error?.message,
+            edge_function: "send-welcome-email"
+          }),
+        });
+      } catch (e) {
+        console.error("[logApiCall] Failed:", e);
+      }
+    };
+    logApiCall(); // Fire and forget
 
     if (error) {
       console.error("Resend error:", error);

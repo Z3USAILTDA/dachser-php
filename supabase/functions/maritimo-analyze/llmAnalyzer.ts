@@ -7,6 +7,43 @@
 import { getPromptForAnalysisType, getShippingDataExtractionInstructions } from './prompts.ts';
 import { extractXlsxText } from './simpleXlsxReader.ts';
 
+// Helper to log API calls asynchronously (fire-and-forget)
+async function logApiCall(
+  api_name: string,
+  endpoint: string,
+  method: string,
+  status_code: number,
+  response_time_ms: number,
+  error_message?: string
+): Promise<void> {
+  try {
+    const supabaseUrl = Deno.env.get('SUPABASE_URL');
+    const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+    if (!supabaseUrl || !supabaseKey) return;
+    
+    await fetch(`${supabaseUrl}/functions/v1/mariadb-proxy`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${supabaseKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        action: 'log_api_call',
+        api_name,
+        endpoint,
+        method,
+        status_code,
+        response_time_ms,
+        error_message,
+        edge_function: 'maritimo-analyze'
+      }),
+    });
+  } catch (e) {
+    // Silently fail - logging should not break main flow
+    console.error('[logApiCall] Failed to log:', e);
+  }
+}
+
 export interface AnalysisResult {
   result_text: string;
   json_result: any;
@@ -288,10 +325,18 @@ async function analyzeWithAnthropic(
         const data = await response.json();
         const text = data.content?.[0]?.text || '';
         console.log(`[Analysis] Anthropic completed in ${elapsed}ms (${text.length} chars)`);
+        
+        // Log successful API call
+        logApiCall('Anthropic (Claude)', '/v1/messages', 'POST', response.status, elapsed);
+        
         return { text, model: 'claude-sonnet-4-20250514' };
       } else {
         const errorText = await response.text();
         console.error(`[Analysis] Anthropic failed (${response.status}): ${errorText.substring(0, 300)}`);
+        
+        // Log failed API call
+        logApiCall('Anthropic (Claude)', '/v1/messages', 'POST', response.status, Date.now() - startTime, errorText.substring(0, 200));
+        
         lastError = new Error(`Anthropic API error: ${response.status}`);
         
         // Don't retry on certain status codes
@@ -402,10 +447,18 @@ async function analyzeWithGemini(
         const data = await response.json();
         const text = data.choices?.[0]?.message?.content || '';
         console.log(`[Fallback] Gemini completed in ${elapsed}ms (${text.length} chars)`);
+        
+        // Log successful API call
+        logApiCall('Lovable AI (Gemini)', '/v1/chat/completions', 'POST', response.status, elapsed);
+        
         return { text, model: 'google/gemini-2.5-flash' };
       } else {
         const errorText = await response.text();
         console.error(`[Fallback] Gemini failed (${response.status}): ${errorText.substring(0, 200)}`);
+        
+        // Log failed API call
+        logApiCall('Lovable AI (Gemini)', '/v1/chat/completions', 'POST', response.status, elapsed, errorText.substring(0, 200));
+        
         lastError = new Error(`Gemini API error: ${response.status}`);
         
         // Wait before retry
