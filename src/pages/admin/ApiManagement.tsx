@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { ArrowLeft, Activity, Server, TrendingUp, AlertCircle, RefreshCw, Loader2, Calendar } from "lucide-react";
+import { ArrowLeft, Activity, Server, TrendingUp, AlertCircle, RefreshCw, Loader2, Calendar, DollarSign } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -14,7 +14,7 @@ import {
   ChartLegend,
   ChartLegendContent
 } from "@/components/ui/chart";
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, ResponsiveContainer, BarChart, Bar, AreaChart, Area } from "recharts";
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, ResponsiveContainer, BarChart, Bar, AreaChart, Area, PieChart, Pie, Cell } from "recharts";
 import dachserBg from "@/assets/dachser-background.jpg";
 
 interface ApiStats {
@@ -51,6 +51,47 @@ interface DailyTotal {
   total_errors: number;
 }
 
+// Preços estimados por chamada (em USD)
+// Baseado em preços públicos dos provedores (valores aproximados médios)
+interface ApiPricing {
+  costPerCall: number; // USD por chamada
+  unit: string; // Descrição da unidade
+  notes: string; // Notas sobre o preço
+}
+
+const API_PRICING: Record<string, ApiPricing> = {
+  "Anthropic": { 
+    costPerCall: 0.015, // ~$3/1M input tokens + $15/1M output, média ~1K tokens/call
+    unit: "por chamada (~1K tokens)",
+    notes: "Claude 3.5 Sonnet: $3/1M input, $15/1M output"
+  },
+  "LovableAI": { 
+    costPerCall: 0.002, // Gemini Flash pricing
+    unit: "por chamada (~1K tokens)",
+    notes: "Gemini 2.5 Flash via Lovable Gateway"
+  },
+  "Resend": { 
+    costPerCall: 0.001, // $1/1000 emails
+    unit: "por email",
+    notes: "$1/1000 emails após tier gratuito"
+  },
+  "JSONCargo": { 
+    costPerCall: 0.05, // Estimativa baseada em pricing típico de APIs de tracking
+    unit: "por consulta",
+    notes: "Preço estimado - verificar contrato"
+  },
+  "FlightRadar": { 
+    costPerCall: 0.02, // Estimativa
+    unit: "por consulta",
+    notes: "Preço estimado - verificar plano contratado"
+  },
+  "Leadcomex": { 
+    costPerCall: 0.01, // Estimativa
+    unit: "por chamada",
+    notes: "Preço estimado - verificar contrato"
+  },
+};
+
 // Usuários que NÃO podem ver esta página
 const RESTRICTED_USERS = ["ana.tozzo"];
 
@@ -66,6 +107,21 @@ const API_COLORS: Record<string, string> = {
 
 const getApiColor = (apiName: string): string => {
   return API_COLORS[apiName] || "#6b7280";
+};
+
+const getApiCost = (apiName: string, calls: number): number => {
+  const pricing = API_PRICING[apiName];
+  if (!pricing) return 0;
+  return calls * pricing.costPerCall;
+};
+
+const formatCurrency = (value: number): string => {
+  return new Intl.NumberFormat('en-US', { 
+    style: 'currency', 
+    currency: 'USD',
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2
+  }).format(value);
 };
 
 export default function ApiManagement() {
@@ -244,7 +300,7 @@ export default function ApiManagement() {
           </div>
 
           {/* Summary Cards */}
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
+          <div className="grid grid-cols-1 md:grid-cols-5 gap-4 mb-8">
             <Card className="bg-white/10 border-white/20 backdrop-blur">
               <CardContent className="pt-6">
                 <div className="flex items-center gap-4">
@@ -305,6 +361,24 @@ export default function ApiManagement() {
                     <p className="text-white/60 text-sm">Total de Erros</p>
                     <p className="text-2xl font-bold text-white">
                       {isLoading ? "..." : apiStats.reduce((sum, api) => sum + api.error_count, 0).toLocaleString()}
+                    </p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card className="bg-gradient-to-br from-emerald-500/20 to-green-600/20 border-emerald-500/30 backdrop-blur">
+              <CardContent className="pt-6">
+                <div className="flex items-center gap-4">
+                  <div className="p-3 rounded-full bg-emerald-500/30">
+                    <DollarSign className="w-6 h-6 text-emerald-400" />
+                  </div>
+                  <div>
+                    <p className="text-white/60 text-sm">Custo Estimado (30d)</p>
+                    <p className="text-2xl font-bold text-emerald-400">
+                      {isLoading ? "..." : formatCurrency(
+                        apiStats.reduce((sum, api) => sum + getApiCost(api.api_name, api.total_calls), 0)
+                      )}
                     </p>
                   </div>
                 </div>
@@ -425,6 +499,123 @@ export default function ApiManagement() {
             </Card>
           )}
 
+          {/* Cost Breakdown Section */}
+          {!isLoading && apiStats.length > 0 && (
+            <Card className="bg-white/10 border-white/20 backdrop-blur mb-8">
+              <CardHeader>
+                <CardTitle className="text-white flex items-center gap-2">
+                  <DollarSign className="w-5 h-5 text-emerald-400" />
+                  Estimativa de Custos por API
+                </CardTitle>
+                <CardDescription className="text-white/50">
+                  Custos estimados baseados nos preços públicos de cada provedor (últimos 30 dias)
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                  {/* Cost Pie Chart */}
+                  <div className="bg-black/30 rounded-lg p-4">
+                    <h4 className="text-white/80 text-sm font-medium mb-4">Distribuição de Custos</h4>
+                    <div className="h-64 flex items-center justify-center">
+                      <ResponsiveContainer width="100%" height="100%">
+                        <PieChart>
+                          <Pie
+                            data={apiStats.map(api => ({
+                              name: api.api_name,
+                              value: getApiCost(api.api_name, api.total_calls),
+                              fill: getApiColor(api.api_name)
+                            })).filter(d => d.value > 0)}
+                            cx="50%"
+                            cy="50%"
+                            innerRadius={60}
+                            outerRadius={90}
+                            paddingAngle={2}
+                            dataKey="value"
+                            label={({ name, value }) => `${name}: ${formatCurrency(value)}`}
+                            labelLine={{ stroke: 'rgba(255,255,255,0.3)' }}
+                          >
+                            {apiStats.map((api, index) => (
+                              <Cell key={`cell-${index}`} fill={getApiColor(api.api_name)} />
+                            ))}
+                          </Pie>
+                          <ChartTooltip 
+                            content={({ active, payload }) => {
+                              if (active && payload && payload.length) {
+                                const data = payload[0].payload;
+                                return (
+                                  <div className="bg-black/90 border border-white/20 rounded-lg p-3">
+                                    <p className="text-white font-medium">{data.name}</p>
+                                    <p className="text-emerald-400">{formatCurrency(data.value)}</p>
+                                  </div>
+                                );
+                              }
+                              return null;
+                            }}
+                          />
+                        </PieChart>
+                      </ResponsiveContainer>
+                    </div>
+                  </div>
+
+                  {/* Cost Table */}
+                  <div className="bg-black/30 rounded-lg p-4">
+                    <h4 className="text-white/80 text-sm font-medium mb-4">Detalhamento de Custos</h4>
+                    <div className="space-y-3">
+                      {apiStats
+                        .map(api => ({
+                          ...api,
+                          cost: getApiCost(api.api_name, api.total_calls),
+                          pricing: API_PRICING[api.api_name]
+                        }))
+                        .sort((a, b) => b.cost - a.cost)
+                        .map(api => (
+                          <div key={api.api_name} className="flex items-center justify-between p-3 bg-white/5 rounded-lg hover:bg-white/10 transition">
+                            <div className="flex items-center gap-3">
+                              <div className="w-3 h-3 rounded-full" style={{ backgroundColor: getApiColor(api.api_name) }} />
+                              <div>
+                                <p className="text-white font-medium">{api.api_name}</p>
+                                <p className="text-white/40 text-xs">
+                                  {api.pricing ? `${api.pricing.unit} • ${api.pricing.notes}` : 'Preço não configurado'}
+                                </p>
+                              </div>
+                            </div>
+                            <div className="text-right">
+                              <p className="text-emerald-400 font-semibold">{formatCurrency(api.cost)}</p>
+                              <p className="text-white/40 text-xs">
+                                {api.total_calls.toLocaleString()} chamadas
+                              </p>
+                            </div>
+                          </div>
+                        ))}
+                      
+                      {/* Total */}
+                      <div className="flex items-center justify-between p-3 bg-emerald-500/10 border border-emerald-500/30 rounded-lg mt-4">
+                        <div className="flex items-center gap-3">
+                          <DollarSign className="w-5 h-5 text-emerald-400" />
+                          <p className="text-white font-semibold">Total Estimado</p>
+                        </div>
+                        <p className="text-emerald-400 font-bold text-lg">
+                          {formatCurrency(apiStats.reduce((sum, api) => sum + getApiCost(api.api_name, api.total_calls), 0))}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                
+                {/* Disclaimer */}
+                <div className="mt-4 p-3 rounded-lg bg-amber-500/10 border border-amber-500/30">
+                  <p className="text-amber-300 text-xs flex items-start gap-2">
+                    <AlertCircle className="w-4 h-4 mt-0.5 flex-shrink-0" />
+                    <span>
+                      Os valores são estimativas baseadas nos preços públicos médios de cada provedor. 
+                      Os custos reais podem variar conforme o plano contratado, volume de tokens por chamada e taxas adicionais.
+                    </span>
+                  </p>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
           {/* API Cards Grid */}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {isLoading ? (
@@ -440,52 +631,55 @@ export default function ApiManagement() {
                 </p>
               </div>
             ) : (
-              apiStats.map((api) => (
-                <Card key={api.api_name} className="bg-white/10 border-white/20 backdrop-blur hover:bg-white/15 transition">
-                  <CardHeader className="pb-2">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <div className="w-3 h-3 rounded-full" style={{ backgroundColor: getApiColor(api.api_name) }} />
-                        <CardTitle className="text-lg text-white">{api.api_name}</CardTitle>
+              apiStats.map((api) => {
+                const cost = getApiCost(api.api_name, api.total_calls);
+                return (
+                  <Card key={api.api_name} className="bg-white/10 border-white/20 backdrop-blur hover:bg-white/15 transition">
+                    <CardHeader className="pb-2">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <div className="w-3 h-3 rounded-full" style={{ backgroundColor: getApiColor(api.api_name) }} />
+                          <CardTitle className="text-lg text-white">{api.api_name}</CardTitle>
+                        </div>
+                        <Badge className={getStatusColor(api.success_rate)}>
+                          {api.success_rate?.toFixed(1) || 0}%
+                        </Badge>
                       </div>
-                      <Badge className={getStatusColor(api.success_rate)}>
-                        {api.success_rate?.toFixed(1) || 0}%
-                      </Badge>
-                    </div>
-                    <CardDescription className="text-white/50">
-                      Última chamada: {formatDate(api.last_call)}
-                    </CardDescription>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="grid grid-cols-2 gap-4">
-                      <div>
-                        <p className="text-white/50 text-xs">Total Chamadas</p>
-                        <p className="text-xl font-semibold text-white">
-                          {(api.total_calls || 0).toLocaleString()}
-                        </p>
+                      <CardDescription className="text-white/50">
+                        Última chamada: {formatDate(api.last_call)}
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="grid grid-cols-2 gap-4">
+                        <div>
+                          <p className="text-white/50 text-xs">Total Chamadas</p>
+                          <p className="text-xl font-semibold text-white">
+                            {(api.total_calls || 0).toLocaleString()}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-white/50 text-xs">Custo Est.</p>
+                          <p className="text-xl font-semibold text-emerald-400">
+                            {formatCurrency(cost)}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-white/50 text-xs">Tempo Médio</p>
+                          <p className="text-xl font-semibold text-white">
+                            {api.avg_response_time_ms ? `${api.avg_response_time_ms}ms` : "N/A"}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-white/50 text-xs">Erros</p>
+                          <p className={`text-xl font-semibold ${(api.error_count || 0) > 0 ? "text-red-400" : "text-green-400"}`}>
+                            {api.error_count || 0}
+                          </p>
+                        </div>
                       </div>
-                      <div>
-                        <p className="text-white/50 text-xs">Tempo Médio</p>
-                        <p className="text-xl font-semibold text-white">
-                          {api.avg_response_time_ms ? `${api.avg_response_time_ms}ms` : "N/A"}
-                        </p>
-                      </div>
-                      <div>
-                        <p className="text-white/50 text-xs">Erros</p>
-                        <p className={`text-xl font-semibold ${(api.error_count || 0) > 0 ? "text-red-400" : "text-green-400"}`}>
-                          {api.error_count || 0}
-                        </p>
-                      </div>
-                      <div>
-                        <p className="text-white/50 text-xs">Sucesso</p>
-                        <p className="text-xl font-semibold text-green-400">
-                          {((api.total_calls || 0) - (api.error_count || 0)).toLocaleString()}
-                        </p>
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-              ))
+                    </CardContent>
+                  </Card>
+                );
+              })
             )}
           </div>
 
