@@ -636,6 +636,32 @@ export default function ApiManagement() {
       backTo="/dashboard"
       rightContent={rightContent}
     >
+      {/* Navigation Tabs */}
+      <nav className="flex items-center gap-1 px-2 py-1.5 rounded-full bg-[rgba(5,6,18,0.85)] border border-white/10 backdrop-blur-sm w-fit">
+        {[
+          { id: "dashboard" as const, label: "Dashboard", icon: LayoutDashboard },
+          { id: "analytics" as const, label: "Analytics", icon: BarChart3 },
+        ].map((tab) => {
+          const Icon = tab.icon;
+          const isActive = activeTab === tab.id;
+          return (
+            <button
+              key={tab.id}
+              onClick={() => setActiveTab(tab.id)}
+              className={cn(
+                "flex items-center gap-2 px-4 py-2 rounded-full text-[0.8rem] font-medium transition-all duration-200",
+                isActive
+                  ? "bg-[rgba(255,200,0,0.15)] text-[#ffc800] border border-[#ffc800]/40 shadow-[0_0_12px_rgba(255,200,0,0.3)]"
+                  : "text-[#aaaaaa] hover:text-white hover:bg-white/5"
+              )}
+            >
+              <Icon className="h-4 w-4" />
+              {tab.label}
+            </button>
+          );
+        })}
+      </nav>
+
       {/* Summary Metrics */}
       <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
         <div className="p-3 rounded-xl bg-[#0a0b10] border border-white/10">
@@ -692,32 +718,6 @@ export default function ApiManagement() {
           </div>
         </div>
       </div>
-
-      {/* Navigation Tabs */}
-      <nav className="flex items-center gap-1 px-2 py-1.5 rounded-full bg-[rgba(5,6,18,0.85)] border border-white/10 backdrop-blur-sm w-fit">
-        {[
-          { id: "dashboard" as const, label: "Dashboard", icon: LayoutDashboard },
-          { id: "analytics" as const, label: "Analytics", icon: BarChart3 },
-        ].map((tab) => {
-          const Icon = tab.icon;
-          const isActive = activeTab === tab.id;
-          return (
-            <button
-              key={tab.id}
-              onClick={() => setActiveTab(tab.id)}
-              className={cn(
-                "flex items-center gap-2 px-4 py-2 rounded-full text-[0.8rem] font-medium transition-all duration-200",
-                isActive
-                  ? "bg-[rgba(255,200,0,0.15)] text-[#ffc800] border border-[#ffc800]/40 shadow-[0_0_12px_rgba(255,200,0,0.3)]"
-                  : "text-[#aaaaaa] hover:text-white hover:bg-white/5"
-              )}
-            >
-              <Icon className="h-4 w-4" />
-              {tab.label}
-            </button>
-          );
-        })}
-      </nav>
 
       {/* Tab Content */}
       {activeTab === "dashboard" && (
