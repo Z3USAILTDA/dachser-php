@@ -1436,6 +1436,7 @@ serve(async (req) => {
 
         // Query containers that need update: valid ISO format AND (never checked OR checked > N hours ago)
         // Include mbl_id to detect shipping line from MBL prefix for leasing containers
+        // ONLY select containers with "Aguardando" status (pending, no events yet)
         const containers = await client.query(`
           SELECT id, mbl_id, container, shipping_line, navio 
           FROM dados_dachser.t_tracking_sea 
@@ -1444,11 +1445,19 @@ serve(async (req) => {
             AND container NOT IN ('PENDENTE', 'NAO_ENCONTRADO', 'IGNORADO', '')
             AND container REGEXP '^[A-Za-z]{4}[0-9]{7}$'
             AND (last_check IS NULL OR last_check < DATE_SUB(NOW(), INTERVAL ? HOUR))
+            AND (
+              container_status IS NULL 
+              OR container_status = '' 
+              OR container_status = 'PENDING'
+              OR last_event IS NULL 
+              OR last_event = '' 
+              OR last_event LIKE '%Aguardando%'
+            )
           ORDER BY last_check ASC
           LIMIT ?
         `, [staleHours, batchSize]);
 
-        console.log(`[refresh_sea_tracking] Processing batch of ${containers.length} containers (stale > ${staleHours}h)`);
+        console.log(`[refresh_sea_tracking] Processing ${containers.length} pending containers (status=AGD, stale > ${staleHours}h)`);
 
         let updated = 0;
         let errors = 0;
