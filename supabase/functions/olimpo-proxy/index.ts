@@ -1435,8 +1435,9 @@ serve(async (req) => {
         }
 
         // Query containers that need update: valid ISO format AND (never checked OR checked > N hours ago)
+        // Include mbl_id to detect shipping line from MBL prefix for leasing containers
         const containers = await client.query(`
-          SELECT id, container, shipping_line, navio 
+          SELECT id, mbl_id, container, shipping_line, navio 
           FROM dados_dachser.t_tracking_sea 
           WHERE active = 1
             AND container IS NOT NULL
@@ -1452,6 +1453,74 @@ serve(async (req) => {
         let updated = 0;
         let errors = 0;
         let processed = 0;
+        let leasingDetected = 0;
+
+        // Extended mapping for container prefixes to shipping lines
+        const CONTAINER_PREFIX_TO_SHIPPING_LINE: Record<string, string> = {
+          // CMA CGM (including APL)
+          'CMAU': 'CMA_CGM', 'CXDU': 'CMA_CGM', 'CGMU': 'CMA_CGM', 'SEGU': 'CMA_CGM',
+          'APLU': 'CMA_CGM', 'APHU': 'CMA_CGM',
+          // CCLU - CMA CGM predominant
+          'CCLU': 'CMA_CGM',
+          // MSC
+          'MSCU': 'MSC', 'MEDU': 'MSC', 'MSDU': 'MSC', 'TRLU': 'MSC', 'GLDU': 'MSC',
+          // MAERSK (including Hamburg Sud)
+          'MAEU': 'MAERSK', 'MRKU': 'MAERSK', 'MSKU': 'MAERSK', 'PONU': 'MAERSK', 'SUDU': 'MAERSK',
+          // Hapag-Lloyd (inclui UACU - United Arab Shipping Company adquirida em 2017)
+          'HLCU': 'HAPAG_LLOYD', 'HLXU': 'HAPAG_LLOYD', 'TCLU': 'HAPAG_LLOYD', 'UACU': 'HAPAG_LLOYD',
+          // ONE
+          'ONEY': 'ONE', 'ONEU': 'ONE', 'NYKU': 'ONE', 'MOLU': 'ONE', 'KKFU': 'ONE',
+          // HMM
+          'HDMU': 'HMM', 'HMMU': 'HMM', 'HMCU': 'HMM', 'KMTU': 'HMM',
+          // Evergreen
+          'EISU': 'EVERGREEN', 'EITU': 'EVERGREEN', 'EGSU': 'EVERGREEN', 'EGHU': 'EVERGREEN', 'EMCU': 'EVERGREEN',
+          // Yang Ming
+          'YMLU': 'YANG_MING', 'YMMU': 'YANG_MING', 'YMPU': 'YANG_MING',
+          // COSCO / OOCL (both under COSCO Group)
+          'COSU': 'COSCO', 'CSNU': 'COSCO', 'CBHU': 'COSCO', 'OOLU': 'COSCO', 'CSLU': 'COSCO',
+          // ZIM
+          'ZIMU': 'ZIM', 'ZCSU': 'ZIM',
+          // PIL (Pacific International Lines)
+          'PCIU': 'PIL', 'PILU': 'PIL',
+          // Wan Hai
+          'WHLU': 'WAN_HAI', 'WANU': 'WAN_HAI',
+          // Seaboard
+          'SEAU': 'SEABOARD',
+          // Crowley
+          'CLHU': 'CROWLEY',
+          // Arkas
+          'ARKU': 'ARKAS',
+          // Turkon
+          'TRKU': 'TURKON',
+          // Grimaldi
+          'GRIU': 'GRIMALDI',
+          // Alianca (now Hamburg Sud/Maersk)
+          'ALIU': 'MAERSK',
+        };
+
+        // MBL prefix to shipping line mapping (for detecting carrier from MBL when container is leasing)
+        const MBL_PREFIX_TO_SHIPPING_LINE: Record<string, string> = {
+          // Hapag-Lloyd MBL prefixes
+          'HLCU': 'HAPAG_LLOYD', 'HLXU': 'HAPAG_LLOYD', 
+          // MSC MBL prefixes
+          'MSCU': 'MSC', 'MEDU': 'MSC',
+          // Maersk MBL prefixes  
+          'MAEU': 'MAERSK', 'MRKU': 'MAERSK', 'MSKU': 'MAERSK',
+          // CMA CGM MBL prefixes
+          'CMAU': 'CMA_CGM', 'CGMU': 'CMA_CGM',
+          // ONE MBL prefixes
+          'ONEY': 'ONE', 'ONEU': 'ONE',
+          // Evergreen MBL prefixes
+          'EISU': 'EVERGREEN', 'EITU': 'EVERGREEN',
+          // COSCO MBL prefixes
+          'COSU': 'COSCO', 'OOLU': 'COSCO',
+          // Yang Ming MBL prefixes
+          'YMLU': 'YANG_MING',
+          // HMM MBL prefixes
+          'HDMU': 'HMM', 'HMMU': 'HMM',
+          // ZIM MBL prefixes
+          'ZIMU': 'ZIM',
+        };
 
         for (const row of containers) {
           // Time control: stop if approaching timeout
@@ -1461,53 +1530,42 @@ serve(async (req) => {
           }
 
           const containerId = row.container;
+          const mblId = row.mbl_id || '';
           let shippingLine = row.shipping_line || '';
+          let shippingLineSource = 'database';
           
+          // Step 1: Try to get shipping line from database
           if (!shippingLine && containerId) {
             const prefix = containerId.substring(0, 4).toUpperCase();
-            // Extended mapping for container prefixes to shipping lines
-            const CONTAINER_PREFIX_TO_SHIPPING_LINE: Record<string, string> = {
-              // CMA CGM (including APL)
-              'CMAU': 'CMA_CGM', 'CXDU': 'CMA_CGM', 'CGMU': 'CMA_CGM', 'SEGU': 'CMA_CGM',
-              'APLU': 'CMA_CGM', 'APHU': 'CMA_CGM',
-              // CCLU - CMA CGM predominant
-              'CCLU': 'CMA_CGM',
-              // MSC
-              'MSCU': 'MSC', 'MEDU': 'MSC', 'MSDU': 'MSC', 'TRLU': 'MSC', 'GLDU': 'MSC',
-              // MAERSK (including Hamburg Sud)
-              'MAEU': 'MAERSK', 'MRKU': 'MAERSK', 'MSKU': 'MAERSK', 'PONU': 'MAERSK', 'SUDU': 'MAERSK',
-              // Hapag-Lloyd (inclui UACU - United Arab Shipping Company adquirida em 2017)
-              'HLCU': 'HAPAG_LLOYD', 'HLXU': 'HAPAG_LLOYD', 'TCLU': 'HAPAG_LLOYD', 'UACU': 'HAPAG_LLOYD',
-              // ONE
-              'ONEY': 'ONE', 'ONEU': 'ONE', 'NYKU': 'ONE', 'MOLU': 'ONE', 'KKFU': 'ONE',
-              // HMM
-              'HDMU': 'HMM', 'HMMU': 'HMM', 'HMCU': 'HMM', 'KMTU': 'HMM',
-              // Evergreen
-              'EISU': 'EVERGREEN', 'EITU': 'EVERGREEN', 'EGSU': 'EVERGREEN', 'EGHU': 'EVERGREEN', 'EMCU': 'EVERGREEN',
-              // Yang Ming
-              'YMLU': 'YANG_MING', 'YMMU': 'YANG_MING', 'YMPU': 'YANG_MING',
-              // COSCO / OOCL (both under COSCO Group)
-              'COSU': 'COSCO', 'CSNU': 'COSCO', 'CBHU': 'COSCO', 'OOLU': 'COSCO', 'CSLU': 'COSCO',
-              // ZIM
-              'ZIMU': 'ZIM', 'ZCSU': 'ZIM',
-              // PIL (Pacific International Lines)
-              'PCIU': 'PIL', 'PILU': 'PIL',
-              // Wan Hai
-              'WHLU': 'WAN_HAI', 'WANU': 'WAN_HAI',
-              // Seaboard
-              'SEAU': 'SEABOARD',
-              // Crowley
-              'CLHU': 'CROWLEY',
-              // Arkas
-              'ARKU': 'ARKAS',
-              // Turkon
-              'TRKU': 'TURKON',
-              // Grimaldi
-              'GRIU': 'GRIMALDI',
-              // Alianca (now Hamburg Sud/Maersk)
-              'ALIU': 'MAERSK',
-            };
             shippingLine = CONTAINER_PREFIX_TO_SHIPPING_LINE[prefix] || '';
+            if (shippingLine) shippingLineSource = 'container_prefix';
+          }
+          
+          // Step 2: If container prefix not recognized (leasing container), use MBL prefix
+          if (!shippingLine && mblId) {
+            const mblPrefix = mblId.substring(0, 4).toUpperCase();
+            shippingLine = MBL_PREFIX_TO_SHIPPING_LINE[mblPrefix] || '';
+            if (shippingLine) {
+              shippingLineSource = 'mbl_prefix';
+              leasingDetected++;
+              console.log(`[refresh_sea_tracking] Leasing container ${containerId}: using ${shippingLine} from MBL ${mblId}`);
+            }
+          }
+          
+          // Step 3: If still no shipping line, log and mark as unidentifiable
+          if (!shippingLine) {
+            const containerPrefix = containerId ? containerId.substring(0, 4).toUpperCase() : 'UNKNOWN';
+            const mblPrefix = mblId ? mblId.substring(0, 4).toUpperCase() : 'UNKNOWN';
+            console.log(`[refresh_sea_tracking] Cannot identify carrier for ${containerId} (prefix: ${containerPrefix}, MBL: ${mblId}, MBL prefix: ${mblPrefix})`);
+            
+            await client.execute(`
+              UPDATE dados_dachser.t_tracking_sea 
+              SET last_check = NOW(), last_error = ?
+              WHERE id = ?
+            `, [`armador_nao_identificado: container=${containerPrefix} mbl=${mblPrefix}`, row.id]);
+            errors++;
+            processed++;
+            continue;
           }
           
           const qs: Record<string, string> = {};
@@ -1620,13 +1678,14 @@ serve(async (req) => {
         const remaining = remainingResult[0]?.cnt || 0;
 
         await client.close();
-        console.log(`[refresh_sea_tracking] Batch done: ${updated} updated, ${errors} errors, ${remaining} remaining`);
+        console.log(`[refresh_sea_tracking] Batch done: ${updated} updated, ${errors} errors, ${leasingDetected} leasing containers detected, ${remaining} remaining`);
         
         return new Response(JSON.stringify({ 
           success: true, 
           updated, 
           errors, 
           processed,
+          leasingDetected,
           remaining,
           batchSize,
           elapsedMs: Date.now() - startTime
