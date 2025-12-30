@@ -408,41 +408,71 @@ const ContainerTracking = () => {
     }
   };
 
-  // Enrich MBLs with containers from JsonCargo API
+  // Enrich MBLs with containers from JsonCargo API (batch processing to avoid timeout)
   const handleEnrich = async () => {
     setIsEnriching(true);
+    let totalEnriched = 0;
+    let totalSkipped = 0;
+    let totalErrors = 0;
+    let totalNoContainers = 0;
+    let remaining = 1; // Start with 1 to enter loop
+    let iteration = 0;
+    const maxIterations = 30; // Safety limit
+    
     toast({
       title: "Enriquecendo",
       description: "Buscando containers via API JsonCargo...",
     });
     
     try {
-      const res = await fetch(
-        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/olimpo-proxy?action=enrich_sea_containers`,
-        {
-          method: 'GET',
-          headers: {
-            'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
-            'Content-Type': 'application/json',
+      while (remaining > 0 && iteration < maxIterations) {
+        iteration++;
+        
+        const res = await fetch(
+          `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/olimpo-proxy?action=enrich_sea_containers&batch_size=10&max_time_ms=45000`,
+          {
+            method: 'GET',
+            headers: {
+              'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
+              'Content-Type': 'application/json',
+            }
           }
+        );
+        
+        const result = await res.json();
+        
+        if (result.success) {
+          totalEnriched += result.enriched || 0;
+          totalSkipped += result.skipped || 0;
+          totalErrors += result.errors || 0;
+          totalNoContainers += result.noContainers || 0;
+          remaining = result.remaining || 0;
+          
+          toast({
+            title: `Enriquecendo... (${iteration})`,
+            description: `${totalEnriched} enriquecidos, ${remaining} restantes`,
+          });
+          
+          // If no MBLs were processed (all skipped or none left), exit
+          if (remaining === 0 || (result.enriched === 0 && result.errors === 0 && result.noContainers === 0)) {
+            break;
+          }
+        } else {
+          toast({
+            title: "Erro ao enriquecer",
+            description: result.error || "Falha no enriquecimento",
+            variant: "destructive",
+          });
+          break;
         }
-      );
-      
-      const result = await res.json();
-      
-      if (result.success) {
-        toast({
-          title: "Enriquecimento concluído",
-          description: `${result.enriched} MBLs enriquecidos com containers. ${result.noContainers} sem containers. ${result.errors} erros.`,
-        });
-        await fetchMblData();
-      } else {
-        toast({
-          title: "Erro ao enriquecer",
-          description: result.error || "Falha no enriquecimento",
-          variant: "destructive",
-        });
       }
+      
+      toast({
+        title: "Enriquecimento concluído",
+        description: `${totalEnriched} enriquecidos, ${totalSkipped} ignorados, ${totalNoContainers} sem containers, ${totalErrors} erros`,
+      });
+      
+      await fetchMblData();
     } catch (error) {
       console.error("Error enriching:", error);
       toast({
