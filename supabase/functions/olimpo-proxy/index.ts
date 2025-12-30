@@ -1423,6 +1423,17 @@ serve(async (req) => {
       });
 
       try {
+        // Ensure last_error column exists
+        try {
+          await client.execute(`
+            ALTER TABLE dados_dachser.t_tracking_sea 
+            ADD COLUMN IF NOT EXISTS last_error VARCHAR(255) DEFAULT NULL
+          `);
+        } catch (alterErr: any) {
+          // Column might already exist, ignore error
+          console.log('[refresh_sea_tracking] last_error column check:', alterErr.message);
+        }
+
         // Query containers that need update: valid ISO format AND (never checked OR checked > N hours ago)
         const containers = await client.query(`
           SELECT id, container, shipping_line, navio 
@@ -1454,16 +1465,49 @@ serve(async (req) => {
           
           if (!shippingLine && containerId) {
             const prefix = containerId.substring(0, 4).toUpperCase();
-            if (prefix === 'CMAU' || prefix === 'CCLU' || prefix === 'CXDU') shippingLine = 'CMA_CGM';
-            else if (prefix === 'MSCU' || prefix === 'MEDU') shippingLine = 'MSC';
-            else if (prefix === 'MAEU' || prefix === 'MRKU' || prefix === 'MSKU') shippingLine = 'MAERSK';
-            else if (prefix === 'HLCU' || prefix === 'HLXU') shippingLine = 'HAPAG_LLOYD';
-            else if (prefix === 'ONEY' || prefix === 'ONEU') shippingLine = 'ONE';
-            else if (prefix === 'HDMU' || prefix === 'HMMU') shippingLine = 'HMM';
-            else if (prefix === 'EISU' || prefix === 'EITU' || prefix === 'EGSU' || prefix === 'EGHU') shippingLine = 'EVERGREEN';
-            else if (prefix === 'YMLU' || prefix === 'YMMU') shippingLine = 'YANG_MING';
-            else if (prefix === 'COSU' || prefix === 'CSNU') shippingLine = 'COSCO';
-            else if (prefix === 'ZIMU' || prefix === 'ZCSU') shippingLine = 'ZIM';
+            // Extended mapping for container prefixes to shipping lines
+            const CONTAINER_PREFIX_TO_SHIPPING_LINE: Record<string, string> = {
+              // CMA CGM (including APL)
+              'CMAU': 'CMA_CGM', 'CXDU': 'CMA_CGM', 'CGMU': 'CMA_CGM', 'SEGU': 'CMA_CGM',
+              'APLU': 'CMA_CGM', 'APHU': 'CMA_CGM',
+              // CCLU - CMA CGM predominant
+              'CCLU': 'CMA_CGM',
+              // MSC
+              'MSCU': 'MSC', 'MEDU': 'MSC', 'MSDU': 'MSC', 'TRLU': 'MSC', 'GLDU': 'MSC',
+              // MAERSK (including Hamburg Sud)
+              'MAEU': 'MAERSK', 'MRKU': 'MAERSK', 'MSKU': 'MAERSK', 'PONU': 'MAERSK', 'SUDU': 'MAERSK',
+              // Hapag-Lloyd
+              'HLCU': 'HAPAG_LLOYD', 'HLXU': 'HAPAG_LLOYD', 'TCLU': 'HAPAG_LLOYD',
+              // ONE
+              'ONEY': 'ONE', 'ONEU': 'ONE', 'NYKU': 'ONE', 'MOLU': 'ONE', 'KKFU': 'ONE',
+              // HMM
+              'HDMU': 'HMM', 'HMMU': 'HMM', 'HMCU': 'HMM', 'KMTU': 'HMM',
+              // Evergreen
+              'EISU': 'EVERGREEN', 'EITU': 'EVERGREEN', 'EGSU': 'EVERGREEN', 'EGHU': 'EVERGREEN', 'EMCU': 'EVERGREEN', 'UACU': 'EVERGREEN',
+              // Yang Ming
+              'YMLU': 'YANG_MING', 'YMMU': 'YANG_MING', 'YMPU': 'YANG_MING',
+              // COSCO / OOCL (both under COSCO Group)
+              'COSU': 'COSCO', 'CSNU': 'COSCO', 'CBHU': 'COSCO', 'OOLU': 'COSCO', 'CSLU': 'COSCO',
+              // ZIM
+              'ZIMU': 'ZIM', 'ZCSU': 'ZIM',
+              // PIL (Pacific International Lines)
+              'PCIU': 'PIL', 'PILU': 'PIL',
+              // Wan Hai
+              'WHLU': 'WAN_HAI', 'WANU': 'WAN_HAI',
+              // Seaboard
+              'SEAU': 'SEABOARD',
+              // Crowley
+              'CLHU': 'CROWLEY',
+              // Arkas
+              'ARKU': 'ARKAS',
+              // Turkon
+              'TRKU': 'TURKON',
+              // Grimaldi
+              'GRIU': 'GRIMALDI',
+              // Alianca (now Hamburg Sud/Maersk)
+              'ALIU': 'MAERSK',
+            };
+            shippingLine = CONTAINER_PREFIX_TO_SHIPPING_LINE[prefix] || '';
           }
           
           const qs: Record<string, string> = {};
@@ -1491,7 +1535,8 @@ serve(async (req) => {
                 navio = COALESCE(?, navio),
                 last_event = ?,
                 shipping_line = COALESCE(?, shipping_line),
-                last_check = NOW()
+                last_check = NOW(),
+                last_error = NULL
               WHERE id = ?
             `, [
               data.container_status || null,
@@ -1505,12 +1550,55 @@ serve(async (req) => {
             ]);
             updated++;
           } else {
-            // Still update last_check to avoid re-checking failed containers too soon
+            // Categorize error type for better diagnostics
+            let errorType = 'unknown';
+            let errorDetail = '';
+            
+            if (apiRes.__curl_error) {
+              if (apiRes.__curl_error.includes('timeout') || apiRes.__curl_error.includes('abort')) {
+                errorType = 'timeout';
+              } else if (apiRes.__curl_error.includes('fetch') || apiRes.__curl_error.includes('network')) {
+                errorType = 'network';
+              } else {
+                errorType = 'curl_error';
+              }
+              errorDetail = apiRes.__curl_error;
+            } else if (apiRes.__status === 429) {
+              errorType = 'rate_limit';
+              errorDetail = 'API rate limit exceeded';
+            } else if (apiRes.__status === 404) {
+              errorType = 'not_found';
+              errorDetail = 'Container not found in API';
+            } else if (apiRes.__status >= 500) {
+              errorType = 'api_server_error';
+              errorDetail = `API returned status ${apiRes.__status}`;
+            } else if (apiRes.error) {
+              errorType = 'api_error';
+              errorDetail = typeof apiRes.error === 'string' ? apiRes.error : JSON.stringify(apiRes.error);
+            } else if (apiRes.message) {
+              errorType = 'api_message';
+              errorDetail = apiRes.message;
+            }
+            
+            const errorMsg = `${errorType}: ${errorDetail}`.substring(0, 255);
+            
+            // Log detailed error for debugging
+            console.log(`[refresh_sea_tracking] Error for ${containerId}:`, {
+              shipping_line: shippingLine || 'NOT_DETECTED',
+              error_type: errorType,
+              error_detail: errorDetail,
+              api_status: apiRes.__status,
+              curl_error: apiRes.__curl_error,
+              api_error: apiRes.error,
+              api_message: apiRes.message
+            });
+            
+            // Update last_check and save error to last_error column
             await client.execute(`
               UPDATE dados_dachser.t_tracking_sea 
-              SET last_check = NOW()
+              SET last_check = NOW(), last_error = ?
               WHERE id = ?
-            `, [row.id]);
+            `, [errorMsg, row.id]);
             errors++;
           }
 
@@ -1555,7 +1643,131 @@ serve(async (req) => {
       }
     }
 
-    // ===== SEA TRACKING: Enrich MBLs with containers from JsonCargo API =====
+    // ===== SEA TRACKING: Get containers with errors for diagnostics =====
+    if (action === 'get_containers_with_errors') {
+      const mariadbHost = Deno.env.get('MARIADB_HOST');
+      const mariadbPort = Deno.env.get('MARIADB_PORT') || '3306';
+      const mariadbUser = Deno.env.get('MARIADB_USER');
+      const mariadbPass = Deno.env.get('MARIADB_PASSWORD');
+
+      if (!mariadbHost || !mariadbUser || !mariadbPass) {
+        return new Response(JSON.stringify({ error: 'MariaDB não configurado' }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      }
+
+      const { Client } = await import("https://deno.land/x/mysql@v2.12.1/mod.ts");
+      const client = await new Client().connect({
+        hostname: mariadbHost,
+        port: parseInt(mariadbPort, 10),
+        username: mariadbUser,
+        password: mariadbPass,
+        db: 'dados_dachser',
+      });
+
+      try {
+        // Get containers with errors grouped by error type
+        const errorsByType = await client.query(`
+          SELECT 
+            SUBSTRING_INDEX(last_error, ':', 1) as error_type,
+            COUNT(*) as count
+          FROM dados_dachser.t_tracking_sea 
+          WHERE active = 1 
+            AND last_error IS NOT NULL
+          GROUP BY SUBSTRING_INDEX(last_error, ':', 1)
+          ORDER BY count DESC
+        `);
+
+        // Get detailed list of containers with errors (limited to 100)
+        const containersWithErrors = await client.query(`
+          SELECT 
+            id, container, mbl_id, shipping_line, last_error, last_check,
+            consignee, tipo_processo
+          FROM dados_dachser.t_tracking_sea 
+          WHERE active = 1 
+            AND last_error IS NOT NULL
+          ORDER BY last_check DESC
+          LIMIT 100
+        `);
+
+        // Get containers without detected shipping line
+        const noShippingLine = await client.query(`
+          SELECT 
+            id, container, mbl_id, last_error, last_check
+          FROM dados_dachser.t_tracking_sea 
+          WHERE active = 1 
+            AND (shipping_line IS NULL OR shipping_line = '')
+            AND container REGEXP '^[A-Za-z]{4}[0-9]{7}$'
+          ORDER BY last_check DESC
+          LIMIT 50
+        `);
+
+        // Get unique prefixes from containers without shipping line (for prefix mapping)
+        const unknownPrefixes = await client.query(`
+          SELECT 
+            UPPER(SUBSTRING(container, 1, 4)) as prefix,
+            COUNT(*) as count
+          FROM dados_dachser.t_tracking_sea 
+          WHERE active = 1 
+            AND (shipping_line IS NULL OR shipping_line = '')
+            AND container REGEXP '^[A-Za-z]{4}[0-9]{7}$'
+          GROUP BY UPPER(SUBSTRING(container, 1, 4))
+          ORDER BY count DESC
+        `);
+
+        // Get summary statistics
+        const stats = await client.query(`
+          SELECT 
+            COUNT(*) as total,
+            SUM(CASE WHEN last_error IS NOT NULL THEN 1 ELSE 0 END) as with_errors,
+            SUM(CASE WHEN last_error IS NULL AND container_status IS NOT NULL THEN 1 ELSE 0 END) as tracked_ok,
+            SUM(CASE WHEN shipping_line IS NULL OR shipping_line = '' THEN 1 ELSE 0 END) as no_shipping_line
+          FROM dados_dachser.t_tracking_sea 
+          WHERE active = 1
+            AND container REGEXP '^[A-Za-z]{4}[0-9]{7}$'
+        `);
+
+        await client.close();
+
+        return new Response(JSON.stringify({ 
+          success: true,
+          stats: stats[0] || {},
+          errorsByType,
+          containersWithErrors: containersWithErrors.map((row: any) => ({
+            id: row.id,
+            container: row.container,
+            mbl_id: row.mbl_id,
+            shipping_line: row.shipping_line,
+            last_error: row.last_error,
+            last_check: row.last_check,
+            consignee: row.consignee,
+            tipo_processo: row.tipo_processo
+          })),
+          noShippingLine: noShippingLine.map((row: any) => ({
+            id: row.id,
+            container: row.container,
+            mbl_id: row.mbl_id,
+            last_error: row.last_error,
+            last_check: row.last_check
+          })),
+          unknownPrefixes: unknownPrefixes.map((row: any) => ({
+            prefix: row.prefix,
+            count: Number(row.count)
+          }))
+        }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      } catch (e: any) {
+        await client.close();
+        console.error('[get_containers_with_errors] Error:', e);
+        return new Response(JSON.stringify({ error: e.message }), {
+          status: 500,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      }
+    }
+
+
     if (action === 'enrich_sea_containers') {
       const mariadbHost = Deno.env.get('MARIADB_HOST');
       const mariadbPort = Deno.env.get('MARIADB_PORT') || '3306';
