@@ -4088,6 +4088,47 @@ serve(async (req) => {
       }
     }
 
+    // ===== CLEANUP: Remove "Sibling sync:" prefix from last_event =====
+    if (action === 'cleanup_sibling_sync_prefix') {
+      const mariadbHost = Deno.env.get('MARIADB_HOST');
+      const mariadbPort = Deno.env.get('MARIADB_PORT') || '3306';
+      const mariadbUser = Deno.env.get('MARIADB_USER');
+      const mariadbPass = Deno.env.get('MARIADB_PASSWORD');
+
+      const { Client } = await import("https://deno.land/x/mysql@v2.12.1/mod.ts");
+      const client = await new Client().connect({
+        hostname: mariadbHost,
+        port: parseInt(mariadbPort, 10),
+        username: mariadbUser,
+        password: mariadbPass,
+        db: 'dados_dachser',
+      });
+
+      try {
+        const result = await client.execute(`
+          UPDATE dados_dachser.t_tracking_sea 
+          SET last_event = REPLACE(last_event, 'Sibling sync: ', '')
+          WHERE last_event LIKE 'Sibling sync:%'
+        `);
+
+        await client.close();
+        console.log(`[cleanup_sibling_sync_prefix] Cleaned ${result.affectedRows} rows`);
+
+        return new Response(JSON.stringify({ 
+          success: true, 
+          cleaned: result.affectedRows || 0
+        }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      } catch (e: any) {
+        await client.close();
+        return new Response(JSON.stringify({ error: e.message }), {
+          status: 500,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      }
+    }
+
     return new Response(JSON.stringify({ error: 'Ação não reconhecida' }), {
       status: 400,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' }
