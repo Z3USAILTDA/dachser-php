@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { Activity, Server, TrendingUp, AlertCircle, RefreshCw, Loader2, Calendar, DollarSign, LayoutDashboard, BarChart3, HelpCircle } from "lucide-react";
+import { Activity, Server, TrendingUp, AlertCircle, RefreshCw, Loader2, Calendar, DollarSign, LayoutDashboard, BarChart3, HelpCircle, X, Clock, CheckCircle, XCircle, ExternalLink } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
@@ -11,6 +11,9 @@ import { LineChart, Line, XAxis, YAxis, CartesianGrid, ResponsiveContainer, BarC
 import { cn } from "@/lib/utils";
 import { PageLayout } from "@/components/layout/PageLayout";
 import { PageCard } from "@/components/layout/PageCard";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 
 interface ApiStats {
   api_name: string;
@@ -137,17 +140,231 @@ const formatCurrency = (value: number): string => {
   }).format(value);
 };
 
+// API Detail Modal Component
+const ApiDetailModal = ({
+  isOpen,
+  onClose,
+  api,
+  logs,
+  formatDate
+}: {
+  isOpen: boolean;
+  onClose: () => void;
+  api: ApiStats | null;
+  logs: ApiUsageLog[];
+  formatDate: (dateStr: string | null) => string;
+}) => {
+  if (!api) return null;
+  
+  const pricing = API_PRICING[api.api_name];
+  const cost = getApiCost(api.api_name, Number(api.total_calls || 0));
+  const apiLogs = logs.filter(log => log.api_name === api.api_name);
+  
+  // Group logs by endpoint
+  const endpointStats = apiLogs.reduce((acc, log) => {
+    const key = `${log.method} ${log.endpoint}`;
+    if (!acc[key]) {
+      acc[key] = { count: 0, errors: 0, totalTime: 0 };
+    }
+    acc[key].count++;
+    if (log.status_code >= 400) acc[key].errors++;
+    acc[key].totalTime += log.response_time_ms || 0;
+    return acc;
+  }, {} as Record<string, { count: number; errors: number; totalTime: number }>);
+
+  return (
+    <Dialog open={isOpen} onOpenChange={onClose}>
+      <DialogContent className="max-w-4xl max-h-[90vh] bg-[#0d0e14] border-white/10 text-white p-0 overflow-hidden">
+        <DialogHeader className="p-6 pb-4 border-b border-white/10">
+          <div className="flex items-center gap-3">
+            <div className="w-4 h-4 rounded-full" style={{ backgroundColor: getApiColor(api.api_name) }} />
+            <DialogTitle className="text-xl font-bold text-white">{api.api_name}</DialogTitle>
+            <Badge className={api.success_rate >= 99 
+              ? "bg-emerald-500/15 border-emerald-500/80 text-emerald-400" 
+              : api.success_rate >= 95 
+                ? "bg-yellow-500/15 border-yellow-500/80 text-yellow-400"
+                : "bg-red-500/15 border-red-500/80 text-red-400"
+            }>
+              {Number(api.success_rate || 0).toFixed(1)}% sucesso
+            </Badge>
+          </div>
+        </DialogHeader>
+        
+        <ScrollArea className="max-h-[calc(90vh-100px)]">
+          <div className="p-6 space-y-6">
+            {/* Summary Stats */}
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              <div className="p-4 rounded-lg bg-[#0a0b10] border border-white/10">
+                <div className="flex items-center gap-2 text-muted-foreground text-xs mb-2">
+                  <Activity className="w-3.5 h-3.5" />
+                  Total de Chamadas
+                </div>
+                <div className="text-2xl font-bold text-white">
+                  {Number(api.total_calls || 0).toLocaleString()}
+                </div>
+              </div>
+              <div className="p-4 rounded-lg bg-[#0a0b10] border border-white/10">
+                <div className="flex items-center gap-2 text-muted-foreground text-xs mb-2">
+                  <DollarSign className="w-3.5 h-3.5" />
+                  Custo Estimado
+                </div>
+                <div className="text-2xl font-bold text-emerald-400">
+                  {formatCurrency(cost)}
+                </div>
+              </div>
+              <div className="p-4 rounded-lg bg-[#0a0b10] border border-white/10">
+                <div className="flex items-center gap-2 text-muted-foreground text-xs mb-2">
+                  <Clock className="w-3.5 h-3.5" />
+                  Tempo Médio
+                </div>
+                <div className="text-2xl font-bold text-white">
+                  {api.avg_response_time_ms ? `${Number(api.avg_response_time_ms).toFixed(0)}ms` : "N/A"}
+                </div>
+              </div>
+              <div className="p-4 rounded-lg bg-[#0a0b10] border border-white/10">
+                <div className="flex items-center gap-2 text-muted-foreground text-xs mb-2">
+                  <XCircle className="w-3.5 h-3.5" />
+                  Erros
+                </div>
+                <div className={`text-2xl font-bold ${Number(api.error_count || 0) > 0 ? "text-red-400" : "text-green-400"}`}>
+                  {Number(api.error_count || 0)}
+                </div>
+              </div>
+            </div>
+
+            {/* Pricing Info */}
+            {pricing && (
+              <div className="p-4 rounded-lg bg-blue-500/10 border border-blue-500/30">
+                <h4 className="text-sm font-semibold text-blue-300 mb-2">Informações de Preço</h4>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+                  <div>
+                    <span className="text-muted-foreground">Custo por chamada:</span>
+                    <div className="text-white font-medium">{formatCurrency(pricing.costPerCall)}</div>
+                  </div>
+                  <div>
+                    <span className="text-muted-foreground">Unidade:</span>
+                    <div className="text-white font-medium">{pricing.unit}</div>
+                  </div>
+                  {pricing.tier && (
+                    <div>
+                      <span className="text-muted-foreground">Plano:</span>
+                      <div className="text-white font-medium">{pricing.tier}</div>
+                    </div>
+                  )}
+                  <div className="col-span-2 md:col-span-1">
+                    <span className="text-muted-foreground">Notas:</span>
+                    <div className="text-white/70 text-xs">{pricing.notes}</div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Endpoint Breakdown */}
+            {Object.keys(endpointStats).length > 0 && (
+              <div>
+                <h4 className="text-sm font-semibold text-white mb-3">Endpoints Utilizados</h4>
+                <div className="rounded-lg border border-white/10 overflow-hidden">
+                  <Table>
+                    <TableHeader>
+                      <TableRow className="border-white/10 hover:bg-transparent">
+                        <TableHead className="text-muted-foreground">Endpoint</TableHead>
+                        <TableHead className="text-muted-foreground text-right">Chamadas</TableHead>
+                        <TableHead className="text-muted-foreground text-right">Erros</TableHead>
+                        <TableHead className="text-muted-foreground text-right">Tempo Médio</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {Object.entries(endpointStats).map(([endpoint, stats]) => (
+                        <TableRow key={endpoint} className="border-white/10">
+                          <TableCell className="font-mono text-xs text-white/80">{endpoint}</TableCell>
+                          <TableCell className="text-right text-white">{stats.count}</TableCell>
+                          <TableCell className={`text-right ${stats.errors > 0 ? "text-red-400" : "text-green-400"}`}>
+                            {stats.errors}
+                          </TableCell>
+                          <TableCell className="text-right text-white/70">
+                            {stats.count > 0 ? `${Math.round(stats.totalTime / stats.count)}ms` : "N/A"}
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              </div>
+            )}
+
+            {/* Recent Logs */}
+            <div>
+              <h4 className="text-sm font-semibold text-white mb-3">
+                Histórico de Chamadas 
+                <span className="text-muted-foreground font-normal ml-2">
+                  (últimas {Math.min(apiLogs.length, 50)} de {apiLogs.length})
+                </span>
+              </h4>
+              {apiLogs.length === 0 ? (
+                <div className="p-8 rounded-lg bg-[#0a0b10] border border-white/10 text-center">
+                  <Server className="w-8 h-8 text-white/20 mx-auto mb-2" />
+                  <p className="text-muted-foreground text-sm">Nenhum log disponível para esta API</p>
+                </div>
+              ) : (
+                <div className="rounded-lg border border-white/10 overflow-hidden">
+                  <Table>
+                    <TableHeader>
+                      <TableRow className="border-white/10 hover:bg-transparent">
+                        <TableHead className="text-muted-foreground">Data/Hora</TableHead>
+                        <TableHead className="text-muted-foreground">Endpoint</TableHead>
+                        <TableHead className="text-muted-foreground text-center">Status</TableHead>
+                        <TableHead className="text-muted-foreground text-right">Tempo</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {apiLogs.slice(0, 50).map((log) => (
+                        <TableRow key={log.id} className="border-white/10">
+                          <TableCell className="text-xs text-white/60">
+                            {formatDate(log.created_at)}
+                          </TableCell>
+                          <TableCell className="font-mono text-xs text-white/80 max-w-[200px] truncate">
+                            {log.method} {log.endpoint}
+                          </TableCell>
+                          <TableCell className="text-center">
+                            <Badge className={log.status_code < 400 
+                              ? "bg-green-500/20 text-green-400 border-green-500/50" 
+                              : "bg-red-500/20 text-red-400 border-red-500/50"
+                            }>
+                              {log.status_code}
+                            </Badge>
+                          </TableCell>
+                          <TableCell className="text-right text-white/70 text-xs">
+                            {log.response_time_ms ? `${log.response_time_ms}ms` : "—"}
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              )}
+            </div>
+          </div>
+        </ScrollArea>
+      </DialogContent>
+    </Dialog>
+  );
+};
+
 // Dashboard Tab Component - API Cards
 const DashboardTab = ({ 
   apiStats, 
+  recentLogs,
   isLoading,
   formatDate,
-  getStatusColor 
+  getStatusColor,
+  onApiClick
 }: { 
   apiStats: ApiStats[];
+  recentLogs: ApiUsageLog[];
   isLoading: boolean;
   formatDate: (dateStr: string | null) => string;
   getStatusColor: (successRate: number) => string;
+  onApiClick: (api: ApiStats) => void;
 }) => {
   return (
     <div className="space-y-5 animate-fade-in">
@@ -168,16 +385,24 @@ const DashboardTab = ({
         ) : (
           apiStats.map((api) => {
             const cost = getApiCost(api.api_name, Number(api.total_calls || 0));
+            const apiLogCount = recentLogs.filter(log => log.api_name === api.api_name).length;
             return (
-              <PageCard key={api.api_name} className="hover:border-white/20 transition">
+              <PageCard 
+                key={api.api_name} 
+                className="hover:border-[#ffc800]/50 hover:bg-white/[0.02] transition cursor-pointer group"
+                onClick={() => onApiClick(api)}
+              >
                 <div className="flex items-center justify-between mb-3">
                   <div className="flex items-center gap-2">
                     <div className="w-3 h-3 rounded-full" style={{ backgroundColor: getApiColor(api.api_name) }} />
-                    <span className="text-base font-semibold text-white">{api.api_name}</span>
+                    <span className="text-base font-semibold text-white group-hover:text-[#ffc800] transition">{api.api_name}</span>
                   </div>
-                  <Badge className={getStatusColor(Number(api.success_rate || 0))}>
-                    {Number(api.success_rate || 0).toFixed(1)}%
-                  </Badge>
+                  <div className="flex items-center gap-2">
+                    <Badge className={getStatusColor(Number(api.success_rate || 0))}>
+                      {Number(api.success_rate || 0).toFixed(1)}%
+                    </Badge>
+                    <ExternalLink className="w-3.5 h-3.5 text-white/30 group-hover:text-[#ffc800] transition" />
+                  </div>
                 </div>
                 <p className="text-[10px] text-muted-foreground mb-3">
                   Última chamada: {formatDate(api.last_call)}
@@ -208,6 +433,14 @@ const DashboardTab = ({
                     </div>
                   </div>
                 </div>
+                <div className="mt-3 pt-3 border-t border-white/5 flex items-center justify-between">
+                  <span className="text-[10px] text-muted-foreground">
+                    {apiLogCount} logs recentes
+                  </span>
+                  <span className="text-[10px] text-[#ffc800] opacity-0 group-hover:opacity-100 transition">
+                    Clique para detalhes →
+                  </span>
+                </div>
               </PageCard>
             );
           })
@@ -219,8 +452,7 @@ const DashboardTab = ({
         <p className="text-blue-300 text-sm flex items-start gap-2">
           <AlertCircle className="w-4 h-4 mt-0.5 flex-shrink-0" />
           <span>
-            Os dados exibidos são baseados nos logs de uso do sistema. Para implementar um tracking mais detalhado,
-            é necessário adicionar instrumentação nas edge functions que fazem chamadas às APIs externas.
+            Clique em qualquer card de API para ver o histórico detalhado de chamadas, endpoints utilizados e informações de custo.
           </span>
         </p>
       </div>
@@ -543,6 +775,13 @@ export default function ApiManagement() {
   const [isRestricted, setIsRestricted] = useState(false);
   const [selectedPeriod, setSelectedPeriod] = useState<"7" | "30">("7");
   const [activeTab, setActiveTab] = useState<"dashboard" | "analytics">("dashboard");
+  const [selectedApi, setSelectedApi] = useState<ApiStats | null>(null);
+  const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
+
+  const handleApiClick = (api: ApiStats) => {
+    setSelectedApi(api);
+    setIsDetailModalOpen(true);
+  };
 
   useEffect(() => {
     const storedUser = localStorage.getItem("user");
@@ -744,9 +983,11 @@ export default function ApiManagement() {
       {activeTab === "dashboard" && (
         <DashboardTab 
           apiStats={apiStats}
+          recentLogs={recentLogs}
           isLoading={isLoading}
           formatDate={formatDate}
           getStatusColor={getStatusColor}
+          onApiClick={handleApiClick}
         />
       )}
 
@@ -760,6 +1001,15 @@ export default function ApiManagement() {
           setSelectedPeriod={setSelectedPeriod}
         />
       )}
+
+      {/* API Detail Modal */}
+      <ApiDetailModal
+        isOpen={isDetailModalOpen}
+        onClose={() => setIsDetailModalOpen(false)}
+        api={selectedApi}
+        logs={recentLogs}
+        formatDate={formatDate}
+      />
     </PageLayout>
   );
 }
