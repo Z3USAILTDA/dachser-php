@@ -1904,8 +1904,90 @@ serve(async (req) => {
             errors++;
           }
 
-          processed++;
+        processed++;
           await new Promise(r => setTimeout(r, 100)); // Reduced delay since API handles it
+        }
+
+        // ===== SIBLING SYNC: Propagar dados de containers bem-sucedidos para pendentes do mesmo MBL =====
+        console.log('[refresh_sea_tracking] Running sibling sync...');
+        let siblingSynced = 0;
+        try {
+          // Primeiro, identificar MBLs que têm containers com e sem dados
+          const mblsWithMixedStatus = await client.query(`
+            SELECT 
+              mbl_id,
+              SUM(CASE WHEN container_status IS NOT NULL AND container_status != '' AND (last_error IS NULL OR last_error = '') THEN 1 ELSE 0 END) as with_data,
+              SUM(CASE WHEN container_status IS NULL OR container_status = '' OR (last_error IS NOT NULL AND last_error != '') THEN 1 ELSE 0 END) as without_data
+            FROM dados_dachser.t_tracking_sea
+            WHERE active = 1
+              AND mbl_id IS NOT NULL 
+              AND mbl_id != ''
+            GROUP BY mbl_id
+            HAVING with_data > 0 AND without_data > 0
+          `);
+          
+          console.log(`[refresh_sea_tracking] Found ${mblsWithMixedStatus.length} MBLs with mixed status`);
+          
+          for (const mbl of mblsWithMixedStatus) {
+            const mblId = mbl.mbl_id;
+            
+            // Buscar o "melhor" container deste MBL (mais recente com dados completos)
+            const bestContainers = await client.query(`
+              SELECT 
+                container_status, navio, vessel_imo, eta, last_event, origem, destino, shipping_line
+              FROM dados_dachser.t_tracking_sea
+              WHERE active = 1
+                AND mbl_id = ?
+                AND container_status IS NOT NULL
+                AND container_status != ''
+                AND (last_error IS NULL OR last_error = '')
+              ORDER BY last_check DESC
+              LIMIT 1
+            `, [mblId]);
+            
+            if (bestContainers.length === 0) continue;
+            
+            const best = bestContainers[0];
+            
+            // Atualizar containers pendentes deste MBL
+            const updateResult = await client.execute(`
+              UPDATE dados_dachser.t_tracking_sea 
+              SET 
+                container_status = COALESCE(container_status, ?),
+                navio = COALESCE(navio, ?),
+                vessel_imo = COALESCE(vessel_imo, ?),
+                eta = COALESCE(eta, ?),
+                last_event = COALESCE(last_event, ?),
+                origem = COALESCE(origem, ?),
+                destino = COALESCE(destino, ?),
+                shipping_line = COALESCE(shipping_line, ?),
+                sibling_synced = 1,
+                sibling_synced_at = NOW()
+              WHERE active = 1
+                AND mbl_id = ?
+                AND (
+                  container_status IS NULL 
+                  OR container_status = ''
+                  OR (last_error IS NOT NULL AND last_error != '')
+                )
+            `, [
+              best.container_status,
+              best.navio,
+              best.vessel_imo,
+              best.eta,
+              best.last_event,
+              best.origem,
+              best.destino,
+              best.shipping_line,
+              mblId
+            ]);
+            
+            siblingSynced += updateResult.affectedRows || 0;
+          }
+          
+          console.log(`[refresh_sea_tracking] Sibling sync complete: ${siblingSynced} containers synced`);
+        } catch (siblingError: any) {
+          console.error('[refresh_sea_tracking] Sibling sync error:', siblingError.message);
         }
 
         // Count remaining containers that still need update
@@ -1922,13 +2004,14 @@ serve(async (req) => {
         const remaining = remainingResult[0]?.cnt || 0;
 
         await client.close();
-        console.log(`[refresh_sea_tracking] Batch done: ${updated} updated, ${errors} errors, ${leasingDetected} leasing containers detected, ${remaining} remaining`);
+        console.log(`[refresh_sea_tracking] Batch done: ${updated} updated, ${errors} errors, ${siblingSynced} sibling synced, ${leasingDetected} leasing, ${remaining} remaining`);
         
         return new Response(JSON.stringify({ 
           success: true, 
           updated, 
           errors, 
           processed,
+          siblingSynced,
           leasingDetected,
           remaining,
           batchSize,
@@ -3863,6 +3946,75 @@ serve(async (req) => {
       } catch (e: any) {
         await client.close();
         console.error('[update_vessel_imo] Error:', e);
+        return new Response(JSON.stringify({ error: e.message }), {
+          status: 500,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      }
+    }
+
+    // ===== SETUP: Add sibling sync columns to t_tracking_sea =====
+    if (action === 'setup_sibling_sync_columns') {
+      const mariadbHost = Deno.env.get('MARIADB_HOST');
+      const mariadbPort = Deno.env.get('MARIADB_PORT') || '3306';
+      const mariadbUser = Deno.env.get('MARIADB_USER');
+      const mariadbPassword = Deno.env.get('MARIADB_PASSWORD');
+      const mariadbDatabase = Deno.env.get('MARIADB_DATABASE') || 'dados_dachser';
+
+      const { Client } = await import("https://deno.land/x/mysql@v2.12.1/mod.ts");
+      const client = await new Client().connect({
+        hostname: mariadbHost,
+        port: parseInt(mariadbPort),
+        username: mariadbUser,
+        password: mariadbPassword,
+        db: mariadbDatabase,
+      });
+
+      try {
+        // Check if columns exist
+        const columns = await client.query(`
+          SELECT COLUMN_NAME 
+          FROM INFORMATION_SCHEMA.COLUMNS 
+          WHERE TABLE_SCHEMA = 'dados_dachser' 
+            AND TABLE_NAME = 't_tracking_sea'
+            AND COLUMN_NAME IN ('sibling_synced', 'sibling_synced_at')
+        `);
+        
+        const existingCols = columns.map((r: any) => r.COLUMN_NAME);
+        const results: string[] = [];
+        
+        if (!existingCols.includes('sibling_synced')) {
+          await client.execute(`
+            ALTER TABLE dados_dachser.t_tracking_sea 
+            ADD COLUMN sibling_synced TINYINT(1) DEFAULT 0 AFTER last_error
+          `);
+          results.push('sibling_synced column added');
+        } else {
+          results.push('sibling_synced column already exists');
+        }
+        
+        if (!existingCols.includes('sibling_synced_at')) {
+          await client.execute(`
+            ALTER TABLE dados_dachser.t_tracking_sea 
+            ADD COLUMN sibling_synced_at DATETIME NULL AFTER sibling_synced
+          `);
+          results.push('sibling_synced_at column added');
+        } else {
+          results.push('sibling_synced_at column already exists');
+        }
+        
+        await client.close();
+        console.log('[setup_sibling_sync_columns] Done:', results);
+        
+        return new Response(JSON.stringify({ 
+          success: true, 
+          results 
+        }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      } catch (e: any) {
+        await client.close();
+        console.error('[setup_sibling_sync_columns] Error:', e);
         return new Response(JSON.stringify({ error: e.message }), {
           status: 500,
           headers: { ...corsHeaders, 'Content-Type': 'application/json' }
