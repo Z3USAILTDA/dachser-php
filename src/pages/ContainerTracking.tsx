@@ -208,16 +208,10 @@ const ContainerTracking = () => {
     return ['GOD', 'DLV'].includes(status.code);
   };
 
-  // Check admin access
+  // Check authentication - redirect to login if not authenticated
   useEffect(() => {
     const storedUser = localStorage.getItem("user");
-    if (storedUser) {
-      const parsed = JSON.parse(storedUser);
-      if (parsed.is_admin !== 1) {
-        navigate("/dashboard");
-        return;
-      }
-    } else {
+    if (!storedUser) {
       navigate("/");
       return;
     }
