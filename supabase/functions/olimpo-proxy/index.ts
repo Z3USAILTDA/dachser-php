@@ -1449,6 +1449,171 @@ serve(async (req) => {
       }
     }
 
+    // ===== SEA TRACKING: Enrich MBLs with containers from JsonCargo API =====
+    if (action === 'enrich_sea_containers') {
+      const mariadbHost = Deno.env.get('MARIADB_HOST');
+      const mariadbPort = Deno.env.get('MARIADB_PORT') || '3306';
+      const mariadbUser = Deno.env.get('MARIADB_USER');
+      const mariadbPass = Deno.env.get('MARIADB_PASSWORD');
+
+      if (!mariadbHost || !mariadbUser || !mariadbPass) {
+        return new Response(JSON.stringify({ error: 'MariaDB não configurado' }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      }
+
+      // Mapping MBL prefixes to shipping line codes for API
+      const MBL_PREFIX_TO_SHIPPING_LINE: Record<string, string> = {
+        'COSU': 'COSCO', 'CSNU': 'COSCO', 'CBHU': 'COSCO', 'OOLU': 'COSCO',
+        'HLCU': 'HAPAG_LLOYD', 'HLXU': 'HAPAG_LLOYD',
+        'MAEU': 'MAERSK', 'MRKU': 'MAERSK', 'MSKU': 'MAERSK',
+        'MSCU': 'MSC', 'MEDU': 'MSC',
+        'CMAU': 'CMA_CGM', 'CCLU': 'CMA_CGM', 'CXDU': 'CMA_CGM',
+        'ONEY': 'ONE', 'ONEU': 'ONE',
+        'HDMU': 'HMM', 'HMMU': 'HMM',
+        'EISU': 'EVERGREEN', 'EITU': 'EVERGREEN', 'EGSU': 'EVERGREEN', 'EGHU': 'EVERGREEN', 'EBKG': 'EVERGREEN',
+        'YMLU': 'YANG_MING', 'YMMU': 'YANG_MING',
+        'ZIMU': 'ZIM', 'ZCSU': 'ZIM',
+        'GLNL': 'HAPAG_LLOYD', 'GLSL': 'CMA_CGM',
+      };
+
+      const detectShippingLineFromMbl = (mblId: string): string | null => {
+        if (!mblId) return null;
+        const prefix = mblId.substring(0, 4).toUpperCase();
+        return MBL_PREFIX_TO_SHIPPING_LINE[prefix] || null;
+      };
+
+      const { Client } = await import("https://deno.land/x/mysql@v2.12.1/mod.ts");
+      const client = await new Client().connect({
+        hostname: mariadbHost,
+        port: parseInt(mariadbPort, 10),
+        username: mariadbUser,
+        password: mariadbPass,
+        db: 'dados_dachser',
+      });
+
+      try {
+        // Fetch MBLs with container = 'PENDENTE'
+        const pendingMbls = await client.query(`
+          SELECT DISTINCT mbl_id, consignee, email_analista, email_cliente, tipo_processo
+          FROM dados_dachser.t_tracking_sea
+          WHERE active = 1 AND (container = 'PENDENTE' OR container IS NULL OR container = '')
+        `);
+
+        console.log(`[enrich_sea_containers] Found ${pendingMbls.length} MBLs with pending containers`);
+
+        let enriched = 0;
+        let errors = 0;
+        let noContainers = 0;
+        const details: any[] = [];
+
+        for (const row of pendingMbls) {
+          const mblId = row.mbl_id;
+          const shippingLine = detectShippingLineFromMbl(mblId);
+
+          if (!shippingLine) {
+            console.log(`[enrich_sea_containers] Could not detect shipping line for MBL ${mblId}`);
+            details.push({ mbl: mblId, status: 'unknown_shipping_line' });
+            errors++;
+            continue;
+          }
+
+          try {
+            // Call JsonCargo API to get containers for this MBL
+            const apiRes = await jcJson(
+              `http://api.jsoncargo.com/api/v1/containers/bol/${encodeURIComponent(mblId)}`,
+              { shipping_line: shippingLine }
+            );
+
+            if (apiRes.__curl_error) {
+              console.log(`[enrich_sea_containers] API error for MBL ${mblId}: ${apiRes.__curl_error}`);
+              details.push({ mbl: mblId, status: 'api_error', error: apiRes.__curl_error });
+              errors++;
+              continue;
+            }
+
+            const data = apiRes.data || apiRes;
+            const containers = data.associated_container_numbers || [];
+
+            if (containers.length === 0) {
+              console.log(`[enrich_sea_containers] No containers found for MBL ${mblId}`);
+              details.push({ mbl: mblId, status: 'no_containers' });
+              noContainers++;
+              continue;
+            }
+
+            console.log(`[enrich_sea_containers] Found ${containers.length} containers for MBL ${mblId}: ${containers.join(', ')}`);
+
+            // Delete the PENDENTE record for this MBL
+            await client.execute(`
+              DELETE FROM dados_dachser.t_tracking_sea 
+              WHERE mbl_id = ? AND (container = 'PENDENTE' OR container IS NULL OR container = '')
+            `, [mblId]);
+
+            // Insert new records for each container found
+            for (const container of containers) {
+              if (!container || container.trim() === '') continue;
+              
+              await client.execute(`
+                INSERT INTO dados_dachser.t_tracking_sea 
+                  (mbl_id, container, tipo_processo, consignee, email_analista, email_cliente, active, shipping_line)
+                VALUES (?, ?, ?, ?, ?, ?, 1, ?)
+                ON DUPLICATE KEY UPDATE
+                  tipo_processo = VALUES(tipo_processo),
+                  consignee = VALUES(consignee),
+                  email_analista = VALUES(email_analista),
+                  email_cliente = VALUES(email_cliente),
+                  shipping_line = COALESCE(shipping_line, VALUES(shipping_line)),
+                  active = 1
+              `, [
+                mblId,
+                container.toUpperCase().trim(),
+                row.tipo_processo || 'SEA IMPORT',
+                row.consignee || null,
+                row.email_analista || null,
+                row.email_cliente || null,
+                normalizeShippingLine(shippingLine)
+              ]);
+            }
+
+            enriched++;
+            details.push({ mbl: mblId, status: 'enriched', containers: containers.length });
+
+          } catch (apiError: any) {
+            console.error(`[enrich_sea_containers] Error processing MBL ${mblId}:`, apiError);
+            details.push({ mbl: mblId, status: 'error', error: apiError.message });
+            errors++;
+          }
+
+          // Rate limiting - wait 500ms between API calls
+          await new Promise(r => setTimeout(r, 500));
+        }
+
+        await client.close();
+        
+        console.log(`[enrich_sea_containers] Completed: enriched=${enriched}, noContainers=${noContainers}, errors=${errors}`);
+        
+        return new Response(JSON.stringify({ 
+          success: true, 
+          enriched,
+          noContainers,
+          errors,
+          total: pendingMbls.length,
+          message: `${enriched} MBLs enriquecidos com containers`,
+          details
+        }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      } catch (e: any) {
+        await client.close();
+        console.error('[enrich_sea_containers] Error:', e);
+        return new Response(JSON.stringify({ error: e.message }), {
+          status: 500,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      }
+    }
+
     // ===== SEA TRACKING: Track single container and update t_tracking_sea =====
     if (action === 'track_sea_container') {
       const containerId = url.searchParams.get('container') || '';

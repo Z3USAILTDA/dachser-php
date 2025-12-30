@@ -171,6 +171,7 @@ const ContainerTracking = () => {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
   const [isCleaning, setIsCleaning] = useState(false);
+  const [isEnriching, setIsEnriching] = useState(false);
   const { toast } = useToast();
   
   // Expansion state
@@ -404,6 +405,53 @@ const ContainerTracking = () => {
       });
     } finally {
       setIsSyncing(false);
+    }
+  };
+
+  // Enrich MBLs with containers from JsonCargo API
+  const handleEnrich = async () => {
+    setIsEnriching(true);
+    toast({
+      title: "Enriquecendo",
+      description: "Buscando containers via API JsonCargo...",
+    });
+    
+    try {
+      const res = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/olimpo-proxy?action=enrich_sea_containers`,
+        {
+          method: 'GET',
+          headers: {
+            'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
+            'Content-Type': 'application/json',
+          }
+        }
+      );
+      
+      const result = await res.json();
+      
+      if (result.success) {
+        toast({
+          title: "Enriquecimento concluído",
+          description: `${result.enriched} MBLs enriquecidos com containers. ${result.noContainers} sem containers. ${result.errors} erros.`,
+        });
+        await fetchMblData();
+      } else {
+        toast({
+          title: "Erro ao enriquecer",
+          description: result.error || "Falha no enriquecimento",
+          variant: "destructive",
+        });
+      }
+    } catch (error) {
+      console.error("Error enriching:", error);
+      toast({
+        title: "Erro",
+        description: "Falha ao enriquecer MBLs",
+        variant: "destructive",
+      });
+    } finally {
+      setIsEnriching(false);
     }
   };
 
@@ -934,6 +982,28 @@ const ContainerTracking = () => {
                     </TooltipTrigger>
                     <TooltipContent>
                       <p className="text-xs">Remover MBLs e containers inválidos</p>
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <button
+                        onClick={handleEnrich}
+                        disabled={isEnriching}
+                        className="h-8 px-4 rounded-full bg-purple-600 text-white text-[0.75rem] font-medium flex items-center gap-1.5 hover:bg-purple-500 transition shadow-[0_0_20px_rgba(147,51,234,.3)] disabled:opacity-50"
+                      >
+                        {isEnriching ? (
+                          <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                        ) : (
+                          <Package className="w-3.5 h-3.5" />
+                        )}
+                        Enriquecer
+                      </button>
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      <p className="text-xs">Buscar containers para MBLs pendentes via API JsonCargo</p>
                     </TooltipContent>
                   </Tooltip>
                 </TooltipProvider>
