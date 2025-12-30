@@ -1295,7 +1295,7 @@ serve(async (req) => {
             tipo_processo = VALUES(tipo_processo),
             container = CASE 
               WHEN VALUES(container) != 'PENDENTE' THEN VALUES(container)
-              ELSE container
+              ELSE t_tracking_sea.container
             END,
             consignee = VALUES(consignee),
             email_analista = VALUES(email_analista),
