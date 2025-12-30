@@ -901,16 +901,13 @@ const ContainerTracking = () => {
                   <thead>
                     <tr className="bg-[rgba(0,0,0,.4)] border-b border-[rgba(255,255,255,.08)]">
                       <th className="px-4 py-3 text-left text-[#aaaaaa] uppercase text-[0.68rem] tracking-[0.1em] font-medium">MBL</th>
-                      <th className="px-4 py-3 text-center text-[#aaaaaa] uppercase text-[0.68rem] tracking-[0.1em] font-medium">Containers</th>
                       <th className="px-4 py-3 text-left text-[#aaaaaa] uppercase text-[0.68rem] tracking-[0.1em] font-medium">Consignee</th>
                       <th className="px-4 py-3 text-left text-[#aaaaaa] uppercase text-[0.68rem] tracking-[0.1em] font-medium">Armador</th>
                       <th className="px-4 py-3 text-left text-[#aaaaaa] uppercase text-[0.68rem] tracking-[0.1em] font-medium">Origem</th>
                       <th className="px-4 py-3 text-left text-[#aaaaaa] uppercase text-[0.68rem] tracking-[0.1em] font-medium">Destino</th>
                       <th className="px-4 py-3 text-center text-[#aaaaaa] uppercase text-[0.68rem] tracking-[0.1em] font-medium min-w-[180px]">Timeline</th>
                       <th className="px-4 py-3 text-left text-[#aaaaaa] uppercase text-[0.68rem] tracking-[0.1em] font-medium">Status</th>
-                      {isAdmin && (
-                        <th className="px-4 py-3 text-center text-[#aaaaaa] uppercase text-[0.68rem] tracking-[0.1em] font-medium">Ações</th>
-                      )}
+                      <th className="px-4 py-3 text-center text-[#aaaaaa] uppercase text-[0.68rem] tracking-[0.1em] font-medium">Ações</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -926,16 +923,6 @@ const ContainerTracking = () => {
                           <tr className="border-b border-[rgba(255,255,255,.05)] hover:bg-[rgba(255,255,255,.03)] transition">
                             <td className="px-4 py-3">
                               <span className="text-[#f5f5f5] font-mono text-sm">{mbl.mbl_id}</span>
-                            </td>
-                            <td className="px-4 py-3 text-center">
-                              <button
-                                onClick={() => handleToggleExpand(mbl.mbl_id)}
-                                className="inline-flex items-center gap-1.5 px-2 py-1 rounded-full bg-[rgba(255,200,0,.1)] text-[#ffc800] hover:bg-[rgba(255,200,0,.2)] transition text-sm"
-                              >
-                                <Package className="w-3.5 h-3.5" />
-                                {mbl.container_count}
-                                {isExpanded ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
-                              </button>
                             </td>
                             <td className="px-4 py-3">
                               <TooltipProvider>
@@ -1035,52 +1022,72 @@ const ContainerTracking = () => {
                                 </Tooltip>
                               </TooltipProvider>
                             </td>
-                            {isAdmin && (
-                              <td className="px-3 py-3 text-center">
-                                <div className="flex items-center justify-center gap-1">
-                                  <TooltipProvider>
-                                    <Tooltip>
-                                      <TooltipTrigger asChild>
-                                        <Button
-                                          variant="ghost"
-                                          size="icon"
-                                          onClick={() => handleOpenEmailModal(mbl)}
-                                          className="h-8 w-8 text-blue-400 hover:text-blue-300 hover:bg-blue-500/10"
-                                        >
-                                          <Mail className="h-4 w-4" />
-                                        </Button>
-                                      </TooltipTrigger>
-                                      <TooltipContent>
-                                        <p className="text-xs">Enviar e-mail de status</p>
-                                      </TooltipContent>
-                                    </Tooltip>
-                                  </TooltipProvider>
-                                  <TooltipProvider>
-                                    <Tooltip>
-                                      <TooltipTrigger asChild>
-                                        <Button
-                                          variant="ghost"
-                                          size="icon"
-                                          onClick={() => handleDeleteMbl(mbl.mbl_id)}
-                                          className="h-8 w-8 text-red-500 hover:text-red-400 hover:bg-red-500/10"
-                                        >
-                                          <Trash2 className="h-4 w-4" />
-                                        </Button>
-                                      </TooltipTrigger>
-                                      <TooltipContent>
-                                        <p className="text-xs">Remover MBL do monitoramento</p>
-                                      </TooltipContent>
-                                    </Tooltip>
-                                  </TooltipProvider>
-                                </div>
-                              </td>
-                            )}
+                            <td className="px-3 py-3 text-center">
+                              <div className="flex items-center justify-center gap-1">
+                                <TooltipProvider>
+                                  <Tooltip>
+                                    <TooltipTrigger asChild>
+                                      <Button
+                                        variant="ghost"
+                                        size="icon"
+                                        onClick={() => handleToggleExpand(mbl.mbl_id)}
+                                        className="h-8 w-8 text-[#ffc800] hover:text-[#ffdc50] hover:bg-[rgba(255,200,0,.1)]"
+                                      >
+                                        <Package className="h-4 w-4" />
+                                        {isExpanded ? <ChevronUp className="h-3 w-3 absolute -bottom-0.5 -right-0.5" /> : <ChevronDown className="h-3 w-3 absolute -bottom-0.5 -right-0.5" />}
+                                      </Button>
+                                    </TooltipTrigger>
+                                    <TooltipContent>
+                                      <p className="text-xs">Ver {mbl.container_count} container(s)</p>
+                                    </TooltipContent>
+                                  </Tooltip>
+                                </TooltipProvider>
+                                {isAdmin && (
+                                  <>
+                                    <TooltipProvider>
+                                      <Tooltip>
+                                        <TooltipTrigger asChild>
+                                          <Button
+                                            variant="ghost"
+                                            size="icon"
+                                            onClick={() => handleOpenEmailModal(mbl)}
+                                            className="h-8 w-8 text-blue-400 hover:text-blue-300 hover:bg-blue-500/10"
+                                          >
+                                            <Mail className="h-4 w-4" />
+                                          </Button>
+                                        </TooltipTrigger>
+                                        <TooltipContent>
+                                          <p className="text-xs">Enviar e-mail de status</p>
+                                        </TooltipContent>
+                                      </Tooltip>
+                                    </TooltipProvider>
+                                    <TooltipProvider>
+                                      <Tooltip>
+                                        <TooltipTrigger asChild>
+                                          <Button
+                                            variant="ghost"
+                                            size="icon"
+                                            onClick={() => handleDeleteMbl(mbl.mbl_id)}
+                                            className="h-8 w-8 text-red-500 hover:text-red-400 hover:bg-red-500/10"
+                                          >
+                                            <Trash2 className="h-4 w-4" />
+                                          </Button>
+                                        </TooltipTrigger>
+                                        <TooltipContent>
+                                          <p className="text-xs">Remover MBL do monitoramento</p>
+                                        </TooltipContent>
+                                      </Tooltip>
+                                    </TooltipProvider>
+                                  </>
+                                )}
+                              </div>
+                            </td>
                           </tr>
                           
                           {/* Expanded containers row */}
                           {isExpanded && (
                             <tr className="bg-[rgba(0,0,0,.3)]">
-                              <td colSpan={isAdmin ? 9 : 8} className="px-4 py-4">
+                              <td colSpan={8} className="px-4 py-4">
                                 {loadingContainers ? (
                                   <div className="flex items-center justify-center py-4">
                                     <Loader2 className="w-6 h-6 animate-spin text-[#ffc800]" />
