@@ -2135,8 +2135,59 @@ serve(async (req) => {
                   }
                 }
               } else {
-                // MBL lookup failed - but still try to extract any useful info from error response
-                console.log(`[refresh_sea_tracking] MBL ${mblId} lookup failed or returned no containers:`, bolApiRes.error || bolApiRes.__curl_error || 'No associated_container_numbers');
+                // MBL lookup returned but no containers - still try to use BOL data directly
+                console.log(`[refresh_sea_tracking] MBL ${mblId} lookup returned no containers, trying BOL data as fallback...`);
+                
+                // Even without associated_container_numbers, the BOL response might have shipment data
+                if (bolApiRes.data) {
+                  const bolData = bolApiRes.data;
+                  
+                  const bolContainerStatus = bolData.status || bolData.bol_status || bolData.shipment_status || null;
+                  const bolVessel = bolData.vessel || bolData.vessel_name || bolData.current_vessel || null;
+                  const bolVesselImo = bolData.vessel_imo || bolData.imo || null;
+                  const bolEta = bolData.eta || bolData.eta_final || bolData.eta_destination || null;
+                  const bolPol = bolData.pol || bolData.port_of_loading || bolData.origin || null;
+                  const bolPod = bolData.pod || bolData.port_of_discharge || bolData.destination || null;
+                  
+                  if (bolContainerStatus || bolVessel || bolEta) {
+                    console.log(`[refresh_sea_tracking] Using MBL-only data for ${containerId}: status=${bolContainerStatus}, vessel=${bolVessel}, eta=${bolEta}`);
+                    
+                    const lastEventFromBol = bolContainerStatus || (bolVessel ? `Em trânsito - ${bolVessel}` : 'Dados via MBL');
+                    
+                    await client.execute(`
+                      UPDATE dados_dachser.t_tracking_sea 
+                      SET 
+                        container_status = COALESCE(?, container_status, 'Via MBL'),
+                        origem = COALESCE(?, origem),
+                        destino = COALESCE(?, destino),
+                        eta = COALESCE(?, eta),
+                        navio = COALESCE(?, navio),
+                        vessel_imo = COALESCE(?, vessel_imo),
+                        last_event = ?,
+                        last_check = NOW(),
+                        last_error = NULL,
+                        sibling_synced = 1,
+                        sibling_synced_at = NOW()
+                      WHERE id = ?
+                    `, [
+                      bolContainerStatus,
+                      bolPol,
+                      bolPod,
+                      bolEta ? new Date(bolEta) : null,
+                      bolVessel,
+                      bolVesselImo,
+                      lastEventFromBol,
+                      row.id
+                    ]);
+                    
+                    updated++;
+                    processed++;
+                    siblingSuccess = true;
+                    continue;
+                  }
+                }
+                
+                console.log(`[refresh_sea_tracking] MBL ${mblId} has no useful data in BOL response`);
               }
               
               if (siblingSuccess) continue;
