@@ -1753,7 +1753,13 @@ serve(async (req) => {
               lastEventDescription = data.last_movement.description;
             }
             
-            // Update main tracking table
+            // Extract vessel IMO from various possible response fields
+            const vesselImo = data.vessel?.imo || data.current_vessel_imo || data.vessel_imo || data.imo || null;
+            const vesselName = data.current_vessel_name || data.last_vessel_name || data.vessel?.name || null;
+            
+            console.log(`[refresh_sea_tracking] Container ${containerId}: vessel=${vesselName}, imo=${vesselImo}`);
+            
+            // Update main tracking table including vessel_imo
             await client.execute(`
               UPDATE dados_dachser.t_tracking_sea 
               SET 
@@ -1762,6 +1768,7 @@ serve(async (req) => {
                 destino = COALESCE(?, destino),
                 eta = ?,
                 navio = COALESCE(?, navio),
+                vessel_imo = COALESCE(?, vessel_imo),
                 last_event = ?,
                 shipping_line = COALESCE(?, shipping_line),
                 last_check = NOW(),
@@ -1772,7 +1779,8 @@ serve(async (req) => {
               data.loading_port || data.shipped_from || null,
               data.discharging_port || data.shipped_to || null,
               data.eta_final_destination || data.eta ? new Date(data.eta_final_destination || data.eta) : null,
-              data.current_vessel_name || data.last_vessel_name || null,
+              vesselName,
+              vesselImo,
               lastEventDescription,
               shippingLine ? normalizeShippingLine(shippingLine) : null,
               row.id
@@ -2345,6 +2353,9 @@ serve(async (req) => {
         lastEventDescription = data.last_movement.description;
       }
 
+      // Extract vessel IMO from various possible response fields
+      const vesselImo = data.vessel?.imo || data.current_vessel_imo || data.vessel_imo || data.imo || null;
+      
       const trackingData = {
         container: containerId,
         container_status: data.container_status || null,
@@ -2352,8 +2363,11 @@ serve(async (req) => {
         discharging_port: data.discharging_port?.name || data.pod || data.discharging_port || null,
         eta: data.eta_final_destination || data.eta || null,
         vessel: data.vessel?.name || data.current_vessel_name || null,
+        vessel_imo: vesselImo,
         last_event: lastEventDescription,
       };
+      
+      console.log(`[track_sea_container] Container ${containerId}: vessel=${trackingData.vessel}, imo=${vesselImo}`);
 
       const mariadbHost = Deno.env.get('MARIADB_HOST');
       const mariadbPort = Deno.env.get('MARIADB_PORT') || '3306';
@@ -2379,6 +2393,7 @@ serve(async (req) => {
               destino = COALESCE(?, destino),
               eta = ?,
               navio = COALESCE(?, navio),
+              vessel_imo = COALESCE(?, vessel_imo),
               last_event = ?,
               shipping_line = COALESCE(?, shipping_line),
               last_check = NOW()
@@ -2389,6 +2404,7 @@ serve(async (req) => {
             trackingData.discharging_port,
             trackingData.eta ? new Date(trackingData.eta) : null,
             trackingData.vessel,
+            trackingData.vessel_imo,
             trackingData.last_event,
             shippingLine ? normalizeShippingLine(shippingLine) : null,
             containerId.toUpperCase().trim()
