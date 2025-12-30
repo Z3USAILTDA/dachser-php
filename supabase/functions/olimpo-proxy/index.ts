@@ -37,6 +37,16 @@ function normalizeShippingLine(code: string): string {
   return map[code] || code;
 }
 
+// Converte nomes legíveis de volta para código da API JSONCargo
+function toApiShippingLine(displayName: string): string {
+  const map: Record<string, string> = {
+    'CMA CGM': 'CMA_CGM',
+    'HAPAG-LLOYD': 'HAPAG_LLOYD',
+    'YANG MING': 'YANG_MING',
+  };
+  return map[displayName] || displayName;
+}
+
 // Helper to log API calls asynchronously (fire-and-forget)
 async function logApiCall(
   api_name: string,
@@ -1598,8 +1608,8 @@ serve(async (req) => {
           // MAERSK (including Hamburg Sud, Sealand, Safmarine)
           'MAEU': 'MAERSK', 'MRKU': 'MAERSK', 'MSKU': 'MAERSK', 'PONU': 'MAERSK', 'SUDU': 'MAERSK',
           'SFAU': 'MAERSK', 'SLBU': 'MAERSK',
-          // Hapag-Lloyd (inclui UACU - United Arab Shipping Company adquirida em 2017)
-          'HLCU': 'HAPAG_LLOYD', 'HLXU': 'HAPAG_LLOYD', 'TCLU': 'HAPAG_LLOYD', 'UACU': 'HAPAG_LLOYD',
+          // Hapag-Lloyd (inclui UACU - United Arab Shipping Company adquirida em 2017, e HLBU)
+          'HLCU': 'HAPAG_LLOYD', 'HLXU': 'HAPAG_LLOYD', 'HLBU': 'HAPAG_LLOYD', 'TCLU': 'HAPAG_LLOYD', 'UACU': 'HAPAG_LLOYD',
           // ONE (Ocean Network Express - formado por MOL, NYK, K-Line)
           'ONEY': 'ONE', 'ONEU': 'ONE', 'NYKU': 'ONE', 'MOLU': 'ONE', 'KKFU': 'ONE', 'MOAU': 'ONE',
           // HMM
@@ -1724,8 +1734,12 @@ serve(async (req) => {
             continue;
           }
           
+          // Convert shipping line to API format (e.g., "HAPAG-LLOYD" -> "HAPAG_LLOYD")
+          const apiShippingLine = toApiShippingLine(shippingLine);
+          console.log(`[refresh_sea_tracking] Container ${containerId}: DB=${shippingLine}, API=${apiShippingLine}`);
+          
           const qs: Record<string, string> = {};
-          if (shippingLine) qs['shipping_line'] = shippingLine;
+          if (apiShippingLine) qs['shipping_line'] = apiShippingLine;
           
           const apiRes = await jcJson(`http://api.jsoncargo.com/api/v1/containers/${encodeURIComponent(containerId)}`, qs, 15000);
           
