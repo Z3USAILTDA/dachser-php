@@ -310,7 +310,7 @@ export default function ApiManagement() {
                   <div>
                     <p className="text-white/60 text-sm">Total de Chamadas</p>
                     <p className="text-2xl font-bold text-white">
-                      {isLoading ? "..." : apiStats.reduce((sum, api) => sum + api.total_calls, 0).toLocaleString()}
+                      {isLoading ? "..." : apiStats.reduce((sum, api) => sum + Number(api.total_calls || 0), 0).toLocaleString()}
                     </p>
                   </div>
                 </div>
@@ -327,7 +327,7 @@ export default function ApiManagement() {
                     <p className="text-white/60 text-sm">Taxa de Sucesso</p>
                     <p className="text-2xl font-bold text-white">
                       {isLoading ? "..." : (
-                        (apiStats.reduce((sum, api) => sum + api.success_rate, 0) / (apiStats.length || 1)).toFixed(1) + "%"
+                        (apiStats.reduce((sum, api) => sum + Number(api.success_rate || 0), 0) / (apiStats.length || 1)).toFixed(1) + "%"
                       )}
                     </p>
                   </div>
@@ -360,7 +360,7 @@ export default function ApiManagement() {
                   <div>
                     <p className="text-white/60 text-sm">Total de Erros</p>
                     <p className="text-2xl font-bold text-white">
-                      {isLoading ? "..." : apiStats.reduce((sum, api) => sum + api.error_count, 0).toLocaleString()}
+                      {isLoading ? "..." : apiStats.reduce((sum, api) => sum + Number(api.error_count || 0), 0).toLocaleString()}
                     </p>
                   </div>
                 </div>
@@ -377,7 +377,7 @@ export default function ApiManagement() {
                     <p className="text-white/60 text-sm">Custo Estimado (30d)</p>
                     <p className="text-2xl font-bold text-emerald-400">
                       {isLoading ? "..." : formatCurrency(
-                        apiStats.reduce((sum, api) => sum + getApiCost(api.api_name, api.total_calls), 0)
+                        apiStats.reduce((sum, api) => sum + getApiCost(api.api_name, Number(api.total_calls || 0)), 0)
                       )}
                     </p>
                   </div>
@@ -595,7 +595,7 @@ export default function ApiManagement() {
                           <p className="text-white font-semibold">Total Estimado</p>
                         </div>
                         <p className="text-emerald-400 font-bold text-lg">
-                          {formatCurrency(apiStats.reduce((sum, api) => sum + getApiCost(api.api_name, api.total_calls), 0))}
+                          {formatCurrency(apiStats.reduce((sum, api) => sum + getApiCost(api.api_name, Number(api.total_calls || 0)), 0))}
                         </p>
                       </div>
                     </div>
@@ -641,8 +641,8 @@ export default function ApiManagement() {
                           <div className="w-3 h-3 rounded-full" style={{ backgroundColor: getApiColor(api.api_name) }} />
                           <CardTitle className="text-lg text-white">{api.api_name}</CardTitle>
                         </div>
-                        <Badge className={getStatusColor(api.success_rate)}>
-                          {api.success_rate?.toFixed(1) || 0}%
+                        <Badge className={getStatusColor(Number(api.success_rate || 0))}>
+                          {Number(api.success_rate || 0).toFixed(1)}%
                         </Badge>
                       </div>
                       <CardDescription className="text-white/50">
@@ -654,7 +654,7 @@ export default function ApiManagement() {
                         <div>
                           <p className="text-white/50 text-xs">Total Chamadas</p>
                           <p className="text-xl font-semibold text-white">
-                            {(api.total_calls || 0).toLocaleString()}
+                            {Number(api.total_calls || 0).toLocaleString()}
                           </p>
                         </div>
                         <div>
@@ -666,13 +666,13 @@ export default function ApiManagement() {
                         <div>
                           <p className="text-white/50 text-xs">Tempo Médio</p>
                           <p className="text-xl font-semibold text-white">
-                            {api.avg_response_time_ms ? `${api.avg_response_time_ms}ms` : "N/A"}
+                            {api.avg_response_time_ms ? `${Number(api.avg_response_time_ms)}ms` : "N/A"}
                           </p>
                         </div>
                         <div>
                           <p className="text-white/50 text-xs">Erros</p>
-                          <p className={`text-xl font-semibold ${(api.error_count || 0) > 0 ? "text-red-400" : "text-green-400"}`}>
-                            {api.error_count || 0}
+                          <p className={`text-xl font-semibold ${Number(api.error_count || 0) > 0 ? "text-red-400" : "text-green-400"}`}>
+                            {Number(api.error_count || 0)}
                           </p>
                         </div>
                       </div>

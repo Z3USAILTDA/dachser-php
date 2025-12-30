@@ -6526,8 +6526,32 @@ serve(async (req) => {
           ORDER BY date ASC
         `);
 
-        console.log(`[get_api_stats] Found ${stats.length} APIs, ${recentLogs.length} recent logs, ${dailyTrend.length} daily trend records`);
-        result = { success: true, stats, recent_logs: recentLogs, daily_trend: dailyTrend, daily_total: dailyTotal };
+        // Normalize numeric values (Deno MySQL driver returns aggregates as strings)
+        const normalizedStats = stats.map((row: any) => ({
+          api_name: row.api_name,
+          total_calls: Number(row.total_calls) || 0,
+          last_call: row.last_call,
+          avg_response_time_ms: row.avg_response_time_ms != null ? Number(row.avg_response_time_ms) : null,
+          error_count: Number(row.error_count) || 0,
+          success_rate: Number(row.success_rate) || 0,
+        }));
+
+        const normalizedDailyTrend = dailyTrend.map((row: any) => ({
+          date: row.date,
+          api_name: row.api_name,
+          calls: Number(row.calls) || 0,
+          errors: Number(row.errors) || 0,
+          avg_response_time: row.avg_response_time != null ? Number(row.avg_response_time) : null,
+        }));
+
+        const normalizedDailyTotal = dailyTotal.map((row: any) => ({
+          date: row.date,
+          total_calls: Number(row.total_calls) || 0,
+          total_errors: Number(row.total_errors) || 0,
+        }));
+
+        console.log(`[get_api_stats] Found ${normalizedStats.length} APIs, ${recentLogs.length} recent logs, ${normalizedDailyTrend.length} daily trend records`);
+        result = { success: true, stats: normalizedStats, recent_logs: recentLogs, daily_trend: normalizedDailyTrend, daily_total: normalizedDailyTotal };
         break;
       }
 
