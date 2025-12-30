@@ -1476,14 +1476,14 @@ serve(async (req) => {
               'MSCU': 'MSC', 'MEDU': 'MSC', 'MSDU': 'MSC', 'TRLU': 'MSC', 'GLDU': 'MSC',
               // MAERSK (including Hamburg Sud)
               'MAEU': 'MAERSK', 'MRKU': 'MAERSK', 'MSKU': 'MAERSK', 'PONU': 'MAERSK', 'SUDU': 'MAERSK',
-              // Hapag-Lloyd
-              'HLCU': 'HAPAG_LLOYD', 'HLXU': 'HAPAG_LLOYD', 'TCLU': 'HAPAG_LLOYD',
+              // Hapag-Lloyd (inclui UACU - United Arab Shipping Company adquirida em 2017)
+              'HLCU': 'HAPAG_LLOYD', 'HLXU': 'HAPAG_LLOYD', 'TCLU': 'HAPAG_LLOYD', 'UACU': 'HAPAG_LLOYD',
               // ONE
               'ONEY': 'ONE', 'ONEU': 'ONE', 'NYKU': 'ONE', 'MOLU': 'ONE', 'KKFU': 'ONE',
               // HMM
               'HDMU': 'HMM', 'HMMU': 'HMM', 'HMCU': 'HMM', 'KMTU': 'HMM',
               // Evergreen
-              'EISU': 'EVERGREEN', 'EITU': 'EVERGREEN', 'EGSU': 'EVERGREEN', 'EGHU': 'EVERGREEN', 'EMCU': 'EVERGREEN', 'UACU': 'EVERGREEN',
+              'EISU': 'EVERGREEN', 'EITU': 'EVERGREEN', 'EGSU': 'EVERGREEN', 'EGHU': 'EVERGREEN', 'EMCU': 'EVERGREEN',
               // Yang Ming
               'YMLU': 'YANG_MING', 'YMMU': 'YANG_MING', 'YMPU': 'YANG_MING',
               // COSCO / OOCL (both under COSCO Group)
@@ -2306,7 +2306,7 @@ serve(async (req) => {
         // Container prefix to shipping line mapping
         const CONTAINER_PREFIX_MAP: Record<string, string> = {
           "MAEU": "MAERSK", "MSKU": "MAERSK", "MRKU": "MAERSK", "MRSU": "MAERSK", "SUDU": "MAERSK", "SEAU": "MAERSK", "SFCU": "MAERSK",
-          "HLCU": "HAPAG-LLOYD", "HLXU": "HAPAG-LLOYD", "HJCU": "HAPAG-LLOYD", "HASU": "HAPAG-LLOYD",
+          "HLCU": "HAPAG-LLOYD", "HLXU": "HAPAG-LLOYD", "HJCU": "HAPAG-LLOYD", "HASU": "HAPAG-LLOYD", "UACU": "HAPAG-LLOYD",
           "CMAU": "CMA CGM", "CGMU": "CMA CGM", "APLU": "CMA CGM", "ANLU": "CMA CGM", "ECMU": "CMA CGM", "APHU": "CMA CGM", "CXDU": "CMA CGM",
           "MSCU": "MSC", "MEDU": "MSC", "MSCZ": "MSC", "MSDU": "MSC",
           "ONEY": "ONE", "NYKU": "ONE", "MOLU": "ONE", "KSTU": "ONE", "KKFU": "ONE",
@@ -2558,7 +2558,7 @@ serve(async (req) => {
           shippingLine = 'MSC';
         } else if (prefix === 'MAEU' || prefix === 'MRKU' || prefix === 'MSKU') {
           shippingLine = 'MAERSK';
-        } else if (prefix === 'HLCU' || prefix === 'HLXU') {
+        } else if (prefix === 'HLCU' || prefix === 'HLXU' || prefix === 'UACU') {
           shippingLine = 'HAPAG_LLOYD';
         } else if (prefix === 'ONEY' || prefix === 'ONEU') {
           shippingLine = 'ONE';
@@ -2759,7 +2759,7 @@ serve(async (req) => {
               shippingLine = 'MSC';
             } else if (prefix === 'MAEU' || prefix === 'MRKU' || prefix === 'MSKU') {
               shippingLine = 'MAERSK';
-            } else if (prefix === 'HLCU' || prefix === 'HLXU') {
+            } else if (prefix === 'HLCU' || prefix === 'HLXU' || prefix === 'UACU') {
               shippingLine = 'HAPAG_LLOYD';
             } else if (prefix === 'ONEY' || prefix === 'ONEU') {
               shippingLine = 'ONE';
