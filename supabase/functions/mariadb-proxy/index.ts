@@ -6500,8 +6500,34 @@ serve(async (req) => {
           LIMIT 100
         `);
 
-        console.log(`[get_api_stats] Found ${stats.length} APIs, ${recentLogs.length} recent logs`);
-        result = { success: true, stats, recent_logs: recentLogs };
+        // Get daily trend data (last 30 days, grouped by date and API)
+        const dailyTrend = await client.query(`
+          SELECT 
+            DATE(created_at) as date,
+            api_name,
+            COUNT(*) as calls,
+            SUM(CASE WHEN status_code >= 400 OR error_message IS NOT NULL THEN 1 ELSE 0 END) as errors,
+            ROUND(AVG(response_time_ms), 0) as avg_response_time
+          FROM ai_agente.t_api_usage_logs
+          WHERE created_at >= DATE_SUB(NOW(), INTERVAL 30 DAY)
+          GROUP BY DATE(created_at), api_name
+          ORDER BY date ASC, api_name
+        `);
+
+        // Get total calls per day (for overview chart)
+        const dailyTotal = await client.query(`
+          SELECT 
+            DATE(created_at) as date,
+            COUNT(*) as total_calls,
+            SUM(CASE WHEN status_code >= 400 OR error_message IS NOT NULL THEN 1 ELSE 0 END) as total_errors
+          FROM ai_agente.t_api_usage_logs
+          WHERE created_at >= DATE_SUB(NOW(), INTERVAL 30 DAY)
+          GROUP BY DATE(created_at)
+          ORDER BY date ASC
+        `);
+
+        console.log(`[get_api_stats] Found ${stats.length} APIs, ${recentLogs.length} recent logs, ${dailyTrend.length} daily trend records`);
+        result = { success: true, stats, recent_logs: recentLogs, daily_trend: dailyTrend, daily_total: dailyTotal };
         break;
       }
 
