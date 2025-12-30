@@ -1603,6 +1603,105 @@ serve(async (req) => {
       }
     }
 
+    // ===== SEA TRACKING: Cleanup invalid records (mark as inactive) =====
+    if (action === 'cleanup_sea_tracking') {
+      const mariadbHost = Deno.env.get('MARIADB_HOST');
+      const mariadbPort = Deno.env.get('MARIADB_PORT') || '3306';
+      const mariadbUser = Deno.env.get('MARIADB_USER');
+      const mariadbPass = Deno.env.get('MARIADB_PASSWORD');
+
+      if (!mariadbHost || !mariadbUser || !mariadbPass) {
+        return new Response(JSON.stringify({ error: 'MariaDB não configurado' }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      }
+
+      const { Client } = await import("https://deno.land/x/mysql@v2.12.1/mod.ts");
+      const client = await new Client().connect({
+        hostname: mariadbHost,
+        port: parseInt(mariadbPort, 10),
+        username: mariadbUser,
+        password: mariadbPass,
+        db: 'dados_dachser',
+      });
+
+      try {
+        // Contar registros inválidos antes de limpar
+        const countBefore = await client.query(`
+          SELECT 
+            COUNT(*) as total_ativos,
+            SUM(CASE WHEN mbl_id NOT REGEXP '^[A-Za-z]{4}[0-9]+$' THEN 1 ELSE 0 END) as mbl_formato_invalido,
+            SUM(CASE WHEN mbl_id REGEXP '^BR[A-Za-z]{3}' THEN 1 ELSE 0 END) as mbl_hawb,
+            SUM(CASE WHEN container IS NULL OR TRIM(container) = '' OR container = 'PENDENTE' THEN 1 ELSE 0 END) as container_vazio,
+            SUM(CASE WHEN container IS NOT NULL AND TRIM(container) != '' AND container != 'PENDENTE' AND container NOT REGEXP '^[A-Za-z]{4}[0-9]{7}$' THEN 1 ELSE 0 END) as container_formato_invalido
+          FROM dados_dachser.t_tracking_sea
+          WHERE active = 1
+        `);
+
+        const stats = countBefore[0] || {};
+        console.log(`[cleanup_sea_tracking] Before cleanup: total=${stats.total_ativos}, mblInvalido=${stats.mbl_formato_invalido}, hawb=${stats.mbl_hawb}, containerVazio=${stats.container_vazio}, containerInvalido=${stats.container_formato_invalido}`);
+
+        // Marcar como inativos os registros que não atendem aos novos critérios
+        const result = await client.execute(`
+          UPDATE dados_dachser.t_tracking_sea 
+          SET active = 0
+          WHERE active = 1
+            AND (
+              -- MBL com formato inválido (não é SCAC: 4 letras + números)
+              mbl_id NOT REGEXP '^[A-Za-z]{4}[0-9]+$'
+              -- OU MBL é um HAWB brasileiro
+              OR mbl_id REGEXP '^BR[A-Za-z]{3}'
+              -- OU Container vazio/pendente
+              OR container IS NULL 
+              OR TRIM(container) = ''
+              OR container = 'PENDENTE'
+              -- OU Container com formato inválido (não é ISO: 4 letras + 7 números)
+              OR container NOT REGEXP '^[A-Za-z]{4}[0-9]{7}$'
+            )
+        `);
+
+        const cleaned = result.affectedRows || 0;
+
+        // Contar registros válidos restantes
+        const countAfter = await client.query(`
+          SELECT COUNT(*) as total_ativos FROM dados_dachser.t_tracking_sea WHERE active = 1
+        `);
+        const remaining = countAfter[0]?.total_ativos || 0;
+
+        await client.close();
+        
+        console.log(`[cleanup_sea_tracking] Cleaned ${cleaned} invalid records, ${remaining} valid records remaining`);
+        
+        return new Response(JSON.stringify({ 
+          success: true, 
+          cleaned,
+          remaining,
+          message: `${cleaned} registros inválidos marcados como inativos`,
+          stats_before: {
+            total_ativos: Number(stats.total_ativos) || 0,
+            mbl_formato_invalido: Number(stats.mbl_formato_invalido) || 0,
+            mbl_hawb: Number(stats.mbl_hawb) || 0,
+            container_vazio: Number(stats.container_vazio) || 0,
+            container_formato_invalido: Number(stats.container_formato_invalido) || 0
+          },
+          validation_rules: {
+            mbl: '^[A-Za-z]{4}[0-9]+$ (SCAC format)',
+            mbl_reject: '^BR[A-Za-z]{3} (HAWBs)',
+            container: '^[A-Za-z]{4}[0-9]{7}$ (ISO format)'
+          }
+        }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      } catch (e: any) {
+        await client.close();
+        console.error('[cleanup_sea_tracking] Error:', e);
+        return new Response(JSON.stringify({ error: e.message }), {
+          status: 500,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      }
+    }
+
     // ===== SEA TRACKING (LEGACY): Get tracked containers =====
     if (action === 'get_tracked_containers') {
       const mariadbHost = Deno.env.get('MARIADB_HOST');
