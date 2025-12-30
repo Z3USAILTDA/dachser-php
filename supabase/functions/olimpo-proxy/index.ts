@@ -1559,6 +1559,11 @@ serve(async (req) => {
         return { skip: false };
       };
 
+      // Batch processing parameters to avoid timeout
+      const batchSize = parseInt(url.searchParams.get('batch_size') || '10', 10);
+      const maxTimeMs = parseInt(url.searchParams.get('max_time_ms') || '45000', 10);
+      const startTime = Date.now();
+
       try {
         // Fetch MBLs with container = 'PENDENTE'
         const pendingMbls = await client.query(`
@@ -1567,16 +1572,30 @@ serve(async (req) => {
           WHERE active = 1 AND (container = 'PENDENTE' OR container IS NULL OR container = '')
         `);
 
-        console.log(`[enrich_sea_containers] Found ${pendingMbls.length} MBLs with pending containers`);
+        console.log(`[enrich_sea_containers] Found ${pendingMbls.length} MBLs with pending containers (batch_size=${batchSize}, max_time=${maxTimeMs}ms)`);
 
         let enriched = 0;
         let errors = 0;
         let noContainers = 0;
         let skipped = 0;
+        let processed = 0;
         const details: any[] = [];
 
         for (const row of pendingMbls) {
+          // Check if we've exceeded time limit
+          if (Date.now() - startTime > maxTimeMs) {
+            console.log(`[enrich_sea_containers] Time limit reached after ${processed} MBLs (${Date.now() - startTime}ms)`);
+            break;
+          }
+
+          // Check if we've hit batch size limit (only count API calls, not skips)
+          if (enriched + errors + noContainers >= batchSize) {
+            console.log(`[enrich_sea_containers] Batch size reached: ${batchSize}`);
+            break;
+          }
+
           const mblId = row.mbl_id;
+          processed++;
           
           // Check if this MBL should be skipped (booking reference, internal code, HAWB)
           const skipCheck = shouldSkipEnrichment(mblId);
@@ -1669,7 +1688,10 @@ serve(async (req) => {
 
         await client.close();
         
-        console.log(`[enrich_sea_containers] Completed: enriched=${enriched}, skipped=${skipped}, noContainers=${noContainers}, errors=${errors}`);
+        const remaining = pendingMbls.length - processed;
+        const timeElapsed = Date.now() - startTime;
+        
+        console.log(`[enrich_sea_containers] Batch completed: enriched=${enriched}, skipped=${skipped}, noContainers=${noContainers}, errors=${errors}, remaining=${remaining}, time=${timeElapsed}ms`);
         
         return new Response(JSON.stringify({ 
           success: true, 
@@ -1677,8 +1699,11 @@ serve(async (req) => {
           skipped,
           noContainers,
           errors,
+          processed,
           total: pendingMbls.length,
-          message: `${enriched} MBLs enriquecidos, ${skipped} ignorados (booking refs/HAWBs)`,
+          remaining,
+          timeElapsed,
+          message: `${enriched} MBLs enriquecidos, ${skipped} ignorados. ${remaining} restantes.`,
           details
         }), {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' }
