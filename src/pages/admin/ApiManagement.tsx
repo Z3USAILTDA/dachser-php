@@ -83,60 +83,14 @@ export default function ApiManagement() {
       if (data?.success) {
         setApiStats(data.stats || []);
         setRecentLogs(data.recent_logs || []);
+      } else {
+        throw new Error(data?.error || "Erro ao buscar dados");
       }
     } catch (error) {
       console.error("Error fetching API stats:", error);
-      // Use mock data for now if the endpoint doesn't exist yet
-      setApiStats([
-        {
-          api_name: "JSONCargo",
-          total_calls: 1247,
-          last_call: new Date().toISOString(),
-          avg_response_time_ms: 850,
-          error_count: 12,
-          success_rate: 99.0,
-        },
-        {
-          api_name: "FlightRadar24",
-          total_calls: 3542,
-          last_call: new Date().toISOString(),
-          avg_response_time_ms: 320,
-          error_count: 45,
-          success_rate: 98.7,
-        },
-        {
-          api_name: "Anthropic (Claude)",
-          total_calls: 856,
-          last_call: new Date().toISOString(),
-          avg_response_time_ms: 2100,
-          error_count: 8,
-          success_rate: 99.1,
-        },
-        {
-          api_name: "OpenAI (GPT)",
-          total_calls: 423,
-          last_call: new Date().toISOString(),
-          avg_response_time_ms: 1800,
-          error_count: 5,
-          success_rate: 98.8,
-        },
-        {
-          api_name: "Resend (Email)",
-          total_calls: 1892,
-          last_call: new Date().toISOString(),
-          avg_response_time_ms: 450,
-          error_count: 23,
-          success_rate: 98.8,
-        },
-        {
-          api_name: "Leadcomex",
-          total_calls: 567,
-          last_call: new Date().toISOString(),
-          avg_response_time_ms: 1200,
-          error_count: 15,
-          success_rate: 97.4,
-        },
-      ]);
+      toast.error("Erro ao carregar estatísticas de APIs");
+      setApiStats([]);
+      setRecentLogs([]);
     } finally {
       setIsLoading(false);
     }
@@ -279,6 +233,14 @@ export default function ApiManagement() {
               <div className="col-span-full flex items-center justify-center py-12">
                 <Loader2 className="w-8 h-8 text-amber-400 animate-spin" />
               </div>
+            ) : apiStats.length === 0 ? (
+              <div className="col-span-full flex flex-col items-center justify-center py-12 text-center">
+                <Server className="w-12 h-12 text-white/30 mb-4" />
+                <p className="text-white/60 text-lg font-medium">Nenhum dado de API registrado</p>
+                <p className="text-white/40 text-sm mt-2 max-w-md">
+                  As estatísticas aparecerão aqui conforme as edge functions forem instrumentadas para registrar chamadas de API.
+                </p>
+              </div>
             ) : (
               apiStats.map((api) => (
                 <Card key={api.api_name} className="bg-white/10 border-white/20 backdrop-blur hover:bg-white/15 transition">
@@ -286,7 +248,7 @@ export default function ApiManagement() {
                     <div className="flex items-center justify-between">
                       <CardTitle className="text-lg text-white">{api.api_name}</CardTitle>
                       <Badge className={getStatusColor(api.success_rate)}>
-                        {api.success_rate.toFixed(1)}%
+                        {api.success_rate?.toFixed(1) || 0}%
                       </Badge>
                     </div>
                     <CardDescription className="text-white/50">
@@ -298,7 +260,7 @@ export default function ApiManagement() {
                       <div>
                         <p className="text-white/50 text-xs">Total Chamadas</p>
                         <p className="text-xl font-semibold text-white">
-                          {api.total_calls.toLocaleString()}
+                          {(api.total_calls || 0).toLocaleString()}
                         </p>
                       </div>
                       <div>
@@ -309,14 +271,14 @@ export default function ApiManagement() {
                       </div>
                       <div>
                         <p className="text-white/50 text-xs">Erros</p>
-                        <p className={`text-xl font-semibold ${api.error_count > 0 ? "text-red-400" : "text-green-400"}`}>
-                          {api.error_count}
+                        <p className={`text-xl font-semibold ${(api.error_count || 0) > 0 ? "text-red-400" : "text-green-400"}`}>
+                          {api.error_count || 0}
                         </p>
                       </div>
                       <div>
                         <p className="text-white/50 text-xs">Sucesso</p>
                         <p className="text-xl font-semibold text-green-400">
-                          {(api.total_calls - api.error_count).toLocaleString()}
+                          {((api.total_calls || 0) - (api.error_count || 0)).toLocaleString()}
                         </p>
                       </div>
                     </div>
