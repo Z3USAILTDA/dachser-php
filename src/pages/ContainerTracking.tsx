@@ -311,43 +311,69 @@ const ContainerTracking = () => {
     }
   };
 
-  // Refresh all containers via JSONCargo API
+  // Refresh containers via JSONCargo API (batch processing to avoid timeout)
   const handleRefresh = async () => {
     setIsRefreshing(true);
+    let totalUpdated = 0;
+    let totalErrors = 0;
+    let remaining = 1; // Start with 1 to enter loop
+    let iteration = 0;
+    const maxIterations = 50; // Safety limit
+    
     toast({
       title: "Atualizando dados",
       description: "Consultando status via JSONCargo API...",
     });
     
     try {
-      const res = await fetch(
-        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/olimpo-proxy?action=refresh_sea_tracking`,
-        {
-          method: 'GET',
-          headers: {
-            'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
-            'Content-Type': 'application/json',
+      while (remaining > 0 && iteration < maxIterations) {
+        iteration++;
+        
+        const res = await fetch(
+          `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/olimpo-proxy?action=refresh_sea_tracking&batch_size=20&max_time_ms=45000&stale_hours=4`,
+          {
+            method: 'GET',
+            headers: {
+              'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
+              'Content-Type': 'application/json',
+            }
           }
+        );
+        
+        const result = await res.json();
+        
+        if (result.success) {
+          totalUpdated += result.updated || 0;
+          totalErrors += result.errors || 0;
+          remaining = result.remaining || 0;
+          
+          toast({
+            title: `Atualizando... (${iteration})`,
+            description: `${totalUpdated} atualizados, ${remaining} restantes`,
+          });
+          
+          // If no containers were processed, exit
+          if (result.processed === 0) {
+            break;
+          }
+        } else {
+          toast({
+            title: "Erro ao atualizar",
+            description: result.error || "Falha na atualização",
+            variant: "destructive",
+          });
+          break;
         }
-      );
+      }
       
-      const result = await res.json();
+      toast({
+        title: "Atualização concluída",
+        description: `${totalUpdated} containers atualizados${totalErrors > 0 ? `, ${totalErrors} com erro` : ''}`,
+      });
       
-      if (result.success) {
-        toast({
-          title: "Dados atualizados",
-          description: `${result.updated} containers atualizados${result.errors > 0 ? `, ${result.errors} com erro` : ''}.`,
-        });
-        await fetchMblData();
-        if (expandedMbl) {
-          await fetchMblContainers(expandedMbl);
-        }
-      } else {
-        toast({
-          title: "Erro ao atualizar",
-          description: result.error || "Falha na atualização",
-          variant: "destructive",
-        });
+      await fetchMblData();
+      if (expandedMbl) {
+        await fetchMblContainers(expandedMbl);
       }
     } catch (error) {
       console.error("Error refreshing:", error);
