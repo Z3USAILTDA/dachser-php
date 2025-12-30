@@ -168,7 +168,7 @@ https://z3us.ai
           },
           body: JSON.stringify({
             action: 'log_api_call',
-            api_name: 'Resend (Email)',
+            api_name: 'Resend',
             endpoint: '/emails',
             method: 'POST',
             status_code: response.status,

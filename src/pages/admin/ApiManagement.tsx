@@ -46,55 +46,76 @@ interface DailyTotal {
   total_errors: number;
 }
 
-// Preços estimados por chamada (em USD)
+// Preços reais por chamada (em USD) - Atualizado em Dez/2024
 interface ApiPricing {
   costPerCall: number;
   unit: string;
   notes: string;
+  tier?: string; // Plano contratado
 }
 
 const API_PRICING: Record<string, ApiPricing> = {
   "Anthropic": { 
-    costPerCall: 0.015,
+    costPerCall: 0.015, // ~500 input + 500 output tokens avg
     unit: "por chamada (~1K tokens)",
-    notes: "Claude 3.5 Sonnet: $3/1M input, $15/1M output"
+    notes: "Claude Sonnet 4: $3/1M input, $15/1M output",
+    tier: "API Direta"
   },
   "LovableAI": { 
     costPerCall: 0.002,
-    unit: "por chamada (~1K tokens)",
-    notes: "Gemini 2.5 Flash via Lovable Gateway"
+    unit: "por chamada",
+    notes: "Gemini 2.5 Flash via Lovable Gateway",
+    tier: "Lovable Workspace"
   },
   "Resend": { 
-    costPerCall: 0.001,
+    costPerCall: 0.0009, // $0.90/1000 após tier gratuito
     unit: "por email",
-    notes: "$1/1000 emails após tier gratuito"
+    notes: "Pro: $20/mês (50k inclusos) + $0.90/1k extra",
+    tier: "Pro"
   },
   "JSONCargo": { 
-    costPerCall: 0.05,
+    costPerCall: 0.05, // €499/mês ÷ ~10k calls
     unit: "por consulta",
-    notes: "Preço estimado - verificar contrato"
+    notes: "Plano Admiral: €499/mês (~10k consultas)",
+    tier: "Admiral"
   },
-  "FlightRadar": { 
-    costPerCall: 0.02,
-    unit: "por consulta",
-    notes: "Preço estimado - verificar plano contratado"
+  "FlightRadar24": { 
+    costPerCall: 0.0003, // $90/mês ÷ ~333k credits
+    unit: "por credit",
+    notes: "Essential: $90/mês (333k credits)",
+    tier: "Essential"
   },
   "Leadcomex": { 
-    costPerCall: 0.01,
+    costPerCall: 0.01, // Estimado - API privada brasileira
     unit: "por chamada",
-    notes: "Preço estimado - verificar contrato"
+    notes: "API CCT/Siscomex - verificar contrato",
+    tier: "Empresarial"
+  },
+  "Firecrawl": { 
+    costPerCall: 0.0053, // $16/mês ÷ 3k créditos
+    unit: "por scrape",
+    notes: "Hobby: $16/mês (3k créditos)",
+    tier: "Hobby"
+  },
+  "Air Carriers": { 
+    costPerCall: 0.0,
+    unit: "por consulta",
+    notes: "APIs diretas de companhias aéreas (TAP, Atlas, Lufthansa, etc.)",
+    tier: "Gratuito"
   },
 };
 
 const RESTRICTED_USERS = ["ana.tozzo"];
 
 const API_COLORS: Record<string, string> = {
-  "JSONCargo": "#3b82f6",
-  "Anthropic": "#8b5cf6",
-  "LovableAI": "#10b981",
-  "Resend": "#f59e0b",
-  "FlightRadar": "#ef4444",
-  "Leadcomex": "#06b6d4",
+  "JSONCargo": "#3b82f6",      // Azul
+  "Anthropic": "#8b5cf6",      // Roxo
+  "LovableAI": "#10b981",      // Verde
+  "Resend": "#f59e0b",         // Âmbar
+  "FlightRadar24": "#ef4444",  // Vermelho
+  "Leadcomex": "#06b6d4",      // Ciano
+  "Firecrawl": "#f97316",      // Laranja
+  "Air Carriers": "#a855f7",   // Violeta
 };
 
 const getApiColor = (apiName: string): string => {
