@@ -1394,7 +1394,7 @@ serve(async (req) => {
       }
     }
 
-    // ===== SEA TRACKING: Refresh all containers in t_tracking_sea =====
+    // ===== SEA TRACKING: Refresh containers in t_tracking_sea (BATCH PROCESSING) =====
     if (action === 'refresh_sea_tracking') {
       const mariadbHost = Deno.env.get('MARIADB_HOST');
       const mariadbPort = Deno.env.get('MARIADB_PORT') || '3306';
@@ -1407,6 +1407,12 @@ serve(async (req) => {
         });
       }
 
+      // Batch processing parameters
+      const batchSize = parseInt(url.searchParams.get('batch_size') || '20');
+      const maxTimeMs = parseInt(url.searchParams.get('max_time_ms') || '45000');
+      const staleHours = parseInt(url.searchParams.get('stale_hours') || '4');
+      const startTime = Date.now();
+
       const { Client } = await import("https://deno.land/x/mysql@v2.12.1/mod.ts");
       const client = await new Client().connect({
         hostname: mariadbHost,
@@ -1417,20 +1423,32 @@ serve(async (req) => {
       });
 
       try {
-        // Filtrar apenas containers com formato ISO válido (4 letras + 7 números)
+        // Query containers that need update: valid ISO format AND (never checked OR checked > N hours ago)
         const containers = await client.query(`
           SELECT id, container, shipping_line, navio 
           FROM dados_dachser.t_tracking_sea 
           WHERE active = 1
             AND container IS NOT NULL
-            AND container != 'PENDENTE'
+            AND container NOT IN ('PENDENTE', 'NAO_ENCONTRADO', 'IGNORADO', '')
             AND container REGEXP '^[A-Za-z]{4}[0-9]{7}$'
-        `);
+            AND (last_check IS NULL OR last_check < DATE_SUB(NOW(), INTERVAL ? HOUR))
+          ORDER BY last_check ASC
+          LIMIT ?
+        `, [staleHours, batchSize]);
+
+        console.log(`[refresh_sea_tracking] Processing batch of ${containers.length} containers (stale > ${staleHours}h)`);
 
         let updated = 0;
         let errors = 0;
+        let processed = 0;
 
         for (const row of containers) {
+          // Time control: stop if approaching timeout
+          if (Date.now() - startTime > maxTimeMs) {
+            console.log(`[refresh_sea_tracking] Time limit reached after ${processed} containers`);
+            break;
+          }
+
           const containerId = row.container;
           let shippingLine = row.shipping_line || '';
           
@@ -1487,14 +1505,44 @@ serve(async (req) => {
             ]);
             updated++;
           } else {
+            // Still update last_check to avoid re-checking failed containers too soon
+            await client.execute(`
+              UPDATE dados_dachser.t_tracking_sea 
+              SET last_check = NOW()
+              WHERE id = ?
+            `, [row.id]);
             errors++;
           }
 
-          await new Promise(r => setTimeout(r, 300));
+          processed++;
+          await new Promise(r => setTimeout(r, 100)); // Reduced delay since API handles it
         }
 
+        // Count remaining containers that still need update
+        const remainingResult = await client.query(`
+          SELECT COUNT(*) as cnt
+          FROM dados_dachser.t_tracking_sea 
+          WHERE active = 1
+            AND container IS NOT NULL
+            AND container NOT IN ('PENDENTE', 'NAO_ENCONTRADO', 'IGNORADO', '')
+            AND container REGEXP '^[A-Za-z]{4}[0-9]{7}$'
+            AND (last_check IS NULL OR last_check < DATE_SUB(NOW(), INTERVAL ? HOUR))
+        `, [staleHours]);
+        
+        const remaining = remainingResult[0]?.cnt || 0;
+
         await client.close();
-        return new Response(JSON.stringify({ success: true, updated, errors, total: containers.length }), {
+        console.log(`[refresh_sea_tracking] Batch done: ${updated} updated, ${errors} errors, ${remaining} remaining`);
+        
+        return new Response(JSON.stringify({ 
+          success: true, 
+          updated, 
+          errors, 
+          processed,
+          remaining,
+          batchSize,
+          elapsedMs: Date.now() - startTime
+        }), {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' }
         });
       } catch (e: any) {
