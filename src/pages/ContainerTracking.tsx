@@ -998,71 +998,75 @@ const ContainerTracking = () => {
               </div>
 
               <div className="flex items-center gap-2">
-                <TooltipProvider>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <button
-                        onClick={handleSync}
-                        disabled={isSyncing}
-                        className="h-8 px-4 rounded-full bg-blue-600 text-white text-[0.75rem] font-medium flex items-center gap-1.5 hover:bg-blue-500 transition shadow-[0_0_20px_rgba(59,130,246,.3)] disabled:opacity-50"
-                      >
-                        {isSyncing ? (
-                          <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                        ) : (
-                          <Database className="w-3.5 h-3.5" />
-                        )}
-                        Sincronizar
-                      </button>
-                    </TooltipTrigger>
-                    <TooltipContent>
-                      <p className="text-xs">Sincronizar dados de t_master_dados</p>
-                    </TooltipContent>
-                  </Tooltip>
-                </TooltipProvider>
+                {isAdmin && (
+                  <>
+                    <TooltipProvider>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <button
+                            onClick={handleSync}
+                            disabled={isSyncing}
+                            className="h-8 px-4 rounded-full bg-blue-600 text-white text-[0.75rem] font-medium flex items-center gap-1.5 hover:bg-blue-500 transition shadow-[0_0_20px_rgba(59,130,246,.3)] disabled:opacity-50"
+                          >
+                            {isSyncing ? (
+                              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                            ) : (
+                              <Database className="w-3.5 h-3.5" />
+                            )}
+                            Sincronizar
+                          </button>
+                        </TooltipTrigger>
+                        <TooltipContent>
+                          <p className="text-xs">Sincronizar dados de t_master_dados</p>
+                        </TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
 
-                <TooltipProvider>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <button
-                        onClick={handleCleanup}
-                        disabled={isCleaning}
-                        className="h-8 px-4 rounded-full bg-red-600 text-white text-[0.75rem] font-medium flex items-center gap-1.5 hover:bg-red-500 transition shadow-[0_0_20px_rgba(239,68,68,.3)] disabled:opacity-50"
-                      >
-                        {isCleaning ? (
-                          <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                        ) : (
-                          <Trash2 className="w-3.5 h-3.5" />
-                        )}
-                        Limpar
-                      </button>
-                    </TooltipTrigger>
-                    <TooltipContent>
-                      <p className="text-xs">Remover MBLs e containers inválidos</p>
-                    </TooltipContent>
-                  </Tooltip>
-                </TooltipProvider>
+                    <TooltipProvider>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <button
+                            onClick={handleCleanup}
+                            disabled={isCleaning}
+                            className="h-8 px-4 rounded-full bg-red-600 text-white text-[0.75rem] font-medium flex items-center gap-1.5 hover:bg-red-500 transition shadow-[0_0_20px_rgba(239,68,68,.3)] disabled:opacity-50"
+                          >
+                            {isCleaning ? (
+                              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                            ) : (
+                              <Trash2 className="w-3.5 h-3.5" />
+                            )}
+                            Limpar
+                          </button>
+                        </TooltipTrigger>
+                        <TooltipContent>
+                          <p className="text-xs">Remover MBLs e containers inválidos</p>
+                        </TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
 
-                <TooltipProvider>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <button
-                        onClick={handleEnrich}
-                        disabled={isEnriching}
-                        className="h-8 px-4 rounded-full bg-purple-600 text-white text-[0.75rem] font-medium flex items-center gap-1.5 hover:bg-purple-500 transition shadow-[0_0_20px_rgba(147,51,234,.3)] disabled:opacity-50"
-                      >
-                        {isEnriching ? (
-                          <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                        ) : (
-                          <Package className="w-3.5 h-3.5" />
-                        )}
-                        Enriquecer
-                      </button>
-                    </TooltipTrigger>
-                    <TooltipContent>
-                      <p className="text-xs">Buscar containers para MBLs pendentes via API JsonCargo</p>
-                    </TooltipContent>
-                  </Tooltip>
-                </TooltipProvider>
+                    <TooltipProvider>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <button
+                            onClick={handleEnrich}
+                            disabled={isEnriching}
+                            className="h-8 px-4 rounded-full bg-purple-600 text-white text-[0.75rem] font-medium flex items-center gap-1.5 hover:bg-purple-500 transition shadow-[0_0_20px_rgba(147,51,234,.3)] disabled:opacity-50"
+                          >
+                            {isEnriching ? (
+                              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                            ) : (
+                              <Package className="w-3.5 h-3.5" />
+                            )}
+                            Enriquecer
+                          </button>
+                        </TooltipTrigger>
+                        <TooltipContent>
+                          <p className="text-xs">Buscar containers para MBLs pendentes via API JsonCargo</p>
+                        </TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
+                  </>
+                )}
                 
                 <button
                   onClick={handleRefresh}
