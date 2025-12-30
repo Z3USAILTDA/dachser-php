@@ -192,6 +192,13 @@ interface QueryRequest {
   master_id?: string;
   numero_rm?: string;
   consolidacao_rm_numero?: string;
+  // API Usage Tracking
+  api_name?: string;
+  status_code?: number;
+  response_time_ms?: number;
+  error_message?: string;
+  edge_function?: string;
+  user_email?: string;
 }
 
 serve(async (req) => {
@@ -6449,6 +6456,111 @@ serve(async (req) => {
 
       // NOTE: update_voucher_esteira is already defined earlier in this file (around line 3735)
       // Removed duplicate case here to avoid dead code
+
+      // ==================== API USAGE TRACKING ====================
+      case 'get_api_stats': {
+        // First ensure the table exists
+        await client.execute(`
+          CREATE TABLE IF NOT EXISTS ai_agente.t_api_usage_logs (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            api_name VARCHAR(100) NOT NULL,
+            endpoint VARCHAR(500),
+            method VARCHAR(10) DEFAULT 'GET',
+            status_code INT,
+            response_time_ms INT,
+            error_message TEXT,
+            user_email VARCHAR(255),
+            edge_function VARCHAR(100),
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            INDEX idx_api_name (api_name),
+            INDEX idx_created_at (created_at)
+          )
+        `);
+
+        // Get aggregated stats per API (last 30 days)
+        const stats = await client.query(`
+          SELECT 
+            api_name,
+            COUNT(*) as total_calls,
+            MAX(created_at) as last_call,
+            ROUND(AVG(response_time_ms), 0) as avg_response_time_ms,
+            SUM(CASE WHEN status_code >= 400 OR error_message IS NOT NULL THEN 1 ELSE 0 END) as error_count,
+            ROUND(100.0 * SUM(CASE WHEN status_code < 400 AND error_message IS NULL THEN 1 ELSE 0 END) / COUNT(*), 1) as success_rate
+          FROM ai_agente.t_api_usage_logs
+          WHERE created_at >= DATE_SUB(NOW(), INTERVAL 30 DAY)
+          GROUP BY api_name
+          ORDER BY total_calls DESC
+        `);
+
+        // Get recent logs
+        const recentLogs = await client.query(`
+          SELECT id, api_name, endpoint, method, status_code, response_time_ms, created_at, user_email, edge_function, error_message
+          FROM ai_agente.t_api_usage_logs
+          ORDER BY created_at DESC
+          LIMIT 100
+        `);
+
+        console.log(`[get_api_stats] Found ${stats.length} APIs, ${recentLogs.length} recent logs`);
+        result = { success: true, stats, recent_logs: recentLogs };
+        break;
+      }
+
+      case 'log_api_call': {
+        const { 
+          api_name, 
+          endpoint, 
+          method, 
+          status_code, 
+          response_time_ms, 
+          error_message, 
+          user_email,
+          edge_function 
+        } = body;
+
+        if (!api_name) {
+          return new Response(
+            JSON.stringify({ error: 'api_name é obrigatório' }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+
+        // Ensure table exists
+        await client.execute(`
+          CREATE TABLE IF NOT EXISTS ai_agente.t_api_usage_logs (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            api_name VARCHAR(100) NOT NULL,
+            endpoint VARCHAR(500),
+            method VARCHAR(10) DEFAULT 'GET',
+            status_code INT,
+            response_time_ms INT,
+            error_message TEXT,
+            user_email VARCHAR(255),
+            edge_function VARCHAR(100),
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            INDEX idx_api_name (api_name),
+            INDEX idx_created_at (created_at)
+          )
+        `);
+
+        await client.execute(`
+          INSERT INTO ai_agente.t_api_usage_logs 
+          (api_name, endpoint, method, status_code, response_time_ms, error_message, user_email, edge_function)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        `, [
+          api_name,
+          endpoint || null,
+          method || 'GET',
+          status_code || null,
+          response_time_ms || null,
+          error_message || null,
+          user_email || null,
+          edge_function || null
+        ]);
+
+        console.log(`[log_api_call] Logged: ${api_name} - ${status_code || 'N/A'} - ${response_time_ms}ms`);
+        result = { success: true };
+        break;
+      }
 
       default:
         return new Response(
