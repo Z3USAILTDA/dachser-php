@@ -26,6 +26,7 @@ import {
   ChevronDown,
   ChevronUp,
   Package,
+  MapPin,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
@@ -33,6 +34,7 @@ import type { User, Session } from "@supabase/supabase-js";
 import dachserBg from "@/assets/dachser-background.jpg";
 import { TablePagination } from "@/components/layout/TablePagination";
 import { Filter as FilterIcon } from "lucide-react";
+import VesselFinderMap from "@/components/tracking/VesselFinderMap";
 
 // Normaliza códigos de armadores do banco para nomes legíveis
 const normalizeShippingLine = (code: string | null | undefined): string => {
@@ -149,6 +151,7 @@ interface ContainerDetail {
   last_check: string;
   eta: string;
   navio: string;
+  vessel_imo: string | null;
   origem: string;
   destino: string;
   consignee: string;
@@ -179,6 +182,8 @@ const ContainerTracking = () => {
   const [mblContainers, setMblContainers] = useState<ContainerDetail[]>([]);
   const [loadingContainers, setLoadingContainers] = useState(false);
   const [trackingContainer, setTrackingContainer] = useState<string | null>(null);
+  const [vesselImo, setVesselImo] = useState<string | null>(null);
+  const [vesselName, setVesselName] = useState<string | null>(null);
   
   // Email modal state
   const [emailModalOpen, setEmailModalOpen] = useState(false);
@@ -270,6 +275,8 @@ const ContainerTracking = () => {
   // Fetch containers for expanded MBL
   const fetchMblContainers = async (mbl_id: string) => {
     setLoadingContainers(true);
+    setVesselImo(null);
+    setVesselName(null);
     try {
       const res = await fetch(
         `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/olimpo-proxy?action=get_sea_tracking_containers&mbl_id=${encodeURIComponent(mbl_id)}`,
@@ -286,6 +293,17 @@ const ContainerTracking = () => {
       
       if (result.success && result.data) {
         setMblContainers(result.data);
+        
+        // Extract vessel IMO and name from first container that has them
+        const containerWithImo = result.data.find((c: ContainerDetail) => c.vessel_imo);
+        const containerWithVessel = result.data.find((c: ContainerDetail) => c.navio);
+        
+        if (containerWithImo) {
+          setVesselImo(containerWithImo.vessel_imo);
+        }
+        if (containerWithVessel) {
+          setVesselName(containerWithVessel.navio);
+        }
       }
     } catch (error) {
       console.error("Error fetching containers:", error);
@@ -299,6 +317,8 @@ const ContainerTracking = () => {
     if (expandedMbl === mbl_id) {
       setExpandedMbl(null);
       setMblContainers([]);
+      setVesselImo(null);
+      setVesselName(null);
     } else {
       setExpandedMbl(mbl_id);
       await fetchMblContainers(mbl_id);
@@ -1350,6 +1370,23 @@ const ContainerTracking = () => {
                                         </tbody>
                                       </table>
                                     </div>
+                                    
+                                    {/* VesselFinder Map */}
+                                    {(vesselName || vesselImo) && (
+                                      <div className="mt-6 pt-4 border-t border-[rgba(255,255,255,.08)]">
+                                        <div className="text-xs text-[#aaaaaa] uppercase tracking-wide mb-3 flex items-center gap-2">
+                                          <MapPin className="w-4 h-4 text-[#ffc800]" />
+                                          Rastreio do Navio: <span className="text-[#f5f5f5] font-medium normal-case">{vesselName || "Desconhecido"}</span>
+                                          {vesselImo && <span className="text-[#666] text-[0.65rem]">IMO: {vesselImo}</span>}
+                                        </div>
+                                        <VesselFinderMap 
+                                          vesselName={vesselName}
+                                          imo={vesselImo}
+                                          height={350}
+                                          showTrack={true}
+                                        />
+                                      </div>
+                                    )}
                                   </div>
                                 )}
                               </td>

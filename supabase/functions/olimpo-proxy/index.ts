@@ -1274,7 +1274,7 @@ serve(async (req) => {
           SELECT 
             id, mbl_id, container, shipping_line, 
             container_status, last_event, last_check, 
-            eta, navio, origem, destino, consignee
+            eta, navio, vessel_imo, origem, destino, consignee
           FROM dados_dachser.t_tracking_sea
           WHERE mbl_id = ?
           ORDER BY container
@@ -3658,6 +3658,195 @@ serve(async (req) => {
       } catch (e: any) {
         await client.close();
         console.error('[get_tracking_history_summary] Error:', e);
+        return new Response(JSON.stringify({ error: e.message }), {
+          status: 500,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      }
+    }
+
+    // ===== SEA TRACKING: Setup vessel_imo column =====
+    if (action === 'setup_vessel_imo_column') {
+      const mariadbHost = Deno.env.get('MARIADB_HOST');
+      const mariadbPort = Deno.env.get('MARIADB_PORT') || '3306';
+      const mariadbUser = Deno.env.get('MARIADB_USER');
+      const mariadbPass = Deno.env.get('MARIADB_PASSWORD');
+
+      if (!mariadbHost || !mariadbUser || !mariadbPass) {
+        return new Response(JSON.stringify({ error: 'MariaDB não configurado' }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      }
+
+      const { Client } = await import("https://deno.land/x/mysql@v2.12.1/mod.ts");
+      const client = await new Client().connect({
+        hostname: mariadbHost,
+        port: parseInt(mariadbPort, 10),
+        username: mariadbUser,
+        password: mariadbPass,
+        db: 'dados_dachser',
+      });
+
+      try {
+        // Check if column exists
+        const columns = await client.query(`
+          SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS 
+          WHERE TABLE_SCHEMA = 'dados_dachser' 
+          AND TABLE_NAME = 't_tracking_sea' 
+          AND COLUMN_NAME = 'vessel_imo'
+        `);
+
+        if (columns.length === 0) {
+          await client.execute(`
+            ALTER TABLE dados_dachser.t_tracking_sea 
+            ADD COLUMN vessel_imo VARCHAR(20) NULL AFTER navio
+          `);
+          console.log('[setup_vessel_imo_column] Column vessel_imo added to t_tracking_sea');
+        } else {
+          console.log('[setup_vessel_imo_column] Column vessel_imo already exists');
+        }
+
+        await client.close();
+        return new Response(JSON.stringify({ 
+          success: true, 
+          message: columns.length === 0 ? 'Coluna vessel_imo criada' : 'Coluna já existe'
+        }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      } catch (e: any) {
+        await client.close();
+        console.error('[setup_vessel_imo_column] Error:', e);
+        return new Response(JSON.stringify({ error: e.message }), {
+          status: 500,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      }
+    }
+
+    // ===== SEA TRACKING: Get vessel IMO for a given MBL =====
+    if (action === 'get_vessel_imo') {
+      const mbl_id = url.searchParams.get('mbl_id') || '';
+
+      if (!mbl_id) {
+        return new Response(JSON.stringify({ error: 'mbl_id obrigatório' }), {
+          status: 400,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      }
+
+      const mariadbHost = Deno.env.get('MARIADB_HOST');
+      const mariadbPort = Deno.env.get('MARIADB_PORT') || '3306';
+      const mariadbUser = Deno.env.get('MARIADB_USER');
+      const mariadbPass = Deno.env.get('MARIADB_PASSWORD');
+
+      if (!mariadbHost || !mariadbUser || !mariadbPass) {
+        return new Response(JSON.stringify({ error: 'MariaDB não configurado' }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      }
+
+      const { Client } = await import("https://deno.land/x/mysql@v2.12.1/mod.ts");
+      const client = await new Client().connect({
+        hostname: mariadbHost,
+        port: parseInt(mariadbPort, 10),
+        username: mariadbUser,
+        password: mariadbPass,
+        db: 'dados_dachser',
+      });
+
+      try {
+        // Get vessel_imo from the first container of this MBL that has it
+        const rows = await client.query(`
+          SELECT vessel_imo, navio 
+          FROM dados_dachser.t_tracking_sea
+          WHERE mbl_id = ? AND active = 1
+          LIMIT 1
+        `, [mbl_id]);
+
+        await client.close();
+
+        if (rows.length > 0) {
+          return new Response(JSON.stringify({ 
+            success: true, 
+            data: {
+              vessel_imo: rows[0].vessel_imo || null,
+              vessel_name: rows[0].navio || null
+            }
+          }), {
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+          });
+        }
+
+        return new Response(JSON.stringify({ 
+          success: true, 
+          data: { vessel_imo: null, vessel_name: null }
+        }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      } catch (e: any) {
+        await client.close();
+        console.error('[get_vessel_imo] Error:', e);
+        return new Response(JSON.stringify({ error: e.message }), {
+          status: 500,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      }
+    }
+
+    // ===== SEA TRACKING: Update vessel IMO for MBL =====
+    if (action === 'update_vessel_imo') {
+      const body = await req.json();
+      const { mbl_id, vessel_imo } = body;
+
+      if (!mbl_id) {
+        return new Response(JSON.stringify({ error: 'mbl_id obrigatório' }), {
+          status: 400,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      }
+
+      const mariadbHost = Deno.env.get('MARIADB_HOST');
+      const mariadbPort = Deno.env.get('MARIADB_PORT') || '3306';
+      const mariadbUser = Deno.env.get('MARIADB_USER');
+      const mariadbPass = Deno.env.get('MARIADB_PASSWORD');
+
+      if (!mariadbHost || !mariadbUser || !mariadbPass) {
+        return new Response(JSON.stringify({ error: 'MariaDB não configurado' }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      }
+
+      const { Client } = await import("https://deno.land/x/mysql@v2.12.1/mod.ts");
+      const client = await new Client().connect({
+        hostname: mariadbHost,
+        port: parseInt(mariadbPort, 10),
+        username: mariadbUser,
+        password: mariadbPass,
+        db: 'dados_dachser',
+      });
+
+      try {
+        // Update vessel_imo for all containers in this MBL
+        const result = await client.execute(`
+          UPDATE dados_dachser.t_tracking_sea 
+          SET vessel_imo = ?
+          WHERE mbl_id = ?
+        `, [vessel_imo || null, mbl_id]);
+
+        await client.close();
+        
+        console.log(`[update_vessel_imo] Updated ${result.affectedRows} rows for MBL ${mbl_id} with IMO ${vessel_imo}`);
+
+        return new Response(JSON.stringify({ 
+          success: true, 
+          updated: result.affectedRows || 0,
+          message: `IMO atualizado para ${result.affectedRows} containers`
+        }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      } catch (e: any) {
+        await client.close();
+        console.error('[update_vessel_imo] Error:', e);
         return new Response(JSON.stringify({ error: e.message }), {
           status: 500,
           headers: { ...corsHeaders, 'Content-Type': 'application/json' }
