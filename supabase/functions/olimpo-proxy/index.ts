@@ -1554,37 +1554,31 @@ serve(async (req) => {
         const LEASING_CONTAINER_PREFIXES = new Set([
           // Beacon Intermodal Leasing
           'BSIU', 'BEAU', 
-          // Triton International
-          'TRHU', 'TRIU', 'TCKU', 'TTNU',
-          // Textainer
-          'TXGU', 'TEMU', 'TGHU', 'TCNU',
+          // Triton International (includes TAL, Interpool)
+          'TRHU', 'TRIU', 'TCKU', 'TTNU', 'TIIU', 'TLLU', 'TALU', 'IPXU', 'ITLU',
+          // Textainer (major leasing company)
+          'TXGU', 'TEMU', 'TGHU', 'TCNU', 'TGBU',
           // SeaCube Container Leasing
-          'SCZU',
+          'SCZU', 'SCMU', 'SCLU',
           // CAI International (now Mitsubishi HC Capital)
           'CAAU', 'CAIU', 'CARU', 'CXRU',
-          // Florens Container
+          // Florens Container (CIMC subsidiary)
           'FCIU', 'FBIU', 'FCGU', 'FSCU',
-          // Seaco
-          'SZLU',
-          // TAL International (now Triton)
-          'TLLU', 'TALU',
-          // DFSU - DF Capital
-          'DFSU',
-          // Dong Fang
-          'DFCU', 'FDCU',
-          // Gold Container
+          // Seaco Global
+          'SZLU', 'SEGU',
+          // DFSU - DF Capital / Dong Fang International
+          'DFSU', 'DFCU', 'FDCU',
+          // Gold Container Corporation
           'GCXU', 'GATU', 'GLDU',
-          // Hamburg Container
+          // Hamburg Container Leasing
           'HAMU', 'HCMU',
-          // Interpool (now Triton)
-          'IPXU', 'ITLU',
           // Itel Container
           'ILAU', 'ITEU',
-          // UES International
+          // UES International (HK)
           'UASU', 'UESU', 'UFCU',
-          // Fanu (Blue Sky Intermodal)
+          // Fanu / Blue Sky Intermodal
           'FANU', 'FBLU',
-          // Fuwa
+          // Fuwa Leasing
           'FYCU', 'FUJU',
           // Geseaco
           'GESU',
@@ -1594,6 +1588,14 @@ serve(async (req) => {
           'CSXU', 'CBLU',
           // Container Leasing International
           'CLIU', 'CLXU',
+          // Fortress Transportation
+          'FTAU',
+          // Borchard Lines (leasing containers)
+          'BBCU',
+          // SM Line (leasing)
+          'SMCU', 'SMLU',
+          // Leasing genérico / outros
+          'LCRU', 'LGEU', 'CXIC', 'CXNI',
         ]);
 
         // Extended mapping for container prefixes to shipping lines
@@ -1895,6 +1897,68 @@ serve(async (req) => {
               api_message: apiRes.message
             });
             
+            // ===== MBL FALLBACK: Try tracking via MBL endpoint for leasing containers =====
+            const isPrefixNotFoundError = errorDetail.includes('Prefix not found') || errorType === 'api_error';
+            
+            if (isLeasingContainer && isPrefixNotFoundError && mblId && mblId.length >= 10) {
+              console.log(`[refresh_sea_tracking] Trying MBL fallback for leasing container ${containerId} via MBL ${mblId}`);
+              
+              const mblApiRes = await jcJson(
+                `http://api.jsoncargo.com/api/v1/containers/bol/${encodeURIComponent(mblId)}`,
+                { shipping_line: apiShippingLine },
+                15000
+              );
+              
+              if (!mblApiRes.__curl_error && !mblApiRes.error && (mblApiRes.data || mblApiRes.container_status)) {
+                const mblData = mblApiRes.data || mblApiRes;
+                
+                // Extract status and vessel info from MBL response
+                let mblEventDescription = mblData.container_status || null;
+                if (mblData.last_movement?.description) {
+                  mblEventDescription = mblData.last_movement.description;
+                }
+                
+                const mblVesselImo = mblData.vessel?.imo || mblData.current_vessel_imo || mblData.vessel_imo || null;
+                const mblVesselName = mblData.current_vessel_name || mblData.last_vessel_name || mblData.vessel?.name || null;
+                
+                console.log(`[refresh_sea_tracking] MBL fallback success for ${containerId}: status=${mblData.container_status}, vessel=${mblVesselName}`);
+                
+                // Update container with MBL data
+                await client.execute(`
+                  UPDATE dados_dachser.t_tracking_sea 
+                  SET 
+                    container_status = COALESCE(?, container_status),
+                    origem = COALESCE(?, origem),
+                    destino = COALESCE(?, destino),
+                    eta = ?,
+                    navio = COALESCE(?, navio),
+                    vessel_imo = COALESCE(?, vessel_imo),
+                    last_event = CONCAT('Via MBL: ', COALESCE(?, '')),
+                    shipping_line = COALESCE(?, shipping_line),
+                    last_check = NOW(),
+                    last_error = 'mbl_fallback_success'
+                  WHERE id = ?
+                `, [
+                  mblData.container_status || null,
+                  mblData.loading_port || mblData.shipped_from || null,
+                  mblData.discharging_port || mblData.shipped_to || null,
+                  mblData.eta_final_destination || mblData.eta ? new Date(mblData.eta_final_destination || mblData.eta) : null,
+                  mblVesselName,
+                  mblVesselImo,
+                  mblEventDescription || 'Status atualizado via MBL',
+                  shippingLine ? normalizeShippingLine(shippingLine) : null,
+                  row.id
+                ]);
+                
+                updated++;
+                processed++;
+                await new Promise(r => setTimeout(r, 100));
+                continue; // Skip error recording, we succeeded via MBL
+              } else {
+                console.log(`[refresh_sea_tracking] MBL fallback also failed for ${containerId}:`, mblApiRes.error || mblApiRes.__curl_error);
+              }
+            }
+            
             // Update last_check and save error to last_error column
             await client.execute(`
               UPDATE dados_dachser.t_tracking_sea 
@@ -1949,26 +2013,28 @@ serve(async (req) => {
             
             const best = bestContainers[0];
             
-            // Atualizar containers pendentes deste MBL
+            // Atualizar containers pendentes deste MBL - SOBRESCREVER quando há erro (não apenas COALESCE)
             const updateResult = await client.execute(`
               UPDATE dados_dachser.t_tracking_sea 
               SET 
-                container_status = COALESCE(container_status, ?),
-                navio = COALESCE(navio, ?),
-                vessel_imo = COALESCE(vessel_imo, ?),
-                eta = COALESCE(eta, ?),
-                last_event = COALESCE(last_event, ?),
-                origem = COALESCE(origem, ?),
-                destino = COALESCE(destino, ?),
-                shipping_line = COALESCE(shipping_line, ?),
+                container_status = ?,
+                navio = COALESCE(?, navio),
+                vessel_imo = COALESCE(?, vessel_imo),
+                eta = COALESCE(?, eta),
+                last_event = CONCAT('Sibling sync: ', COALESCE(?, 'Status compartilhado')),
+                origem = COALESCE(?, origem),
+                destino = COALESCE(?, destino),
+                shipping_line = COALESCE(?, shipping_line),
                 sibling_synced = 1,
-                sibling_synced_at = NOW()
+                sibling_synced_at = NOW(),
+                last_error = NULL
               WHERE active = 1
                 AND mbl_id = ?
                 AND (
                   container_status IS NULL 
                   OR container_status = ''
-                  OR (last_error IS NOT NULL AND last_error != '')
+                  OR container_status = 'PENDING'
+                  OR (last_error IS NOT NULL AND last_error != '' AND last_error NOT LIKE 'sibling%' AND last_error NOT LIKE 'mbl_fallback%')
                 )
             `, [
               best.container_status,
