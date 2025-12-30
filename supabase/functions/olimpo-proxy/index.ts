@@ -1230,11 +1230,30 @@ serve(async (req) => {
       });
 
       try {
-        // Validação: 
-        // - MBL não pode ser vazio
-        // - MBL deve ter pelo menos 3 letras no início (formatos: HLCU, MEDU, SIJ, HBG, etc.)
+        // Primeiro, vamos contar estatísticas de rejeição para log
+        const statsQuery = await client.query(`
+          SELECT 
+            COUNT(*) as total_candidatos,
+            SUM(CASE WHEN TRIM(md.mawb) NOT REGEXP '^[A-Za-z]{4}[0-9]+$' THEN 1 ELSE 0 END) as rejeitados_mbl_formato,
+            SUM(CASE WHEN TRIM(md.mawb) REGEXP '^BR[A-Za-z]{3}' THEN 1 ELSE 0 END) as rejeitados_mbl_hawb,
+            SUM(CASE WHEN md.container IS NULL OR TRIM(md.container) = '' OR TRIM(md.container) = 'PENDENTE' THEN 1 ELSE 0 END) as rejeitados_container_vazio,
+            SUM(CASE WHEN md.container IS NOT NULL AND TRIM(md.container) != '' AND TRIM(md.container) != 'PENDENTE' AND TRIM(md.container) NOT REGEXP '^[A-Za-z]{4}[0-9]{7}$' THEN 1 ELSE 0 END) as rejeitados_container_formato
+          FROM dados_dachser.t_master_dados md
+          WHERE md.mawb IS NOT NULL 
+            AND TRIM(md.mawb) != ''
+            AND md.etd >= '2025-12-01'
+            AND md.tipo_processo LIKE '%SEA%'
+        `);
+        
+        const stats = statsQuery[0] || {};
+        console.log(`[sync_sea_tracking] Stats: total=${stats.total_candidatos}, rejMblFormato=${stats.rejeitados_mbl_formato}, rejMblHawb=${stats.rejeitados_mbl_hawb}, rejContainerVazio=${stats.rejeitados_container_vazio}, rejContainerFormato=${stats.rejeitados_container_formato}`);
+
+        // Validação RIGOROSA:
+        // - MBL formato SCAC: 4 letras + números (ex: HLCUSS5251256977, MEDUP4658944)
+        // - Container obrigatório com formato ISO: 4 letras + 7 números (ex: CMAU1234567)
+        // - Rejeitar HAWBs brasileiros (ex: BRSAO123456)
         // - ETD >= 01/12/2025
-        // - Apenas processos SEA (IMPORT ou EXPORT)
+        // - Apenas processos SEA
         const result = await client.execute(`
           INSERT INTO dados_dachser.t_tracking_sea (
             mbl_id, tipo_processo, container,
@@ -1245,7 +1264,7 @@ serve(async (req) => {
           SELECT
             TRIM(md.mawb) AS mbl_id,
             md.tipo_processo,
-            COALESCE(md.container, 'PENDENTE') AS container,
+            TRIM(md.container) AS container,
             NULL AS shipping_line,
             md.cliente AS consignee,
             NULL AS origem,
@@ -1261,14 +1280,22 @@ serve(async (req) => {
           FROM dados_dachser.t_master_dados md
           WHERE md.mawb IS NOT NULL 
             AND TRIM(md.mawb) != ''
-            -- Validação de formato: deve começar com pelo menos 3 letras
-            AND TRIM(md.mawb) REGEXP '^[A-Za-z]{3,}'
+            -- VALIDAÇÃO MBL: formato SCAC = 4 letras + números
+            AND TRIM(md.mawb) REGEXP '^[A-Za-z]{4}[0-9]+$'
+            -- REJEITAR HAWBs brasileiros (começam com BR + 3 letras)
+            AND TRIM(md.mawb) NOT REGEXP '^BR[A-Za-z]{3}'
+            -- VALIDAÇÃO CONTAINER: obrigatório e formato ISO válido (4 letras + 7 números)
+            AND md.container IS NOT NULL
+            AND TRIM(md.container) != ''
+            AND TRIM(md.container) != 'PENDENTE'
+            AND TRIM(md.container) REGEXP '^[A-Za-z]{4}[0-9]{7}$'
             -- Filtro de antiguidade: ETD >= 01/12/2025
             AND md.etd >= '2025-12-01'
             -- Apenas processos marítimos
             AND md.tipo_processo LIKE '%SEA%'
           ON DUPLICATE KEY UPDATE
             tipo_processo = VALUES(tipo_processo),
+            container = VALUES(container),
             consignee = VALUES(consignee),
             email_analista = VALUES(email_analista),
             email_cliente = VALUES(email_cliente),
@@ -1276,11 +1303,28 @@ serve(async (req) => {
         `);
 
         await client.close();
-        console.log(`[sync_sea_tracking] Synced ${result.affectedRows || 0} rows`);
+        
+        const synced = result.affectedRows || 0;
+        console.log(`[sync_sea_tracking] Synced ${synced} rows (with strict MBL + container validation)`);
+        
         return new Response(JSON.stringify({ 
           success: true, 
-          synced: result.affectedRows || 0,
-          message: `${result.affectedRows || 0} registros sincronizados de t_master_dados`
+          synced,
+          message: `${synced} registros sincronizados (validação rigorosa)`,
+          stats: {
+            total_candidatos: Number(stats.total_candidatos) || 0,
+            rejeitados_mbl_formato: Number(stats.rejeitados_mbl_formato) || 0,
+            rejeitados_mbl_hawb: Number(stats.rejeitados_mbl_hawb) || 0,
+            rejeitados_container_vazio: Number(stats.rejeitados_container_vazio) || 0,
+            rejeitados_container_formato: Number(stats.rejeitados_container_formato) || 0,
+            aceitos: synced
+          },
+          validation_rules: {
+            mbl: '^[A-Za-z]{4}[0-9]+$ (SCAC format)',
+            mbl_reject: '^BR[A-Za-z]{3} (HAWBs)',
+            container: '^[A-Za-z]{4}[0-9]{7}$ (ISO format)',
+            etd_min: '2025-12-01'
+          }
         }), {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' }
         });
@@ -1317,8 +1361,14 @@ serve(async (req) => {
       });
 
       try {
+        // Filtrar apenas containers com formato ISO válido (4 letras + 7 números)
         const containers = await client.query(`
-          SELECT id, container, shipping_line, navio FROM dados_dachser.t_tracking_sea WHERE active = 1
+          SELECT id, container, shipping_line, navio 
+          FROM dados_dachser.t_tracking_sea 
+          WHERE active = 1
+            AND container IS NOT NULL
+            AND container != 'PENDENTE'
+            AND container REGEXP '^[A-Za-z]{4}[0-9]{7}$'
         `);
 
         let updated = 0;
