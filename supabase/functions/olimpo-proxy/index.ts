@@ -1543,6 +1543,22 @@ serve(async (req) => {
         db: 'dados_dachser',
       });
 
+      // Prefixes that are booking references or internal codes - should NOT be enriched
+      const SKIP_ENRICHMENT_PREFIXES = ['EBKG', 'BKNG', 'GLNL', 'GLSL', 'GLDL', 'BRSA'];
+      
+      const shouldSkipEnrichment = (mblId: string): { skip: boolean; reason?: string } => {
+        if (!mblId) return { skip: true, reason: 'empty_mbl' };
+        const prefix = mblId.substring(0, 4).toUpperCase();
+        if (SKIP_ENRICHMENT_PREFIXES.includes(prefix)) {
+          return { skip: true, reason: `booking_reference_${prefix}` };
+        }
+        // Skip HAWBs brasileiros
+        if (/^BR[A-Za-z]{3}/i.test(mblId)) {
+          return { skip: true, reason: 'hawb_brasileiro' };
+        }
+        return { skip: false };
+      };
+
       try {
         // Fetch MBLs with container = 'PENDENTE'
         const pendingMbls = await client.query(`
@@ -1556,10 +1572,21 @@ serve(async (req) => {
         let enriched = 0;
         let errors = 0;
         let noContainers = 0;
+        let skipped = 0;
         const details: any[] = [];
 
         for (const row of pendingMbls) {
           const mblId = row.mbl_id;
+          
+          // Check if this MBL should be skipped (booking reference, internal code, HAWB)
+          const skipCheck = shouldSkipEnrichment(mblId);
+          if (skipCheck.skip) {
+            console.log(`[enrich_sea_containers] Skipping ${mblId}: ${skipCheck.reason}`);
+            details.push({ mbl: mblId, status: 'skipped', reason: skipCheck.reason });
+            skipped++;
+            continue;
+          }
+
           const shippingLine = detectShippingLineFromMbl(mblId);
 
           if (!shippingLine) {
@@ -1642,15 +1669,16 @@ serve(async (req) => {
 
         await client.close();
         
-        console.log(`[enrich_sea_containers] Completed: enriched=${enriched}, noContainers=${noContainers}, errors=${errors}`);
+        console.log(`[enrich_sea_containers] Completed: enriched=${enriched}, skipped=${skipped}, noContainers=${noContainers}, errors=${errors}`);
         
         return new Response(JSON.stringify({ 
           success: true, 
           enriched,
+          skipped,
           noContainers,
           errors,
           total: pendingMbls.length,
-          message: `${enriched} MBLs enriquecidos com containers`,
+          message: `${enriched} MBLs enriquecidos, ${skipped} ignorados (booking refs/HAWBs)`,
           details
         }), {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' }
