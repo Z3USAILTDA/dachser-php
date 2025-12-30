@@ -1601,6 +1601,12 @@ serve(async (req) => {
           const skipCheck = shouldSkipEnrichment(mblId);
           if (skipCheck.skip) {
             console.log(`[enrich_sea_containers] Skipping ${mblId}: ${skipCheck.reason}`);
+            // Marcar como IGNORADO para não reprocessar
+            await client.execute(`
+              UPDATE dados_dachser.t_tracking_sea 
+              SET container = 'IGNORADO'
+              WHERE mbl_id = ? AND (container = 'PENDENTE' OR container IS NULL OR container = '')
+            `, [mblId]);
             details.push({ mbl: mblId, status: 'skipped', reason: skipCheck.reason });
             skipped++;
             continue;
@@ -1610,6 +1616,12 @@ serve(async (req) => {
 
           if (!shippingLine) {
             console.log(`[enrich_sea_containers] Could not detect shipping line for MBL ${mblId}`);
+            // Marcar como ARMADOR_DESCONHECIDO para não reprocessar
+            await client.execute(`
+              UPDATE dados_dachser.t_tracking_sea 
+              SET container = 'ARMADOR_DESCONHECIDO'
+              WHERE mbl_id = ? AND (container = 'PENDENTE' OR container IS NULL OR container = '')
+            `, [mblId]);
             details.push({ mbl: mblId, status: 'unknown_shipping_line' });
             errors++;
             continue;
@@ -1634,6 +1646,12 @@ serve(async (req) => {
 
             if (containers.length === 0) {
               console.log(`[enrich_sea_containers] No containers found for MBL ${mblId}`);
+              // Marcar como NAO_ENCONTRADO para não reprocessar
+              await client.execute(`
+                UPDATE dados_dachser.t_tracking_sea 
+                SET container = 'NAO_ENCONTRADO'
+                WHERE mbl_id = ? AND (container = 'PENDENTE' OR container IS NULL OR container = '')
+              `, [mblId]);
               details.push({ mbl: mblId, status: 'no_containers' });
               noContainers++;
               continue;
