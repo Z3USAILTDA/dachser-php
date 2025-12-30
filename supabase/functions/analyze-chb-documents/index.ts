@@ -5,6 +5,37 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
+// Helper function to log API calls to mariadb-proxy
+async function logApiCall(params: {
+  api_name: string;
+  endpoint: string;
+  method: string;
+  status_code: number;
+  response_time_ms: number;
+  error_message?: string;
+}) {
+  try {
+    const supabaseUrl = Deno.env.get('SUPABASE_URL');
+    const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+    if (!supabaseUrl || !supabaseKey) return;
+    
+    await fetch(`${supabaseUrl}/functions/v1/mariadb-proxy`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${supabaseKey}`,
+      },
+      body: JSON.stringify({
+        action: 'log_api_call',
+        ...params,
+        edge_function: 'analyze-chb-documents',
+      }),
+    });
+  } catch (e) {
+    console.error('[logApiCall] Failed to log:', e);
+  }
+}
+
 // ============================================================================
 // EXCEL READER - Extract text from XLSX/XLS files for CHB analysis
 // ============================================================================
@@ -710,6 +741,7 @@ async function callAnthropicAPI(prompt: string, filesContent: { name: string; co
   console.log(`Calling Anthropic API with ${filesContent.length} files...`);
   console.log(`Prompt length: ${prompt.length} chars`);
 
+  const startTime = Date.now();
   const response = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
     headers: {
@@ -728,6 +760,17 @@ async function callAnthropicAPI(prompt: string, filesContent: { name: string; co
         },
       ],
     }),
+  });
+  const elapsed = Date.now() - startTime;
+
+  // Log the API call
+  logApiCall({
+    api_name: 'Anthropic',
+    endpoint: '/v1/messages',
+    method: 'POST',
+    status_code: response.status,
+    response_time_ms: elapsed,
+    error_message: response.ok ? undefined : `Status ${response.status}`,
   });
 
   if (!response.ok) {
@@ -826,6 +869,7 @@ async function callLovableAI(prompt: string, filesContent: { name: string; conte
 
   console.log(`Calling Lovable AI (Gemini) with ${filesContent.length} files...`);
 
+  const startTime = Date.now();
   const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
     method: 'POST',
     headers: {
@@ -842,6 +886,17 @@ async function callLovableAI(prompt: string, filesContent: { name: string; conte
       ],
       max_tokens: 16000,
     }),
+  });
+  const elapsed = Date.now() - startTime;
+
+  // Log the API call
+  logApiCall({
+    api_name: 'LovableAI',
+    endpoint: '/v1/chat/completions',
+    method: 'POST',
+    status_code: response.status,
+    response_time_ms: elapsed,
+    error_message: response.ok ? undefined : `Status ${response.status}`,
   });
 
   if (!response.ok) {

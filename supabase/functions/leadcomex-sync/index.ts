@@ -6,6 +6,37 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
+// Helper function to log API calls to mariadb-proxy
+async function logApiCall(params: {
+  api_name: string;
+  endpoint: string;
+  method: string;
+  status_code: number;
+  response_time_ms: number;
+  error_message?: string;
+}) {
+  try {
+    const supabaseUrl = Deno.env.get('SUPABASE_URL');
+    const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+    if (!supabaseUrl || !supabaseKey) return;
+    
+    await fetch(`${supabaseUrl}/functions/v1/mariadb-proxy`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${supabaseKey}`,
+      },
+      body: JSON.stringify({
+        action: 'log_api_call',
+        ...params,
+        edge_function: 'leadcomex-sync',
+      }),
+    });
+  } catch (e) {
+    console.error('[logApiCall] Failed to log:', e);
+  }
+}
+
 // Mapeamento de status LeadComex → Eventos CCT
 // Note: API returns "Informada" (with "a"), not "Informado"
 const STATUS_TO_CCT_EVENT: Record<string, { codigo: string; descricao: string }> = {
@@ -247,12 +278,24 @@ async function fetchHousesByPeriod(token: string, periodoInicio: string, periodo
   console.log(`[LEADCOMEX] Buscando houses de ${periodoInicio} a ${periodoFim}`);
   console.log(`[LEADCOMEX] URL: ${url.toString()}`);
 
+  const startTime = Date.now();
   const response = await fetch(url.toString(), {
     method: 'GET',
     headers: {
       'Token': token,
       'Content-Type': 'application/json',
     },
+  });
+  const elapsed = Date.now() - startTime;
+
+  // Log the API call
+  logApiCall({
+    api_name: 'Leadcomex',
+    endpoint: '/api/ext/houses',
+    method: 'GET',
+    status_code: response.status,
+    response_time_ms: elapsed,
+    error_message: response.ok ? undefined : `Status ${response.status}`,
   });
 
   if (response.status === 204) {
@@ -297,6 +340,7 @@ async function fetchHawbStatus(token: string, hawb: string): Promise<LeadComexCa
 
   console.log(`[LEADCOMEX] Buscando status do HAWB: ${hawb}`);
 
+  const startTime = Date.now();
   try {
     const response = await fetch(url.toString(), {
       method: 'GET',
@@ -304,6 +348,17 @@ async function fetchHawbStatus(token: string, hawb: string): Promise<LeadComexCa
         'Token': token,
         'Content-Type': 'application/json',
       },
+    });
+    const elapsed = Date.now() - startTime;
+
+    // Log the API call
+    logApiCall({
+      api_name: 'Leadcomex',
+      endpoint: '/api/ext/conhecimentos-carga',
+      method: 'GET',
+      status_code: response.status,
+      response_time_ms: elapsed,
+      error_message: response.ok || response.status === 204 ? undefined : `Status ${response.status}`,
     });
 
     if (response.status === 204) {
@@ -324,6 +379,15 @@ async function fetchHawbStatus(token: string, hawb: string): Promise<LeadComexCa
     }
     return data;
   } catch (error) {
+    const elapsed = Date.now() - startTime;
+    logApiCall({
+      api_name: 'Leadcomex',
+      endpoint: '/api/ext/conhecimentos-carga',
+      method: 'GET',
+      status_code: 0,
+      response_time_ms: elapsed,
+      error_message: error instanceof Error ? error.message : 'Connection error',
+    });
     console.error(`[LEADCOMEX] Erro de conexão para ${hawb}:`, error);
     return null;
   }
@@ -337,12 +401,24 @@ async function fetchCargaDetalhada(token: string, hawb: string, dataEmissao: str
 
   console.log(`[LEADCOMEX] Buscando detalhes do HAWB: ${hawb}`);
 
+  const startTime = Date.now();
   const response = await fetch(url.toString(), {
     method: 'GET',
     headers: {
       'Token': token,
       'Content-Type': 'application/json',
     },
+  });
+  const elapsed = Date.now() - startTime;
+
+  // Log the API call
+  logApiCall({
+    api_name: 'Leadcomex',
+    endpoint: '/api/ext/conhecimentos-carga',
+    method: 'GET',
+    status_code: response.status,
+    response_time_ms: elapsed,
+    error_message: response.ok || response.status === 204 ? undefined : `Status ${response.status}`,
   });
 
   if (response.status === 204) {
