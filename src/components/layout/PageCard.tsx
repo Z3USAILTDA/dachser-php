@@ -1,10 +1,11 @@
 import { ReactNode } from "react";
 import { cn } from "@/lib/utils";
 
-interface PageCardProps {
+export interface PageCardProps {
   children: ReactNode;
   className?: string;
   padding?: "sm" | "md" | "lg";
+  onClick?: () => void;
 }
 
 const paddingMap = {
@@ -13,12 +14,13 @@ const paddingMap = {
   lg: "p-6",
 };
 
-export function PageCard({ children, className, padding = "md" }: PageCardProps) {
+export function PageCard({ children, className, padding = "md", onClick }: PageCardProps) {
   return (
     <section 
       className={cn(
         "rounded-2xl",
         paddingMap[padding],
+        onClick && "cursor-pointer",
         className
       )}
       style={{
@@ -26,6 +28,7 @@ export function PageCard({ children, className, padding = "md" }: PageCardProps)
         border: '1px solid rgba(255,255,255,.06)',
         boxShadow: '0 18px 40px rgba(0,0,0,.85)',
       }}
+      onClick={onClick}
     >
       {children}
     </section>
