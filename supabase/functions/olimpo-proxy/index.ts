@@ -1110,6 +1110,7 @@ serve(async (req) => {
       });
 
       try {
+        // Excluir MBLs que só têm containers marcados como NAO_ENCONTRADO
         const rows = await client.query(`
           SELECT 
             ts.mbl_id,
@@ -1122,7 +1123,7 @@ serve(async (req) => {
             MAX(ts.eta) as eta,
             MAX(ts.email_analista) as email_analista,
             MAX(ts.email_cliente) as email_cliente,
-            COUNT(DISTINCT ts.container) as container_count,
+            COUNT(DISTINCT CASE WHEN ts.container NOT IN ('NAO_ENCONTRADO', 'PENDENTE', '') AND ts.container IS NOT NULL THEN ts.container END) as container_count,
             MAX(ts.container_status) as container_status,
             MAX(ts.last_event) as last_event,
             MAX(ts.last_check) as last_check,
@@ -1132,6 +1133,12 @@ serve(async (req) => {
           FROM dados_dachser.t_tracking_sea ts
           WHERE ts.active = 1
           GROUP BY ts.mbl_id
+          HAVING 
+            -- Só mostrar MBLs que têm pelo menos 1 container real OU que ainda estão pendentes de enriquecimento
+            COUNT(DISTINCT CASE WHEN ts.container NOT IN ('NAO_ENCONTRADO', 'PENDENTE', 'IGNORADO', '') AND ts.container IS NOT NULL THEN ts.container END) > 0
+            OR MAX(ts.container) = 'PENDENTE'
+            OR MAX(ts.container) IS NULL
+            OR MAX(ts.container) = ''
           ORDER BY MAX(ts.last_check) DESC, ts.mbl_id
         `);
 
