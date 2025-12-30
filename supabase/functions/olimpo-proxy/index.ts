@@ -1230,12 +1230,45 @@ serve(async (req) => {
       });
 
       try {
-        // Primeiro, vamos contar estatísticas para log
+        // Prefixos válidos de MBL por armador
+        const VALID_MBL_PREFIXES = [
+          'COSU', 'CSNU', 'CBHU', 'OOLU',  // COSCO
+          'HLCU', 'HLXU',                   // HAPAG-LLOYD
+          'MAEU', 'MRKU', 'MSKU',           // MAERSK
+          'MSCU', 'MEDU',                   // MSC
+          'CMAU', 'CCLU', 'CXDU',           // CMA CGM
+          'ONEY', 'ONEU',                   // ONE
+          'HDMU', 'HMMU',                   // HMM
+          'EISU', 'EITU', 'EGSU', 'EGHU',   // EVERGREEN
+          'YMLU', 'YMMU',                   // YANG MING
+          'ZIMU', 'ZCSU',                   // ZIM
+        ].join('|');
+        
+        // Prefixos de booking references (não são MBLs reais)
+        const BOOKING_PREFIXES = ['EBKG', 'BKNG', 'BKG'];
+        // Prefixos de referências internas
+        const INTERNAL_PREFIXES = ['GLNL', 'GLSL', 'GLDL', 'BRSA'];
+        
+        // REGEXP que aceita formatos reais de MBL:
+        // 1. SCAC padrão: 4 letras + números (ex: COSU6437929310)
+        // 2. SCAC estendido: 4 letras + 0-3 letras (código porto) + números + alfanuméricos
+        //    Ex: HLCUHAM251021534, MEDUBD238946, HLCUHAM2511APAR5, ONEYHAMFA1481300
+        const MBL_REGEXP_SCAC_PADRAO = '^[A-Za-z]{4}[0-9]+$';
+        const MBL_REGEXP_SCAC_ESTENDIDO = `^(${VALID_MBL_PREFIXES})[A-Za-z]{0,6}[0-9]{2,}[A-Za-z0-9]*$`;
+        
+        // Primeiro, vamos contar estatísticas detalhadas para log
         const statsQuery = await client.query(`
           SELECT 
             COUNT(*) as total_candidatos,
-            SUM(CASE WHEN TRIM(md.mawb) NOT REGEXP '^[A-Za-z]{4}[0-9]+$' THEN 1 ELSE 0 END) as rejeitados_mbl_formato,
-            SUM(CASE WHEN TRIM(md.mawb) REGEXP '^BR[A-Za-z]{3}' THEN 1 ELSE 0 END) as rejeitados_mbl_hawb,
+            SUM(CASE WHEN TRIM(md.mawb) REGEXP '^[A-Za-z]{4}[0-9]+$' THEN 1 ELSE 0 END) as formato_scac_padrao,
+            SUM(CASE 
+              WHEN TRIM(md.mawb) REGEXP '^(${VALID_MBL_PREFIXES})[A-Za-z]{0,6}[0-9]{2,}[A-Za-z0-9]*$' 
+              AND TRIM(md.mawb) NOT REGEXP '^[A-Za-z]{4}[0-9]+$'
+              THEN 1 ELSE 0 
+            END) as formato_scac_estendido,
+            SUM(CASE WHEN LEFT(TRIM(md.mawb), 4) IN ('EBKG', 'BKNG') THEN 1 ELSE 0 END) as booking_references,
+            SUM(CASE WHEN LEFT(TRIM(md.mawb), 4) IN ('GLNL', 'GLSL', 'GLDL', 'BRSA') THEN 1 ELSE 0 END) as referencias_internas,
+            SUM(CASE WHEN TRIM(md.mawb) REGEXP '^BR[A-Za-z]{3}' THEN 1 ELSE 0 END) as hawbs_brasileiros,
             SUM(CASE WHEN md.container IS NULL OR TRIM(md.container) = '' THEN 1 ELSE 0 END) as containers_vazios,
             SUM(CASE WHEN md.container IS NOT NULL AND TRIM(md.container) != '' AND TRIM(md.container) REGEXP '^[A-Za-z]{4}[0-9]{7}$' THEN 1 ELSE 0 END) as containers_validos
           FROM dados_dachser.t_master_dados md
@@ -1246,10 +1279,14 @@ serve(async (req) => {
         `);
         
         const stats = statsQuery[0] || {};
-        console.log(`[sync_sea_tracking] Stats: total=${stats.total_candidatos}, rejMblFormato=${stats.rejeitados_mbl_formato}, rejMblHawb=${stats.rejeitados_mbl_hawb}, containersVazios=${stats.containers_vazios}, containersValidos=${stats.containers_validos}`);
+        const totalMblsValidos = (Number(stats.formato_scac_padrao) || 0) + (Number(stats.formato_scac_estendido) || 0);
+        console.log(`[sync_sea_tracking] Stats: total=${stats.total_candidatos}, scacPadrao=${stats.formato_scac_padrao}, scacEstendido=${stats.formato_scac_estendido}, totalValidos=${totalMblsValidos}, bookingRefs=${stats.booking_references}, refsInternas=${stats.referencias_internas}, hawbs=${stats.hawbs_brasileiros}, containersVazios=${stats.containers_vazios}, containersValidos=${stats.containers_validos}`);
 
-        // Validação:
-        // - MBL formato SCAC: 4 letras + números (ex: HLCUSS5251256977, MEDUP4658944)
+        // Validação atualizada:
+        // - MBL formato SCAC padrão: 4 letras + números (ex: COSU6437929310)
+        // - MBL formato SCAC estendido: prefixo armador + código porto + números (ex: HLCUHAM251021534)
+        // - Rejeitar booking references (EBKG, etc.)
+        // - Rejeitar referências internas (GLNL, GLSL, etc.)
         // - Rejeitar HAWBs brasileiros (ex: BRSAO123456)
         // - Container: aceitar vazio (usa 'PENDENTE'), mas validar formato se presente
         // - ETD >= 01/12/2025
@@ -1283,8 +1320,15 @@ serve(async (req) => {
           FROM dados_dachser.t_master_dados md
           WHERE md.mawb IS NOT NULL 
             AND TRIM(md.mawb) != ''
-            -- VALIDAÇÃO MBL: formato SCAC = 4 letras + números
-            AND TRIM(md.mawb) REGEXP '^[A-Za-z]{4}[0-9]+$'
+            -- VALIDAÇÃO MBL: formato SCAC padrão OU estendido (armadores conhecidos)
+            AND (
+              TRIM(md.mawb) REGEXP '^[A-Za-z]{4}[0-9]+$'
+              OR TRIM(md.mawb) REGEXP '^(${VALID_MBL_PREFIXES})[A-Za-z]{0,6}[0-9]{2,}[A-Za-z0-9]*$'
+            )
+            -- REJEITAR booking references
+            AND LEFT(TRIM(md.mawb), 4) NOT IN ('EBKG', 'BKNG')
+            -- REJEITAR referências internas
+            AND LEFT(TRIM(md.mawb), 4) NOT IN ('GLNL', 'GLSL', 'GLDL', 'BRSA')
             -- REJEITAR HAWBs brasileiros (começam com BR + 3 letras)
             AND TRIM(md.mawb) NOT REGEXP '^BR[A-Za-z]{3}'
             -- Filtro de antiguidade: ETD >= 01/12/2025
@@ -1303,7 +1347,7 @@ serve(async (req) => {
         await client.close();
         
         const synced = result.affectedRows || 0;
-        console.log(`[sync_sea_tracking] Synced ${synced} rows (MBL SCAC only, container optional)`);
+        console.log(`[sync_sea_tracking] Synced ${synced} rows (MBL SCAC padrão + estendido, container opcional)`);
         
         return new Response(JSON.stringify({ 
           success: true, 
@@ -1311,15 +1355,22 @@ serve(async (req) => {
           message: `${synced} registros sincronizados`,
           stats: {
             total_candidatos: Number(stats.total_candidatos) || 0,
-            rejeitados_mbl_formato: Number(stats.rejeitados_mbl_formato) || 0,
-            rejeitados_mbl_hawb: Number(stats.rejeitados_mbl_hawb) || 0,
+            formato_scac_padrao: Number(stats.formato_scac_padrao) || 0,
+            formato_scac_estendido: Number(stats.formato_scac_estendido) || 0,
+            total_mbls_validos: totalMblsValidos,
+            booking_references: Number(stats.booking_references) || 0,
+            referencias_internas: Number(stats.referencias_internas) || 0,
+            hawbs_brasileiros: Number(stats.hawbs_brasileiros) || 0,
             containers_vazios: Number(stats.containers_vazios) || 0,
             containers_validos: Number(stats.containers_validos) || 0,
             aceitos: synced
           },
           validation_rules: {
-            mbl: '^[A-Za-z]{4}[0-9]+$ (SCAC format)',
-            mbl_reject: '^BR[A-Za-z]{3} (HAWBs)',
+            mbl_scac_padrao: '^[A-Za-z]{4}[0-9]+$ (ex: COSU6437929310)',
+            mbl_scac_estendido: `^(${VALID_MBL_PREFIXES.substring(0, 30)}...)[A-Za-z]{0,6}[0-9]{2,}[A-Za-z0-9]*$ (ex: HLCUHAM251021534)`,
+            mbl_reject_booking: 'EBKG*, BKNG* (booking references)',
+            mbl_reject_internal: 'GLNL*, GLSL*, GLDL*, BRSA* (referências internas)',
+            mbl_reject_hawb: '^BR[A-Za-z]{3} (HAWBs brasileiros)',
             container: 'Opcional (usa PENDENTE se vazio)',
             etd_min: '2025-12-01'
           }
