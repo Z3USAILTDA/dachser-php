@@ -170,6 +170,7 @@ const ContainerTracking = () => {
   const [isLoadingData, setIsLoadingData] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
+  const [isCleaning, setIsCleaning] = useState(false);
   const { toast } = useToast();
   
   // Expansion state
@@ -403,6 +404,53 @@ const ContainerTracking = () => {
       });
     } finally {
       setIsSyncing(false);
+    }
+  };
+
+  // Cleanup invalid records
+  const handleCleanup = async () => {
+    setIsCleaning(true);
+    toast({
+      title: "Limpando",
+      description: "Marcando registros inválidos como inativos...",
+    });
+    
+    try {
+      const res = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/olimpo-proxy?action=cleanup_sea_tracking`,
+        {
+          method: 'GET',
+          headers: {
+            'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
+            'Content-Type': 'application/json',
+          }
+        }
+      );
+      
+      const result = await res.json();
+      
+      if (result.success) {
+        toast({
+          title: "Limpeza concluída",
+          description: `${result.cleaned} registros inválidos removidos. ${result.remaining} registros válidos restantes.`,
+        });
+        await fetchMblData();
+      } else {
+        toast({
+          title: "Erro na limpeza",
+          description: result.error || "Falha ao limpar registros",
+          variant: "destructive",
+        });
+      }
+    } catch (error) {
+      console.error("Error cleaning:", error);
+      toast({
+        title: "Erro",
+        description: "Falha ao limpar registros",
+        variant: "destructive",
+      });
+    } finally {
+      setIsCleaning(false);
     }
   };
 
@@ -864,6 +912,28 @@ const ContainerTracking = () => {
                     </TooltipTrigger>
                     <TooltipContent>
                       <p className="text-xs">Sincronizar dados de t_master_dados</p>
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <button
+                        onClick={handleCleanup}
+                        disabled={isCleaning}
+                        className="h-8 px-4 rounded-full bg-red-600 text-white text-[0.75rem] font-medium flex items-center gap-1.5 hover:bg-red-500 transition shadow-[0_0_20px_rgba(239,68,68,.3)] disabled:opacity-50"
+                      >
+                        {isCleaning ? (
+                          <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                        ) : (
+                          <Trash2 className="w-3.5 h-3.5" />
+                        )}
+                        Limpar
+                      </button>
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      <p className="text-xs">Remover MBLs e containers inválidos</p>
                     </TooltipContent>
                   </Tooltip>
                 </TooltipProvider>
