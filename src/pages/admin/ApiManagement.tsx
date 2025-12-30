@@ -680,7 +680,7 @@ export default function ApiManagement() {
           </div>
         </div>
 
-        <div className="p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/30">
+        <div className="p-3 rounded-xl bg-[#0a0b10] border border-white/10">
           <div className="text-[10px] uppercase tracking-[0.15em] text-muted-foreground flex items-center gap-1.5">
             <DollarSign className="w-3 h-3 text-emerald-400" />
             Custo Est. (30d)
