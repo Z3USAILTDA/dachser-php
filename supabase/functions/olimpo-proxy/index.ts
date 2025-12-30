@@ -805,6 +805,16 @@ serve(async (req) => {
           await new Promise(r => setTimeout(r, 250));
         }
 
+        // Log FlightRadar24 API call
+        logApiCall(
+          'FlightRadar24',
+          '/api/live/flight-positions/full',
+          'GET',
+          lastStatus,
+          0, // Response time not tracked per batch
+          lastErr || undefined
+        );
+
         if (ok) {
           const data = Array.isArray(out?.data) ? out.data : (Array.isArray(out) ? out : []);
           merged = merged.concat(data);
@@ -905,6 +915,16 @@ serve(async (req) => {
           }
           await new Promise(r => setTimeout(r, 250));
         }
+
+        // Log FlightRadar24 API call
+        logApiCall(
+          'FlightRadar24',
+          '/api/flight-summary/full',
+          'GET',
+          lastStatus,
+          0, // Response time not tracked per batch
+          lastErr || undefined
+        );
 
         if (ok) {
           const data = Array.isArray(out?.data) ? out.data : (Array.isArray(out) ? out : []);

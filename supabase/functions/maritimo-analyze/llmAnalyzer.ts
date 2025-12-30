@@ -327,7 +327,7 @@ async function analyzeWithAnthropic(
         console.log(`[Analysis] Anthropic completed in ${elapsed}ms (${text.length} chars)`);
         
         // Log successful API call
-        logApiCall('Anthropic (Claude)', '/v1/messages', 'POST', response.status, elapsed);
+        logApiCall('Anthropic', '/v1/messages', 'POST', response.status, elapsed);
         
         return { text, model: 'claude-sonnet-4-20250514' };
       } else {
@@ -335,7 +335,7 @@ async function analyzeWithAnthropic(
         console.error(`[Analysis] Anthropic failed (${response.status}): ${errorText.substring(0, 300)}`);
         
         // Log failed API call
-        logApiCall('Anthropic (Claude)', '/v1/messages', 'POST', response.status, Date.now() - startTime, errorText.substring(0, 200));
+        logApiCall('Anthropic', '/v1/messages', 'POST', response.status, Date.now() - startTime, errorText.substring(0, 200));
         
         lastError = new Error(`Anthropic API error: ${response.status}`);
         
@@ -449,7 +449,7 @@ async function analyzeWithGemini(
         console.log(`[Fallback] Gemini completed in ${elapsed}ms (${text.length} chars)`);
         
         // Log successful API call
-        logApiCall('Lovable AI (Gemini)', '/v1/chat/completions', 'POST', response.status, elapsed);
+        logApiCall('LovableAI', '/v1/chat/completions', 'POST', response.status, elapsed);
         
         return { text, model: 'google/gemini-2.5-flash' };
       } else {
@@ -457,7 +457,7 @@ async function analyzeWithGemini(
         console.error(`[Fallback] Gemini failed (${response.status}): ${errorText.substring(0, 200)}`);
         
         // Log failed API call
-        logApiCall('Lovable AI (Gemini)', '/v1/chat/completions', 'POST', response.status, elapsed, errorText.substring(0, 200));
+        logApiCall('LovableAI', '/v1/chat/completions', 'POST', response.status, elapsed, errorText.substring(0, 200));
         
         lastError = new Error(`Gemini API error: ${response.status}`);
         

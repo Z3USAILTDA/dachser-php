@@ -6,6 +6,103 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
+// ============= API LOGGING HELPERS =============
+
+// Helper to log API calls asynchronously (fire-and-forget)
+async function logApiCall(
+  api_name: string,
+  endpoint: string,
+  method: string,
+  status_code: number,
+  response_time_ms: number,
+  error_message?: string
+): Promise<void> {
+  try {
+    const supabaseUrl = Deno.env.get('SUPABASE_URL');
+    const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+    if (!supabaseUrl || !supabaseKey) return;
+    
+    await fetch(`${supabaseUrl}/functions/v1/mariadb-proxy`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${supabaseKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        action: 'log_api_call',
+        api_name,
+        endpoint,
+        method,
+        status_code,
+        response_time_ms,
+        error_message,
+        edge_function: 'track-awb'
+      }),
+    });
+  } catch (e) {
+    // Silently fail - logging should not break main flow
+    console.error('[logApiCall] Failed to log:', e);
+  }
+}
+
+// Wrapper for Firecrawl API calls with automatic logging
+async function firecrawlScrape(
+  url: string,
+  options: { formats?: string[]; waitFor?: number; timeout?: number; onlyMainContent?: boolean } = {}
+): Promise<{ response: Response; elapsed: number }> {
+  const apiKey = Deno.env.get('FIRECRAWL_API_KEY');
+  if (!apiKey) {
+    throw new Error('FIRECRAWL_API_KEY not configured');
+  }
+  
+  const startTime = Date.now();
+  const response = await fetch('https://api.firecrawl.dev/v1/scrape', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${apiKey}`,
+    },
+    body: JSON.stringify({
+      url,
+      formats: options.formats || ['html', 'markdown'],
+      waitFor: options.waitFor || 15000,
+      timeout: options.timeout || 60000,
+      onlyMainContent: options.onlyMainContent,
+    }),
+  });
+  const elapsed = Date.now() - startTime;
+  
+  // Log Firecrawl API call
+  logApiCall(
+    'Firecrawl',
+    '/v1/scrape',
+    'POST',
+    response.status,
+    elapsed,
+    response.ok ? undefined : `HTTP ${response.status}`
+  );
+  
+  return { response, elapsed };
+}
+
+// Log Air Carrier API calls (for direct airline APIs)
+function logAirCarrierCall(
+  carrier: string,
+  endpoint: string,
+  status: number,
+  elapsed: number,
+  error?: string
+): void {
+  logApiCall(
+    'Air Carriers',
+    `${carrier}: ${endpoint}`,
+    'GET',
+    status,
+    elapsed,
+    error
+  );
+}
+
 // ============= INTERFACES =============
 
 interface TrackingEvent {
@@ -149,6 +246,7 @@ async function fetchTAPAPI(awb: string): Promise<StandardResult> {
   const provider = 'TAP';
   console.log(`[TAP API] Fetching AWB: ${awb}`);
   
+  const startTime = Date.now();
   try {
     const url = 'https://www.tapcargo.com/api/cargo/cargo-flight-list?functionName=retrieveCargoETracking';
     const payload = { AirwayBillNumber: awb };
@@ -160,6 +258,10 @@ async function fetchTAPAPI(awb: string): Promise<StandardResult> {
       },
       body: JSON.stringify(payload),
     });
+    const elapsed = Date.now() - startTime;
+
+    // Log Air Carrier API call
+    logAirCarrierCall('TAP', '/api/cargo/cargo-flight-list', response.status, elapsed);
 
     if (!response.ok) {
       return {
@@ -411,6 +513,7 @@ async function fetchAtlasAPI(awb: string): Promise<StandardResult> {
   const provider = 'ATLAS';
   console.log(`[ATLAS API] Fetching AWB: ${awb}`);
   
+  const startTime = Date.now();
   try {
     // Detect if it's 8 digits (serial) or 11 (full AWB)
     const digits = awb.replace(/\D/g, '');
@@ -440,6 +543,10 @@ async function fetchAtlasAPI(awb: string): Promise<StandardResult> {
         'Referer': 'https://jumpseat.atlasair.com/track-trace',
       },
     });
+    const elapsed = Date.now() - startTime;
+
+    // Log Air Carrier API call
+    logAirCarrierCall('ATLAS', '/tracktraceapi/api/FreightContProvdr', response.status, elapsed);
 
     if (!response.ok) {
       return {
