@@ -35,6 +35,7 @@ import EsteiraManual from "./pages/esteira/EsteiraManual";
 import EsteiraReports from "./pages/esteira/EsteiraReports";
 import EsteiraUserManagement from "./pages/esteira/EsteiraUserManagement";
 import AdminUserManagement from "./pages/admin/UserManagement";
+import AdminApiManagement from "./pages/admin/ApiManagement";
 import EsteiraVoucherDetails from "./pages/esteira/EsteiraVoucherDetails";
 import AccrualManagement from "./pages/esteira/AccrualManagement";
 import VoucherRules from "./pages/esteira/VoucherRules";
@@ -102,6 +103,7 @@ const App = () => (
           <Route path="/admin/metrics" element={<MetricsUsage />} />
           <Route path="/admin/register" element={<Register />} />
           <Route path="/admin/users" element={<AdminUserManagement />} />
+          <Route path="/admin/apis" element={<AdminApiManagement />} />
           <Route path="/admin/logs" element={<Logs />} />
           <Route path="/air/check" element={<CheckAwb />} />
           <Route path="/sea/analysis" element={<SeaAnalysis />} />

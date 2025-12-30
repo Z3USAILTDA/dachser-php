@@ -49,6 +49,10 @@ const menuItems: MenuItem[] = [
         label: "Gerenciamento de Usuários",
         href: "/admin/users",
       },
+      {
+        label: "Gerenciamento de APIs",
+        href: "/admin/apis",
+      },
     ],
   },
   {
