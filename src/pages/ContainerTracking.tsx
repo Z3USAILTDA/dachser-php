@@ -448,6 +448,49 @@ const ContainerTracking = () => {
     }
   };
 
+  // Setup sibling sync columns in database
+  const handleSetupSiblingSync = async () => {
+    toast({
+      title: "Configurando",
+      description: "Criando colunas para sibling sync...",
+    });
+    
+    try {
+      const res = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/olimpo-proxy?action=setup_sibling_sync_columns`,
+        {
+          method: 'GET',
+          headers: {
+            'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
+            'Content-Type': 'application/json',
+          }
+        }
+      );
+      
+      const result = await res.json();
+      
+      if (result.success) {
+        toast({
+          title: "Configurado",
+          description: result.results?.join(', ') || "Colunas criadas com sucesso",
+        });
+      } else {
+        toast({
+          title: "Erro",
+          description: result.error || "Falha ao configurar",
+          variant: "destructive",
+        });
+      }
+    } catch (error) {
+      console.error("Error setting up sibling sync:", error);
+      toast({
+        title: "Erro",
+        description: "Falha ao configurar sibling sync",
+        variant: "destructive",
+      });
+    }
+  };
+
   // Enrich MBLs with containers from JsonCargo API (batch processing to avoid timeout)
   const handleEnrich = async () => {
     setIsEnriching(true);
@@ -1076,6 +1119,23 @@ const ContainerTracking = () => {
                         </TooltipTrigger>
                         <TooltipContent>
                           <p className="text-xs">Buscar containers para MBLs pendentes via API JsonCargo</p>
+                        </TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
+
+                    <TooltipProvider>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <button
+                            onClick={handleSetupSiblingSync}
+                            className="h-8 px-4 rounded-full bg-green-600 text-white text-[0.75rem] font-medium flex items-center gap-1.5 hover:bg-green-500 transition shadow-[0_0_20px_rgba(34,197,94,.3)]"
+                          >
+                            <Database className="w-3.5 h-3.5" />
+                            Setup Sibling
+                          </button>
+                        </TooltipTrigger>
+                        <TooltipContent>
+                          <p className="text-xs">Criar colunas sibling_synced na tabela t_tracking_sea</p>
                         </TooltipContent>
                       </Tooltip>
                     </TooltipProvider>
