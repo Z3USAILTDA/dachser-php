@@ -1521,51 +1521,121 @@ serve(async (req) => {
         }
 
         // Query containers that need update
-        // If force=1, include containers with errors or pending status regardless of last_check
-        // If force=0, use normal staleness check
+        // OPTIMIZATION: Select only ONE container per MBL to save API calls
+        // The sibling sync at the end will propagate data to other containers of the same MBL
+        // Priority: prefer non-leasing containers (they track better)
         let containers;
+        
+        // Define leasing prefixes for the query (same as LEASING_CONTAINER_PREFIXES below but as string for SQL)
+        const leasingPrefixesForQuery = `'BSIU','BEAU','TRHU','TRIU','TCKU','TTNU','TIIU','TLLU','TALU','IPXU','ITLU','TXGU','TEMU','TGHU','TCNU','TGBU','SCZU','SCMU','SCLU','CAAU','CAIU','CARU','CXRU','FCIU','FBIU','FCGU','FSCU','SZLU','SEGU','DFSU','DFCU','FDCU','GCXU','GATU','GLDU','HAMU','HCMU','ILAU','ITEU','UASU','UESU','UFCU','FANU','FBLU','FYCU','FUJU','GESU','BMOU','CSXU','CBLU','CLIU','CLXU','FTAU','BBCU','SMCU','SMLU','LCRU','LGEU','CXIC','CXNI'`;
+        
         if (forceRefresh) {
+          // Force refresh: get one representative container per MBL (preferring non-leasing)
           containers = await client.query(`
-            SELECT id, mbl_id, container, shipping_line, navio, last_error
-            FROM dados_dachser.t_tracking_sea 
-            WHERE active = 1
-              AND container IS NOT NULL
-              AND container NOT IN ('PENDENTE', 'NAO_ENCONTRADO', 'IGNORADO', '')
-              AND container REGEXP '^[A-Za-z]{4}[0-9]{7}$'
-              AND (
-                container_status IS NULL 
-                OR container_status = '' 
-                OR container_status = 'PENDING'
-                OR last_event IS NULL 
-                OR last_event = '' 
-                OR last_event LIKE '%Aguardando%'
-                OR last_error IS NOT NULL
-              )
-            ORDER BY last_error DESC, last_check ASC
+            SELECT t.id, t.mbl_id, t.container, t.shipping_line, t.navio, t.last_error
+            FROM dados_dachser.t_tracking_sea t
+            INNER JOIN (
+              SELECT 
+                mbl_id,
+                MIN(
+                  CASE 
+                    WHEN UPPER(LEFT(container, 4)) NOT IN (${leasingPrefixesForQuery}) THEN CONCAT('0_', id)
+                    ELSE CONCAT('1_', id)
+                  END
+                ) as priority_id
+              FROM dados_dachser.t_tracking_sea
+              WHERE active = 1
+                AND container IS NOT NULL
+                AND container NOT IN ('PENDENTE', 'NAO_ENCONTRADO', 'IGNORADO', '')
+                AND container REGEXP '^[A-Za-z]{4}[0-9]{7}$'
+                AND mbl_id IS NOT NULL AND mbl_id != ''
+                AND (
+                  container_status IS NULL 
+                  OR container_status = '' 
+                  OR container_status = 'PENDING'
+                  OR last_event IS NULL 
+                  OR last_event = '' 
+                  OR last_event LIKE '%Aguardando%'
+                  OR last_error IS NOT NULL
+                )
+              GROUP BY mbl_id
+            ) representative ON t.mbl_id = representative.mbl_id 
+              AND CONCAT(
+                CASE 
+                  WHEN UPPER(LEFT(t.container, 4)) NOT IN (${leasingPrefixesForQuery}) THEN '0_'
+                  ELSE '1_'
+                END, 
+                t.id
+              ) = representative.priority_id
+            WHERE t.active = 1
+            ORDER BY t.last_error DESC, t.last_check ASC
             LIMIT ?
           `, [batchSize]);
         } else {
+          // Normal refresh: get one representative container per MBL with staleness check
           containers = await client.query(`
-            SELECT id, mbl_id, container, shipping_line, navio, last_error
-            FROM dados_dachser.t_tracking_sea 
-            WHERE active = 1
-              AND container IS NOT NULL
-              AND container NOT IN ('PENDENTE', 'NAO_ENCONTRADO', 'IGNORADO', '')
-              AND container REGEXP '^[A-Za-z]{4}[0-9]{7}$'
-              AND (last_check IS NULL OR last_check < DATE_SUB(NOW(), INTERVAL ? HOUR))
-              AND (
-                container_status IS NULL 
-                OR container_status = '' 
-                OR container_status = 'PENDING'
-                OR last_event IS NULL 
-                OR last_event = '' 
-                OR last_event LIKE '%Aguardando%'
-              )
-            ORDER BY last_check ASC
+            SELECT t.id, t.mbl_id, t.container, t.shipping_line, t.navio, t.last_error
+            FROM dados_dachser.t_tracking_sea t
+            INNER JOIN (
+              SELECT 
+                mbl_id,
+                MIN(
+                  CASE 
+                    WHEN UPPER(LEFT(container, 4)) NOT IN (${leasingPrefixesForQuery}) THEN CONCAT('0_', id)
+                    ELSE CONCAT('1_', id)
+                  END
+                ) as priority_id
+              FROM dados_dachser.t_tracking_sea
+              WHERE active = 1
+                AND container IS NOT NULL
+                AND container NOT IN ('PENDENTE', 'NAO_ENCONTRADO', 'IGNORADO', '')
+                AND container REGEXP '^[A-Za-z]{4}[0-9]{7}$'
+                AND mbl_id IS NOT NULL AND mbl_id != ''
+                AND (last_check IS NULL OR last_check < DATE_SUB(NOW(), INTERVAL ? HOUR))
+                AND (
+                  container_status IS NULL 
+                  OR container_status = '' 
+                  OR container_status = 'PENDING'
+                  OR last_event IS NULL 
+                  OR last_event = '' 
+                  OR last_event LIKE '%Aguardando%'
+                )
+              GROUP BY mbl_id
+            ) representative ON t.mbl_id = representative.mbl_id 
+              AND CONCAT(
+                CASE 
+                  WHEN UPPER(LEFT(t.container, 4)) NOT IN (${leasingPrefixesForQuery}) THEN '0_'
+                  ELSE '1_'
+                END, 
+                t.id
+              ) = representative.priority_id
+            WHERE t.active = 1
+            ORDER BY t.last_check ASC
             LIMIT ?
           `, [staleHours, batchSize]);
         }
 
+        // Count how many containers we skipped due to MBL optimization
+        const totalPendingResult = await client.query(`
+          SELECT COUNT(*) as total
+          FROM dados_dachser.t_tracking_sea 
+          WHERE active = 1
+            AND container IS NOT NULL
+            AND container NOT IN ('PENDENTE', 'NAO_ENCONTRADO', 'IGNORADO', '')
+            AND container REGEXP '^[A-Za-z]{4}[0-9]{7}$'
+            AND (
+              container_status IS NULL 
+              OR container_status = '' 
+              OR container_status = 'PENDING'
+              OR last_event IS NULL 
+              OR last_event = '' 
+              OR last_event LIKE '%Aguardando%'
+            )
+        `);
+        const totalPending = totalPendingResult[0]?.total || 0;
+        const apiCallsSaved = totalPending > containers.length ? totalPending - containers.length : 0;
+        
+        console.log(`[refresh_sea_tracking] OPTIMIZATION: Processing ${containers.length} containers (1 per MBL), ${totalPending} total pending, ~${apiCallsSaved} API calls saved`);
         console.log(`[refresh_sea_tracking] Processing ${containers.length} containers (force=${forceRefresh}, stale > ${staleHours}h)`);
 
         let updated = 0;
@@ -2304,7 +2374,7 @@ serve(async (req) => {
         const remaining = remainingResult[0]?.cnt || 0;
 
         await client.close();
-        console.log(`[refresh_sea_tracking] Batch done: ${updated} updated, ${errors} errors, ${siblingSynced} sibling synced, ${leasingDetected} leasing, ${remaining} remaining`);
+        console.log(`[refresh_sea_tracking] Batch done: ${updated} updated, ${errors} errors, ${siblingSynced} sibling synced, ${leasingDetected} leasing, ${remaining} remaining, ~${apiCallsSaved} API calls saved`);
         
         return new Response(JSON.stringify({ 
           success: true, 
@@ -2315,6 +2385,9 @@ serve(async (req) => {
           leasingDetected,
           remaining,
           batchSize,
+          apiCallsSaved,
+          totalPending,
+          optimization: 'one_per_mbl',
           elapsedMs: Date.now() - startTime
         }), {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' }
