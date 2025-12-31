@@ -1,6 +1,5 @@
 import React, { useState } from "react";
 import { Ship, ExternalLink, AlertCircle, Loader2 } from "lucide-react";
-import { Button } from "@/components/ui/button";
 
 interface VesselFinderMapProps {
   vesselName?: string | null;
@@ -8,8 +7,6 @@ interface VesselFinderMapProps {
   mmsi?: string | null;
   height?: number;
   showTrack?: boolean;
-  onRequestImo?: () => void;
-  isLoadingImo?: boolean;
 }
 
 const VesselFinderMap: React.FC<VesselFinderMapProps> = ({
@@ -18,8 +15,6 @@ const VesselFinderMap: React.FC<VesselFinderMapProps> = ({
   mmsi,
   height = 350,
   showTrack = true,
-  onRequestImo,
-  isLoadingImo = false,
 }) => {
   const [iframeLoaded, setIframeLoaded] = useState(false);
   const [iframeError, setIframeError] = useState(false);
@@ -37,7 +32,7 @@ const VesselFinderMap: React.FC<VesselFinderMapProps> = ({
 
   const embedUrl = getEmbedUrl();
 
-  // If no IMO/MMSI, show fallback with vessel name search link
+  // If no IMO/MMSI, show informative message (no manual action)
   if (!embedUrl) {
     return (
       <div 
@@ -51,46 +46,25 @@ const VesselFinderMap: React.FC<VesselFinderMapProps> = ({
               {vesselName || "Navio não identificado"}
             </p>
             <p className="text-xs text-[#666] mt-1">
-              IMO/MMSI não disponível para rastreio em tempo real
+              IMO não disponível para rastreio em tempo real
+            </p>
+            <p className="text-xs text-[#888] mt-2">
+              O IMO será populado automaticamente na próxima sincronização
             </p>
           </div>
         </div>
 
-        <div className="flex flex-col items-center gap-3">
-          {vesselName && (
-            <a
-              href={`https://www.vesselfinder.com/?imo=0&name=${encodeURIComponent(vesselName)}`}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-blue-600/20 text-blue-400 text-sm hover:bg-blue-600/30 transition"
-            >
-              <ExternalLink className="w-4 h-4" />
-              Buscar "{vesselName}" no VesselFinder
-            </a>
-          )}
-          
-          {onRequestImo && (
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={onRequestImo}
-              disabled={isLoadingImo}
-              className="text-[#ffc800] border-[#ffc800]/30 hover:bg-[#ffc800]/10"
-            >
-              {isLoadingImo ? (
-                <>
-                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                  Buscando IMO...
-                </>
-              ) : (
-                <>
-                  <Ship className="w-4 h-4 mr-2" />
-                  Buscar IMO Automaticamente
-                </>
-              )}
-            </Button>
-          )}
-        </div>
+        {vesselName && (
+          <a
+            href={`https://www.vesselfinder.com/?imo=0&name=${encodeURIComponent(vesselName)}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-blue-600/20 text-blue-400 text-sm hover:bg-blue-600/30 transition"
+          >
+            <ExternalLink className="w-4 h-4" />
+            Buscar "{vesselName}" no VesselFinder
+          </a>
+        )}
       </div>
     );
   }

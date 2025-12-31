@@ -1433,8 +1433,10 @@ serve(async (req) => {
         // - Container: aceitar vazio (usa 'PENDENTE'), mas validar formato se presente
         // - ETD >= 01/12/2025
         // - Apenas processos SEA
+        // INSERT IGNORE: Only insert NEW MBLs, never update existing records
+        // This preserves: active status, last_error, tracking data for existing MBLs
         const result = await client.execute(`
-          INSERT INTO dados_dachser.t_tracking_sea (
+          INSERT IGNORE INTO dados_dachser.t_tracking_sea (
             mbl_id, tipo_processo, container,
             shipping_line, consignee, origem, destino,
             navio, eta, last_event, container_status,
@@ -1458,7 +1460,7 @@ serve(async (req) => {
             NULL AS last_check,
             md.email_analista,
             md.emails_cliente AS email_cliente,
-            COALESCE(md.active, 1) AS active
+            1 AS active
           FROM dados_dachser.t_master_dados md
           WHERE md.mawb IS NOT NULL 
             AND TRIM(md.mawb) != ''
@@ -1477,13 +1479,15 @@ serve(async (req) => {
             AND md.etd >= '2025-12-01'
             -- Apenas processos marítimos
             AND md.tipo_processo LIKE '%SEA%'
-          ON DUPLICATE KEY UPDATE
-            tipo_processo = VALUES(tipo_processo),
-            container = VALUES(container),
-            consignee = VALUES(consignee),
-            email_analista = VALUES(email_analista),
-            email_cliente = VALUES(email_cliente),
-            active = VALUES(active)
+            -- Only insert if MBL doesn't exist yet (WHERE NOT EXISTS pattern via INSERT IGNORE)
+            AND NOT EXISTS (
+              SELECT 1 FROM dados_dachser.t_tracking_sea t 
+              WHERE t.mbl_id = TRIM(md.mawb) 
+              AND t.container = CASE 
+                WHEN md.container IS NULL OR TRIM(md.container) = '' THEN 'PENDENTE'
+                ELSE TRIM(md.container)
+              END
+            )
         `);
 
         await client.close();
@@ -1546,8 +1550,12 @@ serve(async (req) => {
       const batchSize = parseInt(url.searchParams.get('batch_size') || '20');
       const maxTimeMs = parseInt(url.searchParams.get('max_time_ms') || '45000');
       const staleHours = parseInt(url.searchParams.get('stale_hours') || '4');
+      const refreshValidHours = parseInt(url.searchParams.get('refresh_valid_hours') || '48');
       const forceRefresh = url.searchParams.get('force') === '1';
       const startTime = Date.now();
+      
+      // Final statuses that should not be refreshed
+      const FINAL_STATUSES = ['DELIVERED', 'COMPLETED', 'EMPTY_RETURNED', 'EMPTY_RETURN', 'DLV', 'GOD'];
 
       const { Client } = await import("https://deno.land/x/mysql@v2.12.1/mod.ts");
       const client = await new Client().connect({
@@ -1626,7 +1634,12 @@ serve(async (req) => {
             LIMIT ?
           `, [batchSize]);
         } else {
-          // Normal refresh: get one representative container per MBL with staleness check
+          // Normal refresh with two categories:
+          // Category 1 - Pending: NULL/empty/PENDING status, check every staleHours (4h)
+          // Category 2 - Valid: Valid status, check every refreshValidHours (48h)
+          // Exclude final statuses (DELIVERED, COMPLETED, etc.)
+          const finalStatusList = FINAL_STATUSES.map(s => `'${s}'`).join(',');
+          
           containers = await client.query(`
             SELECT t.id, t.mbl_id, t.container, t.shipping_line, t.navio, t.last_error
             FROM dados_dachser.t_tracking_sea t
@@ -1645,14 +1658,32 @@ serve(async (req) => {
                 AND container NOT IN ('PENDENTE', 'NAO_ENCONTRADO', 'IGNORADO', '')
                 AND container REGEXP '^[A-Za-z]{4}[0-9]{7}$'
                 AND mbl_id IS NOT NULL AND mbl_id != ''
-                AND (last_check IS NULL OR last_check < DATE_SUB(NOW(), INTERVAL ? HOUR))
+                -- Exclude final statuses (DELIVERED, COMPLETED, etc.)
+                AND (container_status IS NULL OR UPPER(container_status) NOT IN (${finalStatusList}))
+                AND (last_event IS NULL OR UPPER(last_event) NOT REGEXP 'DELIVERED|EMPTY.?RETURN')
                 AND (
-                  container_status IS NULL 
-                  OR container_status = '' 
-                  OR container_status = 'PENDING'
-                  OR last_event IS NULL 
-                  OR last_event = '' 
-                  OR last_event LIKE '%Aguardando%'
+                  -- Category 1: Pending status, check every staleHours (4h)
+                  (
+                    (last_check IS NULL OR last_check < DATE_SUB(NOW(), INTERVAL ? HOUR))
+                    AND (
+                      container_status IS NULL 
+                      OR container_status = '' 
+                      OR container_status = 'PENDING'
+                      OR last_event IS NULL 
+                      OR last_event = '' 
+                      OR last_event LIKE '%Aguardando%'
+                    )
+                  )
+                  OR
+                  -- Category 2: Valid status, check every refreshValidHours (48h)
+                  (
+                    (last_check IS NULL OR last_check < DATE_SUB(NOW(), INTERVAL ? HOUR))
+                    AND container_status IS NOT NULL 
+                    AND container_status != '' 
+                    AND container_status != 'PENDING'
+                    AND last_event IS NOT NULL 
+                    AND last_event != ''
+                  )
                 )
               GROUP BY mbl_id
             ) representative ON t.mbl_id = representative.mbl_id 
@@ -1666,7 +1697,7 @@ serve(async (req) => {
             WHERE t.active = 1
             ORDER BY t.last_check ASC
             LIMIT ?
-          `, [staleHours, batchSize]);
+          `, [staleHours, refreshValidHours, batchSize]);
         }
 
         // Count how many containers we skipped due to MBL optimization
