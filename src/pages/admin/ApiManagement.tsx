@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { Activity, Server, TrendingUp, AlertCircle, RefreshCw, Loader2, Calendar, DollarSign, LayoutDashboard, BarChart3, HelpCircle, X, Clock, CheckCircle, XCircle, ExternalLink } from "lucide-react";
+import { Activity, Server, TrendingUp, AlertCircle, RefreshCw, Loader2, Calendar, DollarSign, LayoutDashboard, BarChart3, HelpCircle, X, Clock, CheckCircle, XCircle, ExternalLink, History, ArrowUpRight, ArrowDownRight, Minus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
@@ -47,6 +47,20 @@ interface DailyTotal {
   date: string;
   total_calls: number;
   total_errors: number;
+}
+
+interface ApiUsageCycle {
+  id: string;
+  api_name: string;
+  cycle_start_date: string;
+  cycle_end_date: string;
+  total_calls: number;
+  total_errors: number;
+  monthly_limit: number | null;
+  usage_percentage: number | null;
+  estimated_cost_usd: number | null;
+  plan_name: string | null;
+  created_at: string;
 }
 
 // Preços reais por chamada (em USD) - Atualizado em Dez/2024
@@ -878,6 +892,203 @@ const AnalyticsTab = ({
   );
 };
 
+// History Tab Component - Billing Cycle History
+const HistoryTab = ({
+  usageCycles,
+  isLoading,
+  onSaveCycle
+}: {
+  usageCycles: ApiUsageCycle[];
+  isLoading: boolean;
+  onSaveCycle: () => void;
+}) => {
+  // Group cycles by API
+  const groupedCycles = usageCycles.reduce((acc, cycle) => {
+    if (!acc[cycle.api_name]) {
+      acc[cycle.api_name] = [];
+    }
+    acc[cycle.api_name].push(cycle);
+    return acc;
+  }, {} as Record<string, ApiUsageCycle[]>);
+
+  // Calculate variation between cycles
+  const getVariation = (current: number, previous: number | undefined): { value: number; type: 'up' | 'down' | 'same' } => {
+    if (previous === undefined || previous === 0) return { value: 0, type: 'same' };
+    const diff = ((current - previous) / previous) * 100;
+    if (diff > 0) return { value: diff, type: 'up' };
+    if (diff < 0) return { value: Math.abs(diff), type: 'down' };
+    return { value: 0, type: 'same' };
+  };
+
+  const formatCycleRange = (start: string, end: string) => {
+    const startDate = new Date(start);
+    const endDate = new Date(end);
+    return `${startDate.toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' })} - ${endDate.toLocaleDateString('pt-BR', { day: '2-digit', month: 'short', year: 'numeric' })}`;
+  };
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center py-12">
+        <Loader2 className="w-8 h-8 text-[#ffc800] animate-spin" />
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-5 animate-fade-in">
+      {/* Save Current Cycle Button */}
+      <div className="flex items-center justify-between">
+        <div>
+          <h3 className="text-sm font-semibold text-white flex items-center gap-2">
+            <History className="w-4 h-4 text-[#ffc800]" />
+            Histórico de Ciclos de Faturamento
+          </h3>
+          <p className="text-xs text-muted-foreground mt-1">
+            Compare o consumo de APIs entre diferentes períodos de faturamento
+          </p>
+        </div>
+        <Button
+          onClick={onSaveCycle}
+          className="bg-[#ffc800] hover:bg-[#e6b400] text-black rounded-full px-4 h-8 text-xs font-semibold"
+        >
+          <Calendar className="w-3.5 h-3.5 mr-1.5" />
+          Salvar Ciclo Atual
+        </Button>
+      </div>
+
+      {Object.keys(groupedCycles).length === 0 ? (
+        <div className="flex flex-col items-center justify-center py-12 text-center">
+          <History className="w-12 h-12 text-white/30 mb-4" />
+          <p className="text-white/60 text-lg font-medium">Sem histórico de ciclos</p>
+          <p className="text-white/40 text-sm mt-2 max-w-md">
+            Clique em "Salvar Ciclo Atual" para registrar o uso do período atual. 
+            O histórico permitirá comparar o consumo entre diferentes meses.
+          </p>
+        </div>
+      ) : (
+        <div className="space-y-4">
+          {Object.entries(groupedCycles).map(([apiName, cycles]) => {
+            const sortedCycles = [...cycles].sort((a, b) => 
+              new Date(b.cycle_start_date).getTime() - new Date(a.cycle_start_date).getTime()
+            );
+
+            return (
+              <PageCard key={apiName}>
+                <div className="flex items-center gap-3 mb-4">
+                  <div className="w-10 h-10 rounded-xl flex items-center justify-center text-lg font-bold"
+                       style={{ backgroundColor: getApiColor(apiName) + '20', color: getApiColor(apiName) }}>
+                    {apiName.charAt(0)}
+                  </div>
+                  <div>
+                    <h4 className="text-sm font-semibold text-white">{apiName}</h4>
+                    <p className="text-xs text-muted-foreground">
+                      {sortedCycles.length} ciclo{sortedCycles.length !== 1 ? 's' : ''} registrado{sortedCycles.length !== 1 ? 's' : ''}
+                    </p>
+                  </div>
+                </div>
+
+                {/* Cycle Comparison Chart */}
+                <div className="h-40 mb-4">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={sortedCycles.slice(0, 6).reverse().map(c => ({
+                      period: new Date(c.cycle_start_date).toLocaleDateString('pt-BR', { month: 'short', year: '2-digit' }),
+                      calls: c.total_calls,
+                      errors: c.total_errors,
+                      limit: c.monthly_limit
+                    }))}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.08)" />
+                      <XAxis dataKey="period" tick={{ fill: "#ccc", fontSize: 10 }} axisLine={false} />
+                      <YAxis tick={{ fill: "#ccc", fontSize: 10 }} axisLine={false} />
+                      <ChartTooltip
+                        content={({ active, payload, label }) => {
+                          if (active && payload && payload.length) {
+                            return (
+                              <div className="bg-[#111] border border-[rgba(255,200,0,0.3)] rounded-lg p-3">
+                                <p className="text-white font-medium">{label}</p>
+                                <p className="text-[#ffc800]">Chamadas: {Number(payload[0]?.value || 0).toLocaleString()}</p>
+                                {payload[1] && <p className="text-red-400">Erros: {payload[1].value}</p>}
+                              </div>
+                            );
+                          }
+                          return null;
+                        }}
+                      />
+                      <Bar dataKey="calls" fill={getApiColor(apiName)} radius={[4, 4, 0, 0]} />
+                      <Bar dataKey="errors" fill="#ef4444" radius={[4, 4, 0, 0]} />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+
+                {/* Cycle Details Table */}
+                <div className="rounded-lg border border-white/10 overflow-hidden">
+                  <Table>
+                    <TableHeader>
+                      <TableRow className="border-white/10 hover:bg-transparent">
+                        <TableHead className="text-[10px] uppercase tracking-wider text-muted-foreground">Período</TableHead>
+                        <TableHead className="text-[10px] uppercase tracking-wider text-muted-foreground text-right">Chamadas</TableHead>
+                        <TableHead className="text-[10px] uppercase tracking-wider text-muted-foreground text-right">Variação</TableHead>
+                        <TableHead className="text-[10px] uppercase tracking-wider text-muted-foreground text-right">% Limite</TableHead>
+                        <TableHead className="text-[10px] uppercase tracking-wider text-muted-foreground text-right">Custo Est.</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {sortedCycles.slice(0, 6).map((cycle, index) => {
+                        const previousCycle = sortedCycles[index + 1];
+                        const variation = getVariation(cycle.total_calls, previousCycle?.total_calls);
+                        
+                        return (
+                          <TableRow key={cycle.id} className="border-white/5 hover:bg-white/5">
+                            <TableCell className="text-xs text-white">
+                              {formatCycleRange(cycle.cycle_start_date, cycle.cycle_end_date)}
+                            </TableCell>
+                            <TableCell className="text-xs text-right font-mono text-white">
+                              {cycle.total_calls.toLocaleString()}
+                            </TableCell>
+                            <TableCell className="text-xs text-right">
+                              <span className={cn(
+                                "inline-flex items-center gap-1",
+                                variation.type === 'up' && "text-red-400",
+                                variation.type === 'down' && "text-green-400",
+                                variation.type === 'same' && "text-white/50"
+                              )}>
+                                {variation.type === 'up' && <ArrowUpRight className="w-3 h-3" />}
+                                {variation.type === 'down' && <ArrowDownRight className="w-3 h-3" />}
+                                {variation.type === 'same' && <Minus className="w-3 h-3" />}
+                                {variation.value.toFixed(1)}%
+                              </span>
+                            </TableCell>
+                            <TableCell className="text-xs text-right">
+                              {cycle.usage_percentage !== null ? (
+                                <span className={cn(
+                                  cycle.usage_percentage >= 80 ? "text-amber-400" : "text-white/70"
+                                )}>
+                                  {cycle.usage_percentage.toFixed(1)}%
+                                </span>
+                              ) : (
+                                <span className="text-white/30">-</span>
+                              )}
+                            </TableCell>
+                            <TableCell className="text-xs text-right font-mono text-emerald-400">
+                              {cycle.estimated_cost_usd !== null 
+                                ? formatCurrency(cycle.estimated_cost_usd)
+                                : '-'
+                              }
+                            </TableCell>
+                          </TableRow>
+                        );
+                      })}
+                    </TableBody>
+                  </Table>
+                </div>
+              </PageCard>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+};
+
 export default function ApiManagement() {
   const navigate = useNavigate();
   const [isLoading, setIsLoading] = useState(true);
@@ -886,10 +1097,11 @@ export default function ApiManagement() {
   const [recentLogs, setRecentLogs] = useState<ApiUsageLog[]>([]);
   const [dailyTrend, setDailyTrend] = useState<DailyTrend[]>([]);
   const [dailyTotal, setDailyTotal] = useState<DailyTotal[]>([]);
+  const [usageCycles, setUsageCycles] = useState<ApiUsageCycle[]>([]);
   const [isAdmin, setIsAdmin] = useState(false);
   const [isRestricted, setIsRestricted] = useState(false);
   const [selectedPeriod, setSelectedPeriod] = useState<"7" | "30">("7");
-  const [activeTab, setActiveTab] = useState<"dashboard" | "analytics">("dashboard");
+  const [activeTab, setActiveTab] = useState<"dashboard" | "analytics" | "history">("dashboard");
   const [selectedApi, setSelectedApi] = useState<ApiStats | null>(null);
   const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
 
@@ -925,6 +1137,7 @@ export default function ApiManagement() {
   useEffect(() => {
     if (isAdmin && !isRestricted) {
       fetchApiStats();
+      fetchUsageCycles();
     }
   }, [isAdmin, isRestricted]);
 
@@ -1012,9 +1225,81 @@ export default function ApiManagement() {
     }
   };
 
+  const fetchUsageCycles = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('api_usage_cycles')
+        .select('*')
+        .order('cycle_start_date', { ascending: false });
+      
+      if (error) throw error;
+      setUsageCycles(data || []);
+    } catch (error) {
+      console.error("Error fetching usage cycles:", error);
+    }
+  };
+
+  const handleSaveCurrentCycle = async () => {
+    if (apiStats.length === 0) {
+      toast.error("Sem dados de API para salvar");
+      return;
+    }
+
+    try {
+      const now = new Date();
+      const savedCount = { success: 0, skipped: 0 };
+
+      for (const api of apiStats) {
+        const limitConfig = API_LIMITS[api.api_name];
+        const billingCycle = limitConfig 
+          ? getBillingCycleDates(limitConfig.renewalDay) 
+          : { startDate: new Date(now.getFullYear(), now.getMonth(), 1), endDate: new Date(now.getFullYear(), now.getMonth() + 1, 0) };
+
+        const cycleStartStr = billingCycle.startDate.toISOString().split('T')[0];
+        const cycleEndStr = billingCycle.endDate.toISOString().split('T')[0];
+        
+        const totalCalls = Number(api.total_calls || 0);
+        const totalErrors = Number(api.error_count || 0);
+        const monthlyLimit = limitConfig?.monthlyLimit || null;
+        const usagePercentage = monthlyLimit ? (totalCalls / monthlyLimit) * 100 : null;
+        const estimatedCost = getApiCost(api.api_name, totalCalls);
+
+        const { error } = await supabase
+          .from('api_usage_cycles')
+          .upsert({
+            api_name: api.api_name,
+            cycle_start_date: cycleStartStr,
+            cycle_end_date: cycleEndStr,
+            total_calls: totalCalls,
+            total_errors: totalErrors,
+            monthly_limit: monthlyLimit,
+            usage_percentage: usagePercentage,
+            estimated_cost_usd: estimatedCost,
+            plan_name: limitConfig?.plan || null,
+            updated_at: new Date().toISOString()
+          }, { 
+            onConflict: 'api_name,cycle_start_date' 
+          });
+
+        if (error) {
+          console.error(`Error saving cycle for ${api.api_name}:`, error);
+        } else {
+          savedCount.success++;
+        }
+      }
+
+      await fetchUsageCycles();
+      toast.success(`Ciclo salvo para ${savedCount.success} API${savedCount.success !== 1 ? 's' : ''}`);
+    } catch (error) {
+      console.error("Error saving current cycle:", error);
+      toast.error("Erro ao salvar ciclo atual");
+    }
+  };
+
   const handleRefresh = async () => {
     setIsRefreshing(true);
     await fetchApiStats();
+    await fetchUsageCycles();
     setIsRefreshing(false);
     toast.success("Dados atualizados");
   };
@@ -1071,6 +1356,7 @@ export default function ApiManagement() {
         {[
           { id: "dashboard" as const, label: "Dashboard", icon: LayoutDashboard },
           { id: "analytics" as const, label: "Analytics", icon: BarChart3 },
+          { id: "history" as const, label: "Histórico", icon: History },
         ].map((tab) => {
           const Icon = tab.icon;
           const isActive = activeTab === tab.id;
@@ -1172,6 +1458,13 @@ export default function ApiManagement() {
         />
       )}
 
+      {activeTab === "history" && (
+        <HistoryTab
+          usageCycles={usageCycles}
+          isLoading={isLoading}
+          onSaveCycle={handleSaveCurrentCycle}
+        />
+      )}
       {/* API Detail Modal */}
       <ApiDetailModal
         isOpen={isDetailModalOpen}
