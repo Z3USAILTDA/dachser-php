@@ -1190,36 +1190,13 @@ serve(async (req) => {
         db: 'dados_dachser',
       });
 
-      // Prefixos de containers de leasing não suportados pela JSONCargo API
-      // Lista completa de prefixos de empresas de leasing de containers
+      // Prefixos de containers confirmados como NÃO rastreáveis pela JSONCargo API
+      // Apenas os prefixos que retornam "Prefix not found" confirmados
       const UNSUPPORTED_LEASING_PREFIXES = [
-        // Beacon Intermodal
-        'BSIU', 'BEAU',
-        // Triton International
-        'TRHU', 'TRIU', 'TCKU', 'TTNU', 'TIIU', 'TLLU', 'TALU', 'IPXU', 'ITLU',
-        // Textainer
-        'TXGU', 'TEMU', 'TGHU', 'TCNU', 'TGBU',
-        // SeaCube
-        'SCZU', 'SCMU', 'SCLU',
-        // CAI International
-        'CAAU', 'CAIU', 'CARU', 'CXRU',
-        // Florens Container
-        'FCIU', 'FBIU', 'FCGU', 'FSCU',
-        // Seaco Global
-        'SZLU', 'SEGU',
-        // DF Capital
-        'DFSU', 'DFCU', 'FDCU',
-        // Gold Container
-        'GCXU', 'GATU', 'GLDU',
-        // Hamburg Container
-        'HAMU', 'HCMU',
-        // Itel Container
-        'ILAU', 'ITEU',
-        // UES International
-        'UASU', 'UESU', 'UFCU', 'UETU',
-        // Outros
-        'FANU', 'FBLU', 'FYCU', 'FUJU', 'GESU', 'BMOU', 'CSXU', 'CBLU',
-        'CLIU', 'CLXU', 'FTAU', 'BBCU', 'SMCU', 'SMLU', 'LCRU', 'LGEU', 'CXIC', 'CXNI'
+        // Originais (confirmados)
+        'CAAU', 'TXGU', 'UETU', 'TIIU',
+        // Novos identificados nos 12 MBLs pendentes
+        'BBCU', 'TGBU', 'CAIU', 'FCIU', 'DFSU', 'SEGU', 'FBIU', 'FDCU', 'FTAU', 'GCXU'
       ];
       const prefixCondition = UNSUPPORTED_LEASING_PREFIXES.map(p => `'${p}'`).join(', ');
 

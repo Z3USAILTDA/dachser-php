@@ -258,16 +258,10 @@ const ContainerTracking = () => {
       const result = await res.json();
       
       if (result.success && result.data) {
-        // Filtrar MBLs que só possuem containers com prefixos não suportados pela JSONCargo
-        // Esses prefixos são de leasing e não podem ser rastreados diretamente
+        // Prefixos confirmados como NÃO rastreáveis pela JSONCargo (fallback)
         const UNSUPPORTED_PREFIXES = [
-          'BSIU', 'BEAU', 'TRHU', 'TRIU', 'TCKU', 'TTNU', 'TIIU', 'TLLU', 'TALU', 'IPXU', 'ITLU',
-          'TXGU', 'TEMU', 'TGHU', 'TCNU', 'TGBU', 'SCZU', 'SCMU', 'SCLU',
-          'CAAU', 'CAIU', 'CARU', 'CXRU', 'FCIU', 'FBIU', 'FCGU', 'FSCU',
-          'SZLU', 'SEGU', 'DFSU', 'DFCU', 'FDCU', 'GCXU', 'GATU', 'GLDU',
-          'HAMU', 'HCMU', 'ILAU', 'ITEU', 'UASU', 'UESU', 'UFCU', 'UETU',
-          'FANU', 'FBLU', 'FYCU', 'FUJU', 'GESU', 'BMOU', 'CSXU', 'CBLU',
-          'CLIU', 'CLXU', 'FTAU', 'BBCU', 'SMCU', 'SMLU', 'LCRU', 'LGEU', 'CXIC', 'CXNI'
+          'CAAU', 'TXGU', 'UETU', 'TIIU',
+          'BBCU', 'TGBU', 'CAIU', 'FCIU', 'DFSU', 'SEGU', 'FBIU', 'FDCU', 'FTAU', 'GCXU'
         ];
         
         // Nota: A filtragem principal é feita no backend, mas mantemos aqui como fallback
@@ -307,15 +301,10 @@ const ContainerTracking = () => {
       const result = await res.json();
       
       if (result.success && result.data) {
-        // Filtrar containers com prefixos não suportados pela JSONCargo (leasing)
+        // Prefixos confirmados como NÃO rastreáveis pela JSONCargo
         const UNSUPPORTED_PREFIXES = [
-          'BSIU', 'BEAU', 'TRHU', 'TRIU', 'TCKU', 'TTNU', 'TIIU', 'TLLU', 'TALU', 'IPXU', 'ITLU',
-          'TXGU', 'TEMU', 'TGHU', 'TCNU', 'TGBU', 'SCZU', 'SCMU', 'SCLU',
-          'CAAU', 'CAIU', 'CARU', 'CXRU', 'FCIU', 'FBIU', 'FCGU', 'FSCU',
-          'SZLU', 'SEGU', 'DFSU', 'DFCU', 'FDCU', 'GCXU', 'GATU', 'GLDU',
-          'HAMU', 'HCMU', 'ILAU', 'ITEU', 'UASU', 'UESU', 'UFCU', 'UETU',
-          'FANU', 'FBLU', 'FYCU', 'FUJU', 'GESU', 'BMOU', 'CSXU', 'CBLU',
-          'CLIU', 'CLXU', 'FTAU', 'BBCU', 'SMCU', 'SMLU', 'LCRU', 'LGEU', 'CXIC', 'CXNI'
+          'CAAU', 'TXGU', 'UETU', 'TIIU',
+          'BBCU', 'TGBU', 'CAIU', 'FCIU', 'DFSU', 'SEGU', 'FBIU', 'FDCU', 'FTAU', 'GCXU'
         ];
         const filteredContainers = result.data.filter((c: ContainerDetail) => {
           if (!c.container || c.container === 'PENDENTE' || c.container === 'NAO_ENCONTRADO') {
