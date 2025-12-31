@@ -376,10 +376,23 @@ const ContainerTracking = () => {
     console.log('[AutoSync] Starting automated sync process...');
     
     try {
-      // Step 0: Cleanup orphan PENDENTE containers from MBLs that already have valid containers
-      console.log('[AutoSync] Step 0: Cleaning up orphan PENDENTE containers...');
+      // Step 0a: Cleanup orphan PENDENTE containers from MBLs that already have valid containers
+      console.log('[AutoSync] Step 0a: Cleaning up orphan PENDENTE containers...');
       await fetch(
         `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/olimpo-proxy?action=cleanup_orphan_pendentes`,
+        {
+          method: 'GET',
+          headers: {
+            'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
+            'Content-Type': 'application/json',
+          }
+        }
+      );
+
+      // Step 0b: Deactivate invalid MBLs (booking refs, no valid containers)
+      console.log('[AutoSync] Step 0b: Deactivating invalid MBLs...');
+      await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/olimpo-proxy?action=deactivate_invalid_mbls`,
         {
           method: 'GET',
           headers: {
