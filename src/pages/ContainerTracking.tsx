@@ -266,8 +266,28 @@ const ContainerTracking = () => {
     }
   }, []);
 
+  // Cleanup orphan PENDENTE containers on initial load, then fetch data
   useEffect(() => {
-    fetchMblData();
+    const initializeData = async () => {
+      // First, cleanup orphan PENDENTE containers that shouldn't exist
+      try {
+        await fetch(
+          `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/olimpo-proxy?action=cleanup_orphan_pendentes`,
+          {
+            method: 'GET',
+            headers: {
+              'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
+              'Content-Type': 'application/json',
+            }
+          }
+        );
+      } catch (e) {
+        console.error('[init] cleanup_orphan_pendentes error:', e);
+      }
+      // Then fetch data
+      fetchMblData();
+    };
+    initializeData();
   }, [fetchMblData]);
 
   // Fetch containers for expanded MBL
@@ -356,6 +376,19 @@ const ContainerTracking = () => {
     console.log('[AutoSync] Starting automated sync process...');
     
     try {
+      // Step 0: Cleanup orphan PENDENTE containers from MBLs that already have valid containers
+      console.log('[AutoSync] Step 0: Cleaning up orphan PENDENTE containers...');
+      await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/olimpo-proxy?action=cleanup_orphan_pendentes`,
+        {
+          method: 'GET',
+          headers: {
+            'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
+            'Content-Type': 'application/json',
+          }
+        }
+      );
+
       // Step 1: Sync new MBLs from t_master_dados
       setAutoSyncStatus('sync');
       console.log('[AutoSync] Step 1: Syncing new MBLs...');
