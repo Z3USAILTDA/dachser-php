@@ -535,6 +535,18 @@ export function ChbClientConfigDialog({ open, onOpenChange }: Props) {
                     <Button onClick={handleSave} className="flex-1">
                       {editingConfig ? 'Salvar Alterações' : 'Criar Configuração'}
                     </Button>
+                    {editingConfig && (
+                      <Button 
+                        variant="outline" 
+                        onClick={() => {
+                          const fileName = exportChbConfigToPDF([editingConfig]);
+                          toast.success(`PDF exportado: ${fileName}`);
+                        }}
+                      >
+                        <Download className="h-4 w-4 mr-1" />
+                        Exportar
+                      </Button>
+                    )}
                     <Button variant="outline" onClick={resetForm}>
                       Cancelar
                     </Button>
