@@ -369,12 +369,14 @@ REGRAS DE CONTEÚDO DA TABELA
       - Linha da tabela: "Frete" ou "Freight"
       - ATENÇÃO: Frete pode ser "COLLECT" ou "PREPAID" — indicar na observação
    
-   C) VALOR TOTAL FRETE (Prepaid/Collect Total):
-      - É a soma de TODOS os custos no CCT/BL/AWB (frete + taxas + impostos)
-      - PROCURAR NA TABELA "Prepaid" / "Collect":
-        → Linha "Total" na coluna "Prepaid" = Total Pré-pago
-        → Linha "Total" na coluna "Collect" = Total a Cobrar
-      - Sinônimos: "Total Prepaid", "Total Collect", "Total Charges", "Grand Total" (em BL/CCT)
+   C) VALOR TOTAL FRETE (Total do Documento):
+      - É a soma de TODOS os custos (mercadoria + frete + taxas + impostos)
+      - ONDE PROCURAR:
+        → CCT/BL/AWB: Linha "Total" na coluna "Prepaid" ou "Collect"
+        → Invoice: "Final Amount", "Total Amount", "Grand Total", "Amount Due"
+        → Packing List: geralmente não tem (ND é aceitável)
+      - Sinônimos: "Total Prepaid", "Total Collect", "Total Charges", "Grand Total",
+                   "Final Amount", "Total Amount", "Amount Due", "Total Invoice"
       - Linha da tabela: "Valor Total Frete"
    
    MOEDA: sempre especificar (USD, EUR, BRL, etc.)
