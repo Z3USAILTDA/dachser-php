@@ -4692,6 +4692,105 @@ serve(async (req) => {
       }
     }
 
+    // ===== POPULATE MISSING VESSEL IMOs =====
+    if (action === 'populate_missing_imos') {
+      const batchSize = parseInt(url.searchParams.get('batch_size') || '50', 10);
+      const maxTimeMs = 45000;
+      
+      const mariadbHost = Deno.env.get('MARIADB_HOST');
+      const mariadbPort = Deno.env.get('MARIADB_PORT') || '3306';
+      const mariadbUser = Deno.env.get('MARIADB_USER');
+      const mariadbPass = Deno.env.get('MARIADB_PASSWORD');
+
+      const { Client } = await import("https://deno.land/x/mysql@v2.12.1/mod.ts");
+      const client = await new Client().connect({
+        hostname: mariadbHost,
+        port: parseInt(mariadbPort, 10),
+        username: mariadbUser,
+        password: mariadbPass,
+        db: 'dados_dachser',
+      });
+
+      try {
+        const startTime = Date.now();
+        
+        // Buscar navios únicos que têm nome mas não têm IMO
+        const vessels = await client.query(`
+          SELECT DISTINCT navio
+          FROM dados_dachser.t_tracking_sea
+          WHERE active = 1
+            AND navio IS NOT NULL AND navio != ''
+            AND (vessel_imo IS NULL OR vessel_imo = '')
+          LIMIT ?
+        `, [batchSize]);
+        
+        console.log(`[populate_missing_imos] Found ${vessels.length} unique vessels without IMO`);
+        
+        vesselImoCache.clear();
+        
+        let updated = 0;
+        let notFound = 0;
+        let processed = 0;
+        
+        for (const row of vessels) {
+          if (Date.now() - startTime > maxTimeMs) {
+            console.log(`[populate_missing_imos] Time limit reached after ${processed} vessels`);
+            break;
+          }
+          
+          const vesselName = row.navio;
+          const imo = await findVesselImo(vesselName);
+          processed++;
+          
+          if (imo) {
+            const result = await client.execute(`
+              UPDATE dados_dachser.t_tracking_sea 
+              SET vessel_imo = ?
+              WHERE navio = ? AND (vessel_imo IS NULL OR vessel_imo = '')
+            `, [imo, vesselName]);
+            updated += result.affectedRows || 0;
+            console.log(`[populate_missing_imos] Updated ${result.affectedRows} containers with IMO ${imo} for "${vesselName}"`);
+          } else {
+            notFound++;
+            console.log(`[populate_missing_imos] No IMO found for "${vesselName}"`);
+          }
+          
+          await new Promise(r => setTimeout(r, 200)); // Rate limit
+        }
+        
+        // Contar navios restantes sem IMO
+        const remainingResult = await client.query(`
+          SELECT COUNT(DISTINCT navio) as remaining
+          FROM dados_dachser.t_tracking_sea
+          WHERE active = 1
+            AND navio IS NOT NULL AND navio != ''
+            AND (vessel_imo IS NULL OR vessel_imo = '')
+        `);
+        
+        await client.close();
+        
+        const remaining = remainingResult[0]?.remaining || 0;
+        console.log(`[populate_missing_imos] Done: ${processed} vessels processed, ${updated} containers updated, ${notFound} not found, ${remaining} remaining`);
+        
+        return new Response(JSON.stringify({
+          success: true,
+          vesselsProcessed: processed,
+          containersUpdated: updated,
+          notFound,
+          remaining
+        }), { 
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+        });
+      } catch (e: any) {
+        await client.close();
+        console.error('[populate_missing_imos] Error:', e);
+        return new Response(JSON.stringify({ error: e.message }), {
+          status: 500,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      }
+    }
+
     // ===== CLEANUP: Remove "Sibling sync:" prefix from last_event =====
     if (action === 'cleanup_sibling_sync_prefix') {
       const mariadbHost = Deno.env.get('MARIADB_HOST');

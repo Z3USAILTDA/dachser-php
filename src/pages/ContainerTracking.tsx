@@ -176,6 +176,7 @@ const ContainerTracking = () => {
   const [isCleaning, setIsCleaning] = useState(false);
   const [isEnriching, setIsEnriching] = useState(false);
   const [isForceRefreshing, setIsForceRefreshing] = useState(false);
+  const [isPopulatingImos, setIsPopulatingImos] = useState(false);
   const { toast } = useToast();
   
   // Expansion state
@@ -479,6 +480,81 @@ const ContainerTracking = () => {
       });
     } finally {
       setIsForceRefreshing(false);
+    }
+  };
+
+  // Populate missing vessel IMOs
+  const handlePopulateImos = async () => {
+    setIsPopulatingImos(true);
+    let totalUpdated = 0;
+    let totalNotFound = 0;
+    let remaining = 1;
+    let iteration = 0;
+    const maxIterations = 20;
+    
+    toast({
+      title: "Buscando IMOs",
+      description: "Consultando API para navios sem IMO...",
+    });
+    
+    try {
+      while (remaining > 0 && iteration < maxIterations) {
+        iteration++;
+        
+        const res = await fetch(
+          `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/olimpo-proxy?action=populate_missing_imos&batch_size=30`,
+          {
+            method: 'GET',
+            headers: {
+              'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
+              'Content-Type': 'application/json',
+            }
+          }
+        );
+        
+        const result = await res.json();
+        
+        if (result.success) {
+          totalUpdated += result.containersUpdated || 0;
+          totalNotFound += result.notFound || 0;
+          remaining = result.remaining || 0;
+          
+          toast({
+            title: `Buscando IMOs... (${iteration})`,
+            description: `${totalUpdated} containers atualizados, ${remaining} navios restantes`,
+          });
+          
+          if (result.vesselsProcessed === 0 || remaining === 0) {
+            break;
+          }
+        } else {
+          toast({
+            title: "Erro ao buscar IMOs",
+            description: result.error || "Falha na busca",
+            variant: "destructive",
+          });
+          break;
+        }
+      }
+      
+      toast({
+        title: "Busca de IMOs concluída",
+        description: `${totalUpdated} containers atualizados, ${totalNotFound} navios não encontrados`,
+      });
+      
+      await fetchMblData();
+      if (expandedMbl) {
+        await fetchMblContainers(expandedMbl);
+      }
+    } catch (error) {
+      console.error("Error populating IMOs:", error);
+      toast({
+        title: "Erro",
+        description: "Falha ao buscar IMOs",
+        variant: "destructive",
+      });
+    } finally {
+      setIsPopulatingImos(false);
     }
   };
 
@@ -1179,6 +1255,28 @@ const ContainerTracking = () => {
                         </TooltipTrigger>
                         <TooltipContent>
                           <p className="text-xs">Re-rastrear todos containers pendentes/com erro (ignora tempo)</p>
+                        </TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
+
+                    <TooltipProvider>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <button
+                            onClick={handlePopulateImos}
+                            disabled={isPopulatingImos}
+                            className="h-8 px-4 rounded-full bg-cyan-600 text-white text-[0.75rem] font-medium flex items-center gap-1.5 hover:bg-cyan-500 transition shadow-[0_0_20px_rgba(6,182,212,.3)] disabled:opacity-50"
+                          >
+                            {isPopulatingImos ? (
+                              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                            ) : (
+                              <Ship className="w-3.5 h-3.5" />
+                            )}
+                            Popular IMOs
+                          </button>
+                        </TooltipTrigger>
+                        <TooltipContent>
+                          <p className="text-xs">Buscar IMO dos navios para exibir mapa VesselFinder</p>
                         </TooltipContent>
                       </Tooltip>
                     </TooltipProvider>
