@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { Activity, Server, TrendingUp, AlertCircle, RefreshCw, Loader2, Calendar, DollarSign, LayoutDashboard, BarChart3, HelpCircle, X, Clock, CheckCircle, XCircle, ExternalLink } from "lucide-react";
+import { Activity, Server, TrendingUp, AlertCircle, RefreshCw, Loader2, Calendar, DollarSign, LayoutDashboard, BarChart3, HelpCircle, X, Clock, CheckCircle, XCircle, ExternalLink, Mail } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
@@ -920,6 +920,45 @@ export default function ApiManagement() {
     toast.success("Dados atualizados");
   };
 
+  // Função para testar envio de alerta (apenas para devs@z3us.ai)
+  const handleTestAlert = async (apiName: string) => {
+    const apiStat = apiStats.find(a => a.api_name === apiName);
+    if (!apiStat) {
+      toast.error(`API ${apiName} não encontrada`);
+      return;
+    }
+
+    const now = new Date();
+    const periodStart = new Date(now.getFullYear(), now.getMonth(), 1);
+    const periodEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+    const formatDateBR = (date: Date) => date.toLocaleDateString("pt-BR");
+
+    toast.loading(`Enviando email de teste para devs@z3us.ai...`, { id: "test-alert" });
+
+    try {
+      const { data, error } = await supabase.functions.invoke("send-api-usage-alert", {
+        body: {
+          api_name: apiName,
+          current_usage: Number(apiStat.total_calls || 0),
+          period_start: formatDateBR(periodStart),
+          period_end: formatDateBR(periodEnd),
+          test_mode: true
+        }
+      });
+
+      if (error) throw error;
+
+      if (data?.alert_sent) {
+        toast.success(`Email de teste enviado para devs@z3us.ai`, { id: "test-alert" });
+      } else {
+        toast.info(data?.message || "Nenhum alerta enviado", { id: "test-alert" });
+      }
+    } catch (err) {
+      console.error("Erro ao enviar alerta de teste:", err);
+      toast.error("Erro ao enviar email de teste", { id: "test-alert" });
+    }
+  };
+
   const formatDate = (dateStr: string | null) => {
     if (!dateStr) return "N/A";
     return new Date(dateStr).toLocaleString("pt-BR");
@@ -937,6 +976,15 @@ export default function ApiManagement() {
 
   const rightContent = (
     <div className="flex items-center gap-2.5">
+      <Button
+        onClick={() => handleTestAlert("JSONCargo")}
+        variant="outline"
+        className="border-amber-500/50 text-amber-400 hover:bg-amber-500/10 rounded-full px-4 h-8 text-xs font-semibold"
+        title="Envia email de teste para devs@z3us.ai"
+      >
+        <Mail className="w-3.5 h-3.5 mr-1.5" />
+        Testar Alerta
+      </Button>
       <Button
         onClick={handleRefresh}
         disabled={isRefreshing}
