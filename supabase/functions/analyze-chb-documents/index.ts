@@ -318,7 +318,10 @@ REGRAS DE CONTEÚDO DA TABELA
 
 2) Padronização de valores:
    - Números: vírgula decimal; milhar com ponto (ex.: 10.841,00)
-   - Datas: DD/MM/AAAA ou AAAA-MM-DD
+   - Datas: DD/MM/AAAA preferencialmente
+     → Se documento usa MM/DD/AAAA, converter para DD/MM/AAAA
+     → ATENÇÃO: 05/12/2025 pode ser 5/Dez ou 12/Mai dependendo do formato original!
+     → Na dúvida sobre formato, marcar como 🟨 com nota explicativa
    - CNPJ: formatado ou apenas dígitos
    - Ausência: "ND" (não disponível) ou "Ilegível"
    - Status: SOMENTE ícones ✅, 🟨, 🔴
@@ -352,19 +355,27 @@ REGRAS DE CONTEÚDO DA TABELA
 
 7) VALORES — REGRAS CRÍTICAS (ATENÇÃO MÁXIMA — DIFERENCIE CLARAMENTE):
 
-   ⚠️ EXISTEM DOIS VALORES DISTINTOS — NÃO CONFUNDA!
+   ⚠️ EXISTEM TRÊS VALORES DISTINTOS — NÃO CONFUNDA!
    
    A) VALOR TOTAL DA MERCADORIA (Invoice Amount / Merchandise Value):
-      - É o valor TOTAL da Invoice comercial (soma dos itens)
-      - Aparece na INVOICE, geralmente na última linha como "Total", "Grand Total", "Final Amount" ou "Total Amount"
-      - Linha da tabela: "Valor Total" ou "Valor Mercadoria"
-      - PROCURE ESPECIFICAMENTE por "Final Amount" que é o valor total final da invoice
+      - É o valor TOTAL dos produtos na Invoice comercial
+      - Sinônimos: "Total Items", "Merchandise Total", "Subtotal", "Total Goods Value", "Commercial Value"
+      - Linha da tabela: "Valor Mercadoria"
+      - ⚠️ NÃO usar "Final Amount" ou "Total Amount" para mercadoria (podem incluir frete!)
    
    B) VALOR DO FRETE (Freight / Ocean Freight / Air Freight):
       - É o custo do TRANSPORTE da carga
       - Aparece no BL, HBL, AWB, ou documentos de frete
       - Linha da tabela: "Frete" ou "Freight"
       - ATENÇÃO: Frete pode ser "COLLECT" ou "PREPAID" — indicar na observação
+   
+   C) VALOR TOTAL FRETE (Prepaid/Collect Total):
+      - É a soma de TODOS os custos no CCT/BL/AWB (frete + taxas + impostos)
+      - PROCURAR NA TABELA "Prepaid" / "Collect":
+        → Linha "Total" na coluna "Prepaid" = Total Pré-pago
+        → Linha "Total" na coluna "Collect" = Total a Cobrar
+      - Sinônimos: "Total Prepaid", "Total Collect", "Total Charges", "Grand Total" (em BL/CCT)
+      - Linha da tabela: "Valor Total Frete"
    
    MOEDA: sempre especificar (USD, EUR, BRL, etc.)
    NUNCA inventar valores que não existam no documento
@@ -427,22 +438,108 @@ REGRAS DE EXTRAÇÃO — LEIA COM ATENÇÃO MÁXIMA
 - Packing List não tem frete? → ND (normal!)
 - Se dado EXISTE mas está difícil de ler → Extraia assim mesmo!
 
-⚠️ REGRA #6: STATUS
-- ✅ = Valores iguais OU dado existe em só um doc (ND + Valor = ✅)
-- 🟨 = Diferença pequena ou dado parcial
-- 🔴 = Valores DIFERENTES entre documentos que deveriam bater
+⚠️ REGRA #6: STATUS — CRITÉRIOS ESTRITOS PARA "CONFORME" (✅)
+
+CONFORME (✅) SOMENTE quando:
+- Valores são EXATAMENTE iguais (ex.: "USD 1.500,00" = "USD 1.500,00")
+- OU valores são numericamente equivalentes (ex.: "10.841" = "10.841,00" = "10841")
+- OU dado existe em apenas UM documento (ND + Valor = ✅)
+- OU diferença está DENTRO da tolerância configurada pelo cliente
+
+🔴 NÃO É CONFORME quando:
+- Existem 2 ou mais valores DIFERENTES para o mesmo campo
+- Datas diferentes (ex.: 08/12/2025 vs 05/12/2025 vs 12/05/2025 = 🔴)
+- Valores com diferença acima da tolerância
+- Formatos de data invertidos que resultam em datas diferentes
+
+⚠️ REGRA DE DATA CRÍTICA:
+- Se um campo de data mostra valores diferentes entre documentos = 🔴 DIVERGENTE
+- Exemplo: 08/12/2025 (Invoice) vs 05/12/2025 (Packing) = 🔴 NÃO É CONFORME
+- Mesmo se apenas DIA diferir, é divergência
+- Verificar se não é inversão DD/MM vs MM/DD (ambos são divergentes!)
 
 ⚠️ REGRA #7: SEMPRE INCLUA MOEDA
 - Exemplo: "EUR 28.234,23" não apenas "28.234,23"
 
 ═══════════════════════════════════════════════════════════════════════════════
-SINÔNIMOS PARA BUSCAR
+SINÔNIMOS PARA BUSCAR (PROCURE TODAS AS VARIAÇÕES!)
 ═══════════════════════════════════════════════════════════════════════════════
-PESO BRUTO: Gross Weight, G.W., GW, Total Weight, Bruto
-PESO LÍQUIDO: Net Weight, N.W., NW, Líquido
-FRETE: Freight, Ocean Freight, Air Freight, Freight Charges
-VALOR TOTAL: Total, Grand Total, Invoice Total, Amount, Final Amount, Total Amount, Total Value, Valor Total
-INCOTERM: Delivery Terms, Trade Terms
+
+PESO BRUTO: 
+  Gross Weight, G.W., GW, Total Weight, Bruto, Total Bruto, Peso Total,
+  Weight, Wgt, Total Wt, Chargeable Weight (se único peso disponível)
+
+PESO LÍQUIDO: 
+  Net Weight, N.W., NW, Líquido, Net, Nett Weight, Product Weight
+
+QUANTIDADE:
+  Quantity, Qty, QTY, Pcs, Pieces, Units, UN, Packages, Pkgs, Cartons, CTN,
+  No. of Packages, Number of Packages, Volume (un.)
+
+FRETE:
+  Freight, Ocean Freight, Air Freight, Freight Charges, Sea Freight,
+  Prepaid Amount, Collect Amount, Charges, Transportation
+
+VALOR MERCADORIA:
+  Total Items, Merchandise Total, Subtotal, Total Goods, Invoice Total,
+  Total Value, Valor Total Mercadoria, Commercial Value, FOB Value,
+  Net Amount, Valor da Mercadoria
+
+VALOR TOTAL FRETE (na tabela Prepaid/Collect):
+  Total (coluna Prepaid), Total (coluna Collect), Total Prepaid,
+  Total Collect, Total Charges, Freight Total, Grand Total (em BL/CCT)
+
+INCOTERM:
+  Delivery Terms, Trade Terms, Terms of Delivery, Shipment Terms,
+  Freight Terms, Condition of Sale
+
+DATA EMISSÃO:
+  Issue Date, Date of Issue, Issued, Dated, Invoice Date, Date,
+  B/L Date, AWB Date, Document Date, Creation Date
+
+CONSIGNATÁRIO:
+  Consignee, CNPJ, Destinatário, Notify Party, Ship To, Deliver To,
+  Importer, Buyer, Comprador
+
+NCM:
+  HS Code, HTS, Tariff Code, Commodity Code, Classification,
+  NCM/SH, Código NCM
+
+CONTAINERS:
+  Container No., Container Number, CNTR No., Equipment,
+  Container ID, Seal No., Lacre, Container/Seal
+
+═══════════════════════════════════════════════════════════════════════════════
+ESTRUTURA TÍPICA DE CADA DOCUMENTO (onde encontrar cada valor)
+═══════════════════════════════════════════════════════════════════════════════
+
+INVOICE COMERCIAL:
+├── Cabeçalho: Shipper, Consignee, Invoice Number, Date
+├── Tabela de Itens: Description, Quantity, Unit Price, Amount
+├── Rodapé: Incoterm, Total Items, Currency
+└── ATENÇÃO: "Total" ou "Total Items" aqui é VALOR MERCADORIA!
+
+PACKING LIST:
+├── Cabeçalho: Shipper, Consignee, Reference
+├── Tabela: Description, Quantity, Net Weight, Gross Weight
+├── Totais: Total Packages, Total Net Weight, Total Gross Weight
+└── ATENÇÃO: Peso BRUTO e LÍQUIDO devem vir DAQUI!
+
+CCT / BL (Conhecimento de Transporte):
+├── Cabeçalho: Shipper, Consignee, Notify, Port of Loading/Discharge
+├── Descrição da Carga: Container, Description, Weight, Volume
+├── TABELA PREPAID/COLLECT:
+│   ├── Ocean Freight / Air Freight
+│   ├── BAF, CAF, THC, etc.
+│   ├── Impostos
+│   └── TOTAL ← Este é o VALOR TOTAL FRETE!
+└── ATENÇÃO: O "Total" na coluna Prepaid/Collect é FRETE, não mercadoria!
+
+AWB (Air Waybill):
+├── Shipper, Consignee, Carrier
+├── Weight, Dimensions, Chargeable Weight
+├── Freight: Prepaid / Collect
+└── Total Charges
 `;
 
 
@@ -485,14 +582,17 @@ CAMPOS OBRIGATÓRIOS NA TABELA (cada um em sua linha):
 2. Incoterm (FOB, CFR, CIF, etc.)
 3. Peso Bruto (kg) - do PACKING LIST
 4. Peso Líquido (kg) - do PACKING LIST
-5. Valor Mercadoria (COM MOEDA!) - da INVOICE (ex: EUR 28.234,23)
-6. Frete (COM MOEDA!) - do AWB/BL (ex: USD 1.500,00)
-7. NCM Principal
-8. Nº Conhecimento (AWB ou BL)
+5. Valor Mercadoria (COM MOEDA!) - da INVOICE, procure "Total Items" (ex: EUR 28.234,23)
+6. Frete (COM MOEDA!) - do AWB/BL, linha Ocean/Air Freight (ex: USD 1.500,00)
+7. Valor Total Frete (COM MOEDA!) - do CCT/BL, linha "Total" na coluna Prepaid ou Collect
+8. NCM Principal
+9. Nº Conhecimento (AWB ou BL)
+10. Data Emissão (de cada documento)
 
-⚠️ ATENÇÃO: "Valor Mercadoria" e "Frete" são campos DIFERENTES!
-- Valor Mercadoria = soma dos produtos na Invoice
-- Frete = custo do transporte no AWB/BL
+⚠️ ATENÇÃO — TRÊS VALORES DIFERENTES:
+- Valor Mercadoria = soma dos produtos na Invoice ("Total Items")
+- Frete = custo do transporte (linha "Ocean Freight" ou "Air Freight")
+- Valor Total Frete = total na coluna Prepaid/Collect (inclui frete + taxas)
 
 ═══════════════════════════════════════════════════════════════════════════════
 ESTRUTURA DA TABELA DE SAÍDA:
