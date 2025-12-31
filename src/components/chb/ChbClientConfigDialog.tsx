@@ -9,12 +9,13 @@ import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useChbClientConfig, ChbClientConfig, ChbClientConfigInput } from '@/hooks/useChbClientConfig';
 import { toast } from 'sonner';
-import { Settings, Trash2, Plus, Percent, Scale, FileText, MessageSquare, Ship, MapPin, Mail, Clock, DollarSign, Building2, Receipt } from 'lucide-react';
+import { Settings, Trash2, Plus, Percent, Scale, FileText, MessageSquare, Ship, MapPin, Mail, Clock, DollarSign, Building2, Receipt, Download } from 'lucide-react';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Separator } from '@/components/ui/separator';
+import { exportChbConfigToPDF } from '@/utils/chbConfigPdfExport';
 
 interface Props {
   open: boolean;
@@ -220,10 +221,32 @@ export function ChbClientConfigDialog({ open, onOpenChange }: Props) {
             <CardHeader className="pb-3">
               <div className="flex items-center justify-between">
                 <CardTitle className="text-sm font-medium">Clientes Configurados</CardTitle>
-                <Button size="sm" onClick={handleCreate} variant="outline">
-                  <Plus className="h-4 w-4 mr-1" />
-                  Novo
-                </Button>
+                <div className="flex items-center gap-2">
+                  <Button 
+                    size="sm" 
+                    variant="outline"
+                    onClick={() => {
+                      if (configs.length === 0) {
+                        toast.error('Nenhuma configuração para exportar');
+                        return;
+                      }
+                      const fileName = exportChbConfigToPDF(configs, {
+                        toleranciaPesoDefault: 2.0,
+                        toleranciaValorDefault: 1.0,
+                        camposObrigatoriosDefault: ['peso_bruto', 'peso_liquido', 'valor_total', 'moeda', 'incoterm']
+                      });
+                      toast.success(`PDF exportado: ${fileName}`);
+                    }}
+                    disabled={configs.length === 0}
+                  >
+                    <Download className="h-4 w-4 mr-1" />
+                    PDF
+                  </Button>
+                  <Button size="sm" onClick={handleCreate} variant="outline">
+                    <Plus className="h-4 w-4 mr-1" />
+                    Novo
+                  </Button>
+                </div>
               </div>
             </CardHeader>
             <CardContent className="p-0">
