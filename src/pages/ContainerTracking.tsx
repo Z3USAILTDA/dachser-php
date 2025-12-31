@@ -258,6 +258,12 @@ const ContainerTracking = () => {
       const result = await res.json();
       
       if (result.success && result.data) {
+        // Filtrar MBLs que só possuem containers com prefixos não suportados pela JSONCargo
+        // Esses prefixos são de leasing e não podem ser rastreados
+        const UNSUPPORTED_PREFIXES = ['CAAU', 'TXGU', 'UETU', 'TIIU'];
+        
+        // Nota: A filtragem principal é feita no backend, mas mantemos aqui como fallback
+        // para dados que já podem estar carregados no cliente
         setMblList(result.data);
       } else if (result.error) {
         console.error("Error fetching MBL data:", result.error);
@@ -293,11 +299,21 @@ const ContainerTracking = () => {
       const result = await res.json();
       
       if (result.success && result.data) {
-        setMblContainers(result.data);
+        // Filtrar containers com prefixos não suportados pela JSONCargo
+        const UNSUPPORTED_PREFIXES = ['CAAU', 'TXGU', 'UETU', 'TIIU'];
+        const filteredContainers = result.data.filter((c: ContainerDetail) => {
+          if (!c.container || c.container === 'PENDENTE' || c.container === 'NAO_ENCONTRADO') {
+            return true; // Manter pendentes para exibir status
+          }
+          const prefix = c.container.substring(0, 4).toUpperCase();
+          return !UNSUPPORTED_PREFIXES.includes(prefix);
+        });
+        
+        setMblContainers(filteredContainers);
         
         // Extract vessel IMO and name from first container that has them
-        const containerWithImo = result.data.find((c: ContainerDetail) => c.vessel_imo);
-        const containerWithVessel = result.data.find((c: ContainerDetail) => c.navio);
+        const containerWithImo = filteredContainers.find((c: ContainerDetail) => c.vessel_imo);
+        const containerWithVessel = filteredContainers.find((c: ContainerDetail) => c.navio);
         
         if (containerWithImo) {
           setVesselImo(containerWithImo.vessel_imo);
