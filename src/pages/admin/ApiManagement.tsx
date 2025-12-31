@@ -402,6 +402,19 @@ const DashboardTab = ({
           apiStats.map((api) => {
             const cost = getApiCost(api.api_name, Number(api.total_calls || 0));
             const apiLogCount = recentLogs.filter(log => log.api_name === api.api_name).length;
+            const limitConfig = API_LIMITS[api.api_name];
+            const currentUsage = Number(api.total_calls || 0);
+            const usagePercentage = limitConfig ? (currentUsage / limitConfig.monthlyLimit) * 100 : null;
+            const remaining = limitConfig ? limitConfig.monthlyLimit - currentUsage : null;
+            
+            // Cores da barra baseadas no percentual
+            const getProgressColor = (pct: number) => {
+              if (pct >= 90) return "bg-red-500";
+              if (pct >= 80) return "bg-amber-500";
+              if (pct >= 60) return "bg-yellow-500";
+              return "bg-emerald-500";
+            };
+            
             return (
               <PageCard 
                 key={api.api_name} 
@@ -423,6 +436,41 @@ const DashboardTab = ({
                 <p className="text-[10px] text-muted-foreground mb-3">
                   Última chamada: {formatDate(api.last_call)}
                 </p>
+                
+                {/* Barra de progresso para APIs com limite */}
+                {limitConfig && usagePercentage !== null && (
+                  <div className="mb-3 p-2.5 rounded-lg bg-[#0a0b10] border border-white/10">
+                    <div className="flex items-center justify-between mb-1.5">
+                      <span className="text-[9px] uppercase tracking-wider text-muted-foreground">
+                        Uso Mensal
+                      </span>
+                      <span className={`text-[10px] font-semibold ${usagePercentage >= 80 ? "text-amber-400" : "text-white/70"}`}>
+                        {usagePercentage.toFixed(1)}%
+                      </span>
+                    </div>
+                    <div className="h-2 rounded-full bg-white/10 overflow-hidden">
+                      <div 
+                        className={`h-full rounded-full transition-all duration-500 ${getProgressColor(usagePercentage)}`}
+                        style={{ width: `${Math.min(usagePercentage, 100)}%` }}
+                      />
+                    </div>
+                    <div className="flex items-center justify-between mt-1.5">
+                      <span className="text-[10px] text-white/60">
+                        {currentUsage.toLocaleString()} / {limitConfig.monthlyLimit.toLocaleString()}
+                      </span>
+                      <span className={`text-[10px] ${remaining! <= 1000 ? "text-amber-400" : "text-white/40"}`}>
+                        {remaining!.toLocaleString()} restantes
+                      </span>
+                    </div>
+                    {usagePercentage >= 80 && (
+                      <div className="mt-2 flex items-center gap-1.5 text-[10px] text-amber-400">
+                        <AlertCircle className="w-3 h-3" />
+                        <span>Atenção: próximo do limite mensal</span>
+                      </div>
+                    )}
+                  </div>
+                )}
+                
                 <div className="grid grid-cols-2 gap-3">
                   <div className="p-2 rounded-lg bg-[#0a0b10] border border-white/10">
                     <div className="text-[9px] uppercase tracking-wider text-muted-foreground">Chamadas</div>
