@@ -130,6 +130,49 @@ async function jcJson(url: string, qs: Record<string, string> = {}, timeout = 25
   return result;
 }
 
+// Cache de IMO de navios já buscados (durante o batch de re-rastreio)
+const vesselImoCache = new Map<string, string | null>();
+
+async function findVesselImo(vesselName: string): Promise<string | null> {
+  if (!vesselName) return null;
+  
+  // Normaliza o nome do navio
+  const normalizedName = vesselName.toUpperCase().trim();
+  
+  // Verifica cache primeiro
+  if (vesselImoCache.has(normalizedName)) {
+    const cached = vesselImoCache.get(normalizedName);
+    console.log(`[findVesselImo] Cache hit for "${vesselName}": ${cached || 'null'}`);
+    return cached || null;
+  }
+  
+  try {
+    console.log(`[findVesselImo] Searching IMO for vessel "${vesselName}"...`);
+    
+    const res = await jcJson('http://api.jsoncargo.com/api/v1/vessel/finder', { 
+      name: normalizedName, 
+      fuzzy: '1' 
+    }, 10000);
+    
+    if (res.data && Array.isArray(res.data) && res.data.length > 0) {
+      // Pega o primeiro resultado
+      const vessel = res.data[0];
+      const imo = vessel.imo || vessel.vessel_imo || vessel.IMO || null;
+      vesselImoCache.set(normalizedName, imo);
+      console.log(`[findVesselImo] Found IMO ${imo} for vessel "${vesselName}" (${res.data.length} results)`);
+      return imo;
+    }
+    
+    vesselImoCache.set(normalizedName, null);
+    console.log(`[findVesselImo] No IMO found for vessel "${vesselName}"`);
+    return null;
+  } catch (e: any) {
+    console.error(`[findVesselImo] Error searching for "${vesselName}":`, e.message || e);
+    vesselImoCache.set(normalizedName, null);
+    return null;
+  }
+}
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
@@ -1655,6 +1698,11 @@ serve(async (req) => {
         let leasingDetected = 0;
         let bolFirstSuccess = 0;  // Containers de leasing rastreados via BOL-first strategy
         let dbSiblingSuccess = 0; // Containers de leasing rastreados via sibling no banco (0 API calls)
+        let imoLookups = 0;       // Buscas de IMO via vessel/finder
+        
+        // Limpa cache de IMO no início de cada execução
+        vesselImoCache.clear();
+        console.log(`[refresh_sea_tracking] IMO cache cleared for new batch`);
 
         // Prefixes de containers de leasing (não pertencem a armadores específicos)
         // Estes containers precisam usar o MBL ou shipping_line do banco para identificar o armador
@@ -1942,9 +1990,20 @@ serve(async (req) => {
                 if (!siblingApiRes.__curl_error && !siblingApiRes.error && siblingApiRes.data) {
                   const sibData = siblingApiRes.data;
                   const vesselName = sibData.current_vessel_name || sibData.last_vessel_name || sibData.vessel?.name || null;
-                  const vesselImo = sibData.vessel?.imo || sibData.current_vessel_imo || null;
+                  let vesselImo = sibData.vessel?.imo || sibData.current_vessel_imo || null;
                   const containerStatus = sibData.container_status || null;
                   const lastEvent = sibData.last_movement?.description || containerStatus;
+                  
+                  // Se não obteve IMO mas tem nome do navio, buscar via vessel/finder
+                  if (!vesselImo && vesselName) {
+                    console.log(`[refresh_sea_tracking] No IMO from sibling ${nonLeasingSibling}, searching for vessel "${vesselName}"...`);
+                    const foundImo = await findVesselImo(vesselName);
+                    if (foundImo) {
+                      vesselImo = foundImo;
+                      imoLookups++;
+                      console.log(`[refresh_sea_tracking] Found IMO ${foundImo} via vessel/finder for sibling`);
+                    }
+                  }
                   
                   if (containerStatus) {
                     console.log(`[refresh_sea_tracking] Sibling ${nonLeasingSibling} data: status=${containerStatus}, vessel=${vesselName}`);
@@ -1994,10 +2053,21 @@ serve(async (req) => {
                 const bolData = bolApiRes.data;
                 const bolContainerStatus = bolData.status || bolData.bol_status || bolData.shipment_status || null;
                 const bolVessel = bolData.vessel || bolData.vessel_name || bolData.current_vessel || null;
-                const bolVesselImo = bolData.vessel_imo || bolData.imo || null;
+                let bolVesselImo = bolData.vessel_imo || bolData.imo || null;
                 const bolEta = bolData.eta || bolData.eta_final || bolData.eta_destination || null;
                 const bolPol = bolData.pol || bolData.port_of_loading || bolData.origin || null;
                 const bolPod = bolData.pod || bolData.port_of_discharge || bolData.destination || null;
+                
+                // Se não obteve IMO mas tem nome do navio, buscar via vessel/finder
+                if (!bolVesselImo && bolVessel) {
+                  console.log(`[refresh_sea_tracking] No IMO from BOL data, searching for vessel "${bolVessel}"...`);
+                  const foundImo = await findVesselImo(bolVessel);
+                  if (foundImo) {
+                    bolVesselImo = foundImo;
+                    imoLookups++;
+                    console.log(`[refresh_sea_tracking] Found IMO ${foundImo} via vessel/finder for BOL data`);
+                  }
+                }
                 
                 if (bolContainerStatus || bolVessel || bolEta) {
                   console.log(`[refresh_sea_tracking] Using BOL data directly: status=${bolContainerStatus}, vessel=${bolVessel}, eta=${bolEta}`);
@@ -2063,8 +2133,19 @@ serve(async (req) => {
             }
             
             // Extract vessel IMO from various possible response fields
-            const vesselImo = data.vessel?.imo || data.current_vessel_imo || data.vessel_imo || data.imo || null;
+            let vesselImo = data.vessel?.imo || data.current_vessel_imo || data.vessel_imo || data.imo || null;
             const vesselName = data.current_vessel_name || data.last_vessel_name || data.vessel?.name || null;
+            
+            // Se não obteve IMO mas tem nome do navio, buscar via vessel/finder
+            if (!vesselImo && vesselName) {
+              console.log(`[refresh_sea_tracking] No IMO from API for ${containerId}, searching for vessel "${vesselName}"...`);
+              const foundImo = await findVesselImo(vesselName);
+              if (foundImo) {
+                vesselImo = foundImo;
+                imoLookups++;
+                console.log(`[refresh_sea_tracking] Found IMO ${foundImo} via vessel/finder for ${containerId}`);
+              }
+            }
             
             console.log(`[refresh_sea_tracking] Container ${containerId}: vessel=${vesselName}, imo=${vesselImo}`);
             
@@ -2587,7 +2668,7 @@ serve(async (req) => {
         const remaining = remainingResult[0]?.cnt || 0;
 
         await client.close();
-        console.log(`[refresh_sea_tracking] Batch done: ${updated} updated (bolFirst=${bolFirstSuccess}, dbSibling=${dbSiblingSuccess}), ${errors} errors, ${siblingSynced} sibling synced, ${leasingDetected} leasing, ${remaining} remaining, ~${apiCallsSaved} API calls saved`);
+        console.log(`[refresh_sea_tracking] Batch done: ${updated} updated (bolFirst=${bolFirstSuccess}, dbSibling=${dbSiblingSuccess}), ${errors} errors, ${siblingSynced} sibling synced, ${leasingDetected} leasing, ${imoLookups} IMO lookups, ${remaining} remaining, ~${apiCallsSaved} API calls saved`);
         
         return new Response(JSON.stringify({ 
           success: true, 
@@ -2598,11 +2679,12 @@ serve(async (req) => {
           leasingDetected,
           bolFirstSuccess,      // Leasing containers tracked via BOL-first strategy
           dbSiblingSuccess,     // Leasing containers tracked via DB sibling (0 API calls)
+          imoLookups,           // IMO lookups via vessel/finder API
           remaining,
           batchSize,
           apiCallsSaved,
           totalPending,
-          optimization: 'bol_first_for_leasing',
+          optimization: 'bol_first_for_leasing_with_imo_lookup',
           elapsedMs: Date.now() - startTime
         }), {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' }
