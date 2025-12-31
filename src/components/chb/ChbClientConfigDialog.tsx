@@ -416,51 +416,6 @@ export function ChbClientConfigDialog({ open, onOpenChange }: Props) {
                       </div>
                     </div>
 
-                    <Separator />
-
-                    <div>
-                      <Label className="text-xs font-medium flex items-center gap-1 mb-3">
-                        <DollarSign className="h-3 w-3" />
-                        Tolerâncias para Taxas Acessórias
-                      </Label>
-                      <div className="grid grid-cols-2 gap-3">
-                        <div className="space-y-1.5">
-                          <Label className="text-xs text-muted-foreground">Valor Absoluto (USD/EUR)</Label>
-                          <div className="relative">
-                            <Input
-                              type="number"
-                              step="1"
-                              min="0"
-                              value={formData.tolerancia_taxas_acessorias_abs}
-                              onChange={e => setFormData({ ...formData, tolerancia_taxas_acessorias_abs: parseFloat(e.target.value) || 0 })}
-                              className="h-9 pl-8"
-                            />
-                            <DollarSign className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-                          </div>
-                          <p className="text-[0.6rem] text-muted-foreground">
-                            Divergências até este valor serão toleradas
-                          </p>
-                        </div>
-                        <div className="space-y-1.5">
-                          <Label className="text-xs text-muted-foreground">Valor Percentual (%)</Label>
-                          <div className="relative">
-                            <Input
-                              type="number"
-                              step="0.1"
-                              min="0"
-                              max="100"
-                              value={formData.tolerancia_taxas_acessorias_pct}
-                              onChange={e => setFormData({ ...formData, tolerancia_taxas_acessorias_pct: parseFloat(e.target.value) || 0 })}
-                              className="h-9 pr-8"
-                            />
-                            <Percent className="absolute right-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-                          </div>
-                          <p className="text-[0.6rem] text-muted-foreground">
-                            Ou divergências até este % do total
-                          </p>
-                        </div>
-                      </div>
-                    </div>
                   </TabsContent>
 
 
