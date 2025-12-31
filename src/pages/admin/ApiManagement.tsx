@@ -62,15 +62,49 @@ interface ApiLimitConfig {
   monthlyLimit: number;
   alertThreshold: number; // 80% do limite
   plan: string;
+  renewalDay: number; // Dia do mês em que o ciclo renova (1-28)
 }
 
 const API_LIMITS: Record<string, ApiLimitConfig> = {
   "JSONCargo": {
     monthlyLimit: 5000,
     alertThreshold: 4000, // 80% de 5000
-    plan: "Navigator (€299/mês)"
+    plan: "Navigator (€299/mês)",
+    renewalDay: 15 // Renova dia 15 de cada mês
   }
   // Adicionar outras APIs aqui conforme necessário
+};
+
+// Calcula as datas do ciclo atual baseado no dia de renovação
+const getBillingCycleDates = (renewalDay: number): { startDate: Date; endDate: Date; daysRemaining: number } => {
+  const now = new Date();
+  const currentDay = now.getDate();
+  const currentMonth = now.getMonth();
+  const currentYear = now.getFullYear();
+  
+  let cycleStart: Date;
+  let cycleEnd: Date;
+  
+  if (currentDay >= renewalDay) {
+    // Estamos após o dia de renovação, ciclo atual começou este mês
+    cycleStart = new Date(currentYear, currentMonth, renewalDay);
+    cycleEnd = new Date(currentYear, currentMonth + 1, renewalDay - 1);
+  } else {
+    // Estamos antes do dia de renovação, ciclo atual começou mês passado
+    cycleStart = new Date(currentYear, currentMonth - 1, renewalDay);
+    cycleEnd = new Date(currentYear, currentMonth, renewalDay - 1);
+  }
+  
+  // Dias restantes até renovação
+  const timeDiff = cycleEnd.getTime() - now.getTime();
+  const daysRemaining = Math.max(0, Math.ceil(timeDiff / (1000 * 60 * 60 * 24)));
+  
+  return { startDate: cycleStart, endDate: cycleEnd, daysRemaining };
+};
+
+// Formata data do ciclo
+const formatCycleDate = (date: Date): string => {
+  return date.toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' });
 };
 
 const API_PRICING: Record<string, ApiPricing> = {
@@ -407,6 +441,9 @@ const DashboardTab = ({
             const usagePercentage = limitConfig ? (currentUsage / limitConfig.monthlyLimit) * 100 : null;
             const remaining = limitConfig ? limitConfig.monthlyLimit - currentUsage : null;
             
+            // Calcular ciclo de faturamento baseado na data de renovação
+            const billingCycle = limitConfig ? getBillingCycleDates(limitConfig.renewalDay) : null;
+            
             // Cores da barra baseadas no percentual
             const getProgressColor = (pct: number) => {
               if (pct >= 90) return "bg-red-500";
@@ -438,12 +475,17 @@ const DashboardTab = ({
                 </p>
                 
                 {/* Barra de progresso para APIs com limite */}
-                {limitConfig && usagePercentage !== null && (
+                {limitConfig && usagePercentage !== null && billingCycle && (
                   <div className="mb-3 p-2.5 rounded-lg bg-[#0a0b10] border border-white/10">
                     <div className="flex items-center justify-between mb-1.5">
-                      <span className="text-[9px] uppercase tracking-wider text-muted-foreground">
-                        Uso Mensal
-                      </span>
+                      <div className="flex items-center gap-2">
+                        <span className="text-[9px] uppercase tracking-wider text-muted-foreground">
+                          Ciclo Atual
+                        </span>
+                        <span className="text-[9px] text-white/40">
+                          ({formatCycleDate(billingCycle.startDate)} - {formatCycleDate(billingCycle.endDate)})
+                        </span>
+                      </div>
                       <span className={`text-[10px] font-semibold ${usagePercentage >= 80 ? "text-amber-400" : "text-white/70"}`}>
                         {usagePercentage.toFixed(1)}%
                       </span>
@@ -460,6 +502,15 @@ const DashboardTab = ({
                       </span>
                       <span className={`text-[10px] ${remaining! <= 1000 ? "text-amber-400" : "text-white/40"}`}>
                         {remaining!.toLocaleString()} restantes
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between mt-1.5 pt-1.5 border-t border-white/5">
+                      <span className="text-[9px] text-white/40 flex items-center gap-1">
+                        <RefreshCw className="w-2.5 h-2.5" />
+                        Renova dia {limitConfig.renewalDay}
+                      </span>
+                      <span className={`text-[9px] ${billingCycle.daysRemaining <= 5 ? "text-amber-400" : "text-white/40"}`}>
+                        {billingCycle.daysRemaining} dias restantes
                       </span>
                     </div>
                     {usagePercentage >= 80 && (
