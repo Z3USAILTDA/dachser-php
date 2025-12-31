@@ -378,12 +378,6 @@ REGRAS DE CONTEÚDO DA TABELA
       - Sinônimos: "Total Prepaid", "Total Collect", "Total Charges", "Grand Total",
                    "Final Amount", "Total Amount", "Amount Due", "Total Invoice"
       - Linha da tabela: "Valor Total Frete"
-      
-      ⚠️ REGRA DE COMPARAÇÃO PARA VALOR TOTAL FRETE:
-      - Se Invoice E CCT ambos têm "Valor Total Frete":
-        → Valores são IGUAIS → ✅ CONFORME
-        → Valores são DIFERENTES → 🔴 DIVERGENTE (mesmo que venham de documentos diferentes!)
-      - Se apenas um documento tem valor (outro é ND) → ✅ CONFORME
    
    MOEDA: sempre especificar (USD, EUR, BRL, etc.)
    NUNCA inventar valores que não existam no documento
@@ -465,44 +459,6 @@ CONFORME (✅) SOMENTE quando:
 - Exemplo: 08/12/2025 (Invoice) vs 05/12/2025 (Packing) = 🔴 NÃO É CONFORME
 - Mesmo se apenas DIA diferir, é divergência
 - Verificar se não é inversão DD/MM vs MM/DD (ambos são divergentes!)
-
-═══════════════════════════════════════════════════════════════════════════════
-EXEMPLOS CONCRETOS DE DIVERGÊNCIA (🔴) — ESTUDE COM ATENÇÃO!
-═══════════════════════════════════════════════════════════════════════════════
-
-EXEMPLO 1 - Valor Total Frete diferente:
-- Invoice mostra "Final Amount: USD 15.000,00" 
-- CCT mostra "Total Prepaid: USD 12.500,00"
-→ 🔴 DIVERGENTE! (são valores diferentes para Valor Total Frete)
-
-EXEMPLO 2 - Datas diferentes:
-- Invoice mostra "Date: 08/12/2025"
-- Packing mostra "Date: 05/12/2025"
-→ 🔴 DIVERGENTE! (datas diferentes = divergência)
-
-EXEMPLO 3 - Peso diferente:
-- Invoice mostra "Weight: 1.200 kg"
-- Packing mostra "Weight: 1.500 kg"
-→ 🔴 DIVERGENTE! (25% de diferença, acima de tolerância)
-
-═══════════════════════════════════════════════════════════════════════════════
-EXEMPLOS CONCRETOS DE CONFORME (✅) — ESTUDE COM ATENÇÃO!
-═══════════════════════════════════════════════════════════════════════════════
-
-EXEMPLO 1 - ND + Valor:
-- Invoice mostra "Total: USD 15.000,00"
-- Packing mostra "ND" (não tem valor total)
-→ ✅ CONFORME! (ND + valor = OK, não é divergência)
-
-EXEMPLO 2 - Valores equivalentes:
-- Invoice mostra "Weight: 1.500 kg"
-- Packing mostra "Weight: 1.500,00 kg"
-→ ✅ CONFORME! (numericamente equivalentes)
-
-EXEMPLO 3 - Pequena diferença dentro da tolerância:
-- Invoice mostra "Weight: 1.500 kg"
-- Packing mostra "Weight: 1.485 kg"
-→ 🟨 ALERTA (diferença de 1%, dentro da tolerância) ou ✅ se tolerância > 1%
 
 ⚠️ REGRA #7: SEMPRE INCLUA MOEDA
 - Exemplo: "EUR 28.234,23" não apenas "28.234,23"
@@ -654,37 +610,12 @@ ESTRUTURA DA TABELA DE SAÍDA:
 </tbody>
 </table>
 
-REGRAS DE STATUS — ATENÇÃO MÁXIMA:
-═══════════════════════════════════════════════════════════════════════════════
-🔴 DIVERGENTE = Valores DIFERENTES entre documentos
-   Exemplo: Invoice=USD 15.000 vs CCT=USD 12.500 → 🔴
-   Exemplo: Data 08/12/2025 vs 05/12/2025 → 🔴
+REGRAS DE STATUS:
+- ✅ = Valores iguais OU dado existe em apenas um documento
+- 🟨 = Divergência pequena (< tolerância configurada)
+- 🔴 = Divergência significativa entre documentos
 
-🟨 ALERTA = Pequena diferença DENTRO da tolerância configurada
-   Exemplo: Peso 1.500kg vs 1.480kg (diferença < 2%) → 🟨
-
-✅ CONFORME = Valores EXATAMENTE IGUAIS ou ND em um documento
-   Exemplo: USD 15.000 vs USD 15.000 → ✅
-   Exemplo: USD 15.000 vs ND → ✅ (ND não é divergência!)
-
-⚠️ CRÍTICO - VALOR TOTAL FRETE:
-   Se Invoice tem "Final Amount" = USD 15.000
-   E CCT tem "Total Prepaid" = USD 12.500
-   → 🔴 DIVERGENTE! (valores diferentes para o MESMO campo!)
-
-⚠️ CRÍTICO - REGRA DE COMPARAÇÃO:
-   "ND" em um documento + valor em outro = ✅ (isso NÃO é divergência!)
-   Dois valores DIFERENTES para o MESMO campo = 🔴 (isso É divergência!)
-
-EXEMPLO DE TABELA CORRETA:
-| Status | Campo              | Invoice     | Packing | CCT         |
-|--------|-------------------|-------------|---------|-------------|
-| ✅     | Peso Bruto        | ND          | 1.500kg | 1.500kg     |
-| 🔴     | Valor Total Frete | USD 15.000  | ND      | USD 12.500  |
-| ✅     | Consignee         | EMPRESA X   | EMPRESA X | EMPRESA X |
-
-↑ Peso Bruto = ✅ porque Packing e CCT são IGUAIS (Invoice ND não conta)
-↑ Valor Total Frete = 🔴 porque Invoice ≠ CCT (valores DIFERENTES!)
+REGRA CRÍTICA: "ND" em um documento + valor em outro = ✅ (não é divergência!)
 
 ${EXTRACTION_INSTRUCTIONS}
 ${CHB_FORMAT_HTML}
