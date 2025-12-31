@@ -1190,19 +1190,10 @@ serve(async (req) => {
         db: 'dados_dachser',
       });
 
-      // Prefixos de containers confirmados como NÃO rastreáveis pela JSONCargo API
-      // Apenas os prefixos que retornam "Prefix not found" confirmados
-      const UNSUPPORTED_LEASING_PREFIXES = [
-        // Originais (confirmados)
-        'CAAU', 'TXGU', 'UETU', 'TIIU',
-        // Novos identificados nos 12 MBLs pendentes
-        'BBCU', 'TGBU', 'CAIU', 'FCIU', 'DFSU', 'SEGU', 'FBIU', 'FDCU', 'FTAU', 'GCXU'
-      ];
-      const prefixCondition = UNSUPPORTED_LEASING_PREFIXES.map(p => `'${p}'`).join(', ');
-
       try {
-        // Excluir MBLs que só têm containers marcados como NAO_ENCONTRADO
-        // E também excluir MBLs onde TODOS os containers têm prefixos não suportados
+        // Excluir MBLs que:
+        // 1. Só têm containers marcados como NAO_ENCONTRADO
+        // 2. Todos os containers têm erro "Prefix not found" (não rastreáveis)
         const rows = await client.query(`
           SELECT 
             ts.mbl_id,
@@ -1226,21 +1217,19 @@ serve(async (req) => {
           WHERE ts.active = 1
           GROUP BY ts.mbl_id
           HAVING 
-            -- Mostrar MBLs que têm pelo menos 1 container COM prefixo SUPORTADO
+            -- Mostrar MBLs que têm pelo menos 1 container válido (não NAO_ENCONTRADO/PENDENTE)
             COUNT(DISTINCT CASE 
               WHEN ts.container NOT IN ('NAO_ENCONTRADO', 'PENDENTE', 'IGNORADO', '') 
               AND ts.container IS NOT NULL 
-              AND UPPER(LEFT(ts.container, 4)) NOT IN (${prefixCondition})
               THEN ts.container 
             END) > 0
-            -- OU MBLs que ainda estão pendentes de enriquecimento (não sabemos os containers ainda)
-            OR (
-              (MAX(ts.container) = 'PENDENTE' OR MAX(ts.container) IS NULL OR MAX(ts.container) = '')
-              AND COUNT(DISTINCT CASE 
-                WHEN ts.container NOT IN ('NAO_ENCONTRADO', 'PENDENTE', 'IGNORADO', '') 
-                AND ts.container IS NOT NULL 
+            -- E que NÃO tenham TODOS os containers com erro "Prefix not found"
+            AND NOT (
+              COUNT(DISTINCT ts.container) = COUNT(DISTINCT CASE 
+                WHEN ts.last_error LIKE '%Prefix not found%' 
                 THEN ts.container 
-              END) = 0
+              END)
+              AND COUNT(DISTINCT CASE WHEN ts.last_error LIKE '%Prefix not found%' THEN ts.container END) > 0
             )
           ORDER BY MAX(ts.last_check) DESC, ts.mbl_id
         `);
