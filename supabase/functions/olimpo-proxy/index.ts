@@ -1211,6 +1211,85 @@ serve(async (req) => {
       }
     }
 
+    // ===== SEA TRACKING: Debug stats for t_tracking_sea table =====
+    if (action === 'debug_tracking_stats') {
+      const mariadbHost = Deno.env.get('MARIADB_HOST');
+      const mariadbPort = Deno.env.get('MARIADB_PORT') || '3306';
+      const mariadbUser = Deno.env.get('MARIADB_USER');
+      const mariadbPass = Deno.env.get('MARIADB_PASSWORD');
+
+      if (!mariadbHost || !mariadbUser || !mariadbPass) {
+        return new Response(JSON.stringify({ error: 'MariaDB não configurado' }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      }
+
+      const { Client } = await import("https://deno.land/x/mysql@v2.12.1/mod.ts");
+      const client = await new Client().connect({
+        hostname: mariadbHost,
+        port: parseInt(mariadbPort, 10),
+        username: mariadbUser,
+        password: mariadbPass,
+        db: 'dados_dachser',
+      });
+
+      try {
+        // Count by active status
+        const activeStats = await client.query(`
+          SELECT 
+            active,
+            COUNT(*) as total_rows,
+            COUNT(DISTINCT mbl_id) as distinct_mbls
+          FROM dados_dachser.t_tracking_sea
+          GROUP BY active
+        `);
+
+        // Count MBLs with containers PENDENTE only vs with valid containers
+        const containerStats = await client.query(`
+          SELECT 
+            mbl_id,
+            active,
+            COUNT(*) as total_containers,
+            SUM(CASE WHEN container IN ('PENDENTE', 'NAO_ENCONTRADO', 'IGNORADO', '') OR container IS NULL THEN 1 ELSE 0 END) as invalid_containers,
+            SUM(CASE WHEN container NOT IN ('PENDENTE', 'NAO_ENCONTRADO', 'IGNORADO', '') AND container IS NOT NULL THEN 1 ELSE 0 END) as valid_containers,
+            MAX(last_error) as last_error
+          FROM dados_dachser.t_tracking_sea
+          WHERE active = 1
+          GROUP BY mbl_id, active
+          HAVING valid_containers = 0
+          LIMIT 20
+        `);
+
+        // Sample of inactive MBLs
+        const inactiveMbls = await client.query(`
+          SELECT DISTINCT mbl_id, active, last_error, container
+          FROM dados_dachser.t_tracking_sea
+          WHERE active = 0
+          LIMIT 20
+        `);
+
+        await client.close();
+        
+        return new Response(JSON.stringify({ 
+          success: true,
+          stats: {
+            by_active_status: activeStats,
+            mbls_with_only_invalid_containers: containerStats,
+            sample_inactive_mbls: inactiveMbls
+          }
+        }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      } catch (e: any) {
+        await client.close();
+        console.error('[debug_tracking_stats] Error:', e);
+        return new Response(JSON.stringify({ error: e.message }), {
+          status: 500,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      }
+    }
+
     // ===== SEA TRACKING: Get MBL tracking data from t_tracking_sea (grouped by MBL) =====
     if (action === 'get_sea_tracking') {
       const mariadbHost = Deno.env.get('MARIADB_HOST');
@@ -3081,6 +3160,86 @@ serve(async (req) => {
       } catch (e: any) {
         await client.close();
         console.error('[enrich_sea_containers] Error:', e);
+        return new Response(JSON.stringify({ error: e.message }), {
+          status: 500,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      }
+    }
+
+    // ===== SEA TRACKING: Deactivate MBLs that only have invalid containers or are booking references =====
+    if (action === 'deactivate_invalid_mbls') {
+      const mariadbHost = Deno.env.get('MARIADB_HOST');
+      const mariadbPort = Deno.env.get('MARIADB_PORT') || '3306';
+      const mariadbUser = Deno.env.get('MARIADB_USER');
+      const mariadbPass = Deno.env.get('MARIADB_PASSWORD');
+
+      if (!mariadbHost || !mariadbUser || !mariadbPass) {
+        return new Response(JSON.stringify({ error: 'MariaDB não configurado' }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      }
+
+      const { Client } = await import("https://deno.land/x/mysql@v2.12.1/mod.ts");
+      const client = await new Client().connect({
+        hostname: mariadbHost,
+        port: parseInt(mariadbPort, 10),
+        username: mariadbUser,
+        password: mariadbPass,
+        db: 'dados_dachser',
+      });
+
+      try {
+        // 1. Deactivate booking references (EBKG, GLNL, GLSL, etc.) that shouldn't be tracked
+        const bookingResult = await client.execute(`
+          UPDATE dados_dachser.t_tracking_sea
+          SET active = 0, last_error = 'Booking reference - não rastreável'
+          WHERE active = 1
+          AND (
+            LEFT(mbl_id, 4) IN ('EBKG', 'BKNG', 'GLNL', 'GLSL', 'GLDL', 'BRSA')
+            OR mbl_id REGEXP '^BR[A-Za-z]{3}'
+          )
+        `);
+        
+        const bookingDeactivated = bookingResult.affectedRows || 0;
+        console.log(`[deactivate_invalid_mbls] Deactivated ${bookingDeactivated} booking references`);
+
+        // 2. Deactivate MBLs that only have invalid containers (no valid container format)
+        const invalidResult = await client.execute(`
+          UPDATE dados_dachser.t_tracking_sea t1
+          INNER JOIN (
+            SELECT mbl_id
+            FROM dados_dachser.t_tracking_sea
+            WHERE active = 1
+            GROUP BY mbl_id
+            HAVING SUM(CASE 
+              WHEN container NOT IN ('PENDENTE', 'NAO_ENCONTRADO', 'IGNORADO', '') 
+              AND container IS NOT NULL 
+              AND container REGEXP '^[A-Z]{4}[0-9]{7}$'
+              THEN 1 ELSE 0 
+            END) = 0
+          ) t2 ON t1.mbl_id = t2.mbl_id
+          SET t1.active = 0, t1.last_error = 'Sem containers válidos'
+          WHERE t1.active = 1
+        `);
+        
+        const invalidDeactivated = invalidResult.affectedRows || 0;
+        console.log(`[deactivate_invalid_mbls] Deactivated ${invalidDeactivated} MBLs without valid containers`);
+
+        await client.close();
+        
+        return new Response(JSON.stringify({ 
+          success: true, 
+          bookingDeactivated,
+          invalidDeactivated,
+          totalDeactivated: bookingDeactivated + invalidDeactivated,
+          message: `${bookingDeactivated} booking refs + ${invalidDeactivated} sem containers válidos = ${bookingDeactivated + invalidDeactivated} desativados`
+        }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      } catch (e: any) {
+        await client.close();
+        console.error('[deactivate_invalid_mbls] Error:', e);
         return new Response(JSON.stringify({ error: e.message }), {
           status: 500,
           headers: { ...corsHeaders, 'Content-Type': 'application/json' }
