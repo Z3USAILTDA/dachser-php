@@ -57,6 +57,22 @@ interface ApiPricing {
   tier?: string; // Plano contratado
 }
 
+// Limites mensais das APIs (para alertas)
+interface ApiLimitConfig {
+  monthlyLimit: number;
+  alertThreshold: number; // 80% do limite
+  plan: string;
+}
+
+const API_LIMITS: Record<string, ApiLimitConfig> = {
+  "JSONCargo": {
+    monthlyLimit: 5000,
+    alertThreshold: 4000, // 80% de 5000
+    plan: "Navigator (€299/mês)"
+  }
+  // Adicionar outras APIs aqui conforme necessário
+};
+
 const API_PRICING: Record<string, ApiPricing> = {
   "Anthropic": { 
     costPerCall: 0.015, // ~500 input + 500 output tokens avg
@@ -813,6 +829,57 @@ export default function ApiManagement() {
     }
   }, [isAdmin, isRestricted]);
 
+  // Função para verificar limites e enviar alerta
+  const checkApiLimitsAndAlert = async (stats: ApiStats[]) => {
+    const now = new Date();
+    const periodStart = new Date(now.getFullYear(), now.getMonth(), 1);
+    const periodEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+    
+    const formatDateBR = (date: Date) => date.toLocaleDateString("pt-BR");
+    
+    // Verificar alertas já enviados neste mês (usando localStorage para evitar spam)
+    const alertKey = `api_alert_${now.getFullYear()}_${now.getMonth()}`;
+    const sentAlerts: Record<string, boolean> = JSON.parse(localStorage.getItem(alertKey) || "{}");
+    
+    for (const api of stats) {
+      const limitConfig = API_LIMITS[api.api_name];
+      if (!limitConfig) continue;
+      
+      const currentUsage = Number(api.total_calls || 0);
+      
+      // Verificar se atingiu o threshold e ainda não enviou alerta neste mês
+      if (currentUsage >= limitConfig.alertThreshold && !sentAlerts[api.api_name]) {
+        console.log(`[API Alert] ${api.api_name} atingiu ${currentUsage}/${limitConfig.monthlyLimit} (threshold: ${limitConfig.alertThreshold})`);
+        
+        try {
+          const { data, error } = await supabase.functions.invoke("send-api-usage-alert", {
+            body: {
+              api_name: api.api_name,
+              current_usage: currentUsage,
+              period_start: formatDateBR(periodStart),
+              period_end: formatDateBR(periodEnd)
+            }
+          });
+          
+          if (error) throw error;
+          
+          if (data?.alert_sent) {
+            // Marcar como enviado para evitar duplicatas
+            sentAlerts[api.api_name] = true;
+            localStorage.setItem(alertKey, JSON.stringify(sentAlerts));
+            
+            toast.warning(`Alerta enviado: ${api.api_name} em ${((currentUsage / limitConfig.monthlyLimit) * 100).toFixed(0)}% do limite`, {
+              duration: 8000,
+              description: `Notificação enviada para herbert@z3us.ai, rodrigo@z3us.ai e devs@z3us.ai`
+            });
+          }
+        } catch (err) {
+          console.error(`[API Alert] Erro ao enviar alerta para ${api.api_name}:`, err);
+        }
+      }
+    }
+  };
+
   const fetchApiStats = async () => {
     setIsLoading(true);
     try {
@@ -823,10 +890,14 @@ export default function ApiManagement() {
       if (error) throw error;
 
       if (data?.success) {
-        setApiStats(data.stats || []);
+        const stats = data.stats || [];
+        setApiStats(stats);
         setRecentLogs(data.recent_logs || []);
         setDailyTrend(data.daily_trend || []);
         setDailyTotal(data.daily_total || []);
+        
+        // Verificar limites e enviar alertas se necessário
+        checkApiLimitsAndAlert(stats);
       } else {
         throw new Error(data?.error || "Erro ao buscar dados");
       }

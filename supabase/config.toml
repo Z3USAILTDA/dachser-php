@@ -39,6 +39,9 @@ verify_jwt = false
 [functions.send-welcome-email]
 verify_jwt = false
 
+[functions.send-api-usage-alert]
+verify_jwt = false
+
 [functions.add-awb]
 verify_jwt = false
 
