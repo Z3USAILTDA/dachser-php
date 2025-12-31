@@ -337,34 +337,49 @@ export default function ConferenciaChb() {
         console.log(`Using client config for: ${clientConfig.cliente_nome || clientConfig.cliente_cnpj}`);
       }
 
-      const { data, error } = await supabase.functions.invoke('analyze-chb-documents', {
-        body: {
-          stepId: activeStep,
-          files: allFilesContent,
-          itemId: itemId, // Send itemId for caching extracted data
-          clientConfig: clientConfig ? {
-            tolerancia_peso: clientConfig.tolerancia_peso,
-            tolerancia_valor: clientConfig.tolerancia_valor,
-            campos_obrigatorios: clientConfig.campos_obrigatorios,
-            cliente_nome: clientConfig.cliente_nome,
-            instrucoes_personalizadas: clientConfig.instrucoes_personalizadas,
-            // Novos campos de armador
-            armador: clientConfig.armador,
-            agente_destino: clientConfig.agente_destino,
-            contato_email: clientConfig.contato_email,
-            prazo_resposta_dias: clientConfig.prazo_resposta_dias,
-            porto_descarga_real: clientConfig.porto_descarga_real,
-            // Tolerâncias de taxas acessórias
-            tolerancia_taxas_acessorias_abs: clientConfig.tolerancia_taxas_acessorias_abs,
-            tolerancia_taxas_acessorias_pct: clientConfig.tolerancia_taxas_acessorias_pct,
-            // Regras fiscais
-            beneficio_fiscal: clientConfig.beneficio_fiscal,
-            cfop_padrao: clientConfig.cfop_padrao,
-            estado_uf: clientConfig.estado_uf,
-            icms_diferido: clientConfig.icms_diferido,
-          } : undefined,
-        },
-      });
+      // Create AbortController with 5 minute timeout for long-running analysis
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 5 * 60 * 1000); // 5 minutes
+      
+      let data: any;
+      let error: any;
+      
+      try {
+        const result = await supabase.functions.invoke('analyze-chb-documents', {
+          body: {
+            stepId: activeStep,
+            files: allFilesContent,
+            itemId: itemId, // Send itemId for caching extracted data
+            clientConfig: clientConfig ? {
+              tolerancia_peso: clientConfig.tolerancia_peso,
+              tolerancia_valor: clientConfig.tolerancia_valor,
+              campos_obrigatorios: clientConfig.campos_obrigatorios,
+              cliente_nome: clientConfig.cliente_nome,
+              instrucoes_personalizadas: clientConfig.instrucoes_personalizadas,
+              armador: clientConfig.armador,
+              agente_destino: clientConfig.agente_destino,
+              contato_email: clientConfig.contato_email,
+              prazo_resposta_dias: clientConfig.prazo_resposta_dias,
+              porto_descarga_real: clientConfig.porto_descarga_real,
+              tolerancia_taxas_acessorias_abs: clientConfig.tolerancia_taxas_acessorias_abs,
+              tolerancia_taxas_acessorias_pct: clientConfig.tolerancia_taxas_acessorias_pct,
+              beneficio_fiscal: clientConfig.beneficio_fiscal,
+              cfop_padrao: clientConfig.cfop_padrao,
+              estado_uf: clientConfig.estado_uf,
+              icms_diferido: clientConfig.icms_diferido,
+            } : undefined,
+          },
+        });
+        data = result.data;
+        error = result.error;
+      } catch (invokeError: any) {
+        if (invokeError.name === 'AbortError') {
+          throw new Error('Análise demorou mais de 5 minutos. Tente novamente com menos arquivos ou arquivos menores.');
+        }
+        throw invokeError;
+      } finally {
+        clearTimeout(timeoutId);
+      }
 
       if (error) {
         throw new Error(error.message);
