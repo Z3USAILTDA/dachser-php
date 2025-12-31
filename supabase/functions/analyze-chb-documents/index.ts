@@ -751,7 +751,7 @@ async function callAnthropicAPI(prompt: string, filesContent: { name: string; co
     },
     body: JSON.stringify({
       model: 'claude-sonnet-4-5',
-      max_tokens: 16000,
+      max_tokens: 32000,
       temperature: 0, // Maximum determinism for data extraction
       messages: [
         {
@@ -877,14 +877,14 @@ async function callLovableAI(prompt: string, filesContent: { name: string; conte
       'Authorization': `Bearer ${apiKey}`,
     },
     body: JSON.stringify({
-      model: 'google/gemini-2.5-flash',
+      model: 'google/gemini-2.5-pro',
       messages: [
         {
           role: 'user',
           content: content,
         },
       ],
-      max_tokens: 16000,
+      max_tokens: 32000,
     }),
   });
   const elapsed = Date.now() - startTime;
@@ -1043,7 +1043,7 @@ function estimateTokenCount(text: string): number {
  */
 function validateInputSize(
   files: { name: string; content: string; mimeType: string }[],
-  maxInputTokens: number = 150000
+  maxInputTokens: number = 200000
 ): { isValid: boolean; estimatedTokens: number; warning?: string } {
   let totalEstimate = 0;
   
@@ -1099,7 +1099,7 @@ serve(async (req) => {
     // Validate input size
     const inputValidation = validateInputSize(files);
     console.log(`[Input Size] Estimated input tokens: ${inputValidation.estimatedTokens}`);
-    console.log(`[Input Size] Max output tokens: 16000`);
+    console.log(`[Input Size] Max output tokens: 32000`);
     
     if (!inputValidation.isValid) {
       console.warn(`[Input Size] ${inputValidation.warning}`);
