@@ -50,7 +50,7 @@ const generateAlertEmailHtml = (
 ): string => {
   const logoLight = "https://i.ibb.co/TgXzCqz/logo-preto.png";
   const logoDark = "https://i.ibb.co/sJkY7y5/logo-branco.png";
-  const dashboardUrl = "https://dachser.z3us.app/admin/apis";
+  const dashboardUrl = "https://dachser.z3us.app/";
   const brand = "Z3US";
   const brandPlain = "Z3US&#8203;.AI";
 
@@ -196,7 +196,7 @@ Recomendações:
 - Considere otimizar chamadas desnecessárias
 - Avalie upgrade de plano se necessário
 
-Ver Dashboard: https://dachser.z3us.app/admin/apis
+Ver Dashboard: https://dachser.z3us.app/
 
 ---
 Z3US.AI - Monitoramento de APIs`;
