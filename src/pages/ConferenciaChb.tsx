@@ -341,6 +341,7 @@ export default function ConferenciaChb() {
         body: {
           stepId: activeStep,
           files: allFilesContent,
+          itemId: itemId, // Send itemId for caching extracted data
           clientConfig: clientConfig ? {
             tolerancia_peso: clientConfig.tolerancia_peso,
             tolerancia_valor: clientConfig.tolerancia_valor,
