@@ -1479,14 +1479,12 @@ serve(async (req) => {
             AND md.etd >= '2025-12-01'
             -- Apenas processos marítimos
             AND md.tipo_processo LIKE '%SEA%'
-            -- Only insert if MBL doesn't exist yet (WHERE NOT EXISTS pattern via INSERT IGNORE)
+            -- Only insert if this MBL doesn't already exist in tracking table
+            -- Check MBL existence ONLY (not the specific container combination)
+            -- This prevents adding new "PENDENTE" records to MBLs that already have enriched containers
             AND NOT EXISTS (
               SELECT 1 FROM dados_dachser.t_tracking_sea t 
-              WHERE t.mbl_id = TRIM(md.mawb) 
-              AND t.container = CASE 
-                WHEN md.container IS NULL OR TRIM(md.container) = '' THEN 'PENDENTE'
-                ELSE TRIM(md.container)
-              END
+              WHERE t.mbl_id = TRIM(md.mawb)
             )
         `);
 
@@ -3083,6 +3081,67 @@ serve(async (req) => {
       } catch (e: any) {
         await client.close();
         console.error('[enrich_sea_containers] Error:', e);
+        return new Response(JSON.stringify({ error: e.message }), {
+          status: 500,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      }
+    }
+
+    // ===== SEA TRACKING: Cleanup orphan PENDENTE containers from MBLs that already have valid containers =====
+    if (action === 'cleanup_orphan_pendentes') {
+      const mariadbHost = Deno.env.get('MARIADB_HOST');
+      const mariadbPort = Deno.env.get('MARIADB_PORT') || '3306';
+      const mariadbUser = Deno.env.get('MARIADB_USER');
+      const mariadbPass = Deno.env.get('MARIADB_PASSWORD');
+
+      if (!mariadbHost || !mariadbUser || !mariadbPass) {
+        return new Response(JSON.stringify({ error: 'MariaDB não configurado' }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      }
+
+      const { Client } = await import("https://deno.land/x/mysql@v2.12.1/mod.ts");
+      const client = await new Client().connect({
+        hostname: mariadbHost,
+        port: parseInt(mariadbPort, 10),
+        username: mariadbUser,
+        password: mariadbPass,
+        db: 'dados_dachser',
+      });
+
+      try {
+        // Delete PENDENTE containers from MBLs that already have at least one valid container
+        // A valid container is one that is NOT 'PENDENTE', 'NAO_ENCONTRADO', 'IGNORADO', empty, or null
+        const result = await client.execute(`
+          DELETE FROM dados_dachser.t_tracking_sea
+          WHERE container IN ('PENDENTE', '')
+          AND mbl_id IN (
+            SELECT DISTINCT mbl_id FROM (
+              SELECT mbl_id 
+              FROM dados_dachser.t_tracking_sea 
+              WHERE container NOT IN ('PENDENTE', 'NAO_ENCONTRADO', 'IGNORADO', '') 
+              AND container IS NOT NULL
+              AND container REGEXP '^[A-Z]{4}[0-9]{7}$'
+            ) AS mbls_with_valid_containers
+          )
+        `);
+
+        await client.close();
+        
+        const deleted = result.affectedRows || 0;
+        console.log(`[cleanup_orphan_pendentes] Deleted ${deleted} orphan PENDENTE records`);
+        
+        return new Response(JSON.stringify({ 
+          success: true, 
+          deleted,
+          message: `${deleted} registros PENDENTE órfãos removidos`
+        }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      } catch (e: any) {
+        await client.close();
+        console.error('[cleanup_orphan_pendentes] Error:', e);
         return new Response(JSON.stringify({ error: e.message }), {
           status: 500,
           headers: { ...corsHeaders, 'Content-Type': 'application/json' }
