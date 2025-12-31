@@ -15,7 +15,6 @@ import {
   RefreshCw,
   Ship,
   Trash2,
-  Database,
   Mail,
   Check,
   ArrowLeft,
@@ -26,7 +25,6 @@ import {
   ChevronDown,
   ChevronUp,
   Package,
-  MapPin,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
@@ -172,18 +170,16 @@ const ContainerTracking = () => {
   const [currentPage, setCurrentPage] = useState(1);
   const [isLoadingData, setIsLoadingData] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
-  const [isSyncing, setIsSyncing] = useState(false);
-  const [isCleaning, setIsCleaning] = useState(false);
-  const [isEnriching, setIsEnriching] = useState(false);
-  const [isForceRefreshing, setIsForceRefreshing] = useState(false);
-  const [isPopulatingImos, setIsPopulatingImos] = useState(false);
   const { toast } = useToast();
+  
+  // Auto sync state
+  const [autoSyncStatus, setAutoSyncStatus] = useState<'sync' | 'enrich' | 'track' | 'imo' | null>(null);
+  const [lastAutoSync, setLastAutoSync] = useState<Date | null>(null);
   
   // Expansion state
   const [expandedMbl, setExpandedMbl] = useState<string | null>(null);
   const [mblContainers, setMblContainers] = useState<ContainerDetail[]>([]);
   const [loadingContainers, setLoadingContainers] = useState(false);
-  const [trackingContainer, setTrackingContainer] = useState<string | null>(null);
   const [vesselImo, setVesselImo] = useState<string | null>(null);
   const [vesselName, setVesselName] = useState<string | null>(null);
   
@@ -259,10 +255,6 @@ const ContainerTracking = () => {
       const result = await res.json();
       
       if (result.success && result.data) {
-        // Nota: A filtragem principal é feita no backend por last_error
-        
-        // Nota: A filtragem principal é feita no backend, mas mantemos aqui como fallback
-        // para dados que já podem estar carregados no cliente
         setMblList(result.data);
       } else if (result.error) {
         console.error("Error fetching MBL data:", result.error);
@@ -298,10 +290,8 @@ const ContainerTracking = () => {
       const result = await res.json();
       
       if (result.success && result.data) {
-        // Containers são filtrados no backend por last_error
         setMblContainers(result.data);
         
-        // Extract vessel IMO and name from first container that has them
         const containerWithImo = result.data.find((c: ContainerDetail) => c.vessel_imo);
         const containerWithVessel = result.data.find((c: ContainerDetail) => c.navio);
         
@@ -332,75 +322,28 @@ const ContainerTracking = () => {
     }
   };
 
-  // Refresh containers via JSONCargo API (batch processing to avoid timeout)
+  // Simplified refresh - only reloads data from UI
   const handleRefresh = async () => {
     setIsRefreshing(true);
-    let totalUpdated = 0;
-    let totalErrors = 0;
-    let remaining = 1; // Start with 1 to enter loop
-    let iteration = 0;
-    const maxIterations = 50; // Safety limit
-    
     toast({
-      title: "Atualizando dados",
-      description: "Consultando status via JSONCargo API...",
+      title: "Atualizando",
+      description: "Recarregando dados...",
     });
     
     try {
-      while (remaining > 0 && iteration < maxIterations) {
-        iteration++;
-        
-        const res = await fetch(
-          `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/olimpo-proxy?action=refresh_sea_tracking&batch_size=10&max_time_ms=45000&stale_hours=0`,
-          {
-            method: 'GET',
-            headers: {
-              'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
-              'Content-Type': 'application/json',
-            }
-          }
-        );
-        
-        const result = await res.json();
-        
-        if (result.success) {
-          totalUpdated += result.updated || 0;
-          totalErrors += result.errors || 0;
-          remaining = result.remaining || 0;
-          
-          toast({
-            title: `Atualizando... (${iteration})`,
-            description: `${totalUpdated} atualizados, ${remaining} restantes`,
-          });
-          
-          // If no containers were processed, exit
-          if (result.processed === 0) {
-            break;
-          }
-        } else {
-          toast({
-            title: "Erro ao atualizar",
-            description: result.error || "Falha na atualização",
-            variant: "destructive",
-          });
-          break;
-        }
-      }
-      
-      toast({
-        title: "Atualização concluída",
-        description: `${totalUpdated} containers atualizados${totalErrors > 0 ? `, ${totalErrors} com erro` : ''}`,
-      });
-      
       await fetchMblData();
       if (expandedMbl) {
         await fetchMblContainers(expandedMbl);
       }
+      toast({
+        title: "Atualizado",
+        description: "Dados recarregados com sucesso",
+      });
     } catch (error) {
       console.error("Error refreshing:", error);
       toast({
         title: "Erro",
-        description: "Falha ao atualizar containers",
+        description: "Falha ao recarregar dados",
         variant: "destructive",
       });
     } finally {
@@ -408,166 +351,15 @@ const ContainerTracking = () => {
     }
   };
 
-  // Force re-track pending/error containers
-  const handleForceRefresh = async () => {
-    setIsForceRefreshing(true);
-    let totalUpdated = 0;
-    let totalErrors = 0;
-    let remaining = 1;
-    let iteration = 0;
-    const maxIterations = 50;
-    
-    toast({
-      title: "Forçando re-rastreio",
-      description: "Re-processando containers pendentes e com erro...",
-    });
+  // Automated sync function - runs every 12 hours in background
+  const runAutoSync = React.useCallback(async () => {
+    console.log('[AutoSync] Starting automated sync process...');
     
     try {
-      while (remaining > 0 && iteration < maxIterations) {
-        iteration++;
-        
-        const res = await fetch(
-          `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/olimpo-proxy?action=refresh_sea_tracking&batch_size=10&max_time_ms=45000&force=1`,
-          {
-            method: 'GET',
-            headers: {
-              'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
-              'Content-Type': 'application/json',
-            }
-          }
-        );
-        
-        const result = await res.json();
-        
-        if (result.success) {
-          totalUpdated += result.updated || 0;
-          totalErrors += result.errors || 0;
-          remaining = result.remaining || 0;
-          
-          toast({
-            title: `Re-rastreando... (${iteration})`,
-            description: `${totalUpdated} atualizados, ${remaining} restantes`,
-          });
-          
-          if (result.processed === 0) {
-            break;
-          }
-        } else {
-          toast({
-            title: "Erro ao re-rastrear",
-            description: result.error || "Falha no re-rastreio",
-            variant: "destructive",
-          });
-          break;
-        }
-      }
-      
-      toast({
-        title: "Re-rastreio concluído",
-        description: `${totalUpdated} containers atualizados${totalErrors > 0 ? `, ${totalErrors} com erro` : ''}`,
-      });
-      
-      await fetchMblData();
-      if (expandedMbl) {
-        await fetchMblContainers(expandedMbl);
-      }
-    } catch (error) {
-      console.error("Error force refreshing:", error);
-      toast({
-        title: "Erro",
-        description: "Falha ao re-rastrear containers",
-        variant: "destructive",
-      });
-    } finally {
-      setIsForceRefreshing(false);
-    }
-  };
-
-  // Populate missing vessel IMOs
-  const handlePopulateImos = async () => {
-    setIsPopulatingImos(true);
-    let totalUpdated = 0;
-    let totalNotFound = 0;
-    let remaining = 1;
-    let iteration = 0;
-    const maxIterations = 20;
-    
-    toast({
-      title: "Buscando IMOs",
-      description: "Consultando API para navios sem IMO...",
-    });
-    
-    try {
-      while (remaining > 0 && iteration < maxIterations) {
-        iteration++;
-        
-        const res = await fetch(
-          `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/olimpo-proxy?action=populate_missing_imos&batch_size=30`,
-          {
-            method: 'GET',
-            headers: {
-              'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
-              'Content-Type': 'application/json',
-            }
-          }
-        );
-        
-        const result = await res.json();
-        
-        if (result.success) {
-          totalUpdated += result.containersUpdated || 0;
-          totalNotFound += result.notFound || 0;
-          remaining = result.remaining || 0;
-          
-          toast({
-            title: `Buscando IMOs... (${iteration})`,
-            description: `${totalUpdated} containers atualizados, ${remaining} navios restantes`,
-          });
-          
-          if (result.vesselsProcessed === 0 || remaining === 0) {
-            break;
-          }
-        } else {
-          toast({
-            title: "Erro ao buscar IMOs",
-            description: result.error || "Falha na busca",
-            variant: "destructive",
-          });
-          break;
-        }
-      }
-      
-      toast({
-        title: "Busca de IMOs concluída",
-        description: `${totalUpdated} containers atualizados, ${totalNotFound} navios não encontrados`,
-      });
-      
-      await fetchMblData();
-      if (expandedMbl) {
-        await fetchMblContainers(expandedMbl);
-      }
-    } catch (error) {
-      console.error("Error populating IMOs:", error);
-      toast({
-        title: "Erro",
-        description: "Falha ao buscar IMOs",
-        variant: "destructive",
-      });
-    } finally {
-      setIsPopulatingImos(false);
-    }
-  };
-
-  // Sync from t_master_dados
-  const handleSync = async () => {
-    setIsSyncing(true);
-    toast({
-      title: "Sincronizando",
-      description: "Buscando dados de t_master_dados...",
-    });
-    
-    try {
-      const res = await fetch(
+      // Step 1: Sync new MBLs from t_master_dados
+      setAutoSyncStatus('sync');
+      console.log('[AutoSync] Step 1: Syncing new MBLs...');
+      await fetch(
         `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/olimpo-proxy?action=sync_sea_tracking`,
         {
           method: 'GET',
@@ -577,56 +369,16 @@ const ContainerTracking = () => {
           }
         }
       );
-      
-      const result = await res.json();
-      
-      if (result.success) {
-        toast({
-          title: "Sincronizado",
-          description: result.message || `${result.synced} registros sincronizados`,
-        });
-        await fetchMblData();
-      } else {
-        toast({
-          title: "Erro ao sincronizar",
-          description: result.error || "Falha na sincronização",
-          variant: "destructive",
-        });
-      }
-    } catch (error) {
-      console.error("Error syncing:", error);
-      toast({
-        title: "Erro",
-        description: "Falha ao sincronizar",
-        variant: "destructive",
-      });
-    } finally {
-      setIsSyncing(false);
-    }
-  };
 
-  // Enrich MBLs with containers from JsonCargo API (batch processing to avoid timeout)
-  const handleEnrich = async () => {
-    setIsEnriching(true);
-    let totalEnriched = 0;
-    let totalSkipped = 0;
-    let totalErrors = 0;
-    let totalNoContainers = 0;
-    let remaining = 1; // Start with 1 to enter loop
-    let iteration = 0;
-    const maxIterations = 30; // Safety limit
-    
-    toast({
-      title: "Enriquecendo",
-      description: "Buscando containers via API JsonCargo...",
-    });
-    
-    try {
-      while (remaining > 0 && iteration < maxIterations) {
-        iteration++;
-        
-        const res = await fetch(
-          `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/olimpo-proxy?action=enrich_sea_containers&batch_size=10&max_time_ms=45000`,
+      // Step 2: Enrich MBLs with containers (batch)
+      setAutoSyncStatus('enrich');
+      console.log('[AutoSync] Step 2: Enriching MBLs with containers...');
+      let enrichRemaining = 1;
+      let enrichIteration = 0;
+      while (enrichRemaining > 0 && enrichIteration < 20) {
+        enrichIteration++;
+        const enrichRes = await fetch(
+          `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/olimpo-proxy?action=enrich_sea_containers&batch_size=30&max_time_ms=45000`,
           {
             method: 'GET',
             headers: {
@@ -635,139 +387,81 @@ const ContainerTracking = () => {
             }
           }
         );
-        
-        const result = await res.json();
-        
-        if (result.success) {
-          totalEnriched += result.enriched || 0;
-          totalSkipped += result.skipped || 0;
-          totalErrors += result.errors || 0;
-          totalNoContainers += result.noContainers || 0;
-          remaining = result.remaining || 0;
-          
-          toast({
-            title: `Enriquecendo... (${iteration})`,
-            description: `${totalEnriched} enriquecidos, ${remaining} restantes`,
-          });
-          
-          // If no MBLs were processed (all skipped or none left), exit
-          if (remaining === 0 || (result.enriched === 0 && result.errors === 0 && result.noContainers === 0)) {
-            break;
-          }
-        } else {
-          toast({
-            title: "Erro ao enriquecer",
-            description: result.error || "Falha no enriquecimento",
-            variant: "destructive",
-          });
-          break;
-        }
+        const enrichResult = await enrichRes.json();
+        enrichRemaining = enrichResult.remaining || 0;
+        if (enrichResult.enriched === 0 && enrichResult.errors === 0) break;
       }
-      
-      toast({
-        title: "Enriquecimento concluído",
-        description: `${totalEnriched} enriquecidos, ${totalSkipped} ignorados, ${totalNoContainers} sem containers, ${totalErrors} erros`,
-      });
-      
+
+      // Step 3: Track containers (batch with 48h for valid status)
+      setAutoSyncStatus('track');
+      console.log('[AutoSync] Step 3: Tracking containers...');
+      let trackRemaining = 1;
+      let trackIteration = 0;
+      while (trackRemaining > 0 && trackIteration < 30) {
+        trackIteration++;
+        const trackRes = await fetch(
+          `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/olimpo-proxy?action=refresh_sea_tracking&batch_size=20&stale_hours=4&refresh_valid_hours=48`,
+          {
+            method: 'GET',
+            headers: {
+              'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
+              'Content-Type': 'application/json',
+            }
+          }
+        );
+        const trackResult = await trackRes.json();
+        trackRemaining = trackResult.remaining || 0;
+        if (trackResult.processed === 0) break;
+      }
+
+      // Step 4: Populate missing IMOs
+      setAutoSyncStatus('imo');
+      console.log('[AutoSync] Step 4: Populating missing IMOs...');
+      let imoRemaining = 1;
+      let imoIteration = 0;
+      while (imoRemaining > 0 && imoIteration < 15) {
+        imoIteration++;
+        const imoRes = await fetch(
+          `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/olimpo-proxy?action=populate_missing_imos&batch_size=30`,
+          {
+            method: 'GET',
+            headers: {
+              'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
+              'Content-Type': 'application/json',
+            }
+          }
+        );
+        const imoResult = await imoRes.json();
+        imoRemaining = imoResult.remaining || 0;
+        if (imoResult.vesselsProcessed === 0) break;
+      }
+
+      // Step 5: Refresh data in UI
+      console.log('[AutoSync] Step 5: Refreshing UI data...');
       await fetchMblData();
+      setLastAutoSync(new Date());
+      console.log('[AutoSync] Completed successfully');
+      
     } catch (error) {
-      console.error("Error enriching:", error);
-      toast({
-        title: "Erro",
-        description: "Falha ao enriquecer MBLs",
-        variant: "destructive",
-      });
+      console.error('[AutoSync] Error:', error);
     } finally {
-      setIsEnriching(false);
+      setAutoSyncStatus(null);
     }
-  };
+  }, [fetchMblData]);
 
-  // Cleanup invalid records
-  const handleCleanup = async () => {
-    setIsCleaning(true);
-    toast({
-      title: "Limpando",
-      description: "Marcando registros inválidos como inativos...",
-    });
+  // Set up 12-hour interval for auto sync (NOT on page load)
+  useEffect(() => {
+    if (!user) return;
     
-    try {
-      const res = await fetch(
-        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/olimpo-proxy?action=cleanup_sea_tracking`,
-        {
-          method: 'GET',
-          headers: {
-            'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
-            'Content-Type': 'application/json',
-          }
-        }
-      );
-      
-      const result = await res.json();
-      
-      if (result.success) {
-        toast({
-          title: "Limpeza concluída",
-          description: `${result.cleaned} registros inválidos removidos. ${result.remaining} registros válidos restantes.`,
-        });
-        await fetchMblData();
-      } else {
-        toast({
-          title: "Erro na limpeza",
-          description: result.error || "Falha ao limpar registros",
-          variant: "destructive",
-        });
-      }
-    } catch (error) {
-      console.error("Error cleaning:", error);
-      toast({
-        title: "Erro",
-        description: "Falha ao limpar registros",
-        variant: "destructive",
-      });
-    } finally {
-      setIsCleaning(false);
-    }
-  };
-
-  // Track single container
-  const handleTrackContainer = async (containerId: string, shippingLine: string) => {
-    setTrackingContainer(containerId);
-    try {
-      const res = await fetch(
-        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/olimpo-proxy?action=track_sea_container&container=${encodeURIComponent(containerId)}&shipping_line=${encodeURIComponent(shippingLine)}`,
-        {
-          method: 'GET',
-          headers: {
-            'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
-            'Content-Type': 'application/json',
-          }
-        }
-      );
-      
-      const result = await res.json();
-      
-      if (result.success) {
-        toast({
-          title: "Container rastreado",
-          description: `Status: ${result.data?.container_status || 'N/A'}`,
-        });
-        if (expandedMbl) {
-          await fetchMblContainers(expandedMbl);
-        }
-        await fetchMblData();
-      } else {
-        toast({
-          title: "Erro no rastreio",
-          description: result.error || "Falha ao rastrear container",
-          variant: "destructive",
-        });
-      }
-    } catch (error) {
-      console.error("Error tracking:", error);
-    } finally {
-      setTrackingContainer(null);
-    }
-  };
+    const TWELVE_HOURS_MS = 12 * 60 * 60 * 1000;
+    
+    const interval = setInterval(() => {
+      console.log('[AutoSync] 12-hour interval triggered');
+      runAutoSync();
+    }, TWELVE_HOURS_MS);
+    
+    return () => clearInterval(interval);
+  }, [user, runAutoSync]);
 
   // Delete MBL from tracking
   const handleDeleteMbl = async (mbl_id: string) => {
@@ -925,6 +619,17 @@ const ContainerTracking = () => {
     });
     return Array.from(armadoresSet).sort();
   }, [mblList]);
+
+  // Get auto sync status label
+  const getAutoSyncLabel = () => {
+    switch (autoSyncStatus) {
+      case 'sync': return 'Sincronizando MBLs...';
+      case 'enrich': return 'Enriquecendo containers...';
+      case 'track': return 'Rastreando containers...';
+      case 'imo': return 'Buscando IMOs...';
+      default: return null;
+    }
+  };
 
   if (isLoading) {
     return (
@@ -1166,123 +871,24 @@ const ContainerTracking = () => {
                     </SelectContent>
                   </Select>
                 </div>
+                
+                {/* Auto Sync Status Indicator */}
+                {autoSyncStatus && (
+                  <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-[rgba(255,200,0,.1)] border border-[rgba(255,200,0,.3)]">
+                    <Loader2 className="w-3.5 h-3.5 animate-spin text-[#ffc800]" />
+                    <span className="text-xs text-[#ffc800]">{getAutoSyncLabel()}</span>
+                  </div>
+                )}
+                
+                {/* Last Sync Time */}
+                {lastAutoSync && !autoSyncStatus && (
+                  <div className="text-xs text-[#666]">
+                    Última sincronização: {lastAutoSync.toLocaleTimeString('pt-BR')}
+                  </div>
+                )}
               </div>
 
               <div className="flex items-center gap-2">
-                {isAdmin && (
-                  <>
-                    <TooltipProvider>
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                          <button
-                            onClick={handleSync}
-                            disabled={isSyncing}
-                            className="h-8 px-4 rounded-full bg-blue-600 text-white text-[0.75rem] font-medium flex items-center gap-1.5 hover:bg-blue-500 transition shadow-[0_0_20px_rgba(59,130,246,.3)] disabled:opacity-50"
-                          >
-                            {isSyncing ? (
-                              <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                            ) : (
-                              <Database className="w-3.5 h-3.5" />
-                            )}
-                            Sincronizar
-                          </button>
-                        </TooltipTrigger>
-                        <TooltipContent>
-                          <p className="text-xs">Sincronizar dados de t_master_dados</p>
-                        </TooltipContent>
-                      </Tooltip>
-                    </TooltipProvider>
-
-                    <TooltipProvider>
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                          <button
-                            onClick={handleCleanup}
-                            disabled={isCleaning}
-                            className="h-8 px-4 rounded-full bg-red-600 text-white text-[0.75rem] font-medium flex items-center gap-1.5 hover:bg-red-500 transition shadow-[0_0_20px_rgba(239,68,68,.3)] disabled:opacity-50"
-                          >
-                            {isCleaning ? (
-                              <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                            ) : (
-                              <Trash2 className="w-3.5 h-3.5" />
-                            )}
-                            Limpar
-                          </button>
-                        </TooltipTrigger>
-                        <TooltipContent>
-                          <p className="text-xs">Remover MBLs e containers inválidos</p>
-                        </TooltipContent>
-                      </Tooltip>
-                    </TooltipProvider>
-
-                    <TooltipProvider>
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                          <button
-                            onClick={handleEnrich}
-                            disabled={isEnriching}
-                            className="h-8 px-4 rounded-full bg-purple-600 text-white text-[0.75rem] font-medium flex items-center gap-1.5 hover:bg-purple-500 transition shadow-[0_0_20px_rgba(147,51,234,.3)] disabled:opacity-50"
-                          >
-                            {isEnriching ? (
-                              <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                            ) : (
-                              <Package className="w-3.5 h-3.5" />
-                            )}
-                            Enriquecer
-                          </button>
-                        </TooltipTrigger>
-                        <TooltipContent>
-                          <p className="text-xs">Buscar containers para MBLs pendentes via API JsonCargo</p>
-                        </TooltipContent>
-                      </Tooltip>
-                    </TooltipProvider>
-
-                    <TooltipProvider>
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                          <button
-                            onClick={handleForceRefresh}
-                            disabled={isForceRefreshing}
-                            className="h-8 px-4 rounded-full bg-orange-600 text-white text-[0.75rem] font-medium flex items-center gap-1.5 hover:bg-orange-500 transition shadow-[0_0_20px_rgba(234,88,12,.3)] disabled:opacity-50"
-                          >
-                            {isForceRefreshing ? (
-                              <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                            ) : (
-                              <RefreshCw className="w-3.5 h-3.5" />
-                            )}
-                            Forçar Re-rastreio
-                          </button>
-                        </TooltipTrigger>
-                        <TooltipContent>
-                          <p className="text-xs">Re-rastrear todos containers pendentes/com erro (ignora tempo)</p>
-                        </TooltipContent>
-                      </Tooltip>
-                    </TooltipProvider>
-
-                    <TooltipProvider>
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                          <button
-                            onClick={handlePopulateImos}
-                            disabled={isPopulatingImos}
-                            className="h-8 px-4 rounded-full bg-cyan-600 text-white text-[0.75rem] font-medium flex items-center gap-1.5 hover:bg-cyan-500 transition shadow-[0_0_20px_rgba(6,182,212,.3)] disabled:opacity-50"
-                          >
-                            {isPopulatingImos ? (
-                              <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                            ) : (
-                              <Ship className="w-3.5 h-3.5" />
-                            )}
-                            Popular IMOs
-                          </button>
-                        </TooltipTrigger>
-                        <TooltipContent>
-                          <p className="text-xs">Buscar IMO dos navios para exibir mapa VesselFinder</p>
-                        </TooltipContent>
-                      </Tooltip>
-                    </TooltipProvider>
-                  </>
-                )}
-                
                 <button
                   onClick={handleRefresh}
                   disabled={isRefreshing}
@@ -1509,11 +1115,19 @@ const ContainerTracking = () => {
                                     <span className="ml-2 text-[#aaaaaa]">Carregando containers...</span>
                                   </div>
                                 ) : (
-                                  <div className="space-y-2">
+                                  <div className="space-y-4">
                                     <div className="text-xs text-[#aaaaaa] uppercase tracking-wide mb-2 flex items-center gap-2">
                                       <Package className="w-4 h-4" />
                                       Containers do MBL {mbl.mbl_id}
                                     </div>
+                                    
+                                    {/* VesselFinder Map */}
+                                    <VesselFinderMap 
+                                      vesselName={vesselName}
+                                      imo={vesselImo}
+                                      height={300}
+                                    />
+                                    
                                     <div className="overflow-x-auto">
                                       <table className="w-full text-sm">
                                         <thead>
@@ -1523,7 +1137,6 @@ const ContainerTracking = () => {
                                             <th className="px-3 py-2 text-left">Status</th>
                                             <th className="px-3 py-2 text-left">Último Evento</th>
                                             <th className="px-3 py-2 text-left">ETA</th>
-                                            <th className="px-3 py-2 text-center">Ações</th>
                                           </tr>
                                         </thead>
                                         <tbody>
@@ -1550,44 +1163,12 @@ const ContainerTracking = () => {
                                                 <td className="px-3 py-2 text-[#aaaaaa]">
                                                   {cnt.eta ? new Date(cnt.eta).toLocaleDateString('pt-BR') : "-"}
                                                 </td>
-                                                <td className="px-3 py-2 text-center">
-                                                  <Button
-                                                    variant="ghost"
-                                                    size="sm"
-                                                    onClick={() => handleTrackContainer(cnt.container, cnt.shipping_line || '')}
-                                                    disabled={trackingContainer === cnt.container}
-                                                    className="h-7 px-2 text-[#ffc800] hover:text-[#ffdc50] hover:bg-[rgba(255,200,0,.1)]"
-                                                  >
-                                                    {trackingContainer === cnt.container ? (
-                                                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                                                    ) : (
-                                                      <RefreshCw className="w-3.5 h-3.5" />
-                                                    )}
-                                                  </Button>
-                                                </td>
                                               </tr>
                                             );
                                           })}
                                         </tbody>
                                       </table>
                                     </div>
-                                    
-                                    {/* VesselFinder Map */}
-                                    {(vesselName || vesselImo) && (
-                                      <div className="mt-6 pt-4 border-t border-[rgba(255,255,255,.08)]">
-                                        <div className="text-xs text-[#aaaaaa] uppercase tracking-wide mb-3 flex items-center gap-2">
-                                          <MapPin className="w-4 h-4 text-[#ffc800]" />
-                                          Rastreio do Navio: <span className="text-[#f5f5f5] font-medium normal-case">{vesselName || "Desconhecido"}</span>
-                                          {vesselImo && <span className="text-[#666] text-[0.65rem]">IMO: {vesselImo}</span>}
-                                        </div>
-                                        <VesselFinderMap 
-                                          vesselName={vesselName}
-                                          imo={vesselImo}
-                                          height={350}
-                                          showTrack={true}
-                                        />
-                                      </div>
-                                    )}
                                   </div>
                                 )}
                               </td>
@@ -1599,26 +1180,24 @@ const ContainerTracking = () => {
                   </tbody>
                 </table>
               </div>
-              
+
               {/* Pagination */}
-              <div className="p-4 border-t border-[rgba(255,255,255,.08)] flex items-center justify-between bg-[rgba(0,0,0,.3)]">
-                <div className="text-[0.78rem] text-[#aaaaaa]">
-                  Página {currentPage} de {totalPages} | Total: {filteredMbls.length} MBLs
-                </div>
+              <div className="flex items-center justify-between px-4 py-3 border-t border-[rgba(255,255,255,.08)]">
+                <span className="text-xs text-[#666]">
+                  Mostrando {startIndex + 1}-{Math.min(endIndex, filteredMbls.length)} de {filteredMbls.length} MBLs
+                </span>
                 <TablePagination
                   currentPage={currentPage}
                   totalPages={totalPages}
                   onPageChange={setCurrentPage}
-                  showFirstLast={false}
                 />
               </div>
             </>
           ) : (
-            <div className="p-12 text-center">
-              <p className="text-[#f5f5f5] uppercase tracking-[0.15em] font-medium">NENHUM MBL MONITORADO</p>
-              <p className="text-[0.85rem] text-[#aaaaaa] mt-2">
-                Clique em "Sincronizar" para carregar dados de t_master_dados
-              </p>
+            <div className="flex flex-col items-center justify-center py-12 text-[#666]">
+              <Ship className="w-12 h-12 mb-4 opacity-50" />
+              <p className="text-lg">Nenhum MBL encontrado</p>
+              <p className="text-sm mt-1">Ajuste os filtros ou aguarde a sincronização</p>
             </div>
           )}
         </section>
@@ -1626,27 +1205,20 @@ const ContainerTracking = () => {
 
       {/* Email Modal */}
       <Dialog open={emailModalOpen} onOpenChange={setEmailModalOpen}>
-        <DialogContent className="sm:max-w-[425px] bg-[#1a1a1a] border-[rgba(255,255,255,.1)]">
+        <DialogContent className="sm:max-w-md bg-[rgba(5,6,18,.98)] border border-[rgba(255,255,255,.12)]">
           <DialogHeader>
-            <DialogTitle className="text-white flex items-center gap-2">
-              <Mail className="h-5 w-5 text-blue-400" />
-              Enviar E-mail - {emailMbl?.mbl_id}
-            </DialogTitle>
+            <DialogTitle className="text-white">Enviar E-mail de Status</DialogTitle>
             <DialogDescription className="text-gray-400">
-              Selecione o tipo de destinatário e adicione uma mensagem personalizada (opcional).
+              Escolha o destinatário e envie um e-mail com o status atual do MBL.
             </DialogDescription>
           </DialogHeader>
-          
+
           <div className="space-y-4 py-4">
-            <div className="space-y-3">
-              <Label className="text-white">Tipo de envio:</Label>
-              <RadioGroup 
-                value={emailType} 
-                onValueChange={(v) => setEmailType(v as "interno" | "cliente")}
-                className="flex flex-col gap-3"
-              >
-                <div className="flex items-center space-x-3 p-3 rounded-lg border border-[rgba(255,255,255,.1)] hover:border-blue-400/50 transition cursor-pointer">
-                  <RadioGroupItem value="interno" id="interno" className="border-gray-500 text-blue-400" />
+            <div className="space-y-2">
+              <Label className="text-white">Destinatário:</Label>
+              <RadioGroup value={emailType} onValueChange={(v) => setEmailType(v as "interno" | "cliente")} className="space-y-2">
+                <div className="flex items-center space-x-3 p-3 rounded-lg border border-[rgba(255,255,255,.1)] hover:border-[#ffc800]/50 transition cursor-pointer">
+                  <RadioGroupItem value="interno" id="interno" className="border-gray-500 text-[#ffc800]" />
                   <Label htmlFor="interno" className="text-white cursor-pointer flex-1">
                     Interno (Analista)
                     <span className="block text-xs text-gray-400 mt-0.5">
