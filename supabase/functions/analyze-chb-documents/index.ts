@@ -1179,13 +1179,125 @@ function validateInputSize(
   };
 }
 
+// Helper to save extracted data to database
+async function saveExtractedData(
+  itemId: number, 
+  filename: string, 
+  etapa: string, 
+  extractedFields: Record<string, any>,
+  rawText?: string
+): Promise<void> {
+  try {
+    const supabaseUrl = Deno.env.get('SUPABASE_URL');
+    const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+    if (!supabaseUrl || !supabaseKey) return;
+    
+    // Upsert to avoid duplicates
+    await fetch(`${supabaseUrl}/rest/v1/chb_extracted_data`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${supabaseKey}`,
+        'apikey': supabaseKey,
+        'Prefer': 'resolution=merge-duplicates',
+      },
+      body: JSON.stringify({
+        item_id: itemId,
+        filename,
+        etapa,
+        extracted_fields: extractedFields,
+        raw_text: rawText?.substring(0, 50000), // Limit raw text size
+        updated_at: new Date().toISOString(),
+      }),
+    });
+  } catch (e) {
+    console.error('[saveExtractedData] Failed to save:', e);
+  }
+}
+
+// Helper to get cached extracted data
+async function getCachedExtractedData(
+  itemId: number
+): Promise<Record<string, { fields: Record<string, any>; rawText?: string }>> {
+  try {
+    const supabaseUrl = Deno.env.get('SUPABASE_URL');
+    const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+    if (!supabaseUrl || !supabaseKey) return {};
+    
+    const response = await fetch(
+      `${supabaseUrl}/rest/v1/chb_extracted_data?item_id=eq.${itemId}&select=filename,extracted_fields,raw_text`,
+      {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${supabaseKey}`,
+          'apikey': supabaseKey,
+        },
+      }
+    );
+    
+    if (!response.ok) return {};
+    
+    const data = await response.json();
+    const cache: Record<string, { fields: Record<string, any>; rawText?: string }> = {};
+    
+    for (const item of data) {
+      cache[item.filename] = {
+        fields: item.extracted_fields || {},
+        rawText: item.raw_text,
+      };
+    }
+    
+    return cache;
+  } catch (e) {
+    console.error('[getCachedExtractedData] Failed to fetch:', e);
+    return {};
+  }
+}
+
+// Parse extracted data from LLM response for caching
+function parseExtractedFields(response: string, filename: string): Record<string, any> {
+  const fields: Record<string, any> = {};
+  
+  // Try to extract common fields from the HTML response
+  const fieldPatterns: Record<string, RegExp[]> = {
+    peso_bruto: [/peso\s*bruto[:\s]*([0-9.,]+)\s*(kg)?/gi],
+    peso_liquido: [/peso\s*l[íi]quido[:\s]*([0-9.,]+)\s*(kg)?/gi],
+    valor_total: [/valor\s*total[:\s]*([A-Z]{3})?\s*([0-9.,]+)/gi],
+    moeda: [/moeda[:\s]*([A-Z]{3})/gi, /(USD|EUR|BRL)/g],
+    incoterm: [/incoterm[:\s]*([A-Z]{3})/gi, /(FOB|CIF|DDP|DAP|CFR|EXW|FCA)/g],
+    quantidade: [/quantidade[:\s]*([0-9.,]+)/gi, /qty[:\s]*([0-9.,]+)/gi],
+    ncm: [/ncm[:\s]*([0-9]{4,8})/gi],
+    consignee: [/consignee[:\s]*([^\n<]+)/gi, /consignat[áa]rio[:\s]*([^\n<]+)/gi],
+    shipper: [/shipper[:\s]*([^\n<]+)/gi, /exportador[:\s]*([^\n<]+)/gi],
+    container: [/container[:\s]*([A-Z]{4}[0-9]{7})/gi],
+    bl_number: [/bl\s*n[°o]?[:\s]*([^\n<]+)/gi, /b\/l[:\s]*([^\n<]+)/gi],
+    hawb: [/hawb[:\s]*([^\n<]+)/gi],
+    mawb: [/mawb[:\s]*([^\n<]+)/gi],
+    invoice_number: [/invoice\s*n[°o]?[:\s]*([^\n<]+)/gi, /fatura[:\s]*([^\n<]+)/gi],
+    data_emissao: [/data\s*emiss[ãa]o[:\s]*([0-9\/.-]+)/gi, /date[:\s]*([0-9\/.-]+)/gi],
+    valor_frete: [/frete[:\s]*([A-Z]{3})?\s*([0-9.,]+)/gi, /freight[:\s]*([0-9.,]+)/gi],
+  };
+  
+  for (const [field, patterns] of Object.entries(fieldPatterns)) {
+    for (const pattern of patterns) {
+      const match = response.match(pattern);
+      if (match && match[1]) {
+        fields[field] = match[1].trim();
+        break;
+      }
+    }
+  }
+  
+  return fields;
+}
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
 
   try {
-    const { stepId, files, clientConfig } = await req.json();
+    const { stepId, files, clientConfig, itemId, cachedData } = await req.json();
 
     if (!stepId || !files || !Array.isArray(files) || files.length === 0) {
       return new Response(
@@ -1197,6 +1309,37 @@ serve(async (req) => {
     console.log(`═══ CHB ANALYSIS ═══`);
     console.log(`[Input Size] Total files: ${files.length}`);
     console.log(`[Input Size] Files: ${files.map((f: any) => `${f.name} (${f.mimeType})`).join(', ')}`);
+    
+    // Get cached data from DB if itemId provided and no cachedData sent
+    let existingCache: Record<string, { fields: Record<string, any>; rawText?: string }> = cachedData || {};
+    if (itemId && !cachedData) {
+      console.log(`[Cache] Fetching cached data for item ${itemId}...`);
+      existingCache = await getCachedExtractedData(itemId);
+      console.log(`[Cache] Found ${Object.keys(existingCache).length} cached documents`);
+    }
+    
+    // Separate files into: needs processing vs already cached
+    const filesToProcess: typeof files = [];
+    const cachedFiles: { name: string; fields: Record<string, any>; rawText?: string }[] = [];
+    
+    for (const file of files) {
+      const cached = existingCache[file.name];
+      if (cached && cached.rawText && Object.keys(cached.fields).length > 0) {
+        console.log(`[Cache] Using cached data for: ${file.name}`);
+        cachedFiles.push({
+          name: file.name,
+          fields: cached.fields,
+          rawText: cached.rawText,
+        });
+      } else {
+        filesToProcess.push(file);
+      }
+    }
+    
+    console.log(`[Cache] ${cachedFiles.length} files from cache, ${filesToProcess.length} to process`);
+    
+    // If all files are cached and we have analysis from previous step, we can optimize
+    // For now, we still need to send all files for comparison but can use extracted text
     
     // Validate input size
     const inputValidation = validateInputSize(files);
@@ -1212,7 +1355,25 @@ serve(async (req) => {
     }
 
     const fileNames = files.map((f: any) => f.name);
-    const prompt = getPromptByStep(stepId, fileNames, clientConfig as ClientConfig | undefined);
+    
+    // Build enhanced prompt with cached data context
+    let cachedContext = '';
+    if (cachedFiles.length > 0) {
+      cachedContext = '\n\n=== DADOS JÁ EXTRAÍDOS (etapas anteriores) ===\n';
+      for (const cached of cachedFiles) {
+        cachedContext += `\n[${cached.name}] Campos extraídos:\n`;
+        for (const [key, value] of Object.entries(cached.fields)) {
+          cachedContext += `  - ${key}: ${value}\n`;
+        }
+      }
+      cachedContext += '\n=== USE ESTES DADOS COMO REFERÊNCIA ===\n';
+    }
+    
+    const basePrompt = getPromptByStep(stepId, fileNames, clientConfig as ClientConfig | undefined);
+    const prompt = cachedContext ? cachedContext + '\n\n' + basePrompt : basePrompt;
+    
+    console.log(`Prompt length: ${prompt.length} chars`);
+    
     let responseText: string;
     let usedFallback = false;
     let fileWarnings: ChbFileError[] = [];
@@ -1255,6 +1416,34 @@ serve(async (req) => {
     }
 
     const { html, tags, summary, detailedSummary, parecer, modal, cliente } = extractHtmlAndTags(responseText, stepId);
+
+    // Save extracted data to cache for future steps (fire and forget)
+    if (itemId) {
+      (async () => {
+        try {
+          console.log(`[Cache] Saving extracted data for ${files.length} files...`);
+          for (const file of files) {
+            const extractedFields = parseExtractedFields(responseText, file.name);
+            
+            // Get raw text for this file from the response context
+            let rawText = '';
+            if (file.mimeType.includes('spreadsheet') || file.mimeType.includes('excel') || 
+                file.name.endsWith('.xlsx') || file.name.endsWith('.xls')) {
+              try {
+                rawText = await extractExcelText(file.content, file.name);
+              } catch (e) {
+                console.error(`[Cache] Error extracting excel text for ${file.name}:`, e);
+              }
+            }
+            
+            await saveExtractedData(itemId, file.name, stepId.toString(), extractedFields, rawText);
+          }
+          console.log(`[Cache] Saved extracted data for item ${itemId}`);
+        } catch (e) {
+          console.error('[Cache] Error saving extracted data:', e);
+        }
+      })();
+    }
 
     return new Response(
       JSON.stringify({

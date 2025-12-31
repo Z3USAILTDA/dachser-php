@@ -344,6 +344,50 @@ export type Database = {
         }
         Relationships: []
       }
+      chb_extracted_data: {
+        Row: {
+          created_at: string
+          document_id: string | null
+          etapa: string
+          extracted_fields: Json
+          filename: string
+          id: string
+          item_id: number
+          raw_text: string | null
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          document_id?: string | null
+          etapa: string
+          extracted_fields?: Json
+          filename: string
+          id?: string
+          item_id: number
+          raw_text?: string | null
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          document_id?: string | null
+          etapa?: string
+          extracted_fields?: Json
+          filename?: string
+          id?: string
+          item_id?: number
+          raw_text?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "chb_extracted_data_document_id_fkey"
+            columns: ["document_id"]
+            isOneToOne: false
+            referencedRelation: "chb_documents"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       profiles: {
         Row: {
           active: boolean | null
