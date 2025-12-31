@@ -1190,8 +1190,13 @@ serve(async (req) => {
         db: 'dados_dachser',
       });
 
+      // Prefixos de containers de leasing não suportados pela JSONCargo API
+      const UNSUPPORTED_LEASING_PREFIXES = ['CAAU', 'TXGU', 'UETU', 'TIIU'];
+      const prefixCondition = UNSUPPORTED_LEASING_PREFIXES.map(p => `'${p}'`).join(', ');
+
       try {
         // Excluir MBLs que só têm containers marcados como NAO_ENCONTRADO
+        // E também excluir MBLs onde TODOS os containers têm prefixos não suportados
         const rows = await client.query(`
           SELECT 
             ts.mbl_id,
@@ -1215,11 +1220,22 @@ serve(async (req) => {
           WHERE ts.active = 1
           GROUP BY ts.mbl_id
           HAVING 
-            -- Só mostrar MBLs que têm pelo menos 1 container real OU que ainda estão pendentes de enriquecimento
-            COUNT(DISTINCT CASE WHEN ts.container NOT IN ('NAO_ENCONTRADO', 'PENDENTE', 'IGNORADO', '') AND ts.container IS NOT NULL THEN ts.container END) > 0
-            OR MAX(ts.container) = 'PENDENTE'
-            OR MAX(ts.container) IS NULL
-            OR MAX(ts.container) = ''
+            -- Mostrar MBLs que têm pelo menos 1 container COM prefixo SUPORTADO
+            COUNT(DISTINCT CASE 
+              WHEN ts.container NOT IN ('NAO_ENCONTRADO', 'PENDENTE', 'IGNORADO', '') 
+              AND ts.container IS NOT NULL 
+              AND UPPER(LEFT(ts.container, 4)) NOT IN (${prefixCondition})
+              THEN ts.container 
+            END) > 0
+            -- OU MBLs que ainda estão pendentes de enriquecimento (não sabemos os containers ainda)
+            OR (
+              (MAX(ts.container) = 'PENDENTE' OR MAX(ts.container) IS NULL OR MAX(ts.container) = '')
+              AND COUNT(DISTINCT CASE 
+                WHEN ts.container NOT IN ('NAO_ENCONTRADO', 'PENDENTE', 'IGNORADO', '') 
+                AND ts.container IS NOT NULL 
+                THEN ts.container 
+              END) = 0
+            )
           ORDER BY MAX(ts.last_check) DESC, ts.mbl_id
         `);
 
