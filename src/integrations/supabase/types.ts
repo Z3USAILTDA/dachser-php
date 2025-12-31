@@ -47,6 +47,51 @@ export type Database = {
         }
         Relationships: []
       }
+      api_usage_cycles: {
+        Row: {
+          api_name: string
+          created_at: string
+          cycle_end_date: string
+          cycle_start_date: string
+          estimated_cost_usd: number | null
+          id: string
+          monthly_limit: number | null
+          plan_name: string | null
+          total_calls: number
+          total_errors: number
+          updated_at: string
+          usage_percentage: number | null
+        }
+        Insert: {
+          api_name: string
+          created_at?: string
+          cycle_end_date: string
+          cycle_start_date: string
+          estimated_cost_usd?: number | null
+          id?: string
+          monthly_limit?: number | null
+          plan_name?: string | null
+          total_calls?: number
+          total_errors?: number
+          updated_at?: string
+          usage_percentage?: number | null
+        }
+        Update: {
+          api_name?: string
+          created_at?: string
+          cycle_end_date?: string
+          cycle_start_date?: string
+          estimated_cost_usd?: number | null
+          id?: string
+          monthly_limit?: number | null
+          plan_name?: string | null
+          total_calls?: number
+          total_errors?: number
+          updated_at?: string
+          usage_percentage?: number | null
+        }
+        Relationships: []
+      }
       cct_evento_normalizado: {
         Row: {
           aeroporto: string | null
