@@ -38,6 +38,7 @@ interface AlertRequest {
   current_usage: number;
   period_start: string;
   period_end: string;
+  test_mode?: boolean; // Se true, envia apenas para devs@z3us.ai
 }
 
 const generateAlertEmailHtml = (
@@ -207,7 +208,7 @@ const handler = async (req: Request): Promise<Response> => {
   }
 
   try {
-    const { api_name, current_usage, period_start, period_end }: AlertRequest = await req.json();
+    const { api_name, current_usage, period_start, period_end, test_mode }: AlertRequest = await req.json();
 
     if (!api_name || current_usage === undefined) {
       return new Response(JSON.stringify({ 
@@ -230,8 +231,8 @@ const handler = async (req: Request): Promise<Response> => {
       });
     }
 
-    // Verificar se atingiu o threshold
-    if (current_usage < limit.alertThreshold) {
+    // Em modo de teste, ignorar verificação de threshold
+    if (!test_mode && current_usage < limit.alertThreshold) {
       return new Response(JSON.stringify({ 
         success: true, 
         message: `Uso atual (${current_usage}) abaixo do threshold (${limit.alertThreshold}). Nenhum alerta enviado.`,
@@ -254,18 +255,22 @@ const handler = async (req: Request): Promise<Response> => {
       });
     }
 
-    console.log(`Sending API usage alert for ${api_name} to ${ALERT_RECIPIENTS.join(", ")}`);
+    // Destinatários: em modo de teste, apenas devs@z3us.ai
+    const recipients = test_mode ? ["devs@z3us.ai"] : ALERT_RECIPIENTS;
+    
+    console.log(`Sending API usage alert for ${api_name} to ${recipients.join(", ")}${test_mode ? " (TEST MODE)" : ""}`);
     console.log(`Usage: ${current_usage}/${limit.monthlyLimit} (${((current_usage/limit.monthlyLimit)*100).toFixed(1)}%)`);
 
     const resend = new Resend(resendApiKey);
 
     const percentageUsed = ((current_usage / limit.monthlyLimit) * 100).toFixed(0);
+    const subjectPrefix = test_mode ? "[TESTE] " : "";
 
     const startTime = Date.now();
     const { data, error } = await resend.emails.send({
       from: "Z3US.AI - Alertas <alertas@hermes.z3us.ai>",
-      to: ALERT_RECIPIENTS,
-      subject: `⚠️ Alerta: API ${api_name} em ${percentageUsed}% do limite mensal`,
+      to: recipients,
+      subject: `${subjectPrefix}⚠️ Alerta: API ${api_name} em ${percentageUsed}% do limite mensal`,
       html: generateAlertEmailHtml(api_name, current_usage, limit, period_start, period_end),
       text: generateAlertEmailText(api_name, current_usage, limit, period_start, period_end),
     });
@@ -317,10 +322,11 @@ const handler = async (req: Request): Promise<Response> => {
 
     return new Response(JSON.stringify({ 
       success: true, 
-      message: "Alerta enviado com sucesso", 
+      message: test_mode ? "Alerta de teste enviado com sucesso" : "Alerta enviado com sucesso", 
       emailId: data?.id,
       alert_sent: true,
-      recipients: ALERT_RECIPIENTS
+      recipients: recipients,
+      test_mode: test_mode || false
     }), {
       status: 200,
       headers: { "Content-Type": "application/json", ...corsHeaders },
