@@ -1906,7 +1906,11 @@ serve(async (req) => {
             
             if (!bolApiRes.__curl_error && !bolApiRes.error && bolApiRes.data) {
               const siblings = bolApiRes.data.associated_container_numbers || [];
-              console.log(`[refresh_sea_tracking] BOL API returned ${siblings.length} containers for MBL ${mblId}`);
+              
+              // Log full BOL response for debugging (important for understanding API structure)
+              console.log(`[refresh_sea_tracking] BOL API FULL RESPONSE for MBL ${mblId}:`, JSON.stringify(bolApiRes.data, null, 2).substring(0, 2000));
+              console.log(`[refresh_sea_tracking] BOL API returned ${siblings.length} containers for MBL ${mblId}: ${siblings.slice(0, 5).join(', ')}`);
+              
               
               // STEP C: Find a non-leasing sibling to track
               const nonLeasingSibling = siblings.find((ctr: string) => {
