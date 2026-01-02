@@ -456,32 +456,42 @@ ${fiscalRulesSection}${armadorSection}${taxasSection}
 
 16) TRATAMENTO DE DOCUMENTOS DE SEGURO (APÓLICE/CERTIFICADO):
    
-   ⚠️ DOCUMENTOS DE SEGURO SÃO INFORMATIVOS — NÃO CRIAR CAMPOS EXCLUSIVOS!
+   ⚠️ SEGURO PARTICIPA DA COMPARAÇÃO, MAS NÃO CRIA CAMPOS NOVOS!
    
-   A) O QUE FAZER COM SEGURO:
-      - Confirmar que o CONSIGNEE/SEGURADO corresponde ao processo
-      - Verificar se o VALOR SEGURADO é compatível com o valor da mercadoria
-      - Verificar se a VIGÊNCIA cobre a data de embarque
-      - Reportar estas verificações nas OBSERVAÇÕES, não na tabela principal
+   A) COMO TRATAR O DOCUMENTO DE SEGURO:
+      - INCLUIR o Seguro como COLUNA na tabela de comparação (igual aos outros docs)
+      - EXTRAIR dados do Seguro para campos que JÁ EXISTEM em outros documentos
+      - NÃO CRIAR linhas/campos que SÓ existem no documento de Seguro
    
-   B) O QUE NÃO FAZER:
-      - NÃO criar linhas como "Nº Apólice", "Valor Segurado", "Vigência", "Prêmio" na tabela
-      - NÃO adicionar campos que SÓ existem no documento de Seguro
-      - Campos exclusivos de seguro resultam em "ND" em todos outros docs = RUÍDO!
+   B) CAMPOS QUE O SEGURO DEVE PREENCHER (se contiver a informação):
+      ✅ Consignee/Segurado → comparar com outros documentos
+      ✅ Valor da Mercadoria/Importância Segurada → comparar com Invoice
+      ✅ Descrição da Mercadoria → comparar com Invoice/Packing
+      ✅ NCM (se houver) → comparar com outros docs
+      ✅ Origem/Destino → comparar com AWB/BL
    
-   C) COMO REPORTAR INFORMAÇÕES DE SEGURO:
-      Na seção de OBSERVAÇÕES, incluir:
-      <p class="obs-info">📋 <strong>Seguro:</strong> Apólice [Nº] com valor segurado 
-      [VALOR] e vigência [DATA_INICIO] a [DATA_FIM]. ✅ Compatível com o processo.</p>
-      
-      OU se houver problema:
-      <p class="obs-alerta">🟨 <strong>Seguro:</strong> Valor segurado ([VALOR]) inferior 
-      ao valor da mercadoria ([VALOR_INV]). Verificar cobertura.</p>
+   C) CAMPOS QUE NÃO DEVEM SER CRIADOS (exclusivos do Seguro):
+      ❌ Nº da Apólice → NÃO criar linha, resultaria em "ND" para todos outros docs
+      ❌ Nº do Certificado → NÃO criar linha
+      ❌ Vigência/Período de Cobertura → NÃO criar linha
+      ❌ Prêmio do Seguro → NÃO criar linha
+      ❌ Tipo de Cobertura → NÃO criar linha
+      ❌ Franquia → NÃO criar linha
+      → Esses campos resultariam em "ND" para todos outros docs = RUÍDO
    
-   D) CAMPOS DO SEGURO QUE PODEM ENTRAR NA TABELA (apenas se úteis para comparação):
-      - CONSIGNEE/SEGURADO → apenas para verificar se corresponde aos outros docs
-      - DESCRIÇÃO DA MERCADORIA → se relevante para comparação com Invoice
-      - Estes campos já existem nos outros documentos, então faz sentido comparar
+   D) INFORMAÇÕES EXCLUSIVAS DO SEGURO VÃO NAS OBSERVAÇÕES:
+      Se houver informações relevantes exclusivas do seguro, reportar em observações:
+      <p class="obs-info">📋 <strong>Seguro:</strong> Apólice [Nº], vigência [DATAS], 
+      valor segurado compatível com mercadoria.</p>
+   
+   EXEMPLO CORRETO DE TABELA:
+   | Campo            | Invoice    | Packing | HAWB  | Seguro     | Status |
+   | Consignee        | ABC Ltda   | ABC     | ABC   | ABC Ltda   | ✅     |
+   | Valor Mercadoria | EUR 10.000 | ND      | ND    | EUR 10.000 | ✅     |
+   | Peso Bruto       | ND         | 500 kg  | 500   | ND         | ✅     |
+   
+   ERRADO (não criar esta linha):
+   | Nº Apólice       | ND         | ND      | ND    | XYZ-123    | ❌     |
 
 ${clientConfig?.instrucoes_personalizadas ? `
 17) INSTRUÇÕES ESPECÍFICAS DO CLIENTE:
@@ -732,8 +742,9 @@ IDENTIFICAÇÃO DE TIPOS:
 - cct.pdf = COMPROVANTE CCT
 - relatorio_di = DRAFT DI
 - SEGURO ou Certificado ou Apólice = APÓLICE DE SEGURO
-  → ⚠️ DOCUMENTO INFORMATIVO: NÃO criar campos exclusivos na tabela!
-  → Validar consignee e valor segurado, mas reportar nas OBSERVAÇÕES
+  → Incluir como COLUNA na tabela de comparação (igual aos outros docs)
+  → Extrair dados para campos que JÁ EXISTEM (Consignee, Valor, Descrição)
+  → NÃO criar campos exclusivos (Nº Apólice, Vigência, Prêmio)
 
 ═══════════════════════════════════════════════════════════════════════════════
 CAMPOS OBRIGATÓRIOS NA TABELA (cada um em sua linha):
@@ -749,12 +760,12 @@ CAMPOS OBRIGATÓRIOS NA TABELA (cada um em sua linha):
 9. Nº Conhecimento (AWB ou BL)
 10. Data Emissão (de cada documento)
 
-⚠️ CAMPOS QUE NÃO DEVEM ENTRAR NA TABELA (documentos informativos):
-- NÃO incluir campos EXCLUSIVOS de documentos de Seguro/Apólice:
-  → Nº Apólice, Valor Segurado, Vigência, Prêmio do Seguro
-- Esses campos resultam em "ND" para todos os outros documentos = RUÍDO!
-- Informações do seguro devem ir na seção de OBSERVAÇÕES
-- APENAS incluir seguro na tabela se for para comparar CONSIGNEE
+⚠️ CAMPOS EXCLUSIVOS QUE NÃO GERAM NOVAS LINHAS:
+- Regra: Se um campo só existe em UM tipo de documento, NÃO criar linha para ele
+- Campos que existem APENAS em documentos de Seguro (NÃO CRIAR):
+  → Nº Apólice, Nº Certificado, Vigência, Prêmio, Franquia, Tipo Cobertura
+- O documento de Seguro PARTICIPA da comparação nos campos que JÁ EXISTEM
+- Informações exclusivas do seguro podem ir nas OBSERVAÇÕES
 
 ⚠️ ATENÇÃO — TRÊS VALORES DIFERENTES:
 - Valor Mercadoria = soma dos produtos na Invoice ("Total Items")
