@@ -330,9 +330,18 @@ REGRAS DE CONTEÚDO DA TABELA
    ⚠️ TOLERÂNCIA SE APLICA APENAS PARA DIFERENÇAS DE ARREDONDAMENTO/FORMATAÇÃO!
    - TOLERÂNCIA DE PESO: ${toleranciaPeso}% (para pequenas diferenças de arredondamento)
    - TOLERÂNCIA DE VALOR: ${toleranciaValor}% (para pequenas diferenças de arredondamento)
-   - Valores como 97,3 e 97,30 são EQUIVALENTES (✅)
+   - Valores como 97,3 e 97,30 são EQUIVALENTES (✅) — zeros à direita NÃO são divergência!
+   - Valores como 97,3 e 97.30 são EQUIVALENTES (✅) — vírgula vs ponto decimal é formatação!
    - 10.841,00 e 10841 e 10.841 são EQUIVALENTES (✅)
-   - Ignore zeros à direita e diferenças de formatação
+   - Ignore zeros à direita e diferenças de formatação de decimais
+   
+   ⚠️ REGRA CRÍTICA DE EQUIVALÊNCIA NUMÉRICA:
+   - ANTES de comparar valores numéricos, NORMALIZAR:
+     → Remover zeros à direita após decimal (97,30 → 97,3)
+     → Tratar vírgula e ponto como decimal (97,3 = 97.3)
+     → Remover separadores de milhar (10.841 = 10841)
+   - SE valores normalizados são IGUAIS → ✅ CONFORME (obrigatório!)
+   - NÃO marcar como divergente por diferença de formatação!
    
    ⚠️ TOLERÂNCIA NÃO SE APLICA QUANDO:
    - Valores são CLARAMENTE diferentes (ex.: 10.841 vs 12.500 → 🔴 DIVERGENTE)
@@ -698,6 +707,24 @@ EXTRAÇÃO DETERMINÍSTICA:
 - Se houver tabela com subtotais e total geral, usar o TOTAL GERAL
 - Em caso de ambiguidade, marcar como 🟨 com observação explicando
 
+⚠️ REGRA #9.1: MÚLTIPLOS ARQUIVOS DO MESMO TIPO — EXTRAÇÃO INDEPENDENTE
+QUANDO há múltiplas Invoices (inv_01.pdf, inv_02.pdf, etc.):
+- CADA ARQUIVO TEM VALORES PRÓPRIOS — EXTRAIR DE CADA UM SEPARADAMENTE!
+- NÃO copiar valor de um arquivo para outro
+- NÃO assumir que invoices diferentes têm o mesmo valor
+- OBRIGATÓRIO ler CADA documento e extrair SEU valor individual
+
+EXEMPLO:
+- inv_01.pdf contém: "Total: EUR 5.000,00"
+- inv_02.pdf contém: "Total: EUR 7.500,00"
+→ Coluna inv_01.pdf: EUR 5.000,00
+→ Coluna inv_02.pdf: EUR 7.500,00
+→ Status: depende da comparação entre ambos
+
+ERRO A NÃO COMETER:
+→ Mostrar EUR 5.000,00 para AMBAS as invoices (copiando da primeira)
+→ Isso é ERRO GRAVE de extração!
+
 NUNCA INFERIR OU CALCULAR:
 - Se o documento não mostra o valor explicitamente, usar "ND"
 - Não somar linhas para obter total (a menos que instruído explicitamente para Packing List)
@@ -716,7 +743,12 @@ CENÁRIO 2: APENAS UM documento tem valor, demais são ND/N/A
 - Observação OBRIGATÓRIA: "Apenas 1 documento contém valor para este campo, impossível verificar conformidade por comparação"
 
 CENÁRIO 3: DOIS ou mais documentos têm valores comparáveis
-- Aplicar regras de conformidade normais (✅, 🟨, 🔴) conforme regras anteriores
+- Se valores são IGUAIS (após normalização numérica) → ✅ CONFORME
+- Se valores diferem além da tolerância → aplicar 🟨 ou 🔴 conforme regras
+
+⚠️ REGRA CRÍTICA CENÁRIO 3:
+- Dois docs com valores equivalentes (ex: 97,3 e 97,30) → ✅ OBRIGATÓRIO!
+- NÃO marcar como 🟨 se valores são iguais após normalização
 
 VERIFICAÇÃO OBRIGATÓRIA:
 - Para CADA linha/campo da tabela, ANTES de definir status final:
