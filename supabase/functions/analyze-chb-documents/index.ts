@@ -858,6 +858,8 @@ PACKING LIST:
 CCT / BL (Conhecimento de Transporte):
 ├── Cabeçalho: Shipper, Consignee, Notify, Port of Loading/Discharge
 ├── Descrição da Carga: Container, Description, Weight, Volume
+├── ⚠️ PESO BRUTO: Procurar "Weight", "Gross Weight", "G.W." na descrição da carga
+│   → CCT CONTÉM PESO BRUTO! Extrair e incluir na coluna do CCT!
 ├── TABELA PREPAID/COLLECT:
 │   ├── Ocean Freight / Air Freight
 │   ├── BAF, CAF, THC, etc.
@@ -923,9 +925,9 @@ ${fileListText}
 IDENTIFICAÇÃO DE TIPOS:
 - inv_XX.pdf ou Invoice = INVOICE COMERCIAL → extrair VALOR DA MERCADORIA
 - pack_XX.pdf ou Packing = PACKING LIST → extrair PESOS
-- HAWB.pdf ou AWB = CONHECIMENTO AÉREO → extrair FRETE AÉREO
-- BL ou HBL = CONHECIMENTO MARÍTIMO → extrair FRETE MARÍTIMO
-- cct.pdf = COMPROVANTE CCT
+- HAWB.pdf ou AWB = CONHECIMENTO AÉREO → extrair FRETE AÉREO + PESO BRUTO + VALOR TOTAL FRETE (Total Collect/Prepaid)
+- BL ou HBL = CONHECIMENTO MARÍTIMO → extrair FRETE MARÍTIMO + PESO BRUTO + VALOR TOTAL FRETE
+- cct.pdf = COMPROVANTE CCT → extrair PESO BRUTO (campo "Weight" ou "Gross Weight") + VALOR TOTAL FRETE
 - relatorio_di = DRAFT DI
 - SEGURO ou Certificado ou Apólice = APÓLICE DE SEGURO
   → Incluir como COLUNA na tabela de comparação (igual aos outros docs)
@@ -937,11 +939,11 @@ CAMPOS OBRIGATÓRIOS NA TABELA (cada um em sua linha):
 ═══════════════════════════════════════════════════════════════════════════════
 1. Consignee/CNPJ
 2. Incoterm (FOB, CFR, CIF, etc.)
-3. Peso Bruto (kg) - do PACKING LIST
-4. Peso Líquido (kg) - do PACKING LIST
+3. Peso Bruto (kg) - do PACKING LIST, CCT, HAWB ou BL (extrair de TODOS que tiverem!)
+4. Peso Líquido (kg) - do PACKING LIST (se disponível)
 5. Valor Mercadoria (COM MOEDA!) - da INVOICE, procure "Total Items" (ex: EUR 28.234,23)
-6. Frete (COM MOEDA!) - do AWB/BL, linha Ocean/Air Freight (ex: USD 1.500,00)
-7. Valor Total Frete (COM MOEDA!) - do CCT/BL, linha "Total" na coluna Prepaid ou Collect
+6. Frete (COM MOEDA!) - do AWB/HAWB/BL, linha Ocean/Air Freight ou Weight Charge (ex: USD 1.500,00)
+7. Valor Total Frete (COM MOEDA!) - do HAWB/AWB/CCT/BL, linha "Total Collect" ou "Total Prepaid" no RODAPÉ
 8. NCM Principal
 9. Nº Conhecimento (AWB ou BL)
 10. Data Emissão (de cada documento)
