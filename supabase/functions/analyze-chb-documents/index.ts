@@ -634,13 +634,22 @@ REGRAS DE EXTRAÇÃO — LEIA COM ATENÇÃO MÁXIMA
 - Totais ficam no RODAPÉ/FINAL da tabela
 - Procure em TODAS as páginas
 
-⚠️ REGRA #3: EXTRAIA DO DOCUMENTO CERTO
-| Campo            | Documento Fonte                      |
+⚠️ REGRA #3: EXTRAIA DE TODOS OS DOCUMENTOS QUE CONTÊM O CAMPO
+| Campo            | Documentos Fonte (extrair de TODOS!) |
 |------------------|--------------------------------------|
 | Valor Mercadoria | INVOICE (soma dos itens no rodapé)   |
-| Peso Bruto/Líq   | PACKING LIST                         |
-| Frete            | HAWB, AWB, BL, HBL                   |
-| Incoterm         | INVOICE ou documento de transporte   |
+| Peso Bruto       | PACKING LIST + HAWB + AWB + BL + HBL |
+| Peso Líquido     | PACKING LIST                         |
+| Frete            | HAWB + AWB + BL + HBL                |
+| Incoterm         | INVOICE + PACKING + HAWB/AWB/BL      |
+
+⚠️ EXTRAÇÃO DE PESO BRUTO DO HAWB/AWB (CRÍTICO):
+- No HAWB/AWB, o Peso Bruto está na coluna "Gross Weight" ou "Kg" na tabela de carga
+- Exemplo: tabela com "No. of Pieces | Gross Weight | Chargeable Weight"
+  → Linha "3 | 501,5 | 501,5" significa Peso Bruto = 501,5 kg
+- O campo geralmente aparece em kg com vírgula decimal (ex: 501,5)
+- NUNCA confundir "Chargeable Weight" com "Gross Weight" (podem ser iguais, mas são campos diferentes)
+- Extrair o valor da coluna "Gross Weight" ou "Kg" DIRETAMENTE, sem cálculos
 
 ⚠️ REGRA #4: VALOR MERCADORIA ≠ FRETE
 - VALOR MERCADORIA = total da Invoice (produtos vendidos)
