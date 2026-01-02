@@ -459,16 +459,40 @@ ${fiscalRulesSection}${armadorSection}${taxasSection}
    ⚠️ SEGURO PARTICIPA DA COMPARAÇÃO, MAS NÃO CRIA CAMPOS NOVOS!
    
    A) COMO TRATAR O DOCUMENTO DE SEGURO:
-      - INCLUIR o Seguro como COLUNA na tabela de comparação (igual aos outros docs)
-      - EXTRAIR dados do Seguro para campos que JÁ EXISTEM em outros documentos
-      - NÃO CRIAR linhas/campos que SÓ existem no documento de Seguro
+   - INCLUIR o Seguro como COLUNA na tabela de comparação (igual aos outros docs)
+   - EXTRAIR dados do Seguro para campos que JÁ EXISTEM em outros documentos
+   - NÃO CRIAR linhas/campos que SÓ existem no documento de Seguro
    
-   B) CAMPOS QUE O SEGURO DEVE PREENCHER (se contiver a informação):
-      ✅ Consignee/Segurado → comparar com outros documentos
-      ✅ Valor da Mercadoria/Importância Segurada → comparar com Invoice
-      ✅ Descrição da Mercadoria → comparar com Invoice/Packing
-      ✅ NCM (se houver) → comparar com outros docs
-      ✅ Origem/Destino → comparar com AWB/BL
+   B) ⚠️ REGRA CRÍTICA: VERIFICAR "INSURED OBJECT" ANTES DE MAPEAR VALORES!
+   
+   O documento de seguro geralmente contém:
+   - Campo "Insured Object" ou "Subject Matter Insured" → indica O QUE está segurado
+   - Campo "Total Insured Amount" → valor total da cobertura
+   
+   MAPEAMENTO CORRETO BASEADO NO "INSURED OBJECT":
+   
+   CASO 1: insured object = "mercadoria" (apenas)
+     → Total Insured Amount = VALOR MERCADORIA
+   
+   CASO 2: insured object = "mercadoria + frete int" ou "goods + freight" ou similar
+     → Total Insured Amount = VALOR TOTAL FRETE (pois inclui mercadoria + frete!)
+     → NÃO mapear para Valor Mercadoria (seria valor inflado!)
+     → Na observação: "Seguro cobre mercadoria + frete internacional"
+   
+   Exemplo do documento:
+   | Insured Object         | Total Insured Amount |
+   | mercadoria + frete int | EUR 22.500,00        |
+   
+   → EUR 22.500,00 vai para coluna do Seguro na linha "Valor Total Frete"
+   → Linha "Valor Mercadoria" do Seguro = ND (não extrair deste campo!)
+   
+   C) CAMPOS QUE O SEGURO DEVE PREENCHER (se contiver a informação):
+   ✅ Consignee/Segurado → comparar com outros documentos
+   ✅ Valor da Mercadoria/Importância Segurada → comparar com Invoice (apenas se insured object = "mercadoria")
+   ✅ Valor Total Frete → usar se insured object = "mercadoria + frete int"
+   ✅ Descrição da Mercadoria → comparar com Invoice/Packing
+   ✅ NCM (se houver) → comparar com outros docs
+   ✅ Origem/Destino → comparar com AWB/BL
    
    C) CAMPOS QUE NÃO DEVEM SER CRIADOS (exclusivos do Seguro):
       ❌ Document NO / Nº Documento → NÃO criar linha
@@ -500,8 +524,26 @@ ${fiscalRulesSection}${armadorSection}${taxasSection}
    | Vigência         | ND         | ND      | ND    | 20/12/2025 | ❌     | ← PROIBIDO!
    | Taxa             | ND         | ND      | ND    | 0.25%      | ❌     | ← PROIBIDO!
 
-17) NORMALIZAÇÃO DE NÚMEROS DE CONHECIMENTO:
+17) N° CONHECIMENTO — EXTRAÇÃO DO IDENTIFICADOR DE CADA DOCUMENTO:
    
+   ⚠️ CADA DOCUMENTO TEM SEU PRÓPRIO NÚMERO IDENTIFICADOR!
+   
+   | Tipo Documento | Campo Identificador a Usar                     |
+   |----------------|------------------------------------------------|
+   | AWB / HAWB     | AWB Number, House AWB, HAWB No., Air Waybill   |
+   | BL / HBL       | B/L Number, Bill of Lading No., HBL No.        |
+   | Packing List   | Packing slip number, P/L No., Packing No.      |
+   | Invoice        | Invoice Number, Invoice No., Ref. No.          |
+   | Seguro         | Document No., Certificate No., Certificado     |
+   | CCT            | CCT No., Conhecimento No.                      |
+   
+   REGRA: Cada documento na análise deve mostrar SEU PRÓPRIO número identificador.
+   - Packing List com "Packing slip number: 0100159703LS" → N° = 0100159703LS
+   - Seguro com "Document No.: 202534567002" → N° = 202534567002
+   - Invoice com "Invoice No.: INV-2024-001" → N° = INV-2024-001
+   - HAWB com "AWB No.: 123-45678901" → N° = 123-45678901
+   
+   NORMALIZAÇÃO (para comparar documentos de TRANSPORTE entre si):
    Antes de comparar Nº Conhecimento (AWB, HAWB, BL, HBL, MAWB, MBL):
    - Remover todos os espaços
    - Remover hífens (-)
@@ -519,11 +561,29 @@ ${fiscalRulesSection}${armadorSection}${taxasSection}
    - Peso Bruto Total (soma dos pesos individuais)
    - Peso Líquido Total
    
-   COMO EXTRAIR:
-   a) Procurar linha/campo com "Gross Weight Total" ou "Total Gross Weight" ou "Total G.W."
-   b) Se não encontrar total explícito, SOMAR os pesos brutos individuais da tabela
-   c) Procurar "Number of Packages", "Qty", "No. of Packages" para total de volumes
-   d) Contar linhas de volumes na tabela se necessário
+   ⚠️ COMO EXTRAIR PESO BRUTO — REGRA CRÍTICA (OBRIGATÓRIO):
+   
+   a) PRIMEIRO: Buscar campo explícito "Gross Weight Total", "Total Gross Weight", "Total G.W."
+   
+   b) SE NÃO ENCONTRAR TOTAL EXPLÍCITO: Verificar se há tabela com itens individuais
+      - Se houver colunas como: Type, Packages, Size, Gross Weight
+      - E cada linha tem seu próprio "Gross weight" → SOMAR TODOS OS VALORES
+      
+      EXEMPLO de tabela no Packing List:
+      | Coli type        | Quantity | Gross weight |
+      | Carton           | 1        | 12.50 kg     |
+      | presswood pallet | 1        | 230.00 kg    |
+      | presswood pallet | 1        | 259.00 kg    |
+      
+      → Peso Bruto = 12.50 + 230.00 + 259.00 = 501.50 kg
+      → Indicar na tabela: "501.50 kg" (soma dos itens)
+      
+   c) NUNCA deixar "ND" se existirem dados individuais para somar!
+      - Se houver tabela com pesos por item → OBRIGATÓRIO somar
+      - Só usar "ND" se realmente não houver NENHUM dado de peso
+   
+   d) Procurar "Number of Packages", "Qty", "No. of Packages" para total de volumes
+   e) Contar linhas de volumes na tabela se necessário
    
    VALIDAÇÃO:
    - Peso Bruto > Peso Líquido (sempre verdade)
@@ -563,11 +623,22 @@ REGRAS DE EXTRAÇÃO — LEIA COM ATENÇÃO MÁXIMA
 - FRETE = custo do transporte (campo "Freight" no AWB/BL)
 - São LINHAS SEPARADAS na tabela!
 
-⚠️ REGRA #5: QUANDO USAR "ND"
-- SOMENTE quando o dado NÃO EXISTE naquele documento
+⚠️ REGRA #5: QUANDO USAR "ND" vs "N/A (documento sem frete)"
+- "ND" = dado NÃO EXISTE naquele documento mas PODERIA existir
+- "N/A (documento sem frete)" = campo NÃO É APLICÁVEL ao tipo de documento
 - Invoice não tem peso? → ND na coluna da Invoice (normal!)
-- Packing List não tem frete? → ND (normal!)
+- Packing List não tem frete? → "N/A (documento sem frete)" (é esperado!)
+- Invoice sem campo de frete? → "N/A (documento sem frete)" (é esperado!)
 - Se dado EXISTE mas está difícil de ler → Extraia assim mesmo!
+
+⚠️ REGRA #5.1: TRATAMENTO ESPECIAL - DOCUMENTOS SEM FRETE
+- Invoices e Packing Lists GERALMENTE não contêm frete
+- SE o documento não tiver campos de frete (Freight, Shipping Cost, Ocean Freight, etc.):
+  → Valor Total Frete = "N/A (documento sem frete)"
+  → Frete = "N/A (documento sem frete)"
+- USAR "N/A" para: Invoice, Packing List, Surcharges (quando não têm frete)
+- USAR "ND" apenas quando o campo DEVERIA existir (ex: AWB/BL sem frete = PROBLEMA!)
+- A diferença é semântica importante para auditoria!
 
 ⚠️ REGRA #6: STATUS — CRITÉRIOS ESTRITOS PARA "CONFORME" (✅)
 
@@ -673,7 +744,15 @@ VALOR TOTAL FRETE (na tabela Prepaid/Collect):
 
 INCOTERM:
   Delivery Terms, Trade Terms, Terms of Delivery, Shipment Terms,
-  Freight Terms, Condition of Sale
+  Freight Terms, Condition of Sale, Terms of Sale, Shipping Terms,
+  Terms, Delivery Condition, Delivery Incoterms, Sales Terms
+  
+  ⚠️ REGRA DE CONSISTÊNCIA OBRIGATÓRIA PARA INCOTERM:
+  - Se "Delivery Terms" foi reconhecido como Incoterm em Invoice ou CCT
+    → DEVE ser reconhecido da MESMA FORMA em Packing List e outros documentos
+  - Valores típicos a buscar: EXW, FOB, CIF, CFR, DDP, DAP, FCA, CPT, CIP
+  - APLICAR reconhecimento CONSISTENTE em TODOS os tipos de documento
+  - NÃO deixar "ND" para Incoterm em Packing List se Invoice tem "Delivery Terms"
 
 DATA EMISSÃO:
   Issue Date, Date of Issue, Issued, Dated, Invoice Date, Date,
