@@ -401,9 +401,45 @@ REGRAS DE CONTEÚDO DA TABELA
    - Se documento contém "BL", "Bill of Lading", "HBL", "MBL", "Container" → MODAL = SEA
    - Reportar o modal detectado no bloco METADATA
 ${fiscalRulesSection}${armadorSection}${taxasSection}
+
+14) REGRAS ESPECÍFICAS PARA AWB/HAWB (ATENÇÃO MÁXIMA):
+   
+   A) ESTRUTURA DE CHARGES EM DUAS COLUNAS:
+      - HAWB/AWB típico tem estrutura: PREPAID (esquerda) | COLLECT (direita)
+      - Cada coluna lista os respectivos encargos
+      - A linha FINAL de cada coluna mostra o TOTAL daquela coluna
+   
+   B) COMO EXTRAIR O VALOR TOTAL FRETE CORRETAMENTE:
+      - PROCURE a linha "Total Prepaid" E/OU "Total Collect" no RODAPÉ
+      - Se só há UMA coluna com valores → usar o "Total" dessa coluna
+      - Se há valores em AMBAS as colunas → SOMAR os dois totais
+      - O VALOR TOTAL FRETE = Total Prepaid + Total Collect
+   
+   C) TAXAS COMUNS EM HAWB (podem estar em Prepaid ou Collect):
+      → Weight Charge / Freight Charge (frete base por kg)
+      → MAA (Miscellaneous Charges All Agent) - taxa de agente
+      → THC (Terminal Handling Charge)
+      → FSC (Fuel Surcharge)
+      → AWB Fee / Documentation Fee
+      → Security Charge / X-Ray
+      → Handling Fee
+   
+   D) ERROS COMUNS A EVITAR:
+      → NÃO usar apenas "Weight Charge" como Valor Total Frete (é só uma parte!)
+      → NÃO usar "Total Charge" da tabela de itens (diferente do total final!)
+      → NÃO confundir "Chargeable Weight" (peso) com valor monetário
+      → Se o total extraído < Weight Charge + Other Charges listados → ERRO!
+   
+   E) VALIDAÇÃO DE CONSISTÊNCIA:
+      - Valor Total Frete extraído ≈ soma de charges visíveis → ✅ OK
+      - Valor Total Frete < Weight Charge + taxas listadas → 🔴 CRÍTICO (rever extração!)
+      - Se CCT mostra valor diferente do HAWB:
+        → CCT pode mostrar apenas frete base (sem MAA/taxas de agente)
+        → HAWB mostra total incluindo todas as taxas
+        → Neste caso, explicar a diferença nas observações
 ${clientConfig?.instrucoes_personalizadas ? `
 
-14) INSTRUÇÕES ESPECÍFICAS DO CLIENTE:
+15) INSTRUÇÕES ESPECÍFICAS DO CLIENTE:
 ${clientConfig.instrucoes_personalizadas}
 ` : ''}`;
 }
@@ -489,7 +525,24 @@ VALOR MERCADORIA:
 
 VALOR TOTAL FRETE (na tabela Prepaid/Collect):
   Total (coluna Prepaid), Total (coluna Collect), Total Prepaid,
-  Total Collect, Total Charges, Freight Total, Grand Total (em BL/CCT)
+  Total Collect, Total Charges, Freight Total, Grand Total (em BL/CCT),
+  Amount Due, Total Amount, Final Amount (quando em BL/AWB/CCT)
+  
+  ⚠️ REGRA CRÍTICA PARA AWB/HAWB — VALOR TOTAL FRETE:
+  - PROCURE a linha "Total Collect" ou "Total Prepaid" no RODAPÉ do documento
+  - Esta linha geralmente está em uma CAIXA DESTACADA ou em negrito
+  - É a SOMA de: Weight Charge + Other Charges (MAA, THC, FSC, AWB Fee, etc.)
+  - NÃO confunda com:
+    → "Total Charge" na tabela de itens (é só o frete base sem taxas)
+    → "Weight Charge" isolado (é só uma parcela do total)
+    → "Chargeable Weight" (é PESO, não valor!)
+  - Se existem DUAS colunas (Prepaid + Collect), somar AMBAS para o total real
+  - Exemplo de extração correta:
+    Weight Charge:         1.589,76 EUR
+    Other Charges (MAA):     165,94 EUR
+    AWB Fee:                  85,00 EUR
+    ─────────────────────────────────────
+    Total Collect:        1.840,70 EUR ← USAR ESTE!
 
 INCOTERM:
   Delivery Terms, Trade Terms, Terms of Delivery, Shipment Terms,
@@ -537,11 +590,35 @@ CCT / BL (Conhecimento de Transporte):
 │   └── TOTAL ← Este é o VALOR TOTAL FRETE!
 └── ATENÇÃO: O "Total" na coluna Prepaid/Collect é FRETE, não mercadoria!
 
-AWB (Air Waybill):
-├── Shipper, Consignee, Carrier
-├── Weight, Dimensions, Chargeable Weight
-├── Freight: Prepaid / Collect
-└── Total Charges
+AWB / HAWB (Air Waybill / House Air Waybill):
+├── Cabeçalho: Shipper, Consignee, Agent, Carrier
+├── Tabela de Carga: Pieces, Gross Weight, Chargeable Weight, Rate, Total Charge
+├── TABELA DE CHARGES (estrutura típica em duas colunas):
+│   ├── COLUNA PREPAID:
+│   │   ├── Weight Charge (frete base calculado por kg)
+│   │   ├── Valuation Charge
+│   │   ├── Tax
+│   │   └── Total Other Charges Due Agent
+│   ├── COLUNA COLLECT:
+│   │   ├── Other Charges (MAA, AWB Fee, FSC, THC, etc.)
+│   │   ├── Total Other Charges Due Agent
+│   │   └── Total Other Charges Due Carrier
+│   └── LINHA FINAL: "TOTAL PREPAID" ou "TOTAL COLLECT" ← ESTE É O VALOR TOTAL FRETE!
+├── ATENÇÃO CRÍTICA para extração de VALOR TOTAL FRETE:
+│   ├── PROCURE a linha "Total Collect" ou "Total Prepaid" no RODAPÉ
+│   ├── Esta linha geralmente está em uma CAIXA DESTACADA ou em negrito
+│   ├── É a SOMA de Weight Charge + Other Charges + Taxes
+│   ├── NÃO confunda com:
+│   │   → "Total Charge" na tabela de itens (é só o frete base sem taxas de agente)
+│   │   → "Weight Charge" isolado (é só uma parcela)
+│   │   → "Chargeable Weight" (é peso, não valor!)
+│   └── Exemplo típico de HAWB:
+│       Weight Charge:           1.589,76 EUR (Prepaid)
+│       Other Charges (MAA):       165,94 EUR (Collect)
+│       AWB Fee:                    85,00 EUR (Collect)
+│       ─────────────────────────────────────────────
+│       Total Collect:           1.840,70 EUR ← USAR ESTE VALOR!
+└── Se existem valores em AMBAS as colunas (Prepaid + Collect), somar para obter o total real
 `;
 
 
