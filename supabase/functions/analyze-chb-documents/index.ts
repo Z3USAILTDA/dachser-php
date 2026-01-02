@@ -471,30 +471,68 @@ ${fiscalRulesSection}${armadorSection}${taxasSection}
       ✅ Origem/Destino → comparar com AWB/BL
    
    C) CAMPOS QUE NÃO DEVEM SER CRIADOS (exclusivos do Seguro):
-      ❌ Nº da Apólice → NÃO criar linha, resultaria em "ND" para todos outros docs
-      ❌ Nº do Certificado → NÃO criar linha
-      ❌ Vigência/Período de Cobertura → NÃO criar linha
-      ❌ Prêmio do Seguro → NÃO criar linha
-      ❌ Tipo de Cobertura → NÃO criar linha
-      ❌ Franquia → NÃO criar linha
-      → Esses campos resultariam em "ND" para todos outros docs = RUÍDO
+      ❌ Document NO / Nº Documento → NÃO criar linha
+      ❌ Nº da Apólice / Policy Number → NÃO criar linha
+      ❌ Nº do Certificado / Certificate Number → NÃO criar linha
+      ❌ Vigência / ETD / Validity Period → NÃO criar linha
+      ❌ Taxa / Rate / Premium Rate → NÃO criar linha
+      ❌ Taxa de serviço / Service Fee → NÃO criar linha
+      ❌ Prêmio do Seguro / Premium Amount → NÃO criar linha
+      ❌ Franquia / Deductible → NÃO criar linha
+      ❌ Tipo de Cobertura / Coverage Type → NÃO criar linha
+      ❌ Segurador / Insurer Name → NÃO criar linha
+      → Esses campos resultariam em "ND" para todos outros docs = RUÍDO PROIBIDO
    
    D) INFORMAÇÕES EXCLUSIVAS DO SEGURO VÃO NAS OBSERVAÇÕES:
       Se houver informações relevantes exclusivas do seguro, reportar em observações:
       <p class="obs-info">📋 <strong>Seguro:</strong> Apólice [Nº], vigência [DATAS], 
       valor segurado compatível com mercadoria.</p>
    
-   EXEMPLO CORRETO DE TABELA:
+   EXEMPLO CORRETO DE TABELA (SIGA EXATAMENTE):
    | Campo            | Invoice    | Packing | HAWB  | Seguro     | Status |
    | Consignee        | ABC Ltda   | ABC     | ABC   | ABC Ltda   | ✅     |
    | Valor Mercadoria | EUR 10.000 | ND      | ND    | EUR 10.000 | ✅     |
    | Peso Bruto       | ND         | 500 kg  | 500   | ND         | ✅     |
    
-   ERRADO (não criar esta linha):
-   | Nº Apólice       | ND         | ND      | ND    | XYZ-123    | ❌     |
+   ⛔ PROIBIDO - NUNCA criar estas linhas:
+   | Nº Apólice       | ND         | ND      | ND    | XYZ-123    | ❌     | ← PROIBIDO!
+   | Document NO      | ND         | ND      | ND    | 123456     | ❌     | ← PROIBIDO!
+   | Vigência         | ND         | ND      | ND    | 20/12/2025 | ❌     | ← PROIBIDO!
+   | Taxa             | ND         | ND      | ND    | 0.25%      | ❌     | ← PROIBIDO!
+
+17) NORMALIZAÇÃO DE NÚMEROS DE CONHECIMENTO:
+   
+   Antes de comparar Nº Conhecimento (AWB, HAWB, BL, HBL, MAWB, MBL):
+   - Remover todos os espaços
+   - Remover hífens (-)
+   - Converter para maiúsculas
+   
+   Exemplo: "KFB-0094 7167" e "KFB00947167" são IGUAIS → ✅ CONFORME
+   
+   Na tabela, exibir o formato mais completo, mas marcar como CONFORME se forem iguais após normalização.
+
+18) EXTRAÇÃO DE DADOS DO PACKING LIST:
+   
+   O Packing List geralmente contém:
+   - Tabela com volumes individuais e seus pesos
+   - Total de volumes (ex: "3 Boxes" ou "3 Caixas" ou "3 Packages")
+   - Peso Bruto Total (soma dos pesos individuais)
+   - Peso Líquido Total
+   
+   COMO EXTRAIR:
+   a) Procurar linha/campo com "Gross Weight Total" ou "Total Gross Weight" ou "Total G.W."
+   b) Se não encontrar total explícito, SOMAR os pesos brutos individuais da tabela
+   c) Procurar "Number of Packages", "Qty", "No. of Packages" para total de volumes
+   d) Contar linhas de volumes na tabela se necessário
+   
+   VALIDAÇÃO:
+   - Peso Bruto > Peso Líquido (sempre verdade)
+   - Se houver discrepância entre soma e total declarado, reportar em observações
+   
+   ATENÇÃO: Muitas vezes os campos estão no rodapé ou em células específicas, procure em todo o documento!
 
 ${clientConfig?.instrucoes_personalizadas ? `
-17) INSTRUÇÕES ESPECÍFICAS DO CLIENTE:
+19) INSTRUÇÕES ESPECÍFICAS DO CLIENTE:
 ${clientConfig.instrucoes_personalizadas}
 ` : ''}`;
 }
@@ -762,34 +800,44 @@ CAMPOS OBRIGATÓRIOS NA TABELA (cada um em sua linha):
 
 ⚠️ CAMPOS EXCLUSIVOS QUE NÃO GERAM NOVAS LINHAS:
 - Regra: Se um campo só existe em UM tipo de documento, NÃO criar linha para ele
-- Campos que existem APENAS em documentos de Seguro (NÃO CRIAR):
-  → Nº Apólice, Nº Certificado, Vigência, Prêmio, Franquia, Tipo Cobertura
-- O documento de Seguro PARTICIPA da comparação nos campos que JÁ EXISTEM
-- Informações exclusivas do seguro podem ir nas OBSERVAÇÕES
+- Campos que existem APENAS em documentos de Seguro (NÃO CRIAR LINHAS PARA):
+  ❌ Document NO / Nº Documento do Seguro
+  ❌ Nº da Apólice / Policy Number  
+  ❌ Nº do Certificado / Certificate Number
+  ❌ Vigência / ETD do Seguro / Validity Period
+  ❌ Taxa / Rate / Premium Rate
+  ❌ Taxa de serviço / Service Fee
+  ❌ Prêmio do Seguro / Premium Amount
+  ❌ Franquia / Deductible
+  ❌ Tipo de Cobertura / Coverage Type
+  ❌ Segurador / Insurer Name
+- O documento de Seguro PARTICIPA da comparação nos campos que JÁ EXISTEM:
+  ✅ Consignee/Segurado → comparar com outros documentos
+  ✅ Valor da Mercadoria/Importância Segurada → comparar com Invoice
+  ✅ Descrição da Mercadoria → comparar com Invoice/Packing
+  ✅ Origem/Destino → comparar com AWB/BL
+- Informações exclusivas do seguro vão nas OBSERVAÇÕES (não na tabela)
+
+⚠️ NORMALIZAÇÃO DE Nº CONHECIMENTO (CRÍTICO):
+- Antes de comparar AWB, HAWB, BL, HBL, MAWB, MBL:
+  1. Remover TODOS os espaços
+  2. Remover hífens (-)
+  3. Converter para maiúsculas
+- Exemplo: "KFB-0094 7167" e "KFB00947167" são IGUAIS → ✅ CONFORME
+- Na tabela, exibir o formato mais completo, mas marcar como CONFORME
+
+⚠️ EXTRAÇÃO DE PACKING LIST (PESO E VOLUMES):
+- O Packing List geralmente tem tabela com volumes individuais
+- Para PESO BRUTO TOTAL: procure "Total Gross Weight" ou "Gross Weight Total"
+  → Se não encontrar total, SOMAR os pesos brutos individuais da tabela
+- Para VOLUMES/PACKAGES: procure "Number of Packages", "Total Packages", "Qty"
+  → Contar linhas da tabela se necessário
+- VALIDAÇÃO: Peso Bruto > Peso Líquido (sempre!)
 
 ⚠️ ATENÇÃO — TRÊS VALORES DIFERENTES:
 - Valor Mercadoria = soma dos produtos na Invoice ("Total Items")
 - Frete = custo do transporte (linha "Ocean Freight" ou "Air Freight")
 - Valor Total Frete = total na coluna Prepaid/Collect (inclui frete + taxas)
-
-═══════════════════════════════════════════════════════════════════════════════
-ESTRUTURA DA TABELA DE SAÍDA:
-═══════════════════════════════════════════════════════════════════════════════
-<table>
-<thead><tr>
-  <th>Status</th>
-  <th>Campo</th>
-  <th>${columnHeaders.split(' | ').map(h => `</th>\n  <th>${h}`).join('').slice(5)}</th>
-</tr></thead>
-<tbody>
-  <tr><td>✅/🟨/🔴</td><td>Campo</td><td>Valor do doc 1</td>...</tr>
-</tbody>
-</table>
-
-REGRAS DE STATUS:
-- ✅ = Valores iguais OU dado existe em apenas um documento
-- 🟨 = Divergência pequena (< tolerância configurada)
-- 🔴 = Divergência significativa entre documentos
 
 REGRA CRÍTICA: "ND" em um documento + valor em outro = ✅ (não é divergência!)
 
@@ -1016,6 +1064,11 @@ async function callAnthropicAPI(prompt: string, filesContent: { name: string; co
     text: prompt,
   });
 
+  // Log detailed extraction info
+  console.log(`[CHB Debug] Files being sent to API:`);
+  for (const file of filesContent) {
+    console.log(`  - ${file.name} (${file.mimeType}) - Method: ${file.mimeType === 'application/pdf' ? 'PDF-Document' : file.mimeType.startsWith('image/') ? 'Image' : 'Text'}`);
+  }
   console.log(`Calling Anthropic API with ${filesContent.length} files...`);
   console.log(`Prompt length: ${prompt.length} chars`);
 
