@@ -23,7 +23,7 @@ export default function ConferenciaChb() {
   const itemId = id ? parseInt(id) : null;
   
   const { files: dbFiles, fetchFiles, createFile, deleteFile } = useChbFiles(itemId);
-  const { runs: dbRuns, fetchRuns, createRun } = useChbRuns(itemId);
+  const { runs: dbRuns, fetchRuns, createRun, updateRun } = useChbRuns(itemId);
   const { updateItem, updateItemClient } = useChbItems();
   const { getConfigByClient } = useChbClientConfig();
   
@@ -105,12 +105,15 @@ export default function ConferenciaChb() {
     const restoredAnalysis: Record<number, ChbAnalysisResult | null> = { 1: null, 2: null, 3: null };
     let maxApprovedStep = 0;
     
-    // Sort runs by created_at to get the most recent per step
-    const sortedRuns = [...dbRuns]
-      .filter((r: ChbRun) => r.status === 'approved')
+    // Separate approved and draft runs
+    const approvedRuns = dbRuns.filter((r: ChbRun) => r.status === 'approved');
+    const draftRuns = dbRuns.filter((r: ChbRun) => r.status === 'draft');
+    
+    // Sort approved runs by created_at to get the most recent per step
+    const sortedApprovedRuns = [...approvedRuns]
       .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
     
-    sortedRuns.forEach((r: ChbRun) => {
+    sortedApprovedRuns.forEach((r: ChbRun) => {
       const stepId = parseInt(r.etapa) as 1 | 2 | 3;
       if (stepId > maxApprovedStep) maxApprovedStep = stepId;
       
@@ -135,6 +138,31 @@ export default function ConferenciaChb() {
           filesAnalyzed: [],
           tags: [],
         };
+      }
+    });
+    
+    // Restore drafts for NON-approved steps
+    const sortedDraftRuns = [...draftRuns]
+      .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+    
+    sortedDraftRuns.forEach((r: ChbRun) => {
+      const stepId = parseInt(r.etapa) as 1 | 2 | 3;
+      
+      // Only restore draft if:
+      // 1. Step is not yet approved (stepId > maxApprovedStep)
+      // 2. We don't already have an analysis for this step
+      if (stepId > maxApprovedStep && !restoredAnalysis[stepId] && r.result_html) {
+        restoredAnalysis[stepId] = {
+          id: `draft-${r.id}`,
+          stepId,
+          html: r.result_html,
+          summary: r.result_text || '',
+          generatedAt: new Date(r.created_at).toLocaleString('pt-BR'),
+          filesAnalyzed: [],
+          tags: [],
+          usedFallback: false,
+        };
+        console.log(`[CHB] Restored draft analysis for step ${stepId}`);
       }
     });
     
@@ -525,6 +553,37 @@ export default function ConferenciaChb() {
         }
       }
 
+      // Save analysis as draft for persistence (so user doesn't lose it if they leave)
+      try {
+        // Check if there's an existing draft for this step
+        const existingDraft = dbRuns.find(
+          (r: ChbRun) => r.etapa === activeStep.toString() && r.status === 'draft'
+        );
+
+        if (existingDraft) {
+          // Update existing draft
+          await updateRun(existingDraft.id, {
+            resultText: analysisData.summary || '',
+            resultHtml: analysisData.html,
+            resultJson: analysisData,
+          });
+          console.log('[CHB] Updated existing draft analysis for step', activeStep);
+        } else {
+          // Create new draft
+          await createRun(
+            activeStep.toString() as '1' | '2' | '3',
+            'draft',
+            analysisData.summary || '',
+            analysisData.html,
+            analysisData
+          );
+          console.log('[CHB] Saved new draft analysis for step', activeStep);
+        }
+      } catch (err) {
+        console.error('Error saving analysis draft:', err);
+        // Don't block the user, just log the error
+      }
+
       toast.success('Análise concluída com sucesso!');
     } catch (error) {
       console.error('Error analyzing documents:', error);
@@ -557,14 +616,31 @@ export default function ConferenciaChb() {
     }
 
     // Save to database with status 'approved'
+    // Check if there's an existing draft to update instead of creating new
     try {
-      await createRun(
-        activeStep.toString() as '1' | '2' | '3',
-        'approved',
-        currentAnalysis.summary,
-        currentAnalysis.html,
-        currentAnalysis
+      const existingDraft = dbRuns.find(
+        (r: ChbRun) => r.etapa === activeStep.toString() && r.status === 'draft'
       );
+
+      if (existingDraft) {
+        // Update existing draft to approved
+        await updateRun(existingDraft.id, {
+          status: 'approved',
+          resultText: currentAnalysis.summary,
+          resultHtml: currentAnalysis.html,
+          resultJson: currentAnalysis,
+        });
+        console.log('[CHB] Converted draft to approved for step', activeStep);
+      } else {
+        // Create new approved run (fallback if no draft exists)
+        await createRun(
+          activeStep.toString() as '1' | '2' | '3',
+          'approved',
+          currentAnalysis.summary,
+          currentAnalysis.html,
+          currentAnalysis
+        );
+      }
 
       // Update step status in database
       if (itemId) {

@@ -243,5 +243,25 @@ export function useChbRuns(itemId: number | null) {
     }
   }, [itemId, fetchRuns]);
 
-  return { runs, loading, fetchRuns, createRun };
+  const updateRun = useCallback(async (
+    runId: number,
+    updates: { status?: string; resultText?: string; resultHtml?: string; resultJson?: object }
+  ): Promise<boolean> => {
+    try {
+      await callMariaDB('update_chb_run', { 
+        runId, 
+        status: updates.status,
+        resultText: updates.resultText,
+        resultHtml: updates.resultHtml,
+        resultJson: updates.resultJson,
+      });
+      await fetchRuns();
+      return true;
+    } catch (error) {
+      console.error('Error updating CHB run:', error);
+      return false;
+    }
+  }, [fetchRuns]);
+
+  return { runs, loading, fetchRuns, createRun, updateRun };
 }
