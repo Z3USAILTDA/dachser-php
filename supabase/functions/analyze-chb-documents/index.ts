@@ -937,16 +937,20 @@ IDENTIFICAÇÃO DE TIPOS:
 ═══════════════════════════════════════════════════════════════════════════════
 CAMPOS OBRIGATÓRIOS NA TABELA (cada um em sua linha):
 ═══════════════════════════════════════════════════════════════════════════════
-1. Consignee/CNPJ
-2. Incoterm (FOB, CFR, CIF, etc.)
-3. Peso Bruto (kg) - do PACKING LIST, CCT, HAWB ou BL (extrair de TODOS que tiverem!)
+⚠️ REGRA CRÍTICA: Extrair cada campo de TODOS os documentos que o contêm!
+   Use "+" (extrair de todos) e NÃO "ou" (escolher um)!
+
+1. Consignee/CNPJ - extrair de INVOICE + PACKING + HAWB/BL + CCT (TODOS!)
+2. Incoterm (FOB, CFR, CIF, etc.) - extrair de INVOICE + PACKING + HAWB/BL + CCT (TODOS!)
+3. Peso Bruto (kg) - extrair de PACKING LIST + CCT + HAWB + BL (TODOS que tiverem!)
+   → Cada documento deve ter sua própria coluna com o valor extraído
 4. Peso Líquido (kg) - do PACKING LIST (se disponível)
 5. Valor Mercadoria (COM MOEDA!) - da INVOICE, procure "Total Items" (ex: EUR 28.234,23)
-6. Frete (COM MOEDA!) - do AWB/HAWB/BL, linha Ocean/Air Freight ou Weight Charge (ex: USD 1.500,00)
-7. Valor Total Frete (COM MOEDA!) - do HAWB/AWB/CCT/BL, linha "Total Collect" ou "Total Prepaid" no RODAPÉ
-8. NCM Principal
-9. Nº Conhecimento (AWB ou BL)
-10. Data Emissão (de cada documento)
+6. Frete (COM MOEDA!) - do AWB + HAWB + BL (TODOS!), linha Ocean/Air Freight ou Weight Charge
+7. Valor Total Frete (COM MOEDA!) - do HAWB + AWB + CCT + BL (TODOS!), linha "Total Collect" ou "Total Prepaid"
+8. NCM Principal - extrair de INVOICE + PACKING + DI (TODOS!)
+9. Nº Conhecimento - extrair de HAWB + AWB + BL + CCT (TODOS!)
+10. Data Emissão (de cada documento) - extrair de TODOS os documentos!
 
 ⚠️ CAMPOS EXCLUSIVOS QUE NÃO GERAM NOVAS LINHAS:
 - Regra: Se um campo só existe em UM tipo de documento, NÃO criar linha para ele
