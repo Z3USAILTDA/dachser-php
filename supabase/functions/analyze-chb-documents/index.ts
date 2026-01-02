@@ -755,6 +755,35 @@ EXTRAÇÃO DETERMINÍSTICA:
 - Se houver tabela com subtotais e total geral, usar o TOTAL GERAL
 - Em caso de ambiguidade, marcar como 🟨 com observação explicando
 
+═══════════════════════════════════════════════════════════════════════════════
+⚠️⚠️⚠️ REGRA ANTI-ALUCINAÇÃO — LEIA COM ATENÇÃO MÁXIMA! ⚠️⚠️⚠️
+═══════════════════════════════════════════════════════════════════════════════
+
+VOCÊ ESTÁ PROIBIDO DE:
+1. INVENTAR valores que não existem no documento
+2. COPIAR valor de um documento para outro
+3. ASSUMIR que dois documentos têm o mesmo valor
+4. ARREDONDAR ou MODIFICAR valores extraídos
+5. CALCULAR valores (exceto soma de Packing List quando explicitamente instruído)
+
+PARA CADA DOCUMENTO, VOCÊ DEVE:
+1. LER o documento INTEIRO
+2. LOCALIZAR o campo específico (Peso Bruto, Valor, etc.)
+3. TRANSCREVER o valor EXATAMENTE como aparece
+4. Se não encontrar o campo → usar "ND"
+
+⚠️ VERIFICAÇÃO OBRIGATÓRIA ANTES DE INCLUIR QUALQUER VALOR:
+Antes de escrever um valor na tabela, pergunte-se:
+"Eu vi esse valor EXATO neste documento específico?"
+- Se SIM → inclua o valor
+- Se NÃO → use "ND"
+
+EXEMPLO DE ERRO GRAVE (NÃO FAZER!):
+- HAWB mostra: "Gross Weight: 502,0 kg"
+- Packing mostra: "Total Gross: 501,5 kg"
+→ ERRO: Colocar 501,5 kg para HAWB (copiou do Packing!)
+→ CORRETO: HAWB = 502,0 kg | Packing = 501,5 kg
+
 ⚠️ REGRA #9.1: MÚLTIPLOS ARQUIVOS DO MESMO TIPO — EXTRAÇÃO INDEPENDENTE
 QUANDO há múltiplas Invoices (inv_01.pdf, inv_02.pdf, etc.):
 - CADA ARQUIVO TEM VALORES PRÓPRIOS — EXTRAIR DE CADA UM SEPARADAMENTE!
@@ -777,6 +806,12 @@ NUNCA INFERIR OU CALCULAR:
 - Se o documento não mostra o valor explicitamente, usar "ND"
 - Não somar linhas para obter total (a menos que instruído explicitamente para Packing List)
 - Não converter moedas entre si
+
+⚠️ TRANSCRIÇÃO LITERAL OBRIGATÓRIA:
+- Se documento mostra "501,5 kg" → escreva "501,5 kg"
+- Se documento mostra "502.0 KG" → escreva "502.0 kg"
+- NUNCA modifique o valor numérico!
+- NUNCA "ajuste" um valor para "bater" com outro documento!
 
 ⚠️ REGRA #10: CAMPOS SEM BASE DE COMPARAÇÃO → ALERTA (🟨)
 
