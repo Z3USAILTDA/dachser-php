@@ -987,46 +987,46 @@ function createFileError(file: { name: string; mimeType: string }, errorType: st
 // POST-PROCESSING FILTER: Remove exclusive insurance field rows from HTML table
 // ═══════════════════════════════════════════════════════════════════════════════
 function filterExclusiveInsuranceFields(htmlContent: string): { filtered: string; removedCount: number } {
-  // Patterns that identify rows with exclusive insurance fields (first column = field name)
+  // Patterns that identify rows with EXCLUSIVE insurance fields only
+  // IMPORTANT: These must be specific to avoid filtering legitimate fields like "Frete", "Taxa de Câmbio"
   const bannedFieldPatterns = [
-    /^document\s*n[oº°]/i,
-    /^n[oº°]\s*(da\s+)?ap[oó]lice/i,
-    /^policy\s*n(umber|o|º)?/i,
-    /^n[oº°]\s*(do\s+)?certificado/i,
-    /^certificate\s*n(umber|o|º)?/i,
-    /^vig[eê]ncia/i,
-    /^validity/i,
-    /^etd\s*(do\s+)?seguro/i,
-    /^taxa(\s+de\s+servi[çc]o)?$/i,
-    /^service\s*fee/i,
-    /^rate\s*%?$/i,
-    /^premium\s*(rate|amount)?$/i,
-    /^pr[eê]mio(\s+(do\s+)?seguro)?$/i,
-    /^franquia/i,
-    /^deductible/i,
-    /^tipo\s*(de\s+)?cobertura/i,
-    /^coverage(\s+type)?$/i,
-    /^segurador(a)?$/i,
-    /^insurer/i,
-    /^n[oº°]\s*documento/i,
+    /^n[oº°]\s*(da\s+)?ap[oó]lice/i,          // Nº da Apólice
+    /^policy\s*n(umber|o|º)?$/i,               // Policy Number (exact)
+    /^n[oº°]\s*(do\s+)?certificado/i,          // Nº do Certificado
+    /^certificate\s*n(umber|o|º)?$/i,          // Certificate Number (exact)
+    /^vig[eê]ncia(\s+(do\s+)?seguro)?$/i,      // Vigência (do Seguro)
+    /^validity\s+period$/i,                     // Validity Period (exact)
+    /^pr[eê]mio\s+(do\s+)?seguro$/i,           // Prêmio do Seguro (específico)
+    /^insurance\s+premium$/i,                   // Insurance Premium
+    /^franquia\s*(do\s+)?seguro$/i,            // Franquia do Seguro
+    /^deductible$/i,                            // Deductible (exact)
+    /^tipo\s+de\s+cobertura$/i,                // Tipo de Cobertura (exact)
+    /^coverage\s+type$/i,                       // Coverage Type (exact)
+    /^segurador(a)?$/i,                         // Segurador/Seguradora
+    /^insurer$/i,                               // Insurer (exact)
+    /^underwriter$/i,                           // Underwriter
   ];
 
   let removedCount = 0;
   
-  // Find all <tr> elements and check if first <td> matches banned patterns
+  // Find all <tr> elements and check the SECOND <td> (Campo column, not Status)
   const filtered = htmlContent.replace(/<tr[^>]*>[\s\S]*?<\/tr>/gi, (trMatch) => {
-    // Extract first <td> content (the field name column)
-    const firstTdMatch = trMatch.match(/<td[^>]*>([\s\S]*?)<\/td>/i);
-    if (!firstTdMatch) return trMatch; // Keep if no td found
+    // Extract ALL <td> elements from the row
+    const allTds = trMatch.match(/<td[^>]*>[\s\S]*?<\/td>/gi);
+    if (!allTds || allTds.length < 2) return trMatch; // Keep if not enough columns
+    
+    // The SECOND <td> is the field name (first is Status icon)
+    const secondTdMatch = allTds[1].match(/<td[^>]*>([\s\S]*?)<\/td>/i);
+    if (!secondTdMatch) return trMatch;
     
     // Get text content, removing HTML tags
-    const fieldName = firstTdMatch[1].replace(/<[^>]+>/g, '').trim();
+    const fieldName = secondTdMatch[1].replace(/<[^>]+>/g, '').trim();
     
     // Check if this field matches any banned pattern
     for (const pattern of bannedFieldPatterns) {
       if (pattern.test(fieldName)) {
         removedCount++;
-        console.log(`[CHB Filter] Removed row with banned field: "${fieldName}"`);
+        console.log(`[CHB Filter] Removed insurance-only row: "${fieldName}"`);
         return ''; // Remove the entire <tr>
       }
     }
