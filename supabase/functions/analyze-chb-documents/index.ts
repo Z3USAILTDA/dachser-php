@@ -673,30 +673,69 @@ REGRAS DE EXTRAÇÃO — LEIA COM ATENÇÃO MÁXIMA
 - USAR "ND" apenas quando o campo DEVERIA existir (ex: AWB/BL sem frete = PROBLEMA!)
 - A diferença é semântica importante para auditoria!
 
-⚠️ REGRA #6: STATUS — CRITÉRIOS ESTRITOS PARA "CONFORME" (✅)
+⚠️ REGRA #6: STATUS — CRITÉRIOS ABSOLUTAMENTE ESTRITOS PARA "CONFORME" (✅)
 
-CONFORME (✅) SOMENTE quando:
-- Valores são EXATAMENTE iguais (ex.: "USD 1.500,00" = "USD 1.500,00")
-- OU valores são numericamente equivalentes (ex.: "10.841" = "10.841,00" = "10841")
-- OU diferença está DENTRO da tolerância (APENAS arredondamentos!)
+═══════════════════════════════════════════════════════════════════════════════
+REGRA SUPREMA DE CONSISTÊNCIA — LEIA COM ATENÇÃO MÁXIMA!
+═══════════════════════════════════════════════════════════════════════════════
 
-⚠️ REGRA "ND + Valor" — QUANDO APLICAR:
-- Se dado existe em APENAS UM documento e é campo NÃO-CRÍTICO → ✅
-- CAMPOS CRÍTICOS que NUNCA são ✅ com ND em documento obrigatório:
-  → peso_bruto, peso_liquido, valor_total, valor_mercadoria, frete, cnpj
-- Se campo CRÍTICO = ND em documento que DEVERIA ter esse campo → 🟨 ALERTA
+PESO BRUTO — VALIDAÇÃO OBRIGATÓRIA:
+1. Extrair Peso Bruto de: Packing List, HAWB/AWB, BL/HBL, CCT
+2. COMPARAR TODOS os valores extraídos entre si
+3. Se QUALQUER valor for diferente dos outros → 🔴 DIVERGENTE (OBRIGATÓRIO!)
+4. Exemplo:
+   - Packing: 501,5 kg
+   - HAWB: 502,0 kg
+   - CCT: 501,5 kg
+   → Status: 🔴 DIVERGENTE (HAWB difere de Packing e CCT!)
 
-🔴 NÃO É CONFORME quando:
-- Existem 2 ou mais valores DIFERENTES para o mesmo campo
-- Datas diferentes (ex.: 08/12/2025 vs 05/12/2025 vs 12/05/2025 = 🔴)
-- Valores com diferença acima da tolerância
-- Formatos de data invertidos que resultam em datas diferentes
+CONFORME (✅) SOMENTE quando TODOS estes critérios forem atendidos:
+1. TODOS os documentos que contêm o campo têm o MESMO valor
+2. Valores são EXATAMENTE iguais (ex.: "USD 1.500,00" = "USD 1.500,00")
+3. OU valores são numericamente IDÊNTICOS (ex.: "501,5" = "501,50" = "501.5")
+4. NENHUMA diferença numérica é permitida para marcar ✅
 
-⚠️ REGRA #8: VERIFICAÇÃO CRUZADA OBRIGATÓRIA
-ANTES de marcar qualquer campo como ✅ CONFORME, verificar:
-1. O valor é IDÊNTICO em TODOS os documentos que contêm esse campo?
-2. Se NÃO → 🔴 DIVERGENTE (independente da "tolerância")
-3. A tolerância só se aplica para diferenças de ARREDONDAMENTO/FORMATAÇÃO
+DIVERGENTE (🔴) OBRIGATÓRIO quando:
+- QUALQUER documento tem valor DIFERENTE dos demais (mesmo que por 0,1 kg!)
+- Exemplo: Packing = 501,5 kg | HAWB = 502,0 kg → 🔴 (diferença de 0,5 kg)
+- Exemplo: Invoice A = EUR 10.000 | Invoice B = EUR 10.001 → 🔴 
+- Datas diferentes entre documentos = 🔴 SEMPRE
+- Formatos de data que resultam em datas diferentes = 🔴
+
+⚠️ ALERTA (🟨) quando:
+- Campo existe em apenas 1 documento (impossível comparar)
+- Todos os documentos têm ND para o campo
+- Dados incompletos que impedem verificação
+
+⚠️ REGRA "ND + Valor" — RESTRITIVA:
+- CAMPOS CRÍTICOS (peso_bruto, peso_liquido, valor_total, valor_mercadoria, frete, cnpj):
+  → Se ND em documento obrigatório que DEVERIA ter o campo → 🟨 ALERTA
+  → NUNCA ✅ se um documento tem valor e outro deveria ter mas está ND
+- CAMPOS NÃO-CRÍTICOS:
+  → Se apenas 1 documento tem valor e outros são ND → 🟨 (não ✅!)
+
+═══════════════════════════════════════════════════════════════════════════════
+VERIFICAÇÃO CRUZADA OBRIGATÓRIA — EXECUTAR PARA CADA LINHA
+═══════════════════════════════════════════════════════════════════════════════
+
+ANTES de marcar QUALQUER campo como ✅ CONFORME:
+1. Liste TODOS os valores extraídos de TODOS os documentos
+2. Compare TODOS os valores numericamente
+3. Se houver QUALQUER diferença (mesmo 0,01) → 🔴 DIVERGENTE
+4. Tolerância = ZERO para valores diferentes. Apenas formatação (501,5 = 501.5)
+5. Se valores são diferentes → 🔴 É OBRIGATÓRIO, NÃO HÁ EXCEÇÃO!
+
+CHECKLIST MENTAL OBRIGATÓRIO:
+□ Extraí o valor de CADA documento que contém este campo?
+□ TODOS os valores são EXATAMENTE iguais (numericamente)?
+□ Se NÃO → 🔴 DIVERGENTE (não há exceção!)
+□ Se SIM → ✅ CONFORME
+
+ERRO GRAVE A EVITAR:
+- Marcar ✅ quando valores são diferentes
+- Ignorar diferenças "pequenas" (0,5 kg, EUR 1, etc.)
+- Copiar valor de um documento para outro
+- Assumir que documentos têm o mesmo valor sem verificar
 
 EXEMPLO DE ERRO A EVITAR:
 - Invoice 1: EUR 10.000,00
@@ -905,7 +944,41 @@ AWB / HAWB (Air Waybill / House Air Waybill):
 │       ─────────────────────────────────────────────
 │       Total Collect:           1.840,70 EUR ← USAR ESTE VALOR!
 └── Se existem valores em AMBAS as colunas (Prepaid + Collect), somar para obter o total real
+
+═══════════════════════════════════════════════════════════════════════════════
+VALIDAÇÃO FINAL OBRIGATÓRIA — EXECUTAR ANTES DE GERAR O RESULTADO
+═══════════════════════════════════════════════════════════════════════════════
+
+⚠️ ATENÇÃO: EXECUTE ESTA VERIFICAÇÃO PARA CADA LINHA DA TABELA!
+
+PARA O CAMPO "PESO BRUTO":
+1. Listar todos os valores extraídos:
+   - Packing List: _____ kg
+   - HAWB: _____ kg
+   - CCT: _____ kg
+   - Outros: _____ kg
+
+2. Comparar TODOS os valores numericamente:
+   - Se TODOS são iguais (ex: 501,5 = 501,5 = 501,5) → ✅ CONFORME
+   - Se QUALQUER valor difere (ex: 501,5 ≠ 502,0) → 🔴 DIVERGENTE
+
+3. NÃO HÁ EXCEÇÃO para valores diferentes!
+   - 501,5 vs 502,0 = 🔴 (diferença de 0,5 kg)
+   - 500 vs 501 = 🔴 (diferença de 1 kg)
+   - 10.841 vs 10.842 = 🔴 (diferença de 1 kg)
+
+ERRO FATAL A EVITAR:
+❌ Marcar ✅ quando HAWB mostra valor diferente de Packing ou CCT
+❌ Ignorar pequenas diferenças (toda diferença conta!)
+❌ Assumir que documentos concordam sem verificar cada um
+
+REGRA DE OURO:
+→ Se você extraiu valores DIFERENTES de documentos DIFERENTES = 🔴 DIVERGENTE
+→ Não importa se a diferença é pequena
+→ Não importa se "parece arredondamento"
+→ VALORES DIFERENTES = 🔴, SEMPRE!
 `;
+
 
 
 function getPromptByStep(stepId: number, fileNames: string[], clientConfig?: ClientConfig): string {
