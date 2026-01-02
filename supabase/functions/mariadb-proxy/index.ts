@@ -3164,6 +3164,44 @@ serve(async (req) => {
         break;
       }
 
+      case 'update_chb_run': {
+        const { runId, status, resultText, resultHtml, resultJson } = body;
+        console.log('Updating CHB run:', { runId, status });
+        
+        const updates: string[] = [];
+        const params: any[] = [];
+        
+        if (status !== undefined) {
+          updates.push('status = ?');
+          params.push(status);
+        }
+        if (resultText !== undefined) {
+          updates.push('result_text = ?');
+          params.push(resultText);
+        }
+        if (resultHtml !== undefined) {
+          updates.push('result_html = ?');
+          params.push(resultHtml);
+        }
+        if (resultJson !== undefined) {
+          updates.push('result_json = ?');
+          params.push(typeof resultJson === 'string' ? resultJson : JSON.stringify(resultJson));
+        }
+        
+        if (updates.length === 0) {
+          result = { success: false, error: 'No updates provided' };
+          break;
+        }
+        
+        params.push(runId);
+        await client.execute(`
+          UPDATE ai_agente.t_dachser_chb_runs SET ${updates.join(', ')} WHERE id = ?
+        `, params);
+        
+        result = { success: true };
+        break;
+      }
+
       // ==================== SEA (MARITIME) MODULE ====================
       // Tables: t_dachser_sea_items (id, view, arquivo_id, arquivo_label, consignee, container, status, active, active_by, active_at, created_at)
       // t_dachser_sea_runs (id, item_id, mode, thread_id, run_id, status, result_text, created_at)
