@@ -643,13 +643,42 @@ REGRAS DE EXTRAÇÃO — LEIA COM ATENÇÃO MÁXIMA
 | Frete            | HAWB + AWB + BL + HBL                |
 | Incoterm         | INVOICE + PACKING + HAWB/AWB/BL      |
 
-⚠️ EXTRAÇÃO DE PESO BRUTO DO HAWB/AWB (CRÍTICO):
-- No HAWB/AWB, o Peso Bruto está na coluna "Gross Weight" ou "Kg" na tabela de carga
-- Exemplo: tabela com "No. of Pieces | Gross Weight | Chargeable Weight"
-  → Linha "3 | 501,5 | 501,5" significa Peso Bruto = 501,5 kg
-- O campo geralmente aparece em kg com vírgula decimal (ex: 501,5)
-- NUNCA confundir "Chargeable Weight" com "Gross Weight" (podem ser iguais, mas são campos diferentes)
-- Extrair o valor da coluna "Gross Weight" ou "Kg" DIRETAMENTE, sem cálculos
+⚠️⚠️⚠️ EXTRAÇÃO DE PESO BRUTO DO HAWB/AWB — LEIA COM ATENÇÃO MÁXIMA! ⚠️⚠️⚠️
+
+ESTRUTURA TÍPICA DO HAWB/AWB (onde encontrar Peso Bruto):
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ HAWB/AWB contém uma TABELA DE CARGA com estas colunas:                      │
+│                                                                             │
+│ No. of Pieces RCP │ Gross Weight │ kg lb │ Chargeable Weight │ Rate/Charge │
+│ ─────────────────────────────────────────────────────────────────────────── │
+│ 3                 │ 501,5        │ K     │ 501,5             │ ...         │
+│                                                                             │
+│ ⚠️ O PESO BRUTO está na coluna "Gross Weight" (segunda coluna numérica)    │
+│ ⚠️ NÃO é "Chargeable Weight" (quarta coluna) - são campos DIFERENTES!      │
+│ ⚠️ A coluna "kg lb" indica a unidade (K = kg, L = lb)                       │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+ONDE PROCURAR NO HAWB:
+1. Procure a seção "Rate Description" ou tabela de carga (geralmente no meio do documento)
+2. Localize a coluna com rótulo "Gross Weight" ou "G.W." ou apenas "Gross"
+3. O valor está na LINHA DE DADOS (não no cabeçalho!)
+4. Geralmente é um número com vírgula (ex: 501,5) seguido de indicador K (kg)
+
+EXEMPLO REAL DE EXTRAÇÃO:
+- Se o HAWB mostra: "No. of Pieces: 3 | Gross Weight: 501,5 | K | Chargeable: 501,5"
+- O Peso Bruto do HAWB = 501,5 kg (coluna Gross Weight, NÃO Chargeable!)
+
+ERROS A EVITAR:
+❌ Pegar o "Chargeable Weight" em vez do "Gross Weight"
+❌ Inventar um valor que não está no documento
+❌ Copiar o valor do Packing List para o HAWB
+❌ Usar qualquer outro número do documento que não seja da coluna "Gross Weight"
+
+VERIFICAÇÃO:
+Antes de colocar o valor do HAWB na tabela, confirme:
+"Este valor está NA COLUNA 'Gross Weight' do HAWB?" 
+- Se SIM → use o valor
+- Se NÃO → está extraindo do lugar errado!
 
 ⚠️ REGRA #4: VALOR MERCADORIA ≠ FRETE
 - VALOR MERCADORIA = total da Invoice (produtos vendidos)
