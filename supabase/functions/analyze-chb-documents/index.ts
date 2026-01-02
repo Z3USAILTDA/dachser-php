@@ -453,9 +453,38 @@ ${fiscalRulesSection}${armadorSection}${taxasSection}
         → CCT pode mostrar apenas frete base (sem MAA/taxas de agente)
         → HAWB mostra total incluindo todas as taxas
         → Neste caso, explicar a diferença nas observações
-${clientConfig?.instrucoes_personalizadas ? `
 
-15) INSTRUÇÕES ESPECÍFICAS DO CLIENTE:
+16) TRATAMENTO DE DOCUMENTOS DE SEGURO (APÓLICE/CERTIFICADO):
+   
+   ⚠️ DOCUMENTOS DE SEGURO SÃO INFORMATIVOS — NÃO CRIAR CAMPOS EXCLUSIVOS!
+   
+   A) O QUE FAZER COM SEGURO:
+      - Confirmar que o CONSIGNEE/SEGURADO corresponde ao processo
+      - Verificar se o VALOR SEGURADO é compatível com o valor da mercadoria
+      - Verificar se a VIGÊNCIA cobre a data de embarque
+      - Reportar estas verificações nas OBSERVAÇÕES, não na tabela principal
+   
+   B) O QUE NÃO FAZER:
+      - NÃO criar linhas como "Nº Apólice", "Valor Segurado", "Vigência", "Prêmio" na tabela
+      - NÃO adicionar campos que SÓ existem no documento de Seguro
+      - Campos exclusivos de seguro resultam em "ND" em todos outros docs = RUÍDO!
+   
+   C) COMO REPORTAR INFORMAÇÕES DE SEGURO:
+      Na seção de OBSERVAÇÕES, incluir:
+      <p class="obs-info">📋 <strong>Seguro:</strong> Apólice [Nº] com valor segurado 
+      [VALOR] e vigência [DATA_INICIO] a [DATA_FIM]. ✅ Compatível com o processo.</p>
+      
+      OU se houver problema:
+      <p class="obs-alerta">🟨 <strong>Seguro:</strong> Valor segurado ([VALOR]) inferior 
+      ao valor da mercadoria ([VALOR_INV]). Verificar cobertura.</p>
+   
+   D) CAMPOS DO SEGURO QUE PODEM ENTRAR NA TABELA (apenas se úteis para comparação):
+      - CONSIGNEE/SEGURADO → apenas para verificar se corresponde aos outros docs
+      - DESCRIÇÃO DA MERCADORIA → se relevante para comparação com Invoice
+      - Estes campos já existem nos outros documentos, então faz sentido comparar
+
+${clientConfig?.instrucoes_personalizadas ? `
+17) INSTRUÇÕES ESPECÍFICAS DO CLIENTE:
 ${clientConfig.instrucoes_personalizadas}
 ` : ''}`;
 }
@@ -702,7 +731,9 @@ IDENTIFICAÇÃO DE TIPOS:
 - BL ou HBL = CONHECIMENTO MARÍTIMO → extrair FRETE MARÍTIMO
 - cct.pdf = COMPROVANTE CCT
 - relatorio_di = DRAFT DI
-- SEGURO ou Certificado = APÓLICE DE SEGURO
+- SEGURO ou Certificado ou Apólice = APÓLICE DE SEGURO
+  → ⚠️ DOCUMENTO INFORMATIVO: NÃO criar campos exclusivos na tabela!
+  → Validar consignee e valor segurado, mas reportar nas OBSERVAÇÕES
 
 ═══════════════════════════════════════════════════════════════════════════════
 CAMPOS OBRIGATÓRIOS NA TABELA (cada um em sua linha):
@@ -717,6 +748,13 @@ CAMPOS OBRIGATÓRIOS NA TABELA (cada um em sua linha):
 8. NCM Principal
 9. Nº Conhecimento (AWB ou BL)
 10. Data Emissão (de cada documento)
+
+⚠️ CAMPOS QUE NÃO DEVEM ENTRAR NA TABELA (documentos informativos):
+- NÃO incluir campos EXCLUSIVOS de documentos de Seguro/Apólice:
+  → Nº Apólice, Valor Segurado, Vigência, Prêmio do Seguro
+- Esses campos resultam em "ND" para todos os outros documentos = RUÍDO!
+- Informações do seguro devem ir na seção de OBSERVAÇÕES
+- APENAS incluir seguro na tabela se for para comparar CONSIGNEE
 
 ⚠️ ATENÇÃO — TRÊS VALORES DIFERENTES:
 - Valor Mercadoria = soma dos produtos na Invoice ("Total Items")
