@@ -1037,88 +1037,6 @@ function filterExclusiveInsuranceFields(htmlContent: string): { filtered: string
   return { filtered, removedCount };
 }
 
-// ═══════════════════════════════════════════════════════════════════════════════
-// PDF PRE-EXTRACTION: Use Haiku to extract text from each PDF individually
-// This improves OCR quality by dedicating extraction to each document
-// ═══════════════════════════════════════════════════════════════════════════════
-async function preExtractPdfText(base64Content: string, fileName: string): Promise<{ text: string; success: boolean }> {
-  const apiKey = Deno.env.get('CHB_ANTHROPIC_API_KEY');
-  if (!apiKey) {
-    return { text: '', success: false };
-  }
-
-  try {
-    console.log(`[CHB OCR] Pre-extracting PDF: ${fileName}...`);
-    const startTime = Date.now();
-    
-    const response = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': apiKey,
-        'anthropic-version': '2023-06-01',
-      },
-      body: JSON.stringify({
-        model: 'claude-3-5-haiku-20241022',
-        max_tokens: 16000,
-        temperature: 0,
-        messages: [{
-          role: 'user',
-          content: [
-            { 
-              type: 'document',
-              source: { 
-                type: 'base64', 
-                media_type: 'application/pdf', 
-                data: base64Content 
-              }
-            },
-            { 
-              type: 'text', 
-              text: `EXTRAIA TODO o texto deste documento "${fileName}".
-
-REGRAS DE EXTRAÇÃO:
-1. Extrair CADA número, valor monetário, data, nome e referência
-2. Preservar a estrutura de tabelas usando | como separador
-3. Incluir cabeçalhos de seções e campos
-4. Para valores monetários, manter o formato original (ex: EUR 1.234,56)
-5. Para datas, manter o formato original
-6. NÃO resumir ou interpretar - apenas extrair o texto literal
-
-FORMATO DE SAÍDA:
-- Use linhas separadas para cada campo
-- Use | para separar colunas de tabelas
-- Indique seções com [SEÇÃO: nome]
-
-Extraia TODO o conteúdo visível agora:`
-            }
-          ]
-        }]
-      }),
-    });
-
-    const elapsed = Date.now() - startTime;
-    
-    if (!response.ok) {
-      console.error(`[CHB OCR] Failed to extract ${fileName}: ${response.status}`);
-      return { text: '', success: false };
-    }
-
-    const data = await response.json();
-    const extractedText = data.content?.[0]?.text || '';
-    
-    console.log(`[CHB OCR] ${fileName}: ${extractedText.length} chars in ${elapsed}ms`);
-    
-    return { 
-      text: extractedText, 
-      success: extractedText.length > 200 
-    };
-  } catch (error) {
-    console.error(`[CHB OCR] Error extracting ${fileName}:`, error);
-    return { text: '', success: false };
-  }
-}
-
 async function callAnthropicAPI(prompt: string, filesContent: { name: string; content: string; mimeType: string }[]): Promise<{ text: string; warnings: ChbFileError[] }> {
   const apiKey = Deno.env.get('CHB_ANTHROPIC_API_KEY');
   if (!apiKey) {
@@ -1129,54 +1047,21 @@ async function callAnthropicAPI(prompt: string, filesContent: { name: string; co
   const warnings: ChbFileError[] = [];
   
   // ═══════════════════════════════════════════════════════════════════════════
-  // STEP 1: Pre-extract text from all PDFs in parallel using Haiku
+  // DIRECT PDF PROCESSING: Send PDFs directly to Sonnet for best OCR quality
   // ═══════════════════════════════════════════════════════════════════════════
-  const pdfFiles = filesContent.filter(f => f.mimeType === 'application/pdf');
-  const otherFiles = filesContent.filter(f => f.mimeType !== 'application/pdf');
-  
-  console.log(`[CHB] Pre-extracting ${pdfFiles.length} PDFs in parallel...`);
-  
-  const pdfExtractions = await Promise.all(
-    pdfFiles.map(async (file) => {
-      const result = await preExtractPdfText(file.content, file.name);
-      return {
-        file,
-        extractedText: result.text,
-        success: result.success
-      };
-    })
-  );
-  
-  // ═══════════════════════════════════════════════════════════════════════════
-  // STEP 2: Build content array with extracted text or fallback to direct PDF
-  // ═══════════════════════════════════════════════════════════════════════════
-  
-  // Add pre-extracted PDFs
-  for (const extraction of pdfExtractions) {
-    if (extraction.success) {
-      // Use pre-extracted text (better quality)
-      content.push({
-        type: 'text',
-        text: `[DOCUMENTO: ${extraction.file.name}]\n${'═'.repeat(50)}\n${extraction.extractedText}\n${'═'.repeat(50)}`,
-      });
-      console.log(`[CHB] ${extraction.file.name}: Using pre-extracted text (${extraction.extractedText.length} chars)`);
-    } else {
-      // Fallback: send PDF directly if extraction failed
-      console.log(`[CHB] ${extraction.file.name}: Fallback to direct PDF (extraction failed)`);
+  for (const file of filesContent) {
+    if (file.mimeType === 'application/pdf') {
+      // Send PDF directly to Sonnet - its internal OCR handles layout properly
       content.push({
         type: 'document',
         source: {
           type: 'base64',
           media_type: 'application/pdf',
-          data: extraction.file.content,
+          data: file.content,
         },
       });
-    }
-  }
-  
-  // Add other files (images, excel, etc.)
-  for (const file of otherFiles) {
-    if (file.mimeType.startsWith('image/')) {
+      console.log(`[CHB] PDF "${file.name}" sent directly to Sonnet`);
+    } else if (file.mimeType.startsWith('image/')) {
       content.push({
         type: 'image',
         source: {
@@ -1237,10 +1122,10 @@ async function callAnthropicAPI(prompt: string, filesContent: { name: string; co
     text: prompt,
   });
 
-  // Log detailed extraction info
+  // Log detailed info
   console.log(`[CHB Debug] Files being sent to API:`);
   for (const file of filesContent) {
-    console.log(`  - ${file.name} (${file.mimeType}) - Method: ${file.mimeType === 'application/pdf' ? 'PDF-Document' : file.mimeType.startsWith('image/') ? 'Image' : 'Text'}`);
+    console.log(`  - ${file.name} (${file.mimeType}) - Direct to Sonnet`);
   }
   console.log(`Calling Anthropic API with ${filesContent.length} files...`);
   console.log(`Prompt length: ${prompt.length} chars`);
