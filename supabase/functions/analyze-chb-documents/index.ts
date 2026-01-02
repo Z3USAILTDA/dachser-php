@@ -785,27 +785,48 @@ EXTRAÇÃO DETERMINÍSTICA:
 - Em caso de ambiguidade, marcar como 🟨 com observação explicando
 
 ═══════════════════════════════════════════════════════════════════════════════
-⚠️⚠️⚠️ REGRA ANTI-ALUCINAÇÃO — LEIA COM ATENÇÃO MÁXIMA! ⚠️⚠️⚠️
+⚠️⚠️⚠️ REGRA ANTI-ALUCINAÇÃO — CRÍTICA! LEIA COM ATENÇÃO MÁXIMA! ⚠️⚠️⚠️
 ═══════════════════════════════════════════════════════════════════════════════
 
-VOCÊ ESTÁ PROIBIDO DE:
+VOCÊ ESTÁ ABSOLUTAMENTE PROIBIDO DE:
 1. INVENTAR valores que não existem no documento
 2. COPIAR valor de um documento para outro
 3. ASSUMIR que dois documentos têm o mesmo valor
 4. ARREDONDAR ou MODIFICAR valores extraídos
 5. CALCULAR valores (exceto soma de Packing List quando explicitamente instruído)
+6. USAR um valor que você "acha" que deveria estar lá
+
+SE VOCÊ NÃO ENCONTRAR O CAMPO NO DOCUMENTO → USE "ND"!
+Não invente! Não adivinhe! Não copie de outro documento!
 
 PARA CADA DOCUMENTO, VOCÊ DEVE:
 1. LER o documento INTEIRO
-2. LOCALIZAR o campo específico (Peso Bruto, Valor, etc.)
-3. TRANSCREVER o valor EXATAMENTE como aparece
-4. Se não encontrar o campo → usar "ND"
+2. LOCALIZAR o campo específico (Peso Bruto, Valor, etc.) COM O RÓTULO CORRETO
+3. TRANSCREVER o valor EXATAMENTE como aparece ao lado do rótulo
+4. Se não encontrar o campo COM SEU RÓTULO → usar "ND"
 
 ⚠️ VERIFICAÇÃO OBRIGATÓRIA ANTES DE INCLUIR QUALQUER VALOR:
-Antes de escrever um valor na tabela, pergunte-se:
-"Eu vi esse valor EXATO neste documento específico?"
-- Se SIM → inclua o valor
-- Se NÃO → use "ND"
+
+PASSO 1: Pergunte-se: "Eu vi o RÓTULO deste campo neste documento?"
+- Exemplo: Para Peso Bruto no HAWB, procure "Gross Weight" ou "G.W."
+- Se NÃO encontrou o rótulo → use "ND"
+
+PASSO 2: Pergunte-se: "Qual valor está AO LADO deste rótulo?"
+- Extraia APENAS o valor que está associado ao rótulo correto
+- Se o rótulo não tem valor associado → use "ND"
+
+PASSO 3: Pergunte-se: "Este valor faz sentido para este campo?"
+- Peso Bruto deve ser um número em kg (ex: 501,5 kg)
+- Valor Mercadoria deve ser um valor em moeda (ex: EUR 10.000,00)
+- Se não faz sentido → provavelmente está extraindo do lugar errado!
+
+ERRO GRAVÍSSIMO (NUNCA FAZER!):
+- Inventar o valor "518 kg" se esse número NÃO APARECE no documento!
+- Ver "518" em um lugar do documento e assumir que é Peso Bruto sem verificar o rótulo!
+- Copiar "518" de outro documento porque "deve ser o mesmo valor"!
+
+SE O HAWB NÃO TEM "GROSS WEIGHT" COM UM VALOR → HAWB = "ND" para Peso Bruto!
+SE O CCT NÃO TEM PESO BRUTO EXPLÍCITO → CCT = "ND" para Peso Bruto!
 
 EXEMPLO DE ERRO GRAVE (NÃO FAZER!):
 - HAWB mostra: "Gross Weight: 502,0 kg"
@@ -832,15 +853,20 @@ ERRO A NÃO COMETER:
 → Isso é ERRO GRAVE de extração!
 
 NUNCA INFERIR OU CALCULAR:
-- Se o documento não mostra o valor explicitamente, usar "ND"
+- Se o documento não mostra o valor explicitamente COM SEU RÓTULO, usar "ND"
 - Não somar linhas para obter total (a menos que instruído explicitamente para Packing List)
 - Não converter moedas entre si
+- Não "adivinhar" valores baseado em outros documentos
 
 ⚠️ TRANSCRIÇÃO LITERAL OBRIGATÓRIA:
 - Se documento mostra "501,5 kg" → escreva "501,5 kg"
 - Se documento mostra "502.0 KG" → escreva "502.0 kg"
 - NUNCA modifique o valor numérico!
 - NUNCA "ajuste" um valor para "bater" com outro documento!
+
+REGRA DE OURO:
+→ Se você não tem 100% de certeza de que viu o valor no documento → use "ND"
+→ É melhor ter "ND" do que um valor INVENTADO!
 
 ⚠️ REGRA #10: CAMPOS SEM BASE DE COMPARAÇÃO → ALERTA (🟨)
 
