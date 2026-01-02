@@ -453,6 +453,13 @@ ${fiscalRulesSection}${armadorSection}${taxasSection}
         → CCT pode mostrar apenas frete base (sem MAA/taxas de agente)
         → HAWB mostra total incluindo todas as taxas
         → Neste caso, explicar a diferença nas observações
+   
+   F) PESO BRUTO EM HAWB/AWB (⚠️ NUNCA SOMAR!):
+      - O HAWB/AWB já mostra o PESO BRUTO TOTAL diretamente no documento
+      - Campos válidos: "Gross Weight", "Weight", "Total Weight", "Actual Weight", "Wt."
+      - NUNCA calcular ou somar pesos de itens individuais em HAWB/AWB
+      - Usar o valor EXPLÍCITO do documento exatamente como está
+      - A regra de soma de pesos (seção 18) é EXCLUSIVA para Packing List!
 
 16) TRATAMENTO DE DOCUMENTOS DE SEGURO (APÓLICE/CERTIFICADO):
    
@@ -553,15 +560,23 @@ ${fiscalRulesSection}${armadorSection}${taxasSection}
    
    Na tabela, exibir o formato mais completo, mas marcar como CONFORME se forem iguais após normalização.
 
-18) EXTRAÇÃO DE DADOS DO PACKING LIST:
+18) EXTRAÇÃO DE DADOS DO PACKING LIST (⚠️ SOMENTE PACKING LIST!):
    
-   O Packing List geralmente contém:
+   ⚠️ ATENÇÃO CRÍTICA: ESTA REGRA DE SOMA É EXCLUSIVA PARA PACKING LIST!
+   ⚠️ NÃO APLICAR EM HAWB, AWB, BL, HBL OU OUTROS DOCUMENTOS DE TRANSPORTE!
+   
+   Para HAWB/AWB/BL/HBL:
+   - Peso Bruto = campo "Gross Weight" ou "Total Weight" EXPLÍCITO no documento
+   - NUNCA somar valores de tabela de itens no HAWB/AWB
+   - Documentos de transporte mostram peso bruto total diretamente (não calcular!)
+   
+   SOMENTE PARA PACKING LIST - O documento geralmente contém:
    - Tabela com volumes individuais e seus pesos
    - Total de volumes (ex: "3 Boxes" ou "3 Caixas" ou "3 Packages")
    - Peso Bruto Total (soma dos pesos individuais)
    - Peso Líquido Total
    
-   ⚠️ COMO EXTRAIR PESO BRUTO — REGRA CRÍTICA (OBRIGATÓRIO):
+   ⚠️ COMO EXTRAIR PESO BRUTO NO PACKING LIST — REGRA CRÍTICA (OBRIGATÓRIO):
    
    a) PRIMEIRO: Buscar campo explícito "Gross Weight Total", "Total Gross Weight", "Total G.W."
    
@@ -685,8 +700,30 @@ EXTRAÇÃO DETERMINÍSTICA:
 
 NUNCA INFERIR OU CALCULAR:
 - Se o documento não mostra o valor explicitamente, usar "ND"
-- Não somar linhas para obter total (a menos que instruído explicitamente)
+- Não somar linhas para obter total (a menos que instruído explicitamente para Packing List)
 - Não converter moedas entre si
+
+⚠️ REGRA #10: CAMPOS SEM BASE DE COMPARAÇÃO → ALERTA (🟨)
+
+APLICAR ESTA REGRA ANTES DAS DEMAIS para cada linha da tabela:
+
+CENÁRIO 1: TODOS os documentos têm ND ou N/A para um campo
+- Se Invoice = ND, Packing = ND, HAWB = ND, Seguro = N/A → Status: 🟨 (alerta)
+- Observação OBRIGATÓRIA: "Não é possível definir conformidade por falta de valores em todos os documentos"
+
+CENÁRIO 2: APENAS UM documento tem valor, demais são ND/N/A
+- Se Invoice = EUR 10.000, Packing = ND, HAWB = ND, Seguro = N/A → Status: 🟨 (alerta)
+- Observação OBRIGATÓRIA: "Apenas 1 documento contém valor para este campo, impossível verificar conformidade por comparação"
+
+CENÁRIO 3: DOIS ou mais documentos têm valores comparáveis
+- Aplicar regras de conformidade normais (✅, 🟨, 🔴) conforme regras anteriores
+
+VERIFICAÇÃO OBRIGATÓRIA:
+- Para CADA linha/campo da tabela, ANTES de definir status final:
+  1. Contar quantos documentos têm valor real (não ND, não N/A)
+  2. Se nenhum tem valor → 🟨 com observação de cenário 1
+  3. Se apenas 1 tem valor → 🟨 com observação de cenário 2
+  4. Se 2+ têm valor → aplicar comparação normal
 
 ⚠️ REGRA DE DATA CRÍTICA:
 - Se um campo de data mostra valores diferentes entre documentos = 🔴 DIVERGENTE
