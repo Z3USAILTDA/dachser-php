@@ -983,6 +983,60 @@ function createFileError(file: { name: string; mimeType: string }, errorType: st
   };
 }
 
+// ═══════════════════════════════════════════════════════════════════════════════
+// POST-PROCESSING FILTER: Remove exclusive insurance field rows from HTML table
+// ═══════════════════════════════════════════════════════════════════════════════
+function filterExclusiveInsuranceFields(htmlContent: string): { filtered: string; removedCount: number } {
+  // Patterns that identify rows with exclusive insurance fields (first column = field name)
+  const bannedFieldPatterns = [
+    /^document\s*n[oº°]/i,
+    /^n[oº°]\s*(da\s+)?ap[oó]lice/i,
+    /^policy\s*n(umber|o|º)?/i,
+    /^n[oº°]\s*(do\s+)?certificado/i,
+    /^certificate\s*n(umber|o|º)?/i,
+    /^vig[eê]ncia/i,
+    /^validity/i,
+    /^etd\s*(do\s+)?seguro/i,
+    /^taxa(\s+de\s+servi[çc]o)?$/i,
+    /^service\s*fee/i,
+    /^rate\s*%?$/i,
+    /^premium\s*(rate|amount)?$/i,
+    /^pr[eê]mio(\s+(do\s+)?seguro)?$/i,
+    /^franquia/i,
+    /^deductible/i,
+    /^tipo\s*(de\s+)?cobertura/i,
+    /^coverage(\s+type)?$/i,
+    /^segurador(a)?$/i,
+    /^insurer/i,
+    /^n[oº°]\s*documento/i,
+  ];
+
+  let removedCount = 0;
+  
+  // Find all <tr> elements and check if first <td> matches banned patterns
+  const filtered = htmlContent.replace(/<tr[^>]*>[\s\S]*?<\/tr>/gi, (trMatch) => {
+    // Extract first <td> content (the field name column)
+    const firstTdMatch = trMatch.match(/<td[^>]*>([\s\S]*?)<\/td>/i);
+    if (!firstTdMatch) return trMatch; // Keep if no td found
+    
+    // Get text content, removing HTML tags
+    const fieldName = firstTdMatch[1].replace(/<[^>]+>/g, '').trim();
+    
+    // Check if this field matches any banned pattern
+    for (const pattern of bannedFieldPatterns) {
+      if (pattern.test(fieldName)) {
+        removedCount++;
+        console.log(`[CHB Filter] Removed row with banned field: "${fieldName}"`);
+        return ''; // Remove the entire <tr>
+      }
+    }
+    
+    return trMatch; // Keep the row
+  });
+
+  return { filtered, removedCount };
+}
+
 async function callAnthropicAPI(prompt: string, filesContent: { name: string; content: string; mimeType: string }[]): Promise<{ text: string; warnings: ChbFileError[] }> {
   const apiKey = Deno.env.get('CHB_ANTHROPIC_API_KEY');
   if (!apiKey) {
@@ -1120,7 +1174,15 @@ async function callAnthropicAPI(prompt: string, filesContent: { name: string; co
   }
 
   const data = await response.json();
-  return { text: data.content[0].text, warnings };
+  const rawText = data.content[0].text;
+  
+  // Apply post-processing filter to remove exclusive insurance fields
+  const { filtered: filteredText, removedCount } = filterExclusiveInsuranceFields(rawText);
+  if (removedCount > 0) {
+    console.log(`[CHB Anthropic] Post-processing removed ${removedCount} exclusive insurance field rows`);
+  }
+  
+  return { text: filteredText, warnings };
 }
 
 async function callLovableAI(prompt: string, filesContent: { name: string; content: string; mimeType: string }[]): Promise<{ text: string; warnings: ChbFileError[] }> {
@@ -1245,7 +1307,15 @@ async function callLovableAI(prompt: string, filesContent: { name: string; conte
   }
 
   const data = await response.json();
-  return { text: data.choices[0].message.content, warnings };
+  const rawText = data.choices[0].message.content;
+  
+  // Apply post-processing filter to remove exclusive insurance fields
+  const { filtered: filteredText, removedCount } = filterExclusiveInsuranceFields(rawText);
+  if (removedCount > 0) {
+    console.log(`[CHB LovableAI] Post-processing removed ${removedCount} exclusive insurance field rows`);
+  }
+  
+  return { text: filteredText, warnings };
 }
 
 function extractHtmlAndTags(response: string, stepId: number): { 
