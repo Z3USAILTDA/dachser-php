@@ -638,18 +638,28 @@ REGRAS DE EXTRAÇÃO — LEIA COM ATENÇÃO MÁXIMA
 | Campo            | Documentos Fonte (extrair de TODOS!) |
 |------------------|--------------------------------------|
 | Valor Mercadoria | INVOICE (soma dos itens no rodapé)   |
-| Peso Bruto       | PACKING LIST + HAWB + AWB + BL + HBL |
+| Peso Bruto       | PACKING LIST + CCT + HAWB + AWB + BL + HBL |
 | Peso Líquido     | PACKING LIST                         |
 | Frete            | HAWB + AWB + BL + HBL                |
-| Incoterm         | INVOICE + PACKING + HAWB/AWB/BL      |
+| Incoterm         | INVOICE + PACKING + HAWB/AWB/BL/CCT  |
 
-⚠️ EXTRAÇÃO DE PESO BRUTO DO HAWB/AWB (CRÍTICO):
-- No HAWB/AWB, o Peso Bruto está na coluna "Gross Weight" ou "Kg" na tabela de carga
-- Exemplo: tabela com "No. of Pieces | Gross Weight | Chargeable Weight"
-  → Linha "3 | 501,5 | 501,5" significa Peso Bruto = 501,5 kg
-- O campo geralmente aparece em kg com vírgula decimal (ex: 501,5)
-- NUNCA confundir "Chargeable Weight" com "Gross Weight" (podem ser iguais, mas são campos diferentes)
-- Extrair o valor da coluna "Gross Weight" ou "Kg" DIRETAMENTE, sem cálculos
+⚠️ EXTRAÇÃO DE PESO BRUTO (CRÍTICO - POR TIPO DE DOCUMENTO):
+
+A) PACKING LIST:
+   - Buscar "Total Gross Weight", "Gross Weight Total", "Total G.W."
+   - Se não houver total, SOMAR pesos individuais da tabela
+   
+B) CCT / BL / HBL (Conhecimento Marítimo):
+   - Procurar "Weight", "Gross Weight", "G.W." na descrição da carga
+   - O peso geralmente aparece junto com descrição dos containers
+   - Exemplo: "Said to contain... Weight: 501.50 KGS"
+   
+C) HAWB / AWB (Conhecimento Aéreo):
+   - Procurar na tabela de carga a coluna "Gross Weight" ou "Kg"
+   - Exemplo: tabela com "No. of Pieces | Gross Weight | Chargeable Weight"
+   - Linha "3 | 501,5 | 501,5" significa Peso Bruto = 501,5 kg
+   - NUNCA confundir "Chargeable Weight" com "Gross Weight"
+   - Extrair DIRETAMENTE, sem cálculos
 
 ⚠️ REGRA #4: VALOR MERCADORIA ≠ FRETE
 - VALOR MERCADORIA = total da Invoice (produtos vendidos)
