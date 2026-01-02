@@ -326,12 +326,18 @@ REGRAS DE CONTEÚDO DA TABELA
    - Ausência: "ND" (não disponível) ou "Ilegível"
    - Status: SOMENTE ícones ✅, 🟨, 🔴
 
-3) TOLERÂNCIA NUMÉRICA — CONFIGURAÇÃO DO CLIENTE:
-   - TOLERÂNCIA DE PESO: ${toleranciaPeso}% (divergências acima disso = 🔴)
-   - TOLERÂNCIA DE VALOR: ${toleranciaValor}% (divergências acima disso = 🔴)
+3) TOLERÂNCIA NUMÉRICA — APLICAÇÃO CORRETA:
+   ⚠️ TOLERÂNCIA SE APLICA APENAS PARA DIFERENÇAS DE ARREDONDAMENTO/FORMATAÇÃO!
+   - TOLERÂNCIA DE PESO: ${toleranciaPeso}% (para pequenas diferenças de arredondamento)
+   - TOLERÂNCIA DE VALOR: ${toleranciaValor}% (para pequenas diferenças de arredondamento)
    - Valores como 97,3 e 97,30 são EQUIVALENTES (✅)
    - 10.841,00 e 10841 e 10.841 são EQUIVALENTES (✅)
    - Ignore zeros à direita e diferenças de formatação
+   
+   ⚠️ TOLERÂNCIA NÃO SE APLICA QUANDO:
+   - Valores são CLARAMENTE diferentes (ex.: 10.841 vs 12.500 → 🔴 DIVERGENTE)
+   - Diferença > 20% → 🔴 OBRIGATÓRIO (independente da tolerância configurada)
+   - Valores de ordens de magnitude diferentes → 🔴 CRÍTICO
 
 4) CAMPOS OBRIGATÓRIOS (definidos pelo cliente):
    ${camposObrigatoriosText}
@@ -377,16 +383,26 @@ REGRAS DE CONTEÚDO DA TABELA
         → Packing List: geralmente não tem (ND é aceitável)
       - Sinônimos: "Total Prepaid", "Total Collect", "Total Charges", "Grand Total",
                    "Final Amount", "Total Amount", "Amount Due", "Total Invoice"
-      - Linha da tabela: "Valor Total Frete"
+       - Linha da tabela: "Valor Total Frete"
+   
+   D) REGRA ESPECIAL PARA RELATÓRIO DI / RASCUNHO DI:
+      ⚠️ O Relatório DI brasileiro frequentemente exibe DUAS COLUNAS:
+      - Coluna "Moeda Estrangeira" (USD, EUR, etc.) → USAR ESTE VALOR!
+      - Coluna "Moeda Nacional" (BRL) → IGNORAR para comparação
+      
+      EXEMPLO:
+      | Campo              | Moeda Estrangeira | Moeda Nacional |
+      | Valor total frete  | EUR 1.589,76      | BRL 8.723,45   |
+      
+      → EXTRAIR: "EUR 1.589,76" (NÃO usar "BRL 8.723,45")
+      
+      REGRA: Para manter consistência com outros documentos (Invoice, AWB, CCT),
+      SEMPRE extrair o valor na MOEDA ESTRANGEIRA do DI.
+      Se apenas BRL estiver disponível, indicar na observação.
    
    MOEDA: sempre especificar (USD, EUR, BRL, etc.)
    NUNCA inventar valores que não existam no documento
    Se documento não tem valor → "ND" (não "0" ou valor inventado)
-   
-   TOLERÂNCIA DE VALOR (configurada pelo cliente): ${toleranciaValor}%
-   - Divergência > ${toleranciaValor}% → 🔴 CRÍTICO
-   - Divergência > 20% → 🔴 OBRIGATÓRIO (independente da tolerância)
-   - Valores de ordens de magnitude diferentes → 🔴 CRÍTICO (verificar extração!)
 
 8) NCM — Regra aduaneira:
    - Divergência na RAIZ (4 primeiros dígitos) → 🔴 CRÍTICO
@@ -481,14 +497,48 @@ REGRAS DE EXTRAÇÃO — LEIA COM ATENÇÃO MÁXIMA
 CONFORME (✅) SOMENTE quando:
 - Valores são EXATAMENTE iguais (ex.: "USD 1.500,00" = "USD 1.500,00")
 - OU valores são numericamente equivalentes (ex.: "10.841" = "10.841,00" = "10841")
-- OU dado existe em apenas UM documento (ND + Valor = ✅)
-- OU diferença está DENTRO da tolerância configurada pelo cliente
+- OU diferença está DENTRO da tolerância (APENAS arredondamentos!)
+
+⚠️ REGRA "ND + Valor" — QUANDO APLICAR:
+- Se dado existe em APENAS UM documento e é campo NÃO-CRÍTICO → ✅
+- CAMPOS CRÍTICOS que NUNCA são ✅ com ND em documento obrigatório:
+  → peso_bruto, peso_liquido, valor_total, valor_mercadoria, frete, cnpj
+- Se campo CRÍTICO = ND em documento que DEVERIA ter esse campo → 🟨 ALERTA
 
 🔴 NÃO É CONFORME quando:
 - Existem 2 ou mais valores DIFERENTES para o mesmo campo
 - Datas diferentes (ex.: 08/12/2025 vs 05/12/2025 vs 12/05/2025 = 🔴)
 - Valores com diferença acima da tolerância
 - Formatos de data invertidos que resultam em datas diferentes
+
+⚠️ REGRA #8: VERIFICAÇÃO CRUZADA OBRIGATÓRIA
+ANTES de marcar qualquer campo como ✅ CONFORME, verificar:
+1. O valor é IDÊNTICO em TODOS os documentos que contêm esse campo?
+2. Se NÃO → 🔴 DIVERGENTE (independente da "tolerância")
+3. A tolerância só se aplica para diferenças de ARREDONDAMENTO/FORMATAÇÃO
+
+EXEMPLO DE ERRO A EVITAR:
+- Invoice 1: EUR 10.000,00
+- Invoice 2: EUR 12.500,00  
+- Packing: ND
+→ Status CORRETO: 🔴 DIVERGENTE (valores diferentes entre invoices!)
+→ Status ERRADO: ✅ (a regra "ND + Valor" NÃO se aplica aqui!)
+
+⚠️ REGRA #9: CONSISTÊNCIA E DETERMINISMO
+ORDEM DE PROCESSAMENTO (sempre seguir):
+1. Ler TODOS os documentos ANTES de iniciar comparação
+2. Para cada campo, listar TODOS os valores encontrados em TODOS os docs
+3. Só então determinar status baseado nas regras acima
+
+EXTRAÇÃO DETERMINÍSTICA:
+- Se houver múltiplas ocorrências do mesmo campo, usar o valor do CABEÇALHO ou RESUMO
+- Se houver tabela com subtotais e total geral, usar o TOTAL GERAL
+- Em caso de ambiguidade, marcar como 🟨 com observação explicando
+
+NUNCA INFERIR OU CALCULAR:
+- Se o documento não mostra o valor explicitamente, usar "ND"
+- Não somar linhas para obter total (a menos que instruído explicitamente)
+- Não converter moedas entre si
 
 ⚠️ REGRA DE DATA CRÍTICA:
 - Se um campo de data mostra valores diferentes entre documentos = 🔴 DIVERGENTE
@@ -772,7 +822,7 @@ CAMPOS A COMPARAR:
 - Container (nº/tipo/lacre)
 - Portos (origem/dest.)
 - Datas principais
-- Frete/Seguros
+- Frete/Seguros (⚠️ DI: usar coluna MOEDA ESTRANGEIRA, não BRL!)
 - Referências/PO
 
 ATENÇÃO MÁXIMA:
