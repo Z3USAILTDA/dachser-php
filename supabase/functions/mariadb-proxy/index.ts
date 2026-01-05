@@ -2463,7 +2463,12 @@ serve(async (req) => {
               TRIM(s.destino) as aeroporto_destino,
               s.data_atraso,
               s.arr_datetime,
-              s.dep_datetime,
+              (SELECT h.data_evento 
+               FROM ${database}.t_status_historico h 
+               WHERE TRIM(h.awb) = TRIM(s.awb) 
+                 AND h.status_code = 'DEP' 
+               ORDER BY h.data_evento DESC 
+               LIMIT 1) as dep_datetime,
               LEFT(TRIM(s.awb), 3) as airline_code,
               cct.peso_declarado,
               cct.peso_constatado,
