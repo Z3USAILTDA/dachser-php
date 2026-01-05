@@ -1113,6 +1113,89 @@ DATA EMISSÃO — NÃO COMPARAR:
 → Datas diferentes são ESPERADAS e NORMAIS!
 → SE MARCOU 🔴 PARA ESTE CENÁRIO → VOCÊ ERROU!
 
+═══════════════════════════════════════════════════════════════════════════════
+⚠️⚠️⚠️ REGRA CRÍTICA — QUANDO IGNORAR vs QUANDO COMPARAR ⚠️⚠️⚠️
+═══════════════════════════════════════════════════════════════════════════════
+
+⚠️ DISTINÇÃO FUNDAMENTAL — LEIA COM ATENÇÃO:
+
+IGNORAR NA COMPARAÇÃO (não afeta determinação de status):
+├── Quando o documento NÃO POSSUI o campo NATURALMENTE
+│   → HAWB não tem "Valor Mercadoria" → ignorar ND do HAWB
+│   → Invoice não tem "Peso Bruto" → ignorar ND da Invoice
+│   → Seguro não tem "Frete" → mostrar "N/A (documento sem frete)"
+│   → Packing não tem "Frete" → mostrar "N/A (documento sem frete)"
+├── O valor é explicitamente ND/N/A porque o campo não existe no tipo de documento
+
+COMPARAR OBRIGATORIAMENTE (afeta determinação de status):
+├── Quando o documento POSSUI o campo e tem um valor extraído
+│   → Invoice tem "Valor Mercadoria" = EUR X → INCLUIR na comparação!
+│   → HAWB tem "Peso Bruto" = 501,5 kg → INCLUIR na comparação!
+│   → CCT tem "Peso Bruto" = 501,500 kg → INCLUIR na comparação!
+├── TODOS os valores reais DEVEM ser comparados entre si
+├── Se valores são IGUAIS (após normalização) → ✅ CONFORME
+├── Se valores são DIFERENTES → 🔴 DIVERGENTE
+
+⚠️ REGRA DE MÚLTIPLAS INVOICES — SOMA E COMPARAÇÃO:
+┌───────────────────────────────────────────────────────────────────────────────┐
+│ CENÁRIO: Múltiplas invoices com valores diferentes de Valor Mercadoria       │
+│                                                                               │
+│ PASSO 1: Verificar se são invoices para ITENS DIFERENTES da mesma remessa    │
+│ - Invoice 1: Item A = EUR 28.234,23                                          │
+│ - Invoice 2: Item B = EUR 508,22                                             │
+│ - SOMA das invoices = EUR 28.742,45                                          │
+│                                                                               │
+│ PASSO 2: Comparar SOMA das invoices com valor total no CCT ou Seguro         │
+│ - Se SOMA ≈ Valor CCT ou Valor Segurado → ✅ CONFORME                         │
+│ - Se SOMA ≠ Valor CCT e ≠ Valor Segurado → 🔴 DIVERGENTE                     │
+│                                                                               │
+│ PASSO 3: Na observação, explicar                                             │
+│ - "Soma das invoices (EUR 28.742,45) confere com valor no CCT/Seguro"        │
+│                                                                               │
+│ ⚠️ NOTA: Múltiplas invoices para itens diferentes NÃO são divergência!       │
+│ A divergência só existe se a SOMA não bater com CCT/Seguro                   │
+└───────────────────────────────────────────────────────────────────────────────┘
+
+⚠️ VALOR SEGURADO NO SEGURO — ATENÇÃO:
+├── O Valor Segurado pode incluir valor da mercadoria + frete + seguro adicional
+├── É NORMAL que Valor Segurado > Soma das Invoices
+├── Para Valor Mercadoria: Comparar Invoices vs CCT PRINCIPALMENTE
+├── Se Valor Segurado > Soma Invoices mas CCT ≈ Soma Invoices → ✅ CONFORME
+
+═══════════════════════════════════════════════════════════════════════════════
+⚠️ VALIDAÇÃO FINAL OBRIGATÓRIA — EXECUTAR ANTES DE GERAR RESPOSTA
+═══════════════════════════════════════════════════════════════════════════════
+
+PARA CADA LINHA DA TABELA, VERIFICAR SE VOCÊ SEGUIU AS REGRAS:
+
+□ PESO BRUTO: 
+  ├── Você normalizou 501,500 e 501,5 para o mesmo valor?
+  ├── Se sim e são iguais → Status DEVE ser ✅ CONFORME
+  └── Se marcou 🔴 para 501,500 vs 501,5 → CORRIJA para ✅
+
+□ DATA EMISSÃO: 
+  ├── Este é um campo INFORMATIVO, não comparativo
+  ├── Datas diferentes entre documentos são ESPERADAS
+  └── Status DEVE ser ✅ CONFORME (a menos que falte data obrigatória)
+
+□ VALOR TOTAL FRETE:
+  ├── Você incluiu o valor do Seguro na comparação de frete?
+  ├── Se sim → REMOVA! Seguro não tem frete, use "N/A (documento sem frete)"
+  └── Compare APENAS: HAWB/AWB, BL/HBL, CCT
+
+□ VALOR MERCADORIA com múltiplas invoices:
+  ├── Se Invoice 1 ≠ Invoice 2, você SOMOU para comparar com CCT?
+  ├── Se soma ≈ CCT → ✅ CONFORME
+  └── Se não somou → RECALCULE!
+
+□ Nº CONHECIMENTO:
+  ├── Cada documento TEM SEU PRÓPRIO número de conhecimento
+  ├── HAWB tem um número, BL tem outro, CCT tem outro
+  ├── ISSO NÃO É DIVERGÊNCIA se são números de documentos diferentes
+  └── Verificar apenas se o MESMO documento é referenciado consistentemente
+
+⚠️ SE O STATUS GERADO VIOLA ESTAS REGRAS → CORRIJA ANTES DE RESPONDER!
+
 ⚠️ REGRA #7: SEMPRE INCLUA MOEDA
 - Exemplo: "EUR 28.234,23" não apenas "28.234,23"
 
