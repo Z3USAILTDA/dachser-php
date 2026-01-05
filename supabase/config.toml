@@ -228,3 +228,21 @@ verify_jwt = false
 
 [functions.get-mapbox-token]
 verify_jwt = false
+
+[functions.draft-fetch-mariadb]
+verify_jwt = false
+
+[functions.draft-fetch-tracking-status]
+verify_jwt = false
+
+[functions.draft-track-hapag]
+verify_jwt = false
+
+[functions.draft-track-hapag-multi]
+verify_jwt = false
+
+[functions.draft-save-tracking]
+verify_jwt = false
+
+[functions.draft-track-navigator]
+verify_jwt = false
