@@ -23,6 +23,7 @@ import SubmeterManifestHbl from "./pages/SubmeterManifestHbl";
 import InvoicesDraftHbl from "./pages/InvoicesDraftHbl";
 import SystemLogs from "./pages/SystemLogs";
 import LocalCharges from "./pages/LocalCharges";
+import DraftExportacao from "./pages/sea/DraftExportacao";
 import AlteracoesFee from "./pages/AlteracoesFee";
 import ReguaCobranca from "./pages/ReguaCobranca";
 import FinanceiroDisputa from "./pages/FinanceiroDisputa";
@@ -128,6 +129,7 @@ const App = () => (
           <Route path="/maritimo/invoices-draft-hbl" element={<InvoicesDraftHbl />} />
           <Route path="/admin/system-logs" element={<SystemLogs />} />
           <Route path="/sea/local-charges" element={<LocalCharges />} />
+          <Route path="/sea/draft-exportacao" element={<DraftExportacao />} />
           <Route path="/sea/alteracoes-fee" element={<AlteracoesFee />} />
           <Route path="/fin/regua" element={<ReguaCobranca />} />
           <Route path="/fin/disputa" element={<FinanceiroDisputa />} />
