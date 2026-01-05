@@ -636,7 +636,7 @@ interface ApiResponse {
 function validateInputSize(files: FileForAnalysis[]): { isValid: boolean; estimatedTokens: number; warning?: string } {
   // Estimate tokens: ~1.5 tokens per character for base64 content
   // Claude has ~200k token context, but we need room for output
-  const MAX_INPUT_TOKENS = 150000;
+  const MAX_INPUT_TOKENS = 300000;
   const CHARS_PER_TOKEN = 4;
   
   let totalChars = 0;
