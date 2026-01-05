@@ -1,8 +1,9 @@
-import React, { useState, useEffect, useRef, useMemo } from "react";
+import React, { useState, useEffect, useRef, useMemo, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useUsageLog } from "@/hooks/useUsageLog";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { DatabaseStatsPanel, DbStats } from "@/components/DatabaseStatsPanel";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -356,6 +357,8 @@ const Index = () => {
   const [cardFilter, setCardFilter] = useState<CardFilterType>("all");
   const [showUnregisteredModal, setShowUnregisteredModal] = useState(false);
   const [showMonitoredModal, setShowMonitoredModal] = useState(false);
+  const [dbStats, setDbStats] = useState<DbStats | null>(null);
+  const [isLoadingDbStats, setIsLoadingDbStats] = useState(false);
   const isPausedRef = useRef(false);
   const shouldSendEmailsRef = useRef(false); // Only send emails when user explicitly clicks button
   const emailEnableTimestampRef = useRef<number>(0); // Track when emails were enabled
@@ -466,6 +469,27 @@ const Index = () => {
     }
   }, []);
 
+  // Fetch database statistics from t_master_dados
+  const fetchDbStats = useCallback(async () => {
+    setIsLoadingDbStats(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("fetch-master-dados-stats");
+      
+      if (error) {
+        console.error("Error fetching db stats:", error);
+        return;
+      }
+
+      if (data?.success && data?.stats) {
+        setDbStats(data.stats);
+      }
+    } catch (error) {
+      console.error("Error in fetchDbStats:", error);
+    } finally {
+      setIsLoadingDbStats(false);
+    }
+  }, []);
+
   // Load status aereo data on mount
   useEffect(() => {
     // Initialize database columns if needed
@@ -484,9 +508,14 @@ const Index = () => {
     initColumns();
 
     fetchStatusAereoData();
+    fetchDbStats();
     const interval = setInterval(fetchStatusAereoData, 30000); // Refresh every 30s
-    return () => clearInterval(interval);
-  }, [fetchStatusAereoData]);
+    const statsInterval = setInterval(fetchDbStats, 60000); // Refresh stats every 60s
+    return () => {
+      clearInterval(interval);
+      clearInterval(statsInterval);
+    };
+  }, [fetchStatusAereoData, fetchDbStats]);
 
   // Function to re-track AWBs from t_status_aereo
   // sendNoChangesEmail: only send "no changes" email when explicitly triggered by user (button click)
@@ -1913,6 +1942,9 @@ const Index = () => {
             setCurrentPage(1);
           }}
         />
+
+        {/* Database Stats Panel */}
+        <DatabaseStatsPanel stats={dbStats} isLoading={isLoadingDbStats} />
 
         {/* Search and Filter Bar */}
         <section 

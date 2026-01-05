@@ -246,3 +246,6 @@ verify_jwt = false
 
 [functions.draft-track-navigator]
 verify_jwt = false
+
+[functions.fetch-master-dados-stats]
+verify_jwt = false
