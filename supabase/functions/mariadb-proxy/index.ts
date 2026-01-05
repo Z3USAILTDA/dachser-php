@@ -2486,6 +2486,7 @@ serve(async (req) => {
             LEFT JOIN ${database}.t_master_dados m ON TRIM(s.awb) COLLATE utf8mb4_unicode_ci = TRIM(m.mawb) COLLATE utf8mb4_unicode_ci
             WHERE LEFT(TRIM(s.awb), 3) IN (${airlineFilter})
             AND s.\`último_status\` NOT IN (${errorStatusFilter})
+            AND (m.tipo_processo = 'AIR IMPORT' OR m.tipo_processo IS NULL)
             AND (s.origem IS NOT NULL AND LOWER(TRIM(s.origem)) NOT IN ('n/a', 'na', 'erro', 'error', ''))
             AND (s.destino IS NOT NULL AND LOWER(TRIM(s.destino)) NOT IN ('n/a', 'na', 'erro', 'error', ''))
             AND (
