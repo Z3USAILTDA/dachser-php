@@ -131,6 +131,7 @@ verify_jwt = false
 
 [functions.analyze-chb-documents]
 verify_jwt = false
+timeout = 300
 
 [functions.maritimo-analyze]
 verify_jwt = false
