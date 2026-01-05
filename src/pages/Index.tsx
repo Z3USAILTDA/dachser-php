@@ -621,6 +621,10 @@ const Index = () => {
                 const newStatus = getStatusCode(lastEventText);
 
                 // Update t_status_aereo with new status (preserve hawb and nome_analista)
+                // Extract DEP timestamp from carrier data when status is DEP
+                const statusCode = trackData.data.lastStatus?.code || trackData.data.status || "";
+                const depTimestamp = statusCode === "DEP" ? trackData.data.lastStatus?.timestamp : null;
+                
                 await supabase.functions.invoke("add-awb-to-status", {
                   body: {
                     mawb: awbNumber,
@@ -631,6 +635,7 @@ const Index = () => {
                     nome_analista: "N/A", // Always N/A during reprocessing to preserve existing values
                     origin: trackData.data.origin || "N/A",
                     destination: trackData.data.destination || "N/A",
+                    dep_timestamp: depTimestamp, // Timestamp real do DEP da companhia aérea
                   },
                 });
 
@@ -1392,6 +1397,10 @@ const Index = () => {
         setAddingToDb(newAwb.id);
 
         try {
+          // Extract DEP timestamp from carrier data when status is DEP
+          const statusCode = data.data.lastStatus?.code || data.data.status || "";
+          const depTimestamp = statusCode === "DEP" ? data.data.lastStatus?.timestamp : null;
+          
           const { data: dbData, error: dbError } = await supabase.functions.invoke("add-awb-to-status", {
             body: {
               mawb: updatedAwb.awb,
@@ -1402,6 +1411,7 @@ const Index = () => {
               nome_analista: "N/A",
               origin: data.data.origin || "N/A",
               destination: data.data.destination || "N/A",
+              dep_timestamp: depTimestamp, // Timestamp real do DEP da companhia aérea
             },
           });
 
