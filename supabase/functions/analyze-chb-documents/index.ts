@@ -778,6 +778,39 @@ Antes de colocar o valor do HAWB na tabela, confirme:
 ⚠️ REGRA #6: STATUS — CRITÉRIOS ABSOLUTAMENTE ESTRITOS PARA "CONFORME" (✅)
 
 ═══════════════════════════════════════════════════════════════════════════════
+MAPEAMENTO OBRIGATÓRIO — QUAIS DOCUMENTOS CONSIDERAR POR CAMPO
+═══════════════════════════════════════════════════════════════════════════════
+
+⚠️ PARA CADA CAMPO, IGNORAR DOCUMENTOS QUE NÃO O POSSUEM NATURALMENTE!
+
+PESO BRUTO (kg):
+├── CONSIDERAR: CCT, HAWB/AWB, Packing List, BL/HBL
+├── IGNORAR: Invoice, Seguro (não possuem peso naturalmente!)
+├── NORMALIZAR ANTES DE COMPARAR: 501,500 = 501,5 = 501.5
+└── Se Invoice/Seguro = ND para peso → IGNORAR na comparação (esperado!)
+
+VALOR MERCADORIA:
+├── CONSIDERAR: Invoice(s), CCT, Seguro (como valor segurado)
+├── IGNORAR: HAWB/AWB, Packing List (não possuem valor mercadoria!)
+└── Se HAWB = ND para Valor Mercadoria → IGNORAR na comparação (esperado!)
+
+FRETE / VALOR TOTAL FRETE:
+├── CONSIDERAR: HAWB/AWB, BL/HBL, CCT
+├── IGNORAR COMPLETAMENTE: Invoice, Packing List, SEGURO
+├── ⚠️ O "VALOR SEGURADO" DO SEGURO NÃO É FRETE! É o valor da mercadoria!
+├── Seguro deve mostrar: "N/A (documento sem frete)" para campos de frete
+└── Comparar frete SOMENTE entre HAWB/AWB, BL/HBL e CCT
+
+DATA EMISSÃO — CAMPO INFORMATIVO (NÃO COMPARAR!):
+├── ⚠️ CADA DOCUMENTO TEM SUA PRÓPRIA DATA DE EMISSÃO!
+├── Invoice: data da venda | HAWB: data de emissão | CCT: data registro RFB
+├── Seguro: data da apólice | Packing: data de criação
+├── DATAS DIFERENTES SÃO ESPERADAS E NORMAIS!
+├── STATUS: ✅ CONFORME se cada documento tem sua data legível
+├── STATUS: 🟨 ALERTA apenas se documento deveria ter data mas está ND
+└── STATUS: 🔴 DIVERGENTE → NUNCA USAR PARA DATA EMISSÃO!
+
+═══════════════════════════════════════════════════════════════════════════════
 REGRA SUPREMA DE CONSISTÊNCIA — LEIA COM ATENÇÃO MÁXIMA!
 ═══════════════════════════════════════════════════════════════════════════════
 
@@ -808,8 +841,11 @@ DIVERGENTE (🔴) OBRIGATÓRIO quando:
 - QUALQUER documento tem valor DIFERENTE dos demais (mesmo que por 0,1 kg!)
 - Exemplo: Packing = 501,5 kg | HAWB = 502,0 kg → 🔴 (diferença de 0,5 kg)
 - Exemplo: Invoice A = EUR 10.000 | Invoice B = EUR 10.001 → 🔴 
-- Datas diferentes entre documentos = 🔴 SEMPRE
-- Formatos de data que resultam em datas diferentes = 🔴
+- Datas de EMBARQUE/CHEGADA diferentes = 🔴
+- ⚠️ EXCEÇÃO ABSOLUTA: "Data Emissão" → Cada documento tem sua PRÓPRIA data!
+  → Datas de emissão diferentes entre documentos são ESPERADAS e NORMAIS!
+  → Status para Data Emissão com datas diferentes = ✅ CONFORME (não 🔴!)
+- Formatos de data que resultam em datas diferentes (exceto Data Emissão) = 🔴
 
 ⚠️ ALERTA (🟨) quando:
 - Campo existe em apenas 1 documento (impossível comparar)
@@ -1014,11 +1050,68 @@ VERIFICAÇÃO OBRIGATÓRIA:
   3. Se apenas 1 tem valor → 🟨 com observação de cenário 2
   4. Se 2+ têm valor → aplicar comparação normal
 
-⚠️ REGRA DE DATA CRÍTICA:
-- Se um campo de data mostra valores diferentes entre documentos = 🔴 DIVERGENTE
-- Exemplo: 08/12/2025 (Invoice) vs 05/12/2025 (Packing) = 🔴 NÃO É CONFORME
-- Mesmo se apenas DIA diferir, é divergência
-- Verificar se não é inversão DD/MM vs MM/DD (ambos são divergentes!)
+⚠️ REGRA DE DATA — COM EXCEÇÃO IMPORTANTE:
+
+CAMPOS DE DATA DE COMPARAÇÃO (devem ser iguais):
+- Data de Embarque / Shipping Date → 🔴 se diferentes
+- Data de Chegada / Arrival Date → 🔴 se diferentes
+- Data do BL / BL Date → verificar consistência
+
+⚠️ EXCEÇÃO OBRIGATÓRIA — DATA DE EMISSÃO:
+┌───────────────────────────────────────────────────────────────────────────────┐
+│ O campo "Data Emissão" NÃO É para comparação entre documentos!               │
+│ Cada documento tem sua PRÓPRIA data de emissão:                              │
+│ - Invoice: 17/12/2025 (data da venda)                                        │
+│ - HAWB: 19/12/2025 (data de emissão do conhecimento)                         │
+│ - CCT: 29/12/2025 (data de registro na RFB)                                  │
+│ - Seguro: 22/12/2025 (data da apólice)                                       │
+│ - Packing: 17/12/2025 (data de criação)                                      │
+│                                                                               │
+│ DATAS DIFERENTES PARA "Data Emissão" = ✅ CONFORME (comportamento esperado!) │
+│ NÃO MARCAR 🔴 DIVERGENTE PARA DATA EMISSÃO!                                  │
+└───────────────────────────────────────────────────────────────────────────────┘
+
+⚠️ EXEMPLOS ESPECÍFICOS DE CONFERÊNCIAS ANTERIORES:
+
+PESO BRUTO — NORMALIZAÇÃO OBRIGATÓRIA:
+| Documento | Valor Extraído | Normalizado | Incluir na Comparação? |
+|-----------|----------------|-------------|------------------------|
+| CCT       | 501,500        | 501,5       | ✅ SIM                 |
+| HAWB      | 501,5          | 501,5       | ✅ SIM                 |
+| Packing   | 501,5          | 501,5       | ✅ SIM                 |
+| Invoice   | ND             | -           | ❌ NÃO (não tem peso)  |
+| Seguro    | ND             | -           | ❌ NÃO (não tem peso)  |
+
+→ Comparar apenas: CCT, HAWB, Packing
+→ Após normalização: 501,5 = 501,5 = 501,5 → ✅ CONFORME
+→ SE MARCOU 🔴 PARA 501,500 vs 501,5 → VOCÊ ERROU!
+
+VALOR TOTAL FRETE — IGNORAR SEGURO:
+| Documento | Valor         | É Frete Real?          | Incluir? |
+|-----------|---------------|------------------------|----------|
+| HAWB      | EUR 1.840,70  | SIM (frete)            | ✅ SIM   |
+| Invoice   | N/A           | NÃO (não tem frete)    | ❌ NÃO   |
+| Packing   | N/A           | NÃO (não tem frete)    | ❌ NÃO   |
+| SEGURO    | EUR 35.662,74 | NÃO! É VALOR SEGURADO! | ❌ NÃO   |
+
+→ O EUR 35.662,74 do SEGURO é VALOR SEGURADO da mercadoria, NÃO É FRETE!
+→ Seguro deve mostrar "N/A (documento sem frete)" para campos de frete
+→ Comparar frete apenas entre: HAWB, BL, CCT
+→ SE incluiu valor do Seguro como frete → VOCÊ ERROU!
+
+DATA EMISSÃO — NÃO COMPARAR:
+| Documento | Data       | Significado              |
+|-----------|------------|--------------------------|
+| CCT       | 29/12/2025 | Data registro RFB        |
+| HAWB      | 19/12/2025 | Data emissão conhecimento|
+| Invoice 1 | 17/12/2025 | Data da venda            |
+| Invoice 2 | 17/12/2025 | Data da venda            |
+| Packing   | 17/12/2025 | Data criação documento   |
+| Seguro    | 22/12/2025 | Data da apólice          |
+
+→ Cada documento tem sua própria data = ✅ CONFORME
+→ Datas diferentes são ESPERADAS e NORMAIS!
+→ SE MARCOU 🔴 PARA ESTE CENÁRIO → VOCÊ ERROU!
 
 ⚠️ REGRA #7: SEMPRE INCLUA MOEDA
 - Exemplo: "EUR 28.234,23" não apenas "28.234,23"
