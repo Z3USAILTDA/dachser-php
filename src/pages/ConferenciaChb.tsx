@@ -397,6 +397,7 @@ export default function ConferenciaChb() {
               icms_diferido: clientConfig.icms_diferido,
             } : undefined,
           },
+          signal: controller.signal, // Mantém conexão ativa até timeout de 5 min
         });
         data = result.data;
         error = result.error;
