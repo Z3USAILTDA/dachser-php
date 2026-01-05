@@ -1470,37 +1470,90 @@ ${tableSpec}
 
   if (stepId === 2) {
     return `
-SISTEMA — CRONOS (Etapa 2: Pré-Alerta × Instrução)
+SISTEMA — CRONOS (Etapa 2: Pré-Alerta × Instrução de Despacho)
+${clientContext}
 
 Você é o CRONOS, auditor de logística (importação, Brasil).
-Objetivo: comparar Pré-Alerta (referência) com Instrução de Despacho.
-${clientContext}
-ARQUIVOS PARA ANÁLISE:
+
+═══════════════════════════════════════════════════════════════════════════════
+⚠️ OBJETIVO CRÍTICO DA ETAPA 2:
+═══════════════════════════════════════════════════════════════════════════════
+COMPARAR os dados do NOVO DOCUMENTO (Instrução de Despacho) com os dados 
+JÁ EXTRAÍDOS NA ETAPA 1 (Pré-Alerta, Invoice, Packing, HAWB, etc.).
+
+A seção "DADOS DE REFERÊNCIA — EXTRAÍDOS NA ETAPA 1" contém os valores 
+que você DEVE usar para comparação!
+
+═══════════════════════════════════════════════════════════════════════════════
+REGRA DE DETERMINAÇÃO DE STATUS:
+═══════════════════════════════════════════════════════════════════════════════
+Para CADA campo do novo documento (Instrução de Despacho):
+
+1. BUSCAR o valor correspondente nos DADOS JÁ EXTRAÍDOS (seção acima)
+2. COMPARAR os dois valores:
+   - Se IGUAIS (após normalização de formato) → ✅ CONFORME
+   - Se DIFERENTES → 🔴 DIVERGENTE ou ⚠️ ALERTA (conforme severidade)
+   - Se campo não existia na etapa anterior → ✅ CONFORME (novo dado)
+   - Se campo existe na Etapa 1 mas não na Instrução → ⚠️ ALERTA (ausente)
+
+EXEMPLOS DE COMPARAÇÃO:
+├── Etapa 1 extraiu: Peso Bruto = 501,5 kg
+│   ├── Instrução: Peso Bruto = 501,5 kg → ✅ CONFORME
+│   ├── Instrução: Peso Bruto = 520,0 kg → 🔴 DIVERGENTE (diferença!)
+│   └── Instrução: Peso Bruto = ND → ⚠️ ALERTA (ausente)
+│
+├── Etapa 1 extraiu: Consignee = EMPRESA ABC LTDA
+│   ├── Instrução: Consignee = EMPRESA ABC LTDA → ✅ CONFORME
+│   ├── Instrução: Consignee = EMPRESA ABC → ⚠️ ALERTA (abreviado)
+│   └── Instrução: Consignee = EMPRESA XYZ → 🔴 DIVERGENTE (diferente!)
+│
+├── Etapa 1 extraiu: CNPJ = 12.345.678/0001-90
+│   ├── Instrução: CNPJ = 12345678000190 → ✅ CONFORME (mesmo valor, formatação diferente)
+│   └── Instrução: CNPJ = 98.765.432/0001-10 → 🔴 DIVERGENTE
+
+═══════════════════════════════════════════════════════════════════════════════
+ARQUIVOS PARA ANÁLISE (NOVOS - Etapa 2):
+═══════════════════════════════════════════════════════════════════════════════
 ${fileListText}
 
 ESTRUTURA DA TABELA — CRÍTICO:
 <table>
 <thead><tr>
   <th>Campo</th>
+  <th>Valor Etapa 1 (Referência)</th>
   <th>${columnHeaders}</th>
   <th>Status</th>
 </tr></thead>
 ...
 </table>
 
-Use EXATAMENTE os nomes dos arquivos: ${columnHeaders}
-Os arquivos de Pré-Alerta são a BASE de comparação.
+⚠️ IMPORTANTE: 
+- A coluna "Valor Etapa 1 (Referência)" DEVE conter o valor extraído anteriormente 
+  (dos dados cacheados na seção de referência). Use "ND" se não foi extraído antes.
+- Use EXATAMENTE os nomes dos arquivos: ${columnHeaders}
 
+═══════════════════════════════════════════════════════════════════════════════
 CAMPOS A COMPARAR:
+═══════════════════════════════════════════════════════════════════════════════
 - Consignee/CNPJ
 - Incoterm/condição de frete
-- Peso bruto
+- Peso bruto (kg)
 - Volume/CBM
-- NCM (raiz+desc)
+- NCM (raiz + descrição)
 - Container (nº/tipo/lacre)
-- Valor total
+- Valor total/Valor Mercadoria
 - Referências/PO
-- Datas principais
+- Datas principais (ETD/ETA/Embarque)
+- Nº Conhecimento (HAWB/HBL)
+
+═══════════════════════════════════════════════════════════════════════════════
+VALIDAÇÃO FINAL — EXECUTAR ANTES DE GERAR RESPOSTA:
+═══════════════════════════════════════════════════════════════════════════════
+Para CADA linha da tabela, verificar:
+□ O valor da coluna "Etapa 1" foi extraído dos dados cacheados?
+□ O valor do novo documento foi comparado corretamente com a Etapa 1?
+□ O status reflete a comparação (igual = ✅, diferente = 🔴 ou ⚠️)?
+□ Se TODOS estão ✅, REVISAR — é muito raro que tudo esteja 100% conforme!
 
 ${EXTRACTION_INSTRUCTIONS}
 ${CHB_FORMAT_HTML}
@@ -2314,14 +2367,26 @@ serve(async (req) => {
     // Build enhanced prompt with cached data context
     let cachedContext = '';
     if (cachedFiles.length > 0) {
-      cachedContext = '\n\n=== DADOS JÁ EXTRAÍDOS (etapas anteriores) ===\n';
+      cachedContext = `
+═══════════════════════════════════════════════════════════════════════════════
+⚠️ DADOS DE REFERÊNCIA — EXTRAÍDOS NA ETAPA 1 (USAR PARA COMPARAÇÃO!)
+═══════════════════════════════════════════════════════════════════════════════
+INSTRUÇÃO CRÍTICA: Para cada campo abaixo, COMPARE com o valor do novo documento.
+- Se os valores forem DIFERENTES → marque como 🔴 DIVERGENTE ou ⚠️ ALERTA
+- Se os valores forem IGUAIS (após normalização) → marque como ✅ CONFORME
+
+`;
       for (const cached of cachedFiles) {
         cachedContext += `\n[${cached.name}] Campos extraídos:\n`;
         for (const [key, value] of Object.entries(cached.fields)) {
-          cachedContext += `  - ${key}: ${value}\n`;
+          cachedContext += `  • ${key}: ${value}\n`;
         }
       }
-      cachedContext += '\n=== USE ESTES DADOS COMO REFERÊNCIA ===\n';
+      cachedContext += `
+═══════════════════════════════════════════════════════════════════════════════
+FIM DOS DADOS DE REFERÊNCIA — COMPARE COM OS NOVOS DOCUMENTOS ABAIXO
+═══════════════════════════════════════════════════════════════════════════════
+`;
     }
     
     const basePrompt = getPromptByStep(stepId, fileNames, clientConfig as ClientConfig | undefined);
