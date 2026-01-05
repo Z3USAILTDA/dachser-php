@@ -411,7 +411,20 @@ export default function ConferenciaChb() {
       });
 
       if (submitResult.error) {
-        throw new Error(submitResult.error.message || 'Erro ao iniciar análise');
+        // Extract detailed error message from response
+        let errorMessage = 'Erro ao iniciar análise';
+        
+        // Check if the response data contains error details (from 4xx responses)
+        if (submitResult.data?.error) {
+          errorMessage = submitResult.data.error;
+          if (submitResult.data.errors?.[0]?.suggestion) {
+            errorMessage += ` ${submitResult.data.errors[0].suggestion}`;
+          }
+        } else if (submitResult.error.message && !submitResult.error.message.includes('non-2xx')) {
+          errorMessage = submitResult.error.message;
+        }
+        
+        throw new Error(errorMessage);
       }
 
       const { requestId } = submitResult.data;
