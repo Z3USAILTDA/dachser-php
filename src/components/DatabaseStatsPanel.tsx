@@ -1,10 +1,14 @@
-import { useState } from "react";
-import { Database, ChevronDown, ChevronUp, Plane, Clock } from "lucide-react";
-import { Card, CardContent } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import { formatDistanceToNow } from "date-fns";
+import { Database, ChevronDown, RefreshCw, Plane } from "lucide-react";
+import { formatDistanceToNow, format } from "date-fns";
 import { ptBR } from "date-fns/locale";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { ScrollArea } from "@/components/ui/scroll-area";
 
 interface AirlineBreakdown {
   code: string;
@@ -20,121 +24,136 @@ export interface DbStats {
 
 interface DatabaseStatsPanelProps {
   stats: DbStats | null;
-  isLoading?: boolean;
+  isLoading: boolean;
+  onRefresh?: () => void;
 }
 
-export const DatabaseStatsPanel = ({ stats, isLoading }: DatabaseStatsPanelProps) => {
-  const [isOpen, setIsOpen] = useState(false);
+export const DatabaseStatsPanel = ({ stats, isLoading, onRefresh }: DatabaseStatsPanelProps) => {
+  if (!stats && !isLoading) return null;
 
-  if (isLoading) {
-    return (
-      <Card className="bg-card/80 backdrop-blur-sm border-border/50">
-        <CardContent className="p-4">
-          <div className="flex items-center gap-3">
-            <div className="animate-pulse flex items-center gap-2">
-              <div className="h-5 w-5 bg-muted rounded"></div>
-              <div className="h-4 w-48 bg-muted rounded"></div>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-    );
-  }
-
-  if (!stats) {
-    return null;
-  }
-
-  const formatLastUpdate = (dateString: string | null) => {
-    if (!dateString) return "Não disponível";
-    
+  const formatRelativeTime = (dateString: string | null) => {
+    if (!dateString) return "N/A";
     try {
       const date = new Date(dateString);
-      const formattedDate = date.toLocaleString("pt-BR", {
-        day: "2-digit",
-        month: "2-digit",
-        year: "numeric",
-        hour: "2-digit",
-        minute: "2-digit",
-      });
-      const relativeTime = formatDistanceToNow(date, { addSuffix: true, locale: ptBR });
-      return `${formattedDate} (${relativeTime})`;
+      return formatDistanceToNow(date, { addSuffix: true, locale: ptBR });
     } catch {
-      return dateString;
+      return "N/A";
     }
   };
 
-  const getPercentage = (count: number) => {
-    if (stats.totalRecords === 0) return 0;
-    return ((count / stats.totalRecords) * 100).toFixed(1);
+  const formatDateTime = (dateString: string | null) => {
+    if (!dateString) return "N/A";
+    try {
+      const date = new Date(dateString);
+      return format(date, "dd/MM/yyyy HH:mm", { locale: ptBR });
+    } catch {
+      return "N/A";
+    }
   };
 
   return (
-    <Card className="bg-card/80 backdrop-blur-sm border-border/50">
-      <CardContent className="p-4">
-        <div className="flex flex-col gap-3">
-          {/* Header row */}
-          <div className="flex items-center justify-between flex-wrap gap-2">
-            <div className="flex items-center gap-2">
-              <Database className="h-5 w-5 text-primary" />
-              <span className="font-medium text-foreground">Base de Dados</span>
-            </div>
-            <Badge variant="secondary" className="text-sm">
-              <Plane className="h-3 w-3 mr-1" />
-              {stats.totalRecords.toLocaleString("pt-BR")} AWBs
+    <Popover>
+      <PopoverTrigger asChild>
+        <Button 
+          variant="outline" 
+          size="sm" 
+          className="gap-2 bg-[rgba(0,0,0,.70)] backdrop-blur-sm border-[rgba(255,255,255,.18)] hover:bg-[rgba(0,0,0,.85)] hover:border-[#ffc800]/50 text-[#aaaaaa] hover:text-[#f5f5f5]"
+          disabled={isLoading}
+        >
+          {isLoading ? (
+            <RefreshCw className="h-4 w-4 animate-spin" />
+          ) : (
+            <Database className="h-4 w-4 text-[#ffc800]" />
+          )}
+          <span className="hidden sm:inline text-xs">Base de Dados</span>
+          {stats && (
+            <Badge variant="secondary" className="ml-1 text-xs bg-[#ffc800]/20 text-[#ffc800] border-none">
+              {stats.totalRecords.toLocaleString('pt-BR')}
             </Badge>
+          )}
+          <ChevronDown className="h-3 w-3 opacity-50" />
+        </Button>
+      </PopoverTrigger>
+      
+      <PopoverContent 
+        className="w-80 p-0 bg-[rgba(5,6,18,.95)] border-[rgba(255,255,255,.12)] backdrop-blur-xl" 
+        align="start"
+      >
+        <div className="p-4 border-b border-[rgba(255,255,255,.08)]">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Database className="h-4 w-4 text-[#ffc800]" />
+              <span className="font-medium text-sm text-[#f5f5f5]">t_master_dados</span>
+            </div>
+            {onRefresh && (
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-7 w-7 text-[#aaaaaa] hover:text-[#ffc800] hover:bg-[rgba(255,255,255,.05)]"
+                onClick={onRefresh}
+                disabled={isLoading}
+              >
+                <RefreshCw className={`h-3.5 w-3.5 ${isLoading ? 'animate-spin' : ''}`} />
+              </Button>
+            )}
           </div>
-
-          {/* Last update */}
-          <div className="flex items-center gap-2 text-sm text-muted-foreground">
-            <Clock className="h-4 w-4" />
-            <span>Última atualização: {formatLastUpdate(stats.lastUpdate)}</span>
-          </div>
-
-          {/* Airlines breakdown - Collapsible */}
-          {stats.airlineBreakdown.length > 0 && (
-            <Collapsible open={isOpen} onOpenChange={setIsOpen}>
-              <CollapsibleTrigger className="flex items-center gap-2 text-sm text-primary hover:text-primary/80 transition-colors w-full justify-start">
-                {isOpen ? (
-                  <ChevronUp className="h-4 w-4" />
-                ) : (
-                  <ChevronDown className="h-4 w-4" />
-                )}
-                <span>Distribuição por Companhia ({stats.airlineBreakdown.length})</span>
-              </CollapsibleTrigger>
-              
-              <CollapsibleContent className="mt-3">
-                <div className="grid gap-2 max-h-64 overflow-y-auto pr-2">
-                  {stats.airlineBreakdown.map((airline) => (
-                    <div
-                      key={airline.code}
-                      className="flex items-center justify-between text-sm bg-muted/50 rounded-lg px-3 py-2"
-                    >
-                      <div className="flex items-center gap-2">
-                        <span className="font-mono text-xs bg-background px-1.5 py-0.5 rounded">
-                          {airline.code}
-                        </span>
-                        <span className="text-foreground">{airline.name}</span>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <div className="w-24 h-2 bg-muted rounded-full overflow-hidden">
-                          <div
-                            className="h-full bg-primary rounded-full transition-all"
-                            style={{ width: `${Math.min(100, parseFloat(String(getPercentage(airline.count))))}%` }}
-                          />
-                        </div>
-                        <span className="text-muted-foreground text-xs w-16 text-right">
-                          {airline.count.toLocaleString("pt-BR")} ({String(getPercentage(airline.count))}%)
-                        </span>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </CollapsibleContent>
-            </Collapsible>
+          
+          {stats && (
+            <div className="mt-3 space-y-2 text-sm">
+              <div className="flex justify-between">
+                <span className="text-[#888]">Última atualização:</span>
+                <span className="font-medium text-[#f5f5f5]">{formatRelativeTime(stats.lastUpdate)}</span>
+              </div>
+              <div className="flex justify-between text-xs">
+                <span></span>
+                <span className="text-[#666]">{formatDateTime(stats.lastUpdate)}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-[#888]">Total AWBs:</span>
+                <span className="font-medium text-[#ffc800]">{stats.totalRecords.toLocaleString('pt-BR')}</span>
+              </div>
+            </div>
           )}
         </div>
-      </CardContent>
-    </Card>
+        
+        {stats && stats.airlineBreakdown.length > 0 && (
+          <div className="p-3">
+            <div className="flex items-center gap-2 mb-2">
+              <Plane className="h-3.5 w-3.5 text-[#888]" />
+              <span className="text-xs font-medium text-[#888]">Distribuição por CIA</span>
+            </div>
+            
+            <ScrollArea className="h-48">
+              <div className="space-y-1.5 pr-3">
+                {stats.airlineBreakdown.map((airline) => {
+                  const percentage = ((airline.count / stats.totalRecords) * 100).toFixed(1);
+                  return (
+                    <div key={airline.code} className="text-xs">
+                      <div className="flex items-center justify-between mb-0.5">
+                        <span className="truncate flex-1">
+                          <span className="font-mono text-[#ffc800]">{airline.code}</span>
+                          <span className="text-[#888] ml-1.5">{airline.name}</span>
+                        </span>
+                        <span className="text-[#666] ml-2 whitespace-nowrap">
+                          {airline.count} ({percentage}%)
+                        </span>
+                      </div>
+                      <div className="h-1 bg-[rgba(255,255,255,.08)] rounded-full overflow-hidden">
+                        <div 
+                          className="h-full bg-[#ffc800]/60 rounded-full transition-all"
+                          style={{ width: `${percentage}%` }}
+                        />
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </ScrollArea>
+          </div>
+        )}
+      </PopoverContent>
+    </Popover>
   );
 };
+
+export default DatabaseStatsPanel;
