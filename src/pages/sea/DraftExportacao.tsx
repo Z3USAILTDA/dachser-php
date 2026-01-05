@@ -1,9 +1,65 @@
+import { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { PageLayout } from "@/components/layout/PageLayout";
-import { Ship, Database, FileText, LayoutDashboard, Search } from "lucide-react";
+import { Ship, Database, FileText, LayoutDashboard, Search, ShieldAlert } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
-// Placeholder - aguardando componentes do projeto original
 const DraftExportacao = () => {
+  const navigate = useNavigate();
+  const [isAdmin, setIsAdmin] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    const storedUser = localStorage.getItem("user");
+    if (storedUser) {
+      const parsed = JSON.parse(storedUser);
+      const adminStatus = parsed.is_admin === 1 || parsed.is_admin === "1" || parsed.is_admin === true;
+      setIsAdmin(adminStatus);
+      
+      if (!adminStatus) {
+        // Redirect non-admin users
+        navigate("/dashboard");
+      }
+    } else {
+      navigate("/");
+    }
+  }, [navigate]);
+
+  // Show loading while checking
+  if (isAdmin === null) {
+    return (
+      <PageLayout
+        title="Draft Exportação"
+        subtitle="Verificando permissões..."
+        backTo="/dashboard"
+        pageIcon={Ship}
+      >
+        <div className="flex items-center justify-center h-64">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+        </div>
+      </PageLayout>
+    );
+  }
+
+  // Show access denied if not admin
+  if (!isAdmin) {
+    return (
+      <PageLayout
+        title="Acesso Negado"
+        subtitle="Você não tem permissão para acessar esta página"
+        backTo="/dashboard"
+        pageIcon={ShieldAlert}
+      >
+        <div className="bg-card border border-border rounded-xl p-8 text-center">
+          <ShieldAlert className="h-12 w-12 text-destructive mx-auto mb-4" />
+          <h3 className="text-lg font-semibold text-foreground mb-2">Acesso Restrito</h3>
+          <p className="text-muted-foreground">
+            Esta funcionalidade está disponível apenas para administradores.
+          </p>
+        </div>
+      </PageLayout>
+    );
+  }
+
   return (
     <PageLayout
       title="Draft Exportação"

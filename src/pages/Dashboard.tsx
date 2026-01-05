@@ -92,6 +92,7 @@ const menuItems: MenuItem[] = [
       {
         label: "Draft Exportação",
         href: "/sea/draft-exportacao",
+        adminOnly: true,
       },
       {
         label: "Monitoramento",
