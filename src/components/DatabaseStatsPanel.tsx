@@ -56,8 +56,8 @@ export const DatabaseStatsPanel = ({ stats, isLoading, onRefresh }: DatabaseStat
       <PopoverTrigger asChild>
         <Button 
           variant="outline" 
-          size="sm" 
-          className="gap-2 bg-[rgba(0,0,0,.70)] backdrop-blur-sm border-[rgba(255,255,255,.18)] hover:bg-[rgba(0,0,0,.85)] hover:border-[#ffc800]/50 text-[#aaaaaa] hover:text-[#f5f5f5]"
+          size="icon"
+          className="w-8 h-8 rounded-full bg-[rgba(0,0,0,.70)] backdrop-blur-sm border-[rgba(255,255,255,.18)] hover:bg-[rgba(0,0,0,.85)] hover:border-[#ffc800]/50 text-[#aaaaaa] hover:text-[#f5f5f5]"
           disabled={isLoading}
         >
           {isLoading ? (
@@ -65,13 +65,6 @@ export const DatabaseStatsPanel = ({ stats, isLoading, onRefresh }: DatabaseStat
           ) : (
             <Database className="h-4 w-4 text-[#ffc800]" />
           )}
-          <span className="hidden sm:inline text-xs">Base de Dados</span>
-          {stats && (
-            <Badge variant="secondary" className="ml-1 text-xs bg-[#ffc800]/20 text-[#ffc800] border-none">
-              {stats.totalRecords.toLocaleString('pt-BR')}
-            </Badge>
-          )}
-          <ChevronDown className="h-3 w-3 opacity-50" />
         </Button>
       </PopoverTrigger>
       
@@ -83,7 +76,7 @@ export const DatabaseStatsPanel = ({ stats, isLoading, onRefresh }: DatabaseStat
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
               <Database className="h-4 w-4 text-[#ffc800]" />
-              <span className="font-medium text-sm text-[#f5f5f5]">t_master_dados</span>
+              <span className="font-medium text-sm text-[#f5f5f5]">Base de Dados</span>
             </div>
             {onRefresh && (
               <Button
