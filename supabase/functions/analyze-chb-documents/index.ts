@@ -482,10 +482,68 @@ ${fiscalRulesSection}${armadorSection}${taxasSection}
       - NCM (comparar com Invoice)
       - Peso (comparar com BL/PL)
    
-   D) VALIDAÇÕES FISCAIS:
-      - CFOP deve bater com tipo de operação
-      - Alíquotas de II, IPI devem ser consistentes com NCM
-      - Se cliente tem benefício fiscal → verificar aplicação correta
+    D) VALIDAÇÕES FISCAIS:
+       - CFOP deve bater com tipo de operação
+       - Alíquotas de II, IPI devem ser consistentes com NCM
+       - Se cliente tem benefício fiscal → verificar aplicação correta
+
+16) REGRAS DE STATUS — PRIORIDADE MÁXIMA (SEGUIR À RISCA!):
+
+   ⚠️ STATUS 🔴 CRÍTICO — USAR OBRIGATORIAMENTE QUANDO:
+   - Valores numéricos diferem em mais de 20% (ex.: 28.234 vs 508 → claramente diferentes!)
+   - Moedas diferentes para o MESMO campo em documentos que DEVERIAM ter mesma moeda
+   - CNPJ divergente entre documentos
+   - NCM divergente na raiz (4 primeiros dígitos)
+   - Frete marcado COLLECT em um doc vs PREPAID em outro
+   - Incoterms diferentes (CFR vs FOB vs CIF)
+   - Valores de ordens de magnitude diferentes (ex.: 10.000 vs 100)
+
+   ⚠️ STATUS 🟨 ALERTA — USAR OBRIGATORIAMENTE QUANDO:
+   - Valores numéricos diferem mais que a tolerância MAS menos que 20%
+   - Datas diferentes entre documentos (ex.: 19/12/2025 vs 17/12/2025)
+   - Moedas diferentes em campos DIFERENTES entre documentos (ex.: Invoice em EUR, Seguro em USD)
+   - Campo obrigatório ausente (ND) em algum documento mas presente em outros
+   - Razão social diferente (mesmo CNPJ)
+   - Diferença em Total Collect/Prepaid acima de EUR/USD 50
+   - Valores em moedas diferentes que não podem ser comparados diretamente
+
+   ⚠️ STATUS ✅ CONFORME — USAR SOMENTE QUANDO:
+   - Valores são IDÊNTICOS após normalização numérica (vírgula vs ponto, zeros trailing)
+   - OU diferença está DENTRO da tolerância configurada E mesma moeda
+   - OU campo é "ND" em TODOS os documentos (nenhum documento tem o dado)
+   - NUNCA marcar ✅ se houver diferença significativa entre valores!
+
+   ⚠️ REGRA DE OURO — CONSISTÊNCIA TABELA × OBSERVAÇÕES:
+   Se você mencionar algo na seção "Observações" com 🟨 ou 🔴,
+   a LINHA CORRESPONDENTE na tabela DEVE ter o MESMO ícone!
+   
+   EXEMPLO ERRADO (NÃO FAZER!):
+   - Tabela: "Valor Mercadoria" → ✅
+   - Observações: "🟨 Valores diferentes nas faturas"
+   → INCONSISTÊNCIA! O status da linha DEVE ser 🟨
+   
+   EXEMPLO CORRETO:
+   - Tabela: "Valor Mercadoria" → 🟨
+   - Observações: "🟨 Valores diferentes nas faturas: EUR 28.234 vs EUR 508"
+   → CONSISTENTE!
+
+   ⚠️ REGRA CRÍTICA PARA COMPARAÇÃO MULTI-DOCUMENTO:
+   - Documentos DIFERENTES podem ter valores DIFERENTES — isso é NORMAL
+   - MAS se o MESMO campo (ex.: Valor Mercadoria) aparece em 2+ docs com valores MUITO diferentes:
+     → EUR 28.234,23 (Invoice) vs EUR 508,22 (outro doc) → 🟨 ou 🔴 (valores claramente diferentes!)
+     → NÃO marcar como ✅ só porque são "documentos diferentes"
+   - Se valores estão em moedas diferentes e não podem ser comparados:
+     → Marcar como 🟨 e explicar que "moedas diferentes, comparação requer conversão"
+
+17) VERIFICAÇÃO FINAL OBRIGATÓRIA:
+   Antes de gerar a saída, VERIFIQUE:
+   1. Para cada item listado em "Observações" com 🟨 ou 🔴
+   2. Encontre a linha correspondente na tabela
+   3. Confirme que o STATUS da linha CORRESPONDE ao ícone da observação
+   4. Se não corresponder, CORRIJA a tabela antes de gerar a saída
+   
+   Esta verificação é OBRIGATÓRIA. Inconsistências entre tabela e observações
+   indicam erro no processamento e devem ser corrigidas antes da saída final.
 `;
 }
 
