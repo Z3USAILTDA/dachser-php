@@ -1864,7 +1864,7 @@ const Index = () => {
 
       {/* Top Header Bar */}
       <div className="relative z-10 max-w-[95%] mx-auto px-2 pt-5 pb-4 flex items-center justify-between">
-        {/* Left - Back + Header + DB Stats Button */}
+        {/* Left - Back + Header */}
         <div className="flex items-center gap-[18px]">
           <button
             onClick={() => navigate("/dashboard")}
@@ -1884,13 +1884,11 @@ const Index = () => {
               <span className="w-1.5 h-1.5 rounded-full bg-[#ffc800] shadow-[0_0_10px_rgba(255,200,0,.9)]" />
             </div>
           </header>
-
-          {/* Database Stats Button */}
-          <DatabaseStatsPanel stats={dbStats} isLoading={isLoadingDbStats} />
         </div>
 
-        {/* Right - User */}
+        {/* Right - DB Stats + User */}
         <div className="flex items-center gap-2.5 text-[0.85rem]">
+          <DatabaseStatsPanel stats={dbStats} isLoading={isLoadingDbStats} onRefresh={fetchDbStats} />
           <div className="px-[14px] py-1.5 rounded-full bg-[rgba(0,0,0,.70)] border border-[rgba(255,255,255,.18)] text-[#aaaaaa] max-w-[220px] truncate">
             @{user?.email?.split("@")[0] || "admin"}
           </div>
