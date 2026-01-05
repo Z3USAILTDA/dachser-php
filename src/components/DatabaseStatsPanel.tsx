@@ -75,20 +75,6 @@ export const DatabaseStatsPanel = ({ stats, isLoading, onRefresh }: DatabaseStat
         align="end"
       >
         <div className="p-4 border-b border-[rgba(255,255,255,.08)]">
-          <div className="flex items-center justify-end">
-            {onRefresh && (
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-7 w-7 text-[#aaaaaa] hover:text-[#ffc800] hover:bg-[rgba(255,255,255,.05)]"
-                onClick={onRefresh}
-                disabled={isLoading}
-              >
-                <RefreshCw className={`h-3.5 w-3.5 ${isLoading ? 'animate-spin' : ''}`} />
-              </Button>
-            )}
-          </div>
-          
           {stats && (
             <div className="mt-3 space-y-2 text-sm">
               <div className="flex justify-between">
