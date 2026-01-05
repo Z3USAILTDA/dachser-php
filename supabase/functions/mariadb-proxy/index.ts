@@ -2465,7 +2465,7 @@ serve(async (req) => {
               s.arr_datetime,
               (SELECT h.data_evento 
                FROM ${database}.t_status_historico h 
-               WHERE TRIM(h.awb) = TRIM(s.awb) 
+               WHERE TRIM(h.awb) COLLATE utf8mb4_unicode_ci = TRIM(s.awb) COLLATE utf8mb4_unicode_ci
                  AND h.status_code = 'DEP' 
                ORDER BY h.data_evento DESC 
                LIMIT 1) as dep_datetime,
