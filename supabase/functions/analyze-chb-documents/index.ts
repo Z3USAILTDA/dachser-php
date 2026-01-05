@@ -1,9 +1,17 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
+
+// Create Supabase client for database operations
+function getSupabaseClient() {
+  const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
+  const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+  return createClient(supabaseUrl, supabaseKey);
+}
 
 // Helper function to log API calls to mariadb-proxy
 async function logApiCall(params: {
@@ -432,1310 +440,240 @@ ${fiscalRulesSection}${armadorSection}${taxasSection}
    A) ESTRUTURA DE CHARGES EM DUAS COLUNAS:
       - HAWB/AWB típico tem estrutura: PREPAID (esquerda) | COLLECT (direita)
       - Cada coluna lista os respectivos encargos
-      - A linha FINAL de cada coluna mostra o TOTAL daquela coluna
+      - SEMPRE verificar AMBAS as colunas ao extrair valores!
    
-   B) COMO EXTRAIR O VALOR TOTAL FRETE CORRETAMENTE:
-      - PROCURE a linha "Total Prepaid" E/OU "Total Collect" no RODAPÉ
-      - Se só há UMA coluna com valores → usar o "Total" dessa coluna
-      - Se há valores em AMBAS as colunas → SOMAR os dois totais
-      - O VALOR TOTAL FRETE = Total Prepaid + Total Collect
-   
-   C) TAXAS COMUNS EM HAWB (podem estar em Prepaid ou Collect):
-      → Weight Charge / Freight Charge (frete base por kg)
-      → MAA (Miscellaneous Charges All Agent) - taxa de agente
-      → THC (Terminal Handling Charge)
-      → FSC (Fuel Surcharge)
-      → AWB Fee / Documentation Fee
-      → Security Charge / X-Ray
-      → Handling Fee
-   
-   D) ERROS COMUNS A EVITAR:
-      → NÃO usar apenas "Weight Charge" como Valor Total Frete (é só uma parte!)
-      → NÃO usar "Total Charge" da tabela de itens (diferente do total final!)
-      → NÃO confundir "Chargeable Weight" (peso) com valor monetário
-      → Se o total extraído < Weight Charge + Other Charges listados → ERRO!
-   
-   E) VALIDAÇÃO DE CONSISTÊNCIA:
-      - Valor Total Frete extraído ≈ soma de charges visíveis → ✅ OK
-      - Valor Total Frete < Weight Charge + taxas listadas → 🔴 CRÍTICO (rever extração!)
-      - Se CCT mostra valor diferente do HAWB:
-        → CCT pode mostrar apenas frete base (sem MAA/taxas de agente)
-        → HAWB mostra total incluindo todas as taxas
-        → Neste caso, explicar a diferença nas observações
-   
-   F) PESO BRUTO EM HAWB/AWB (⚠️ NUNCA SOMAR!):
-      - O HAWB/AWB já mostra o PESO BRUTO TOTAL diretamente no documento
-      - Campos válidos: "Gross Weight", "Weight", "Total Weight", "Actual Weight", "Wt."
-      - NUNCA calcular ou somar pesos de itens individuais em HAWB/AWB
-      - Usar o valor EXPLÍCITO do documento exatamente como está
-      - A regra de soma de pesos (seção 18) é EXCLUSIVA para Packing List!
-
-16) TRATAMENTO DE DOCUMENTOS DE SEGURO (APÓLICE/CERTIFICADO):
-   
-   ⚠️ SEGURO PARTICIPA DA COMPARAÇÃO, MAS NÃO CRIA CAMPOS NOVOS!
-   
-   A) COMO TRATAR O DOCUMENTO DE SEGURO:
-   - INCLUIR o Seguro como COLUNA na tabela de comparação (igual aos outros docs)
-   - EXTRAIR dados do Seguro para campos que JÁ EXISTEM em outros documentos
-   - NÃO CRIAR linhas/campos que SÓ existem no documento de Seguro
-   
-   B) ⚠️ REGRA CRÍTICA: VERIFICAR "INSURED OBJECT" ANTES DE MAPEAR VALORES!
-   
-   O documento de seguro geralmente contém:
-   - Campo "Insured Object" ou "Subject Matter Insured" → indica O QUE está segurado
-   - Campo "Total Insured Amount" → valor total da cobertura
-   
-   MAPEAMENTO CORRETO BASEADO NO "INSURED OBJECT":
-   
-   CASO 1: insured object = "mercadoria" (apenas)
-     → Total Insured Amount = VALOR MERCADORIA
-   
-   CASO 2: insured object = "mercadoria + frete int" ou "goods + freight" ou similar
-     → Total Insured Amount = VALOR TOTAL FRETE (pois inclui mercadoria + frete!)
-     → NÃO mapear para Valor Mercadoria (seria valor inflado!)
-     → Na observação: "Seguro cobre mercadoria + frete internacional"
-   
-   Exemplo do documento:
-   | Insured Object         | Total Insured Amount |
-   | mercadoria + frete int | EUR 22.500,00        |
-   
-   → EUR 22.500,00 vai para coluna do Seguro na linha "Valor Total Frete"
-   → Linha "Valor Mercadoria" do Seguro = ND (não extrair deste campo!)
-   
-   C) CAMPOS QUE O SEGURO DEVE PREENCHER (se contiver a informação):
-   ✅ Consignee/Segurado → comparar com outros documentos
-   ✅ Valor da Mercadoria/Importância Segurada → comparar com Invoice (apenas se insured object = "mercadoria")
-   ✅ Valor Total Frete → usar se insured object = "mercadoria + frete int"
-   ✅ Descrição da Mercadoria → comparar com Invoice/Packing
-   ✅ NCM (se houver) → comparar com outros docs
-   ✅ Origem/Destino → comparar com AWB/BL
-   
-   C) CAMPOS QUE NÃO DEVEM SER CRIADOS (exclusivos do Seguro):
-      ❌ Document NO / Nº Documento → NÃO criar linha
-      ❌ Nº da Apólice / Policy Number → NÃO criar linha
-      ❌ Nº do Certificado / Certificate Number → NÃO criar linha
-      ❌ Vigência / ETD / Validity Period → NÃO criar linha
-      ❌ Taxa / Rate / Premium Rate → NÃO criar linha
-      ❌ Taxa de serviço / Service Fee → NÃO criar linha
-      ❌ Prêmio do Seguro / Premium Amount → NÃO criar linha
-      ❌ Franquia / Deductible → NÃO criar linha
-      ❌ Tipo de Cobertura / Coverage Type → NÃO criar linha
-      ❌ Segurador / Insurer Name → NÃO criar linha
-      → Esses campos resultariam em "ND" para todos outros docs = RUÍDO PROIBIDO
-   
-   D) INFORMAÇÕES EXCLUSIVAS DO SEGURO VÃO NAS OBSERVAÇÕES:
-      Se houver informações relevantes exclusivas do seguro, reportar em observações:
-      <p class="obs-info">📋 <strong>Seguro:</strong> Apólice [Nº], vigência [DATAS], 
-      valor segurado compatível com mercadoria.</p>
-   
-   EXEMPLO CORRETO DE TABELA (SIGA EXATAMENTE):
-   | Campo            | Invoice    | Packing | HAWB  | Seguro     | Status |
-   | Consignee        | ABC Ltda   | ABC     | ABC   | ABC Ltda   | ✅     |
-   | Valor Mercadoria | EUR 10.000 | ND      | ND    | EUR 10.000 | ✅     |
-   | Peso Bruto       | ND         | 500 kg  | 500   | ND         | ✅     |
-   
-   ⛔ PROIBIDO - NUNCA criar estas linhas:
-   | Nº Apólice       | ND         | ND      | ND    | XYZ-123    | ❌     | ← PROIBIDO!
-   | Document NO      | ND         | ND      | ND    | 123456     | ❌     | ← PROIBIDO!
-   | Vigência         | ND         | ND      | ND    | 20/12/2025 | ❌     | ← PROIBIDO!
-   | Taxa             | ND         | ND      | ND    | 0.25%      | ❌     | ← PROIBIDO!
-
-17) N° CONHECIMENTO — EXTRAÇÃO DO IDENTIFICADOR DE CADA DOCUMENTO:
-   
-   ⚠️ CADA DOCUMENTO TEM SEU PRÓPRIO NÚMERO IDENTIFICADOR!
-   
-   | Tipo Documento | Campo Identificador a Usar                     |
-   |----------------|------------------------------------------------|
-   | AWB / HAWB     | AWB Number, House AWB, HAWB No., Air Waybill   |
-   | BL / HBL       | B/L Number, Bill of Lading No., HBL No.        |
-   | Packing List   | Packing slip number, P/L No., Packing No.      |
-   | Invoice        | Invoice Number, Invoice No., Ref. No.          |
-   | Seguro         | Document No., Certificate No., Certificado     |
-   | CCT            | CCT No., Conhecimento No.                      |
-   
-   REGRA: Cada documento na análise deve mostrar SEU PRÓPRIO número identificador.
-   - Packing List com "Packing slip number: 0100159703LS" → N° = 0100159703LS
-   - Seguro com "Document No.: 202534567002" → N° = 202534567002
-   - Invoice com "Invoice No.: INV-2024-001" → N° = INV-2024-001
-   - HAWB com "AWB No.: 123-45678901" → N° = 123-45678901
-   
-   NORMALIZAÇÃO (para comparar documentos de TRANSPORTE entre si):
-   Antes de comparar Nº Conhecimento (AWB, HAWB, BL, HBL, MAWB, MBL):
-   - Remover todos os espaços
-   - Remover hífens (-)
-   - Converter para maiúsculas
-   
-   Exemplo: "KFB-0094 7167" e "KFB00947167" são IGUAIS → ✅ CONFORME
-   
-   Na tabela, exibir o formato mais completo, mas marcar como CONFORME se forem iguais após normalização.
-
-18) EXTRAÇÃO DE DADOS DO PACKING LIST (⚠️ SOMENTE PACKING LIST!):
-   
-   ⚠️ ATENÇÃO CRÍTICA: ESTA REGRA DE SOMA É EXCLUSIVA PARA PACKING LIST!
-   ⚠️ NÃO APLICAR EM HAWB, AWB, BL, HBL OU OUTROS DOCUMENTOS DE TRANSPORTE!
-   
-   Para HAWB/AWB/BL/HBL:
-   - Peso Bruto = campo "Gross Weight" ou "Total Weight" EXPLÍCITO no documento
-   - NUNCA somar valores de tabela de itens no HAWB/AWB
-   - Documentos de transporte mostram peso bruto total diretamente (não calcular!)
-   
-   SOMENTE PARA PACKING LIST - O documento geralmente contém:
-   - Tabela com volumes individuais e seus pesos
-   - Total de volumes (ex: "3 Boxes" ou "3 Caixas" ou "3 Packages")
-   - Peso Bruto Total (soma dos pesos individuais)
-   - Peso Líquido Total
-   
-   ⚠️ COMO EXTRAIR PESO BRUTO NO PACKING LIST — REGRA CRÍTICA (OBRIGATÓRIO):
-   
-   a) PRIMEIRO: Buscar campo explícito "Gross Weight Total", "Total Gross Weight", "Total G.W."
-   
-   b) SE NÃO ENCONTRAR TOTAL EXPLÍCITO: Verificar se há tabela com itens individuais
-      - Se houver colunas como: Type, Packages, Size, Gross Weight
-      - E cada linha tem seu próprio "Gross weight" → SOMAR TODOS OS VALORES
+   B) EXTRAÇÃO DE "TOTAL CHARGES":
+      ⚠️ NÃO existe campo literal "Total Charges" no AWB padrão IATA!
+      ONDE PROCURAR:
+      → Linha "Total" na coluna "Prepaid" → valor do frete pré-pago
+      → Linha "Total" na coluna "Collect" → valor a cobrar no destino
+      → "Total Other Charges Due Agent/Carrier" → taxas adicionais
       
-      EXEMPLO de tabela no Packing List:
-      | Coli type        | Quantity | Gross weight |
-      | Carton           | 1        | 12.50 kg     |
-      | presswood pallet | 1        | 230.00 kg    |
-      | presswood pallet | 1        | 259.00 kg    |
-      
-      → Peso Bruto = 12.50 + 230.00 + 259.00 = 501.50 kg
-      → Indicar na tabela: "501.50 kg" (soma dos itens)
-      
-   c) NUNCA deixar "ND" se existirem dados individuais para somar!
-      - Se houver tabela com pesos por item → OBRIGATÓRIO somar
-      - Só usar "ND" se realmente não houver NENHUM dado de peso
+      COMO REPORTAR:
+      - Se PREPAID: Linha "Total Prepaid" com o valor
+      - Se COLLECT: Linha "Total Collect" com o valor
+      - NÃO inventar "Total Charges" se não existir explicitamente
    
-   d) Procurar "Number of Packages", "Qty", "No. of Packages" para total de volumes
-   e) Contar linhas de volumes na tabela se necessário
-   
-   VALIDAÇÃO:
-   - Peso Bruto > Peso Líquido (sempre verdade)
-   - Se houver discrepância entre soma e total declarado, reportar em observações
-   
-   ATENÇÃO: Muitas vezes os campos estão no rodapé ou em células específicas, procure em todo o documento!
+   C) COMPARAÇÃO COM CCT/BL:
+      - AWB "Total Prepaid" deve bater com valor de frete no CCT
+      - Diferenças em taxas acessórias → aplicar tolerância configurada
+      - Se AWB é "Collect" mas CCT mostra "Prepaid" → 🔴 CRÍTICO
 
-${clientConfig?.instrucoes_personalizadas ? `
-19) INSTRUÇÕES ESPECÍFICAS DO CLIENTE:
-${clientConfig.instrucoes_personalizadas}
-` : ''}`;
+15) REGRAS PARA DRAFT DI / RASCUNHO DI (ATENÇÃO MÁXIMA):
+   
+   A) IDENTIFICAÇÃO DO DOCUMENTO:
+      - Nomes típicos: "Rascunho_DI.pdf", "Draft_DI.pdf", "RelDI.pdf", "DI_Preliminar.xlsx"
+      - Contém campos como: CFOP, NCM, II, IPI, PIS, COFINS, ICMS
+      - Formato brasileiro com valores em BRL e moeda estrangeira
+   
+   B) EXTRAÇÃO DE VALORES — REGRA CRÍTICA:
+      ⚠️ O documento DI brasileiro tem DUAS COLUNAS de valores:
+      - "Moeda Estrangeira" (USD, EUR, etc.) — USAR ESTE!
+      - "Moeda Nacional" (BRL) — IGNORAR para comparação
+      
+      Para CADA campo de valor, SEMPRE extrair a coluna "Moeda Estrangeira"!
+   
+   C) CAMPOS CHAVE PARA COMPARAÇÃO:
+      - Valor Total Mercadoria (FOB/CIF)
+      - Valor Frete
+      - Valor Seguro (se aplicável)
+      - Valor VMLE (Valor da Mercadoria no Local de Embarque)
+      - Valor VMCV (se CIF)
+      - NCM (comparar com Invoice)
+      - Peso (comparar com BL/PL)
+   
+   D) VALIDAÇÕES FISCAIS:
+      - CFOP deve bater com tipo de operação
+      - Alíquotas de II, IPI devem ser consistentes com NCM
+      - Se cliente tem benefício fiscal → verificar aplicação correta
+`;
 }
 
-const EXTRACTION_INSTRUCTIONS = `
-═══════════════════════════════════════════════════════════════════════════════
-REGRAS DE EXTRAÇÃO — LEIA COM ATENÇÃO MÁXIMA
-═══════════════════════════════════════════════════════════════════════════════
-
-⚠️ REGRA #1: CADA ARQUIVO = UMA COLUNA NA TABELA
-- Se recebe 7 arquivos, a tabela tem 7 colunas de dados
-- Use o NOME EXATO de cada arquivo como cabeçalho
-
-⚠️ REGRA #2: LEIA TODO O DOCUMENTO
-- Totais ficam no RODAPÉ/FINAL da tabela
-- Procure em TODAS as páginas
-
-⚠️ REGRA #3: EXTRAIA DE TODOS OS DOCUMENTOS QUE CONTÊM O CAMPO
-| Campo            | Documentos Fonte (extrair de TODOS!) |
-|------------------|--------------------------------------|
-| Valor Mercadoria | INVOICE (soma dos itens no rodapé)   |
-| Peso Bruto       | PACKING LIST + HAWB + AWB + BL + HBL |
-| Peso Líquido     | PACKING LIST                         |
-| Frete            | HAWB + AWB + BL + HBL                |
-| Incoterm         | INVOICE + PACKING + HAWB/AWB/BL      |
-
-⚠️⚠️⚠️ EXTRAÇÃO DE PESO BRUTO DO HAWB/AWB — LEIA COM ATENÇÃO MÁXIMA! ⚠️⚠️⚠️
-
-ESTRUTURA TÍPICA DO HAWB/AWB (onde encontrar Peso Bruto):
-┌─────────────────────────────────────────────────────────────────────────────┐
-│ HAWB/AWB contém uma TABELA DE CARGA com estas colunas:                      │
-│                                                                             │
-│ No. of Pieces RCP │ Gross Weight │ kg lb │ Chargeable Weight │ Rate/Charge │
-│ ─────────────────────────────────────────────────────────────────────────── │
-│ 3                 │ 501,5        │ K     │ 501,5             │ ...         │
-│                                                                             │
-│ ⚠️ O PESO BRUTO está na coluna "Gross Weight" (segunda coluna numérica)    │
-│ ⚠️ NÃO é "Chargeable Weight" (quarta coluna) - são campos DIFERENTES!      │
-│ ⚠️ A coluna "kg lb" indica a unidade (K = kg, L = lb)                       │
-└─────────────────────────────────────────────────────────────────────────────┘
-
-ONDE PROCURAR NO HAWB:
-1. Procure a seção "Rate Description" ou tabela de carga (geralmente no meio do documento)
-2. Localize a coluna com rótulo "Gross Weight" ou "G.W." ou apenas "Gross"
-3. O valor está na LINHA DE DADOS (não no cabeçalho!)
-4. Geralmente é um número com vírgula (ex: 501,5) seguido de indicador K (kg)
-
-EXEMPLO REAL DE EXTRAÇÃO:
-- Se o HAWB mostra: "No. of Pieces: 3 | Gross Weight: 501,5 | K | Chargeable: 501,5"
-- O Peso Bruto do HAWB = 501,5 kg (coluna Gross Weight, NÃO Chargeable!)
-
-ERROS A EVITAR:
-❌ Pegar o "Chargeable Weight" em vez do "Gross Weight"
-❌ Inventar um valor que não está no documento
-❌ Copiar o valor do Packing List para o HAWB
-❌ Usar qualquer outro número do documento que não seja da coluna "Gross Weight"
-
-VERIFICAÇÃO:
-Antes de colocar o valor do HAWB na tabela, confirme:
-"Este valor está NA COLUNA 'Gross Weight' do HAWB?" 
-- Se SIM → use o valor
-- Se NÃO → está extraindo do lugar errado!
-
-⚠️⚠️⚠️ EXTRAÇÃO DE PESO BRUTO DO CCT (EXTRATO DO CONHECIMENTO ELETRÔNICO) ⚠️⚠️⚠️
-┌─────────────────────────────────────────────────────────────────────────────┐
-│ O CCT é um documento oficial brasileiro da Receita Federal!                 │
-│ Contém campos rotulados em PORTUGUÊS com estrutura específica:              │
-│                                                                             │
-│ ONDE PROCURAR:                                                              │
-│ 1. Seção "Dados Básicos" ou "Quantidades de volumes"                        │
-│ 2. O rótulo é exatamente: "Peso bruto (Kg):"                               │
-│ 3. O valor está LOGO ABAIXO ou AO LADO do rótulo                           │
-│                                                                             │
-│ ESTRUTURA TÍPICA DO CCT:                                                    │
-│ ┌────────────────────────────────┐                                         │
-│ │ Quantidades de volumes: 3      │                                         │
-│ │ Peso bruto (Kg):               │                                         │
-│ │ 501,500                        │ ← ESTE É O VALOR!                       │
-│ └────────────────────────────────┘                                         │
-│                                                                             │
-│ ⚠️ FORMATO BRASILEIRO:                                                      │
-│ - Usa VÍRGULA como separador decimal (ex: 501,500)                         │
-│ - Pode ter 3 casas decimais                                                │
-│ - Valor em kg (não em gramas!)                                             │
-│                                                                             │
-│ EXEMPLO REAL:                                                               │
-│ - CCT mostra: "Peso bruto (Kg):" seguido de "501,500"                      │
-│ - O Peso Bruto do CCT = 501,500 kg                                         │
-│                                                                             │
-│ ⚠️ O CCT NÃO TEM COLUNA "GROSS WEIGHT" - procure "Peso bruto (Kg):"!       │
-└─────────────────────────────────────────────────────────────────────────────┘
-
-⚠️⚠️⚠️ EXTRAÇÃO DE VALOR MERCADORIA DE INVOICES — ATENÇÃO ESPECIAL ⚠️⚠️⚠️
-┌─────────────────────────────────────────────────────────────────────────────┐
-│ CADA INVOICE TEM SEU PRÓPRIO VALOR TOTAL INDEPENDENTE:                      │
-│                                                                             │
-│ ONDE PROCURAR NA INVOICE:                                                   │
-│ 1. RODAPÉ da última página (mais comum!)                                    │
-│ 2. Seção "Summary" ou "Total"                                               │
-│ 3. Última linha da tabela de itens                                          │
-│                                                                             │
-│ RÓTULOS COMUNS:                                                             │
-│ - "Total amount", "Total", "Grand Total"                                    │
-│ - "Sub total", "Invoice Total"                                              │
-│ - "Montant Total", "Valor Total"                                            │
-│                                                                             │
-│ ESTRUTURA TÍPICA DE INVOICE:                                                │
-│ ┌──────────────────────────────────────────────────────────────────────┐   │
-│ │ Description    | Qty | Unit Price | Total                           │   │
-│ │ ───────────────────────────────────────────────────────────────────  │   │
-│ │ Item 1         | 10  | EUR 500    | EUR 5.000,00                    │   │
-│ │ Item 2         | 5   | EUR 650    | EUR 3.250,00                    │   │
-│ │ ───────────────────────────────────────────────────────────────────  │   │
-│ │                             Sub total: EUR 8.250,00                  │   │
-│ │                             VAT 0%:    EUR 0,00                      │   │
-│ │                             TOTAL:     EUR 8.250,00 ← ESTE VALOR!   │   │
-│ └──────────────────────────────────────────────────────────────────────┘   │
-│                                                                             │
-│ MÚLTIPLAS INVOICES (inv_01.pdf, inv_02.pdf, etc.):                         │
-│ ⚠️ EXTRAIR CADA UMA SEPARADAMENTE!                                          │
-│ ⚠️ NÃO copiar valor de uma para outra!                                      │
-│ ⚠️ Cada invoice tem SEU PRÓPRIO total!                                      │
-│                                                                             │
-│ EXEMPLO COM 2 INVOICES:                                                     │
-│ - inv_01.pdf → procure "Total amount" → EUR 28.234,23                      │
-│ - inv_02.pdf → procure "Total amount" → EUR 508,22                         │
-│ → Coluna inv_01.pdf: EUR 28.234,23                                         │
-│ → Coluna inv_02.pdf: EUR 508,22                                            │
-│                                                                             │
-│ OCR RUIM OU ILEGÍVEL:                                                       │
-│ - Se texto está corrompido/ilegível, OLHE A IMAGEM do documento            │
-│ - Procure tabelas no FINAL das páginas                                      │
-│ - O total geralmente está na ÚLTIMA página                                  │
-│ - Se realmente impossível ler → usar "ND" (NÃO INVENTAR!)                  │
-└─────────────────────────────────────────────────────────────────────────────┘
-
-⚠️ REGRA #4: VALOR MERCADORIA ≠ FRETE
-- VALOR MERCADORIA = total da Invoice (produtos vendidos)
-- FRETE = custo do transporte (campo "Freight" no AWB/BL)
-- São LINHAS SEPARADAS na tabela!
-
-⚠️ REGRA #5: QUANDO USAR "ND" vs "N/A (documento sem frete)"
-- "ND" = dado NÃO EXISTE naquele documento mas PODERIA existir
-- "N/A (documento sem frete)" = campo NÃO É APLICÁVEL ao tipo de documento
-- Invoice não tem peso? → ND na coluna da Invoice (normal!)
-- Packing List não tem frete? → "N/A (documento sem frete)" (é esperado!)
-- Invoice sem campo de frete? → "N/A (documento sem frete)" (é esperado!)
-- Se dado EXISTE mas está difícil de ler → Extraia assim mesmo!
-
-⚠️ REGRA #5.1: TRATAMENTO ESPECIAL - DOCUMENTOS SEM FRETE
-- Invoices e Packing Lists GERALMENTE não contêm frete
-- SE o documento não tiver campos de frete (Freight, Shipping Cost, Ocean Freight, etc.):
-  → Valor Total Frete = "N/A (documento sem frete)"
-  → Frete = "N/A (documento sem frete)"
-- USAR "N/A" para: Invoice, Packing List, Surcharges (quando não têm frete)
-- USAR "ND" apenas quando o campo DEVERIA existir (ex: AWB/BL sem frete = PROBLEMA!)
-- A diferença é semântica importante para auditoria!
-
-⚠️ REGRA #6: STATUS — CRITÉRIOS ABSOLUTAMENTE ESTRITOS PARA "CONFORME" (✅)
-
-═══════════════════════════════════════════════════════════════════════════════
-MAPEAMENTO OBRIGATÓRIO — QUAIS DOCUMENTOS CONSIDERAR POR CAMPO
-═══════════════════════════════════════════════════════════════════════════════
-
-⚠️ PARA CADA CAMPO, IGNORAR DOCUMENTOS QUE NÃO O POSSUEM NATURALMENTE!
-
-PESO BRUTO (kg):
-├── CONSIDERAR: CCT, HAWB/AWB, Packing List, BL/HBL
-├── IGNORAR: Invoice, Seguro (não possuem peso naturalmente!)
-├── NORMALIZAR ANTES DE COMPARAR: 501,500 = 501,5 = 501.5
-└── Se Invoice/Seguro = ND para peso → IGNORAR na comparação (esperado!)
-
-VALOR MERCADORIA:
-├── CONSIDERAR: Invoice(s), CCT, Seguro (como valor segurado)
-├── IGNORAR: HAWB/AWB, Packing List (não possuem valor mercadoria!)
-└── Se HAWB = ND para Valor Mercadoria → IGNORAR na comparação (esperado!)
-
-FRETE / VALOR TOTAL FRETE:
-├── CONSIDERAR: HAWB/AWB, BL/HBL, CCT
-├── IGNORAR COMPLETAMENTE: Invoice, Packing List, SEGURO
-├── ⚠️ O "VALOR SEGURADO" DO SEGURO NÃO É FRETE! É o valor da mercadoria!
-├── Seguro deve mostrar: "N/A (documento sem frete)" para campos de frete
-└── Comparar frete SOMENTE entre HAWB/AWB, BL/HBL e CCT
-
-DATA EMISSÃO — CAMPO INFORMATIVO (NÃO COMPARAR!):
-├── ⚠️ CADA DOCUMENTO TEM SUA PRÓPRIA DATA DE EMISSÃO!
-├── Invoice: data da venda | HAWB: data de emissão | CCT: data registro RFB
-├── Seguro: data da apólice | Packing: data de criação
-├── DATAS DIFERENTES SÃO ESPERADAS E NORMAIS!
-├── STATUS: ✅ CONFORME se cada documento tem sua data legível
-├── STATUS: 🟨 ALERTA apenas se documento deveria ter data mas está ND
-└── STATUS: 🔴 DIVERGENTE → NUNCA USAR PARA DATA EMISSÃO!
-
-═══════════════════════════════════════════════════════════════════════════════
-REGRA SUPREMA DE CONSISTÊNCIA — LEIA COM ATENÇÃO MÁXIMA!
-═══════════════════════════════════════════════════════════════════════════════
-
-PESO BRUTO — VALIDAÇÃO OBRIGATÓRIA:
-1. Extrair Peso Bruto de: Packing List, HAWB/AWB, BL/HBL, CCT
-2. COMPARAR TODOS os valores extraídos entre si
-3. Se QUALQUER valor for diferente dos outros → 🔴 DIVERGENTE (OBRIGATÓRIO!)
-4. Exemplo:
-   - Packing: 501,5 kg
-   - HAWB: 502,0 kg
-   - CCT: 501,5 kg
-   → Status: 🔴 DIVERGENTE (HAWB difere de Packing e CCT!)
-
-CONFORME (✅) SOMENTE quando TODOS estes critérios forem atendidos:
-1. TODOS os documentos que contêm o campo têm o MESMO valor NORMALIZADO
-2. NORMALIZAÇÃO OBRIGATÓRIA ANTES DE COMPARAR:
-   - Remover zeros à direita após decimal: 501,500 → 501,5
-   - Tratar vírgula e ponto como equivalentes: 501.5 = 501,5
-   - Ignorar separadores de milhar: 10.841 = 10841
-3. Após normalização, valores iguais = ✅ CONFORME
-4. EXEMPLOS DE CONFORME (✅):
-   - CCT: 501,500 | HAWB: 501,5 | Packing: 501,5 → ✅ (501,5 = 501,5 = 501,5)
-   - Invoice: EUR 10.841,00 | CCT: EUR 10841 → ✅ (mesmo valor numérico)
-   - Peso: 97,30 | Peso: 97,3 → ✅ (mesmo valor após normalização)
-5. NENHUMA diferença NUMÉRICA REAL é permitida para marcar ✅
-
-DIVERGENTE (🔴) OBRIGATÓRIO quando:
-- QUALQUER documento tem valor DIFERENTE dos demais (mesmo que por 0,1 kg!)
-- Exemplo: Packing = 501,5 kg | HAWB = 502,0 kg → 🔴 (diferença de 0,5 kg)
-- Exemplo: Invoice A = EUR 10.000 | Invoice B = EUR 10.001 → 🔴 
-- Datas de EMBARQUE/CHEGADA diferentes = 🔴
-- ⚠️ EXCEÇÃO ABSOLUTA: "Data Emissão" → Cada documento tem sua PRÓPRIA data!
-  → Datas de emissão diferentes entre documentos são ESPERADAS e NORMAIS!
-  → Status para Data Emissão com datas diferentes = ✅ CONFORME (não 🔴!)
-- Formatos de data que resultam em datas diferentes (exceto Data Emissão) = 🔴
-
-⚠️ ALERTA (🟨) quando:
-- Campo existe em apenas 1 documento (impossível comparar)
-- Todos os documentos têm ND para o campo
-- Dados incompletos que impedem verificação
-
-⚠️ REGRA "ND + Valor" — RESTRITIVA:
-- CAMPOS CRÍTICOS (peso_bruto, peso_liquido, valor_total, valor_mercadoria, frete, cnpj):
-  → Se ND em documento obrigatório que DEVERIA ter o campo → 🟨 ALERTA
-  → NUNCA ✅ se um documento tem valor e outro deveria ter mas está ND
-- CAMPOS NÃO-CRÍTICOS:
-  → Se apenas 1 documento tem valor e outros são ND → 🟨 (não ✅!)
-
-═══════════════════════════════════════════════════════════════════════════════
-VERIFICAÇÃO CRUZADA OBRIGATÓRIA — EXECUTAR PARA CADA LINHA
-═══════════════════════════════════════════════════════════════════════════════
-
-ANTES de marcar QUALQUER campo como ✅ CONFORME:
-1. Liste TODOS os valores extraídos de TODOS os documentos
-2. NORMALIZE cada valor (remover zeros à direita, uniformizar decimal)
-3. Compare os valores NORMALIZADOS
-4. Se valores NORMALIZADOS são IGUAIS → ✅ CONFORME (obrigatório!)
-5. Se valores NORMALIZADOS são DIFERENTES (mesmo 0,01) → 🔴 DIVERGENTE
-6. Tolerância = ZERO para valores NUMERICAMENTE diferentes após normalização
-
-⚠️ NORMALIZAÇÃO — DIFERENÇAS DE FORMATAÇÃO NÃO SÃO DIVERGÊNCIAS:
-- 501,500 vs 501,5 → ✅ CONFORME (mesmo valor: 501,5)
-- 501.50 vs 501,5 → ✅ CONFORME (mesmo valor: 501,5)
-- 10.841,00 vs 10841 → ✅ CONFORME (mesmo valor: 10841)
-- 97,30 vs 97,3 → ✅ CONFORME (mesmo valor: 97,3)
-
-⚠️ DIVERGÊNCIAS REAIS (valores NUMERICAMENTE diferentes):
-- 501,5 vs 502,0 → 🔴 DIVERGENTE (diferença de 0,5!)
-- 500 vs 501 → 🔴 DIVERGENTE (diferença de 1!)
-- 10.841 vs 10.842 → 🔴 DIVERGENTE (diferença de 1!)
-
-CHECKLIST MENTAL OBRIGATÓRIO:
-□ Extraí o valor de CADA documento que contém este campo?
-□ TODOS os valores são EXATAMENTE iguais (numericamente)?
-□ Se NÃO → 🔴 DIVERGENTE (não há exceção!)
-□ Se SIM → ✅ CONFORME
-
-ERRO GRAVE A EVITAR:
-- Marcar ✅ quando valores são diferentes
-- Ignorar diferenças "pequenas" (0,5 kg, EUR 1, etc.)
-- Copiar valor de um documento para outro
-- Assumir que documentos têm o mesmo valor sem verificar
-
-EXEMPLO DE ERRO A EVITAR:
-- Invoice 1: EUR 10.000,00
-- Invoice 2: EUR 12.500,00  
-- Packing: ND
-→ Status CORRETO: 🔴 DIVERGENTE (valores diferentes entre invoices!)
-→ Status ERRADO: ✅ (a regra "ND + Valor" NÃO se aplica aqui!)
-
-⚠️ REGRA #9: CONSISTÊNCIA E DETERMINISMO
-ORDEM DE PROCESSAMENTO (sempre seguir):
-1. Ler TODOS os documentos ANTES de iniciar comparação
-2. Para cada campo, listar TODOS os valores encontrados em TODOS os docs
-3. Só então determinar status baseado nas regras acima
-
-EXTRAÇÃO DETERMINÍSTICA:
-- Se houver múltiplas ocorrências do mesmo campo, usar o valor do CABEÇALHO ou RESUMO
-- Se houver tabela com subtotais e total geral, usar o TOTAL GERAL
-- Em caso de ambiguidade, marcar como 🟨 com observação explicando
-
-═══════════════════════════════════════════════════════════════════════════════
-⚠️⚠️⚠️ REGRA ANTI-ALUCINAÇÃO — CRÍTICA! LEIA COM ATENÇÃO MÁXIMA! ⚠️⚠️⚠️
-═══════════════════════════════════════════════════════════════════════════════
-
-VOCÊ ESTÁ ABSOLUTAMENTE PROIBIDO DE:
-1. INVENTAR valores que não existem no documento
-2. COPIAR valor de um documento para outro
-3. ASSUMIR que dois documentos têm o mesmo valor
-4. ARREDONDAR ou MODIFICAR valores extraídos
-5. CALCULAR valores (exceto soma de Packing List quando explicitamente instruído)
-6. USAR um valor que você "acha" que deveria estar lá
-
-SE VOCÊ NÃO ENCONTRAR O CAMPO NO DOCUMENTO → USE "ND"!
-Não invente! Não adivinhe! Não copie de outro documento!
-
-PARA CADA DOCUMENTO, VOCÊ DEVE:
-1. LER o documento INTEIRO
-2. LOCALIZAR o campo específico (Peso Bruto, Valor, etc.) COM O RÓTULO CORRETO
-3. TRANSCREVER o valor EXATAMENTE como aparece ao lado do rótulo
-4. Se não encontrar o campo COM SEU RÓTULO → usar "ND"
-
-⚠️ VERIFICAÇÃO OBRIGATÓRIA ANTES DE INCLUIR QUALQUER VALOR:
-
-PASSO 1: Pergunte-se: "Eu vi o RÓTULO deste campo neste documento?"
-- Exemplo: Para Peso Bruto no HAWB, procure "Gross Weight" ou "G.W."
-- Se NÃO encontrou o rótulo → use "ND"
-
-PASSO 2: Pergunte-se: "Qual valor está AO LADO deste rótulo?"
-- Extraia APENAS o valor que está associado ao rótulo correto
-- Se o rótulo não tem valor associado → use "ND"
-
-PASSO 3: Pergunte-se: "Este valor faz sentido para este campo?"
-- Peso Bruto deve ser um número em kg (ex: 501,5 kg)
-- Valor Mercadoria deve ser um valor em moeda (ex: EUR 10.000,00)
-- Se não faz sentido → provavelmente está extraindo do lugar errado!
-
-ERRO GRAVÍSSIMO (NUNCA FAZER!):
-- Inventar o valor "518 kg" se esse número NÃO APARECE no documento!
-- Ver "518" em um lugar do documento e assumir que é Peso Bruto sem verificar o rótulo!
-- Copiar "518" de outro documento porque "deve ser o mesmo valor"!
-
-⚠️⚠️⚠️ VALIDAÇÃO ANTI-ALUCINAÇÃO ESPECÍFICA - PESO BRUTO ⚠️⚠️⚠️
-┌─────────────────────────────────────────────────────────────────────────────┐
-│ ANTES de colocar QUALQUER valor de Peso Bruto na tabela:                    │
-│                                                                             │
-│ TESTE 1: O valor está com o RÓTULO correto?                                │
-│ - HAWB: "Gross Weight" ou "G.W."                                           │
-│ - CCT: "Peso bruto (Kg):"                                                  │
-│ - Packing: "Gross Weight", "Total Weight", ou tabela de itens              │
-│                                                                             │
-│ TESTE 2: O valor faz sentido para PESO?                                    │
-│ - Deve ser um número em kg (100-2000 kg tipicamente para carga aérea)      │
-│ - Se o número parecer "estranho" → revisar de onde está extraindo!         │
-│                                                                             │
-│ TESTE 3: O valor NÃO é de outro campo?                                     │
-│ - Não é "Chargeable Weight" (HAWB)                                         │
-│ - Não é valor monetário (USD, EUR, BRL)                                    │
-│ - Não é quantidade de volumes                                               │
-│ - Não é dimensões (cm, m)                                                  │
-│                                                                             │
-│ ⚠️ EXEMPLO DE ERRO ESPECÍFICO A EVITAR:                                     │
-│ - O número "518" NÃO APARECE como Peso Bruto em documentos típicos!        │
-│ - Se você está colocando "518" → REVISE! Provavelmente é alucinação!       │
-│ - Valores comuns: ~501-502 kg (para esta conferência específica)           │
-│                                                                             │
-│ SE QUALQUER DÚVIDA → USE "ND"! É MELHOR QUE INVENTAR!                      │
-└─────────────────────────────────────────────────────────────────────────────┘
-
-SE O HAWB NÃO TEM "GROSS WEIGHT" COM UM VALOR → HAWB = "ND" para Peso Bruto!
-SE O CCT NÃO TEM "Peso bruto (Kg):" COM UM VALOR → CCT = "ND" para Peso Bruto!
-
-EXEMPLO DE ERRO GRAVE (NÃO FAZER!):
-- HAWB mostra: "Gross Weight: 502,0 kg"
-- Packing mostra: "Total Gross: 501,5 kg"
-→ ERRO: Colocar 501,5 kg para HAWB (copiou do Packing!)
-→ CORRETO: HAWB = 502,0 kg | Packing = 501,5 kg
-
-⚠️ REGRA #9.1: MÚLTIPLOS ARQUIVOS DO MESMO TIPO — EXTRAÇÃO INDEPENDENTE
-QUANDO há múltiplas Invoices (inv_01.pdf, inv_02.pdf, etc.):
-- CADA ARQUIVO TEM VALORES PRÓPRIOS — EXTRAIR DE CADA UM SEPARADAMENTE!
-- NÃO copiar valor de um arquivo para outro
-- NÃO assumir que invoices diferentes têm o mesmo valor
-- OBRIGATÓRIO ler CADA documento e extrair SEU valor individual
-
-EXEMPLO:
-- inv_01.pdf contém: "Total: EUR 5.000,00"
-- inv_02.pdf contém: "Total: EUR 7.500,00"
-→ Coluna inv_01.pdf: EUR 5.000,00
-→ Coluna inv_02.pdf: EUR 7.500,00
-→ Status: depende da comparação entre ambos
-
-ERRO A NÃO COMETER:
-→ Mostrar EUR 5.000,00 para AMBAS as invoices (copiando da primeira)
-→ Isso é ERRO GRAVE de extração!
-
-NUNCA INFERIR OU CALCULAR:
-- Se o documento não mostra o valor explicitamente COM SEU RÓTULO, usar "ND"
-- Não somar linhas para obter total (a menos que instruído explicitamente para Packing List)
-- Não converter moedas entre si
-- Não "adivinhar" valores baseado em outros documentos
-
-⚠️ TRANSCRIÇÃO LITERAL OBRIGATÓRIA:
-- Se documento mostra "501,5 kg" → escreva "501,5 kg"
-- Se documento mostra "502.0 KG" → escreva "502.0 kg"
-- NUNCA modifique o valor numérico!
-- NUNCA "ajuste" um valor para "bater" com outro documento!
-
-REGRA DE OURO:
-→ Se você não tem 100% de certeza de que viu o valor no documento → use "ND"
-→ É melhor ter "ND" do que um valor INVENTADO!
-
-⚠️ REGRA #10: CAMPOS SEM BASE DE COMPARAÇÃO → ALERTA (🟨)
-
-APLICAR ESTA REGRA ANTES DAS DEMAIS para cada linha da tabela:
-
-CENÁRIO 1: TODOS os documentos têm ND ou N/A para um campo
-- Se Invoice = ND, Packing = ND, HAWB = ND, Seguro = N/A → Status: 🟨 (alerta)
-- Observação OBRIGATÓRIA: "Não é possível definir conformidade por falta de valores em todos os documentos"
-
-CENÁRIO 2: APENAS UM documento tem valor, demais são ND/N/A
-- Se Invoice = EUR 10.000, Packing = ND, HAWB = ND, Seguro = N/A → Status: 🟨 (alerta)
-- Observação OBRIGATÓRIA: "Apenas 1 documento contém valor para este campo, impossível verificar conformidade por comparação"
-
-CENÁRIO 3: DOIS ou mais documentos têm valores comparáveis
-- Se valores são IGUAIS (após normalização numérica) → ✅ CONFORME
-- Se valores diferem além da tolerância → aplicar 🟨 ou 🔴 conforme regras
-
-⚠️ REGRA CRÍTICA CENÁRIO 3:
-- Dois docs com valores equivalentes (ex: 97,3 e 97,30) → ✅ OBRIGATÓRIO!
-- NÃO marcar como 🟨 se valores são iguais após normalização
-
-VERIFICAÇÃO OBRIGATÓRIA:
-- Para CADA linha/campo da tabela, ANTES de definir status final:
-  1. Contar quantos documentos têm valor real (não ND, não N/A)
-  2. Se nenhum tem valor → 🟨 com observação de cenário 1
-  3. Se apenas 1 tem valor → 🟨 com observação de cenário 2
-  4. Se 2+ têm valor → aplicar comparação normal
-
-⚠️ REGRA DE DATA — COM EXCEÇÃO IMPORTANTE:
-
-CAMPOS DE DATA DE COMPARAÇÃO (devem ser iguais):
-- Data de Embarque / Shipping Date → 🔴 se diferentes
-- Data de Chegada / Arrival Date → 🔴 se diferentes
-- Data do BL / BL Date → verificar consistência
-
-⚠️ EXCEÇÃO OBRIGATÓRIA — DATA DE EMISSÃO:
-┌───────────────────────────────────────────────────────────────────────────────┐
-│ O campo "Data Emissão" NÃO É para comparação entre documentos!               │
-│ Cada documento tem sua PRÓPRIA data de emissão:                              │
-│ - Invoice: 17/12/2025 (data da venda)                                        │
-│ - HAWB: 19/12/2025 (data de emissão do conhecimento)                         │
-│ - CCT: 29/12/2025 (data de registro na RFB)                                  │
-│ - Seguro: 22/12/2025 (data da apólice)                                       │
-│ - Packing: 17/12/2025 (data de criação)                                      │
-│                                                                               │
-│ DATAS DIFERENTES PARA "Data Emissão" = ✅ CONFORME (comportamento esperado!) │
-│ NÃO MARCAR 🔴 DIVERGENTE PARA DATA EMISSÃO!                                  │
-└───────────────────────────────────────────────────────────────────────────────┘
-
-⚠️ EXEMPLOS ESPECÍFICOS DE CONFERÊNCIAS ANTERIORES:
-
-PESO BRUTO — NORMALIZAÇÃO OBRIGATÓRIA:
-| Documento | Valor Extraído | Normalizado | Incluir na Comparação? |
-|-----------|----------------|-------------|------------------------|
-| CCT       | 501,500        | 501,5       | ✅ SIM                 |
-| HAWB      | 501,5          | 501,5       | ✅ SIM                 |
-| Packing   | 501,5          | 501,5       | ✅ SIM                 |
-| Invoice   | ND             | -           | ❌ NÃO (não tem peso)  |
-| Seguro    | ND             | -           | ❌ NÃO (não tem peso)  |
-
-→ Comparar apenas: CCT, HAWB, Packing
-→ Após normalização: 501,5 = 501,5 = 501,5 → ✅ CONFORME
-→ SE MARCOU 🔴 PARA 501,500 vs 501,5 → VOCÊ ERROU!
-
-VALOR TOTAL FRETE — IGNORAR SEGURO:
-| Documento | Valor         | É Frete Real?          | Incluir? |
-|-----------|---------------|------------------------|----------|
-| HAWB      | EUR 1.840,70  | SIM (frete)            | ✅ SIM   |
-| Invoice   | N/A           | NÃO (não tem frete)    | ❌ NÃO   |
-| Packing   | N/A           | NÃO (não tem frete)    | ❌ NÃO   |
-| SEGURO    | EUR 35.662,74 | NÃO! É VALOR SEGURADO! | ❌ NÃO   |
-
-→ O EUR 35.662,74 do SEGURO é VALOR SEGURADO da mercadoria, NÃO É FRETE!
-→ Seguro deve mostrar "N/A (documento sem frete)" para campos de frete
-→ Comparar frete apenas entre: HAWB, BL, CCT
-→ SE incluiu valor do Seguro como frete → VOCÊ ERROU!
-
-DATA EMISSÃO — NÃO COMPARAR:
-| Documento | Data       | Significado              |
-|-----------|------------|--------------------------|
-| CCT       | 29/12/2025 | Data registro RFB        |
-| HAWB      | 19/12/2025 | Data emissão conhecimento|
-| Invoice 1 | 17/12/2025 | Data da venda            |
-| Invoice 2 | 17/12/2025 | Data da venda            |
-| Packing   | 17/12/2025 | Data criação documento   |
-| Seguro    | 22/12/2025 | Data da apólice          |
-
-→ Cada documento tem sua própria data = ✅ CONFORME
-→ Datas diferentes são ESPERADAS e NORMAIS!
-→ SE MARCOU 🔴 PARA ESTE CENÁRIO → VOCÊ ERROU!
-
-═══════════════════════════════════════════════════════════════════════════════
-⚠️⚠️⚠️ REGRA CRÍTICA — QUANDO IGNORAR vs QUANDO COMPARAR ⚠️⚠️⚠️
-═══════════════════════════════════════════════════════════════════════════════
-
-⚠️ DISTINÇÃO FUNDAMENTAL — LEIA COM ATENÇÃO:
-
-IGNORAR NA COMPARAÇÃO (não afeta determinação de status):
-├── Quando o documento NÃO POSSUI o campo NATURALMENTE
-│   → HAWB não tem "Valor Mercadoria" → ignorar ND do HAWB
-│   → Invoice não tem "Peso Bruto" → ignorar ND da Invoice
-│   → Seguro não tem "Frete" → mostrar "N/A (documento sem frete)"
-│   → Packing não tem "Frete" → mostrar "N/A (documento sem frete)"
-├── O valor é explicitamente ND/N/A porque o campo não existe no tipo de documento
-
-COMPARAR OBRIGATORIAMENTE (afeta determinação de status):
-├── Quando o documento POSSUI o campo e tem um valor extraído
-│   → Invoice tem "Valor Mercadoria" = EUR X → INCLUIR na comparação!
-│   → HAWB tem "Peso Bruto" = 501,5 kg → INCLUIR na comparação!
-│   → CCT tem "Peso Bruto" = 501,500 kg → INCLUIR na comparação!
-├── TODOS os valores reais DEVEM ser comparados entre si
-├── Se valores são IGUAIS (após normalização) → ✅ CONFORME
-├── Se valores são DIFERENTES → 🔴 DIVERGENTE
-
-⚠️ REGRA DE MÚLTIPLAS INVOICES — SOMA E COMPARAÇÃO:
-┌───────────────────────────────────────────────────────────────────────────────┐
-│ CENÁRIO: Múltiplas invoices com valores diferentes de Valor Mercadoria       │
-│                                                                               │
-│ PASSO 1: Verificar se são invoices para ITENS DIFERENTES da mesma remessa    │
-│ - Invoice 1: Item A = EUR 28.234,23                                          │
-│ - Invoice 2: Item B = EUR 508,22                                             │
-│ - SOMA das invoices = EUR 28.742,45                                          │
-│                                                                               │
-│ PASSO 2: Comparar SOMA das invoices com valor total no CCT ou Seguro         │
-│ - Se SOMA ≈ Valor CCT ou Valor Segurado → ✅ CONFORME                         │
-│ - Se SOMA ≠ Valor CCT e ≠ Valor Segurado → 🔴 DIVERGENTE                     │
-│                                                                               │
-│ PASSO 3: Na observação, explicar                                             │
-│ - "Soma das invoices (EUR 28.742,45) confere com valor no CCT/Seguro"        │
-│                                                                               │
-│ ⚠️ NOTA: Múltiplas invoices para itens diferentes NÃO são divergência!       │
-│ A divergência só existe se a SOMA não bater com CCT/Seguro                   │
-└───────────────────────────────────────────────────────────────────────────────┘
-
-⚠️ VALOR SEGURADO NO SEGURO — ATENÇÃO:
-├── O Valor Segurado pode incluir valor da mercadoria + frete + seguro adicional
-├── É NORMAL que Valor Segurado > Soma das Invoices
-├── Para Valor Mercadoria: Comparar Invoices vs CCT PRINCIPALMENTE
-├── Se Valor Segurado > Soma Invoices mas CCT ≈ Soma Invoices → ✅ CONFORME
-
-═══════════════════════════════════════════════════════════════════════════════
-⚠️ VALIDAÇÃO FINAL OBRIGATÓRIA — EXECUTAR ANTES DE GERAR RESPOSTA
-═══════════════════════════════════════════════════════════════════════════════
-
-PARA CADA LINHA DA TABELA, VERIFICAR SE VOCÊ SEGUIU AS REGRAS:
-
-□ PESO BRUTO: 
-  ├── Você normalizou 501,500 e 501,5 para o mesmo valor?
-  ├── Se sim e são iguais → Status DEVE ser ✅ CONFORME
-  └── Se marcou 🔴 para 501,500 vs 501,5 → CORRIJA para ✅
-
-□ DATA EMISSÃO: 
-  ├── Este é um campo INFORMATIVO, não comparativo
-  ├── Datas diferentes entre documentos são ESPERADAS
-  └── Status DEVE ser ✅ CONFORME (a menos que falte data obrigatória)
-
-□ VALOR TOTAL FRETE:
-  ├── Você incluiu o valor do Seguro na comparação de frete?
-  ├── Se sim → REMOVA! Seguro não tem frete, use "N/A (documento sem frete)"
-  └── Compare APENAS: HAWB/AWB, BL/HBL, CCT
-
-□ VALOR MERCADORIA com múltiplas invoices:
-  ├── Se Invoice 1 ≠ Invoice 2, você SOMOU para comparar com CCT?
-  ├── Se soma ≈ CCT → ✅ CONFORME
-  └── Se não somou → RECALCULE!
-
-□ Nº CONHECIMENTO:
-  ├── Cada documento TEM SEU PRÓPRIO número de conhecimento
-  ├── HAWB tem um número, BL tem outro, CCT tem outro
-  ├── ISSO NÃO É DIVERGÊNCIA se são números de documentos diferentes
-  └── Verificar apenas se o MESMO documento é referenciado consistentemente
-
-⚠️ SE O STATUS GERADO VIOLA ESTAS REGRAS → CORRIJA ANTES DE RESPONDER!
-
-⚠️ REGRA #7: SEMPRE INCLUA MOEDA
-- Exemplo: "EUR 28.234,23" não apenas "28.234,23"
-
-═══════════════════════════════════════════════════════════════════════════════
-SINÔNIMOS PARA BUSCAR (PROCURE TODAS AS VARIAÇÕES!)
-═══════════════════════════════════════════════════════════════════════════════
-
-PESO BRUTO: 
-  Gross Weight, G.W., GW, Total Weight, Bruto, Total Bruto, Peso Total,
-  Weight, Wgt, Total Wt, Chargeable Weight (se único peso disponível)
-
-PESO LÍQUIDO: 
-  Net Weight, N.W., NW, Líquido, Net, Nett Weight, Product Weight
-
-QUANTIDADE:
-  Quantity, Qty, QTY, Pcs, Pieces, Units, UN, Packages, Pkgs, Cartons, CTN,
-  No. of Packages, Number of Packages, Volume (un.)
-
-FRETE:
-  Freight, Ocean Freight, Air Freight, Freight Charges, Sea Freight,
-  Prepaid Amount, Collect Amount, Charges, Transportation
-
-VALOR MERCADORIA:
-  Total Items, Merchandise Total, Subtotal, Total Goods, Invoice Total,
-  Total Value, Valor Total Mercadoria, Commercial Value, FOB Value,
-  Net Amount, Valor da Mercadoria
-
-VALOR TOTAL FRETE (na tabela Prepaid/Collect):
-  Total (coluna Prepaid), Total (coluna Collect), Total Prepaid,
-  Total Collect, Total Charges, Freight Total, Grand Total (em BL/CCT),
-  Amount Due, Total Amount, Final Amount (quando em BL/AWB/CCT)
-  
-  ⚠️ REGRA CRÍTICA PARA AWB/HAWB — VALOR TOTAL FRETE:
-  - PROCURE a linha "Total Collect" ou "Total Prepaid" no RODAPÉ do documento
-  - Esta linha geralmente está em uma CAIXA DESTACADA ou em negrito
-  - É a SOMA de: Weight Charge + Other Charges (MAA, THC, FSC, AWB Fee, etc.)
-  - NÃO confunda com:
-    → "Total Charge" na tabela de itens (é só o frete base sem taxas)
-    → "Weight Charge" isolado (é só uma parcela do total)
-    → "Chargeable Weight" (é PESO, não valor!)
-  - Se existem DUAS colunas (Prepaid + Collect), somar AMBAS para o total real
-  - Exemplo de extração correta:
-    Weight Charge:         1.589,76 EUR
-    Other Charges (MAA):     165,94 EUR
-    AWB Fee:                  85,00 EUR
-    ─────────────────────────────────────
-    Total Collect:        1.840,70 EUR ← USAR ESTE!
-
-INCOTERM:
-  Delivery Terms, Trade Terms, Terms of Delivery, Shipment Terms,
-  Freight Terms, Condition of Sale, Terms of Sale, Shipping Terms,
-  Terms, Delivery Condition, Delivery Incoterms, Sales Terms
-  
-  ⚠️ REGRA DE CONSISTÊNCIA OBRIGATÓRIA PARA INCOTERM:
-  - Se "Delivery Terms" foi reconhecido como Incoterm em Invoice ou CCT
-    → DEVE ser reconhecido da MESMA FORMA em Packing List e outros documentos
-  - Valores típicos a buscar: EXW, FOB, CIF, CFR, DDP, DAP, FCA, CPT, CIP
-  - APLICAR reconhecimento CONSISTENTE em TODOS os tipos de documento
-  - NÃO deixar "ND" para Incoterm em Packing List se Invoice tem "Delivery Terms"
-
-DATA EMISSÃO:
-  Issue Date, Date of Issue, Issued, Dated, Invoice Date, Date,
-  B/L Date, AWB Date, Document Date, Creation Date
-
-CONSIGNATÁRIO:
-  Consignee, CNPJ, Destinatário, Notify Party, Ship To, Deliver To,
-  Importer, Buyer, Comprador
-
-NCM:
-  HS Code, HTS, Tariff Code, Commodity Code, Classification,
-  NCM/SH, Código NCM
-
-CONTAINERS:
-  Container No., Container Number, CNTR No., Equipment,
-  Container ID, Seal No., Lacre, Container/Seal
-
-═══════════════════════════════════════════════════════════════════════════════
-ESTRUTURA TÍPICA DE CADA DOCUMENTO (onde encontrar cada valor)
-═══════════════════════════════════════════════════════════════════════════════
-
-INVOICE COMERCIAL:
-├── Cabeçalho: Shipper, Consignee, Invoice Number, Date
-├── Tabela de Itens: Description, Quantity, Unit Price, Amount
-├── Rodapé: Incoterm, Total Items, Currency
-└── ATENÇÃO: "Total" ou "Total Items" aqui é VALOR MERCADORIA!
-
-PACKING LIST:
-├── Cabeçalho: Shipper, Consignee, Reference
-├── Tabela: Description, Quantity, Net Weight, Gross Weight
-├── Totais: Total Packages, Total Net Weight, Total Gross Weight
-└── ATENÇÃO: Peso BRUTO e LÍQUIDO devem vir DAQUI!
-
-CCT / BL (Conhecimento de Transporte):
-├── Cabeçalho: Shipper, Consignee, Notify, Port of Loading/Discharge
-├── Descrição da Carga: Container, Description, Weight, Volume
-├── ⚠️ PESO BRUTO: Procurar "Weight", "Gross Weight", "G.W." na descrição da carga
-│   → CCT CONTÉM PESO BRUTO! Extrair e incluir na coluna do CCT!
-├── TABELA PREPAID/COLLECT:
-│   ├── Ocean Freight / Air Freight
-│   ├── BAF, CAF, THC, etc.
-│   ├── Impostos
-│   └── TOTAL ← Este é o VALOR TOTAL FRETE!
-└── ATENÇÃO: O "Total" na coluna Prepaid/Collect é FRETE, não mercadoria!
-
-AWB / HAWB (Air Waybill / House Air Waybill):
-├── Cabeçalho: Shipper, Consignee, Agent, Carrier
-├── Tabela de Carga: Pieces, Gross Weight, Chargeable Weight, Rate, Total Charge
-├── TABELA DE CHARGES (estrutura típica em duas colunas):
-│   ├── COLUNA PREPAID:
-│   │   ├── Weight Charge (frete base calculado por kg)
-│   │   ├── Valuation Charge
-│   │   ├── Tax
-│   │   └── Total Other Charges Due Agent
-│   ├── COLUNA COLLECT:
-│   │   ├── Other Charges (MAA, AWB Fee, FSC, THC, etc.)
-│   │   ├── Total Other Charges Due Agent
-│   │   └── Total Other Charges Due Carrier
-│   └── LINHA FINAL: "TOTAL PREPAID" ou "TOTAL COLLECT" ← ESTE É O VALOR TOTAL FRETE!
-├── ATENÇÃO CRÍTICA para extração de VALOR TOTAL FRETE:
-│   ├── PROCURE a linha "Total Collect" ou "Total Prepaid" no RODAPÉ
-│   ├── Esta linha geralmente está em uma CAIXA DESTACADA ou em negrito
-│   ├── É a SOMA de Weight Charge + Other Charges + Taxes
-│   ├── NÃO confunda com:
-│   │   → "Total Charge" na tabela de itens (é só o frete base sem taxas de agente)
-│   │   → "Weight Charge" isolado (é só uma parcela)
-│   │   → "Chargeable Weight" (é peso, não valor!)
-│   └── Exemplo típico de HAWB:
-│       Weight Charge:           1.589,76 EUR (Prepaid)
-│       Other Charges (MAA):       165,94 EUR (Collect)
-│       AWB Fee:                    85,00 EUR (Collect)
-│       ─────────────────────────────────────────────
-│       Total Collect:           1.840,70 EUR ← USAR ESTE VALOR!
-└── Se existem valores em AMBAS as colunas (Prepaid + Collect), somar para obter o total real
-
-═══════════════════════════════════════════════════════════════════════════════
-VALIDAÇÃO FINAL OBRIGATÓRIA — EXECUTAR ANTES DE GERAR O RESULTADO
-═══════════════════════════════════════════════════════════════════════════════
-
-⚠️ ATENÇÃO: EXECUTE ESTA VERIFICAÇÃO PARA CADA LINHA DA TABELA!
-
-PARA O CAMPO "PESO BRUTO":
-1. Listar todos os valores extraídos:
-   - Packing List: _____ kg
-   - HAWB: _____ kg
-   - CCT: _____ kg
-   - Outros: _____ kg
-
-2. Comparar TODOS os valores numericamente:
-   - Se TODOS são iguais (ex: 501,5 = 501,5 = 501,5) → ✅ CONFORME
-   - Se QUALQUER valor difere (ex: 501,5 ≠ 502,0) → 🔴 DIVERGENTE
-
-3. NÃO HÁ EXCEÇÃO para valores diferentes!
-   - 501,5 vs 502,0 = 🔴 (diferença de 0,5 kg)
-   - 500 vs 501 = 🔴 (diferença de 1 kg)
-   - 10.841 vs 10.842 = 🔴 (diferença de 1 kg)
-
-ERRO FATAL A EVITAR:
-❌ Marcar ✅ quando HAWB mostra valor diferente de Packing ou CCT
-❌ Ignorar pequenas diferenças (toda diferença conta!)
-❌ Assumir que documentos concordam sem verificar cada um
-
-REGRA DE OURO:
-→ Se você extraiu valores DIFERENTES de documentos DIFERENTES = 🔴 DIVERGENTE
-→ Não importa se a diferença é pequena
-→ Não importa se "parece arredondamento"
-→ VALORES DIFERENTES = 🔴, SEMPRE!
-`;
-
-
+// =============================================================================
+// STEP-SPECIFIC PROMPTS
+// =============================================================================
 
 function getPromptByStep(stepId: number, fileNames: string[], clientConfig?: ClientConfig): string {
-  const fileListText = fileNames.map((name, i) => `${i + 1}. ${name}`).join('\n');
-  const columnHeaders = fileNames.join(' | ');
   const tableSpec = buildTableSpec(clientConfig);
   
-  // Add client context if available
-  const clientContext = clientConfig?.cliente_nome 
-    ? `\nCLIENTE IDENTIFICADO: ${clientConfig.cliente_nome}\nAplicando regras de validação personalizadas para este cliente.\n`
-    : '';
-
-  if (stepId === 1) {
-    return `
-SISTEMA — CRONOS v4.0 (Auditor de Importação)
-${clientContext}
-
-Você é o CRONOS, auditor especialista em comércio exterior brasileiro.
-Sua missão: EXTRAIR e COMPARAR dados dos documentos recebidos.
+  // Add client-specific instructions if available
+  let clientInstructions = '';
+  if (clientConfig?.instrucoes_personalizadas) {
+    clientInstructions = `
 
 ═══════════════════════════════════════════════════════════════════════════════
-ARQUIVOS RECEBIDOS (${fileNames.length} documentos):
+⚠️ INSTRUÇÕES ESPECÍFICAS DO CLIENTE (PRIORIDADE MÁXIMA):
 ═══════════════════════════════════════════════════════════════════════════════
-${fileListText}
-
-IDENTIFICAÇÃO DE TIPOS:
-- inv_XX.pdf ou Invoice = INVOICE COMERCIAL → extrair VALOR DA MERCADORIA
-- pack_XX.pdf ou Packing = PACKING LIST → extrair PESOS
-- HAWB.pdf ou AWB = CONHECIMENTO AÉREO → extrair FRETE AÉREO + PESO BRUTO + VALOR TOTAL FRETE (Total Collect/Prepaid)
-- BL ou HBL = CONHECIMENTO MARÍTIMO → extrair FRETE MARÍTIMO + PESO BRUTO + VALOR TOTAL FRETE
-- cct.pdf = COMPROVANTE CCT → extrair PESO BRUTO (campo "Weight" ou "Gross Weight") + VALOR TOTAL FRETE
-- relatorio_di = DRAFT DI
-- SEGURO ou Certificado ou Apólice = APÓLICE DE SEGURO
-  → Incluir como COLUNA na tabela de comparação (igual aos outros docs)
-  → Extrair dados para campos que JÁ EXISTEM (Consignee, Valor, Descrição)
-  → NÃO criar campos exclusivos (Nº Apólice, Vigência, Prêmio)
-
+${clientConfig.instrucoes_personalizadas}
 ═══════════════════════════════════════════════════════════════════════════════
-CAMPOS OBRIGATÓRIOS NA TABELA (cada um em sua linha):
-═══════════════════════════════════════════════════════════════════════════════
-⚠️ REGRA CRÍTICA: Extrair cada campo de TODOS os documentos que o contêm!
-   Use "+" (extrair de todos) e NÃO "ou" (escolher um)!
-
-1. Consignee/CNPJ - extrair de INVOICE + PACKING + HAWB/BL + CCT (TODOS!)
-2. Incoterm (FOB, CFR, CIF, etc.) - extrair de INVOICE + PACKING + HAWB/BL + CCT (TODOS!)
-3. Peso Bruto (kg) - extrair de PACKING LIST + CCT + HAWB + BL (TODOS que tiverem!)
-   → Cada documento deve ter sua própria coluna com o valor extraído
-4. Peso Líquido (kg) - do PACKING LIST (se disponível)
-5. Valor Mercadoria (COM MOEDA!) - da INVOICE, procure "Total Items" (ex: EUR 28.234,23)
-6. Frete (COM MOEDA!) - do AWB + HAWB + BL (TODOS!), linha Ocean/Air Freight ou Weight Charge
-7. Valor Total Frete (COM MOEDA!) - do HAWB + AWB + CCT + BL (TODOS!), linha "Total Collect" ou "Total Prepaid"
-8. NCM Principal - extrair de INVOICE + PACKING + DI (TODOS!)
-9. Nº Conhecimento - extrair de HAWB + AWB + BL + CCT (TODOS!)
-10. Data Emissão (de cada documento) - extrair de TODOS os documentos!
-
-⚠️ CAMPOS EXCLUSIVOS QUE NÃO GERAM NOVAS LINHAS:
-- Regra: Se um campo só existe em UM tipo de documento, NÃO criar linha para ele
-- Campos que existem APENAS em documentos de Seguro (NÃO CRIAR LINHAS PARA):
-  ❌ Document NO / Nº Documento do Seguro
-  ❌ Nº da Apólice / Policy Number  
-  ❌ Nº do Certificado / Certificate Number
-  ❌ Vigência / ETD do Seguro / Validity Period
-  ❌ Taxa / Rate / Premium Rate
-  ❌ Taxa de serviço / Service Fee
-  ❌ Prêmio do Seguro / Premium Amount
-  ❌ Franquia / Deductible
-  ❌ Tipo de Cobertura / Coverage Type
-  ❌ Segurador / Insurer Name
-- O documento de Seguro PARTICIPA da comparação nos campos que JÁ EXISTEM:
-  ✅ Consignee/Segurado → comparar com outros documentos
-  ✅ Valor da Mercadoria/Importância Segurada → comparar com Invoice
-  ✅ Descrição da Mercadoria → comparar com Invoice/Packing
-  ✅ Origem/Destino → comparar com AWB/BL
-- Informações exclusivas do seguro vão nas OBSERVAÇÕES (não na tabela)
-
-⚠️ NORMALIZAÇÃO DE Nº CONHECIMENTO (CRÍTICO):
-- Antes de comparar AWB, HAWB, BL, HBL, MAWB, MBL:
-  1. Remover TODOS os espaços
-  2. Remover hífens (-)
-  3. Converter para maiúsculas
-- Exemplo: "KFB-0094 7167" e "KFB00947167" são IGUAIS → ✅ CONFORME
-- Na tabela, exibir o formato mais completo, mas marcar como CONFORME
-
-⚠️ EXTRAÇÃO DE PACKING LIST (PESO E VOLUMES):
-- O Packing List geralmente tem tabela com volumes individuais
-- Para PESO BRUTO TOTAL: procure "Total Gross Weight" ou "Gross Weight Total"
-  → Se não encontrar total, SOMAR os pesos brutos individuais da tabela
-- Para VOLUMES/PACKAGES: procure "Number of Packages", "Total Packages", "Qty"
-  → Contar linhas da tabela se necessário
-- VALIDAÇÃO: Peso Bruto > Peso Líquido (sempre!)
-
-⚠️ ATENÇÃO — TRÊS VALORES DIFERENTES:
-- Valor Mercadoria = soma dos produtos na Invoice ("Total Items")
-- Frete = custo do transporte (linha "Ocean Freight" ou "Air Freight")
-- Valor Total Frete = total na coluna Prepaid/Collect (inclui frete + taxas)
-
-REGRA CRÍTICA: "ND" em um documento + valor em outro = ✅ (não é divergência!)
-
-${EXTRACTION_INSTRUCTIONS}
-${CHB_FORMAT_HTML}
-${tableSpec}
 `;
   }
+  
+  const baseContext = `
+Você é um analista de conferência de documentos de comércio exterior especializado em desembaraço aduaneiro.
 
-  if (stepId === 2) {
-    return `
-SISTEMA — CRONOS (Etapa 2: Pré-Alerta × Instrução de Despacho)
-${clientContext}
+ARQUIVOS FORNECIDOS NESTA ANÁLISE:
+${fileNames.map((f, i) => `${i + 1}. ${f}`).join('\n')}
 
-Você é o CRONOS, auditor de logística (importação, Brasil).
-
-═══════════════════════════════════════════════════════════════════════════════
-⚠️ OBJETIVO CRÍTICO DA ETAPA 2:
-═══════════════════════════════════════════════════════════════════════════════
-COMPARAR os dados do NOVO DOCUMENTO (Instrução de Despacho) com os dados 
-JÁ EXTRAÍDOS NA ETAPA 1 (Pré-Alerta, Invoice, Packing, HAWB, etc.).
-
-A seção "DADOS DE REFERÊNCIA — EXTRAÍDOS NA ETAPA 1" contém os valores 
-que você DEVE usar para comparação!
-
-═══════════════════════════════════════════════════════════════════════════════
-REGRA DE DETERMINAÇÃO DE STATUS:
-═══════════════════════════════════════════════════════════════════════════════
-Para CADA campo do novo documento (Instrução de Despacho):
-
-1. BUSCAR o valor correspondente nos DADOS JÁ EXTRAÍDOS (seção acima)
-2. COMPARAR os dois valores:
-   - Se IGUAIS (após normalização de formato) → ✅ CONFORME
-   - Se DIFERENTES → 🔴 DIVERGENTE ou ⚠️ ALERTA (conforme severidade)
-   - Se campo não existia na etapa anterior → ✅ CONFORME (novo dado)
-   - Se campo existe na Etapa 1 mas não na Instrução → ⚠️ ALERTA (ausente)
-
-EXEMPLOS DE COMPARAÇÃO:
-├── Etapa 1 extraiu: Peso Bruto = 501,5 kg
-│   ├── Instrução: Peso Bruto = 501,5 kg → ✅ CONFORME
-│   ├── Instrução: Peso Bruto = 520,0 kg → 🔴 DIVERGENTE (diferença!)
-│   └── Instrução: Peso Bruto = ND → ⚠️ ALERTA (ausente)
-│
-├── Etapa 1 extraiu: Consignee = EMPRESA ABC LTDA
-│   ├── Instrução: Consignee = EMPRESA ABC LTDA → ✅ CONFORME
-│   ├── Instrução: Consignee = EMPRESA ABC → ⚠️ ALERTA (abreviado)
-│   └── Instrução: Consignee = EMPRESA XYZ → 🔴 DIVERGENTE (diferente!)
-│
-├── Etapa 1 extraiu: CNPJ = 12.345.678/0001-90
-│   ├── Instrução: CNPJ = 12345678000190 → ✅ CONFORME (mesmo valor, formatação diferente)
-│   └── Instrução: CNPJ = 98.765.432/0001-10 → 🔴 DIVERGENTE
-
-═══════════════════════════════════════════════════════════════════════════════
-ARQUIVOS PARA ANÁLISE (NOVOS - Etapa 2):
-═══════════════════════════════════════════════════════════════════════════════
-${fileListText}
-
-ESTRUTURA DA TABELA — CRÍTICO:
-<table>
-<thead><tr>
-  <th>Campo</th>
-  <th>Valor Etapa 1 (Referência)</th>
-  <th>${columnHeaders}</th>
-  <th>Status</th>
-</tr></thead>
-...
-</table>
-
-⚠️ IMPORTANTE: 
-- A coluna "Valor Etapa 1 (Referência)" DEVE conter o valor extraído anteriormente 
-  (dos dados cacheados na seção de referência). Use "ND" se não foi extraído antes.
-- Use EXATAMENTE os nomes dos arquivos: ${columnHeaders}
-
-═══════════════════════════════════════════════════════════════════════════════
-CAMPOS A COMPARAR:
-═══════════════════════════════════════════════════════════════════════════════
-- Consignee/CNPJ
-- Incoterm/condição de frete
-- Peso bruto (kg)
-- Volume/CBM
-- NCM (raiz + descrição)
-- Container (nº/tipo/lacre)
-- Valor total/Valor Mercadoria
-- Referências/PO
-- Datas principais (ETD/ETA/Embarque)
-- Nº Conhecimento (HAWB/HBL)
-
-═══════════════════════════════════════════════════════════════════════════════
-VALIDAÇÃO FINAL — EXECUTAR ANTES DE GERAR RESPOSTA:
-═══════════════════════════════════════════════════════════════════════════════
-Para CADA linha da tabela, verificar:
-□ O valor da coluna "Etapa 1" foi extraído dos dados cacheados?
-□ O valor do novo documento foi comparado corretamente com a Etapa 1?
-□ O status reflete a comparação (igual = ✅, diferente = 🔴 ou ⚠️)?
-□ Se TODOS estão ✅, REVISAR — é muito raro que tudo esteja 100% conforme!
-
-${EXTRACTION_INSTRUCTIONS}
+IMPORTANTE: Use os NOMES EXATOS dos arquivos acima como cabeçalhos das colunas na tabela de comparação.
+${clientInstructions}
 ${CHB_FORMAT_HTML}
 ${tableSpec}
 `;
+
+  switch (stepId) {
+    case 1:
+      return `${baseContext}
+
+═══════════════════════════════════════════════════════════════════════════════
+ETAPA 1 — CONFERÊNCIA DOCUMENTAL INICIAL
+═══════════════════════════════════════════════════════════════════════════════
+
+OBJETIVO: Comparar documentos comerciais básicos (Commercial Invoice, Packing List, BL/AWB) 
+para identificar divergências antes do registro da DI.
+
+FOCO PRINCIPAL:
+1. Extrair e comparar: Peso Bruto, Peso Líquido, Valor Total Mercadoria, Incoterm, NCM
+2. Validar consistência entre Invoice × Packing List × BL/AWB
+3. Identificar campos ausentes (ND) que precisarão ser obtidos
+4. Detectar divergências críticas que impediriam o registro da DI
+
+REGRA DE OURO: 
+- Compare TODOS os documentos fornecidos entre si
+- Crie uma coluna para CADA documento (usando o nome exato do arquivo)
+- Status na PRIMEIRA coluna para decisão rápida
+
+Analise os documentos e produza a saída HTML conforme especificado.`;
+
+    case 2:
+      return `${baseContext}
+
+═══════════════════════════════════════════════════════════════════════════════
+ETAPA 2 — CONFERÊNCIA DO DRAFT DI
+═══════════════════════════════════════════════════════════════════════════════
+
+OBJETIVO: Comparar o rascunho/draft da DI (Declaração de Importação) com os documentos 
+originais já validados na Etapa 1.
+
+CONTEXTO: O cliente está prestes a registrar a DI no Siscomex. Esta é a última 
+verificação antes do registro oficial.
+
+FOCO PRINCIPAL:
+1. Comparar valores do Draft DI com Invoice + BL/AWB originais
+2. Validar NCM e CFOP estão corretos para a operação
+3. Verificar cálculo de tributos (se visível no draft)
+4. Confirmar que dados do importador/exportador estão corretos
+5. Identificar QUALQUER divergência que poderia causar multa ou retenção
+
+⚠️ REGRA CRÍTICA PARA DRAFT DI:
+- O DI brasileiro tem valores em "Moeda Estrangeira" e "Moeda Nacional"
+- SEMPRE usar a coluna "Moeda Estrangeira" para comparação!
+- Se aparecerem valores em BRL, são apenas para referência fiscal
+
+SEVERIDADE MÁXIMA: Erros no DI podem causar:
+- Multas da Receita Federal
+- Retenção de mercadoria
+- Necessidade de retificação (custo e tempo)
+
+Analise os documentos e produza a saída HTML conforme especificado.`;
+
+    case 3:
+      return `${baseContext}
+
+═══════════════════════════════════════════════════════════════════════════════
+ETAPA 3 — CONFERÊNCIA FINAL (DI REGISTRADA × DOCUMENTOS)
+═══════════════════════════════════════════════════════════════════════════════
+
+OBJETIVO: Validação final comparando a DI já registrada com todos os documentos 
+do processo para garantir consistência completa.
+
+CONTEXTO: A DI já foi registrada. Esta etapa identifica se há necessidade de 
+retificação ou se o processo pode seguir para liberação.
+
+FOCO PRINCIPAL:
+1. Comparar DI registrada com Invoice, BL/AWB, Packing List
+2. Verificar se valores bateram com a etapa 2 (se disponível)
+3. Identificar discrepâncias que exigiriam retificação
+4. Validar numerário e dados bancários (se visíveis)
+5. Confirmar que NCM e alíquotas estão corretos
+
+PARECER FINAL:
+- Se tudo conforme: ✅ Processo pode prosseguir para liberação
+- Se divergências: 🔴 Indicar necessidade de retificação + itens específicos
+
+Analise os documentos e produza a saída HTML conforme especificado.`;
+
+    default:
+      return `${baseContext}
+
+Analise os documentos fornecidos e produza a saída HTML conforme especificado.`;
   }
-
-  // stepId === 3
-  return `
-SISTEMA — CRONOS (Etapa 3: DI × (Pré-Alerta + Instrução))
-
-Você é o CRONOS, auditor de logística (importação, Brasil).
-Objetivo: confrontar Rascunho DI com a Consolidação (PA+Instr.).
-Esta é a VALIDAÇÃO FINAL antes do registro da Declaração de Importação.
-${clientContext}
-ARQUIVOS PARA ANÁLISE:
-${fileListText}
-
-ESTRUTURA DA TABELA — CRÍTICO:
-<table>
-<thead><tr>
-  <th>Campo</th>
-  <th>${columnHeaders}</th>
-  <th>Status</th>
-</tr></thead>
-...
-</table>
-
-Use EXATAMENTE os nomes dos arquivos: ${columnHeaders}
-
-CAMPOS A COMPARAR:
-- Consignee/CNPJ
-- Incoterm/condição de frete
-- Peso bruto (ATENÇÃO: DI ≈ Peso Líquido = 🔴)
-- Volume/CBM
-- NCM (raiz+desc)
-- Container (nº/tipo/lacre)
-- Portos (origem/dest.)
-- Datas principais
-- Frete/Seguros (⚠️ DI: usar coluna MOEDA ESTRANGEIRA, não BRL!)
-- Referências/PO
-
-ATENÇÃO MÁXIMA:
-- DI deve refletir EXATAMENTE os dados dos documentos
-- Qualquer divergência pode causar MULTA ou RETENÇÃO na RFB
-- O parecer deve ser CONCLUSIVO sobre viabilidade de registro
-
-${EXTRACTION_INSTRUCTIONS}
-${CHB_FORMAT_HTML}
-${tableSpec}
-`;
 }
 
-// Error types for structured error responses
+// =============================================================================
+// API CALLERS
+// =============================================================================
+
+interface FileForAnalysis {
+  name: string;
+  content: string;
+  mimeType: string;
+}
+
 interface ChbFileError {
-  type: 'file_read' | 'file_format' | 'api_error' | 'network' | 'timeout' | 'unknown';
-  message: string;
-  documentName?: string;
-  details?: string;
-  suggestion?: string;
+  fileName: string;
+  error: string;
+  type: 'conversion' | 'size' | 'format' | 'api';
+  suggestion: string;
 }
 
-function createFileError(file: { name: string; mimeType: string }, errorType: string, details?: string): ChbFileError {
-  const supportedFormats = ['application/pdf', 'image/png', 'image/jpeg', 'image/jpg', 'image/webp'];
+interface ApiResponse {
+  text: string;
+  warnings: ChbFileError[];
+}
+
+// Validate total input size to avoid API errors
+function validateInputSize(files: FileForAnalysis[]): { isValid: boolean; estimatedTokens: number; warning?: string } {
+  // Estimate tokens: ~1.5 tokens per character for base64 content
+  // Claude has ~200k token context, but we need room for output
+  const MAX_INPUT_TOKENS = 150000;
+  const CHARS_PER_TOKEN = 4;
   
-  if (errorType === 'unsupported_format') {
+  let totalChars = 0;
+  for (const file of files) {
+    totalChars += file.content.length;
+    totalChars += file.name.length;
+  }
+  
+  const estimatedTokens = Math.ceil(totalChars / CHARS_PER_TOKEN);
+  
+  if (estimatedTokens > MAX_INPUT_TOKENS) {
     return {
-      type: 'file_format',
-      message: `Formato não suportado: ${file.mimeType}`,
-      documentName: file.name,
-      details: `O arquivo "${file.name}" está em formato ${file.mimeType} que não é totalmente suportado.`,
-      suggestion: 'Converta o arquivo para PDF ou imagem (PNG, JPG) para melhor análise.'
+      isValid: false,
+      estimatedTokens,
+      warning: `Input muito grande (${estimatedTokens} tokens estimados). Limite: ${MAX_INPUT_TOKENS} tokens.`
     };
   }
   
-  if (errorType === 'empty_content') {
-    return {
-      type: 'file_read',
-      message: 'Arquivo vazio ou sem conteúdo legível',
-      documentName: file.name,
-      details: `Não foi possível extrair texto do arquivo "${file.name}".`,
-      suggestion: 'Verifique se o arquivo não está corrompido. Para PDFs escaneados, certifique-se de que há texto OCR incorporado.'
-    };
-  }
-  
-  if (errorType === 'binary_not_readable') {
-    return {
-      type: 'file_read',
-      message: 'Conteúdo binário não legível',
-      documentName: file.name,
-      details: `O arquivo "${file.name}" contém dados binários que não podem ser interpretados diretamente.`,
-      suggestion: 'Para planilhas Excel, exporte para PDF ou CSV. Para outros formatos, converta para PDF.'
-    };
-  }
-  
-  return {
-    type: 'unknown',
-    message: details || 'Erro ao processar arquivo',
-    documentName: file.name,
-    suggestion: 'Tente enviar o arquivo novamente ou use um formato diferente.'
-  };
+  return { isValid: true, estimatedTokens };
 }
 
-// ═══════════════════════════════════════════════════════════════════════════════
-// POST-PROCESSING FILTER: Remove exclusive insurance field rows from HTML table
-// ═══════════════════════════════════════════════════════════════════════════════
-function filterExclusiveInsuranceFields(htmlContent: string): { filtered: string; removedCount: number } {
-  // Patterns that identify rows with EXCLUSIVE insurance fields only
-  // IMPORTANT: These must be specific to avoid filtering legitimate fields like "Frete", "Taxa de Câmbio"
-  const bannedFieldPatterns = [
-    /^n[oº°]\s*(da\s+)?ap[oó]lice/i,          // Nº da Apólice
-    /^policy\s*n(umber|o|º)?$/i,               // Policy Number (exact)
-    /^n[oº°]\s*(do\s+)?certificado/i,          // Nº do Certificado
-    /^certificate\s*n(umber|o|º)?$/i,          // Certificate Number (exact)
-    /^vig[eê]ncia(\s+(do\s+)?seguro)?$/i,      // Vigência (do Seguro)
-    /^validity\s+period$/i,                     // Validity Period (exact)
-    /^pr[eê]mio\s+(do\s+)?seguro$/i,           // Prêmio do Seguro (específico)
-    /^insurance\s+premium$/i,                   // Insurance Premium
-    /^franquia\s*(do\s+)?seguro$/i,            // Franquia do Seguro
-    /^deductible$/i,                            // Deductible (exact)
-    /^tipo\s+de\s+cobertura$/i,                // Tipo de Cobertura (exact)
-    /^coverage\s+type$/i,                       // Coverage Type (exact)
-    /^segurador(a)?$/i,                         // Segurador/Seguradora
-    /^insurer$/i,                               // Insurer (exact)
-    /^underwriter$/i,                           // Underwriter
-  ];
-
-  let removedCount = 0;
+// Call Anthropic Claude API with vision capabilities
+async function callAnthropicAPI(prompt: string, files: FileForAnalysis[]): Promise<ApiResponse> {
+  const anthropicApiKey = Deno.env.get('CHB_ANTHROPIC_API_KEY');
   
-  // Find all <tr> elements and check the SECOND <td> (Campo column, not Status)
-  const filtered = htmlContent.replace(/<tr[^>]*>[\s\S]*?<\/tr>/gi, (trMatch) => {
-    // Extract ALL <td> elements from the row
-    const allTds = trMatch.match(/<td[^>]*>[\s\S]*?<\/td>/gi);
-    if (!allTds || allTds.length < 2) return trMatch; // Keep if not enough columns
-    
-    // The SECOND <td> is the field name (first is Status icon)
-    const secondTdMatch = allTds[1].match(/<td[^>]*>([\s\S]*?)<\/td>/i);
-    if (!secondTdMatch) return trMatch;
-    
-    // Get text content, removing HTML tags
-    const fieldName = secondTdMatch[1].replace(/<[^>]+>/g, '').trim();
-    
-    // Check if this field matches any banned pattern
-    for (const pattern of bannedFieldPatterns) {
-      if (pattern.test(fieldName)) {
-        removedCount++;
-        console.log(`[CHB Filter] Removed insurance-only row: "${fieldName}"`);
-        return ''; // Remove the entire <tr>
-      }
-    }
-    
-    return trMatch; // Keep the row
-  });
-
-  return { filtered, removedCount };
-}
-
-async function callAnthropicAPI(prompt: string, filesContent: { name: string; content: string; mimeType: string }[]): Promise<{ text: string; warnings: ChbFileError[] }> {
-  const apiKey = Deno.env.get('CHB_ANTHROPIC_API_KEY');
-  if (!apiKey) {
-    throw new Error('CHB_ANTHROPIC_API_KEY not configured');
+  if (!anthropicApiKey) {
+    throw new Error('ANTHROPIC_API_KEY não configurada');
   }
-
-  const content: any[] = [];
+  
   const warnings: ChbFileError[] = [];
   
-  // ═══════════════════════════════════════════════════════════════════════════
-  // DIRECT PDF PROCESSING: Send PDFs directly to Sonnet for best OCR quality
-  // ═══════════════════════════════════════════════════════════════════════════
-  for (const file of filesContent) {
-    if (file.mimeType === 'application/pdf') {
-      // Send PDF directly to Sonnet - its internal OCR handles layout properly
-      content.push({
-        type: 'document',
-        source: {
-          type: 'base64',
-          media_type: 'application/pdf',
-          data: file.content,
-        },
-      });
-      console.log(`[CHB] PDF "${file.name}" sent directly to Sonnet`);
-    } else if (file.mimeType.startsWith('image/')) {
+  // Build content array with files
+  const content: any[] = [];
+  
+  // Add files as images or text
+  for (const file of files) {
+    if (file.mimeType.startsWith('image/')) {
       content.push({
         type: 'image',
         source: {
@@ -1744,454 +682,337 @@ async function callAnthropicAPI(prompt: string, filesContent: { name: string; co
           data: file.content,
         },
       });
-    } else if (file.mimeType.includes('spreadsheet') || file.mimeType.includes('excel') || file.name.endsWith('.xlsx') || file.name.endsWith('.xls')) {
-      // Excel files - extract text content using the Excel reader
+      content.push({
+        type: 'text',
+        text: `[Arquivo: ${file.name}]`,
+      });
+    } else if (file.mimeType === 'application/pdf') {
+      content.push({
+        type: 'document',
+        source: {
+          type: 'base64',
+          media_type: 'application/pdf',
+          data: file.content,
+        },
+      });
+      content.push({
+        type: 'text',
+        text: `[Arquivo PDF: ${file.name}]`,
+      });
+    } else if (file.mimeType.includes('spreadsheet') || file.mimeType.includes('excel') || 
+               file.name.endsWith('.xlsx') || file.name.endsWith('.xls')) {
+      // Extract text from Excel
       try {
         const excelText = await extractExcelText(file.content, file.name);
-        if (excelText && excelText.length > 100) {
-          console.log(`[CHB] Excel "${file.name}" extracted ${excelText.length} chars`);
-          content.push({
-            type: 'text',
-            text: excelText,
-          });
-        } else {
-          warnings.push(createFileError(file, 'empty_content'));
-          content.push({
-            type: 'text',
-            text: `[Arquivo: ${file.name}] - Planilha Excel com pouco conteúdo legível.`,
-          });
-        }
-      } catch (xlsxError) {
-        console.error(`[CHB] Error reading Excel ${file.name}:`, xlsxError);
-        warnings.push(createFileError(file, 'binary_not_readable'));
         content.push({
           type: 'text',
-          text: `[Arquivo: ${file.name}] - Erro ao ler planilha Excel.`,
+          text: excelText,
+        });
+      } catch (e) {
+        console.error(`Error processing Excel ${file.name}:`, e);
+        warnings.push({
+          fileName: file.name,
+          error: 'Erro ao processar arquivo Excel',
+          type: 'conversion',
+          suggestion: 'Verifique se o arquivo não está corrompido ou tente exportar como PDF.',
+        });
+        content.push({
+          type: 'text',
+          text: `[Arquivo Excel: ${file.name}] - Não foi possível extrair conteúdo`,
         });
       }
     } else {
-      // For other types, try to send as text
+      // Text-based files
       try {
-        const decoded = atob(file.content);
-        if (decoded.trim().length === 0) {
-          warnings.push(createFileError(file, 'empty_content'));
-        }
+        const textContent = atob(file.content);
         content.push({
           type: 'text',
-          text: `[Arquivo: ${file.name}]\n${decoded}`,
+          text: `[Arquivo: ${file.name}]\n${textContent}`,
         });
       } catch {
-        warnings.push(createFileError(file, 'binary_not_readable'));
         content.push({
           type: 'text',
-          text: `[Arquivo: ${file.name}] - Conteúdo binário não legível como texto`,
+          text: `[Arquivo: ${file.name}] - Conteúdo binário não legível`,
         });
       }
     }
   }
-
-  // Add the prompt
+  
+  // Add the analysis prompt at the end
   content.push({
     type: 'text',
     text: prompt,
   });
-
-  // ═══════════════════════════════════════════════════════════════════════════════
-  // DEBUG LOGGING - Detalhamento dos arquivos antes da análise
-  // ═══════════════════════════════════════════════════════════════════════════════
-  console.log(`[CHB Debug] ═══════════════════════════════════════════════════════`);
-  console.log(`[CHB Debug] ARQUIVOS SENDO ENVIADOS PARA ANÁLISE:`);
-  for (const file of filesContent) {
-    const sizeKB = Math.round(file.content.length * 0.75 / 1024); // Base64 to actual size
-    const docType = file.name.toLowerCase().includes('hawb') ? 'HAWB' :
-                   file.name.toLowerCase().includes('cct') ? 'CCT' :
-                   file.name.toLowerCase().includes('pack') ? 'PACKING' :
-                   file.name.toLowerCase().includes('inv') ? 'INVOICE' :
-                   file.name.toLowerCase().includes('seguro') ? 'SEGURO' :
-                   'OUTRO';
-    console.log(`  📄 ${file.name}`);
-    console.log(`     Tipo detectado: ${docType} | MIME: ${file.mimeType} | Tamanho: ~${sizeKB}KB`);
-  }
-  console.log(`[CHB Debug] Total de arquivos: ${filesContent.length}`);
-  console.log(`[CHB Debug] Tamanho do prompt: ${prompt.length} caracteres`);
-  console.log(`[CHB Debug] ═══════════════════════════════════════════════════════`);
-  console.log(`[CHB] Chamando Anthropic API...`);
-
+  
   const startTime = Date.now();
+  
   const response = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      'x-api-key': apiKey,
+      'x-api-key': anthropicApiKey,
       'anthropic-version': '2023-06-01',
     },
     body: JSON.stringify({
-      model: 'claude-sonnet-4-5',
+      model: 'claude-sonnet-4-20250514',
       max_tokens: 32000,
-      temperature: 0, // Maximum determinism for data extraction
       messages: [
         {
           role: 'user',
-          content: content,
+          content,
         },
       ],
     }),
   });
-  const elapsed = Date.now() - startTime;
-
-  // Log the API call
-  logApiCall({
-    api_name: 'Anthropic',
-    endpoint: '/v1/messages',
-    method: 'POST',
-    status_code: response.status,
-    response_time_ms: elapsed,
-    error_message: response.ok ? undefined : `Status ${response.status}`,
-  });
-
+  
+  const responseTime = Date.now() - startTime;
+  
   if (!response.ok) {
     const errorText = await response.text();
-    console.error('Anthropic API error:', response.status, errorText);
+    console.error('Anthropic API error:', errorText);
     
-    if (response.status === 400 && errorText.includes('document')) {
-      throw new Error(`Erro ao processar documento: O serviço não conseguiu interpretar um ou mais arquivos. Verifique se os PDFs não estão protegidos.`);
-    } else if (response.status === 429) {
-      throw new Error('Limite de requisições excedido. Aguarde alguns minutos e tente novamente.');
-    } else if (response.status === 401) {
-      throw new Error('Erro de autenticação com o serviço de IA. Entre em contato com o suporte.');
-    }
+    await logApiCall({
+      api_name: 'anthropic',
+      endpoint: '/v1/messages',
+      method: 'POST',
+      status_code: response.status,
+      response_time_ms: responseTime,
+      error_message: errorText,
+    });
     
-    throw new Error(`Erro na API de análise (código ${response.status})`);
-  }
-
-  const data = await response.json();
-  const rawText = data.content[0].text;
-  
-  // Apply post-processing filter to remove exclusive insurance fields
-  const { filtered: filteredText, removedCount } = filterExclusiveInsuranceFields(rawText);
-  if (removedCount > 0) {
-    console.log(`[CHB Anthropic] Post-processing removed ${removedCount} exclusive insurance field rows`);
+    throw new Error(`Anthropic API error: ${response.status} - ${errorText}`);
   }
   
-  return { text: filteredText, warnings };
+  const result = await response.json();
+  
+  await logApiCall({
+    api_name: 'anthropic',
+    endpoint: '/v1/messages',
+    method: 'POST',
+    status_code: 200,
+    response_time_ms: responseTime,
+  });
+  
+  const textContent = result.content?.find((c: any) => c.type === 'text');
+  if (!textContent) {
+    throw new Error('No text content in Anthropic response');
+  }
+  
+  return { text: textContent.text, warnings };
 }
 
-async function callLovableAI(prompt: string, filesContent: { name: string; content: string; mimeType: string }[]): Promise<{ text: string; warnings: ChbFileError[] }> {
-  const apiKey = Deno.env.get('LOVABLE_API_KEY');
-  if (!apiKey) {
-    throw new Error('LOVABLE_API_KEY not configured');
+// Call Lovable AI (Gemini) as fallback
+async function callLovableAI(prompt: string, files: FileForAnalysis[]): Promise<ApiResponse> {
+  const supabaseUrl = Deno.env.get('SUPABASE_URL');
+  const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+  
+  if (!supabaseUrl || !supabaseKey) {
+    throw new Error('Supabase credentials not configured');
   }
-
-  const content: any[] = [];
+  
   const warnings: ChbFileError[] = [];
-
-  // Add files - Gemini supports PDFs, images and documents via inline_data
-  for (const file of filesContent) {
-    if (file.mimeType.startsWith('image/')) {
-      content.push({
-        type: 'image_url',
-        image_url: {
-          url: `data:${file.mimeType};base64,${file.content}`,
+  
+  // Build parts for Gemini
+  const parts: any[] = [];
+  
+  for (const file of files) {
+    if (file.mimeType.startsWith('image/') || file.mimeType === 'application/pdf') {
+      parts.push({
+        inlineData: {
+          mimeType: file.mimeType,
+          data: file.content,
         },
       });
-    } else if (file.mimeType === 'application/pdf') {
-      content.push({
-        type: 'image_url',
-        image_url: {
-          url: `data:${file.mimeType};base64,${file.content}`,
-        },
+      parts.push({
+        text: `[Arquivo: ${file.name}]`,
       });
-    } else if (file.mimeType.includes('spreadsheet') || file.mimeType.includes('excel') || file.name.endsWith('.xlsx') || file.name.endsWith('.xls')) {
-      // Excel files - extract text content
+    } else if (file.mimeType.includes('spreadsheet') || file.mimeType.includes('excel') ||
+               file.name.endsWith('.xlsx') || file.name.endsWith('.xls')) {
       try {
         const excelText = await extractExcelText(file.content, file.name);
-        if (excelText && excelText.length > 100) {
-          console.log(`[CHB-Gemini] Excel "${file.name}" extracted ${excelText.length} chars`);
-          content.push({
-            type: 'text',
-            text: excelText,
-          });
-        } else {
-          warnings.push(createFileError(file, 'empty_content'));
-          content.push({
-            type: 'text',
-            text: `[Arquivo: ${file.name}] - Planilha Excel com pouco conteúdo legível.`,
-          });
-        }
-      } catch (xlsxError) {
-        console.error(`[CHB-Gemini] Error reading Excel ${file.name}:`, xlsxError);
-        warnings.push(createFileError(file, 'binary_not_readable'));
-        content.push({
-          type: 'text',
-          text: `[Arquivo: ${file.name}] - Erro ao ler planilha Excel.`,
+        parts.push({ text: excelText });
+      } catch (e) {
+        console.error(`Error processing Excel ${file.name}:`, e);
+        warnings.push({
+          fileName: file.name,
+          error: 'Erro ao processar arquivo Excel',
+          type: 'conversion',
+          suggestion: 'Verifique se o arquivo não está corrompido.',
+        });
+        parts.push({
+          text: `[Arquivo Excel: ${file.name}] - Não foi possível extrair conteúdo`,
         });
       }
     } else {
       try {
-        const decoded = atob(file.content);
-        if (decoded.trim().length === 0) {
-          warnings.push(createFileError(file, 'empty_content'));
-        }
-        content.push({
-          type: 'text',
-          text: `[Arquivo: ${file.name}]\n${decoded}`,
+        const textContent = atob(file.content);
+        parts.push({
+          text: `[Arquivo: ${file.name}]\n${textContent}`,
         });
       } catch {
-        warnings.push(createFileError(file, 'binary_not_readable'));
-        content.push({
-          type: 'text',
-          text: `[Arquivo: ${file.name}] - Conteúdo binário não legível como texto`,
+        parts.push({
+          text: `[Arquivo: ${file.name}] - Conteúdo binário não legível`,
         });
       }
     }
   }
-
-  content.push({
-    type: 'text',
-    text: prompt,
-  });
-
-  // ═══════════════════════════════════════════════════════════════════════════════
-  // DEBUG LOGGING - Detalhamento dos arquivos antes da análise (Lovable AI)
-  // ═══════════════════════════════════════════════════════════════════════════════
-  console.log(`[CHB Debug Lovable] ═══════════════════════════════════════════════════════`);
-  console.log(`[CHB Debug Lovable] ARQUIVOS SENDO ENVIADOS PARA ANÁLISE (Fallback):`);
-  for (const file of filesContent) {
-    const sizeKB = Math.round(file.content.length * 0.75 / 1024);
-    const docType = file.name.toLowerCase().includes('hawb') ? 'HAWB' :
-                   file.name.toLowerCase().includes('cct') ? 'CCT' :
-                   file.name.toLowerCase().includes('pack') ? 'PACKING' :
-                   file.name.toLowerCase().includes('inv') ? 'INVOICE' :
-                   file.name.toLowerCase().includes('seguro') ? 'SEGURO' :
-                   'OUTRO';
-    console.log(`  📄 ${file.name}`);
-    console.log(`     Tipo detectado: ${docType} | MIME: ${file.mimeType} | Tamanho: ~${sizeKB}KB`);
-  }
-  console.log(`[CHB Debug Lovable] Total de arquivos: ${filesContent.length}`);
-  console.log(`[CHB Debug Lovable] ═══════════════════════════════════════════════════════`);
-  console.log(`[CHB] Chamando Lovable AI (Gemini)...`);
-
+  
+  parts.push({ text: prompt });
+  
   const startTime = Date.now();
-  const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
+  
+  const response = await fetch(`${supabaseUrl}/functions/v1/lovable-ai-proxy`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      'Authorization': `Bearer ${apiKey}`,
+      'Authorization': `Bearer ${supabaseKey}`,
     },
     body: JSON.stringify({
       model: 'google/gemini-2.5-pro',
-      messages: [
+      contents: [
         {
           role: 'user',
-          content: content,
+          parts,
         },
       ],
-      max_tokens: 32000,
+      generationConfig: {
+        maxOutputTokens: 32000,
+        temperature: 0.1,
+      },
     }),
   });
-  const elapsed = Date.now() - startTime;
-
-  // Log the API call
-  logApiCall({
-    api_name: 'LovableAI',
-    endpoint: '/v1/chat/completions',
-    method: 'POST',
-    status_code: response.status,
-    response_time_ms: elapsed,
-    error_message: response.ok ? undefined : `Status ${response.status}`,
-  });
-
+  
+  const responseTime = Date.now() - startTime;
+  
   if (!response.ok) {
     const errorText = await response.text();
-    console.error('Lovable AI error:', response.status, errorText);
-    
-    if (response.status === 429) {
-      throw new Error('Limite de requisições excedido. Aguarde alguns minutos e tente novamente.');
-    }
-    if (response.status === 402) {
-      throw new Error('Créditos de IA esgotados. Entre em contato com o administrador.');
-    }
-    
-    throw new Error(`Erro no serviço de IA (código ${response.status})`);
-  }
-
-  const data = await response.json();
-  const rawText = data.choices[0].message.content;
-  
-  // Apply post-processing filter to remove exclusive insurance fields
-  const { filtered: filteredText, removedCount } = filterExclusiveInsuranceFields(rawText);
-  if (removedCount > 0) {
-    console.log(`[CHB LovableAI] Post-processing removed ${removedCount} exclusive insurance field rows`);
+    console.error('Lovable AI error:', errorText);
+    throw new Error(`Lovable AI error: ${response.status} - ${errorText}`);
   }
   
-  return { text: filteredText, warnings };
+  const result = await response.json();
+  
+  // Extract text from Gemini response format
+  const text = result.candidates?.[0]?.content?.parts?.[0]?.text || 
+               result.text || 
+               '';
+  
+  if (!text) {
+    throw new Error('No text content in Lovable AI response');
+  }
+  
+  return { text, warnings };
 }
 
-function extractHtmlAndTags(response: string, stepId: number): { 
-  html: string; 
-  tags: { label: string; variant: 'success' | 'warning' | 'error' }[]; 
+// =============================================================================
+// RESPONSE PARSING
+// =============================================================================
+
+interface AnalysisTag {
+  type: 'success' | 'warning' | 'danger';
+  label: string;
+}
+
+function extractHtmlAndTags(response: string, stepId: number): {
+  html: string;
+  tags: AnalysisTag[];
   summary: string;
   detailedSummary: string;
   parecer: string;
-  modal: 'SEA' | 'AIR' | null;
-  cliente: string | null;
+  modal: string;
+  cliente: string;
 } {
   // Extract metadata
+  let modal = 'SEA';
+  let cliente = '';
   const metadataMatch = response.match(/<<METADATA>>([\s\S]*?)<<END_METADATA>>/);
-  let modal: 'SEA' | 'AIR' | null = null;
-  let cliente: string | null = null;
-  
   if (metadataMatch) {
-    const modalMatch = metadataMatch[1].match(/MODAL:\s*(SEA|AIR)/i);
-    if (modalMatch) modal = modalMatch[1].toUpperCase() as 'SEA' | 'AIR';
-    
-    const clienteMatch = metadataMatch[1].match(/CLIENTE:\s*([^\n]+)/i);
+    const metadata = metadataMatch[1];
+    const modalMatch = metadata.match(/MODAL:\s*(SEA|AIR)/i);
+    if (modalMatch) modal = modalMatch[1].toUpperCase();
+    const clienteMatch = metadata.match(/CLIENTE:\s*([^\n]+)/i);
     if (clienteMatch) cliente = clienteMatch[1].trim();
   }
-  // Extract HTML between markers
-  const htmlMatch = response.match(/<<BEGIN_HTML>>([\s\S]*?)<<END_HTML>>/);
-  const html = htmlMatch ? htmlMatch[1].trim() : response;
-
-  // Count status icons
-  const successCount = (response.match(/✅/g) || []).length;
-  const warningCount = (response.match(/🟨/g) || []).length;
-  const errorCount = (response.match(/🔴/g) || []).length;
-
-  const tags: { label: string; variant: 'success' | 'warning' | 'error' }[] = [];
   
-  if (successCount > 0) {
-    tags.push({ label: `${successCount} Conforme`, variant: 'success' });
+  // Extract HTML
+  let html = '';
+  const htmlMatch = response.match(/<<BEGIN_HTML>>([\s\S]*?)<<END_HTML>>/);
+  if (htmlMatch) {
+    html = htmlMatch[1].trim();
+  } else {
+    // Try to find table directly
+    const tableMatch = response.match(/<table[\s\S]*?<\/table>/i);
+    if (tableMatch) {
+      html = tableMatch[0];
+      
+      // Also try to get observations and parecer sections
+      const obsMatch = response.match(/<div class="observations-section">[\s\S]*?<\/div>/i);
+      if (obsMatch) html += '\n' + obsMatch[0];
+      
+      const parecerMatch = response.match(/<div class="parecer-section">[\s\S]*?<\/div>/i);
+      if (parecerMatch) html += '\n' + parecerMatch[0];
+      
+      const actionsMatch = response.match(/<div class="actions-section">[\s\S]*?<\/div>/i);
+      if (actionsMatch) html += '\n' + actionsMatch[0];
+    }
+  }
+  
+  // Count status indicators
+  const criticalCount = (html.match(/🔴/g) || []).length;
+  const warningCount = (html.match(/🟨/g) || []).length;
+  const okCount = (html.match(/✅/g) || []).length;
+  
+  // Build tags
+  const tags: AnalysisTag[] = [];
+  if (criticalCount > 0) {
+    tags.push({ type: 'danger', label: `${criticalCount} crítico(s)` });
   }
   if (warningCount > 0) {
-    tags.push({ label: `${warningCount} Alerta`, variant: 'warning' });
+    tags.push({ type: 'warning', label: `${warningCount} alerta(s)` });
   }
-  if (errorCount > 0) {
-    tags.push({ label: `${errorCount} Crítico`, variant: 'error' });
-  }
-
-  // Extract Parecer do Modelo section completely
-  let parecer = '';
-  const parecerMatch = response.match(/Parecer do Modelo[\s\S]*?(?=<<END_HTML>>|$)/i);
-  if (parecerMatch) {
-    // Extract the content after "Parecer do Modelo"
-    const parecerContent = parecerMatch[0];
-    
-    // Extract impedimento
-    const impedimentoMatch = parecerContent.match(/Impedimento para registrar a DI:\s*(Sim|Não)\s*[—-]\s*([^<\n]+)/i);
-    if (impedimentoMatch) {
-      parecer += `• Impedimento: ${impedimentoMatch[1]} — ${impedimentoMatch[2].trim()}\n`;
-    }
-
-    // Extract nível de risco
-    const riscoMatch = parecerContent.match(/Nível de risco consolidado:\s*(🔴|🟨|✅)([^<\n]*)/i);
-    if (riscoMatch) {
-      parecer += `• Risco: ${riscoMatch[1]}${riscoMatch[2] ? ' ' + riscoMatch[2].trim() : ''}\n`;
-    }
-
-    // Extract causas críticas
-    const causasMatch = parecerContent.match(/Principal\(ais\) causa\(s\) crítica\(s\):\s*([^<]+)/i);
-    if (causasMatch) {
-      parecer += `• Causas críticas: ${causasMatch[1].trim()}\n`;
-    }
-  }
-
-  // Extract Observações section
-  let observacoes: string[] = [];
-  const obsSection = response.match(/Observações[\s\S]*?(?=Parecer|<<END_HTML>>|$)/i);
-  if (obsSection) {
-    const obsMatches = obsSection[0].match(/[🔴🟨✅]\s*[^:]+:\s*[^<\n]+/g);
-    if (obsMatches) {
-      observacoes = obsMatches.slice(0, 3).map(o => o.trim());
-    }
-  }
-
-  // Build detailed summary
-  const stepNames: Record<number, string> = { 1: 'Pré-Alerta', 2: 'Instrução', 3: 'DI/Fechamento' };
-  const stepName = stepNames[stepId] || `Etapa ${stepId}`;
-  
-  let detailedSummary = `═══ ${stepName} ═══\n\n`;
-  
-  // Status summary
-  detailedSummary += `📊 Resultado: `;
-  if (errorCount > 0) detailedSummary += `${errorCount} crítico(s) 🔴  `;
-  if (warningCount > 0) detailedSummary += `${warningCount} alerta(s) 🟨  `;
-  if (successCount > 0) detailedSummary += `${successCount} conforme(s) ✅`;
-  detailedSummary += '\n\n';
-  
-  // Add parecer if exists
-  if (parecer) {
-    detailedSummary += `📋 Parecer do Modelo:\n${parecer}\n`;
+  if (okCount > 0 && criticalCount === 0 && warningCount === 0) {
+    tags.push({ type: 'success', label: 'Documentos conformes' });
+  } else if (okCount > 0) {
+    tags.push({ type: 'success', label: `${okCount} conforme(s)` });
   }
   
-  // Add key observations
-  if (observacoes.length > 0) {
-    detailedSummary += `📝 Principais observações:\n`;
-    observacoes.forEach(obs => {
-      detailedSummary += `${obs}\n`;
-    });
-  }
-
-  // Simple summary for backward compatibility
+  // Build summary
   let summary = '';
-  if (errorCount > 0) summary = `${errorCount} discrepância(s) encontrada(s). `;
-  if (warningCount > 0) summary += `${warningCount} alerta(s). `;
-  if (successCount > 0) summary += `${successCount} item(ns) conforme(s).`;
-  if (!summary) summary = 'Análise concluída.';
-
+  if (criticalCount > 0) {
+    summary = `⚠️ ${criticalCount} divergência(s) crítica(s) encontrada(s)`;
+  } else if (warningCount > 0) {
+    summary = `${warningCount} alerta(s) para verificação`;
+  } else {
+    summary = 'Documentos em conformidade';
+  }
+  
+  // Build detailed summary
+  const stepNames: Record<number, string> = {
+    1: 'Conferência Documental Inicial',
+    2: 'Conferência do Draft DI',
+    3: 'Conferência Final',
+  };
+  
+  const detailedSummary = `${stepNames[stepId] || `Etapa ${stepId}`}: ${criticalCount} crítico(s), ${warningCount} alerta(s), ${okCount} conforme(s)`;
+  
+  // Extract parecer
+  let parecer = '';
+  const parecerTextMatch = html.match(/<div class="parecer-section">([\s\S]*?)<\/div>/i);
+  if (parecerTextMatch) {
+    parecer = parecerTextMatch[1].replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+  }
+  
   return { html, tags, summary, detailedSummary, parecer, modal, cliente };
 }
 
-/**
- * Estimate token count from text (approximately 4 chars per token for Portuguese)
- */
-function estimateTokenCount(text: string): number {
-  return Math.ceil(text.length / 4);
-}
+// =============================================================================
+// DATA PERSISTENCE
+// =============================================================================
 
-/**
- * Validate input size before sending to LLM
- */
-function validateInputSize(
-  files: { name: string; content: string; mimeType: string }[],
-  maxInputTokens: number = 200000
-): { isValid: boolean; estimatedTokens: number; warning?: string } {
-  let totalEstimate = 0;
-  
-  for (const file of files) {
-    if (file.mimeType === 'application/pdf') {
-      // PDF: estimate ~1500 tokens per 50KB of base64
-      const sizeKB = (file.content.length * 0.75) / 1024; // base64 to actual bytes
-      totalEstimate += Math.ceil((sizeKB / 50) * 1500);
-    } else if (file.mimeType.includes('image/')) {
-      // Images: estimate ~500 tokens per image
-      totalEstimate += 500;
-    } else {
-      // Text content
-      try {
-        const decoded = atob(file.content);
-        totalEstimate += estimateTokenCount(decoded);
-      } catch {
-        totalEstimate += estimateTokenCount(file.content);
-      }
-    }
-  }
-  
-  const isValid = totalEstimate <= maxInputTokens;
-  
-  return {
-    isValid,
-    estimatedTokens: totalEstimate,
-    warning: !isValid 
-      ? `⚠️ Input estimado (${totalEstimate} tokens) excede limite recomendado (${maxInputTokens}). Considere reduzir número de arquivos.`
-      : undefined
-  };
-}
-
-// Helper to save extracted data to database
 async function saveExtractedData(
-  itemId: number, 
-  filename: string, 
-  etapa: string, 
+  itemId: number,
+  filename: string,
+  etapa: string,
   extractedFields: Record<string, any>,
   rawText?: string
 ): Promise<void> {
@@ -2200,33 +1021,37 @@ async function saveExtractedData(
     const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
     if (!supabaseUrl || !supabaseKey) return;
     
-    // Upsert to avoid duplicates
-    await fetch(`${supabaseUrl}/rest/v1/chb_extracted_data`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${supabaseKey}`,
-        'apikey': supabaseKey,
-        'Prefer': 'resolution=merge-duplicates',
-      },
-      body: JSON.stringify({
-        item_id: itemId,
-        filename,
-        etapa,
-        extracted_fields: extractedFields,
-        raw_text: rawText?.substring(0, 50000), // Limit raw text size
-        updated_at: new Date().toISOString(),
-      }),
-    });
+    // Upsert extracted data
+    const response = await fetch(
+      `${supabaseUrl}/rest/v1/chb_extracted_data`,
+      {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${supabaseKey}`,
+          'apikey': supabaseKey,
+          'Content-Type': 'application/json',
+          'Prefer': 'resolution=merge-duplicates',
+        },
+        body: JSON.stringify({
+          item_id: itemId,
+          filename,
+          etapa,
+          extracted_fields: extractedFields,
+          raw_text: rawText,
+          updated_at: new Date().toISOString(),
+        }),
+      }
+    );
+    
+    if (!response.ok) {
+      console.error('[saveExtractedData] Error:', await response.text());
+    }
   } catch (e) {
-    console.error('[saveExtractedData] Failed to save:', e);
+    console.error('[saveExtractedData] Failed:', e);
   }
 }
 
-// Helper to get cached extracted data
-async function getCachedExtractedData(
-  itemId: number
-): Promise<Record<string, { fields: Record<string, any>; rawText?: string }>> {
+async function getCachedExtractedData(itemId: number): Promise<Record<string, { fields: Record<string, any>; rawText?: string }>> {
   try {
     const supabaseUrl = Deno.env.get('SUPABASE_URL');
     const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
@@ -2299,82 +1124,57 @@ function parseExtractedFields(response: string, filename: string): Record<string
   return fields;
 }
 
-serve(async (req) => {
-  if (req.method === 'OPTIONS') {
-    return new Response(null, { headers: corsHeaders });
-  }
+// =============================================================================
+// BACKGROUND ANALYSIS PROCESSOR
+// =============================================================================
 
+async function processAnalysisInBackground(
+  requestId: string,
+  stepId: number,
+  files: FileForAnalysis[],
+  clientConfig?: ClientConfig,
+  itemId?: number,
+  cachedData?: Record<string, { fields: Record<string, any>; rawText?: string }>
+): Promise<void> {
+  const supabase = getSupabaseClient();
+  
   try {
-    const { stepId, files, clientConfig, itemId, cachedData } = await req.json();
-
-    if (!stepId || !files || !Array.isArray(files) || files.length === 0) {
-      return new Response(
-        JSON.stringify({ error: 'stepId e files são obrigatórios' }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    }
-
-    console.log(`═══ CHB ANALYSIS ═══`);
-    console.log(`[Input Size] Total files: ${files.length}`);
-    console.log(`[Input Size] Files: ${files.map((f: any) => `${f.name} (${f.mimeType})`).join(', ')}`);
+    console.log(`[BG] Starting background analysis for request ${requestId}`);
+    
+    // Update status to processing
+    await supabase.from('chb_analysis_requests').update({
+      status: 'processing',
+    }).eq('id', requestId);
+    
+    console.log(`[BG] Processing ${files.length} files for step ${stepId}`);
     
     // Get cached data from DB if itemId provided and no cachedData sent
     let existingCache: Record<string, { fields: Record<string, any>; rawText?: string }> = cachedData || {};
     if (itemId && !cachedData) {
-      console.log(`[Cache] Fetching cached data for item ${itemId}...`);
+      console.log(`[BG] Fetching cached data for item ${itemId}...`);
       existingCache = await getCachedExtractedData(itemId);
-      console.log(`[Cache] Found ${Object.keys(existingCache).length} cached documents`);
+      console.log(`[BG] Found ${Object.keys(existingCache).length} cached documents`);
     }
     
-    // Separate files into: needs processing vs already cached
-    const filesToProcess: typeof files = [];
+    // Build cached context
     const cachedFiles: { name: string; fields: Record<string, any>; rawText?: string }[] = [];
-    
     for (const file of files) {
       const cached = existingCache[file.name];
       if (cached && cached.rawText && Object.keys(cached.fields).length > 0) {
-        console.log(`[Cache] Using cached data for: ${file.name}`);
         cachedFiles.push({
           name: file.name,
           fields: cached.fields,
           rawText: cached.rawText,
         });
-      } else {
-        filesToProcess.push(file);
       }
     }
     
-    console.log(`[Cache] ${cachedFiles.length} files from cache, ${filesToProcess.length} to process`);
-    
-    // If all files are cached and we have analysis from previous step, we can optimize
-    // For now, we still need to send all files for comparison but can use extracted text
-    
-    // Validate input size
-    const inputValidation = validateInputSize(files);
-    console.log(`[Input Size] Estimated input tokens: ${inputValidation.estimatedTokens}`);
-    console.log(`[Input Size] Max output tokens: 32000`);
-    
-    if (!inputValidation.isValid) {
-      console.warn(`[Input Size] ${inputValidation.warning}`);
-    }
-    
-    if (clientConfig) {
-      console.log('Using client config:', JSON.stringify(clientConfig));
-    }
-
-    const fileNames = files.map((f: any) => f.name);
-    
-    // Build enhanced prompt with cached data context
     let cachedContext = '';
     if (cachedFiles.length > 0) {
       cachedContext = `
 ═══════════════════════════════════════════════════════════════════════════════
 ⚠️ DADOS DE REFERÊNCIA — EXTRAÍDOS NA ETAPA 1 (USAR PARA COMPARAÇÃO!)
 ═══════════════════════════════════════════════════════════════════════════════
-INSTRUÇÃO CRÍTICA: Para cada campo abaixo, COMPARE com o valor do novo documento.
-- Se os valores forem DIFERENTES → marque como 🔴 DIVERGENTE ou ⚠️ ALERTA
-- Se os valores forem IGUAIS (após normalização) → marque como ✅ CONFORME
-
 `;
       for (const cached of cachedFiles) {
         cachedContext += `\n[${cached.name}] Campos extraídos:\n`;
@@ -2384,15 +1184,14 @@ INSTRUÇÃO CRÍTICA: Para cada campo abaixo, COMPARE com o valor do novo docume
       }
       cachedContext += `
 ═══════════════════════════════════════════════════════════════════════════════
-FIM DOS DADOS DE REFERÊNCIA — COMPARE COM OS NOVOS DOCUMENTOS ABAIXO
-═══════════════════════════════════════════════════════════════════════════════
 `;
     }
     
-    const basePrompt = getPromptByStep(stepId, fileNames, clientConfig as ClientConfig | undefined);
+    const fileNames = files.map((f: any) => f.name);
+    const basePrompt = getPromptByStep(stepId, fileNames, clientConfig);
     const prompt = cachedContext ? cachedContext + '\n\n' + basePrompt : basePrompt;
     
-    console.log(`Prompt length: ${prompt.length} chars`);
+    console.log(`[BG] Prompt length: ${prompt.length} chars`);
     
     let responseText: string;
     let usedFallback = false;
@@ -2400,135 +1199,235 @@ FIM DOS DADOS DE REFERÊNCIA — COMPARE COM OS NOVOS DOCUMENTOS ABAIXO
 
     // Try Anthropic first
     try {
-      console.log('Attempting Anthropic API...');
+      console.log('[BG] Attempting Anthropic API...');
       const result = await callAnthropicAPI(prompt, files);
       responseText = result.text;
       fileWarnings = result.warnings;
-      console.log('Anthropic API succeeded');
+      console.log('[BG] Anthropic API succeeded');
     } catch (anthropicError) {
-      console.error('Anthropic API failed, trying Lovable AI (Gemini) fallback:', anthropicError);
+      console.error('[BG] Anthropic API failed, trying Lovable AI (Gemini) fallback:', anthropicError);
       usedFallback = true;
       
       try {
-        console.log('Attempting Lovable AI (Gemini) fallback...');
+        console.log('[BG] Attempting Lovable AI (Gemini) fallback...');
         const result = await callLovableAI(prompt, files);
         responseText = result.text;
         fileWarnings = result.warnings;
-        console.log('Lovable AI succeeded');
+        console.log('[BG] Lovable AI succeeded');
       } catch (geminiError) {
-        console.error('Lovable AI also failed:', geminiError);
+        console.error('[BG] Lovable AI also failed:', geminiError);
         
-        // Return structured error
-        const errorMessage = geminiError instanceof Error ? geminiError.message : 'Erro desconhecido';
-        return new Response(
-          JSON.stringify({
-            error: 'Falha na análise dos documentos',
-            errors: [{
-              type: 'api_error',
-              message: 'Não foi possível processar os documentos',
-              details: `Os serviços de análise (Anthropic e Gemini) falharam: ${errorMessage}`,
-              suggestion: 'Verifique a qualidade dos arquivos (PDFs digitais funcionam melhor que scans). Tente novamente em alguns minutos.'
-            }]
-          }),
-          { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        );
+        // Update request with error
+        await supabase.from('chb_analysis_requests').update({
+          status: 'error',
+          error_message: `Falha na análise: ${geminiError instanceof Error ? geminiError.message : 'Erro desconhecido'}`,
+          completed_at: new Date().toISOString(),
+        }).eq('id', requestId);
+        
+        return;
       }
     }
 
     const { html, tags, summary, detailedSummary, parecer, modal, cliente } = extractHtmlAndTags(responseText, stepId);
 
-    // ═══════════════════════════════════════════════════════════════════════════════
-    // DEBUG LOGGING - Valores extraídos para validação
-    // ═══════════════════════════════════════════════════════════════════════════════
-    console.log(`[CHB Debug] ═══════════════════════════════════════════════════════`);
-    console.log(`[CHB Debug] ANÁLISE CONCLUÍDA - Verificação de valores extraídos:`);
-    
-    // Extrair valores de Peso Bruto do HTML para debug
-    const pesoBrutoMatches = responseText.match(/Peso\s+Bruto[^<]*<\/td>[\s\S]*?<\/tr>/gi);
-    if (pesoBrutoMatches) {
-      console.log(`[CHB Debug] 📦 PESO BRUTO encontrado na resposta:`);
-      for (const match of pesoBrutoMatches.slice(0, 1)) { // Just first occurrence
-        const valuesInRow = match.match(/<td[^>]*>([^<]+)<\/td>/g);
-        if (valuesInRow) {
-          const cleanValues = valuesInRow.map(v => v.replace(/<[^>]+>/g, '').trim()).filter(v => v);
-          console.log(`     Valores na linha: ${cleanValues.join(' | ')}`);
-        }
-      }
-    }
-    
-    // Extrair valores de Valor Mercadoria do HTML para debug  
-    const valorMercMatches = responseText.match(/Valor\s+Mercadoria[^<]*<\/td>[\s\S]*?<\/tr>/gi);
-    if (valorMercMatches) {
-      console.log(`[CHB Debug] 💰 VALOR MERCADORIA encontrado na resposta:`);
-      for (const match of valorMercMatches.slice(0, 1)) {
-        const valuesInRow = match.match(/<td[^>]*>([^<]+)<\/td>/g);
-        if (valuesInRow) {
-          const cleanValues = valuesInRow.map(v => v.replace(/<[^>]+>/g, '').trim()).filter(v => v);
-          console.log(`     Valores na linha: ${cleanValues.join(' | ')}`);
-        }
-      }
-    }
-    
-    // Alerta se "518" aparecer em algum lugar
-    if (responseText.includes('518')) {
-      console.warn(`[CHB Debug] ⚠️ ALERTA: Valor "518" detectado na resposta! Possível alucinação!`);
-      const context518 = responseText.match(/.{0,50}518.{0,50}/g);
-      if (context518) {
-        console.warn(`[CHB Debug] Contexto onde "518" aparece:`);
-        context518.slice(0, 3).forEach((ctx, i) => console.warn(`     ${i+1}: ...${ctx}...`));
-      }
-    }
-    
-    console.log(`[CHB Debug] 📊 Tags: ${tags.map(t => t.label).join(', ')}`);
-    console.log(`[CHB Debug] ${usedFallback ? '⚠️ Usou fallback (Lovable AI)' : '✅ Usou Anthropic'}`);
-    console.log(`[CHB Debug] ═══════════════════════════════════════════════════════`);
+    console.log(`[BG] Analysis completed - ${tags.map(t => t.label).join(', ')}`);
+
+    // Build result object
+    const resultData = {
+      id: crypto.randomUUID(),
+      stepId,
+      html,
+      tags,
+      summary,
+      detailedSummary,
+      parecer,
+      modal,
+      cliente,
+      generatedAt: new Date().toLocaleString('pt-BR'),
+      filesAnalyzed: files.map((f: any) => f.name),
+      usedFallback,
+      fileWarnings: fileWarnings.length > 0 ? fileWarnings : undefined,
+    };
+
+    // Update request with result
+    await supabase.from('chb_analysis_requests').update({
+      status: 'completed',
+      result_html: JSON.stringify(resultData),
+      completed_at: new Date().toISOString(),
+    }).eq('id', requestId);
+
+    console.log(`[BG] Request ${requestId} completed successfully`);
 
     // Save extracted data to cache for future steps (fire and forget)
     if (itemId) {
-      (async () => {
-        try {
-          console.log(`[Cache] Saving extracted data for ${files.length} files...`);
-          for (const file of files) {
-            const extractedFields = parseExtractedFields(responseText, file.name);
-            
-            // Get raw text for this file from the response context
-            let rawText = '';
-            if (file.mimeType.includes('spreadsheet') || file.mimeType.includes('excel') || 
-                file.name.endsWith('.xlsx') || file.name.endsWith('.xls')) {
-              try {
-                rawText = await extractExcelText(file.content, file.name);
-              } catch (e) {
-                console.error(`[Cache] Error extracting excel text for ${file.name}:`, e);
-              }
+      try {
+        console.log(`[BG Cache] Saving extracted data for ${files.length} files...`);
+        for (const file of files) {
+          const extractedFields = parseExtractedFields(responseText, file.name);
+          
+          let rawText = '';
+          if (file.mimeType.includes('spreadsheet') || file.mimeType.includes('excel') || 
+              file.name.endsWith('.xlsx') || file.name.endsWith('.xls')) {
+            try {
+              rawText = await extractExcelText(file.content, file.name);
+            } catch (e) {
+              console.error(`[BG Cache] Error extracting excel text for ${file.name}:`, e);
             }
-            
-            await saveExtractedData(itemId, file.name, stepId.toString(), extractedFields, rawText);
           }
-          console.log(`[Cache] Saved extracted data for item ${itemId}`);
-        } catch (e) {
-          console.error('[Cache] Error saving extracted data:', e);
+          
+          await saveExtractedData(itemId, file.name, stepId.toString(), extractedFields, rawText);
         }
-      })();
+        console.log(`[BG Cache] Saved extracted data for item ${itemId}`);
+      } catch (e) {
+        console.error('[BG Cache] Error saving extracted data:', e);
+      }
     }
 
+  } catch (error) {
+    console.error(`[BG] Error processing analysis ${requestId}:`, error);
+    
+    // Update request with error
+    await supabase.from('chb_analysis_requests').update({
+      status: 'error',
+      error_message: error instanceof Error ? error.message : 'Erro desconhecido',
+      completed_at: new Date().toISOString(),
+    }).eq('id', requestId);
+  }
+}
+
+// =============================================================================
+// MAIN HANDLER
+// =============================================================================
+
+serve(async (req) => {
+  if (req.method === 'OPTIONS') {
+    return new Response(null, { headers: corsHeaders });
+  }
+
+  try {
+    const body = await req.json();
+    const supabase = getSupabaseClient();
+    
+    // =========================================================================
+    // MODE: POLL - Check status of existing request
+    // =========================================================================
+    if (body.requestId) {
+      const { requestId } = body;
+      console.log(`[POLL] Checking status for request ${requestId}`);
+      
+      const { data, error } = await supabase
+        .from('chb_analysis_requests')
+        .select('status, result_html, error_message')
+        .eq('id', requestId)
+        .single();
+      
+      if (error || !data) {
+        return new Response(
+          JSON.stringify({ 
+            status: 'error', 
+            error: 'Requisição não encontrada' 
+          }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+      
+      // Parse result_html if completed
+      let result = null;
+      if (data.status === 'completed' && data.result_html) {
+        try {
+          result = JSON.parse(data.result_html);
+        } catch {
+          result = { html: data.result_html };
+        }
+      }
+      
+      return new Response(
+        JSON.stringify({
+          status: data.status,
+          result,
+          error: data.error_message,
+        }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+    
+    // =========================================================================
+    // MODE: SUBMIT - Start new analysis (async)
+    // =========================================================================
+    const { stepId, files, clientConfig, itemId, cachedData } = body;
+
+    if (!stepId || !files || !Array.isArray(files) || files.length === 0) {
+      return new Response(
+        JSON.stringify({ error: 'stepId e files são obrigatórios' }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    console.log(`═══ CHB ANALYSIS (ASYNC) ═══`);
+    console.log(`[SUBMIT] Total files: ${files.length}`);
+    console.log(`[SUBMIT] Files: ${files.map((f: any) => `${f.name} (${f.mimeType})`).join(', ')}`);
+    
+    // Validate input size
+    const inputValidation = validateInputSize(files);
+    console.log(`[SUBMIT] Estimated input tokens: ${inputValidation.estimatedTokens}`);
+    
+    if (!inputValidation.isValid) {
+      return new Response(
+        JSON.stringify({ 
+          error: inputValidation.warning,
+          errors: [{
+            type: 'size',
+            message: 'Arquivos muito grandes para análise',
+            suggestion: 'Reduza o número ou tamanho dos arquivos.'
+          }]
+        }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    // Create analysis request in database
+    const { data: requestData, error: insertError } = await supabase
+      .from('chb_analysis_requests')
+      .insert({
+        item_id: itemId || 0,
+        step_id: stepId,
+        status: 'pending',
+        request_payload: { 
+          filesCount: files.length, 
+          fileNames: files.map((f: any) => f.name),
+          hasClientConfig: !!clientConfig,
+        },
+      })
+      .select()
+      .single();
+
+    if (insertError || !requestData) {
+      console.error('[SUBMIT] Error creating request:', insertError);
+      return new Response(
+        JSON.stringify({ error: 'Erro ao criar requisição de análise' }),
+        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    const requestId = requestData.id;
+    console.log(`[SUBMIT] Created request ${requestId}`);
+
+    // Start background processing
+    // deno-lint-ignore no-explicit-any
+    (globalThis as any).EdgeRuntime?.waitUntil?.(
+      processAnalysisInBackground(requestId, stepId, files, clientConfig, itemId, cachedData)
+    ) || processAnalysisInBackground(requestId, stepId, files, clientConfig, itemId, cachedData);
+
+    // Return request ID immediately
     return new Response(
       JSON.stringify({
-        id: crypto.randomUUID(),
-        stepId,
-        html,
-        tags,
-        summary,
-        detailedSummary,
-        parecer,
-        modal,
-        cliente,
-        generatedAt: new Date().toLocaleString('pt-BR'),
-        filesAnalyzed: files.map((f: any) => f.name),
-        usedFallback,
-        fileWarnings: fileWarnings.length > 0 ? fileWarnings : undefined,
+        requestId,
+        status: 'pending',
+        message: 'Análise iniciada. Use o requestId para consultar o status.',
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
+
   } catch (error) {
     console.error('Error in analyze-chb-documents:', error);
     

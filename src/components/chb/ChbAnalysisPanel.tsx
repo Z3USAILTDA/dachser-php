@@ -12,6 +12,7 @@ interface ChbAnalysisPanelProps {
   isAnalyzing: boolean;
   hasFiles: boolean;
   isStepCompleted?: boolean;
+  analysisProgress?: string;
 }
 
 const copyAnalysisResult = (html: string) => {
@@ -28,7 +29,8 @@ export function ChbAnalysisPanel({
   onApproveAndAdvance, 
   isAnalyzing,
   hasFiles,
-  isStepCompleted = false
+  isStepCompleted = false,
+  analysisProgress = ''
 }: ChbAnalysisPanelProps) {
   // No files uploaded yet
   if (!hasFiles && !analysisResult) {
@@ -58,31 +60,34 @@ export function ChbAnalysisPanel({
         </h3>
         
         <div className="p-8 text-center rounded-lg bg-black/30 border border-white/10">
-          <FileText className="w-12 h-12 text-amber-500/40 mx-auto mb-3" />
-          <p className="text-white/60 text-xs mb-3">
-            {isAnalyzing 
-              ? 'Processando documentos com IA...' 
-              : 'Clique para iniciar a análise dos documentos.'}
-          </p>
-          
-          <button
-            onClick={onRunAnalysis}
-            disabled={isAnalyzing}
-            className="flex items-center gap-1.5 px-4 py-2 mx-auto rounded-full bg-amber-500 text-black text-xs font-medium
-              hover:bg-amber-400 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            {isAnalyzing ? (
-              <>
-                <Loader2 className="w-3 h-3 animate-spin" />
-                Analisando...
-              </>
-            ) : (
-              <>
+          {isAnalyzing ? (
+            <>
+              <Loader2 className="w-12 h-12 text-amber-500 mx-auto mb-3 animate-spin" />
+              <p className="text-white/80 text-sm font-medium mb-1">
+                {analysisProgress || 'Processando documentos com IA...'}
+              </p>
+              <p className="text-white/40 text-[0.65rem]">
+                A análise pode levar alguns minutos dependendo do tamanho dos arquivos.
+              </p>
+            </>
+          ) : (
+            <>
+              <FileText className="w-12 h-12 text-amber-500/40 mx-auto mb-3" />
+              <p className="text-white/60 text-xs mb-3">
+                Clique para iniciar a análise dos documentos.
+              </p>
+              
+              <button
+                onClick={onRunAnalysis}
+                disabled={isAnalyzing}
+                className="flex items-center gap-1.5 px-4 py-2 mx-auto rounded-full bg-amber-500 text-black text-xs font-medium
+                  hover:bg-amber-400 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              >
                 <Play className="w-3 h-3" />
                 Iniciar Análise IA
-              </>
-            )}
-          </button>
+              </button>
+            </>
+          )}
         </div>
       </div>
     );

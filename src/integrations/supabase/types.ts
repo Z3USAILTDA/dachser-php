@@ -230,6 +230,42 @@ export type Database = {
           },
         ]
       }
+      chb_analysis_requests: {
+        Row: {
+          completed_at: string | null
+          created_at: string
+          error_message: string | null
+          id: string
+          item_id: number
+          request_payload: Json | null
+          result_html: string | null
+          status: string
+          step_id: number
+        }
+        Insert: {
+          completed_at?: string | null
+          created_at?: string
+          error_message?: string | null
+          id?: string
+          item_id: number
+          request_payload?: Json | null
+          result_html?: string | null
+          status?: string
+          step_id: number
+        }
+        Update: {
+          completed_at?: string | null
+          created_at?: string
+          error_message?: string | null
+          id?: string
+          item_id?: number
+          request_payload?: Json | null
+          result_html?: string | null
+          status?: string
+          step_id?: number
+        }
+        Relationships: []
+      }
       chb_client_config: {
         Row: {
           agente_destino: string | null

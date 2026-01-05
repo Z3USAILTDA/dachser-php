@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { FileCheck, HelpCircle } from 'lucide-react';
 import { useUsageLog } from "@/hooks/useUsageLog";
@@ -53,7 +53,9 @@ export default function ConferenciaChb() {
     3: [],
   });
   const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [analysisProgress, setAnalysisProgress] = useState<string>('');
   const [clientConfig, setClientConfig] = useState<ChbClientConfig | null>(null);
+  const pollingRef = useRef<boolean>(false);
 
   const currentUser = localStorage.getItem('user_email') || localStorage.getItem('username') || 'Usuário';
 
@@ -98,6 +100,13 @@ export default function ConferenciaChb() {
       fetchRuns();
     }
   }, [itemId, loadSupabaseFiles, fetchRuns]);
+
+  // Cleanup polling on unmount
+  useEffect(() => {
+    return () => {
+      pollingRef.current = false;
+    };
+  }, []);
 
   // Convert DB runs to approved history, restore step state, and populate analysis results
   useEffect(() => {
@@ -309,7 +318,9 @@ export default function ConferenciaChb() {
     }
 
     setIsAnalyzing(true);
+    setAnalysisProgress('Preparando arquivos...');
     setActiveTab('analise');
+    pollingRef.current = true;
 
     try {
       // Convert new uploaded files to base64
@@ -323,6 +334,7 @@ export default function ConferenciaChb() {
       );
 
       // Convert existing documents (all steps) - fetch from URL if no local file
+      setAnalysisProgress('Carregando documentos existentes...');
       const existingDocsPromises = allDocs.map(async (doc) => {
         // If we have a local File reference, use it
         if (doc.file) {
@@ -365,54 +377,104 @@ export default function ConferenciaChb() {
         console.log(`Using client config for: ${clientConfig.cliente_nome || clientConfig.cliente_cnpj}`);
       }
 
-      // Create AbortController with 5 minute timeout for long-running analysis
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 5 * 60 * 1000); // 5 minutes
+      // =========================================================================
+      // ASYNC POLLING PATTERN: Submit analysis, then poll for result
+      // =========================================================================
       
-      let data: any;
-      let error: any;
+      setAnalysisProgress('Enviando para análise...');
       
-      try {
-        const result = await supabase.functions.invoke('analyze-chb-documents', {
-          body: {
-            stepId: activeStep,
-            files: allFilesContent,
-            itemId: itemId, // Send itemId for caching extracted data
-            clientConfig: clientConfig ? {
-              tolerancia_peso: clientConfig.tolerancia_peso,
-              tolerancia_valor: clientConfig.tolerancia_valor,
-              campos_obrigatorios: clientConfig.campos_obrigatorios,
-              cliente_nome: clientConfig.cliente_nome,
-              instrucoes_personalizadas: clientConfig.instrucoes_personalizadas,
-              armador: clientConfig.armador,
-              agente_destino: clientConfig.agente_destino,
-              contato_email: clientConfig.contato_email,
-              prazo_resposta_dias: clientConfig.prazo_resposta_dias,
-              porto_descarga_real: clientConfig.porto_descarga_real,
-              tolerancia_taxas_acessorias_abs: clientConfig.tolerancia_taxas_acessorias_abs,
-              tolerancia_taxas_acessorias_pct: clientConfig.tolerancia_taxas_acessorias_pct,
-              beneficio_fiscal: clientConfig.beneficio_fiscal,
-              cfop_padrao: clientConfig.cfop_padrao,
-              estado_uf: clientConfig.estado_uf,
-              icms_diferido: clientConfig.icms_diferido,
-            } : undefined,
-          },
-          signal: controller.signal, // Mantém conexão ativa até timeout de 5 min
-        });
-        data = result.data;
-        error = result.error;
-      } catch (invokeError: any) {
-        if (invokeError.name === 'AbortError') {
-          throw new Error('Análise demorou mais de 5 minutos. Tente novamente com menos arquivos ou arquivos menores.');
-        }
-        throw invokeError;
-      } finally {
-        clearTimeout(timeoutId);
+      // Step 1: Submit analysis request
+      const submitResult = await supabase.functions.invoke('analyze-chb-documents', {
+        body: {
+          stepId: activeStep,
+          files: allFilesContent,
+          itemId: itemId,
+          clientConfig: clientConfig ? {
+            tolerancia_peso: clientConfig.tolerancia_peso,
+            tolerancia_valor: clientConfig.tolerancia_valor,
+            campos_obrigatorios: clientConfig.campos_obrigatorios,
+            cliente_nome: clientConfig.cliente_nome,
+            instrucoes_personalizadas: clientConfig.instrucoes_personalizadas,
+            armador: clientConfig.armador,
+            agente_destino: clientConfig.agente_destino,
+            contato_email: clientConfig.contato_email,
+            prazo_resposta_dias: clientConfig.prazo_resposta_dias,
+            porto_descarga_real: clientConfig.porto_descarga_real,
+            tolerancia_taxas_acessorias_abs: clientConfig.tolerancia_taxas_acessorias_abs,
+            tolerancia_taxas_acessorias_pct: clientConfig.tolerancia_taxas_acessorias_pct,
+            beneficio_fiscal: clientConfig.beneficio_fiscal,
+            cfop_padrao: clientConfig.cfop_padrao,
+            estado_uf: clientConfig.estado_uf,
+            icms_diferido: clientConfig.icms_diferido,
+          } : undefined,
+        },
+      });
+
+      if (submitResult.error) {
+        throw new Error(submitResult.error.message || 'Erro ao iniciar análise');
       }
 
-      if (error) {
-        throw new Error(error.message);
+      const { requestId } = submitResult.data;
+      if (!requestId) {
+        throw new Error('Não foi possível obter ID da requisição');
       }
+
+      console.log(`Analysis request submitted: ${requestId}`);
+      setAnalysisProgress('Analisando documentos...');
+
+      // Step 2: Poll for result (max 10 minutes)
+      const maxPollTime = 10 * 60 * 1000; // 10 minutes
+      const pollInterval = 3000; // 3 seconds
+      const startTime = Date.now();
+      let data: any = null;
+
+      while (pollingRef.current && (Date.now() - startTime) < maxPollTime) {
+        await new Promise(resolve => setTimeout(resolve, pollInterval));
+        
+        if (!pollingRef.current) {
+          console.log('Polling cancelled by user');
+          break;
+        }
+
+        const elapsedSecs = Math.floor((Date.now() - startTime) / 1000);
+        setAnalysisProgress(`Analisando documentos... (${elapsedSecs}s)`);
+
+        const pollResult = await supabase.functions.invoke('analyze-chb-documents', {
+          body: { requestId },
+        });
+
+        if (pollResult.error) {
+          console.error('Poll error:', pollResult.error);
+          continue; // Try again
+        }
+
+        const pollData = pollResult.data;
+        console.log(`Poll status: ${pollData.status}`);
+
+        if (pollData.status === 'completed') {
+          data = pollData.result;
+          break;
+        }
+
+        if (pollData.status === 'error') {
+          throw new Error(pollData.error || 'Erro na análise dos documentos');
+        }
+
+        // Continue polling for 'pending' or 'processing' status
+      }
+
+      if (!pollingRef.current) {
+        setIsAnalyzing(false);
+        setAnalysisProgress('');
+        toast.info('Análise cancelada');
+        return;
+      }
+
+      if (!data) {
+        throw new Error('Tempo limite excedido. A análise demorou mais de 10 minutos.');
+      }
+
+      setAnalysisProgress('');
 
       // Only add new documents if there are new files (not a re-run)
       if (currentStepFiles.length > 0) {
@@ -591,6 +653,8 @@ export default function ConferenciaChb() {
       toast.error(`Erro na análise: ${error instanceof Error ? error.message : 'Erro desconhecido'}`);
     } finally {
       setIsAnalyzing(false);
+      setAnalysisProgress('');
+      pollingRef.current = false;
     }
   };
 
@@ -759,6 +823,7 @@ export default function ConferenciaChb() {
             isAnalyzing={isAnalyzing}
             hasFiles={(uploadedFiles[activeStep] || []).length > 0 || getDocumentsForStep(activeStep).some(d => d.file || d.url)}
             isStepCompleted={isStepCompleted}
+            analysisProgress={analysisProgress}
           />
         );
       case 'historico':
