@@ -90,6 +90,10 @@ const menuItems: MenuItem[] = [
         href: "/sea/local-charges",
       },
       {
+        label: "Draft Exportação",
+        href: "/sea/draft-exportacao",
+      },
+      {
         label: "Monitoramento",
         href: "/sea/tracking",
       },
