@@ -634,9 +634,10 @@ interface ApiResponse {
 
 // Validate total input size to avoid API errors
 function validateInputSize(files: FileForAnalysis[]): { isValid: boolean; estimatedTokens: number; warning?: string } {
-  // Estimate tokens: ~1.5 tokens per character for base64 content
-  // Claude has ~200k token context, but we need room for output
-  const MAX_INPUT_TOKENS = 300000;
+  // Estimate tokens: ~4 chars per token for base64 content
+  // Claude Sonnet 4 has ~200k context, but base64 PDFs are large
+  // Allow up to 1M tokens to handle large document sets
+  const MAX_INPUT_TOKENS = 1000000;
   const CHARS_PER_TOKEN = 4;
   
   let totalChars = 0;
