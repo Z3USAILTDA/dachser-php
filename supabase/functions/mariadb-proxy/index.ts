@@ -2433,6 +2433,7 @@ serve(async (req) => {
             sub.aeroporto_destino,
             sub.data_atraso,
             sub.arr_datetime,
+            sub.dep_datetime,
             sub.tipo_servico,
             sub.airline_code,
             sub.peso_declarado,
@@ -2443,6 +2444,7 @@ serve(async (req) => {
             sub.etd,
             sub.data_decolagem_ultimo_trecho,
             sub.cnpj_consignatario,
+            sub.data_manifestacao_cct,
             sub.tratamento,
             sub.status_manifestacao
           FROM (
@@ -2461,7 +2463,7 @@ serve(async (req) => {
               TRIM(s.destino) as aeroporto_destino,
               s.data_atraso,
               s.arr_datetime,
-              s.tipo_servico,
+              s.dep_datetime,
               LEFT(TRIM(s.awb), 3) as airline_code,
               cct.peso_declarado,
               cct.peso_constatado,
@@ -2471,6 +2473,7 @@ serve(async (req) => {
               cct.etd,
               cct.data_decolagem_ultimo_trecho,
               cct.cnpj_consignatario,
+              cct.data_manifestacao_cct,
               TRIM(m.tratamento) as tratamento,
               -- Status de manifestação baseado no status atual
               CASE 
@@ -2509,30 +2512,62 @@ serve(async (req) => {
         `);
 
         // Calculate SLA status based on specific status
+        // NEW LOGIC: For manifested AWBs, SLA = DEP datetime - Manifestation datetime
         const now = new Date();
         const processedShipments = (shipments || []).map((row: any) => {
           const lastUpdate = row.ultimo_evento_data ? new Date(row.ultimo_evento_data) : null;
           const statusCode = row.status_cct_oficial || 'AGUARDANDO_MANIFESTACAO';
           
+          // Parse dates for new SLA calculation
+          const depDatetime = row.dep_datetime ? new Date(row.dep_datetime) : null;
+          const manifestacaoDatetime = row.data_manifestacao_cct ? new Date(row.data_manifestacao_cct) : null;
+          
           // Get SLA hours for this specific status
           const slaHours = slaConfigByStatus[statusCode] ?? 24;
-          const hoursSinceUpdate = lastUpdate ? (now.getTime() - lastUpdate.getTime()) / (1000 * 60 * 60) : null;
           
           // SLA calculation
           let slaStatus = 'OK';
           let horasRestantes: number | null = null;
           let percentual: number | null = null;
+          let tempoResposta: number | null = null; // Horas entre DEP e Manifestação
+          let usouNovaLogica = false;
           
-          if (hoursSinceUpdate !== null) {
-            horasRestantes = slaHours - hoursSinceUpdate;
-            percentual = Math.min(100, Math.max(0, (hoursSinceUpdate / slaHours) * 100));
+          // NEW LOGIC: If manifested and has DEP datetime, calculate SLA as DEP - Manifestação
+          // This shows how long after manifestation the flight departed
+          if (depDatetime && manifestacaoDatetime && statusCode === 'DEP') {
+            tempoResposta = (depDatetime.getTime() - manifestacaoDatetime.getTime()) / (1000 * 60 * 60);
+            usouNovaLogica = true;
             
-            if (horasRestantes <= 0) {
-              slaStatus = 'VENCIDO';
-            } else if (horasRestantes <= 2) {
-              slaStatus = 'CRITICO';
-            } else if (horasRestantes <= 6 || percentual >= 75) {
+            // SLA thresholds based on tempo de resposta (quanto menor, melhor)
+            // OK: decolou em até 24h após manifestar
+            // ALERTA: decolou entre 24h e 48h após manifestar
+            // VENCIDO: decolou mais de 48h após manifestar
+            if (tempoResposta <= 24) {
+              slaStatus = 'OK';
+              percentual = Math.min(100, (tempoResposta / 24) * 100);
+            } else if (tempoResposta <= 48) {
               slaStatus = 'ALERTA';
+              percentual = Math.min(100, (tempoResposta / 48) * 100);
+            } else {
+              slaStatus = 'VENCIDO';
+              percentual = 100;
+            }
+            horasRestantes = null; // Não aplicável para tempo de resposta
+          } else {
+            // Fallback: use original logic based on time since last update
+            const hoursSinceUpdate = lastUpdate ? (now.getTime() - lastUpdate.getTime()) / (1000 * 60 * 60) : null;
+            
+            if (hoursSinceUpdate !== null) {
+              horasRestantes = slaHours - hoursSinceUpdate;
+              percentual = Math.min(100, Math.max(0, (hoursSinceUpdate / slaHours) * 100));
+              
+              if (horasRestantes <= 0) {
+                slaStatus = 'VENCIDO';
+              } else if (horasRestantes <= 2) {
+                slaStatus = 'CRITICO';
+              } else if (horasRestantes <= 6 || percentual >= 75) {
+                slaStatus = 'ALERTA';
+              }
             }
           }
 
@@ -2573,6 +2608,8 @@ serve(async (req) => {
               horasRestantes: horasRestantes !== null ? Math.round(horasRestantes * 100) / 100 : null,
               percentual: percentual !== null ? Math.round(percentual * 100) / 100 : null,
               slaConfigHoras: slaHours,
+              tempoResposta: tempoResposta !== null ? Math.round(tempoResposta * 100) / 100 : null, // Horas entre DEP e Manifestação
+              usouNovaLogica: usouNovaLogica, // Indica se usou a lógica DEP - Manifestação
             },
             sla_limite: null,
             tipo_voo: null,
@@ -2595,6 +2632,8 @@ serve(async (req) => {
             data_atraso: row.data_atraso,
             data_decolagem_ultimo_trecho: row.data_decolagem_ultimo_trecho || null,
             arr_datetime: row.arr_datetime,
+            dep_datetime: row.dep_datetime, // Timestamp real do DEP da companhia aérea
+            data_manifestacao_cct: row.data_manifestacao_cct, // Data de manifestação no CCT
             created_at: row.ultimo_evento_data || new Date().toISOString(),
             updated_at: row.ultimo_evento_data || new Date().toISOString(),
           };

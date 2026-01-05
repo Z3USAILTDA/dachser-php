@@ -24,6 +24,9 @@ verify_jwt = false
 [functions.add-arr-datetime-column]
 verify_jwt = false
 
+[functions.add-dep-datetime-column]
+verify_jwt = false
+
 [functions.send-voucher-notification]
 verify_jwt = false
 

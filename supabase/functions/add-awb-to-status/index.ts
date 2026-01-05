@@ -58,7 +58,7 @@ serve(async (req) => {
   };
 
   try {
-    const { mawb, hawb, last_event, status, consignee_name, airline_code, nome_analista, email_analista, origin, destination, email_cliente, tipo_servico } = await req.json();
+    const { mawb, hawb, last_event, status, consignee_name, airline_code, nome_analista, email_analista, origin, destination, email_cliente, tipo_servico, dep_timestamp } = await req.json();
     
     // SANITIZE ALL INPUT DATA - Apply trim to prevent whitespace issues
     const sanitizedMawb = mawb ? mawb.toString().trim() : '';
@@ -114,24 +114,30 @@ serve(async (req) => {
     console.log('Connected to MariaDB');
 
     // Insert AWB into t_status_aereo with correct column names
-    // Columns: id, awb, destinatário, última atualização, último_status, origem, destino, hawb, nome_analista, email_analista, email_cliente, data_atraso, tipo_servico, arr_check_count, arr_datetime
+    // Columns: id, awb, destinatário, última atualização, último_status, origem, destino, hawb, nome_analista, email_analista, email_cliente, data_atraso, tipo_servico, arr_check_count, arr_datetime, dep_datetime
     // During INSERT: use provided values, set data_atraso to NOW() if DIS/OFLD
     // During UPDATE: only update hawb/nome_analista/email_analista/email_cliente/tipo_servico if they are NOT 'N/A' or NULL (preserve existing values)
     // data_atraso: set to NOW() when DIS/OFLD first occurs, reset to NULL when status becomes DLV
     // arr_check_count: increment when status is ARR, reset to 0 when status changes from ARR
     // arr_datetime: set to NOW() when status first becomes ARR, preserve on subsequent ARR checks
+    // dep_datetime: set when status is DEP and dep_timestamp is provided, preserve on subsequent updates
     // Use sanitized AWB for insert - TRIM applied to prevent whitespace issues
     const isArrStatus = finalLastEvent === 'ARR';
+    const isDepStatus = finalLastEvent === 'DEP';
     
     // Define critical/alert statuses that can override ARR
     const criticalStatuses = ['DIS', 'NIL', 'NIF', 'OFLD'];
     const isCriticalStatus = criticalStatuses.includes(finalLastEvent);
     
+    // Parse dep_timestamp if provided (ISO format from carrier API)
+    const depDatetimeValue = dep_timestamp && isDepStatus ? dep_timestamp : null;
+    console.log('DEP datetime handling:', { isDepStatus, dep_timestamp, depDatetimeValue });
+    
     // Update current status in t_status_aereo
     // ARR status is "locked" - only critical statuses (DIS, NIL, NIF, OFLD) can override it
     await client.execute(
-      `INSERT INTO t_status_aereo (awb, destinatário, \`última atualização\`, último_status, origem, destino, hawb, nome_analista, email_analista, email_cliente, data_atraso, tipo_servico, arr_check_count, arr_datetime) 
-       VALUES (TRIM(?), TRIM(?), NOW(), TRIM(?), TRIM(?), TRIM(?), TRIM(?), TRIM(?), TRIM(?), TRIM(?), ${isAlertStatus ? 'NOW()' : 'NULL'}, TRIM(?), ${isArrStatus ? '1' : '0'}, ${isArrStatus ? 'NOW()' : 'NULL'})
+      `INSERT INTO t_status_aereo (awb, destinatário, \`última atualização\`, último_status, origem, destino, hawb, nome_analista, email_analista, email_cliente, data_atraso, tipo_servico, arr_check_count, arr_datetime, dep_datetime) 
+       VALUES (TRIM(?), TRIM(?), NOW(), TRIM(?), TRIM(?), TRIM(?), TRIM(?), TRIM(?), TRIM(?), TRIM(?), ${isAlertStatus ? 'NOW()' : 'NULL'}, TRIM(?), ${isArrStatus ? '1' : '0'}, ${isArrStatus ? 'NOW()' : 'NULL'}, ${depDatetimeValue ? '?' : 'NULL'})
        ON DUPLICATE KEY UPDATE 
          destinatário = TRIM(?),
          \`última atualização\` = NOW(),
@@ -149,8 +155,24 @@ serve(async (req) => {
          data_atraso = IF(TRIM(?) = 'DLV', NULL, IF(? = 1 AND data_atraso IS NULL, NOW(), data_atraso)),
          tipo_servico = IF(TRIM(?) != 'N/A', TRIM(?), tipo_servico),
          arr_check_count = IF(último_status = 'ARR' OR ? = 1, COALESCE(arr_check_count, 0) + 1, 0),
-         arr_datetime = IF((último_status = 'ARR' OR ? = 1) AND arr_datetime IS NULL, NOW(), IF(último_status != 'ARR' AND ? = 0, NULL, arr_datetime))`,
-      [
+         arr_datetime = IF((último_status = 'ARR' OR ? = 1) AND arr_datetime IS NULL, NOW(), IF(último_status != 'ARR' AND ? = 0, NULL, arr_datetime)),
+         dep_datetime = IF(? = 1 AND dep_datetime IS NULL AND ? IS NOT NULL, ?, dep_datetime)`,
+      depDatetimeValue ? [
+        sanitizedMawb, finalConsigneeName, finalLastEvent, finalOrigin, finalDestination, finalHawb, finalNomeAnalista, finalEmailAnalista, finalEmailCliente, finalTipoServico, depDatetimeValue,
+        finalConsigneeName,
+        isCriticalStatus ? 1 : 0, finalLastEvent,
+        finalOrigin, finalOrigin, 
+        finalDestination, finalDestination, 
+        finalHawb, finalHawb, 
+        finalNomeAnalista, finalNomeAnalista,
+        finalEmailAnalista, finalEmailAnalista, finalEmailAnalista,
+        finalEmailCliente, finalEmailCliente, finalEmailCliente,
+        finalLastEvent, isAlertStatus ? 1 : 0,
+        finalTipoServico, finalTipoServico,
+        isArrStatus ? 1 : 0,
+        isArrStatus ? 1 : 0, isArrStatus ? 1 : 0,
+        isDepStatus ? 1 : 0, depDatetimeValue, depDatetimeValue
+      ] : [
         sanitizedMawb, finalConsigneeName, finalLastEvent, finalOrigin, finalDestination, finalHawb, finalNomeAnalista, finalEmailAnalista, finalEmailCliente, finalTipoServico,
         finalConsigneeName,
         isCriticalStatus ? 1 : 0, finalLastEvent,
@@ -163,7 +185,8 @@ serve(async (req) => {
         finalLastEvent, isAlertStatus ? 1 : 0,
         finalTipoServico, finalTipoServico,
         isArrStatus ? 1 : 0,
-        isArrStatus ? 1 : 0, isArrStatus ? 1 : 0
+        isArrStatus ? 1 : 0, isArrStatus ? 1 : 0,
+        isDepStatus ? 1 : 0, null, null
       ]
     );
 
