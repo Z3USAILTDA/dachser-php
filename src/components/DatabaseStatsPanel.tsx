@@ -66,25 +66,16 @@ export const DatabaseStatsPanel = ({ stats, isLoading, onRefresh }: DatabaseStat
             <Database className="h-4 w-4 text-[#ffc800]" />
           )}
           <span className="hidden sm:inline text-xs">Base de Dados</span>
-          {stats && (
-            <Badge variant="secondary" className="ml-1 text-xs bg-[#ffc800]/20 text-[#ffc800] border-none">
-              {stats.totalRecords.toLocaleString('pt-BR')}
-            </Badge>
-          )}
           <ChevronDown className="h-3 w-3 opacity-50" />
         </Button>
       </PopoverTrigger>
       
       <PopoverContent 
         className="w-80 p-0 bg-[rgba(5,6,18,.95)] border-[rgba(255,255,255,.12)] backdrop-blur-xl" 
-        align="start"
+        align="end"
       >
         <div className="p-4 border-b border-[rgba(255,255,255,.08)]">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <Database className="h-4 w-4 text-[#ffc800]" />
-              <span className="font-medium text-sm text-[#f5f5f5]">t_master_dados</span>
-            </div>
+          <div className="flex items-center justify-end">
             {onRefresh && (
               <Button
                 variant="ghost"
