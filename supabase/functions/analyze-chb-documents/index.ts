@@ -680,6 +680,79 @@ Antes de colocar o valor do HAWB na tabela, confirme:
 - Se SIM → use o valor
 - Se NÃO → está extraindo do lugar errado!
 
+⚠️⚠️⚠️ EXTRAÇÃO DE PESO BRUTO DO CCT (EXTRATO DO CONHECIMENTO ELETRÔNICO) ⚠️⚠️⚠️
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ O CCT é um documento oficial brasileiro da Receita Federal!                 │
+│ Contém campos rotulados em PORTUGUÊS com estrutura específica:              │
+│                                                                             │
+│ ONDE PROCURAR:                                                              │
+│ 1. Seção "Dados Básicos" ou "Quantidades de volumes"                        │
+│ 2. O rótulo é exatamente: "Peso bruto (Kg):"                               │
+│ 3. O valor está LOGO ABAIXO ou AO LADO do rótulo                           │
+│                                                                             │
+│ ESTRUTURA TÍPICA DO CCT:                                                    │
+│ ┌────────────────────────────────┐                                         │
+│ │ Quantidades de volumes: 3      │                                         │
+│ │ Peso bruto (Kg):               │                                         │
+│ │ 501,500                        │ ← ESTE É O VALOR!                       │
+│ └────────────────────────────────┘                                         │
+│                                                                             │
+│ ⚠️ FORMATO BRASILEIRO:                                                      │
+│ - Usa VÍRGULA como separador decimal (ex: 501,500)                         │
+│ - Pode ter 3 casas decimais                                                │
+│ - Valor em kg (não em gramas!)                                             │
+│                                                                             │
+│ EXEMPLO REAL:                                                               │
+│ - CCT mostra: "Peso bruto (Kg):" seguido de "501,500"                      │
+│ - O Peso Bruto do CCT = 501,500 kg                                         │
+│                                                                             │
+│ ⚠️ O CCT NÃO TEM COLUNA "GROSS WEIGHT" - procure "Peso bruto (Kg):"!       │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+⚠️⚠️⚠️ EXTRAÇÃO DE VALOR MERCADORIA DE INVOICES — ATENÇÃO ESPECIAL ⚠️⚠️⚠️
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ CADA INVOICE TEM SEU PRÓPRIO VALOR TOTAL INDEPENDENTE:                      │
+│                                                                             │
+│ ONDE PROCURAR NA INVOICE:                                                   │
+│ 1. RODAPÉ da última página (mais comum!)                                    │
+│ 2. Seção "Summary" ou "Total"                                               │
+│ 3. Última linha da tabela de itens                                          │
+│                                                                             │
+│ RÓTULOS COMUNS:                                                             │
+│ - "Total amount", "Total", "Grand Total"                                    │
+│ - "Sub total", "Invoice Total"                                              │
+│ - "Montant Total", "Valor Total"                                            │
+│                                                                             │
+│ ESTRUTURA TÍPICA DE INVOICE:                                                │
+│ ┌──────────────────────────────────────────────────────────────────────┐   │
+│ │ Description    | Qty | Unit Price | Total                           │   │
+│ │ ───────────────────────────────────────────────────────────────────  │   │
+│ │ Item 1         | 10  | EUR 500    | EUR 5.000,00                    │   │
+│ │ Item 2         | 5   | EUR 650    | EUR 3.250,00                    │   │
+│ │ ───────────────────────────────────────────────────────────────────  │   │
+│ │                             Sub total: EUR 8.250,00                  │   │
+│ │                             VAT 0%:    EUR 0,00                      │   │
+│ │                             TOTAL:     EUR 8.250,00 ← ESTE VALOR!   │   │
+│ └──────────────────────────────────────────────────────────────────────┘   │
+│                                                                             │
+│ MÚLTIPLAS INVOICES (inv_01.pdf, inv_02.pdf, etc.):                         │
+│ ⚠️ EXTRAIR CADA UMA SEPARADAMENTE!                                          │
+│ ⚠️ NÃO copiar valor de uma para outra!                                      │
+│ ⚠️ Cada invoice tem SEU PRÓPRIO total!                                      │
+│                                                                             │
+│ EXEMPLO COM 2 INVOICES:                                                     │
+│ - inv_01.pdf → procure "Total amount" → EUR 28.234,23                      │
+│ - inv_02.pdf → procure "Total amount" → EUR 508,22                         │
+│ → Coluna inv_01.pdf: EUR 28.234,23                                         │
+│ → Coluna inv_02.pdf: EUR 508,22                                            │
+│                                                                             │
+│ OCR RUIM OU ILEGÍVEL:                                                       │
+│ - Se texto está corrompido/ilegível, OLHE A IMAGEM do documento            │
+│ - Procure tabelas no FINAL das páginas                                      │
+│ - O total geralmente está na ÚLTIMA página                                  │
+│ - Se realmente impossível ler → usar "ND" (NÃO INVENTAR!)                  │
+└─────────────────────────────────────────────────────────────────────────────┘
+
 ⚠️ REGRA #4: VALOR MERCADORIA ≠ FRETE
 - VALOR MERCADORIA = total da Invoice (produtos vendidos)
 - FRETE = custo do transporte (campo "Freight" no AWB/BL)
@@ -825,8 +898,35 @@ ERRO GRAVÍSSIMO (NUNCA FAZER!):
 - Ver "518" em um lugar do documento e assumir que é Peso Bruto sem verificar o rótulo!
 - Copiar "518" de outro documento porque "deve ser o mesmo valor"!
 
+⚠️⚠️⚠️ VALIDAÇÃO ANTI-ALUCINAÇÃO ESPECÍFICA - PESO BRUTO ⚠️⚠️⚠️
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ ANTES de colocar QUALQUER valor de Peso Bruto na tabela:                    │
+│                                                                             │
+│ TESTE 1: O valor está com o RÓTULO correto?                                │
+│ - HAWB: "Gross Weight" ou "G.W."                                           │
+│ - CCT: "Peso bruto (Kg):"                                                  │
+│ - Packing: "Gross Weight", "Total Weight", ou tabela de itens              │
+│                                                                             │
+│ TESTE 2: O valor faz sentido para PESO?                                    │
+│ - Deve ser um número em kg (100-2000 kg tipicamente para carga aérea)      │
+│ - Se o número parecer "estranho" → revisar de onde está extraindo!         │
+│                                                                             │
+│ TESTE 3: O valor NÃO é de outro campo?                                     │
+│ - Não é "Chargeable Weight" (HAWB)                                         │
+│ - Não é valor monetário (USD, EUR, BRL)                                    │
+│ - Não é quantidade de volumes                                               │
+│ - Não é dimensões (cm, m)                                                  │
+│                                                                             │
+│ ⚠️ EXEMPLO DE ERRO ESPECÍFICO A EVITAR:                                     │
+│ - O número "518" NÃO APARECE como Peso Bruto em documentos típicos!        │
+│ - Se você está colocando "518" → REVISE! Provavelmente é alucinação!       │
+│ - Valores comuns: ~501-502 kg (para esta conferência específica)           │
+│                                                                             │
+│ SE QUALQUER DÚVIDA → USE "ND"! É MELHOR QUE INVENTAR!                      │
+└─────────────────────────────────────────────────────────────────────────────┘
+
 SE O HAWB NÃO TEM "GROSS WEIGHT" COM UM VALOR → HAWB = "ND" para Peso Bruto!
-SE O CCT NÃO TEM PESO BRUTO EXPLÍCITO → CCT = "ND" para Peso Bruto!
+SE O CCT NÃO TEM "Peso bruto (Kg):" COM UM VALOR → CCT = "ND" para Peso Bruto!
 
 EXEMPLO DE ERRO GRAVE (NÃO FAZER!):
 - HAWB mostra: "Gross Weight: 502,0 kg"
@@ -1448,13 +1548,26 @@ async function callAnthropicAPI(prompt: string, filesContent: { name: string; co
     text: prompt,
   });
 
-  // Log detailed info
-  console.log(`[CHB Debug] Files being sent to API:`);
+  // ═══════════════════════════════════════════════════════════════════════════════
+  // DEBUG LOGGING - Detalhamento dos arquivos antes da análise
+  // ═══════════════════════════════════════════════════════════════════════════════
+  console.log(`[CHB Debug] ═══════════════════════════════════════════════════════`);
+  console.log(`[CHB Debug] ARQUIVOS SENDO ENVIADOS PARA ANÁLISE:`);
   for (const file of filesContent) {
-    console.log(`  - ${file.name} (${file.mimeType}) - Direct to Sonnet`);
+    const sizeKB = Math.round(file.content.length * 0.75 / 1024); // Base64 to actual size
+    const docType = file.name.toLowerCase().includes('hawb') ? 'HAWB' :
+                   file.name.toLowerCase().includes('cct') ? 'CCT' :
+                   file.name.toLowerCase().includes('pack') ? 'PACKING' :
+                   file.name.toLowerCase().includes('inv') ? 'INVOICE' :
+                   file.name.toLowerCase().includes('seguro') ? 'SEGURO' :
+                   'OUTRO';
+    console.log(`  📄 ${file.name}`);
+    console.log(`     Tipo detectado: ${docType} | MIME: ${file.mimeType} | Tamanho: ~${sizeKB}KB`);
   }
-  console.log(`Calling Anthropic API with ${filesContent.length} files...`);
-  console.log(`Prompt length: ${prompt.length} chars`);
+  console.log(`[CHB Debug] Total de arquivos: ${filesContent.length}`);
+  console.log(`[CHB Debug] Tamanho do prompt: ${prompt.length} caracteres`);
+  console.log(`[CHB Debug] ═══════════════════════════════════════════════════════`);
+  console.log(`[CHB] Chamando Anthropic API...`);
 
   const startTime = Date.now();
   const response = await fetch('https://api.anthropic.com/v1/messages', {
@@ -1590,7 +1703,25 @@ async function callLovableAI(prompt: string, filesContent: { name: string; conte
     text: prompt,
   });
 
-  console.log(`Calling Lovable AI (Gemini) with ${filesContent.length} files...`);
+  // ═══════════════════════════════════════════════════════════════════════════════
+  // DEBUG LOGGING - Detalhamento dos arquivos antes da análise (Lovable AI)
+  // ═══════════════════════════════════════════════════════════════════════════════
+  console.log(`[CHB Debug Lovable] ═══════════════════════════════════════════════════════`);
+  console.log(`[CHB Debug Lovable] ARQUIVOS SENDO ENVIADOS PARA ANÁLISE (Fallback):`);
+  for (const file of filesContent) {
+    const sizeKB = Math.round(file.content.length * 0.75 / 1024);
+    const docType = file.name.toLowerCase().includes('hawb') ? 'HAWB' :
+                   file.name.toLowerCase().includes('cct') ? 'CCT' :
+                   file.name.toLowerCase().includes('pack') ? 'PACKING' :
+                   file.name.toLowerCase().includes('inv') ? 'INVOICE' :
+                   file.name.toLowerCase().includes('seguro') ? 'SEGURO' :
+                   'OUTRO';
+    console.log(`  📄 ${file.name}`);
+    console.log(`     Tipo detectado: ${docType} | MIME: ${file.mimeType} | Tamanho: ~${sizeKB}KB`);
+  }
+  console.log(`[CHB Debug Lovable] Total de arquivos: ${filesContent.length}`);
+  console.log(`[CHB Debug Lovable] ═══════════════════════════════════════════════════════`);
+  console.log(`[CHB] Chamando Lovable AI (Gemini)...`);
 
   const startTime = Date.now();
   const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
@@ -2045,6 +2176,52 @@ serve(async (req) => {
     }
 
     const { html, tags, summary, detailedSummary, parecer, modal, cliente } = extractHtmlAndTags(responseText, stepId);
+
+    // ═══════════════════════════════════════════════════════════════════════════════
+    // DEBUG LOGGING - Valores extraídos para validação
+    // ═══════════════════════════════════════════════════════════════════════════════
+    console.log(`[CHB Debug] ═══════════════════════════════════════════════════════`);
+    console.log(`[CHB Debug] ANÁLISE CONCLUÍDA - Verificação de valores extraídos:`);
+    
+    // Extrair valores de Peso Bruto do HTML para debug
+    const pesoBrutoMatches = responseText.match(/Peso\s+Bruto[^<]*<\/td>[\s\S]*?<\/tr>/gi);
+    if (pesoBrutoMatches) {
+      console.log(`[CHB Debug] 📦 PESO BRUTO encontrado na resposta:`);
+      for (const match of pesoBrutoMatches.slice(0, 1)) { // Just first occurrence
+        const valuesInRow = match.match(/<td[^>]*>([^<]+)<\/td>/g);
+        if (valuesInRow) {
+          const cleanValues = valuesInRow.map(v => v.replace(/<[^>]+>/g, '').trim()).filter(v => v);
+          console.log(`     Valores na linha: ${cleanValues.join(' | ')}`);
+        }
+      }
+    }
+    
+    // Extrair valores de Valor Mercadoria do HTML para debug  
+    const valorMercMatches = responseText.match(/Valor\s+Mercadoria[^<]*<\/td>[\s\S]*?<\/tr>/gi);
+    if (valorMercMatches) {
+      console.log(`[CHB Debug] 💰 VALOR MERCADORIA encontrado na resposta:`);
+      for (const match of valorMercMatches.slice(0, 1)) {
+        const valuesInRow = match.match(/<td[^>]*>([^<]+)<\/td>/g);
+        if (valuesInRow) {
+          const cleanValues = valuesInRow.map(v => v.replace(/<[^>]+>/g, '').trim()).filter(v => v);
+          console.log(`     Valores na linha: ${cleanValues.join(' | ')}`);
+        }
+      }
+    }
+    
+    // Alerta se "518" aparecer em algum lugar
+    if (responseText.includes('518')) {
+      console.warn(`[CHB Debug] ⚠️ ALERTA: Valor "518" detectado na resposta! Possível alucinação!`);
+      const context518 = responseText.match(/.{0,50}518.{0,50}/g);
+      if (context518) {
+        console.warn(`[CHB Debug] Contexto onde "518" aparece:`);
+        context518.slice(0, 3).forEach((ctx, i) => console.warn(`     ${i+1}: ...${ctx}...`));
+      }
+    }
+    
+    console.log(`[CHB Debug] 📊 Tags: ${tags.map(t => t.label).join(', ')}`);
+    console.log(`[CHB Debug] ${usedFallback ? '⚠️ Usou fallback (Lovable AI)' : '✅ Usou Anthropic'}`);
+    console.log(`[CHB Debug] ═══════════════════════════════════════════════════════`);
 
     // Save extracted data to cache for future steps (fire and forget)
     if (itemId) {
