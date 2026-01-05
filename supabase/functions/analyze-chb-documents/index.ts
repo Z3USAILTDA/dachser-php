@@ -792,10 +792,17 @@ PESO BRUTO — VALIDAÇÃO OBRIGATÓRIA:
    → Status: 🔴 DIVERGENTE (HAWB difere de Packing e CCT!)
 
 CONFORME (✅) SOMENTE quando TODOS estes critérios forem atendidos:
-1. TODOS os documentos que contêm o campo têm o MESMO valor
-2. Valores são EXATAMENTE iguais (ex.: "USD 1.500,00" = "USD 1.500,00")
-3. OU valores são numericamente IDÊNTICOS (ex.: "501,5" = "501,50" = "501.5")
-4. NENHUMA diferença numérica é permitida para marcar ✅
+1. TODOS os documentos que contêm o campo têm o MESMO valor NORMALIZADO
+2. NORMALIZAÇÃO OBRIGATÓRIA ANTES DE COMPARAR:
+   - Remover zeros à direita após decimal: 501,500 → 501,5
+   - Tratar vírgula e ponto como equivalentes: 501.5 = 501,5
+   - Ignorar separadores de milhar: 10.841 = 10841
+3. Após normalização, valores iguais = ✅ CONFORME
+4. EXEMPLOS DE CONFORME (✅):
+   - CCT: 501,500 | HAWB: 501,5 | Packing: 501,5 → ✅ (501,5 = 501,5 = 501,5)
+   - Invoice: EUR 10.841,00 | CCT: EUR 10841 → ✅ (mesmo valor numérico)
+   - Peso: 97,30 | Peso: 97,3 → ✅ (mesmo valor após normalização)
+5. NENHUMA diferença NUMÉRICA REAL é permitida para marcar ✅
 
 DIVERGENTE (🔴) OBRIGATÓRIO quando:
 - QUALQUER documento tem valor DIFERENTE dos demais (mesmo que por 0,1 kg!)
@@ -822,10 +829,22 @@ VERIFICAÇÃO CRUZADA OBRIGATÓRIA — EXECUTAR PARA CADA LINHA
 
 ANTES de marcar QUALQUER campo como ✅ CONFORME:
 1. Liste TODOS os valores extraídos de TODOS os documentos
-2. Compare TODOS os valores numericamente
-3. Se houver QUALQUER diferença (mesmo 0,01) → 🔴 DIVERGENTE
-4. Tolerância = ZERO para valores diferentes. Apenas formatação (501,5 = 501.5)
-5. Se valores são diferentes → 🔴 É OBRIGATÓRIO, NÃO HÁ EXCEÇÃO!
+2. NORMALIZE cada valor (remover zeros à direita, uniformizar decimal)
+3. Compare os valores NORMALIZADOS
+4. Se valores NORMALIZADOS são IGUAIS → ✅ CONFORME (obrigatório!)
+5. Se valores NORMALIZADOS são DIFERENTES (mesmo 0,01) → 🔴 DIVERGENTE
+6. Tolerância = ZERO para valores NUMERICAMENTE diferentes após normalização
+
+⚠️ NORMALIZAÇÃO — DIFERENÇAS DE FORMATAÇÃO NÃO SÃO DIVERGÊNCIAS:
+- 501,500 vs 501,5 → ✅ CONFORME (mesmo valor: 501,5)
+- 501.50 vs 501,5 → ✅ CONFORME (mesmo valor: 501,5)
+- 10.841,00 vs 10841 → ✅ CONFORME (mesmo valor: 10841)
+- 97,30 vs 97,3 → ✅ CONFORME (mesmo valor: 97,3)
+
+⚠️ DIVERGÊNCIAS REAIS (valores NUMERICAMENTE diferentes):
+- 501,5 vs 502,0 → 🔴 DIVERGENTE (diferença de 0,5!)
+- 500 vs 501 → 🔴 DIVERGENTE (diferença de 1!)
+- 10.841 vs 10.842 → 🔴 DIVERGENTE (diferença de 1!)
 
 CHECKLIST MENTAL OBRIGATÓRIO:
 □ Extraí o valor de CADA documento que contém este campo?
