@@ -96,6 +96,7 @@ export const EventsTable = ({ events }: EventsTableProps) => {
             <TableHead className="text-[#888] text-[0.7rem] uppercase tracking-wider font-medium">CODE</TableHead>
             <TableHead className="text-[#888] text-[0.7rem] uppercase tracking-wider font-medium">LOCATION</TableHead>
             <TableHead className="text-[#888] text-[0.7rem] uppercase tracking-wider font-medium">CONTAINER</TableHead>
+            <TableHead className="text-[#888] text-[0.7rem] uppercase tracking-wider font-medium">EMPTY</TableHead>
             <TableHead className="text-[#888] text-[0.7rem] uppercase tracking-wider font-medium">VESSEL</TableHead>
           </TableRow>
         </TableHeader>
@@ -134,6 +135,15 @@ export const EventsTable = ({ events }: EventsTableProps) => {
                       </span>
                     )}
                   </div>
+                ) : (
+                  <span className="text-[#666]">-</span>
+                )}
+              </TableCell>
+              <TableCell>
+                {(event as any).emptyIndicator === 'EMPTY' ? (
+                  <span className="text-amber-400 text-[0.82rem] font-medium">EMPTY</span>
+                ) : (event as any).emptyIndicator === 'LADEN' ? (
+                  <span className="text-emerald-400 text-[0.82rem] font-medium">LADEN</span>
                 ) : (
                   <span className="text-[#666]">-</span>
                 )}

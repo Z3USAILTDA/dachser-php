@@ -80,8 +80,8 @@ export const BookingResultCard = ({ bookingInfo, apiMetadata }: BookingResultCar
           boxShadow: '0 18px 40px rgba(0,0,0,0.85)'
         }}
       >
-        <div className="grid grid-cols-1 lg:grid-cols-[1fr_2fr_1fr] gap-8 items-start">
-          {/* Left - Booking Info */}
+        <div className="grid grid-cols-1 lg:grid-cols-[200px_1fr_200px_200px] gap-6 items-start">
+          {/* Col 1 - Booking Info (200px) */}
           <div className="space-y-4">
             <div>
               <div className="text-[0.7rem] text-[#888] uppercase tracking-wider mb-1">Booking No.</div>
@@ -89,17 +89,13 @@ export const BookingResultCard = ({ bookingInfo, apiMetadata }: BookingResultCar
             </div>
             <div>
               <div className="text-[0.7rem] text-[#888] uppercase tracking-wider mb-1">Your Reference</div>
-              <div className="text-[0.9rem] text-white/90">{yourRef}</div>
-            </div>
-            <div>
-              <div className="text-[0.7rem] text-[#888] uppercase tracking-wider mb-1">Vessel</div>
-              <div className="text-[0.9rem] text-[#ffc800] font-medium">{vessel}</div>
+              <div className="text-[0.9rem] text-white/90 break-all">{yourRef}</div>
             </div>
           </div>
 
-          {/* Center - Route Visualization */}
+          {/* Col 2 - Journey Timeline (flex) */}
           <div className="flex flex-col items-center justify-center py-4">
-            <div className="flex items-center w-full max-w-md">
+            <div className="flex items-center w-full">
               {/* Origin Dot */}
               <div className="flex flex-col items-center">
                 <div className="w-4 h-4 rounded-full bg-emerald-500 ring-4 ring-emerald-500/20" />
@@ -123,8 +119,8 @@ export const BookingResultCard = ({ bookingInfo, apiMetadata }: BookingResultCar
             </div>
 
             {/* Route Names */}
-            <div className="flex justify-between w-full max-w-md mt-4 px-2">
-              <div className="text-center">
+            <div className="flex justify-between w-full mt-4">
+              <div className="text-left">
                 <div className="text-[0.85rem] font-medium text-white">
                   {polCode && `(${polCode})`} {polName}
                 </div>
@@ -132,7 +128,7 @@ export const BookingResultCard = ({ bookingInfo, apiMetadata }: BookingResultCar
                   ETD: {formatDate(etd)}
                 </div>
               </div>
-              <div className="text-center">
+              <div className="text-right">
                 <div className="text-[0.85rem] font-medium text-white">
                   {podCode && `(${podCode})`} {podName}
                 </div>
@@ -141,10 +137,16 @@ export const BookingResultCard = ({ bookingInfo, apiMetadata }: BookingResultCar
                 </div>
               </div>
             </div>
+
+            {/* Vessel Info */}
+            <div className="mt-3 text-center">
+              <span className="text-[0.75rem] text-[#888]">Vessel: </span>
+              <span className="text-[0.85rem] text-[#ffc800] font-medium">{vessel}</span>
+            </div>
           </div>
 
-          {/* Right - Container & Status */}
-          <div className="space-y-4 lg:text-right">
+          {/* Col 3 - Containers & Commodity (200px) */}
+          <div className="space-y-4">
             <div>
               <div className="text-[0.7rem] text-[#888] uppercase tracking-wider mb-1">Containers</div>
               <div className="text-xl font-bold text-white">{containerType}</div>
@@ -153,15 +155,17 @@ export const BookingResultCard = ({ bookingInfo, apiMetadata }: BookingResultCar
               <div className="text-[0.7rem] text-[#888] uppercase tracking-wider mb-1">Commodity</div>
               <div className="text-[0.9rem] text-white/90">{commodity}</div>
             </div>
-            <div>
-              <div className="text-[0.7rem] text-[#888] uppercase tracking-wider mb-2">Document Status</div>
-              <span 
-                className={`inline-flex items-center gap-1.5 px-4 py-1.5 rounded-full border-2 text-[0.8rem] font-semibold ${getStatusColor(status)}`}
-              >
-                {status.toLowerCase().includes('approved') && <Check className="h-3.5 w-3.5" />}
-                {status}
-              </span>
-            </div>
+          </div>
+
+          {/* Col 4 - Document Status (200px) */}
+          <div className="space-y-2 lg:text-right">
+            <div className="text-[0.7rem] text-[#888] uppercase tracking-wider mb-2">Document Status</div>
+            <span 
+              className={`inline-flex items-center gap-1.5 px-4 py-2 rounded-full border-2 text-[0.85rem] font-semibold ${getStatusColor(status)}`}
+            >
+              {status.toLowerCase().includes('approved') && <Check className="h-4 w-4" />}
+              {status}
+            </span>
           </div>
         </div>
       </div>

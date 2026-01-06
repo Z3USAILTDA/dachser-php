@@ -8,7 +8,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
-import { Package } from "lucide-react";
+import { Package, ExternalLink } from "lucide-react";
 import { useState } from "react";
 
 interface ContainersTableProps {
@@ -61,6 +61,7 @@ export const ContainersTable = ({ containers }: ContainersTableProps) => {
             <TableHead className="text-[#888] text-[0.7rem] uppercase tracking-wider font-medium">STATUS</TableHead>
             <TableHead className="text-[#888] text-[0.7rem] uppercase tracking-wider font-medium">DATE</TableHead>
             <TableHead className="text-[#888] text-[0.7rem] uppercase tracking-wider font-medium">PLACE OF ACTIVITY</TableHead>
+            <TableHead className="text-[#888] text-[0.7rem] uppercase tracking-wider font-medium text-center">AÇÕES</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -88,6 +89,16 @@ export const ContainersTable = ({ containers }: ContainersTableProps) => {
               </TableCell>
               <TableCell className="text-white/80 text-[0.85rem]">
                 {container.placeOfActivity || '-'}
+              </TableCell>
+              <TableCell className="text-center">
+                <a 
+                  href={`https://www.hapag-lloyd.com/en/online-business/track/track-by-container-solution.html?container=${container.containerNo}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center justify-center h-7 w-7 rounded-lg bg-[rgba(255,255,255,0.05)] hover:bg-[rgba(255,255,255,0.1)] transition-colors"
+                >
+                  <ExternalLink className="h-3.5 w-3.5 text-[#888] hover:text-[#ffc800]" />
+                </a>
               </TableCell>
             </TableRow>
           ))}
