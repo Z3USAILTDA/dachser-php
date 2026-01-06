@@ -233,10 +233,10 @@ export const DraftDataGrid = ({ data, onRefresh, isLoading }: DraftDataGridProps
     <div className="space-y-4">
       {/* Stats Cards */}
       <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
-        <Card className="bg-card/50 border-border border-l-4 border-l-blue-500">
+        <Card className="bg-card/50 border-border border-l-4 border-l-[hsl(var(--info))]">
           <CardContent className="pt-3 pb-3">
             <div className="flex items-center gap-2">
-              <Database className="h-4 w-4 text-blue-400" />
+              <Database className="h-4 w-4 text-[hsl(var(--info))]" />
               <div>
                 <div className="text-lg font-bold">{stats.total}</div>
                 <div className="text-xs text-muted-foreground">Total</div>
@@ -245,10 +245,10 @@ export const DraftDataGrid = ({ data, onRefresh, isLoading }: DraftDataGridProps
           </CardContent>
         </Card>
 
-        <Card className="bg-card/50 border-border border-l-4 border-l-emerald-500">
+        <Card className="bg-card/50 border-border border-l-4 border-l-[hsl(var(--success))]">
           <CardContent className="pt-3 pb-3">
             <div className="flex items-center gap-2">
-              <CheckCircle2 className="h-4 w-4 text-emerald-400" />
+              <CheckCircle2 className="h-4 w-4 text-[hsl(var(--success))]" />
               <div>
                 <div className="text-lg font-bold">{stats.completed}</div>
                 <div className="text-xs text-muted-foreground">Completed</div>
@@ -257,10 +257,10 @@ export const DraftDataGrid = ({ data, onRefresh, isLoading }: DraftDataGridProps
           </CardContent>
         </Card>
 
-        <Card className="bg-card/50 border-border border-l-4 border-l-amber-500">
+        <Card className="bg-card/50 border-border border-l-4 border-l-[hsl(var(--warning))]">
           <CardContent className="pt-3 pb-3">
             <div className="flex items-center gap-2">
-              <Ship className="h-4 w-4 text-amber-400" />
+              <Ship className="h-4 w-4 text-[hsl(var(--warning))]" />
               <div>
                 <div className="text-lg font-bold">{stats.inTransit}</div>
                 <div className="text-xs text-muted-foreground">Em Trânsito</div>
@@ -269,10 +269,10 @@ export const DraftDataGrid = ({ data, onRefresh, isLoading }: DraftDataGridProps
           </CardContent>
         </Card>
 
-        <Card className="bg-card/50 border-border border-l-4 border-l-orange-500">
+        <Card className="bg-card/50 border-border border-l-4 border-l-primary">
           <CardContent className="pt-3 pb-3">
             <div className="flex items-center gap-2">
-              <Clock className="h-4 w-4 text-orange-400" />
+              <Clock className="h-4 w-4 text-primary" />
               <div>
                 <div className="text-lg font-bold">{stats.pending}</div>
                 <div className="text-xs text-muted-foreground">Pendentes</div>
@@ -281,10 +281,10 @@ export const DraftDataGrid = ({ data, onRefresh, isLoading }: DraftDataGridProps
           </CardContent>
         </Card>
 
-        <Card className="bg-card/50 border-border border-l-4 border-l-rose-500">
+        <Card className="bg-card/50 border-border border-l-4 border-l-[hsl(var(--destructive))]">
           <CardContent className="pt-3 pb-3">
             <div className="flex items-center gap-2">
-              <XCircle className="h-4 w-4 text-rose-400" />
+              <XCircle className="h-4 w-4 text-[hsl(var(--destructive))]" />
               <div>
                 <div className="text-lg font-bold">{stats.errors}</div>
                 <div className="text-xs text-muted-foreground">Erros</div>
