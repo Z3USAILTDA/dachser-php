@@ -385,7 +385,7 @@ export const DraftMultiSearch = ({ onComplete }: DraftMultiSearchProps) => {
       {/* Batch Search Mode */}
       {isBatchMode && (
         <>
-          <Card className="bg-card/50 border-border">
+          <Card className="bg-card border-border">
             <CardHeader className="pb-3">
               <CardTitle className="text-lg">
                 Cole os {currentSearchType.label}s (um por linha)
@@ -424,7 +424,7 @@ export const DraftMultiSearch = ({ onComplete }: DraftMultiSearchProps) => {
 
           {/* Progress Bar */}
           {(isProcessing || results.length > 0) && (
-            <Card className="bg-card/50 border-border">
+            <Card className="bg-card border-border">
               <CardContent className="py-4 space-y-3">
                 <div className="flex justify-between text-sm">
                   <span className="text-muted-foreground">
@@ -460,7 +460,7 @@ export const DraftMultiSearch = ({ onComplete }: DraftMultiSearchProps) => {
 
           {/* Results Table */}
           {results.length > 0 && (
-            <Card className="bg-card/50 border-border">
+            <Card className="bg-card border-border">
               <CardHeader className="pb-3">
                 <div className="flex items-center justify-between">
                   <CardTitle className="text-lg">Resultados</CardTitle>

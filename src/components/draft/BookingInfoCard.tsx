@@ -35,7 +35,7 @@ export const BookingInfoCard = ({ bookingInfo, trackingData }: BookingInfoCardPr
   };
 
   return (
-    <Card className="bg-card/50 border-border">
+    <Card className="bg-card border-border">
       <CardHeader className="pb-3">
         <div className="flex items-center justify-between">
           <CardTitle className="text-lg flex items-center gap-2">

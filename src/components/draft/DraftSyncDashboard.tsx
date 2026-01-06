@@ -260,7 +260,7 @@ export const DraftSyncDashboard = ({
       {/* Two Column Layout */}
       <div className="grid lg:grid-cols-2 gap-6">
         {/* Left: Queue Table */}
-        <Card className="bg-card/50 border-border">
+        <Card className="bg-card border-border">
           <CardHeader className="pb-2">
             <CardTitle className="text-lg">Fila de Sincronização</CardTitle>
           </CardHeader>
@@ -305,7 +305,7 @@ export const DraftSyncDashboard = ({
         </Card>
 
         {/* Right: Details Panel */}
-        <Card className="bg-card/50 border-border">
+        <Card className="bg-card border-border">
           <CardHeader className="pb-2">
             <CardTitle className="text-lg">
               {selectedMBL ? `Detalhes: ${selectedMBL.mbl_id}` : 'Detalhes do MBL'}
