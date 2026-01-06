@@ -233,7 +233,7 @@ export const DraftDataGrid = ({ data, onRefresh, isLoading }: DraftDataGridProps
     <div className="space-y-4">
       {/* Stats Cards */}
       <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
-        <Card className="bg-card/50 border-border border-l-4 border-l-[hsl(var(--info))]">
+        <Card className="bg-card border-border border-l-4 border-l-[hsl(var(--info))]">
           <CardContent className="pt-3 pb-3">
             <div className="flex items-center gap-2">
               <Database className="h-4 w-4 text-[hsl(var(--info))]" />
@@ -245,7 +245,7 @@ export const DraftDataGrid = ({ data, onRefresh, isLoading }: DraftDataGridProps
           </CardContent>
         </Card>
 
-        <Card className="bg-card/50 border-border border-l-4 border-l-[hsl(var(--success))]">
+        <Card className="bg-card border-border border-l-4 border-l-[hsl(var(--success))]">
           <CardContent className="pt-3 pb-3">
             <div className="flex items-center gap-2">
               <CheckCircle2 className="h-4 w-4 text-[hsl(var(--success))]" />
@@ -257,7 +257,7 @@ export const DraftDataGrid = ({ data, onRefresh, isLoading }: DraftDataGridProps
           </CardContent>
         </Card>
 
-        <Card className="bg-card/50 border-border border-l-4 border-l-[hsl(var(--warning))]">
+        <Card className="bg-card border-border border-l-4 border-l-[hsl(var(--warning))]">
           <CardContent className="pt-3 pb-3">
             <div className="flex items-center gap-2">
               <Ship className="h-4 w-4 text-[hsl(var(--warning))]" />
@@ -269,7 +269,7 @@ export const DraftDataGrid = ({ data, onRefresh, isLoading }: DraftDataGridProps
           </CardContent>
         </Card>
 
-        <Card className="bg-card/50 border-border border-l-4 border-l-primary">
+        <Card className="bg-card border-border border-l-4 border-l-primary">
           <CardContent className="pt-3 pb-3">
             <div className="flex items-center gap-2">
               <Clock className="h-4 w-4 text-primary" />
@@ -281,7 +281,7 @@ export const DraftDataGrid = ({ data, onRefresh, isLoading }: DraftDataGridProps
           </CardContent>
         </Card>
 
-        <Card className="bg-card/50 border-border border-l-4 border-l-[hsl(var(--destructive))]">
+        <Card className="bg-card border-border border-l-4 border-l-[hsl(var(--destructive))]">
           <CardContent className="pt-3 pb-3">
             <div className="flex items-center gap-2">
               <XCircle className="h-4 w-4 text-[hsl(var(--destructive))]" />

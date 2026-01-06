@@ -144,7 +144,7 @@ export const DraftSyncDashboard = ({
     <div className="space-y-6">
       {/* 5 Metric Cards */}
       <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
-        <Card className="bg-card/50 border-border border-l-4 border-l-[hsl(var(--info))]">
+        <Card className="bg-card border-border border-l-4 border-l-[hsl(var(--info))]">
           <CardContent className="pt-4 pb-4">
             <div className="flex items-center gap-3">
               <div className="p-2 bg-[hsl(var(--info)/0.2)] rounded-lg">
@@ -158,7 +158,7 @@ export const DraftSyncDashboard = ({
           </CardContent>
         </Card>
 
-        <Card className="bg-card/50 border-border border-l-4 border-l-[hsl(var(--warning))]">
+        <Card className="bg-card border-border border-l-4 border-l-[hsl(var(--warning))]">
           <CardContent className="pt-4 pb-4">
             <div className="flex items-center gap-3">
               <div className="p-2 bg-[hsl(var(--warning)/0.2)] rounded-lg">
@@ -172,7 +172,7 @@ export const DraftSyncDashboard = ({
           </CardContent>
         </Card>
 
-        <Card className="bg-card/50 border-border border-l-4 border-l-[hsl(var(--primary))]">
+        <Card className="bg-card border-border border-l-4 border-l-[hsl(var(--primary))]">
           <CardContent className="pt-4 pb-4">
             <div className="flex items-center gap-3">
               <div className="p-2 bg-[hsl(var(--primary)/0.2)] rounded-lg">
@@ -186,7 +186,7 @@ export const DraftSyncDashboard = ({
           </CardContent>
         </Card>
 
-        <Card className="bg-card/50 border-border border-l-4 border-l-[hsl(var(--success))]">
+        <Card className="bg-card border-border border-l-4 border-l-[hsl(var(--success))]">
           <CardContent className="pt-4 pb-4">
             <div className="flex items-center gap-3">
               <div className="p-2 bg-[hsl(var(--success)/0.2)] rounded-lg">
@@ -200,7 +200,7 @@ export const DraftSyncDashboard = ({
           </CardContent>
         </Card>
 
-        <Card className="bg-card/50 border-border border-l-4 border-l-[hsl(var(--destructive))]">
+        <Card className="bg-card border-border border-l-4 border-l-[hsl(var(--destructive))]">
           <CardContent className="pt-4 pb-4">
             <div className="flex items-center gap-3">
               <div className="p-2 bg-[hsl(var(--destructive)/0.2)] rounded-lg">
