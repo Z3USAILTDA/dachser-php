@@ -357,10 +357,10 @@ export const DraftDataGrid = ({ data, onRefresh, isLoading }: DraftDataGridProps
       )}
 
       {/* Data Table */}
-      <div className="border border-border rounded-lg overflow-x-auto">
+      <div className="border border-border rounded-lg overflow-x-auto bg-card">
         <Table>
           <TableHeader>
-            <TableRow className="bg-muted/50">
+            <TableRow className="bg-muted">
               <TableHead className="font-semibold w-12">#</TableHead>
               <TableHead className="font-semibold">MBL ID</TableHead>
               <TableHead className="font-semibold">Booking</TableHead>
@@ -392,7 +392,7 @@ export const DraftDataGrid = ({ data, onRefresh, isLoading }: DraftDataGridProps
               </TableRow>
             ) : (
               paginatedData.map((item, index) => (
-                <TableRow key={item.mbl_id} className="hover:bg-muted/30">
+                <TableRow key={item.mbl_id} className="hover:bg-muted/50">
                   <TableCell className="text-muted-foreground text-sm">
                     {(currentPage - 1) * ITEMS_PER_PAGE + index + 1}
                   </TableCell>

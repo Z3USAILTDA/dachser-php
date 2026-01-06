@@ -265,10 +265,10 @@ export const DraftSyncDashboard = ({
             <CardTitle className="text-lg">Fila de Sincronização</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="border border-border rounded-lg overflow-hidden max-h-96 overflow-y-auto">
+            <div className="border border-border rounded-lg overflow-hidden max-h-96 overflow-y-auto bg-card">
               <Table>
                 <TableHeader>
-                  <TableRow className="bg-muted/50">
+                  <TableRow className="bg-muted">
                     <TableHead className="font-semibold">MBL</TableHead>
                     <TableHead className="font-semibold">Status</TableHead>
                     <TableHead className="font-semibold">Última Sync</TableHead>
@@ -285,7 +285,7 @@ export const DraftSyncDashboard = ({
                     queueItems.map((item) => (
                       <TableRow 
                         key={item.mbl_id} 
-                        className={`cursor-pointer hover:bg-muted/30 ${selectedMBL?.mbl_id === item.mbl_id ? 'bg-[rgba(255,200,0,0.1)]' : ''}`}
+                        className={`cursor-pointer hover:bg-muted/50 ${selectedMBL?.mbl_id === item.mbl_id ? 'bg-primary/10' : ''}`}
                         onClick={() => handleSelectMBL(item)}
                       >
                         <TableCell className="font-mono text-sm">{item.mbl_id}</TableCell>

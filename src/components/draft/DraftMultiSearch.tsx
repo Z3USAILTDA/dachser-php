@@ -486,10 +486,10 @@ export const DraftMultiSearch = ({ onComplete }: DraftMultiSearchProps) => {
                 </div>
               </CardHeader>
               <CardContent>
-                <div className="border border-border rounded-lg overflow-hidden max-h-[400px] overflow-y-auto">
+                <div className="border border-border rounded-lg overflow-hidden max-h-[400px] overflow-y-auto bg-card">
                   <Table>
                     <TableHeader>
-                      <TableRow className="bg-muted/50">
+                      <TableRow className="bg-muted">
                         <TableHead>Referência</TableHead>
                         <TableHead>Status</TableHead>
                         <TableHead>Booking</TableHead>
