@@ -30,10 +30,7 @@ const eventTypeConfig: Record<string, {
 };
 
 const getEventCode = (event: HapagEvent): string => {
-  return event.equipmentEventTypeCode || 
-         event.transportEventTypeCode || 
-         event.shipmentEventTypeCode || 
-         'N/A';
+  return event.eventCode || 'N/A';
 };
 
 const getEventDescription = (event: HapagEvent): string => {
@@ -52,17 +49,15 @@ const getEventDescription = (event: HapagEvent): string => {
 };
 
 const getLocationInfo = (event: HapagEvent): string => {
-  const location = event.eventLocation || event.transportCall?.location;
-  if (!location) return '';
-  
-  const name = location.locationName || '';
-  const code = location.UNLocationCode || '';
+  const name = event.location || '';
+  const code = event.locationCode || '';
   
   if (name && code) return `${name} (${code})`;
   return name || code;
 };
 
-const formatEventDate = (dateStr: string): string => {
+const formatEventDate = (dateStr: string | undefined): string => {
+  if (!dateStr) return '-';
   try {
     const date = parseISO(dateStr);
     return format(date, "dd/MM/yyyy HH:mm", { locale: ptBR });
@@ -74,7 +69,7 @@ const formatEventDate = (dateStr: string): string => {
 export const DraftEventTimeline = ({ events }: DraftEventTimelineProps) => {
   // Sort events by date (most recent first)
   const sortedEvents = [...events].sort((a, b) => 
-    new Date(b.eventDateTime).getTime() - new Date(a.eventDateTime).getTime()
+    new Date(b.dateTime).getTime() - new Date(a.dateTime).getTime()
   );
 
   if (events.length === 0) {
@@ -116,7 +111,7 @@ export const DraftEventTimeline = ({ events }: DraftEventTimelineProps) => {
               </div>
               
               <div className="text-xs text-muted-foreground">
-                {formatEventDate(event.eventDateTime)}
+                {formatEventDate(event.dateTime)}
               </div>
 
               {location && (
@@ -126,10 +121,10 @@ export const DraftEventTimeline = ({ events }: DraftEventTimelineProps) => {
                 </div>
               )}
 
-              {event.equipmentReference && (
+              {event.containerNo && (
                 <div className="mt-1 text-xs text-muted-foreground">
-                  Container: {event.equipmentReference}
-                  {event.ISOEquipmentCode && ` (${event.ISOEquipmentCode})`}
+                  Container: {event.containerNo}
+                  {event.containerType && ` (${event.containerType})`}
                 </div>
               )}
             </div>

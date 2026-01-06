@@ -84,11 +84,11 @@ export const HapagTrackerPanel = ({ onSave }: HapagTrackerPanelProps) => {
         body: {
           trackingData: {
             mbl_id: result.bookingInfo.transportDocumentReference,
-            booking: result.bookingInfo.bookingReference,
-            origem: result.bookingInfo.polName,
-            destino: result.bookingInfo.podName,
+            booking: result.bookingInfo.bookingNumber,
+            origem: result.bookingInfo.originLocation,
+            destino: result.bookingInfo.destinationLocation,
             navio: result.bookingInfo.vesselName,
-            voyage: result.bookingInfo.voyage,
+            voyage: result.bookingInfo.voyageNumber,
             etd: result.bookingInfo.etd,
             eta: result.bookingInfo.eta,
             status_armador: result.bookingInfo.documentStatus,
@@ -195,11 +195,16 @@ export const HapagTrackerPanel = ({ onSave }: HapagTrackerPanelProps) => {
                       <Package className="h-5 w-5 text-muted-foreground" />
                       <div>
                         <div className="font-mono text-sm font-medium">
-                          {container.equipmentReference}
+                          {container.containerNo}
                         </div>
                         <div className="text-xs text-muted-foreground">
-                          {container.ISOEquipmentCode} - {container.emptyIndicatorCode}
+                          {container.type} - {container.status}
                         </div>
+                        {container.placeOfActivity && (
+                          <div className="text-xs text-muted-foreground">
+                            {container.placeOfActivity}
+                          </div>
+                        )}
                       </div>
                     </div>
                   ))}
