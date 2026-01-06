@@ -7,7 +7,6 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Badge } from "@/components/ui/badge";
 import { Calendar } from "lucide-react";
 import { format, parseISO } from "date-fns";
 
@@ -29,27 +28,27 @@ const getEventTypeBadge = (eventType: string) => {
   switch (eventType) {
     case 'EQUIPMENT':
       return (
-        <Badge className="bg-orange-500/20 text-orange-400 border-orange-500/30 hover:bg-orange-500/30">
+        <span className="inline-flex items-center px-2.5 py-1 rounded-full text-[0.72rem] font-medium bg-orange-500/15 text-orange-400 border border-orange-500/25">
           EQUIPMENT
-        </Badge>
+        </span>
       );
     case 'TRANSPORT':
       return (
-        <Badge className="bg-blue-500/20 text-blue-400 border-blue-500/30 hover:bg-blue-500/30">
+        <span className="inline-flex items-center px-2.5 py-1 rounded-full text-[0.72rem] font-medium bg-blue-500/15 text-blue-400 border border-blue-500/25">
           TRANSPORT
-        </Badge>
+        </span>
       );
     case 'SHIPMENT':
       return (
-        <Badge className="bg-yellow-500/20 text-yellow-400 border-yellow-500/30 hover:bg-yellow-500/30">
+        <span className="inline-flex items-center px-2.5 py-1 rounded-full text-[0.72rem] font-medium bg-[#ffc800]/15 text-[#ffc800] border border-[#ffc800]/25">
           SHIPMENT
-        </Badge>
+        </span>
       );
     default:
       return (
-        <Badge variant="outline" className="text-muted-foreground">
+        <span className="inline-flex items-center px-2.5 py-1 rounded-full text-[0.72rem] font-medium bg-[rgba(255,255,255,0.05)] text-[#888] border border-[rgba(255,255,255,0.12)]">
           {eventType}
-        </Badge>
+        </span>
       );
   }
 };
@@ -62,48 +61,65 @@ export const EventsTable = ({ events }: EventsTableProps) => {
 
   if (events.length === 0) {
     return (
-      <div className="text-center py-8 text-muted-foreground">
-        Nenhum evento encontrado
+      <div 
+        className="rounded-2xl py-12 text-center backdrop-blur-[18px]"
+        style={{
+          background: 'rgba(5,6,18,0.9)',
+          border: '1px solid rgba(255,255,255,0.12)',
+        }}
+      >
+        <span className="text-[#888] text-[0.85rem]">Nenhum evento encontrado</span>
       </div>
     );
   }
 
   return (
-    <div className="bg-[hsl(var(--card))]/60 border border-border rounded-lg">
-      <div className="flex items-center gap-2 px-4 py-3 border-b border-border">
-        <Calendar className="h-5 w-5 text-primary" />
-        <span className="font-medium text-foreground">Event Timeline ({events.length} events)</span>
+    <div 
+      className="rounded-2xl overflow-hidden backdrop-blur-[18px]"
+      style={{
+        background: 'rgba(5,6,18,0.9)',
+        border: '1px solid rgba(255,255,255,0.12)',
+        boxShadow: '0 18px 40px rgba(0,0,0,0.85)'
+      }}
+    >
+      {/* Header */}
+      <div className="flex items-center gap-2 px-5 py-4 border-b border-[rgba(255,255,255,0.08)]">
+        <Calendar className="h-5 w-5 text-[#ffc800]" />
+        <span className="text-[0.85rem] font-medium text-white">Event Timeline ({events.length} events)</span>
       </div>
 
       <Table>
         <TableHeader>
-          <TableRow className="border-border hover:bg-transparent">
-            <TableHead className="text-muted-foreground text-xs font-medium uppercase tracking-wider">DATE/TIME</TableHead>
-            <TableHead className="text-muted-foreground text-xs font-medium uppercase tracking-wider">EVENT TYPE</TableHead>
-            <TableHead className="text-muted-foreground text-xs font-medium uppercase tracking-wider">CODE</TableHead>
-            <TableHead className="text-muted-foreground text-xs font-medium uppercase tracking-wider">LOCATION</TableHead>
-            <TableHead className="text-muted-foreground text-xs font-medium uppercase tracking-wider">CONTAINER</TableHead>
-            <TableHead className="text-muted-foreground text-xs font-medium uppercase tracking-wider">VESSEL</TableHead>
+          <TableRow className="border-[rgba(255,255,255,0.06)] hover:bg-transparent">
+            <TableHead className="text-[#888] text-[0.7rem] uppercase tracking-wider font-medium px-5 py-3">DATE/TIME</TableHead>
+            <TableHead className="text-[#888] text-[0.7rem] uppercase tracking-wider font-medium">EVENT TYPE</TableHead>
+            <TableHead className="text-[#888] text-[0.7rem] uppercase tracking-wider font-medium">CODE</TableHead>
+            <TableHead className="text-[#888] text-[0.7rem] uppercase tracking-wider font-medium">LOCATION</TableHead>
+            <TableHead className="text-[#888] text-[0.7rem] uppercase tracking-wider font-medium">CONTAINER</TableHead>
+            <TableHead className="text-[#888] text-[0.7rem] uppercase tracking-wider font-medium">VESSEL</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
           {sortedEvents.map((event, index) => (
-            <TableRow key={index} className="border-border hover:bg-muted/30">
-              <TableCell className="text-foreground whitespace-nowrap">
+            <TableRow 
+              key={index} 
+              className="border-[rgba(255,255,255,0.05)] hover:bg-[rgba(255,255,255,0.03)] transition-colors"
+            >
+              <TableCell className="px-5 py-3.5 text-white/90 whitespace-nowrap text-[0.82rem]">
                 {formatEventDate(event.dateTime)}
               </TableCell>
               <TableCell>
                 {getEventTypeBadge(event.eventType)}
               </TableCell>
-              <TableCell className="font-medium text-foreground">
+              <TableCell className="font-medium text-white text-[0.85rem]">
                 {event.eventCode || '-'}
               </TableCell>
               <TableCell>
-                <div className="text-foreground font-medium">
+                <div className="text-white font-medium text-[0.85rem]">
                   {event.location || '-'}
                 </div>
                 {event.facilityName && (
-                  <div className="text-xs text-muted-foreground">
+                  <div className="text-[0.72rem] text-[#888]">
                     {event.facilityName}
                   </div>
                 )}
@@ -111,29 +127,29 @@ export const EventsTable = ({ events }: EventsTableProps) => {
               <TableCell>
                 {event.containerNo ? (
                   <div>
-                    <span className="font-mono text-primary">{event.containerNo}</span>
+                    <span className="font-mono text-[#ffc800] text-[0.85rem]">{event.containerNo}</span>
                     {event.containerType && (
-                      <span className="text-xs text-muted-foreground ml-1">
+                      <span className="text-[0.72rem] text-[#888] ml-1.5">
                         ({event.containerType})
                       </span>
                     )}
                   </div>
                 ) : (
-                  <span className="text-muted-foreground">-</span>
+                  <span className="text-[#666]">-</span>
                 )}
               </TableCell>
               <TableCell>
                 {event.vesselName ? (
                   <div>
-                    <span className="font-medium text-foreground">{event.vesselName}</span>
+                    <span className="font-medium text-white text-[0.85rem]">{event.vesselName}</span>
                     {event.voyageNumber && (
-                      <span className="text-xs text-primary ml-1">
+                      <span className="text-[0.75rem] text-[#ffc800] ml-1.5">
                         v.{event.voyageNumber}
                       </span>
                     )}
                   </div>
                 ) : (
-                  <span className="text-muted-foreground">-</span>
+                  <span className="text-[#666]">-</span>
                 )}
               </TableCell>
             </TableRow>
