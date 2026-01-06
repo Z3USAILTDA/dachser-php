@@ -74,7 +74,7 @@ interface SLAInfoBadgeProps {
 }
 
 export function SLAInfoBadge({ slaInfo, className }: SLAInfoBadgeProps) {
-  const { status, horasRestantes } = slaInfo;
+  const { status, horasRestantes, tempoResposta, usouNovaLogica } = slaInfo;
   
   const getColor = () => {
     switch (status) {
@@ -91,11 +91,14 @@ export function SLAInfoBadge({ slaInfo, className }: SLAInfoBadgeProps) {
     }
   };
   
-  const formattedTime = formatSLARestante(horasRestantes);
+  // Se usou nova lógica (DEP - Manifestação), mostrar tempo de resposta
+  const displayValue = usouNovaLogica && tempoResposta !== null
+    ? `${tempoResposta.toFixed(1)}h resp.`
+    : formatSLARestante(horasRestantes);
   
   return (
     <Badge variant="outline" className={cn(getColor(), "font-mono text-xs", className)}>
-      {formattedTime}
+      {displayValue}
     </Badge>
   );
 }

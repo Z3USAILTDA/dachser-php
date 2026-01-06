@@ -90,7 +90,9 @@ function mapRowToProcessoCCT(row: any): ProcessoCCT {
       email: row.email_analista || '',
     } : null,
     nome_analista_legado: row.nome_analista,
-    data_decolagem_ultimo_trecho: row.data_decolagem_ultimo_trecho,
+    data_decolagem_ultimo_trecho: row.dep_datetime || row.data_decolagem_ultimo_trecho,
+    dep_datetime: row.dep_datetime,
+    data_manifestacao_cct: row.data_manifestacao_cct,
     created_at: row.created_at,
     updated_at: row.updated_at,
   };
@@ -101,12 +103,16 @@ function mapRowToProcessoCCT(row: any): ProcessoCCT {
     status: (row.sla_info.status || row.sla_status || 'OK') as SLAStatus,
     horasRestantes: row.sla_info.horasRestantes ?? null,
     percentual: row.sla_info.percentual ?? null,
-    slaConfigHoras: row.sla_info.horasLimite ?? 24,
+    slaConfigHoras: row.sla_info.slaConfigHoras ?? row.sla_info.horasLimite ?? 24,
+    tempoResposta: row.sla_info.tempoResposta ?? null,
+    usouNovaLogica: row.sla_info.usouNovaLogica ?? false,
   } : {
     status: (row.sla_status || 'OK') as SLAStatus,
     horasRestantes: null,
     percentual: null,
     slaConfigHoras: 24,
+    tempoResposta: null,
+    usouNovaLogica: false,
   };
 
   const status_atual: CCTStatusAtual = {

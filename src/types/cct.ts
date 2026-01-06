@@ -237,6 +237,8 @@ export interface CCTShipment {
   analista?: { id: string; nome: string; email: string } | null;
   nome_analista_legado?: string | null;
   data_decolagem_ultimo_trecho?: string | null;
+  dep_datetime?: string | null;
+  data_manifestacao_cct?: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -261,6 +263,8 @@ export interface SLAInfo {
   slaConfigHoras: number;
   vencidoEm?: string | null;
   proximoVencimento?: string | null;
+  tempoResposta?: number | null;
+  usouNovaLogica?: boolean;
 }
 
 export interface CCTStatusAtual {
