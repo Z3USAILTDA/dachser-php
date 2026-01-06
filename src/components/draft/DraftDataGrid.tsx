@@ -28,8 +28,6 @@ import {
   Eye, 
   RotateCcw,
   Loader2,
-  ChevronLeft,
-  ChevronRight,
   FileSpreadsheet,
   ExternalLink,
   Database,
@@ -42,6 +40,7 @@ import { format, parseISO } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { DraftEventTimeline } from "./DraftEventTimeline";
 import { BookingInfoCard } from "./BookingInfoCard";
+import { TablePagination } from "@/components/layout/TablePagination";
 import * as XLSX from 'xlsx';
 
 interface DraftDataGridProps {
@@ -50,7 +49,7 @@ interface DraftDataGridProps {
   isLoading: boolean;
 }
 
-const ITEMS_PER_PAGE = 20;
+const ITEMS_PER_PAGE = 15;
 const BATCH_SIZE = 5;
 const BATCH_DELAY_MS = 35000;
 
@@ -295,51 +294,36 @@ export const DraftDataGrid = ({ data, onRefresh, isLoading }: DraftDataGridProps
       </div>
 
       {/* Actions Bar */}
-      <div className="flex flex-wrap justify-between gap-3">
-        <div className="flex flex-wrap gap-2">
-          <Button
-            variant="outline"
-            onClick={onRefresh}
-            disabled={isLoading || isProcessingAll}
-          >
-            <RefreshCw className={`h-4 w-4 mr-2 ${isLoading ? 'animate-spin' : ''}`} />
-            <span className="hidden sm:inline">Atualizar</span>
-          </Button>
-          <Button
-            onClick={processAllPending}
-            disabled={isLoading || isProcessingAll || stats.pending === 0}
-            className="bg-[#ffc800] text-black hover:bg-[#ffdc50]"
-          >
-            {isProcessingAll ? (
-              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-            ) : (
-              <Download className="h-4 w-4 mr-2" />
-            )}
-            <span className="hidden sm:inline">Buscar Status API</span>
-            <span className="sm:hidden">API</span>
-          </Button>
-          <Button
-            variant="outline"
-            onClick={exportToCSV}
-            disabled={filteredData.length === 0}
-          >
-            <FileSpreadsheet className="h-4 w-4 mr-2" />
-            <span className="hidden sm:inline">Exportar CSV</span>
-          </Button>
-        </div>
-
-        <div className="relative w-full sm:w-64">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-          <Input
-            placeholder="Buscar..."
-            value={searchTerm}
-            onChange={(e) => {
-              setSearchTerm(e.target.value);
-              setCurrentPage(1);
-            }}
-            className="pl-10"
-          />
-        </div>
+      <div className="flex flex-wrap gap-2">
+        <Button
+          variant="outline"
+          onClick={onRefresh}
+          disabled={isLoading || isProcessingAll}
+        >
+          <RefreshCw className={`h-4 w-4 mr-2 ${isLoading ? 'animate-spin' : ''}`} />
+          <span className="hidden sm:inline">Atualizar</span>
+        </Button>
+        <Button
+          onClick={processAllPending}
+          disabled={isLoading || isProcessingAll || stats.pending === 0}
+          className="bg-primary text-primary-foreground hover:bg-primary/90"
+        >
+          {isProcessingAll ? (
+            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+          ) : (
+            <Download className="h-4 w-4 mr-2" />
+          )}
+          <span className="hidden sm:inline">Buscar Status API</span>
+          <span className="sm:hidden">API</span>
+        </Button>
+        <Button
+          variant="outline"
+          onClick={exportToCSV}
+          disabled={filteredData.length === 0}
+        >
+          <FileSpreadsheet className="h-4 w-4 mr-2" />
+          <span className="hidden sm:inline">Exportar CSV</span>
+        </Button>
       </div>
 
       {/* Progress Bar */}
@@ -356,59 +340,80 @@ export const DraftDataGrid = ({ data, onRefresh, isLoading }: DraftDataGridProps
         </div>
       )}
 
-      {/* Data Table */}
-      <div className="border border-border rounded-lg overflow-x-auto bg-card">
-        <Table>
-          <TableHeader>
-            <TableRow className="bg-muted">
-              <TableHead className="font-semibold w-12">#</TableHead>
-              <TableHead className="font-semibold">MBL ID</TableHead>
-              <TableHead className="font-semibold">Booking</TableHead>
-              <TableHead className="font-semibold hidden lg:table-cell">Viagem</TableHead>
-              <TableHead className="font-semibold">Status</TableHead>
-              <TableHead className="font-semibold hidden md:table-cell">Origem</TableHead>
-              <TableHead className="font-semibold hidden md:table-cell">Destino</TableHead>
-              <TableHead className="font-semibold hidden xl:table-cell">Navio</TableHead>
-              <TableHead className="font-semibold hidden xl:table-cell">ETD</TableHead>
-              <TableHead className="font-semibold hidden xl:table-cell">ETA</TableHead>
-              <TableHead className="font-semibold hidden 2xl:table-cell">Transaction ID</TableHead>
-              <TableHead className="font-semibold">Última Consulta</TableHead>
-              <TableHead className="font-semibold text-right">Ações</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {isLoading ? (
-              <TableRow>
-                <TableCell colSpan={14} className="text-center py-8">
-                  <Loader2 className="h-6 w-6 animate-spin mx-auto mb-2" />
-                  <span className="text-muted-foreground">Carregando...</span>
-                </TableCell>
+      {/* Data Table - Dachser Style */}
+      <div className="rounded-2xl bg-[rgba(5,6,18,0.9)] border border-[rgba(255,255,255,0.12)] backdrop-blur-[18px] shadow-[0_18px_40px_rgba(0,0,0,0.85)] overflow-hidden">
+        {/* Search Header */}
+        <div className="p-4 border-b border-[rgba(255,255,255,0.08)] flex items-center justify-between">
+          <div className="relative max-w-md flex-1">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-[#666]" />
+            <input
+              type="text"
+              placeholder="Buscar em todas as colunas..."
+              value={searchTerm}
+              onChange={(e) => {
+                setSearchTerm(e.target.value);
+                setCurrentPage(1);
+              }}
+              className="w-full pl-10 pr-4 py-2.5 rounded-lg bg-[rgba(0,0,0,0.5)] border border-[rgba(255,255,255,0.1)] text-white placeholder:text-[#666] text-[0.85rem] focus:outline-none focus:border-primary/50"
+            />
+          </div>
+          <span className="text-[0.8rem] text-[#aaaaaa] ml-4">
+            {filteredData.length} de {data.length} registros
+          </span>
+        </div>
+
+        {/* Table */}
+        <div className="overflow-x-auto">
+          <Table>
+            <TableHeader>
+              <TableRow className="hover:bg-transparent border-[rgba(255,255,255,0.08)]">
+                <TableHead className="text-[#888] text-[0.75rem] uppercase tracking-wider font-medium w-12">#</TableHead>
+                <TableHead className="text-[#888] text-[0.75rem] uppercase tracking-wider font-medium">MBL ID</TableHead>
+                <TableHead className="text-[#888] text-[0.75rem] uppercase tracking-wider font-medium">Booking</TableHead>
+                <TableHead className="text-[#888] text-[0.75rem] uppercase tracking-wider font-medium hidden lg:table-cell">Viagem</TableHead>
+                <TableHead className="text-[#888] text-[0.75rem] uppercase tracking-wider font-medium">Status</TableHead>
+                <TableHead className="text-[#888] text-[0.75rem] uppercase tracking-wider font-medium hidden md:table-cell">Origem</TableHead>
+                <TableHead className="text-[#888] text-[0.75rem] uppercase tracking-wider font-medium hidden md:table-cell">Destino</TableHead>
+                <TableHead className="text-[#888] text-[0.75rem] uppercase tracking-wider font-medium hidden xl:table-cell">Navio</TableHead>
+                <TableHead className="text-[#888] text-[0.75rem] uppercase tracking-wider font-medium hidden xl:table-cell">ETD</TableHead>
+                <TableHead className="text-[#888] text-[0.75rem] uppercase tracking-wider font-medium hidden xl:table-cell">ETA</TableHead>
+                <TableHead className="text-[#888] text-[0.75rem] uppercase tracking-wider font-medium">Última Consulta</TableHead>
+                <TableHead className="text-[#888] text-[0.75rem] uppercase tracking-wider font-medium text-right">Ações</TableHead>
               </TableRow>
-            ) : paginatedData.length === 0 ? (
-              <TableRow>
-                <TableCell colSpan={14} className="text-center py-8 text-muted-foreground">
-                  {searchTerm ? 'Nenhum resultado' : 'Nenhum dado'}
-                </TableCell>
-              </TableRow>
-            ) : (
-              paginatedData.map((item, index) => (
-                <TableRow key={item.mbl_id} className="hover:bg-muted/50">
-                  <TableCell className="text-muted-foreground text-sm">
-                    {(currentPage - 1) * ITEMS_PER_PAGE + index + 1}
+            </TableHeader>
+            <TableBody>
+              {isLoading ? (
+                <TableRow>
+                  <TableCell colSpan={12} className="text-center py-12">
+                    <Loader2 className="h-8 w-8 animate-spin mx-auto mb-3 text-primary" />
+                    <span className="text-[#aaaaaa] text-[0.85rem]">Carregando...</span>
                   </TableCell>
-                  <TableCell className="font-mono text-sm">{item.mbl_id}</TableCell>
-                  <TableCell className="text-sm">{item.trackingData?.booking || '-'}</TableCell>
-                  <TableCell className="text-sm hidden lg:table-cell">{item.trackingData?.voyage || '-'}</TableCell>
-                  <TableCell><TrackingStatusBadge status={item.status} showIcon={false} /></TableCell>
-                  <TableCell className="text-sm hidden md:table-cell">{item.trackingData?.origem || '-'}</TableCell>
-                  <TableCell className="text-sm hidden md:table-cell">{item.trackingData?.destino || '-'}</TableCell>
-                  <TableCell className="text-sm hidden xl:table-cell">{item.trackingData?.navio || '-'}</TableCell>
-                  <TableCell className="text-sm hidden xl:table-cell">{formatDate(item.trackingData?.etd)}</TableCell>
-                  <TableCell className="text-sm hidden xl:table-cell">{formatDate(item.trackingData?.eta)}</TableCell>
-                  <TableCell className="font-mono text-xs hidden 2xl:table-cell truncate max-w-[100px]">
-                    {item.trackingData?.transaction_id || '-'}
+                </TableRow>
+              ) : paginatedData.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={12} className="text-center py-12 text-[#aaaaaa]">
+                    {searchTerm ? `Nenhum resultado para "${searchTerm}"` : 'Nenhum dado disponível'}
                   </TableCell>
-                  <TableCell className="text-muted-foreground text-sm">{formatDate(item.lastConsulted)}</TableCell>
+                </TableRow>
+              ) : (
+                paginatedData.map((item, index) => (
+                  <TableRow 
+                    key={item.mbl_id} 
+                    className={`border-[rgba(255,255,255,0.05)] hover:bg-[rgba(255,255,255,0.03)] ${index % 2 === 0 ? "bg-[rgba(255,255,255,0.02)]" : ""}`}
+                  >
+                    <TableCell className="text-[#888] text-[0.85rem]">
+                      {(currentPage - 1) * ITEMS_PER_PAGE + index + 1}
+                    </TableCell>
+                    <TableCell className="font-mono text-primary text-[0.85rem]">{item.mbl_id}</TableCell>
+                    <TableCell className="text-white text-[0.85rem]">{item.trackingData?.booking || '-'}</TableCell>
+                    <TableCell className="text-[#aaaaaa] text-[0.85rem] hidden lg:table-cell">{item.trackingData?.voyage || '-'}</TableCell>
+                    <TableCell><TrackingStatusBadge status={item.status} showIcon={false} /></TableCell>
+                    <TableCell className="text-[#aaaaaa] text-[0.85rem] hidden md:table-cell">{item.trackingData?.origem || '-'}</TableCell>
+                    <TableCell className="text-[#aaaaaa] text-[0.85rem] hidden md:table-cell">{item.trackingData?.destino || '-'}</TableCell>
+                    <TableCell className="text-white text-[0.85rem] hidden xl:table-cell">{item.trackingData?.navio || '-'}</TableCell>
+                    <TableCell className="text-[#aaaaaa] text-[0.85rem] hidden xl:table-cell">{formatDate(item.trackingData?.etd)}</TableCell>
+                    <TableCell className="text-[#aaaaaa] text-[0.85rem] hidden xl:table-cell">{formatDate(item.trackingData?.eta)}</TableCell>
+                    <TableCell className="text-[#888] text-[0.8rem]">{formatDate(item.lastConsulted)}</TableCell>
                   <TableCell className="text-right">
                     <div className="flex justify-end gap-1">
                       <Button
@@ -453,41 +458,26 @@ export const DraftDataGrid = ({ data, onRefresh, isLoading }: DraftDataGridProps
             )}
           </TableBody>
         </Table>
-      </div>
-
-      {/* Pagination */}
-      {totalPages > 1 && (
-        <div className="flex items-center justify-between">
-          <span className="text-sm text-muted-foreground">
-            {((currentPage - 1) * ITEMS_PER_PAGE) + 1}-{Math.min(currentPage * ITEMS_PER_PAGE, filteredData.length)} de {filteredData.length}
-          </span>
-          <div className="flex items-center gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
-              disabled={currentPage === 1}
-            >
-              <ChevronLeft className="h-4 w-4" />
-            </Button>
-            <span className="text-sm">
-              {currentPage}/{totalPages}
+        </div>
+        
+        {/* Pagination */}
+        <div className="p-4 border-t border-[rgba(255,255,255,0.08)]">
+          <div className="flex items-center justify-between">
+            <span className="text-[0.8rem] text-[#aaaaaa]">
+              {filteredData.length} de {data.length} registros
             </span>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
-              disabled={currentPage === totalPages}
-            >
-              <ChevronRight className="h-4 w-4" />
-            </Button>
+            <TablePagination
+              currentPage={currentPage}
+              totalPages={totalPages}
+              onPageChange={setCurrentPage}
+            />
           </div>
         </div>
-      )}
 
-      {/* Footer Note */}
-      <div className="text-xs text-muted-foreground text-center py-2 border-t border-border">
-        Nota: A API Hapag-Lloyd possui rate limit. Consultas em lote são processadas com delay de 35s entre batches.
+        {/* Footer Note */}
+        <div className="text-[0.75rem] text-[#888] text-center py-3 border-t border-[rgba(255,255,255,0.08)]">
+          Nota: A API Hapag-Lloyd possui rate limit. Consultas em lote são processadas com delay de 35s entre batches.
+        </div>
       </div>
 
       {/* Details Modal */}
