@@ -224,7 +224,7 @@ const DraftExportacao = () => {
         <div className="space-y-6">
           {/* Navigation Tabs */}
           <nav className="flex items-center gap-1 px-2 py-1.5 rounded-full bg-[rgba(5,6,18,0.85)] border border-white/10 backdrop-blur-sm w-fit">
-            {navTabs.map((tab) => {
+          {navTabs.map((tab) => {
               const Icon = tab.icon;
               const isActive = activeTab === tab.id;
               return (
@@ -240,7 +240,7 @@ const DraftExportacao = () => {
                   `}
                 >
                   <Icon className="h-4 w-4" />
-                  {tab.label}
+                  <span className="hidden sm:inline">{tab.label}</span>
                 </button>
               );
             })}
