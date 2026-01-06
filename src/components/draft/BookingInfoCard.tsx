@@ -10,14 +10,14 @@ interface BookingInfoCardProps {
 
 export const BookingInfoCard = ({ bookingInfo, trackingData }: BookingInfoCardProps) => {
   // Use bookingInfo if available, otherwise fall back to trackingData
-  const booking = bookingInfo?.bookingReference || trackingData?.booking || '-';
+  const booking = bookingInfo?.bookingNumber || trackingData?.booking || '-';
   const mbl = bookingInfo?.transportDocumentReference || trackingData?.mbl_id || '-';
   const vessel = bookingInfo?.vesselName || trackingData?.navio || '-';
-  const voyage = bookingInfo?.voyage || trackingData?.voyage || '-';
-  const polCode = bookingInfo?.polCode || '';
-  const polName = bookingInfo?.polName || trackingData?.origem || '-';
-  const podCode = bookingInfo?.podCode || '';
-  const podName = bookingInfo?.podName || trackingData?.destino || '-';
+  const voyage = bookingInfo?.voyageNumber || trackingData?.voyage || '-';
+  const polCode = bookingInfo?.originCode || '';
+  const polName = bookingInfo?.originLocation || trackingData?.origem || '-';
+  const podCode = bookingInfo?.destinationCode || '';
+  const podName = bookingInfo?.destinationLocation || trackingData?.destino || '-';
   const etd = bookingInfo?.etd || trackingData?.etd || '-';
   const eta = bookingInfo?.eta || trackingData?.eta || '-';
   const status = bookingInfo?.documentStatus || 

@@ -59,42 +59,47 @@ export interface TransportCall {
 // Evento individual da API Hapag-Lloyd
 export interface HapagEvent {
   eventType: 'EQUIPMENT' | 'TRANSPORT' | 'SHIPMENT';
-  equipmentEventTypeCode?: string;
-  transportEventTypeCode?: string;
-  shipmentEventTypeCode?: string;
-  eventDateTime: string;
-  documentID?: string;
-  documentTypeCode?: string;
-  carrierBookingReference?: string;
-  transportDocumentReference?: string;
-  equipmentReference?: string;
-  ISOEquipmentCode?: string;
-  emptyIndicatorCode?: string;
-  eventLocation?: EventLocation;
-  transportCall?: TransportCall;
+  eventCode: string;
+  dateTime: string;
+  location: string;
+  locationCode: string;
+  facilityName?: string;
+  vesselName?: string | null;
+  vesselIMO?: string | null;
+  voyageNumber?: string | null;
+  containerNo?: string;
+  containerType?: string;
+  emptyIndicator?: string;
+  documentId?: string | null;
+  documentType?: string | null;
 }
 
-// Informações de container
+// Informações de container (campos da API Hapag-Lloyd)
 export interface ContainerInfo {
-  equipmentReference: string;
-  ISOEquipmentCode: string;
-  emptyIndicatorCode: string;
-  events: HapagEvent[];
+  containerNo: string;
+  type: string;
+  status: string;
+  date: string;
+  placeOfActivity: string;
 }
 
-// Informações consolidadas do booking
+// Informações consolidadas do booking (campos da API Hapag-Lloyd)
 export interface BookingInfo {
-  bookingReference: string;
+  bookingNumber: string;
   transportDocumentReference: string;
   vesselName: string;
-  voyage: string;
-  polCode: string;
-  polName: string;
-  podCode: string;
-  podName: string;
+  vesselIMO?: string;
+  voyageNumber: string;
+  originLocation: string;
+  originCode: string;
+  destinationLocation: string;
+  destinationCode: string;
   etd: string | null;
   eta: string | null;
-  documentStatus: SyncStatus;
+  documentStatus: string;
+  bookingCreationDate?: string;
+  containerType?: string;
+  commodity?: string | null;
 }
 
 // Dados combinados MBL + Status
