@@ -10,7 +10,7 @@ import {
 } from "@/components/ui/select";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import { Search, Save, Loader2, Package, AlertCircle, Ship, Fingerprint, FileText, Container } from "lucide-react";
+import { Search, Save, Loader2, Package, AlertCircle, Ship, Fingerprint, FileText, Container, Clock, CheckCircle, AlertTriangle } from "lucide-react";
 import { BookingResultCard } from "./BookingResultCard";
 import { ContainersTable } from "./ContainersTable";
 import { EventsTable } from "./EventsTable";
@@ -24,7 +24,7 @@ type SearchType = 'booking' | 'BL' | 'container';
 
 export const HapagTrackerPanel = ({ onSave }: HapagTrackerPanelProps) => {
   const [searchType, setSearchType] = useState<SearchType>('booking');
-  const [searchValue, setSearchValue] = useState("");
+  const [searchValue, setSearchValue] = useState("14387297");
   const [isLoading, setIsLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [result, setResult] = useState<TrackingApiResponse | null>(null);
@@ -125,10 +125,87 @@ export const HapagTrackerPanel = ({ onSave }: HapagTrackerPanelProps) => {
     }
   };
 
+  // Stats from results
+  const containersCount = result?.containers?.length || 0;
+  const inTransitCount = result?.containers?.filter(c => c.status?.toLowerCase().includes('transit'))?.length || 0;
+  const deliveredCount = result?.containers?.filter(c => c.status?.toLowerCase().includes('gate out') || c.status?.toLowerCase().includes('delivered'))?.length || 0;
+  const alertsCount = result?.containers?.filter(c => c.status?.toLowerCase().includes('hold') || c.status?.toLowerCase().includes('exception'))?.length || 0;
+
   return (
     <div className="space-y-6">
+      {/* Stats Cards Grid */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div 
+          className="rounded-xl p-4 border-l-4 border-l-emerald-500"
+          style={{
+            background: 'rgba(5,6,18,0.9)',
+            border: '1px solid rgba(255,255,255,0.12)',
+          }}
+        >
+          <div className="flex items-center gap-3">
+            <Package className="h-5 w-5 text-emerald-500" />
+            <div>
+              <div className="text-2xl font-bold text-white">{containersCount}</div>
+              <div className="text-[0.72rem] text-[#888] uppercase tracking-wider">Total Rastreados</div>
+              <div className="text-[0.68rem] text-[#666] mt-0.5">Containers ativos</div>
+            </div>
+          </div>
+        </div>
+
+        <div 
+          className="rounded-xl p-4 border-l-4 border-l-amber-500"
+          style={{
+            background: 'rgba(5,6,18,0.9)',
+            border: '1px solid rgba(255,255,255,0.12)',
+          }}
+        >
+          <div className="flex items-center gap-3">
+            <Clock className="h-5 w-5 text-amber-500" />
+            <div>
+              <div className="text-2xl font-bold text-white">{inTransitCount}</div>
+              <div className="text-[0.72rem] text-[#888] uppercase tracking-wider">Em Trânsito</div>
+              <div className="text-[0.68rem] text-[#666] mt-0.5">Em movimento</div>
+            </div>
+          </div>
+        </div>
+
+        <div 
+          className="rounded-xl p-4 border-l-4 border-l-orange-500"
+          style={{
+            background: 'rgba(5,6,18,0.9)',
+            border: '1px solid rgba(255,255,255,0.12)',
+          }}
+        >
+          <div className="flex items-center gap-3">
+            <CheckCircle className="h-5 w-5 text-orange-500" />
+            <div>
+              <div className="text-2xl font-bold text-white">{deliveredCount}</div>
+              <div className="text-[0.72rem] text-[#888] uppercase tracking-wider">Entregues</div>
+              <div className="text-[0.68rem] text-[#666] mt-0.5">Gate Out</div>
+            </div>
+          </div>
+        </div>
+
+        <div 
+          className="rounded-xl p-4 border-l-4 border-l-rose-500"
+          style={{
+            background: 'rgba(5,6,18,0.9)',
+            border: '1px solid rgba(255,255,255,0.12)',
+          }}
+        >
+          <div className="flex items-center gap-3">
+            <AlertTriangle className="h-5 w-5 text-rose-500" />
+            <div>
+              <div className="text-2xl font-bold text-white">{alertsCount}</div>
+              <div className="text-[0.72rem] text-[#888] uppercase tracking-wider">Alertas</div>
+              <div className="text-[0.68rem] text-[#666] mt-0.5">Ação imediata</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
       {/* Search Input - Dachser Style */}
-      <div className="flex items-center gap-3">
+      <div className="flex flex-col sm:flex-row items-center gap-3">
         <Select value={searchType} onValueChange={(v) => setSearchType(v as SearchType)}>
           <SelectTrigger className="w-[140px] h-10 rounded-full bg-[#13141a] border-[rgba(255,255,255,0.14)] text-[0.82rem] text-white">
             <SelectValue />
