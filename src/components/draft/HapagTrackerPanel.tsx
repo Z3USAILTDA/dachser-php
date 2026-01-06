@@ -135,70 +135,46 @@ export const HapagTrackerPanel = ({ onSave }: HapagTrackerPanelProps) => {
     <div className="space-y-6">
       {/* Stats Cards Grid */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <div 
-          className="rounded-xl p-4 border-l-4 border-l-emerald-500"
-          style={{
-            background: 'rgba(5,6,18,0.9)',
-            border: '1px solid rgba(255,255,255,0.12)',
-          }}
-        >
+        <div className="rounded-xl p-4 border-l-4 border-l-[hsl(var(--success))] bg-card border border-border">
           <div className="flex items-center gap-3">
-            <Package className="h-5 w-5 text-emerald-500" />
+            <Package className="h-5 w-5 text-[hsl(var(--success))]" />
             <div>
-              <div className="text-2xl font-bold text-white">{containersCount}</div>
-              <div className="text-[0.72rem] text-[#888] uppercase tracking-wider">Total Rastreados</div>
-              <div className="text-[0.68rem] text-[#666] mt-0.5">Containers ativos</div>
+              <div className="text-2xl font-bold text-foreground">{containersCount}</div>
+              <div className="text-[0.72rem] text-muted-foreground uppercase tracking-wider">Total Rastreados</div>
+              <div className="text-[0.68rem] text-muted-foreground/70 mt-0.5">Containers ativos</div>
             </div>
           </div>
         </div>
 
-        <div 
-          className="rounded-xl p-4 border-l-4 border-l-amber-500"
-          style={{
-            background: 'rgba(5,6,18,0.9)',
-            border: '1px solid rgba(255,255,255,0.12)',
-          }}
-        >
+        <div className="rounded-xl p-4 border-l-4 border-l-[hsl(var(--warning))] bg-card border border-border">
           <div className="flex items-center gap-3">
-            <Clock className="h-5 w-5 text-amber-500" />
+            <Clock className="h-5 w-5 text-[hsl(var(--warning))]" />
             <div>
-              <div className="text-2xl font-bold text-white">{inTransitCount}</div>
-              <div className="text-[0.72rem] text-[#888] uppercase tracking-wider">Em Trânsito</div>
-              <div className="text-[0.68rem] text-[#666] mt-0.5">Em movimento</div>
+              <div className="text-2xl font-bold text-foreground">{inTransitCount}</div>
+              <div className="text-[0.72rem] text-muted-foreground uppercase tracking-wider">Em Trânsito</div>
+              <div className="text-[0.68rem] text-muted-foreground/70 mt-0.5">Em movimento</div>
             </div>
           </div>
         </div>
 
-        <div 
-          className="rounded-xl p-4 border-l-4 border-l-orange-500"
-          style={{
-            background: 'rgba(5,6,18,0.9)',
-            border: '1px solid rgba(255,255,255,0.12)',
-          }}
-        >
+        <div className="rounded-xl p-4 border-l-4 border-l-[hsl(var(--info))] bg-card border border-border">
           <div className="flex items-center gap-3">
-            <CheckCircle className="h-5 w-5 text-orange-500" />
+            <CheckCircle className="h-5 w-5 text-[hsl(var(--info))]" />
             <div>
-              <div className="text-2xl font-bold text-white">{deliveredCount}</div>
-              <div className="text-[0.72rem] text-[#888] uppercase tracking-wider">Entregues</div>
-              <div className="text-[0.68rem] text-[#666] mt-0.5">Gate Out</div>
+              <div className="text-2xl font-bold text-foreground">{deliveredCount}</div>
+              <div className="text-[0.72rem] text-muted-foreground uppercase tracking-wider">Entregues</div>
+              <div className="text-[0.68rem] text-muted-foreground/70 mt-0.5">Gate Out</div>
             </div>
           </div>
         </div>
 
-        <div 
-          className="rounded-xl p-4 border-l-4 border-l-rose-500"
-          style={{
-            background: 'rgba(5,6,18,0.9)',
-            border: '1px solid rgba(255,255,255,0.12)',
-          }}
-        >
+        <div className="rounded-xl p-4 border-l-4 border-l-[hsl(var(--destructive))] bg-card border border-border">
           <div className="flex items-center gap-3">
-            <AlertTriangle className="h-5 w-5 text-rose-500" />
+            <AlertTriangle className="h-5 w-5 text-[hsl(var(--destructive))]" />
             <div>
-              <div className="text-2xl font-bold text-white">{alertsCount}</div>
-              <div className="text-[0.72rem] text-[#888] uppercase tracking-wider">Alertas</div>
-              <div className="text-[0.68rem] text-[#666] mt-0.5">Ação imediata</div>
+              <div className="text-2xl font-bold text-foreground">{alertsCount}</div>
+              <div className="text-[0.72rem] text-muted-foreground uppercase tracking-wider">Alertas</div>
+              <div className="text-[0.68rem] text-muted-foreground/70 mt-0.5">Ação imediata</div>
             </div>
           </div>
         </div>
