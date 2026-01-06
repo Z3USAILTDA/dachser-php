@@ -2469,7 +2469,7 @@ serve(async (req) => {
                  AND h.status_code = 'DEP' 
                ORDER BY h.data_evento DESC 
                LIMIT 1) as dep_datetime,
-              'N/A' as tipo_servico,
+              COALESCE(s.tipo_servico, 'N/A') as tipo_servico,
               LEFT(TRIM(s.awb), 3) as airline_code,
               cct.peso_declarado,
               cct.peso_constatado,
