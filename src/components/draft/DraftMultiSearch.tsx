@@ -290,7 +290,7 @@ export const DraftMultiSearch = ({ onComplete }: DraftMultiSearchProps) => {
                 p-4 rounded-xl border text-left transition-all duration-200
                 ${isActive 
                   ? 'bg-[rgba(255,200,0,0.15)] border-[#ffc800]/40 shadow-[0_0_15px_rgba(255,200,0,0.2)]' 
-                  : 'bg-card/50 border-border hover:border-white/20 hover:bg-card/70'
+                  : 'bg-card border-border hover:border-white/20 hover:bg-card'
                 }
               `}
             >
@@ -334,7 +334,7 @@ export const DraftMultiSearch = ({ onComplete }: DraftMultiSearchProps) => {
 
       {/* Single Search Mode */}
       {!isBatchMode && (
-        <Card className="bg-card/50 border-border">
+        <Card className="bg-card border-border">
           <CardContent className="pt-6 space-y-4">
             <div className="flex flex-col sm:flex-row gap-3">
               <div className="relative flex-1">
