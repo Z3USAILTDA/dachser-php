@@ -3,10 +3,16 @@ import { useNavigate } from "react-router-dom";
 import { PageLayout } from "@/components/layout/PageLayout";
 import { Ship, Database, FileText, LayoutDashboard, Search, ShieldAlert } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { useDraftData } from "@/hooks/useDraftData";
+import { DraftDataGrid } from "@/components/draft/DraftDataGrid";
+import { HapagTrackerPanel } from "@/components/draft/HapagTrackerPanel";
+import { DraftMultiSearch } from "@/components/draft/DraftMultiSearch";
+import { DraftSyncDashboard } from "@/components/draft/DraftSyncDashboard";
 
 const DraftExportacao = () => {
   const navigate = useNavigate();
   const [isAdmin, setIsAdmin] = useState<boolean | null>(null);
+  const { combinedData, stats, isLoading, refetch } = useDraftData();
 
   useEffect(() => {
     const storedUser = localStorage.getItem("user");
@@ -16,7 +22,6 @@ const DraftExportacao = () => {
       setIsAdmin(adminStatus);
       
       if (!adminStatus) {
-        // Redirect non-admin users
         navigate("/dashboard");
       }
     } else {
@@ -24,7 +29,6 @@ const DraftExportacao = () => {
     }
   }, [navigate]);
 
-  // Show loading while checking
   if (isAdmin === null) {
     return (
       <PageLayout
@@ -40,7 +44,6 @@ const DraftExportacao = () => {
     );
   }
 
-  // Show access denied if not admin
   if (!isAdmin) {
     return (
       <PageLayout
@@ -89,43 +92,31 @@ const DraftExportacao = () => {
           </TabsList>
 
           <TabsContent value="grid">
-            <div className="bg-card border border-border rounded-xl p-8 text-center">
-              <Database className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-              <h3 className="text-lg font-semibold text-foreground mb-2">Grid MariaDB</h3>
-              <p className="text-muted-foreground">
-                Aguardando integração dos componentes do projeto original.
-              </p>
-            </div>
+            <DraftDataGrid 
+              data={combinedData}
+              onRefresh={refetch}
+              isLoading={isLoading}
+            />
           </TabsContent>
 
           <TabsContent value="tracker">
-            <div className="bg-card border border-border rounded-xl p-8 text-center">
-              <Search className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-              <h3 className="text-lg font-semibold text-foreground mb-2">Hapag Tracker</h3>
-              <p className="text-muted-foreground">
-                Aguardando integração dos componentes do projeto original.
-              </p>
-            </div>
+            <HapagTrackerPanel onSave={refetch} />
           </TabsContent>
 
           <TabsContent value="multi">
-            <div className="bg-card border border-border rounded-xl p-8 text-center">
-              <FileText className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-              <h3 className="text-lg font-semibold text-foreground mb-2">Multi-Busca</h3>
-              <p className="text-muted-foreground">
-                Aguardando integração dos componentes do projeto original.
-              </p>
-            </div>
+            <DraftMultiSearch onComplete={refetch} />
           </TabsContent>
 
           <TabsContent value="dashboard">
-            <div className="bg-card border border-border rounded-xl p-8 text-center">
-              <LayoutDashboard className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-              <h3 className="text-lg font-semibold text-foreground mb-2">Dashboard de Sincronização</h3>
-              <p className="text-muted-foreground">
-                Aguardando integração dos componentes do projeto original.
-              </p>
-            </div>
+            <DraftSyncDashboard 
+              stats={stats}
+              combinedData={combinedData}
+              onSyncPending={async () => {
+                // Trigger processing of pending MBLs through the grid
+                await refetch();
+              }}
+              isLoading={isLoading}
+            />
           </TabsContent>
         </Tabs>
       </div>
