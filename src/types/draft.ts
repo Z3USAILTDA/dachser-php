@@ -100,6 +100,7 @@ export interface BookingInfo {
   bookingCreationDate?: string;
   containerType?: string;
   commodity?: string | null;
+  yourReference?: string | null;
 }
 
 // Dados combinados MBL + Status
@@ -130,6 +131,16 @@ export interface BatchProcessResult {
   error?: string;
 }
 
+// Metadados da API (prova de autenticidade)
+export interface ApiMetadata {
+  transactionId?: string;
+  serverDateTime?: string;
+  clientDateTime?: string;
+  apiEndpoint?: string;
+  requestedAt?: string;
+  endpoint?: string;
+}
+
 // Response da API de tracking
 export interface TrackingApiResponse {
   success: boolean;
@@ -137,9 +148,5 @@ export interface TrackingApiResponse {
   containers?: ContainerInfo[];
   events?: HapagEvent[];
   error?: string;
-  apiMetadata?: {
-    requestedAt: string;
-    endpoint: string;
-    transactionId?: string;
-  };
+  apiMetadata?: ApiMetadata;
 }
