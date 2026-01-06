@@ -151,20 +151,31 @@ serve(async (req) => {
 
     console.log("Conectado ao MariaDB");
 
-    // Query para última atualização e total de registros
-    const statsQuery = `
-      SELECT 
-        MAX(data_insert) as last_update, 
-        COUNT(*) as total_records
+    // Query para encontrar o timestamp da última atualização
+    const lastUpdateQuery = `
+      SELECT MAX(data_insert) as last_update
       FROM t_master_dados
       WHERE active = 1 
         AND tipo_processo IN ('AIR IMPORT', 'AIR EXPORT')
     `;
 
-    const statsResult = await client.query(statsQuery);
+    const lastUpdateResult = await client.query(lastUpdateQuery);
+    const lastUpdate = lastUpdateResult[0]?.last_update || null;
+    console.log("Last update:", lastUpdate);
+
+    // Query para contar apenas os registros da última atualização
+    const statsQuery = `
+      SELECT COUNT(*) as total_records
+      FROM t_master_dados
+      WHERE active = 1 
+        AND tipo_processo IN ('AIR IMPORT', 'AIR EXPORT')
+        AND data_insert = ?
+    `;
+
+    const statsResult = await client.query(statsQuery, [lastUpdate]);
     console.log("Stats result:", statsResult);
 
-    // Query para distribuição por companhia aérea
+    // Query para distribuição por companhia aérea apenas da última atualização
     const breakdownQuery = `
       SELECT 
         LEFT(mawb, 3) as airline_code, 
@@ -174,15 +185,15 @@ serve(async (req) => {
         AND tipo_processo IN ('AIR IMPORT', 'AIR EXPORT')
         AND mawb IS NOT NULL 
         AND mawb != ''
+        AND data_insert = ?
       GROUP BY LEFT(mawb, 3)
       ORDER BY count DESC
     `;
 
-    const breakdownResult = await client.query(breakdownQuery);
+    const breakdownResult = await client.query(breakdownQuery, [lastUpdate]);
     console.log("Breakdown result:", breakdownResult);
 
     // Processar resultados
-    const lastUpdate = statsResult[0]?.last_update || null;
     const totalRecords = Number(statsResult[0]?.total_records || 0);
 
     // Mapear breakdown com nomes de companhias
