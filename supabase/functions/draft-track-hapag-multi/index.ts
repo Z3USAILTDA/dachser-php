@@ -51,8 +51,11 @@ Deno.serve(async (req) => {
 
   try {
     const body = await req.json();
-    searchType = body.searchType || 'booking';
+    // Normalize searchType to lowercase for consistent comparison
+    const rawSearchType = (body.searchType || 'booking').toLowerCase();
+    searchType = rawSearchType as SearchType;
     searchValue = body.searchValue;
+    console.log('Parsed request - searchType:', searchType, 'searchValue:', searchValue);
   } catch (parseError) {
     console.error('Failed to parse request body:', parseError);
     return new Response(
