@@ -1,6 +1,8 @@
 import { useState, useMemo, useCallback, useEffect } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
-import { ArrowLeft, LayoutDashboard, BarChart3, AlertTriangle, Bell, Settings, HelpCircle, LogOut, Radio, RefreshCw, Database, Package, AlertCircle, Clock, Plane, List, CheckCircle2, Eye, CheckCircle } from "lucide-react";
+import { ArrowLeft, LayoutDashboard, BarChart3, AlertTriangle, Bell, Settings, HelpCircle, LogOut, Radio, RefreshCw, Database, Package, AlertCircle, Clock, Plane, List, CheckCircle2, Eye, CheckCircle, Download } from "lucide-react";
+import { toast } from "sonner";
+import { exportCCTWithoutDepDateToExcel } from "@/utils/cctExcelExport";
 import dachserBg from "@/assets/dachser-background.jpg";
 import { useUsageLog } from "@/hooks/useUsageLog";
 
@@ -211,6 +213,23 @@ export default function CCTDashboard() {
             <RefreshCw className={`h-4 w-4 ${isRefetching ? "animate-spin" : ""}`} />
             Atualizar
           </button>
+          
+          {isAdmin && (
+            <button 
+              onClick={() => {
+                const count = exportCCTWithoutDepDateToExcel(processos);
+                if (count > 0) {
+                  toast.success(`${count} AWBs sem data de decolagem exportadas`);
+                } else {
+                  toast.info("Nenhuma AWB sem data de decolagem encontrada");
+                }
+              }}
+              className="flex items-center gap-2 px-4 py-2 rounded-full border border-[rgba(255,255,255,.25)] bg-[rgba(0,0,0,.7)] text-[#aaaaaa] hover:text-white hover:bg-[rgba(0,0,0,.9)] transition text-[0.8rem]"
+            >
+              <Download className="h-4 w-4" />
+              Exportar Sem DEP
+            </button>
+          )}
           
           {activeTab === "dashboard" && <NovoShipmentDialog />}
           
