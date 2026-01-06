@@ -11,9 +11,10 @@ import {
 } from "@/components/ui/select";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import { Search, Save, Loader2, Package, AlertCircle } from "lucide-react";
-import { BookingInfoCard } from "./BookingInfoCard";
-import { DraftEventTimeline } from "./DraftEventTimeline";
+import { Search, Save, Loader2, Package, AlertCircle, RefreshCw, Ship, Fingerprint, FileText, Container } from "lucide-react";
+import { BookingResultCard } from "./BookingResultCard";
+import { ContainersTable } from "./ContainersTable";
+import { EventsTable } from "./EventsTable";
 import { TrackingApiResponse, ContainerInfo, HapagEvent } from "@/types/draft";
 
 interface HapagTrackerPanelProps {
@@ -23,7 +24,7 @@ interface HapagTrackerPanelProps {
 type SearchType = 'booking' | 'BL' | 'container';
 
 export const HapagTrackerPanel = ({ onSave }: HapagTrackerPanelProps) => {
-  const [searchType, setSearchType] = useState<SearchType>('BL');
+  const [searchType, setSearchType] = useState<SearchType>('booking');
   const [searchValue, setSearchValue] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
@@ -109,9 +110,17 @@ export const HapagTrackerPanel = ({ onSave }: HapagTrackerPanelProps) => {
     }
   };
 
+  const getSearchIcon = () => {
+    switch (searchType) {
+      case 'booking': return <Fingerprint className="h-4 w-4 text-muted-foreground" />;
+      case 'BL': return <FileText className="h-4 w-4 text-muted-foreground" />;
+      case 'container': return <Container className="h-4 w-4 text-muted-foreground" />;
+    }
+  };
+
   const getSearchPlaceholder = (): string => {
     switch (searchType) {
-      case 'booking': return 'Ex: 123456789';
+      case 'booking': return 'Ex: 14387297';
       case 'BL': return 'Ex: HLCUSHA240001234';
       case 'container': return 'Ex: HLCU1234567';
     }
@@ -119,119 +128,70 @@ export const HapagTrackerPanel = ({ onSave }: HapagTrackerPanelProps) => {
 
   return (
     <div className="space-y-6">
-      {/* Search Form */}
-      <Card className="bg-card/50 border-border">
-        <CardHeader className="pb-3">
-          <CardTitle className="text-lg flex items-center gap-2">
-            <Search className="h-5 w-5 text-primary" />
-            Consultar Hapag-Lloyd
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="flex flex-col sm:flex-row gap-4">
-            <Select value={searchType} onValueChange={(v) => setSearchType(v as SearchType)}>
-              <SelectTrigger className="w-full sm:w-[180px]">
-                <SelectValue placeholder="Tipo" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="BL">Bill of Lading</SelectItem>
-                <SelectItem value="booking">Booking</SelectItem>
-                <SelectItem value="container">Container</SelectItem>
-              </SelectContent>
-            </Select>
-
-            <Input
-              placeholder={getSearchPlaceholder()}
-              value={searchValue}
-              onChange={(e) => setSearchValue(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
-              className="flex-1"
-            />
-
-            <Button onClick={handleSearch} disabled={isLoading}>
-              {isLoading ? (
-                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-              ) : (
-                <Search className="h-4 w-4 mr-2" />
-              )}
-              Consultar
-            </Button>
+      {/* Search Input */}
+      <div className="flex items-center gap-3">
+        <div className="flex-1 relative">
+          <div className="absolute left-3 top-1/2 -translate-y-1/2">
+            {getSearchIcon()}
           </div>
-        </CardContent>
-      </Card>
+          <Input
+            placeholder={getSearchPlaceholder()}
+            value={searchValue}
+            onChange={(e) => setSearchValue(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
+            className="pl-10 bg-[hsl(var(--card))]/60 border-border"
+          />
+        </div>
+        
+        <Button 
+          onClick={handleSearch} 
+          disabled={isLoading}
+          variant="outline"
+          className="gap-2"
+        >
+          {isLoading ? (
+            <Loader2 className="h-4 w-4 animate-spin" />
+          ) : (
+            <RefreshCw className="h-4 w-4" />
+          )}
+          Atualizar
+        </Button>
+      </div>
 
       {/* Error State */}
       {error && (
-        <Card className="bg-destructive/10 border-destructive/30">
-          <CardContent className="flex items-center gap-3 py-4">
-            <AlertCircle className="h-5 w-5 text-destructive" />
-            <span className="text-destructive">{error}</span>
-          </CardContent>
-        </Card>
+        <div className="bg-destructive/10 border border-destructive/30 rounded-lg p-4 flex items-center gap-3">
+          <AlertCircle className="h-5 w-5 text-destructive" />
+          <span className="text-destructive">{error}</span>
+        </div>
       )}
 
       {/* Results */}
-      {result && (
-        <div className="space-y-6">
-          {/* Booking Info */}
-          <BookingInfoCard bookingInfo={result.bookingInfo} />
+      {result && result.bookingInfo && (
+        <div className="space-y-4">
+          {/* Booking Info Card */}
+          <BookingResultCard 
+            bookingInfo={result.bookingInfo} 
+            apiMetadata={result.apiMetadata}
+          />
 
-          {/* Containers */}
+          {/* Containers Table */}
           {result.containers && result.containers.length > 0 && (
-            <Card className="bg-card/50 border-border">
-              <CardHeader className="pb-3">
-                <CardTitle className="text-lg flex items-center gap-2">
-                  <Package className="h-5 w-5 text-primary" />
-                  Containers ({result.containers.length})
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                  {result.containers.map((container: ContainerInfo, index: number) => (
-                    <div 
-                      key={index}
-                      className="flex items-center gap-3 p-3 bg-muted/50 rounded-lg"
-                    >
-                      <Package className="h-5 w-5 text-muted-foreground" />
-                      <div>
-                        <div className="font-mono text-sm font-medium">
-                          {container.containerNo}
-                        </div>
-                        <div className="text-xs text-muted-foreground">
-                          {container.type} - {container.status}
-                        </div>
-                        {container.placeOfActivity && (
-                          <div className="text-xs text-muted-foreground">
-                            {container.placeOfActivity}
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
+            <ContainersTable containers={result.containers} />
           )}
 
-          {/* Timeline */}
+          {/* Events Timeline */}
           {result.events && result.events.length > 0 && (
-            <Card className="bg-card/50 border-border">
-              <CardHeader className="pb-3">
-                <CardTitle className="text-lg">Timeline de Eventos</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <DraftEventTimeline events={result.events as HapagEvent[]} />
-              </CardContent>
-            </Card>
+            <EventsTable events={result.events as HapagEvent[]} />
           )}
 
           {/* Save Button */}
           <div className="flex justify-end">
-            <Button onClick={handleSave} disabled={isSaving}>
+            <Button onClick={handleSave} disabled={isSaving} className="gap-2">
               {isSaving ? (
-                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                <Loader2 className="h-4 w-4 animate-spin" />
               ) : (
-                <Save className="h-4 w-4 mr-2" />
+                <Save className="h-4 w-4" />
               )}
               Salvar no MariaDB
             </Button>
@@ -241,12 +201,12 @@ export const HapagTrackerPanel = ({ onSave }: HapagTrackerPanelProps) => {
 
       {/* Empty State */}
       {!isLoading && !result && !error && (
-        <Card className="bg-card/50 border-border">
-          <CardContent className="py-12 text-center text-muted-foreground">
-            <Search className="h-12 w-12 mx-auto mb-4 opacity-50" />
-            <p>Digite um número e clique em "Consultar" para buscar informações</p>
-          </CardContent>
-        </Card>
+        <div className="bg-[hsl(var(--card))]/60 border border-border rounded-lg py-16 text-center">
+          <Package className="h-16 w-16 mx-auto mb-4 text-muted-foreground/50" />
+          <p className="text-muted-foreground">
+            Digite um número de booking para iniciar o rastreamento
+          </p>
+        </div>
       )}
     </div>
   );

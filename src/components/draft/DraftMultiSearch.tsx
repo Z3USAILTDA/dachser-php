@@ -98,7 +98,7 @@ export const DraftMultiSearch = ({ onComplete }: DraftMultiSearchProps) => {
             mbl_id: mbl,
             success: true,
             status: data.bookingInfo?.documentStatus as SyncStatus || 'Unknown',
-            booking: data.bookingInfo?.bookingReference
+            booking: data.bookingInfo?.bookingNumber
           });
         } else {
           newResults.push({
