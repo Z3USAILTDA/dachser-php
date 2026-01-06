@@ -1,5 +1,4 @@
 import { useState } from "react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import {
@@ -11,7 +10,7 @@ import {
 } from "@/components/ui/select";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import { Search, Save, Loader2, Package, AlertCircle, RefreshCw, Ship, Fingerprint, FileText, Container } from "lucide-react";
+import { Search, Save, Loader2, Package, AlertCircle, Ship, Fingerprint, FileText, Container } from "lucide-react";
 import { BookingResultCard } from "./BookingResultCard";
 import { ContainersTable } from "./ContainersTable";
 import { EventsTable } from "./EventsTable";
@@ -112,9 +111,9 @@ export const HapagTrackerPanel = ({ onSave }: HapagTrackerPanelProps) => {
 
   const getSearchIcon = () => {
     switch (searchType) {
-      case 'booking': return <Fingerprint className="h-4 w-4 text-muted-foreground" />;
-      case 'BL': return <FileText className="h-4 w-4 text-muted-foreground" />;
-      case 'container': return <Container className="h-4 w-4 text-muted-foreground" />;
+      case 'booking': return <Fingerprint className="h-4 w-4 text-[#888]" />;
+      case 'BL': return <FileText className="h-4 w-4 text-[#888]" />;
+      case 'container': return <Container className="h-4 w-4 text-[#888]" />;
     }
   };
 
@@ -128,10 +127,36 @@ export const HapagTrackerPanel = ({ onSave }: HapagTrackerPanelProps) => {
 
   return (
     <div className="space-y-6">
-      {/* Search Input */}
+      {/* Search Input - Dachser Style */}
       <div className="flex items-center gap-3">
+        <Select value={searchType} onValueChange={(v) => setSearchType(v as SearchType)}>
+          <SelectTrigger className="w-[140px] h-10 rounded-full bg-[#13141a] border-[rgba(255,255,255,0.14)] text-[0.82rem] text-white">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent className="bg-[#13141a] border-[rgba(255,255,255,0.14)] rounded-xl">
+            <SelectItem value="booking" className="text-white hover:bg-[rgba(255,255,255,0.05)]">
+              <span className="flex items-center gap-2">
+                <Fingerprint className="h-3.5 w-3.5" />
+                Booking
+              </span>
+            </SelectItem>
+            <SelectItem value="BL" className="text-white hover:bg-[rgba(255,255,255,0.05)]">
+              <span className="flex items-center gap-2">
+                <FileText className="h-3.5 w-3.5" />
+                BL Number
+              </span>
+            </SelectItem>
+            <SelectItem value="container" className="text-white hover:bg-[rgba(255,255,255,0.05)]">
+              <span className="flex items-center gap-2">
+                <Container className="h-3.5 w-3.5" />
+                Container
+              </span>
+            </SelectItem>
+          </SelectContent>
+        </Select>
+
         <div className="flex-1 relative">
-          <div className="absolute left-3 top-1/2 -translate-y-1/2">
+          <div className="absolute left-3.5 top-1/2 -translate-y-1/2">
             {getSearchIcon()}
           </div>
           <Input
@@ -139,30 +164,29 @@ export const HapagTrackerPanel = ({ onSave }: HapagTrackerPanelProps) => {
             value={searchValue}
             onChange={(e) => setSearchValue(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
-            className="pl-10 bg-[hsl(var(--card))]/60 border-border"
+            className="h-10 pl-10 pr-4 rounded-full border-[rgba(255,255,255,0.14)] bg-[#13141a] text-white text-[0.82rem] placeholder:text-[#666] focus:outline-none focus:border-[#ffc800] focus:ring-1 focus:ring-[rgba(255,200,0,0.5)]"
           />
         </div>
         
         <Button 
           onClick={handleSearch} 
           disabled={isLoading}
-          variant="outline"
-          className="gap-2"
+          className="h-10 px-6 rounded-full bg-[#ffc800] text-black text-[0.82rem] font-semibold hover:bg-[#ffdc50] transition shadow-[0_0_20px_rgba(255,200,0,0.3)] gap-2"
         >
           {isLoading ? (
             <Loader2 className="h-4 w-4 animate-spin" />
           ) : (
-            <RefreshCw className="h-4 w-4" />
+            <Search className="h-4 w-4" />
           )}
-          Atualizar
+          Consultar
         </Button>
       </div>
 
-      {/* Error State */}
+      {/* Error State - Dachser Style */}
       {error && (
-        <div className="bg-destructive/10 border border-destructive/30 rounded-lg p-4 flex items-center gap-3">
-          <AlertCircle className="h-5 w-5 text-destructive" />
-          <span className="text-destructive">{error}</span>
+        <div className="bg-rose-500/10 border border-rose-500/30 rounded-2xl p-4 flex items-center gap-3 backdrop-blur-[18px]">
+          <AlertCircle className="h-5 w-5 text-rose-400" />
+          <span className="text-rose-400 text-[0.85rem]">{error}</span>
         </div>
       )}
 
@@ -185,9 +209,13 @@ export const HapagTrackerPanel = ({ onSave }: HapagTrackerPanelProps) => {
             <EventsTable events={result.events as HapagEvent[]} />
           )}
 
-          {/* Save Button */}
+          {/* Save Button - Dachser Style */}
           <div className="flex justify-end">
-            <Button onClick={handleSave} disabled={isSaving} className="gap-2">
+            <Button 
+              onClick={handleSave} 
+              disabled={isSaving} 
+              className="h-10 px-6 rounded-full bg-[#ffc800] text-black text-[0.82rem] font-semibold hover:bg-[#ffdc50] transition shadow-[0_0_20px_rgba(255,200,0,0.3)] gap-2"
+            >
               {isSaving ? (
                 <Loader2 className="h-4 w-4 animate-spin" />
               ) : (
@@ -199,12 +227,22 @@ export const HapagTrackerPanel = ({ onSave }: HapagTrackerPanelProps) => {
         </div>
       )}
 
-      {/* Empty State */}
+      {/* Empty State - Dachser Style */}
       {!isLoading && !result && !error && (
-        <div className="bg-[hsl(var(--card))]/60 border border-border rounded-lg py-16 text-center">
-          <Package className="h-16 w-16 mx-auto mb-4 text-muted-foreground/50" />
-          <p className="text-muted-foreground">
-            Digite um número de booking para iniciar o rastreamento
+        <div 
+          className="rounded-2xl py-20 text-center backdrop-blur-[18px]"
+          style={{
+            background: 'rgba(5,6,18,0.9)',
+            border: '1px solid rgba(255,255,255,0.12)',
+            boxShadow: '0 18px 40px rgba(0,0,0,0.85)'
+          }}
+        >
+          <Ship className="h-16 w-16 mx-auto mb-4 text-[#ffc800]/50" />
+          <p className="text-[#888] text-[0.9rem]">
+            Selecione o tipo de busca e digite o número para consultar
+          </p>
+          <p className="text-[#666] text-[0.78rem] mt-2">
+            Booking, BL ou Container Number
           </p>
         </div>
       )}
