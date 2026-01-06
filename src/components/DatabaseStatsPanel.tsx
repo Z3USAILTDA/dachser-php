@@ -91,6 +91,23 @@ export const DatabaseStatsPanel = ({ stats, isLoading, onRefresh }: DatabaseStat
               </div>
             </div>
           )}
+          
+          {onRefresh && (
+            <Button
+              variant="outline"
+              size="sm"
+              className="w-full mt-3 gap-2 bg-[rgba(255,200,0,.1)] border-[#ffc800]/30 hover:bg-[#ffc800]/20 hover:border-[#ffc800]/50 text-[#ffc800]"
+              onClick={onRefresh}
+              disabled={isLoading}
+            >
+              {isLoading ? (
+                <RefreshCw className="h-4 w-4 animate-spin" />
+              ) : (
+                <RefreshCw className="h-4 w-4" />
+              )}
+              Atualizar
+            </Button>
+          )}
         </div>
         
         {stats && stats.airlineBreakdown.length > 0 && (
