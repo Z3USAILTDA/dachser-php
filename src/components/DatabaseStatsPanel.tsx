@@ -94,17 +94,13 @@ export const DatabaseStatsPanel = ({ stats, isLoading, onRefresh }: DatabaseStat
           
           {onRefresh && (
             <Button
-              variant="outline"
+              variant="ghost"
               size="sm"
-              className="w-full mt-3 gap-2 bg-[rgba(255,200,0,.1)] border-[#ffc800]/30 hover:bg-[#ffc800]/20 hover:border-[#ffc800]/50 text-[#ffc800]"
+              className="mt-2 gap-1.5 h-7 px-2 text-xs text-[#888] hover:text-[#ffc800] hover:bg-[rgba(255,200,0,.1)]"
               onClick={onRefresh}
               disabled={isLoading}
             >
-              {isLoading ? (
-                <RefreshCw className="h-4 w-4 animate-spin" />
-              ) : (
-                <RefreshCw className="h-4 w-4" />
-              )}
+              <RefreshCw className={`h-3 w-3 ${isLoading ? 'animate-spin' : ''}`} />
               Atualizar
             </Button>
           )}
