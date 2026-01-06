@@ -34,7 +34,9 @@ export const DatabaseStatsPanel = ({ stats, isLoading, onRefresh }: DatabaseStat
   const formatRelativeTime = (dateString: string | null) => {
     if (!dateString) return "N/A";
     try {
-      const date = new Date(dateString);
+      // Remove 'Z' suffix to treat as local time (MariaDB stores in local timezone)
+      const localDateString = dateString.replace('Z', '');
+      const date = new Date(localDateString);
       return formatDistanceToNow(date, { addSuffix: true, locale: ptBR });
     } catch {
       return "N/A";
@@ -44,7 +46,9 @@ export const DatabaseStatsPanel = ({ stats, isLoading, onRefresh }: DatabaseStat
   const formatDateTime = (dateString: string | null) => {
     if (!dateString) return "N/A";
     try {
-      const date = new Date(dateString);
+      // Remove 'Z' suffix to treat as local time (MariaDB stores in local timezone)
+      const localDateString = dateString.replace('Z', '');
+      const date = new Date(localDateString);
       return format(date, "dd/MM/yyyy HH:mm", { locale: ptBR });
     } catch {
       return "N/A";
