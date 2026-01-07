@@ -6939,6 +6939,41 @@ serve(async (req) => {
         break;
       }
 
+      case 'disassemble_master_voucher': {
+        // Disassemble a master voucher: restore children and delete master
+        const { master_id } = body as { master_id: string };
+        console.log('Disassembling master voucher:', master_id);
+
+        if (!master_id) {
+          return new Response(
+            JSON.stringify({ error: 'master_id é obrigatório' }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+
+        // Count child vouchers before restoring
+        const childCount = await client.query(`
+          SELECT COUNT(*) as count FROM dados_dachser.t_vouchers WHERE voucher_master_id = ?
+        `, [master_id]);
+        const childrenRestored = childCount?.[0]?.count || 0;
+
+        // Restore all child vouchers by clearing voucher_master_id
+        await client.execute(`
+          UPDATE dados_dachser.t_vouchers 
+          SET voucher_master_id = NULL, updated_at = NOW()
+          WHERE voucher_master_id = ?
+        `, [master_id]);
+
+        // Delete the master voucher
+        await client.execute(`
+          DELETE FROM dados_dachser.t_vouchers WHERE id = ?
+        `, [master_id]);
+
+        console.log(`Master voucher ${master_id} disassembled. ${childrenRestored} children restored.`);
+        result = { success: true, childrenRestored };
+        break;
+      }
+
       default:
         return new Response(
           JSON.stringify({ error: `Ação não suportada: ${action}` }),
