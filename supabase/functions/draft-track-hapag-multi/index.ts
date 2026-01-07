@@ -163,10 +163,11 @@ Deno.serve(async (req) => {
       return new Response(
         JSON.stringify({ 
           success: false, 
+          notFound: true,
           error: `${searchTypeLabels[searchType]} não encontrado ou sem eventos registrados`,
           status: 204,
         }),
-        { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
@@ -180,8 +181,8 @@ Deno.serve(async (req) => {
           container: 'Container',
         };
         return new Response(
-          JSON.stringify({ success: false, error: `${searchTypeLabels[searchType]} não encontrado` }),
-          { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          JSON.stringify({ success: false, notFound: true, error: `${searchTypeLabels[searchType]} não encontrado` }),
+          { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
       }
 
@@ -214,9 +215,10 @@ Deno.serve(async (req) => {
       return new Response(
         JSON.stringify({ 
           success: false, 
+          notFound: true,
           error: `${searchTypeLabels[searchType]} não encontrado ou sem eventos registrados`,
         }),
-        { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
