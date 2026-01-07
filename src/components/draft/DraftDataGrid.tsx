@@ -210,11 +210,28 @@ export const DraftDataGrid = ({ data, onRefresh, isLoading, statusFilter, onStat
         body: { searchType: 'BL', searchValue: item.mbl_id }
       });
 
-      if (error) throw error;
+      // Handle case where BL is not found (API returns 204/404)
+      if (error) {
+        // Check if it's a "not found" type error
+        const errorBody = error.message || '';
+        if (errorBody.includes('não encontrado') || errorBody.includes('204')) {
+          setDetailsData({ notFound: true, message: 'BL não encontrado na API Hapag-Lloyd' });
+          return;
+        }
+        throw error;
+      }
+      
+      // Handle success: false response
+      if (data && !data.success && data.error) {
+        setDetailsData({ notFound: true, message: data.error });
+        return;
+      }
+      
       setDetailsData(data);
     } catch (err) {
       console.error('Erro:', err);
-      toast.error('Erro ao carregar');
+      toast.error('Erro ao carregar detalhes');
+      setDetailsData({ notFound: true, message: 'Erro ao consultar API' });
     } finally {
       setDetailsLoading(false);
     }
@@ -510,6 +527,14 @@ export const DraftDataGrid = ({ data, onRefresh, isLoading, statusFilter, onStat
           {detailsLoading ? (
             <div className="flex items-center justify-center py-12">
               <Loader2 className="h-8 w-8 animate-spin text-primary" />
+            </div>
+          ) : detailsData?.notFound ? (
+            <div className="text-center py-8">
+              <XCircle className="h-12 w-12 text-muted-foreground mx-auto mb-3" />
+              <p className="text-muted-foreground">{detailsData.message}</p>
+              <p className="text-sm text-muted-foreground/70 mt-2">
+                O BL pode não existir ou ainda não ter eventos registrados na Hapag-Lloyd.
+              </p>
             </div>
           ) : detailsData ? (
             <div className="space-y-6">
