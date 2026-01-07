@@ -1267,9 +1267,7 @@ export const CreateVoucherDialog = ({
                 )}
               </div>
             </div>
-            </>
-            )}
-            {/* Submit Buttons */}
+            {/* Submit Buttons - apenas para modo RM e Manual */}
             <div className="flex justify-end gap-3 pt-4 border-t border-border">
               <Button
                 type="button"
@@ -1300,6 +1298,8 @@ export const CreateVoucherDialog = ({
                 {isSubmitting ? "Enviando..." : "Enviar Voucher"}
               </Button>
             </div>
+            </>
+            )}
           </form>
         </Form>
       </DialogContent>
