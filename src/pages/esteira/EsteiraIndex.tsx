@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { useUsageLog } from "@/hooks/useUsageLog";
 import { ArrowLeft, Plus, Package, AlertTriangle, AlertCircle, Clock, List, BarChart3, RefreshCw, TrendingUp, DollarSign, Calendar, Bot, FileSpreadsheet, Filter, Building2, Users, LayoutDashboard, CheckCircle2, FileWarning, HelpCircle, Receipt, ShieldX, Settings, Search, CreditCard } from "lucide-react";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { supabase } from "@/integrations/supabase/client";
@@ -1573,19 +1574,22 @@ const EsteiraIndex = () => {
                   
 
                   {/* Master Filter */}
-                  <Select value={filters.isMaster} onValueChange={v => setFilters({
-                ...filters,
-                isMaster: v
-              })}>
-                    <SelectTrigger className="w-[130px] bg-[#0a0b10] border-white/10 rounded-full">
-                      <SelectValue placeholder="Tipo" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">Todos</SelectItem>
-                      <SelectItem value="true">Apenas Master</SelectItem>
-                      <SelectItem value="false">Sem Master</SelectItem>
-                    </SelectContent>
-                  </Select>
+                  <div className="flex flex-col gap-1">
+                    <Label className="text-xs text-muted-foreground">Voucher Master</Label>
+                    <Select value={filters.isMaster} onValueChange={v => setFilters({
+                      ...filters,
+                      isMaster: v
+                    })}>
+                      <SelectTrigger className="w-[130px] bg-[#0a0b10] border-white/10 rounded-full">
+                        <SelectValue placeholder="Tipo" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">Todos</SelectItem>
+                        <SelectItem value="true">Apenas Master</SelectItem>
+                        <SelectItem value="false">Sem Master</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
 
                   {/* Clear All Filters */}
                   {(quickFilterFornecedor !== "all" || quickFilterCobranca !== "all" || filters.formaPagamento !== "all" || filters.origemCriacao !== "all" || filters.vencimentoFim !== "" || filters.isMaster !== "all" || filters.search !== "" || filters.etapa !== "all" || filters.processo !== "" || filters.fornecedor !== "" || filters.faixaValor !== "all" || filters.slaStatus !== "all" || filters.vencimentoInicio !== "" || filters.urgente !== "all" || filters.statusComprovante !== "all") && <button onClick={() => {
