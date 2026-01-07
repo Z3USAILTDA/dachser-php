@@ -47,13 +47,15 @@ interface DraftDataGridProps {
   data: CombinedMBLData[];
   onRefresh: () => Promise<void>;
   isLoading: boolean;
+  statusFilter?: string | null;
+  onStatusFilterChange?: (status: string | null) => void;
 }
 
 const ITEMS_PER_PAGE = 15;
 const BATCH_SIZE = 5;
 const BATCH_DELAY_MS = 35000;
 
-export const DraftDataGrid = ({ data, onRefresh, isLoading }: DraftDataGridProps) => {
+export const DraftDataGrid = ({ data, onRefresh, isLoading, statusFilter, onStatusFilterChange }: DraftDataGridProps) => {
   const [searchTerm, setSearchTerm] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
   const [isProcessingAll, setIsProcessingAll] = useState(false);
@@ -72,17 +74,32 @@ export const DraftDataGrid = ({ data, onRefresh, isLoading }: DraftDataGridProps
     return { total: data.length, completed, inTransit, pending, errors };
   }, [data]);
 
-  // Filter data based on search term
+  // Filter data based on search term and status filter
   const filteredData = useMemo(() => {
-    if (!searchTerm.trim()) return data;
-    const term = searchTerm.toLowerCase();
-    return data.filter(item => 
-      item.mbl_id.toLowerCase().includes(term) ||
-      item.trackingData?.booking?.toLowerCase().includes(term) ||
-      item.trackingData?.origem?.toLowerCase().includes(term) ||
-      item.trackingData?.destino?.toLowerCase().includes(term)
-    );
-  }, [data, searchTerm]);
+    let filtered = data;
+    
+    // Apply status filter
+    if (statusFilter) {
+      if (statusFilter === 'Pending') {
+        filtered = filtered.filter(item => item.status === 'Pending' || item.status === 'Nunca Consultado');
+      } else {
+        filtered = filtered.filter(item => item.status === statusFilter);
+      }
+    }
+    
+    // Apply search filter
+    if (searchTerm.trim()) {
+      const term = searchTerm.toLowerCase();
+      filtered = filtered.filter(item => 
+        item.mbl_id.toLowerCase().includes(term) ||
+        item.trackingData?.booking?.toLowerCase().includes(term) ||
+        item.trackingData?.origem?.toLowerCase().includes(term) ||
+        item.trackingData?.destino?.toLowerCase().includes(term)
+      );
+    }
+    
+    return filtered;
+  }, [data, searchTerm, statusFilter]);
 
   // Paginate data
   const paginatedData = useMemo(() => {
@@ -230,9 +247,12 @@ export const DraftDataGrid = ({ data, onRefresh, isLoading }: DraftDataGridProps
 
   return (
     <div className="space-y-4">
-      {/* Stats Cards */}
+      {/* Stats Cards - Filtros Clicáveis */}
       <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
-        <Card className="bg-card border-border border-l-4 border-l-[hsl(var(--info))]">
+        <Card 
+          className={`bg-card border-border border-l-4 border-l-[hsl(var(--info))] cursor-pointer transition-all hover:scale-[1.02] ${statusFilter === null ? 'ring-2 ring-[hsl(var(--info))] ring-offset-2 ring-offset-background' : ''}`}
+          onClick={() => onStatusFilterChange?.(null)}
+        >
           <CardContent className="pt-3 pb-3">
             <div className="flex items-center gap-2">
               <Database className="h-4 w-4 text-[hsl(var(--info))]" />
@@ -244,7 +264,10 @@ export const DraftDataGrid = ({ data, onRefresh, isLoading }: DraftDataGridProps
           </CardContent>
         </Card>
 
-        <Card className="bg-card border-border border-l-4 border-l-[hsl(var(--success))]">
+        <Card 
+          className={`bg-card border-border border-l-4 border-l-[hsl(var(--success))] cursor-pointer transition-all hover:scale-[1.02] ${statusFilter === 'Completed' ? 'ring-2 ring-[hsl(var(--success))] ring-offset-2 ring-offset-background' : ''}`}
+          onClick={() => onStatusFilterChange?.(statusFilter === 'Completed' ? null : 'Completed')}
+        >
           <CardContent className="pt-3 pb-3">
             <div className="flex items-center gap-2">
               <CheckCircle2 className="h-4 w-4 text-[hsl(var(--success))]" />
@@ -256,7 +279,10 @@ export const DraftDataGrid = ({ data, onRefresh, isLoading }: DraftDataGridProps
           </CardContent>
         </Card>
 
-        <Card className="bg-card border-border border-l-4 border-l-[hsl(var(--warning))]">
+        <Card 
+          className={`bg-card border-border border-l-4 border-l-[hsl(var(--warning))] cursor-pointer transition-all hover:scale-[1.02] ${statusFilter === 'In Progress' ? 'ring-2 ring-[hsl(var(--warning))] ring-offset-2 ring-offset-background' : ''}`}
+          onClick={() => onStatusFilterChange?.(statusFilter === 'In Progress' ? null : 'In Progress')}
+        >
           <CardContent className="pt-3 pb-3">
             <div className="flex items-center gap-2">
               <Ship className="h-4 w-4 text-[hsl(var(--warning))]" />
@@ -268,7 +294,10 @@ export const DraftDataGrid = ({ data, onRefresh, isLoading }: DraftDataGridProps
           </CardContent>
         </Card>
 
-        <Card className="bg-card border-border border-l-4 border-l-primary">
+        <Card 
+          className={`bg-card border-border border-l-4 border-l-primary cursor-pointer transition-all hover:scale-[1.02] ${statusFilter === 'Pending' ? 'ring-2 ring-primary ring-offset-2 ring-offset-background' : ''}`}
+          onClick={() => onStatusFilterChange?.(statusFilter === 'Pending' ? null : 'Pending')}
+        >
           <CardContent className="pt-3 pb-3">
             <div className="flex items-center gap-2">
               <Clock className="h-4 w-4 text-primary" />
@@ -280,7 +309,10 @@ export const DraftDataGrid = ({ data, onRefresh, isLoading }: DraftDataGridProps
           </CardContent>
         </Card>
 
-        <Card className="bg-card border-border border-l-4 border-l-[hsl(var(--destructive))]">
+        <Card 
+          className={`bg-card border-border border-l-4 border-l-[hsl(var(--destructive))] cursor-pointer transition-all hover:scale-[1.02] ${statusFilter === 'Error' ? 'ring-2 ring-[hsl(var(--destructive))] ring-offset-2 ring-offset-background' : ''}`}
+          onClick={() => onStatusFilterChange?.(statusFilter === 'Error' ? null : 'Error')}
+        >
           <CardContent className="pt-3 pb-3">
             <div className="flex items-center gap-2">
               <XCircle className="h-4 w-4 text-[hsl(var(--destructive))]" />
@@ -442,14 +474,6 @@ export const DraftDataGrid = ({ data, onRefresh, isLoading }: DraftDataGridProps
                         >
                           <ExternalLink className="h-4 w-4" />
                         </a>
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => viewDetails(item)}
-                        title="Detalhes"
-                      >
-                        <Eye className="h-4 w-4" />
                       </Button>
                     </div>
                   </TableCell>

@@ -1,14 +1,12 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Ship, Database, FileText, LayoutDashboard, Search, ShieldAlert, ArrowLeft, RefreshCw, HelpCircle } from "lucide-react";
+import { Ship, Database, Search, ShieldAlert, ArrowLeft, RefreshCw, HelpCircle } from "lucide-react";
 import { useDraftData } from "@/hooks/useDraftData";
 import { DraftDataGrid } from "@/components/draft/DraftDataGrid";
 import { HapagTrackerPanel } from "@/components/draft/HapagTrackerPanel";
-import { DraftMultiSearch } from "@/components/draft/DraftMultiSearch";
-import { DraftSyncDashboard } from "@/components/draft/DraftSyncDashboard";
 import dachserBg from "@/assets/dachser-background.jpg";
 
-type TabType = "grid" | "tracker" | "multi" | "dashboard";
+type TabType = "grid" | "tracker";
 
 interface NavTab {
   id: TabType;
@@ -19,14 +17,13 @@ interface NavTab {
 const navTabs: NavTab[] = [
   { id: "grid", label: "Grid de Dados", icon: Database },
   { id: "tracker", label: "Tracker", icon: Search },
-  { id: "multi", label: "Multi-Busca", icon: FileText },
-  { id: "dashboard", label: "Dashboard", icon: LayoutDashboard },
 ];
 
 const DraftExportacao = () => {
   const navigate = useNavigate();
   const [isAdmin, setIsAdmin] = useState<boolean | null>(null);
   const [activeTab, setActiveTab] = useState<TabType>("grid");
+  const [statusFilter, setStatusFilter] = useState<string | null>(null);
   const { combinedData, stats, isLoading, refetch } = useDraftData();
 
   const storedUser = localStorage.getItem("user");
@@ -252,6 +249,8 @@ const DraftExportacao = () => {
               data={combinedData}
               onRefresh={refetch}
               isLoading={isLoading}
+              statusFilter={statusFilter}
+              onStatusFilterChange={setStatusFilter}
             />
           )}
 
@@ -259,20 +258,6 @@ const DraftExportacao = () => {
             <HapagTrackerPanel onSave={refetch} />
           )}
 
-          {activeTab === "multi" && (
-            <DraftMultiSearch onComplete={refetch} />
-          )}
-
-          {activeTab === "dashboard" && (
-            <DraftSyncDashboard 
-              stats={stats}
-              combinedData={combinedData}
-              onSyncPending={async () => {
-                await refetch();
-              }}
-              isLoading={isLoading}
-            />
-          )}
         </div>
       </main>
     </div>
