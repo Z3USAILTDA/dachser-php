@@ -133,14 +133,23 @@ export const DraftDataGrid = ({ data, onRefresh, isLoading, statusFilter, onStat
         // If it's a "not found" error, treat as no data available (not a failure)
         if (errorMsg.includes('204') || errorMsg.includes('não encontrado')) {
           console.log(`MBL ${mblId}: Sem dados na API Hapag-Lloyd`);
+          toast.info(`${mblId}: Não encontrado na Hapag-Lloyd`);
           return { success: true, mblId, noData: true };
         }
         throw error;
       }
 
+      // Handle rate limit response
+      if (data && data.rateLimit) {
+        console.log(`MBL ${mblId}: rate_limit`);
+        toast.warning(`Rate limit atingido. Aguarde ${data.retryAfter || 30}s`);
+        return { success: false, mblId, rateLimit: true, retryAfter: data.retryAfter };
+      }
+
       // Handle success: false response from API (e.g., 204 No Content)
       if (data && !data.success) {
         console.log(`MBL ${mblId}: ${data.error || 'Sem dados'}`);
+        toast.info(`${mblId}: ${data.error || 'Sem dados na API'}`);
         return { success: true, mblId, noData: true };
       }
 
@@ -161,13 +170,13 @@ export const DraftDataGrid = ({ data, onRefresh, isLoading, statusFilter, onStat
             }
           }
         });
-        toast.success(`MBL ${mblId} atualizado`);
+        toast.success(`${mblId} atualizado com sucesso!`);
       }
 
       return { success: true, mblId };
     } catch (err: any) {
       console.error(`Erro ao rastrear ${mblId}:`, err);
-      toast.error(`Erro: ${mblId}`);
+      toast.error(`Erro ao consultar ${mblId}`);
       return { success: false, mblId, error: err.message };
     } finally {
       setProcessingMBL(null);
