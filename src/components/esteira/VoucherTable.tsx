@@ -294,26 +294,8 @@ export const VoucherTable = ({ vouchers, onViewDetails, onEdit, onDelete, onGoBa
                     className="h-8 text-xs w-24"
                   />
                 </TableHead>
-                <TableHead className="py-2">
-                  <Select value={filters.cobrancaEmNomeDe} onValueChange={(value) => handleFilterChange("cobrancaEmNomeDe", value)}>
-                    <SelectTrigger className="h-8 text-xs bg-card w-24">
-                      <SelectValue placeholder="Todos" />
-                    </SelectTrigger>
-                    <SelectContent className="bg-card border-border">
-                      <SelectItem value="all">Todos</SelectItem>
-                      <SelectItem value="DACHSER">Dachser</SelectItem>
-                      <SelectItem value="CLIENTE">Cliente</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </TableHead>
-                <TableHead className="py-2">
-                  <Input
-                    placeholder="Fornecedor..."
-                    value={filters.fornecedor || ""}
-                    onChange={(e) => handleFilterChange("fornecedor", e.target.value)}
-                    className="h-8 text-xs w-28"
-                  />
-                </TableHead>
+                <TableHead className="py-2"></TableHead>
+                <TableHead className="py-2"></TableHead>
                 <TableHead className="py-2">
                   <Select value={filters.faixaValor || "all"} onValueChange={(value) => handleFilterChange("faixaValor", value)}>
                     <SelectTrigger className="h-8 text-xs bg-card w-28">
@@ -328,15 +310,13 @@ export const VoucherTable = ({ vouchers, onViewDetails, onEdit, onDelete, onGoBa
                   </Select>
                 </TableHead>
                 <TableHead className="py-2">
-                  <div className="flex gap-1">
-                    <Input
-                      type="date"
-                      value={filters.vencimentoInicio || ""}
-                      onChange={(e) => handleFilterChange("vencimentoInicio", e.target.value)}
-                      className="h-8 text-xs w-28"
-                      title="De"
-                    />
-                  </div>
+                  <Input
+                    type="date"
+                    value={filters.vencimentoInicio || ""}
+                    onChange={(e) => handleFilterChange("vencimentoInicio", e.target.value)}
+                    className="h-8 text-xs w-28"
+                    title="Venc. de"
+                  />
                 </TableHead>
                 <TableHead className="py-2">
                   <Select value={filters.urgente} onValueChange={(value) => handleFilterChange("urgente", value)}>
