@@ -127,7 +127,22 @@ export const DraftDataGrid = ({ data, onRefresh, isLoading, statusFilter, onStat
         body: { searchType: 'BL', searchValue: mblId }
       });
 
-      if (error) throw error;
+      // Handle API errors - check if it's a "not found" type error (204)
+      if (error) {
+        const errorMsg = error.message || '';
+        // If it's a "not found" error, treat as no data available (not a failure)
+        if (errorMsg.includes('204') || errorMsg.includes('não encontrado')) {
+          console.log(`MBL ${mblId}: Sem dados na API Hapag-Lloyd`);
+          return { success: true, mblId, noData: true };
+        }
+        throw error;
+      }
+
+      // Handle success: false response from API (e.g., 204 No Content)
+      if (data && !data.success) {
+        console.log(`MBL ${mblId}: ${data.error || 'Sem dados'}`);
+        return { success: true, mblId, noData: true };
+      }
 
       if (data?.success && data?.bookingInfo) {
         await supabase.functions.invoke('draft-save-tracking', {
