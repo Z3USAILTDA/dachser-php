@@ -706,6 +706,7 @@ const EsteiraIndex = () => {
         responsavelFinanceiroUserId: v.responsavel_financeiro_user_id,
         aprovadoPorUserId: v.aprovado_por_user_id,
         clienteEmail: v.cliente_email,
+        isMaster: v.is_master === 1 || v.is_master === true,
         origemCriacao: v.is_master ? "MASTER" : v.id_rm ? "RM" : "MANUAL",
         processoId: v.processo_id || null,
         origemProcesso: v.origem_processo || null,
@@ -778,7 +779,14 @@ const EsteiraIndex = () => {
       });
 
       // Merge both arrays: RM pending vouchers first (A_PROCESSAR), then esteira vouchers
-      const allVouchers = [...rmPendingVouchers, ...mappedVouchers];
+      // Filter out master vouchers that shouldn't be in A_PROCESSAR (data inconsistency)
+      const allVouchers = [...rmPendingVouchers, ...mappedVouchers].filter(v => {
+        if ((v.isMaster || v.origemCriacao === "MASTER") && v.etapaAtual === "A_PROCESSAR") {
+          console.warn(`Voucher Master ${v.numeroSPO} ignorado - inconsistência: etapa A_PROCESSAR`);
+          return false;
+        }
+        return true;
+      });
       setVouchers(allVouchers);
 
       // Calculate metrics (consolidated)
