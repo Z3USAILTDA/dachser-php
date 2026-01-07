@@ -290,7 +290,7 @@ export const VoucherMasterForm = ({ onSuccess, onClose }: VoucherMasterFormProps
 
   return (
     <Form {...form}>
-      <form onSubmit={form.handleSubmit(handleSubmit)} className="space-y-6">
+      <div className="space-y-6">
         {/* Header info */}
         <div className="flex items-start gap-3 p-4 rounded-xl border border-purple-500/20 bg-purple-500/5">
           <Layers className="h-5 w-5 text-purple-400 flex-shrink-0 mt-0.5" />
@@ -616,7 +616,8 @@ export const VoucherMasterForm = ({ onSuccess, onClose }: VoucherMasterFormProps
             Cancelar
           </Button>
           <Button
-            type="submit"
+            type="button"
+            onClick={form.handleSubmit(handleSubmit)}
             disabled={isSubmitting || selectedVouchers.length < 2}
             className="bg-purple-600 hover:bg-purple-700 text-white gap-2"
           >
@@ -633,7 +634,7 @@ export const VoucherMasterForm = ({ onSuccess, onClose }: VoucherMasterFormProps
             )}
           </Button>
         </div>
-      </form>
+      </div>
     </Form>
   );
 };
