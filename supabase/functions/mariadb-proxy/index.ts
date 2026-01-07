@@ -6792,8 +6792,8 @@ serve(async (req) => {
             id, numero_spo, fornecedor, cnpj_fornecedor, valor, moeda, vencimento,
             forma_pagamento, tipo_documento, cobranca_em_nome_de, filial,
             comentarios_operacao, etapa_atual, status_baixa, status_financeiro,
-            criado_por_user_id, is_master, origem_criacao, created_at, updated_at
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'FISCAL', 'PENDENTE', 'PENDENTE', ?, 1, 'MASTER', NOW(), NOW())
+            criado_por_user_id, is_master, created_at, updated_at
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'FISCAL', 'PENDENTE', 'PENDENTE', ?, 1, NOW(), NOW())
         `, [
           masterId,
           numeroSpoMaster,
