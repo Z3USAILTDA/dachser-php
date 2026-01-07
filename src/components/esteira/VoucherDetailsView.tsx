@@ -205,6 +205,12 @@ export const VoucherDetailsView = ({ voucher, onUpdate, canEditAttachments = fal
               <p className="text-sm text-muted-foreground">Nº SPO</p>
               <p className="font-mono font-medium text-foreground">{voucher.numeroSPO}</p>
             </div>
+            {voucher.processoId && (
+              <div>
+                <p className="text-sm text-muted-foreground">Nº Processo</p>
+                <p className="font-mono font-medium text-foreground">{voucher.processoId}</p>
+              </div>
+            )}
             {voucher.fornecedor && (
               <div>
                 <p className="text-sm text-muted-foreground">Fornecedor</p>
