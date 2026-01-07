@@ -6982,6 +6982,47 @@ serve(async (req) => {
         break;
       }
 
+      case 'update_master_processo_ids': {
+        // Update processo_id for existing master vouchers based on children
+        console.log('Updating processo_id for master vouchers');
+
+        // Get all master vouchers without processo_id
+        const masterVouchers = await client.query(`
+          SELECT id, numero_spo FROM dados_dachser.t_vouchers 
+          WHERE is_master = 1 AND (processo_id IS NULL OR processo_id = '')
+        `);
+
+        let updatedCount = 0;
+        for (const master of masterVouchers) {
+          // Get unique processo_ids from children
+          const childProcessos = await client.query(`
+            SELECT DISTINCT processo_id 
+            FROM dados_dachser.t_vouchers 
+            WHERE voucher_master_id = ? AND processo_id IS NOT NULL AND processo_id != ''
+          `, [master.id]);
+
+          const processoIds = childProcessos
+            ?.map((c: any) => c.processo_id)
+            .filter((p: any) => p && p.trim())
+            .filter((v: string, i: number, a: string[]) => a.indexOf(v) === i);
+
+          if (processoIds?.length > 0) {
+            const processoIdStr = processoIds.join(', ');
+            await client.execute(`
+              UPDATE dados_dachser.t_vouchers 
+              SET processo_id = ?, updated_at = NOW()
+              WHERE id = ?
+            `, [processoIdStr, master.id]);
+            updatedCount++;
+            console.log(`Updated master ${master.numero_spo} with processo_id: ${processoIdStr}`);
+          }
+        }
+
+        console.log(`Updated ${updatedCount} master vouchers with processo_id`);
+        result = { success: true, updatedCount, totalMasters: masterVouchers.length };
+        break;
+      }
+
       default:
         return new Response(
           JSON.stringify({ error: `Ação não suportada: ${action}` }),
