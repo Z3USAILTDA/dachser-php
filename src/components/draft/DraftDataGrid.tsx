@@ -464,16 +464,10 @@ export const DraftDataGrid = ({ data, onRefresh, isLoading, statusFilter, onStat
                       <Button
                         variant="ghost"
                         size="icon"
-                        asChild
-                        title="Hapag-Lloyd"
+                        onClick={() => viewDetails(item)}
+                        title="Detalhes"
                       >
-                        <a
-                          href={`https://www.hapag-lloyd.com/en/online-business/track/track-by-booking-solution.html?blno=${item.mbl_id}`}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                        >
-                          <ExternalLink className="h-4 w-4" />
-                        </a>
+                        <Eye className="h-4 w-4" />
                       </Button>
                     </div>
                   </TableCell>
