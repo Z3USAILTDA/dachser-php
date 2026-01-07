@@ -400,33 +400,6 @@ export const VoucherMasterForm = ({ onSuccess, onClose }: VoucherMasterFormProps
             </Button>
           </CollapsibleTrigger>
           <CollapsibleContent className="mt-4 space-y-4 p-4 rounded-xl border border-border/30 bg-background/20">
-            <div className="grid grid-cols-2 gap-4">
-              <FormField
-                control={form.control}
-                name="fornecedor"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Fornecedor</FormLabel>
-                    <FormControl>
-                      <Input {...field} className="bg-background/50 border-border" />
-                    </FormControl>
-                  </FormItem>
-                )}
-              />
-              <FormField
-                control={form.control}
-                name="cnpjFornecedor"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>CNPJ</FormLabel>
-                    <FormControl>
-                      <Input {...field} className="bg-background/50 border-border" />
-                    </FormControl>
-                  </FormItem>
-                )}
-              />
-            </div>
-
             <div className="grid grid-cols-3 gap-4">
               <FormField
                 control={form.control}
@@ -468,7 +441,7 @@ export const VoucherMasterForm = ({ onSuccess, onClose }: VoucherMasterFormProps
               />
             </div>
 
-            <div className="grid grid-cols-3 gap-4">
+            <div className="grid grid-cols-2 gap-4">
               <FormField
                 control={form.control}
                 name="formaPagamento"
@@ -509,18 +482,6 @@ export const VoucherMasterForm = ({ onSuccess, onClose }: VoucherMasterFormProps
                         <SelectItem value="CLIENTE">Cliente</SelectItem>
                       </SelectContent>
                     </Select>
-                  </FormItem>
-                )}
-              />
-              <FormField
-                control={form.control}
-                name="filial"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Filial</FormLabel>
-                    <FormControl>
-                      <Input {...field} className="bg-background/50 border-border" />
-                    </FormControl>
                   </FormItem>
                 )}
               />
