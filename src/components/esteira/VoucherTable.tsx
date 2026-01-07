@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { VoucherActionsMenu } from "./VoucherActionsMenu";
-import { AlertCircle, Eye, Clock, Building2, User, Plane, Ship, Package, FileCheck, FileClock, ArrowUpDown, ArrowUp, ArrowDown, Layers, Pencil, Check, X } from "lucide-react";
+import { AlertCircle, Eye, Clock, Building2, User, Plane, Ship, Package, FileCheck, FileClock, ArrowUpDown, ArrowUp, ArrowDown, Layers } from "lucide-react";
 import { format, isToday, isPast } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { cn } from "@/lib/utils";
@@ -128,47 +128,6 @@ export const VoucherTable = ({ vouchers, onViewDetails, onEdit, onDelete, onGoBa
   const [sortField, setSortField] = useState<SortField>("createdAt");
   const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
   const [currentPage, setCurrentPage] = useState(1);
-  const [editingSpoId, setEditingSpoId] = useState<string | null>(null);
-  const [editingSpoValue, setEditingSpoValue] = useState<string>("");
-
-  const handleStartEditSpo = (e: React.MouseEvent, voucher: Voucher) => {
-    e.stopPropagation();
-    setEditingSpoId(voucher.id);
-    setEditingSpoValue(voucher.numeroSPO || "");
-  };
-
-  const handleCancelEditSpo = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    setEditingSpoId(null);
-    setEditingSpoValue("");
-  };
-
-  const handleSaveSpo = async (e: React.MouseEvent, voucher: Voucher) => {
-    e.stopPropagation();
-    if (!editingSpoValue.trim()) return;
-    
-    try {
-      const response = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/mariadb-proxy`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          action: "update_voucher_numero_spo",
-          voucher_id: voucher.id,
-          novo_numero_spo: editingSpoValue.trim()
-        })
-      });
-      
-      if (!response.ok) throw new Error("Erro ao atualizar");
-      
-      // Trigger refresh via edit callback
-      onEdit({ ...voucher, numeroSPO: editingSpoValue.trim() });
-      setEditingSpoId(null);
-      setEditingSpoValue("");
-    } catch (error) {
-      console.error("Erro ao salvar SPO:", error);
-    }
-  };
-
   const handleFilterChange = (key: keyof FilterValues, value: string) => {
     onFilterChange({ ...filters, [key]: value });
     setCurrentPage(1); // Reset page when filter changes
@@ -404,41 +363,12 @@ export const VoucherTable = ({ vouchers, onViewDetails, onEdit, onDelete, onGoBa
                     >
                       <TableCell className="font-mono font-medium">
                         <div className="flex items-center gap-2">
-                          {editingSpoId === voucher.id ? (
-                            <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
-                              <Input
-                                value={editingSpoValue}
-                                onChange={(e) => setEditingSpoValue(e.target.value)}
-                                className="h-7 w-32 text-xs"
-                                autoFocus
-                              />
-                              <Button size="icon" variant="ghost" className="h-6 w-6" onClick={(e) => handleSaveSpo(e, voucher)}>
-                                <Check className="h-3.5 w-3.5 text-green-500" />
-                              </Button>
-                              <Button size="icon" variant="ghost" className="h-6 w-6" onClick={handleCancelEditSpo}>
-                                <X className="h-3.5 w-3.5 text-red-500" />
-                              </Button>
-                            </div>
-                          ) : (
-                            <>
-                              {voucher.numeroSPO}
-                              {(voucher.isMaster || voucher.origemCriacao === "MASTER") && (
-                                <>
-                                  <Badge className="bg-purple-500/20 text-purple-400 border-purple-500/30 text-[10px] gap-1">
-                                    <Layers className="h-3 w-3" />
-                                    Master
-                                  </Badge>
-                                  <Button 
-                                    size="icon" 
-                                    variant="ghost" 
-                                    className="h-6 w-6 opacity-50 hover:opacity-100"
-                                    onClick={(e) => handleStartEditSpo(e, voucher)}
-                                  >
-                                    <Pencil className="h-3 w-3" />
-                                  </Button>
-                                </>
-                              )}
-                            </>
+                          {voucher.numeroSPO}
+                          {(voucher.isMaster || voucher.origemCriacao === "MASTER") && (
+                            <Badge className="bg-purple-500/20 text-purple-400 border-purple-500/30 text-[10px] gap-1">
+                              <Layers className="h-3 w-3" />
+                              Master
+                            </Badge>
                           )}
                         </div>
                       </TableCell>
