@@ -140,9 +140,9 @@ export const VoucherTable = ({ vouchers, onViewDetails, onEdit, onDelete, onGoBa
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          action: "update_voucher",
-          id: voucher.id,
-          data: { numero_spo: editingSpoValue.trim() }
+          action: "update_voucher_numero_spo",
+          voucher_id: voucher.id,
+          novo_numero_spo: editingSpoValue.trim()
         })
       });
       
