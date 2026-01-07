@@ -44,8 +44,9 @@ interface TrackingData {
   data_hora_consulta: string | null;
 }
 
-// Default value for tipo_processo when not provided
+// Default values for NOT NULL columns
 const DEFAULT_TIPO_PROCESSO = 'MARITIMO';
+const DEFAULT_HASH = '';
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
@@ -125,18 +126,18 @@ Deno.serve(async (req) => {
       `;
 
       await mariaClient.execute(updateQuery, [
-        trackingData.booking,
-        trackingData.origem,
-        trackingData.destino,
-        trackingData.navio,
-        trackingData.voyage,
-        trackingData.etd,
-        trackingData.eta,
+        trackingData.booking || '',
+        trackingData.origem || '',
+        trackingData.destino || '',
+        trackingData.navio || '',
+        trackingData.voyage || '',
+        trackingData.etd || '',
+        trackingData.eta || '',
         trackingData.tipo_processo || DEFAULT_TIPO_PROCESSO,
-        trackingData.status_armador,
-        trackingData.transaction_id,
-        trackingData.hash_hapag_lloyd,
-        trackingData.api_endpoint,
+        trackingData.status_armador || '',
+        trackingData.transaction_id || '',
+        trackingData.hash_hapag_lloyd || DEFAULT_HASH,
+        trackingData.api_endpoint || '',
         formatDateTimeForMySQL(trackingData.data_hora_servidor),
         formatDateTimeForMySQL(trackingData.data_hora_consulta),
         trackingData.mbl_id
@@ -170,18 +171,18 @@ Deno.serve(async (req) => {
 
       await mariaClient.execute(insertQuery, [
         trackingData.mbl_id,
-        trackingData.booking,
-        trackingData.origem,
-        trackingData.destino,
-        trackingData.navio,
-        trackingData.voyage,
-        trackingData.etd,
-        trackingData.eta,
+        trackingData.booking || '',
+        trackingData.origem || '',
+        trackingData.destino || '',
+        trackingData.navio || '',
+        trackingData.voyage || '',
+        trackingData.etd || '',
+        trackingData.eta || '',
         trackingData.tipo_processo || DEFAULT_TIPO_PROCESSO,
-        trackingData.status_armador,
-        trackingData.transaction_id,
-        trackingData.hash_hapag_lloyd,
-        trackingData.api_endpoint,
+        trackingData.status_armador || '',
+        trackingData.transaction_id || '',
+        trackingData.hash_hapag_lloyd || DEFAULT_HASH,
+        trackingData.api_endpoint || '',
         formatDateTimeForMySQL(trackingData.data_hora_servidor),
         formatDateTimeForMySQL(trackingData.data_hora_consulta)
       ]);
