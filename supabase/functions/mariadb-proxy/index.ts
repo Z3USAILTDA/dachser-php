@@ -6777,20 +6777,27 @@ serve(async (req) => {
           totalValor = childVouchers?.[0]?.total || 0;
         }
 
-        // Get earliest vencimento and origem_processo from children if not provided
+        // Get earliest vencimento, origem_processo and processo_ids from children if not provided
         let venc = vencimento;
         let origemProcesso = null;
+        let processoId = null;
         const childData = await client.query(`
-          SELECT MIN(vencimento) as min_venc, origem_processo 
+          SELECT MIN(vencimento) as min_venc, origem_processo, processo_id 
           FROM dados_dachser.t_vouchers 
           WHERE id IN (${voucher_ids.map(() => '?').join(',')})
-          GROUP BY origem_processo
-          LIMIT 1
+          GROUP BY origem_processo, processo_id
         `, voucher_ids);
         if (!venc) {
           venc = childData?.[0]?.min_venc || new Date().toISOString().split('T')[0];
         }
         origemProcesso = childData?.[0]?.origem_processo || null;
+        
+        // Collect unique processo_ids from all children
+        const processoIds = childData
+          ?.map((c: any) => c.processo_id)
+          .filter((p: any) => p && p.trim())
+          .filter((v: string, i: number, a: string[]) => a.indexOf(v) === i);
+        processoId = processoIds?.length > 0 ? processoIds.join(', ') : null;
         
         // Format vencimento as YYYY-MM-DD for MariaDB DATE column
         const formatDateForMariaDB = (dateValue: any): string => {
@@ -6817,8 +6824,8 @@ serve(async (req) => {
             id, numero_spo, fornecedor, cnpj_fornecedor, valor, moeda, vencimento,
             forma_pagamento, tipo_documento, cobranca_em_nome_de, filial,
             comentarios_operacao, etapa_atual, status_baixa, status_financeiro,
-            criado_por_user_id, is_master, origem_processo, created_at, updated_at
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'FISCAL', 'PENDENTE', 'PENDENTE', ?, 1, ?, NOW(), NOW())
+            criado_por_user_id, is_master, origem_processo, processo_id, created_at, updated_at
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'FISCAL', 'PENDENTE', 'PENDENTE', ?, 1, ?, ?, NOW(), NOW())
         `, [
           masterId,
           numeroSpoMaster,
@@ -6833,7 +6840,8 @@ serve(async (req) => {
           filial || null,
           comentarios_operacao || null,
           criado_por_user_id || null,
-          origemProcesso
+          origemProcesso,
+          processoId
         ]);
 
         // Update all child vouchers with the master ID
