@@ -1,7 +1,8 @@
 /**
  * Utility to safely parse dates from MariaDB
- * MariaDB stores dates in local time (UTC-3 São Paulo), so we should NOT add 'Z'
- * to datetime strings, letting JavaScript interpret them as local time.
+ * MariaDB stores dates in local time (UTC-3 São Paulo/Brasília).
+ * We need to explicitly add the timezone offset to ensure correct parsing
+ * regardless of the browser's timezone setting.
  * 
  * Handles various date formats: date-only, datetime, ISO with/without timezone
  */
@@ -13,18 +14,18 @@ export const parseMariaDBDate = (dateStr: string | null | undefined): Date | nul
     return new Date(dateStr);
   }
   
-  // Se é formato MariaDB "YYYY-MM-DD HH:mm:ss", interpretar como hora LOCAL
-  // NÃO adicionar 'Z' pois o MariaDB armazena em UTC-3
+  // Se é formato MariaDB "YYYY-MM-DD HH:mm:ss", adicionar offset de São Paulo (-03:00)
+  // Isso garante que a data seja interpretada corretamente independente do timezone do navegador
   if (dateStr.includes(' ')) {
-    // Criar Date diretamente - será interpretado como hora local
-    return new Date(dateStr.replace(' ', 'T'));
+    // Converter para ISO format e adicionar offset de São Paulo
+    return new Date(dateStr.replace(' ', 'T') + '-03:00');
   }
   
-  // Se tem 'T' sem timezone, interpretar como hora local
-  if (dateStr.includes('T')) {
-    return new Date(dateStr);
+  // Se tem 'T' sem timezone, adicionar offset de São Paulo
+  if (dateStr.includes('T') && !dateStr.includes('Z') && !dateStr.includes('+') && !dateStr.includes('-', 10)) {
+    return new Date(dateStr + '-03:00');
   }
   
-  // Se é apenas data (YYYY-MM-DD), criar como meia-noite local
-  return new Date(dateStr + 'T00:00:00');
+  // Se é apenas data (YYYY-MM-DD), criar como meia-noite no horário de São Paulo
+  return new Date(dateStr + 'T00:00:00-03:00');
 };
