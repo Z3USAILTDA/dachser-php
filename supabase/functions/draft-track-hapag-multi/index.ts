@@ -191,11 +191,12 @@ Deno.serve(async (req) => {
         return new Response(
           JSON.stringify({ 
             success: false, 
+            rateLimit: true,
             error: 'rate_limit',
             message: `Limite de requisições atingido. Aguarde ${retryAfter} segundos.`,
             retryAfter: parseInt(retryAfter, 10),
           }),
-          { status: 429, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
       }
 
