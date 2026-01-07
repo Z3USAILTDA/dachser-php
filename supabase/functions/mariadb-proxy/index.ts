@@ -6711,8 +6711,8 @@ serve(async (req) => {
         }
         
         const vouchers = await client.query(`
-          SELECT id, numero_spo, fornecedor, valor, moeda, vencimento, etapa_atual
-          FROM dados_dachser.t_vouchers 
+          SELECT id, numero_spo, fornecedor, cnpj_fornecedor, valor, moeda, vencimento, etapa_atual, filial
+          FROM dados_dachser.t_vouchers
           WHERE (numero_spo LIKE ? OR fornecedor LIKE ?)
             AND etapa_atual IN ('OPERACAO', 'A_PROCESSAR', 'FISCAL')
             AND (voucher_master_id IS NULL OR voucher_master_id = '')
