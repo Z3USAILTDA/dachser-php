@@ -885,7 +885,7 @@ const EsteiraIndex = () => {
         responsavelFinanceiroUserId: v.responsavel_financeiro_user_id,
         aprovadoPorUserId: v.aprovado_por_user_id,
         clienteEmail: v.cliente_email,
-        origemCriacao: v.origem_criacao || "MANUAL",
+        origemCriacao: v.is_master ? "MASTER" : (v.id_rm ? "RM" : "MANUAL"),
         processoId: v.processo_id || null,
         origemProcesso: v.origem_processo || null,
         chavePix: v.chave_pix || null,

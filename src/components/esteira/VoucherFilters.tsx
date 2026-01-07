@@ -173,6 +173,7 @@ export const VoucherFilters = ({ onSearch }: VoucherFiltersProps) => {
               <SelectItem value="all">Todas</SelectItem>
               <SelectItem value="MANUAL">Manual</SelectItem>
               <SelectItem value="RM">Via RM</SelectItem>
+              <SelectItem value="MASTER">Master</SelectItem>
             </SelectContent>
           </Select>
         </div>
