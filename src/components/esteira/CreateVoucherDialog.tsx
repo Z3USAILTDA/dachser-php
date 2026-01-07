@@ -1291,9 +1291,13 @@ export const CreateVoucherDialog = ({
                 Salvar Rascunho
               </Button>
               <Button 
-                type="submit" 
+                type="button" 
                 disabled={isSubmitting} 
                 className="bg-primary text-primary-foreground hover:bg-primary/90"
+                onClick={() => {
+                  const values = form.getValues();
+                  handleSubmitVoucher(values, false);
+                }}
               >
                 {isSubmitting ? "Enviando..." : "Enviar Voucher"}
               </Button>
