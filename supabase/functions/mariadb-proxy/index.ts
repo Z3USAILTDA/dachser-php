@@ -4042,6 +4042,57 @@ serve(async (req) => {
         break;
       }
 
+      // Reset vouchers NOT updated today to A_PROCESSAR
+      case 'admin_reset_stale_to_a_processar': {
+        const resetBody = body as any;
+        const reset_user_id = resetBody.user_id as string | undefined;
+        const reset_user_name = resetBody.user_name as string | undefined;
+        
+        console.log('Admin reset: Moving stale vouchers (not updated today) to A_PROCESSAR');
+        
+        // First, list affected vouchers for logging
+        const staleVouchers = await client.query(`
+          SELECT id, numero_spo, etapa_atual, updated_at 
+          FROM dados_dachser.t_vouchers 
+          WHERE etapa_atual NOT IN ('A_PROCESSAR', 'CONCLUIDO', 'CANCELADO')
+            AND DATE(updated_at) < CURDATE()
+        `);
+        
+        const affectedCount = staleVouchers?.length || 0;
+        console.log(`Found ${affectedCount} stale vouchers to reset to A_PROCESSAR`);
+        
+        if (affectedCount > 0) {
+          // Log each voucher being reset
+          const affectedSpos = (staleVouchers || []).map((v: any) => v.numero_spo).join(', ');
+          console.log(`Resetting vouchers: ${affectedSpos}`);
+          
+          // Update stale vouchers (not updated today)
+          await client.execute(`
+            UPDATE dados_dachser.t_vouchers 
+            SET etapa_atual = 'A_PROCESSAR', updated_at = NOW() 
+            WHERE etapa_atual NOT IN ('A_PROCESSAR', 'CONCLUIDO', 'CANCELADO')
+              AND DATE(updated_at) < CURDATE()
+          `);
+          
+          // Log the bulk action
+          await client.execute(`
+            INSERT INTO dados_dachser.t_voucher_logs (
+              id, voucher_id, user_id, user_name, acao, detalhe, data_hora
+            ) VALUES (?, 'BULK_ACTION', ?, ?, 'RESET_STALE_TO_A_PROCESSAR', ?, NOW())
+          `, [
+            crypto.randomUUID(),
+            reset_user_id || null,
+            reset_user_name || 'Admin',
+            `Reset vouchers obsoletos: ${affectedCount} vouchers movidos para A_PROCESSAR (${affectedSpos})`
+          ]);
+          
+          console.log(`Successfully reset ${affectedCount} stale vouchers to A_PROCESSAR`);
+        }
+        
+        result = { success: true, affectedCount, vouchers: staleVouchers };
+        break;
+      }
+
       case 'get_vouchers_esteira': {
         const { search, etapa, limit = 100, offset = 0 } = body as any;
         console.log('Fetching vouchers from dados_dachser.t_vouchers');
