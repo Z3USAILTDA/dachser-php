@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { useUsageLog } from "@/hooks/useUsageLog";
-import { ArrowLeft, Plus, Package, AlertTriangle, AlertCircle, Clock, List, BarChart3, RefreshCw, TrendingUp, DollarSign, Calendar, Bot, FileSpreadsheet, Filter, Building2, Users, LayoutDashboard, CheckCircle2, FileWarning, HelpCircle, Receipt, ShieldX, Settings, Search, CreditCard } from "lucide-react";
+import { ArrowLeft, Plus, Package, AlertTriangle, AlertCircle, Clock, List, BarChart3, RefreshCw, TrendingUp, DollarSign, Calendar, Bot, FileSpreadsheet, Filter, Building2, Users, LayoutDashboard, CheckCircle2, FileWarning, HelpCircle, Receipt, ShieldX, Settings, Search, CreditCard, Layers } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
@@ -1574,14 +1574,14 @@ const EsteiraIndex = () => {
                   
 
                   {/* Master Filter */}
-                  <div className="flex flex-col gap-1">
-                    <Label className="text-xs text-muted-foreground">Voucher Master</Label>
+                  <div className="flex items-center gap-2">
+                    <Layers className="h-4 w-4 text-[#888888]" />
                     <Select value={filters.isMaster} onValueChange={v => setFilters({
                       ...filters,
                       isMaster: v
                     })}>
-                      <SelectTrigger className="w-[130px] bg-[#0a0b10] border-white/10 rounded-full">
-                        <SelectValue placeholder="Tipo" />
+                      <SelectTrigger className="w-[150px] bg-[#0a0b10] border-white/10 rounded-full">
+                        <SelectValue placeholder="Voucher Master" />
                       </SelectTrigger>
                       <SelectContent>
                         <SelectItem value="all">Todos</SelectItem>
