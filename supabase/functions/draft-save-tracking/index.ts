@@ -44,6 +44,9 @@ interface TrackingData {
   data_hora_consulta: string | null;
 }
 
+// Default value for tipo_processo when not provided
+const DEFAULT_TIPO_PROCESSO = 'MARITIMO';
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
@@ -129,7 +132,7 @@ Deno.serve(async (req) => {
         trackingData.voyage,
         trackingData.etd,
         trackingData.eta,
-        trackingData.tipo_processo,
+        trackingData.tipo_processo || DEFAULT_TIPO_PROCESSO,
         trackingData.status_armador,
         trackingData.transaction_id,
         trackingData.hash_hapag_lloyd,
@@ -174,7 +177,7 @@ Deno.serve(async (req) => {
         trackingData.voyage,
         trackingData.etd,
         trackingData.eta,
-        trackingData.tipo_processo,
+        trackingData.tipo_processo || DEFAULT_TIPO_PROCESSO,
         trackingData.status_armador,
         trackingData.transaction_id,
         trackingData.hash_hapag_lloyd,
