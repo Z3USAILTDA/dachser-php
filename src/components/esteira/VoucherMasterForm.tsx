@@ -286,7 +286,7 @@ export const VoucherMasterForm = ({ onSuccess, onClose }: VoucherMasterFormProps
     }
   };
 
-  const totalValorSelecionado = selectedVouchers.reduce((sum, v) => sum + (v.valor || 0), 0);
+  const totalValorSelecionado = selectedVouchers.reduce((sum, v) => sum + (Number(v.valor) || 0), 0);
 
   return (
     <Form {...form}>
@@ -337,7 +337,7 @@ export const VoucherMasterForm = ({ onSuccess, onClose }: VoucherMasterFormProps
                     </div>
                     <div className="text-right">
                       <span className="text-sm font-medium">
-                        {voucher.moeda || 'BRL'} {voucher.valor?.toLocaleString('pt-BR', { minimumFractionDigits: 2 }) || '0,00'}
+                        {voucher.moeda || 'BRL'} {Number(voucher.valor || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                       </span>
                       <Badge variant="outline" className="ml-2 text-xs">
                         {voucher.etapa_atual}
@@ -368,7 +368,7 @@ export const VoucherMasterForm = ({ onSuccess, onClose }: VoucherMasterFormProps
                 >
                   <span className="font-mono">{voucher.numero_spo}</span>
                   <span className="text-xs opacity-75">
-                    ({voucher.moeda || 'BRL'} {voucher.valor?.toLocaleString('pt-BR', { minimumFractionDigits: 2 }) || '0,00'})
+                    ({voucher.moeda || 'BRL'} {Number(voucher.valor || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })})
                   </span>
                   <button
                     type="button"
