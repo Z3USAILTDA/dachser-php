@@ -195,6 +195,9 @@ export function useUserRole() {
   // Verifica se pode cancelar voucher (Admin, Supervisor, Financeiro)
   const canCancelVoucher = isAdmin || isSupervisor || isFinanceiro;
 
+  // Verifica se pode desmembrar voucher master (Admin, Supervisor, Financeiro)
+  const canDisassembleMaster = isAdmin || isSupervisor || isFinanceiro;
+
   // Verifica se pode gerenciar usuários (Admin apenas)
   const canManageUsers = isAdmin;
 
@@ -227,6 +230,7 @@ export function useUserRole() {
     canAuthorizeExceptions,
     canGoBackStage,
     canCancelVoucher,
+    canDisassembleMaster,
     canManageUsers,
   };
 }

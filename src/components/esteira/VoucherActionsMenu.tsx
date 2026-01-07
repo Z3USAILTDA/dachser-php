@@ -1,4 +1,4 @@
-import { MoreHorizontal, Edit, Trash2, Undo2, XCircle } from "lucide-react";
+import { MoreHorizontal, Edit, Trash2, Undo2, XCircle, Unlink } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -34,11 +34,13 @@ interface VoucherActionsMenuProps {
   onDelete: () => void;
   onGoBack: (justificativa: string) => void;
   onCancel?: () => void;
+  onDisassemble?: () => void;
   canGoBack: boolean;
   canGoBackStage?: boolean;
   canEdit?: boolean;
   canDelete?: boolean;
   canCancelVoucher?: boolean;
+  canDisassemble?: boolean;
   isCancelled?: boolean;
 }
 
@@ -47,15 +49,18 @@ export const VoucherActionsMenu = ({
   onDelete,
   onGoBack,
   onCancel,
+  onDisassemble,
   canGoBack,
   canGoBackStage = false,
   canEdit = true,
   canDelete = true,
   canCancelVoucher = false,
+  canDisassemble = false,
   isCancelled = false,
 }: VoucherActionsMenuProps) => {
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [showGoBackDialog, setShowGoBackDialog] = useState(false);
+  const [showDisassembleDialog, setShowDisassembleDialog] = useState(false);
   const [justificativa, setJustificativa] = useState("");
 
   // If voucher is cancelled, only show view (no actions)
@@ -64,7 +69,7 @@ export const VoucherActionsMenu = ({
   }
 
   // If user can't perform any action, don't show the menu at all
-  if (!canEdit && !canDelete && !(canGoBack && canGoBackStage) && !canCancelVoucher) {
+  if (!canEdit && !canDelete && !(canGoBack && canGoBackStage) && !canCancelVoucher && !canDisassemble) {
     return null;
   }
 
@@ -98,9 +103,21 @@ export const VoucherActionsMenu = ({
               Voltar Etapa
             </DropdownMenuItem>
           )}
-          {canCancelVoucher && onCancel && (
+          {canDisassemble && onDisassemble && (
             <>
               {(canEdit || (canGoBack && canGoBackStage)) && <DropdownMenuSeparator />}
+              <DropdownMenuItem
+                onClick={() => setShowDisassembleDialog(true)}
+                className="text-orange-600 focus:text-orange-600"
+              >
+                <Unlink className="mr-2 h-4 w-4" />
+                Desmembrar Master
+              </DropdownMenuItem>
+            </>
+          )}
+          {canCancelVoucher && onCancel && (
+            <>
+              {(canEdit || (canGoBack && canGoBackStage) || canDisassemble) && <DropdownMenuSeparator />}
               <DropdownMenuItem
                 onClick={onCancel}
                 className="text-destructive focus:text-destructive"
@@ -187,6 +204,31 @@ export const VoucherActionsMenu = ({
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <AlertDialog open={showDisassembleDialog} onOpenChange={setShowDisassembleDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Desmembrar Voucher Master</AlertDialogTitle>
+            <AlertDialogDescription>
+              Esta ação irá restaurar todos os vouchers filhos como vouchers individuais e 
+              excluir o voucher master. Os vouchers filhos voltarão a aparecer separadamente 
+              na esteira. Deseja continuar?
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                onDisassemble?.();
+                setShowDisassembleDialog(false);
+              }}
+              className="bg-orange-600 hover:bg-orange-700"
+            >
+              Desmembrar
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </>
   );
 };

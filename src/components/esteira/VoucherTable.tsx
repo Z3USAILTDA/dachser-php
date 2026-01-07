@@ -38,12 +38,14 @@ interface VoucherTableProps {
   onDelete: (voucher: Voucher) => void;
   onGoBack: (voucher: Voucher, justificativa: string) => void;
   onCancel?: (voucher: Voucher) => void;
+  onDisassemble?: (voucher: Voucher) => void;
   filters: FilterValues;
   onFilterChange: (filters: FilterValues) => void;
   canEdit?: boolean;
   canDelete?: boolean;
   canGoBackStage?: boolean;
   canCancelVoucher?: boolean;
+  canDisassembleMaster?: boolean;
   lastUpdateTime?: Date | null;
 }
 
@@ -110,7 +112,7 @@ const getSlaColor = (status: "ok" | "warning" | "critical") => {
   return colors[status];
 };
 
-export const VoucherTable = ({ vouchers, onViewDetails, onEdit, onDelete, onGoBack, onCancel, filters, onFilterChange, canEdit = true, canDelete = true, canGoBackStage = false, canCancelVoucher = false, lastUpdateTime }: VoucherTableProps) => {
+export const VoucherTable = ({ vouchers, onViewDetails, onEdit, onDelete, onGoBack, onCancel, onDisassemble, filters, onFilterChange, canEdit = true, canDelete = true, canGoBackStage = false, canCancelVoucher = false, canDisassembleMaster = false, lastUpdateTime }: VoucherTableProps) => {
   const [sortField, setSortField] = useState<SortField>("createdAt");
   const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
   const [currentPage, setCurrentPage] = useState(1);
@@ -529,11 +531,13 @@ export const VoucherTable = ({ vouchers, onViewDetails, onEdit, onDelete, onGoBa
                             onDelete={() => onDelete(voucher)}
                             onGoBack={(justificativa) => onGoBack(voucher, justificativa)}
                             onCancel={onCancel ? () => onCancel(voucher) : undefined}
+                            onDisassemble={onDisassemble ? () => onDisassemble(voucher) : undefined}
                             canGoBack={canGoBack(voucher)}
                             canGoBackStage={canGoBackStage}
                             canEdit={canEdit && voucher.etapaAtual !== "CANCELADO"}
                             canDelete={canDelete && voucher.etapaAtual !== "CANCELADO"}
                             canCancelVoucher={canCancelVoucher && voucher.etapaAtual !== "CANCELADO" && voucher.etapaAtual !== "CONCLUIDO"}
+                            canDisassemble={canDisassembleMaster && (voucher.isMaster || voucher.origemCriacao === "MASTER")}
                             isCancelled={voucher.etapaAtual === "CANCELADO"}
                           />
                         </div>

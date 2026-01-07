@@ -810,6 +810,7 @@ const EsteiraIndex = () => {
     canGoBackStage,
     canManageUsers,
     canCancelVoucher,
+    canDisassembleMaster,
   } = useUserRole();
   const storedUser = localStorage.getItem("user") || localStorage.getItem("dachser_user");
   const user = storedUser ? JSON.parse(storedUser) : null;
@@ -1390,6 +1391,46 @@ const EsteiraIndex = () => {
     setShowCancelDialog(true);
   };
 
+  const handleDisassemble = async (voucher: Voucher) => {
+    try {
+      const { data, error } = await supabase.functions.invoke("mariadb-proxy", {
+        body: {
+          action: "disassemble_master_voucher",
+          master_id: voucher.id,
+        },
+      });
+      
+      if (error || !data?.success) throw new Error(data?.error || error?.message || "Erro ao desmembrar");
+      
+      // Log the action
+      const storedUser = localStorage.getItem("user") || localStorage.getItem("dachser_user");
+      const userData = storedUser ? JSON.parse(storedUser) : { id: 0, username: "sistema" };
+      
+      await supabase.functions.invoke("mariadb-proxy", {
+        body: {
+          action: "save_voucher_log",
+          voucher_id: voucher.id,
+          user_id: userData.id?.toString(),
+          user_name: userData.username,
+          acao: "MASTER_DESMEMBRADO",
+          detalhe: `Voucher master ${voucher.numeroSPO} foi desmembrado. ${data.childrenRestored || 0} vouchers filhos restaurados.`,
+        },
+      });
+      
+      toast({
+        title: "Voucher desmembrado",
+        description: `${data.childrenRestored || 0} vouchers filhos foram restaurados como individuais`,
+      });
+      loadVouchers();
+    } catch (error: any) {
+      toast({
+        title: "Erro ao desmembrar",
+        description: error.message,
+        variant: "destructive",
+      });
+    }
+  };
+
   return (
     <div className="min-h-screen relative overflow-x-hidden">
       {/* Background with image and gradient overlay */}
@@ -1726,12 +1767,14 @@ const EsteiraIndex = () => {
                       onDelete={handleDelete}
                       onGoBack={handleGoBack}
                       onCancel={handleCancel}
+                      onDisassemble={handleDisassemble}
                       filters={filters}
                       onFilterChange={setFilters}
                       canEdit={canEditVoucher}
                       canDelete={canDeleteVoucher}
                       canGoBackStage={canGoBackStage}
                       canCancelVoucher={canCancelVoucher}
+                      canDisassembleMaster={canDisassembleMaster}
                       lastUpdateTime={lastUpdateTime}
                     />
                 </div>
