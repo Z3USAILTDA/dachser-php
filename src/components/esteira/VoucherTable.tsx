@@ -26,6 +26,18 @@ export interface FilterValues {
   vencimentoInicio: string;
   vencimentoFim: string;
   origemCriacao: string;
+  // Novos filtros inline
+  processo: string;
+  fornecedor: string;
+  faixaValor: string;
+  slaStatus: string;
+  // Novos filtros avançados
+  tipoDocumento: string;
+  filial: string;
+  moeda: string;
+  criadoEmInicio: string;
+  criadoEmFim: string;
+  isMaster: string;
 }
 
 type SortField = "numeroSPO" | "fornecedor" | "valor" | "vencimento" | "etapaAtual" | "tempoNaEtapa" | "createdAt";
@@ -268,16 +280,23 @@ export const VoucherTable = ({ vouchers, onViewDetails, onEdit, onDelete, onGoBa
               <TableRow className="bg-background/50 border-b-primary/10">
                 <TableHead className="py-2">
                   <Input
-                    placeholder="Buscar..."
+                    placeholder="SPO..."
                     value={filters.search}
                     onChange={(e) => handleFilterChange("search", e.target.value)}
-                    className="h-8 text-xs"
+                    className="h-8 text-xs w-24"
                   />
                 </TableHead>
-                <TableHead className="py-2"></TableHead>
+                <TableHead className="py-2">
+                  <Input
+                    placeholder="Processo..."
+                    value={filters.processo || ""}
+                    onChange={(e) => handleFilterChange("processo", e.target.value)}
+                    className="h-8 text-xs w-24"
+                  />
+                </TableHead>
                 <TableHead className="py-2">
                   <Select value={filters.cobrancaEmNomeDe} onValueChange={(value) => handleFilterChange("cobrancaEmNomeDe", value)}>
-                    <SelectTrigger className="h-8 text-xs bg-card">
+                    <SelectTrigger className="h-8 text-xs bg-card w-24">
                       <SelectValue placeholder="Todos" />
                     </SelectTrigger>
                     <SelectContent className="bg-card border-border">
@@ -287,12 +306,41 @@ export const VoucherTable = ({ vouchers, onViewDetails, onEdit, onDelete, onGoBa
                     </SelectContent>
                   </Select>
                 </TableHead>
-                <TableHead className="py-2"></TableHead>
-                <TableHead className="py-2"></TableHead>
-                <TableHead className="py-2"></TableHead>
+                <TableHead className="py-2">
+                  <Input
+                    placeholder="Fornecedor..."
+                    value={filters.fornecedor || ""}
+                    onChange={(e) => handleFilterChange("fornecedor", e.target.value)}
+                    className="h-8 text-xs w-28"
+                  />
+                </TableHead>
+                <TableHead className="py-2">
+                  <Select value={filters.faixaValor || "all"} onValueChange={(value) => handleFilterChange("faixaValor", value)}>
+                    <SelectTrigger className="h-8 text-xs bg-card w-28">
+                      <SelectValue placeholder="Todos" />
+                    </SelectTrigger>
+                    <SelectContent className="bg-card border-border">
+                      <SelectItem value="all">Todos</SelectItem>
+                      <SelectItem value="low">{"< R$ 1.000"}</SelectItem>
+                      <SelectItem value="medium">R$ 1k - 10k</SelectItem>
+                      <SelectItem value="high">{"> R$ 10.000"}</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </TableHead>
+                <TableHead className="py-2">
+                  <div className="flex gap-1">
+                    <Input
+                      type="date"
+                      value={filters.vencimentoInicio || ""}
+                      onChange={(e) => handleFilterChange("vencimentoInicio", e.target.value)}
+                      className="h-8 text-xs w-28"
+                      title="De"
+                    />
+                  </div>
+                </TableHead>
                 <TableHead className="py-2">
                   <Select value={filters.urgente} onValueChange={(value) => handleFilterChange("urgente", value)}>
-                    <SelectTrigger className="h-8 text-xs bg-card">
+                    <SelectTrigger className="h-8 text-xs bg-card w-28">
                       <SelectValue placeholder="Todos" />
                     </SelectTrigger>
                     <SelectContent className="bg-card border-border">
@@ -305,7 +353,7 @@ export const VoucherTable = ({ vouchers, onViewDetails, onEdit, onDelete, onGoBa
                 </TableHead>
                 <TableHead className="py-2">
                   <Select value={filters.etapa} onValueChange={(value) => handleFilterChange("etapa", value)}>
-                    <SelectTrigger className="h-8 text-xs bg-card">
+                    <SelectTrigger className="h-8 text-xs bg-card w-28">
                       <SelectValue placeholder="Todas" />
                     </SelectTrigger>
                     <SelectContent className="bg-card border-border">
@@ -317,16 +365,28 @@ export const VoucherTable = ({ vouchers, onViewDetails, onEdit, onDelete, onGoBa
                       <SelectItem value="FINANCEIRO">Financeiro</SelectItem>
                       <SelectItem value="ROBO">Robô</SelectItem>
                       <SelectItem value="CONCLUIDO">Concluído</SelectItem>
-                      <SelectItem value="AJUSTE_OPERACAO">Ajuste Operacional</SelectItem>
+                      <SelectItem value="AJUSTE_OPERACAO">Ajuste Op.</SelectItem>
                       <SelectItem value="AJUSTE_FISCAL">Ajuste Fiscal</SelectItem>
                       <SelectItem value="CANCELADO">Cancelado</SelectItem>
                     </SelectContent>
                   </Select>
                 </TableHead>
-                <TableHead className="py-2"></TableHead>
+                <TableHead className="py-2">
+                  <Select value={filters.slaStatus || "all"} onValueChange={(value) => handleFilterChange("slaStatus", value)}>
+                    <SelectTrigger className="h-8 text-xs bg-card w-24">
+                      <SelectValue placeholder="Todos" />
+                    </SelectTrigger>
+                    <SelectContent className="bg-card border-border">
+                      <SelectItem value="all">Todos</SelectItem>
+                      <SelectItem value="ok">OK</SelectItem>
+                      <SelectItem value="warning">Atenção</SelectItem>
+                      <SelectItem value="critical">Crítico</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </TableHead>
                 <TableHead className="py-2">
                   <Select value={filters.statusComprovante || "all"} onValueChange={(value) => handleFilterChange("statusComprovante", value)}>
-                    <SelectTrigger className="h-8 text-xs bg-card">
+                    <SelectTrigger className="h-8 text-xs bg-card w-24">
                       <SelectValue placeholder="Todos" />
                     </SelectTrigger>
                     <SelectContent className="bg-card border-border">

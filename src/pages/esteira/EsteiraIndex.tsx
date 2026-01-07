@@ -34,7 +34,7 @@ import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
-import { Voucher, EtapaAtual, ETAPA_LABELS, SLA_POR_ETAPA } from "@/types/voucher";
+import { Voucher, EtapaAtual, ETAPA_LABELS, SLA_POR_ETAPA, calcularTempoNaEtapa } from "@/types/voucher";
 import { useUserRole } from "@/hooks/useUserRole";
 import { useVoucherSync } from "@/hooks/useVoucherSync";
 import { cn } from "@/lib/utils";
@@ -766,6 +766,18 @@ const EsteiraIndex = () => {
     vencimentoInicio: "",
     vencimentoFim: "",
     origemCriacao: "all",
+    // Novos filtros inline
+    processo: "",
+    fornecedor: "",
+    faixaValor: "all",
+    slaStatus: "all",
+    // Novos filtros avançados
+    tipoDocumento: "all",
+    filial: "all",
+    moeda: "all",
+    criadoEmInicio: "",
+    criadoEmFim: "",
+    isMaster: "all",
   });
   const [metrics, setMetrics] = useState<DashboardMetrics>({
     ativos: 0,
@@ -1123,49 +1135,134 @@ const EsteiraIndex = () => {
             break;
         }
       }
+      
+      // Filtro de busca por SPO
       if (filters.search) {
         const searchLower = filters.search.toLowerCase();
-        const matchesSPO = voucher.numeroSPO.toLowerCase().includes(searchLower);
-        const matchesFornecedor = voucher.fornecedor?.toLowerCase().includes(searchLower);
-        if (!matchesSPO && !matchesFornecedor) return false;
+        if (!voucher.numeroSPO.toLowerCase().includes(searchLower)) return false;
       }
+      
+      // Filtro de processo
+      if (filters.processo) {
+        const searchLower = filters.processo.toLowerCase();
+        if (!voucher.processoId?.toLowerCase().includes(searchLower)) return false;
+      }
+      
+      // Filtro de fornecedor
+      if (filters.fornecedor) {
+        const searchLower = filters.fornecedor.toLowerCase();
+        if (!voucher.fornecedor?.toLowerCase().includes(searchLower)) return false;
+      }
+      
+      // Filtro de etapa
       if (filters.etapa !== "all" && voucher.etapaAtual !== filters.etapa) {
         return false;
       }
+      
+      // Filtro de cobrança
       if (filters.cobrancaEmNomeDe !== "all" && voucher.cobrancaEmNomeDe !== filters.cobrancaEmNomeDe) {
         return false;
       }
+      
+      // Filtro de forma de pagamento
       if (filters.formaPagamento !== "all" && voucher.formaPagamento !== filters.formaPagamento) {
         return false;
       }
-      if (filters.urgente !== "all") {
-        const isUrgente = voucher.urgenciaTipo !== "NORMAL";
-        if (filters.urgente === "true" && !isUrgente) return false;
-        if (filters.urgente === "false" && isUrgente) return false;
+      
+      // Filtro de urgência
+      if (filters.urgente !== "all" && voucher.urgenciaTipo !== filters.urgente) {
+        return false;
       }
+      
+      // Filtro de faixa de valor
+      if (filters.faixaValor && filters.faixaValor !== "all") {
+        const valor = voucher.valor || 0;
+        if (filters.faixaValor === "low" && valor >= 1000) return false;
+        if (filters.faixaValor === "medium" && (valor < 1000 || valor >= 10000)) return false;
+        if (filters.faixaValor === "high" && valor < 10000) return false;
+      }
+      
+      // Filtro de SLA
+      if (filters.slaStatus && filters.slaStatus !== "all") {
+        const tempoHoras = calcularTempoNaEtapa(voucher);
+        const sla = SLA_POR_ETAPA[voucher.etapaAtual as keyof typeof SLA_POR_ETAPA] || 24;
+        let status: "ok" | "warning" | "critical" = "ok";
+        if (sla > 0) {
+          if (tempoHoras >= sla) status = "critical";
+          else if (tempoHoras >= sla * 0.75) status = "warning";
+        }
+        if (filters.slaStatus !== status) return false;
+      }
+      
       // Filtro de vencimento - data inicial
       if (filters.vencimentoInicio) {
         const inicio = new Date(filters.vencimentoInicio);
         if (voucher.vencimento < inicio) return false;
       }
+      
       // Filtro de vencimento - data final
       if (filters.vencimentoFim) {
         const fim = new Date(filters.vencimentoFim);
         fim.setHours(23, 59, 59, 999);
         if (voucher.vencimento > fim) return false;
       }
+      
       // Filtro de origem
       if (filters.origemCriacao && filters.origemCriacao !== "all" && voucher.origemCriacao !== filters.origemCriacao) {
         return false;
       }
+      
+      // Filtro de status comprovante
+      if (filters.statusComprovante && filters.statusComprovante !== "all") {
+        const status = voucher.statusComprovante || "PENDENTE";
+        if (status !== filters.statusComprovante) return false;
+      }
+      
+      // Filtro de tipo de documento
+      if (filters.tipoDocumento && filters.tipoDocumento !== "all" && voucher.tipoDocumento !== filters.tipoDocumento) {
+        return false;
+      }
+      
+      // Filtro de filial
+      if (filters.filial && filters.filial !== "all" && voucher.filial !== filters.filial) {
+        return false;
+      }
+      
+      // Filtro de moeda
+      if (filters.moeda && filters.moeda !== "all" && voucher.moeda !== filters.moeda) {
+        return false;
+      }
+      
+      // Filtro de data de criação - início
+      if (filters.criadoEmInicio) {
+        const inicio = new Date(filters.criadoEmInicio);
+        if (voucher.createdAt < inicio) return false;
+      }
+      
+      // Filtro de data de criação - fim
+      if (filters.criadoEmFim) {
+        const fim = new Date(filters.criadoEmFim);
+        fim.setHours(23, 59, 59, 999);
+        if (voucher.createdAt > fim) return false;
+      }
+      
+      // Filtro de voucher master
+      if (filters.isMaster && filters.isMaster !== "all") {
+        const isMaster = voucher.isMaster || voucher.origemCriacao === "MASTER";
+        if (filters.isMaster === "true" && !isMaster) return false;
+        if (filters.isMaster === "false" && isMaster) return false;
+      }
+      
       // Quick filter: Fornecedor
       if (quickFilterFornecedor !== "all" && voucher.fornecedor !== quickFilterFornecedor) {
         return false;
       }
+      
       // Quick filter: Cobrança
       if (quickFilterCobranca !== "all" && voucher.cobrancaEmNomeDe !== quickFilterCobranca) {
         return false;
       }
+      
       return true;
     });
   };
@@ -1696,59 +1793,159 @@ const EsteiraIndex = () => {
             })}
           </nav>
 
-          {/* Quick Filters */}
+          {/* Quick Filters + Advanced Filters */}
           {activeTab === "processos" && (
-            <div className="rounded-2xl p-4 bg-[rgba(5,6,18,0.9)] border border-[rgba(255,255,255,0.12)] backdrop-blur-[18px]">
-              <div className="flex items-center gap-4 flex-wrap">
-                <div className="flex items-center gap-2">
-                  <Filter className="h-4 w-4 text-[#aaaaaa]" />
-                  <span className="text-[0.75rem] font-medium text-[#aaaaaa] uppercase tracking-wider">
-                    Filtros Rápidos:
-                  </span>
-                </div>
+            <div className="space-y-3">
+              {/* Quick Filters Row */}
+              <div className="rounded-2xl p-4 bg-[rgba(5,6,18,0.9)] border border-[rgba(255,255,255,0.12)] backdrop-blur-[18px]">
+                <div className="flex items-center gap-4 flex-wrap">
+                  <div className="flex items-center gap-2">
+                    <Filter className="h-4 w-4 text-[#aaaaaa]" />
+                    <span className="text-[0.75rem] font-medium text-[#aaaaaa] uppercase tracking-wider">
+                      Filtros Rápidos:
+                    </span>
+                  </div>
 
-                <div className="flex items-center gap-2">
-                  <Building2 className="h-4 w-4 text-[#888888]" />
-                  <Select value={quickFilterFornecedor} onValueChange={setQuickFilterFornecedor}>
-                    <SelectTrigger className="w-[180px] bg-[#0a0b10] border-white/10 rounded-full">
-                      <SelectValue placeholder="Fornecedor" />
+                  <div className="flex items-center gap-2">
+                    <Building2 className="h-4 w-4 text-[#888888]" />
+                    <Select value={quickFilterFornecedor} onValueChange={setQuickFilterFornecedor}>
+                      <SelectTrigger className="w-[180px] bg-[#0a0b10] border-white/10 rounded-full">
+                        <SelectValue placeholder="Fornecedor" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">Todos Fornecedores</SelectItem>
+                        {uniqueFornecedores.map((fornecedor) => (
+                          <SelectItem key={fornecedor} value={fornecedor}>
+                            {fornecedor}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <Users className="h-4 w-4 text-[#888888]" />
+                    <Select value={quickFilterCobranca} onValueChange={setQuickFilterCobranca}>
+                      <SelectTrigger className="w-[160px] bg-[#0a0b10] border-white/10 rounded-full">
+                        <SelectValue placeholder="Cobrança" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">Todas Cobranças</SelectItem>
+                        <SelectItem value="DACHSER">DACHSER</SelectItem>
+                        <SelectItem value="CLIENTE">CLIENTE</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  {/* Forma de Pagamento */}
+                  <div className="flex items-center gap-2">
+                    <CreditCard className="h-4 w-4 text-[#888888]" />
+                    <Select value={filters.formaPagamento} onValueChange={(v) => setFilters({ ...filters, formaPagamento: v })}>
+                      <SelectTrigger className="w-[150px] bg-[#0a0b10] border-white/10 rounded-full">
+                        <SelectValue placeholder="Pagamento" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">Todas Formas</SelectItem>
+                        <SelectItem value="BOLETO">Boleto</SelectItem>
+                        <SelectItem value="PIX">Pix</SelectItem>
+                        <SelectItem value="TRANSFERENCIA">Transferência</SelectItem>
+                        <SelectItem value="DEBITO">Débito</SelectItem>
+                        <SelectItem value="CAMBIO">Câmbio</SelectItem>
+                        <SelectItem value="DARF">DARF</SelectItem>
+                        <SelectItem value="GPS">GPS</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  {/* Origem */}
+                  <div className="flex items-center gap-2">
+                    <Package className="h-4 w-4 text-[#888888]" />
+                    <Select value={filters.origemCriacao} onValueChange={(v) => setFilters({ ...filters, origemCriacao: v })}>
+                      <SelectTrigger className="w-[120px] bg-[#0a0b10] border-white/10 rounded-full">
+                        <SelectValue placeholder="Origem" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">Todas</SelectItem>
+                        <SelectItem value="MANUAL">Manual</SelectItem>
+                        <SelectItem value="RM">Via RM</SelectItem>
+                        <SelectItem value="MASTER">Master</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  {/* Vencimento Até */}
+                  <div className="flex items-center gap-2">
+                    <Calendar className="h-4 w-4 text-[#888888]" />
+                    <Input
+                      type="date"
+                      value={filters.vencimentoFim}
+                      onChange={(e) => setFilters({ ...filters, vencimentoFim: e.target.value })}
+                      className="w-[140px] bg-[#0a0b10] border-white/10 rounded-full h-9"
+                      placeholder="Venc. até"
+                    />
+                  </div>
+
+                  {/* Master Filter */}
+                  <Select value={filters.isMaster} onValueChange={(v) => setFilters({ ...filters, isMaster: v })}>
+                    <SelectTrigger className="w-[130px] bg-[#0a0b10] border-white/10 rounded-full">
+                      <SelectValue placeholder="Tipo" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="all">Todos Fornecedores</SelectItem>
-                      {uniqueFornecedores.map((fornecedor) => (
-                        <SelectItem key={fornecedor} value={fornecedor}>
-                          {fornecedor}
-                        </SelectItem>
-                      ))}
+                      <SelectItem value="all">Todos</SelectItem>
+                      <SelectItem value="true">Apenas Master</SelectItem>
+                      <SelectItem value="false">Sem Master</SelectItem>
                     </SelectContent>
                   </Select>
-                </div>
 
-                <div className="flex items-center gap-2">
-                  <Users className="h-4 w-4 text-[#888888]" />
-                  <Select value={quickFilterCobranca} onValueChange={setQuickFilterCobranca}>
-                    <SelectTrigger className="w-[160px] bg-[#0a0b10] border-white/10 rounded-full">
-                      <SelectValue placeholder="Cobrança" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">Todas Cobranças</SelectItem>
-                      <SelectItem value="DACHSER">DACHSER</SelectItem>
-                      <SelectItem value="CLIENTE">CLIENTE</SelectItem>
-                    </SelectContent>
-                  </Select>
+                  {/* Clear All Filters */}
+                  {(quickFilterFornecedor !== "all" || 
+                    quickFilterCobranca !== "all" || 
+                    filters.formaPagamento !== "all" ||
+                    filters.origemCriacao !== "all" ||
+                    filters.vencimentoFim !== "" ||
+                    filters.isMaster !== "all" ||
+                    filters.search !== "" ||
+                    filters.etapa !== "all" ||
+                    filters.processo !== "" ||
+                    filters.fornecedor !== "" ||
+                    filters.faixaValor !== "all" ||
+                    filters.slaStatus !== "all" ||
+                    filters.vencimentoInicio !== "" ||
+                    filters.urgente !== "all" ||
+                    filters.statusComprovante !== "all") && (
+                    <button
+                      onClick={() => {
+                        setQuickFilterFornecedor("all");
+                        setQuickFilterCobranca("all");
+                        setFilters({
+                          search: "",
+                          etapa: "all",
+                          cobrancaEmNomeDe: "all",
+                          formaPagamento: "all",
+                          urgente: "all",
+                          statusBaixa: "all",
+                          statusComprovante: "all",
+                          vencimentoInicio: "",
+                          vencimentoFim: "",
+                          origemCriacao: "all",
+                          processo: "",
+                          fornecedor: "",
+                          faixaValor: "all",
+                          slaStatus: "all",
+                          tipoDocumento: "all",
+                          filial: "all",
+                          moeda: "all",
+                          criadoEmInicio: "",
+                          criadoEmFim: "",
+                          isMaster: "all",
+                        });
+                      }}
+                      className="text-[#ffc800] hover:text-white text-[0.8rem] flex items-center gap-1"
+                    >
+                      ✕ Limpar Todos
+                    </button>
+                  )}
                 </div>
-
-                {(quickFilterFornecedor !== "all" || quickFilterCobranca !== "all") && (
-                  <button
-                    onClick={() => {
-                      setQuickFilterFornecedor("all");
-                      setQuickFilterCobranca("all");
-                    }}
-                    className="text-[#aaaaaa] hover:text-white text-[0.8rem]"
-                  >
-                    Limpar filtros
-                  </button>
-                )}
               </div>
             </div>
           )}
