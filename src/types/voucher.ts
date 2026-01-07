@@ -222,6 +222,16 @@ export interface LogEntry {
   payloadJson?: Record<string, unknown>;
 }
 
+export interface VoucherFilho {
+  id: string;
+  numeroSPO: string;
+  fornecedor?: string;
+  valor?: number;
+  moeda?: string;
+  vencimento?: Date;
+  etapaAtual?: string;
+}
+
 export interface Voucher {
   id: string;
   numeroSPO: string;
@@ -255,7 +265,7 @@ export interface Voucher {
   accrualDiferenca?: number;
   processoId?: string;
   origemProcesso?: string;
-  origemCriacao?: "MANUAL" | "RM";
+  origemCriacao?: "MANUAL" | "RM" | "MASTER";
   linhaDigitavel?: string;
   clienteNome?: string;
   centroCusto?: string;
@@ -296,6 +306,10 @@ export interface Voucher {
   canceladoEm?: Date;
   // RM Pending tracking (internal use)
   idRm?: number;
+  // Voucher Master fields
+  voucherMasterId?: string;
+  isMaster?: boolean;
+  vouchersFilhos?: VoucherFilho[];
 }
 
 export interface RemessaItem {

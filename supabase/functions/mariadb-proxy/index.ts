@@ -4049,6 +4049,9 @@ serve(async (req) => {
         let whereConditions: string[] = [];
         let params: any[] = [];
         
+        // CRITICAL: Exclude child vouchers (consolidated into a master) from main grid
+        whereConditions.push('(voucher_master_id IS NULL OR voucher_master_id = "")');
+        
         if (search) {
           whereConditions.push('(numero_spo LIKE ? OR fornecedor LIKE ? OR cnpj_fornecedor LIKE ?)');
           params.push(`%${search}%`, `%${search}%`, `%${search}%`);
@@ -6693,6 +6696,220 @@ serve(async (req) => {
 
         console.log(`[log_api_call] Logged: ${api_name} - ${status_code || 'N/A'} - ${response_time_ms}ms`);
         result = { success: true };
+        break;
+      }
+
+      // ==================== VOUCHER MASTER ====================
+      case 'search_vouchers_for_master': {
+        // Search vouchers that can be consolidated into a master
+        const { search } = body as { search?: string };
+        console.log('Searching vouchers for master consolidation:', search);
+        
+        if (!search || search.length < 2) {
+          result = { success: true, data: [] };
+          break;
+        }
+        
+        const vouchers = await client.query(`
+          SELECT id, numero_spo, fornecedor, valor, moeda, vencimento, etapa_atual
+          FROM dados_dachser.t_vouchers 
+          WHERE (numero_spo LIKE ? OR fornecedor LIKE ?)
+            AND etapa_atual IN ('OPERACAO', 'A_PROCESSAR', 'FISCAL')
+            AND (voucher_master_id IS NULL OR voucher_master_id = '')
+            AND (is_master IS NULL OR is_master = 0)
+          ORDER BY numero_spo ASC
+          LIMIT 20
+        `, [`%${search}%`, `%${search}%`]);
+        
+        result = { success: true, data: vouchers || [] };
+        break;
+      }
+
+      case 'create_voucher_master': {
+        // Create a master voucher consolidating multiple child vouchers
+        const {
+          voucher_ids,
+          fornecedor,
+          cnpj_fornecedor,
+          valor_total,
+          moeda,
+          vencimento,
+          forma_pagamento,
+          tipo_documento,
+          cobranca_em_nome_de,
+          filial,
+          comentarios_operacao,
+          criado_por_user_id,
+          criado_por_user_name,
+        } = body as any;
+
+        console.log('Creating voucher master with children:', voucher_ids);
+
+        if (!voucher_ids || !Array.isArray(voucher_ids) || voucher_ids.length < 2) {
+          return new Response(
+            JSON.stringify({ error: 'É necessário selecionar pelo menos 2 vouchers para consolidar' }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+
+        // Ensure columns exist
+        try {
+          await client.execute(`
+            ALTER TABLE dados_dachser.t_vouchers 
+            ADD COLUMN IF NOT EXISTS voucher_master_id VARCHAR(36) NULL,
+            ADD COLUMN IF NOT EXISTS is_master TINYINT(1) DEFAULT 0
+          `);
+        } catch (alterErr) {
+          console.log('Note: ALTER TABLE might have failed (columns may already exist)');
+        }
+
+        // Generate master voucher ID and numero_spo
+        const masterId = crypto.randomUUID();
+        const randomSuffix = Math.random().toString(36).substring(2, 10).toUpperCase();
+        const numeroSpoMaster = `MASTER-${randomSuffix}`;
+
+        // Calculate total value from children if not provided
+        let totalValor = valor_total;
+        if (!totalValor) {
+          const childVouchers = await client.query(`
+            SELECT SUM(valor) as total FROM dados_dachser.t_vouchers WHERE id IN (${voucher_ids.map(() => '?').join(',')})
+          `, voucher_ids);
+          totalValor = childVouchers?.[0]?.total || 0;
+        }
+
+        // Get earliest vencimento from children if not provided
+        let venc = vencimento;
+        if (!venc) {
+          const earliestVenc = await client.query(`
+            SELECT MIN(vencimento) as min_venc FROM dados_dachser.t_vouchers WHERE id IN (${voucher_ids.map(() => '?').join(',')})
+          `, voucher_ids);
+          venc = earliestVenc?.[0]?.min_venc || new Date().toISOString();
+        }
+
+        // Create the master voucher - goes directly to FISCAL
+        await client.execute(`
+          INSERT INTO dados_dachser.t_vouchers (
+            id, numero_spo, fornecedor, cnpj_fornecedor, valor, moeda, vencimento,
+            forma_pagamento, tipo_documento, cobranca_em_nome_de, filial,
+            comentarios_operacao, etapa_atual, status_baixa, status_financeiro,
+            criado_por_user_id, is_master, origem_criacao, created_at, updated_at
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'FISCAL', 'PENDENTE', 'PENDENTE', ?, 1, 'MASTER', NOW(), NOW())
+        `, [
+          masterId,
+          numeroSpoMaster,
+          fornecedor || null,
+          cnpj_fornecedor || null,
+          totalValor,
+          moeda || 'BRL',
+          venc,
+          forma_pagamento || 'BOLETO',
+          tipo_documento || null,
+          cobranca_em_nome_de || 'DACHSER',
+          filial || null,
+          comentarios_operacao || null,
+          criado_por_user_id || null
+        ]);
+
+        // Update all child vouchers with the master ID
+        await client.execute(`
+          UPDATE dados_dachser.t_vouchers 
+          SET voucher_master_id = ?, updated_at = NOW()
+          WHERE id IN (${voucher_ids.map(() => '?').join(',')})
+        `, [masterId, ...voucher_ids]);
+
+        // Log the master creation
+        await client.execute(`
+          INSERT INTO dados_dachser.t_voucher_logs (id, voucher_id, user_id, user_name, acao, detalhe, data_hora)
+          VALUES (?, ?, ?, ?, 'MASTER_CRIADO', ?, NOW())
+        `, [
+          crypto.randomUUID(),
+          masterId,
+          criado_por_user_id || null,
+          criado_por_user_name || 'Sistema',
+          `Voucher Master criado consolidando ${voucher_ids.length} vouchers: ${voucher_ids.join(', ')}`
+        ]);
+
+        // Log for each child voucher
+        for (const childId of voucher_ids) {
+          await client.execute(`
+            INSERT INTO dados_dachser.t_voucher_logs (id, voucher_id, user_id, user_name, acao, detalhe, data_hora)
+            VALUES (?, ?, ?, ?, 'CONSOLIDADO_EM_MASTER', ?, NOW())
+          `, [
+            crypto.randomUUID(),
+            childId,
+            criado_por_user_id || null,
+            criado_por_user_name || 'Sistema',
+            `Consolidado no Voucher Master: ${numeroSpoMaster}`
+          ]);
+        }
+
+        console.log(`Master voucher created: ${numeroSpoMaster} with ${voucher_ids.length} children`);
+        result = { success: true, masterId, numeroSpo: numeroSpoMaster, childCount: voucher_ids.length };
+        break;
+      }
+
+      case 'get_voucher_filhos': {
+        // Get child vouchers of a master
+        const { master_id } = body as { master_id: string };
+        console.log('Fetching child vouchers for master:', master_id);
+
+        if (!master_id) {
+          return new Response(
+            JSON.stringify({ error: 'master_id é obrigatório' }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+
+        const filhos = await client.query(`
+          SELECT id, numero_spo, fornecedor, valor, moeda, vencimento, etapa_atual
+          FROM dados_dachser.t_vouchers 
+          WHERE voucher_master_id = ?
+          ORDER BY numero_spo ASC
+        `, [master_id]);
+
+        result = { success: true, data: filhos || [] };
+        break;
+      }
+
+      case 'update_voucher_numero_spo': {
+        // Update the numero_spo of a master voucher (fiscal action)
+        const { voucher_id, novo_numero_spo, user_id, user_name } = body as any;
+        console.log('Updating voucher numero_spo:', voucher_id, '->', novo_numero_spo);
+
+        if (!voucher_id || !novo_numero_spo) {
+          return new Response(
+            JSON.stringify({ error: 'voucher_id e novo_numero_spo são obrigatórios' }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+
+        // Get old numero_spo
+        const oldVoucher = await client.query(`
+          SELECT numero_spo FROM dados_dachser.t_vouchers WHERE id = ?
+        `, [voucher_id]);
+        const oldNumero = oldVoucher?.[0]?.numero_spo || 'N/A';
+
+        // Update numero_spo
+        await client.execute(`
+          UPDATE dados_dachser.t_vouchers 
+          SET numero_spo = ?, updated_at = NOW()
+          WHERE id = ?
+        `, [novo_numero_spo, voucher_id]);
+
+        // Log the change
+        await client.execute(`
+          INSERT INTO dados_dachser.t_voucher_logs (id, voucher_id, user_id, user_name, acao, detalhe, data_hora)
+          VALUES (?, ?, ?, ?, 'NUMERO_SPO_ALTERADO', ?, NOW())
+        `, [
+          crypto.randomUUID(),
+          voucher_id,
+          user_id || null,
+          user_name || 'Sistema',
+          `Número SPO alterado de "${oldNumero}" para "${novo_numero_spo}"`
+        ]);
+
+        console.log(`Voucher numero_spo updated: ${oldNumero} -> ${novo_numero_spo}`);
+        result = { success: true, oldNumero, newNumero: novo_numero_spo };
         break;
       }
 

@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { Plus, Upload, X, Search, FileText, RefreshCw, Plane, Ship, FileCheck, AlertCircle, Loader2, Check, Save } from "lucide-react";
+import { Plus, Upload, X, Search, FileText, RefreshCw, Plane, Ship, FileCheck, AlertCircle, Loader2, Check, Save, Layers } from "lucide-react";
 import { format, parse, isValid } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import {
@@ -48,6 +48,7 @@ import {
 } from "@/types/voucher";
 import { Badge } from "@/components/ui/badge";
 import { DateInputField } from "./DateInputField";
+import { VoucherMasterForm } from "./VoucherMasterForm";
 
 // CNPJ formatting and validation utilities
 const formatCNPJ = (value: string): string => {
@@ -130,7 +131,7 @@ interface CreateVoucherDialogProps {
   onVoucherCreated?: () => void;
 }
 
-type EntryMode = "rm" | "manual";
+type EntryMode = "rm" | "manual" | "master";
 type OrigemProcesso = "AIR" | "SEA" | "CHB";
 
 export const CreateVoucherDialog = ({ 
@@ -640,29 +641,53 @@ export const CreateVoucherDialog = ({
             <div className="flex gap-2 p-1 bg-background/30 rounded-xl border border-border/50">
               <Button
                 type="button"
-                variant={isRmMode ? "default" : "ghost"}
+                variant={entryMode === "rm" ? "default" : "ghost"}
                 className={cn(
                   "flex-1 gap-2 rounded-lg",
-                  isRmMode && "bg-primary text-primary-foreground shadow-lg"
+                  entryMode === "rm" && "bg-primary text-primary-foreground shadow-lg"
                 )}
                 onClick={() => handleModeChange("rm")}
               >
                 <Search className="h-4 w-4" />
-                Criar a partir do RM
+                A partir do RM
               </Button>
               <Button
                 type="button"
-                variant={!isRmMode ? "default" : "ghost"}
+                variant={entryMode === "manual" ? "default" : "ghost"}
                 className={cn(
                   "flex-1 gap-2 rounded-lg",
-                  !isRmMode && "bg-primary text-primary-foreground shadow-lg"
+                  entryMode === "manual" && "bg-primary text-primary-foreground shadow-lg"
                 )}
                 onClick={() => handleModeChange("manual")}
               >
                 <FileText className="h-4 w-4" />
-                Entrada Manual
+                Manual
+              </Button>
+              <Button
+                type="button"
+                variant={entryMode === "master" ? "default" : "ghost"}
+                className={cn(
+                  "flex-1 gap-2 rounded-lg",
+                  entryMode === "master" && "bg-purple-600 text-white shadow-lg"
+                )}
+                onClick={() => handleModeChange("master")}
+              >
+                <Layers className="h-4 w-4" />
+                Voucher Master
               </Button>
             </div>
+
+            {/* Voucher Master Mode - Show separate form */}
+            {entryMode === "master" ? (
+              <VoucherMasterForm 
+                onSuccess={() => {
+                  onSuccess?.();
+                  onVoucherCreated?.();
+                }}
+                onClose={() => setOpen(false)}
+              />
+            ) : (
+            <>
 
             {/* Manual Mode Alert + Voucher Number Field */}
             {!isRmMode && (
@@ -1242,7 +1267,8 @@ export const CreateVoucherDialog = ({
                 )}
               </div>
             </div>
-
+            </>
+            )}
             {/* Submit Buttons */}
             <div className="flex justify-end gap-3 pt-4 border-t border-border">
               <Button
