@@ -20,10 +20,12 @@ interface VoucherSearchResult {
   id: string;
   numero_spo: string;
   fornecedor?: string;
+  cnpj_fornecedor?: string;
   valor?: number;
   moeda?: string;
   vencimento?: string;
   etapa_atual?: string;
+  filial?: string;
 }
 
 interface VoucherMasterFormProps {
@@ -91,10 +93,16 @@ export const VoucherMasterForm = ({ onSuccess, onClose }: VoucherMasterFormProps
         .sort((a, b) => new Date(a.vencimento!).getTime() - new Date(b.vencimento!).getTime())[0];
 
       form.setValue("fornecedor", first.fornecedor || "");
+      form.setValue("cnpjFornecedor", first.cnpj_fornecedor || "");
+      form.setValue("filial", first.filial || "");
       form.setValue("valorTotal", totalValor.toFixed(2).replace(".", ","));
       form.setValue("moeda", first.moeda || "BRL");
+      
       if (earliestVenc?.vencimento) {
-        form.setValue("vencimento", new Date(earliestVenc.vencimento));
+        const dateStr = earliestVenc.vencimento.split('T')[0];
+        const [year, month, day] = dateStr.split('-').map(Number);
+        const vencDate = new Date(year, month - 1, day);
+        form.setValue("vencimento", vencDate);
       }
     }
   }, [selectedVouchers]);
