@@ -40,6 +40,13 @@ interface DadosBancarios {
   pix_tipo_chave?: string;
 }
 
+interface VoucherAnexo {
+  id: string;
+  tipo: string;
+  fileUrl: string;
+  fileName: string;
+}
+
 interface DadosPagamentoPanelProps {
   voucherId: string;
   formaPagamento: string;
@@ -49,6 +56,7 @@ interface DadosPagamentoPanelProps {
   dadosBancarios?: DadosBancarios;
   tipoExecucao?: TipoExecucaoPagamento;
   chavePix?: string;
+  anexos?: VoucherAnexo[];
   onUpdate?: () => void;
 }
 
@@ -61,6 +69,7 @@ export const DadosPagamentoPanel = ({
   dadosBancarios,
   tipoExecucao,
   chavePix,
+  anexos,
   onUpdate
 }: DadosPagamentoPanelProps) => {
   const [copiedField, setCopiedField] = useState<string | null>(null);
@@ -84,8 +93,33 @@ export const DadosPagamentoPanel = ({
   const handleReextract = async () => {
     setReextracting(true);
     try {
-      // TODO: Implement re-extraction logic by calling extract-boleto-barcode with the boleto file
-      toast({ title: "Re-extração", description: "Funcionalidade em desenvolvimento" });
+      // Find first BOLETO attachment
+      const boletoAnexo = anexos?.find(a => a.tipo === "BOLETO");
+      if (!boletoAnexo) {
+        toast({ title: "Nenhum boleto encontrado", description: "Anexe um boleto primeiro", variant: "destructive" });
+        return;
+      }
+
+      // Extract barcode from boleto
+      const { data, error } = await supabase.functions.invoke("extract-boleto-barcode", {
+        body: { fileUrl: boletoAnexo.fileUrl }
+      });
+
+      if (error || !data?.success) {
+        throw new Error(data?.error || "Falha na extração");
+      }
+
+      // Save to database
+      await supabase.functions.invoke("mariadb-proxy", {
+        body: {
+          action: "save_linha_digitavel",
+          voucher_id: voucherId,
+          linha_digitavel: data.linhaDigitavel,
+        }
+      });
+
+      toast({ title: "Linha digitável extraída com sucesso!" });
+      onUpdate?.();
     } catch (error: unknown) {
       toast({ 
         title: "Erro na re-extração", 

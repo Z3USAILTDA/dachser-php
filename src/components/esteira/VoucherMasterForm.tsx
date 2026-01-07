@@ -245,7 +245,7 @@ export const VoucherMasterForm = ({ onSuccess, onClose }: VoucherMasterFormProps
         });
       }
 
-      // Upload boleto files
+      // Upload boleto files and extract barcode
       for (const file of boletoFiles) {
         const fileExt = file.name.split(".").pop();
         const filePath = `${masterId}/${Date.now()}-boleto.${fileExt}`;
@@ -273,6 +273,29 @@ export const VoucherMasterForm = ({ onSuccess, onClose }: VoucherMasterFormProps
             file_size: file.size,
           },
         });
+
+        // Automatic barcode extraction for boleto
+        if (values.formaPagamento === "BOLETO") {
+          try {
+            const { data: extractionResult, error: extractionError } = await supabase.functions.invoke("extract-boleto-barcode", {
+              body: { fileUrl: publicUrl.publicUrl }
+            });
+
+            if (!extractionError && extractionResult?.success && extractionResult?.linhaDigitavel) {
+              await supabase.functions.invoke("mariadb-proxy", {
+                body: {
+                  action: "save_linha_digitavel",
+                  voucher_id: masterId,
+                  linha_digitavel: extractionResult.linhaDigitavel,
+                },
+              });
+              console.log("Linha digitável extraída automaticamente:", extractionResult.linhaDigitavel);
+            }
+          } catch (extractError) {
+            console.error("Erro na extração automática de código de barras:", extractError);
+            // Don't block creation - user can extract manually later
+          }
+        }
       }
 
       toast({

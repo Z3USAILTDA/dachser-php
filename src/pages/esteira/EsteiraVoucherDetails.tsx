@@ -420,6 +420,7 @@ const EsteiraVoucherDetails = () => {
                 codigoBarras={voucher.codigoBarras}
                 cnpjFornecedor={voucher.cnpjFornecedor}
                 chavePix={voucher.chavePix}
+                anexos={voucher.anexos}
                 dadosBancarios={voucher.dadosBancarios ? {
                   banco: voucher.dadosBancarios.banco || "",
                   agencia: voucher.dadosBancarios.agencia || "",
