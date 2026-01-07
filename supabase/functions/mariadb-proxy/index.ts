@@ -6777,14 +6777,20 @@ serve(async (req) => {
           totalValor = childVouchers?.[0]?.total || 0;
         }
 
-        // Get earliest vencimento from children if not provided
+        // Get earliest vencimento and origem_processo from children if not provided
         let venc = vencimento;
+        let origemProcesso = null;
+        const childData = await client.query(`
+          SELECT MIN(vencimento) as min_venc, origem_processo 
+          FROM dados_dachser.t_vouchers 
+          WHERE id IN (${voucher_ids.map(() => '?').join(',')})
+          GROUP BY origem_processo
+          LIMIT 1
+        `, voucher_ids);
         if (!venc) {
-          const earliestVenc = await client.query(`
-            SELECT MIN(vencimento) as min_venc FROM dados_dachser.t_vouchers WHERE id IN (${voucher_ids.map(() => '?').join(',')})
-          `, voucher_ids);
-          venc = earliestVenc?.[0]?.min_venc || new Date().toISOString();
+          venc = childData?.[0]?.min_venc || new Date().toISOString();
         }
+        origemProcesso = childData?.[0]?.origem_processo || null;
 
         // Create the master voucher - goes directly to FISCAL
         await client.execute(`
@@ -6792,8 +6798,8 @@ serve(async (req) => {
             id, numero_spo, fornecedor, cnpj_fornecedor, valor, moeda, vencimento,
             forma_pagamento, tipo_documento, cobranca_em_nome_de, filial,
             comentarios_operacao, etapa_atual, status_baixa, status_financeiro,
-            criado_por_user_id, is_master, created_at, updated_at
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'FISCAL', 'PENDENTE', 'PENDENTE', ?, 1, NOW(), NOW())
+            criado_por_user_id, is_master, origem_processo, created_at, updated_at
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'FISCAL', 'PENDENTE', 'PENDENTE', ?, 1, ?, NOW(), NOW())
         `, [
           masterId,
           numeroSpoMaster,
@@ -6807,7 +6813,8 @@ serve(async (req) => {
           cobranca_em_nome_de || 'DACHSER',
           filial || null,
           comentarios_operacao || null,
-          criado_por_user_id || null
+          criado_por_user_id || null,
+          origemProcesso
         ]);
 
         // Update all child vouchers with the master ID
