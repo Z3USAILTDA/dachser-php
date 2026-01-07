@@ -6788,9 +6788,28 @@ serve(async (req) => {
           LIMIT 1
         `, voucher_ids);
         if (!venc) {
-          venc = childData?.[0]?.min_venc || new Date().toISOString();
+          venc = childData?.[0]?.min_venc || new Date().toISOString().split('T')[0];
         }
         origemProcesso = childData?.[0]?.origem_processo || null;
+        
+        // Format vencimento as YYYY-MM-DD for MariaDB DATE column
+        const formatDateForMariaDB = (dateValue: any): string => {
+          if (!dateValue) return new Date().toISOString().split('T')[0];
+          if (typeof dateValue === 'string') {
+            // If it's an ISO string, extract just the date part
+            if (dateValue.includes('T')) {
+              return dateValue.split('T')[0];
+            }
+            // Already in YYYY-MM-DD format
+            return dateValue;
+          }
+          if (dateValue instanceof Date) {
+            return dateValue.toISOString().split('T')[0];
+          }
+          return new Date().toISOString().split('T')[0];
+        };
+        
+        const vencFormatted = formatDateForMariaDB(venc);
 
         // Create the master voucher - goes directly to FISCAL
         await client.execute(`
@@ -6807,7 +6826,7 @@ serve(async (req) => {
           cnpj_fornecedor || null,
           totalValor,
           moeda || 'BRL',
-          venc,
+          vencFormatted,
           forma_pagamento || 'BOLETO',
           tipo_documento || null,
           cobranca_em_nome_de || 'DACHSER',
