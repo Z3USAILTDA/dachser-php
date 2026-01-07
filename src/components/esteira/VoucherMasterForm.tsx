@@ -85,7 +85,7 @@ export const VoucherMasterForm = ({ onSuccess, onClose }: VoucherMasterFormProps
   useEffect(() => {
     if (selectedVouchers.length > 0) {
       const first = selectedVouchers[0];
-      const totalValor = selectedVouchers.reduce((sum, v) => sum + (v.valor || 0), 0);
+      const totalValor = selectedVouchers.reduce((sum, v) => sum + (Number(v.valor) || 0), 0);
       const earliestVenc = selectedVouchers
         .filter(v => v.vencimento)
         .sort((a, b) => new Date(a.vencimento!).getTime() - new Date(b.vencimento!).getTime())[0];
