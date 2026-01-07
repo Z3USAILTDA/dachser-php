@@ -6,24 +6,22 @@ const corsHeaders = {
 };
 
 // Convert various date formats to MySQL datetime format (YYYY-MM-DD HH:MM:SS)
-function formatDateTimeForMySQL(dateStr: string | null): string | null {
-  if (!dateStr) return null;
+function formatDateTimeForMySQL(dateStr: string | null): string {
+  const date = dateStr ? new Date(dateStr) : new Date();
   
-  try {
-    const date = new Date(dateStr);
-    if (isNaN(date.getTime())) return null;
-    
-    const year = date.getFullYear();
-    const month = String(date.getMonth() + 1).padStart(2, '0');
-    const day = String(date.getDate()).padStart(2, '0');
-    const hours = String(date.getHours()).padStart(2, '0');
-    const minutes = String(date.getMinutes()).padStart(2, '0');
-    const seconds = String(date.getSeconds()).padStart(2, '0');
-    
-    return `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`;
-  } catch {
-    return null;
+  // If invalid date, use current time
+  if (isNaN(date.getTime())) {
+    return formatDateTimeForMySQL(null);
   }
+  
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  const hours = String(date.getHours()).padStart(2, '0');
+  const minutes = String(date.getMinutes()).padStart(2, '0');
+  const seconds = String(date.getSeconds()).padStart(2, '0');
+  
+  return `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`;
 }
 
 interface TrackingData {
