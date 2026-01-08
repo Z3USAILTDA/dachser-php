@@ -203,7 +203,7 @@ export function DemurrageLayout({
                   onClick={() => onFilterChange?.("all")}
                   className={cn(
                     "cursor-pointer transition-all",
-                    activeFilter === "all" && "ring-2 ring-[#ffc800] ring-offset-2 ring-offset-transparent rounded-2xl"
+                    activeFilter === "all" && "ring-1 ring-[#ffc800]/70 rounded-2xl"
                   )}
                 >
                   <MetricCard
@@ -217,7 +217,7 @@ export function DemurrageLayout({
                   onClick={() => onFilterChange?.("at_risk")}
                   className={cn(
                     "cursor-pointer transition-all",
-                    activeFilter === "at_risk" && "ring-2 ring-[#ffc800] ring-offset-2 ring-offset-transparent rounded-2xl"
+                    activeFilter === "at_risk" && "ring-1 ring-[#ffc800]/70 rounded-2xl"
                   )}
                 >
                   <MetricCard
@@ -232,7 +232,7 @@ export function DemurrageLayout({
                   onClick={() => onFilterChange?.("exceeded")}
                   className={cn(
                     "cursor-pointer transition-all",
-                    activeFilter === "exceeded" && "ring-2 ring-[#ffc800] ring-offset-2 ring-offset-transparent rounded-2xl"
+                    activeFilter === "exceeded" && "ring-1 ring-[#ffc800]/70 rounded-2xl"
                   )}
                 >
                   <MetricCard
@@ -247,7 +247,7 @@ export function DemurrageLayout({
                   onClick={() => onFilterChange?.("safe")}
                   className={cn(
                     "cursor-pointer transition-all",
-                    activeFilter === "safe" && "ring-2 ring-[#ffc800] ring-offset-2 ring-offset-transparent rounded-2xl"
+                    activeFilter === "safe" && "ring-1 ring-[#ffc800]/70 rounded-2xl"
                   )}
                 >
                   <MetricCard

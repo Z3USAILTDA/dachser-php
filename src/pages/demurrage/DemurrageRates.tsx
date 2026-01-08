@@ -40,6 +40,7 @@ const mockContainers = [
 export default function DemurrageRates() {
   const [showAddDialog, setShowAddDialog] = useState(false);
   const [filterArmador, setFilterArmador] = useState<string>("all");
+  const [quickFilter, setQuickFilter] = useState<"all" | "at_risk" | "exceeded" | "safe">("all");
 
   const [formData, setFormData] = useState({
     container_type: '',
@@ -89,6 +90,10 @@ export default function DemurrageRates() {
     setShowAddDialog(false);
   };
 
+  const handleQuickFilterChange = (filter: "all" | "at_risk" | "exceeded" | "safe") => {
+    setQuickFilter(filter);
+  };
+
   const rightActions = (
     <Button className="bg-[#ffc800] text-black hover:bg-[#e6b400]" onClick={() => setShowAddDialog(true)}>
       <Plus className="h-4 w-4 mr-2" />
@@ -105,6 +110,8 @@ export default function DemurrageRates() {
         safe: containerStats.safe,
       }}
       rightActions={rightActions}
+      activeFilter={quickFilter}
+      onFilterChange={handleQuickFilterChange}
     >
       <div className="space-y-4">
         {/* Filters */}

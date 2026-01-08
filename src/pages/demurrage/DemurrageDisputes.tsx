@@ -26,6 +26,7 @@ const mockContainers = [
 
 export default function DemurrageDisputes() {
   const [activeTab, setActiveTab] = useState("all");
+  const [quickFilter, setQuickFilter] = useState<"all" | "at_risk" | "exceeded" | "safe">("all");
 
   const formatCurrency = (value: number) => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 0 }).format(value);
 
@@ -68,6 +69,10 @@ export default function DemurrageDisputes() {
 
   const filteredDisputes = activeTab === 'all' ? mockDisputes : mockDisputes.filter(d => d.status === activeTab);
 
+  const handleQuickFilterChange = (filter: "all" | "at_risk" | "exceeded" | "safe") => {
+    setQuickFilter(filter);
+  };
+
   const rightActions = (
     <Button className="bg-[#ffc800] text-black hover:bg-[#e6b400]">
       <Plus className="h-4 w-4 mr-2" />
@@ -84,6 +89,8 @@ export default function DemurrageDisputes() {
         safe: containerStats.safe,
       }}
       rightActions={rightActions}
+      activeFilter={quickFilter}
+      onFilterChange={handleQuickFilterChange}
     >
       <div className="space-y-4">
         {/* Inner Nav */}

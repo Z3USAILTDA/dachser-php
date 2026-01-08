@@ -27,6 +27,7 @@ const mockContainers = [
 export default function DemurrageCarrierCosts() {
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [searchTerm, setSearchTerm] = useState("");
+  const [quickFilter, setQuickFilter] = useState<"all" | "at_risk" | "exceeded" | "safe">("all");
 
   const formatCurrency = (value: number) => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(value);
 
@@ -60,6 +61,10 @@ export default function DemurrageCarrierCosts() {
     return matchesSearch && matchesStatus;
   });
 
+  const handleQuickFilterChange = (filter: "all" | "at_risk" | "exceeded" | "safe") => {
+    setQuickFilter(filter);
+  };
+
   const rightActions = (
     <div className="flex gap-2">
       <Button variant="outline" className="bg-[rgba(0,0,0,0.7)] border-[rgba(255,255,255,0.25)] text-[#aaaaaa] hover:text-white hover:bg-[rgba(0,0,0,0.9)]">
@@ -82,6 +87,8 @@ export default function DemurrageCarrierCosts() {
         safe: containerStats.safe,
       }}
       rightActions={rightActions}
+      activeFilter={quickFilter}
+      onFilterChange={handleQuickFilterChange}
     >
       <div className="space-y-4">
         {/* Filters */}
