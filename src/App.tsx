@@ -24,6 +24,14 @@ import InvoicesDraftHbl from "./pages/InvoicesDraftHbl";
 import SystemLogs from "./pages/SystemLogs";
 import LocalCharges from "./pages/LocalCharges";
 import DraftExportacao from "./pages/sea/DraftExportacao";
+import DemurrageIndex from "./pages/demurrage/DemurrageIndex";
+import DemurrageMonitor from "./pages/demurrage/DemurrageMonitor";
+import DemurrageRates from "./pages/demurrage/DemurrageRates";
+import DemurragePreInvoicing from "./pages/demurrage/DemurragePreInvoicing";
+import DemurrageCarrierCosts from "./pages/demurrage/DemurrageCarrierCosts";
+import DemurrageDisputes from "./pages/demurrage/DemurrageDisputes";
+import DemurrageClients from "./pages/demurrage/DemurrageClients";
+import DemurrageAnalytics from "./pages/demurrage/DemurrageAnalytics";
 import AlteracoesFee from "./pages/AlteracoesFee";
 import ReguaCobranca from "./pages/ReguaCobranca";
 import FinanceiroDisputa from "./pages/FinanceiroDisputa";
@@ -130,6 +138,14 @@ const App = () => (
           <Route path="/admin/system-logs" element={<SystemLogs />} />
           <Route path="/sea/local-charges" element={<LocalCharges />} />
           <Route path="/sea/draft-exportacao" element={<DraftExportacao />} />
+          <Route path="/sea/demurrage" element={<DemurrageIndex />} />
+          <Route path="/sea/demurrage/monitor" element={<DemurrageMonitor />} />
+          <Route path="/sea/demurrage/rates" element={<DemurrageRates />} />
+          <Route path="/sea/demurrage/pre-invoicing" element={<DemurragePreInvoicing />} />
+          <Route path="/sea/demurrage/carrier-costs" element={<DemurrageCarrierCosts />} />
+          <Route path="/sea/demurrage/disputes" element={<DemurrageDisputes />} />
+          <Route path="/sea/demurrage/clients" element={<DemurrageClients />} />
+          <Route path="/sea/demurrage/analytics" element={<DemurrageAnalytics />} />
           <Route path="/sea/alteracoes-fee" element={<AlteracoesFee />} />
           <Route path="/fin/regua" element={<ReguaCobranca />} />
           <Route path="/fin/disputa" element={<FinanceiroDisputa />} />

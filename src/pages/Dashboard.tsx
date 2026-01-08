@@ -98,6 +98,10 @@ const menuItems: MenuItem[] = [
         label: "Monitoramento",
         href: "/sea/tracking",
       },
+      {
+        label: "Demurrage / Detention",
+        href: "/sea/demurrage",
+      },
     ],
   },
   {
