@@ -70,6 +70,7 @@ import ManualCadastroManifest from "./pages/sea/ManualCadastroManifest";
 import ManualSubmeterHblMbl from "./pages/sea/ManualSubmeterHblMbl";
 import ManualSubmeterManifestHbl from "./pages/sea/ManualSubmeterManifestHbl";
 import ManualInvoicesDraft from "./pages/sea/ManualInvoicesDraft";
+import ManualDraftExportacao from "./pages/sea/ManualDraftExportacao";
 
 // CHB Module
 import ManualChb from "./pages/chb/ManualChb";
@@ -139,6 +140,7 @@ const App = () => (
           <Route path="/admin/system-logs" element={<SystemLogs />} />
           <Route path="/sea/local-charges" element={<LocalCharges />} />
           <Route path="/sea/draft-exportacao" element={<DraftExportacao />} />
+          <Route path="/sea/manual-drafts" element={<ManualDraftExportacao />} />
           <Route path="/sea/demurrage" element={<DemurrageMonitor />} />
           <Route path="/sea/demurrage/monitor" element={<DemurrageMonitor />} />
           <Route path="/sea/demurrage/rates" element={<DemurrageRates />} />
