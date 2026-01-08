@@ -43,6 +43,7 @@ export default function DemurrageMonitor() {
     } else if (quickFilter === "delivered") {
       f.cronos_status_list = ["GATE_OUT", "RETURNED"];
     }
+    // quickFilter === "all" or "at_risk" means no cronos_status filter (at_risk filters client-side)
     
     return f;
   }, [searchTerm, filterStatus, quickFilter]);
