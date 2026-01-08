@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { DemurrageLayout } from "@/components/demurrage/DemurrageLayout";
 import { KpiCard } from "@/components/demurrage/KpiCard";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -7,11 +7,13 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { DollarSign, Plus, Edit, Trash2, Clock, TrendingUp, Filter } from "lucide-react";
+import { DollarSign, Plus, Edit, Trash2, Clock, TrendingUp, Filter, Loader2 } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
 import { toast } from "sonner";
+import { useDemurrageRates, useCreateDemurrageRate, useUpdateDemurrageRate, useDeleteDemurrageRate, DemurrageRate } from "@/hooks/useDemurrageData";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 
 const CONTAINER_TYPES = [
   { value: "20DV", label: "20' Dry Van" },
@@ -22,18 +24,17 @@ const CONTAINER_TYPES = [
   { value: "45HC", label: "45' High Cube" },
 ];
 
-// Mock data
-const mockRates = [
-  { id: "1", armador: "MSC", container_type: "40HC", free_time_days: 7, period_type: "first_period", rate_usd: 150, period_start_day: 8, period_end_day: 14 },
-  { id: "2", armador: "MSC", container_type: "40HC", free_time_days: 7, period_type: "second_period", rate_usd: 200, period_start_day: 15, period_end_day: 21 },
-  { id: "3", armador: "HAPAG", container_type: "20DV", free_time_days: 10, period_type: "first_period", rate_usd: 100, period_start_day: 11, period_end_day: 17 },
-  { id: "4", armador: "MAERSK", container_type: "40DV", free_time_days: 7, period_type: "first_period", rate_usd: 180, period_start_day: 8, period_end_day: 14 },
-];
-
 type QuickFilter = "20DV" | "40DV" | "40HC" | "20RF" | "40RF" | "45HC" | "all";
 
 export default function DemurrageRates() {
+  const { data: rates = [], isLoading, error } = useDemurrageRates();
+  const createRate = useCreateDemurrageRate();
+  const updateRate = useUpdateDemurrageRate();
+  const deleteRate = useDeleteDemurrageRate();
+
   const [showAddDialog, setShowAddDialog] = useState(false);
+  const [editingRate, setEditingRate] = useState<DemurrageRate | null>(null);
+  const [deletingRate, setDeletingRate] = useState<DemurrageRate | null>(null);
   const [filterArmador, setFilterArmador] = useState<string>("all");
   const [quickFilter, setQuickFilter] = useState<QuickFilter>("all");
 
@@ -47,13 +48,26 @@ export default function DemurrageRates() {
     armador: '',
   });
 
-  const armadors = [...new Set(mockRates.map(r => r.armador))].sort();
+  const armadors = useMemo(() => [...new Set(rates.map(r => r.armador))].sort(), [rates]);
 
-  const filteredRates = mockRates.filter(rate => {
+  const filteredRates = useMemo(() => rates.filter(rate => {
     const matchesArmador = filterArmador === 'all' || rate.armador === filterArmador;
     const matchesQuickFilter = quickFilter === 'all' || rate.container_type === quickFilter;
     return matchesArmador && matchesQuickFilter;
-  });
+  }), [rates, filterArmador, quickFilter]);
+
+  // Calculate KPI stats per container type
+  const containerStats = useMemo(() => {
+    const stats: Record<string, { count: number; avgFreeTime: number }> = {};
+    CONTAINER_TYPES.forEach(ct => {
+      const typeRates = rates.filter(r => r.container_type === ct.value);
+      const avgFT = typeRates.length > 0 
+        ? Math.round(typeRates.reduce((sum, r) => sum + r.free_time_days, 0) / typeRates.length)
+        : 0;
+      stats[ct.value] = { count: typeRates.length, avgFreeTime: avgFT };
+    });
+    return stats;
+  }, [rates]);
 
   const formatCurrency = (value: number) => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(value);
 
@@ -61,7 +75,8 @@ export default function DemurrageRates() {
     free_period: 'Free Time',
     first_period: '1º Período',
     second_period: '2º Período',
-    third_period: '3º Período'
+    third_period: '3º Período',
+    standard: 'Padrão',
   }[pt] || pt);
 
   const getPeriodBadgeColor = (pt: string) => {
@@ -70,13 +85,83 @@ export default function DemurrageRates() {
       case 'first_period': return 'bg-blue-500/10 text-blue-500 border-blue-500/20';
       case 'second_period': return 'bg-orange-500/10 text-orange-500 border-orange-500/20';
       case 'third_period': return 'bg-red-500/10 text-red-500 border-red-500/20';
+      case 'standard': return 'bg-gray-500/10 text-gray-400 border-gray-500/20';
       default: return '';
     }
   };
 
-  const handleSave = () => {
-    toast.success("Tarifa salva com sucesso!");
-    setShowAddDialog(false);
+  const resetForm = () => {
+    setFormData({
+      container_type: '',
+      free_time_days: '7',
+      period_type: 'first_period',
+      rate_usd: '150',
+      period_start_day: '',
+      period_end_day: '',
+      armador: '',
+    });
+  };
+
+  const openAddDialog = () => {
+    resetForm();
+    setEditingRate(null);
+    setShowAddDialog(true);
+  };
+
+  const openEditDialog = (rate: DemurrageRate) => {
+    setFormData({
+      armador: rate.armador,
+      container_type: rate.container_type,
+      free_time_days: String(rate.free_time_days),
+      period_type: rate.period_type || 'standard',
+      rate_usd: String(rate.rate_usd),
+      period_start_day: rate.period_start_day ? String(rate.period_start_day) : '',
+      period_end_day: rate.period_end_day ? String(rate.period_end_day) : '',
+    });
+    setEditingRate(rate);
+    setShowAddDialog(true);
+  };
+
+  const handleSave = async () => {
+    if (!formData.armador || !formData.container_type) {
+      toast.error("Armador e tipo de container são obrigatórios");
+      return;
+    }
+
+    try {
+      const payload = {
+        armador: formData.armador.toUpperCase(),
+        container_type: formData.container_type,
+        free_time_days: parseInt(formData.free_time_days) || 7,
+        rate_usd: parseFloat(formData.rate_usd) || 0,
+        period_type: formData.period_type,
+        period_start_day: formData.period_start_day ? parseInt(formData.period_start_day) : undefined,
+        period_end_day: formData.period_end_day ? parseInt(formData.period_end_day) : undefined,
+      };
+
+      if (editingRate) {
+        await updateRate.mutateAsync({ id: editingRate.id, ...payload });
+        toast.success("Tarifa atualizada com sucesso!");
+      } else {
+        await createRate.mutateAsync(payload);
+        toast.success("Tarifa criada com sucesso!");
+      }
+      setShowAddDialog(false);
+      resetForm();
+    } catch (err) {
+      toast.error(`Erro ao salvar tarifa: ${err instanceof Error ? err.message : 'Erro desconhecido'}`);
+    }
+  };
+
+  const handleDelete = async () => {
+    if (!deletingRate) return;
+    try {
+      await deleteRate.mutateAsync(deletingRate.id);
+      toast.success("Tarifa excluída com sucesso!");
+      setDeletingRate(null);
+    } catch (err) {
+      toast.error(`Erro ao excluir tarifa: ${err instanceof Error ? err.message : 'Erro desconhecido'}`);
+    }
   };
 
   const handleQuickFilterChange = (filter: QuickFilter) => {
@@ -84,7 +169,7 @@ export default function DemurrageRates() {
   };
 
   const rightActions = (
-    <Button className="bg-[#ffc800] text-black hover:bg-[#e6b400]" onClick={() => setShowAddDialog(true)}>
+    <Button className="bg-[#ffc800] text-black hover:bg-[#e6b400]" onClick={openAddDialog}>
       <Plus className="h-4 w-4 mr-2" />
       Nova Tarifa
     </Button>
@@ -92,60 +177,18 @@ export default function DemurrageRates() {
 
   const customCards = (
     <div className="grid gap-4 grid-cols-2 md:grid-cols-3 xl:grid-cols-6">
-      <KpiCard
-        title="20DV"
-        value={5}
-        subtitle="5 dias FT"
-        icon={<Clock className="h-5 w-5" />}
-        variant="default"
-        isActive={quickFilter === "20DV"}
-        onClick={() => handleQuickFilterChange("20DV")}
-      />
-      <KpiCard
-        title="40DV"
-        value={5}
-        subtitle="5 dias FT"
-        icon={<Clock className="h-5 w-5" />}
-        variant="default"
-        isActive={quickFilter === "40DV"}
-        onClick={() => handleQuickFilterChange("40DV")}
-      />
-      <KpiCard
-        title="40HC"
-        value={0}
-        subtitle="- dias FT"
-        icon={<Clock className="h-5 w-5" />}
-        variant="default"
-        isActive={quickFilter === "40HC"}
-        onClick={() => handleQuickFilterChange("40HC")}
-      />
-      <KpiCard
-        title="20RF"
-        value={4}
-        subtitle="2 dias FT"
-        icon={<Clock className="h-5 w-5" />}
-        variant="default"
-        isActive={quickFilter === "20RF"}
-        onClick={() => handleQuickFilterChange("20RF")}
-      />
-      <KpiCard
-        title="40RF"
-        value={9}
-        subtitle="2 dias FT"
-        icon={<Clock className="h-5 w-5" />}
-        variant="default"
-        isActive={quickFilter === "40RF"}
-        onClick={() => handleQuickFilterChange("40RF")}
-      />
-      <KpiCard
-        title="45HC"
-        value={0}
-        subtitle="- dias FT"
-        icon={<Clock className="h-5 w-5" />}
-        variant="default"
-        isActive={quickFilter === "45HC"}
-        onClick={() => handleQuickFilterChange("45HC")}
-      />
+      {CONTAINER_TYPES.map(ct => (
+        <KpiCard
+          key={ct.value}
+          title={ct.value}
+          value={containerStats[ct.value]?.count || 0}
+          subtitle={containerStats[ct.value]?.avgFreeTime ? `${containerStats[ct.value].avgFreeTime} dias FT` : '- dias FT'}
+          icon={<Clock className="h-5 w-5" />}
+          variant="default"
+          isActive={quickFilter === ct.value}
+          onClick={() => handleQuickFilterChange(ct.value as QuickFilter)}
+        />
+      ))}
     </div>
   );
 
@@ -195,7 +238,15 @@ export default function DemurrageRates() {
             </CardDescription>
           </CardHeader>
           <CardContent>
-            {!filteredRates.length ? (
+            {isLoading ? (
+              <div className="flex items-center justify-center py-8">
+                <Loader2 className="h-8 w-8 animate-spin text-[#ffc800]" />
+              </div>
+            ) : error ? (
+              <div className="text-center py-8 text-red-400">
+                <p>Erro ao carregar tarifas: {error instanceof Error ? error.message : 'Erro desconhecido'}</p>
+              </div>
+            ) : !filteredRates.length ? (
               <div className="text-center py-8 text-muted-foreground">
                 <DollarSign className="h-12 w-12 mx-auto mb-4 opacity-50" />
                 <p>Nenhuma tarifa encontrada</p>
@@ -225,21 +276,34 @@ export default function DemurrageRates() {
                         </Badge>
                       </TableCell>
                       <TableCell>
-                        <Badge className={getPeriodBadgeColor(rate.period_type)}>
-                          {formatPeriodType(rate.period_type)}
+                        <Badge className={getPeriodBadgeColor(rate.period_type || 'standard')}>
+                          {formatPeriodType(rate.period_type || 'standard')}
                         </Badge>
                       </TableCell>
                       <TableCell className="text-center text-sm text-muted-foreground">
-                        {rate.period_start_day}-{rate.period_end_day}
+                        {rate.period_start_day && rate.period_end_day 
+                          ? `${rate.period_start_day}-${rate.period_end_day}`
+                          : '-'
+                        }
                       </TableCell>
                       <TableCell className="text-right font-semibold text-[#ffc800]">
                         {formatCurrency(rate.rate_usd)}
                       </TableCell>
                       <TableCell className="text-right">
-                        <Button variant="ghost" size="sm" className="text-muted-foreground hover:text-white">
+                        <Button 
+                          variant="ghost" 
+                          size="sm" 
+                          className="text-muted-foreground hover:text-white"
+                          onClick={() => openEditDialog(rate)}
+                        >
                           <Edit className="h-4 w-4" />
                         </Button>
-                        <Button variant="ghost" size="sm" className="text-red-500 hover:text-red-400">
+                        <Button 
+                          variant="ghost" 
+                          size="sm" 
+                          className="text-red-500 hover:text-red-400"
+                          onClick={() => setDeletingRate(rate)}
+                        >
                           <Trash2 className="h-4 w-4" />
                         </Button>
                       </TableCell>
@@ -255,7 +319,7 @@ export default function DemurrageRates() {
         <Dialog open={showAddDialog} onOpenChange={setShowAddDialog}>
           <DialogContent className="max-w-2xl bg-[rgba(5,6,18,0.95)] border-[rgba(255,255,255,0.1)]">
             <DialogHeader>
-              <DialogTitle>Nova Tarifa de Demurrage</DialogTitle>
+              <DialogTitle>{editingRate ? 'Editar Tarifa' : 'Nova Tarifa de Demurrage'}</DialogTitle>
               <DialogDescription>Configure Free Time e tarifas por período</DialogDescription>
             </DialogHeader>
 
@@ -292,7 +356,7 @@ export default function DemurrageRates() {
 
               <div>
                 <h4 className="text-sm font-medium mb-3">Free Time e Período</h4>
-                <div className="grid grid-cols-3 gap-4">
+                <div className="grid grid-cols-2 gap-4">
                   <div>
                     <Label>Free Time (dias)</Label>
                     <Input 
@@ -309,11 +373,34 @@ export default function DemurrageRates() {
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
+                        <SelectItem value="standard">Padrão</SelectItem>
                         <SelectItem value="first_period">1º Período</SelectItem>
                         <SelectItem value="second_period">2º Período</SelectItem>
                         <SelectItem value="third_period">3º Período</SelectItem>
                       </SelectContent>
                     </Select>
+                  </div>
+                </div>
+                <div className="grid grid-cols-3 gap-4 mt-4">
+                  <div>
+                    <Label>Dia Início</Label>
+                    <Input 
+                      type="number" 
+                      value={formData.period_start_day} 
+                      onChange={e => setFormData({...formData, period_start_day: e.target.value})}
+                      placeholder="Ex: 8"
+                      className="bg-[rgba(0,0,0,0.5)] border-[rgba(255,255,255,0.1)]"
+                    />
+                  </div>
+                  <div>
+                    <Label>Dia Fim</Label>
+                    <Input 
+                      type="number" 
+                      value={formData.period_end_day} 
+                      onChange={e => setFormData({...formData, period_end_day: e.target.value})}
+                      placeholder="Ex: 14"
+                      className="bg-[rgba(0,0,0,0.5)] border-[rgba(255,255,255,0.1)]"
+                    />
                   </div>
                   <div>
                     <Label>Taxa USD/dia</Label>
@@ -332,12 +419,41 @@ export default function DemurrageRates() {
               <Button variant="outline" onClick={() => setShowAddDialog(false)} className="border-[rgba(255,255,255,0.2)]">
                 Cancelar
               </Button>
-              <Button onClick={handleSave} className="bg-[#ffc800] text-black hover:bg-[#e6b400]">
-                Salvar Tarifa
+              <Button 
+                onClick={handleSave} 
+                className="bg-[#ffc800] text-black hover:bg-[#e6b400]"
+                disabled={createRate.isPending || updateRate.isPending}
+              >
+                {(createRate.isPending || updateRate.isPending) && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+                {editingRate ? 'Atualizar' : 'Salvar'} Tarifa
               </Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>
+
+        {/* Delete Confirmation Dialog */}
+        <AlertDialog open={!!deletingRate} onOpenChange={(open) => !open && setDeletingRate(null)}>
+          <AlertDialogContent className="bg-[rgba(5,6,18,0.95)] border-[rgba(255,255,255,0.1)]">
+            <AlertDialogHeader>
+              <AlertDialogTitle>Confirmar Exclusão</AlertDialogTitle>
+              <AlertDialogDescription>
+                Tem certeza que deseja excluir a tarifa de <strong>{deletingRate?.armador}</strong> para container <strong>{deletingRate?.container_type}</strong>?
+                Esta ação não pode ser desfeita.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel className="border-[rgba(255,255,255,0.2)]">Cancelar</AlertDialogCancel>
+              <AlertDialogAction 
+                onClick={handleDelete}
+                className="bg-red-600 hover:bg-red-700"
+                disabled={deleteRate.isPending}
+              >
+                {deleteRate.isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+                Excluir
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
       </div>
     </DemurrageLayout>
   );
