@@ -11,7 +11,8 @@ const corsHeaders = {
 interface IntegrateRMRequest {
   voucherId?: string;
   numeroVoucherRM?: string;
-  action: "fetch" | "integrate" | "list";
+  action: "fetch" | "integrate" | "list" | "import";
+  limit?: number;
 }
 
 interface RMVoucherData {
@@ -64,9 +65,169 @@ const handler = async (req: Request): Promise<Response> => {
     const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabase = createClient(supabaseUrl, supabaseKey);
 
-    const { voucherId, numeroVoucherRM, action }: IntegrateRMRequest = await req.json();
+    const { voucherId, numeroVoucherRM, action, limit = 50 }: IntegrateRMRequest = await req.json();
 
-    console.log(`[voucher-integrate-rm] Action: ${action}, VoucherID: ${voucherId}, RM Number: ${numeroVoucherRM}`);
+    console.log(`[voucher-integrate-rm] Action: ${action}, VoucherID: ${voucherId}, RM Number: ${numeroVoucherRM}, Limit: ${limit}`);
+
+    // ACTION: IMPORT - Importar vouchers do MariaDB para Supabase
+    if (action === "import") {
+      console.log("[voucher-integrate-rm] Importando vouchers do RM para Supabase");
+      
+      let mariaClient: Client | null = null;
+      try {
+        mariaClient = await getMariaDBClient();
+        
+        // Buscar vouchers do MariaDB que ainda não foram importados
+        const result = await mariaClient.query(
+          `SELECT 
+            id_rm,
+            nd,
+            documento,
+            nome_beneficiario,
+            nome_cobranca,
+            numero_nf,
+            numero_processo,
+            modal,
+            tipo_pag,
+            forma_pag,
+            data_emissao,
+            data_vencimento,
+            valor_nf,
+            moeda,
+            cnpj,
+            razao_social
+          FROM dados_dachser.t_dados_financeiro_voucher
+          ORDER BY id DESC
+          LIMIT ?`,
+          [limit]
+        );
+        
+        await mariaClient.close();
+        
+        if (!result || result.length === 0) {
+          return new Response(
+            JSON.stringify({
+              success: true,
+              message: "Nenhum voucher encontrado para importar",
+              imported: 0,
+            }),
+            {
+              status: 200,
+              headers: { "Content-Type": "application/json", ...corsHeaders },
+            }
+          );
+        }
+
+        console.log(`[voucher-integrate-rm] Encontrados ${result.length} vouchers no MariaDB`);
+
+        let importedCount = 0;
+        let skippedCount = 0;
+        const errors: { nd: string; error: string }[] = [];
+
+        for (const rmData of result as any[]) {
+          try {
+            const nd = rmData.nd?.toString().trim();
+            if (!nd) {
+              skippedCount++;
+              continue;
+            }
+
+            // Verificar se já existe no Supabase
+            const { data: existingVoucher } = await supabase
+              .from("vouchers")
+              .select("id")
+              .eq("numero_spo", nd)
+              .maybeSingle();
+
+            if (existingVoucher) {
+              console.log(`[voucher-integrate-rm] Voucher ${nd} já existe, pulando...`);
+              skippedCount++;
+              continue;
+            }
+
+            // Format dates
+            let vencimentoFormatted = new Date().toISOString().split('T')[0];
+            if (rmData.data_vencimento) {
+              const d = new Date(rmData.data_vencimento);
+              if (!isNaN(d.getTime())) {
+                vencimentoFormatted = d.toISOString().split('T')[0];
+              }
+            }
+
+            let dataEmissaoFormatted: string | null = null;
+            if (rmData.data_emissao) {
+              const d = new Date(rmData.data_emissao);
+              if (!isNaN(d.getTime())) {
+                dataEmissaoFormatted = d.toISOString().split('T')[0];
+              }
+            }
+
+            // Mapear cobranca_em_nome_de a partir do modal
+            const modal = (rmData.modal || "").toUpperCase();
+            let cobrancaEmNomeDe = "DACHSER";
+            if (modal === "AIR") cobrancaEmNomeDe = "AIR";
+            else if (modal === "SEA") cobrancaEmNomeDe = "SEA";
+            else if (modal === "CHB") cobrancaEmNomeDe = "CHB";
+
+            // Inserir no Supabase
+            const { error: insertError } = await supabase
+              .from("vouchers")
+              .insert({
+                numero_spo: nd,
+                fornecedor: rmData.nome_beneficiario || rmData.razao_social || null,
+                cnpj_fornecedor: rmData.cnpj || null,
+                valor: rmData.valor_nf ? parseFloat(rmData.valor_nf) : null,
+                vencimento: vencimentoFormatted,
+                tipo_documento: rmData.tipo_pag || null,
+                data_emissao_documento: dataEmissaoFormatted,
+                moeda: rmData.moeda || "BRL",
+                forma_pagamento: mapFormaPagamento(rmData.forma_pag),
+                cobranca_em_nome_de: cobrancaEmNomeDe,
+                filial: rmData.nome_cobranca || null,
+                remessa: rmData.numero_processo || null,
+                etapa_atual: "A_PROCESSAR",
+                status_baixa: "IMPORTADO",
+                origem_criacao: "RM_IMPORT",
+              });
+
+            if (insertError) {
+              console.error(`[voucher-integrate-rm] Erro ao inserir ${nd}:`, insertError);
+              errors.push({ nd, error: insertError.message });
+              continue;
+            }
+
+            importedCount++;
+            console.log(`[voucher-integrate-rm] Voucher ${nd} importado com sucesso`);
+
+          } catch (voucherError: any) {
+            console.error(`[voucher-integrate-rm] Erro ao processar voucher:`, voucherError);
+            errors.push({ nd: rmData.nd || "unknown", error: voucherError.message });
+          }
+        }
+
+        return new Response(
+          JSON.stringify({
+            success: true,
+            message: `Importação concluída: ${importedCount} importados, ${skippedCount} já existentes`,
+            imported: importedCount,
+            skipped: skippedCount,
+            total: result.length,
+            errors: errors.length > 0 ? errors : undefined,
+          }),
+          {
+            status: 200,
+            headers: { "Content-Type": "application/json", ...corsHeaders },
+          }
+        );
+      } catch (error: any) {
+        console.error("[voucher-integrate-rm] Erro na importação:", error);
+        if (mariaClient) await mariaClient.close();
+        return new Response(
+          JSON.stringify({ success: false, error: error.message }),
+          { status: 500, headers: { "Content-Type": "application/json", ...corsHeaders } }
+        );
+      }
+    }
 
     // ACTION: LIST - Listar vouchers disponíveis no RM
     if (action === "list") {

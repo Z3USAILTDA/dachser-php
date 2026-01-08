@@ -9,13 +9,14 @@ const corsHeaders = {
 };
 
 interface RMVoucherData {
-  fornecedor: string;
-  cnpj_fornecedor: string;
-  valor: number;
-  vencimento: string;
-  tipo_documento: string;
+  nome_beneficiario: string;
+  cnpj: string;
+  valor_nf: number;
+  data_vencimento: string;
+  numero_nf: string;
   data_emissao: string;
   moeda: string;
+  forma_pag: string;
 }
 
 const getMariaDBClient = async (): Promise<Client> => {
@@ -84,15 +85,16 @@ const handler = async (req: Request): Promise<Response> => {
           // Buscar dados no MariaDB (tabela de vouchers do RM)
           const result = await mariaClient.query(
             `SELECT 
-              fornecedor,
-              cnpj_fornecedor,
-              valor,
-              vencimento,
-              tipo_documento,
+              nome_beneficiario,
+              cnpj,
+              valor_nf,
+              data_vencimento,
+              numero_nf,
               data_emissao,
-              moeda
-            FROM t_rm_vouchers 
-            WHERE numero_voucher = ?`,
+              moeda,
+              forma_pag
+            FROM t_dados_financeiro_voucher 
+            WHERE documento = ?`,
             [voucher.numero_spo]
           );
 
@@ -113,13 +115,14 @@ const handler = async (req: Request): Promise<Response> => {
           const { error: updateError } = await supabase
             .from("vouchers")
             .update({
-              fornecedor: rmData.fornecedor,
-              cnpj_fornecedor: rmData.cnpj_fornecedor,
-              valor: rmData.valor,
-              vencimento: rmData.vencimento,
-              tipo_documento: rmData.tipo_documento,
+              fornecedor: rmData.nome_beneficiario,
+              cnpj_fornecedor: rmData.cnpj,
+              valor: rmData.valor_nf,
+              vencimento: rmData.data_vencimento,
+              tipo_documento: rmData.numero_nf,
               data_emissao_documento: rmData.data_emissao,
               moeda: rmData.moeda || "BRL",
+              forma_pagamento: rmData.forma_pag || "BOLETO",
               status_baixa: "SINCRONIZADO",
               updated_at: new Date().toISOString(),
             })
