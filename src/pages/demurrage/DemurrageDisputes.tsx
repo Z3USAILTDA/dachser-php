@@ -4,6 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 import { Scale, Plus, CheckCircle, XCircle, Clock, MessageSquare } from "lucide-react";
 
@@ -86,58 +87,15 @@ export default function DemurrageDisputes() {
     >
       <div className="space-y-4">
         {/* Inner Nav */}
-        <div className="flex items-center gap-2 flex-wrap">
-          <button
-            onClick={() => setActiveTab("all")}
-            className={`px-4 py-2 rounded-full text-sm font-medium transition-all border ${
-              activeTab === "all"
-                ? "bg-[rgba(255,200,0,0.15)] text-[#ffc800] border-[#ffc800]/40"
-                : "bg-[rgba(0,0,0,0.4)] text-[#aaaaaa] border-white/10 hover:bg-white/5 hover:text-white"
-            }`}
-          >
-            Todas ({stats.total})
-          </button>
-          <button
-            onClick={() => setActiveTab("opened")}
-            className={`px-4 py-2 rounded-full text-sm font-medium transition-all border ${
-              activeTab === "opened"
-                ? "bg-[rgba(255,200,0,0.15)] text-[#ffc800] border-[#ffc800]/40"
-                : "bg-[rgba(0,0,0,0.4)] text-[#aaaaaa] border-white/10 hover:bg-white/5 hover:text-white"
-            }`}
-          >
-            Abertas ({stats.opened})
-          </button>
-          <button
-            onClick={() => setActiveTab("negotiating")}
-            className={`px-4 py-2 rounded-full text-sm font-medium transition-all border ${
-              activeTab === "negotiating"
-                ? "bg-[rgba(255,200,0,0.15)] text-[#ffc800] border-[#ffc800]/40"
-                : "bg-[rgba(0,0,0,0.4)] text-[#aaaaaa] border-white/10 hover:bg-white/5 hover:text-white"
-            }`}
-          >
-            Negociando ({stats.negotiating})
-          </button>
-          <button
-            onClick={() => setActiveTab("won")}
-            className={`px-4 py-2 rounded-full text-sm font-medium transition-all border ${
-              activeTab === "won"
-                ? "bg-[rgba(255,200,0,0.15)] text-[#ffc800] border-[#ffc800]/40"
-                : "bg-[rgba(0,0,0,0.4)] text-[#aaaaaa] border-white/10 hover:bg-white/5 hover:text-white"
-            }`}
-          >
-            Ganhas ({stats.won})
-          </button>
-          <button
-            onClick={() => setActiveTab("lost")}
-            className={`px-4 py-2 rounded-full text-sm font-medium transition-all border ${
-              activeTab === "lost"
-                ? "bg-[rgba(255,200,0,0.15)] text-[#ffc800] border-[#ffc800]/40"
-                : "bg-[rgba(0,0,0,0.4)] text-[#aaaaaa] border-white/10 hover:bg-white/5 hover:text-white"
-            }`}
-          >
-            Perdidas ({stats.lost})
-          </button>
-        </div>
+        <Tabs value={activeTab} onValueChange={setActiveTab}>
+          <TabsList>
+            <TabsTrigger value="all">Todas ({stats.total})</TabsTrigger>
+            <TabsTrigger value="opened">Abertas ({stats.opened})</TabsTrigger>
+            <TabsTrigger value="negotiating">Negociando ({stats.negotiating})</TabsTrigger>
+            <TabsTrigger value="won">Ganhas ({stats.won})</TabsTrigger>
+            <TabsTrigger value="lost">Perdidas ({stats.lost})</TabsTrigger>
+          </TabsList>
+        </Tabs>
 
         {/* Content */}
         <Card className="bg-[rgba(5,6,18,0.85)] border-[rgba(255,255,255,0.1)]">

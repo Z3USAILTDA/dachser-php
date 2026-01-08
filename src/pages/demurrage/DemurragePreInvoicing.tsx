@@ -3,6 +3,7 @@ import { DemurrageLayout } from "@/components/demurrage/DemurrageLayout";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { FileText, Clock, CheckCircle2, Send, Eye } from "lucide-react";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 
 
@@ -88,58 +89,15 @@ export default function DemurragePreInvoicing() {
     >
       <div className="space-y-4">
         {/* Inner Nav */}
-        <div className="flex items-center gap-2 flex-wrap">
-          <button
-            onClick={() => setActiveTab("all")}
-            className={`px-4 py-2 rounded-full text-sm font-medium transition-all border ${
-              activeTab === "all"
-                ? "bg-[rgba(255,200,0,0.15)] text-[#ffc800] border-[#ffc800]/40"
-                : "bg-[rgba(0,0,0,0.4)] text-[#aaaaaa] border-white/10 hover:bg-white/5 hover:text-white"
-            }`}
-          >
-            Todas ({stats.total})
-          </button>
-          <button
-            onClick={() => setActiveTab("calculated")}
-            className={`px-4 py-2 rounded-full text-sm font-medium transition-all border ${
-              activeTab === "calculated"
-                ? "bg-[rgba(255,200,0,0.15)] text-[#ffc800] border-[#ffc800]/40"
-                : "bg-[rgba(0,0,0,0.4)] text-[#aaaaaa] border-white/10 hover:bg-white/5 hover:text-white"
-            }`}
-          >
-            Calculadas ({stats.calculated})
-          </button>
-          <button
-            onClick={() => setActiveTab("reviewed")}
-            className={`px-4 py-2 rounded-full text-sm font-medium transition-all border ${
-              activeTab === "reviewed"
-                ? "bg-[rgba(255,200,0,0.15)] text-[#ffc800] border-[#ffc800]/40"
-                : "bg-[rgba(0,0,0,0.4)] text-[#aaaaaa] border-white/10 hover:bg-white/5 hover:text-white"
-            }`}
-          >
-            Revisadas ({stats.reviewed})
-          </button>
-          <button
-            onClick={() => setActiveTab("sent_to_otelo")}
-            className={`px-4 py-2 rounded-full text-sm font-medium transition-all border ${
-              activeTab === "sent_to_otelo"
-                ? "bg-[rgba(255,200,0,0.15)] text-[#ffc800] border-[#ffc800]/40"
-                : "bg-[rgba(0,0,0,0.4)] text-[#aaaaaa] border-white/10 hover:bg-white/5 hover:text-white"
-            }`}
-          >
-            Lançadas ({stats.sent})
-          </button>
-          <button
-            onClick={() => setActiveTab("finalized")}
-            className={`px-4 py-2 rounded-full text-sm font-medium transition-all border ${
-              activeTab === "finalized"
-                ? "bg-[rgba(255,200,0,0.15)] text-[#ffc800] border-[#ffc800]/40"
-                : "bg-[rgba(0,0,0,0.4)] text-[#aaaaaa] border-white/10 hover:bg-white/5 hover:text-white"
-            }`}
-          >
-            Finalizadas ({stats.finalized})
-          </button>
-        </div>
+        <Tabs value={activeTab} onValueChange={setActiveTab}>
+          <TabsList>
+            <TabsTrigger value="all">Todas ({stats.total})</TabsTrigger>
+            <TabsTrigger value="calculated">Calculadas ({stats.calculated})</TabsTrigger>
+            <TabsTrigger value="reviewed">Revisadas ({stats.reviewed})</TabsTrigger>
+            <TabsTrigger value="sent_to_otelo">Lançadas ({stats.sent})</TabsTrigger>
+            <TabsTrigger value="finalized">Finalizadas ({stats.finalized})</TabsTrigger>
+          </TabsList>
+        </Tabs>
 
         {/* Content */}
         <Card className="bg-[rgba(5,6,18,0.85)] border-[rgba(255,255,255,0.1)]">
