@@ -240,16 +240,15 @@ export default function Olimpo() {
     }
   };
 
-  // Filter data
+  // Filter data - mais permissivo para mostrar mais itens
   const filteredData = data.filter((item) => {
     const now = Date.now();
 
-    // Filter items without complete route or ETA
-    const hasValidRoute = item.rota && !item.rota.includes("—") && item.rota.includes("→");
-    const hasValidEta = item.eta_api && item.eta_api !== "—" && item.eta_api.trim() !== "";
-    if (!hasValidRoute || !hasValidEta) return false;
+    // Precisa ter rota válida (origem → destino)
+    const hasValidRoute = item.rota && item.rota.includes("→");
+    if (!hasValidRoute) return false;
 
-    // Filter delivered items that are too old
+    // Filter delivered items that are too old (24h após entrega)
     if (item.status === "Entregue") {
       if (item.delivered_until_ts && now > item.delivered_until_ts) return false;
       if (item.ata_iso) {
@@ -257,11 +256,13 @@ export default function Olimpo() {
         if (now > limit) return false;
       }
     } else if (daysFilter && item.eta_iso) {
+      // Filtro de dias apenas para itens com ETA
       const d = new Date(item.eta_iso);
       const start = new Date(now - daysFilter * 24 * 60 * 60 * 1000);
       const end = new Date(now + daysFilter * 24 * 60 * 60 * 1000);
       if (d < start || d > end) return false;
     }
+    // Se não tem ETA, mostrar mesmo assim (melhor mostrar do que esconder)
 
     if (modeFilter && item.mode !== modeFilter) return false;
     if (statusFilter && item.status !== statusFilter) return false;
@@ -450,10 +451,7 @@ export default function Olimpo() {
             if (!o || !d) continue;
 
             const etaIso = f.eta || null;
-            const etaApiHuman = fmtLocalBRDateTime(etaIso) || "";
-            
-            // Skip if no ETA
-            if (!etaApiHuman) continue;
+            const etaApiHuman = fmtLocalBRDateTime(etaIso) || "—";
 
             const hasPosition = Number.isFinite(f.lat) && Number.isFinite(f.lon);
             const status = calcStatus(etaIso, hasPosition);
@@ -602,7 +600,9 @@ export default function Olimpo() {
       style: "mapbox://styles/mapbox/dark-v11",
       center: [-30, 10],
       zoom: 2,
-      // Modo 2D - projeção mercator (padrão)
+      projection: "mercator", // Forçar 2D - projeção flat
+      pitch: 0, // Sem inclinação
+      bearing: 0, // Sem rotação
     });
 
     // Add navigation controls
