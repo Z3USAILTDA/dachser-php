@@ -53,12 +53,16 @@ export default function DemurrageMonitor() {
 
   // Filter for at_risk on client side (includes multiple statuses)
   const filteredContainers = useMemo(() => {
-    const base = quickFilter === "at_risk"
+    return quickFilter === "at_risk"
       ? containers.filter(c => ["at_risk", "critical", "exceeded"].includes(c.risk_status))
       : containers;
-    setCurrentPage(1);
-    return base;
   }, [containers, quickFilter]);
+
+  // Reset page when filters change
+  const handleQuickFilterChangeWithReset = (filter: QuickFilter) => {
+    setQuickFilter(filter);
+    setCurrentPage(1);
+  };
 
   const totalPages = Math.ceil(filteredContainers.length / PAGE_SIZE);
   const paginatedContainers = useMemo(() => {
@@ -74,10 +78,6 @@ export default function DemurrageMonitor() {
     } catch (error) {
       toast.error("Erro ao sincronizar dados");
     }
-  };
-
-  const handleQuickFilterChange = (filter: QuickFilter) => {
-    setQuickFilter(filter);
   };
 
   const getRiskBadge = (status: string) => {
@@ -115,7 +115,7 @@ export default function DemurrageMonitor() {
         icon={<Ship className="h-6 w-6" />}
         variant="default"
         isActive={quickFilter === "all"}
-        onClick={() => handleQuickFilterChange("all")}
+        onClick={() => handleQuickFilterChangeWithReset("all")}
       />
       <KpiCard
         title="EM TRÂNSITO"
@@ -124,7 +124,7 @@ export default function DemurrageMonitor() {
         icon={<TrendingUp className="h-6 w-6" />}
         variant="info"
         isActive={quickFilter === "in_transit"}
-        onClick={() => handleQuickFilterChange("in_transit")}
+        onClick={() => handleQuickFilterChangeWithReset("in_transit")}
       />
       <KpiCard
         title="EM ALERTA"
@@ -133,7 +133,7 @@ export default function DemurrageMonitor() {
         icon={<AlertTriangle className="h-6 w-6" />}
         variant="critical"
         isActive={quickFilter === "at_risk"}
-        onClick={() => handleQuickFilterChange("at_risk")}
+        onClick={() => handleQuickFilterChangeWithReset("at_risk")}
       />
       <KpiCard
         title="ENTREGUES"
@@ -142,7 +142,7 @@ export default function DemurrageMonitor() {
         icon={<CheckCircle2 className="h-6 w-6" />}
         variant="success"
         isActive={quickFilter === "delivered"}
-        onClick={() => handleQuickFilterChange("delivered")}
+        onClick={() => handleQuickFilterChangeWithReset("delivered")}
       />
     </div>
   );
