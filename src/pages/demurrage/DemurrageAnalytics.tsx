@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { DemurrageLayout } from "@/components/demurrage/DemurrageLayout";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -54,6 +55,8 @@ const mockContainers = [
 ];
 
 export default function DemurrageAnalytics() {
+  const [quickFilter, setQuickFilter] = useState<"all" | "at_risk" | "exceeded" | "safe">("all");
+
   const formatCurrency = (value: number) => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 0 }).format(value);
 
   const containerStats = {
@@ -61,6 +64,10 @@ export default function DemurrageAnalytics() {
     atRisk: mockContainers.filter(c => c.status === 'at_risk').length,
     exceeded: mockContainers.filter(c => c.status === 'exceeded').length,
     safe: mockContainers.filter(c => c.status === 'safe').length,
+  };
+
+  const handleQuickFilterChange = (filter: "all" | "at_risk" | "exceeded" | "safe") => {
+    setQuickFilter(filter);
   };
 
   const rightActions = (
@@ -79,6 +86,8 @@ export default function DemurrageAnalytics() {
         safe: containerStats.safe,
       }}
       rightActions={rightActions}
+      activeFilter={quickFilter}
+      onFilterChange={handleQuickFilterChange}
     >
       <div className="space-y-4">
         {/* Charts Row 1 */}

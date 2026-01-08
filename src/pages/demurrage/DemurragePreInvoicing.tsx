@@ -25,6 +25,7 @@ const mockContainers = [
 
 export default function DemurragePreInvoicing() {
   const [activeTab, setActiveTab] = useState("all");
+  const [quickFilter, setQuickFilter] = useState<"all" | "at_risk" | "exceeded" | "safe">("all");
 
   const formatCurrency = (value: number) => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(value);
 
@@ -78,6 +79,10 @@ export default function DemurragePreInvoicing() {
     return inv.workflow_status === activeTab;
   });
 
+  const handleQuickFilterChange = (filter: "all" | "at_risk" | "exceeded" | "safe") => {
+    setQuickFilter(filter);
+  };
+
   return (
     <DemurrageLayout
       metrics={{
@@ -86,6 +91,8 @@ export default function DemurragePreInvoicing() {
         exceeded: containerStats.exceeded,
         safe: containerStats.safe,
       }}
+      activeFilter={quickFilter}
+      onFilterChange={handleQuickFilterChange}
     >
       <div className="space-y-4">
         {/* Inner Nav */}
