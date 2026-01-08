@@ -1,6 +1,5 @@
 import { useState } from "react";
-import { PageLayout } from "@/components/layout/PageLayout";
-import { KpiCard } from "@/components/demurrage/KpiCard";
+import { DemurrageLayout } from "@/components/demurrage/DemurrageLayout";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
@@ -30,9 +29,16 @@ const mockRates = [
   { id: "4", armador: "MAERSK", container_type: "40DV", free_time_days: 7, period_type: "first_period", rate_usd: 180, period_start_day: 8, period_end_day: 14 },
 ];
 
+// Mock containers for metrics
+const mockContainers = [
+  { status: "safe" },
+  { status: "at_risk" },
+  { status: "exceeded" },
+  { status: "safe" },
+];
+
 export default function DemurrageRates() {
   const [showAddDialog, setShowAddDialog] = useState(false);
-  const [activeTab, setActiveTab] = useState("all");
   const [filterArmador, setFilterArmador] = useState<string>("all");
 
   const [formData, setFormData] = useState({
@@ -48,10 +54,16 @@ export default function DemurrageRates() {
   const armadors = [...new Set(mockRates.map(r => r.armador))].sort();
 
   const filteredRates = mockRates.filter(rate => {
-    if (activeTab !== 'all' && rate.container_type !== activeTab) return false;
     if (filterArmador !== 'all' && rate.armador !== filterArmador) return false;
     return true;
   });
+
+  const containerStats = {
+    total: mockContainers.length,
+    atRisk: mockContainers.filter(c => c.status === 'at_risk').length,
+    exceeded: mockContainers.filter(c => c.status === 'exceeded').length,
+    safe: mockContainers.filter(c => c.status === 'safe').length,
+  };
 
   const formatCurrency = (value: number) => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(value);
 
@@ -77,43 +89,26 @@ export default function DemurrageRates() {
     setShowAddDialog(false);
   };
 
+  const rightActions = (
+    <Button className="bg-[#ffc800] text-black hover:bg-[#e6b400]" onClick={() => setShowAddDialog(true)}>
+      <Plus className="h-4 w-4 mr-2" />
+      Nova Tarifa
+    </Button>
+  );
+
   return (
-    <PageLayout 
-      title="DACHSER" 
-      subtitle="Demurrage / Detention — Tarifas"
-      pageIcon={DollarSign}
+    <DemurrageLayout
+      metrics={{
+        totalContainers: containerStats.total,
+        atRisk: containerStats.atRisk,
+        exceeded: containerStats.exceeded,
+        safe: containerStats.safe,
+      }}
+      rightActions={rightActions}
     >
-      <div className="space-y-6">
-        {/* Actions */}
-        <div className="flex justify-end">
-          <Button onClick={() => setShowAddDialog(true)}>
-            <Plus className="h-4 w-4 mr-2" />
-            Nova Tarifa
-          </Button>
-        </div>
-
-        {/* Summary Cards */}
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
-          {CONTAINER_TYPES.slice(0, 6).map((type, index) => {
-            const count = mockRates.filter(r => r.container_type === type.value).length;
-            const isActive = activeTab === type.value;
-            return (
-              <KpiCard
-                key={type.value}
-                title={type.value}
-                value={count}
-                subtitle={`${7} dias FT`}
-                icon={<Clock className="h-5 w-5" />}
-                variant={isActive ? "primary" : "default"}
-                onClick={() => setActiveTab(activeTab === type.value ? 'all' : type.value)}
-                className={isActive ? "ring-2 ring-primary" : ""}
-              />
-            );
-          })}
-        </div>
-
+      <div className="space-y-4">
         {/* Filters */}
-        <Card className="bg-[rgba(0,0,0,0.5)] border-[rgba(255,255,255,0.1)]">
+        <Card className="bg-[rgba(5,6,18,0.85)] border-[rgba(255,255,255,0.1)]">
           <CardContent className="pt-4 pb-4">
             <div className="flex gap-4 items-center">
               <div className="flex items-center gap-2">
@@ -121,7 +116,7 @@ export default function DemurrageRates() {
                 <span className="text-sm font-medium">Filtros:</span>
               </div>
               <Select value={filterArmador} onValueChange={setFilterArmador}>
-                <SelectTrigger className="w-48 bg-background/50">
+                <SelectTrigger className="w-48 bg-[rgba(0,0,0,0.5)] border-[rgba(255,255,255,0.1)]">
                   <SelectValue placeholder="Armador" />
                 </SelectTrigger>
                 <SelectContent>
@@ -131,8 +126,8 @@ export default function DemurrageRates() {
                   ))}
                 </SelectContent>
               </Select>
-              {(activeTab !== 'all' || filterArmador !== 'all') && (
-                <Button variant="ghost" size="sm" onClick={() => { setActiveTab('all'); setFilterArmador('all'); }}>
+              {filterArmador !== 'all' && (
+                <Button variant="ghost" size="sm" onClick={() => setFilterArmador('all')} className="text-muted-foreground hover:text-white">
                   Limpar filtros
                 </Button>
               )}
@@ -141,14 +136,14 @@ export default function DemurrageRates() {
         </Card>
 
         {/* Rates Table */}
-        <Card className="bg-[rgba(0,0,0,0.5)] border-[rgba(255,255,255,0.1)]">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-foreground">
-              <TrendingUp className="h-5 w-5 text-primary" />
+        <Card className="bg-[rgba(5,6,18,0.85)] border-[rgba(255,255,255,0.1)]">
+          <CardHeader className="pb-3">
+            <CardTitle className="flex items-center gap-2 text-foreground text-base">
+              <TrendingUp className="h-5 w-5 text-[#ffc800]" />
               Tarifas Configuradas
             </CardTitle>
             <CardDescription>
-              {filteredRates.length} tarifa(s) {activeTab !== 'all' ? `para ${activeTab}` : ''} {filterArmador !== 'all' ? `- ${filterArmador}` : ''}
+              {filteredRates.length} tarifa(s) {filterArmador !== 'all' ? `- ${filterArmador}` : ''}
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -176,7 +171,7 @@ export default function DemurrageRates() {
                       <TableCell className="font-medium">{rate.armador}</TableCell>
                       <TableCell><span className="font-mono">{rate.container_type}</span></TableCell>
                       <TableCell className="text-center">
-                        <Badge variant="outline" className="bg-green-500/10 text-green-600">
+                        <Badge variant="outline" className="bg-green-500/10 text-green-500 border-green-500/20">
                           <Clock className="h-3 w-3 mr-1" />
                           {rate.free_time_days}d
                         </Badge>
@@ -189,14 +184,14 @@ export default function DemurrageRates() {
                       <TableCell className="text-center text-sm text-muted-foreground">
                         {rate.period_start_day}-{rate.period_end_day}
                       </TableCell>
-                      <TableCell className="text-right font-semibold text-primary">
+                      <TableCell className="text-right font-semibold text-[#ffc800]">
                         {formatCurrency(rate.rate_usd)}
                       </TableCell>
                       <TableCell className="text-right">
-                        <Button variant="ghost" size="sm">
+                        <Button variant="ghost" size="sm" className="text-muted-foreground hover:text-white">
                           <Edit className="h-4 w-4" />
                         </Button>
-                        <Button variant="ghost" size="sm" className="text-destructive">
+                        <Button variant="ghost" size="sm" className="text-red-500 hover:text-red-400">
                           <Trash2 className="h-4 w-4" />
                         </Button>
                       </TableCell>
@@ -210,7 +205,7 @@ export default function DemurrageRates() {
 
         {/* Add/Edit Dialog */}
         <Dialog open={showAddDialog} onOpenChange={setShowAddDialog}>
-          <DialogContent className="max-w-2xl">
+          <DialogContent className="max-w-2xl bg-[rgba(5,6,18,0.95)] border-[rgba(255,255,255,0.1)]">
             <DialogHeader>
               <DialogTitle>Nova Tarifa de Demurrage</DialogTitle>
               <DialogDescription>Configure Free Time e tarifas por período</DialogDescription>
@@ -225,13 +220,14 @@ export default function DemurrageRates() {
                     <Input 
                       value={formData.armador} 
                       onChange={e => setFormData({...formData, armador: e.target.value})} 
-                      placeholder="MSC, MAERSK, HAPAG..." 
+                      placeholder="MSC, MAERSK, HAPAG..."
+                      className="bg-[rgba(0,0,0,0.5)] border-[rgba(255,255,255,0.1)]"
                     />
                   </div>
                   <div>
                     <Label>Tipo de Container</Label>
                     <Select value={formData.container_type} onValueChange={(v) => setFormData(p => ({...p, container_type: v}))}>
-                      <SelectTrigger>
+                      <SelectTrigger className="bg-[rgba(0,0,0,0.5)] border-[rgba(255,255,255,0.1)]">
                         <SelectValue placeholder="Selecione" />
                       </SelectTrigger>
                       <SelectContent>
@@ -244,7 +240,7 @@ export default function DemurrageRates() {
                 </div>
               </div>
 
-              <Separator />
+              <Separator className="bg-[rgba(255,255,255,0.1)]" />
 
               <div>
                 <h4 className="text-sm font-medium mb-3">Free Time e Período</h4>
@@ -254,13 +250,14 @@ export default function DemurrageRates() {
                     <Input 
                       type="number" 
                       value={formData.free_time_days} 
-                      onChange={e => setFormData({...formData, free_time_days: e.target.value})} 
+                      onChange={e => setFormData({...formData, free_time_days: e.target.value})}
+                      className="bg-[rgba(0,0,0,0.5)] border-[rgba(255,255,255,0.1)]"
                     />
                   </div>
                   <div>
                     <Label>Período</Label>
                     <Select value={formData.period_type} onValueChange={(v) => setFormData(p => ({...p, period_type: v}))}>
-                      <SelectTrigger>
+                      <SelectTrigger className="bg-[rgba(0,0,0,0.5)] border-[rgba(255,255,255,0.1)]">
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
@@ -275,7 +272,8 @@ export default function DemurrageRates() {
                     <Input 
                       type="number" 
                       value={formData.rate_usd} 
-                      onChange={e => setFormData({...formData, rate_usd: e.target.value})} 
+                      onChange={e => setFormData({...formData, rate_usd: e.target.value})}
+                      className="bg-[rgba(0,0,0,0.5)] border-[rgba(255,255,255,0.1)]"
                     />
                   </div>
                 </div>
@@ -283,12 +281,16 @@ export default function DemurrageRates() {
             </div>
 
             <DialogFooter>
-              <Button variant="outline" onClick={() => setShowAddDialog(false)}>Cancelar</Button>
-              <Button onClick={handleSave}>Salvar Tarifa</Button>
+              <Button variant="outline" onClick={() => setShowAddDialog(false)} className="border-[rgba(255,255,255,0.2)]">
+                Cancelar
+              </Button>
+              <Button onClick={handleSave} className="bg-[#ffc800] text-black hover:bg-[#e6b400]">
+                Salvar Tarifa
+              </Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>
       </div>
-    </PageLayout>
+    </DemurrageLayout>
   );
 }

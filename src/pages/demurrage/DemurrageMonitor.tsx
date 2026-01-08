@@ -1,6 +1,5 @@
 import { useState } from "react";
-import { PageLayout } from "@/components/layout/PageLayout";
-import { KpiCard } from "@/components/demurrage/KpiCard";
+import { DemurrageLayout } from "@/components/demurrage/DemurrageLayout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -8,15 +7,11 @@ import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { 
-  Activity, 
   Package, 
   AlertTriangle, 
   Search, 
-  RefreshCw,
   Clock,
   CheckCircle2,
-  Ship,
-  TrendingUp,
   FileSpreadsheet
 } from "lucide-react";
 import { toast } from "sonner";
@@ -33,11 +28,12 @@ export default function DemurrageMonitor() {
   const [searchTerm, setSearchTerm] = useState("");
   const [filterStatus, setFilterStatus] = useState<string>("all");
   const [loading, setLoading] = useState(false);
+  const [isRefetching, setIsRefetching] = useState(false);
 
   const handleRefresh = () => {
-    setLoading(true);
+    setIsRefetching(true);
     setTimeout(() => {
-      setLoading(false);
+      setIsRefetching(false);
       toast.success("Dados atualizados");
     }, 1000);
   };
@@ -77,60 +73,30 @@ export default function DemurrageMonitor() {
     return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 0 }).format(value);
   };
 
+  const rightActions = (
+    <Button variant="outline" className="bg-[rgba(0,0,0,0.7)] border-[rgba(255,255,255,0.25)] text-[#aaaaaa] hover:text-white hover:bg-[rgba(0,0,0,0.9)]">
+      <FileSpreadsheet className="h-4 w-4 mr-2" />
+      Exportar
+    </Button>
+  );
+
   return (
-    <PageLayout 
-      title="DACHSER" 
-      subtitle="Demurrage / Detention — Monitor"
-      pageIcon={Activity}
+    <DemurrageLayout
+      metrics={{
+        totalContainers: stats.total,
+        atRisk: stats.atRisk,
+        exceeded: stats.exceeded,
+        safe: stats.safe,
+      }}
+      loading={loading}
+      onRefresh={handleRefresh}
+      isRefetching={isRefetching}
+      rightActions={rightActions}
     >
-      <div className="space-y-6">
-        {/* Actions */}
-        <div className="flex justify-end gap-2">
-          <Button variant="outline" onClick={handleRefresh} disabled={loading}>
-            <RefreshCw className={`h-4 w-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
-            Atualizar
-          </Button>
-          <Button variant="outline">
-            <FileSpreadsheet className="h-4 w-4 mr-2" />
-            Exportar
-          </Button>
-        </div>
-
-        {/* KPIs */}
-        <div className="grid gap-4 md:grid-cols-4">
-          <KpiCard
-            title="TOTAL MONITORADOS"
-            value={stats.total}
-            subtitle="Containers ativos"
-            icon={<Ship className="h-6 w-6" />}
-            variant="primary"
-          />
-          <KpiCard
-            title="EM TRÂNSITO"
-            value={stats.safe}
-            subtitle="Dentro do Free Time"
-            icon={<TrendingUp className="h-6 w-6" />}
-            variant="success"
-          />
-          <KpiCard
-            title="EM ALERTA"
-            value={stats.atRisk}
-            subtitle="Próximo ao vencimento"
-            icon={<Clock className="h-6 w-6" />}
-            variant="warning"
-          />
-          <KpiCard
-            title="EXCEDIDOS"
-            value={stats.exceeded}
-            subtitle="Free Time expirado"
-            icon={<AlertTriangle className="h-6 w-6" />}
-            variant="danger"
-          />
-        </div>
-
+      <div className="space-y-4">
         {/* Filters */}
-        <Card className="bg-[rgba(0,0,0,0.5)] border-[rgba(255,255,255,0.1)]">
-          <CardContent className="pt-6">
+        <Card className="bg-[rgba(5,6,18,0.85)] border-[rgba(255,255,255,0.1)]">
+          <CardContent className="pt-4 pb-4">
             <div className="flex gap-4 items-center">
               <div className="flex-1">
                 <div className="relative">
@@ -139,12 +105,12 @@ export default function DemurrageMonitor() {
                     placeholder="Buscar por container, MBL ou cliente..."
                     value={searchTerm}
                     onChange={(e) => setSearchTerm(e.target.value)}
-                    className="pl-10 bg-background/50"
+                    className="pl-10 bg-[rgba(0,0,0,0.5)] border-[rgba(255,255,255,0.1)]"
                   />
                 </div>
               </div>
               <Select value={filterStatus} onValueChange={setFilterStatus}>
-                <SelectTrigger className="w-40 bg-background/50">
+                <SelectTrigger className="w-40 bg-[rgba(0,0,0,0.5)] border-[rgba(255,255,255,0.1)]">
                   <SelectValue placeholder="Status" />
                 </SelectTrigger>
                 <SelectContent>
@@ -160,10 +126,10 @@ export default function DemurrageMonitor() {
         </Card>
 
         {/* Table */}
-        <Card className="bg-[rgba(0,0,0,0.5)] border-[rgba(255,255,255,0.1)]">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-foreground">
-              <Package className="h-5 w-5 text-primary" />
+        <Card className="bg-[rgba(5,6,18,0.85)] border-[rgba(255,255,255,0.1)]">
+          <CardHeader className="pb-3">
+            <CardTitle className="flex items-center gap-2 text-foreground text-base">
+              <Package className="h-5 w-5 text-[#ffc800]" />
               Containers ({filteredContainers.length})
             </CardTitle>
           </CardHeader>
@@ -189,7 +155,7 @@ export default function DemurrageMonitor() {
                 </TableHeader>
                 <TableBody>
                   {filteredContainers.map((container) => (
-                    <TableRow key={container.id} className="border-[rgba(255,255,255,0.1)] cursor-pointer hover:bg-primary/5">
+                    <TableRow key={container.id} className="border-[rgba(255,255,255,0.1)] cursor-pointer hover:bg-[rgba(255,200,0,0.05)]">
                       <TableCell className="font-mono font-medium">{container.numero}</TableCell>
                       <TableCell className="font-mono text-sm">{container.master}</TableCell>
                       <TableCell>{container.cliente}</TableCell>
@@ -201,7 +167,7 @@ export default function DemurrageMonitor() {
                         </Badge>
                       </TableCell>
                       <TableCell>{getRiskBadge(container.status)}</TableCell>
-                      <TableCell className="text-right font-semibold text-primary">
+                      <TableCell className="text-right font-semibold text-[#ffc800]">
                         {container.demurrage > 0 ? formatCurrency(container.demurrage) : '-'}
                       </TableCell>
                     </TableRow>
@@ -212,6 +178,6 @@ export default function DemurrageMonitor() {
           </CardContent>
         </Card>
       </div>
-    </PageLayout>
+    </DemurrageLayout>
   );
 }
