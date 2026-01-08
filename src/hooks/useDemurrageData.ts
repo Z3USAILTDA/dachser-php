@@ -96,20 +96,24 @@ export function useDemurrageData(filters?: DemurrageFilters) {
   return useQuery({
     queryKey: ['demurrage_containers', filters],
     queryFn: async () => {
-      const { data, error } = await supabase.functions.invoke('mariadb-proxy', {
-        body: {
-          action: 'demurrage_get_containers',
-          search: filters?.search,
-          risk_status: filters?.risk_status,
-          cronos_status: filters?.cronos_status,
-          cronos_status_list: filters?.cronos_status_list,
-          cliente: filters?.cliente,
-          armador: filters?.armador,
-          pre_invoice_status: filters?.pre_invoice_status,
-          dispute_status: filters?.dispute_status,
-          audit_status: filters?.audit_status,
-        }
-      });
+      // Build request body, only including non-empty values
+      const body: Record<string, unknown> = {
+        action: 'demurrage_get_containers',
+      };
+      
+      if (filters?.search) body.search = filters.search;
+      if (filters?.risk_status) body.risk_status = filters.risk_status;
+      if (filters?.cronos_status) body.cronos_status = filters.cronos_status;
+      if (filters?.cronos_status_list && filters.cronos_status_list.length > 0) {
+        body.cronos_status_list = filters.cronos_status_list;
+      }
+      if (filters?.cliente) body.cliente = filters.cliente;
+      if (filters?.armador) body.armador = filters.armador;
+      if (filters?.pre_invoice_status) body.pre_invoice_status = filters.pre_invoice_status;
+      if (filters?.dispute_status) body.dispute_status = filters.dispute_status;
+      if (filters?.audit_status) body.audit_status = filters.audit_status;
+      
+      const { data, error } = await supabase.functions.invoke('mariadb-proxy', { body });
       if (error) throw error;
       if (!data.success) throw new Error(data.error || 'Failed to fetch containers');
       return (data.data || []) as DemurrageContainer[];
