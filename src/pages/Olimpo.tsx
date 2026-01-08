@@ -490,6 +490,10 @@ export default function Olimpo() {
       }
 
       // SEA data - buscar da tela de monitoramento (t_tracking_sea)
+      // Primeiro, sincronizar dados e buscar coordenadas via JSONCARGO em background
+      fetch(`${baseUrl}?action=sync_olimpo_from_monitoring`).catch(() => {});
+      fetch(`${baseUrl}?action=refresh_sea_tracking_smart`).catch(() => {});
+      
       const seaRes = await fetch(`${baseUrl}?action=olimpo_sea_from_monitoring`);
       const seaJson = await seaRes.json();
       const seaArr = Array.isArray(seaJson?.data) ? seaJson.data : [];
@@ -502,7 +506,7 @@ export default function Olimpo() {
         
         if (!oCode || !dCode) continue;
 
-        // Usar coordenadas pré-salvas do banco
+        // Usar coordenadas pré-salvas do banco (com fallback de portos conhecidos no backend)
         const orig: [number, number] | null = 
           s.origem_lat && s.origem_lon 
             ? [Number(s.origem_lat), Number(s.origem_lon)] 
@@ -512,8 +516,9 @@ export default function Olimpo() {
             ? [Number(s.destino_lat), Number(s.destino_lon)] 
             : null;
           
-        // Se não tem coordenadas, pular (será preenchido no próximo sync)
-        if (!orig || !dest) continue;
+        // Se não tem coordenadas de origem/destino, pular (backend deve fornecer via fallback de portos)
+        // Mas não bloqueamos completamente - mostramos com rota se tiver pelo menos uma coordenada
+        if (!orig && !dest) continue;
 
         const etaIso = s.eta ? new Date(s.eta).toISOString() : null;
         const mblId = s.mbl_id || `sea-${newData.length}`;
