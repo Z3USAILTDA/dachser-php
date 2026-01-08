@@ -66,24 +66,23 @@ export function RegisterFreeTimeDialog({
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (!clienteNome.trim()) {
-      return;
+    // Para CONTRATO: cliente obrigatório + vigência
+    if (tipoFt === 'CONTRATO') {
+      if (!clienteNome.trim()) return;
+      if (!vigenciaInicio || !vigenciaFim) return;
     }
 
-    if (tipoFt === 'CONTRATO' && (!vigenciaInicio || !vigenciaFim)) {
-      return;
-    }
-
+    // Para PROCESSO: apenas MBL obrigatório
     if (tipoFt === 'PROCESSO' && !mbl.trim()) {
       return;
     }
 
     const data: CreateClientFreeTimeData = {
-      cliente_nome: clienteNome.trim(),
-      cliente_cnpj: clienteCnpj.trim() || undefined,
+      cliente_nome: tipoFt === 'CONTRATO' ? clienteNome.trim() : (mbl.trim() || 'Processo'),
+      cliente_cnpj: tipoFt === 'CONTRATO' ? (clienteCnpj.trim() || undefined) : undefined,
       tipo_ft: tipoFt,
       free_time_days: freeTimeDays,
-      armador: armador || undefined,
+      armador: tipoFt === 'CONTRATO' ? (armador || undefined) : undefined,
       notas: notas.trim() || undefined,
     };
 
@@ -140,30 +139,32 @@ export function RegisterFreeTimeDialog({
             </RadioGroup>
           </div>
 
-          {/* Cliente */}
-          <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-2">
-              <Label htmlFor="clienteNome" className="text-gray-300">Nome do Cliente *</Label>
-              <Input
-                id="clienteNome"
-                value={clienteNome}
-                onChange={(e) => setClienteNome(e.target.value)}
-                placeholder="Ex: Empresa ABC Ltda"
-                className="bg-[#111] border-[#333] text-white placeholder:text-gray-500"
-                required
-              />
+          {/* Cliente - apenas para CONTRATO */}
+          {tipoFt === 'CONTRATO' && (
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-2">
+                <Label htmlFor="clienteNome" className="text-gray-300">Nome do Cliente *</Label>
+                <Input
+                  id="clienteNome"
+                  value={clienteNome}
+                  onChange={(e) => setClienteNome(e.target.value)}
+                  placeholder="Ex: Empresa ABC Ltda"
+                  className="bg-[#111] border-[#333] text-white placeholder:text-gray-500"
+                  required
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="clienteCnpj" className="text-gray-300">CNPJ</Label>
+                <Input
+                  id="clienteCnpj"
+                  value={clienteCnpj}
+                  onChange={(e) => setClienteCnpj(e.target.value)}
+                  placeholder="00.000.000/0000-00"
+                  className="bg-[#111] border-[#333] text-white placeholder:text-gray-500"
+                />
+              </div>
             </div>
-            <div className="space-y-2">
-              <Label htmlFor="clienteCnpj" className="text-gray-300">CNPJ</Label>
-              <Input
-                id="clienteCnpj"
-                value={clienteCnpj}
-                onChange={(e) => setClienteCnpj(e.target.value)}
-                placeholder="00.000.000/0000-00"
-                className="bg-[#111] border-[#333] text-white placeholder:text-gray-500"
-              />
-            </div>
-          </div>
+          )}
 
           {/* Campos condicionais por tipo */}
           {tipoFt === 'CONTRATO' ? (
@@ -206,7 +207,7 @@ export function RegisterFreeTimeDialog({
           )}
 
           {/* Free Time e Armador */}
-          <div className="grid grid-cols-2 gap-3">
+          <div className={tipoFt === 'CONTRATO' ? "grid grid-cols-2 gap-3" : ""}>
             <div className="space-y-2">
               <Label htmlFor="freeTimeDays" className="text-gray-300">Free Time (dias) *</Label>
               <Input
@@ -220,21 +221,23 @@ export function RegisterFreeTimeDialog({
                 required
               />
             </div>
-            <div className="space-y-2">
-              <Label htmlFor="armador" className="text-gray-300">Armador</Label>
-              <Select value={armador} onValueChange={setArmador}>
-                <SelectTrigger className="bg-[#111] border-[#333] text-white">
-                  <SelectValue placeholder="Selecione (opcional)" />
-                </SelectTrigger>
-                <SelectContent className="bg-[#1a1a1a] border-[#333]">
-                  {ARMADORES.map((arm) => (
-                    <SelectItem key={arm} value={arm} className="text-white hover:bg-[#333]">
-                      {arm}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
+            {tipoFt === 'CONTRATO' && (
+              <div className="space-y-2">
+                <Label htmlFor="armador" className="text-gray-300">Armador</Label>
+                <Select value={armador} onValueChange={setArmador}>
+                  <SelectTrigger className="bg-[#111] border-[#333] text-white">
+                    <SelectValue placeholder="Selecione (opcional)" />
+                  </SelectTrigger>
+                  <SelectContent className="bg-[#1a1a1a] border-[#333]">
+                    {ARMADORES.map((arm) => (
+                      <SelectItem key={arm} value={arm} className="text-white hover:bg-[#333]">
+                        {arm}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
           </div>
 
           {/* Notas */}
