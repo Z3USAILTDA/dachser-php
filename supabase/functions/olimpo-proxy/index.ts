@@ -5196,7 +5196,7 @@ serve(async (req) => {
             ot.last_api_update
           FROM dados_dachser.t_tracking_sea ts
           LEFT JOIN dados_dachser.t_olimpo_tracking ot 
-            ON ot.mode = 'sea' AND ot.asset = ts.mbl_id
+            ON ot.mode = 'sea' AND ot.asset COLLATE utf8mb4_unicode_ci = ts.mbl_id COLLATE utf8mb4_unicode_ci
           WHERE ts.active = 1
             AND NOT (
               UPPER(ts.container_status) IN ('DELIVERED', 'DLV', 'GOD', 'EMPTY_RETURNED')
