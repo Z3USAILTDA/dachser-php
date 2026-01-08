@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { DemurrageLayout } from "@/components/demurrage/DemurrageLayout";
+import { KpiCard } from "@/components/demurrage/KpiCard";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
@@ -29,18 +30,12 @@ const mockRates = [
   { id: "4", armador: "MAERSK", container_type: "40DV", free_time_days: 7, period_type: "first_period", rate_usd: 180, period_start_day: 8, period_end_day: 14 },
 ];
 
-// Mock containers for metrics
-const mockContainers = [
-  { status: "safe" },
-  { status: "at_risk" },
-  { status: "exceeded" },
-  { status: "safe" },
-];
+type QuickFilter = "20DV" | "40DV" | "40HC" | "20RF" | "40RF" | "45HC" | "all";
 
 export default function DemurrageRates() {
   const [showAddDialog, setShowAddDialog] = useState(false);
   const [filterArmador, setFilterArmador] = useState<string>("all");
-  const [quickFilter, setQuickFilter] = useState<"all" | "at_risk" | "exceeded" | "safe">("all");
+  const [quickFilter, setQuickFilter] = useState<QuickFilter>("all");
 
   const [formData, setFormData] = useState({
     container_type: '',
@@ -55,16 +50,10 @@ export default function DemurrageRates() {
   const armadors = [...new Set(mockRates.map(r => r.armador))].sort();
 
   const filteredRates = mockRates.filter(rate => {
-    if (filterArmador !== 'all' && rate.armador !== filterArmador) return false;
-    return true;
+    const matchesArmador = filterArmador === 'all' || rate.armador === filterArmador;
+    const matchesQuickFilter = quickFilter === 'all' || rate.container_type === quickFilter;
+    return matchesArmador && matchesQuickFilter;
   });
-
-  const containerStats = {
-    total: mockContainers.length,
-    atRisk: mockContainers.filter(c => c.status === 'at_risk').length,
-    exceeded: mockContainers.filter(c => c.status === 'exceeded').length,
-    safe: mockContainers.filter(c => c.status === 'safe').length,
-  };
 
   const formatCurrency = (value: number) => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(value);
 
@@ -90,7 +79,7 @@ export default function DemurrageRates() {
     setShowAddDialog(false);
   };
 
-  const handleQuickFilterChange = (filter: "all" | "at_risk" | "exceeded" | "safe") => {
+  const handleQuickFilterChange = (filter: QuickFilter) => {
     setQuickFilter(filter);
   };
 
@@ -101,17 +90,69 @@ export default function DemurrageRates() {
     </Button>
   );
 
+  const customCards = (
+    <div className="grid gap-4 grid-cols-2 md:grid-cols-3 xl:grid-cols-6">
+      <KpiCard
+        title="20DV"
+        value={5}
+        subtitle="5 dias FT"
+        icon={<Clock className="h-5 w-5" />}
+        variant="default"
+        isActive={quickFilter === "20DV"}
+        onClick={() => handleQuickFilterChange("20DV")}
+      />
+      <KpiCard
+        title="40DV"
+        value={5}
+        subtitle="5 dias FT"
+        icon={<Clock className="h-5 w-5" />}
+        variant="default"
+        isActive={quickFilter === "40DV"}
+        onClick={() => handleQuickFilterChange("40DV")}
+      />
+      <KpiCard
+        title="40HC"
+        value={0}
+        subtitle="- dias FT"
+        icon={<Clock className="h-5 w-5" />}
+        variant="default"
+        isActive={quickFilter === "40HC"}
+        onClick={() => handleQuickFilterChange("40HC")}
+      />
+      <KpiCard
+        title="20RF"
+        value={4}
+        subtitle="2 dias FT"
+        icon={<Clock className="h-5 w-5" />}
+        variant="default"
+        isActive={quickFilter === "20RF"}
+        onClick={() => handleQuickFilterChange("20RF")}
+      />
+      <KpiCard
+        title="40RF"
+        value={9}
+        subtitle="2 dias FT"
+        icon={<Clock className="h-5 w-5" />}
+        variant="default"
+        isActive={quickFilter === "40RF"}
+        onClick={() => handleQuickFilterChange("40RF")}
+      />
+      <KpiCard
+        title="45HC"
+        value={0}
+        subtitle="- dias FT"
+        icon={<Clock className="h-5 w-5" />}
+        variant="default"
+        isActive={quickFilter === "45HC"}
+        onClick={() => handleQuickFilterChange("45HC")}
+      />
+    </div>
+  );
+
   return (
     <DemurrageLayout
-      metrics={{
-        totalContainers: containerStats.total,
-        atRisk: containerStats.atRisk,
-        exceeded: containerStats.exceeded,
-        safe: containerStats.safe,
-      }}
       rightActions={rightActions}
-      activeFilter={quickFilter}
-      onFilterChange={handleQuickFilterChange}
+      customCards={customCards}
     >
       <div className="space-y-4">
         {/* Filters */}
@@ -133,8 +174,8 @@ export default function DemurrageRates() {
                   ))}
                 </SelectContent>
               </Select>
-              {filterArmador !== 'all' && (
-                <Button variant="ghost" size="sm" onClick={() => setFilterArmador('all')} className="text-muted-foreground hover:text-white">
+              {(filterArmador !== 'all' || quickFilter !== 'all') && (
+                <Button variant="ghost" size="sm" onClick={() => { setFilterArmador('all'); setQuickFilter('all'); }} className="text-muted-foreground hover:text-white">
                   Limpar filtros
                 </Button>
               )}

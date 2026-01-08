@@ -1,11 +1,12 @@
 import { useState } from "react";
 import { DemurrageLayout } from "@/components/demurrage/DemurrageLayout";
+import { KpiCard } from "@/components/demurrage/KpiCard";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
-import { Ship, Plus, Search, AlertTriangle, CheckCircle2, FileSearch, FileSpreadsheet } from "lucide-react";
+import { Ship, Plus, Search, AlertTriangle, CheckCircle2, FileSearch, FileSpreadsheet, DollarSign, Clock } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 // Mock data
@@ -16,20 +17,14 @@ const mockInvoices = [
   { id: "4", invoice_number: "INV-CMA-004", armador: "CMA CGM", container: "CMAU5678901", cliente: "CLIENTE ABC", days_charged: 6, cost_usd: 900, audit_status: "validated" },
 ];
 
-// Mock containers for metrics
-const mockContainers = [
-  { status: "safe" },
-  { status: "at_risk" },
-  { status: "exceeded" },
-  { status: "safe" },
-];
+type QuickFilter = "all" | "validated" | "discrepancy" | "pending";
 
 export default function DemurrageCarrierCosts() {
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [searchTerm, setSearchTerm] = useState("");
-  const [quickFilter, setQuickFilter] = useState<"all" | "at_risk" | "exceeded" | "safe">("all");
+  const [quickFilter, setQuickFilter] = useState<QuickFilter>("all");
 
-  const formatCurrency = (value: number) => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(value);
+  const formatCurrency = (value: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'USD', minimumFractionDigits: 2 }).format(value);
 
   const getStatusBadge = (status: string) => {
     switch (status) {
@@ -44,11 +39,11 @@ export default function DemurrageCarrierCosts() {
     }
   };
 
-  const containerStats = {
-    total: mockContainers.length,
-    atRisk: mockContainers.filter(c => c.status === 'at_risk').length,
-    exceeded: mockContainers.filter(c => c.status === 'exceeded').length,
-    safe: mockContainers.filter(c => c.status === 'safe').length,
+  const stats = {
+    totalCost: mockInvoices.reduce((sum, inv) => sum + inv.cost_usd, 0),
+    validated: mockInvoices.filter(inv => inv.audit_status === 'validated').reduce((sum, inv) => sum + inv.cost_usd, 0),
+    discrepancy: mockInvoices.filter(inv => inv.audit_status === 'discrepancy').reduce((sum, inv) => sum + inv.cost_usd, 0),
+    pending: mockInvoices.filter(inv => inv.audit_status === 'pending').reduce((sum, inv) => sum + inv.cost_usd, 0),
   };
 
   const filteredInvoices = mockInvoices.filter(inv => {
@@ -57,11 +52,17 @@ export default function DemurrageCarrierCosts() {
       inv.invoice_number.toLowerCase().includes(searchTerm.toLowerCase()) ||
       inv.armador.toLowerCase().includes(searchTerm.toLowerCase()) ||
       inv.container.toLowerCase().includes(searchTerm.toLowerCase());
+    
+    let matchesQuickFilter = true;
+    if (quickFilter !== "all") {
+      matchesQuickFilter = inv.audit_status === quickFilter;
+    }
+    
     const matchesStatus = statusFilter === "all" || inv.audit_status === statusFilter;
-    return matchesSearch && matchesStatus;
+    return matchesSearch && matchesQuickFilter && matchesStatus;
   });
 
-  const handleQuickFilterChange = (filter: "all" | "at_risk" | "exceeded" | "safe") => {
+  const handleQuickFilterChange = (filter: QuickFilter) => {
     setQuickFilter(filter);
   };
 
@@ -69,7 +70,7 @@ export default function DemurrageCarrierCosts() {
     <div className="flex gap-2">
       <Button variant="outline" className="bg-[rgba(0,0,0,0.7)] border-[rgba(255,255,255,0.25)] text-[#aaaaaa] hover:text-white hover:bg-[rgba(0,0,0,0.9)]">
         <FileSpreadsheet className="h-4 w-4 mr-2" />
-        Exportar
+        Exportar Excel
       </Button>
       <Button className="bg-[#ffc800] text-black hover:bg-[#e6b400]">
         <Plus className="h-4 w-4 mr-2" />
@@ -78,17 +79,51 @@ export default function DemurrageCarrierCosts() {
     </div>
   );
 
+  const customCards = (
+    <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+      <KpiCard
+        title="TOTAL CUSTOS"
+        value={formatCurrency(75980)}
+        subtitle="Faturas recebidas"
+        icon={<DollarSign className="h-6 w-6" />}
+        variant="default"
+        isActive={quickFilter === "all"}
+        onClick={() => handleQuickFilterChange("all")}
+      />
+      <KpiCard
+        title="VALIDADAS"
+        value="US$ 0,00"
+        subtitle="Auditoria concluída"
+        icon={<CheckCircle2 className="h-6 w-6" />}
+        variant="success"
+        isActive={quickFilter === "validated"}
+        onClick={() => handleQuickFilterChange("validated")}
+      />
+      <KpiCard
+        title="DISCREPÂNCIAS"
+        value="US$ 0,00"
+        subtitle="Requer análise"
+        icon={<AlertTriangle className="h-6 w-6" />}
+        variant="critical"
+        isActive={quickFilter === "discrepancy"}
+        onClick={() => handleQuickFilterChange("discrepancy")}
+      />
+      <KpiCard
+        title="PENDENTES"
+        value={formatCurrency(12480)}
+        subtitle="Aguardando auditoria"
+        icon={<Clock className="h-6 w-6" />}
+        variant="warning"
+        isActive={quickFilter === "pending"}
+        onClick={() => handleQuickFilterChange("pending")}
+      />
+    </div>
+  );
+
   return (
     <DemurrageLayout
-      metrics={{
-        totalContainers: containerStats.total,
-        atRisk: containerStats.atRisk,
-        exceeded: containerStats.exceeded,
-        safe: containerStats.safe,
-      }}
       rightActions={rightActions}
-      activeFilter={quickFilter}
-      onFilterChange={handleQuickFilterChange}
+      customCards={customCards}
     >
       <div className="space-y-4">
         {/* Filters */}
