@@ -47,6 +47,168 @@ function toApiShippingLine(displayName: string): string {
   return map[displayName] || displayName;
 }
 
+// Dicionário de coordenadas de portos conhecidos (fallback quando JSONCARGO não retorna)
+const PORT_COORDINATES: Record<string, { lat: number; lon: number }> = {
+  // Brasil
+  'SANTOS': { lat: -23.9618, lon: -46.3322 },
+  'BRSSZ': { lat: -23.9618, lon: -46.3322 },
+  'PARANAGUA': { lat: -25.5166, lon: -48.5110 },
+  'BRPNG': { lat: -25.5166, lon: -48.5110 },
+  'RIO GRANDE': { lat: -32.0351, lon: -52.0986 },
+  'BRRIG': { lat: -32.0351, lon: -52.0986 },
+  'ITAJAI': { lat: -26.9078, lon: -48.6619 },
+  'BRITJ': { lat: -26.9078, lon: -48.6619 },
+  'NAVEGANTES': { lat: -26.8978, lon: -48.6447 },
+  'BRNVT': { lat: -26.8978, lon: -48.6447 },
+  'ITAPOA': { lat: -26.1167, lon: -48.6167 },
+  'BRIOA': { lat: -26.1167, lon: -48.6167 },
+  'RIO DE JANEIRO': { lat: -22.8908, lon: -43.1729 },
+  'BRRIO': { lat: -22.8908, lon: -43.1729 },
+  'VITORIA': { lat: -20.3155, lon: -40.2922 },
+  'BRVIX': { lat: -20.3155, lon: -40.2922 },
+  'SALVADOR': { lat: -12.9714, lon: -38.5014 },
+  'BRSSA': { lat: -12.9714, lon: -38.5014 },
+  'SUAPE': { lat: -8.3936, lon: -34.9506 },
+  'BRSUA': { lat: -8.3936, lon: -34.9506 },
+  'PECEM': { lat: -3.5328, lon: -38.7922 },
+  'BRPEC': { lat: -3.5328, lon: -38.7922 },
+  'MANAUS': { lat: -3.1019, lon: -60.0250 },
+  'BRMAO': { lat: -3.1019, lon: -60.0250 },
+  // China
+  'SHANGHAI': { lat: 31.2304, lon: 121.4737 },
+  'CNSHA': { lat: 31.2304, lon: 121.4737 },
+  'NINGBO': { lat: 29.8683, lon: 121.5440 },
+  'CNNGB': { lat: 29.8683, lon: 121.5440 },
+  'SHENZHEN': { lat: 22.5431, lon: 114.0579 },
+  'CNSZX': { lat: 22.5431, lon: 114.0579 },
+  'YANTIAN': { lat: 22.5805, lon: 114.2825 },
+  'CNYTN': { lat: 22.5805, lon: 114.2825 },
+  'QINGDAO': { lat: 36.0671, lon: 120.3826 },
+  'CNTAO': { lat: 36.0671, lon: 120.3826 },
+  'XIAMEN': { lat: 24.4798, lon: 118.0894 },
+  'CNXMN': { lat: 24.4798, lon: 118.0894 },
+  'GUANGZHOU': { lat: 23.1291, lon: 113.2644 },
+  'CNCAN': { lat: 23.1291, lon: 113.2644 },
+  'HONG KONG': { lat: 22.3193, lon: 114.1694 },
+  'HKHKG': { lat: 22.3193, lon: 114.1694 },
+  'TIANJIN': { lat: 38.9965, lon: 117.7327 },
+  'CNTSN': { lat: 38.9965, lon: 117.7327 },
+  'DALIAN': { lat: 38.9140, lon: 121.6147 },
+  'CNDLC': { lat: 38.9140, lon: 121.6147 },
+  // Ásia
+  'SINGAPORE': { lat: 1.2897, lon: 103.8501 },
+  'SGSIN': { lat: 1.2897, lon: 103.8501 },
+  'BUSAN': { lat: 35.1028, lon: 129.0403 },
+  'KRPUS': { lat: 35.1028, lon: 129.0403 },
+  'TOKYO': { lat: 35.6762, lon: 139.6503 },
+  'JPTYO': { lat: 35.6762, lon: 139.6503 },
+  'YOKOHAMA': { lat: 35.4437, lon: 139.6380 },
+  'JPYOK': { lat: 35.4437, lon: 139.6380 },
+  'KAOHSIUNG': { lat: 22.6163, lon: 120.2661 },
+  'TWKHH': { lat: 22.6163, lon: 120.2661 },
+  'BANGKOK': { lat: 13.7563, lon: 100.5018 },
+  'THBKK': { lat: 13.7563, lon: 100.5018 },
+  'LAEM CHABANG': { lat: 13.0827, lon: 100.8837 },
+  'THLCH': { lat: 13.0827, lon: 100.8837 },
+  'HO CHI MINH': { lat: 10.7769, lon: 106.7009 },
+  'VNSGN': { lat: 10.7769, lon: 106.7009 },
+  'HAIPHONG': { lat: 20.8449, lon: 106.6881 },
+  'VNHPH': { lat: 20.8449, lon: 106.6881 },
+  'MANILA': { lat: 14.5995, lon: 120.9842 },
+  'PHMNL': { lat: 14.5995, lon: 120.9842 },
+  'PORT KLANG': { lat: 3.0319, lon: 101.4101 },
+  'MYPKG': { lat: 3.0319, lon: 101.4101 },
+  'TANJUNG PELEPAS': { lat: 1.3667, lon: 103.5500 },
+  'MYTPP': { lat: 1.3667, lon: 103.5500 },
+  'COLOMBO': { lat: 6.9271, lon: 79.8612 },
+  'LKCMB': { lat: 6.9271, lon: 79.8612 },
+  'MUNDRA': { lat: 22.8396, lon: 69.7050 },
+  'INMUN': { lat: 22.8396, lon: 69.7050 },
+  'NHAVA SHEVA': { lat: 18.9500, lon: 72.9500 },
+  'INNSA': { lat: 18.9500, lon: 72.9500 },
+  // Europa
+  'ROTTERDAM': { lat: 51.9225, lon: 4.4792 },
+  'NLRTM': { lat: 51.9225, lon: 4.4792 },
+  'ANTWERP': { lat: 51.2194, lon: 4.4025 },
+  'BEANR': { lat: 51.2194, lon: 4.4025 },
+  'HAMBURG': { lat: 53.5511, lon: 9.9937 },
+  'DEHAM': { lat: 53.5511, lon: 9.9937 },
+  'BREMERHAVEN': { lat: 53.5396, lon: 8.5809 },
+  'DEBRV': { lat: 53.5396, lon: 8.5809 },
+  'LE HAVRE': { lat: 49.4944, lon: 0.1079 },
+  'FRLEH': { lat: 49.4944, lon: 0.1079 },
+  'VALENCIA': { lat: 39.4699, lon: -0.3763 },
+  'ESVLC': { lat: 39.4699, lon: -0.3763 },
+  'BARCELONA': { lat: 41.3851, lon: 2.1734 },
+  'ESBCN': { lat: 41.3851, lon: 2.1734 },
+  'FELIXSTOWE': { lat: 51.9607, lon: 1.3056 },
+  'GBFXT': { lat: 51.9607, lon: 1.3056 },
+  'SOUTHAMPTON': { lat: 50.8998, lon: -1.4044 },
+  'GBSOU': { lat: 50.8998, lon: -1.4044 },
+  'PIRAEUS': { lat: 37.9488, lon: 23.6428 },
+  'GRPIR': { lat: 37.9488, lon: 23.6428 },
+  'GENOA': { lat: 44.4056, lon: 8.9463 },
+  'ITGOA': { lat: 44.4056, lon: 8.9463 },
+  // América do Norte
+  'LOS ANGELES': { lat: 33.7405, lon: -118.2607 },
+  'USLAX': { lat: 33.7405, lon: -118.2607 },
+  'LONG BEACH': { lat: 33.7675, lon: -118.1892 },
+  'USLGB': { lat: 33.7675, lon: -118.1892 },
+  'NEW YORK': { lat: 40.6892, lon: -74.0445 },
+  'USNYC': { lat: 40.6892, lon: -74.0445 },
+  'SAVANNAH': { lat: 32.0809, lon: -81.0912 },
+  'USSAV': { lat: 32.0809, lon: -81.0912 },
+  'HOUSTON': { lat: 29.7604, lon: -95.3698 },
+  'USHOU': { lat: 29.7604, lon: -95.3698 },
+  'MIAMI': { lat: 25.7617, lon: -80.1918 },
+  'USMIA': { lat: 25.7617, lon: -80.1918 },
+  'CHARLESTON': { lat: 32.7833, lon: -79.9333 },
+  'USCHS': { lat: 32.7833, lon: -79.9333 },
+  'SEATTLE': { lat: 47.6062, lon: -122.3321 },
+  'USSEA': { lat: 47.6062, lon: -122.3321 },
+  'VANCOUVER': { lat: 49.2827, lon: -123.1207 },
+  'CAVAN': { lat: 49.2827, lon: -123.1207 },
+  // América do Sul (outros)
+  'BUENOS AIRES': { lat: -34.6037, lon: -58.3816 },
+  'ARBUE': { lat: -34.6037, lon: -58.3816 },
+  'MONTEVIDEO': { lat: -34.9011, lon: -56.1645 },
+  'UYMVD': { lat: -34.9011, lon: -56.1645 },
+  'CALLAO': { lat: -12.0464, lon: -77.0428 },
+  'PECLL': { lat: -12.0464, lon: -77.0428 },
+  'VALPARAISO': { lat: -33.0458, lon: -71.6197 },
+  'CLVAP': { lat: -33.0458, lon: -71.6197 },
+  'SAN ANTONIO': { lat: -33.5929, lon: -71.6217 },
+  'CLSAI': { lat: -33.5929, lon: -71.6217 },
+  'CARTAGENA': { lat: 10.3910, lon: -75.4794 },
+  'COCTG': { lat: 10.3910, lon: -75.4794 },
+  // Oriente Médio
+  'JEBEL ALI': { lat: 25.0069, lon: 55.0606 },
+  'AEJEA': { lat: 25.0069, lon: 55.0606 },
+  'DUBAI': { lat: 25.2048, lon: 55.2708 },
+  'AEDXB': { lat: 25.2048, lon: 55.2708 },
+  // Hub Transshipment
+  'KINGSTON': { lat: 17.9821, lon: -76.8409 },
+  'JMKIN': { lat: 17.9821, lon: -76.8409 },
+  'PANAMA': { lat: 9.0019, lon: -79.5012 },
+  'PAPTY': { lat: 9.0019, lon: -79.5012 },
+  'COLON': { lat: 9.3590, lon: -79.9012 },
+  'PACOL': { lat: 9.3590, lon: -79.9012 },
+  'FREEPORT': { lat: 26.5285, lon: -78.6967 },
+  'BSFPO': { lat: 26.5285, lon: -78.6967 },
+  'ALGECIRAS': { lat: 36.1408, lon: -5.4536 },
+  'ESALG': { lat: 36.1408, lon: -5.4536 },
+  'TANGER MED': { lat: 35.8833, lon: -5.5000 },
+  'MATNG': { lat: 35.8833, lon: -5.5000 },
+  'SALALAH': { lat: 17.0151, lon: 54.0924 },
+  'OMSLL': { lat: 17.0151, lon: 54.0924 },
+};
+
+// Função para buscar coordenadas de porto
+function getPortCoordinates(portCode: string): { lat: number; lon: number } | null {
+  const code = (portCode || '').toUpperCase().trim();
+  return PORT_COORDINATES[code] || null;
+}
+
 // Helper to log API calls asynchronously (fire-and-forget)
 async function logApiCall(
   api_name: string,
@@ -5206,30 +5368,55 @@ serve(async (req) => {
           ORDER BY ts.eta ASC
         `);
 
-        const out = rows.map((r: any) => ({
-          mbl_id: r.mbl_id,
-          container: r.container,
-          consignee: r.consignee,
-          cliente: r.consignee,
-          tipo_processo: r.tipo_processo,
-          porto_origem: r.porto_origem,
-          porto_destino: r.porto_destino,
-          vessel_name: r.vessel_name,
-          vessel_imo: r.vessel_imo,
-          eta: r.eta,
-          container_status: r.container_status,
-          last_event: r.last_event,
-          last_check: r.last_check,
-          shipping_line: r.shipping_line,
-          is_eta_delayed: r.is_eta_delayed,
-          origem_lat: r.origem_lat ? Number(r.origem_lat) : null,
-          origem_lon: r.origem_lon ? Number(r.origem_lon) : null,
-          destino_lat: r.destino_lat ? Number(r.destino_lat) : null,
-          destino_lon: r.destino_lon ? Number(r.destino_lon) : null,
-          current_lat: r.current_lat ? Number(r.current_lat) : null,
-          current_lon: r.current_lon ? Number(r.current_lon) : null,
-          last_api_update: r.last_api_update,
-        }));
+        const out = rows.map((r: any) => {
+          // Usar coordenadas do banco se disponíveis, senão usar fallback do dicionário de portos
+          let origemLat = r.origem_lat ? Number(r.origem_lat) : null;
+          let origemLon = r.origem_lon ? Number(r.origem_lon) : null;
+          let destinoLat = r.destino_lat ? Number(r.destino_lat) : null;
+          let destinoLon = r.destino_lon ? Number(r.destino_lon) : null;
+          
+          // Fallback para coordenadas de portos conhecidos
+          if (origemLat === null || origemLon === null) {
+            const portOrigem = getPortCoordinates(r.porto_origem);
+            if (portOrigem) {
+              origemLat = portOrigem.lat;
+              origemLon = portOrigem.lon;
+            }
+          }
+          
+          if (destinoLat === null || destinoLon === null) {
+            const portDestino = getPortCoordinates(r.porto_destino);
+            if (portDestino) {
+              destinoLat = portDestino.lat;
+              destinoLon = portDestino.lon;
+            }
+          }
+          
+          return {
+            mbl_id: r.mbl_id,
+            container: r.container,
+            consignee: r.consignee,
+            cliente: r.consignee,
+            tipo_processo: r.tipo_processo,
+            porto_origem: r.porto_origem,
+            porto_destino: r.porto_destino,
+            vessel_name: r.vessel_name,
+            vessel_imo: r.vessel_imo,
+            eta: r.eta,
+            container_status: r.container_status,
+            last_event: r.last_event,
+            last_check: r.last_check,
+            shipping_line: r.shipping_line,
+            is_eta_delayed: r.is_eta_delayed,
+            origem_lat: origemLat,
+            origem_lon: origemLon,
+            destino_lat: destinoLat,
+            destino_lon: destinoLon,
+            current_lat: r.current_lat ? Number(r.current_lat) : null,
+            current_lon: r.current_lon ? Number(r.current_lon) : null,
+            last_api_update: r.last_api_update,
+          };
+        });
 
         await client.close();
         console.log(`[olimpo_sea_from_monitoring] Returning ${out.length} MBLs from t_tracking_sea`);
