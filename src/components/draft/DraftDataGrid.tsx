@@ -289,7 +289,7 @@ export const DraftDataGrid = ({ data, onRefresh, isLoading, statusFilter, onStat
   return (
     <div className="space-y-4">
       {/* Stats Cards - Filtros Clicáveis */}
-      <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         <Card 
           className={`bg-card border-border border-l-4 border-l-[hsl(var(--info))] cursor-pointer transition-all hover:scale-[1.02] ${statusFilter === null ? 'ring-2 ring-[hsl(var(--info))] ring-offset-2 ring-offset-background' : ''}`}
           onClick={() => onStatusFilterChange?.(null)}
@@ -345,21 +345,6 @@ export const DraftDataGrid = ({ data, onRefresh, isLoading, statusFilter, onStat
               <div>
                 <div className="text-lg font-bold">{stats.pending}</div>
                 <div className="text-xs text-muted-foreground">Pendentes</div>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card 
-          className={`bg-card border-border border-l-4 border-l-[hsl(var(--destructive))] cursor-pointer transition-all hover:scale-[1.02] ${statusFilter === 'Error' ? 'ring-2 ring-[hsl(var(--destructive))] ring-offset-2 ring-offset-background' : ''}`}
-          onClick={() => onStatusFilterChange?.(statusFilter === 'Error' ? null : 'Error')}
-        >
-          <CardContent className="pt-3 pb-3">
-            <div className="flex items-center gap-2">
-              <XCircle className="h-4 w-4 text-[hsl(var(--destructive))]" />
-              <div>
-                <div className="text-lg font-bold">{stats.errors}</div>
-                <div className="text-xs text-muted-foreground">Erros</div>
               </div>
             </div>
           </CardContent>

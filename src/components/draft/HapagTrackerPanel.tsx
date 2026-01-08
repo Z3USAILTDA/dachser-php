@@ -133,53 +133,6 @@ export const HapagTrackerPanel = ({ onSave }: HapagTrackerPanelProps) => {
 
   return (
     <div className="space-y-6">
-      {/* Stats Cards Grid */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <div className="rounded-xl p-4 border-l-4 border-l-[hsl(var(--success))] bg-card border border-border">
-          <div className="flex items-center gap-3">
-            <Package className="h-5 w-5 text-[hsl(var(--success))]" />
-            <div>
-              <div className="text-2xl font-bold text-foreground">{containersCount}</div>
-              <div className="text-[0.72rem] text-muted-foreground uppercase tracking-wider">Total Rastreados</div>
-              <div className="text-[0.68rem] text-muted-foreground/70 mt-0.5">Containers ativos</div>
-            </div>
-          </div>
-        </div>
-
-        <div className="rounded-xl p-4 border-l-4 border-l-[hsl(var(--warning))] bg-card border border-border">
-          <div className="flex items-center gap-3">
-            <Clock className="h-5 w-5 text-[hsl(var(--warning))]" />
-            <div>
-              <div className="text-2xl font-bold text-foreground">{inTransitCount}</div>
-              <div className="text-[0.72rem] text-muted-foreground uppercase tracking-wider">Em Trânsito</div>
-              <div className="text-[0.68rem] text-muted-foreground/70 mt-0.5">Em movimento</div>
-            </div>
-          </div>
-        </div>
-
-        <div className="rounded-xl p-4 border-l-4 border-l-[hsl(var(--info))] bg-card border border-border">
-          <div className="flex items-center gap-3">
-            <CheckCircle className="h-5 w-5 text-[hsl(var(--info))]" />
-            <div>
-              <div className="text-2xl font-bold text-foreground">{deliveredCount}</div>
-              <div className="text-[0.72rem] text-muted-foreground uppercase tracking-wider">Entregues</div>
-              <div className="text-[0.68rem] text-muted-foreground/70 mt-0.5">Gate Out</div>
-            </div>
-          </div>
-        </div>
-
-        <div className="rounded-xl p-4 border-l-4 border-l-[hsl(var(--destructive))] bg-card border border-border">
-          <div className="flex items-center gap-3">
-            <AlertTriangle className="h-5 w-5 text-[hsl(var(--destructive))]" />
-            <div>
-              <div className="text-2xl font-bold text-foreground">{alertsCount}</div>
-              <div className="text-[0.72rem] text-muted-foreground uppercase tracking-wider">Alertas</div>
-              <div className="text-[0.68rem] text-muted-foreground/70 mt-0.5">Ação imediata</div>
-            </div>
-          </div>
-        </div>
-      </div>
-
       {/* Search Input - Dachser Style */}
       <div className="flex flex-col sm:flex-row items-center gap-3">
         <Select value={searchType} onValueChange={(v) => setSearchType(v as SearchType)}>
