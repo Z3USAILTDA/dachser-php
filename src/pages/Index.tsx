@@ -27,7 +27,9 @@ import {
   AlertCircle,
   X,
   HelpCircle,
+  Settings,
 } from "lucide-react";
+import { EmailClienteRegrasDialog } from "@/components/air/EmailClienteRegrasDialog";
 import { Checkbox } from "@/components/ui/checkbox";
 import { useToast } from "@/hooks/use-toast";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
@@ -359,6 +361,7 @@ const Index = () => {
   const [showMonitoredModal, setShowMonitoredModal] = useState(false);
   const [dbStats, setDbStats] = useState<DbStats | null>(null);
   const [isLoadingDbStats, setIsLoadingDbStats] = useState(false);
+  const [regrasDialogOpen, setRegrasDialogOpen] = useState(false);
   const isPausedRef = useRef(false);
   const shouldSendEmailsRef = useRef(false); // Only send emails when user explicitly clicks button
   const emailEnableTimestampRef = useRef<number>(0); // Track when emails were enabled
@@ -1903,6 +1906,13 @@ const Index = () => {
             @{user?.email?.split("@")[0] || "admin"}
           </div>
           <button
+            onClick={() => setRegrasDialogOpen(true)}
+            className="w-8 h-8 rounded-full border border-white/25 flex items-center justify-center bg-black/70 text-gray-400 hover:text-[#ffc800] transition-colors"
+            title="Regras de notificação"
+          >
+            <Settings className="h-4 w-4" />
+          </button>
+          <button
             onClick={() => navigate("/air/tracking/manual")}
             className="w-8 h-8 rounded-full border border-white/25 flex items-center justify-center bg-black/70 text-gray-400 hover:text-[#ffc800] transition-colors"
             title="Manual do usuário"
@@ -2543,6 +2553,11 @@ const Index = () => {
           <p className="text-xs text-muted-foreground mt-1">{new Date().toLocaleString("pt-BR")}</p>
         </div>
       )}
+
+      <EmailClienteRegrasDialog 
+        open={regrasDialogOpen} 
+        onOpenChange={setRegrasDialogOpen} 
+      />
     </div>
   );
 };
