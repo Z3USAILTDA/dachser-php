@@ -1,14 +1,12 @@
 import { useState } from "react";
-import { PageLayout } from "@/components/layout/PageLayout";
-import { KpiCard } from "@/components/demurrage/KpiCard";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { DemurrageLayout } from "@/components/demurrage/DemurrageLayout";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Users, Plus, Edit, Bell, BellOff, DollarSign, Package, Search } from "lucide-react";
-import { toast } from "sonner";
+import { Users, Plus, Edit, Bell, BellOff, Search } from "lucide-react";
 
 // Mock data
 const mockProfiles = [
@@ -16,6 +14,14 @@ const mockProfiles = [
   { id: "2", client_name: "CLIENTE XYZ", auto_alert_enabled: false, containers: 8, total_demurrage: 2200, exceeded: 1 },
   { id: "3", client_name: "CLIENTE 123", auto_alert_enabled: true, containers: 15, total_demurrage: 6800, exceeded: 4 },
   { id: "4", client_name: "CLIENTE DEF", auto_alert_enabled: true, containers: 5, total_demurrage: 950, exceeded: 0 },
+];
+
+// Mock containers for metrics
+const mockContainers = [
+  { status: "safe" },
+  { status: "at_risk" },
+  { status: "exceeded" },
+  { status: "safe" },
 ];
 
 export default function DemurrageClients() {
@@ -32,63 +38,34 @@ export default function DemurrageClients() {
     return matchesSearch && matchesFilter;
   });
 
-  const kpis = {
-    total: mockProfiles.length,
-    reportsYes: mockProfiles.filter(p => p.auto_alert_enabled).length,
-    reportsNo: mockProfiles.filter(p => !p.auto_alert_enabled).length,
-    totalDemurrage: mockProfiles.reduce((sum, p) => sum + p.total_demurrage, 0),
+  const containerStats = {
+    total: mockContainers.length,
+    atRisk: mockContainers.filter(c => c.status === 'at_risk').length,
+    exceeded: mockContainers.filter(c => c.status === 'exceeded').length,
+    safe: mockContainers.filter(c => c.status === 'safe').length,
   };
 
+  const rightActions = (
+    <Button className="bg-[#ffc800] text-black hover:bg-[#e6b400]">
+      <Plus className="h-4 w-4 mr-2" />
+      Novo Perfil
+    </Button>
+  );
+
   return (
-    <PageLayout 
-      title="DACHSER" 
-      subtitle="Demurrage / Detention — Clientes"
-      pageIcon={Users}
+    <DemurrageLayout
+      metrics={{
+        totalContainers: containerStats.total,
+        atRisk: containerStats.atRisk,
+        exceeded: containerStats.exceeded,
+        safe: containerStats.safe,
+      }}
+      rightActions={rightActions}
     >
-      <div className="space-y-6">
-        {/* Actions */}
-        <div className="flex justify-end">
-          <Button>
-            <Plus className="h-4 w-4 mr-2" />
-            Novo Perfil
-          </Button>
-        </div>
-
-        {/* KPIs */}
-        <div className="grid gap-4 md:grid-cols-4">
-          <KpiCard
-            title="TOTAL PERFIS"
-            value={kpis.total}
-            subtitle="Clientes cadastrados"
-            icon={<Users className="h-6 w-6" />}
-            variant="primary"
-          />
-          <KpiCard
-            title="REPORTA DEMURRAGE"
-            value={kpis.reportsYes}
-            subtitle="Com alertas ativos"
-            icon={<Bell className="h-6 w-6" />}
-            variant="success"
-          />
-          <KpiCard
-            title="NÃO REPORTA"
-            value={kpis.reportsNo}
-            subtitle="Sem alertas"
-            icon={<BellOff className="h-6 w-6" />}
-            variant="default"
-          />
-          <KpiCard
-            title="DEMURRAGE TOTAL"
-            value={formatCurrency(kpis.totalDemurrage)}
-            subtitle="Valor consolidado"
-            icon={<DollarSign className="h-6 w-6" />}
-            variant="warning"
-          />
-        </div>
-
+      <div className="space-y-4">
         {/* Filters */}
-        <Card className="bg-[rgba(0,0,0,0.5)] border-[rgba(255,255,255,0.1)]">
-          <CardContent className="pt-6">
+        <Card className="bg-[rgba(5,6,18,0.85)] border-[rgba(255,255,255,0.1)]">
+          <CardContent className="pt-4 pb-4">
             <div className="flex gap-4 items-center">
               <div className="flex-1">
                 <div className="relative">
@@ -97,12 +74,12 @@ export default function DemurrageClients() {
                     placeholder="Buscar cliente..."
                     value={searchTerm}
                     onChange={(e) => setSearchTerm(e.target.value)}
-                    className="pl-10 bg-background/50"
+                    className="pl-10 bg-[rgba(0,0,0,0.5)] border-[rgba(255,255,255,0.1)]"
                   />
                 </div>
               </div>
               <Select value={filterReports} onValueChange={setFilterReports}>
-                <SelectTrigger className="w-48 bg-background/50">
+                <SelectTrigger className="w-48 bg-[rgba(0,0,0,0.5)] border-[rgba(255,255,255,0.1)]">
                   <SelectValue placeholder="Filtrar" />
                 </SelectTrigger>
                 <SelectContent>
@@ -116,9 +93,12 @@ export default function DemurrageClients() {
         </Card>
 
         {/* Table */}
-        <Card className="bg-[rgba(0,0,0,0.5)] border-[rgba(255,255,255,0.1)]">
-          <CardHeader>
-            <CardTitle className="text-foreground">Perfis Configurados</CardTitle>
+        <Card className="bg-[rgba(5,6,18,0.85)] border-[rgba(255,255,255,0.1)]">
+          <CardHeader className="pb-3">
+            <CardTitle className="flex items-center gap-2 text-foreground text-base">
+              <Users className="h-5 w-5 text-[#ffc800]" />
+              Perfis Configurados
+            </CardTitle>
             <CardDescription>{filteredProfiles.length} perfil(is)</CardDescription>
           </CardHeader>
           <CardContent>
@@ -147,25 +127,28 @@ export default function DemurrageClients() {
                         <Button 
                           size="sm" 
                           variant={profile.auto_alert_enabled ? "default" : "secondary"}
-                          className="gap-1"
+                          className={profile.auto_alert_enabled 
+                            ? "gap-1 bg-green-500/20 text-green-500 hover:bg-green-500/30 border-green-500/30" 
+                            : "gap-1 bg-[rgba(255,255,255,0.1)] text-muted-foreground"
+                          }
                         >
                           {profile.auto_alert_enabled ? <Bell className="h-3 w-3" /> : <BellOff className="h-3 w-3" />}
                           {profile.auto_alert_enabled ? 'Sim' : 'Não'}
                         </Button>
                       </TableCell>
                       <TableCell className="text-center font-medium">{profile.containers}</TableCell>
-                      <TableCell className="text-right font-semibold text-primary">
+                      <TableCell className="text-right font-semibold text-[#ffc800]">
                         {formatCurrency(profile.total_demurrage)}
                       </TableCell>
                       <TableCell className="text-center">
                         {profile.exceeded ? (
                           <Badge variant="destructive">{profile.exceeded}</Badge>
                         ) : (
-                          <Badge variant="outline">0</Badge>
+                          <Badge variant="outline" className="text-muted-foreground">0</Badge>
                         )}
                       </TableCell>
                       <TableCell>
-                        <Button size="sm" variant="ghost">
+                        <Button size="sm" variant="ghost" className="text-muted-foreground hover:text-white">
                           <Edit className="h-4 w-4" />
                         </Button>
                       </TableCell>
@@ -177,6 +160,6 @@ export default function DemurrageClients() {
           </CardContent>
         </Card>
       </div>
-    </PageLayout>
+    </DemurrageLayout>
   );
 }

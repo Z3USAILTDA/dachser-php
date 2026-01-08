@@ -1,16 +1,10 @@
-import { PageLayout } from "@/components/layout/PageLayout";
-import { KpiCard } from "@/components/demurrage/KpiCard";
+import { DemurrageLayout } from "@/components/demurrage/DemurrageLayout";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { 
-  BarChart3, 
-  DollarSign, 
-  Package, 
   TrendingUp,
-  TrendingDown,
   Users,
   Ship,
-  Target,
   Calendar
 } from "lucide-react";
 import { 
@@ -51,68 +45,47 @@ const topArmadores = [
   { name: 'ONE', demurrage: 6200 },
 ];
 
+// Mock containers for metrics
+const mockContainers = [
+  { status: "safe" },
+  { status: "at_risk" },
+  { status: "exceeded" },
+  { status: "safe" },
+];
+
 export default function DemurrageAnalytics() {
   const formatCurrency = (value: number) => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 0 }).format(value);
 
+  const containerStats = {
+    total: mockContainers.length,
+    atRisk: mockContainers.filter(c => c.status === 'at_risk').length,
+    exceeded: mockContainers.filter(c => c.status === 'exceeded').length,
+    safe: mockContainers.filter(c => c.status === 'safe').length,
+  };
+
+  const rightActions = (
+    <Badge variant="outline" className="text-sm border-[rgba(255,255,255,0.2)] text-muted-foreground">
+      <Calendar className="h-3 w-3 mr-1" />
+      Últimos 6 meses
+    </Badge>
+  );
+
   return (
-    <PageLayout 
-      title="DACHSER" 
-      subtitle="Demurrage / Detention — Analytics"
-      pageIcon={BarChart3}
+    <DemurrageLayout
+      metrics={{
+        totalContainers: containerStats.total,
+        atRisk: containerStats.atRisk,
+        exceeded: containerStats.exceeded,
+        safe: containerStats.safe,
+      }}
+      rightActions={rightActions}
     >
-      <div className="space-y-6">
-        {/* Period Badge */}
-        <div className="flex justify-end">
-          <Badge variant="outline" className="text-sm">
-            <Calendar className="h-3 w-3 mr-1" />
-            Últimos 6 meses
-          </Badge>
-        </div>
-
-        {/* KPIs */}
-        <div className="grid gap-4 md:grid-cols-5">
-          <KpiCard
-            title="CONTAINERS"
-            value={156}
-            subtitle="Total monitorados"
-            icon={<Package className="h-6 w-6" />}
-            variant="primary"
-          />
-          <KpiCard
-            title="DEMURRAGE TOTAL"
-            value={formatCurrency(98800)}
-            subtitle="Valor acumulado"
-            icon={<DollarSign className="h-6 w-6" />}
-            variant="warning"
-          />
-          <KpiCard
-            title="RECUPERADO"
-            value={formatCurrency(27900)}
-            subtitle="Em disputas ganhas"
-            icon={<TrendingUp className="h-6 w-6" />}
-            variant="success"
-          />
-          <KpiCard
-            title="TAXA SUCESSO"
-            value="68%"
-            subtitle="17W / 8L"
-            icon={<Target className="h-6 w-6" />}
-            variant="info"
-          />
-          <KpiCard
-            title="MÉDIA DIAS EXC."
-            value="4.2"
-            subtitle="Dias excedidos"
-            icon={<TrendingDown className="h-6 w-6" />}
-            variant="danger"
-          />
-        </div>
-
+      <div className="space-y-4">
         {/* Charts Row 1 */}
-        <Card className="bg-[rgba(0,0,0,0.5)] border-[rgba(255,255,255,0.1)]">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-foreground">
-              <TrendingUp className="h-5 w-5 text-primary" />
+        <Card className="bg-[rgba(5,6,18,0.85)] border-[rgba(255,255,255,0.1)]">
+          <CardHeader className="pb-3">
+            <CardTitle className="flex items-center gap-2 text-foreground text-base">
+              <TrendingUp className="h-5 w-5 text-[#ffc800]" />
               Evolução Mensal
             </CardTitle>
             <CardDescription>Demurrage vs Recuperado</CardDescription>
@@ -126,7 +99,8 @@ export default function DemurrageAnalytics() {
                   <YAxis tickFormatter={(v) => `$${(v/1000).toFixed(0)}k`} stroke="rgba(255,255,255,0.5)" />
                   <Tooltip 
                     formatter={(value: number) => formatCurrency(value)} 
-                    contentStyle={{ backgroundColor: 'rgba(0,0,0,0.8)', border: '1px solid rgba(255,255,255,0.1)' }}
+                    contentStyle={{ backgroundColor: 'rgba(5,6,18,0.95)', border: '1px solid rgba(255,255,255,0.1)' }}
+                    labelStyle={{ color: 'white' }}
                   />
                   <Legend />
                   <Area type="monotone" dataKey="demurrage" name="Demurrage" stroke="#ffc800" fill="#ffc800" fillOpacity={0.3} />
@@ -138,12 +112,11 @@ export default function DemurrageAnalytics() {
         </Card>
 
         {/* Charts Row 2 */}
-        <div className="grid gap-6 md:grid-cols-2">
+        <div className="grid gap-4 md:grid-cols-2">
           {/* Status Distribution */}
-          <Card className="bg-[rgba(0,0,0,0.5)] border-[rgba(255,255,255,0.1)]">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2 text-foreground">
-                <Package className="h-5 w-5 text-primary" />
+          <Card className="bg-[rgba(5,6,18,0.85)] border-[rgba(255,255,255,0.1)]">
+            <CardHeader className="pb-3">
+              <CardTitle className="flex items-center gap-2 text-foreground text-base">
                 Status dos Containers
               </CardTitle>
             </CardHeader>
@@ -165,7 +138,7 @@ export default function DemurrageAnalytics() {
                         <Cell key={`cell-${index}`} fill={entry.color} />
                       ))}
                     </Pie>
-                    <Tooltip contentStyle={{ backgroundColor: 'rgba(0,0,0,0.8)', border: '1px solid rgba(255,255,255,0.1)' }} />
+                    <Tooltip contentStyle={{ backgroundColor: 'rgba(5,6,18,0.95)', border: '1px solid rgba(255,255,255,0.1)' }} />
                   </PieChart>
                 </ResponsiveContainer>
               </div>
@@ -173,10 +146,10 @@ export default function DemurrageAnalytics() {
           </Card>
 
           {/* Top Clients */}
-          <Card className="bg-[rgba(0,0,0,0.5)] border-[rgba(255,255,255,0.1)]">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2 text-foreground">
-                <Users className="h-5 w-5 text-primary" />
+          <Card className="bg-[rgba(5,6,18,0.85)] border-[rgba(255,255,255,0.1)]">
+            <CardHeader className="pb-3">
+              <CardTitle className="flex items-center gap-2 text-foreground text-base">
+                <Users className="h-5 w-5 text-[#ffc800]" />
                 Top Clientes
               </CardTitle>
             </CardHeader>
@@ -189,7 +162,8 @@ export default function DemurrageAnalytics() {
                     <YAxis dataKey="name" type="category" width={100} tick={{ fontSize: 11 }} stroke="rgba(255,255,255,0.5)" />
                     <Tooltip 
                       formatter={(value: number) => formatCurrency(value)}
-                      contentStyle={{ backgroundColor: 'rgba(0,0,0,0.8)', border: '1px solid rgba(255,255,255,0.1)' }}
+                      contentStyle={{ backgroundColor: 'rgba(5,6,18,0.95)', border: '1px solid rgba(255,255,255,0.1)' }}
+                      labelStyle={{ color: 'white' }}
                     />
                     <Bar dataKey="demurrage" fill="#ffc800" radius={[0, 4, 4, 0]} />
                   </BarChart>
@@ -200,10 +174,10 @@ export default function DemurrageAnalytics() {
         </div>
 
         {/* Top Armadores */}
-        <Card className="bg-[rgba(0,0,0,0.5)] border-[rgba(255,255,255,0.1)]">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-foreground">
-              <Ship className="h-5 w-5 text-primary" />
+        <Card className="bg-[rgba(5,6,18,0.85)] border-[rgba(255,255,255,0.1)]">
+          <CardHeader className="pb-3">
+            <CardTitle className="flex items-center gap-2 text-foreground text-base">
+              <Ship className="h-5 w-5 text-[#ffc800]" />
               Top Armadores
             </CardTitle>
           </CardHeader>
@@ -216,7 +190,8 @@ export default function DemurrageAnalytics() {
                   <YAxis tickFormatter={(v) => `$${(v/1000).toFixed(0)}k`} stroke="rgba(255,255,255,0.5)" />
                   <Tooltip 
                     formatter={(value: number) => formatCurrency(value)}
-                    contentStyle={{ backgroundColor: 'rgba(0,0,0,0.8)', border: '1px solid rgba(255,255,255,0.1)' }}
+                    contentStyle={{ backgroundColor: 'rgba(5,6,18,0.95)', border: '1px solid rgba(255,255,255,0.1)' }}
+                    labelStyle={{ color: 'white' }}
                   />
                   <Bar dataKey="demurrage" fill="#ffc800" radius={[4, 4, 0, 0]} />
                 </BarChart>
@@ -225,6 +200,6 @@ export default function DemurrageAnalytics() {
           </CardContent>
         </Card>
       </div>
-    </PageLayout>
+    </DemurrageLayout>
   );
 }

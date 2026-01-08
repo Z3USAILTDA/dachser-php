@@ -1,13 +1,11 @@
 import { useState } from "react";
-import { PageLayout } from "@/components/layout/PageLayout";
-import { KpiCard } from "@/components/demurrage/KpiCard";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { DemurrageLayout } from "@/components/demurrage/DemurrageLayout";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Scale, Plus, CheckCircle, XCircle, Clock, MessageSquare, DollarSign, TrendingUp } from "lucide-react";
-import { toast } from "sonner";
+import { Scale, Plus, CheckCircle, XCircle, Clock, MessageSquare } from "lucide-react";
 
 // Mock data
 const mockDisputes = [
@@ -15,6 +13,14 @@ const mockDisputes = [
   { id: "2", container: "HLCU7654321", cliente: "CLIENTE XYZ", armador: "HAPAG", disputed_amount: 2200, recovered_amount: 0, status: "negotiating" },
   { id: "3", container: "MAEU9876543", cliente: "CLIENTE 123", armador: "MAERSK", disputed_amount: 800, recovered_amount: 650, status: "won" },
   { id: "4", container: "CMAU5678901", cliente: "CLIENTE ABC", armador: "CMA CGM", disputed_amount: 1200, recovered_amount: 0, status: "lost" },
+];
+
+// Mock containers for metrics
+const mockContainers = [
+  { status: "safe" },
+  { status: "at_risk" },
+  { status: "exceeded" },
+  { status: "safe" },
 ];
 
 export default function DemurrageDisputes() {
@@ -50,72 +56,65 @@ export default function DemurrageDisputes() {
     negotiating: mockDisputes.filter(d => d.status === 'negotiating').length,
     won: mockDisputes.filter(d => d.status === 'won').length,
     lost: mockDisputes.filter(d => d.status === 'lost').length,
-    totalDisputed: mockDisputes.reduce((acc, d) => acc + d.disputed_amount, 0),
-    totalRecovered: mockDisputes.filter(d => d.status === 'won').reduce((acc, d) => acc + d.recovered_amount, 0),
+  };
+
+  const containerStats = {
+    total: mockContainers.length,
+    atRisk: mockContainers.filter(c => c.status === 'at_risk').length,
+    exceeded: mockContainers.filter(c => c.status === 'exceeded').length,
+    safe: mockContainers.filter(c => c.status === 'safe').length,
   };
 
   const filteredDisputes = activeTab === 'all' ? mockDisputes : mockDisputes.filter(d => d.status === activeTab);
 
+  const rightActions = (
+    <Button className="bg-[#ffc800] text-black hover:bg-[#e6b400]">
+      <Plus className="h-4 w-4 mr-2" />
+      Abrir Disputa
+    </Button>
+  );
+
   return (
-    <PageLayout 
-      title="DACHSER" 
-      subtitle="Demurrage / Detention — Disputas"
-      pageIcon={Scale}
+    <DemurrageLayout
+      metrics={{
+        totalContainers: containerStats.total,
+        atRisk: containerStats.atRisk,
+        exceeded: containerStats.exceeded,
+        safe: containerStats.safe,
+      }}
+      rightActions={rightActions}
     >
-      <div className="space-y-6">
-        {/* Actions */}
-        <div className="flex justify-end">
-          <Button>
-            <Plus className="h-4 w-4 mr-2" />
-            Abrir Disputa
-          </Button>
-        </div>
-
-        {/* KPIs */}
-        <div className="grid gap-4 md:grid-cols-4">
-          <KpiCard
-            title="TOTAL DISPUTADO"
-            value={formatCurrency(stats.totalDisputed)}
-            subtitle={`${stats.total} disputa(s)`}
-            icon={<DollarSign className="h-6 w-6" />}
-            variant="primary"
-          />
-          <KpiCard
-            title="VALOR RECUPERADO"
-            value={formatCurrency(stats.totalRecovered)}
-            subtitle={`${stats.won} disputa(s) ganha(s)`}
-            icon={<TrendingUp className="h-6 w-6" />}
-            variant="success"
-          />
-          <KpiCard
-            title="EM ANDAMENTO"
-            value={stats.opened + stats.negotiating}
-            subtitle="Abertas + Negociando"
-            icon={<Clock className="h-6 w-6" />}
-            variant="warning"
-          />
-          <KpiCard
-            title="TAXA DE SUCESSO"
-            value={`${stats.won + stats.lost > 0 ? ((stats.won / (stats.won + stats.lost)) * 100).toFixed(0) : 0}%`}
-            subtitle={`${stats.won}W / ${stats.lost}L`}
-            icon={<CheckCircle className="h-6 w-6" />}
-            variant="info"
-          />
-        </div>
-
+      <div className="space-y-4">
         {/* Tabs */}
         <Tabs value={activeTab} onValueChange={setActiveTab}>
-          <TabsList className="bg-background/50">
-            <TabsTrigger value="all">Todas ({stats.total})</TabsTrigger>
-            <TabsTrigger value="opened">Abertas ({stats.opened})</TabsTrigger>
-            <TabsTrigger value="negotiating">Negociando ({stats.negotiating})</TabsTrigger>
-            <TabsTrigger value="won">Ganhas ({stats.won})</TabsTrigger>
-            <TabsTrigger value="lost">Perdidas ({stats.lost})</TabsTrigger>
+          <TabsList className="bg-[rgba(5,6,18,0.85)] border border-[rgba(255,255,255,0.1)]">
+            <TabsTrigger value="all" className="data-[state=active]:bg-[rgba(255,200,0,0.15)] data-[state=active]:text-[#ffc800]">
+              Todas ({stats.total})
+            </TabsTrigger>
+            <TabsTrigger value="opened" className="data-[state=active]:bg-[rgba(255,200,0,0.15)] data-[state=active]:text-[#ffc800]">
+              Abertas ({stats.opened})
+            </TabsTrigger>
+            <TabsTrigger value="negotiating" className="data-[state=active]:bg-[rgba(255,200,0,0.15)] data-[state=active]:text-[#ffc800]">
+              Negociando ({stats.negotiating})
+            </TabsTrigger>
+            <TabsTrigger value="won" className="data-[state=active]:bg-[rgba(255,200,0,0.15)] data-[state=active]:text-[#ffc800]">
+              Ganhas ({stats.won})
+            </TabsTrigger>
+            <TabsTrigger value="lost" className="data-[state=active]:bg-[rgba(255,200,0,0.15)] data-[state=active]:text-[#ffc800]">
+              Perdidas ({stats.lost})
+            </TabsTrigger>
           </TabsList>
 
           <TabsContent value={activeTab} className="mt-4">
-            <Card className="bg-[rgba(0,0,0,0.5)] border-[rgba(255,255,255,0.1)]">
-              <CardContent className="pt-6">
+            <Card className="bg-[rgba(5,6,18,0.85)] border-[rgba(255,255,255,0.1)]">
+              <CardHeader className="pb-3">
+                <CardTitle className="flex items-center gap-2 text-foreground text-base">
+                  <Scale className="h-5 w-5 text-[#ffc800]" />
+                  Disputas
+                </CardTitle>
+                <CardDescription>{filteredDisputes.length} disputa(s)</CardDescription>
+              </CardHeader>
+              <CardContent>
                 {filteredDisputes.length === 0 ? (
                   <div className="flex flex-col items-center justify-center py-12 text-muted-foreground">
                     <Scale className="h-12 w-12 mb-4 opacity-50" />
@@ -148,14 +147,16 @@ export default function DemurrageDisputes() {
                           <TableCell>
                             <div className="flex gap-1">
                               {dispute.status === 'opened' && (
-                                <Button size="sm" variant="outline">Negociar</Button>
+                                <Button size="sm" variant="outline" className="border-[rgba(255,255,255,0.2)] text-xs">
+                                  Negociar
+                                </Button>
                               )}
                               {(dispute.status === 'opened' || dispute.status === 'negotiating') && (
                                 <>
-                                  <Button size="sm" variant="default">
+                                  <Button size="sm" className="bg-green-500/20 text-green-500 hover:bg-green-500/30 h-8 w-8 p-0">
                                     <CheckCircle className="h-4 w-4" />
                                   </Button>
-                                  <Button size="sm" variant="destructive">
+                                  <Button size="sm" className="bg-red-500/20 text-red-500 hover:bg-red-500/30 h-8 w-8 p-0">
                                     <XCircle className="h-4 w-4" />
                                   </Button>
                                 </>
@@ -172,6 +173,6 @@ export default function DemurrageDisputes() {
           </TabsContent>
         </Tabs>
       </div>
-    </PageLayout>
+    </DemurrageLayout>
   );
 }

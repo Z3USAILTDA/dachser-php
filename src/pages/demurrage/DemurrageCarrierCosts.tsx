@@ -1,14 +1,12 @@
 import { useState } from "react";
-import { PageLayout } from "@/components/layout/PageLayout";
-import { KpiCard } from "@/components/demurrage/KpiCard";
+import { DemurrageLayout } from "@/components/demurrage/DemurrageLayout";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
-import { Ship, Plus, Search, AlertTriangle, CheckCircle2, FileSearch, DollarSign, FileSpreadsheet } from "lucide-react";
+import { Ship, Plus, Search, AlertTriangle, CheckCircle2, FileSearch, FileSpreadsheet } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { toast } from "sonner";
 
 // Mock data
 const mockInvoices = [
@@ -16,6 +14,14 @@ const mockInvoices = [
   { id: "2", invoice_number: "INV-HAPAG-002", armador: "HAPAG", container: "HLCU7654321", cliente: "CLIENTE XYZ", days_charged: 8, cost_usd: 1200, audit_status: "discrepancy" },
   { id: "3", invoice_number: "INV-MAERSK-003", armador: "MAERSK", container: "MAEU9876543", cliente: "CLIENTE 123", days_charged: 3, cost_usd: 540, audit_status: "pending" },
   { id: "4", invoice_number: "INV-CMA-004", armador: "CMA CGM", container: "CMAU5678901", cliente: "CLIENTE ABC", days_charged: 6, cost_usd: 900, audit_status: "validated" },
+];
+
+// Mock containers for metrics
+const mockContainers = [
+  { status: "safe" },
+  { status: "at_risk" },
+  { status: "exceeded" },
+  { status: "safe" },
 ];
 
 export default function DemurrageCarrierCosts() {
@@ -37,12 +43,12 @@ export default function DemurrageCarrierCosts() {
     }
   };
 
-  const totals = mockInvoices.reduce((acc, inv) => ({
-    totalCost: acc.totalCost + inv.cost_usd,
-    validated: acc.validated + (inv.audit_status === 'validated' ? inv.cost_usd : 0),
-    discrepancy: acc.discrepancy + (inv.audit_status === 'discrepancy' ? inv.cost_usd : 0),
-    pending: acc.pending + (inv.audit_status === 'pending' ? inv.cost_usd : 0)
-  }), { totalCost: 0, validated: 0, discrepancy: 0, pending: 0 });
+  const containerStats = {
+    total: mockContainers.length,
+    atRisk: mockContainers.filter(c => c.status === 'at_risk').length,
+    exceeded: mockContainers.filter(c => c.status === 'exceeded').length,
+    safe: mockContainers.filter(c => c.status === 'safe').length,
+  };
 
   const filteredInvoices = mockInvoices.filter(inv => {
     const matchesSearch = 
@@ -54,60 +60,33 @@ export default function DemurrageCarrierCosts() {
     return matchesSearch && matchesStatus;
   });
 
+  const rightActions = (
+    <div className="flex gap-2">
+      <Button variant="outline" className="bg-[rgba(0,0,0,0.7)] border-[rgba(255,255,255,0.25)] text-[#aaaaaa] hover:text-white hover:bg-[rgba(0,0,0,0.9)]">
+        <FileSpreadsheet className="h-4 w-4 mr-2" />
+        Exportar
+      </Button>
+      <Button className="bg-[#ffc800] text-black hover:bg-[#e6b400]">
+        <Plus className="h-4 w-4 mr-2" />
+        Nova Fatura
+      </Button>
+    </div>
+  );
+
   return (
-    <PageLayout 
-      title="DACHSER" 
-      subtitle="Demurrage / Detention — Custos Armadores"
-      pageIcon={Ship}
+    <DemurrageLayout
+      metrics={{
+        totalContainers: containerStats.total,
+        atRisk: containerStats.atRisk,
+        exceeded: containerStats.exceeded,
+        safe: containerStats.safe,
+      }}
+      rightActions={rightActions}
     >
-      <div className="space-y-6">
-        {/* Actions */}
-        <div className="flex justify-end gap-2">
-          <Button variant="outline">
-            <FileSpreadsheet className="h-4 w-4 mr-2" />
-            Exportar Excel
-          </Button>
-          <Button>
-            <Plus className="h-4 w-4 mr-2" />
-            Nova Fatura
-          </Button>
-        </div>
-
-        {/* KPIs */}
-        <div className="grid grid-cols-4 gap-4">
-          <KpiCard
-            title="TOTAL CUSTOS"
-            value={formatCurrency(totals.totalCost)}
-            subtitle="Faturas recebidas"
-            icon={<DollarSign className="h-6 w-6" />}
-            variant="primary"
-          />
-          <KpiCard
-            title="VALIDADAS"
-            value={formatCurrency(totals.validated)}
-            subtitle="Auditoria concluída"
-            icon={<CheckCircle2 className="h-6 w-6" />}
-            variant="success"
-          />
-          <KpiCard
-            title="DISCREPÂNCIAS"
-            value={formatCurrency(totals.discrepancy)}
-            subtitle="Requer análise"
-            icon={<AlertTriangle className="h-6 w-6" />}
-            variant="danger"
-          />
-          <KpiCard
-            title="PENDENTES"
-            value={formatCurrency(totals.pending)}
-            subtitle="Aguardando auditoria"
-            icon={<FileSearch className="h-6 w-6" />}
-            variant="warning"
-          />
-        </div>
-
+      <div className="space-y-4">
         {/* Filters */}
-        <Card className="bg-[rgba(0,0,0,0.5)] border-[rgba(255,255,255,0.1)]">
-          <CardContent className="pt-6">
+        <Card className="bg-[rgba(5,6,18,0.85)] border-[rgba(255,255,255,0.1)]">
+          <CardContent className="pt-4 pb-4">
             <div className="flex gap-4 items-center">
               <div className="flex-1">
                 <div className="relative">
@@ -116,12 +95,12 @@ export default function DemurrageCarrierCosts() {
                     placeholder="Buscar por fatura, armador ou container..."
                     value={searchTerm}
                     onChange={(e) => setSearchTerm(e.target.value)}
-                    className="pl-10 bg-background/50"
+                    className="pl-10 bg-[rgba(0,0,0,0.5)] border-[rgba(255,255,255,0.1)]"
                   />
                 </div>
               </div>
               <Select value={statusFilter} onValueChange={setStatusFilter}>
-                <SelectTrigger className="w-48 bg-background/50">
+                <SelectTrigger className="w-48 bg-[rgba(0,0,0,0.5)] border-[rgba(255,255,255,0.1)]">
                   <SelectValue placeholder="Status" />
                 </SelectTrigger>
                 <SelectContent>
@@ -137,10 +116,10 @@ export default function DemurrageCarrierCosts() {
         </Card>
 
         {/* Table */}
-        <Card className="bg-[rgba(0,0,0,0.5)] border-[rgba(255,255,255,0.1)]">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-foreground">
-              <Ship className="h-5 w-5 text-primary" />
+        <Card className="bg-[rgba(5,6,18,0.85)] border-[rgba(255,255,255,0.1)]">
+          <CardHeader className="pb-3">
+            <CardTitle className="flex items-center gap-2 text-foreground text-base">
+              <Ship className="h-5 w-5 text-[#ffc800]" />
               Faturas de Armadores
             </CardTitle>
             <CardDescription>{filteredInvoices.length} faturas encontradas</CardDescription>
@@ -166,7 +145,7 @@ export default function DemurrageCarrierCosts() {
                 </TableHeader>
                 <TableBody>
                   {filteredInvoices.map((invoice) => (
-                    <TableRow key={invoice.id} className="border-[rgba(255,255,255,0.1)]">
+                    <TableRow key={invoice.id} className="border-[rgba(255,255,255,0.1)] cursor-pointer hover:bg-[rgba(255,200,0,0.05)]">
                       <TableCell className="font-mono">{invoice.invoice_number}</TableCell>
                       <TableCell>{invoice.armador}</TableCell>
                       <TableCell className="font-mono">{invoice.container}</TableCell>
@@ -174,7 +153,7 @@ export default function DemurrageCarrierCosts() {
                       <TableCell className="text-center">
                         <Badge variant="outline">{invoice.days_charged} dias</Badge>
                       </TableCell>
-                      <TableCell className="text-right font-semibold text-primary">{formatCurrency(invoice.cost_usd)}</TableCell>
+                      <TableCell className="text-right font-semibold text-[#ffc800]">{formatCurrency(invoice.cost_usd)}</TableCell>
                       <TableCell>{getStatusBadge(invoice.audit_status)}</TableCell>
                     </TableRow>
                   ))}
@@ -184,6 +163,6 @@ export default function DemurrageCarrierCosts() {
           </CardContent>
         </Card>
       </div>
-    </PageLayout>
+    </DemurrageLayout>
   );
 }
