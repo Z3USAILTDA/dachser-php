@@ -662,7 +662,7 @@ const EsteiraIndex = () => {
       const { data, error } = await supabase.functions.invoke("voucher-integrate-rm", {
         body: {
           action: "import",
-          limit: 100
+          limit: 500 // Increased limit to catch more vouchers
         }
       });
       if (error) {
