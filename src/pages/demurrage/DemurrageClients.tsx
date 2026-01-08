@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { DemurrageLayout } from "@/components/demurrage/DemurrageLayout";
 import { KpiCard } from "@/components/demurrage/KpiCard";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -8,50 +8,83 @@ import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Users, Plus, Edit, Bell, BellOff, Search, DollarSign, AlertTriangle } from "lucide-react";
-
-// Mock data
-const mockProfiles = [
-  { id: "1", client_name: "CLIENTE ABC", auto_alert_enabled: true, containers: 12, total_demurrage: 4500, exceeded: 2 },
-  { id: "2", client_name: "CLIENTE XYZ", auto_alert_enabled: false, containers: 8, total_demurrage: 2200, exceeded: 1 },
-  { id: "3", client_name: "CLIENTE 123", auto_alert_enabled: true, containers: 15, total_demurrage: 6800, exceeded: 4 },
-  { id: "4", client_name: "CLIENTE DEF", auto_alert_enabled: true, containers: 5, total_demurrage: 950, exceeded: 0 },
-  { id: "5", client_name: "CLIENTE GHI", auto_alert_enabled: true, containers: 22, total_demurrage: 12500, exceeded: 3 },
-  { id: "6", client_name: "CLIENTE JKL", auto_alert_enabled: true, containers: 18, total_demurrage: 8900, exceeded: 2 },
-  { id: "7", client_name: "CLIENTE MNO", auto_alert_enabled: false, containers: 0, total_demurrage: 0, exceeded: 0 },
-];
+import { useDemurrageData } from "@/hooks/useDemurrageData";
 
 type QuickFilter = "all" | "reports" | "no_reports" | "demurrage" | "pending";
+
+interface ClientProfile {
+  cliente: string;
+  auto_alert_enabled: boolean;
+  containers: number;
+  total_demurrage: number;
+  exceeded: number;
+}
 
 export default function DemurrageClients() {
   const [searchTerm, setSearchTerm] = useState("");
   const [filterReports, setFilterReports] = useState<string>("all");
   const [quickFilter, setQuickFilter] = useState<QuickFilter>("all");
 
+  const { data: containers = [], isLoading } = useDemurrageData();
+
+  // Group containers by client
+  const clientProfiles = useMemo(() => {
+    const clientMap = new Map<string, ClientProfile>();
+
+    containers.forEach(c => {
+      const clientName = c.cliente || 'SEM CLIENTE';
+      
+      if (!clientMap.has(clientName)) {
+        clientMap.set(clientName, {
+          cliente: clientName,
+          auto_alert_enabled: c.client_auto_alert,
+          containers: 0,
+          total_demurrage: 0,
+          exceeded: 0,
+        });
+      }
+
+      const profile = clientMap.get(clientName)!;
+      profile.containers += 1;
+      profile.total_demurrage += c.expected_cost_usd || 0;
+      if (['exceeded', 'critical'].includes(c.risk_status)) {
+        profile.exceeded += 1;
+      }
+    });
+
+    return Array.from(clientMap.values()).sort((a, b) => b.total_demurrage - a.total_demurrage);
+  }, [containers]);
+
   const formatCurrency = (value: number) => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 0 }).format(value);
 
-  const stats = {
-    total: mockProfiles.length,
-    reportsEnabled: mockProfiles.filter(p => p.auto_alert_enabled).length,
-    noReports: mockProfiles.filter(p => !p.auto_alert_enabled).length,
-    totalDemurrage: mockProfiles.reduce((sum, p) => sum + p.total_demurrage, 0),
-    pendingProfiles: 78, // Mock value for profiles awaiting registration
-  };
+  const stats = useMemo(() => {
+    const total = clientProfiles.length;
+    const reportsEnabled = clientProfiles.filter(p => p.auto_alert_enabled).length;
+    const noReports = clientProfiles.filter(p => !p.auto_alert_enabled).length;
+    const totalDemurrage = clientProfiles.reduce((sum, p) => sum + p.total_demurrage, 0);
+    // Count unique clients in containers that don't have a profile yet (approximation)
+    const pendingProfiles = 0; // This would need a separate query to determine
 
-  const filteredProfiles = mockProfiles.filter(p => {
-    const matchesSearch = p.client_name.toLowerCase().includes(searchTerm.toLowerCase());
-    
-    let matchesQuickFilter = true;
-    if (quickFilter === "reports") {
-      matchesQuickFilter = p.auto_alert_enabled;
-    } else if (quickFilter === "no_reports") {
-      matchesQuickFilter = !p.auto_alert_enabled;
-    }
-    
-    const matchesFilter = filterReports === "all" || 
-      (filterReports === "reports" && p.auto_alert_enabled) ||
-      (filterReports === "no-reports" && !p.auto_alert_enabled);
-    return matchesSearch && matchesQuickFilter && matchesFilter;
-  });
+    return { total, reportsEnabled, noReports, totalDemurrage, pendingProfiles };
+  }, [clientProfiles]);
+
+  const filteredProfiles = useMemo(() => {
+    return clientProfiles.filter(p => {
+      const matchesSearch = p.cliente.toLowerCase().includes(searchTerm.toLowerCase());
+      
+      let matchesQuickFilter = true;
+      if (quickFilter === "reports") {
+        matchesQuickFilter = p.auto_alert_enabled;
+      } else if (quickFilter === "no_reports") {
+        matchesQuickFilter = !p.auto_alert_enabled;
+      }
+      
+      const matchesFilter = filterReports === "all" || 
+        (filterReports === "reports" && p.auto_alert_enabled) ||
+        (filterReports === "no-reports" && !p.auto_alert_enabled);
+      return matchesSearch && matchesQuickFilter && matchesFilter;
+    });
+  }, [clientProfiles, searchTerm, quickFilter, filterReports]);
 
   const handleQuickFilterChange = (filter: QuickFilter) => {
     setQuickFilter(filter);
@@ -68,8 +101,8 @@ export default function DemurrageClients() {
     <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
       <KpiCard
         title="TOTAL PERFIS"
-        value={7}
-        subtitle="Clientes cadastrados"
+        value={stats.total}
+        subtitle="Clientes com containers"
         icon={<Users className="h-6 w-6" />}
         variant="default"
         isActive={quickFilter === "all"}
@@ -77,7 +110,7 @@ export default function DemurrageClients() {
       />
       <KpiCard
         title="REPORTA DEMURRAGE"
-        value={6}
+        value={stats.reportsEnabled}
         subtitle="Com alertas ativos"
         icon={<Bell className="h-6 w-6" />}
         variant="warning"
@@ -86,7 +119,7 @@ export default function DemurrageClients() {
       />
       <KpiCard
         title="NÃO REPORTA"
-        value={1}
+        value={stats.noReports}
         subtitle="Sem alertas"
         icon={<BellOff className="h-6 w-6" />}
         variant="info"
@@ -95,7 +128,7 @@ export default function DemurrageClients() {
       />
       <KpiCard
         title="DEMURRAGE TOTAL"
-        value={formatCurrency(76220)}
+        value={formatCurrency(stats.totalDemurrage)}
         subtitle="Valor consolidado"
         icon={<DollarSign className="h-6 w-6" />}
         variant="default"
@@ -104,7 +137,7 @@ export default function DemurrageClients() {
       />
       <KpiCard
         title="SEM PERFIL"
-        value={78}
+        value={stats.pendingProfiles}
         subtitle="Aguardando cadastro"
         icon={<AlertTriangle className="h-6 w-6" />}
         variant="critical"
@@ -118,6 +151,7 @@ export default function DemurrageClients() {
     <DemurrageLayout
       rightActions={rightActions}
       customCards={customCards}
+      loading={isLoading}
     >
       <div className="space-y-4">
         {/* Filters */}
@@ -154,7 +188,7 @@ export default function DemurrageClients() {
           <CardHeader className="pb-3">
             <CardTitle className="flex items-center gap-2 text-foreground text-base">
               <Users className="h-5 w-5 text-[#ffc800]" />
-              Perfis Configurados
+              Perfis por Cliente
             </CardTitle>
             <CardDescription>{filteredProfiles.length} perfil(is)</CardDescription>
           </CardHeader>
@@ -178,8 +212,8 @@ export default function DemurrageClients() {
                 </TableHeader>
                 <TableBody>
                   {filteredProfiles.map((profile) => (
-                    <TableRow key={profile.id} className="border-[rgba(255,255,255,0.1)]">
-                      <TableCell className="font-medium">{profile.client_name}</TableCell>
+                    <TableRow key={profile.cliente} className="border-[rgba(255,255,255,0.1)]">
+                      <TableCell className="font-medium">{profile.cliente}</TableCell>
                       <TableCell>
                         <Button 
                           size="sm" 
