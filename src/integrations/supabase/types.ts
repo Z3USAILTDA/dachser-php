@@ -637,6 +637,57 @@ export type Database = {
         }
         Relationships: []
       }
+      t_client_free_time: {
+        Row: {
+          armador: string | null
+          ativo: boolean | null
+          cliente_cnpj: string | null
+          cliente_nome: string
+          created_at: string | null
+          created_by: string | null
+          free_time_days: number
+          id: string
+          mbl: string | null
+          notas: string | null
+          tipo_ft: string
+          updated_at: string | null
+          vigencia_fim: string | null
+          vigencia_inicio: string | null
+        }
+        Insert: {
+          armador?: string | null
+          ativo?: boolean | null
+          cliente_cnpj?: string | null
+          cliente_nome: string
+          created_at?: string | null
+          created_by?: string | null
+          free_time_days?: number
+          id?: string
+          mbl?: string | null
+          notas?: string | null
+          tipo_ft?: string
+          updated_at?: string | null
+          vigencia_fim?: string | null
+          vigencia_inicio?: string | null
+        }
+        Update: {
+          armador?: string | null
+          ativo?: boolean | null
+          cliente_cnpj?: string | null
+          cliente_nome?: string
+          created_at?: string | null
+          created_by?: string | null
+          free_time_days?: number
+          id?: string
+          mbl?: string | null
+          notas?: string | null
+          tipo_ft?: string
+          updated_at?: string | null
+          vigencia_fim?: string | null
+          vigencia_inicio?: string | null
+        }
+        Relationships: []
+      }
       t_demurrage_containers: {
         Row: {
           active: boolean | null
@@ -668,6 +719,8 @@ export type Database = {
           expected_cost_usd: number | null
           free_time_days: number | null
           free_time_end_date: string | null
+          ft_origem: string | null
+          ft_pendente: boolean | null
           ft_started_at: string | null
           id: string
           last_event: string | null
@@ -723,6 +776,8 @@ export type Database = {
           expected_cost_usd?: number | null
           free_time_days?: number | null
           free_time_end_date?: string | null
+          ft_origem?: string | null
+          ft_pendente?: boolean | null
           ft_started_at?: string | null
           id?: string
           last_event?: string | null
@@ -778,6 +833,8 @@ export type Database = {
           expected_cost_usd?: number | null
           free_time_days?: number | null
           free_time_end_date?: string | null
+          ft_origem?: string | null
+          ft_pendente?: boolean | null
           ft_started_at?: string | null
           id?: string
           last_event?: string | null

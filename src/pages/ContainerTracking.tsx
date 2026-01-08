@@ -25,7 +25,9 @@ import {
   ChevronDown,
   ChevronUp,
   Package,
+  Clock,
 } from "lucide-react";
+import { RegisterFreeTimeDialog } from "@/components/tracking/RegisterFreeTimeDialog";
 import { useToast } from "@/hooks/use-toast";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import type { User, Session } from "@supabase/supabase-js";
@@ -192,6 +194,9 @@ const ContainerTracking = () => {
   const [emailType, setEmailType] = useState<"interno" | "cliente">("interno");
   const [emailCustomMessage, setEmailCustomMessage] = useState("");
   const [isSendingEmail, setIsSendingEmail] = useState(false);
+
+  // Free Time dialog state
+  const [freeTimeDialogOpen, setFreeTimeDialogOpen] = useState(false);
 
   const itemsPerPage = 10;
 
@@ -943,6 +948,13 @@ const ContainerTracking = () => {
 
               <div className="flex items-center gap-2">
                 <button
+                  onClick={() => setFreeTimeDialogOpen(true)}
+                  className="h-8 px-4 rounded-full bg-[#ffc800] text-[#000] text-[0.75rem] font-medium flex items-center gap-1.5 hover:bg-[#ffdc50] transition shadow-[0_0_20px_rgba(255,200,0,.3)]"
+                >
+                  <Clock className="w-3.5 h-3.5" />
+                  Registrar FT
+                </button>
+                <button
                   onClick={handleRefresh}
                   disabled={isRefreshing}
                   className="h-8 px-4 rounded-full bg-[#ffc800] text-[#000] text-[0.75rem] font-medium flex items-center gap-1.5 hover:bg-[#ffdc50] transition shadow-[0_0_20px_rgba(255,200,0,.3)] disabled:opacity-50"
@@ -1386,6 +1398,12 @@ const ContainerTracking = () => {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Register Free Time Dialog */}
+      <RegisterFreeTimeDialog 
+        open={freeTimeDialogOpen} 
+        onOpenChange={setFreeTimeDialogOpen}
+      />
     </div>
   );
 };
