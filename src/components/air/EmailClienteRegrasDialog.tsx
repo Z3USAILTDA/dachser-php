@@ -18,7 +18,7 @@ import {
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
 import { X, Plus, Search, Edit2, Trash2, RefreshCw } from 'lucide-react';
 import { useEmailClienteRegras } from '@/hooks/useEmailClienteRegras';
-import { EmailClienteRegra, EVENTOS_AWB, CANAIS_AWB, AEROPORTOS_COMUNS_AWB, CanalNotificacaoAir } from '@/types/air';
+import { EmailClienteRegra, EVENTOS_AWB, AEROPORTOS_COMUNS_AWB } from '@/types/air';
 
 interface EmailClienteRegrasDialogProps {
   open: boolean;
@@ -43,7 +43,6 @@ export function EmailClienteRegrasDialog({ open, onOpenChange }: EmailClienteReg
   const [aeroportos, setAeroportos] = useState<string[]>([]);
   const [aeroportoInput, setAeroportoInput] = useState('');
   const [eventosDisparo, setEventosDisparo] = useState<string[]>([]);
-  const [canais, setCanais] = useState<CanalNotificacaoAir[]>([]);
   const [ativo, setAtivo] = useState(true);
   const [saving, setSaving] = useState(false);
 
@@ -63,7 +62,6 @@ export function EmailClienteRegrasDialog({ open, onOpenChange }: EmailClienteReg
       setEmailCliente(selectedRegra.email_cliente || '');
       setAeroportos(selectedRegra.aeroportos || []);
       setEventosDisparo(selectedRegra.eventos_disparo || []);
-      setCanais(selectedRegra.canais || []);
       setAtivo(selectedRegra.ativo);
       setIsNewMode(false);
     }
@@ -77,7 +75,6 @@ export function EmailClienteRegrasDialog({ open, onOpenChange }: EmailClienteReg
     setEmailCliente('');
     setAeroportos([]);
     setEventosDisparo([]);
-    setCanais([]);
     setAtivo(true);
     setAeroportoInput('');
   };
@@ -111,17 +108,9 @@ export function EmailClienteRegrasDialog({ open, onOpenChange }: EmailClienteReg
     }
   };
 
-  const toggleCanal = (canal: CanalNotificacaoAir) => {
-    if (canais.includes(canal)) {
-      setCanais(canais.filter(c => c !== canal));
-    } else {
-      setCanais([...canais, canal]);
-    }
-  };
-
   const handleSave = async () => {
     if (!clienteNome.trim() && !cnpj.trim()) return;
-    if (eventosDisparo.length === 0 || canais.length === 0) return;
+    if (eventosDisparo.length === 0) return;
 
     setSaving(true);
     
@@ -131,7 +120,6 @@ export function EmailClienteRegrasDialog({ open, onOpenChange }: EmailClienteReg
       email_cliente: emailCliente || null,
       aeroportos,
       eventos_disparo: eventosDisparo,
-      canais,
       ativo,
     };
 
@@ -165,7 +153,7 @@ export function EmailClienteRegrasDialog({ open, onOpenChange }: EmailClienteReg
   );
 
   const isFormDirty = isNewMode || selectedRegra;
-  const canSave = (clienteNome.trim() || cnpj.trim()) && eventosDisparo.length > 0 && canais.length > 0;
+  const canSave = (clienteNome.trim() || cnpj.trim()) && eventosDisparo.length > 0;
 
   return (
     <>
@@ -363,25 +351,6 @@ export function EmailClienteRegrasDialog({ open, onOpenChange }: EmailClienteReg
                               onCheckedChange={() => toggleEvento(evento)}
                             />
                             <span className="text-xs text-white/80">{evento}</span>
-                          </label>
-                        ))}
-                      </div>
-                    </div>
-
-                    {/* Canais */}
-                    <div className="space-y-2">
-                      <Label className="text-white/70">Canais de Notificação</Label>
-                      <div className="flex gap-4">
-                        {CANAIS_AWB.map(canal => (
-                          <label
-                            key={canal.value}
-                            className="flex items-center gap-2 p-3 rounded bg-white/5 hover:bg-white/10 cursor-pointer"
-                          >
-                            <Checkbox
-                              checked={canais.includes(canal.value)}
-                              onCheckedChange={() => toggleCanal(canal.value)}
-                            />
-                            <span className="text-sm text-white/80">{canal.label}</span>
                           </label>
                         ))}
                       </div>
