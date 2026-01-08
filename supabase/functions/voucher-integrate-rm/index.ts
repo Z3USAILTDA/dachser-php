@@ -88,8 +88,9 @@ const handler = async (req: Request): Promise<Response> => {
         );
         console.log(`[voucher-integrate-rm] ${existingNds.size} vouchers já existem no Supabase`);
         
-        // Buscar vouchers do MariaDB - ordenar por id_rm DESC para pegar os mais recentes
-        // Usar um limite maior para garantir que pegamos todos os novos
+        // Buscar vouchers do MariaDB - sem limite para pegar todos
+        // Ordenar por id_rm ASC para garantir ordem consistente
+        const effectiveLimit = limit > 0 ? limit : 10000;
         const result = await mariaClient.query(
           `SELECT 
             id_rm,
@@ -109,9 +110,9 @@ const handler = async (req: Request): Promise<Response> => {
             cnpj,
             razao_social
           FROM dados_dachser.t_dados_financeiro_voucher
-          ORDER BY id_rm DESC
+          ORDER BY id_rm ASC
           LIMIT ?`,
-          [limit]
+          [effectiveLimit]
         );
         
         await mariaClient.close();
