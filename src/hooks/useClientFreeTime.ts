@@ -31,41 +31,38 @@ export interface CreateClientFreeTimeData {
   notas?: string;
 }
 
-// Listar todas as configurações de Free Time
+// Listar todas as configurações de Free Time (MariaDB)
 export function useClientFreeTimeList() {
   return useQuery({
     queryKey: ['client-free-time'],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from('t_client_free_time' as any)
-        .select('*')
-        .eq('ativo', true)
-        .order('created_at', { ascending: false });
+      const { data, error } = await supabase.functions.invoke('client-freetime-crud', {
+        body: { action: 'list' }
+      });
 
       if (error) throw error;
-      return (data || []) as unknown as ClientFreeTime[];
+      if (!data.success) throw new Error(data.error);
+      
+      return (data.data || []) as ClientFreeTime[];
     },
   });
 }
 
-// Criar nova configuração de Free Time
+// Criar nova configuração de Free Time (MariaDB)
 export function useCreateClientFreeTime() {
   const queryClient = useQueryClient();
   const { toast } = useToast();
 
   return useMutation({
-    mutationFn: async (data: CreateClientFreeTimeData) => {
-      const { data: result, error } = await supabase
-        .from('t_client_free_time' as any)
-        .insert({
-          ...data,
-          ativo: true,
-        })
-        .select()
-        .single();
+    mutationFn: async (formData: CreateClientFreeTimeData) => {
+      const { data, error } = await supabase.functions.invoke('client-freetime-crud', {
+        body: { action: 'create', data: formData }
+      });
 
       if (error) throw error;
-      return result as unknown as ClientFreeTime;
+      if (!data.success) throw new Error(data.error);
+      
+      return data;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['client-free-time'] });
@@ -77,32 +74,28 @@ export function useCreateClientFreeTime() {
     onError: (error) => {
       toast({
         title: "Erro ao cadastrar",
-        description: error.message,
+        description: error instanceof Error ? error.message : 'Erro desconhecido',
         variant: "destructive",
       });
     },
   });
 }
 
-// Atualizar configuração de Free Time
+// Atualizar configuração de Free Time (MariaDB)
 export function useUpdateClientFreeTime() {
   const queryClient = useQueryClient();
   const { toast } = useToast();
 
   return useMutation({
     mutationFn: async ({ id, data }: { id: string; data: Partial<CreateClientFreeTimeData> }) => {
-      const { data: result, error } = await supabase
-        .from('t_client_free_time' as any)
-        .update({
-          ...data,
-          updated_at: new Date().toISOString(),
-        })
-        .eq('id', id)
-        .select()
-        .single();
+      const { data: result, error } = await supabase.functions.invoke('client-freetime-crud', {
+        body: { action: 'update', id, data }
+      });
 
       if (error) throw error;
-      return result as unknown as ClientFreeTime;
+      if (!result.success) throw new Error(result.error);
+      
+      return result;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['client-free-time'] });
@@ -114,26 +107,28 @@ export function useUpdateClientFreeTime() {
     onError: (error) => {
       toast({
         title: "Erro ao atualizar",
-        description: error.message,
+        description: error instanceof Error ? error.message : 'Erro desconhecido',
         variant: "destructive",
       });
     },
   });
 }
 
-// Excluir configuração de Free Time (soft delete)
+// Excluir configuração de Free Time - soft delete (MariaDB)
 export function useDeleteClientFreeTime() {
   const queryClient = useQueryClient();
   const { toast } = useToast();
 
   return useMutation({
     mutationFn: async (id: string) => {
-      const { error } = await supabase
-        .from('t_client_free_time' as any)
-        .update({ ativo: false, updated_at: new Date().toISOString() })
-        .eq('id', id);
+      const { data, error } = await supabase.functions.invoke('client-freetime-crud', {
+        body: { action: 'delete', id }
+      });
 
       if (error) throw error;
+      if (!data.success) throw new Error(data.error);
+      
+      return data;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['client-free-time'] });
@@ -145,56 +140,31 @@ export function useDeleteClientFreeTime() {
     onError: (error) => {
       toast({
         title: "Erro ao remover",
-        description: error.message,
+        description: error instanceof Error ? error.message : 'Erro desconhecido',
         variant: "destructive",
       });
     },
   });
 }
 
-// Buscar Free Time aplicável para um cliente/MBL
+// Buscar Free Time aplicável para um cliente/MBL (MariaDB)
 export function useFreeTimeForClient(clienteNome?: string, mbl?: string) {
   return useQuery({
     queryKey: ['client-free-time', 'applicable', clienteNome, mbl],
     queryFn: async () => {
       if (!clienteNome) return null;
 
-      const today = new Date().toISOString().split('T')[0];
+      const { data, error } = await supabase.functions.invoke('client-freetime-crud', {
+        body: { action: 'findForClient', clienteNome, mbl }
+      });
 
-      // Primeiro, tentar encontrar FT por processo (MBL específico)
-      if (mbl) {
-        const { data: processoFT } = await supabase
-          .from('t_client_free_time' as any)
-          .select('*')
-          .eq('ativo', true)
-          .eq('tipo_ft', 'PROCESSO')
-          .eq('mbl', mbl)
-          .single();
-
-        if (processoFT) {
-          const ftData = processoFT as unknown as ClientFreeTime;
-          return { ...ftData, origem: 'PROCESSO' };
-        }
+      if (error) throw error;
+      if (!data.success) throw new Error(data.error);
+      
+      if (data.data) {
+        return { ...data.data, origem: data.data.tipo_ft } as ClientFreeTime & { origem: string };
       }
-
-      // Segundo, buscar FT por contrato (cliente + vigência ativa)
-      const { data: contratoFT } = await supabase
-        .from('t_client_free_time' as any)
-        .select('*')
-        .eq('ativo', true)
-        .eq('tipo_ft', 'CONTRATO')
-        .ilike('cliente_nome', `%${clienteNome}%`)
-        .lte('vigencia_inicio', today)
-        .gte('vigencia_fim', today)
-        .order('created_at', { ascending: false })
-        .limit(1)
-        .single();
-
-      if (contratoFT) {
-        const ftData = contratoFT as unknown as ClientFreeTime;
-        return { ...ftData, origem: 'CONTRATO' };
-      }
-
+      
       return null;
     },
     enabled: !!clienteNome,
