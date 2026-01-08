@@ -18,14 +18,7 @@ import {
   TrendingUp
 } from "lucide-react";
 import { toast } from "sonner";
-
-// Mock data for demonstration
-const mockContainers = [
-  { id: "1", numero: "MSCU1234567", master: "MEDUGRU123456", cliente: "CLIENTE ABC", armador: "MSC", tipo: "40HC", status: "at_risk", diasRestantes: 2, demurrage: 450 },
-  { id: "2", numero: "HLCU7654321", master: "HLCUGRU789012", cliente: "CLIENTE XYZ", armador: "HAPAG", tipo: "20DV", status: "safe", diasRestantes: 8, demurrage: 0 },
-  { id: "3", numero: "MAEU9876543", master: "MAEUPAR345678", cliente: "CLIENTE 123", armador: "MAERSK", tipo: "40DV", status: "exceeded", diasRestantes: -3, demurrage: 1200 },
-  { id: "4", numero: "CMAU5678901", master: "CMAUGRU901234", cliente: "CLIENTE ABC", armador: "CMA CGM", tipo: "40HC", status: "safe", diasRestantes: 5, demurrage: 0 },
-];
+import { useDemurrageData, useDemurrageStats, useSyncDemurrage, useRecalcDemurrage, type DemurrageContainer } from "@/hooks/useDemurrageData";
 
 type QuickFilter = "all" | "in_transit" | "at_risk" | "delivered";
 
@@ -33,46 +26,45 @@ export default function DemurrageMonitor() {
   const [searchTerm, setSearchTerm] = useState("");
   const [filterStatus, setFilterStatus] = useState<string>("all");
   const [quickFilter, setQuickFilter] = useState<QuickFilter>("all");
-  const [loading, setLoading] = useState(false);
-  const [isRefetching, setIsRefetching] = useState(false);
 
-  const handleRefresh = () => {
-    setIsRefetching(true);
-    setTimeout(() => {
-      setIsRefetching(false);
-      toast.success("Dados atualizados");
-    }, 1000);
+  // Determine filter based on quickFilter
+  const getFilters = () => {
+    const filters: { search?: string; risk_status?: string; cronos_status?: string } = {};
+    
+    if (searchTerm) filters.search = searchTerm;
+    if (filterStatus !== "all") filters.risk_status = filterStatus;
+    
+    if (quickFilter === "in_transit") {
+      filters.cronos_status = "IN_TRANSIT";
+    } else if (quickFilter === "delivered") {
+      filters.cronos_status = "GATE_OUT";
+    }
+    
+    return filters;
+  };
+
+  const { data: containers = [], isLoading, refetch, isRefetching } = useDemurrageData(getFilters());
+  const { data: stats } = useDemurrageStats();
+  const syncMutation = useSyncDemurrage();
+  const recalcMutation = useRecalcDemurrage();
+
+  // Filter for at_risk on client side (includes multiple statuses)
+  const filteredContainers = quickFilter === "at_risk"
+    ? containers.filter(c => ["at_risk", "critical", "exceeded"].includes(c.risk_status))
+    : containers;
+
+  const handleRefresh = async () => {
+    try {
+      await syncMutation.mutateAsync();
+      await recalcMutation.mutateAsync();
+      toast.success("Dados sincronizados e recalculados");
+    } catch (error) {
+      toast.error("Erro ao sincronizar dados");
+    }
   };
 
   const handleQuickFilterChange = (filter: QuickFilter) => {
     setQuickFilter(filter);
-  };
-
-  const filteredContainers = mockContainers.filter(c => {
-    const matchesSearch = 
-      c.numero.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      c.master.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      c.cliente.toLowerCase().includes(searchTerm.toLowerCase());
-    
-    let matchesQuickFilter = true;
-    if (quickFilter === "in_transit") {
-      matchesQuickFilter = c.status === "at_risk" || c.status === "critical";
-    } else if (quickFilter === "at_risk") {
-      matchesQuickFilter = c.status === "exceeded" || c.status === "critical";
-    } else if (quickFilter === "delivered") {
-      matchesQuickFilter = c.status === "safe";
-    }
-    
-    const matchesStatus = filterStatus === "all" || c.status === filterStatus;
-    
-    return matchesSearch && matchesQuickFilter && matchesStatus;
-  });
-
-  const stats = {
-    total: mockContainers.length,
-    inTransit: 0, // CRG, DEP, TSP, ARR, DCH
-    atRisk: mockContainers.filter(c => c.status === 'exceeded' || c.status === 'critical').length, // DELAYED, HOLD, CANCELLED
-    delivered: mockContainers.filter(c => c.status === 'safe').length, // GOD, DLV (Gate-out, Entrega)
   };
 
   const getRiskBadge = (status: string) => {
@@ -105,7 +97,7 @@ export default function DemurrageMonitor() {
     <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
       <KpiCard
         title="TOTAL MONITORADOS"
-        value={202}
+        value={stats?.total || 0}
         subtitle="Containers ativos"
         icon={<Ship className="h-6 w-6" />}
         variant="default"
@@ -114,8 +106,8 @@ export default function DemurrageMonitor() {
       />
       <KpiCard
         title="EM TRÂNSITO"
-        value={0}
-        subtitle="CRG, DEP, TSP, ARR, DCH"
+        value={stats?.inTransit || 0}
+        subtitle="PENDING, IN_TRANSIT, ARRIVED"
         icon={<TrendingUp className="h-6 w-6" />}
         variant="info"
         isActive={quickFilter === "in_transit"}
@@ -123,8 +115,8 @@ export default function DemurrageMonitor() {
       />
       <KpiCard
         title="EM ALERTA"
-        value={10}
-        subtitle="DELAYED, HOLD, CANCELLED"
+        value={stats?.atRisk || 0}
+        subtitle="Risco, Crítico ou Excedido"
         icon={<AlertTriangle className="h-6 w-6" />}
         variant="critical"
         isActive={quickFilter === "at_risk"}
@@ -132,8 +124,8 @@ export default function DemurrageMonitor() {
       />
       <KpiCard
         title="ENTREGUES"
-        value={192}
-        subtitle="GOD, DLV (Gate-out, Entrega)"
+        value={stats?.delivered || 0}
+        subtitle="GATE_OUT, RETURNED"
         icon={<CheckCircle2 className="h-6 w-6" />}
         variant="success"
         isActive={quickFilter === "delivered"}
@@ -144,9 +136,9 @@ export default function DemurrageMonitor() {
 
   return (
     <DemurrageLayout
-      loading={loading}
+      loading={isLoading}
       onRefresh={handleRefresh}
-      isRefetching={isRefetching}
+      isRefetching={isRefetching || syncMutation.isPending || recalcMutation.isPending}
       rightActions={rightActions}
       customCards={customCards}
     >
@@ -214,18 +206,23 @@ export default function DemurrageMonitor() {
                   {filteredContainers.map((container) => (
                     <TableRow key={container.id} className="border-[rgba(255,255,255,0.1)] cursor-pointer hover:bg-[rgba(255,200,0,0.05)]">
                       <TableCell className="font-mono font-medium">{container.numero}</TableCell>
-                      <TableCell className="font-mono text-sm">{container.master}</TableCell>
-                      <TableCell>{container.cliente}</TableCell>
-                      <TableCell>{container.armador}</TableCell>
-                      <TableCell><Badge variant="outline">{container.tipo}</Badge></TableCell>
+                      <TableCell className="font-mono text-sm">{container.mbl}</TableCell>
+                      <TableCell>{container.cliente || '-'}</TableCell>
+                      <TableCell>{container.armador || '-'}</TableCell>
+                      <TableCell>
+                        <Badge variant="outline">{container.tipo_conteiner || '-'}</Badge>
+                      </TableCell>
                       <TableCell className="text-center">
-                        <Badge variant={container.diasRestantes <= 0 ? "destructive" : container.diasRestantes <= 2 ? "secondary" : "outline"}>
-                          {container.diasRestantes}d
+                        <Badge variant={
+                          (container.days_remaining ?? 0) <= 0 ? "destructive" : 
+                          (container.days_remaining ?? 0) <= 2 ? "secondary" : "outline"
+                        }>
+                          {container.days_remaining ?? '-'}d
                         </Badge>
                       </TableCell>
-                      <TableCell>{getRiskBadge(container.status)}</TableCell>
+                      <TableCell>{getRiskBadge(container.risk_status)}</TableCell>
                       <TableCell className="text-right font-semibold text-[#ffc800]">
-                        {container.demurrage > 0 ? formatCurrency(container.demurrage) : '-'}
+                        {container.expected_cost_usd > 0 ? formatCurrency(container.expected_cost_usd) : '-'}
                       </TableCell>
                     </TableRow>
                   ))}

@@ -583,6 +583,240 @@ export type Database = {
         }
         Relationships: []
       }
+      t_demurrage_containers: {
+        Row: {
+          active: boolean | null
+          armador: string | null
+          armador_cost_usd: number | null
+          armador_days_charged: number | null
+          armador_invoice_number: string | null
+          audit_status: string | null
+          booking: string | null
+          client_alert_days_before: number | null
+          client_auto_alert: boolean | null
+          client_report_frequency: string | null
+          cliente: string | null
+          container_status: string | null
+          created_at: string | null
+          cronos_status: string | null
+          data_atracacao: string | null
+          data_devolucao: string | null
+          days_remaining: number | null
+          discrepancy_usd: number | null
+          dispute_reason: string | null
+          dispute_status: string | null
+          disputed_amount_usd: number | null
+          email_analista: string | null
+          email_cliente: string | null
+          eta: string | null
+          etd: string | null
+          excedente_dias: number | null
+          expected_cost_usd: number | null
+          free_time_days: number | null
+          free_time_end_date: string | null
+          ft_started_at: string | null
+          id: string
+          last_event: string | null
+          last_sync_at: string | null
+          mariadb_id: number | null
+          mbl: string
+          navio: string | null
+          notes: string | null
+          numero: string
+          porto_destino: string | null
+          porto_origem: string | null
+          pre_invoice_number: string | null
+          pre_invoice_status: string | null
+          pre_invoice_total_usd: number | null
+          rate_usd_per_day: number | null
+          recovered_amount_usd: number | null
+          risk_score: number | null
+          risk_status: string | null
+          status_armador: string | null
+          tipo_conteiner: string | null
+          tipo_processo: string | null
+          updated_at: string | null
+          vessel_imo: string | null
+          voyage: string | null
+        }
+        Insert: {
+          active?: boolean | null
+          armador?: string | null
+          armador_cost_usd?: number | null
+          armador_days_charged?: number | null
+          armador_invoice_number?: string | null
+          audit_status?: string | null
+          booking?: string | null
+          client_alert_days_before?: number | null
+          client_auto_alert?: boolean | null
+          client_report_frequency?: string | null
+          cliente?: string | null
+          container_status?: string | null
+          created_at?: string | null
+          cronos_status?: string | null
+          data_atracacao?: string | null
+          data_devolucao?: string | null
+          days_remaining?: number | null
+          discrepancy_usd?: number | null
+          dispute_reason?: string | null
+          dispute_status?: string | null
+          disputed_amount_usd?: number | null
+          email_analista?: string | null
+          email_cliente?: string | null
+          eta?: string | null
+          etd?: string | null
+          excedente_dias?: number | null
+          expected_cost_usd?: number | null
+          free_time_days?: number | null
+          free_time_end_date?: string | null
+          ft_started_at?: string | null
+          id?: string
+          last_event?: string | null
+          last_sync_at?: string | null
+          mariadb_id?: number | null
+          mbl: string
+          navio?: string | null
+          notes?: string | null
+          numero: string
+          porto_destino?: string | null
+          porto_origem?: string | null
+          pre_invoice_number?: string | null
+          pre_invoice_status?: string | null
+          pre_invoice_total_usd?: number | null
+          rate_usd_per_day?: number | null
+          recovered_amount_usd?: number | null
+          risk_score?: number | null
+          risk_status?: string | null
+          status_armador?: string | null
+          tipo_conteiner?: string | null
+          tipo_processo?: string | null
+          updated_at?: string | null
+          vessel_imo?: string | null
+          voyage?: string | null
+        }
+        Update: {
+          active?: boolean | null
+          armador?: string | null
+          armador_cost_usd?: number | null
+          armador_days_charged?: number | null
+          armador_invoice_number?: string | null
+          audit_status?: string | null
+          booking?: string | null
+          client_alert_days_before?: number | null
+          client_auto_alert?: boolean | null
+          client_report_frequency?: string | null
+          cliente?: string | null
+          container_status?: string | null
+          created_at?: string | null
+          cronos_status?: string | null
+          data_atracacao?: string | null
+          data_devolucao?: string | null
+          days_remaining?: number | null
+          discrepancy_usd?: number | null
+          dispute_reason?: string | null
+          dispute_status?: string | null
+          disputed_amount_usd?: number | null
+          email_analista?: string | null
+          email_cliente?: string | null
+          eta?: string | null
+          etd?: string | null
+          excedente_dias?: number | null
+          expected_cost_usd?: number | null
+          free_time_days?: number | null
+          free_time_end_date?: string | null
+          ft_started_at?: string | null
+          id?: string
+          last_event?: string | null
+          last_sync_at?: string | null
+          mariadb_id?: number | null
+          mbl?: string
+          navio?: string | null
+          notes?: string | null
+          numero?: string
+          porto_destino?: string | null
+          porto_origem?: string | null
+          pre_invoice_number?: string | null
+          pre_invoice_status?: string | null
+          pre_invoice_total_usd?: number | null
+          rate_usd_per_day?: number | null
+          recovered_amount_usd?: number | null
+          risk_score?: number | null
+          risk_status?: string | null
+          status_armador?: string | null
+          tipo_conteiner?: string | null
+          tipo_processo?: string | null
+          updated_at?: string | null
+          vessel_imo?: string | null
+          voyage?: string | null
+        }
+        Relationships: []
+      }
+      t_demurrage_rates: {
+        Row: {
+          active: boolean | null
+          armador: string
+          container_type: string
+          created_at: string | null
+          free_time_days: number
+          id: string
+          period_end_day: number | null
+          period_start_day: number | null
+          period_type: string | null
+          rate_usd: number
+          updated_at: string | null
+        }
+        Insert: {
+          active?: boolean | null
+          armador: string
+          container_type: string
+          created_at?: string | null
+          free_time_days?: number
+          id?: string
+          period_end_day?: number | null
+          period_start_day?: number | null
+          period_type?: string | null
+          rate_usd: number
+          updated_at?: string | null
+        }
+        Update: {
+          active?: boolean | null
+          armador?: string
+          container_type?: string
+          created_at?: string | null
+          free_time_days?: number
+          id?: string
+          period_end_day?: number | null
+          period_start_day?: number | null
+          period_type?: string | null
+          rate_usd?: number
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
+      t_demurrage_settings: {
+        Row: {
+          description: string | null
+          id: string
+          key: string
+          updated_at: string | null
+          value: string
+        }
+        Insert: {
+          description?: string | null
+          id?: string
+          key: string
+          updated_at?: string | null
+          value: string
+        }
+        Update: {
+          description?: string | null
+          id?: string
+          key?: string
+          updated_at?: string | null
+          value?: string
+        }
+        Relationships: []
+      }
       user_roles: {
         Row: {
           created_at: string

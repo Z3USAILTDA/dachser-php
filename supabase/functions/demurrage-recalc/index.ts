@@ -5,25 +5,24 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-interface Container {
+interface DemurrageContainer {
   id: string;
   numero: string;
+  armador: string | null;
+  tipo_conteiner: string | null;
   ft_started_at: string | null;
   data_devolucao: string | null;
-  tipo_conteiner: string | null;
-  shipments?: {
-    armador: string;
-    cliente: string;
-  } | null;
+  free_time_days: number;
 }
 
 interface DemurrageRate {
+  armador: string;
   container_type: string;
   free_time_days: number;
+  rate_usd: number;
   period_type: string;
   period_start_day: number | null;
   period_end_day: number | null;
-  rate_usd: number;
 }
 
 Deno.serve(async (req) => {
@@ -38,9 +37,9 @@ Deno.serve(async (req) => {
 
     console.log('=== Recalculating Demurrage ===');
 
-    // Fetch system settings
+    // Fetch settings from t_demurrage_settings
     const { data: settingsData } = await supabase
-      .from('system_settings')
+      .from('t_demurrage_settings')
       .select('key, value');
     
     const settings: Record<string, string> = {};
@@ -50,12 +49,12 @@ Deno.serve(async (req) => {
     
     const defaultFreeTime = parseInt(settings.default_free_time) || 14;
     const defaultRate = parseFloat(settings.default_rate) || 150;
-    console.log(`System settings: FT=${defaultFreeTime} days, Rate=$${defaultRate}/day`);
+    console.log(`Settings: FT=${defaultFreeTime} days, Rate=$${defaultRate}/day`);
 
-    // Fetch demurrage rates
+    // Fetch rates from t_demurrage_rates
     const { data: rates, error: ratesError } = await supabase
-      .from('demurrage_rates')
-      .select('container_type, free_time_days, period_type, period_start_day, period_end_day, rate_usd')
+      .from('t_demurrage_rates')
+      .select('armador, container_type, free_time_days, rate_usd, period_type, period_start_day, period_end_day')
       .eq('active', true);
 
     if (ratesError) throw new Error(`Failed to fetch rates: ${ratesError.message}`);
@@ -63,41 +62,34 @@ Deno.serve(async (req) => {
     const ratesList = (rates || []) as DemurrageRate[];
     console.log(`Loaded ${ratesList.length} demurrage rates`);
 
-    // Build rate lookup by container type
-    const ratesByType: Record<string, DemurrageRate[]> = {};
+    // Build rate lookup by armador + container type
+    const ratesMap: Record<string, DemurrageRate[]> = {};
     for (const rate of ratesList) {
-      if (!ratesByType[rate.container_type]) {
-        ratesByType[rate.container_type] = [];
+      const key = `${rate.armador}:${rate.container_type}`;
+      if (!ratesMap[key]) {
+        ratesMap[key] = [];
       }
-      ratesByType[rate.container_type].push(rate);
+      ratesMap[key].push(rate);
     }
 
     // Fetch containers with ft_started_at set
     const { data: containers, error: containersError } = await supabase
-      .from('containers')
-      .select(`
-        id,
-        numero,
-        ft_started_at,
-        data_devolucao,
-        tipo_conteiner,
-        shipments (
-          armador,
-          cliente
-        )
-      `)
+      .from('t_demurrage_containers')
+      .select('id, numero, armador, tipo_conteiner, ft_started_at, data_devolucao, free_time_days')
+      .eq('active', true)
       .not('ft_started_at', 'is', null);
 
     if (containersError) throw new Error(`Failed to fetch containers: ${containersError.message}`);
 
-    const containerList = (containers as unknown as Container[]) || [];
+    const containerList = (containers || []) as DemurrageContainer[];
     console.log(`Found ${containerList.length} containers to recalculate`);
 
     const results = {
       total: containerList.length,
       updated: 0,
-      returned: 0,
-      in_free_time: 0,
+      safe: 0,
+      at_risk: 0,
+      critical: 0,
       exceeded: 0,
       total_demurrage_usd: 0,
       errors: 0,
@@ -114,57 +106,65 @@ Deno.serve(async (req) => {
           ? new Date(container.data_devolucao) 
           : now;
 
-        // Get rates for this container type (default to 40DV if not found)
+        // Get rates for this container (by armador + tipo_conteiner)
         const containerType = container.tipo_conteiner || '40DV';
-        const applicableRates = ratesByType[containerType] || ratesByType['40DV'] || [];
+        const armador = container.armador || 'DEFAULT';
+        const key = `${armador}:${containerType}`;
+        const applicableRates = ratesMap[key] || ratesMap[`DEFAULT:${containerType}`] || [];
         
-        // Get free time days (use system default if not found)
-        const freeTimeDays = applicableRates[0]?.free_time_days || defaultFreeTime;
+        // Get free time days
+        const freeTimeDays = applicableRates[0]?.free_time_days || container.free_time_days || defaultFreeTime;
         
         // Calculate free time end date
         const freeTimeEnd = new Date(ftStart);
         freeTimeEnd.setDate(freeTimeEnd.getDate() + freeTimeDays);
 
-        // Calculate days from FT start to end date
+        // Calculate days
         const totalDays = Math.floor((endDate.getTime() - ftStart.getTime()) / (1000 * 60 * 60 * 24));
         const daysRemaining = Math.floor((freeTimeEnd.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
         const daysExceeded = Math.max(0, totalDays - freeTimeDays);
 
-        // Calculate demurrage cost based on tiered rates
+        // Calculate demurrage cost
         let demurrageCost = 0;
+        let ratePerDay = defaultRate;
         
         if (daysExceeded > 0) {
-          // Sort rates by period_start_day
+          // Use tiered rates if available
           const sortedRates = applicableRates
             .filter(r => r.period_type !== 'free_period')
             .sort((a, b) => (a.period_start_day || 0) - (b.period_start_day || 0));
 
-          let remainingDays = daysExceeded;
-          
-          for (const rate of sortedRates) {
-            if (remainingDays <= 0) break;
+          if (sortedRates.length > 0) {
+            let remainingDays = daysExceeded;
             
-            const periodStart = (rate.period_start_day || 1) - freeTimeDays;
-            const periodEnd = rate.period_end_day ? (rate.period_end_day - freeTimeDays) : Infinity;
-            
-            const daysInPeriod = Math.min(
-              remainingDays,
-              periodEnd - Math.max(0, periodStart) + 1
-            );
-            
-            if (daysInPeriod > 0) {
-              demurrageCost += daysInPeriod * rate.rate_usd;
-              remainingDays -= daysInPeriod;
+            for (const rate of sortedRates) {
+              if (remainingDays <= 0) break;
+              
+              const periodStart = (rate.period_start_day || 1);
+              const periodEnd = rate.period_end_day || Infinity;
+              const periodLength = periodEnd - periodStart + 1;
+              
+              const daysInPeriod = Math.min(remainingDays, periodLength);
+              
+              if (daysInPeriod > 0) {
+                demurrageCost += daysInPeriod * rate.rate_usd;
+                ratePerDay = rate.rate_usd;
+                remainingDays -= daysInPeriod;
+              }
             }
-          }
 
-          // If no specific rates found, use system default rate
-          if (demurrageCost === 0) {
+            // Any remaining days use last rate
+            if (remainingDays > 0) {
+              const lastRate = sortedRates[sortedRates.length - 1];
+              demurrageCost += remainingDays * lastRate.rate_usd;
+            }
+          } else {
+            // No specific rates, use default
             demurrageCost = daysExceeded * defaultRate;
           }
         }
 
-        // Determine status
+        // Determine risk status
         let riskStatus: string;
         let riskScore: number;
         
@@ -172,54 +172,54 @@ Deno.serve(async (req) => {
           // Container returned
           riskStatus = daysExceeded > 0 ? 'exceeded' : 'safe';
           riskScore = daysExceeded > 0 ? 100 : 0;
-          results.returned++;
         } else if (daysRemaining > 5) {
           riskStatus = 'safe';
           riskScore = 20;
-          results.in_free_time++;
+          results.safe++;
         } else if (daysRemaining > 2) {
           riskStatus = 'at_risk';
           riskScore = 50;
-          results.exceeded++;
+          results.at_risk++;
         } else if (daysRemaining > 0) {
           riskStatus = 'critical';
           riskScore = 80;
-          results.exceeded++;
+          results.critical++;
         } else {
           riskStatus = 'exceeded';
           riskScore = 100;
           results.exceeded++;
         }
 
-        // Update container
-        const updateData: Record<string, unknown> = {
+        // Update container in t_demurrage_containers
+        const updateData = {
+          free_time_days: freeTimeDays,
+          free_time_end_date: freeTimeEnd.toISOString().split('T')[0],
           days_remaining: Math.max(0, daysRemaining),
           excedente_dias: daysExceeded,
-          free_time_end_date: freeTimeEnd.toISOString().split('T')[0],
           expected_cost_usd: demurrageCost,
+          rate_usd_per_day: ratePerDay,
           risk_status: riskStatus,
           risk_score: riskScore,
           updated_at: new Date().toISOString(),
         };
 
-        // If returned, set cronos_status
-        if (container.data_devolucao) {
-          updateData.cronos_status = 'RETURNED';
-        }
-
-        await supabase
-          .from('containers')
+        const { error: updateError } = await supabase
+          .from('t_demurrage_containers')
           .update(updateData)
           .eq('id', container.id);
 
-        results.updated++;
-        results.total_demurrage_usd += demurrageCost;
+        if (updateError) {
+          console.error(`Error updating ${container.numero}:`, updateError.message);
+          results.errors++;
+        } else {
+          results.updated++;
+          results.total_demurrage_usd += demurrageCost;
+        }
 
-        console.log(`${container.numero}: ${daysExceeded} days exceeded, $${demurrageCost.toFixed(2)} demurrage, status: ${riskStatus}`);
+        console.log(`${container.numero}: ${daysExceeded}d exceeded, $${demurrageCost.toFixed(2)}, ${riskStatus}`);
 
       } catch (err) {
-        const error = err as Error;
-        console.error(`Error processing ${container.numero}:`, error.message);
+        console.error(`Error processing ${container.numero}:`, err);
         results.errors++;
       }
     }
