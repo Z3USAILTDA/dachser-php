@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { DemurrageLayout } from "@/components/demurrage/DemurrageLayout";
 import { KpiCard } from "@/components/demurrage/KpiCard";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -8,14 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Ship, Plus, Search, AlertTriangle, CheckCircle2, FileSearch, FileSpreadsheet, DollarSign, Clock } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-
-// Mock data
-const mockInvoices = [
-  { id: "1", invoice_number: "INV-MSC-001", armador: "MSC", container: "MSCU1234567", cliente: "CLIENTE ABC", days_charged: 5, cost_usd: 750, audit_status: "validated" },
-  { id: "2", invoice_number: "INV-HAPAG-002", armador: "HAPAG", container: "HLCU7654321", cliente: "CLIENTE XYZ", days_charged: 8, cost_usd: 1200, audit_status: "discrepancy" },
-  { id: "3", invoice_number: "INV-MAERSK-003", armador: "MAERSK", container: "MAEU9876543", cliente: "CLIENTE 123", days_charged: 3, cost_usd: 540, audit_status: "pending" },
-  { id: "4", invoice_number: "INV-CMA-004", armador: "CMA CGM", container: "CMAU5678901", cliente: "CLIENTE ABC", days_charged: 6, cost_usd: 900, audit_status: "validated" },
-];
+import { useDemurrageData } from "@/hooks/useDemurrageData";
 
 type QuickFilter = "all" | "validated" | "discrepancy" | "pending";
 
@@ -24,9 +17,16 @@ export default function DemurrageCarrierCosts() {
   const [searchTerm, setSearchTerm] = useState("");
   const [quickFilter, setQuickFilter] = useState<QuickFilter>("all");
 
+  const { data: containers = [], isLoading } = useDemurrageData();
+
+  // Filter containers that have carrier invoice data
+  const carrierContainers = useMemo(() => {
+    return containers.filter(c => c.armador_invoice_number || c.armador_cost_usd);
+  }, [containers]);
+
   const formatCurrency = (value: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'USD', minimumFractionDigits: 2 }).format(value);
 
-  const getStatusBadge = (status: string) => {
+  const getStatusBadge = (status: string | null) => {
     switch (status) {
       case 'validated':
         return <Badge className="bg-green-500/10 text-green-500 border-green-500/20"><CheckCircle2 className="h-3 w-3 mr-1" /> Validada</Badge>;
@@ -39,28 +39,32 @@ export default function DemurrageCarrierCosts() {
     }
   };
 
-  const stats = {
-    totalCost: mockInvoices.reduce((sum, inv) => sum + inv.cost_usd, 0),
-    validated: mockInvoices.filter(inv => inv.audit_status === 'validated').reduce((sum, inv) => sum + inv.cost_usd, 0),
-    discrepancy: mockInvoices.filter(inv => inv.audit_status === 'discrepancy').reduce((sum, inv) => sum + inv.cost_usd, 0),
-    pending: mockInvoices.filter(inv => inv.audit_status === 'pending').reduce((sum, inv) => sum + inv.cost_usd, 0),
-  };
+  const stats = useMemo(() => {
+    const totalCost = carrierContainers.reduce((sum, c) => sum + (c.armador_cost_usd || 0), 0);
+    const validated = carrierContainers.filter(c => c.audit_status === 'validated').reduce((sum, c) => sum + (c.armador_cost_usd || 0), 0);
+    const discrepancy = carrierContainers.filter(c => c.audit_status === 'discrepancy').reduce((sum, c) => sum + (c.armador_cost_usd || 0), 0);
+    const pending = carrierContainers.filter(c => !c.audit_status || c.audit_status === 'pending').reduce((sum, c) => sum + (c.armador_cost_usd || 0), 0);
 
-  const filteredInvoices = mockInvoices.filter(inv => {
-    const matchesSearch = 
-      searchTerm === "" ||
-      inv.invoice_number.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      inv.armador.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      inv.container.toLowerCase().includes(searchTerm.toLowerCase());
-    
-    let matchesQuickFilter = true;
-    if (quickFilter !== "all") {
-      matchesQuickFilter = inv.audit_status === quickFilter;
-    }
-    
-    const matchesStatus = statusFilter === "all" || inv.audit_status === statusFilter;
-    return matchesSearch && matchesQuickFilter && matchesStatus;
-  });
+    return { totalCost, validated, discrepancy, pending };
+  }, [carrierContainers]);
+
+  const filteredInvoices = useMemo(() => {
+    return carrierContainers.filter(c => {
+      const matchesSearch = 
+        searchTerm === "" ||
+        (c.armador_invoice_number || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+        (c.armador || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+        c.numero.toLowerCase().includes(searchTerm.toLowerCase());
+      
+      let matchesQuickFilter = true;
+      if (quickFilter !== "all") {
+        matchesQuickFilter = c.audit_status === quickFilter || (!c.audit_status && quickFilter === "pending");
+      }
+      
+      const matchesStatus = statusFilter === "all" || c.audit_status === statusFilter || (!c.audit_status && statusFilter === "pending");
+      return matchesSearch && matchesQuickFilter && matchesStatus;
+    });
+  }, [carrierContainers, searchTerm, quickFilter, statusFilter]);
 
   const handleQuickFilterChange = (filter: QuickFilter) => {
     setQuickFilter(filter);
@@ -83,7 +87,7 @@ export default function DemurrageCarrierCosts() {
     <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
       <KpiCard
         title="TOTAL CUSTOS"
-        value={formatCurrency(75980)}
+        value={formatCurrency(stats.totalCost)}
         subtitle="Faturas recebidas"
         icon={<DollarSign className="h-6 w-6" />}
         variant="default"
@@ -92,7 +96,7 @@ export default function DemurrageCarrierCosts() {
       />
       <KpiCard
         title="VALIDADAS"
-        value="US$ 0,00"
+        value={formatCurrency(stats.validated)}
         subtitle="Auditoria concluída"
         icon={<CheckCircle2 className="h-6 w-6" />}
         variant="success"
@@ -101,7 +105,7 @@ export default function DemurrageCarrierCosts() {
       />
       <KpiCard
         title="DISCREPÂNCIAS"
-        value="US$ 0,00"
+        value={formatCurrency(stats.discrepancy)}
         subtitle="Requer análise"
         icon={<AlertTriangle className="h-6 w-6" />}
         variant="critical"
@@ -110,7 +114,7 @@ export default function DemurrageCarrierCosts() {
       />
       <KpiCard
         title="PENDENTES"
-        value={formatCurrency(12480)}
+        value={formatCurrency(stats.pending)}
         subtitle="Aguardando auditoria"
         icon={<Clock className="h-6 w-6" />}
         variant="warning"
@@ -124,6 +128,7 @@ export default function DemurrageCarrierCosts() {
     <DemurrageLayout
       rightActions={rightActions}
       customCards={customCards}
+      loading={isLoading}
     >
       <div className="space-y-4">
         {/* Filters */}
@@ -182,21 +187,27 @@ export default function DemurrageCarrierCosts() {
                     <TableHead>Cliente</TableHead>
                     <TableHead className="text-center">Dias</TableHead>
                     <TableHead className="text-right">Custo USD</TableHead>
+                    <TableHead className="text-right">Calculado</TableHead>
                     <TableHead>Status</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {filteredInvoices.map((invoice) => (
-                    <TableRow key={invoice.id} className="border-[rgba(255,255,255,0.1)] cursor-pointer hover:bg-[rgba(255,200,0,0.05)]">
-                      <TableCell className="font-mono">{invoice.invoice_number}</TableCell>
-                      <TableCell>{invoice.armador}</TableCell>
-                      <TableCell className="font-mono">{invoice.container}</TableCell>
-                      <TableCell>{invoice.cliente}</TableCell>
+                  {filteredInvoices.map((container) => (
+                    <TableRow key={container.id} className="border-[rgba(255,255,255,0.1)] cursor-pointer hover:bg-[rgba(255,200,0,0.05)]">
+                      <TableCell className="font-mono">{container.armador_invoice_number || '-'}</TableCell>
+                      <TableCell>{container.armador || '-'}</TableCell>
+                      <TableCell className="font-mono">{container.numero}</TableCell>
+                      <TableCell>{container.cliente || '-'}</TableCell>
                       <TableCell className="text-center">
-                        <Badge variant="outline">{invoice.days_charged} dias</Badge>
+                        <Badge variant="outline">{container.armador_days_charged || container.excedente_dias} dias</Badge>
                       </TableCell>
-                      <TableCell className="text-right font-semibold text-[#ffc800]">{formatCurrency(invoice.cost_usd)}</TableCell>
-                      <TableCell>{getStatusBadge(invoice.audit_status)}</TableCell>
+                      <TableCell className="text-right font-semibold text-[#ffc800]">
+                        {formatCurrency(container.armador_cost_usd || 0)}
+                      </TableCell>
+                      <TableCell className="text-right text-muted-foreground">
+                        {formatCurrency(container.expected_cost_usd)}
+                      </TableCell>
+                      <TableCell>{getStatusBadge(container.audit_status)}</TableCell>
                     </TableRow>
                   ))}
                 </TableBody>
