@@ -77,7 +77,19 @@ const handler = async (req: Request): Promise<Response> => {
       try {
         mariaClient = await getMariaDBClient();
         
-        // Buscar vouchers do MariaDB que ainda não foram importados
+        // Primeiro, buscar todos os id_rm já existentes no Supabase
+        const { data: existingVouchers, error: fetchError } = await supabase
+          .from("vouchers")
+          .select("numero_spo")
+          .eq("origem_criacao", "RM_IMPORT");
+        
+        const existingNds = new Set(
+          (existingVouchers || []).map((v: any) => v.numero_spo?.toString().trim())
+        );
+        console.log(`[voucher-integrate-rm] ${existingNds.size} vouchers já existem no Supabase`);
+        
+        // Buscar vouchers do MariaDB - ordenar por id_rm DESC para pegar os mais recentes
+        // Usar um limite maior para garantir que pegamos todos os novos
         const result = await mariaClient.query(
           `SELECT 
             id_rm,
@@ -97,7 +109,7 @@ const handler = async (req: Request): Promise<Response> => {
             cnpj,
             razao_social
           FROM dados_dachser.t_dados_financeiro_voucher
-          ORDER BY id DESC
+          ORDER BY id_rm DESC
           LIMIT ?`,
           [limit]
         );
@@ -123,24 +135,20 @@ const handler = async (req: Request): Promise<Response> => {
         let importedCount = 0;
         let skippedCount = 0;
         const errors: { nd: string; error: string }[] = [];
+        const vouchersToInsert: any[] = [];
 
         for (const rmData of result as any[]) {
           try {
             const nd = rmData.nd?.toString().trim();
-            if (!nd) {
+            const idRm = rmData.id_rm?.toString();
+            
+            if (!nd || !idRm) {
               skippedCount++;
               continue;
             }
 
-            // Verificar se já existe no Supabase
-            const { data: existingVoucher } = await supabase
-              .from("vouchers")
-              .select("id")
-              .eq("numero_spo", nd)
-              .maybeSingle();
-
-            if (existingVoucher) {
-              console.log(`[voucher-integrate-rm] Voucher ${nd} já existe, pulando...`);
+            // Verificar se já existe usando nd como chave
+            if (existingNds.has(nd)) {
               skippedCount++;
               continue;
             }
@@ -165,45 +173,69 @@ const handler = async (req: Request): Promise<Response> => {
             // Mapear cobranca_em_nome_de a partir do modal
             const modal = (rmData.modal || "").toUpperCase();
             let cobrancaEmNomeDe = "DACHSER";
-            if (modal === "AIR") cobrancaEmNomeDe = "AIR";
-            else if (modal === "SEA") cobrancaEmNomeDe = "SEA";
+            if (modal === "AI" || modal === "AIR") cobrancaEmNomeDe = "AIR";
+            else if (modal === "SE" || modal === "SEA" || modal === "SI") cobrancaEmNomeDe = "SEA";
             else if (modal === "CHB") cobrancaEmNomeDe = "CHB";
+            else if (modal === "DIM" || modal === "DEX") cobrancaEmNomeDe = "DACHSER";
 
-            // Inserir no Supabase
-            const { error: insertError } = await supabase
-              .from("vouchers")
-              .insert({
-                numero_spo: nd,
-                fornecedor: rmData.nome_beneficiario || rmData.razao_social || null,
-                cnpj_fornecedor: rmData.cnpj || null,
-                valor: rmData.valor_nf ? parseFloat(rmData.valor_nf) : null,
-                vencimento: vencimentoFormatted,
-                tipo_documento: rmData.tipo_pag || null,
-                data_emissao_documento: dataEmissaoFormatted,
-                moeda: rmData.moeda || "BRL",
-                forma_pagamento: mapFormaPagamento(rmData.forma_pag),
-                cobranca_em_nome_de: cobrancaEmNomeDe,
-                filial: rmData.nome_cobranca || null,
-                remessa: rmData.numero_processo || null,
-                etapa_atual: "A_PROCESSAR",
-                status_baixa: "IMPORTADO",
-                origem_criacao: "RM_IMPORT",
-              });
+            vouchersToInsert.push({
+              numero_spo: nd,
+              fornecedor: rmData.nome_beneficiario || rmData.razao_social || null,
+              cnpj_fornecedor: rmData.cnpj || null,
+              valor: rmData.valor_nf ? parseFloat(rmData.valor_nf) : null,
+              vencimento: vencimentoFormatted,
+              tipo_documento: rmData.tipo_pag || null,
+              data_emissao_documento: dataEmissaoFormatted,
+              moeda: rmData.moeda || "BRL",
+              forma_pagamento: mapFormaPagamento(rmData.forma_pag),
+              cobranca_em_nome_de: cobrancaEmNomeDe,
+              filial: rmData.nome_cobranca || null,
+              remessa: rmData.numero_processo || null,
+              etapa_atual: "A_PROCESSAR",
+              status_baixa: "IMPORTADO",
+              origem_criacao: "RM_IMPORT",
+            });
 
-            if (insertError) {
-              console.error(`[voucher-integrate-rm] Erro ao inserir ${nd}:`, insertError);
-              errors.push({ nd, error: insertError.message });
-              continue;
-            }
-
-            importedCount++;
-            console.log(`[voucher-integrate-rm] Voucher ${nd} importado com sucesso`);
+            // Adicionar ao set para evitar duplicados dentro do mesmo batch
+            existingNds.add(nd);
 
           } catch (voucherError: any) {
             console.error(`[voucher-integrate-rm] Erro ao processar voucher:`, voucherError);
             errors.push({ nd: rmData.nd || "unknown", error: voucherError.message });
           }
         }
+
+        // Inserir em batch para melhor performance
+        if (vouchersToInsert.length > 0) {
+          console.log(`[voucher-integrate-rm] Inserindo ${vouchersToInsert.length} vouchers em batch`);
+          
+          const { error: insertError, data: insertedData } = await supabase
+            .from("vouchers")
+            .insert(vouchersToInsert)
+            .select("id");
+
+          if (insertError) {
+            console.error(`[voucher-integrate-rm] Erro no batch insert:`, insertError);
+            // Tentar inserir um a um se o batch falhar
+            for (const voucher of vouchersToInsert) {
+              const { error: singleError } = await supabase
+                .from("vouchers")
+                .insert(voucher);
+              
+              if (singleError) {
+                errors.push({ nd: voucher.numero_spo, error: singleError.message });
+              } else {
+                importedCount++;
+              }
+            }
+          } else {
+            importedCount = insertedData?.length || vouchersToInsert.length;
+          }
+        }
+
+        skippedCount = result.length - importedCount - errors.length;
+
+        console.log(`[voucher-integrate-rm] Importação concluída: ${importedCount} importados, ${skippedCount} já existentes, ${errors.length} erros`);
 
         return new Response(
           JSON.stringify({
