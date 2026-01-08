@@ -1,19 +1,124 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { FileSearch, Upload, FileText, FileSpreadsheet, Loader2, X } from "lucide-react";
-import { ComparisonResults, ComparisonRow } from "@/components/analise-documental/ComparisonResults";
+import { FileSearch, Upload, FileText, FileSpreadsheet, Loader2, X, Brain } from "lucide-react";
+import { ComparisonResults } from "@/components/analise-documental/ComparisonResults";
 import { PageLayout } from "@/components/layout/PageLayout";
 import { PageCard } from "@/components/layout/PageCard";
-import { parseExcelFile } from "@/lib/parseExcel";
-import { compareDocuments } from "@/lib/compareDocuments";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
+import * as XLSX from "xlsx";
+
+// Types for LLM analysis response
+export interface LLMAnalysisResult {
+  pdfSummary: {
+    documentType: string;
+    totalValue: number;
+    itemCount: number;
+    metadata: {
+      emissor: string;
+      destinatario: string;
+      data: string;
+      numero: string;
+    };
+    extractedItems: Array<{ description: string; value: number; quantity?: number }>;
+  };
+  excelSummary: {
+    totalValue: number;
+    itemCount: number;
+    extractedItems: Array<{ description: string; value: number }>;
+  };
+  comparison: {
+    matchedItems: Array<{
+      rowNumber: number;
+      pdfItem: string;
+      excelItem: string;
+      pdfValue: number;
+      excelValue: number;
+      difference: number;
+      status: "success" | "warning" | "error";
+      observation?: string;
+    }>;
+    pdfOnlyItems: Array<{ description: string; value: number }>;
+    excelOnlyItems: Array<{ description: string; value: number }>;
+    totalDifference: number;
+  };
+  analysis: {
+    overallStatus: "success" | "warning" | "error";
+    summary: string;
+    discrepancies: Array<{ type: string; description: string; severity: string }>;
+    recommendations: string[];
+  };
+  metadata: {
+    model: string;
+    processingTimeMs: number;
+    pdfFileName: string;
+    excelFileName: string;
+    tokensUsed: number | null;
+  };
+}
+
+// Extract text content from Excel file
+function extractExcelContent(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      try {
+        const data = e.target?.result;
+        const workbook = XLSX.read(data, { type: "array" });
+        const allContent: string[] = [];
+
+        for (const sheetName of workbook.SheetNames) {
+          const sheet = workbook.Sheets[sheetName];
+          const jsonData = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: "" });
+          
+          allContent.push(`=== PLANILHA: ${sheetName} ===`);
+          
+          for (const row of jsonData as any[][]) {
+            const rowText = row
+              .map((cell: any) => {
+                if (cell === null || cell === undefined || cell === "") return "";
+                return String(cell).trim();
+              })
+              .filter((c: string) => c.length > 0)
+              .join(" | ");
+            
+            if (rowText.length > 0) {
+              allContent.push(rowText);
+            }
+          }
+          allContent.push("");
+        }
+
+        resolve(allContent.join("\n"));
+      } catch (error) {
+        reject(error);
+      }
+    };
+    reader.onerror = () => reject(new Error("Failed to read Excel file"));
+    reader.readAsArrayBuffer(file);
+  });
+}
+
+// Convert file to base64
+function fileToBase64(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const result = reader.result as string;
+      // Remove data URL prefix if present
+      const base64 = result.includes(",") ? result.split(",")[1] : result;
+      resolve(base64);
+    };
+    reader.onerror = () => reject(new Error("Failed to read file"));
+    reader.readAsDataURL(file);
+  });
+}
 
 const AnaliseDocumentalComparar = () => {
   const navigate = useNavigate();
   const [pdfFile, setPdfFile] = useState<File | null>(null);
   const [excelFile, setExcelFile] = useState<File | null>(null);
-  const [comparisonResults, setComparisonResults] = useState<ComparisonRow[] | null>(null);
+  const [analysisResult, setAnalysisResult] = useState<LLMAnalysisResult | null>(null);
   const [isComparing, setIsComparing] = useState(false);
 
   const handleFileSelect = (
@@ -37,64 +142,56 @@ const AnaliseDocumentalComparar = () => {
     setIsComparing(true);
 
     try {
-      // Parse PDF via Edge Function with Lovable AI
-      toast.info("Extraindo dados do PDF...");
+      toast.info("Preparando documentos...", { duration: 3000 });
 
-      const formData = new FormData();
-      formData.append("file", pdfFile);
+      // Extract Excel content locally
+      const excelContent = await extractExcelContent(excelFile);
+      console.log(`Excel extracted: ${excelContent.length} characters`);
 
-      const { data: pdfData, error: pdfError } = await supabase.functions.invoke(
-        "parse-invoice-pdf",
-        { body: formData }
-      );
+      // Convert PDF to base64
+      const pdfBase64 = await fileToBase64(pdfFile);
+      console.log(`PDF converted: ${pdfBase64.length} characters`);
 
-      if (pdfError || pdfData?.error) {
-        throw new Error(pdfData?.error || pdfError?.message || "Erro ao processar PDF");
+      toast.info("Analisando com IA (pode levar até 60s)...", { duration: 10000 });
+
+      // Call the LLM comparison edge function
+      const { data, error } = await supabase.functions.invoke("compare-documents-llm", {
+        body: {
+          pdfBase64,
+          pdfFileName: pdfFile.name,
+          excelContent,
+          excelFileName: excelFile.name,
+        },
+      });
+
+      if (error) {
+        console.error("Edge function error:", error);
+        throw new Error(error.message || "Erro ao chamar função de análise");
       }
 
-      const pdfItems = pdfData.items || [];
-      console.log("PDF items extracted:", pdfItems);
-
-      // Parse Excel locally
-      toast.info("Extraindo dados do Excel...");
-      const excelResult = await parseExcelFile(excelFile);
-      const excelItems = excelResult.items || [];
-      console.log("Excel items extracted:", excelItems);
-
-      if (pdfItems.length === 0) {
-        toast.warning("Nenhum item encontrado no PDF. Verifique se o documento é uma fatura válida.");
+      if (data?.error) {
+        throw new Error(data.error);
       }
 
-      if (excelItems.length === 0) {
-        toast.warning("Nenhum item encontrado no Excel. Verifique se a planilha contém itens com valores.");
-      }
+      console.log("Analysis result:", data);
+      setAnalysisResult(data);
 
-      if (pdfItems.length === 0 && excelItems.length === 0) {
-        toast.error("Não foi possível extrair itens de nenhum dos documentos.");
-        setIsComparing(false);
-        return;
-      }
-
-      // Compare documents
-      toast.info("Comparando documentos...");
-      const results = compareDocuments(pdfItems, excelItems);
-
-      setComparisonResults(results);
-
-      const successCount = results.filter((r) => r.status === "success").length;
-      const warningCount = results.filter((r) => r.status === "warning").length;
-      const errorCount = results.filter((r) => r.status === "error").length;
-
-      if (errorCount > 0) {
-        toast.error(`Comparação concluída: ${errorCount} erro(s) encontrado(s)`);
-      } else if (warningCount > 0) {
-        toast.warning(`Comparação concluída: ${warningCount} item(s) com atenção`);
+      // Show result toast based on overall status
+      const status = data.analysis?.overallStatus;
+      const summary = data.analysis?.summary || "Análise concluída";
+      
+      if (status === "error") {
+        toast.error(summary);
+      } else if (status === "warning") {
+        toast.warning(summary);
       } else {
-        toast.success(`Comparação concluída: todos os ${successCount} itens conferem!`);
+        toast.success(summary);
       }
+
     } catch (error) {
       console.error("Comparison error:", error);
-      toast.error(error instanceof Error ? error.message : "Erro ao comparar documentos");
+      const message = error instanceof Error ? error.message : "Erro ao comparar documentos";
+      toast.error(message);
     } finally {
       setIsComparing(false);
     }
@@ -103,19 +200,23 @@ const AnaliseDocumentalComparar = () => {
   const handleReset = () => {
     setPdfFile(null);
     setExcelFile(null);
-    setComparisonResults(null);
-  };
-
-  const handleBack = () => {
-    navigate("/fin/analise-documental");
+    setAnalysisResult(null);
   };
 
   return (
     <PageLayout title="DACHSER" subtitle="Nova Comparação" pageIcon={FileSearch} backTo="/fin/analise-documental">
       <PageCard padding="lg">
-        {!comparisonResults ? (
+        {!analysisResult ? (
           <div className="space-y-6">
-            {/* Upload Grid - Following reference design */}
+            {/* AI Badge */}
+            <div className="flex items-center justify-center">
+              <div className="flex items-center gap-2 px-4 py-2 rounded-full bg-purple-500/10 border border-purple-500/30">
+                <Brain className="w-4 h-4 text-purple-400" />
+                <span className="text-sm text-purple-300">Análise com Gemini 2.5 Pro</span>
+              </div>
+            </div>
+
+            {/* Upload Grid */}
             <div className="grid md:grid-cols-2 gap-6">
               {/* PDF Upload Card */}
               <div className="rounded-2xl border border-white/12 bg-[rgba(5,6,18,0.9)] p-6">
@@ -126,7 +227,7 @@ const AnaliseDocumentalComparar = () => {
                   <div className="flex-1 min-w-0">
                     <h3 className="text-lg font-semibold text-white/90">Documento PDF</h3>
                     <p className="text-sm text-white/50 mt-0.5">
-                      Envie o arquivo PDF para comparação
+                      Fatura, Invoice ou Nota Fiscal
                     </p>
                   </div>
                   {pdfFile && (
@@ -168,7 +269,7 @@ const AnaliseDocumentalComparar = () => {
                   <div className="flex-1 min-w-0">
                     <h3 className="text-lg font-semibold text-white/90">Planilha Excel</h3>
                     <p className="text-sm text-white/50 mt-0.5">
-                      Envie o arquivo Excel para comparação
+                      Base de comparação
                     </p>
                   </div>
                   {excelFile && (
@@ -212,44 +313,47 @@ const AnaliseDocumentalComparar = () => {
                 {isComparing ? (
                   <>
                     <Loader2 className="w-5 h-5 animate-spin" />
-                    Comparando...
+                    Analisando com IA...
                   </>
                 ) : (
-                  "Comparar Documentos"
+                  <>
+                    <Brain className="w-5 h-5" />
+                    Analisar Documentos
+                  </>
                 )}
               </button>
-              <p className="text-sm text-white/40">
-                Envie ambos os arquivos para começar a comparação
+              <p className="text-sm text-white/40 text-center max-w-md">
+                A IA irá extrair e comparar todos os itens e valores dos documentos automaticamente
               </p>
             </div>
           </div>
         ) : (
           <ComparisonResults
-            results={comparisonResults}
+            analysisResult={analysisResult}
             onReset={handleReset}
-            pdfFileName={pdfFile?.name || ""}
-            excelFileName={excelFile?.name || ""}
           />
         )}
       </PageCard>
 
-      {/* Footer with legend */}
-      <PageCard padding="lg">
-        <div className="flex items-center justify-center gap-8 text-sm">
-          <div className="flex items-center gap-2">
-            <div className="w-3 h-3 rounded-full bg-emerald-500" />
-            <span className="text-emerald-300">Valores corretos</span>
+      {/* Footer with info */}
+      {!analysisResult && (
+        <PageCard padding="lg">
+          <div className="flex items-center justify-center gap-8 text-sm">
+            <div className="flex items-center gap-2">
+              <div className="w-3 h-3 rounded-full bg-emerald-500" />
+              <span className="text-emerald-300">Valores conferem</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <div className="w-3 h-3 rounded-full bg-amber-400" />
+              <span className="text-amber-300">Diferença até R$ 50</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <div className="w-3 h-3 rounded-full bg-rose-500" />
+              <span className="text-rose-300">Diferença acima de R$ 50</span>
+            </div>
           </div>
-          <div className="flex items-center gap-2">
-            <div className="w-3 h-3 rounded-full bg-amber-400" />
-            <span className="text-amber-300">Diferença até R$ 50</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <div className="w-3 h-3 rounded-full bg-rose-500" />
-            <span className="text-rose-300">Diferença acima de R$ 50</span>
-          </div>
-        </div>
-      </PageCard>
+        </PageCard>
+      )}
     </PageLayout>
   );
 };

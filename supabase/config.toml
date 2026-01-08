@@ -282,3 +282,7 @@ verify_jwt = false
 
 [functions.demurrage-daily-monitor]
 verify_jwt = false
+
+[functions.compare-documents-llm]
+verify_jwt = false
+timeout = 120
