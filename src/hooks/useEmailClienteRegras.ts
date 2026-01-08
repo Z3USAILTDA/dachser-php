@@ -21,7 +21,6 @@ export function useEmailClienteRegras() {
         ...r,
         aeroportos: typeof r.aeroportos === 'string' ? JSON.parse(r.aeroportos) : (r.aeroportos || []),
         eventos_disparo: typeof r.eventos_disparo === 'string' ? JSON.parse(r.eventos_disparo) : (r.eventos_disparo || []),
-        canais: typeof r.canais === 'string' ? JSON.parse(r.canais) : (r.canais || []),
       }));
       
       setRegras(parsed);
@@ -41,7 +40,6 @@ export function useEmailClienteRegras() {
           ...regra,
           aeroportos: JSON.stringify(regra.aeroportos),
           eventos_disparo: JSON.stringify(regra.eventos_disparo),
-          canais: JSON.stringify(regra.canais),
         }
       });
 
@@ -65,7 +63,6 @@ export function useEmailClienteRegras() {
       if (regra.email_cliente !== undefined) payload.email_cliente = regra.email_cliente;
       if (regra.aeroportos !== undefined) payload.aeroportos = JSON.stringify(regra.aeroportos);
       if (regra.eventos_disparo !== undefined) payload.eventos_disparo = JSON.stringify(regra.eventos_disparo);
-      if (regra.canais !== undefined) payload.canais = JSON.stringify(regra.canais);
       if (regra.ativo !== undefined) payload.ativo = regra.ativo;
 
       const { error } = await supabase.functions.invoke('mariadb-proxy', {
