@@ -199,6 +199,25 @@ interface QueryRequest {
   error_message?: string;
   edge_function?: string;
   user_email?: string;
+  // Demurrage module
+  container_id?: number;
+  rate_id?: number;
+  risk_status?: string;
+  cronos_status?: string;
+  cliente?: string;
+  armador?: string;
+  pre_invoice_status?: string;
+  dispute_status?: string;
+  audit_status?: string;
+  limit?: number;
+  setting_key?: string;
+  setting_value?: string;
+  free_time_days?: number;
+  rate_usd?: number;
+  container_type?: string;
+  period_type?: string;
+  period_start_day?: number;
+  period_end_day?: number;
 }
 
 serve(async (req) => {
@@ -7071,6 +7090,307 @@ serve(async (req) => {
 
         console.log(`Updated ${updatedCount} master vouchers with processo_id`);
         result = { success: true, updatedCount, totalMasters: masterVouchers.length };
+        break;
+      }
+
+      // ==================== DEMURRAGE ====================
+      case 'demurrage_get_containers': {
+        const { search, risk_status, cronos_status, cliente, armador, pre_invoice_status, dispute_status, audit_status, limit = 500 } = body as any;
+        console.log('Fetching demurrage containers with filters:', { search, risk_status, cronos_status, cliente, armador });
+
+        let whereConditions = ['active = 1'];
+        let params: (string | number)[] = [];
+
+        if (search) {
+          whereConditions.push('(numero LIKE ? OR mbl LIKE ? OR cliente LIKE ? OR armador LIKE ?)');
+          params.push(`%${search}%`, `%${search}%`, `%${search}%`, `%${search}%`);
+        }
+        if (risk_status && risk_status !== 'all') {
+          whereConditions.push('risk_status = ?');
+          params.push(risk_status);
+        }
+        if (cronos_status && cronos_status !== 'all') {
+          whereConditions.push('cronos_status = ?');
+          params.push(cronos_status);
+        }
+        if (cliente) {
+          whereConditions.push('cliente = ?');
+          params.push(cliente);
+        }
+        if (armador) {
+          whereConditions.push('armador = ?');
+          params.push(armador);
+        }
+        if (pre_invoice_status && pre_invoice_status !== 'all') {
+          whereConditions.push('pre_invoice_status = ?');
+          params.push(pre_invoice_status);
+        }
+        if (dispute_status && dispute_status !== 'all') {
+          whereConditions.push('dispute_status = ?');
+          params.push(dispute_status);
+        }
+        if (audit_status && audit_status !== 'all') {
+          whereConditions.push('audit_status = ?');
+          params.push(audit_status);
+        }
+
+        const containers = await client.query(`
+          SELECT * FROM dados_dachser.t_dachser_demurrage_containers
+          WHERE ${whereConditions.join(' AND ')}
+          ORDER BY updated_at DESC
+          LIMIT ?
+        `, [...params, limit]);
+
+        result = { success: true, data: containers || [] };
+        break;
+      }
+
+      case 'demurrage_get_stats': {
+        console.log('Fetching demurrage stats');
+
+        const stats = await client.query(`
+          SELECT 
+            COUNT(*) as total,
+            SUM(CASE WHEN cronos_status IN ('IN_TRANSIT', 'ARRIVED', 'PENDING') THEN 1 ELSE 0 END) as in_transit,
+            SUM(CASE WHEN risk_status IN ('at_risk', 'critical', 'exceeded') THEN 1 ELSE 0 END) as at_risk,
+            SUM(CASE WHEN cronos_status IN ('GATE_OUT', 'RETURNED') THEN 1 ELSE 0 END) as delivered,
+            COALESCE(SUM(expected_cost_usd), 0) as total_demurrage_usd
+          FROM dados_dachser.t_dachser_demurrage_containers
+          WHERE active = 1
+        `);
+
+        const row = stats?.[0] || {};
+        result = { 
+          success: true, 
+          data: {
+            total: Number(row.total || 0),
+            inTransit: Number(row.in_transit || 0),
+            atRisk: Number(row.at_risk || 0),
+            delivered: Number(row.delivered || 0),
+            totalDemurrageUsd: Number(row.total_demurrage_usd || 0),
+          }
+        };
+        break;
+      }
+
+      case 'demurrage_update_container': {
+        const { container_id, updates } = body as { container_id: number; updates: Record<string, unknown> };
+        console.log('Updating demurrage container:', container_id, updates);
+
+        if (!container_id || !updates) {
+          return new Response(
+            JSON.stringify({ error: 'container_id e updates são obrigatórios' }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+
+        const allowedFields = [
+          'notes', 'pre_invoice_number', 'pre_invoice_status', 'pre_invoice_total_usd',
+          'disputed_amount_usd', 'recovered_amount_usd', 'dispute_status', 'dispute_reason',
+          'armador_invoice_number', 'armador_cost_usd', 'armador_days_charged', 'audit_status', 'discrepancy_usd',
+          'client_auto_alert', 'client_alert_days_before', 'client_report_frequency',
+          'ft_started_at', 'data_devolucao', 'free_time_days'
+        ];
+
+        const setClauses: string[] = [];
+        const values: unknown[] = [];
+        for (const [key, value] of Object.entries(updates)) {
+          if (allowedFields.includes(key)) {
+            setClauses.push(`${key} = ?`);
+            values.push(value);
+          }
+        }
+
+        if (setClauses.length === 0) {
+          return new Response(
+            JSON.stringify({ error: 'Nenhum campo válido para atualizar' }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+
+        setClauses.push('updated_at = NOW()');
+
+        await client.execute(`
+          UPDATE dados_dachser.t_dachser_demurrage_containers
+          SET ${setClauses.join(', ')}
+          WHERE id = ?
+        `, [...values, container_id]);
+
+        result = { success: true };
+        break;
+      }
+
+      case 'demurrage_get_rates': {
+        console.log('Fetching demurrage rates');
+
+        const rates = await client.query(`
+          SELECT * FROM dados_dachser.t_dachser_demurrage_rates
+          WHERE active = 1
+          ORDER BY armador ASC, container_type ASC, period_start_day ASC
+        `);
+
+        result = { success: true, data: rates || [] };
+        break;
+      }
+
+      case 'demurrage_create_rate': {
+        const { armador, container_type, free_time_days, rate_usd, period_type, period_start_day, period_end_day } = body as any;
+        console.log('Creating demurrage rate:', { armador, container_type, rate_usd });
+
+        if (!armador || !container_type || rate_usd === undefined) {
+          return new Response(
+            JSON.stringify({ error: 'armador, container_type e rate_usd são obrigatórios' }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+
+        await client.execute(`
+          INSERT INTO dados_dachser.t_dachser_demurrage_rates 
+            (armador, container_type, free_time_days, rate_usd, period_type, period_start_day, period_end_day, active)
+          VALUES (?, ?, ?, ?, ?, ?, ?, 1)
+        `, [
+          armador,
+          container_type,
+          free_time_days || 14,
+          rate_usd,
+          period_type || 'standard',
+          period_start_day || null,
+          period_end_day || null
+        ]);
+
+        result = { success: true };
+        break;
+      }
+
+      case 'demurrage_update_rate': {
+        const { rate_id, updates: rateUpdates } = body as { rate_id: number; updates: Record<string, unknown> };
+        console.log('Updating demurrage rate:', rate_id);
+
+        if (!rate_id || !rateUpdates) {
+          return new Response(
+            JSON.stringify({ error: 'rate_id e updates são obrigatórios' }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+
+        const allowedRateFields = ['armador', 'container_type', 'free_time_days', 'rate_usd', 'period_type', 'period_start_day', 'period_end_day', 'active'];
+        const rateSetClauses: string[] = [];
+        const rateValues: unknown[] = [];
+
+        for (const [key, value] of Object.entries(rateUpdates)) {
+          if (allowedRateFields.includes(key)) {
+            rateSetClauses.push(`${key} = ?`);
+            rateValues.push(value);
+          }
+        }
+
+        if (rateSetClauses.length === 0) {
+          return new Response(
+            JSON.stringify({ error: 'Nenhum campo válido para atualizar' }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+
+        rateSetClauses.push('updated_at = NOW()');
+
+        await client.execute(`
+          UPDATE dados_dachser.t_dachser_demurrage_rates
+          SET ${rateSetClauses.join(', ')}
+          WHERE id = ?
+        `, [...rateValues, rate_id]);
+
+        result = { success: true };
+        break;
+      }
+
+      case 'demurrage_delete_rate': {
+        const { rate_id: deleteRateId } = body as { rate_id: number };
+        console.log('Deleting demurrage rate:', deleteRateId);
+
+        if (!deleteRateId) {
+          return new Response(
+            JSON.stringify({ error: 'rate_id é obrigatório' }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+
+        await client.execute(`
+          UPDATE dados_dachser.t_dachser_demurrage_rates
+          SET active = 0, updated_at = NOW()
+          WHERE id = ?
+        `, [deleteRateId]);
+
+        result = { success: true };
+        break;
+      }
+
+      case 'demurrage_get_settings': {
+        console.log('Fetching demurrage settings');
+
+        const settingsRows = await client.query(`
+          SELECT setting_key, setting_value, description
+          FROM dados_dachser.t_dachser_demurrage_settings
+        `);
+
+        const settingsMap: Record<string, string> = {};
+        (settingsRows || []).forEach((s: any) => {
+          settingsMap[s.setting_key] = s.setting_value;
+        });
+
+        result = { success: true, data: settingsMap };
+        break;
+      }
+
+      case 'demurrage_update_setting': {
+        const { setting_key, setting_value } = body as { setting_key: string; setting_value: string };
+        console.log('Updating demurrage setting:', setting_key, '=', setting_value);
+
+        if (!setting_key || setting_value === undefined) {
+          return new Response(
+            JSON.stringify({ error: 'setting_key e setting_value são obrigatórios' }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+
+        await client.execute(`
+          INSERT INTO dados_dachser.t_dachser_demurrage_settings (setting_key, setting_value)
+          VALUES (?, ?)
+          ON DUPLICATE KEY UPDATE setting_value = ?, updated_at = NOW()
+        `, [setting_key, setting_value, setting_value]);
+
+        result = { success: true };
+        break;
+      }
+
+      case 'demurrage_get_unique_clients': {
+        console.log('Fetching unique demurrage clients');
+
+        const clients = await client.query(`
+          SELECT DISTINCT cliente, 
+                 COUNT(*) as total_containers,
+                 SUM(expected_cost_usd) as total_demurrage
+          FROM dados_dachser.t_dachser_demurrage_containers
+          WHERE active = 1 AND cliente IS NOT NULL AND cliente != ''
+          GROUP BY cliente
+          ORDER BY cliente ASC
+        `);
+
+        result = { success: true, data: clients || [] };
+        break;
+      }
+
+      case 'demurrage_get_unique_armadores': {
+        console.log('Fetching unique demurrage armadores');
+
+        const armadores = await client.query(`
+          SELECT DISTINCT armador, COUNT(*) as total_containers
+          FROM dados_dachser.t_dachser_demurrage_containers
+          WHERE active = 1 AND armador IS NOT NULL AND armador != ''
+          GROUP BY armador
+          ORDER BY armador ASC
+        `);
+
+        result = { success: true, data: armadores || [] };
         break;
       }
 

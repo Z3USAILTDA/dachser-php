@@ -1,9 +1,8 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { useEffect } from "react";
 
 export interface DemurrageContainer {
-  id: string;
+  id: number;
   numero: string;
   mbl: string;
   booking: string | null;
@@ -18,6 +17,7 @@ export interface DemurrageContainer {
   etd: string | null;
   eta: string | null;
   data_atracacao: string | null;
+  data_gate_out: string | null;
   last_event: string | null;
   container_status: string | null;
   status_armador: string | null;
@@ -77,119 +77,91 @@ export interface DemurrageStats {
   totalDemurrageUsd: number;
 }
 
+export interface DemurrageRate {
+  id: number;
+  armador: string;
+  container_type: string;
+  free_time_days: number;
+  rate_usd: number;
+  period_type: string;
+  period_start_day: number | null;
+  period_end_day: number | null;
+  active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
 export function useDemurrageData(filters?: DemurrageFilters) {
-  const queryClient = useQueryClient();
-
-  const query = useQuery({
-    queryKey: ['t_demurrage_containers', filters],
+  return useQuery({
+    queryKey: ['demurrage_containers', filters],
     queryFn: async () => {
-      let q = supabase
-        .from('t_demurrage_containers')
-        .select('*')
-        .eq('active', true);
-
-      // Apply filters
-      if (filters?.search) {
-        q = q.or(`numero.ilike.%${filters.search}%,mbl.ilike.%${filters.search}%,cliente.ilike.%${filters.search}%,armador.ilike.%${filters.search}%`);
-      }
-      if (filters?.risk_status && filters.risk_status !== 'all') {
-        q = q.eq('risk_status', filters.risk_status);
-      }
-      if (filters?.cronos_status && filters.cronos_status !== 'all') {
-        q = q.eq('cronos_status', filters.cronos_status);
-      }
-      if (filters?.cliente) {
-        q = q.eq('cliente', filters.cliente);
-      }
-      if (filters?.armador) {
-        q = q.eq('armador', filters.armador);
-      }
-      if (filters?.pre_invoice_status && filters.pre_invoice_status !== 'all') {
-        q = q.eq('pre_invoice_status', filters.pre_invoice_status);
-      }
-      if (filters?.dispute_status && filters.dispute_status !== 'all') {
-        q = q.eq('dispute_status', filters.dispute_status);
-      }
-      if (filters?.audit_status && filters.audit_status !== 'all') {
-        q = q.eq('audit_status', filters.audit_status);
-      }
-
-      const { data, error } = await q.order('updated_at', { ascending: false });
-
+      const { data, error } = await supabase.functions.invoke('mariadb-proxy', {
+        body: {
+          action: 'demurrage_get_containers',
+          search: filters?.search,
+          risk_status: filters?.risk_status,
+          cronos_status: filters?.cronos_status,
+          cliente: filters?.cliente,
+          armador: filters?.armador,
+          pre_invoice_status: filters?.pre_invoice_status,
+          dispute_status: filters?.dispute_status,
+          audit_status: filters?.audit_status,
+        }
+      });
       if (error) throw error;
-      return (data || []) as DemurrageContainer[];
+      if (!data.success) throw new Error(data.error || 'Failed to fetch containers');
+      return (data.data || []) as DemurrageContainer[];
     },
   });
-
-  // Realtime subscription
-  useEffect(() => {
-    const channel = supabase
-      .channel('t_demurrage_containers_changes')
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 't_demurrage_containers',
-        },
-        () => {
-          queryClient.invalidateQueries({ queryKey: ['t_demurrage_containers'] });
-        }
-      )
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(channel);
-    };
-  }, [queryClient]);
-
-  return query;
 }
 
 export function useDemurrageStats() {
   return useQuery({
-    queryKey: ['t_demurrage_containers_stats'],
+    queryKey: ['demurrage_stats'],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from('t_demurrage_containers')
-        .select('cronos_status, risk_status, expected_cost_usd')
-        .eq('active', true);
-
+      const { data, error } = await supabase.functions.invoke('mariadb-proxy', {
+        body: { action: 'demurrage_get_stats' }
+      });
       if (error) throw error;
+      if (!data.success) throw new Error(data.error || 'Failed to fetch stats');
+      return data.data as DemurrageStats;
+    },
+  });
+}
 
-      const containers = data || [];
-      
-      const stats: DemurrageStats = {
-        total: containers.length,
-        inTransit: containers.filter(c => 
-          ['IN_TRANSIT', 'ARRIVED', 'PENDING'].includes(c.cronos_status)
-        ).length,
-        atRisk: containers.filter(c => 
-          ['at_risk', 'critical', 'exceeded'].includes(c.risk_status)
-        ).length,
-        delivered: containers.filter(c => 
-          ['GATE_OUT', 'RETURNED'].includes(c.cronos_status)
-        ).length,
-        totalDemurrageUsd: containers.reduce((sum, c) => sum + (c.expected_cost_usd || 0), 0),
-      };
+export function useUpdateDemurrageContainer() {
+  const queryClient = useQueryClient();
 
-      return stats;
+  return useMutation({
+    mutationFn: async ({ containerId, updates }: { containerId: number; updates: Record<string, unknown> }) => {
+      const { data, error } = await supabase.functions.invoke('mariadb-proxy', {
+        body: {
+          action: 'demurrage_update_container',
+          container_id: containerId,
+          updates,
+        }
+      });
+      if (error) throw error;
+      if (!data.success) throw new Error(data.error || 'Failed to update container');
+      return data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['demurrage_containers'] });
+      queryClient.invalidateQueries({ queryKey: ['demurrage_stats'] });
     },
   });
 }
 
 export function useDemurrageRates() {
   return useQuery({
-    queryKey: ['t_demurrage_rates'],
+    queryKey: ['demurrage_rates'],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from('t_demurrage_rates')
-        .select('*')
-        .eq('active', true)
-        .order('armador', { ascending: true });
-
+      const { data, error } = await supabase.functions.invoke('mariadb-proxy', {
+        body: { action: 'demurrage_get_rates' }
+      });
       if (error) throw error;
-      return data || [];
+      if (!data.success) throw new Error(data.error || 'Failed to fetch rates');
+      return (data.data || []) as DemurrageRate[];
     },
   });
 }
@@ -207,17 +179,18 @@ export function useCreateDemurrageRate() {
       period_start_day?: number;
       period_end_day?: number;
     }) => {
-      const { data, error } = await supabase
-        .from('t_demurrage_rates')
-        .insert(rate)
-        .select()
-        .single();
-
+      const { data, error } = await supabase.functions.invoke('mariadb-proxy', {
+        body: {
+          action: 'demurrage_create_rate',
+          ...rate,
+        }
+      });
       if (error) throw error;
+      if (!data.success) throw new Error(data.error || 'Failed to create rate');
       return data;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['t_demurrage_rates'] });
+      queryClient.invalidateQueries({ queryKey: ['demurrage_rates'] });
     },
   });
 }
@@ -226,7 +199,7 @@ export function useUpdateDemurrageRate() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: async ({ id, ...updates }: { id: string } & Partial<{
+    mutationFn: async ({ id, ...updates }: { id: number } & Partial<{
       armador: string;
       container_type: string;
       free_time_days: number;
@@ -236,18 +209,19 @@ export function useUpdateDemurrageRate() {
       period_end_day: number;
       active: boolean;
     }>) => {
-      const { data, error } = await supabase
-        .from('t_demurrage_rates')
-        .update(updates)
-        .eq('id', id)
-        .select()
-        .single();
-
+      const { data, error } = await supabase.functions.invoke('mariadb-proxy', {
+        body: {
+          action: 'demurrage_update_rate',
+          rate_id: id,
+          updates,
+        }
+      });
       if (error) throw error;
+      if (!data.success) throw new Error(data.error || 'Failed to update rate');
       return data;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['t_demurrage_rates'] });
+      queryClient.invalidateQueries({ queryKey: ['demurrage_rates'] });
     },
   });
 }
@@ -256,36 +230,55 @@ export function useDeleteDemurrageRate() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: async (id: string) => {
-      const { error } = await supabase
-        .from('t_demurrage_rates')
-        .delete()
-        .eq('id', id);
-
+    mutationFn: async (id: number) => {
+      const { data, error } = await supabase.functions.invoke('mariadb-proxy', {
+        body: {
+          action: 'demurrage_delete_rate',
+          rate_id: id,
+        }
+      });
       if (error) throw error;
+      if (!data.success) throw new Error(data.error || 'Failed to delete rate');
+      return data;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['t_demurrage_rates'] });
+      queryClient.invalidateQueries({ queryKey: ['demurrage_rates'] });
     },
   });
 }
 
 export function useDemurrageSettings() {
   return useQuery({
-    queryKey: ['t_demurrage_settings'],
+    queryKey: ['demurrage_settings'],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from('t_demurrage_settings')
-        .select('*');
-
-      if (error) throw error;
-
-      const settings: Record<string, string> = {};
-      (data || []).forEach((s: { key: string; value: string }) => {
-        settings[s.key] = s.value;
+      const { data, error } = await supabase.functions.invoke('mariadb-proxy', {
+        body: { action: 'demurrage_get_settings' }
       });
+      if (error) throw error;
+      if (!data.success) throw new Error(data.error || 'Failed to fetch settings');
+      return (data.data || {}) as Record<string, string>;
+    },
+  });
+}
 
-      return settings;
+export function useUpdateDemurrageSetting() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({ key, value }: { key: string; value: string }) => {
+      const { data, error } = await supabase.functions.invoke('mariadb-proxy', {
+        body: {
+          action: 'demurrage_update_setting',
+          setting_key: key,
+          setting_value: value,
+        }
+      });
+      if (error) throw error;
+      if (!data.success) throw new Error(data.error || 'Failed to update setting');
+      return data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['demurrage_settings'] });
     },
   });
 }
@@ -300,8 +293,8 @@ export function useSyncDemurrage() {
       return data;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['t_demurrage_containers'] });
-      queryClient.invalidateQueries({ queryKey: ['t_demurrage_containers_stats'] });
+      queryClient.invalidateQueries({ queryKey: ['demurrage_containers'] });
+      queryClient.invalidateQueries({ queryKey: ['demurrage_stats'] });
     },
   });
 }
@@ -316,8 +309,36 @@ export function useRecalcDemurrage() {
       return data;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['t_demurrage_containers'] });
-      queryClient.invalidateQueries({ queryKey: ['t_demurrage_containers_stats'] });
+      queryClient.invalidateQueries({ queryKey: ['demurrage_containers'] });
+      queryClient.invalidateQueries({ queryKey: ['demurrage_stats'] });
+    },
+  });
+}
+
+export function useDemurrageClients() {
+  return useQuery({
+    queryKey: ['demurrage_clients'],
+    queryFn: async () => {
+      const { data, error } = await supabase.functions.invoke('mariadb-proxy', {
+        body: { action: 'demurrage_get_unique_clients' }
+      });
+      if (error) throw error;
+      if (!data.success) throw new Error(data.error || 'Failed to fetch clients');
+      return (data.data || []) as Array<{ cliente: string; total_containers: number; total_demurrage: number }>;
+    },
+  });
+}
+
+export function useDemurrageArmadores() {
+  return useQuery({
+    queryKey: ['demurrage_armadores'],
+    queryFn: async () => {
+      const { data, error } = await supabase.functions.invoke('mariadb-proxy', {
+        body: { action: 'demurrage_get_unique_armadores' }
+      });
+      if (error) throw error;
+      if (!data.success) throw new Error(data.error || 'Failed to fetch armadores');
+      return (data.data || []) as Array<{ armador: string; total_containers: number }>;
     },
   });
 }

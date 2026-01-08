@@ -1,5 +1,4 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2.78.0";
 import { Client } from "https://deno.land/x/mysql@v2.12.1/mod.ts";
 
 const corsHeaders = {
@@ -36,11 +35,12 @@ serve(async (req) => {
     return new Response(null, { headers: corsHeaders });
   }
 
-  console.log("=== Starting Demurrage MariaDB Sync ===");
+  console.log("=== Starting Demurrage MariaDB Sync (MariaDB to MariaDB) ===");
   console.log(`Timestamp: ${new Date().toISOString()}`);
 
+  let client: Client | null = null;
+
   try {
-    // MariaDB connection config
     const mariaConfig = {
       hostname: Deno.env.get("MARIADB_HOST") || "",
       port: parseInt(Deno.env.get("MARIADB_PORT") || "3306"),
@@ -54,14 +54,7 @@ serve(async (req) => {
     }
 
     console.log(`Connecting to MariaDB at ${mariaConfig.hostname}:${mariaConfig.port}`);
-
-    // Supabase client
-    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-    const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-    const supabase = createClient(supabaseUrl, supabaseKey);
-
-    // Connect to MariaDB
-    const mariaClient = await new Client().connect(mariaConfig);
+    client = await new Client().connect(mariaConfig);
     console.log("✓ Connected to MariaDB");
 
     // Query joining t_tracking_sea and t_consulta_armador
@@ -88,8 +81,8 @@ serve(async (req) => {
         c.eta as eta_confirmado,
         c.voyage,
         c.status_armador
-      FROM t_tracking_sea t
-      LEFT JOIN t_consulta_armador c 
+      FROM dados_dachser.t_tracking_sea t
+      LEFT JOIN dados_dachser.t_consulta_armador c 
         ON t.mbl_id COLLATE utf8mb4_general_ci = c.mbl_id COLLATE utf8mb4_general_ci
       WHERE t.active = 1
         AND t.tipo_processo IN ('SEA IMPORT', 'SEA EXPORT')
@@ -100,9 +93,9 @@ serve(async (req) => {
       LIMIT 1000
     `;
 
-    console.log("Executing MariaDB query...");
-    const rows = await mariaClient.query(query) as MariaDBRow[];
-    console.log(`✓ Found ${rows.length} records`);
+    console.log("Executing source query...");
+    const rows = await client.query(query) as MariaDBRow[];
+    console.log(`✓ Found ${rows.length} records from source tables`);
 
     const results = {
       total_records: rows.length,
@@ -117,69 +110,143 @@ serve(async (req) => {
       try {
         if (!row.mbl_id || !row.container) continue;
 
+        const numero = row.container.trim();
+        const mbl = row.mbl_id.trim();
+
         // Map cronos_status from last_event
         const cronosStatus = mapCronosStatus(row.last_event, row.status_armador, row.container_status);
 
-        // Prepare container data for upsert
-        const containerData = {
-          numero: row.container.trim(),
-          mbl: row.mbl_id.trim(),
-          booking: row.booking || null,
-          cliente: row.consignee || null,
-          armador: row.shipping_line || null,
-          tipo_processo: row.tipo_processo || null,
-          porto_origem: row.origem || null,
-          porto_destino: row.destino || null,
-          navio: row.navio || null,
-          vessel_imo: row.vessel_imo || null,
-          voyage: row.voyage || null,
-          etd: row.etd ? formatDate(row.etd) : null,
-          eta: row.eta_confirmado ? formatDate(row.eta_confirmado) : (row.eta ? formatDate(row.eta) : null),
-          last_event: row.last_event || null,
-          container_status: row.container_status || null,
-          status_armador: row.status_armador || null,
-          cronos_status: cronosStatus,
-          email_analista: row.email_analista || null,
-          email_cliente: row.email_cliente || null,
-          mariadb_id: row.id,
-          last_sync_at: new Date().toISOString(),
-          active: true,
-          updated_at: new Date().toISOString(),
-        };
+        // Infer container type from container number
+        const tipoConteiner = inferContainerType(numero);
 
-        // Check if record exists
-        const { data: existing } = await supabase
-          .from('t_demurrage_containers')
-          .select('id')
-          .eq('numero', containerData.numero)
-          .eq('mbl', containerData.mbl)
-          .single();
+        // Check if record already exists
+        const existing = await client.query(`
+          SELECT id, cronos_status, ft_started_at, data_atracacao, data_gate_out, data_devolucao
+          FROM dados_dachser.t_dachser_demurrage_containers
+          WHERE numero = ? AND mbl = ?
+          LIMIT 1
+        `, [numero, mbl]);
 
-        if (existing) {
-          // Update existing
-          const { error: updateError } = await supabase
-            .from('t_demurrage_containers')
-            .update(containerData)
-            .eq('id', existing.id);
+        const now = new Date().toISOString().slice(0, 19).replace('T', ' ');
+        const etd = row.etd ? formatDate(row.etd) : null;
+        const eta = row.eta_confirmado ? formatDate(row.eta_confirmado) : (row.eta ? formatDate(row.eta) : null);
 
-          if (updateError) {
-            results.errors++;
-            results.error_details.push(`Update ${row.container}: ${updateError.message}`);
-          } else {
-            results.updated++;
-          }
+        // Calculate dates based on status transitions
+        let ftStartedAt = existing?.[0]?.ft_started_at || null;
+        let dataAtracacao = existing?.[0]?.data_atracacao || null;
+        let dataGateOut = existing?.[0]?.data_gate_out || null;
+        let dataDevolucao = existing?.[0]?.data_devolucao || null;
+
+        // Set dates when status changes
+        if (cronosStatus === 'ARRIVED' && !dataAtracacao) {
+          dataAtracacao = now.split(' ')[0];
+        }
+        if (cronosStatus === 'ARRIVED' && !ftStartedAt) {
+          ftStartedAt = now;
+        }
+        if (cronosStatus === 'GATE_OUT' && !dataGateOut) {
+          dataGateOut = now.split(' ')[0];
+        }
+        if (cronosStatus === 'RETURNED' && !dataDevolucao) {
+          dataDevolucao = now.split(' ')[0];
+        }
+
+        if (existing && existing.length > 0) {
+          // Update existing record
+          await client.execute(`
+            UPDATE dados_dachser.t_dachser_demurrage_containers SET
+              booking = ?,
+              cliente = ?,
+              armador = ?,
+              tipo_processo = ?,
+              porto_origem = ?,
+              porto_destino = ?,
+              navio = ?,
+              vessel_imo = ?,
+              voyage = ?,
+              etd = ?,
+              eta = ?,
+              last_event = ?,
+              container_status = ?,
+              status_armador = ?,
+              cronos_status = ?,
+              email_analista = ?,
+              email_cliente = ?,
+              tipo_conteiner = COALESCE(tipo_conteiner, ?),
+              ft_started_at = COALESCE(ft_started_at, ?),
+              data_atracacao = COALESCE(data_atracacao, ?),
+              data_gate_out = COALESCE(data_gate_out, ?),
+              data_devolucao = COALESCE(data_devolucao, ?),
+              mariadb_id = ?,
+              last_sync_at = NOW(),
+              updated_at = NOW()
+            WHERE id = ?
+          `, [
+            row.booking || null,
+            row.consignee || null,
+            row.shipping_line || null,
+            row.tipo_processo || null,
+            row.origem || null,
+            row.destino || null,
+            row.navio || null,
+            row.vessel_imo || null,
+            row.voyage || null,
+            etd,
+            eta,
+            row.last_event || null,
+            row.container_status || null,
+            row.status_armador || null,
+            cronosStatus,
+            row.email_analista || null,
+            row.email_cliente || null,
+            tipoConteiner,
+            ftStartedAt,
+            dataAtracacao,
+            dataGateOut,
+            dataDevolucao,
+            row.id,
+            existing[0].id
+          ]);
+          results.updated++;
         } else {
-          // Insert new
-          const { error: insertError } = await supabase
-            .from('t_demurrage_containers')
-            .insert(containerData);
-
-          if (insertError) {
-            results.errors++;
-            results.error_details.push(`Insert ${row.container}: ${insertError.message}`);
-          } else {
-            results.created++;
-          }
+          // Insert new record
+          await client.execute(`
+            INSERT INTO dados_dachser.t_dachser_demurrage_containers (
+              numero, mbl, booking, cliente, armador, tipo_processo,
+              porto_origem, porto_destino, navio, vessel_imo, voyage,
+              etd, eta, last_event, container_status, status_armador, cronos_status,
+              email_analista, email_cliente, tipo_conteiner,
+              ft_started_at, data_atracacao, data_gate_out, data_devolucao,
+              mariadb_id, last_sync_at, active
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), 1)
+          `, [
+            numero,
+            mbl,
+            row.booking || null,
+            row.consignee || null,
+            row.shipping_line || null,
+            row.tipo_processo || null,
+            row.origem || null,
+            row.destino || null,
+            row.navio || null,
+            row.vessel_imo || null,
+            row.voyage || null,
+            etd,
+            eta,
+            row.last_event || null,
+            row.container_status || null,
+            row.status_armador || null,
+            cronosStatus,
+            row.email_analista || null,
+            row.email_cliente || null,
+            tipoConteiner,
+            ftStartedAt,
+            dataAtracacao,
+            dataGateOut,
+            dataDevolucao,
+            row.id
+          ]);
+          results.created++;
         }
       } catch (rowError) {
         results.errors++;
@@ -187,7 +254,7 @@ serve(async (req) => {
       }
     }
 
-    await mariaClient.close();
+    await client.close();
     console.log("✓ MariaDB connection closed");
 
     console.log("=== Sync Complete ===");
@@ -196,7 +263,7 @@ serve(async (req) => {
     return new Response(
       JSON.stringify({
         success: true,
-        message: "Demurrage sync completed",
+        message: "Demurrage sync completed (MariaDB to MariaDB)",
         results,
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
@@ -204,6 +271,9 @@ serve(async (req) => {
 
   } catch (error) {
     console.error("Sync error:", error);
+    if (client) {
+      try { await client.close(); } catch {}
+    }
     return new Response(
       JSON.stringify({
         success: false,
@@ -256,4 +326,26 @@ function mapCronosStatus(lastEvent: string | null, statusArmador: string | null,
   }
 
   return 'PENDING';
+}
+
+function inferContainerType(containerNumber: string): string {
+  // Container number format: XXXX1234567
+  // The check digit and size/type can sometimes be inferred
+  // Common container types: 20DV, 40DV, 40HC, 20RF, 40RF
+  
+  const upper = containerNumber.toUpperCase();
+  
+  // Check for reefer indicators
+  if (upper.includes('RF') || upper.includes('RE')) {
+    return '40RF';
+  }
+  
+  // Check for high cube
+  if (upper.includes('HC') || upper.includes('HQ')) {
+    return '40HC';
+  }
+  
+  // Default based on common patterns
+  // Most sea containers are 40ft
+  return '40DV';
 }

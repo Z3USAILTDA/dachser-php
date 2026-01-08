@@ -1,4 +1,5 @@
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { Client } from "https://deno.land/x/mysql@v2.12.1/mod.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -6,7 +7,7 @@ const corsHeaders = {
 };
 
 interface DemurrageContainer {
-  id: string;
+  id: number;
   numero: string;
   armador: string | null;
   tipo_conteiner: string | null;
@@ -25,46 +26,65 @@ interface DemurrageRate {
   period_end_day: number | null;
 }
 
-Deno.serve(async (req) => {
+interface DemurrageSetting {
+  setting_key: string;
+  setting_value: string;
+}
+
+serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
 
+  console.log('=== Recalculating Demurrage (MariaDB) ===');
+
+  let client: Client | null = null;
+
   try {
-    const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
-    const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-    const supabase = createClient(supabaseUrl, supabaseKey);
+    const mariaConfig = {
+      hostname: Deno.env.get("MARIADB_HOST") || "",
+      port: parseInt(Deno.env.get("MARIADB_PORT") || "3306"),
+      username: Deno.env.get("MARIADB_USER") || "",
+      password: Deno.env.get("MARIADB_PASSWORD") || "",
+      db: Deno.env.get("MARIADB_DATABASE") || "",
+    };
 
-    console.log('=== Recalculating Demurrage ===');
+    if (!mariaConfig.hostname || !mariaConfig.username) {
+      throw new Error("MariaDB credentials not configured");
+    }
 
-    // Fetch settings from t_demurrage_settings
-    const { data: settingsData } = await supabase
-      .from('t_demurrage_settings')
-      .select('key, value');
+    console.log(`Connecting to MariaDB at ${mariaConfig.hostname}:${mariaConfig.port}`);
+    client = await new Client().connect(mariaConfig);
+    console.log("✓ Connected to MariaDB");
+
+    // Fetch settings
+    const settingsRows = await client.query(`
+      SELECT setting_key, setting_value 
+      FROM dados_dachser.t_dachser_demurrage_settings
+    `) as DemurrageSetting[];
     
     const settings: Record<string, string> = {};
-    (settingsData || []).forEach((s: { key: string; value: string }) => {
-      settings[s.key] = s.value;
+    (settingsRows || []).forEach((s) => {
+      settings[s.setting_key] = s.setting_value;
     });
     
     const defaultFreeTime = parseInt(settings.default_free_time) || 14;
     const defaultRate = parseFloat(settings.default_rate) || 150;
     console.log(`Settings: FT=${defaultFreeTime} days, Rate=$${defaultRate}/day`);
 
-    // Fetch rates from t_demurrage_rates
-    const { data: rates, error: ratesError } = await supabase
-      .from('t_demurrage_rates')
-      .select('armador, container_type, free_time_days, rate_usd, period_type, period_start_day, period_end_day')
-      .eq('active', true);
-
-    if (ratesError) throw new Error(`Failed to fetch rates: ${ratesError.message}`);
+    // Fetch rates
+    const rates = await client.query(`
+      SELECT armador, container_type, free_time_days, rate_usd, 
+             period_type, period_start_day, period_end_day
+      FROM dados_dachser.t_dachser_demurrage_rates
+      WHERE active = 1
+    `) as DemurrageRate[];
     
-    const ratesList = (rates || []) as DemurrageRate[];
-    console.log(`Loaded ${ratesList.length} demurrage rates`);
+    console.log(`Loaded ${rates.length} demurrage rates`);
 
     // Build rate lookup by armador + container type
     const ratesMap: Record<string, DemurrageRate[]> = {};
-    for (const rate of ratesList) {
+    for (const rate of rates) {
       const key = `${rate.armador}:${rate.container_type}`;
       if (!ratesMap[key]) {
         ratesMap[key] = [];
@@ -73,19 +93,16 @@ Deno.serve(async (req) => {
     }
 
     // Fetch containers with ft_started_at set
-    const { data: containers, error: containersError } = await supabase
-      .from('t_demurrage_containers')
-      .select('id, numero, armador, tipo_conteiner, ft_started_at, data_devolucao, free_time_days')
-      .eq('active', true)
-      .not('ft_started_at', 'is', null);
+    const containers = await client.query(`
+      SELECT id, numero, armador, tipo_conteiner, ft_started_at, data_devolucao, free_time_days
+      FROM dados_dachser.t_dachser_demurrage_containers
+      WHERE active = 1 AND ft_started_at IS NOT NULL
+    `) as DemurrageContainer[];
 
-    if (containersError) throw new Error(`Failed to fetch containers: ${containersError.message}`);
-
-    const containerList = (containers || []) as DemurrageContainer[];
-    console.log(`Found ${containerList.length} containers to recalculate`);
+    console.log(`Found ${containers.length} containers to recalculate`);
 
     const results = {
-      total: containerList.length,
+      total: containers.length,
       updated: 0,
       safe: 0,
       at_risk: 0,
@@ -97,7 +114,7 @@ Deno.serve(async (req) => {
 
     const now = new Date();
 
-    for (const container of containerList) {
+    for (const container of containers) {
       try {
         if (!container.ft_started_at) continue;
 
@@ -190,31 +207,35 @@ Deno.serve(async (req) => {
           results.exceeded++;
         }
 
-        // Update container in t_demurrage_containers
-        const updateData = {
-          free_time_days: freeTimeDays,
-          free_time_end_date: freeTimeEnd.toISOString().split('T')[0],
-          days_remaining: Math.max(0, daysRemaining),
-          excedente_dias: daysExceeded,
-          expected_cost_usd: demurrageCost,
-          rate_usd_per_day: ratePerDay,
-          risk_status: riskStatus,
-          risk_score: riskScore,
-          updated_at: new Date().toISOString(),
-        };
+        const freeTimeEndStr = freeTimeEnd.toISOString().split('T')[0];
 
-        const { error: updateError } = await supabase
-          .from('t_demurrage_containers')
-          .update(updateData)
-          .eq('id', container.id);
+        // Update container in MariaDB
+        await client.execute(`
+          UPDATE dados_dachser.t_dachser_demurrage_containers SET
+            free_time_days = ?,
+            free_time_end_date = ?,
+            days_remaining = ?,
+            excedente_dias = ?,
+            expected_cost_usd = ?,
+            rate_usd_per_day = ?,
+            risk_status = ?,
+            risk_score = ?,
+            updated_at = NOW()
+          WHERE id = ?
+        `, [
+          freeTimeDays,
+          freeTimeEndStr,
+          Math.max(0, daysRemaining),
+          daysExceeded,
+          demurrageCost,
+          ratePerDay,
+          riskStatus,
+          riskScore,
+          container.id
+        ]);
 
-        if (updateError) {
-          console.error(`Error updating ${container.numero}:`, updateError.message);
-          results.errors++;
-        } else {
-          results.updated++;
-          results.total_demurrage_usd += demurrageCost;
-        }
+        results.updated++;
+        results.total_demurrage_usd += demurrageCost;
 
         console.log(`${container.numero}: ${daysExceeded}d exceeded, $${demurrageCost.toFixed(2)}, ${riskStatus}`);
 
@@ -224,23 +245,28 @@ Deno.serve(async (req) => {
       }
     }
 
+    await client.close();
+    console.log("✓ MariaDB connection closed");
+
     console.log('=== Recalculation Complete ===');
     console.log(`Results: ${JSON.stringify(results)}`);
 
     return new Response(JSON.stringify({
       success: true,
-      message: 'Demurrage recalculation completed',
+      message: 'Demurrage recalculation completed (MariaDB)',
       results,
     }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
 
   } catch (err) {
-    const error = err as Error;
-    console.error('Recalc error:', error);
+    console.error('Recalc error:', err);
+    if (client) {
+      try { await client.close(); } catch {}
+    }
     return new Response(JSON.stringify({
       success: false,
-      error: error.message,
+      error: err instanceof Error ? err.message : String(err),
     }), {
       status: 500,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
