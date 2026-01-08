@@ -9,11 +9,8 @@ import {
   BookText,
   ChevronRight,
   CheckCircle2,
-  RefreshCw,
   MapPin,
   Calendar,
-  FileSpreadsheet,
-  AlertTriangle,
   Clock
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
@@ -47,7 +44,7 @@ const faqItems = [
   },
   { 
     q: 'Quem tem acesso a esta tela?', 
-    a: 'Apenas usuários com permissão de administrador podem acessar esta funcionalidade.' 
+    a: 'Todos os usuários logados no sistema têm acesso a esta funcionalidade.' 
   },
   { 
     q: 'O que é o Tracker Hapag?', 
@@ -188,18 +185,6 @@ export default function ManualDraftExportacao() {
                     <Search className="h-8 w-8 text-amber-400 mb-2" />
                     <h4 className="text-white font-medium mb-1">Tracker</h4>
                     <p className="text-xs text-white/60">Consulte status de containers diretamente nos armadores</p>
-                  </div>
-                </div>
-
-                <div className="p-4 rounded-lg bg-amber-500/10 border border-amber-500/20 mt-4">
-                  <div className="flex items-start gap-3">
-                    <AlertTriangle className="h-5 w-5 text-amber-400 shrink-0 mt-0.5" />
-                    <div>
-                      <h4 className="text-amber-300 font-medium mb-1">Acesso Restrito</h4>
-                      <p className="text-sm text-white/70">
-                        Esta funcionalidade está disponível apenas para usuários administradores.
-                      </p>
-                    </div>
                   </div>
                 </div>
               </CardContent>
