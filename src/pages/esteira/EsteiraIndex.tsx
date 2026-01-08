@@ -910,7 +910,12 @@ const EsteiraIndex = () => {
       return vouchers.filter(v => v.etapaAtual === "SUPERVISOR" || v.responsavelSupervisorUserId === currentUserId);
     }
     if (isOperacao) {
-      return vouchers.filter(v => v.criadoPorUserId === currentUserId || v.responsavelOperacaoUserId === currentUserId);
+      // OPERACAO users can see vouchers they created, are responsible for, AND pending A_PROCESSAR vouchers
+      return vouchers.filter(v => 
+        v.criadoPorUserId === currentUserId || 
+        v.responsavelOperacaoUserId === currentUserId ||
+        v.etapaAtual === "A_PROCESSAR" // Allow seeing backlog to import
+      );
     }
     if (isFiscal) {
       return vouchers.filter(v => v.etapaAtual === "FISCAL" || v.etapaAtual === "AJUSTE_FISCAL" || v.responsavelFiscalUserId === currentUserId);
