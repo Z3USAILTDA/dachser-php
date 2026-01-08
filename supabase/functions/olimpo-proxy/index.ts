@@ -1316,6 +1316,8 @@ serve(async (req) => {
         // Excluir MBLs que:
         // 1. Só têm containers marcados como NAO_ENCONTRADO
         // 2. Todos os containers têm erro "Prefix not found" (não rastreáveis)
+        // 3. Containers entregues há mais de 24h
+        // Incluir: is_eta_delayed, transshipment_port, navio/vessel_imo do registro mais recente
         const rows = await client.query(`
           SELECT 
             ts.mbl_id,
@@ -1324,7 +1326,27 @@ serve(async (req) => {
             MAX(ts.shipping_line) as shipping_line,
             MAX(ts.origem) as origem,
             MAX(ts.destino) as destino,
-            MAX(ts.navio) as navio,
+            -- Navio do registro mais recente (subquery para corrigir visualização)
+            (
+              SELECT ts2.navio 
+              FROM dados_dachser.t_tracking_sea ts2 
+              WHERE ts2.mbl_id = ts.mbl_id 
+                AND ts2.navio IS NOT NULL 
+                AND ts2.navio != ''
+                AND ts2.active = 1
+              ORDER BY ts2.last_check DESC 
+              LIMIT 1
+            ) as navio,
+            -- Vessel IMO do registro mais recente
+            (
+              SELECT ts2.vessel_imo 
+              FROM dados_dachser.t_tracking_sea ts2 
+              WHERE ts2.mbl_id = ts.mbl_id 
+                AND ts2.vessel_imo IS NOT NULL 
+                AND ts2.active = 1
+              ORDER BY ts2.last_check DESC 
+              LIMIT 1
+            ) as vessel_imo,
             MAX(ts.eta) as eta,
             MAX(ts.email_analista) as email_analista,
             MAX(ts.email_cliente) as email_cliente,
@@ -1334,7 +1356,24 @@ serve(async (req) => {
             MAX(ts.last_check) as last_check,
             MAX(ts.active) as active,
             MAX(ts.created_at) as created_at,
-            MAX(ts.updated_at) as updated_at
+            MAX(ts.updated_at) as updated_at,
+            -- DELAYED por ETA: se ETA passou há mais de 3 dias e não está entregue
+            CASE 
+              WHEN MAX(ts.eta) IS NOT NULL 
+                AND MAX(ts.eta) < DATE_SUB(NOW(), INTERVAL 3 DAY)
+                AND UPPER(COALESCE(MAX(ts.container_status), '')) NOT IN ('DELIVERED', 'GATE_OUT', 'DLV', 'GOD', 'EMPTY_RETURNED', 'EMPTY_RECEIVED_AT_CY')
+              THEN 1 
+              ELSE 0 
+            END as is_eta_delayed,
+            -- Porto de transbordo: agregar de histórico de eventos
+            (
+              SELECT GROUP_CONCAT(DISTINCT h.location SEPARATOR ', ')
+              FROM dados_dachser.t_tracking_sea_history h
+              WHERE h.mbl_id = ts.mbl_id
+                AND UPPER(h.event_code) IN ('TRANSSHIPMENT', 'TSP', 'TRANSSHIPMENT_DISCHARGED', 'TRANSSHIPMENT_LOADED', 'TRANSHIPMENT_ARRIVAL', 'TRANSHIPMENT_DEPARTURE')
+                AND h.location IS NOT NULL
+                AND h.location != ''
+            ) as transshipment_port
           FROM dados_dachser.t_tracking_sea ts
           WHERE ts.active = 1
           GROUP BY ts.mbl_id
@@ -1352,6 +1391,11 @@ serve(async (req) => {
                 THEN ts.container 
               END)
               AND COUNT(DISTINCT CASE WHEN ts.last_error LIKE '%Prefix not found%' THEN ts.container END) > 0
+            )
+            -- Ocultar containers entregues há mais de 24 horas
+            AND NOT (
+              UPPER(COALESCE(MAX(ts.container_status), '')) IN ('DELIVERED', 'DLV', 'GOD', 'GATE_OUT_FULL', 'EMPTY_RETURNED', 'EMPTY_RECEIVED_AT_CY')
+              AND MAX(ts.last_check) < DATE_SUB(NOW(), INTERVAL 24 HOUR)
             )
           ORDER BY MAX(ts.last_check) DESC, ts.mbl_id
         `);
@@ -1403,14 +1447,33 @@ serve(async (req) => {
       });
 
       try {
+        // Retornar navio/vessel_imo mais recente via COALESCE com subquery
         const rows = await client.query(`
           SELECT 
-            id, mbl_id, container, shipping_line, 
-            container_status, last_event, last_check, 
-            eta, navio, vessel_imo, origem, destino, consignee
-          FROM dados_dachser.t_tracking_sea
-          WHERE mbl_id = ?
-          ORDER BY container
+            ts.id, ts.mbl_id, ts.container, ts.shipping_line, 
+            ts.container_status, ts.last_event, ts.last_check, 
+            ts.eta, 
+            COALESCE(ts.navio, (
+              SELECT t2.navio 
+              FROM dados_dachser.t_tracking_sea t2 
+              WHERE t2.mbl_id = ts.mbl_id 
+                AND t2.navio IS NOT NULL 
+                AND t2.navio != ''
+              ORDER BY t2.last_check DESC 
+              LIMIT 1
+            )) as navio,
+            COALESCE(ts.vessel_imo, (
+              SELECT t2.vessel_imo 
+              FROM dados_dachser.t_tracking_sea t2 
+              WHERE t2.mbl_id = ts.mbl_id 
+                AND t2.vessel_imo IS NOT NULL 
+              ORDER BY t2.last_check DESC 
+              LIMIT 1
+            )) as vessel_imo, 
+            ts.origem, ts.destino, ts.consignee
+          FROM dados_dachser.t_tracking_sea ts
+          WHERE ts.mbl_id = ?
+          ORDER BY ts.container
         `, [mbl_id]);
 
         await client.close();

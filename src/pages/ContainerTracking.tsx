@@ -129,6 +129,7 @@ interface MblTrackingData {
   origem: string;
   destino: string;
   navio: string;
+  vessel_imo: string | null;
   eta: string;
   email_analista: string;
   email_cliente: string;
@@ -136,6 +137,8 @@ interface MblTrackingData {
   container_status: string;
   last_event: string;
   last_check: string;
+  is_eta_delayed: number; // 1 se ETA passou há mais de 3 dias
+  transshipment_port: string | null; // Porto(s) de escala/transbordo
 }
 
 // Container detail interface (expanded view)
@@ -198,7 +201,10 @@ const ContainerTracking = () => {
     return ['CRG', 'DEP', 'TSP', 'ARR', 'DCH'].includes(status.code);
   };
 
-  const isEmAlerta = (lastEvent: string | null): boolean => {
+  const isEmAlerta = (lastEvent: string | null, isEtaDelayed?: number): boolean => {
+    // Verificação via campo calculado do backend (ETA passou há mais de 3 dias)
+    if (isEtaDelayed === 1) return true;
+    
     if (!lastEvent) return false;
     const upper = lastEvent.toUpperCase().replace(/[_\s-]/g, "");
     return upper.includes("DELAYED") || upper.includes("DELAY") ||
@@ -571,6 +577,7 @@ const ContainerTracking = () => {
             destino: emailMbl.destino,
             custom_message: emailCustomMessage || undefined,
             email_type: emailType,
+            preserve_original_status: true, // Sempre usar nomenclatura original do rastreio
           })
         }
       );
@@ -626,9 +633,9 @@ const ContainerTracking = () => {
       
       let matchesCardFilter = true;
       if (activeCardFilter === "transito") {
-        matchesCardFilter = isEmTransito(m.last_event) && !isEntregue(m.last_event) && !isEmAlerta(m.last_event);
+        matchesCardFilter = isEmTransito(m.last_event) && !isEntregue(m.last_event) && !isEmAlerta(m.last_event, m.is_eta_delayed);
       } else if (activeCardFilter === "alerta") {
-        matchesCardFilter = isEmAlerta(m.last_event);
+        matchesCardFilter = isEmAlerta(m.last_event, m.is_eta_delayed);
       } else if (activeCardFilter === "entregues") {
         matchesCardFilter = isEntregue(m.last_event);
       }
@@ -647,8 +654,8 @@ const ContainerTracking = () => {
   // Dashboard stats
   const stats = useMemo(() => {
     const total = mblList.length;
-    const emTransito = mblList.filter((m) => isEmTransito(m.last_event) && !isEntregue(m.last_event) && !isEmAlerta(m.last_event)).length;
-    const emAlerta = mblList.filter((m) => isEmAlerta(m.last_event)).length;
+    const emTransito = mblList.filter((m) => isEmTransito(m.last_event) && !isEntregue(m.last_event) && !isEmAlerta(m.last_event, m.is_eta_delayed)).length;
+    const emAlerta = mblList.filter((m) => isEmAlerta(m.last_event, m.is_eta_delayed)).length;
     const entregues = mblList.filter((m) => isEntregue(m.last_event)).length;
 
     return { total, emTransito, emAlerta, entregues };
@@ -971,6 +978,7 @@ const ContainerTracking = () => {
                       <th className="px-4 py-3 text-left text-[#aaaaaa] uppercase text-[0.68rem] tracking-[0.1em] font-medium">Consignee</th>
                       <th className="px-4 py-3 text-left text-[#aaaaaa] uppercase text-[0.68rem] tracking-[0.1em] font-medium">Armador</th>
                       <th className="px-4 py-3 text-left text-[#aaaaaa] uppercase text-[0.68rem] tracking-[0.1em] font-medium">Origem</th>
+                      <th className="px-4 py-3 text-left text-[#aaaaaa] uppercase text-[0.68rem] tracking-[0.1em] font-medium">Escala</th>
                       <th className="px-4 py-3 text-left text-[#aaaaaa] uppercase text-[0.68rem] tracking-[0.1em] font-medium">Destino</th>
                       <th className="px-4 py-3 text-center text-[#aaaaaa] uppercase text-[0.68rem] tracking-[0.1em] font-medium min-w-[180px]">Timeline</th>
                       <th className="px-4 py-3 text-left text-[#aaaaaa] uppercase text-[0.68rem] tracking-[0.1em] font-medium">Status</th>
@@ -1011,6 +1019,24 @@ const ContainerTracking = () => {
                               </span>
                             </td>
                             <td className="px-4 py-3 text-[#aaaaaa] text-sm">{mbl.origem || "-"}</td>
+                            <td className="px-4 py-3 text-[#aaaaaa] text-sm">
+                              {mbl.transshipment_port ? (
+                                <TooltipProvider>
+                                  <Tooltip>
+                                    <TooltipTrigger asChild>
+                                      <span className="px-2 py-1 rounded-full text-xs font-medium bg-[rgba(249,115,22,.15)] text-orange-400 border border-[rgba(249,115,22,.3)] cursor-help">
+                                        {mbl.transshipment_port.length > 15 ? mbl.transshipment_port.substring(0, 15) + "..." : mbl.transshipment_port}
+                                      </span>
+                                    </TooltipTrigger>
+                                    <TooltipContent>
+                                      <p className="text-xs">Porto de transbordo: {mbl.transshipment_port}</p>
+                                    </TooltipContent>
+                                  </Tooltip>
+                                </TooltipProvider>
+                              ) : (
+                                <span className="text-[#666]">—</span>
+                              )}
+                            </td>
                             <td className="px-4 py-3 text-[#aaaaaa] text-sm">{mbl.destino || "-"}</td>
                             <td className="px-3 py-3 min-w-[280px]">
                               <div className="relative h-1.5 w-full flex items-center">
@@ -1154,7 +1180,7 @@ const ContainerTracking = () => {
                           {/* Expanded containers row */}
                           {isExpanded && (
                             <tr className="bg-[rgba(0,0,0,.3)]">
-                              <td colSpan={8} className="px-4 py-4">
+                              <td colSpan={9} className="px-4 py-4">
                                 {loadingContainers ? (
                                   <div className="flex items-center justify-center py-4">
                                     <Loader2 className="w-6 h-6 animate-spin text-[#ffc800]" />
