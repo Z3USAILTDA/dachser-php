@@ -5183,8 +5183,10 @@ serve(async (req) => {
             ts.last_event,
             ts.last_check,
             ts.shipping_line,
-            ts.is_eta_delayed,
-            -- Coordenadas do t_olimpo_tracking (se existirem)
+            CASE 
+              WHEN ts.eta IS NOT NULL AND ts.eta < DATE_SUB(NOW(), INTERVAL 3 DAY) THEN 1 
+              ELSE 0 
+            END AS is_eta_delayed,
             ot.origem_lat,
             ot.origem_lon,
             ot.destino_lat,
@@ -5196,7 +5198,6 @@ serve(async (req) => {
           LEFT JOIN dados_dachser.t_olimpo_tracking ot 
             ON ot.mode = 'sea' AND ot.asset = ts.mbl_id
           WHERE ts.active = 1
-            -- Filtro de 24h para entregues
             AND NOT (
               UPPER(ts.container_status) IN ('DELIVERED', 'DLV', 'GOD', 'EMPTY_RETURNED')
               AND ts.last_check < DATE_SUB(NOW(), INTERVAL 24 HOUR)
@@ -5277,7 +5278,7 @@ serve(async (req) => {
           INSERT INTO dados_dachser.t_olimpo_tracking (
             mode, asset, cliente, tipo_processo,
             origem_code, destino_code, status,
-            eta, etd, vessel_name, container_status,
+            eta, vessel_name, container_status,
             shipping_line, updated_at, active
           )
           SELECT 
@@ -5285,15 +5286,14 @@ serve(async (req) => {
             ts.mbl_id AS asset,
             ts.consignee AS cliente,
             ts.tipo_processo,
-            ts.porto_origem AS origem_code,
-            ts.porto_destino AS destino_code,
+            ts.origem AS origem_code,
+            ts.destino AS destino_code,
             CASE 
-              WHEN ts.is_eta_delayed = 1 THEN 'Atraso'
+              WHEN ts.eta IS NOT NULL AND ts.eta < DATE_SUB(NOW(), INTERVAL 3 DAY) THEN 'Atraso'
               WHEN UPPER(ts.container_status) IN ('DELIVERED', 'DLV', 'GOD', 'EMPTY_RETURNED') THEN 'Entregue'
               ELSE 'Em trânsito'
             END AS status,
             ts.eta,
-            ts.etd,
             ts.navio AS vessel_name,
             ts.container_status,
             ts.shipping_line,
@@ -5309,7 +5309,6 @@ serve(async (req) => {
             destino_code = VALUES(destino_code),
             status = VALUES(status),
             eta = VALUES(eta),
-            etd = VALUES(etd),
             vessel_name = VALUES(vessel_name),
             container_status = VALUES(container_status),
             shipping_line = VALUES(shipping_line),
