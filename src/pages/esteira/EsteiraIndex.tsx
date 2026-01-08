@@ -654,10 +654,34 @@ const EsteiraIndex = () => {
     };
     getCurrentUser();
   }, []);
+
+  // Sync vouchers from RM on page load
+  const syncFromRM = async () => {
+    try {
+      console.log("Syncing vouchers from RM...");
+      const { data, error } = await supabase.functions.invoke("voucher-integrate-rm", {
+        body: {
+          action: "import",
+          limit: 100
+        }
+      });
+      if (error) {
+        console.error("Error syncing from RM:", error);
+      } else {
+        console.log("RM sync complete:", data);
+      }
+    } catch (err) {
+      console.error("Failed to sync from RM:", err);
+    }
+  };
+
   const loadVouchers = async () => {
     try {
       setLoading(true);
       setIsRefetching(true);
+
+      // First sync from RM to ensure latest data, then load vouchers
+      await syncFromRM();
 
       // Load from MariaDB t_vouchers AND pending RM vouchers in parallel
       const [esteiraResult, rmPendingResult] = await Promise.all([supabase.functions.invoke("mariadb-proxy", {
