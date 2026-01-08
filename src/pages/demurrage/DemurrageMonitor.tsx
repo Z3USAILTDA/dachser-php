@@ -27,6 +27,7 @@ const mockContainers = [
 export default function DemurrageMonitor() {
   const [searchTerm, setSearchTerm] = useState("");
   const [filterStatus, setFilterStatus] = useState<string>("all");
+  const [quickFilter, setQuickFilter] = useState<"all" | "at_risk" | "exceeded" | "safe">("all");
   const [loading, setLoading] = useState(false);
   const [isRefetching, setIsRefetching] = useState(false);
 
@@ -38,12 +39,37 @@ export default function DemurrageMonitor() {
     }, 1000);
   };
 
+  const handleQuickFilterChange = (filter: "all" | "at_risk" | "exceeded" | "safe") => {
+    setQuickFilter(filter);
+    // Reset the select filter when using quick filters
+    if (filter === "all") {
+      setFilterStatus("all");
+    } else if (filter === "at_risk") {
+      setFilterStatus("at_risk");
+    } else if (filter === "exceeded") {
+      setFilterStatus("exceeded");
+    } else if (filter === "safe") {
+      setFilterStatus("safe");
+    }
+  };
+
   const filteredContainers = mockContainers.filter(c => {
     const matchesSearch = 
       c.numero.toLowerCase().includes(searchTerm.toLowerCase()) ||
       c.master.toLowerCase().includes(searchTerm.toLowerCase()) ||
       c.cliente.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesStatus = filterStatus === "all" || c.status === filterStatus;
+    
+    let matchesStatus = true;
+    if (quickFilter === "at_risk") {
+      matchesStatus = c.status === "at_risk" || c.status === "critical";
+    } else if (quickFilter === "exceeded") {
+      matchesStatus = c.status === "exceeded";
+    } else if (quickFilter === "safe") {
+      matchesStatus = c.status === "safe";
+    } else if (filterStatus !== "all") {
+      matchesStatus = c.status === filterStatus;
+    }
+    
     return matchesSearch && matchesStatus;
   });
 
@@ -92,6 +118,8 @@ export default function DemurrageMonitor() {
       onRefresh={handleRefresh}
       isRefetching={isRefetching}
       rightActions={rightActions}
+      activeFilter={quickFilter}
+      onFilterChange={handleQuickFilterChange}
     >
       <div className="space-y-4">
         {/* Filters */}
