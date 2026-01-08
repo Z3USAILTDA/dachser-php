@@ -7,7 +7,7 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-interface MariaDBTracking {
+interface MariaDBRow {
   id: number;
   mbl_id: string;
   tipo_processo: string;
@@ -17,6 +17,7 @@ interface MariaDBTracking {
   origem: string;
   destino: string;
   navio: string;
+  vessel_imo: string | null;
   eta: Date | null;
   last_event: string | null;
   container_status: string | null;
@@ -26,6 +27,7 @@ interface MariaDBTracking {
   booking: string | null;
   etd: Date | null;
   eta_confirmado: Date | null;
+  voyage: string | null;
   status_armador: string | null;
 }
 
@@ -34,11 +36,11 @@ serve(async (req) => {
     return new Response(null, { headers: corsHeaders });
   }
 
-  console.log("=== Starting MariaDB Sync ===");
+  console.log("=== Starting Demurrage MariaDB Sync ===");
   console.log(`Timestamp: ${new Date().toISOString()}`);
 
   try {
-    // MariaDB connection config from secrets
+    // MariaDB connection config
     const mariaConfig = {
       hostname: Deno.env.get("MARIADB_HOST") || "",
       port: parseInt(Deno.env.get("MARIADB_PORT") || "3306"),
@@ -48,10 +50,10 @@ serve(async (req) => {
     };
 
     if (!mariaConfig.hostname || !mariaConfig.username) {
-      throw new Error("MariaDB credentials not configured. Please set MARIADB_HOST, MARIADB_USER, MARIADB_PASSWORD, MARIADB_DATABASE secrets.");
+      throw new Error("MariaDB credentials not configured");
     }
 
-    console.log(`Connecting to MariaDB at ${mariaConfig.hostname}:${mariaConfig.port}, database: ${mariaConfig.db}`);
+    console.log(`Connecting to MariaDB at ${mariaConfig.hostname}:${mariaConfig.port}`);
 
     // Supabase client
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
@@ -60,10 +62,9 @@ serve(async (req) => {
 
     // Connect to MariaDB
     const mariaClient = await new Client().connect(mariaConfig);
-    console.log("✓ Connected to MariaDB successfully");
+    console.log("✓ Connected to MariaDB");
 
-    // Query with JOIN between t_tracking_sea and t_consulta_armador
-    // Using COLLATE to handle collation mismatch between tables
+    // Query joining t_tracking_sea and t_consulta_armador
     const query = `
       SELECT 
         t.id,
@@ -75,6 +76,7 @@ serve(async (req) => {
         t.origem,
         t.destino,
         t.navio,
+        t.vessel_imo,
         t.eta,
         t.last_event,
         t.container_status,
@@ -84,34 +86,28 @@ serve(async (req) => {
         c.booking,
         c.etd,
         c.eta as eta_confirmado,
+        c.voyage,
         c.status_armador
       FROM t_tracking_sea t
-      LEFT JOIN t_consulta_armador c ON t.mbl_id COLLATE utf8mb4_general_ci = c.mbl_id COLLATE utf8mb4_general_ci
+      LEFT JOIN t_consulta_armador c 
+        ON t.mbl_id COLLATE utf8mb4_general_ci = c.mbl_id COLLATE utf8mb4_general_ci
       WHERE t.active = 1
         AND t.tipo_processo IN ('SEA IMPORT', 'SEA EXPORT')
+        AND t.container IS NOT NULL
+        AND t.container != ''
+        AND UPPER(t.container) != 'PENDENTE'
       ORDER BY t.id DESC
-      LIMIT 500
+      LIMIT 1000
     `;
 
-    console.log("Executing query on MariaDB...");
-    
-    let rows: MariaDBTracking[] = [];
-    try {
-      const result = await mariaClient.query(query);
-      rows = result as MariaDBTracking[];
-      console.log(`✓ Found ${rows.length} records to sync`);
-    } catch (queryError) {
-      console.error("Query error:", queryError);
-      throw new Error(`Failed to query MariaDB: ${queryError instanceof Error ? queryError.message : String(queryError)}`);
-    }
+    console.log("Executing MariaDB query...");
+    const rows = await mariaClient.query(query) as MariaDBRow[];
+    console.log(`✓ Found ${rows.length} records`);
 
     const results = {
       total_records: rows.length,
-      shipments_created: 0,
-      shipments_updated: 0,
-      containers_created: 0,
-      containers_updated: 0,
-      containers_skipped_pendente: 0,
+      created: 0,
+      updated: 0,
       errors: 0,
       error_details: [] as string[],
     };
@@ -119,158 +115,99 @@ serve(async (req) => {
     // Process each record
     for (const row of rows) {
       try {
-        if (!row.mbl_id) {
-          console.log(`Skipping record ${row.id}: No MBL ID`);
-          continue;
-        }
+        if (!row.mbl_id || !row.container) continue;
 
-        // Determine modal from tipo_processo
-        const modal = row.tipo_processo?.includes('IMPORT') ? 'FCL' : 'FCL';
-        
-        // Use eta_confirmado if available, otherwise eta
-        const arrivalDate = row.eta_confirmado || row.eta;
-
-        // Check if shipment exists
-        const { data: existingShipment } = await supabase
-          .from('shipments')
-          .select('id')
-          .eq('master', row.mbl_id)
-          .single();
-
-        let shipmentId: string | null = null;
-
-        if (existingShipment) {
-          // Update existing shipment
-          const { error: updateError } = await supabase
-            .from('shipments')
-            .update({
-              cliente: row.consignee || 'Unknown',
-              armador: row.shipping_line || 'Unknown',
-              modal: modal,
-              porto_origem: row.origem || null,
-              porto_destino: row.destino || null,
-              data_atracacao: arrivalDate ? formatDate(arrivalDate) : null,
-              updated_at: new Date().toISOString(),
-            })
-            .eq('id', existingShipment.id);
-
-          if (updateError) {
-            console.error(`Error updating shipment ${row.mbl_id}:`, updateError);
-            results.errors++;
-            results.error_details.push(`Shipment update ${row.mbl_id}: ${updateError.message}`);
-          } else {
-            shipmentId = existingShipment.id;
-            results.shipments_updated++;
-          }
-        } else {
-          // Create new shipment
-          const { data: newShipment, error: insertError } = await supabase
-            .from('shipments')
-            .insert({
-              master: row.mbl_id,
-              cliente: row.consignee || 'Unknown',
-              armador: row.shipping_line || 'Unknown',
-              modal: modal,
-              porto_origem: row.origem || null,
-              porto_destino: row.destino || null,
-              data_atracacao: arrivalDate ? formatDate(arrivalDate) : null,
-            })
-            .select('id')
-            .single();
-
-          if (insertError) {
-            console.error(`Error creating shipment ${row.mbl_id}:`, insertError);
-            results.errors++;
-            results.error_details.push(`Shipment insert ${row.mbl_id}: ${insertError.message}`);
-          } else {
-            shipmentId = newShipment?.id || null;
-            results.shipments_created++;
-            console.log(`✓ Created shipment for MBL ${row.mbl_id}`);
-          }
-        }
-
-        // Process container (skip if "PENDENTE" or empty)
-        if (!row.container || row.container.toUpperCase() === 'PENDENTE' || row.container.trim() === '') {
-          results.containers_skipped_pendente++;
-          continue;
-        }
-
-        // Map cronos_status from last_event or status_armador
+        // Map cronos_status from last_event
         const cronosStatus = mapCronosStatus(row.last_event, row.status_armador, row.container_status);
 
-        // Check if container exists
-        const { data: existingContainer } = await supabase
-          .from('containers')
-          .select('id')
-          .eq('numero', row.container)
-          .single();
-
+        // Prepare container data for upsert
         const containerData = {
-          numero: row.container,
-          shipment_id: shipmentId,
+          numero: row.container.trim(),
+          mbl: row.mbl_id.trim(),
+          booking: row.booking || null,
+          cliente: row.consignee || null,
+          armador: row.shipping_line || null,
+          tipo_processo: row.tipo_processo || null,
+          porto_origem: row.origem || null,
+          porto_destino: row.destino || null,
+          navio: row.navio || null,
+          vessel_imo: row.vessel_imo || null,
+          voyage: row.voyage || null,
+          etd: row.etd ? formatDate(row.etd) : null,
+          eta: row.eta_confirmado ? formatDate(row.eta_confirmado) : (row.eta ? formatDate(row.eta) : null),
+          last_event: row.last_event || null,
+          container_status: row.container_status || null,
+          status_armador: row.status_armador || null,
           cronos_status: cronosStatus,
+          email_analista: row.email_analista || null,
+          email_cliente: row.email_cliente || null,
+          mariadb_id: row.id,
+          last_sync_at: new Date().toISOString(),
+          active: true,
           updated_at: new Date().toISOString(),
         };
 
-        if (existingContainer) {
-          // Update existing container
+        // Check if record exists
+        const { data: existing } = await supabase
+          .from('t_demurrage_containers')
+          .select('id')
+          .eq('numero', containerData.numero)
+          .eq('mbl', containerData.mbl)
+          .single();
+
+        if (existing) {
+          // Update existing
           const { error: updateError } = await supabase
-            .from('containers')
+            .from('t_demurrage_containers')
             .update(containerData)
-            .eq('id', existingContainer.id);
+            .eq('id', existing.id);
 
           if (updateError) {
-            console.error(`Error updating container ${row.container}:`, updateError);
             results.errors++;
-            results.error_details.push(`Container update ${row.container}: ${updateError.message}`);
+            results.error_details.push(`Update ${row.container}: ${updateError.message}`);
           } else {
-            results.containers_updated++;
+            results.updated++;
           }
         } else {
-          // Create new container
+          // Insert new
           const { error: insertError } = await supabase
-            .from('containers')
+            .from('t_demurrage_containers')
             .insert(containerData);
 
           if (insertError) {
-            console.error(`Error creating container ${row.container}:`, insertError);
             results.errors++;
-            results.error_details.push(`Container insert ${row.container}: ${insertError.message}`);
+            results.error_details.push(`Insert ${row.container}: ${insertError.message}`);
           } else {
-            results.containers_created++;
-            console.log(`✓ Created container ${row.container}`);
+            results.created++;
           }
         }
       } catch (rowError) {
-        console.error(`Error processing record ${row.id}:`, rowError);
         results.errors++;
-        results.error_details.push(`Record ${row.id}: ${rowError instanceof Error ? rowError.message : String(rowError)}`);
+        results.error_details.push(`Row ${row.id}: ${rowError instanceof Error ? rowError.message : String(rowError)}`);
       }
     }
 
-    // Close MariaDB connection
     await mariaClient.close();
     console.log("✓ MariaDB connection closed");
 
-    console.log("=== MariaDB Sync Complete ===");
-    console.log(`Results: ${JSON.stringify(results, null, 2)}`);
+    console.log("=== Sync Complete ===");
+    console.log(`Created: ${results.created}, Updated: ${results.updated}, Errors: ${results.errors}`);
 
     return new Response(
       JSON.stringify({
         success: true,
-        message: "MariaDB sync completed successfully",
+        message: "Demurrage sync completed",
         results,
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
 
   } catch (error) {
-    console.error("MariaDB sync error:", error);
+    console.error("Sync error:", error);
     return new Response(
       JSON.stringify({
         success: false,
         error: error instanceof Error ? error.message : "Unknown error",
-        stack: error instanceof Error ? error.stack : undefined,
       }),
       { 
         status: 500, 
@@ -290,31 +227,33 @@ function mapCronosStatus(lastEvent: string | null, statusArmador: string | null,
   const statusLower = (statusArmador || '').toLowerCase();
   const containerLower = (containerStatus || '').toLowerCase();
 
-  // Check for returned/delivered status
+  // Returned/delivered
   if (eventLower.includes('return') || eventLower.includes('devol') || 
-      statusLower.includes('return') || containerLower.includes('return')) {
+      statusLower.includes('return') || containerLower.includes('return') ||
+      eventLower.includes('empty') || containerLower.includes('empty')) {
     return 'RETURNED';
   }
 
-  // Check for gate out status
+  // Gate out
   if (eventLower.includes('gate out') || eventLower.includes('gateout') ||
       eventLower.includes('saída') || eventLower.includes('saida') ||
-      statusLower.includes('gate out')) {
+      statusLower.includes('gate out') || containerLower.includes('gate-out')) {
     return 'GATE_OUT';
   }
 
-  // Check for arrived/discharged status
+  // Arrived/discharged
   if (eventLower.includes('arrived') || eventLower.includes('discharged') ||
-      eventLower.includes('atracado') || eventLower.includes('descarregado')) {
+      eventLower.includes('atracado') || eventLower.includes('descarregado') ||
+      eventLower.includes('arrival') || containerLower.includes('discharged')) {
     return 'ARRIVED';
   }
 
-  // Check for in transit
+  // In transit
   if (eventLower.includes('transit') || eventLower.includes('departed') ||
-      eventLower.includes('em trânsito') || eventLower.includes('embarcado')) {
+      eventLower.includes('em trânsito') || eventLower.includes('embarcado') ||
+      eventLower.includes('loaded') || eventLower.includes('sailing')) {
     return 'IN_TRANSIT';
   }
 
-  // Default to pending
   return 'PENDING';
 }
