@@ -1,12 +1,18 @@
 import { useState } from "react";
 import { DemurrageLayout } from "@/components/demurrage/DemurrageLayout";
+import { KpiCard } from "@/components/demurrage/KpiCard";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { 
   TrendingUp,
+  TrendingDown,
   Users,
   Ship,
-  Calendar
+  Calendar,
+  Package,
+  DollarSign,
+  Target,
+  Clock
 } from "lucide-react";
 import { 
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, 
@@ -46,27 +52,14 @@ const topArmadores = [
   { name: 'ONE', demurrage: 6200 },
 ];
 
-// Mock containers for metrics
-const mockContainers = [
-  { status: "safe" },
-  { status: "at_risk" },
-  { status: "exceeded" },
-  { status: "safe" },
-];
+type QuickFilter = "all" | "containers" | "demurrage" | "recovered" | "success" | "avg_days";
 
 export default function DemurrageAnalytics() {
-  const [quickFilter, setQuickFilter] = useState<"all" | "at_risk" | "exceeded" | "safe">("all");
+  const [quickFilter, setQuickFilter] = useState<QuickFilter>("all");
 
   const formatCurrency = (value: number) => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 0 }).format(value);
 
-  const containerStats = {
-    total: mockContainers.length,
-    atRisk: mockContainers.filter(c => c.status === 'at_risk').length,
-    exceeded: mockContainers.filter(c => c.status === 'exceeded').length,
-    safe: mockContainers.filter(c => c.status === 'safe').length,
-  };
-
-  const handleQuickFilterChange = (filter: "all" | "at_risk" | "exceeded" | "safe") => {
+  const handleQuickFilterChange = (filter: QuickFilter) => {
     setQuickFilter(filter);
   };
 
@@ -77,17 +70,60 @@ export default function DemurrageAnalytics() {
     </Badge>
   );
 
+  const customCards = (
+    <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
+      <KpiCard
+        title="CONTAINERS"
+        value={202}
+        subtitle="Total monitorados"
+        icon={<Package className="h-6 w-6" />}
+        variant="default"
+        isActive={quickFilter === "containers"}
+        onClick={() => handleQuickFilterChange("containers")}
+      />
+      <KpiCard
+        title="DEMURRAGE TOTAL"
+        value="$76,220"
+        subtitle="Valor acumulado"
+        icon={<DollarSign className="h-6 w-6" />}
+        variant="default"
+        isActive={quickFilter === "demurrage"}
+        onClick={() => handleQuickFilterChange("demurrage")}
+      />
+      <KpiCard
+        title="RECUPERADO"
+        value="$7,900"
+        subtitle="Em disputas ganhas"
+        icon={<TrendingUp className="h-6 w-6" />}
+        variant="success"
+        isActive={quickFilter === "recovered"}
+        onClick={() => handleQuickFilterChange("recovered")}
+      />
+      <KpiCard
+        title="TAXA SUCESSO"
+        value="67%"
+        subtitle="2W / 1L"
+        icon={<Target className="h-6 w-6" />}
+        variant="info"
+        isActive={quickFilter === "success"}
+        onClick={() => handleQuickFilterChange("success")}
+      />
+      <KpiCard
+        title="MÉDIA DIAS EXC."
+        value="2.6"
+        subtitle="Dias excedidos"
+        icon={<Clock className="h-6 w-6" />}
+        variant="critical"
+        isActive={quickFilter === "avg_days"}
+        onClick={() => handleQuickFilterChange("avg_days")}
+      />
+    </div>
+  );
+
   return (
     <DemurrageLayout
-      metrics={{
-        totalContainers: containerStats.total,
-        atRisk: containerStats.atRisk,
-        exceeded: containerStats.exceeded,
-        safe: containerStats.safe,
-      }}
       rightActions={rightActions}
-      activeFilter={quickFilter}
-      onFilterChange={handleQuickFilterChange}
+      customCards={customCards}
     >
       <div className="space-y-4">
         {/* Charts Row 1 */}

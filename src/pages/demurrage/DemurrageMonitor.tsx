@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { DemurrageLayout } from "@/components/demurrage/DemurrageLayout";
+import { KpiCard } from "@/components/demurrage/KpiCard";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -12,7 +13,9 @@ import {
   Search, 
   Clock,
   CheckCircle2,
-  FileSpreadsheet
+  FileSpreadsheet,
+  Ship,
+  TrendingUp
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -21,13 +24,15 @@ const mockContainers = [
   { id: "1", numero: "MSCU1234567", master: "MEDUGRU123456", cliente: "CLIENTE ABC", armador: "MSC", tipo: "40HC", status: "at_risk", diasRestantes: 2, demurrage: 450 },
   { id: "2", numero: "HLCU7654321", master: "HLCUGRU789012", cliente: "CLIENTE XYZ", armador: "HAPAG", tipo: "20DV", status: "safe", diasRestantes: 8, demurrage: 0 },
   { id: "3", numero: "MAEU9876543", master: "MAEUPAR345678", cliente: "CLIENTE 123", armador: "MAERSK", tipo: "40DV", status: "exceeded", diasRestantes: -3, demurrage: 1200 },
-  { id: "4", numero: "CMAU5678901", master: "CMAUGRU901234", cliente: "CLIENTE ABC", armador: "CMA CGM", tipo: "40HC", status: "critical", diasRestantes: 1, demurrage: 300 },
+  { id: "4", numero: "CMAU5678901", master: "CMAUGRU901234", cliente: "CLIENTE ABC", armador: "CMA CGM", tipo: "40HC", status: "safe", diasRestantes: 5, demurrage: 0 },
 ];
+
+type QuickFilter = "all" | "in_transit" | "at_risk" | "delivered";
 
 export default function DemurrageMonitor() {
   const [searchTerm, setSearchTerm] = useState("");
   const [filterStatus, setFilterStatus] = useState<string>("all");
-  const [quickFilter, setQuickFilter] = useState<"all" | "at_risk" | "exceeded" | "safe">("all");
+  const [quickFilter, setQuickFilter] = useState<QuickFilter>("all");
   const [loading, setLoading] = useState(false);
   const [isRefetching, setIsRefetching] = useState(false);
 
@@ -39,18 +44,8 @@ export default function DemurrageMonitor() {
     }, 1000);
   };
 
-  const handleQuickFilterChange = (filter: "all" | "at_risk" | "exceeded" | "safe") => {
+  const handleQuickFilterChange = (filter: QuickFilter) => {
     setQuickFilter(filter);
-    // Reset the select filter when using quick filters
-    if (filter === "all") {
-      setFilterStatus("all");
-    } else if (filter === "at_risk") {
-      setFilterStatus("at_risk");
-    } else if (filter === "exceeded") {
-      setFilterStatus("exceeded");
-    } else if (filter === "safe") {
-      setFilterStatus("safe");
-    }
   };
 
   const filteredContainers = mockContainers.filter(c => {
@@ -59,25 +54,25 @@ export default function DemurrageMonitor() {
       c.master.toLowerCase().includes(searchTerm.toLowerCase()) ||
       c.cliente.toLowerCase().includes(searchTerm.toLowerCase());
     
-    let matchesStatus = true;
-    if (quickFilter === "at_risk") {
-      matchesStatus = c.status === "at_risk" || c.status === "critical";
-    } else if (quickFilter === "exceeded") {
-      matchesStatus = c.status === "exceeded";
-    } else if (quickFilter === "safe") {
-      matchesStatus = c.status === "safe";
-    } else if (filterStatus !== "all") {
-      matchesStatus = c.status === filterStatus;
+    let matchesQuickFilter = true;
+    if (quickFilter === "in_transit") {
+      matchesQuickFilter = c.status === "at_risk" || c.status === "critical";
+    } else if (quickFilter === "at_risk") {
+      matchesQuickFilter = c.status === "exceeded" || c.status === "critical";
+    } else if (quickFilter === "delivered") {
+      matchesQuickFilter = c.status === "safe";
     }
     
-    return matchesSearch && matchesStatus;
+    const matchesStatus = filterStatus === "all" || c.status === filterStatus;
+    
+    return matchesSearch && matchesQuickFilter && matchesStatus;
   });
 
   const stats = {
     total: mockContainers.length,
-    atRisk: mockContainers.filter(c => c.status === 'at_risk' || c.status === 'critical').length,
-    exceeded: mockContainers.filter(c => c.status === 'exceeded').length,
-    safe: mockContainers.filter(c => c.status === 'safe').length,
+    inTransit: 0, // CRG, DEP, TSP, ARR, DCH
+    atRisk: mockContainers.filter(c => c.status === 'exceeded' || c.status === 'critical').length, // DELAYED, HOLD, CANCELLED
+    delivered: mockContainers.filter(c => c.status === 'safe').length, // GOD, DLV (Gate-out, Entrega)
   };
 
   const getRiskBadge = (status: string) => {
@@ -106,20 +101,54 @@ export default function DemurrageMonitor() {
     </Button>
   );
 
+  const customCards = (
+    <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+      <KpiCard
+        title="TOTAL MONITORADOS"
+        value={202}
+        subtitle="Containers ativos"
+        icon={<Ship className="h-6 w-6" />}
+        variant="default"
+        isActive={quickFilter === "all"}
+        onClick={() => handleQuickFilterChange("all")}
+      />
+      <KpiCard
+        title="EM TRÂNSITO"
+        value={0}
+        subtitle="CRG, DEP, TSP, ARR, DCH"
+        icon={<TrendingUp className="h-6 w-6" />}
+        variant="info"
+        isActive={quickFilter === "in_transit"}
+        onClick={() => handleQuickFilterChange("in_transit")}
+      />
+      <KpiCard
+        title="EM ALERTA"
+        value={10}
+        subtitle="DELAYED, HOLD, CANCELLED"
+        icon={<AlertTriangle className="h-6 w-6" />}
+        variant="critical"
+        isActive={quickFilter === "at_risk"}
+        onClick={() => handleQuickFilterChange("at_risk")}
+      />
+      <KpiCard
+        title="ENTREGUES"
+        value={192}
+        subtitle="GOD, DLV (Gate-out, Entrega)"
+        icon={<CheckCircle2 className="h-6 w-6" />}
+        variant="success"
+        isActive={quickFilter === "delivered"}
+        onClick={() => handleQuickFilterChange("delivered")}
+      />
+    </div>
+  );
+
   return (
     <DemurrageLayout
-      metrics={{
-        totalContainers: stats.total,
-        atRisk: stats.atRisk,
-        exceeded: stats.exceeded,
-        safe: stats.safe,
-      }}
       loading={loading}
       onRefresh={handleRefresh}
       isRefetching={isRefetching}
       rightActions={rightActions}
-      activeFilter={quickFilter}
-      onFilterChange={handleQuickFilterChange}
+      customCards={customCards}
     >
       <div className="space-y-4">
         {/* Filters */}

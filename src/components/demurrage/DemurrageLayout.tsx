@@ -1,28 +1,20 @@
-import { useState, ReactNode } from "react";
+import { ReactNode } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
-import { ArrowLeft, Ship, Activity, DollarSign, FileText, Scale, Users, BarChart3, AlertTriangle, Clock, Package, HelpCircle, RefreshCw, Settings } from "lucide-react";
+import { ArrowLeft, Ship, Activity, DollarSign, FileText, Scale, Users, BarChart3, HelpCircle, RefreshCw } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { MetricCard } from "@/components/cct/MetricCard";
 import dachserBg from "@/assets/dachser-background.jpg";
 
-interface DemurrageMetrics {
-  totalContainers: number;
-  atRisk: number;
-  exceeded: number;
-  safe: number;
-}
-
-type QuickFilter = "all" | "at_risk" | "exceeded" | "safe";
+type QuickFilter = string;
 
 interface DemurrageLayoutProps {
   children: ReactNode;
-  metrics?: DemurrageMetrics;
   loading?: boolean;
   onRefresh?: () => void;
   isRefetching?: boolean;
   rightActions?: ReactNode;
   activeFilter?: QuickFilter;
   onFilterChange?: (filter: QuickFilter) => void;
+  customCards?: ReactNode;
 }
 
 const navTabs = [
@@ -37,13 +29,11 @@ const navTabs = [
 
 export function DemurrageLayout({
   children,
-  metrics = { totalContainers: 0, atRisk: 0, exceeded: 0, safe: 0 },
   loading = false,
   onRefresh,
   isRefetching = false,
   rightActions,
-  activeFilter = "all",
-  onFilterChange,
+  customCards,
 }: DemurrageLayoutProps) {
   const navigate = useNavigate();
   const location = useLocation();
@@ -188,80 +178,6 @@ export function DemurrageLayout({
       {/* Main Content */}
       <main className="relative z-10 max-w-[95%] mx-auto px-2 pb-8">
         <div className="space-y-6">
-          {/* Metric Cards */}
-          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-            {loading ? (
-              <>
-                <div className="h-28 rounded-2xl bg-[rgba(5,6,18,0.9)] border border-[rgba(255,255,255,0.12)] animate-pulse" />
-                <div className="h-28 rounded-2xl bg-[rgba(5,6,18,0.9)] border border-[rgba(255,255,255,0.12)] animate-pulse" />
-                <div className="h-28 rounded-2xl bg-[rgba(5,6,18,0.9)] border border-[rgba(255,255,255,0.12)] animate-pulse" />
-                <div className="h-28 rounded-2xl bg-[rgba(5,6,18,0.9)] border border-[rgba(255,255,255,0.12)] animate-pulse" />
-              </>
-            ) : (
-              <>
-                <div
-                  onClick={() => onFilterChange?.("all")}
-                  className={cn(
-                    "cursor-pointer transition-all",
-                    activeFilter === "all" && "ring-1 ring-[#ffc800]/70 rounded-2xl"
-                  )}
-                >
-                  <MetricCard
-                    title="Total Containers"
-                    value={metrics.totalContainers}
-                    icon={Package}
-                    subtitle="Monitorados"
-                  />
-                </div>
-                <div
-                  onClick={() => onFilterChange?.("at_risk")}
-                  className={cn(
-                    "cursor-pointer transition-all",
-                    activeFilter === "at_risk" && "ring-1 ring-[#ffc800]/70 rounded-2xl"
-                  )}
-                >
-                  <MetricCard
-                    title="Em Risco"
-                    value={metrics.atRisk}
-                    icon={AlertTriangle}
-                    variant={metrics.atRisk > 0 ? "warning" : "info"}
-                    subtitle="Free time expirando"
-                  />
-                </div>
-                <div
-                  onClick={() => onFilterChange?.("exceeded")}
-                  className={cn(
-                    "cursor-pointer transition-all",
-                    activeFilter === "exceeded" && "ring-1 ring-[#ffc800]/70 rounded-2xl"
-                  )}
-                >
-                  <MetricCard
-                    title="Excedido"
-                    value={metrics.exceeded}
-                    icon={Clock}
-                    variant={metrics.exceeded > 0 ? "critical" : "info"}
-                    subtitle="Demurrage acumulando"
-                  />
-                </div>
-                <div
-                  onClick={() => onFilterChange?.("safe")}
-                  className={cn(
-                    "cursor-pointer transition-all",
-                    activeFilter === "safe" && "ring-1 ring-[#ffc800]/70 rounded-2xl"
-                  )}
-                >
-                  <MetricCard
-                    title="No Prazo"
-                    value={metrics.safe}
-                    icon={Ship}
-                    variant="success"
-                    subtitle="Dentro do free time"
-                  />
-                </div>
-              </>
-            )}
-          </div>
-
           {/* Navigation Tabs */}
           <nav className="flex items-center gap-1 px-2 py-1.5 rounded-full bg-[rgba(5,6,18,0.85)] border border-white/10 backdrop-blur-sm w-fit overflow-x-auto">
             {navTabs.map((tab) => {
@@ -284,6 +200,18 @@ export function DemurrageLayout({
               );
             })}
           </nav>
+
+          {/* Custom Metric Cards */}
+          {loading ? (
+            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+              <div className="h-28 rounded-2xl bg-[rgba(5,6,18,0.9)] border border-[rgba(255,255,255,0.12)] animate-pulse" />
+              <div className="h-28 rounded-2xl bg-[rgba(5,6,18,0.9)] border border-[rgba(255,255,255,0.12)] animate-pulse" />
+              <div className="h-28 rounded-2xl bg-[rgba(5,6,18,0.9)] border border-[rgba(255,255,255,0.12)] animate-pulse" />
+              <div className="h-28 rounded-2xl bg-[rgba(5,6,18,0.9)] border border-[rgba(255,255,255,0.12)] animate-pulse" />
+            </div>
+          ) : (
+            customCards
+          )}
 
           {/* Content */}
           {children}

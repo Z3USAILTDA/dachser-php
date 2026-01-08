@@ -1,11 +1,11 @@
 import { useState } from "react";
 import { DemurrageLayout } from "@/components/demurrage/DemurrageLayout";
+import { KpiCard } from "@/components/demurrage/KpiCard";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { FileText, Clock, CheckCircle2, Send, Eye } from "lucide-react";
+import { FileText, Clock, CheckCircle2, Send, Eye, AlertTriangle, DollarSign } from "lucide-react";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
-
 
 // Mock data
 const mockInvoices = [
@@ -13,19 +13,15 @@ const mockInvoices = [
   { id: "2", invoice_number: "DEM-2026-002", client_name: "CLIENTE XYZ", bl_number: "HLCU9876543210", total_usd: 1800, workflow_status: "reviewed", financial_status: "PENDING", created_at: "2026-01-04" },
   { id: "3", invoice_number: "DEM-2026-003", client_name: "CLIENTE 123", bl_number: "MAEU5678901234", total_usd: 3200, workflow_status: "sent_to_otelo", financial_status: "INVOICED", created_at: "2026-01-03" },
   { id: "4", invoice_number: "DEM-2026-004", client_name: "CLIENTE ABC", bl_number: "CMAU1357924680", total_usd: 950, workflow_status: "finalized", financial_status: "PAID", created_at: "2026-01-02" },
+  { id: "5", invoice_number: "DEM-2026-005", client_name: "CLIENTE DEF", bl_number: "OOCL4567891234", total_usd: 4200, workflow_status: "calculated", financial_status: "PENDING", created_at: "2026-01-06" },
+  { id: "6", invoice_number: "DEM-2026-006", client_name: "CLIENTE GHI", bl_number: "YMLU7891234567", total_usd: 1500, workflow_status: "calculated", financial_status: "PENDING", created_at: "2026-01-07" },
 ];
 
-// Mock containers for metrics
-const mockContainers = [
-  { status: "safe" },
-  { status: "at_risk" },
-  { status: "exceeded" },
-  { status: "safe" },
-];
+type QuickFilter = "all" | "waiting" | "total_usd" | "pending";
 
 export default function DemurragePreInvoicing() {
   const [activeTab, setActiveTab] = useState("all");
-  const [quickFilter, setQuickFilter] = useState<"all" | "at_risk" | "exceeded" | "safe">("all");
+  const [quickFilter, setQuickFilter] = useState<QuickFilter>("all");
 
   const formatCurrency = (value: number) => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(value);
 
@@ -65,13 +61,8 @@ export default function DemurragePreInvoicing() {
     reviewed: mockInvoices.filter(i => i.workflow_status === 'reviewed').length,
     sent: mockInvoices.filter(i => i.workflow_status === 'sent_to_otelo').length,
     finalized: mockInvoices.filter(i => i.workflow_status === 'finalized').length,
-  };
-
-  const containerStats = {
-    total: mockContainers.length,
-    atRisk: mockContainers.filter(c => c.status === 'at_risk').length,
-    exceeded: mockContainers.filter(c => c.status === 'exceeded').length,
-    safe: mockContainers.filter(c => c.status === 'safe').length,
+    totalUsd: mockInvoices.reduce((sum, i) => sum + i.total_usd, 0),
+    pendingUsd: mockInvoices.filter(i => i.financial_status === 'PENDING').reduce((sum, i) => sum + i.total_usd, 0),
   };
 
   const filteredInvoices = mockInvoices.filter(inv => {
@@ -79,21 +70,58 @@ export default function DemurragePreInvoicing() {
     return inv.workflow_status === activeTab;
   });
 
-  const handleQuickFilterChange = (filter: "all" | "at_risk" | "exceeded" | "safe") => {
+  const handleQuickFilterChange = (filter: QuickFilter) => {
     setQuickFilter(filter);
+    if (filter === "waiting") {
+      setActiveTab("calculated");
+    } else {
+      setActiveTab("all");
+    }
   };
 
+  const customCards = (
+    <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+      <KpiCard
+        title="TOTAL PRÉ-FATURAS"
+        value={8}
+        subtitle="Documentos gerados"
+        icon={<FileText className="h-6 w-6" />}
+        variant="default"
+        isActive={quickFilter === "all"}
+        onClick={() => handleQuickFilterChange("all")}
+      />
+      <KpiCard
+        title="AGUARDANDO REVISÃO"
+        value={6}
+        subtitle="Calculadas pendentes"
+        icon={<Clock className="h-6 w-6" />}
+        variant="warning"
+        isActive={quickFilter === "waiting"}
+        onClick={() => handleQuickFilterChange("waiting")}
+      />
+      <KpiCard
+        title="TOTAL USD"
+        value="$90,505.00"
+        subtitle="Valor consolidado"
+        icon={<DollarSign className="h-6 w-6" />}
+        variant="info"
+        isActive={quickFilter === "total_usd"}
+        onClick={() => handleQuickFilterChange("total_usd")}
+      />
+      <KpiCard
+        title="PENDENTE"
+        value="$77,765.00"
+        subtitle="Aguardando pagamento"
+        icon={<AlertTriangle className="h-6 w-6" />}
+        variant="critical"
+        isActive={quickFilter === "pending"}
+        onClick={() => handleQuickFilterChange("pending")}
+      />
+    </div>
+  );
+
   return (
-    <DemurrageLayout
-      metrics={{
-        totalContainers: containerStats.total,
-        atRisk: containerStats.atRisk,
-        exceeded: containerStats.exceeded,
-        safe: containerStats.safe,
-      }}
-      activeFilter={quickFilter}
-      onFilterChange={handleQuickFilterChange}
-    >
+    <DemurrageLayout customCards={customCards}>
       <div className="space-y-4">
         {/* Inner Nav */}
         <Tabs value={activeTab} onValueChange={setActiveTab}>

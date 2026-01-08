@@ -1,12 +1,13 @@
 import { useState } from "react";
 import { DemurrageLayout } from "@/components/demurrage/DemurrageLayout";
+import { KpiCard } from "@/components/demurrage/KpiCard";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Users, Plus, Edit, Bell, BellOff, Search } from "lucide-react";
+import { Users, Plus, Edit, Bell, BellOff, Search, DollarSign, AlertTriangle } from "lucide-react";
 
 // Mock data
 const mockProfiles = [
@@ -14,39 +15,45 @@ const mockProfiles = [
   { id: "2", client_name: "CLIENTE XYZ", auto_alert_enabled: false, containers: 8, total_demurrage: 2200, exceeded: 1 },
   { id: "3", client_name: "CLIENTE 123", auto_alert_enabled: true, containers: 15, total_demurrage: 6800, exceeded: 4 },
   { id: "4", client_name: "CLIENTE DEF", auto_alert_enabled: true, containers: 5, total_demurrage: 950, exceeded: 0 },
+  { id: "5", client_name: "CLIENTE GHI", auto_alert_enabled: true, containers: 22, total_demurrage: 12500, exceeded: 3 },
+  { id: "6", client_name: "CLIENTE JKL", auto_alert_enabled: true, containers: 18, total_demurrage: 8900, exceeded: 2 },
+  { id: "7", client_name: "CLIENTE MNO", auto_alert_enabled: false, containers: 0, total_demurrage: 0, exceeded: 0 },
 ];
 
-// Mock containers for metrics
-const mockContainers = [
-  { status: "safe" },
-  { status: "at_risk" },
-  { status: "exceeded" },
-  { status: "safe" },
-];
+type QuickFilter = "all" | "reports" | "no_reports" | "demurrage" | "pending";
 
 export default function DemurrageClients() {
   const [searchTerm, setSearchTerm] = useState("");
   const [filterReports, setFilterReports] = useState<string>("all");
-  const [quickFilter, setQuickFilter] = useState<"all" | "at_risk" | "exceeded" | "safe">("all");
+  const [quickFilter, setQuickFilter] = useState<QuickFilter>("all");
 
   const formatCurrency = (value: number) => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 0 }).format(value);
 
+  const stats = {
+    total: mockProfiles.length,
+    reportsEnabled: mockProfiles.filter(p => p.auto_alert_enabled).length,
+    noReports: mockProfiles.filter(p => !p.auto_alert_enabled).length,
+    totalDemurrage: mockProfiles.reduce((sum, p) => sum + p.total_demurrage, 0),
+    pendingProfiles: 78, // Mock value for profiles awaiting registration
+  };
+
   const filteredProfiles = mockProfiles.filter(p => {
     const matchesSearch = p.client_name.toLowerCase().includes(searchTerm.toLowerCase());
+    
+    let matchesQuickFilter = true;
+    if (quickFilter === "reports") {
+      matchesQuickFilter = p.auto_alert_enabled;
+    } else if (quickFilter === "no_reports") {
+      matchesQuickFilter = !p.auto_alert_enabled;
+    }
+    
     const matchesFilter = filterReports === "all" || 
       (filterReports === "reports" && p.auto_alert_enabled) ||
       (filterReports === "no-reports" && !p.auto_alert_enabled);
-    return matchesSearch && matchesFilter;
+    return matchesSearch && matchesQuickFilter && matchesFilter;
   });
 
-  const containerStats = {
-    total: mockContainers.length,
-    atRisk: mockContainers.filter(c => c.status === 'at_risk').length,
-    exceeded: mockContainers.filter(c => c.status === 'exceeded').length,
-    safe: mockContainers.filter(c => c.status === 'safe').length,
-  };
-
-  const handleQuickFilterChange = (filter: "all" | "at_risk" | "exceeded" | "safe") => {
+  const handleQuickFilterChange = (filter: QuickFilter) => {
     setQuickFilter(filter);
   };
 
@@ -57,17 +64,60 @@ export default function DemurrageClients() {
     </Button>
   );
 
+  const customCards = (
+    <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
+      <KpiCard
+        title="TOTAL PERFIS"
+        value={7}
+        subtitle="Clientes cadastrados"
+        icon={<Users className="h-6 w-6" />}
+        variant="default"
+        isActive={quickFilter === "all"}
+        onClick={() => handleQuickFilterChange("all")}
+      />
+      <KpiCard
+        title="REPORTA DEMURRAGE"
+        value={6}
+        subtitle="Com alertas ativos"
+        icon={<Bell className="h-6 w-6" />}
+        variant="warning"
+        isActive={quickFilter === "reports"}
+        onClick={() => handleQuickFilterChange("reports")}
+      />
+      <KpiCard
+        title="NÃO REPORTA"
+        value={1}
+        subtitle="Sem alertas"
+        icon={<BellOff className="h-6 w-6" />}
+        variant="info"
+        isActive={quickFilter === "no_reports"}
+        onClick={() => handleQuickFilterChange("no_reports")}
+      />
+      <KpiCard
+        title="DEMURRAGE TOTAL"
+        value={formatCurrency(76220)}
+        subtitle="Valor consolidado"
+        icon={<DollarSign className="h-6 w-6" />}
+        variant="default"
+        isActive={quickFilter === "demurrage"}
+        onClick={() => handleQuickFilterChange("demurrage")}
+      />
+      <KpiCard
+        title="SEM PERFIL"
+        value={78}
+        subtitle="Aguardando cadastro"
+        icon={<AlertTriangle className="h-6 w-6" />}
+        variant="critical"
+        isActive={quickFilter === "pending"}
+        onClick={() => handleQuickFilterChange("pending")}
+      />
+    </div>
+  );
+
   return (
     <DemurrageLayout
-      metrics={{
-        totalContainers: containerStats.total,
-        atRisk: containerStats.atRisk,
-        exceeded: containerStats.exceeded,
-        safe: containerStats.safe,
-      }}
       rightActions={rightActions}
-      activeFilter={quickFilter}
-      onFilterChange={handleQuickFilterChange}
+      customCards={customCards}
     >
       <div className="space-y-4">
         {/* Filters */}
