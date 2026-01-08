@@ -173,7 +173,7 @@ const DraftExportacao = () => {
 
           <header>
             <h1 className="text-[1.6rem] tracking-[0.24em] uppercase text-[#f5f5f5]">DACHSER</h1>
-            <p className="text-[0.9rem] text-[#aaaaaa] mt-0.5">Draft Exportação — Tracking Hapag-Lloyd</p>
+            <p className="text-[0.9rem] text-[#aaaaaa] mt-0.5">DACHSER — Status Doc Exportação</p>
             <div className="flex gap-1.5 mt-1.5">
               <span className="w-1.5 h-1.5 rounded-full bg-[#ffc800] shadow-[0_0_10px_rgba(255,200,0,.9)]" />
               <span className="w-1.5 h-1.5 rounded-full bg-[#ffc800] shadow-[0_0_10px_rgba(255,200,0,.9)]" />
@@ -209,7 +209,7 @@ const DraftExportacao = () => {
 
           <div
             className="w-8 h-8 rounded-full border border-[rgba(255,255,255,.25)] flex items-center justify-center bg-[rgba(0,0,0,.7)] text-[#ffc800]"
-            title="Draft Exportação"
+            title="Status Doc Exportação"
           >
             <Ship size={16} />
           </div>
