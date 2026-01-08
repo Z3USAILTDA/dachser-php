@@ -100,7 +100,7 @@ const getTrackingUrl = (airlineCode: string, fullAwb: string): string | null => 
 
   const urlBuilders: Record<string, (iata: string, awb: string) => string> = {
     "006": (iata, awb) => `https://www.deltacargo.com/Cargo/home/trackShipment?awbNumber=${iata}${awb}&timeZoneOffset=180&t=${Date.now()}`,
-    "016": (iata, awb) => `https://www.unitedcargo.com/en/us/tracking.html?awb=${iata}${awb}`,
+    "016": (iata, awb) => `https://www.unitedcargo.com/en/us/track/awb/${iata}-${awb}`,
     "020": (iata, awb) => `https://www.lufthansa-cargo.com/en/eservices/etracking/tracking/-/awb/${iata}/${awb}`,
     "045": (iata, awb) => `https://www.latamcargo.com/en/trackshipment?docNumber=${awb}&docPrefix=${iata}&soType=MAWB`,
     "047": () => `https://www.tapcargo.com/en/e-tracking-results`,
@@ -117,10 +117,10 @@ const getTrackingUrl = (airlineCode: string, fullAwb: string): string | null => 
     "577": (iata, awb) => `https://azulcargoexpress.smartkargo.com/FrmAWBTracking.aspx?AWBPrefix=${iata}&AWBno=${awb}`,
     "605": () => `https://cargo.skyairline.com/rastreo`,
     "615": (iata, awb) => `https://aviationcargo.dhl.com/track/${iata}-${awb}`,
-    "724": (iata, awb) => `https://www.swissworldcargo.com/en/tracking/${iata}${awb}`,
+    "724": (iata, awb) => `https://offerandorder.swissworldcargo.com/app/offerandorder/#/shipments/list?type=D&values=${iata}${awb}`,
     "729": (iata, awb) => `https://cargoapps.aviancacargo.com/#/e-tracking/details/${iata}-${awb}`,
     "881": (iata, awb) => `https://www.condor.com/eu/en/cargo/tracking.jsp?awb=${iata}${awb}`,
-    "996": (iata, awb) => `https://cargo.aireuropa.com/portal/tracking/${iata}${awb}`,
+    "996": () => `https://www.crsairlines.aero/tracking/`,
   };
 
   const builder = urlBuilders[airlineCode];
