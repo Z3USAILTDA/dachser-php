@@ -18,6 +18,7 @@ interface EmailRequest {
   destino?: string;
   custom_message?: string;
   email_type?: 'interno' | 'cliente'; // Tipo de email
+  preserve_original_status?: boolean; // Se true, não traduz o status (usa exatamente como vem do rastreio)
 }
 
 // Tradução de status para português - status real traduzido
@@ -180,7 +181,7 @@ serve(async (req) => {
 
   try {
     const body: EmailRequest = await req.json();
-    const { to, container, vessel, shipping_line, status, eta, consignee, origem, destino, custom_message, email_type } = body;
+    const { to, container, vessel, shipping_line, status, eta, consignee, origem, destino, custom_message, email_type, preserve_original_status } = body;
 
     // Sempre enviar para devs@z3us.ai (hardcoded por enquanto)
     const recipient = 'devs@z3us.ai';
@@ -234,12 +235,13 @@ serve(async (req) => {
       timeZone: 'America/Sao_Paulo'
     }) + ' (horário de Brasília)';
 
-    const friendlyStatus = getCustomerFriendlyStatus(status);
+    // Se preserve_original_status = true, usar o status exatamente como veio da API (sem tradução)
+    const friendlyStatus = preserve_original_status ? (status || 'N/A') : getCustomerFriendlyStatus(status);
     const statusColors = getStatusColor(status || '');
     const isAlert = isAlertStatus(status || '');
     const extraStyle = statusColors.style || '';
 
-    console.log(`[send-container-status-email] Status: "${status}" -> "${friendlyStatus}"`);
+    console.log(`[send-container-status-email] Status: "${status}" -> "${friendlyStatus}" (preserve_original: ${preserve_original_status})`);
 
     let htmlBody: string;
     let emailSubject: string;
