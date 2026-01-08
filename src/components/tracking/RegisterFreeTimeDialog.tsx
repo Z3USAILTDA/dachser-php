@@ -39,7 +39,7 @@ export function RegisterFreeTimeDialog({
   defaultMbl,
   defaultCliente 
 }: RegisterFreeTimeDialogProps) {
-  const [tipoFt, setTipoFt] = useState<'CONTRATO' | 'PROCESSO'>('CONTRATO');
+  const [tipoFt, setTipoFt] = useState<'CONTRATO' | 'PROCESSO'>('PROCESSO');
   const [clienteNome, setClienteNome] = useState(defaultCliente || '');
   const [clienteCnpj, setClienteCnpj] = useState('');
   const [vigenciaInicio, setVigenciaInicio] = useState('');
@@ -52,7 +52,7 @@ export function RegisterFreeTimeDialog({
   const createFreeTime = useCreateClientFreeTime();
 
   const resetForm = () => {
-    setTipoFt('CONTRATO');
+    setTipoFt('PROCESSO');
     setClienteNome(defaultCliente || '');
     setClienteCnpj('');
     setVigenciaInicio('');
@@ -123,17 +123,17 @@ export function RegisterFreeTimeDialog({
               className="flex gap-4"
             >
               <div className="flex items-center space-x-2">
-                <RadioGroupItem value="CONTRATO" id="contrato" className="border-[#ffc800] text-[#ffc800]" />
-                <Label htmlFor="contrato" className="flex items-center gap-1 text-gray-300 cursor-pointer">
-                  <Building2 className="w-4 h-4" />
-                  Contrato
-                </Label>
-              </div>
-              <div className="flex items-center space-x-2">
                 <RadioGroupItem value="PROCESSO" id="processo" className="border-[#ffc800] text-[#ffc800]" />
                 <Label htmlFor="processo" className="flex items-center gap-1 text-gray-300 cursor-pointer">
                   <FileText className="w-4 h-4" />
                   Por Processo
+                </Label>
+              </div>
+              <div className="flex items-center space-x-2">
+                <RadioGroupItem value="CONTRATO" id="contrato" className="border-[#ffc800] text-[#ffc800]" />
+                <Label htmlFor="contrato" className="flex items-center gap-1 text-gray-300 cursor-pointer">
+                  <Building2 className="w-4 h-4" />
+                  Contrato
                 </Label>
               </div>
             </RadioGroup>
