@@ -12,6 +12,8 @@ interface DemurrageMetrics {
   safe: number;
 }
 
+type QuickFilter = "all" | "at_risk" | "exceeded" | "safe";
+
 interface DemurrageLayoutProps {
   children: ReactNode;
   metrics?: DemurrageMetrics;
@@ -19,6 +21,8 @@ interface DemurrageLayoutProps {
   onRefresh?: () => void;
   isRefetching?: boolean;
   rightActions?: ReactNode;
+  activeFilter?: QuickFilter;
+  onFilterChange?: (filter: QuickFilter) => void;
 }
 
 const navTabs = [
@@ -38,6 +42,8 @@ export function DemurrageLayout({
   onRefresh,
   isRefetching = false,
   rightActions,
+  activeFilter = "all",
+  onFilterChange,
 }: DemurrageLayoutProps) {
   const navigate = useNavigate();
   const location = useLocation();
@@ -193,33 +199,65 @@ export function DemurrageLayout({
               </>
             ) : (
               <>
-                <MetricCard
-                  title="Total Containers"
-                  value={metrics.totalContainers}
-                  icon={Package}
-                  subtitle="Monitorados"
-                />
-                <MetricCard
-                  title="Em Risco"
-                  value={metrics.atRisk}
-                  icon={AlertTriangle}
-                  variant={metrics.atRisk > 0 ? "warning" : "info"}
-                  subtitle="Free time expirando"
-                />
-                <MetricCard
-                  title="Excedido"
-                  value={metrics.exceeded}
-                  icon={Clock}
-                  variant={metrics.exceeded > 0 ? "critical" : "info"}
-                  subtitle="Demurrage acumulando"
-                />
-                <MetricCard
-                  title="No Prazo"
-                  value={metrics.safe}
-                  icon={Ship}
-                  variant="success"
-                  subtitle="Dentro do free time"
-                />
+                <div
+                  onClick={() => onFilterChange?.("all")}
+                  className={cn(
+                    "cursor-pointer transition-all",
+                    activeFilter === "all" && "ring-2 ring-[#ffc800] ring-offset-2 ring-offset-transparent rounded-2xl"
+                  )}
+                >
+                  <MetricCard
+                    title="Total Containers"
+                    value={metrics.totalContainers}
+                    icon={Package}
+                    subtitle="Monitorados"
+                  />
+                </div>
+                <div
+                  onClick={() => onFilterChange?.("at_risk")}
+                  className={cn(
+                    "cursor-pointer transition-all",
+                    activeFilter === "at_risk" && "ring-2 ring-[#ffc800] ring-offset-2 ring-offset-transparent rounded-2xl"
+                  )}
+                >
+                  <MetricCard
+                    title="Em Risco"
+                    value={metrics.atRisk}
+                    icon={AlertTriangle}
+                    variant={metrics.atRisk > 0 ? "warning" : "info"}
+                    subtitle="Free time expirando"
+                  />
+                </div>
+                <div
+                  onClick={() => onFilterChange?.("exceeded")}
+                  className={cn(
+                    "cursor-pointer transition-all",
+                    activeFilter === "exceeded" && "ring-2 ring-[#ffc800] ring-offset-2 ring-offset-transparent rounded-2xl"
+                  )}
+                >
+                  <MetricCard
+                    title="Excedido"
+                    value={metrics.exceeded}
+                    icon={Clock}
+                    variant={metrics.exceeded > 0 ? "critical" : "info"}
+                    subtitle="Demurrage acumulando"
+                  />
+                </div>
+                <div
+                  onClick={() => onFilterChange?.("safe")}
+                  className={cn(
+                    "cursor-pointer transition-all",
+                    activeFilter === "safe" && "ring-2 ring-[#ffc800] ring-offset-2 ring-offset-transparent rounded-2xl"
+                  )}
+                >
+                  <MetricCard
+                    title="No Prazo"
+                    value={metrics.safe}
+                    icon={Ship}
+                    variant="success"
+                    subtitle="Dentro do free time"
+                  />
+                </div>
               </>
             )}
           </div>
