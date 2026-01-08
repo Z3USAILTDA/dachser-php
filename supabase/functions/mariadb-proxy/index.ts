@@ -7095,8 +7095,8 @@ serve(async (req) => {
 
       // ==================== DEMURRAGE ====================
       case 'demurrage_get_containers': {
-        const { search, risk_status, cronos_status, cliente, armador, pre_invoice_status, dispute_status, audit_status, limit = 500 } = body as any;
-        console.log('Fetching demurrage containers with filters:', { search, risk_status, cronos_status, cliente, armador });
+        const { search, risk_status, cronos_status, cronos_status_list, cliente, armador, pre_invoice_status, dispute_status, audit_status, limit = 500 } = body as any;
+        console.log('Fetching demurrage containers with filters:', { search, risk_status, cronos_status, cronos_status_list, cliente, armador });
 
         let whereConditions = ['active = 1'];
         let params: (string | number)[] = [];
@@ -7109,7 +7109,12 @@ serve(async (req) => {
           whereConditions.push('risk_status = ?');
           params.push(risk_status);
         }
-        if (cronos_status && cronos_status !== 'all') {
+        // Support for multiple cronos_status values
+        if (cronos_status_list && Array.isArray(cronos_status_list) && cronos_status_list.length > 0) {
+          const placeholders = cronos_status_list.map(() => '?').join(', ');
+          whereConditions.push(`cronos_status IN (${placeholders})`);
+          params.push(...cronos_status_list);
+        } else if (cronos_status && cronos_status !== 'all') {
           whereConditions.push('cronos_status = ?');
           params.push(cronos_status);
         }

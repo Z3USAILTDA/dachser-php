@@ -62,6 +62,7 @@ export interface DemurrageFilters {
   search?: string;
   risk_status?: string;
   cronos_status?: string;
+  cronos_status_list?: string[];
   cliente?: string;
   armador?: string;
   pre_invoice_status?: string;
@@ -101,6 +102,7 @@ export function useDemurrageData(filters?: DemurrageFilters) {
           search: filters?.search,
           risk_status: filters?.risk_status,
           cronos_status: filters?.cronos_status,
+          cronos_status_list: filters?.cronos_status_list,
           cliente: filters?.cliente,
           armador: filters?.armador,
           pre_invoice_status: filters?.pre_invoice_status,
