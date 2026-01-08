@@ -4,7 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { FileText, Clock, CheckCircle2, Send, Eye } from "lucide-react";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+
 
 // Mock data
 const mockInvoices = [
@@ -87,73 +87,105 @@ export default function DemurragePreInvoicing() {
       }}
     >
       <div className="space-y-4">
-        {/* Tabs */}
-        <Tabs value={activeTab} onValueChange={setActiveTab}>
-          <TabsList className="bg-[rgba(5,6,18,0.85)] border border-[rgba(255,255,255,0.1)]">
-            <TabsTrigger value="all" className="data-[state=active]:bg-[rgba(255,200,0,0.15)] data-[state=active]:text-[#ffc800]">
-              Todas ({stats.total})
-            </TabsTrigger>
-            <TabsTrigger value="calculated" className="data-[state=active]:bg-[rgba(255,200,0,0.15)] data-[state=active]:text-[#ffc800]">
-              Calculadas ({stats.calculated})
-            </TabsTrigger>
-            <TabsTrigger value="reviewed" className="data-[state=active]:bg-[rgba(255,200,0,0.15)] data-[state=active]:text-[#ffc800]">
-              Revisadas ({stats.reviewed})
-            </TabsTrigger>
-            <TabsTrigger value="sent_to_otelo" className="data-[state=active]:bg-[rgba(255,200,0,0.15)] data-[state=active]:text-[#ffc800]">
-              Lançadas ({stats.sent})
-            </TabsTrigger>
-            <TabsTrigger value="finalized" className="data-[state=active]:bg-[rgba(255,200,0,0.15)] data-[state=active]:text-[#ffc800]">
-              Finalizadas ({stats.finalized})
-            </TabsTrigger>
-          </TabsList>
+        {/* Inner Nav */}
+        <div className="flex items-center gap-2 flex-wrap">
+          <button
+            onClick={() => setActiveTab("all")}
+            className={`px-4 py-2 rounded-full text-sm font-medium transition-all border ${
+              activeTab === "all"
+                ? "bg-[rgba(255,200,0,0.15)] text-[#ffc800] border-[#ffc800]/40"
+                : "bg-[rgba(0,0,0,0.4)] text-[#aaaaaa] border-white/10 hover:bg-white/5 hover:text-white"
+            }`}
+          >
+            Todas ({stats.total})
+          </button>
+          <button
+            onClick={() => setActiveTab("calculated")}
+            className={`px-4 py-2 rounded-full text-sm font-medium transition-all border ${
+              activeTab === "calculated"
+                ? "bg-[rgba(255,200,0,0.15)] text-[#ffc800] border-[#ffc800]/40"
+                : "bg-[rgba(0,0,0,0.4)] text-[#aaaaaa] border-white/10 hover:bg-white/5 hover:text-white"
+            }`}
+          >
+            Calculadas ({stats.calculated})
+          </button>
+          <button
+            onClick={() => setActiveTab("reviewed")}
+            className={`px-4 py-2 rounded-full text-sm font-medium transition-all border ${
+              activeTab === "reviewed"
+                ? "bg-[rgba(255,200,0,0.15)] text-[#ffc800] border-[#ffc800]/40"
+                : "bg-[rgba(0,0,0,0.4)] text-[#aaaaaa] border-white/10 hover:bg-white/5 hover:text-white"
+            }`}
+          >
+            Revisadas ({stats.reviewed})
+          </button>
+          <button
+            onClick={() => setActiveTab("sent_to_otelo")}
+            className={`px-4 py-2 rounded-full text-sm font-medium transition-all border ${
+              activeTab === "sent_to_otelo"
+                ? "bg-[rgba(255,200,0,0.15)] text-[#ffc800] border-[#ffc800]/40"
+                : "bg-[rgba(0,0,0,0.4)] text-[#aaaaaa] border-white/10 hover:bg-white/5 hover:text-white"
+            }`}
+          >
+            Lançadas ({stats.sent})
+          </button>
+          <button
+            onClick={() => setActiveTab("finalized")}
+            className={`px-4 py-2 rounded-full text-sm font-medium transition-all border ${
+              activeTab === "finalized"
+                ? "bg-[rgba(255,200,0,0.15)] text-[#ffc800] border-[#ffc800]/40"
+                : "bg-[rgba(0,0,0,0.4)] text-[#aaaaaa] border-white/10 hover:bg-white/5 hover:text-white"
+            }`}
+          >
+            Finalizadas ({stats.finalized})
+          </button>
+        </div>
 
-          <TabsContent value={activeTab} className="mt-4">
-            <Card className="bg-[rgba(5,6,18,0.85)] border-[rgba(255,255,255,0.1)]">
-              <CardHeader className="pb-3">
-                <CardTitle className="flex items-center gap-2 text-foreground text-base">
-                  <FileText className="h-5 w-5 text-[#ffc800]" />
-                  Pré-Faturas
-                </CardTitle>
-                <CardDescription>{filteredInvoices.length} encontrada(s)</CardDescription>
-              </CardHeader>
-              <CardContent>
-                {!filteredInvoices.length ? (
-                  <div className="text-center py-12 text-muted-foreground">
-                    <FileText className="h-12 w-12 mx-auto mb-4 opacity-50" />
-                    <p>Nenhuma pré-fatura encontrada</p>
-                  </div>
-                ) : (
-                  <Table>
-                    <TableHeader>
-                      <TableRow className="border-[rgba(255,255,255,0.1)]">
-                        <TableHead>Nº Fatura</TableHead>
-                        <TableHead>Cliente</TableHead>
-                        <TableHead>BL</TableHead>
-                        <TableHead className="text-right">Total USD</TableHead>
-                        <TableHead>Workflow</TableHead>
-                        <TableHead>Financeiro</TableHead>
-                        <TableHead>Data</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {filteredInvoices.map((inv) => (
-                        <TableRow key={inv.id} className="border-[rgba(255,255,255,0.1)] cursor-pointer hover:bg-[rgba(255,200,0,0.05)]">
-                          <TableCell className="font-mono font-medium">{inv.invoice_number}</TableCell>
-                          <TableCell>{inv.client_name}</TableCell>
-                          <TableCell className="font-mono text-sm">{inv.bl_number}</TableCell>
-                          <TableCell className="text-right font-semibold text-[#ffc800]">{formatCurrency(inv.total_usd)}</TableCell>
-                          <TableCell>{getWorkflowBadge(inv.workflow_status)}</TableCell>
-                          <TableCell>{getFinancialBadge(inv.financial_status)}</TableCell>
-                          <TableCell className="text-muted-foreground">{inv.created_at}</TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                )}
-              </CardContent>
-            </Card>
-          </TabsContent>
-        </Tabs>
+        {/* Content */}
+        <Card className="bg-[rgba(5,6,18,0.85)] border-[rgba(255,255,255,0.1)]">
+          <CardHeader className="pb-3">
+            <CardTitle className="flex items-center gap-2 text-foreground text-base">
+              <FileText className="h-5 w-5 text-[#ffc800]" />
+              Pré-Faturas
+            </CardTitle>
+            <CardDescription>{filteredInvoices.length} encontrada(s)</CardDescription>
+          </CardHeader>
+          <CardContent>
+            {!filteredInvoices.length ? (
+              <div className="text-center py-12 text-muted-foreground">
+                <FileText className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                <p>Nenhuma pré-fatura encontrada</p>
+              </div>
+            ) : (
+              <Table>
+                <TableHeader>
+                  <TableRow className="border-[rgba(255,255,255,0.1)]">
+                    <TableHead>Nº Fatura</TableHead>
+                    <TableHead>Cliente</TableHead>
+                    <TableHead>BL</TableHead>
+                    <TableHead className="text-right">Total USD</TableHead>
+                    <TableHead>Workflow</TableHead>
+                    <TableHead>Financeiro</TableHead>
+                    <TableHead>Data</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {filteredInvoices.map((inv) => (
+                    <TableRow key={inv.id} className="border-[rgba(255,255,255,0.1)] cursor-pointer hover:bg-[rgba(255,200,0,0.05)]">
+                      <TableCell className="font-mono font-medium">{inv.invoice_number}</TableCell>
+                      <TableCell>{inv.client_name}</TableCell>
+                      <TableCell className="font-mono text-sm">{inv.bl_number}</TableCell>
+                      <TableCell className="text-right font-semibold text-[#ffc800]">{formatCurrency(inv.total_usd)}</TableCell>
+                      <TableCell>{getWorkflowBadge(inv.workflow_status)}</TableCell>
+                      <TableCell>{getFinancialBadge(inv.financial_status)}</TableCell>
+                      <TableCell className="text-muted-foreground">{inv.created_at}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            )}
+          </CardContent>
+        </Card>
       </div>
     </DemurrageLayout>
   );

@@ -4,7 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+
 import { Scale, Plus, CheckCircle, XCircle, Clock, MessageSquare } from "lucide-react";
 
 // Mock data
@@ -85,93 +85,125 @@ export default function DemurrageDisputes() {
       rightActions={rightActions}
     >
       <div className="space-y-4">
-        {/* Tabs */}
-        <Tabs value={activeTab} onValueChange={setActiveTab}>
-          <TabsList className="bg-[rgba(5,6,18,0.85)] border border-[rgba(255,255,255,0.1)]">
-            <TabsTrigger value="all" className="data-[state=active]:bg-[rgba(255,200,0,0.15)] data-[state=active]:text-[#ffc800]">
-              Todas ({stats.total})
-            </TabsTrigger>
-            <TabsTrigger value="opened" className="data-[state=active]:bg-[rgba(255,200,0,0.15)] data-[state=active]:text-[#ffc800]">
-              Abertas ({stats.opened})
-            </TabsTrigger>
-            <TabsTrigger value="negotiating" className="data-[state=active]:bg-[rgba(255,200,0,0.15)] data-[state=active]:text-[#ffc800]">
-              Negociando ({stats.negotiating})
-            </TabsTrigger>
-            <TabsTrigger value="won" className="data-[state=active]:bg-[rgba(255,200,0,0.15)] data-[state=active]:text-[#ffc800]">
-              Ganhas ({stats.won})
-            </TabsTrigger>
-            <TabsTrigger value="lost" className="data-[state=active]:bg-[rgba(255,200,0,0.15)] data-[state=active]:text-[#ffc800]">
-              Perdidas ({stats.lost})
-            </TabsTrigger>
-          </TabsList>
+        {/* Inner Nav */}
+        <div className="flex items-center gap-2 flex-wrap">
+          <button
+            onClick={() => setActiveTab("all")}
+            className={`px-4 py-2 rounded-full text-sm font-medium transition-all border ${
+              activeTab === "all"
+                ? "bg-[rgba(255,200,0,0.15)] text-[#ffc800] border-[#ffc800]/40"
+                : "bg-[rgba(0,0,0,0.4)] text-[#aaaaaa] border-white/10 hover:bg-white/5 hover:text-white"
+            }`}
+          >
+            Todas ({stats.total})
+          </button>
+          <button
+            onClick={() => setActiveTab("opened")}
+            className={`px-4 py-2 rounded-full text-sm font-medium transition-all border ${
+              activeTab === "opened"
+                ? "bg-[rgba(255,200,0,0.15)] text-[#ffc800] border-[#ffc800]/40"
+                : "bg-[rgba(0,0,0,0.4)] text-[#aaaaaa] border-white/10 hover:bg-white/5 hover:text-white"
+            }`}
+          >
+            Abertas ({stats.opened})
+          </button>
+          <button
+            onClick={() => setActiveTab("negotiating")}
+            className={`px-4 py-2 rounded-full text-sm font-medium transition-all border ${
+              activeTab === "negotiating"
+                ? "bg-[rgba(255,200,0,0.15)] text-[#ffc800] border-[#ffc800]/40"
+                : "bg-[rgba(0,0,0,0.4)] text-[#aaaaaa] border-white/10 hover:bg-white/5 hover:text-white"
+            }`}
+          >
+            Negociando ({stats.negotiating})
+          </button>
+          <button
+            onClick={() => setActiveTab("won")}
+            className={`px-4 py-2 rounded-full text-sm font-medium transition-all border ${
+              activeTab === "won"
+                ? "bg-[rgba(255,200,0,0.15)] text-[#ffc800] border-[#ffc800]/40"
+                : "bg-[rgba(0,0,0,0.4)] text-[#aaaaaa] border-white/10 hover:bg-white/5 hover:text-white"
+            }`}
+          >
+            Ganhas ({stats.won})
+          </button>
+          <button
+            onClick={() => setActiveTab("lost")}
+            className={`px-4 py-2 rounded-full text-sm font-medium transition-all border ${
+              activeTab === "lost"
+                ? "bg-[rgba(255,200,0,0.15)] text-[#ffc800] border-[#ffc800]/40"
+                : "bg-[rgba(0,0,0,0.4)] text-[#aaaaaa] border-white/10 hover:bg-white/5 hover:text-white"
+            }`}
+          >
+            Perdidas ({stats.lost})
+          </button>
+        </div>
 
-          <TabsContent value={activeTab} className="mt-4">
-            <Card className="bg-[rgba(5,6,18,0.85)] border-[rgba(255,255,255,0.1)]">
-              <CardHeader className="pb-3">
-                <CardTitle className="flex items-center gap-2 text-foreground text-base">
-                  <Scale className="h-5 w-5 text-[#ffc800]" />
-                  Disputas
-                </CardTitle>
-                <CardDescription>{filteredDisputes.length} disputa(s)</CardDescription>
-              </CardHeader>
-              <CardContent>
-                {filteredDisputes.length === 0 ? (
-                  <div className="flex flex-col items-center justify-center py-12 text-muted-foreground">
-                    <Scale className="h-12 w-12 mb-4 opacity-50" />
-                    <p>Nenhuma disputa encontrada</p>
-                  </div>
-                ) : (
-                  <Table>
-                    <TableHeader>
-                      <TableRow className="border-[rgba(255,255,255,0.1)]">
-                        <TableHead>Container</TableHead>
-                        <TableHead>Cliente</TableHead>
-                        <TableHead>Armador</TableHead>
-                        <TableHead className="text-right">Valor Disputado</TableHead>
-                        <TableHead>Status</TableHead>
-                        <TableHead className="text-right">Recuperado</TableHead>
-                        <TableHead>Ações</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {filteredDisputes.map((dispute) => (
-                        <TableRow key={dispute.id} className="border-[rgba(255,255,255,0.1)]">
-                          <TableCell className="font-mono">{dispute.container}</TableCell>
-                          <TableCell>{dispute.cliente}</TableCell>
-                          <TableCell>{dispute.armador}</TableCell>
-                          <TableCell className="text-right font-medium">{formatCurrency(dispute.disputed_amount)}</TableCell>
-                          <TableCell>{getStatusBadge(dispute.status)}</TableCell>
-                          <TableCell className="text-right font-medium text-green-500">
-                            {dispute.status === 'won' ? formatCurrency(dispute.recovered_amount) : '-'}
-                          </TableCell>
-                          <TableCell>
-                            <div className="flex gap-1">
-                              {dispute.status === 'opened' && (
-                                <Button size="sm" variant="outline" className="border-[rgba(255,255,255,0.2)] text-xs">
-                                  Negociar
-                                </Button>
-                              )}
-                              {(dispute.status === 'opened' || dispute.status === 'negotiating') && (
-                                <>
-                                  <Button size="sm" className="bg-green-500/20 text-green-500 hover:bg-green-500/30 h-8 w-8 p-0">
-                                    <CheckCircle className="h-4 w-4" />
-                                  </Button>
-                                  <Button size="sm" className="bg-red-500/20 text-red-500 hover:bg-red-500/30 h-8 w-8 p-0">
-                                    <XCircle className="h-4 w-4" />
-                                  </Button>
-                                </>
-                              )}
-                            </div>
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                )}
-              </CardContent>
-            </Card>
-          </TabsContent>
-        </Tabs>
+        {/* Content */}
+        <Card className="bg-[rgba(5,6,18,0.85)] border-[rgba(255,255,255,0.1)]">
+          <CardHeader className="pb-3">
+            <CardTitle className="flex items-center gap-2 text-foreground text-base">
+              <Scale className="h-5 w-5 text-[#ffc800]" />
+              Disputas
+            </CardTitle>
+            <CardDescription>{filteredDisputes.length} disputa(s)</CardDescription>
+          </CardHeader>
+          <CardContent>
+            {filteredDisputes.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-12 text-muted-foreground">
+                <Scale className="h-12 w-12 mb-4 opacity-50" />
+                <p>Nenhuma disputa encontrada</p>
+              </div>
+            ) : (
+              <Table>
+                <TableHeader>
+                  <TableRow className="border-[rgba(255,255,255,0.1)]">
+                    <TableHead>Container</TableHead>
+                    <TableHead>Cliente</TableHead>
+                    <TableHead>Armador</TableHead>
+                    <TableHead className="text-right">Valor Disputado</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead className="text-right">Recuperado</TableHead>
+                    <TableHead>Ações</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {filteredDisputes.map((dispute) => (
+                    <TableRow key={dispute.id} className="border-[rgba(255,255,255,0.1)]">
+                      <TableCell className="font-mono">{dispute.container}</TableCell>
+                      <TableCell>{dispute.cliente}</TableCell>
+                      <TableCell>{dispute.armador}</TableCell>
+                      <TableCell className="text-right font-medium">{formatCurrency(dispute.disputed_amount)}</TableCell>
+                      <TableCell>{getStatusBadge(dispute.status)}</TableCell>
+                      <TableCell className="text-right font-medium text-green-500">
+                        {dispute.status === 'won' ? formatCurrency(dispute.recovered_amount) : '-'}
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex gap-1">
+                          {dispute.status === 'opened' && (
+                            <Button size="sm" variant="outline" className="border-[rgba(255,255,255,0.2)] text-xs">
+                              Negociar
+                            </Button>
+                          )}
+                          {(dispute.status === 'opened' || dispute.status === 'negotiating') && (
+                            <>
+                              <Button size="sm" className="bg-green-500/20 text-green-500 hover:bg-green-500/30 h-8 w-8 p-0">
+                                <CheckCircle className="h-4 w-4" />
+                              </Button>
+                              <Button size="sm" className="bg-red-500/20 text-red-500 hover:bg-red-500/30 h-8 w-8 p-0">
+                                <XCircle className="h-4 w-4" />
+                              </Button>
+                            </>
+                          )}
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            )}
+          </CardContent>
+        </Card>
       </div>
     </DemurrageLayout>
   );
