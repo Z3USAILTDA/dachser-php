@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Ship, Database, Search, ShieldAlert, ArrowLeft, RefreshCw, HelpCircle } from "lucide-react";
+import { Ship, Database, Search, ArrowLeft, RefreshCw, HelpCircle } from "lucide-react";
 import { useDraftData } from "@/hooks/useDraftData";
 import { DraftDataGrid } from "@/components/draft/DraftDataGrid";
 import { HapagTrackerPanel } from "@/components/draft/HapagTrackerPanel";
@@ -22,7 +22,6 @@ const navTabs: NavTab[] = [{
 }];
 const DraftExportacao = () => {
   const navigate = useNavigate();
-  const [isAdmin, setIsAdmin] = useState<boolean | null>(null);
   const [activeTab, setActiveTab] = useState<TabType>("grid");
   const [statusFilter, setStatusFilter] = useState<string | null>(null);
   const {
@@ -33,58 +32,33 @@ const DraftExportacao = () => {
   } = useDraftData();
   const storedUser = localStorage.getItem("user");
   const user = storedUser ? JSON.parse(storedUser) : null;
+
   useEffect(() => {
-    if (storedUser) {
-      const parsed = JSON.parse(storedUser);
-      const adminStatus = parsed.is_admin === 1 || parsed.is_admin === "1" || parsed.is_admin === true;
-      setIsAdmin(adminStatus);
-      if (!adminStatus) {
-        navigate("/dashboard");
-      }
-    } else {
+    if (!storedUser) {
       navigate("/");
     }
   }, [navigate, storedUser]);
-  if (isAdmin === null) {
-    return <div className="min-h-screen relative overflow-x-hidden">
+
+  if (!storedUser) {
+    return (
+      <div className="min-h-screen relative overflow-x-hidden">
         <div className="fixed inset-0 z-0">
           <div className="absolute inset-0" style={{
-          backgroundImage: `url(${dachserBg})`,
-          backgroundSize: 'cover',
-          backgroundPosition: 'center'
-        }} />
+            backgroundImage: `url(${dachserBg})`,
+            backgroundSize: 'cover',
+            backgroundPosition: 'center'
+          }} />
           <div className="absolute inset-0" style={{
-          background: 'linear-gradient(120deg, rgba(4, 17, 45, 0.92), rgba(26, 93, 173, 0.55))'
-        }} />
+            background: 'linear-gradient(120deg, rgba(4, 17, 45, 0.92), rgba(26, 93, 173, 0.55))'
+          }} />
         </div>
         <div className="relative z-10 flex items-center justify-center h-screen">
           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#ffc800]"></div>
         </div>
-      </div>;
+      </div>
+    );
   }
-  if (!isAdmin) {
-    return <div className="min-h-screen relative overflow-x-hidden">
-        <div className="fixed inset-0 z-0">
-          <div className="absolute inset-0" style={{
-          backgroundImage: `url(${dachserBg})`,
-          backgroundSize: 'cover',
-          backgroundPosition: 'center'
-        }} />
-          <div className="absolute inset-0" style={{
-          background: 'linear-gradient(120deg, rgba(4, 17, 45, 0.92), rgba(26, 93, 173, 0.55))'
-        }} />
-        </div>
-        <div className="relative z-10 flex items-center justify-center h-screen">
-          <div className="rounded-2xl bg-[rgba(5,6,18,0.9)] border border-[rgba(255,255,255,0.12)] backdrop-blur-[18px] shadow-[0_18px_40px_rgba(0,0,0,0.85)] p-8 text-center max-w-md">
-            <ShieldAlert className="h-12 w-12 text-rose-400 mx-auto mb-4" />
-            <h3 className="text-lg font-semibold text-white mb-2">Acesso Restrito</h3>
-            <p className="text-[#aaaaaa]">
-              Esta funcionalidade está disponível apenas para administradores.
-            </p>
-          </div>
-        </div>
-      </div>;
-  }
+
   return <div className="min-h-screen relative overflow-x-hidden">
       {/* Background with image and gradient overlay */}
       <div className="fixed inset-0 z-0">
