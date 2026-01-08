@@ -47,6 +47,60 @@ export type Database = {
         }
         Relationships: []
       }
+      analise_documental_historico: {
+        Row: {
+          analysis: Json | null
+          comparison: Json | null
+          created_at: string
+          created_by_user_id: string | null
+          error_count: number | null
+          excel_file_name: string
+          excel_summary: Json | null
+          id: string
+          metadata: Json | null
+          overall_status: string | null
+          pdf_file_name: string
+          pdf_summary: Json | null
+          success_count: number | null
+          total_items: number | null
+          warning_count: number | null
+        }
+        Insert: {
+          analysis?: Json | null
+          comparison?: Json | null
+          created_at?: string
+          created_by_user_id?: string | null
+          error_count?: number | null
+          excel_file_name: string
+          excel_summary?: Json | null
+          id?: string
+          metadata?: Json | null
+          overall_status?: string | null
+          pdf_file_name: string
+          pdf_summary?: Json | null
+          success_count?: number | null
+          total_items?: number | null
+          warning_count?: number | null
+        }
+        Update: {
+          analysis?: Json | null
+          comparison?: Json | null
+          created_at?: string
+          created_by_user_id?: string | null
+          error_count?: number | null
+          excel_file_name?: string
+          excel_summary?: Json | null
+          id?: string
+          metadata?: Json | null
+          overall_status?: string | null
+          pdf_file_name?: string
+          pdf_summary?: Json | null
+          success_count?: number | null
+          total_items?: number | null
+          warning_count?: number | null
+        }
+        Relationships: []
+      }
       api_usage_cycles: {
         Row: {
           api_name: string
