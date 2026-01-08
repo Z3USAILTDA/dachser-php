@@ -93,6 +93,7 @@ interface QueryRequest {
   awbNumbers?: string[];
   cliente_nome?: string;
   cnpj_consignatario?: string;
+  email_cliente?: string;
   aeroportos?: string;
   eventos_disparo?: string;
   canais?: string;
@@ -2990,6 +2991,98 @@ serve(async (req) => {
 
         await client.execute(`
           DELETE FROM ${database}.t_cct_regras_notificacao WHERE id = ?
+        `, [id]);
+
+        result = { success: true, message: 'Regra excluída com sucesso' };
+        break;
+      }
+
+      // ==================== EMAIL CLIENTE REGRAS (AWB) ====================
+      case 'get_email_cliente_regras': {
+        console.log('Fetching email cliente rules...');
+        
+        // Create table if not exists
+        await client.execute(`
+          CREATE TABLE IF NOT EXISTS ${database}.t_email_cliente (
+            id INT PRIMARY KEY AUTO_INCREMENT,
+            cliente_nome VARCHAR(255),
+            cnpj_consignatario VARCHAR(20),
+            email_cliente VARCHAR(255),
+            aeroportos TEXT,
+            eventos_disparo TEXT,
+            canais TEXT,
+            ativo BOOLEAN DEFAULT TRUE,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+          )
+        `);
+
+        const regrasEmail = await client.query(`
+          SELECT * FROM ${database}.t_email_cliente
+          ORDER BY created_at DESC
+        `);
+
+        console.log(`Found ${regrasEmail?.length || 0} email cliente rules`);
+        result = { success: true, data: regrasEmail || [] };
+        break;
+      }
+
+      case 'create_email_cliente_regra': {
+        const { cliente_nome, cnpj_consignatario, email_cliente, aeroportos, eventos_disparo, canais, ativo } = body;
+        console.log('Creating email cliente rule:', { cliente_nome, cnpj_consignatario, email_cliente });
+
+        await client.execute(`
+          INSERT INTO ${database}.t_email_cliente 
+          (cliente_nome, cnpj_consignatario, email_cliente, aeroportos, eventos_disparo, canais, ativo)
+          VALUES (?, ?, ?, ?, ?, ?, ?)
+        `, [
+          cliente_nome || null,
+          cnpj_consignatario || null,
+          email_cliente || null,
+          aeroportos || '[]',
+          eventos_disparo || '[]',
+          canais || '[]',
+          ativo !== false ? 1 : 0
+        ]);
+
+        result = { success: true, message: 'Regra criada com sucesso' };
+        break;
+      }
+
+      case 'update_email_cliente_regra': {
+        const { id, cliente_nome, cnpj_consignatario, email_cliente, aeroportos, eventos_disparo, canais, ativo } = body;
+        console.log('Updating email cliente rule:', id);
+
+        const updateFieldsEmail: string[] = [];
+        const updateValuesEmail: any[] = [];
+
+        if (cliente_nome !== undefined) { updateFieldsEmail.push('cliente_nome = ?'); updateValuesEmail.push(cliente_nome); }
+        if (cnpj_consignatario !== undefined) { updateFieldsEmail.push('cnpj_consignatario = ?'); updateValuesEmail.push(cnpj_consignatario); }
+        if (email_cliente !== undefined) { updateFieldsEmail.push('email_cliente = ?'); updateValuesEmail.push(email_cliente); }
+        if (aeroportos !== undefined) { updateFieldsEmail.push('aeroportos = ?'); updateValuesEmail.push(aeroportos); }
+        if (eventos_disparo !== undefined) { updateFieldsEmail.push('eventos_disparo = ?'); updateValuesEmail.push(eventos_disparo); }
+        if (canais !== undefined) { updateFieldsEmail.push('canais = ?'); updateValuesEmail.push(canais); }
+        if (ativo !== undefined) { updateFieldsEmail.push('ativo = ?'); updateValuesEmail.push(ativo ? 1 : 0); }
+
+        if (updateFieldsEmail.length > 0) {
+          updateValuesEmail.push(id);
+          await client.execute(`
+            UPDATE ${database}.t_email_cliente 
+            SET ${updateFieldsEmail.join(', ')}
+            WHERE id = ?
+          `, updateValuesEmail);
+        }
+
+        result = { success: true, message: 'Regra atualizada com sucesso' };
+        break;
+      }
+
+      case 'delete_email_cliente_regra': {
+        const { id } = body;
+        console.log('Deleting email cliente rule:', id);
+
+        await client.execute(`
+          DELETE FROM ${database}.t_email_cliente WHERE id = ?
         `, [id]);
 
         result = { success: true, message: 'Regra excluída com sucesso' };

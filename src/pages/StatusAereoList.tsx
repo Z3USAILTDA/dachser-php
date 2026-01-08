@@ -12,13 +12,15 @@ import {
   TableHeader, 
   TableRow 
 } from "@/components/ui/table";
-import { Search, Plane, Package, ArrowLeft, HelpCircle } from "lucide-react";
+import { Search, Plane, Package, ArrowLeft, HelpCircle, Settings } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useNavigate } from "react-router-dom";
 import { DatabaseConnectionIndicator } from "@/components/DatabaseConnectionIndicator";
+import { EmailClienteRegrasDialog } from "@/components/air/EmailClienteRegrasDialog";
 
 const StatusAereoList = () => {
   const [searchTerm, setSearchTerm] = useState("");
+  const [regrasDialogOpen, setRegrasDialogOpen] = useState(false);
   const { toast } = useToast();
   const navigate = useNavigate();
 
@@ -59,13 +61,24 @@ const StatusAereoList = () => {
               <ArrowLeft className="w-4 h-4" />
               Voltar
             </Button>
-            <button
-              onClick={() => navigate("/air/status-aereo/manual")}
-              className="w-8 h-8 rounded-full border border-white/25 flex items-center justify-center bg-black/70 text-gray-400 hover:text-[#ffc800] transition-colors"
-              title="Manual do usuário"
-            >
-              <HelpCircle className="h-4 w-4" />
-            </button>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setRegrasDialogOpen(true)}
+                className="gap-2"
+              >
+                <Settings className="h-4 w-4" />
+                Regras
+              </Button>
+              <button
+                onClick={() => navigate("/air/status-aereo/manual")}
+                className="w-8 h-8 rounded-full border border-white/25 flex items-center justify-center bg-black/70 text-gray-400 hover:text-[#ffc800] transition-colors"
+                title="Manual do usuário"
+              >
+                <HelpCircle className="h-4 w-4" />
+              </button>
+            </div>
           </div>
           <div className="flex items-center gap-3 mb-2">
             <Package className="w-8 h-8 text-primary" />
@@ -161,6 +174,11 @@ const StatusAereoList = () => {
           )}
         </Card>
       </div>
+
+      <EmailClienteRegrasDialog 
+        open={regrasDialogOpen} 
+        onOpenChange={setRegrasDialogOpen} 
+      />
     </div>
   );
 };
