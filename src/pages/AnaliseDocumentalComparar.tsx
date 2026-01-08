@@ -6,6 +6,7 @@ import { PageLayout } from "@/components/layout/PageLayout";
 import { PageCard } from "@/components/layout/PageCard";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/hooks/useAuth";
 import * as XLSX from "xlsx";
 
 // Types for LLM analysis response
@@ -116,9 +117,11 @@ function fileToBase64(file: File): Promise<string> {
 
 const AnaliseDocumentalComparar = () => {
   const navigate = useNavigate();
+  const { user } = useAuth();
   const [pdfFile, setPdfFile] = useState<File | null>(null);
   const [excelFile, setExcelFile] = useState<File | null>(null);
   const [analysisResult, setAnalysisResult] = useState<LLMAnalysisResult | null>(null);
+  const [savedId, setSavedId] = useState<string | null>(null);
   const [isComparing, setIsComparing] = useState(false);
 
   const handleFileSelect = (
@@ -176,6 +179,45 @@ const AnaliseDocumentalComparar = () => {
       console.log("Analysis result:", data);
       setAnalysisResult(data);
 
+      // Calculate counts
+      const matchedItems = data.comparison?.matchedItems || [];
+      const pdfOnlyItems = data.comparison?.pdfOnlyItems || [];
+      const excelOnlyItems = data.comparison?.excelOnlyItems || [];
+      
+      const successCount = matchedItems.filter((r: any) => r.status === "success").length;
+      const warningCount = matchedItems.filter((r: any) => r.status === "warning").length;
+      const errorCount = matchedItems.filter((r: any) => r.status === "error").length + pdfOnlyItems.length + excelOnlyItems.length;
+      const totalItems = matchedItems.length + pdfOnlyItems.length + excelOnlyItems.length;
+
+      // Save to database (using type assertion as table was just created)
+      const { data: savedRecord, error: saveError } = await supabase
+        .from("analise_documental_historico" as any)
+        .insert({
+          pdf_file_name: pdfFile.name,
+          excel_file_name: excelFile.name,
+          pdf_summary: data.pdfSummary,
+          excel_summary: data.excelSummary,
+          comparison: data.comparison,
+          analysis: data.analysis,
+          metadata: data.metadata,
+          total_items: totalItems,
+          success_count: successCount,
+          warning_count: warningCount,
+          error_count: errorCount,
+          overall_status: data.analysis?.overallStatus || "success",
+          created_by_user_id: user?.id,
+        })
+        .select()
+        .single() as { data: { id: string } | null; error: any };
+
+      if (saveError) {
+        console.error("Error saving to database:", saveError);
+        toast.warning("Análise concluída, mas não foi possível salvar no histórico");
+      } else if (savedRecord) {
+        setSavedId(savedRecord.id);
+        console.log("Saved to database:", savedRecord.id);
+      }
+
       // Show result toast based on overall status
       const status = data.analysis?.overallStatus;
       const summary = data.analysis?.summary || "Análise concluída";
@@ -201,6 +243,7 @@ const AnaliseDocumentalComparar = () => {
     setPdfFile(null);
     setExcelFile(null);
     setAnalysisResult(null);
+    setSavedId(null);
   };
 
   return (
