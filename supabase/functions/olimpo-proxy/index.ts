@@ -5144,6 +5144,386 @@ serve(async (req) => {
       }
     }
 
+    // ===== OLIMPO SEA FROM MONITORING: Buscar dados de t_tracking_sea com coordenadas de t_olimpo_tracking =====
+    if (action === 'olimpo_sea_from_monitoring') {
+      const mariadbHost = Deno.env.get('MARIADB_HOST');
+      const mariadbPort = Deno.env.get('MARIADB_PORT') || '3306';
+      const mariadbUser = Deno.env.get('MARIADB_USER');
+      const mariadbPass = Deno.env.get('MARIADB_PASSWORD');
+
+      if (!mariadbHost || !mariadbUser || !mariadbPass) {
+        return new Response(JSON.stringify({ error: 'MariaDB não configurado', data: [] }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      }
+
+      const { Client } = await import("https://deno.land/x/mysql@v2.12.1/mod.ts");
+      const client = await new Client().connect({
+        hostname: mariadbHost,
+        port: parseInt(mariadbPort, 10),
+        username: mariadbUser,
+        password: mariadbPass,
+        db: 'dados_dachser',
+      });
+
+      try {
+        // Buscar containers ativos do monitoramento com coordenadas do olimpo_tracking
+        const rows = await client.query(`
+          SELECT 
+            ts.mbl_id,
+            ts.container,
+            ts.consignee,
+            ts.tipo_processo,
+            ts.porto_origem,
+            ts.porto_destino,
+            ts.navio AS vessel_name,
+            ts.vessel_imo,
+            ts.eta,
+            ts.etd,
+            ts.container_status,
+            ts.last_event,
+            ts.last_check,
+            ts.shipping_line,
+            ts.is_eta_delayed,
+            -- Coordenadas do t_olimpo_tracking (se existirem)
+            ot.origem_lat,
+            ot.origem_lon,
+            ot.destino_lat,
+            ot.destino_lon,
+            ot.current_lat,
+            ot.current_lon,
+            ot.last_api_update
+          FROM dados_dachser.t_tracking_sea ts
+          LEFT JOIN dados_dachser.t_olimpo_tracking ot 
+            ON ot.mode = 'sea' AND ot.asset = ts.mbl_id
+          WHERE ts.active = 1
+            -- Filtro de 24h para entregues
+            AND NOT (
+              UPPER(ts.container_status) IN ('DELIVERED', 'DLV', 'GOD', 'EMPTY_RETURNED')
+              AND ts.last_check < DATE_SUB(NOW(), INTERVAL 24 HOUR)
+            )
+          GROUP BY ts.mbl_id
+          ORDER BY ts.eta ASC
+        `);
+
+        const out = rows.map((r: any) => ({
+          mbl_id: r.mbl_id,
+          container: r.container,
+          consignee: r.consignee,
+          cliente: r.consignee,
+          tipo_processo: r.tipo_processo,
+          porto_origem: r.porto_origem,
+          porto_destino: r.porto_destino,
+          vessel_name: r.vessel_name,
+          vessel_imo: r.vessel_imo,
+          eta: r.eta,
+          etd: r.etd,
+          container_status: r.container_status,
+          last_event: r.last_event,
+          last_check: r.last_check,
+          shipping_line: r.shipping_line,
+          is_eta_delayed: r.is_eta_delayed,
+          origem_lat: r.origem_lat ? Number(r.origem_lat) : null,
+          origem_lon: r.origem_lon ? Number(r.origem_lon) : null,
+          destino_lat: r.destino_lat ? Number(r.destino_lat) : null,
+          destino_lon: r.destino_lon ? Number(r.destino_lon) : null,
+          current_lat: r.current_lat ? Number(r.current_lat) : null,
+          current_lon: r.current_lon ? Number(r.current_lon) : null,
+          last_api_update: r.last_api_update,
+        }));
+
+        await client.close();
+        console.log(`[olimpo_sea_from_monitoring] Returning ${out.length} MBLs from t_tracking_sea`);
+        
+        return new Response(JSON.stringify({ 
+          data: out,
+          count: out.length
+        }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      } catch (e: any) {
+        await client.close();
+        console.error('[olimpo_sea_from_monitoring] Error:', e);
+        return new Response(JSON.stringify({ error: e.message, data: [] }), {
+          status: 500,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      }
+    }
+
+    // ===== SYNC OLIMPO FROM MONITORING: Popular t_olimpo_tracking com dados do t_tracking_sea =====
+    if (action === 'sync_olimpo_from_monitoring') {
+      const mariadbHost = Deno.env.get('MARIADB_HOST');
+      const mariadbPort = Deno.env.get('MARIADB_PORT') || '3306';
+      const mariadbUser = Deno.env.get('MARIADB_USER');
+      const mariadbPass = Deno.env.get('MARIADB_PASSWORD');
+
+      if (!mariadbHost || !mariadbUser || !mariadbPass) {
+        return new Response(JSON.stringify({ error: 'MariaDB não configurado' }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      }
+
+      const { Client } = await import("https://deno.land/x/mysql@v2.12.1/mod.ts");
+      const client = await new Client().connect({
+        hostname: mariadbHost,
+        port: parseInt(mariadbPort, 10),
+        username: mariadbUser,
+        password: mariadbPass,
+        db: 'dados_dachser',
+      });
+
+      try {
+        // Inserir/atualizar MBLs ativos do t_tracking_sea no t_olimpo_tracking
+        const result = await client.execute(`
+          INSERT INTO dados_dachser.t_olimpo_tracking (
+            mode, asset, cliente, tipo_processo,
+            origem_code, destino_code, status,
+            eta, etd, vessel_name, container_status,
+            shipping_line, updated_at, active
+          )
+          SELECT 
+            'sea' AS mode,
+            ts.mbl_id AS asset,
+            ts.consignee AS cliente,
+            ts.tipo_processo,
+            ts.porto_origem AS origem_code,
+            ts.porto_destino AS destino_code,
+            CASE 
+              WHEN ts.is_eta_delayed = 1 THEN 'Atraso'
+              WHEN UPPER(ts.container_status) IN ('DELIVERED', 'DLV', 'GOD', 'EMPTY_RETURNED') THEN 'Entregue'
+              ELSE 'Em trânsito'
+            END AS status,
+            ts.eta,
+            ts.etd,
+            ts.navio AS vessel_name,
+            ts.container_status,
+            ts.shipping_line,
+            NOW() AS updated_at,
+            TRUE AS active
+          FROM dados_dachser.t_tracking_sea ts
+          WHERE ts.active = 1
+          GROUP BY ts.mbl_id
+          ON DUPLICATE KEY UPDATE
+            cliente = VALUES(cliente),
+            tipo_processo = VALUES(tipo_processo),
+            origem_code = VALUES(origem_code),
+            destino_code = VALUES(destino_code),
+            status = VALUES(status),
+            eta = VALUES(eta),
+            etd = VALUES(etd),
+            vessel_name = VALUES(vessel_name),
+            container_status = VALUES(container_status),
+            shipping_line = VALUES(shipping_line),
+            updated_at = NOW(),
+            active = TRUE
+        `);
+
+        // Desativar MBLs que não estão mais ativos no monitoramento
+        const deactivateResult = await client.execute(`
+          UPDATE dados_dachser.t_olimpo_tracking ot
+          SET ot.active = FALSE, ot.updated_at = NOW()
+          WHERE ot.mode = 'sea'
+            AND ot.active = TRUE
+            AND ot.asset NOT IN (
+              SELECT ts.mbl_id FROM dados_dachser.t_tracking_sea ts WHERE ts.active = 1
+            )
+        `);
+
+        await client.close();
+        console.log(`[sync_olimpo_from_monitoring] Synced ${result.affectedRows} rows, deactivated ${deactivateResult.affectedRows} rows`);
+
+        return new Response(JSON.stringify({ 
+          success: true,
+          synced: result.affectedRows || 0,
+          deactivated: deactivateResult.affectedRows || 0
+        }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      } catch (e: any) {
+        await client.close();
+        console.error('[sync_olimpo_from_monitoring] Error:', e);
+        return new Response(JSON.stringify({ error: e.message }), {
+          status: 500,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      }
+    }
+
+    // ===== REFRESH SEA TRACKING SMART: Re-rastrear apenas quando ETA ≤ 4 dias ou sem coordenadas =====
+    if (action === 'refresh_sea_tracking_smart') {
+      const mariadbHost = Deno.env.get('MARIADB_HOST');
+      const mariadbPort = Deno.env.get('MARIADB_PORT') || '3306';
+      const mariadbUser = Deno.env.get('MARIADB_USER');
+      const mariadbPass = Deno.env.get('MARIADB_PASSWORD');
+      const apiKey = Deno.env.get('JSONCARGO_API_KEY');
+
+      if (!mariadbHost || !mariadbUser || !mariadbPass) {
+        return new Response(JSON.stringify({ error: 'MariaDB não configurado' }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      }
+
+      if (!apiKey) {
+        return new Response(JSON.stringify({ error: 'JSONCARGO_API_KEY não configurada' }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      }
+
+      const { Client } = await import("https://deno.land/x/mysql@v2.12.1/mod.ts");
+      const client = await new Client().connect({
+        hostname: mariadbHost,
+        port: parseInt(mariadbPort, 10),
+        username: mariadbUser,
+        password: mariadbPass,
+        db: 'dados_dachser',
+      });
+
+      try {
+        // Buscar MBLs que precisam de re-rastreio:
+        // 1. Sem coordenadas (origem ou destino)
+        // 2. ETA ≤ 4 dias do futuro
+        // 3. Container entregue recentemente (< 6h) para confirmar status
+        const rows = await client.query(`
+          SELECT 
+            ot.id,
+            ot.asset AS mbl_id,
+            ot.origem_code,
+            ot.destino_code,
+            ot.origem_lat,
+            ot.origem_lon,
+            ot.destino_lat,
+            ot.destino_lon,
+            ot.current_lat,
+            ot.current_lon,
+            ot.eta,
+            ot.vessel_name,
+            ot.shipping_line,
+            ot.container_status,
+            ot.last_api_update
+          FROM dados_dachser.t_olimpo_tracking ot
+          WHERE ot.mode = 'sea'
+            AND ot.active = TRUE
+            AND (
+              -- Sem coordenadas de origem/destino
+              ot.origem_lat IS NULL 
+              OR ot.origem_lon IS NULL
+              OR ot.destino_lat IS NULL
+              OR ot.destino_lon IS NULL
+              -- ETA ≤ 4 dias do futuro
+              OR (ot.eta IS NOT NULL AND ot.eta <= DATE_ADD(NOW(), INTERVAL 4 DAY))
+              -- Container entregue recentemente (< 6h desde última atualização API)
+              OR (
+                UPPER(ot.container_status) IN ('DELIVERED', 'DLV', 'GOD', 'EMPTY_RETURNED')
+                AND (ot.last_api_update IS NULL OR ot.last_api_update < DATE_SUB(NOW(), INTERVAL 6 HOUR))
+              )
+            )
+          ORDER BY ot.eta ASC
+          LIMIT 20
+        `);
+
+        console.log(`[refresh_sea_tracking_smart] Found ${rows.length} MBLs to refresh`);
+
+        let updated = 0;
+        let errors = 0;
+
+        for (const row of rows) {
+          const mblId = row.mbl_id;
+          const shippingLine = row.shipping_line;
+
+          if (!mblId || !shippingLine) {
+            console.log(`[refresh_sea_tracking_smart] Skipping ${mblId}: missing shipping_line`);
+            continue;
+          }
+
+          try {
+            // Buscar posição do navio via JSONCargo
+            const apiShippingLine = toApiShippingLine(shippingLine);
+            const trackRes = await jcJson('http://api.jsoncargo.com/api/v1/tracking', {
+              carrier: apiShippingLine,
+              number: mblId,
+            }, 30000);
+
+            if (trackRes.__curl_error || trackRes.error) {
+              console.log(`[refresh_sea_tracking_smart] API error for ${mblId}: ${trackRes.__curl_error || trackRes.error}`);
+              errors++;
+              continue;
+            }
+
+            const data = trackRes.data || trackRes;
+            
+            // Extrair coordenadas
+            let origemLat = row.origem_lat;
+            let origemLon = row.origem_lon;
+            let destinoLat = row.destino_lat;
+            let destinoLon = row.destino_lon;
+            let currentLat = row.current_lat;
+            let currentLon = row.current_lon;
+
+            // Coordenadas do porto de origem
+            if (data.origin?.coordinates) {
+              origemLat = data.origin.coordinates.latitude || data.origin.coordinates.lat;
+              origemLon = data.origin.coordinates.longitude || data.origin.coordinates.lon;
+            }
+
+            // Coordenadas do porto de destino
+            if (data.destination?.coordinates) {
+              destinoLat = data.destination.coordinates.latitude || data.destination.coordinates.lat;
+              destinoLon = data.destination.coordinates.longitude || data.destination.coordinates.lon;
+            }
+
+            // Posição atual do navio
+            if (data.vessel?.position) {
+              currentLat = data.vessel.position.latitude || data.vessel.position.lat;
+              currentLon = data.vessel.position.longitude || data.vessel.position.lon;
+            }
+
+            // Atualizar t_olimpo_tracking
+            await client.execute(`
+              UPDATE dados_dachser.t_olimpo_tracking
+              SET 
+                origem_lat = ?,
+                origem_lon = ?,
+                destino_lat = ?,
+                destino_lon = ?,
+                current_lat = ?,
+                current_lon = ?,
+                last_api_update = NOW(),
+                updated_at = NOW()
+              WHERE id = ?
+            `, [origemLat, origemLon, destinoLat, destinoLon, currentLat, currentLon, row.id]);
+
+            updated++;
+            console.log(`[refresh_sea_tracking_smart] Updated ${mblId}: origin(${origemLat},${origemLon}) dest(${destinoLat},${destinoLon}) current(${currentLat},${currentLon})`);
+
+            // Rate limiting
+            await new Promise(resolve => setTimeout(resolve, 500));
+          } catch (e: any) {
+            console.error(`[refresh_sea_tracking_smart] Error processing ${mblId}:`, e.message);
+            errors++;
+          }
+        }
+
+        await client.close();
+
+        return new Response(JSON.stringify({ 
+          success: true,
+          total: rows.length,
+          updated,
+          errors
+        }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      } catch (e: any) {
+        await client.close();
+        console.error('[refresh_sea_tracking_smart] Error:', e);
+        return new Response(JSON.stringify({ error: e.message }), {
+          status: 500,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      }
+    }
+
     return new Response(JSON.stringify({ error: 'Ação não reconhecida' }), {
       status: 400,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' }
