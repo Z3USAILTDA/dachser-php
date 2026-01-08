@@ -37,11 +37,11 @@ export default function DemurrageMonitor() {
     if (searchTerm.trim()) f.search = searchTerm.trim();
     if (filterStatus !== "all") f.risk_status = filterStatus;
     
-    // Quick filter maps to cronos_status for in_transit and delivered
+    // Quick filter maps to cronos_status_list for multiple values
     if (quickFilter === "in_transit") {
-      f.cronos_status = "IN_TRANSIT";
+      f.cronos_status_list = ["IN_TRANSIT", "ARRIVED", "PENDING"];
     } else if (quickFilter === "delivered") {
-      f.cronos_status = "GATE_OUT";
+      f.cronos_status_list = ["GATE_OUT", "RETURNED"];
     }
     
     return f;
