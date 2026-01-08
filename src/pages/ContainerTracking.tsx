@@ -982,6 +982,7 @@ const ContainerTracking = () => {
                       <th className="px-4 py-3 text-left text-[#aaaaaa] uppercase text-[0.68rem] tracking-[0.1em] font-medium">Destino</th>
                       <th className="px-4 py-3 text-center text-[#aaaaaa] uppercase text-[0.68rem] tracking-[0.1em] font-medium min-w-[180px]">Timeline</th>
                       <th className="px-4 py-3 text-left text-[#aaaaaa] uppercase text-[0.68rem] tracking-[0.1em] font-medium">Status</th>
+                      <th className="px-4 py-3 text-center text-[#aaaaaa] uppercase text-[0.68rem] tracking-[0.1em] font-medium">Situação</th>
                       <th className="px-4 py-3 text-center text-[#aaaaaa] uppercase text-[0.68rem] tracking-[0.1em] font-medium">Ações</th>
                     </tr>
                   </thead>
@@ -1114,6 +1115,22 @@ const ContainerTracking = () => {
                                   </TooltipContent>
                                 </Tooltip>
                               </TooltipProvider>
+                            </td>
+                            <td className="px-3 py-3 text-center">
+                              {(() => {
+                                const emAtraso = isEmAlerta(mbl.last_event, mbl.is_eta_delayed);
+                                return emAtraso ? (
+                                  <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium bg-red-500/20 text-red-400 border border-red-500/30">
+                                    <AlertTriangle className="w-3 h-3" />
+                                    Em Atraso
+                                  </span>
+                                ) : (
+                                  <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium bg-green-500/20 text-green-400 border border-green-500/30">
+                                    <Check className="w-3 h-3" />
+                                    No Prazo
+                                  </span>
+                                );
+                              })()}
                             </td>
                             <td className="px-3 py-3 text-center">
                               <div className="flex items-center justify-center gap-1">
