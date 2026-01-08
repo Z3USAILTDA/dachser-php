@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { DemurrageLayout } from "@/components/demurrage/DemurrageLayout";
 import { KpiCard } from "@/components/demurrage/KpiCard";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -6,13 +6,16 @@ import { FileText, Clock, CheckCircle2, Send, Eye, AlertTriangle, DollarSign } f
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
+import { TablePagination } from "@/components/layout/TablePagination";
 import { useDemurrageData, type DemurrageContainer } from "@/hooks/useDemurrageData";
 
 type QuickFilter = "all" | "waiting" | "total_usd" | "pending";
+const PAGE_SIZE = 15;
 
 export default function DemurragePreInvoicing() {
   const [activeTab, setActiveTab] = useState("all");
   const [quickFilter, setQuickFilter] = useState<QuickFilter>("all");
+  const [currentPage, setCurrentPage] = useState(1);
 
   const { data: containers = [], isLoading } = useDemurrageData();
 
@@ -70,6 +73,16 @@ export default function DemurragePreInvoicing() {
       (activeTab === 'calculated' && !c.pre_invoice_status)
     );
   }, [invoiceableContainers, activeTab]);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [activeTab, quickFilter]);
+
+  const totalPages = Math.ceil(filteredInvoices.length / PAGE_SIZE);
+  const paginatedInvoices = useMemo(() => {
+    const start = (currentPage - 1) * PAGE_SIZE;
+    return filteredInvoices.slice(start, start + PAGE_SIZE);
+  }, [filteredInvoices, currentPage]);
 
   const handleQuickFilterChange = (filter: QuickFilter) => {
     setQuickFilter(filter);
@@ -151,38 +164,35 @@ export default function DemurragePreInvoicing() {
                 <p>Nenhuma pré-fatura encontrada</p>
               </div>
             ) : (
-              <Table>
-                <TableHeader>
-                  <TableRow className="border-[rgba(255,255,255,0.1)]">
-                    <TableHead>Container</TableHead>
-                    <TableHead>MBL</TableHead>
-                    <TableHead>Cliente</TableHead>
-                    <TableHead>Armador</TableHead>
-                    <TableHead className="text-center">Dias Exc.</TableHead>
-                    <TableHead className="text-right">Total USD</TableHead>
-                    <TableHead>Status</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {filteredInvoices.map((container) => (
-                    <TableRow key={container.id} className="border-[rgba(255,255,255,0.1)] cursor-pointer hover:bg-[rgba(255,200,0,0.05)]">
-                      <TableCell className="font-mono font-medium">{container.numero}</TableCell>
-                      <TableCell className="font-mono text-sm">{container.mbl}</TableCell>
-                      <TableCell>{container.cliente || '-'}</TableCell>
-                      <TableCell>{container.armador || '-'}</TableCell>
-                      <TableCell className="text-center">
-                        <Badge variant={container.excedente_dias > 0 ? "destructive" : "outline"}>
-                          {container.excedente_dias}d
-                        </Badge>
-                      </TableCell>
-                      <TableCell className="text-right font-semibold text-[#ffc800]">
-                        {formatCurrency(container.expected_cost_usd)}
-                      </TableCell>
-                      <TableCell>{getWorkflowBadge(container.pre_invoice_status)}</TableCell>
+              <>
+                <Table>
+                  <TableHeader>
+                    <TableRow className="border-[rgba(255,255,255,0.1)]">
+                      <TableHead>Container</TableHead>
+                      <TableHead>MBL</TableHead>
+                      <TableHead>Cliente</TableHead>
+                      <TableHead>Armador</TableHead>
+                      <TableHead className="text-center">Dias Exc.</TableHead>
+                      <TableHead className="text-right">Total USD</TableHead>
+                      <TableHead>Status</TableHead>
                     </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
+                  </TableHeader>
+                  <TableBody>
+                    {paginatedInvoices.map((container) => (
+                      <TableRow key={container.id} className="border-[rgba(255,255,255,0.1)] cursor-pointer hover:bg-[rgba(255,200,0,0.05)]">
+                        <TableCell className="font-mono font-medium">{container.numero}</TableCell>
+                        <TableCell className="font-mono text-sm">{container.mbl}</TableCell>
+                        <TableCell>{container.cliente || '-'}</TableCell>
+                        <TableCell>{container.armador || '-'}</TableCell>
+                        <TableCell className="text-center"><Badge variant={container.excedente_dias > 0 ? "destructive" : "outline"}>{container.excedente_dias}d</Badge></TableCell>
+                        <TableCell className="text-right font-semibold text-[#ffc800]">{formatCurrency(container.expected_cost_usd)}</TableCell>
+                        <TableCell>{getWorkflowBadge(container.pre_invoice_status)}</TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+                <TablePagination currentPage={currentPage} totalPages={totalPages} onPageChange={setCurrentPage} maxVisiblePages={5} showFirstLast={false} />
+              </>
             )}
           </CardContent>
         </Card>

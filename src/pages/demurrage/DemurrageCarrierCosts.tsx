@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { DemurrageLayout } from "@/components/demurrage/DemurrageLayout";
 import { KpiCard } from "@/components/demurrage/KpiCard";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -8,14 +8,17 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Ship, Plus, Search, AlertTriangle, CheckCircle2, FileSearch, FileSpreadsheet, DollarSign, Clock } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { TablePagination } from "@/components/layout/TablePagination";
 import { useDemurrageData } from "@/hooks/useDemurrageData";
 
 type QuickFilter = "all" | "validated" | "discrepancy" | "pending";
+const PAGE_SIZE = 15;
 
 export default function DemurrageCarrierCosts() {
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [searchTerm, setSearchTerm] = useState("");
   const [quickFilter, setQuickFilter] = useState<QuickFilter>("all");
+  const [currentPage, setCurrentPage] = useState(1);
 
   const { data: containers = [], isLoading } = useDemurrageData();
 
@@ -65,6 +68,16 @@ export default function DemurrageCarrierCosts() {
       return matchesSearch && matchesQuickFilter && matchesStatus;
     });
   }, [carrierContainers, searchTerm, quickFilter, statusFilter]);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm, quickFilter, statusFilter]);
+
+  const totalPages = Math.ceil(filteredInvoices.length / PAGE_SIZE);
+  const paginatedInvoices = useMemo(() => {
+    const start = (currentPage - 1) * PAGE_SIZE;
+    return filteredInvoices.slice(start, start + PAGE_SIZE);
+  }, [filteredInvoices, currentPage]);
 
   const handleQuickFilterChange = (filter: QuickFilter) => {
     setQuickFilter(filter);
@@ -178,40 +191,37 @@ export default function DemurrageCarrierCosts() {
                 <p>Nenhuma fatura encontrada</p>
               </div>
             ) : (
-              <Table>
-                <TableHeader>
-                  <TableRow className="border-[rgba(255,255,255,0.1)]">
-                    <TableHead>Fatura</TableHead>
-                    <TableHead>Armador</TableHead>
-                    <TableHead>Container</TableHead>
-                    <TableHead>Cliente</TableHead>
-                    <TableHead className="text-center">Dias</TableHead>
-                    <TableHead className="text-right">Custo USD</TableHead>
-                    <TableHead className="text-right">Calculado</TableHead>
-                    <TableHead>Status</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {filteredInvoices.map((container) => (
-                    <TableRow key={container.id} className="border-[rgba(255,255,255,0.1)] cursor-pointer hover:bg-[rgba(255,200,0,0.05)]">
-                      <TableCell className="font-mono">{container.armador_invoice_number || '-'}</TableCell>
-                      <TableCell>{container.armador || '-'}</TableCell>
-                      <TableCell className="font-mono">{container.numero}</TableCell>
-                      <TableCell>{container.cliente || '-'}</TableCell>
-                      <TableCell className="text-center">
-                        <Badge variant="outline">{container.armador_days_charged || container.excedente_dias} dias</Badge>
-                      </TableCell>
-                      <TableCell className="text-right font-semibold text-[#ffc800]">
-                        {formatCurrency(container.armador_cost_usd || 0)}
-                      </TableCell>
-                      <TableCell className="text-right text-muted-foreground">
-                        {formatCurrency(container.expected_cost_usd)}
-                      </TableCell>
-                      <TableCell>{getStatusBadge(container.audit_status)}</TableCell>
+              <>
+                <Table>
+                  <TableHeader>
+                    <TableRow className="border-[rgba(255,255,255,0.1)]">
+                      <TableHead>Fatura</TableHead>
+                      <TableHead>Armador</TableHead>
+                      <TableHead>Container</TableHead>
+                      <TableHead>Cliente</TableHead>
+                      <TableHead className="text-center">Dias</TableHead>
+                      <TableHead className="text-right">Custo USD</TableHead>
+                      <TableHead className="text-right">Calculado</TableHead>
+                      <TableHead>Status</TableHead>
                     </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
+                  </TableHeader>
+                  <TableBody>
+                    {paginatedInvoices.map((container) => (
+                      <TableRow key={container.id} className="border-[rgba(255,255,255,0.1)] cursor-pointer hover:bg-[rgba(255,200,0,0.05)]">
+                        <TableCell className="font-mono">{container.armador_invoice_number || '-'}</TableCell>
+                        <TableCell>{container.armador || '-'}</TableCell>
+                        <TableCell className="font-mono">{container.numero}</TableCell>
+                        <TableCell>{container.cliente || '-'}</TableCell>
+                        <TableCell className="text-center"><Badge variant="outline">{container.armador_days_charged || container.excedente_dias} dias</Badge></TableCell>
+                        <TableCell className="text-right font-semibold text-[#ffc800]">{formatCurrency(container.armador_cost_usd || 0)}</TableCell>
+                        <TableCell className="text-right text-muted-foreground">{formatCurrency(container.expected_cost_usd)}</TableCell>
+                        <TableCell>{getStatusBadge(container.audit_status)}</TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+                <TablePagination currentPage={currentPage} totalPages={totalPages} onPageChange={setCurrentPage} maxVisiblePages={5} showFirstLast={false} />
+              </>
             )}
           </CardContent>
         </Card>

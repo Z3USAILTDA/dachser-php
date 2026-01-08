@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { DemurrageLayout } from "@/components/demurrage/DemurrageLayout";
 import { KpiCard } from "@/components/demurrage/KpiCard";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -7,10 +7,12 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { TablePagination } from "@/components/layout/TablePagination";
 import { Users, Plus, Edit, Bell, BellOff, Search, DollarSign, AlertTriangle } from "lucide-react";
 import { useDemurrageData } from "@/hooks/useDemurrageData";
 
 type QuickFilter = "all" | "reports" | "no_reports" | "demurrage" | "pending";
+const PAGE_SIZE = 15;
 
 interface ClientProfile {
   cliente: string;
@@ -24,6 +26,7 @@ export default function DemurrageClients() {
   const [searchTerm, setSearchTerm] = useState("");
   const [filterReports, setFilterReports] = useState<string>("all");
   const [quickFilter, setQuickFilter] = useState<QuickFilter>("all");
+  const [currentPage, setCurrentPage] = useState(1);
 
   const { data: containers = [], isLoading } = useDemurrageData();
 
@@ -85,6 +88,16 @@ export default function DemurrageClients() {
       return matchesSearch && matchesQuickFilter && matchesFilter;
     });
   }, [clientProfiles, searchTerm, quickFilter, filterReports]);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm, quickFilter, filterReports]);
+
+  const totalPages = Math.ceil(filteredProfiles.length / PAGE_SIZE);
+  const paginatedProfiles = useMemo(() => {
+    const start = (currentPage - 1) * PAGE_SIZE;
+    return filteredProfiles.slice(start, start + PAGE_SIZE);
+  }, [filteredProfiles, currentPage]);
 
   const handleQuickFilterChange = (filter: QuickFilter) => {
     setQuickFilter(filter);
@@ -199,54 +212,42 @@ export default function DemurrageClients() {
                 <p>Nenhum perfil encontrado</p>
               </div>
             ) : (
-              <Table>
-                <TableHeader>
-                  <TableRow className="border-[rgba(255,255,255,0.1)]">
-                    <TableHead>Cliente</TableHead>
-                    <TableHead>Reporta</TableHead>
-                    <TableHead className="text-center">Containers</TableHead>
-                    <TableHead className="text-right">Demurrage</TableHead>
-                    <TableHead className="text-center">Excedidos</TableHead>
-                    <TableHead></TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {filteredProfiles.map((profile) => (
-                    <TableRow key={profile.cliente} className="border-[rgba(255,255,255,0.1)]">
-                      <TableCell className="font-medium">{profile.cliente}</TableCell>
-                      <TableCell>
-                        <Button 
-                          size="sm" 
-                          variant={profile.auto_alert_enabled ? "default" : "secondary"}
-                          className={profile.auto_alert_enabled 
-                            ? "gap-1 bg-green-500/20 text-green-500 hover:bg-green-500/30 border-green-500/30" 
-                            : "gap-1 bg-[rgba(255,255,255,0.1)] text-muted-foreground"
-                          }
-                        >
-                          {profile.auto_alert_enabled ? <Bell className="h-3 w-3" /> : <BellOff className="h-3 w-3" />}
-                          {profile.auto_alert_enabled ? 'Sim' : 'Não'}
-                        </Button>
-                      </TableCell>
-                      <TableCell className="text-center font-medium">{profile.containers}</TableCell>
-                      <TableCell className="text-right font-semibold text-[#ffc800]">
-                        {formatCurrency(profile.total_demurrage)}
-                      </TableCell>
-                      <TableCell className="text-center">
-                        {profile.exceeded ? (
-                          <Badge variant="destructive">{profile.exceeded}</Badge>
-                        ) : (
-                          <Badge variant="outline" className="text-muted-foreground">0</Badge>
-                        )}
-                      </TableCell>
-                      <TableCell>
-                        <Button size="sm" variant="ghost" className="text-muted-foreground hover:text-white">
-                          <Edit className="h-4 w-4" />
-                        </Button>
-                      </TableCell>
+              <>
+                <Table>
+                  <TableHeader>
+                    <TableRow className="border-[rgba(255,255,255,0.1)]">
+                      <TableHead>Cliente</TableHead>
+                      <TableHead>Reporta</TableHead>
+                      <TableHead className="text-center">Containers</TableHead>
+                      <TableHead className="text-right">Demurrage</TableHead>
+                      <TableHead className="text-center">Excedidos</TableHead>
+                      <TableHead></TableHead>
                     </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
+                  </TableHeader>
+                  <TableBody>
+                    {paginatedProfiles.map((profile) => (
+                      <TableRow key={profile.cliente} className="border-[rgba(255,255,255,0.1)]">
+                        <TableCell className="font-medium">{profile.cliente}</TableCell>
+                        <TableCell>
+                          <Button size="sm" variant={profile.auto_alert_enabled ? "default" : "secondary"} className={profile.auto_alert_enabled ? "gap-1 bg-green-500/20 text-green-500 hover:bg-green-500/30 border-green-500/30" : "gap-1 bg-[rgba(255,255,255,0.1)] text-muted-foreground"}>
+                            {profile.auto_alert_enabled ? <Bell className="h-3 w-3" /> : <BellOff className="h-3 w-3" />}
+                            {profile.auto_alert_enabled ? 'Sim' : 'Não'}
+                          </Button>
+                        </TableCell>
+                        <TableCell className="text-center font-medium">{profile.containers}</TableCell>
+                        <TableCell className="text-right font-semibold text-[#ffc800]">{formatCurrency(profile.total_demurrage)}</TableCell>
+                        <TableCell className="text-center">
+                          {profile.exceeded ? <Badge variant="destructive">{profile.exceeded}</Badge> : <Badge variant="outline" className="text-muted-foreground">0</Badge>}
+                        </TableCell>
+                        <TableCell>
+                          <Button size="sm" variant="ghost" className="text-muted-foreground hover:text-white"><Edit className="h-4 w-4" /></Button>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+                <TablePagination currentPage={currentPage} totalPages={totalPages} onPageChange={setCurrentPage} maxVisiblePages={5} showFirstLast={false} />
+              </>
             )}
           </CardContent>
         </Card>

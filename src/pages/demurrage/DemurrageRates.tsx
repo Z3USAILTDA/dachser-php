@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { DemurrageLayout } from "@/components/demurrage/DemurrageLayout";
 import { KpiCard } from "@/components/demurrage/KpiCard";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -14,6 +14,7 @@ import { Separator } from "@/components/ui/separator";
 import { toast } from "sonner";
 import { useDemurrageRates, useCreateDemurrageRate, useUpdateDemurrageRate, useDeleteDemurrageRate, DemurrageRate } from "@/hooks/useDemurrageData";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
+import { TablePagination } from "@/components/layout/TablePagination";
 
 const CONTAINER_TYPES = [
   { value: "20DV", label: "20' Dry Van" },
@@ -25,6 +26,7 @@ const CONTAINER_TYPES = [
 ];
 
 type QuickFilter = "20DV" | "40DV" | "40HC" | "20RF" | "40RF" | "45HC" | "all";
+const PAGE_SIZE = 15;
 
 export default function DemurrageRates() {
   const { data: rates = [], isLoading, error } = useDemurrageRates();
@@ -37,6 +39,7 @@ export default function DemurrageRates() {
   const [deletingRate, setDeletingRate] = useState<DemurrageRate | null>(null);
   const [filterArmador, setFilterArmador] = useState<string>("all");
   const [quickFilter, setQuickFilter] = useState<QuickFilter>("all");
+  const [currentPage, setCurrentPage] = useState(1);
 
   const [formData, setFormData] = useState({
     container_type: '',
@@ -55,6 +58,16 @@ export default function DemurrageRates() {
     const matchesQuickFilter = quickFilter === 'all' || rate.container_type === quickFilter;
     return matchesArmador && matchesQuickFilter;
   }), [rates, filterArmador, quickFilter]);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [filterArmador, quickFilter]);
+
+  const totalPages = Math.ceil(filteredRates.length / PAGE_SIZE);
+  const paginatedRates = useMemo(() => {
+    const start = (currentPage - 1) * PAGE_SIZE;
+    return filteredRates.slice(start, start + PAGE_SIZE);
+  }, [filteredRates, currentPage]);
 
   // Calculate KPI stats per container type
   const containerStats = useMemo(() => {
@@ -252,65 +265,38 @@ export default function DemurrageRates() {
                 <p>Nenhuma tarifa encontrada</p>
               </div>
             ) : (
-              <Table>
-                <TableHeader>
-                  <TableRow className="border-[rgba(255,255,255,0.1)]">
-                    <TableHead>Armador</TableHead>
-                    <TableHead>Container</TableHead>
-                    <TableHead className="text-center">Free Time</TableHead>
-                    <TableHead>Período</TableHead>
-                    <TableHead className="text-center">Dias</TableHead>
-                    <TableHead className="text-right">USD/dia</TableHead>
-                    <TableHead className="text-right">Ações</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {filteredRates.map((rate) => (
-                    <TableRow key={rate.id} className="border-[rgba(255,255,255,0.1)]">
-                      <TableCell className="font-medium">{rate.armador}</TableCell>
-                      <TableCell><span className="font-mono">{rate.container_type}</span></TableCell>
-                      <TableCell className="text-center">
-                        <Badge variant="outline" className="bg-green-500/10 text-green-500 border-green-500/20">
-                          <Clock className="h-3 w-3 mr-1" />
-                          {rate.free_time_days}d
-                        </Badge>
-                      </TableCell>
-                      <TableCell>
-                        <Badge className={getPeriodBadgeColor(rate.period_type || 'standard')}>
-                          {formatPeriodType(rate.period_type || 'standard')}
-                        </Badge>
-                      </TableCell>
-                      <TableCell className="text-center text-sm text-muted-foreground">
-                        {rate.period_start_day && rate.period_end_day 
-                          ? `${rate.period_start_day}-${rate.period_end_day}`
-                          : '-'
-                        }
-                      </TableCell>
-                      <TableCell className="text-right font-semibold text-[#ffc800]">
-                        {formatCurrency(rate.rate_usd)}
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <Button 
-                          variant="ghost" 
-                          size="sm" 
-                          className="text-muted-foreground hover:text-white"
-                          onClick={() => openEditDialog(rate)}
-                        >
-                          <Edit className="h-4 w-4" />
-                        </Button>
-                        <Button 
-                          variant="ghost" 
-                          size="sm" 
-                          className="text-red-500 hover:text-red-400"
-                          onClick={() => setDeletingRate(rate)}
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
-                      </TableCell>
+              <>
+                <Table>
+                  <TableHeader>
+                    <TableRow className="border-[rgba(255,255,255,0.1)]">
+                      <TableHead>Armador</TableHead>
+                      <TableHead>Container</TableHead>
+                      <TableHead className="text-center">Free Time</TableHead>
+                      <TableHead>Período</TableHead>
+                      <TableHead className="text-center">Dias</TableHead>
+                      <TableHead className="text-right">USD/dia</TableHead>
+                      <TableHead className="text-right">Ações</TableHead>
                     </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
+                  </TableHeader>
+                  <TableBody>
+                    {paginatedRates.map((rate) => (
+                      <TableRow key={rate.id} className="border-[rgba(255,255,255,0.1)]">
+                        <TableCell className="font-medium">{rate.armador}</TableCell>
+                        <TableCell><span className="font-mono">{rate.container_type}</span></TableCell>
+                        <TableCell className="text-center"><Badge variant="outline" className="bg-green-500/10 text-green-500 border-green-500/20"><Clock className="h-3 w-3 mr-1" />{rate.free_time_days}d</Badge></TableCell>
+                        <TableCell><Badge className={getPeriodBadgeColor(rate.period_type || 'standard')}>{formatPeriodType(rate.period_type || 'standard')}</Badge></TableCell>
+                        <TableCell className="text-center text-sm text-muted-foreground">{rate.period_start_day && rate.period_end_day ? `${rate.period_start_day}-${rate.period_end_day}` : '-'}</TableCell>
+                        <TableCell className="text-right font-semibold text-[#ffc800]">{formatCurrency(rate.rate_usd)}</TableCell>
+                        <TableCell className="text-right">
+                          <Button variant="ghost" size="sm" className="text-muted-foreground hover:text-white" onClick={() => openEditDialog(rate)}><Edit className="h-4 w-4" /></Button>
+                          <Button variant="ghost" size="sm" className="text-red-500 hover:text-red-400" onClick={() => setDeletingRate(rate)}><Trash2 className="h-4 w-4" /></Button>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+                <TablePagination currentPage={currentPage} totalPages={totalPages} onPageChange={setCurrentPage} maxVisiblePages={5} showFirstLast={false} />
+              </>
             )}
           </CardContent>
         </Card>

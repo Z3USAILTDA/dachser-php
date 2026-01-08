@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { DemurrageLayout } from "@/components/demurrage/DemurrageLayout";
 import { KpiCard } from "@/components/demurrage/KpiCard";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -7,7 +7,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { 
+import { TablePagination } from "@/components/layout/TablePagination";
+import {
   Package, 
   AlertTriangle, 
   Search, 
@@ -21,11 +22,13 @@ import { toast } from "sonner";
 import { useDemurrageData, useDemurrageStats, useSyncDemurrage, useRecalcDemurrage, type DemurrageContainer } from "@/hooks/useDemurrageData";
 
 type QuickFilter = "all" | "in_transit" | "at_risk" | "delivered";
+const PAGE_SIZE = 15;
 
 export default function DemurrageMonitor() {
   const [searchTerm, setSearchTerm] = useState("");
   const [filterStatus, setFilterStatus] = useState<string>("all");
   const [quickFilter, setQuickFilter] = useState<QuickFilter>("all");
+  const [currentPage, setCurrentPage] = useState(1);
 
   // Determine filter based on quickFilter
   const getFilters = () => {
@@ -49,9 +52,19 @@ export default function DemurrageMonitor() {
   const recalcMutation = useRecalcDemurrage();
 
   // Filter for at_risk on client side (includes multiple statuses)
-  const filteredContainers = quickFilter === "at_risk"
-    ? containers.filter(c => ["at_risk", "critical", "exceeded"].includes(c.risk_status))
-    : containers;
+  const filteredContainers = useMemo(() => {
+    const base = quickFilter === "at_risk"
+      ? containers.filter(c => ["at_risk", "critical", "exceeded"].includes(c.risk_status))
+      : containers;
+    setCurrentPage(1);
+    return base;
+  }, [containers, quickFilter]);
+
+  const totalPages = Math.ceil(filteredContainers.length / PAGE_SIZE);
+  const paginatedContainers = useMemo(() => {
+    const start = (currentPage - 1) * PAGE_SIZE;
+    return filteredContainers.slice(start, start + PAGE_SIZE);
+  }, [filteredContainers, currentPage]);
 
   const handleRefresh = async () => {
     try {
@@ -189,45 +202,45 @@ export default function DemurrageMonitor() {
                 <p>Nenhum container encontrado</p>
               </div>
             ) : (
-              <Table>
-                <TableHeader>
-                  <TableRow className="border-[rgba(255,255,255,0.1)]">
-                    <TableHead>Container</TableHead>
-                    <TableHead>MBL</TableHead>
-                    <TableHead>Cliente</TableHead>
-                    <TableHead>Armador</TableHead>
-                    <TableHead>Tipo</TableHead>
-                    <TableHead className="text-center">Dias Rest.</TableHead>
-                    <TableHead>Risco</TableHead>
-                    <TableHead className="text-right">Demurrage</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {filteredContainers.map((container) => (
-                    <TableRow key={container.id} className="border-[rgba(255,255,255,0.1)] cursor-pointer hover:bg-[rgba(255,200,0,0.05)]">
-                      <TableCell className="font-mono font-medium">{container.numero}</TableCell>
-                      <TableCell className="font-mono text-sm">{container.mbl}</TableCell>
-                      <TableCell>{container.cliente || '-'}</TableCell>
-                      <TableCell>{container.armador || '-'}</TableCell>
-                      <TableCell>
-                        <Badge variant="outline">{container.tipo_conteiner || '-'}</Badge>
-                      </TableCell>
-                      <TableCell className="text-center">
-                        <Badge variant={
-                          (container.days_remaining ?? 0) <= 0 ? "destructive" : 
-                          (container.days_remaining ?? 0) <= 2 ? "secondary" : "outline"
-                        }>
-                          {container.days_remaining ?? '-'}d
-                        </Badge>
-                      </TableCell>
-                      <TableCell>{getRiskBadge(container.risk_status)}</TableCell>
-                      <TableCell className="text-right font-semibold text-[#ffc800]">
-                        {container.expected_cost_usd > 0 ? formatCurrency(container.expected_cost_usd) : '-'}
-                      </TableCell>
+              <>
+                <Table>
+                  <TableHeader>
+                    <TableRow className="border-[rgba(255,255,255,0.1)]">
+                      <TableHead>Container</TableHead>
+                      <TableHead>MBL</TableHead>
+                      <TableHead>Cliente</TableHead>
+                      <TableHead>Armador</TableHead>
+                      <TableHead>Tipo</TableHead>
+                      <TableHead className="text-center">Dias Rest.</TableHead>
+                      <TableHead>Risco</TableHead>
+                      <TableHead className="text-right">Demurrage</TableHead>
                     </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
+                  </TableHeader>
+                  <TableBody>
+                    {paginatedContainers.map((container) => (
+                      <TableRow key={container.id} className="border-[rgba(255,255,255,0.1)] cursor-pointer hover:bg-[rgba(255,200,0,0.05)]">
+                        <TableCell className="font-mono font-medium">{container.numero}</TableCell>
+                        <TableCell className="font-mono text-sm">{container.mbl}</TableCell>
+                        <TableCell>{container.cliente || '-'}</TableCell>
+                        <TableCell>{container.armador || '-'}</TableCell>
+                        <TableCell>
+                          <Badge variant="outline">{container.tipo_conteiner || '-'}</Badge>
+                        </TableCell>
+                        <TableCell className="text-center">
+                          <Badge variant={(container.days_remaining ?? 0) <= 0 ? "destructive" : (container.days_remaining ?? 0) <= 2 ? "secondary" : "outline"}>
+                            {container.days_remaining ?? '-'}d
+                          </Badge>
+                        </TableCell>
+                        <TableCell>{getRiskBadge(container.risk_status)}</TableCell>
+                        <TableCell className="text-right font-semibold text-[#ffc800]">
+                          {container.expected_cost_usd > 0 ? formatCurrency(container.expected_cost_usd) : '-'}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+                <TablePagination currentPage={currentPage} totalPages={totalPages} onPageChange={setCurrentPage} maxVisiblePages={5} showFirstLast={false} />
+              </>
             )}
           </CardContent>
         </Card>
