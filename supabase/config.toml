@@ -252,3 +252,33 @@ verify_jwt = false
 
 [functions.fetch-master-dados-stats]
 verify_jwt = false
+
+[functions.demurrage-auto-invoice]
+verify_jwt = false
+
+[functions.demurrage-send-alert]
+verify_jwt = false
+
+[functions.demurrage-recalc]
+verify_jwt = false
+
+[functions.demurrage-mariadb-sync]
+verify_jwt = false
+
+[functions.demurrage-invite-user]
+verify_jwt = false
+
+[functions.demurrage-import-jsoncargo]
+verify_jwt = false
+
+[functions.demurrage-health-check]
+verify_jwt = false
+
+[functions.demurrage-fetch-timelines]
+verify_jwt = false
+
+[functions.demurrage-alert-cron]
+verify_jwt = false
+
+[functions.demurrage-daily-monitor]
+verify_jwt = false
