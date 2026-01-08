@@ -9,16 +9,13 @@ export const airlineTrackingLinks: Record<string, string> = {
   "695": "https://ecom.klmcargo.com/ecobff/routingInfo?airWaybillPrefix=074&airWaybillSuffix=${awb}&source=trackingSearch",
   "057": "https://www.cma-cgm.com/ebusiness/tracking/awb/${awb}",
   "083": "https://www.cma-cgm.com/ebusiness/tracking/awb/${awb}",
-  "157": "https://www.qrcargo.com/s/track-your-shipment",
+  "157": "https://www.qrcargo.com/tracking?AWB=157-${awb}",
   "618": "https://www.qrcargo.com/tracking?AWB=618-${awb}",
   "125": "https://www.britishairways.com/travel/cargo-tracking/public/en_us?awb=125-${awb}",
-  "160": "https://www.cathaycargo.com/en-us/track-and-trace.html",
+  "160": "https://www.klmcargo.com/en/tracking/${awb}",
   "141": "https://www.klmcargo.com/en/tracking/${awb}",
   "180": "https://www.emirates.com/ae/english/cargo/tracking/?awb=176-${awb}",
   "186": "https://www.emirates.com/ae/english/cargo/tracking/?awb=176-${awb}",
-  "729": "https://cargoapps.aviancacargo.com/#/e-tracking/details/${pr}-${awb}",
-  "147": "https://ebooking.champ.aero/trace/AT/trace.asp",
-  "605": "https://cargo.skyairline.com/rastreo",
 };
 
 export const getAirlinePrefix = (awbNumber: string): string => {
