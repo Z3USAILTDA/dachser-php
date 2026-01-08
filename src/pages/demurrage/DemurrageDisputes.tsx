@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { DemurrageLayout } from "@/components/demurrage/DemurrageLayout";
 import { KpiCard } from "@/components/demurrage/KpiCard";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -6,14 +6,17 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { TablePagination } from "@/components/layout/TablePagination";
 import { Scale, Plus, CheckCircle, XCircle, Clock, MessageSquare, DollarSign, TrendingUp } from "lucide-react";
 import { useDemurrageData } from "@/hooks/useDemurrageData";
 
 type QuickFilter = "all" | "total" | "recovered" | "in_progress" | "success_rate";
+const PAGE_SIZE = 15;
 
 export default function DemurrageDisputes() {
   const [activeTab, setActiveTab] = useState("all");
   const [quickFilter, setQuickFilter] = useState<QuickFilter>("all");
+  const [currentPage, setCurrentPage] = useState(1);
 
   const { data: containers = [], isLoading } = useDemurrageData();
 
@@ -64,6 +67,16 @@ export default function DemurrageDisputes() {
     if (activeTab === 'all') return disputeContainers;
     return disputeContainers.filter(d => d.dispute_status === activeTab);
   }, [disputeContainers, activeTab]);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [activeTab, quickFilter]);
+
+  const totalPages = Math.ceil(filteredDisputes.length / PAGE_SIZE);
+  const paginatedDisputes = useMemo(() => {
+    const start = (currentPage - 1) * PAGE_SIZE;
+    return filteredDisputes.slice(start, start + PAGE_SIZE);
+  }, [filteredDisputes, currentPage]);
 
   const handleQuickFilterChange = (filter: QuickFilter) => {
     setQuickFilter(filter);
@@ -156,52 +169,45 @@ export default function DemurrageDisputes() {
                 <p>Nenhuma disputa encontrada</p>
               </div>
             ) : (
-              <Table>
-                <TableHeader>
-                  <TableRow className="border-[rgba(255,255,255,0.1)]">
-                    <TableHead>Container</TableHead>
-                    <TableHead>Cliente</TableHead>
-                    <TableHead>Armador</TableHead>
-                    <TableHead className="text-right">Valor Disputado</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead className="text-right">Recuperado</TableHead>
-                    <TableHead>Ações</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {filteredDisputes.map((container) => (
-                    <TableRow key={container.id} className="border-[rgba(255,255,255,0.1)]">
-                      <TableCell className="font-mono">{container.numero}</TableCell>
-                      <TableCell>{container.cliente || '-'}</TableCell>
-                      <TableCell>{container.armador || '-'}</TableCell>
-                      <TableCell className="text-right font-medium">{formatCurrency(container.disputed_amount_usd)}</TableCell>
-                      <TableCell>{getStatusBadge(container.dispute_status)}</TableCell>
-                      <TableCell className="text-right font-medium text-green-500">
-                        {container.dispute_status === 'won' ? formatCurrency(container.recovered_amount_usd) : '-'}
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex gap-1">
-                          {container.dispute_status === 'opened' && (
-                            <Button size="sm" variant="outline" className="border-[rgba(255,255,255,0.2)] text-xs">
-                              Negociar
-                            </Button>
-                          )}
-                          {(container.dispute_status === 'opened' || container.dispute_status === 'negotiating') && (
-                            <>
-                              <Button size="sm" className="bg-green-500/20 text-green-500 hover:bg-green-500/30 h-8 w-8 p-0">
-                                <CheckCircle className="h-4 w-4" />
-                              </Button>
-                              <Button size="sm" className="bg-red-500/20 text-red-500 hover:bg-red-500/30 h-8 w-8 p-0">
-                                <XCircle className="h-4 w-4" />
-                              </Button>
-                            </>
-                          )}
-                        </div>
-                      </TableCell>
+              <>
+                <Table>
+                  <TableHeader>
+                    <TableRow className="border-[rgba(255,255,255,0.1)]">
+                      <TableHead>Container</TableHead>
+                      <TableHead>Cliente</TableHead>
+                      <TableHead>Armador</TableHead>
+                      <TableHead className="text-right">Valor Disputado</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead className="text-right">Recuperado</TableHead>
+                      <TableHead>Ações</TableHead>
                     </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
+                  </TableHeader>
+                  <TableBody>
+                    {paginatedDisputes.map((container) => (
+                      <TableRow key={container.id} className="border-[rgba(255,255,255,0.1)]">
+                        <TableCell className="font-mono">{container.numero}</TableCell>
+                        <TableCell>{container.cliente || '-'}</TableCell>
+                        <TableCell>{container.armador || '-'}</TableCell>
+                        <TableCell className="text-right font-medium">{formatCurrency(container.disputed_amount_usd)}</TableCell>
+                        <TableCell>{getStatusBadge(container.dispute_status)}</TableCell>
+                        <TableCell className="text-right font-medium text-green-500">{container.dispute_status === 'won' ? formatCurrency(container.recovered_amount_usd) : '-'}</TableCell>
+                        <TableCell>
+                          <div className="flex gap-1">
+                            {container.dispute_status === 'opened' && <Button size="sm" variant="outline" className="border-[rgba(255,255,255,0.2)] text-xs">Negociar</Button>}
+                            {(container.dispute_status === 'opened' || container.dispute_status === 'negotiating') && (
+                              <>
+                                <Button size="sm" className="bg-green-500/20 text-green-500 hover:bg-green-500/30 h-8 w-8 p-0"><CheckCircle className="h-4 w-4" /></Button>
+                                <Button size="sm" className="bg-red-500/20 text-red-500 hover:bg-red-500/30 h-8 w-8 p-0"><XCircle className="h-4 w-4" /></Button>
+                              </>
+                            )}
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+                <TablePagination currentPage={currentPage} totalPages={totalPages} onPageChange={setCurrentPage} maxVisiblePages={5} showFirstLast={false} />
+              </>
             )}
           </CardContent>
         </Card>
