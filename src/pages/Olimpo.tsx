@@ -491,74 +491,78 @@ export default function Olimpo() {
         }
       }
 
-      // SEA data
-      const seaRes = await fetch(`${baseUrl}?action=sea_seed`);
+      // SEA data - buscar da tela de monitoramento (t_tracking_sea)
+      const seaRes = await fetch(`${baseUrl}?action=olimpo_sea_from_monitoring`);
       const seaJson = await seaRes.json();
       const seaArr = Array.isArray(seaJson?.data) ? seaJson.data : [];
-      
-      // Get ports for coordinates
-      const portCodes = new Set<string>();
-      for (const s of seaArr) {
-        if (s.pol) portCodes.add(s.pol);
-        if (s.pod) portCodes.add(s.pod);
-      }
-      
-      let ports: Record<string, any> = {};
-      if (portCodes.size > 0) {
-        const portsRes = await fetch(`${baseUrl}?action=ports&codes=${encodeURIComponent(Array.from(portCodes).join(","))}`);
-        const portsJson = await portsRes.json();
-        ports = portsJson?.data || {};
-      }
 
       const nowTs = Date.now();
 
       for (const s of seaArr) {
-        const oCode = (s.pol || "").toUpperCase();
-        const dCode = (s.pod || "").toUpperCase();
+        const oCode = (s.porto_origem || "").toUpperCase();
+        const dCode = (s.porto_destino || "").toUpperCase();
         
         if (!oCode || !dCode) continue;
-        
-        const o = ports[oCode];
-        const d = ports[dCode];
-        
-        if (!o || !d) continue;
-        
-        const orig: [number, number] | null = Number.isFinite(+o.lat) && Number.isFinite(+o.lon) 
-          ? [Number(o.lat), Number(o.lon)] : null;
-        const dest: [number, number] | null = Number.isFinite(+d.lat) && Number.isFinite(+d.lon) 
-          ? [Number(d.lat), Number(d.lon)] : null;
+
+        // Usar coordenadas pré-salvas do banco
+        const orig: [number, number] | null = 
+          s.origem_lat && s.origem_lon 
+            ? [Number(s.origem_lat), Number(s.origem_lon)] 
+            : null;
+        const dest: [number, number] | null = 
+          s.destino_lat && s.destino_lon 
+            ? [Number(s.destino_lat), Number(s.destino_lon)] 
+            : null;
           
+        // Se não tem coordenadas, pular (será preenchido no próximo sync)
         if (!orig || !dest) continue;
 
         const etaIso = s.eta ? new Date(s.eta).toISOString() : null;
-        const containerId = s.container || s.id || `sea-${newData.length}`;
+        const mblId = s.mbl_id || `sea-${newData.length}`;
         
-        // Calculate status
+        // Determinar status baseado no container_status e is_eta_delayed
         let status: "Em trânsito" | "Atraso" | "Entregue" = "Em trânsito";
         let deliveredUntilTs: number | null = null;
         
-        if (etaIso) {
+        const containerStatus = (s.container_status || "").toUpperCase();
+        const isDelivered = ["DELIVERED", "DLV", "GOD", "EMPTY_RETURNED"].includes(containerStatus);
+        
+        if (isDelivered) {
+          status = "Entregue";
+          if (s.last_check) {
+            const lastCheckTs = new Date(s.last_check).getTime();
+            deliveredUntilTs = lastCheckTs + 24 * 60 * 60 * 1000;
+          }
+        } else if (s.is_eta_delayed === 1) {
+          status = "Atraso";
+        } else if (etaIso) {
           const etaTs = new Date(etaIso).getTime();
-          if (s.ata || s.actual_arrival) {
-            status = "Entregue";
-            const ataTs = new Date(s.ata || s.actual_arrival).getTime();
-            deliveredUntilTs = ataTs + 24 * 60 * 60 * 1000;
-          } else if (nowTs > etaTs) {
+          if (nowTs > etaTs) {
             status = "Atraso";
           }
         }
 
-        // Calculate position along route
-        let pos: [number, number] | null = null;
-        if (s.lat && s.lon) {
-          pos = [Number(s.lat), Number(s.lon)];
-        }
+        // Posição atual do navio (se disponível)
+        const pos: [number, number] | null = 
+          s.current_lat && s.current_lon 
+            ? [Number(s.current_lat), Number(s.current_lon)] 
+            : null;
+
+        // Calcular progresso baseado em ETD e ETA
+        const etdIso = s.etd ? new Date(s.etd).toISOString() : null;
+        const prog = (() => {
+          if (!(etdIso && etaIso)) return 0.5;
+          const t0 = new Date(etdIso).getTime();
+          const t1 = new Date(etaIso).getTime();
+          if (!isFinite(t0) || !isFinite(t1) || t1 <= t0) return 0.5;
+          return Math.max(0, Math.min(1, (nowTs - t0) / (t1 - t0)));
+        })();
 
         newData.push({
-          id: `sea:${containerId}`,
+          id: `sea:${mblId}`,
           mode: "sea",
-          tipo_label: "SEA IMPORT",
-          cliente: s.cliente || "",
+          tipo_label: s.tipo_processo || "SEA IMPORT",
+          cliente: s.consignee || s.cliente || "",
           rota: `${oCode} → ${dCode}`,
           eta_iso: etaIso,
           eta_api: fmtLocalBRDateTime(etaIso) || "—",
@@ -567,18 +571,10 @@ export default function Olimpo() {
           status,
           orig,
           dest,
-          prog: (() => {
-            const atdIso = s.atd_origin ? new Date(s.atd_origin).toISOString() : null;
-            if (!(atdIso && etaIso)) return 0.5;
-            const now = Date.now();
-            const t0 = new Date(atdIso).getTime();
-            const t1 = new Date(etaIso).getTime();
-            if (!isFinite(t0) || !isFinite(t1) || t1 <= t0) return 0.5;
-            return Math.max(0, Math.min(1, (now - t0) / (t1 - t0)));
-          })(),
+          prog,
           pos,
           flight: null,
-          asset: containerId,
+          asset: mblId,
         });
       }
     } catch (error) {
@@ -604,56 +600,24 @@ export default function Olimpo() {
     const map = new mapboxgl.Map({
       container: mapContainerRef.current,
       style: "mapbox://styles/mapbox/dark-v11",
-      center: [0, 20],
-      zoom: 1.5,
-      projection: "globe",
-      pitch: 20,
+      center: [-30, 10],
+      zoom: 2,
+      // Modo 2D - projeção mercator (padrão)
     });
 
     // Add navigation controls
     map.addControl(
       new mapboxgl.NavigationControl({
-        visualizePitch: true,
+        visualizePitch: false,
       }),
       "top-right"
     );
 
-    // Add atmosphere and fog effects
-    map.on("style.load", () => {
-      map.setFog({
-        color: "rgb(10, 10, 20)",
-        "high-color": "rgb(30, 30, 50)",
-        "horizon-blend": 0.1,
-        "star-intensity": 0.15,
-      });
-    });
-
-    // Slow rotation
-    let userInteracting = false;
-    const secondsPerRevolution = 360;
-
-    function spinGlobe() {
-      if (!map) return;
-      const zoom = map.getZoom();
-      if (!userInteracting && zoom < 3) {
-        const distancePerSecond = 360 / secondsPerRevolution;
-        const center = map.getCenter();
-        center.lng -= distancePerSecond / 60;
-        map.easeTo({ center, duration: 1000 / 60, easing: (n) => n });
-      }
-    }
-
-    map.on("mousedown", () => { userInteracting = true; });
-    map.on("mouseup", () => { userInteracting = false; });
-    map.on("dragstart", () => { userInteracting = true; });
-    map.on("dragend", () => { userInteracting = false; });
-
-    const spinInterval = setInterval(spinGlobe, 1000 / 60);
+    // Modo 2D não precisa de rotação
 
     mapRef.current = map;
 
     return () => {
-      clearInterval(spinInterval);
       map.remove();
       mapRef.current = null;
     };
