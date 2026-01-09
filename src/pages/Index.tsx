@@ -166,6 +166,10 @@ const getStatusCode = (lastEvent: string | null): string => {
     return "Processando";
   }
 
+  if (lastEvent === "AWB_INVALID") {
+    return "AWB Inválido";
+  }
+
   if (lastEvent === "ERRO" || lastEvent === "COMPANY_NOT_REGISTERED") {
     return "Falha na consulta";
   }
@@ -173,10 +177,6 @@ const getStatusCode = (lastEvent: string | null): string => {
   // Tratamento de erros específicos (formatos antigos)
   if (lastEvent.includes("AWB_NOT_FOUND") || lastEvent === "Status não encontrado") {
     return "Status não encontrado";
-  }
-
-  if (lastEvent.includes("COMPANY_NOT_REGISTERED") || lastEvent === "Companhia não cadastrada") {
-    return "Falha na consulta";
   }
 
   if (lastEvent === "AWB não encontrado") {
@@ -1705,8 +1705,8 @@ const Index = () => {
         "RCT", "RCP", "PRE", "LOF", "ARRT", "TDE", "ARR", "RCF",
         // Status de alerta e críticos
         "DIS", "OFLD", "NIL", "NIF",
-        // Status de erro no rastreio (inclui companhias sem integração)
-        "ERRO", "COMPANY_NOT_REGISTERED",
+        // Status de erro no rastreio (inclui companhias sem integração e AWBs inválidos)
+        "ERRO", "COMPANY_NOT_REGISTERED", "AWB_INVALID",
         // Outros status de rastreio
         "FFM", "AUD"
       ];
@@ -2172,6 +2172,8 @@ const Index = () => {
                       const isNilStatus = awb.last_event === "NIL" || awb.last_event === "NIF";
                       const isErroStatus = awb.status === "ERRO" || awb.last_event === "ERRO";
                       const isCompanyNotRegistered = awb.status === "COMPANY_NOT_REGISTERED";
+                      const isAwbInvalid = awb.status === "AWB_INVALID" || awb.last_event === "AWB_INVALID";
+                      const isFalhaConsulta = isErroStatus || isCompanyNotRegistered;
 
                       return (
                         <React.Fragment key={awb.id || index}>
@@ -2347,13 +2349,9 @@ const Index = () => {
                             </td>
                             <td className="px-3 py-3 text-center">
                               {(() => {
-                                if (isCompanyNotRegistered) {
-                                  return (
-                                    <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-semibold bg-slate-500/20 text-slate-400 border border-slate-500/30">
-                                      <span className="w-1.5 h-1.5 rounded-full bg-slate-400"></span>
-                                      Pendente Cadastro
-                                    </span>
-                                  );
+                                // Situação vazia para falhas de consulta e AWB inválido
+                                if (isFalhaConsulta || isAwbInvalid) {
+                                  return <span className="text-muted-foreground">—</span>;
                                 }
                                 const statusCode = getStatusCode(awb.last_event).toUpperCase();
                                 const isDelayed = awb.data_atraso !== null || statusCode === "DIS" || statusCode === "OFLD";
