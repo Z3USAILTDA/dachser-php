@@ -12203,6 +12203,33 @@ async function trackAWB(awb: string, airlineCode: string): Promise<TrackingResul
     };
   }
   
+  // Validate AWB check digit (modulo 7)
+  // AWB format: XXX-XXXXXXXY where Y is the check digit
+  // The check digit is calculated as: first 7 digits of serial mod 7 = last digit
+  const serialPart = formattedAwb.split('-')[1]; // 8 digits after the dash
+  const serialNumber = parseInt(serialPart.substring(0, 7), 10); // First 7 digits
+  const checkDigit = parseInt(serialPart.substring(7, 8), 10); // Last digit (8th)
+  const calculatedCheckDigit = serialNumber % 7;
+  
+  if (calculatedCheckDigit !== checkDigit) {
+    return {
+      awb: formattedAwb,
+      airline: 'N/A',
+      status: 'AWB_INVALID',
+      origin: 'N/A',
+      destination: 'N/A',
+      currentLocation: 'N/A',
+      weight: 'N/A',
+      pieces: 'N/A',
+      events: [{
+        date: new Date().toISOString(),
+        location: 'Sistema',
+        status: 'AWB_INVALID',
+        description: `Dígito verificador inválido (esperado: ${calculatedCheckDigit}, recebido: ${checkDigit})`,
+      }],
+    };
+  }
+  
   // Map airline code to name
   const airlineMap: { [key: string]: string } = {
     '001': 'American Airlines Cargo',
