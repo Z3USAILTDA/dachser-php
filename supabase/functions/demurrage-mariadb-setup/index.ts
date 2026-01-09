@@ -139,6 +139,19 @@ serve(async (req) => {
       console.log("Note: ft_source column may already exist");
     }
 
+    // Fix existing records with NULL ft_started_at
+    console.log("Fixing existing records with NULL ft_started_at...");
+    try {
+      const fixResult = await client.execute(`
+        UPDATE dados_dachser.t_dachser_demurrage_containers 
+        SET ft_started_at = COALESCE(data_atracacao, eta, created_at)
+        WHERE ft_started_at IS NULL
+      `);
+      console.log(`✓ Fixed ${fixResult.affectedRows ?? 0} records with NULL ft_started_at`);
+    } catch (fixError) {
+      console.log("Note: Could not fix ft_started_at, may already be populated");
+    }
+
     // Create rates table
     console.log("Creating t_dachser_demurrage_rates table...");
     await client.execute(`
