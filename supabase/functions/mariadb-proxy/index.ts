@@ -7492,6 +7492,297 @@ serve(async (req) => {
         break;
       }
 
+      // ==================== CHB CLIENT CONFIG (ai_agente) ====================
+      case 'get_chb_client_configs': {
+        console.log('Fetching CHB client configs from ai_agente');
+        const configs = await client.query(`
+          SELECT * FROM ai_agente.t_chb_client_config
+          WHERE ativo = 1
+          ORDER BY cliente_nome ASC
+        `);
+        
+        // Parse JSON fields
+        const parsed = (configs || []).map((c: any) => ({
+          ...c,
+          campos_obrigatorios: typeof c.campos_obrigatorios === 'string' 
+            ? JSON.parse(c.campos_obrigatorios) 
+            : c.campos_obrigatorios || [],
+          regras_comparacao: typeof c.regras_comparacao === 'string'
+            ? JSON.parse(c.regras_comparacao)
+            : c.regras_comparacao || {}
+        }));
+        
+        result = { success: true, data: parsed };
+        break;
+      }
+
+      case 'get_chb_client_config': {
+        const { cnpj } = body;
+        console.log('Fetching CHB client config for CNPJ:', cnpj);
+        
+        const configs = await client.query(`
+          SELECT * FROM ai_agente.t_chb_client_config
+          WHERE cliente_cnpj = ? AND ativo = 1
+          LIMIT 1
+        `, [cnpj]);
+        
+        if (!configs || configs.length === 0) {
+          result = { success: true, data: null };
+        } else {
+          const c = configs[0];
+          result = { 
+            success: true, 
+            data: {
+              ...c,
+              campos_obrigatorios: typeof c.campos_obrigatorios === 'string' 
+                ? JSON.parse(c.campos_obrigatorios) 
+                : c.campos_obrigatorios || [],
+              regras_comparacao: typeof c.regras_comparacao === 'string'
+                ? JSON.parse(c.regras_comparacao)
+                : c.regras_comparacao || {}
+            }
+          };
+        }
+        break;
+      }
+
+      case 'create_chb_client_config': {
+        const configData = body as any;
+        console.log('Creating CHB client config:', configData.cliente_cnpj);
+        
+        const newId = crypto.randomUUID();
+        await client.execute(`
+          INSERT INTO ai_agente.t_chb_client_config (
+            id, cliente_cnpj, cliente_nome, tolerancia_peso, tolerancia_valor,
+            campos_obrigatorios, regras_comparacao, instrucoes_personalizadas,
+            armador, agente_destino, contato_email, prazo_resposta_dias,
+            porto_descarga_real, tolerancia_taxas_acessorias_abs, tolerancia_taxas_acessorias_pct,
+            beneficio_fiscal, cfop_padrao, estado_uf, icms_diferido, ativo
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
+        `, [
+          newId,
+          configData.cliente_cnpj,
+          configData.cliente_nome || null,
+          configData.tolerancia_peso ?? 2.0,
+          configData.tolerancia_valor ?? 1.0,
+          JSON.stringify(configData.campos_obrigatorios || []),
+          JSON.stringify(configData.regras_comparacao || {}),
+          configData.instrucoes_personalizadas || null,
+          configData.armador || null,
+          configData.agente_destino || null,
+          configData.contato_email || null,
+          configData.prazo_resposta_dias ?? 2,
+          configData.porto_descarga_real || null,
+          configData.tolerancia_taxas_acessorias_abs ?? 50,
+          configData.tolerancia_taxas_acessorias_pct ?? 1.0,
+          configData.beneficio_fiscal || null,
+          configData.cfop_padrao || null,
+          configData.estado_uf || null,
+          configData.icms_diferido ? 1 : 0
+        ]);
+        
+        result = { success: true, id: newId };
+        break;
+      }
+
+      case 'update_chb_client_config': {
+        const { id: configId, ...updateData } = body as any;
+        console.log('Updating CHB client config:', configId);
+        
+        if (!configId) {
+          return new Response(
+            JSON.stringify({ error: 'ID é obrigatório' }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+        
+        const setClauses: string[] = [];
+        const values: any[] = [];
+        
+        if (updateData.cliente_cnpj !== undefined) { setClauses.push('cliente_cnpj = ?'); values.push(updateData.cliente_cnpj); }
+        if (updateData.cliente_nome !== undefined) { setClauses.push('cliente_nome = ?'); values.push(updateData.cliente_nome); }
+        if (updateData.tolerancia_peso !== undefined) { setClauses.push('tolerancia_peso = ?'); values.push(updateData.tolerancia_peso); }
+        if (updateData.tolerancia_valor !== undefined) { setClauses.push('tolerancia_valor = ?'); values.push(updateData.tolerancia_valor); }
+        if (updateData.campos_obrigatorios !== undefined) { setClauses.push('campos_obrigatorios = ?'); values.push(JSON.stringify(updateData.campos_obrigatorios)); }
+        if (updateData.regras_comparacao !== undefined) { setClauses.push('regras_comparacao = ?'); values.push(JSON.stringify(updateData.regras_comparacao)); }
+        if (updateData.instrucoes_personalizadas !== undefined) { setClauses.push('instrucoes_personalizadas = ?'); values.push(updateData.instrucoes_personalizadas); }
+        if (updateData.armador !== undefined) { setClauses.push('armador = ?'); values.push(updateData.armador); }
+        if (updateData.agente_destino !== undefined) { setClauses.push('agente_destino = ?'); values.push(updateData.agente_destino); }
+        if (updateData.contato_email !== undefined) { setClauses.push('contato_email = ?'); values.push(updateData.contato_email); }
+        if (updateData.prazo_resposta_dias !== undefined) { setClauses.push('prazo_resposta_dias = ?'); values.push(updateData.prazo_resposta_dias); }
+        if (updateData.porto_descarga_real !== undefined) { setClauses.push('porto_descarga_real = ?'); values.push(updateData.porto_descarga_real); }
+        if (updateData.tolerancia_taxas_acessorias_abs !== undefined) { setClauses.push('tolerancia_taxas_acessorias_abs = ?'); values.push(updateData.tolerancia_taxas_acessorias_abs); }
+        if (updateData.tolerancia_taxas_acessorias_pct !== undefined) { setClauses.push('tolerancia_taxas_acessorias_pct = ?'); values.push(updateData.tolerancia_taxas_acessorias_pct); }
+        if (updateData.beneficio_fiscal !== undefined) { setClauses.push('beneficio_fiscal = ?'); values.push(updateData.beneficio_fiscal); }
+        if (updateData.cfop_padrao !== undefined) { setClauses.push('cfop_padrao = ?'); values.push(updateData.cfop_padrao); }
+        if (updateData.estado_uf !== undefined) { setClauses.push('estado_uf = ?'); values.push(updateData.estado_uf); }
+        if (updateData.icms_diferido !== undefined) { setClauses.push('icms_diferido = ?'); values.push(updateData.icms_diferido ? 1 : 0); }
+        if (updateData.ativo !== undefined) { setClauses.push('ativo = ?'); values.push(updateData.ativo ? 1 : 0); }
+        
+        if (setClauses.length > 0) {
+          setClauses.push('updated_at = NOW()');
+          values.push(configId);
+          
+          await client.execute(`
+            UPDATE ai_agente.t_chb_client_config
+            SET ${setClauses.join(', ')}
+            WHERE id = ?
+          `, values);
+        }
+        
+        result = { success: true };
+        break;
+      }
+
+      case 'delete_chb_client_config': {
+        const { id: deleteConfigId } = body;
+        console.log('Deleting CHB client config:', deleteConfigId);
+        
+        // Soft delete
+        await client.execute(`
+          UPDATE ai_agente.t_chb_client_config
+          SET ativo = 0, updated_at = NOW()
+          WHERE id = ?
+        `, [deleteConfigId]);
+        
+        result = { success: true };
+        break;
+      }
+
+      // ==================== SLA CONFIG (dados_dachser) ====================
+      case 'get_sla_configs': {
+        console.log('Fetching SLA configs from dados_dachser');
+        const slaConfigs = await client.query(`
+          SELECT * FROM dados_dachser.t_sla_config
+          ORDER BY etapa ASC
+        `);
+        
+        result = { success: true, data: slaConfigs || [] };
+        break;
+      }
+
+      case 'update_sla_config': {
+        const { id: slaId, horas_limite, ativo: slaAtivo } = body as { id: string; horas_limite?: number; ativo?: boolean };
+        console.log('Updating SLA config:', slaId);
+        
+        if (!slaId) {
+          return new Response(
+            JSON.stringify({ error: 'ID é obrigatório' }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+        
+        const slaClauses: string[] = [];
+        const slaValues: any[] = [];
+        
+        if (horas_limite !== undefined) { slaClauses.push('horas_limite = ?'); slaValues.push(horas_limite); }
+        if (slaAtivo !== undefined) { slaClauses.push('ativo = ?'); slaValues.push(slaAtivo ? 1 : 0); }
+        
+        if (slaClauses.length > 0) {
+          slaClauses.push('updated_at = NOW()');
+          slaValues.push(slaId);
+          
+          await client.execute(`
+            UPDATE dados_dachser.t_sla_config
+            SET ${slaClauses.join(', ')}
+            WHERE id = ?
+          `, slaValues);
+        }
+        
+        result = { success: true };
+        break;
+      }
+
+      // ==================== ACCRUAL ENTRIES (dados_dachser) ====================
+      case 'get_accrual_entries': {
+        const { search: accSearch } = body;
+        console.log('Fetching accrual entries from dados_dachser');
+        
+        let accQuery = `SELECT * FROM dados_dachser.t_accrual_entries ORDER BY created_at DESC`;
+        let accParams: any[] = [];
+        
+        if (accSearch) {
+          accQuery = `
+            SELECT * FROM dados_dachser.t_accrual_entries
+            WHERE fornecedor LIKE ? OR shared_code LIKE ?
+            ORDER BY created_at DESC
+          `;
+          accParams = [`%${accSearch}%`, `%${accSearch}%`];
+        }
+        
+        const accruals = await client.query(accQuery, accParams);
+        result = { success: true, data: accruals || [] };
+        break;
+      }
+
+      case 'create_accrual_entry': {
+        const accData = body as any;
+        console.log('Creating accrual entry:', accData.fornecedor);
+        
+        const accId = crypto.randomUUID();
+        await client.execute(`
+          INSERT INTO dados_dachser.t_accrual_entries (
+            id, fornecedor, valor, shared_code, status_accrual, uploaded_by_user_id
+          ) VALUES (?, ?, ?, ?, ?, ?)
+        `, [
+          accId,
+          accData.fornecedor,
+          accData.valor,
+          accData.shared_code || null,
+          accData.status_accrual || 'ATIVO',
+          accData.uploaded_by_user_id || null
+        ]);
+        
+        result = { success: true, id: accId };
+        break;
+      }
+
+      case 'bulk_create_accrual': {
+        const bodyAny = body as unknown as { entries: Array<{ fornecedor: string; valor: number; shared_code?: string }> };
+        const entries = bodyAny.entries;
+        console.log('Bulk creating accrual entries:', entries?.length);
+        
+        if (!entries || entries.length === 0) {
+          result = { success: true, inserted: 0 };
+          break;
+        }
+        
+        let inserted = 0;
+        for (const entry of entries) {
+          const accId = crypto.randomUUID();
+          await client.execute(`
+            INSERT INTO dados_dachser.t_accrual_entries (
+              id, fornecedor, valor, shared_code, status_accrual
+            ) VALUES (?, ?, ?, ?, 'ATIVO')
+          `, [accId, entry.fornecedor, entry.valor, entry.shared_code || null]);
+          inserted++;
+        }
+        
+        result = { success: true, inserted };
+        break;
+      }
+
+      case 'delete_accrual_entry': {
+        const { id: accDeleteId } = body;
+        console.log('Deleting accrual entry:', accDeleteId);
+        
+        await client.execute(`
+          DELETE FROM dados_dachser.t_accrual_entries WHERE id = ?
+        `, [accDeleteId]);
+        
+        result = { success: true };
+        break;
+      }
+
+      case 'clear_accrual_entries': {
+        console.log('Clearing all accrual entries');
+        
+        await client.execute(`DELETE FROM dados_dachser.t_accrual_entries`);
+        
+        result = { success: true };
+        break;
+      }
+
       default:
         return new Response(
           JSON.stringify({ error: `Ação não suportada: ${action}` }),
