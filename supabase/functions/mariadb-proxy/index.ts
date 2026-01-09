@@ -1497,18 +1497,21 @@ serve(async (req) => {
                 const count = Number(countResult[0]?.cnt || 0);
                 
                 if (count > 0) {
-                  const rows = await dbClient.query(`
-                    SELECT empresa, charge_description, charge_code, container_type, currency, fee,
-                           unit_of_measure, effective_date, expiry_date, effective, data_atualizacao, user_atualizacao
-                    FROM ${preferredTable}
-                    ORDER BY id DESC
-                  `);
-                  
+                  // First get the latest data_atualizacao
                   const metaResult = await dbClient.query(`
                     SELECT MAX(data_atualizacao) AS updated_at, MAX(effective) AS effective 
                     FROM ${preferredTable}
                   `);
                   const meta = metaResult[0] || { updated_at: null, effective: null };
+                  
+                  // Only get rows from the most recent update
+                  const rows = await dbClient.query(`
+                    SELECT empresa, charge_description, charge_code, container_type, currency, fee,
+                           unit_of_measure, effective_date, expiry_date, effective, data_atualizacao, user_atualizacao
+                    FROM ${preferredTable}
+                    WHERE data_atualizacao = (SELECT MAX(data_atualizacao) FROM ${preferredTable})
+                    ORDER BY charge_description, container_type
+                  `);
                   
                   return { rows, meta, source: preferredTable };
                 }
@@ -1526,19 +1529,22 @@ serve(async (req) => {
                 const count = Number(countResult[0]?.cnt || 0);
                 
                 if (count > 0) {
-                  const rows = await dbClient.query(`
-                    SELECT empresa, charge_description, charge_code, container_type, currency, fee,
-                           unit_of_measure, effective_date, expiry_date, effective, data_atualizacao, user_atualizacao
-                    FROM ${fallbackTable}
-                    WHERE empresa = ?
-                    ORDER BY id DESC
-                  `, [empresa]);
-                  
+                  // First get the latest data_atualizacao for this empresa
                   const metaResult = await dbClient.query(`
                     SELECT MAX(data_atualizacao) AS updated_at, MAX(effective) AS effective 
                     FROM ${fallbackTable} WHERE empresa = ?
                   `, [empresa]);
                   const meta = metaResult[0] || { updated_at: null, effective: null };
+                  
+                  // Only get rows from the most recent update for this empresa
+                  const rows = await dbClient.query(`
+                    SELECT empresa, charge_description, charge_code, container_type, currency, fee,
+                           unit_of_measure, effective_date, expiry_date, effective, data_atualizacao, user_atualizacao
+                    FROM ${fallbackTable}
+                    WHERE empresa = ? 
+                      AND data_atualizacao = (SELECT MAX(data_atualizacao) FROM ${fallbackTable} WHERE empresa = ?)
+                    ORDER BY charge_description, container_type
+                  `, [empresa, empresa]);
                   
                   return { rows, meta, source: `${fallbackTable} (empresa='${empresa}')` };
                 }
