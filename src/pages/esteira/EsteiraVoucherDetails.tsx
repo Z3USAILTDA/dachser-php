@@ -60,7 +60,7 @@ const EsteiraVoucherDetails = () => {
       if (fnError) throw fnError;
       
       if (!responseData?.success || !responseData?.data) {
-        throw new Error('Voucher não encontrado');
+        throw new Error('Voucher/SPO não encontrado');
       }
 
       const data = responseData.data;
@@ -141,7 +141,7 @@ const EsteiraVoucherDetails = () => {
     } catch (error: any) {
       console.error('Error loading voucher:', error);
       toast({
-        title: "Erro ao carregar voucher",
+        title: "Erro ao carregar voucher/SPO",
         description: error.message,
         variant: "destructive",
       });
@@ -224,7 +224,7 @@ const EsteiraVoucherDetails = () => {
     return (
       <PageLayout backTo="/fin/esteira">
         <div className="flex-1 flex items-center justify-center min-h-[60vh]">
-          <p className="text-muted-foreground">Voucher não encontrado</p>
+          <p className="text-muted-foreground">Voucher/SPO não encontrado</p>
         </div>
       </PageLayout>
     );

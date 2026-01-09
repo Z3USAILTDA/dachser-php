@@ -204,7 +204,7 @@ export const VoucherOperacaoActions = ({ voucher, onUpdate }: VoucherOperacaoAct
       // BLOQUEIO: Não permite avançar se RM pendente
       if (isRmPendente) {
         toast({
-          title: "Voucher com RM Pendente",
+          title: "Voucher/SPO com RM Pendente",
           description: "Sincronize os dados do RM antes de enviar para a próxima etapa.",
           variant: "destructive",
         });
@@ -269,19 +269,19 @@ export const VoucherOperacaoActions = ({ voucher, onUpdate }: VoucherOperacaoAct
           user_id: userData.id?.toString(),
           user_name: userData.username,
           acao: isAjusteOperacao ? "REENVIO_APOS_AJUSTE" : "ENVIADO_OPERACAO",
-          detalhe: `Voucher enviado para ${etapaLabel}`,
+          detalhe: `Voucher/SPO enviado para ${etapaLabel}`,
         },
       });
 
       toast({
-        title: "Voucher enviado!",
-        description: `Voucher enviado para ${etapaLabel}`,
+        title: "Voucher/SPO enviado!",
+        description: `Voucher/SPO enviado para ${etapaLabel}`,
       });
 
       onUpdate();
     } catch (error: any) {
       toast({
-        title: "Erro ao enviar voucher",
+        title: "Erro ao enviar voucher/SPO",
         description: error.message,
         variant: "destructive",
       });
@@ -300,8 +300,8 @@ export const VoucherOperacaoActions = ({ voucher, onUpdate }: VoucherOperacaoAct
           <AlertTitle>Dados do RM Pendentes</AlertTitle>
           <AlertDescription className="mt-2">
             <p className="mb-3">
-              Este voucher foi criado mas os dados do RM ainda não foram sincronizados.
-              O voucher <strong>não pode avançar</strong> até que os dados sejam carregados.
+              Este voucher/SPO foi criado mas os dados do RM ainda não foram sincronizados.
+              O voucher/SPO <strong>não pode avançar</strong> até que os dados sejam carregados.
             </p>
             <Button
               variant="outline"
@@ -425,9 +425,9 @@ export const VoucherOperacaoActions = ({ voucher, onUpdate }: VoucherOperacaoAct
             {isRmPendente 
               ? "Sincronize os dados do RM para liberar o envio" 
               : isAjusteOperacao
-                ? "Corrija os anexos e reenvie o voucher"
+                ? "Corrija os anexos e reenvie o voucher/SPO"
                 : canEnviar 
-                  ? "Anexos completos! Você pode enviar o voucher." 
+                  ? "Anexos completos! Você pode enviar o voucher/SPO." 
                   : "Adicione os anexos obrigatórios para enviar."}
           </p>
         </div>

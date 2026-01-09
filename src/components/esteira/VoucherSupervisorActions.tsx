@@ -62,19 +62,19 @@ export const VoucherSupervisorActions = ({ voucher, onUpdate }: VoucherSuperviso
           user_id: userData.id?.toString(),
           user_name: userData.username,
           acao: "APROVADO_SUPERVISOR",
-          detalhe: "Voucher urgente aprovado pelo Supervisor",
+          detalhe: "Voucher/SPO urgente aprovado pelo Supervisor",
         },
       });
 
       toast({
-        title: "Voucher aprovado",
-        description: "Voucher urgente aprovado e enviado para Financeiro",
+        title: "Voucher/SPO aprovado",
+        description: "Voucher/SPO urgente aprovado e enviado para Financeiro",
       });
 
       onUpdate();
     } catch (error: any) {
       toast({
-        title: "Erro ao aprovar voucher",
+        title: "Erro ao aprovar voucher/SPO",
         description: error.message,
         variant: "destructive",
       });
@@ -120,7 +120,7 @@ export const VoucherSupervisorActions = ({ voucher, onUpdate }: VoucherSuperviso
           user_id: userData.id?.toString(),
           user_name: userData.username,
           acao: "REJEITADO_SUPERVISOR",
-          detalhe: `Voucher rejeitado: ${comentarios}`,
+          detalhe: `Voucher/SPO rejeitado: ${comentarios}`,
         },
       });
 
@@ -141,14 +141,14 @@ export const VoucherSupervisorActions = ({ voucher, onUpdate }: VoucherSuperviso
       }
 
       toast({
-        title: "Voucher rejeitado",
-        description: "Voucher rejeitado e devolvido para Operação",
+        title: "Voucher/SPO rejeitado",
+        description: "Voucher/SPO rejeitado e devolvido para Operação",
       });
 
       onUpdate();
     } catch (error: any) {
       toast({
-        title: "Erro ao rejeitar voucher",
+        title: "Erro ao rejeitar voucher/SPO",
         description: error.message,
         variant: "destructive",
       });
@@ -163,16 +163,16 @@ export const VoucherSupervisorActions = ({ voucher, onUpdate }: VoucherSuperviso
       <div>
         <h3 className="text-lg font-semibold mb-2">Ações - Supervisor</h3>
         <p className="text-sm text-muted-foreground">
-          Aprovar ou rejeitar voucher marcado como urgente real
+          Aprovar ou rejeitar voucher/SPO marcado como urgente real
         </p>
       </div>
 
       <div className="bg-amber-500/10 border border-amber-500/20 rounded-lg p-4">
         <p className="text-sm font-medium text-amber-600 mb-1">
-          Voucher Urgente Real
+          Voucher/SPO Urgente Real
         </p>
         <p className="text-sm text-muted-foreground">
-          Este voucher foi marcado como urgente e requer aprovação do supervisor antes de prosseguir para o financeiro.
+          Este voucher/SPO foi marcado como urgente e requer aprovação do supervisor antes de prosseguir para o financeiro.
         </p>
       </div>
 
@@ -203,7 +203,7 @@ export const VoucherSupervisorActions = ({ voucher, onUpdate }: VoucherSuperviso
           <AlertDialogHeader>
             <AlertDialogTitle>Confirmar aprovação</AlertDialogTitle>
             <AlertDialogDescription>
-              Ao aprovar, o voucher será enviado para o Financeiro com prioridade urgente.
+              Ao aprovar, o voucher/SPO será enviado para o Financeiro com prioridade urgente.
               Esta ação não pode ser desfeita.
             </AlertDialogDescription>
           </AlertDialogHeader>
@@ -220,9 +220,9 @@ export const VoucherSupervisorActions = ({ voucher, onUpdate }: VoucherSuperviso
       <AlertDialog open={showRejectDialog} onOpenChange={setShowRejectDialog}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Rejeitar voucher urgente</AlertDialogTitle>
+            <AlertDialogTitle>Rejeitar voucher/SPO urgente</AlertDialogTitle>
             <AlertDialogDescription>
-              Informe o motivo da rejeição. O voucher será devolvido para a Operação.
+              Informe o motivo da rejeição. O voucher/SPO será devolvido para a Operação.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <div className="py-4">

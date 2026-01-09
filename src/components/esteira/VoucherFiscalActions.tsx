@@ -138,19 +138,19 @@ export const VoucherFiscalActions = ({ voucher, onUpdate }: VoucherFiscalActions
           user_id: userData.id?.toString(),
           user_name: userData.username,
           acao: "APROVADO_FISCAL",
-          detalhe: "Voucher aprovado pelo Fiscal e enviado para Financeiro",
+          detalhe: "Voucher/SPO aprovado pelo Fiscal e enviado para Financeiro",
         },
       });
 
       toast({
-        title: "Voucher aprovado!",
-        description: "Voucher enviado para Financeiro",
+        title: "Voucher/SPO aprovado!",
+        description: "Voucher/SPO enviado para Financeiro",
       });
 
       onUpdate();
     } catch (error: any) {
       toast({
-        title: "Erro ao aprovar voucher",
+        title: "Erro ao aprovar voucher/SPO",
         description: error.message,
         variant: "destructive",
       });
@@ -216,14 +216,14 @@ export const VoucherFiscalActions = ({ voucher, onUpdate }: VoucherFiscalActions
       }
 
       toast({
-        title: "Voucher devolvido",
-        description: "Voucher devolvido para Operação para ajustes",
+        title: "Voucher/SPO devolvido",
+        description: "Voucher/SPO devolvido para Operação para ajustes",
       });
 
       onUpdate();
     } catch (error: any) {
       toast({
-        title: "Erro ao devolver voucher",
+        title: "Erro ao devolver voucher/SPO",
         description: error.message,
         variant: "destructive",
       });
