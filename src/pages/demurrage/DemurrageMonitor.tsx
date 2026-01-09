@@ -101,6 +101,42 @@ export default function DemurrageMonitor() {
     return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 0 }).format(value);
   };
 
+  const getFtSourceBadge = (ftSource: string | null, freeTimeDays: number) => {
+    const days = `${freeTimeDays}d`;
+    switch (ftSource) {
+      case 'PROCESSO':
+        return (
+          <Badge className="bg-emerald-500/10 text-emerald-400 border-emerald-500/20">
+            {days} <span className="text-[10px] ml-1 opacity-70">MBL</span>
+          </Badge>
+        );
+      case 'CONTRATO':
+        return (
+          <Badge className="bg-blue-500/10 text-blue-400 border-blue-500/20">
+            {days} <span className="text-[10px] ml-1 opacity-70">Cliente</span>
+          </Badge>
+        );
+      case 'TARIFA':
+        return (
+          <Badge className="bg-purple-500/10 text-purple-400 border-purple-500/20">
+            {days} <span className="text-[10px] ml-1 opacity-70">Tarifa</span>
+          </Badge>
+        );
+      case 'CONTAINER':
+        return (
+          <Badge variant="outline" className="text-muted-foreground">
+            {days}
+          </Badge>
+        );
+      default:
+        return (
+          <Badge variant="secondary" className="text-muted-foreground">
+            {days} <span className="text-[10px] ml-1 opacity-50">Default</span>
+          </Badge>
+        );
+    }
+  };
+
   const rightActions = (
     <Button variant="outline" className="bg-[rgba(0,0,0,0.7)] border-[rgba(255,255,255,0.25)] text-[#aaaaaa] hover:text-white hover:bg-[rgba(0,0,0,0.9)]">
       <FileSpreadsheet className="h-4 w-4 mr-2" />
@@ -213,6 +249,7 @@ export default function DemurrageMonitor() {
                       <TableHead>Cliente</TableHead>
                       <TableHead>Armador</TableHead>
                       <TableHead>Tipo</TableHead>
+                      <TableHead className="text-center">Free Time</TableHead>
                       <TableHead className="text-center">Dias Rest.</TableHead>
                       <TableHead>Risco</TableHead>
                       <TableHead className="text-right">Demurrage</TableHead>
@@ -227,6 +264,9 @@ export default function DemurrageMonitor() {
                         <TableCell>{container.armador || '-'}</TableCell>
                         <TableCell>
                           <Badge variant="outline">{container.tipo_conteiner || '-'}</Badge>
+                        </TableCell>
+                        <TableCell className="text-center">
+                          {getFtSourceBadge(container.ft_source, container.free_time_days)}
                         </TableCell>
                         <TableCell className="text-center">
                           <Badge variant={(container.days_remaining ?? 0) <= 0 ? "destructive" : (container.days_remaining ?? 0) <= 2 ? "secondary" : "outline"}>

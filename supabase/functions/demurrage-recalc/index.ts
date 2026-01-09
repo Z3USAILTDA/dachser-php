@@ -9,11 +9,24 @@ const corsHeaders = {
 interface DemurrageContainer {
   id: number;
   numero: string;
+  mbl: string | null;
+  cliente: string | null;
   armador: string | null;
   tipo_conteiner: string | null;
   ft_started_at: string | null;
   data_devolucao: string | null;
   free_time_days: number;
+}
+
+interface ClientFreeTime {
+  id: number;
+  cliente_nome: string;
+  tipo_ft: string;
+  mbl: string | null;
+  free_time_days: number;
+  vigencia_inicio: string | null;
+  vigencia_fim: string | null;
+  armador: string | null;
 }
 
 interface DemurrageRate {
@@ -92,9 +105,37 @@ serve(async (req) => {
       ratesMap[key].push(rate);
     }
 
+    // Fetch client free times (custom free times registered by users)
+    const clientFreeTimeRows = await client.query(`
+      SELECT id, cliente_nome, tipo_ft, mbl, free_time_days, 
+             vigencia_inicio, vigencia_fim, armador
+      FROM dados_dachser.t_client_free_time 
+      WHERE ativo = TRUE
+        AND (
+          tipo_ft = 'PROCESSO' 
+          OR (tipo_ft = 'CONTRATO' 
+              AND (vigencia_inicio IS NULL OR vigencia_inicio <= CURDATE())
+              AND (vigencia_fim IS NULL OR vigencia_fim >= CURDATE()))
+        )
+    `) as ClientFreeTime[];
+    
+    console.log(`Loaded ${clientFreeTimeRows.length} client free time configurations`);
+
+    // Build lookup maps for quick access
+    const ftByMbl = new Map<string, ClientFreeTime>();
+    const ftByCliente = new Map<string, ClientFreeTime>();
+
+    for (const ft of clientFreeTimeRows) {
+      if (ft.tipo_ft === 'PROCESSO' && ft.mbl) {
+        ftByMbl.set(ft.mbl.toUpperCase(), ft);
+      } else if (ft.tipo_ft === 'CONTRATO' && ft.cliente_nome) {
+        ftByCliente.set(ft.cliente_nome.toUpperCase(), ft);
+      }
+    }
+
     // Fetch containers with ft_started_at set
     const containers = await client.query(`
-      SELECT id, numero, armador, tipo_conteiner, ft_started_at, data_devolucao, free_time_days
+      SELECT id, numero, mbl, cliente, armador, tipo_conteiner, ft_started_at, data_devolucao, free_time_days
       FROM dados_dachser.t_dachser_demurrage_containers
       WHERE active = 1 AND ft_started_at IS NOT NULL
     `) as DemurrageContainer[];
@@ -129,8 +170,38 @@ serve(async (req) => {
         const key = `${armador}:${containerType}`;
         const applicableRates = ratesMap[key] || ratesMap[`DEFAULT:${containerType}`] || [];
         
-        // Get free time days
-        const freeTimeDays = applicableRates[0]?.free_time_days || container.free_time_days || defaultFreeTime;
+        // Determine free time days with priority:
+        // 1. PROCESSO (MBL específico) - Highest priority
+        // 2. CONTRATO (Cliente) - Second priority
+        // 3. Tarifas por Armador/Container - Third priority
+        // 4. Default Settings - Fallback
+        let freeTimeDays = defaultFreeTime;
+        let ftSource = 'DEFAULT';
+
+        // Check for MBL-specific free time (PROCESSO)
+        if (container.mbl && ftByMbl.has(container.mbl.toUpperCase())) {
+          const ft = ftByMbl.get(container.mbl.toUpperCase())!;
+          freeTimeDays = ft.free_time_days;
+          ftSource = 'PROCESSO';
+          console.log(`${container.numero}: Using PROCESSO free time (MBL: ${container.mbl}) = ${freeTimeDays}d`);
+        }
+        // Check for client contract free time (CONTRATO)
+        else if (container.cliente && ftByCliente.has(container.cliente.toUpperCase())) {
+          const ft = ftByCliente.get(container.cliente.toUpperCase())!;
+          freeTimeDays = ft.free_time_days;
+          ftSource = 'CONTRATO';
+          console.log(`${container.numero}: Using CONTRATO free time (Cliente: ${container.cliente}) = ${freeTimeDays}d`);
+        }
+        // Use carrier/container rates
+        else if (applicableRates.length > 0 && applicableRates[0].free_time_days) {
+          freeTimeDays = applicableRates[0].free_time_days;
+          ftSource = 'TARIFA';
+        }
+        // Fallback to container's own free_time_days
+        else if (container.free_time_days) {
+          freeTimeDays = container.free_time_days;
+          ftSource = 'CONTAINER';
+        }
         
         // Calculate free time end date
         const freeTimeEnd = new Date(ftStart);
@@ -220,6 +291,7 @@ serve(async (req) => {
             rate_usd_per_day = ?,
             risk_status = ?,
             risk_score = ?,
+            ft_source = ?,
             updated_at = NOW()
           WHERE id = ?
         `, [
@@ -231,6 +303,7 @@ serve(async (req) => {
           ratePerDay,
           riskStatus,
           riskScore,
+          ftSource,
           container.id
         ]);
 
