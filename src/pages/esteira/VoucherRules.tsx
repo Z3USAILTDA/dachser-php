@@ -7,12 +7,11 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
-import { supabase } from "@/integrations/supabase/client";
+import { useSlaConfig } from "@/hooks/useSlaConfig";
 import { useToast } from "@/hooks/use-toast";
-import { Settings, Save, RefreshCw, Clock, AlertTriangle, FileText, Scale } from "lucide-react";
+import { Settings, Save, RefreshCw, Clock, AlertTriangle, FileText } from "lucide-react";
 
-
-interface SLAConfig {
+interface LocalSLAConfig {
   id: string;
   etapa: string;
   horasLimite: number;
@@ -45,48 +44,41 @@ const TIPO_DOC_LABELS: Record<string, string> = {
   OUTROS: "Outros",
 };
 
+const ETAPA_LABELS: Record<string, string> = {
+  OPERACAO: "Operacional",
+  FISCAL: "Fiscal",
+  SUPERVISOR: "Supervisor",
+  FINANCEIRO: "Financeiro",
+  ROBO: "Robô",
+  AJUSTE_OPERACAO: "Ajuste Operacional",
+  AJUSTE_FISCAL: "Ajuste Fiscal",
+};
+
 export default function VoucherRules() {
-  const [slaConfigs, setSlaConfigs] = useState<SLAConfig[]>([]);
+  const { configs, loading, fetchConfigs, updateConfig } = useSlaConfig();
+  const [localConfigs, setLocalConfigs] = useState<LocalSLAConfig[]>([]);
   const [rules, setRules] = useState<VoucherRule[]>(DEFAULT_RULES);
-  const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const { toast } = useToast();
 
   useEffect(() => {
-    loadSLAConfigs();
-  }, []);
+    fetchConfigs();
+  }, [fetchConfigs]);
 
-  const loadSLAConfigs = async () => {
-    try {
-      setLoading(true);
-      const { data, error } = await supabase
-        .from("sla_config")
-        .select("*")
-        .order("etapa");
-
-      if (error) throw error;
-
-      if (data && data.length > 0) {
-        setSlaConfigs(data.map(d => ({
-          id: d.id,
-          etapa: d.etapa,
-          horasLimite: d.horas_limite,
-          ativo: d.ativo
-        })));
-      }
-    } catch (error: any) {
-      toast({
-        title: "Erro ao carregar configurações",
-        description: error.message,
-        variant: "destructive",
-      });
-    } finally {
-      setLoading(false);
+  // Sync local state when configs are fetched
+  useEffect(() => {
+    if (configs.length > 0) {
+      setLocalConfigs(configs.map(c => ({
+        id: c.id,
+        etapa: c.etapa,
+        horasLimite: c.horas_limite,
+        ativo: c.ativo
+      })));
     }
-  };
+  }, [configs]);
 
   const handleSLAChange = (id: string, field: "horasLimite" | "ativo", value: number | boolean) => {
-    setSlaConfigs(prev => prev.map(c => 
+    setLocalConfigs(prev => prev.map(c => 
       c.id === id ? { ...c, [field]: value } : c
     ));
   };
@@ -101,13 +93,11 @@ export default function VoucherRules() {
     try {
       setSaving(true);
       
-      for (const config of slaConfigs) {
-        const { error } = await supabase
-          .from("sla_config")
-          .update({ horas_limite: config.horasLimite, ativo: config.ativo } as any)
-          .eq("id", config.id);
-        
-        if (error) throw error;
+      for (const config of localConfigs) {
+        await updateConfig(config.id, { 
+          horas_limite: config.horasLimite, 
+          ativo: config.ativo 
+        });
       }
 
       toast({
@@ -123,16 +113,6 @@ export default function VoucherRules() {
     } finally {
       setSaving(false);
     }
-  };
-
-  const ETAPA_LABELS: Record<string, string> = {
-    OPERACAO: "Operacional",
-    FISCAL: "Fiscal",
-    SUPERVISOR: "Supervisor",
-    FINANCEIRO: "Financeiro",
-    ROBO: "Robô",
-    AJUSTE_OPERACAO: "Ajuste Operacional",
-    AJUSTE_FISCAL: "Ajuste Fiscal",
   };
 
   return (
@@ -154,7 +134,7 @@ export default function VoucherRules() {
               <Button
                 variant="outline"
                 size="sm"
-                onClick={loadSLAConfigs}
+                onClick={() => fetchConfigs()}
                 disabled={loading}
               >
                 <RefreshCw className={`h-4 w-4 mr-2 ${loading ? "animate-spin" : ""}`} />
@@ -180,7 +160,7 @@ export default function VoucherRules() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {slaConfigs.map((config) => (
+                {localConfigs.map((config) => (
                   <TableRow key={config.id}>
                     <TableCell className="font-medium">
                       <Badge variant="outline">{ETAPA_LABELS[config.etapa] || config.etapa}</Badge>
