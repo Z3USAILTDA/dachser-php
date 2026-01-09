@@ -161,14 +161,14 @@ export const VoucherRascunhoActions = ({ voucher, onUpdate }: VoucherRascunhoAct
       });
 
       toast({
-        title: "Voucher enviado!",
-        description: `Voucher enviado para ${etapaLabel}`,
+        title: "Voucher/SPO enviado!",
+        description: `Voucher/SPO enviado para ${etapaLabel}`,
       });
 
       onUpdate();
     } catch (error: any) {
       toast({
-        title: "Erro ao enviar voucher",
+        title: "Erro ao enviar voucher/SPO",
         description: error.message,
         variant: "destructive",
       });
@@ -224,7 +224,7 @@ export const VoucherRascunhoActions = ({ voucher, onUpdate }: VoucherRascunhoAct
       <Alert className="bg-amber-500/10 border-amber-500/30">
         <AlertCircle className="h-4 w-4 text-amber-500" />
         <AlertDescription className="text-foreground">
-          Este voucher está em <strong>rascunho</strong>. Complete os dados e anexos obrigatórios para enviá-lo.
+          Este voucher/SPO está em <strong>rascunho</strong>. Complete os dados e anexos obrigatórios para enviá-lo.
         </AlertDescription>
       </Alert>
 
@@ -294,7 +294,7 @@ export const VoucherRascunhoActions = ({ voucher, onUpdate }: VoucherRascunhoAct
           <h3 className="text-lg font-semibold">Ações do Rascunho</h3>
           <p className="text-sm text-muted-foreground">
             {canEnviar 
-              ? "Anexos completos! Você pode enviar o voucher." 
+              ? "Anexos completos! Você pode enviar o voucher/SPO." 
               : "Adicione os anexos obrigatórios para enviar."}
           </p>
         </div>
@@ -316,7 +316,7 @@ export const VoucherRascunhoActions = ({ voucher, onUpdate }: VoucherRascunhoAct
           className="gap-2 bg-primary hover:bg-primary/90"
         >
           {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
-          Enviar Voucher
+          Enviar Voucher/SPO
         </Button>
 
         <Button
@@ -344,9 +344,9 @@ export const VoucherRascunhoActions = ({ voucher, onUpdate }: VoucherRascunhoAct
       <AlertDialog open={showEnviarConfirm} onOpenChange={setShowEnviarConfirm}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Enviar Voucher</AlertDialogTitle>
+            <AlertDialogTitle>Enviar Voucher/SPO</AlertDialogTitle>
             <AlertDialogDescription>
-              Ao enviar, o voucher sairá do modo rascunho e seguirá para a próxima etapa do fluxo.
+              Ao enviar, o voucher/SPO sairá do modo rascunho e seguirá para a próxima etapa do fluxo.
               Deseja continuar?
             </AlertDialogDescription>
           </AlertDialogHeader>

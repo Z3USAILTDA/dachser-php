@@ -153,7 +153,7 @@ export const VoucherRoboActions = ({ voucher, onUpdate }: VoucherRoboActionsProp
             <div>
               <CardTitle>Processamento Automático</CardTitle>
               <CardDescription>
-                Voucher aguardando integração com sistema RM
+                Voucher/SPO aguardando integração com sistema RM
               </CardDescription>
             </div>
           </div>
@@ -218,7 +218,7 @@ export const VoucherRoboActions = ({ voucher, onUpdate }: VoucherRoboActionsProp
           {voucher.statusBaixa === "BAIXA_MANUAL" && (
             <div className="p-3 bg-blue-500/10 border border-blue-500/20 rounded-lg">
               <p className="text-sm text-blue-700 dark:text-blue-300">
-                <strong>Baixa Manual:</strong> Este voucher será processado manualmente no sistema RM
+                <strong>Baixa Manual:</strong> Este voucher/SPO será processado manualmente no sistema RM
               </p>
             </div>
           )}
@@ -226,7 +226,7 @@ export const VoucherRoboActions = ({ voucher, onUpdate }: VoucherRoboActionsProp
           {voucher.statusBaixa === "BAIXA_REMESSA" && (
             <div className="p-3 bg-purple-500/10 border border-purple-500/20 rounded-lg">
               <p className="text-sm text-purple-700 dark:text-purple-300">
-                <strong>Remessa:</strong> Este voucher será incluído na remessa bancária ({voucher.remessa})
+                <strong>Remessa:</strong> Este voucher/SPO será incluído na remessa bancária ({voucher.remessa})
               </p>
             </div>
           )}

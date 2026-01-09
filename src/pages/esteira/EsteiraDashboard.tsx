@@ -142,7 +142,7 @@ const EsteiraDashboard = () => {
     <PageLayout>
       <PageHeader 
         title="Dashboard"
-        subtitle="Visão geral do workflow de vouchers"
+        subtitle="Visão geral do workflow de vouchers/SPO"
       />
 
       <main className="container mx-auto px-4 py-6 space-y-8">
@@ -154,7 +154,7 @@ const EsteiraDashboard = () => {
             <section>
               <h2 className="text-lg font-semibold mb-4 flex items-center gap-2 text-foreground/90">
                 <Users className="h-5 w-5 text-primary" />
-                Vouchers por Etapa
+                Vouchers/SPO por Etapa
               </h2>
               <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
                 <MetricCard
@@ -192,7 +192,7 @@ const EsteiraDashboard = () => {
             <section>
               <h2 className="text-lg font-semibold mb-4 flex items-center gap-2 text-foreground/90">
                 <AlertCircle className="h-5 w-5 text-destructive" />
-                Vouchers Urgentes
+                Vouchers/SPO Urgentes
               </h2>
               <div className="grid gap-4 sm:grid-cols-2">
                 <MetricCard
@@ -256,9 +256,9 @@ const EsteiraDashboard = () => {
                   {metrics.vencidos > 0 && (
                     <div className="flex items-center justify-between p-4 bg-destructive/10 border border-destructive/20 rounded-lg">
                       <div>
-                        <p className="font-medium text-destructive">Vouchers Vencidos</p>
+                        <p className="font-medium text-destructive">Vouchers/SPO Vencidos</p>
                         <p className="text-sm text-muted-foreground">
-                          {metrics.vencidos} voucher(s) já passaram do vencimento
+                          {metrics.vencidos} voucher(s)/SPO já passaram do vencimento
                         </p>
                       </div>
                       <Badge className="bg-destructive text-destructive-foreground">{metrics.vencidos}</Badge>
@@ -269,7 +269,7 @@ const EsteiraDashboard = () => {
                       <div>
                         <p className="font-medium text-warning">Atenção: Vencimento Próximo</p>
                         <p className="text-sm text-muted-foreground">
-                          {metrics.vencendo24h} voucher(s) vencem nas próximas 24 horas
+                          {metrics.vencendo24h} voucher(s)/SPO vencem nas próximas 24 horas
                         </p>
                       </div>
                       <Badge className="bg-warning text-warning-foreground">

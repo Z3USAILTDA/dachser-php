@@ -39,7 +39,7 @@ export const VoucherFinanceiroActions = ({ voucher, onUpdate }: VoucherFinanceir
     // Gate de validação - bloquear se não estiver pronto para ROBO
     if (!isProntoParaRobo) {
       toast({
-        title: "Voucher não está pronto",
+        title: "Voucher/SPO não está pronto",
         description: "Complete todas as pendências antes de enviar para o Robô",
         variant: "destructive",
       });
@@ -115,16 +115,16 @@ export const VoucherFinanceiroActions = ({ voucher, onUpdate }: VoucherFinanceir
       if (error) throw error;
 
       toast({
-        title: "Voucher baixado!",
+        title: "Voucher/SPO baixado!",
         description: tipoBaixa === "BAIXA_REMESSA" 
-          ? "Voucher enviado para Robô e dados enviados ao RM" 
-          : "Voucher enviado para processamento do Robô",
+          ? "Voucher/SPO enviado para Robô e dados enviados ao RM" 
+          : "Voucher/SPO enviado para processamento do Robô",
       });
 
       onUpdate();
     } catch (error: any) {
       toast({
-        title: "Erro ao baixar voucher",
+        title: "Erro ao baixar voucher/SPO",
         description: error.message,
         variant: "destructive",
       });
@@ -190,14 +190,14 @@ export const VoucherFinanceiroActions = ({ voucher, onUpdate }: VoucherFinanceir
       }
 
       toast({
-        title: "Voucher devolvido",
-        description: "Voucher devolvido para Operação",
+        title: "Voucher/SPO devolvido",
+        description: "Voucher/SPO devolvido para Operação",
       });
 
       onUpdate();
     } catch (error: any) {
       toast({
-        title: "Erro ao devolver voucher",
+        title: "Erro ao devolver voucher/SPO",
         description: error.message,
         variant: "destructive",
       });
@@ -263,14 +263,14 @@ export const VoucherFinanceiroActions = ({ voucher, onUpdate }: VoucherFinanceir
       }
 
       toast({
-        title: "Voucher devolvido",
-        description: "Voucher devolvido para Fiscal",
+        title: "Voucher/SPO devolvido",
+        description: "Voucher/SPO devolvido para Fiscal",
       });
 
       onUpdate();
     } catch (error: any) {
       toast({
-        title: "Erro ao devolver voucher",
+        title: "Erro ao devolver voucher/SPO",
         description: error.message,
         variant: "destructive",
       });
@@ -286,7 +286,7 @@ export const VoucherFinanceiroActions = ({ voucher, onUpdate }: VoucherFinanceir
       <div>
         <h3 className="text-lg font-semibold mb-2">Ações - Financeiro</h3>
         <p className="text-sm text-muted-foreground">
-          Revise e processe a baixa do voucher
+          Revise e processe a baixa do voucher/SPO
         </p>
       </div>
 
@@ -425,7 +425,7 @@ export const VoucherFinanceiroActions = ({ voucher, onUpdate }: VoucherFinanceir
             ) : (
               <AlertTriangle className="h-4 w-4" />
             )}
-            {isProntoParaRobo ? "Baixar Voucher" : "Pendências para Baixar"}
+            {isProntoParaRobo ? "Baixar Voucher/SPO" : "Pendências para Baixar"}
           </Button>
         )}
       </div>

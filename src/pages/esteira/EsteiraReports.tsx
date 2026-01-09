@@ -63,11 +63,11 @@ export default function EsteiraReports() {
       const data = response?.vouchers || [];
 
       if (!data || data.length === 0) {
-        toast({
-          title: "Sem dados",
-          description: "Nenhum voucher encontrado com os filtros selecionados",
-          variant: "destructive",
-        });
+      toast({
+        title: "Sem dados",
+        description: "Nenhum voucher/SPO encontrado com os filtros selecionados",
+        variant: "destructive",
+      });
         return;
       }
 
@@ -123,7 +123,7 @@ export default function EsteiraReports() {
 
       toast({
         title: "Exportação concluída!",
-        description: `${mappedVouchers.length} vouchers exportados para ${fileName}`,
+        description: `${mappedVouchers.length} vouchers/SPO exportados para ${fileName}`,
       });
     } catch (error: any) {
       console.error("Erro ao exportar:", error);
@@ -141,7 +141,7 @@ export default function EsteiraReports() {
     <PageLayout backTo="/fin/esteira">
       <PageHeader 
         title="Relatórios"
-        subtitle="Exporte dados de vouchers para análise"
+        subtitle="Exporte dados de vouchers/SPO para análise"
       />
 
       <main className="container mx-auto px-4 py-6">

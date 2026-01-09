@@ -146,7 +146,7 @@ export default function EsteiraManual() {
   );
 
   return (
-    <PageLayout title="DACHSER" subtitle="Manual do Usuário — Esteira de Vouchers v2.0" pageIcon={BookOpen} backTo="/fin/esteira">
+    <PageLayout title="DACHSER" subtitle="Manual do Usuário — Esteira de Vouchers/SPO v2.0" pageIcon={BookOpen} backTo="/fin/esteira">
       <div className="flex gap-6 items-start">
         {/* Sidebar Navigation */}
         <div ref={sidebarPlaceholderRef} className="w-64 shrink-0">
