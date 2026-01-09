@@ -644,6 +644,7 @@ const Index = () => {
                     origin: trackData.data.origin || "N/A",
                     destination: trackData.data.destination || "N/A",
                     dep_timestamp: depTimestamp, // Timestamp real do DEP da companhia aérea
+                    arr_location: trackData.data.lastStatus?.location || null, // IATA code where ARR occurred
                   },
                 });
 
@@ -1000,6 +1001,7 @@ const Index = () => {
                     origin: trackData.data.origin || "N/A",
                     destination: trackData.data.destination || "N/A",
                     email_cliente: awb.email_cliente || null,
+                    arr_location: trackData.data.lastStatus?.location || null, // IATA code where ARR occurred
                   },
                 });
 
@@ -1420,6 +1422,7 @@ const Index = () => {
               origin: data.data.origin || "N/A",
               destination: data.data.destination || "N/A",
               dep_timestamp: depTimestamp, // Timestamp real do DEP da companhia aérea
+              arr_location: data.data.lastStatus?.location || null, // IATA code where ARR occurred
             },
           });
 

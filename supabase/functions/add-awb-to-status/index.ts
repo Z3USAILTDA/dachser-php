@@ -58,7 +58,7 @@ serve(async (req) => {
   };
 
   try {
-    const { mawb, hawb, last_event, status, consignee_name, airline_code, nome_analista, email_analista, origin, destination, email_cliente, tipo_servico, dep_timestamp } = await req.json();
+    const { mawb, hawb, last_event, status, consignee_name, airline_code, nome_analista, email_analista, origin, destination, email_cliente, tipo_servico, dep_timestamp, arr_location } = await req.json();
     
     // SANITIZE ALL INPUT DATA - Apply trim to prevent whitespace issues
     const sanitizedMawb = mawb ? mawb.toString().trim() : '';
@@ -70,6 +70,7 @@ serve(async (req) => {
     const sanitizedDestination = destination ? destination.toString().trim() : 'N/A';
     const sanitizedEmailCliente = email_cliente ? email_cliente.toString().trim() : null;
     const sanitizedTipoServico = tipo_servico ? tipo_servico.toString().trim() : 'N/A';
+    const sanitizedArrLocation = arr_location ? arr_location.toString().trim().toUpperCase() : null;
     
     // Extract airline code from AWB if not provided (first 3 digits)
     const finalAirlineCode = airline_code || (sanitizedMawb ? sanitizedMawb.substring(0, 3) : 'N/A');
@@ -100,7 +101,8 @@ serve(async (req) => {
       finalTipoServico,
       originalEvent: last_event,
       finalLastEvent,
-      isAlertStatus
+      isAlertStatus,
+      arr_location: sanitizedArrLocation
     });
 
     const client = await new Client().connect({
@@ -119,11 +121,31 @@ serve(async (req) => {
     // During UPDATE: only update hawb/nome_analista/email_analista/email_cliente/tipo_servico if they are NOT 'N/A' or NULL (preserve existing values)
     // data_atraso: set to NOW() when DIS/OFLD first occurs, reset to NULL when status becomes DLV
     // arr_check_count: increment when status is ARR, reset to 0 when status changes from ARR
-    // arr_datetime: set to NOW() when status first becomes ARR, preserve on subsequent ARR checks
+    // arr_datetime: set to NOW() when status first becomes ARR AND arr_location matches destination (final destination arrival)
+    //               If ARR is at a connection (arr_location != destination), do NOT set arr_datetime
     // dep_datetime: set when status is DEP and dep_timestamp is provided, preserve on subsequent updates
     // Use sanitized AWB for insert - TRIM applied to prevent whitespace issues
     const isArrStatus = finalLastEvent === 'ARR';
     const isDepStatus = finalLastEvent === 'DEP';
+    
+    // NEW LOGIC: Only set arr_datetime when ARR is at final destination
+    // Compare arr_location with destination to determine if it's final arrival or connection
+    const destinationUpper = finalDestination.toUpperCase();
+    const isArrAtFinalDestination = isArrStatus && (
+      // If no arr_location provided, assume it's final destination (backward compatibility)
+      !sanitizedArrLocation ||
+      // Or arr_location matches destination (case-insensitive)
+      sanitizedArrLocation === destinationUpper ||
+      // Or destination is N/A (can't compare, assume final)
+      destinationUpper === 'N/A'
+    );
+    
+    console.log('ARR location check:', { 
+      isArrStatus, 
+      arr_location: sanitizedArrLocation, 
+      destination: destinationUpper,
+      isArrAtFinalDestination 
+    });
     
     // Define critical/alert statuses that can override ARR
     const criticalStatuses = ['DIS', 'NIL', 'NIF', 'OFLD'];
@@ -137,7 +159,7 @@ serve(async (req) => {
     // ARR status is "locked" - only critical statuses (DIS, NIL, NIF, OFLD) can override it
     await client.execute(
       `INSERT INTO t_status_aereo (awb, destinatário, \`última atualização\`, último_status, origem, destino, hawb, nome_analista, email_analista, email_cliente, data_atraso, tipo_servico, arr_check_count, arr_datetime, dep_datetime) 
-       VALUES (TRIM(?), TRIM(?), NOW(), TRIM(?), TRIM(?), TRIM(?), TRIM(?), TRIM(?), TRIM(?), TRIM(?), ${isAlertStatus ? 'NOW()' : 'NULL'}, TRIM(?), ${isArrStatus ? '1' : '0'}, ${isArrStatus ? 'NOW()' : 'NULL'}, ${depDatetimeValue ? '?' : 'NULL'})
+       VALUES (TRIM(?), TRIM(?), NOW(), TRIM(?), TRIM(?), TRIM(?), TRIM(?), TRIM(?), TRIM(?), TRIM(?), ${isAlertStatus ? 'NOW()' : 'NULL'}, TRIM(?), ${isArrStatus ? '1' : '0'}, ${isArrAtFinalDestination ? 'NOW()' : 'NULL'}, ${depDatetimeValue ? '?' : 'NULL'})
        ON DUPLICATE KEY UPDATE 
          destinatário = TRIM(?),
          \`última atualização\` = NOW(),
@@ -155,7 +177,7 @@ serve(async (req) => {
          data_atraso = IF(TRIM(?) = 'DLV', NULL, IF(? = 1 AND data_atraso IS NULL, NOW(), data_atraso)),
          tipo_servico = IF(TRIM(?) != 'N/A', TRIM(?), tipo_servico),
          arr_check_count = IF(último_status = 'ARR' OR ? = 1, COALESCE(arr_check_count, 0) + 1, 0),
-         arr_datetime = IF((último_status = 'ARR' OR ? = 1) AND arr_datetime IS NULL, NOW(), IF(último_status != 'ARR' AND ? = 0, NULL, arr_datetime)),
+         arr_datetime = IF(? = 1 AND arr_datetime IS NULL, NOW(), IF(último_status != 'ARR' AND ? = 0, NULL, arr_datetime)),
          dep_datetime = IF(? = 1 AND dep_datetime IS NULL AND ? IS NOT NULL, ?, dep_datetime)`,
       depDatetimeValue ? [
         sanitizedMawb, finalConsigneeName, finalLastEvent, finalOrigin, finalDestination, finalHawb, finalNomeAnalista, finalEmailAnalista, finalEmailCliente, finalTipoServico, depDatetimeValue,
@@ -170,7 +192,7 @@ serve(async (req) => {
         finalLastEvent, isAlertStatus ? 1 : 0,
         finalTipoServico, finalTipoServico,
         isArrStatus ? 1 : 0,
-        isArrStatus ? 1 : 0, isArrStatus ? 1 : 0,
+        isArrAtFinalDestination ? 1 : 0, isArrAtFinalDestination ? 1 : 0,
         isDepStatus ? 1 : 0, depDatetimeValue, depDatetimeValue
       ] : [
         sanitizedMawb, finalConsigneeName, finalLastEvent, finalOrigin, finalDestination, finalHawb, finalNomeAnalista, finalEmailAnalista, finalEmailCliente, finalTipoServico,
@@ -185,7 +207,7 @@ serve(async (req) => {
         finalLastEvent, isAlertStatus ? 1 : 0,
         finalTipoServico, finalTipoServico,
         isArrStatus ? 1 : 0,
-        isArrStatus ? 1 : 0, isArrStatus ? 1 : 0,
+        isArrAtFinalDestination ? 1 : 0, isArrAtFinalDestination ? 1 : 0,
         isDepStatus ? 1 : 0, null, null
       ]
     );
