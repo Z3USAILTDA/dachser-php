@@ -91,7 +91,7 @@ export const FinDbStatsPanel = ({ stats, isLoading, onRefresh }: FinDbStatsPanel
         <div className="p-4 border-b border-[rgba(255,255,255,.08)]">
           <div className="flex items-center gap-2 mb-3">
             <Receipt className="h-4 w-4 text-[#ffc800]" />
-            <span className="text-sm font-medium text-[#f5f5f5]">Esteira de Vouchers</span>
+            <span className="text-sm font-medium text-[#f5f5f5]">Esteira de Vouchers/SPO</span>
           </div>
           
           {stats && (
@@ -105,7 +105,7 @@ export const FinDbStatsPanel = ({ stats, isLoading, onRefresh }: FinDbStatsPanel
                 <span className="text-[#666]">{formatDateTime(stats.lastUpdate)}</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-[#888]">Total Vouchers:</span>
+                <span className="text-[#888]">Total Vouchers/SPO:</span>
                 <span className="font-medium text-[#ffc800]">{stats.totalVouchers.toLocaleString('pt-BR')}</span>
               </div>
               <div className="flex justify-between">

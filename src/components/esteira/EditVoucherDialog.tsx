@@ -103,7 +103,7 @@ export const EditVoucherDialog = ({ open, onOpenChange, onSuccess, voucher }: Ed
       if (!data?.success) throw new Error(data?.error || "Erro ao atualizar voucher");
 
       toast({
-        title: "Voucher atualizado!",
+        title: "Voucher/SPO atualizado!",
         description: "As alterações foram salvas com sucesso.",
       });
 
@@ -127,7 +127,7 @@ export const EditVoucherDialog = ({ open, onOpenChange, onSuccess, voucher }: Ed
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>Editar Voucher</DialogTitle>
+          <DialogTitle>Editar Voucher/SPO</DialogTitle>
         </DialogHeader>
 
         <form onSubmit={handleSubmit} className="space-y-4">

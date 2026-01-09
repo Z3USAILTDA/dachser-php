@@ -201,8 +201,8 @@ export const CreateVoucherDialog = ({
     const numeroRM = form.getValues("numeroRM");
     if (!numeroRM || numeroRM.trim() === "") {
       toast({
-        title: "💡 Digite o número do voucher",
-        description: "Informe o número do voucher no RM para buscar os dados automaticamente.",
+        title: "💡 Digite o número do voucher/SPO",
+        description: "Informe o número do voucher/SPO no RM para buscar os dados automaticamente.",
       });
       return;
     }
@@ -218,13 +218,13 @@ export const CreateVoucherDialog = ({
       if (!data.success) {
         if (data.alreadyProcessed) {
           toast({
-            title: "ℹ️ Voucher já baixado",
-            description: "Este voucher já possui baixa registrada. Informe outro número ou use a entrada manual.",
+            title: "ℹ️ Voucher/SPO já baixado",
+            description: "Este voucher/SPO já possui baixa registrada. Informe outro número ou use a entrada manual.",
           });
         } else {
           toast({
-            title: "🔍 Voucher não localizado",
-            description: "Não encontramos este voucher no RM. Verifique o número ou use a entrada manual.",
+            title: "🔍 Voucher/SPO não localizado",
+            description: "Não encontramos este voucher/SPO no RM. Verifique o número ou use a entrada manual.",
           });
         }
         setIsSearchingRM(false);
