@@ -28,6 +28,7 @@ import {
   X,
   HelpCircle,
   Settings,
+  Clock,
 } from "lucide-react";
 import { EmailClienteRegrasDialog } from "@/components/air/EmailClienteRegrasDialog";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -45,6 +46,9 @@ import DashboardCards, { CardFilterType } from "@/components/DashboardCards";
 import dachserBg from "@/assets/dachser-background.jpg";
 import { TablePagination } from "@/components/layout/TablePagination";
 import { Filter as FilterIcon } from "lucide-react";
+import { AwbTimelineModal } from "@/components/air/AwbTimelineModal";
+import { format } from "date-fns";
+import { ptBR } from "date-fns/locale";
 
 // TEMPORARIAMENTE DESATIVADO - Mudar para true para reativar envio de emails
 const EMAIL_SENDING_ENABLED = false;
@@ -363,6 +367,11 @@ const Index = () => {
   const [dbStats, setDbStats] = useState<DbStats | null>(null);
   const [isLoadingDbStats, setIsLoadingDbStats] = useState(false);
   const [regrasDialogOpen, setRegrasDialogOpen] = useState(false);
+  const [timelineModal, setTimelineModal] = useState<{ open: boolean; awb: string; consigneeName: string }>({
+    open: false,
+    awb: "",
+    consigneeName: "",
+  });
   const isPausedRef = useRef(false);
   const shouldSendEmailsRef = useRef(false); // Only send emails when user explicitly clicks button
   const emailEnableTimestampRef = useRef<number>(0); // Track when emails were enabled
@@ -2147,6 +2156,7 @@ const Index = () => {
                       <th className="px-4 py-3 text-left text-[#aaaaaa] uppercase text-[0.68rem] tracking-[0.1em] font-medium">Rota</th>
                       <th className="px-4 py-3 text-left text-[#aaaaaa] uppercase text-[0.68rem] tracking-[0.1em] font-medium">Rastreio</th>
                       <th className="px-4 py-3 text-left text-[#aaaaaa] uppercase text-[0.68rem] tracking-[0.1em] font-medium">Último Evento</th>
+                      <th className="px-4 py-3 text-left text-[#aaaaaa] uppercase text-[0.68rem] tracking-[0.1em] font-medium">Data/Hora</th>
                       <th className="px-4 py-3 text-center text-[#aaaaaa] uppercase text-[0.68rem] tracking-[0.1em] font-medium">Situação</th>
                       <th
                         className="px-4 py-3 text-left text-[#aaaaaa] uppercase text-[0.68rem] tracking-[0.1em] font-medium cursor-pointer select-none hover:text-[#ffc800] transition"
@@ -2160,7 +2170,7 @@ const Index = () => {
                       </th>
                       <th className="px-4 py-3 text-left text-[#aaaaaa] uppercase text-[0.68rem] tracking-[0.1em] font-medium">Serviço</th>
                       <th className="px-4 py-3 text-center text-[#aaaaaa] uppercase text-[0.68rem] tracking-[0.1em] font-medium">
-                        Abrir rastreio
+                        Ações
                       </th>
                     </tr>
                   </thead>
@@ -2347,6 +2357,19 @@ const Index = () => {
                                 {getStatusCode(awb.last_event)}
                               </span>
                             </td>
+                            <td className="px-3 py-3 text-[#aaaaaa] text-sm whitespace-nowrap">
+                              {(() => {
+                                // Data/hora do último evento - usar last_check ou created_at
+                                const eventDate = awb.last_check || awb.created_at;
+                                if (!eventDate) return <span className="text-muted-foreground">—</span>;
+                                try {
+                                  const date = new Date(eventDate);
+                                  return format(date, "dd/MM/yy HH:mm", { locale: ptBR });
+                                } catch {
+                                  return <span className="text-muted-foreground">—</span>;
+                                }
+                              })()}
+                            </td>
                             <td className="px-3 py-3 text-center">
                               {(() => {
                                 // Situação vazia para falhas de consulta e AWB inválido
@@ -2371,21 +2394,47 @@ const Index = () => {
                             <td className="px-3 py-3 text-[#aaaaaa] text-sm uppercase">{awb.nome_analista || "-"}</td>
                             <td className="px-3 py-3 text-[#aaaaaa] text-sm">{awb.tipo_servico || "N/A"}</td>
                             <td className="px-4 py-3 text-center">
-                              <div className="flex items-center justify-center">
+                              <div className="flex items-center justify-center gap-1">
+                                {/* Botão Ver Timeline */}
+                                <TooltipProvider>
+                                  <Tooltip>
+                                    <TooltipTrigger asChild>
+                                      <Button
+                                        variant="ghost"
+                                        size="sm"
+                                        onClick={() => setTimelineModal({ open: true, awb: awb.awb, consigneeName: awb.consignee_name })}
+                                        className="text-[#ffc800] hover:text-[#ffc800] hover:bg-[#ffc800]/10 h-8 w-8 p-0"
+                                      >
+                                        <Clock className="w-4 h-4" />
+                                      </Button>
+                                    </TooltipTrigger>
+                                    <TooltipContent>
+                                      <p className="text-xs">Ver Timeline</p>
+                                    </TooltipContent>
+                                  </Tooltip>
+                                </TooltipProvider>
+                                {/* Botão Abrir Rastreio Externo */}
                                 {(() => {
                                   const trackingUrl = getTrackingUrl(awb.airline_code, awb.awb);
                                   return trackingUrl ? (
-                                    <Button
-                                      variant="ghost"
-                                      size="sm"
-                                      onClick={() => window.open(trackingUrl, "_blank")}
-                                      className="gap-1.5 text-foreground hover:text-primary h-8 px-2"
-                                    >
-                                      <ExternalLink className="w-4 h-4" />
-                                    </Button>
-                                  ) : (
-                                    <span className="text-muted-foreground text-xs">N/D</span>
-                                  );
+                                    <TooltipProvider>
+                                      <Tooltip>
+                                        <TooltipTrigger asChild>
+                                          <Button
+                                            variant="ghost"
+                                            size="sm"
+                                            onClick={() => window.open(trackingUrl, "_blank")}
+                                            className="text-foreground hover:text-primary h-8 w-8 p-0"
+                                          >
+                                            <ExternalLink className="w-4 h-4" />
+                                          </Button>
+                                        </TooltipTrigger>
+                                        <TooltipContent>
+                                          <p className="text-xs">Abrir Rastreio Externo</p>
+                                        </TooltipContent>
+                                      </Tooltip>
+                                    </TooltipProvider>
+                                  ) : null;
                                 })()}
                               </div>
                             </td>
@@ -2557,6 +2606,14 @@ const Index = () => {
       <EmailClienteRegrasDialog 
         open={regrasDialogOpen} 
         onOpenChange={setRegrasDialogOpen} 
+      />
+
+      {/* Modal de Timeline por AWB */}
+      <AwbTimelineModal
+        open={timelineModal.open}
+        onOpenChange={(open) => setTimelineModal((prev) => ({ ...prev, open }))}
+        awb={timelineModal.awb}
+        consigneeName={timelineModal.consigneeName}
       />
     </div>
   );
