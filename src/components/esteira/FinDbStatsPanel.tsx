@@ -29,7 +29,6 @@ interface FinDbStatsPanelProps {
 }
 
 export const FinDbStatsPanel = ({ stats, isLoading, onRefresh }: FinDbStatsPanelProps) => {
-  if (!stats && !isLoading) return null;
 
   const formatRelativeTime = (dateString: string | null) => {
     if (!dateString) return "N/A";
