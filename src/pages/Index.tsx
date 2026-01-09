@@ -1708,7 +1708,9 @@ const Index = () => {
         // Status de alerta e críticos
         "DIS", "OFLD", "NIL", "NIF",
         // Status de erro no rastreio
-        "ERRO"
+        "ERRO",
+        // Outros status de rastreio
+        "FFM", "AUD"
       ];
       const statusToCheck = (awb.status || "").toUpperCase();
       const lastEventCode = getStatusCode(awb.last_event).toUpperCase();
