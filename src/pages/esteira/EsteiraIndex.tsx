@@ -883,35 +883,24 @@ const EsteiraIndex = () => {
   };
 
   // Calculate DB stats from vouchers
-  const calculateFinDbStats = (vouchersList: Voucher[]) => {
-    const etapaCounts: Record<string, number> = {};
-    let totalValor = 0;
-
-    vouchersList.forEach(v => {
-      const etapa = v.etapaAtual || "OPERACAO";
-      etapaCounts[etapa] = (etapaCounts[etapa] || 0) + 1;
-      totalValor += v.valor || 0;
-    });
-
-    const etapaBreakdown = Object.entries(etapaCounts)
-      .map(([etapa, count]) => ({
-        etapa,
-        label: ETAPA_LABELS[etapa as EtapaAtual] || etapa,
-        count
-      }))
-      .sort((a, b) => b.count - a.count);
-
-    setFinDbStats({
-      lastUpdate: new Date().toISOString(),
-      totalVouchers: vouchersList.length,
-      totalValor,
-      etapaBreakdown
-    });
-  };
-
-  const fetchFinDbStats = () => {
+  const fetchFinDbStats = async () => {
     setIsLoadingDbStats(true);
-    loadVouchers().finally(() => setIsLoadingDbStats(false));
+    try {
+      const { data, error } = await supabase.functions.invoke("fetch-fin-voucher-stats");
+      
+      if (error) {
+        console.error("Error fetching fin db stats:", error);
+        return;
+      }
+
+      if (data?.success && data?.stats) {
+        setFinDbStats(data.stats);
+      }
+    } catch (err) {
+      console.error("Error fetching fin db stats:", err);
+    } finally {
+      setIsLoadingDbStats(false);
+    }
   };
 
   useEffect(() => {
@@ -920,12 +909,12 @@ const EsteiraIndex = () => {
     }
   }, [hasEsteiraAccess]);
 
-  // Update stats when vouchers change
+  // Fetch DB stats on mount
   useEffect(() => {
-    if (vouchers.length > 0) {
-      calculateFinDbStats(vouchers);
+    if (hasEsteiraAccess) {
+      fetchFinDbStats();
     }
-  }, [vouchers]);
+  }, [hasEsteiraAccess]);
 
   // Reload vouchers when tab becomes visible after being hidden (tab switch only)
   // Removed window focus listener as it was triggering too frequently (e.g., when closing dialogs)
