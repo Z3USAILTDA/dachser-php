@@ -80,7 +80,7 @@ export default function AlteracoesFee() {
   const [empresaFilter, setEmpresaFilter] = useState<string>("all");
   const [searchTerm, setSearchTerm] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
-  const pageSize = 15;
+  const pageSize = 20;
 
   const fetchChanges = async () => {
     setIsLoading(true);
