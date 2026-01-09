@@ -53,15 +53,21 @@ export function RoboTab() {
         let voucherId = null;
 
         if (numeroSPO) {
-          const { data } = await supabase
-            .from("vouchers")
-            .select("id, numero_spo, etapa_atual")
-            .eq("numero_spo", numeroSPO)
-            .eq("etapa_atual", "ROBO")
-            .maybeSingle();
+          // Query MariaDB via proxy for voucher
+          try {
+            const { data, error } = await supabase.functions.invoke('mariadb-proxy', {
+              body: {
+                action: 'query',
+                query: `SELECT id FROM t_vouchers WHERE numero_spo = ? AND etapa_atual = 'ROBO' LIMIT 1`,
+                params: [numeroSPO],
+              },
+            });
 
-          if (data) {
-            voucherId = data.id;
+            if (!error && data?.rows?.length > 0) {
+              voucherId = data.rows[0].id;
+            }
+          } catch (e) {
+            console.error('Error fetching voucher:', e);
           }
         }
 
@@ -108,6 +114,7 @@ export function RoboTab() {
         const fileName = `${Math.random()}.${fileExt}`;
         const filePath = `${fileName}`;
 
+        // Upload to Supabase Storage
         const { error: uploadError } = await supabase.storage
           .from("voucher-anexos")
           .upload(filePath, fileMatch.file);
@@ -118,24 +125,37 @@ export function RoboTab() {
           .from("voucher-anexos")
           .getPublicUrl(filePath);
 
-        const { error: attachmentError } = await supabase
-          .from("voucher_anexos")
-          .insert({
-            voucher_id: fileMatch.voucherId,
-            tipo: "COMPROVANTE" as TipoAnexo,
-            file_url: publicUrl,
-            file_name: fileMatch.file.name,
-            file_size: fileMatch.file.size,
-            uploaded_by_user_id: userData.user?.id,
-          });
+        // Save attachment metadata to MariaDB
+        const { error: attachmentError } = await supabase.functions.invoke('mariadb-proxy', {
+          body: {
+            action: 'insert',
+            table: 't_voucher_anexos',
+            data: {
+              voucher_id: fileMatch.voucherId,
+              tipo: "COMPROVANTE" as TipoAnexo,
+              file_url: publicUrl,
+              file_name: fileMatch.file.name,
+              file_size: fileMatch.file.size,
+              created_at: new Date().toISOString().slice(0, 19).replace('T', ' '),
+            },
+          },
+        });
 
         if (attachmentError) throw attachmentError;
 
-        await supabase.from("voucher_logs").insert({
-          voucher_id: fileMatch.voucherId,
-          user_id: userData.user?.id,
-          acao: "COMPROVANTE_ANEXADO",
-          detalhe: `Comprovante ${fileMatch.file.name} anexado automaticamente pelo robô`,
+        // Log action to MariaDB
+        await supabase.functions.invoke('mariadb-proxy', {
+          body: {
+            action: 'insert',
+            table: 't_log_entries',
+            data: {
+              voucher_id: fileMatch.voucherId,
+              user_id: userData.user?.id,
+              acao: "COMPROVANTE_ANEXADO",
+              detalhe: `Comprovante ${fileMatch.file.name} anexado automaticamente pelo robô`,
+              data_hora: new Date().toISOString().slice(0, 19).replace('T', ' '),
+            },
+          },
         });
 
         setFiles((prev) =>
