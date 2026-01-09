@@ -221,6 +221,10 @@ export const VoucherTable = ({ vouchers, onViewDetails, onEdit, onDelete, onGoBa
                 <TableHead>
                   <SortableHeader field="vencimento">Data Vencimento</SortableHeader>
                 </TableHead>
+                <TableHead>
+                  <SortableHeader field="createdAt">Emissão</SortableHeader>
+                </TableHead>
+                <TableHead>Enviado por</TableHead>
                 <TableHead>Classificação</TableHead>
                 <TableHead>
                   <SortableHeader field="etapaAtual">Etapa Atual</SortableHeader>
@@ -277,6 +281,16 @@ export const VoucherTable = ({ vouchers, onViewDetails, onEdit, onDelete, onGoBa
                     title="Venc. de"
                   />
                 </TableHead>
+                <TableHead className="py-2">
+                  <Input
+                    type="date"
+                    value={filters.criadoEmInicio || ""}
+                    onChange={(e) => handleFilterChange("criadoEmInicio", e.target.value)}
+                    className="h-8 text-xs w-28"
+                    title="Emissão de"
+                  />
+                </TableHead>
+                <TableHead className="py-2"></TableHead>
                 <TableHead className="py-2">
                   <Select value={filters.urgente} onValueChange={(value) => handleFilterChange("urgente", value)}>
                     <SelectTrigger className="h-8 text-xs bg-card w-28">
@@ -342,7 +356,7 @@ export const VoucherTable = ({ vouchers, onViewDetails, onEdit, onDelete, onGoBa
             <TableBody>
               {paginatedVouchers.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={11} className="text-center text-muted-foreground py-8">
+                  <TableCell colSpan={13} className="text-center text-muted-foreground py-8">
                     Nenhum voucher encontrado
                   </TableCell>
                 </TableRow>
@@ -424,6 +438,21 @@ export const VoucherTable = ({ vouchers, onViewDetails, onEdit, onDelete, onGoBa
                             </Tooltip>
                           )}
                         </div>
+                      </TableCell>
+                      <TableCell className="text-sm text-muted-foreground">
+                        {voucher.dataEmissaoDocumento 
+                          ? format(new Date(voucher.dataEmissaoDocumento), "dd/MM/yyyy", { locale: ptBR }) 
+                          : "-"}
+                      </TableCell>
+                      <TableCell className="text-sm max-w-[100px] truncate">
+                        <Tooltip>
+                          <TooltipTrigger onClick={(e) => e.stopPropagation()}>
+                            <span>{voucher.criadoPorUserName || "-"}</span>
+                          </TooltipTrigger>
+                          <TooltipContent>
+                            Enviado por: {voucher.criadoPorUserName || "Não informado"}
+                          </TooltipContent>
+                        </Tooltip>
                       </TableCell>
                       <TableCell>
                         <Tooltip>
