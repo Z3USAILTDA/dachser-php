@@ -34,7 +34,8 @@ import {
   CheckCircle2,
   Clock,
   XCircle,
-  Ship
+  Ship,
+  Copy
 } from "lucide-react";
 import { format, parseISO } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -551,6 +552,30 @@ export const DraftDataGrid = ({ data, onRefresh, isLoading, statusFilter, onStat
                 bookingInfo={detailsData.bookingInfo} 
                 trackingData={selectedMBL?.trackingData}
               />
+
+              {/* Hash de Comprovação */}
+              {(detailsData.apiMetadata?.transactionId || selectedMBL?.trackingData?.transaction_id) && (
+                <div className="flex items-center gap-2 p-3 rounded-lg bg-white/5 border border-white/10">
+                  <span className="text-sm text-muted-foreground whitespace-nowrap">Hash de Comprovação:</span>
+                  <code className="text-xs font-mono bg-black/30 px-2 py-1 rounded truncate max-w-[300px]">
+                    {detailsData.apiMetadata?.transactionId || selectedMBL?.trackingData?.transaction_id}
+                  </code>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-7 w-7 p-0 shrink-0"
+                    onClick={() => {
+                      const hash = detailsData.apiMetadata?.transactionId || selectedMBL?.trackingData?.transaction_id;
+                      if (hash) {
+                        navigator.clipboard.writeText(hash);
+                        toast.success("Hash copiado!");
+                      }
+                    }}
+                  >
+                    <Copy className="h-3.5 w-3.5" />
+                  </Button>
+                </div>
+              )}
               
               {detailsData.containers?.length > 0 && (
                 <div>
