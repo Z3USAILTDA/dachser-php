@@ -67,9 +67,9 @@ const formatEventDate = (dateStr: string | undefined): string => {
 };
 
 export const DraftEventTimeline = ({ events }: DraftEventTimelineProps) => {
-  // Sort events by date (most recent first)
+  // Sort events by date (oldest first - chronological order)
   const sortedEvents = [...events].sort((a, b) => 
-    new Date(b.dateTime).getTime() - new Date(a.dateTime).getTime()
+    new Date(a.dateTime).getTime() - new Date(b.dateTime).getTime()
   );
 
   if (events.length === 0) {
