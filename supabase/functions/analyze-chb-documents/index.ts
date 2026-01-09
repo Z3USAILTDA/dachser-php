@@ -1065,8 +1065,32 @@ function extractHtmlAndTags(response: string, stepId: number): {
 }
 
 // =============================================================================
-// DATA PERSISTENCE
+// DATA PERSISTENCE - Using MariaDB via mariadb-proxy
 // =============================================================================
+
+async function callMariaDBProxy(action: string, params: Record<string, any> = {}): Promise<any> {
+  const supabaseUrl = Deno.env.get('SUPABASE_URL');
+  const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+  if (!supabaseUrl || !supabaseKey) {
+    throw new Error('Missing Supabase credentials');
+  }
+  
+  const response = await fetch(`${supabaseUrl}/functions/v1/mariadb-proxy`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${supabaseKey}`,
+    },
+    body: JSON.stringify({ action, ...params }),
+  });
+  
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`mariadb-proxy error: ${errorText}`);
+  }
+  
+  return response.json();
+}
 
 async function saveExtractedData(
   itemId: number,
@@ -1076,35 +1100,26 @@ async function saveExtractedData(
   rawText?: string
 ): Promise<void> {
   try {
-    const supabaseUrl = Deno.env.get('SUPABASE_URL');
-    const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
-    if (!supabaseUrl || !supabaseKey) return;
-    
-    // Upsert extracted data
-    const response = await fetch(
-      `${supabaseUrl}/rest/v1/chb_extracted_data`,
-      {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${supabaseKey}`,
-          'apikey': supabaseKey,
-          'Content-Type': 'application/json',
-          'Prefer': 'resolution=merge-duplicates',
-        },
-        body: JSON.stringify({
-          item_id: itemId,
-          filename,
-          etapa,
-          extracted_fields: extractedFields,
-          raw_text: rawText,
-          updated_at: new Date().toISOString(),
-        }),
-      }
-    );
-    
-    if (!response.ok) {
-      console.error('[saveExtractedData] Error:', await response.text());
-    }
+    // Save to MariaDB ai_agente.t_dachser_chb_extracted_data
+    await callMariaDBProxy('execute', {
+      query: `
+        INSERT INTO ai_agente.t_dachser_chb_extracted_data 
+        (item_id, filename, etapa, extracted_fields, raw_text, updated_at)
+        VALUES (?, ?, ?, ?, ?, NOW())
+        ON DUPLICATE KEY UPDATE 
+          extracted_fields = VALUES(extracted_fields),
+          raw_text = VALUES(raw_text),
+          updated_at = NOW()
+      `,
+      params: [
+        itemId,
+        filename,
+        etapa,
+        JSON.stringify(extractedFields),
+        rawText || null
+      ]
+    });
+    console.log(`[saveExtractedData] Saved to MariaDB for item ${itemId}, file ${filename}`);
   } catch (e) {
     console.error('[saveExtractedData] Failed:', e);
   }
@@ -1112,29 +1127,30 @@ async function saveExtractedData(
 
 async function getCachedExtractedData(itemId: number): Promise<Record<string, { fields: Record<string, any>; rawText?: string }>> {
   try {
-    const supabaseUrl = Deno.env.get('SUPABASE_URL');
-    const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
-    if (!supabaseUrl || !supabaseKey) return {};
+    const result = await callMariaDBProxy('query', {
+      query: `
+        SELECT filename, extracted_fields, raw_text 
+        FROM ai_agente.t_dachser_chb_extracted_data 
+        WHERE item_id = ?
+      `,
+      params: [itemId]
+    });
     
-    const response = await fetch(
-      `${supabaseUrl}/rest/v1/chb_extracted_data?item_id=eq.${itemId}&select=filename,extracted_fields,raw_text`,
-      {
-        method: 'GET',
-        headers: {
-          'Authorization': `Bearer ${supabaseKey}`,
-          'apikey': supabaseKey,
-        },
-      }
-    );
-    
-    if (!response.ok) return {};
-    
-    const data = await response.json();
     const cache: Record<string, { fields: Record<string, any>; rawText?: string }> = {};
+    const data = result.data || result || [];
     
     for (const item of data) {
+      let fields = {};
+      try {
+        fields = typeof item.extracted_fields === 'string' 
+          ? JSON.parse(item.extracted_fields) 
+          : (item.extracted_fields || {});
+      } catch {
+        fields = {};
+      }
+      
       cache[item.filename] = {
-        fields: item.extracted_fields || {},
+        fields,
         rawText: item.raw_text,
       };
     }
@@ -1200,10 +1216,11 @@ async function processAnalysisInBackground(
   try {
     console.log(`[BG] Starting background analysis for request ${requestId}`);
     
-    // Update status to processing
-    await supabase.from('chb_analysis_requests').update({
-      status: 'processing',
-    }).eq('id', requestId);
+    // Update status to processing in MariaDB
+    await callMariaDBProxy('execute', {
+      query: `UPDATE ai_agente.t_dachser_chb_runs SET status = 'processing' WHERE id = ?`,
+      params: [requestId]
+    });
     
     console.log(`[BG] Processing ${files.length} files for step ${stepId}`);
     
@@ -1276,12 +1293,11 @@ async function processAnalysisInBackground(
       } catch (geminiError) {
         console.error('[BG] Lovable AI also failed:', geminiError);
         
-        // Update request with error
-        await supabase.from('chb_analysis_requests').update({
-          status: 'error',
-          error_message: `Falha na análise: ${geminiError instanceof Error ? geminiError.message : 'Erro desconhecido'}`,
-          completed_at: new Date().toISOString(),
-        }).eq('id', requestId);
+        // Update request with error in MariaDB
+        await callMariaDBProxy('execute', {
+          query: `UPDATE ai_agente.t_dachser_chb_runs SET status = 'error', result_text = ?, updated_at = NOW() WHERE id = ?`,
+          params: [`Falha na análise: ${geminiError instanceof Error ? geminiError.message : 'Erro desconhecido'}`, requestId]
+        });
         
         return;
       }
@@ -1308,12 +1324,11 @@ async function processAnalysisInBackground(
       fileWarnings: fileWarnings.length > 0 ? fileWarnings : undefined,
     };
 
-    // Update request with result
-    await supabase.from('chb_analysis_requests').update({
-      status: 'completed',
-      result_html: JSON.stringify(resultData),
-      completed_at: new Date().toISOString(),
-    }).eq('id', requestId);
+    // Update request with result in MariaDB
+    await callMariaDBProxy('execute', {
+      query: `UPDATE ai_agente.t_dachser_chb_runs SET status = 'completed', result_html = ?, result_json = ?, updated_at = NOW() WHERE id = ?`,
+      params: [JSON.stringify(resultData), JSON.stringify(resultData), requestId]
+    });
 
     console.log(`[BG] Request ${requestId} completed successfully`);
 
@@ -1345,12 +1360,11 @@ async function processAnalysisInBackground(
   } catch (error) {
     console.error(`[BG] Error processing analysis ${requestId}:`, error);
     
-    // Update request with error
-    await supabase.from('chb_analysis_requests').update({
-      status: 'error',
-      error_message: error instanceof Error ? error.message : 'Erro desconhecido',
-      completed_at: new Date().toISOString(),
-    }).eq('id', requestId);
+    // Update request with error in MariaDB
+    await callMariaDBProxy('execute', {
+      query: `UPDATE ai_agente.t_dachser_chb_runs SET status = 'error', result_text = ?, updated_at = NOW() WHERE id = ?`,
+      params: [error instanceof Error ? error.message : 'Erro desconhecido', requestId]
+    });
   }
 }
 
@@ -1368,46 +1382,58 @@ serve(async (req) => {
     const supabase = getSupabaseClient();
     
     // =========================================================================
-    // MODE: POLL - Check status of existing request
+    // MODE: POLL - Check status of existing request (using MariaDB)
     // =========================================================================
     if (body.requestId) {
       const { requestId } = body;
       console.log(`[POLL] Checking status for request ${requestId}`);
       
-      const { data, error } = await supabase
-        .from('chb_analysis_requests')
-        .select('status, result_html, error_message')
-        .eq('id', requestId)
-        .single();
-      
-      if (error || !data) {
+      try {
+        const pollResult = await callMariaDBProxy('query', {
+          query: `SELECT status, result_html, result_text FROM ai_agente.t_dachser_chb_runs WHERE id = ? LIMIT 1`,
+          params: [requestId]
+        });
+        
+        const data = (pollResult.data || pollResult)?.[0];
+        
+        if (!data) {
+          return new Response(
+            JSON.stringify({ 
+              status: 'error', 
+              error: 'Requisição não encontrada' 
+            }),
+            { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+        
+        // Parse result_html if completed
+        let result = null;
+        if (data.status === 'completed' && data.result_html) {
+          try {
+            result = JSON.parse(data.result_html);
+          } catch {
+            result = { html: data.result_html };
+          }
+        }
+        
+        return new Response(
+          JSON.stringify({
+            status: data.status,
+            result,
+            error: data.status === 'error' ? data.result_text : null,
+          }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      } catch (pollError) {
+        console.error('[POLL] Error querying MariaDB:', pollError);
         return new Response(
           JSON.stringify({ 
             status: 'error', 
-            error: 'Requisição não encontrada' 
+            error: 'Erro ao consultar status' 
           }),
           { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
       }
-      
-      // Parse result_html if completed
-      let result = null;
-      if (data.status === 'completed' && data.result_html) {
-        try {
-          result = JSON.parse(data.result_html);
-        } catch {
-          result = { html: data.result_html };
-        }
-      }
-      
-      return new Response(
-        JSON.stringify({
-          status: data.status,
-          result,
-          error: data.error_message,
-        }),
-        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
     }
     
     // =========================================================================
@@ -1444,32 +1470,35 @@ serve(async (req) => {
       );
     }
 
-    // Create analysis request in database
-    const { data: requestData, error: insertError } = await supabase
-      .from('chb_analysis_requests')
-      .insert({
-        item_id: itemId || 0,
-        step_id: stepId,
-        status: 'pending',
-        request_payload: { 
-          filesCount: files.length, 
-          fileNames: files.map((f: any) => f.name),
-          hasClientConfig: !!clientConfig,
-        },
-      })
-      .select()
-      .single();
-
-    if (insertError || !requestData) {
-      console.error('[SUBMIT] Error creating request:', insertError);
+    // Create analysis request in MariaDB
+    const requestId = crypto.randomUUID();
+    
+    try {
+      await callMariaDBProxy('execute', {
+        query: `
+          INSERT INTO ai_agente.t_dachser_chb_runs 
+          (id, item_id, etapa, status, result_text, created_at, updated_at)
+          VALUES (?, ?, ?, 'pending', ?, NOW(), NOW())
+        `,
+        params: [
+          requestId,
+          itemId || 0,
+          stepId.toString(),
+          JSON.stringify({ 
+            filesCount: files.length, 
+            fileNames: files.map((f: any) => f.name),
+            hasClientConfig: !!clientConfig,
+          })
+        ]
+      });
+      console.log(`[SUBMIT] Created request ${requestId} in MariaDB`);
+    } catch (insertError) {
+      console.error('[SUBMIT] Error creating request in MariaDB:', insertError);
       return new Response(
         JSON.stringify({ error: 'Erro ao criar requisição de análise' }),
         { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
-
-    const requestId = requestData.id;
-    console.log(`[SUBMIT] Created request ${requestId}`);
 
     // Start background processing
     // deno-lint-ignore no-explicit-any
