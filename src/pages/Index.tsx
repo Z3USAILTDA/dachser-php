@@ -1708,7 +1708,7 @@ const Index = () => {
         // Status de alerta e críticos
         "DIS", "OFLD", "NIL", "NIF",
         // Status de erro no rastreio
-        "ERRO", "NOT_FOUND"
+        "ERRO"
       ];
       const statusToCheck = (awb.status || "").toUpperCase();
       const lastEventCode = getStatusCode(awb.last_event).toUpperCase();
@@ -2178,7 +2178,7 @@ const Index = () => {
                       const isDelivered = status === "Chegou em seu destino final";
                       const isRetracking = retrackingAwbs.has(awb.awb);
                       const isNilStatus = awb.last_event === "NIL" || awb.last_event === "NIF";
-                      const isErroStatus = awb.status === "ERRO" || awb.status === "NOT_FOUND" || awb.last_event === "ERRO" || awb.last_event === "NOT_FOUND";
+                      const isErroStatus = awb.status === "ERRO" || awb.last_event === "ERRO";
                       const isCompanyNotRegistered = awb.status === "COMPANY_NOT_REGISTERED";
 
                       return (
