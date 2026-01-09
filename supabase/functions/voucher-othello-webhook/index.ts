@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.78.0";
+import { Client } from "https://deno.land/x/mysql@v2.12.1/mod.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -47,6 +48,8 @@ const handler = async (req: Request): Promise<Response> => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }
+
+  let mariaClient: Client | null = null;
 
   try {
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
@@ -101,66 +104,95 @@ const handler = async (req: Request): Promise<Response> => {
       throw new Error("Nenhum usuário administrador encontrado para criar o voucher");
     }
 
-    // Criar o voucher
-    const { data: voucher, error: voucherError } = await supabase
-      .from("vouchers")
-      .insert({
-        numero_spo: payload.numero_spo,
-        fornecedor: payload.fornecedor || null,
-        cnpj_fornecedor: payload.cnpj_fornecedor || null,
-        valor: payload.valor || null,
-        moeda: payload.moeda || "BRL",
-        vencimento: new Date(payload.vencimento).toISOString().split('T')[0],
-        data_emissao_documento: payload.data_emissao_documento 
-          ? new Date(payload.data_emissao_documento).toISOString().split('T')[0]
-          : null,
-        cobranca_em_nome_de: payload.cobranca_em_nome_de,
-        forma_pagamento: payload.forma_pagamento,
-        tipo_documento: payload.tipo_documento || null,
-        filial: payload.filial || null,
-        cliente_email: payload.cliente_email || null,
-        comentarios_operacao: payload.comentarios || null,
-        urgencia_tipo: urgenciaTipo,
-        criado_por_user_id: systemUserId,
-        responsavel_operacao_user_id: systemUserId,
-        etapa_atual: "OPERACAO",
-        status_baixa: "PENDENTE",
-      })
-      .select()
-      .single();
+    // Connect to MariaDB
+    mariaClient = await new Client().connect({
+      hostname: Deno.env.get('MARIADB_HOST'),
+      port: parseInt(Deno.env.get('MARIADB_PORT') || '3306'),
+      username: Deno.env.get('MARIADB_USER'),
+      password: Deno.env.get('MARIADB_PASSWORD'),
+      db: 'dados_dachser',
+    });
 
-    if (voucherError) {
-      console.error("Erro ao criar voucher:", voucherError);
-      throw voucherError;
-    }
+    const voucherId = crypto.randomUUID();
+    const now = new Date().toISOString().slice(0, 19).replace('T', ' ');
+    const vencimentoDate = new Date(payload.vencimento).toISOString().split('T')[0];
+    const dataEmissao = payload.data_emissao_documento 
+      ? new Date(payload.data_emissao_documento).toISOString().split('T')[0]
+      : null;
 
-    console.log("Voucher criado:", voucher.id);
+    // Create voucher in MariaDB
+    await mariaClient.execute(
+      `INSERT INTO t_vouchers (
+        id, numero_spo, fornecedor, cnpj_fornecedor, valor, moeda,
+        vencimento, data_emissao_documento, cobranca_em_nome_de, forma_pagamento,
+        tipo_documento, filial, cliente_email, comentarios_operacao, urgencia_tipo,
+        criado_por_user_id, responsavel_operacao_user_id, etapa_atual, status_baixa,
+        origem_criacao, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        voucherId,
+        payload.numero_spo,
+        payload.fornecedor || null,
+        payload.cnpj_fornecedor || null,
+        payload.valor || null,
+        payload.moeda || "BRL",
+        vencimentoDate,
+        dataEmissao,
+        payload.cobranca_em_nome_de,
+        payload.forma_pagamento,
+        payload.tipo_documento || null,
+        payload.filial || null,
+        payload.cliente_email || null,
+        payload.comentarios || null,
+        urgenciaTipo,
+        systemUserId,
+        systemUserId,
+        "OPERACAO",
+        "PENDENTE",
+        "OTHELLO",
+        now,
+        now,
+      ]
+    );
+
+    console.log("Voucher criado no MariaDB:", voucherId);
 
     // Criar anexos se fornecidos
     if (payload.anexos && payload.anexos.length > 0) {
       for (const anexo of payload.anexos) {
-        const { error: anexoError } = await supabase.from("voucher_anexos").insert({
-          voucher_id: voucher.id,
-          tipo: anexo.tipo,
-          file_name: anexo.file_name,
-          file_url: anexo.file_url,
-          file_size: anexo.file_size || 0,
-          uploaded_by_user_id: systemUserId,
-        });
-
-        if (anexoError) {
+        try {
+          await mariaClient.execute(
+            `INSERT INTO t_voucher_anexos (voucher_id, tipo, file_name, file_url, file_size, created_at)
+             VALUES (?, ?, ?, ?, ?, ?)`,
+            [
+              voucherId,
+              anexo.tipo,
+              anexo.file_name,
+              anexo.file_url,
+              anexo.file_size || 0,
+              now,
+            ]
+          );
+        } catch (anexoError) {
           console.error("Erro ao criar anexo:", anexoError);
         }
       }
     }
 
     // Criar log de entrada
-    await supabase.from("voucher_logs").insert({
-      voucher_id: voucher.id,
-      user_id: null,
-      acao: "INCLUSAO",
-      detalhe: `Voucher criado via integração OTHELLO. Processo: ${payload.processo_tipo || "N/A"} - ${payload.processo_id || "N/A"}`,
-    });
+    await mariaClient.execute(
+      `INSERT INTO t_log_entries (voucher_id, user_id, acao, detalhe, data_hora)
+       VALUES (?, ?, ?, ?, ?)`,
+      [
+        voucherId,
+        null,
+        "INCLUSAO",
+        `Voucher criado via integração OTHELLO. Processo: ${payload.processo_tipo || "N/A"} - ${payload.processo_id || "N/A"}`,
+        now,
+      ]
+    );
+
+    await mariaClient.close();
 
     console.log("=== OTHELLO Webhook - Voucher processado com sucesso ===");
 
@@ -168,10 +200,10 @@ const handler = async (req: Request): Promise<Response> => {
       JSON.stringify({
         success: true,
         message: "Voucher criado com sucesso",
-        voucher_id: voucher.id,
-        numero_spo: voucher.numero_spo,
-        etapa_atual: voucher.etapa_atual,
-        urgencia_tipo: voucher.urgencia_tipo,
+        voucher_id: voucherId,
+        numero_spo: payload.numero_spo,
+        etapa_atual: "OPERACAO",
+        urgencia_tipo: urgenciaTipo,
       }),
       {
         status: 201,
@@ -180,6 +212,7 @@ const handler = async (req: Request): Promise<Response> => {
     );
   } catch (error: any) {
     console.error("Erro no webhook OTHELLO:", error);
+    if (mariaClient) await mariaClient.close();
     return new Response(
       JSON.stringify({
         success: false,

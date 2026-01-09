@@ -478,12 +478,15 @@ const handler = async (req: Request): Promise<Response> => {
           userId = user?.id;
         }
 
-        await supabase.from("voucher_logs").insert({
-          voucher_id: voucherId,
-          user_id: userId,
-          acao: "BAIXADO",
-          detalhe: `Integração RM concluída. Protocolo: ${rmProtocol}`,
-        });
+        // Log to MariaDB instead of Supabase
+        const logClient = await getMariaDBClient();
+        const logNow = new Date().toISOString().slice(0, 19).replace('T', ' ');
+        await logClient.execute(
+          `INSERT INTO t_log_entries (voucher_id, user_id, acao, detalhe, data_hora)
+           VALUES (?, ?, ?, ?, ?)`,
+          [voucherId, userId, "BAIXADO", `Integração RM concluída. Protocolo: ${rmProtocol}`, logNow]
+        );
+        await logClient.close();
 
         return new Response(
           JSON.stringify({

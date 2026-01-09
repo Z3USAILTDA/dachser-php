@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { Client } from "https://deno.land/x/mysql@v2.12.1/mod.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -30,6 +31,8 @@ serve(async (req) => {
     return new Response(null, { headers: corsHeaders });
   }
 
+  let mariaClient: Client | null = null;
+
   try {
     const supabase = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
@@ -40,29 +43,30 @@ serve(async (req) => {
     const tomorrow = new Date(now);
     tomorrow.setDate(tomorrow.getDate() + 1);
 
-    // Buscar vouchers ativos (não baixados)
-    const { data: vouchers, error: vouchersError } = await supabase
-      .from('vouchers')
-      .select(`
-        id,
-        numero_spo,
-        etapa_atual,
-        vencimento,
-        updated_at,
-        responsavel_operacao_user_id,
-        responsavel_fiscal_user_id,
-        responsavel_financeiro_user_id,
-        criado_por_user_id
-      `)
-      .neq('etapa_atual', 'ROBO')
-      .neq('status_baixa', 'BAIXA_MANUAL')
-      .neq('status_baixa', 'BAIXA_REMESSA');
+    // Connect to MariaDB
+    mariaClient = await new Client().connect({
+      hostname: Deno.env.get('MARIADB_HOST'),
+      port: parseInt(Deno.env.get('MARIADB_PORT') || '3306'),
+      username: Deno.env.get('MARIADB_USER'),
+      password: Deno.env.get('MARIADB_PASSWORD'),
+      db: 'dados_dachser',
+    });
 
-    if (vouchersError) throw vouchersError;
+    // Buscar vouchers ativos do MariaDB (não baixados)
+    const vouchers = await mariaClient.query(
+      `SELECT 
+        id, numero_spo, etapa_atual, vencimento, updated_at,
+        responsavel_operacao_user_id, responsavel_fiscal_user_id,
+        responsavel_financeiro_user_id, criado_por_user_id
+       FROM t_vouchers
+       WHERE etapa_atual != 'ROBO'
+         AND (status_baixa IS NULL OR (status_baixa != 'BAIXA_MANUAL' AND status_baixa != 'BAIXA_REMESSA'))`
+    ) as Voucher[];
+
+    await mariaClient.close();
+    mariaClient = null;
 
     console.log(`[voucher-check-sla-alerts] Verificando ${vouchers?.length || 0} vouchers ativos`);
-
-    const alertsToSend: Array<{ email: string; type: string; vouchers: Voucher[] }> = [];
 
     // Agrupar vouchers por responsável e tipo de alerta
     const vouchersByResponsible: Record<string, {
@@ -186,6 +190,7 @@ serve(async (req) => {
 
   } catch (error: any) {
     console.error('[voucher-check-sla-alerts] Erro ao verificar SLA:', error);
+    if (mariaClient) await mariaClient.close();
     return new Response(
       JSON.stringify({ error: error.message }),
       { 
