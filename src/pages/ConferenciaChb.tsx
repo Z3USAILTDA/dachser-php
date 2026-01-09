@@ -25,7 +25,7 @@ export default function ConferenciaChb() {
   const { files: dbFiles, fetchFiles, createFile, deleteFile } = useChbFiles(itemId);
   const { runs: dbRuns, fetchRuns, createRun, updateRun } = useChbRuns(itemId);
   const { updateItem, updateItemClient } = useChbItems();
-  const { getConfigByClient } = useChbClientConfig();
+  const { getConfigByClient, configs: allClientConfigs, fetchConfigs: fetchClientConfigs } = useChbClientConfig();
   
   const [steps, setSteps] = useState<ChbStep[]>(initialSteps);
   const [activeStep, setActiveStep] = useState(1);
@@ -601,30 +601,32 @@ export default function ConferenciaChb() {
 
       // Try to load client config if cliente was identified and we dont have one yet
       if (analysisData.cliente && !clientConfig) {
-        // Try to find config by client name or CNPJ (partial match)
-        const configs = await supabase.from('chb_client_config').select('*').eq('ativo', true);
-        if (configs.data) {
-          const clienteLower = analysisData.cliente?.toLowerCase() || '';
-          const match = configs.data.find((c: any) => {
-            const nomeLower = c.cliente_nome?.toLowerCase() || '';
-            const cnpj = c.cliente_cnpj || '';
-            // Match by name (partial) or by CNPJ appearing in the client string
-            return clienteLower.includes(nomeLower) ||
-                   nomeLower.includes(clienteLower) ||
-                   clienteLower.includes(cnpj.replace(/\D/g, '')) ||
-                   (c.cliente_cnpj && clienteLower.includes(c.cliente_cnpj));
-          });
-          if (match) {
-            setClientConfig(match as ChbClientConfig);
-            const hasSpecialRules = match.beneficio_fiscal || match.armador || match.estado_uf;
-            if (hasSpecialRules) {
-              toast.info(
-                `Configuração do cliente "${match.cliente_nome}" carregada. Clique em "Re-analisar" para aplicar as regras específicas (${match.beneficio_fiscal ? `${match.beneficio_fiscal}, ` : ''}${match.estado_uf ? `UF: ${match.estado_uf}, ` : ''}${match.armador ? 'Armador configurado' : ''})`.replace(/, $/, '.'),
-                { duration: 8000 }
-              );
-            } else {
-              toast.info(`Configuração do cliente "${match.cliente_nome}" carregada automaticamente.`);
-            }
+        // Fetch configs from MariaDB if not loaded yet
+        if (allClientConfigs.length === 0) {
+          await fetchClientConfigs();
+        }
+        
+        const clienteLower = analysisData.cliente?.toLowerCase() || '';
+        const activeConfigs = allClientConfigs.filter(c => c.ativo);
+        const match = activeConfigs.find((c) => {
+          const nomeLower = c.cliente_nome?.toLowerCase() || '';
+          const cnpj = c.cliente_cnpj || '';
+          // Match by name (partial) or by CNPJ appearing in the client string
+          return clienteLower.includes(nomeLower) ||
+                 nomeLower.includes(clienteLower) ||
+                 clienteLower.includes(cnpj.replace(/\D/g, '')) ||
+                 (c.cliente_cnpj && clienteLower.includes(c.cliente_cnpj));
+        });
+        if (match) {
+          setClientConfig(match);
+          const hasSpecialRules = match.beneficio_fiscal || match.armador || match.estado_uf;
+          if (hasSpecialRules) {
+            toast.info(
+              `Configuração do cliente "${match.cliente_nome}" carregada. Clique em "Re-analisar" para aplicar as regras específicas (${match.beneficio_fiscal ? `${match.beneficio_fiscal}, ` : ''}${match.estado_uf ? `UF: ${match.estado_uf}, ` : ''}${match.armador ? 'Armador configurado' : ''})`.replace(/, $/, '.'),
+              { duration: 8000 }
+            );
+          } else {
+            toast.info(`Configuração do cliente "${match.cliente_nome}" carregada automaticamente.`);
           }
         }
       }

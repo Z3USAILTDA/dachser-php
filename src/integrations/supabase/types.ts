@@ -14,39 +14,6 @@ export type Database = {
   }
   public: {
     Tables: {
-      accrual_entries: {
-        Row: {
-          created_at: string
-          data_upload: string
-          fornecedor: string
-          id: string
-          shared_code: string | null
-          status_accrual: string
-          uploaded_by_user_id: string | null
-          valor: number
-        }
-        Insert: {
-          created_at?: string
-          data_upload?: string
-          fornecedor: string
-          id?: string
-          shared_code?: string | null
-          status_accrual?: string
-          uploaded_by_user_id?: string | null
-          valor: number
-        }
-        Update: {
-          created_at?: string
-          data_upload?: string
-          fornecedor?: string
-          id?: string
-          shared_code?: string | null
-          status_accrual?: string
-          uploaded_by_user_id?: string | null
-          valor?: number
-        }
-        Relationships: []
-      }
       analise_documental_historico: {
         Row: {
           analysis: Json | null
@@ -320,81 +287,6 @@ export type Database = {
         }
         Relationships: []
       }
-      chb_client_config: {
-        Row: {
-          agente_destino: string | null
-          armador: string | null
-          ativo: boolean | null
-          beneficio_fiscal: string | null
-          campos_obrigatorios: Json | null
-          cfop_padrao: string | null
-          cliente_cnpj: string
-          cliente_nome: string | null
-          contato_email: string | null
-          created_at: string
-          estado_uf: string | null
-          icms_diferido: boolean | null
-          id: string
-          instrucoes_personalizadas: string | null
-          porto_descarga_real: string | null
-          prazo_resposta_dias: number | null
-          regras_comparacao: Json | null
-          tolerancia_peso: number | null
-          tolerancia_taxas_acessorias_abs: number | null
-          tolerancia_taxas_acessorias_pct: number | null
-          tolerancia_valor: number | null
-          updated_at: string
-        }
-        Insert: {
-          agente_destino?: string | null
-          armador?: string | null
-          ativo?: boolean | null
-          beneficio_fiscal?: string | null
-          campos_obrigatorios?: Json | null
-          cfop_padrao?: string | null
-          cliente_cnpj: string
-          cliente_nome?: string | null
-          contato_email?: string | null
-          created_at?: string
-          estado_uf?: string | null
-          icms_diferido?: boolean | null
-          id?: string
-          instrucoes_personalizadas?: string | null
-          porto_descarga_real?: string | null
-          prazo_resposta_dias?: number | null
-          regras_comparacao?: Json | null
-          tolerancia_peso?: number | null
-          tolerancia_taxas_acessorias_abs?: number | null
-          tolerancia_taxas_acessorias_pct?: number | null
-          tolerancia_valor?: number | null
-          updated_at?: string
-        }
-        Update: {
-          agente_destino?: string | null
-          armador?: string | null
-          ativo?: boolean | null
-          beneficio_fiscal?: string | null
-          campos_obrigatorios?: Json | null
-          cfop_padrao?: string | null
-          cliente_cnpj?: string
-          cliente_nome?: string | null
-          contato_email?: string | null
-          created_at?: string
-          estado_uf?: string | null
-          icms_diferido?: boolean | null
-          id?: string
-          instrucoes_personalizadas?: string | null
-          porto_descarga_real?: string | null
-          prazo_resposta_dias?: number | null
-          regras_comparacao?: Json | null
-          tolerancia_peso?: number | null
-          tolerancia_taxas_acessorias_abs?: number | null
-          tolerancia_taxas_acessorias_pct?: number | null
-          tolerancia_valor?: number | null
-          updated_at?: string
-        }
-        Relationships: []
-      }
       chb_documents: {
         Row: {
           created_at: string
@@ -607,33 +499,6 @@ export type Database = {
           updated_at?: string
           volume_constatado?: number | null
           volume_declarado?: number | null
-        }
-        Relationships: []
-      }
-      sla_config: {
-        Row: {
-          ativo: boolean
-          created_at: string
-          etapa: string
-          horas_limite: number
-          id: string
-          updated_at: string
-        }
-        Insert: {
-          ativo?: boolean
-          created_at?: string
-          etapa: string
-          horas_limite?: number
-          id?: string
-          updated_at?: string
-        }
-        Update: {
-          ativo?: boolean
-          created_at?: string
-          etapa?: string
-          horas_limite?: number
-          id?: string
-          updated_at?: string
         }
         Relationships: []
       }
