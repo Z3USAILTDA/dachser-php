@@ -35,6 +35,7 @@ export interface DemurrageContainer {
   rate_usd_per_day: number | null;
   risk_status: string;
   risk_score: number;
+  ft_source: string | null;
   pre_invoice_number: string | null;
   pre_invoice_status: string;
   pre_invoice_total_usd: number | null;
