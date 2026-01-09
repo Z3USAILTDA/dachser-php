@@ -57,12 +57,12 @@ export const VoucherFilters = ({ onSearch }: VoucherFiltersProps) => {
     <div className="bg-card border border-border rounded-lg p-4 space-y-4">
       <div className="grid grid-cols-1 md:grid-cols-4 lg:grid-cols-5 gap-4">
         <div>
-          <Label htmlFor="search">Buscar por SPO/Voucher</Label>
+          <Label htmlFor="search">Buscar por Voucher/SPO</Label>
           <div className="relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
             <Input
               id="search"
-              placeholder="Nº SPO"
+              placeholder="Nº Voucher/SPO"
               value={filters.search}
               onChange={(e) => handleFilterChange("search", e.target.value)}
               className="pl-9"
@@ -79,13 +79,13 @@ export const VoucherFilters = ({ onSearch }: VoucherFiltersProps) => {
             <SelectContent>
               <SelectItem value="all">Todas</SelectItem>
               <SelectItem value="RASCUNHO">Rascunho</SelectItem>
-              <SelectItem value="OPERACAO">Voucher</SelectItem>
+              <SelectItem value="OPERACAO">Voucher/SPO</SelectItem>
               <SelectItem value="FISCAL">Fiscal</SelectItem>
               <SelectItem value="SUPERVISOR">Supervisor</SelectItem>
               <SelectItem value="FINANCEIRO">Financeiro</SelectItem>
               <SelectItem value="ROBO">Robô</SelectItem>
               <SelectItem value="CONCLUIDO">Concluído</SelectItem>
-              <SelectItem value="AJUSTE_OPERACAO">Ajuste Voucher</SelectItem>
+              <SelectItem value="AJUSTE_OPERACAO">Ajuste Voucher/SPO</SelectItem>
               <SelectItem value="AJUSTE_FISCAL">Ajuste Fiscal</SelectItem>
             </SelectContent>
           </Select>

@@ -133,7 +133,7 @@ export const EditVoucherDialog = ({ open, onOpenChange, onSuccess, voucher }: Ed
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
-              <Label htmlFor="edit-numeroSPO">Nº SPO/Voucher *</Label>
+              <Label htmlFor="edit-numeroSPO">Nº Voucher/SPO *</Label>
               <Input
                 id="edit-numeroSPO"
                 value={formData.numeroSPO}

@@ -490,7 +490,7 @@ const DashboardTab = ({
             </div>
           </div> : <div className="rounded-xl bg-[#05060c] border border-white/10 p-6 text-center text-[#888888]">
             <CheckCircle2 className="h-6 w-6 mx-auto mb-2 text-emerald-400" />
-            <span className="text-sm">Nenhum voucher acima do SLA</span>
+            <span className="text-sm">Nenhum voucher/SPO acima do SLA</span>
           </div>}
       </div>
 
@@ -499,7 +499,7 @@ const DashboardTab = ({
         <div className="rounded-2xl p-5 bg-[rgba(5,6,18,0.9)] border border-[rgba(255,255,255,0.12)] backdrop-blur-[18px] shadow-[0_18px_40px_rgba(0,0,0,0.85)]">
           <div className="text-[0.75rem] uppercase tracking-wider text-[#aaaaaa] mb-4 flex items-center gap-2">
             <AlertCircle className="h-4 w-4 text-rose-400" />
-            Vouchers Urgentes
+            Vouchers/SPO Urgentes
           </div>
           <div className="grid gap-4 sm:grid-cols-2">
             <MetricCard title="Urgentes Real" value={dashboardMetrics.urgentesReal} icon={FileWarning} variant="critical" subtitle="Aprovação manual" />
@@ -529,9 +529,9 @@ const DashboardTab = ({
           <div className="space-y-2">
             {dashboardMetrics.vencidos > 0 && <div className="flex items-center justify-between p-3 bg-rose-500/10 border border-rose-500/30 rounded-lg">
                 <div>
-                  <p className="text-sm font-medium text-rose-400">Vouchers Vencidos</p>
+                  <p className="text-sm font-medium text-rose-400">Vouchers/SPO Vencidos</p>
                   <p className="text-xs text-[#888888]">
-                    {dashboardMetrics.vencidos} voucher(s) já passaram do vencimento
+                    {dashboardMetrics.vencidos} voucher(s)/SPO(s) já passaram do vencimento
                   </p>
                 </div>
                 <span className="bg-rose-500 text-white px-2.5 py-1 rounded-full text-xs font-medium">
@@ -542,7 +542,7 @@ const DashboardTab = ({
                 <div>
                   <p className="text-sm font-medium text-yellow-400">Atenção: Vencimento Próximo</p>
                   <p className="text-xs text-[#888888]">
-                    {dashboardMetrics.vencendo24h} voucher(s) vencem nas próximas 24 horas
+                    {dashboardMetrics.vencendo24h} voucher(s)/SPO(s) vencem nas próximas 24 horas
                   </p>
                 </div>
                 <span className="bg-yellow-500 text-black px-2.5 py-1 rounded-full text-xs font-medium">
@@ -1343,12 +1343,12 @@ const EsteiraIndex = () => {
           user_id: userData.id?.toString(),
           user_name: userData.username,
           acao: "ETAPA_RETORNADA",
-          detalhe: `Voucher retornou para etapa ${previousStage.replace("_", " ")}. Justificativa: ${justificativa}`
+          detalhe: `Voucher/SPO retornou para etapa ${previousStage.replace("_", " ")}. Justificativa: ${justificativa}`
         }
       });
       toast({
         title: "Etapa atualizada",
-        description: `Voucher retornou para etapa ${previousStage.replace("_", " ")}`
+        description: `Voucher/SPO retornou para etapa ${previousStage.replace("_", " ")}`
       });
       loadVouchers();
     } catch (error: any) {
@@ -1389,12 +1389,12 @@ const EsteiraIndex = () => {
           user_id: userData.id?.toString(),
           user_name: userData.username,
           acao: "MASTER_DESMEMBRADO",
-          detalhe: `Voucher master ${voucher.numeroSPO} foi desmembrado. ${data.childrenRestored || 0} vouchers filhos restaurados.`
+          detalhe: `Voucher/SPO master ${voucher.numeroSPO} foi desmembrado. ${data.childrenRestored || 0} vouchers/SPO filhos restaurados.`
         }
       });
       toast({
-        title: "Voucher desmembrado",
-        description: `${data.childrenRestored || 0} vouchers filhos foram restaurados como individuais`
+        title: "Voucher/SPO desmembrado",
+        description: `${data.childrenRestored || 0} vouchers/SPO filhos foram restaurados como individuais`
       });
       loadVouchers();
     } catch (error: any) {
@@ -1452,7 +1452,7 @@ const EsteiraIndex = () => {
 
           <header>
             <h1 className="text-[1.6rem] tracking-[0.24em] uppercase text-[#f5f5f5]">DACHSER</h1>
-            <p className="text-[0.9rem] text-[#aaaaaa] mt-0.5">Intelligent Logistics — Esteira de Vouchers</p>
+            <p className="text-[0.9rem] text-[#aaaaaa] mt-0.5">Intelligent Logistics — Esteira de Vouchers/SPO</p>
             <div className="flex gap-1.5 mt-1.5">
               <span className="w-1.5 h-1.5 rounded-full bg-[#ffc800] shadow-[0_0_10px_rgba(255,200,0,.9)]" />
               <span className="w-1.5 h-1.5 rounded-full bg-[#ffc800] shadow-[0_0_10px_rgba(255,200,0,.9)]" />
@@ -1472,7 +1472,7 @@ const EsteiraIndex = () => {
 
           {canCreateVoucher && <Button className="gap-2 bg-primary text-primary-foreground hover:bg-primary/90 shadow-lg shadow-primary/20 rounded-full px-4" onClick={() => setShowCreateDialog(true)}>
               <Plus className="h-4 w-4" />
-              Enviar Voucher
+              Enviar Voucher/SPO
             </Button>}
 
           {user && <div className="px-[14px] py-1.5 rounded-full bg-[rgba(0,0,0,.70)] border border-[rgba(255,255,255,.18)] text-[#aaaaaa] max-w-[180px] truncate">
@@ -1492,7 +1492,7 @@ const EsteiraIndex = () => {
             <HelpCircle size={16} />
           </button>
 
-          <div className="w-8 h-8 rounded-full border border-[rgba(255,255,255,.25)] flex items-center justify-center bg-[rgba(0,0,0,.7)] text-[#ffc800]" title="Esteira de Vouchers">
+          <div className="w-8 h-8 rounded-full border border-[rgba(255,255,255,.25)] flex items-center justify-center bg-[rgba(0,0,0,.7)] text-[#ffc800]" title="Esteira de Vouchers/SPO">
             <Receipt size={16} />
           </div>
         </div>
@@ -1509,7 +1509,7 @@ const EsteiraIndex = () => {
                 <div className="h-28 rounded-2xl bg-[rgba(5,6,18,0.9)] border border-[rgba(255,255,255,0.12)] animate-pulse" />
                 <div className="h-28 rounded-2xl bg-[rgba(5,6,18,0.9)] border border-[rgba(255,255,255,0.12)] animate-pulse" />
               </> : <>
-                <MetricCard title="Em Andamento" value={metrics.ativos} icon={Package} subtitle="Vouchers ativos" onClick={() => setDrillDownFilter(drillDownFilter === "ativos" ? "all" : "ativos")} active={drillDownFilter === "ativos"} />
+                <MetricCard title="Em Andamento" value={metrics.ativos} icon={Package} subtitle="Vouchers/SPO ativos" onClick={() => setDrillDownFilter(drillDownFilter === "ativos" ? "all" : "ativos")} active={drillDownFilter === "ativos"} />
                 <MetricCard title="SLA" value={metrics.slaAtencao} icon={AlertTriangle} variant={metrics.slaAtencao > 0 ? "critical" : "warning"} subtitle="Vencendo/Vencidos" onClick={() => setDrillDownFilter(drillDownFilter === "sla" ? "all" : "sla")} active={drillDownFilter === "sla"} />
                 <MetricCard title="Pendências" value={metrics.pendenciasFinanceiras} icon={FileWarning} variant={metrics.pendenciasFinanceiras > 0 ? "warning" : "info"} subtitle="Accrual/Comprovante" onClick={() => setDrillDownFilter(drillDownFilter === "pendencias" ? "all" : "pendencias")} active={drillDownFilter === "pendencias"} />
                 <MetricCard title="Atividade 24h" value={metrics.eventos24h} icon={Clock} variant="info" subtitle="Últimas 24 horas" onClick={() => setDrillDownFilter(drillDownFilter === "atividade" ? "all" : "atividade")} active={drillDownFilter === "atividade"} />
@@ -1653,7 +1653,7 @@ const EsteiraIndex = () => {
                       isMaster: v
                     })}>
                       <SelectTrigger className="w-[150px] bg-[#0a0b10] border-white/10 rounded-full">
-                        <SelectValue placeholder="Voucher Master" />
+                        <SelectValue placeholder="Voucher/SPO Master" />
                       </SelectTrigger>
                       <SelectContent>
                         <SelectItem value="all">Todos</SelectItem>
