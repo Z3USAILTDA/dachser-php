@@ -132,6 +132,7 @@ interface TrackingResult {
     code: string;
     description: string;
     timestamp: string;
+    location?: string; // IATA airport code where the event occurred
   };
 }
 
@@ -152,6 +153,7 @@ interface StandardResult {
       code: string;
       description: string;
       timestamp: string;
+      location?: string; // IATA airport code where the event occurred
     };
     origin?: string;
     destination?: string;
@@ -393,12 +395,16 @@ async function fetchTAPAPI(awb: string): Promise<StandardResult> {
       const flightRaw = seg.FlightNum || null;
       const flightNum = normalizeTAPFlight(flightRaw);
 
+      // Extract event airport for ARR location tracking
+      const eventAirport = seg.EventAirport || seg.ArrivalAirport || seg.Airport || null;
+      
       candidates.push({
         __ts: ts,
         __iso: makeIso(seg.EventDate, seg.EventTime),
         code: code,
         statusTxt: seg.Status || null,
         flight: flightNum,
+        location: eventAirport, // IATA airport code where event occurred
       });
     }
 
@@ -435,12 +441,16 @@ async function fetchTAPAPI(awb: string): Promise<StandardResult> {
         const code = statusTextToCode(ln.StatusDesc || ln.Status || '') || '';
         const flightNum = normalizeTAPFlight(ln.FlightNum || null);
 
+        // Extract location from routing line
+        const routeLocation = ln.ArrivalAirport || ln.DepartureAirport || ln.Airport || null;
+        
         candidates.push({
           __ts: ts,
           __iso: makeIso(date, time),
           code: code,
           statusTxt: ln.StatusDesc || ln.Status || null,
           flight: flightNum,
+          location: routeLocation, // IATA airport code from routing
         });
       }
     }
@@ -468,6 +478,7 @@ async function fetchTAPAPI(awb: string): Promise<StandardResult> {
       code: statusCode,
       description: codeToDesc(statusCode || last.statusTxt || ''),
       timestamp: last.__iso,
+      location: last.location || undefined, // IATA airport code where last event occurred
     };
 
     // Last flight (search backwards for one with valid flight number)
@@ -917,6 +928,7 @@ async function fetchLufthansaAPI(awb: string): Promise<StandardResult> {
           code: statusCode,
           description: statusDescription,
           timestamp: lastEventTimestamp,
+          location: destination || undefined, // For LH, use destination as fallback for ARR events
         },
         origin,
         destination,
@@ -1006,7 +1018,7 @@ async function fetchITAAPI(awb: string): Promise<StandardResult> {
     const destination = awbData?.destination?.code || 'N/A';
 
     // ========== Last Status ==========
-    let lastStatus: { code: string; description: string; timestamp: string; } | undefined = undefined;
+    let lastStatus: { code: string; description: string; timestamp: string; location?: string; } | undefined = undefined;
     let lastStatusTs: number | null = null;
 
     const events = awbData?.events || [];
@@ -1033,10 +1045,14 @@ async function fetchITAAPI(awb: string): Promise<StandardResult> {
         const timestamp = ev.time || (
           typeof ev.transportMeans?.arrivalOn === 'string' ? ev.transportMeans.arrivalOn : null
         );
+        // Extract location from transportMeans station
+        const eventLocation = ev.transportMeans?.station || ev.location?.code || null;
+        
         lastStatus = {
           code: String(ev.actionStatus?.code || '').toUpperCase(),
           description: String(ev.actionStatus?.description || ''),
           timestamp: timestamp || new Date(ts).toISOString(),
+          location: eventLocation || undefined, // IATA code where event occurred
         };
       }
     }
@@ -1551,6 +1567,7 @@ async function fetchLATAMAPI(awb: string): Promise<StandardResult> {
           code: lastEvent.code || mapStatusCode(lastEvent.description || '', 'LATAM'),
           description: lastEvent.description || lastEvent.code || '',
           timestamp: lastEvent.date || new Date().toISOString(),
+          location: lastEvent.station || undefined, // IATA code from LATAM event
         },
         origin: validOrigin,
         destination: validDestination,
@@ -1680,7 +1697,7 @@ async function fetchAzulAPI(awb: string): Promise<StandardResult> {
         // ========== PARSER: Extract Ocorrencias from Value[0] ==========
         let summary: {
           lastFlight?: { number: string; timestamp: string; comment?: string };
-          lastStatus?: { code: string; description: string; timestamp: string };
+          lastStatus?: { code: string; description: string; timestamp: string; location?: string };
           origin?: string;
           destination?: string;
         } | undefined = undefined;
@@ -1776,6 +1793,7 @@ async function fetchAzulAPI(awb: string): Promise<StandardResult> {
                 code: lastStatusCode || 'NOT_FOUND', // e.g., "DEP", "ARR", "RCF", "NFD", "DLV"...
                 description: lastStatusDesc || '', // Human-readable description from API
                 timestamp: lastStatusTime || new Date().toISOString(), // ISO/local in AZUL's format
+                location: destination || undefined, // For Azul, use destination as fallback for ARR events
               } : undefined,
               origin: origin,
               destination: destination,
