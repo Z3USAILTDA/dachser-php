@@ -1,8 +1,9 @@
 import { ChbAnalysisResult } from '@/types/chb';
 import { stepTitles } from '@/data/chbMocks';
-import { Play, CheckCircle, Loader2, RefreshCw, FileText, Copy, AlertTriangle, XCircle, Ship, Plane } from 'lucide-react';
+import { Play, CheckCircle, Loader2, RefreshCw, FileText, Copy, AlertTriangle, XCircle, Ship, Plane, FileDown } from 'lucide-react';
 import { toast } from 'sonner';
 import { ChbComparisonGrid } from './ChbComparisonGrid';
+import { exportChbHistoryToPDF } from '@/utils/chbPdfExport';
 
 interface ChbAnalysisPanelProps {
   stepId: number;
@@ -13,6 +14,7 @@ interface ChbAnalysisPanelProps {
   hasFiles: boolean;
   isStepCompleted?: boolean;
   analysisProgress?: string;
+  reference?: string;
 }
 
 const copyAnalysisResult = (html: string) => {
@@ -30,8 +32,26 @@ export function ChbAnalysisPanel({
   isAnalyzing,
   hasFiles,
   isStepCompleted = false,
-  analysisProgress = ''
+  analysisProgress = '',
+  reference = ''
 }: ChbAnalysisPanelProps) {
+
+  const handleExportPDF = () => {
+    if (!analysisResult) return;
+    
+    const historyEntry = {
+      id: 1,
+      etapa: String(stepId),
+      status: 'approved',
+      result_text: '',
+      result_html: analysisResult.html,
+      created_by_email: '',
+      created_at: analysisResult.generatedAt
+    };
+    
+    exportChbHistoryToPDF([historyEntry], reference || 'Análise CHB');
+    toast.success('PDF gerado com sucesso');
+  };
   // No files uploaded yet
   if (!hasFiles && !analysisResult) {
     return (
@@ -147,6 +167,15 @@ export function ChbAnalysisPanel({
         >
           <Copy className="w-3 h-3" />
           Copiar Resultado
+        </button>
+
+        <button
+          onClick={handleExportPDF}
+          className="flex items-center gap-1.5 px-4 py-2 rounded-full bg-white/10 border border-white/20
+            text-white text-xs font-medium hover:bg-white/20 transition-colors"
+        >
+          <FileDown className="w-3 h-3" />
+          Exportar PDF
         </button>
 
         {!isStepCompleted && (
