@@ -1,9 +1,11 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { Ship, Database, Search, ArrowLeft, RefreshCw, HelpCircle } from "lucide-react";
 import { useDraftData } from "@/hooks/useDraftData";
 import { DraftDataGrid } from "@/components/draft/DraftDataGrid";
 import { HapagTrackerPanel } from "@/components/draft/HapagTrackerPanel";
+import { SeaDbStatsPanel, SeaDbStats } from "@/components/draft/SeaDbStatsPanel";
+import { supabase } from "@/integrations/supabase/client";
 import dachserBg from "@/assets/dachser-background.jpg";
 type TabType = "grid" | "tracker";
 interface NavTab {
@@ -24,6 +26,8 @@ const DraftExportacao = () => {
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState<TabType>("grid");
   const [statusFilter, setStatusFilter] = useState<string | null>(null);
+  const [seaDbStats, setSeaDbStats] = useState<SeaDbStats | null>(null);
+  const [isLoadingDbStats, setIsLoadingDbStats] = useState(false);
   const {
     combinedData,
     stats,
@@ -32,6 +36,31 @@ const DraftExportacao = () => {
   } = useDraftData();
   const storedUser = localStorage.getItem("user");
   const user = storedUser ? JSON.parse(storedUser) : null;
+
+  // Fetch SEA EXPORT stats from t_master_dados
+  const fetchSeaDbStats = useCallback(async () => {
+    setIsLoadingDbStats(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("fetch-sea-master-dados-stats");
+      
+      if (error) {
+        console.error("Error fetching sea db stats:", error);
+        return;
+      }
+
+      if (data?.success && data?.stats) {
+        setSeaDbStats(data.stats);
+      }
+    } catch (error) {
+      console.error("Error fetching sea db stats:", error);
+    } finally {
+      setIsLoadingDbStats(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchSeaDbStats();
+  }, [fetchSeaDbStats]);
 
   useEffect(() => {
     if (!storedUser) {
@@ -117,6 +146,8 @@ const DraftExportacao = () => {
 
         {/* Right - Actions and user */}
         <div className="flex items-center gap-2.5 text-[0.85rem]">
+          <SeaDbStatsPanel stats={seaDbStats} isLoading={isLoadingDbStats} onRefresh={fetchSeaDbStats} />
+          
           <button onClick={() => refetch()} disabled={isLoading} className="flex items-center gap-2 px-4 py-2 rounded-full border border-[rgba(255,255,255,.25)] bg-[rgba(0,0,0,.7)] text-[#aaaaaa] hover:text-white hover:bg-[rgba(0,0,0,.9)] transition disabled:opacity-50 text-[0.8rem]">
             <RefreshCw className={`h-4 w-4 ${isLoading ? "animate-spin" : ""}`} />
             Atualizar
