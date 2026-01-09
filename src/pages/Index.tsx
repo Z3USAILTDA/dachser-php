@@ -1706,7 +1706,9 @@ const Index = () => {
         "RCT", "RCP", "PRE", "LOF", "ARRT", "TDE", "ARR", "RCF",
         "COMPANY_NOT_REGISTERED",
         // Status de alerta e críticos
-        "DIS", "OFLD", "NIL", "NIF"
+        "DIS", "OFLD", "NIL", "NIF",
+        // Status de erro no rastreio
+        "ERRO", "NOT_FOUND"
       ];
       const statusToCheck = (awb.status || "").toUpperCase();
       const lastEventCode = getStatusCode(awb.last_event).toUpperCase();
@@ -2176,6 +2178,7 @@ const Index = () => {
                       const isDelivered = status === "Chegou em seu destino final";
                       const isRetracking = retrackingAwbs.has(awb.awb);
                       const isNilStatus = awb.last_event === "NIL" || awb.last_event === "NIF";
+                      const isErroStatus = awb.status === "ERRO" || awb.status === "NOT_FOUND" || awb.last_event === "ERRO" || awb.last_event === "NOT_FOUND";
                       const isCompanyNotRegistered = awb.status === "COMPANY_NOT_REGISTERED";
 
                       return (
@@ -2184,11 +2187,13 @@ const Index = () => {
                             className={`border-b border-[rgba(255,255,255,.06)] transition-all duration-300 ${
                               isCompanyNotRegistered
                                 ? "bg-slate-500/10 border-l-4 border-l-slate-400/50 opacity-70"
+                                : isErroStatus
+                                ? "bg-orange-500/20 border-l-4 border-l-orange-500 shadow-[0_0_15px_rgba(249,115,22,0.2)]"
                                 : isNilStatus
                                 ? "bg-red-500/20 border-red-500 border-2 animate-pulse shadow-[0_0_20px_rgba(255,0,0,0.3)]"
                                 : "hover:bg-[rgba(255,255,255,.03)]"
-                            } ${isDelivered && !isNilStatus && !isCompanyNotRegistered ? "bg-emerald-500/10" : ""} ${
-                              isRetracking && !isNilStatus && !isCompanyNotRegistered ? "bg-blue-500/20 animate-pulse" : ""
+                            } ${isDelivered && !isNilStatus && !isErroStatus && !isCompanyNotRegistered ? "bg-emerald-500/10" : ""} ${
+                              isRetracking && !isNilStatus && !isErroStatus && !isCompanyNotRegistered ? "bg-blue-500/20 animate-pulse" : ""
                             }`}
                           >
                             <td className="px-4 py-3 whitespace-nowrap">
