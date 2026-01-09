@@ -7,56 +7,23 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { supabase } from "@/integrations/supabase/client";
+import { useAccrualEntries } from "@/hooks/useAccrualEntries";
 import { useToast } from "@/hooks/use-toast";
-import { Upload, Trash2, FileSpreadsheet, RefreshCw, Search, Info, AlertCircle, DollarSign } from "lucide-react";
-
+import { Upload, Trash2, FileSpreadsheet, RefreshCw, Search, Info, AlertCircle } from "lucide-react";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import * as XLSX from "xlsx";
 
-interface AccrualEntry {
-  id: string;
-  fornecedor: string;
-  valor: number;
-  shared_code: string | null;
-  status_accrual: string;
-  data_upload: string;
-  created_at: string;
-}
-
 const AccrualManagement = () => {
-  const [entries, setEntries] = useState<AccrualEntry[]>([]);
-  const [loading, setLoading] = useState(true);
+  const { entries, loading, fetchEntries, bulkCreate, deleteEntry, clearAll } = useAccrualEntries();
   const [uploading, setUploading] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
   const fileInputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
 
-  const loadEntries = async () => {
-    try {
-      setLoading(true);
-      const { data, error } = await supabase
-        .from("accrual_entries")
-        .select("*")
-        .order("created_at", { ascending: false });
-
-      if (error) throw error;
-      setEntries(data || []);
-    } catch (error: any) {
-      toast({
-        title: "Erro ao carregar accruals",
-        description: error.message,
-        variant: "destructive",
-      });
-    } finally {
-      setLoading(false);
-    }
-  };
-
   useEffect(() => {
-    loadEntries();
-  }, []);
+    fetchEntries();
+  }, [fetchEntries]);
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -80,9 +47,6 @@ const AccrualManagement = () => {
     setUploading(true);
 
     try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) throw new Error("Usuário não autenticado");
-
       const data = await file.arrayBuffer();
       const workbook = XLSX.read(data);
       const sheet = workbook.Sheets[workbook.SheetNames[0]];
@@ -101,9 +65,7 @@ const AccrualManagement = () => {
       const entriesData = jsonData.map((row) => ({
         fornecedor: row["fornecedor"] || row["Fornecedor"] || row["FORNECEDOR"] || "N/A",
         valor: parseFloat(row["valor"] || row["Valor"] || row["VALOR"] || "0"),
-        shared_code: row["shared_code"] || row["Shared Code"] || row["SHARED_CODE"] || row["referencia"] || null,
-        status_accrual: row["status"] || row["Status"] || row["STATUS"] || "ATIVO",
-        uploaded_by_user_id: user.id,
+        shared_code: row["shared_code"] || row["Shared Code"] || row["SHARED_CODE"] || row["referencia"] || undefined,
       }));
 
       const validEntries = entriesData.filter((e) => e.fornecedor && e.valor > 0);
@@ -117,18 +79,12 @@ const AccrualManagement = () => {
         return;
       }
 
-      const { error: insertError } = await supabase
-        .from("accrual_entries")
-        .insert(validEntries as any);
-
-      if (insertError) throw insertError;
+      const inserted = await bulkCreate(validEntries);
 
       toast({
         title: "Upload concluído!",
-        description: `${validEntries.length} registros importados com sucesso`,
+        description: `${inserted} registros importados com sucesso`,
       });
-
-      loadEntries();
     } catch (error: any) {
       toast({
         title: "Erro no upload",
@@ -147,13 +103,7 @@ const AccrualManagement = () => {
     if (!confirm("Tem certeza que deseja excluir este registro?")) return;
 
     try {
-      const { error } = await supabase
-        .from("accrual_entries")
-        .delete()
-        .eq("id", id);
-
-      if (error) throw error;
-      setEntries(prev => prev.filter(e => e.id !== id));
+      await deleteEntry(id);
       toast({ title: "Registro excluído!" });
     } catch (error: any) {
       toast({
@@ -168,13 +118,7 @@ const AccrualManagement = () => {
     if (!confirm("Tem certeza que deseja excluir TODOS os registros de accrual?")) return;
 
     try {
-      const { error } = await supabase
-        .from("accrual_entries")
-        .delete()
-        .neq("id", "00000000-0000-0000-0000-000000000000"); // Delete all
-
-      if (error) throw error;
-      setEntries([]);
+      await clearAll();
       toast({ title: "Todos os registros foram excluídos!" });
     } catch (error: any) {
       toast({
@@ -255,7 +199,7 @@ const AccrualManagement = () => {
                         </>
                       )}
                     </Button>
-                    <Button variant="outline" onClick={loadEntries} disabled={loading}>
+                    <Button variant="outline" onClick={() => fetchEntries()} disabled={loading}>
                       <RefreshCw className={`h-4 w-4 mr-2 ${loading ? "animate-spin" : ""}`} />
                       Atualizar
                     </Button>
@@ -326,7 +270,7 @@ const AccrualManagement = () => {
                 <div>
                   <p className="text-xs text-muted-foreground uppercase">Último Upload</p>
                   <p className="text-sm font-medium">
-                    {entries.length > 0
+                    {entries.length > 0 && entries[0].created_at
                       ? format(new Date(entries[0].created_at), "dd/MM/yyyy HH:mm", { locale: ptBR })
                       : "Nenhum"}
                   </p>
@@ -380,7 +324,9 @@ const AccrualManagement = () => {
                         </Badge>
                       </TableCell>
                       <TableCell className="text-sm text-muted-foreground">
-                        {format(new Date(entry.created_at), "dd/MM/yyyy HH:mm", { locale: ptBR })}
+                        {entry.created_at 
+                          ? format(new Date(entry.created_at), "dd/MM/yyyy HH:mm", { locale: ptBR })
+                          : "-"}
                       </TableCell>
                       <TableCell className="text-right">
                         <Button
