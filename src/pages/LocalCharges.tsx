@@ -93,7 +93,7 @@ export default function LocalCharges() {
   const [currentPage, setCurrentPage] = useState(1);
   const [sortColumn, setSortColumn] = useState<string | null>(null);
   const [sortDirection, setSortDirection] = useState<SortDirection>(null);
-  const pageSize = 50;
+  const pageSize = 30;
   
   const [hapagData, setHapagData] = useState<CompanyData>({ rows: [], meta: { updated_at: null, effective: null }, source: '' });
   const [mscData, setMscData] = useState<CompanyData>({ rows: [], meta: { updated_at: null, effective: null }, source: '' });
