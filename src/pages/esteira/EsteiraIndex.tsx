@@ -184,7 +184,7 @@ const AnalyticsDashboard = ({
             minimumFractionDigits: 2
           })}
           </div>
-          <div className="text-[10px] text-muted-foreground mt-0.5">Soma de todos os vouchers</div>
+          <div className="text-[10px] text-muted-foreground mt-0.5">Soma de todos os vouchers/SPO</div>
         </div>
         <div className="p-3 rounded-xl bg-[#0a0b10] border border-white/10">
           <div className="text-[10px] uppercase tracking-[0.15em] text-muted-foreground">Valor Médio</div>
@@ -194,7 +194,7 @@ const AnalyticsDashboard = ({
             minimumFractionDigits: 2
           })}
           </div>
-          <div className="text-[10px] text-muted-foreground mt-0.5">Média por voucher</div>
+          <div className="text-[10px] text-muted-foreground mt-0.5">Média por voucher/SPO</div>
         </div>
         <div className="p-3 rounded-xl bg-[#0a0b10] border border-white/10">
           <div className="text-[10px] uppercase tracking-[0.15em] text-muted-foreground">Taxa Conclusão</div>
@@ -202,7 +202,7 @@ const AnalyticsDashboard = ({
           <div className="text-[10px] text-muted-foreground mt-0.5">Finalizados / Total</div>
         </div>
         <div className="p-3 rounded-xl bg-[#0a0b10] border border-white/10">
-          <div className="text-[10px] uppercase tracking-[0.15em] text-muted-foreground">Total Vouchers</div>
+          <div className="text-[10px] uppercase tracking-[0.15em] text-muted-foreground">Total Vouchers/SPO</div>
           <div className="text-xl font-bold mt-1">{vouchers.length}</div>
           <div className="text-[10px] text-muted-foreground mt-0.5">Cadastrados no sistema</div>
         </div>
@@ -211,8 +211,8 @@ const AnalyticsDashboard = ({
       {/* Charts Row 1 */}
       <div className="grid gap-5 grid-cols-1 lg:grid-cols-2">
         <div className="rounded-xl bg-[#05060c] border border-white/10 p-4">
-          <div className="text-[11px] uppercase tracking-[0.15em] text-muted-foreground mb-1">Vouchers por Mês</div>
-          <div className="text-[10px] text-muted-foreground mb-3">Volume mensal de vouchers criados e finalizados.</div>
+          <div className="text-[11px] uppercase tracking-[0.15em] text-muted-foreground mb-1">Vouchers/SPO por Mês</div>
+          <div className="text-[10px] text-muted-foreground mb-3">Volume mensal de vouchers/SPO criados e finalizados.</div>
           <ResponsiveContainer width="100%" height={250}>
             <AreaChart data={vouchersPorMes}>
               <defs>
@@ -240,7 +240,7 @@ const AnalyticsDashboard = ({
           <div className="text-[11px] uppercase tracking-[0.15em] text-muted-foreground mb-1">
             Distribuição por Etapa
           </div>
-          <div className="text-[10px] text-muted-foreground mb-3">Vouchers em cada etapa do workflow.</div>
+          <div className="text-[10px] text-muted-foreground mb-3">Vouchers/SPO em cada etapa do workflow.</div>
           <ResponsiveContainer width="100%" height={250}>
             <PieChart>
               <Pie data={etapaData} cx="50%" cy="50%" innerRadius={60} outerRadius={90} paddingAngle={2} dataKey="value" label={({
@@ -442,14 +442,14 @@ const DashboardTab = ({
     return null;
   };
   return <div className="space-y-6 animate-fade-in">
-      {/* Vouchers por Etapa */}
+      {/* Vouchers/SPO por Etapa */}
       <div className="rounded-2xl p-5 bg-[rgba(5,6,18,0.9)] border border-[rgba(255,255,255,0.12)] backdrop-blur-[18px] shadow-[0_18px_40px_rgba(0,0,0,0.85)]">
         <div className="text-[0.75rem] uppercase tracking-wider text-[#aaaaaa] mb-4 flex items-center gap-2">
           <Users className="h-4 w-4 text-primary" />
-          Vouchers por Etapa
+          Vouchers/SPO por Etapa
         </div>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          <MetricCard title="Pendentes - Voucher" value={dashboardMetrics.pendentesOperacao} icon={Clock} subtitle="Etapa OPERACAO" />
+          <MetricCard title="Pendentes - Voucher/SPO" value={dashboardMetrics.pendentesOperacao} icon={Clock} subtitle="Etapa OPERACAO" />
           <MetricCard title="Pendentes - Fiscal" value={dashboardMetrics.pendentesFiscal} icon={Clock} subtitle="Etapa FISCAL" />
           <MetricCard title="Pendentes - Supervisor" value={dashboardMetrics.pendentesSupervisor} icon={AlertCircle} variant="warning" subtitle="Etapa SUPERVISOR" />
           <MetricCard title="Pendentes - Financeiro" value={dashboardMetrics.pendentesFinanceiro} icon={Clock} subtitle="Etapa FINANCEIRO" />
@@ -460,7 +460,7 @@ const DashboardTab = ({
       <div className="rounded-2xl p-5 bg-[rgba(5,6,18,0.9)] border border-[rgba(255,255,255,0.12)] backdrop-blur-[18px] shadow-[0_18px_40px_rgba(0,0,0,0.85)]">
         <div className="text-[0.75rem] uppercase tracking-wider text-[#aaaaaa] mb-4 flex items-center gap-2">
           <AlertTriangle className="h-4 w-4 text-yellow-400" />
-          Gargalos - Vouchers Acima do SLA
+          Gargalos - Vouchers/SPO Acima do SLA
         </div>
         {bottleneckData.length > 0 ? <div className="rounded-xl bg-[#05060c] border border-white/10 p-4">
             <ResponsiveContainer width="100%" height={220}>
