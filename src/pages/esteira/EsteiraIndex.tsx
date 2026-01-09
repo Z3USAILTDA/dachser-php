@@ -24,6 +24,7 @@ import { ReportsTab } from "@/components/tabs/ReportsTab";
 import { PagamentosTab } from "@/components/esteira/PagamentosTab";
 // BacklogTab removed - RM pending vouchers now shown in main grid as A_PROCESSAR
 import { MetricCard } from "@/components/cct/MetricCard";
+import { FinDbStatsPanel, FinDbStats } from "@/components/esteira/FinDbStatsPanel";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -597,6 +598,8 @@ const EsteiraIndex = () => {
   const [quickFilterCobranca, setQuickFilterCobranca] = useState<string>("all");
   const [drillDownFilter, setDrillDownFilter] = useState<DrillDownFilter>("all");
   const [lastUpdateTime, setLastUpdateTime] = useState<Date | null>(null);
+  const [finDbStats, setFinDbStats] = useState<FinDbStats | null>(null);
+  const [isLoadingDbStats, setIsLoadingDbStats] = useState(false);
 
   // Dialog states
   const [showCreateDialog, setShowCreateDialog] = useState(false);
@@ -878,11 +881,51 @@ const EsteiraIndex = () => {
       console.error("Error loading esteira users:", err);
     }
   };
+
+  // Calculate DB stats from vouchers
+  const calculateFinDbStats = (vouchersList: Voucher[]) => {
+    const etapaCounts: Record<string, number> = {};
+    let totalValor = 0;
+
+    vouchersList.forEach(v => {
+      const etapa = v.etapaAtual || "OPERACAO";
+      etapaCounts[etapa] = (etapaCounts[etapa] || 0) + 1;
+      totalValor += v.valor || 0;
+    });
+
+    const etapaBreakdown = Object.entries(etapaCounts)
+      .map(([etapa, count]) => ({
+        etapa,
+        label: ETAPA_LABELS[etapa as EtapaAtual] || etapa,
+        count
+      }))
+      .sort((a, b) => b.count - a.count);
+
+    setFinDbStats({
+      lastUpdate: new Date().toISOString(),
+      totalVouchers: vouchersList.length,
+      totalValor,
+      etapaBreakdown
+    });
+  };
+
+  const fetchFinDbStats = () => {
+    setIsLoadingDbStats(true);
+    loadVouchers().finally(() => setIsLoadingDbStats(false));
+  };
+
   useEffect(() => {
     if (hasEsteiraAccess) {
       loadVouchers();
     }
   }, [hasEsteiraAccess]);
+
+  // Update stats when vouchers change
+  useEffect(() => {
+    if (vouchers.length > 0) {
+      calculateFinDbStats(vouchers);
+    }
+  }, [vouchers]);
 
   // Reload vouchers when tab becomes visible after being hidden (tab switch only)
   // Removed window focus listener as it was triggering too frequently (e.g., when closing dialogs)
@@ -1431,16 +1474,11 @@ const EsteiraIndex = () => {
 
         {/* Right - Actions and user */}
         <div className="flex items-center gap-2.5 text-[0.85rem]">
+          <FinDbStatsPanel stats={finDbStats} isLoading={isLoadingDbStats} onRefresh={fetchFinDbStats} />
+
           <button onClick={() => loadVouchers()} disabled={isRefetching} className="flex items-center gap-2 px-4 py-2 rounded-full border border-[rgba(255,255,255,.25)] bg-[rgba(0,0,0,.7)] text-[#aaaaaa] hover:text-white hover:bg-[rgba(0,0,0,.9)] transition disabled:opacity-50 text-[0.8rem]">
             <RefreshCw className={`h-4 w-4 ${isRefetching ? "animate-spin" : ""}`} />
-            <span className="flex flex-col items-start leading-tight">
-              <span>Atualizar</span>
-              {lastUpdateTime && (
-                <span className="text-[0.65rem] text-[#888]">
-                  {lastUpdateTime.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
-                </span>
-              )}
-            </span>
+            Atualizar
           </button>
 
           {canCreateVoucher && <Button className="gap-2 bg-primary text-primary-foreground hover:bg-primary/90 shadow-lg shadow-primary/20 rounded-full px-4" onClick={() => setShowCreateDialog(true)}>
