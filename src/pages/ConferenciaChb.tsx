@@ -886,6 +886,7 @@ export default function ConferenciaChb() {
             hasFiles={(uploadedFiles[activeStep] || []).length > 0 || getDocumentsForStep(activeStep).some(d => d.file || d.url)}
             isStepCompleted={isStepCompleted}
             analysisProgress={analysisProgress}
+            reference={itemId ? `#${itemId}` : ''}
           />
         );
       case 'historico':
