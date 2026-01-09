@@ -103,11 +103,10 @@ export const AwbTimelineModal: React.FC<AwbTimelineModalProps> = ({
         fonte: row.fonte || "",
       }));
 
-      // Deduplicar eventos: manter apenas um evento por código + data (ignora hora)
+      // Deduplicar eventos: manter apenas o mais recente de cada código de evento
       const seen = new Set<string>();
       const deduplicatedEvents = rawEvents.filter((event: TimelineEvent) => {
-        const dateOnly = event.data_hora_evento?.split("T")[0] || event.data_hora_evento?.split(" ")[0] || "";
-        const key = `${event.codigo_evento}-${dateOnly}`;
+        const key = event.codigo_evento?.toUpperCase() || "";
         if (seen.has(key)) {
           return false;
         }
