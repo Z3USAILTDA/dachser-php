@@ -91,13 +91,14 @@ export const VoucherDetailsView = ({ voucher, onUpdate, canEditAttachments = fal
         }
       }
 
-      // Deletar do banco
-      const { error } = await (supabase as any)
-        .from("voucher_anexos")
-        .delete()
-        .eq("id", attachmentId);
-
-      if (error) throw error;
+      // Delete from MariaDB via proxy
+      const { error } = await supabase.functions.invoke("mariadb-proxy", {
+        body: {
+          action: "query",
+          query: "DELETE FROM t_voucher_anexos WHERE id = ?",
+          params: [attachmentId],
+        },
+      });
 
       toast({
         title: "Anexo excluído",
