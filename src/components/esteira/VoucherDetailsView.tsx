@@ -198,12 +198,12 @@ export const VoucherDetailsView = ({ voucher, onUpdate, canEditAttachments = fal
         style={{ backgroundColor: 'rgba(5,6,18,0.9)' }}
       >
         <CardHeader>
-          <CardTitle className="text-[#f5f5f5]">Informações do Voucher</CardTitle>
+          <CardTitle className="text-[#f5f5f5]">Informações do Voucher/SPO</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
             <div>
-              <p className="text-sm text-muted-foreground">Nº SPO</p>
+              <p className="text-sm text-muted-foreground">Nº Voucher/SPO</p>
               <p className="font-mono font-medium text-foreground">{voucher.numeroSPO}</p>
             </div>
             {voucher.processoId && (
@@ -309,7 +309,7 @@ export const VoucherDetailsView = ({ voucher, onUpdate, canEditAttachments = fal
                 <p className="text-sm text-muted-foreground">
                   {voucher.urgenciaMotivo || (
                     voucher.urgenciaTipo === "URGENTE_REAL" 
-                      ? "Este voucher foi marcado como urgente e requer aprovação do supervisor"
+                      ? "Este voucher/SPO foi marcado como urgente e requer aprovação do supervisor"
                       : "Urgência aplicada automaticamente por tipo de documento (ICMS/Armazenagem)"
                   )}
                 </p>

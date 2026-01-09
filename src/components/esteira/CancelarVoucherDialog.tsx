@@ -52,7 +52,7 @@ export const CancelarVoucherDialog = ({
       return;
     }
     if (!voucherCredito.trim()) {
-      toast.error("Informe o número do voucher a crédito");
+      toast.error("Informe o número do voucher/SPO a crédito");
       return;
     }
 
@@ -72,11 +72,11 @@ export const CancelarVoucherDialog = ({
       });
 
       if (error || !data?.success) {
-        throw new Error(data?.error || error?.message || "Erro ao cancelar voucher");
+        throw new Error(data?.error || error?.message || "Erro ao cancelar voucher/SPO");
       }
 
-      toast.success("Voucher cancelado com sucesso", {
-        description: `Voucher ${voucher.numeroSPO} foi cancelado. Crédito: ${voucherCredito}`,
+      toast.success("Voucher/SPO cancelado com sucesso", {
+        description: `Voucher/SPO ${voucher.numeroSPO} foi cancelado. Crédito: ${voucherCredito}`,
       });
 
       onSuccess();
@@ -84,8 +84,8 @@ export const CancelarVoucherDialog = ({
       setMotivo("");
       setVoucherCredito("");
     } catch (err) {
-      console.error("Erro ao cancelar voucher:", err);
-      toast.error("Erro ao cancelar voucher", {
+      console.error("Erro ao cancelar voucher/SPO:", err);
+      toast.error("Erro ao cancelar voucher/SPO", {
         description: err instanceof Error ? err.message : "Erro desconhecido",
       });
     } finally {
@@ -107,11 +107,11 @@ export const CancelarVoucherDialog = ({
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 text-destructive">
             <XCircle className="h-5 w-5" />
-            Cancelar Voucher
+            Cancelar Voucher/SPO
           </DialogTitle>
           <DialogDescription>
-            Você está prestes a cancelar o voucher <strong>{voucher.numeroSPO}</strong>.
-            Esta ação é irreversível e o voucher não poderá ser reativado.
+            Você está prestes a cancelar o voucher/SPO <strong>{voucher.numeroSPO}</strong>.
+            Esta ação é irreversível e o voucher/SPO não poderá ser reativado.
           </DialogDescription>
         </DialogHeader>
 
@@ -121,14 +121,14 @@ export const CancelarVoucherDialog = ({
             <div className="text-sm">
               <p className="font-medium text-warning">Atenção</p>
               <p className="text-muted-foreground">
-                O cancelamento manterá o voucher visível no histórico, mas ele não poderá mais ser 
-                processado. Informe obrigatoriamente o voucher a crédito.
+                O cancelamento manterá o voucher/SPO visível no histórico, mas ele não poderá mais ser 
+                processado. Informe obrigatoriamente o voucher/SPO a crédito.
               </p>
             </div>
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="voucher-credito">Número do Voucher a Crédito *</Label>
+            <Label htmlFor="voucher-credito">Número do Voucher/SPO a Crédito *</Label>
             <Input
               id="voucher-credito"
               placeholder="Ex: 101-123456"
@@ -137,7 +137,7 @@ export const CancelarVoucherDialog = ({
               disabled={loading}
             />
             <p className="text-xs text-muted-foreground">
-              Informe o número do voucher que receberá o crédito referente a este cancelamento.
+              Informe o número do voucher/SPO que receberá o crédito referente a este cancelamento.
             </p>
           </div>
 
@@ -145,7 +145,7 @@ export const CancelarVoucherDialog = ({
             <Label htmlFor="motivo">Motivo do Cancelamento *</Label>
             <Textarea
               id="motivo"
-              placeholder="Descreva o motivo do cancelamento deste voucher..."
+              placeholder="Descreva o motivo do cancelamento deste voucher/SPO..."
               value={motivo}
               onChange={(e) => setMotivo(e.target.value)}
               rows={4}
@@ -155,7 +155,7 @@ export const CancelarVoucherDialog = ({
           </div>
 
           <div className="bg-muted/50 rounded-lg p-3">
-            <p className="text-sm font-medium">Resumo do Voucher</p>
+            <p className="text-sm font-medium">Resumo do Voucher/SPO</p>
             <div className="grid grid-cols-2 gap-2 mt-2 text-sm text-muted-foreground">
               <span>Fornecedor:</span>
               <span>{voucher.fornecedor || "-"}</span>
