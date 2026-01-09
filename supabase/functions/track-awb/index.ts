@@ -12230,12 +12230,12 @@ async function trackAWB(awb: string, airlineCode: string): Promise<TrackingResul
   
   const airlineName = airlineMap[airlineCode] || 'Companhia não cadastrada';
   
-  // Check if company is registered
+  // Check if company is registered - return ERRO for unimplemented airlines
   if (airlineName === 'Companhia não cadastrada') {
     return {
       awb: formattedAwb,
-      airline: airlineName,
-      status: 'COMPANY_NOT_REGISTERED',
+      airline: `Sem integração (${airlineCode})`,
+      status: 'ERRO',
       origin: 'N/A',
       destination: 'N/A',
       currentLocation: 'N/A',
@@ -12244,8 +12244,8 @@ async function trackAWB(awb: string, airlineCode: string): Promise<TrackingResul
       events: [{
         date: new Date().toISOString(),
         location: 'Sistema',
-        status: 'COMPANY_NOT_REGISTERED',
-        description: 'Companhia não cadastrada',
+        status: 'ERRO',
+        description: 'Falha na consulta - companhia sem integração',
       }],
     };
   }

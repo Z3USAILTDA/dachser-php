@@ -166,11 +166,7 @@ const getStatusCode = (lastEvent: string | null): string => {
     return "Processando";
   }
 
-  if (lastEvent === "COMPANY_NOT_REGISTERED") {
-    return "Companhia não registrada";
-  }
-
-  if (lastEvent === "ERRO") {
+  if (lastEvent === "ERRO" || lastEvent === "COMPANY_NOT_REGISTERED") {
     return "Falha na consulta";
   }
 
@@ -180,7 +176,7 @@ const getStatusCode = (lastEvent: string | null): string => {
   }
 
   if (lastEvent.includes("COMPANY_NOT_REGISTERED") || lastEvent === "Companhia não cadastrada") {
-    return "Companhia não cadastrada";
+    return "Falha na consulta";
   }
 
   if (lastEvent === "AWB não encontrado") {
@@ -1707,24 +1703,15 @@ const Index = () => {
       const allowedStatuses = [
         "BKD", "BKF", "AWB", "RCS", "MAN", "DEP", "FOH", "TFD", 
         "RCT", "RCP", "PRE", "LOF", "ARRT", "TDE", "ARR", "RCF",
-        "COMPANY_NOT_REGISTERED",
         // Status de alerta e críticos
         "DIS", "OFLD", "NIL", "NIF",
-        // Status de erro no rastreio
-        "ERRO",
+        // Status de erro no rastreio (inclui companhias sem integração)
+        "ERRO", "COMPANY_NOT_REGISTERED",
         // Outros status de rastreio
         "FFM", "AUD"
       ];
       const statusToCheck = (awb.status || "").toUpperCase();
       const lastEventCode = getStatusCode(awb.last_event).toUpperCase();
-      
-      // Collect COMPANY_NOT_REGISTERED AWBs separately
-      if (statusToCheck === "COMPANY_NOT_REGISTERED") {
-        if (matchesSearch && matchesAirline && matchesAnalyst && matchesService && cardFilter === "all") {
-          companyNotRegisteredAwbs.push(awb);
-        }
-        return false; // Don't include in main list yet
-      }
       
       // Check if status or last event code is in allowed list
       const isAllowed = allowedStatuses.includes(statusToCheck) || allowedStatuses.includes(lastEventCode);
