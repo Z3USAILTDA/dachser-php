@@ -42,7 +42,7 @@ serve(async (req) => {
     const statsQuery = `
       SELECT 
         COUNT(*) as total_records,
-        COALESCE(SUM(valor_voucher), 0) as total_valor
+        COALESCE(SUM(valor_nf), 0) as total_valor
       FROM t_dados_financeiro_voucher
     `;
 
