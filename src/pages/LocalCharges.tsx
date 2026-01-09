@@ -1,10 +1,17 @@
 import { useState, useEffect, useMemo } from "react";
-import { Search, RefreshCw, TrendingUp, Receipt } from "lucide-react";
+import { Search, RefreshCw, TrendingUp, Receipt, Filter } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { useUsageLog } from "@/hooks/useUsageLog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import {
   Table,
   TableBody,
@@ -67,30 +74,79 @@ const fmtMoney = (v: number | string | null): string => {
   return num.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 };
 
-// Company Table Component
-interface CompanyTableProps {
-  title: string;
-  data: CompanyData;
-  isLoading: boolean;
-}
+// Armador colors for badges
+const armadorColors: Record<string, string> = {
+  'HAPAG-LLOYD': 'bg-orange-500/20 text-orange-400 border-orange-500/30',
+  'MSC': 'bg-blue-500/20 text-blue-400 border-blue-500/30',
+  'CMA': 'bg-red-500/20 text-red-400 border-red-500/30',
+  'HMM': 'bg-purple-500/20 text-purple-400 border-purple-500/30',
+  'ONE': 'bg-pink-500/20 text-pink-400 border-pink-500/30',
+};
 
-function CompanyTable({ title, data, isLoading }: CompanyTableProps) {
+// Main Component
+export default function LocalCharges() {
+  useUsageLog({ endpoint: "/sea/local-charges" });
+  const navigate = useNavigate();
+  const [isLoading, setIsLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
+  const [armadorFilter, setArmadorFilter] = useState<string>("all");
   const [currentPage, setCurrentPage] = useState(1);
   const [sortColumn, setSortColumn] = useState<string | null>(null);
   const [sortDirection, setSortDirection] = useState<SortDirection>(null);
-  const pageSize = 5;
+  const pageSize = 15;
+  
+  const [hapagData, setHapagData] = useState<CompanyData>({ rows: [], meta: { updated_at: null, effective: null }, source: '' });
+  const [mscData, setMscData] = useState<CompanyData>({ rows: [], meta: { updated_at: null, effective: null }, source: '' });
+  const [cmaData, setCmaData] = useState<CompanyData>({ rows: [], meta: { updated_at: null, effective: null }, source: '' });
+  const [hmmData, setHmmData] = useState<CompanyData>({ rows: [], meta: { updated_at: null, effective: null }, source: '' });
+  const [oneData, setOneData] = useState<CompanyData>({ rows: [], meta: { updated_at: null, effective: null }, source: '' });
 
+  // Combine all data into a single array with armador field
+  const allData = useMemo(() => {
+    return [
+      ...hapagData.rows.map(r => ({ ...r, empresa: 'HAPAG-LLOYD' })),
+      ...mscData.rows.map(r => ({ ...r, empresa: 'MSC' })),
+      ...cmaData.rows.map(r => ({ ...r, empresa: 'CMA' })),
+      ...hmmData.rows.map(r => ({ ...r, empresa: 'HMM' })),
+      ...oneData.rows.map(r => ({ ...r, empresa: 'ONE' })),
+    ];
+  }, [hapagData, mscData, cmaData, hmmData, oneData]);
+
+  // Stats by armador
+  const statsByArmador = useMemo(() => {
+    const stats: Record<string, number> = {
+      'HAPAG-LLOYD': hapagData.rows.length,
+      'MSC': mscData.rows.length,
+      'CMA': cmaData.rows.length,
+      'HMM': hmmData.rows.length,
+      'ONE': oneData.rows.length,
+    };
+    return stats;
+  }, [hapagData, mscData, cmaData, hmmData, oneData]);
+
+  // Filter data
   const filteredRows = useMemo(() => {
-    if (!searchTerm) return data.rows;
-    const q = searchTerm.toLowerCase();
-    return data.rows.filter(row => 
-      Object.values(row).some(val => 
-        String(val).toLowerCase().includes(q)
-      )
-    );
-  }, [data.rows, searchTerm]);
+    let filtered = allData;
+    
+    // Filter by armador
+    if (armadorFilter !== "all") {
+      filtered = filtered.filter(r => r.empresa === armadorFilter);
+    }
+    
+    // Filter by search term
+    if (searchTerm) {
+      const q = searchTerm.toLowerCase();
+      filtered = filtered.filter(row => 
+        Object.values(row).some(val => 
+          String(val).toLowerCase().includes(q)
+        )
+      );
+    }
+    
+    return filtered;
+  }, [allData, armadorFilter, searchTerm]);
 
+  // Sort data
   const sortedRows = useMemo(() => {
     if (!sortColumn || !sortDirection) return filteredRows;
     
@@ -110,12 +166,13 @@ function CompanyTable({ title, data, isLoading }: CompanyTableProps) {
     });
   }, [filteredRows, sortColumn, sortDirection]);
 
+  // Paginate
   const totalPages = Math.max(1, Math.ceil(sortedRows.length / pageSize));
   const paginatedRows = sortedRows.slice((currentPage - 1) * pageSize, currentPage * pageSize);
 
   useEffect(() => {
     setCurrentPage(1);
-  }, [searchTerm]);
+  }, [searchTerm, armadorFilter]);
 
   const handleSort = (column: string) => {
     if (sortColumn === column) {
@@ -126,132 +183,6 @@ function CompanyTable({ title, data, isLoading }: CompanyTableProps) {
       setSortDirection('asc');
     }
   };
-
-
-  return (
-    <PageCard>
-      {/* Header */}
-      <div className="flex flex-col lg:flex-row lg:items-end lg:justify-between gap-3 mb-3">
-        <div>
-          <h3 className="text-sm font-semibold uppercase tracking-widest text-foreground">{title}</h3>
-          <div className="flex flex-wrap items-center gap-2 mt-2">
-            <Badge variant="outline" className="text-[0.68rem] border-border/50 bg-white/5">
-              <span className="w-1.5 h-1.5 rounded-full bg-primary mr-1.5" />
-              Atualizado: {data.meta.updated_at ? fmtDate(data.meta.updated_at) : '-'}
-            </Badge>
-            <Badge variant="outline" className="text-[0.68rem] border-border/50 bg-white/5">
-              Effective: {data.meta.effective || '-'}
-            </Badge>
-            <Badge variant="outline" className="text-[0.68rem] border-border/50 bg-white/5">
-              Origem: {data.source || '-'}
-            </Badge>
-          </div>
-        </div>
-        <div className="relative w-full lg:w-56">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-          <Input
-            placeholder="Buscar por qualquer coluna"
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="pl-9 h-9 text-sm rounded-full bg-[#13141a] border-border/50"
-          />
-        </div>
-      </div>
-
-      {/* Table */}
-      <div className="border border-border/30 rounded-xl overflow-hidden">
-        <ScrollArea className="h-[280px]">
-          <Table>
-            <TableHeader>
-              <TableRow className="bg-[#15151f] hover:bg-[#15151f]">
-                {[
-                  { key: 'empresa', label: 'Empresa' },
-                  { key: 'charge_description', label: 'Charge Description' },
-                  { key: 'charge_code', label: 'Charge Code' },
-                  { key: 'container_type', label: 'Container Type' },
-                  { key: 'currency', label: 'Currency' },
-                  { key: 'fee', label: 'Fee', align: 'right' },
-                  { key: 'unit_of_measure', label: 'Unit of Measure' },
-                  { key: 'effective_date', label: 'Effective Date' },
-                  { key: 'expiry_date', label: 'Expiry Date' },
-                  { key: 'effective', label: 'Effective (Header)' },
-                  { key: 'data_atualizacao', label: 'Data Atualização' },
-                ].map(col => (
-                  <TableHead
-                    key={col.key}
-                    onClick={() => handleSort(col.key)}
-                    className={`text-[0.7rem] uppercase tracking-wider cursor-pointer hover:text-primary whitespace-nowrap ${
-                      col.align === 'right' ? 'text-right' : ''
-                    } ${sortColumn === col.key ? 'text-primary' : ''}`}
-                  >
-                    {col.label}
-                    {sortColumn === col.key && (
-                      <span className="ml-1">{sortDirection === 'asc' ? '↑' : '↓'}</span>
-                    )}
-                  </TableHead>
-                ))}
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {isLoading ? (
-                <TableRow>
-                  <TableCell colSpan={11} className="text-center py-8 text-muted-foreground">
-                    <div className="flex items-center justify-center gap-2">
-                      <RefreshCw className="h-4 w-4 animate-spin" />
-                      Carregando...
-                    </div>
-                  </TableCell>
-                </TableRow>
-              ) : paginatedRows.length === 0 ? (
-                <TableRow>
-                  <TableCell colSpan={11} className="text-center py-8 text-muted-foreground">
-                    Nenhum registro encontrado
-                  </TableCell>
-                </TableRow>
-              ) : (
-                paginatedRows.map((row, idx) => (
-                  <TableRow key={row.id || idx} className="text-sm hover:bg-white/5">
-                    <TableCell className="whitespace-nowrap">{row.empresa || '-'}</TableCell>
-                    <TableCell>{row.charge_description || '-'}</TableCell>
-                    <TableCell>{row.charge_code || '-'}</TableCell>
-                    <TableCell>{row.container_type || '-'}</TableCell>
-                    <TableCell>{row.currency || '-'}</TableCell>
-                    <TableCell className="text-right font-mono">{fmtMoney(row.fee)}</TableCell>
-                    <TableCell>{row.unit_of_measure || '-'}</TableCell>
-                    <TableCell className="whitespace-nowrap">{fmtDateOnly(row.effective_date)}</TableCell>
-                    <TableCell className="whitespace-nowrap">{row.expiry_date || '-'}</TableCell>
-                    <TableCell>{row.effective || '-'}</TableCell>
-                    <TableCell className="whitespace-nowrap">{fmtDate(row.data_atualizacao)}</TableCell>
-                  </TableRow>
-                ))
-              )}
-            </TableBody>
-          </Table>
-        </ScrollArea>
-      </div>
-
-      {/* Pagination */}
-      <TablePagination
-        currentPage={currentPage}
-        totalPages={totalPages}
-        onPageChange={setCurrentPage}
-        showFirstLast={false}
-      />
-    </PageCard>
-  );
-}
-
-// Main Component
-export default function LocalCharges() {
-  useUsageLog({ endpoint: "/sea/local-charges" });
-  const navigate = useNavigate();
-  const [isLoading, setIsLoading] = useState(true);
-  
-  const [hapagData, setHapagData] = useState<CompanyData>({ rows: [], meta: { updated_at: null, effective: null }, source: '' });
-  const [mscData, setMscData] = useState<CompanyData>({ rows: [], meta: { updated_at: null, effective: null }, source: '' });
-  const [cmaData, setCmaData] = useState<CompanyData>({ rows: [], meta: { updated_at: null, effective: null }, source: '' });
-  const [hmmData, setHmmData] = useState<CompanyData>({ rows: [], meta: { updated_at: null, effective: null }, source: '' });
-  const [oneData, setOneData] = useState<CompanyData>({ rows: [], meta: { updated_at: null, effective: null }, source: '' });
 
   const fetchLocalCharges = async () => {
     setIsLoading(true);
@@ -306,16 +237,159 @@ export default function LocalCharges() {
   return (
     <PageLayout 
       title="DACHSER" 
-      subtitle="Local Charges – Tabelas consolidadas"
+      subtitle="Local Charges – Tabela Consolidada"
       rightContent={rightContent}
       pageIcon={Receipt}
       backTo="/dashboard"
     >
-      <CompanyTable title="HAPAG-LLOYD" data={hapagData} isLoading={isLoading} />
-      <CompanyTable title="CMA" data={cmaData} isLoading={isLoading} />
-      <CompanyTable title="HMM" data={hmmData} isLoading={isLoading} />
-      <CompanyTable title="ONE" data={oneData} isLoading={isLoading} />
-      <CompanyTable title="MSC" data={mscData} isLoading={isLoading} />
+      <PageCard>
+        {/* Header with filters */}
+        <div className="flex flex-col lg:flex-row lg:items-end lg:justify-between gap-4 mb-4">
+          <div className="flex flex-wrap items-center gap-2">
+            <Badge variant="outline" className="text-[0.72rem] border-border/50 bg-white/5 px-3 py-1">
+              Total: <span className="font-bold ml-1">{allData.length}</span> registros
+            </Badge>
+            {Object.entries(statsByArmador).map(([armador, count]) => (
+              count > 0 && (
+                <Badge 
+                  key={armador} 
+                  variant="outline" 
+                  className={`text-[0.68rem] cursor-pointer transition-all ${
+                    armadorFilter === armador 
+                      ? armadorColors[armador] + ' ring-1 ring-offset-1 ring-offset-background' 
+                      : 'border-border/50 bg-white/5 hover:bg-white/10'
+                  }`}
+                  onClick={() => setArmadorFilter(armadorFilter === armador ? 'all' : armador)}
+                >
+                  {armador}: {count}
+                </Badge>
+              )
+            ))}
+          </div>
+          
+          <div className="flex items-center gap-3">
+            {/* Armador Filter Dropdown */}
+            <div className="flex items-center gap-2">
+              <Filter className="h-4 w-4 text-muted-foreground" />
+              <Select value={armadorFilter} onValueChange={setArmadorFilter}>
+                <SelectTrigger className="w-[160px] h-9 text-sm rounded-full bg-[#13141a] border-border/50">
+                  <SelectValue placeholder="Filtrar Armador" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Todos os Armadores</SelectItem>
+                  <SelectItem value="HAPAG-LLOYD">Hapag-Lloyd</SelectItem>
+                  <SelectItem value="MSC">MSC</SelectItem>
+                  <SelectItem value="CMA">CMA</SelectItem>
+                  <SelectItem value="HMM">HMM</SelectItem>
+                  <SelectItem value="ONE">ONE</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            
+            {/* Search */}
+            <div className="relative w-full lg:w-64">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Input
+                placeholder="Buscar por qualquer coluna..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="pl-9 h-9 text-sm rounded-full bg-[#13141a] border-border/50"
+              />
+            </div>
+          </div>
+        </div>
+
+        {/* Table */}
+        <div className="border border-border/30 rounded-xl overflow-hidden">
+          <ScrollArea className="h-[500px]">
+            <Table>
+              <TableHeader>
+                <TableRow className="bg-[#15151f] hover:bg-[#15151f]">
+                  {[
+                    { key: 'empresa', label: 'Armador' },
+                    { key: 'charge_description', label: 'Charge Description' },
+                    { key: 'charge_code', label: 'Charge Code' },
+                    { key: 'container_type', label: 'Container Type' },
+                    { key: 'currency', label: 'Currency' },
+                    { key: 'fee', label: 'Fee', align: 'right' },
+                    { key: 'unit_of_measure', label: 'Unit of Measure' },
+                    { key: 'effective_date', label: 'Effective Date' },
+                    { key: 'expiry_date', label: 'Expiry Date' },
+                    { key: 'data_atualizacao', label: 'Data Atualização' },
+                  ].map(col => (
+                    <TableHead
+                      key={col.key}
+                      onClick={() => handleSort(col.key)}
+                      className={`text-[0.7rem] uppercase tracking-wider cursor-pointer hover:text-primary whitespace-nowrap ${
+                        col.align === 'right' ? 'text-right' : ''
+                      } ${sortColumn === col.key ? 'text-primary' : ''}`}
+                    >
+                      {col.label}
+                      {sortColumn === col.key && (
+                        <span className="ml-1">{sortDirection === 'asc' ? '↑' : '↓'}</span>
+                      )}
+                    </TableHead>
+                  ))}
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {isLoading ? (
+                  <TableRow>
+                    <TableCell colSpan={10} className="text-center py-8 text-muted-foreground">
+                      <div className="flex items-center justify-center gap-2">
+                        <RefreshCw className="h-4 w-4 animate-spin" />
+                        Carregando...
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ) : paginatedRows.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={10} className="text-center py-8 text-muted-foreground">
+                      Nenhum registro encontrado
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  paginatedRows.map((row, idx) => (
+                    <TableRow key={row.id || idx} className="text-sm hover:bg-white/5">
+                      <TableCell className="whitespace-nowrap">
+                        <Badge 
+                          variant="outline" 
+                          className={`text-[0.68rem] ${armadorColors[row.empresa] || 'border-border/50'}`}
+                        >
+                          {row.empresa || '-'}
+                        </Badge>
+                      </TableCell>
+                      <TableCell>{row.charge_description || '-'}</TableCell>
+                      <TableCell>{row.charge_code || '-'}</TableCell>
+                      <TableCell>{row.container_type || '-'}</TableCell>
+                      <TableCell>{row.currency || '-'}</TableCell>
+                      <TableCell className="text-right font-mono">{fmtMoney(row.fee)}</TableCell>
+                      <TableCell>{row.unit_of_measure || '-'}</TableCell>
+                      <TableCell className="whitespace-nowrap">{fmtDateOnly(row.effective_date)}</TableCell>
+                      <TableCell className="whitespace-nowrap">{row.expiry_date || '-'}</TableCell>
+                      <TableCell className="whitespace-nowrap">{fmtDate(row.data_atualizacao)}</TableCell>
+                    </TableRow>
+                  ))
+                )}
+              </TableBody>
+            </Table>
+          </ScrollArea>
+        </div>
+
+        {/* Pagination */}
+        <div className="flex items-center justify-between mt-4">
+          <span className="text-[0.78rem] text-muted-foreground">
+            Mostrando {paginatedRows.length} de {sortedRows.length} registros
+            {armadorFilter !== 'all' && ` (filtrado por ${armadorFilter})`}
+          </span>
+          <TablePagination
+            currentPage={currentPage}
+            totalPages={totalPages}
+            onPageChange={setCurrentPage}
+            showFirstLast={false}
+          />
+        </div>
+      </PageCard>
     </PageLayout>
   );
 }
