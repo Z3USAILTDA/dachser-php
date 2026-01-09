@@ -12182,6 +12182,27 @@ function mapParcelsAppStatus(text: string): string {
 async function trackAWB(awb: string, airlineCode: string): Promise<TrackingResult> {
   const formattedAwb = awb.includes('-') ? awb : `${awb.substring(0, 3)}-${awb.substring(3)}`;
   
+  // Validate AWB format: should be XXX-XXXXXXXX (3 digits, dash, 8 digits)
+  const awbFormatRegex = /^\d{3}-\d{8}$/;
+  if (!awbFormatRegex.test(formattedAwb)) {
+    return {
+      awb: formattedAwb,
+      airline: 'N/A',
+      status: 'AWB_INVALID',
+      origin: 'N/A',
+      destination: 'N/A',
+      currentLocation: 'N/A',
+      weight: 'N/A',
+      pieces: 'N/A',
+      events: [{
+        date: new Date().toISOString(),
+        location: 'Sistema',
+        status: 'AWB_INVALID',
+        description: 'Formato de AWB inválido',
+      }],
+    };
+  }
+  
   // Map airline code to name
   const airlineMap: { [key: string]: string } = {
     '001': 'American Airlines Cargo',
