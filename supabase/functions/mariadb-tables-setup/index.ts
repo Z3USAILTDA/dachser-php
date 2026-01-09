@@ -94,6 +94,49 @@ serve(async (req) => {
           results.push({ table: 't_analise_documental_historico', database: 'ai_agente', status: 'error', error: (e as Error).message });
         }
 
+        // 3. t_dachser_chb_runs - CHB analysis runs (migrated from Supabase chb_analysis_requests)
+        try {
+          await aiAgenteClient.execute(`
+            CREATE TABLE IF NOT EXISTS t_dachser_chb_runs (
+              id VARCHAR(36) PRIMARY KEY,
+              item_id INT NOT NULL,
+              etapa VARCHAR(10) NOT NULL,
+              status VARCHAR(20) NOT NULL DEFAULT 'pending',
+              result_text TEXT,
+              result_html LONGTEXT,
+              result_json JSON,
+              created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+              updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+              INDEX idx_item_id (item_id),
+              INDEX idx_status (status)
+            )
+          `);
+          results.push({ table: 't_dachser_chb_runs', database: 'ai_agente', status: 'success' });
+        } catch (e: unknown) {
+          results.push({ table: 't_dachser_chb_runs', database: 'ai_agente', status: 'error', error: (e as Error).message });
+        }
+
+        // 4. t_dachser_chb_extracted_data - CHB extracted data cache (migrated from Supabase chb_extracted_data)
+        try {
+          await aiAgenteClient.execute(`
+            CREATE TABLE IF NOT EXISTS t_dachser_chb_extracted_data (
+              id INT AUTO_INCREMENT PRIMARY KEY,
+              item_id INT NOT NULL,
+              filename VARCHAR(255) NOT NULL,
+              etapa VARCHAR(10) NOT NULL,
+              extracted_fields JSON,
+              raw_text LONGTEXT,
+              created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+              updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+              UNIQUE KEY uk_item_file_etapa (item_id, filename, etapa),
+              INDEX idx_item_id (item_id)
+            )
+          `);
+          results.push({ table: 't_dachser_chb_extracted_data', database: 'ai_agente', status: 'success' });
+        } catch (e: unknown) {
+          results.push({ table: 't_dachser_chb_extracted_data', database: 'ai_agente', status: 'error', error: (e as Error).message });
+        }
+
         await aiAgenteClient.close();
       } catch (connError: unknown) {
         results.push({ table: 'connection', database: 'ai_agente', status: 'error', error: (connError as Error).message });
