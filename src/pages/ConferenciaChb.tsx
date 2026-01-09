@@ -59,47 +59,57 @@ export default function ConferenciaChb() {
 
   const currentUser = localStorage.getItem('user_email') || localStorage.getItem('username') || 'Usuário';
 
-  // Function to load files from Supabase
-  const loadSupabaseFiles = useCallback(async () => {
+  // Function to load files from MariaDB via proxy
+  const loadMariaDBFiles = useCallback(async () => {
     if (!itemId) return;
     
-    const { data, error } = await supabase
-      .from('chb_documents')
-      .select('*')
-      .eq('item_id', itemId)
-      .order('created_at', { ascending: true });
-    
-    if (error) {
-      console.error('Error loading CHB documents:', error);
-      return;
-    }
-    
-    const newDocs: Record<number, ChbDocument[]> = { 1: [], 2: [], 3: [] };
-    (data || []).forEach((f: any) => {
-      const stepId = parseInt(f.etapa) as 1 | 2 | 3;
-      if (stepId >= 1 && stepId <= 3) {
-        newDocs[stepId].push({
-          id: f.id,
-          name: f.filename,
-          type: f.doc_role || 'O',
-          uploadedAt: new Date(f.created_at).toLocaleString('pt-BR'),
-          size: f.file_size ? formatFileSize(f.file_size) : '',
-          stepId,
-          dbId: undefined,
-          url: f.file_url || undefined,
-        });
+    try {
+      const { data, error } = await supabase.functions.invoke('mariadb-proxy', {
+        body: {
+          action: 'query',
+          query: `SELECT d.id, d.doc_role, d.created_at, f.filename, f.file_url, f.file_size, d.etapa
+                  FROM ai_agente.t_dachser_chb_docs d
+                  JOIN ai_agente.t_dachser_chb_files f ON d.file_id = f.id
+                  WHERE d.item_id = ?
+                  ORDER BY d.created_at ASC`,
+          params: [itemId],
+        },
+      });
+
+      if (error) {
+        console.error('Error loading CHB documents from MariaDB:', error);
+        return;
       }
-    });
-    setDocuments(newDocs);
+
+      const newDocs: Record<number, ChbDocument[]> = { 1: [], 2: [], 3: [] };
+      (data?.rows || []).forEach((f: any) => {
+        const stepId = parseInt(f.etapa) as 1 | 2 | 3;
+        if (stepId >= 1 && stepId <= 3) {
+          newDocs[stepId].push({
+            id: f.id,
+            name: f.filename,
+            type: f.doc_role || 'O',
+            uploadedAt: f.created_at ? new Date(f.created_at).toLocaleString('pt-BR') : '',
+            size: f.file_size ? formatFileSize(f.file_size) : '',
+            stepId,
+            dbId: undefined,
+            url: f.file_url || undefined,
+          });
+        }
+      });
+      setDocuments(newDocs);
+    } catch (error) {
+      console.error('Error loading CHB documents:', error);
+    }
   }, [itemId]);
 
   // Load data from database
   useEffect(() => {
     if (itemId) {
-      loadSupabaseFiles();
+      loadMariaDBFiles();
       fetchRuns();
     }
-  }, [itemId, loadSupabaseFiles, fetchRuns]);
+  }, [itemId, loadMariaDBFiles, fetchRuns]);
 
   // Cleanup polling on unmount
   useEffect(() => {
@@ -522,20 +532,48 @@ export default function ConferenciaChb() {
             
             const publicUrl = urlData?.publicUrl;
             
-            // Save metadata directly to Supabase table (no MariaDB)
-            const { error: insertError } = await supabase.from('chb_documents').insert({
-              item_id: itemId,
-              filename: file.name,
-              file_url: publicUrl || '',
-              file_size: file.size,
-              mime_type: file.type,
-              etapa: activeStep.toString(),
-              doc_role: detectDocumentType(file.name),
-              created_by: currentUser,
+            // Save file metadata to MariaDB
+            const { error: fileInsertError, data: fileData } = await supabase.functions.invoke('mariadb-proxy', {
+              body: {
+                action: 'insert',
+                table: 'ai_agente.t_dachser_chb_files',
+                data: {
+                  item_id: itemId,
+                  filename: file.name,
+                  file_url: publicUrl || '',
+                  file_size: file.size,
+                  mime_type: file.type,
+                  created_at: new Date().toISOString().slice(0, 19).replace('T', ' '),
+                },
+                returnInsertId: true,
+              },
             });
             
-            if (insertError) {
-              console.error('Error saving file metadata:', insertError);
+            if (fileInsertError) {
+              console.error('Error saving file to MariaDB:', fileInsertError);
+              toast.error(`Erro ao salvar ${file.name}`);
+              continue;
+            }
+            
+            const fileId = fileData?.insertId;
+            
+            // Create document link
+            const { error: docInsertError } = await supabase.functions.invoke('mariadb-proxy', {
+              body: {
+                action: 'insert',
+                table: 'ai_agente.t_dachser_chb_docs',
+                data: {
+                  item_id: itemId,
+                  file_id: fileId,
+                  etapa: activeStep.toString(),
+                  doc_role: detectDocumentType(file.name),
+                  created_at: new Date().toISOString().slice(0, 19).replace('T', ' '),
+                },
+              },
+            });
+            
+            if (docInsertError) {
+              console.error('Error saving doc link to MariaDB:', docInsertError);
               toast.error(`Erro ao salvar metadados de ${file.name}`);
               continue;
             }
@@ -567,8 +605,8 @@ export default function ConferenciaChb() {
           toast.success(`${savedDocs.length} arquivo(s) salvo(s) com sucesso!`);
         }
 
-        // Refresh files from Supabase
-        await loadSupabaseFiles();
+        // Refresh files from MariaDB
+        await loadMariaDBFiles();
 
         // Clear only current step uploaded files
         setUploadedFiles(prev => ({
@@ -792,14 +830,23 @@ export default function ConferenciaChb() {
 
 
   const handleDeleteDocument = async (docId: string) => {
-    // Delete from Supabase
-    const { error } = await supabase
-      .from('chb_documents')
-      .delete()
-      .eq('id', docId);
-    
-    if (error) {
-      console.error('Error deleting document:', error);
+    // Delete from MariaDB
+    try {
+      const { error } = await supabase.functions.invoke('mariadb-proxy', {
+        body: {
+          action: 'query',
+          query: `DELETE FROM ai_agente.t_dachser_chb_docs WHERE id = ?`,
+          params: [docId],
+        },
+      });
+      
+      if (error) {
+        console.error('Error deleting document from MariaDB:', error);
+        toast.error('Erro ao excluir documento');
+        return;
+      }
+    } catch (err) {
+      console.error('Error deleting document:', err);
       toast.error('Erro ao excluir documento');
       return;
     }
