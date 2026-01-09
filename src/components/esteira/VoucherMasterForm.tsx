@@ -168,8 +168,8 @@ export const VoucherMasterForm = ({ onSuccess, onClose }: VoucherMasterFormProps
     // Validations
     if (selectedVouchers.length < 2) {
       toast({
-        title: "Mínimo 2 vouchers",
-        description: "Selecione pelo menos 2 vouchers para consolidar",
+        title: "Mínimo 2 vouchers/SPO",
+        description: "Selecione pelo menos 2 vouchers/SPO para consolidar",
         variant: "destructive",
       });
       return;
@@ -299,8 +299,8 @@ export const VoucherMasterForm = ({ onSuccess, onClose }: VoucherMasterFormProps
       }
 
       toast({
-        title: "Voucher Master criado!",
-        description: `${numeroSpo} consolidando ${selectedVouchers.length} vouchers`,
+        title: "Voucher/SPO Master criado!",
+        description: `${numeroSpo} consolidando ${selectedVouchers.length} vouchers/SPO`,
       });
 
       onSuccess();
@@ -308,8 +308,8 @@ export const VoucherMasterForm = ({ onSuccess, onClose }: VoucherMasterFormProps
     } catch (error: any) {
       console.error("Error creating voucher master:", error);
       toast({
-        title: "Erro ao criar Voucher Master",
-        description: error.message || "Ocorreu um erro ao criar o voucher master",
+        title: "Erro ao criar Voucher/SPO Master",
+        description: error.message || "Ocorreu um erro ao criar o voucher/SPO master",
         variant: "destructive",
       });
     } finally {
@@ -326,16 +326,16 @@ export const VoucherMasterForm = ({ onSuccess, onClose }: VoucherMasterFormProps
         <div className="flex items-start gap-3 p-4 rounded-xl border border-purple-500/20 bg-purple-500/5">
           <Layers className="h-5 w-5 text-purple-400 flex-shrink-0 mt-0.5" />
           <div>
-            <p className="font-medium text-purple-400">Consolidar Vouchers</p>
+            <p className="font-medium text-purple-400">Consolidar Vouchers/SPO</p>
             <p className="text-sm text-muted-foreground">
-              Selecione 2 ou mais vouchers para consolidar em um único Voucher Master que seguirá para a etapa Fiscal.
+              Selecione 2 ou mais vouchers/SPO para consolidar em um único Voucher/SPO Master que seguirá para a etapa Fiscal.
             </p>
           </div>
         </div>
 
         {/* Voucher Search */}
         <div className="space-y-3">
-          <Label>Buscar Vouchers para Consolidar</Label>
+          <Label>Buscar Vouchers/SPO para Consolidar</Label>
           <div className="relative">
             <div className="relative">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -385,7 +385,7 @@ export const VoucherMasterForm = ({ onSuccess, onClose }: VoucherMasterFormProps
         {selectedVouchers.length > 0 && (
           <div className="space-y-3">
             <div className="flex items-center justify-between">
-              <Label>Vouchers Selecionados ({selectedVouchers.length})</Label>
+              <Label>Vouchers/SPO Selecionados ({selectedVouchers.length})</Label>
               <span className="text-sm font-medium text-primary">
                 Total: {selectedVouchers[0]?.moeda || 'BRL'} {totalValorSelecionado.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
               </span>

@@ -123,7 +123,7 @@ export const VoucherActionsMenu = ({
                 className="text-destructive focus:text-destructive"
               >
                 <XCircle className="mr-2 h-4 w-4" />
-                Cancelar Voucher
+                Cancelar Voucher/SPO
               </DropdownMenuItem>
             </>
           )}
@@ -147,7 +147,7 @@ export const VoucherActionsMenu = ({
           <AlertDialogHeader>
             <AlertDialogTitle>Confirmar Exclusão</AlertDialogTitle>
             <AlertDialogDescription>
-              Tem certeza que deseja excluir este voucher? Esta ação não pode ser desfeita e todos os
+              Tem certeza que deseja excluir este voucher/SPO? Esta ação não pode ser desfeita e todos os
               anexos e histórico relacionados serão permanentemente removidos.
             </AlertDialogDescription>
           </AlertDialogHeader>
@@ -174,8 +174,8 @@ export const VoucherActionsMenu = ({
           <DialogHeader>
             <DialogTitle>Voltar Etapa Anterior</DialogTitle>
             <DialogDescription>
-              Informe a justificativa para retornar este voucher à etapa anterior. 
-              Esta informação será registrada no histórico do voucher.
+              Informe a justificativa para retornar este voucher/SPO à etapa anterior. 
+              Esta informação será registrada no histórico do voucher/SPO.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4">
@@ -183,7 +183,7 @@ export const VoucherActionsMenu = ({
               <Label htmlFor="justificativa">Justificativa *</Label>
               <Textarea
                 id="justificativa"
-                placeholder="Descreva o motivo para retornar o voucher à etapa anterior..."
+                placeholder="Descreva o motivo para retornar o voucher/SPO à etapa anterior..."
                 value={justificativa}
                 onChange={(e) => setJustificativa(e.target.value)}
                 rows={4}
@@ -208,10 +208,10 @@ export const VoucherActionsMenu = ({
       <AlertDialog open={showDisassembleDialog} onOpenChange={setShowDisassembleDialog}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Desmembrar Voucher Master</AlertDialogTitle>
+            <AlertDialogTitle>Desmembrar Voucher/SPO Master</AlertDialogTitle>
             <AlertDialogDescription>
-              Esta ação irá restaurar todos os vouchers filhos como vouchers individuais e 
-              excluir o voucher master. Os vouchers filhos voltarão a aparecer separadamente 
+              Esta ação irá restaurar todos os vouchers/SPO filhos como vouchers/SPO individuais e 
+              excluir o voucher/SPO master. Os vouchers/SPO filhos voltarão a aparecer separadamente 
               na esteira. Deseja continuar?
             </AlertDialogDescription>
           </AlertDialogHeader>

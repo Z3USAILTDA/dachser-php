@@ -598,8 +598,8 @@ export const CreateVoucherDialog = ({
     } catch (error: any) {
       console.error("Erro ao criar voucher:", error);
       toast({
-        title: "Erro ao criar voucher",
-        description: error.message || "Ocorreu um erro ao criar o voucher",
+        title: "Erro ao criar voucher/SPO",
+        description: error.message || "Ocorreu um erro ao criar o voucher/SPO",
         variant: "destructive",
       });
     } finally {
@@ -619,7 +619,7 @@ export const CreateVoucherDialog = ({
         <DialogTrigger asChild>
           <Button className="gap-2 bg-primary text-primary-foreground hover:bg-primary/90">
             <Plus className="h-4 w-4" />
-            Novo Voucher
+            Novo Voucher/SPO
           </Button>
         </DialogTrigger>
       )}
@@ -627,10 +627,10 @@ export const CreateVoucherDialog = ({
         <DialogHeader>
           <DialogTitle className="text-xl font-semibold text-foreground flex items-center gap-2">
             <FileText className="h-5 w-5 text-primary" />
-            Novo Voucher
+            Novo Voucher/SPO
           </DialogTitle>
           <DialogDescription className="text-muted-foreground">
-            Busque os dados do voucher no RM ou preencha manualmente
+            Busque os dados do voucher/SPO no RM ou preencha manualmente
           </DialogDescription>
         </DialogHeader>
         
@@ -673,7 +673,7 @@ export const CreateVoucherDialog = ({
                 onClick={() => handleModeChange("master")}
               >
                 <Layers className="h-4 w-4" />
-                Voucher Master
+                Voucher/SPO Master
               </Button>
             </div>
 
@@ -697,7 +697,7 @@ export const CreateVoucherDialog = ({
                   <div>
                     <p className="font-medium text-amber-400">Modo de Entrada Manual</p>
                     <p className="text-sm text-muted-foreground">
-                      Preencha todos os campos manualmente. Use este modo quando o voucher não estiver cadastrado no RM.
+                      Preencha todos os campos manualmente. Use este modo quando o voucher/SPO não estiver cadastrado no RM.
                     </p>
                   </div>
                 </div>
@@ -706,7 +706,7 @@ export const CreateVoucherDialog = ({
                 <div className="p-4 rounded-xl border border-primary/20 bg-primary/5 backdrop-blur-sm">
                   <div className="flex items-center gap-2 mb-3">
                     <FileText className="h-4 w-4 text-primary" />
-                    <span className="text-sm font-medium text-primary">Nº do Voucher</span>
+                    <span className="text-sm font-medium text-primary">Nº do Voucher/SPO</span>
                     <span className="text-destructive">*</span>
                   </div>
                   <FormField
@@ -850,7 +850,7 @@ export const CreateVoucherDialog = ({
             <div className="p-4 rounded-xl border border-border/30 bg-background/20 backdrop-blur-sm">
               <div className="flex items-center justify-between mb-4">
                 <div className="flex items-center gap-2">
-                  <span className="text-sm font-medium text-foreground">Dados do Voucher</span>
+                  <span className="text-sm font-medium text-foreground">Dados do Voucher/SPO</span>
                   {isRmMode && rmDataLoaded && (
                     <Badge variant="outline" className="text-xs border-primary/30 bg-primary/5 text-primary">
                       <RefreshCw className="h-3 w-3 mr-1" />
@@ -1299,7 +1299,7 @@ export const CreateVoucherDialog = ({
                   handleSubmitVoucher(values, false);
                 }}
               >
-                {isSubmitting ? "Enviando..." : "Enviar Voucher"}
+                {isSubmitting ? "Enviando..." : "Enviar Voucher/SPO"}
               </Button>
             </div>
             </>
