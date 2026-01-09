@@ -49,12 +49,12 @@ serve(async (req) => {
     const statsResult = await client.query(statsQuery);
     console.log("Stats result:", statsResult);
 
-    // Query para breakdown por etapa_atual
+    // Query para breakdown por etapa_atual - buscar da t_vouchers (esteira)
     const etapaQuery = `
       SELECT 
         COALESCE(etapa_atual, 'OPERACAO') as etapa,
         COUNT(*) as count
-      FROM t_dados_financeiro_voucher
+      FROM t_vouchers
       GROUP BY etapa_atual
       ORDER BY count DESC
     `;
