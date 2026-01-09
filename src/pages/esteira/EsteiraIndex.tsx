@@ -724,6 +724,7 @@ const EsteiraIndex = () => {
         statusFinanceiro: v.status_financeiro || "PENDENTE",
         statusEnvioCliente: v.status_envio_cliente,
         criadoPorUserId: v.criado_por_user_id,
+        criadoPorUserName: v.criado_por_user_name,
         responsavelOperacaoUserId: v.responsavel_operacao_user_id,
         responsavelFiscalUserId: v.responsavel_fiscal_user_id,
         responsavelSupervisorUserId: v.responsavel_supervisor_user_id,
@@ -1432,7 +1433,14 @@ const EsteiraIndex = () => {
         <div className="flex items-center gap-2.5 text-[0.85rem]">
           <button onClick={() => loadVouchers()} disabled={isRefetching} className="flex items-center gap-2 px-4 py-2 rounded-full border border-[rgba(255,255,255,.25)] bg-[rgba(0,0,0,.7)] text-[#aaaaaa] hover:text-white hover:bg-[rgba(0,0,0,.9)] transition disabled:opacity-50 text-[0.8rem]">
             <RefreshCw className={`h-4 w-4 ${isRefetching ? "animate-spin" : ""}`} />
-            Atualizar
+            <span className="flex flex-col items-start leading-tight">
+              <span>Atualizar</span>
+              {lastUpdateTime && (
+                <span className="text-[0.65rem] text-[#888]">
+                  {lastUpdateTime.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
+                </span>
+              )}
+            </span>
           </button>
 
           {canCreateVoucher && <Button className="gap-2 bg-primary text-primary-foreground hover:bg-primary/90 shadow-lg shadow-primary/20 rounded-full px-4" onClick={() => setShowCreateDialog(true)}>
