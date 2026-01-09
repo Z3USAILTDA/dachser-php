@@ -94,7 +94,7 @@ export const AwbTimelineModal: React.FC<AwbTimelineModalProps> = ({
         return [];
       }
 
-      return (data.data || []).map((row: any, index: number) => ({
+      const rawEvents = (data.data || []).map((row: any, index: number) => ({
         id: row.id?.toString() || `event-${awb}-${index}`,
         codigo_evento: row.codigo_evento || "UNKNOWN",
         descricao_evento: row.descricao_evento || "",
@@ -102,6 +102,20 @@ export const AwbTimelineModal: React.FC<AwbTimelineModalProps> = ({
         aeroporto: row.aeroporto || "",
         fonte: row.fonte || "",
       }));
+
+      // Deduplicar eventos: manter apenas um evento por código + data (ignora hora)
+      const seen = new Set<string>();
+      const deduplicatedEvents = rawEvents.filter((event: TimelineEvent) => {
+        const dateOnly = event.data_hora_evento?.split("T")[0] || event.data_hora_evento?.split(" ")[0] || "";
+        const key = `${event.codigo_evento}-${dateOnly}`;
+        if (seen.has(key)) {
+          return false;
+        }
+        seen.add(key);
+        return true;
+      });
+
+      return deduplicatedEvents;
     },
     enabled: open && !!awb,
   });
