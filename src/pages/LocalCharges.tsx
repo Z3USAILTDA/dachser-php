@@ -93,7 +93,7 @@ export default function LocalCharges() {
   const [currentPage, setCurrentPage] = useState(1);
   const [sortColumn, setSortColumn] = useState<string | null>(null);
   const [sortDirection, setSortDirection] = useState<SortDirection>(null);
-  const pageSize = 15;
+  const pageSize = 50;
   
   const [hapagData, setHapagData] = useState<CompanyData>({ rows: [], meta: { updated_at: null, effective: null }, source: '' });
   const [mscData, setMscData] = useState<CompanyData>({ rows: [], meta: { updated_at: null, effective: null }, source: '' });
@@ -301,79 +301,77 @@ export default function LocalCharges() {
 
         {/* Table */}
         <div className="border border-border/30 rounded-xl overflow-hidden">
-          <ScrollArea className="h-[500px]">
-            <Table>
-              <TableHeader>
-                <TableRow className="bg-[#15151f] hover:bg-[#15151f]">
-                  {[
-                    { key: 'empresa', label: 'Armador' },
-                    { key: 'charge_description', label: 'Charge Description' },
-                    { key: 'charge_code', label: 'Charge Code' },
-                    { key: 'container_type', label: 'Container Type' },
-                    { key: 'currency', label: 'Currency' },
-                    { key: 'fee', label: 'Fee', align: 'right' },
-                    { key: 'unit_of_measure', label: 'Unit of Measure' },
-                    { key: 'effective_date', label: 'Effective Date' },
-                    { key: 'expiry_date', label: 'Expiry Date' },
-                    { key: 'data_atualizacao', label: 'Data Atualização' },
-                  ].map(col => (
-                    <TableHead
-                      key={col.key}
-                      onClick={() => handleSort(col.key)}
-                      className={`text-[0.7rem] uppercase tracking-wider cursor-pointer hover:text-primary whitespace-nowrap ${
-                        col.align === 'right' ? 'text-right' : ''
-                      } ${sortColumn === col.key ? 'text-primary' : ''}`}
-                    >
-                      {col.label}
-                      {sortColumn === col.key && (
-                        <span className="ml-1">{sortDirection === 'asc' ? '↑' : '↓'}</span>
-                      )}
-                    </TableHead>
-                  ))}
+          <Table>
+            <TableHeader>
+              <TableRow className="bg-[#15151f] hover:bg-[#15151f]">
+                {[
+                  { key: 'empresa', label: 'Armador' },
+                  { key: 'charge_description', label: 'Charge Description' },
+                  { key: 'charge_code', label: 'Charge Code' },
+                  { key: 'container_type', label: 'Container Type' },
+                  { key: 'currency', label: 'Currency' },
+                  { key: 'fee', label: 'Fee', align: 'right' },
+                  { key: 'unit_of_measure', label: 'Unit of Measure' },
+                  { key: 'effective_date', label: 'Effective Date' },
+                  { key: 'expiry_date', label: 'Expiry Date' },
+                  { key: 'data_atualizacao', label: 'Data Atualização' },
+                ].map(col => (
+                  <TableHead
+                    key={col.key}
+                    onClick={() => handleSort(col.key)}
+                    className={`text-[0.7rem] uppercase tracking-wider cursor-pointer hover:text-primary whitespace-nowrap ${
+                      col.align === 'right' ? 'text-right' : ''
+                    } ${sortColumn === col.key ? 'text-primary' : ''}`}
+                  >
+                    {col.label}
+                    {sortColumn === col.key && (
+                      <span className="ml-1">{sortDirection === 'asc' ? '↑' : '↓'}</span>
+                    )}
+                  </TableHead>
+                ))}
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {isLoading ? (
+                <TableRow>
+                  <TableCell colSpan={10} className="text-center py-8 text-muted-foreground">
+                    <div className="flex items-center justify-center gap-2">
+                      <RefreshCw className="h-4 w-4 animate-spin" />
+                      Carregando...
+                    </div>
+                  </TableCell>
                 </TableRow>
-              </TableHeader>
-              <TableBody>
-                {isLoading ? (
-                  <TableRow>
-                    <TableCell colSpan={10} className="text-center py-8 text-muted-foreground">
-                      <div className="flex items-center justify-center gap-2">
-                        <RefreshCw className="h-4 w-4 animate-spin" />
-                        Carregando...
-                      </div>
+              ) : paginatedRows.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={10} className="text-center py-8 text-muted-foreground">
+                    Nenhum registro encontrado
+                  </TableCell>
+                </TableRow>
+              ) : (
+                paginatedRows.map((row, idx) => (
+                  <TableRow key={row.id || idx} className="text-sm hover:bg-white/5">
+                    <TableCell className="whitespace-nowrap">
+                      <Badge 
+                        variant="outline" 
+                        className={`text-[0.68rem] ${armadorColors[row.empresa] || 'border-border/50'}`}
+                      >
+                        {row.empresa || '-'}
+                      </Badge>
                     </TableCell>
+                    <TableCell>{row.charge_description || '-'}</TableCell>
+                    <TableCell>{row.charge_code || '-'}</TableCell>
+                    <TableCell>{row.container_type || '-'}</TableCell>
+                    <TableCell>{row.currency || '-'}</TableCell>
+                    <TableCell className="text-right font-mono">{fmtMoney(row.fee)}</TableCell>
+                    <TableCell>{row.unit_of_measure || '-'}</TableCell>
+                    <TableCell className="whitespace-nowrap">{fmtDateOnly(row.effective_date)}</TableCell>
+                    <TableCell className="whitespace-nowrap">{row.expiry_date || '-'}</TableCell>
+                    <TableCell className="whitespace-nowrap">{fmtDate(row.data_atualizacao)}</TableCell>
                   </TableRow>
-                ) : paginatedRows.length === 0 ? (
-                  <TableRow>
-                    <TableCell colSpan={10} className="text-center py-8 text-muted-foreground">
-                      Nenhum registro encontrado
-                    </TableCell>
-                  </TableRow>
-                ) : (
-                  paginatedRows.map((row, idx) => (
-                    <TableRow key={row.id || idx} className="text-sm hover:bg-white/5">
-                      <TableCell className="whitespace-nowrap">
-                        <Badge 
-                          variant="outline" 
-                          className={`text-[0.68rem] ${armadorColors[row.empresa] || 'border-border/50'}`}
-                        >
-                          {row.empresa || '-'}
-                        </Badge>
-                      </TableCell>
-                      <TableCell>{row.charge_description || '-'}</TableCell>
-                      <TableCell>{row.charge_code || '-'}</TableCell>
-                      <TableCell>{row.container_type || '-'}</TableCell>
-                      <TableCell>{row.currency || '-'}</TableCell>
-                      <TableCell className="text-right font-mono">{fmtMoney(row.fee)}</TableCell>
-                      <TableCell>{row.unit_of_measure || '-'}</TableCell>
-                      <TableCell className="whitespace-nowrap">{fmtDateOnly(row.effective_date)}</TableCell>
-                      <TableCell className="whitespace-nowrap">{row.expiry_date || '-'}</TableCell>
-                      <TableCell className="whitespace-nowrap">{fmtDate(row.data_atualizacao)}</TableCell>
-                    </TableRow>
-                  ))
-                )}
-              </TableBody>
-            </Table>
-          </ScrollArea>
+                ))
+              )}
+            </TableBody>
+          </Table>
         </div>
 
         {/* Pagination */}
