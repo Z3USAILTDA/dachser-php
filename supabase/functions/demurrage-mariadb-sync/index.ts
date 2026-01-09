@@ -151,6 +151,19 @@ serve(async (req) => {
           dataDevolucao = now.split(' ')[0];
         }
 
+        // IMPORTANT: Always set ft_started_at if null - use ETA, data_atracacao, or now
+        // This ensures demurrage-recalc can calculate days_remaining
+        if (!ftStartedAt) {
+          if (eta) {
+            ftStartedAt = `${eta} 00:00:00`;
+          } else if (dataAtracacao) {
+            ftStartedAt = `${dataAtracacao} 00:00:00`;
+          } else {
+            // Fallback to created_at/now for pending containers
+            ftStartedAt = now;
+          }
+        }
+
         if (existing && existing.length > 0) {
           // Update existing record
           await client.execute(`

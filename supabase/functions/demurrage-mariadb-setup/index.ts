@@ -104,6 +104,9 @@ serve(async (req) => {
         client_alert_days_before INT DEFAULT 3,
         client_report_frequency VARCHAR(20) DEFAULT 'weekly',
         
+        -- Origem do Free Time
+        ft_source VARCHAR(20) DEFAULT 'DEFAULT',
+        
         -- Notas e Controle
         notes TEXT DEFAULT NULL,
         mariadb_id BIGINT DEFAULT NULL,
@@ -123,6 +126,18 @@ serve(async (req) => {
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
     `);
     console.log("✓ Created t_dachser_demurrage_containers table");
+
+    // Add ft_source column if not exists (for existing tables)
+    console.log("Adding ft_source column to existing tables...");
+    try {
+      await client.execute(`
+        ALTER TABLE dados_dachser.t_dachser_demurrage_containers 
+        ADD COLUMN IF NOT EXISTS ft_source VARCHAR(20) DEFAULT 'DEFAULT' AFTER risk_score
+      `);
+      console.log("✓ Added ft_source column (or already exists)");
+    } catch (alterError) {
+      console.log("Note: ft_source column may already exist");
+    }
 
     // Create rates table
     console.log("Creating t_dachser_demurrage_rates table...");

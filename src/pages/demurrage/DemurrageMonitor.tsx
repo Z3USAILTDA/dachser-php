@@ -269,9 +269,13 @@ export default function DemurrageMonitor() {
                           {getFtSourceBadge(container.ft_source, container.free_time_days)}
                         </TableCell>
                         <TableCell className="text-center">
-                          <Badge variant={(container.days_remaining ?? 0) <= 0 ? "destructive" : (container.days_remaining ?? 0) <= 2 ? "secondary" : "outline"}>
-                            {container.days_remaining ?? '-'}d
-                          </Badge>
+                          {container.days_remaining !== null ? (
+                            <Badge variant={container.days_remaining <= 0 ? "destructive" : container.days_remaining <= 2 ? "secondary" : "outline"}>
+                              {container.days_remaining}d
+                            </Badge>
+                          ) : (
+                            <span className="text-muted-foreground">-</span>
+                          )}
                         </TableCell>
                         <TableCell>{getRiskBadge(container.risk_status)}</TableCell>
                         <TableCell className="text-right font-semibold text-[#ffc800]">
