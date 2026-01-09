@@ -49,71 +49,85 @@ serve(async (req) => {
 
     for (const doc of documents || []) {
       try {
-        // Check if already migrated to t_dachser_chb_files
-        const existingFile = await mariaClient.query(
-          `SELECT id FROM t_dachser_chb_files WHERE supabase_id = ? LIMIT 1`,
-          [doc.id]
-        );
-
-        if (existingFile.length > 0) {
-          console.log(`Skipping already migrated document: ${doc.id}`);
-          results.skipped++;
-          continue;
-        }
-
         // Convert ISO date to MySQL datetime format
         const createdAt = doc.created_at 
           ? new Date(doc.created_at).toISOString().slice(0, 19).replace('T', ' ')
           : new Date().toISOString().slice(0, 19).replace('T', ' ');
 
-        // Insert into t_dachser_chb_files
-        const fileInsertResult = await mariaClient.execute(
-          `INSERT INTO t_dachser_chb_files 
-           (item_id, filename, etapa, doc_role, mime, size_bytes, url, created_at, supabase_id) 
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-          [
-            doc.item_id,
-            doc.filename,
-            doc.etapa || '1',
-            doc.doc_role || 'documento',
-            doc.mime_type || 'application/pdf',
-            doc.file_size || 0,
-            doc.file_url,
-            createdAt,
-            doc.id, // Store original Supabase ID for reference
-          ]
+        // Step 1: Check if file already exists in t_dachser_chb_files by filename
+        const existingFile = await mariaClient.query(
+          `SELECT id FROM t_dachser_chb_files WHERE filename = ? LIMIT 1`,
+          [doc.filename]
         );
 
-        results.files_migrated++;
-        console.log(`Migrated file: ${doc.filename} (item_id: ${doc.item_id})`);
+        let fileId: number;
 
-        // Also insert a placeholder run in t_dachser_chb_docs if needed
-        // This represents that the document was uploaded but may not have been analyzed
-        const existingDoc = await mariaClient.query(
-          `SELECT id FROM t_dachser_chb_docs WHERE item_id = ? AND etapa = ? AND filename = ? LIMIT 1`,
-          [doc.item_id, doc.etapa || '1', doc.filename]
-        );
-
-        if (existingDoc.length === 0) {
-          await mariaClient.execute(
-            `INSERT INTO t_dachser_chb_docs 
-             (item_id, etapa, filename, raw_text, extracted_json, created_at, supabase_doc_id) 
+        if (existingFile.length > 0) {
+          fileId = existingFile[0].id;
+          console.log(`File already exists: ${doc.filename} (id: ${fileId})`);
+        } else {
+          // Insert into t_dachser_chb_files
+          const fileResult = await mariaClient.execute(
+            `INSERT INTO t_dachser_chb_files 
+             (filename, mime, size_bytes, sha256, rel_path, url, created_at) 
              VALUES (?, ?, ?, ?, ?, ?, ?)`,
             [
-              doc.item_id,
-              doc.etapa || '1',
               doc.filename,
-              null, // raw_text - will be filled during analysis
-              '{}', // extracted_json - empty placeholder
+              doc.mime_type || 'application/pdf',
+              doc.file_size || 0,
+              null, // sha256 not available
+              doc.file_url, // use URL as rel_path
+              doc.file_url,
               createdAt,
-              doc.id,
             ]
           );
-          results.docs_migrated++;
+          fileId = fileResult.lastInsertId as number;
+          results.files_migrated++;
+          console.log(`Created file: ${doc.filename} (id: ${fileId})`);
         }
 
+        // Step 2: Check if doc link already exists in t_dachser_chb_docs
+        const existingDoc = await mariaClient.query(
+          `SELECT id FROM t_dachser_chb_docs WHERE item_id = ? AND file_id = ? LIMIT 1`,
+          [doc.item_id, fileId]
+        );
+
+        if (existingDoc.length > 0) {
+          console.log(`Doc link already exists for item ${doc.item_id}, file ${fileId}`);
+          results.skipped++;
+          continue;
+        }
+
+        // Map doc_role to enum values
+        let docRole = 'pre_alerta'; // default
+        if (doc.doc_role) {
+          const roleMap: Record<string, string> = {
+            'pre_alerta': 'pre_alerta',
+            'instrucao': 'instrucao',
+            'di_rascunho': 'di_rascunho',
+            'checklist': 'checklist',
+          };
+          docRole = roleMap[doc.doc_role] || 'pre_alerta';
+        }
+
+        // Insert into t_dachser_chb_docs
+        await mariaClient.execute(
+          `INSERT INTO t_dachser_chb_docs 
+           (item_id, file_id, etapa, doc_role, version, is_active, created_at) 
+           VALUES (?, ?, ?, ?, 1, 1, ?)`,
+          [
+            doc.item_id,
+            fileId,
+            doc.etapa || '1',
+            docRole,
+            createdAt,
+          ]
+        );
+        results.docs_migrated++;
+        console.log(`Created doc link: item ${doc.item_id} -> file ${fileId}`);
+
       } catch (docError: unknown) {
-        const errorMsg = `Error migrating doc ${doc.id}: ${docError instanceof Error ? docError.message : String(docError)}`;
+        const errorMsg = `Error migrating doc ${doc.id} (${doc.filename}): ${docError instanceof Error ? docError.message : String(docError)}`;
         console.error(errorMsg);
         results.errors.push(errorMsg);
       }
