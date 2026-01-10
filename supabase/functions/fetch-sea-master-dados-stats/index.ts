@@ -57,31 +57,32 @@ serve(async (req) => {
 
     console.log("Conectado ao MariaDB");
 
-    // Query para encontrar o timestamp da última atualização - apenas SEA EXPORT
+    // Query para encontrar o timestamp da última atualização - apenas SEA EXPORT com ETD últimos 3 meses
     const lastUpdateQuery = `
       SELECT MAX(data_insert) as last_update
       FROM t_master_dados
       WHERE active = 1 
         AND tipo_processo = 'SEA EXPORT'
+        AND etd >= DATE_SUB(CURDATE(), INTERVAL 3 MONTH)
     `;
 
     const lastUpdateResult = await client.query(lastUpdateQuery);
     const lastUpdate = lastUpdateResult[0]?.last_update || null;
-    console.log("Last update SEA EXPORT:", lastUpdate);
+    console.log("Last update SEA EXPORT (ETD últimos 3 meses):", lastUpdate);
 
-    // Query para contar apenas os registros da última atualização
+    // Query para contar registros com ETD nos últimos 3 meses
     const statsQuery = `
       SELECT COUNT(*) as total_records
       FROM t_master_dados
       WHERE active = 1 
         AND tipo_processo = 'SEA EXPORT'
-        AND data_insert = ?
+        AND etd >= DATE_SUB(CURDATE(), INTERVAL 3 MONTH)
     `;
 
-    const statsResult = await client.query(statsQuery, [lastUpdate]);
+    const statsResult = await client.query(statsQuery);
     console.log("Stats result:", statsResult);
 
-    // Query para distribuição por armador (shipping line) apenas da última atualização
+    // Query para distribuição por armador (shipping line) com ETD últimos 3 meses
     // Extrair SCAC code do MBL (geralmente primeiros 4 caracteres)
     const breakdownQuery = `
       SELECT 
@@ -92,13 +93,13 @@ serve(async (req) => {
         AND tipo_processo = 'SEA EXPORT'
         AND mawb IS NOT NULL 
         AND mawb != ''
-        AND data_insert = ?
+        AND etd >= DATE_SUB(CURDATE(), INTERVAL 3 MONTH)
       GROUP BY UPPER(LEFT(mawb, 4))
       ORDER BY count DESC
       LIMIT 15
     `;
 
-    const breakdownResult = await client.query(breakdownQuery, [lastUpdate]);
+    const breakdownResult = await client.query(breakdownQuery);
     console.log("Breakdown result:", breakdownResult);
 
     // Processar resultados

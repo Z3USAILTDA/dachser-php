@@ -39,17 +39,19 @@ serve(async (req) => {
 
     console.log('Connected to MariaDB successfully');
 
-    // Execute query to get MBLs
+    // Execute query to get MBLs - filtered by ETD last 3 months
     const query = `
       SELECT 
         tmd.mawb as mbl_id,
-        tmd.tipo_processo
+        tmd.tipo_processo,
+        tmd.etd
       FROM 
         dados_dachser.t_master_dados tmd
       WHERE 
         tmd.tipo_processo = 'SEA EXPORT'
         AND tmd.mawb LIKE '%HLC%'
-      ORDER BY tmd.mawb
+        AND tmd.etd >= DATE_SUB(CURDATE(), INTERVAL 3 MONTH)
+      ORDER BY tmd.etd DESC, tmd.mawb
     `;
 
     console.log('Executing query...');
@@ -63,7 +65,8 @@ serve(async (req) => {
     // Transform results to ensure proper JSON serialization
     const data = results.map((row: any) => ({
       mbl_id: row.mbl_id?.toString().trim() || '',
-      tipo_processo: row.tipo_processo?.toString().trim() || ''
+      tipo_processo: row.tipo_processo?.toString().trim() || '',
+      etd: row.etd || null
     }));
 
     return new Response(JSON.stringify({
