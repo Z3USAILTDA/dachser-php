@@ -30,17 +30,17 @@ const statusConfig: Record<string, { label: string; color: string }> = {
   CRITICO: { label: "Crítico", color: "bg-destructive/20 text-destructive border-destructive/30" },
   VENCIDO: { label: "Vencido", color: "bg-red-600/20 text-red-500 border-red-600/30" },
   
-  // Raw tracking codes
-  DEP: { label: "Embarcado", color: "bg-orange-500/20 text-orange-400 border-orange-500/30" },
-  ARR: { label: "Chegada", color: "bg-cyan-500/20 text-cyan-400 border-cyan-500/30" },
-  RCF: { label: "Recepcionado", color: "bg-indigo-500/20 text-indigo-400 border-indigo-500/30" },
-  NFD: { label: "Notificado", color: "bg-purple-500/20 text-purple-400 border-purple-500/30" },
-  AWD: { label: "Em Espera", color: "bg-purple-500/20 text-purple-400 border-purple-500/30" },
-  DLV: { label: "Entregue", color: "bg-emerald-500/20 text-emerald-400 border-emerald-500/30" },
-  POD: { label: "Comprovado", color: "bg-emerald-500/20 text-emerald-400 border-emerald-500/30" },
-  FRO: { label: "Congelado", color: "bg-sky-500/20 text-sky-400 border-sky-500/30" },
-  DIS: { label: "Divergência", color: "bg-destructive/20 text-destructive border-destructive/30" },
-  OFLD: { label: "Descarregado", color: "bg-destructive/20 text-destructive border-destructive/30" },
+  // Raw tracking codes - Nomenclatura Híbrida IATA (código + descrição)
+  DEP: { label: "DEP - Embarcado", color: "bg-orange-500/20 text-orange-400 border-orange-500/30" },
+  ARR: { label: "ARR - Chegada", color: "bg-cyan-500/20 text-cyan-400 border-cyan-500/30" },
+  RCF: { label: "RCF - Recepção", color: "bg-indigo-500/20 text-indigo-400 border-indigo-500/30" },
+  NFD: { label: "NFD - Notificado", color: "bg-purple-500/20 text-purple-400 border-purple-500/30" },
+  AWD: { label: "AWD - Em Espera", color: "bg-purple-500/20 text-purple-400 border-purple-500/30" },
+  DLV: { label: "DLV - Entrega", color: "bg-emerald-500/20 text-emerald-400 border-emerald-500/30" },
+  POD: { label: "POD - Comprovado", color: "bg-emerald-500/20 text-emerald-400 border-emerald-500/30" },
+  FRO: { label: "FRO - Congelado", color: "bg-sky-500/20 text-sky-400 border-sky-500/30" },
+  DIS: { label: "DIS - Divergência", color: "bg-destructive/20 text-destructive border-destructive/30" },
+  OFLD: { label: "OFLD - Offload", color: "bg-destructive/20 text-destructive border-destructive/30" },
 };
 
 export function StatusBadge({ status, className }: StatusBadgeProps) {

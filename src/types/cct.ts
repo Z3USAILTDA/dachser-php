@@ -39,7 +39,8 @@ export type FonteEvento = "LEADCOMEX" | "HANDLER" | "RFB" | "MANUAL" | "TRACKING
 
 export type NivelConfianca = "PRIMARIA" | "COMPLEMENTAR";
 
-export const DIVERGENCIA_THRESHOLD_PCT = 5;
+// Qualquer divergência > 0% é considerada CRÍTICO
+export const DIVERGENCIA_THRESHOLD_PCT = 0;
 
 export const CODIGOS_EVENTO = [
   "AGUARDANDO_EMBARQUE",
