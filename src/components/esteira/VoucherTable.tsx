@@ -50,7 +50,7 @@ interface VoucherTableProps {
   onDelete: (voucher: Voucher) => void;
   onGoBack: (voucher: Voucher, justificativa: string) => void;
   onCancel?: (voucher: Voucher) => void;
-  onDisassemble?: (voucher: Voucher) => void;
+  onDisassemble?: (voucher: Voucher, selectedChildIds: string[], keepMaster: boolean) => Promise<void>;
   filters: FilterValues;
   onFilterChange: (filters: FilterValues) => void;
   canEdit?: boolean;
@@ -530,7 +530,9 @@ export const VoucherTable = ({ vouchers, onViewDetails, onEdit, onDelete, onGoBa
                             onDelete={() => onDelete(voucher)}
                             onGoBack={(justificativa) => onGoBack(voucher, justificativa)}
                             onCancel={onCancel ? () => onCancel(voucher) : undefined}
-                            onDisassemble={onDisassemble ? () => onDisassemble(voucher) : undefined}
+                            onDisassemble={onDisassemble ? async (selectedChildIds, keepMaster) => {
+                              await onDisassemble(voucher, selectedChildIds, keepMaster);
+                            } : undefined}
                             canGoBack={canGoBack(voucher)}
                             canGoBackStage={canGoBackStage}
                             canEdit={canEdit && voucher.etapaAtual !== "CANCELADO"}
@@ -538,6 +540,8 @@ export const VoucherTable = ({ vouchers, onViewDetails, onEdit, onDelete, onGoBa
                             canCancelVoucher={canCancelVoucher && voucher.etapaAtual !== "CANCELADO" && voucher.etapaAtual !== "CONCLUIDO"}
                             canDisassemble={canDisassembleMaster && (voucher.isMaster || voucher.origemCriacao === "MASTER")}
                             isCancelled={voucher.etapaAtual === "CANCELADO"}
+                            vouchersFilhos={voucher.vouchersFilhos || []}
+                            masterId={voucher.id}
                           />
                         </div>
                       </TableCell>
