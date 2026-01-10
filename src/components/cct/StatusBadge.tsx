@@ -33,7 +33,9 @@ const statusConfig: Record<string, { label: string; color: string }> = {
   // Raw tracking codes - Nomenclatura Híbrida IATA (código + descrição)
   DEP: { label: "DEP - Embarcado", color: "bg-orange-500/20 text-orange-400 border-orange-500/30" },
   ARR: { label: "ARR - Chegada", color: "bg-cyan-500/20 text-cyan-400 border-cyan-500/30" },
+  ATA: { label: "ATA - Chegada", color: "bg-cyan-500/20 text-cyan-400 border-cyan-500/30" },
   RCF: { label: "RCF - Recepção", color: "bg-indigo-500/20 text-indigo-400 border-indigo-500/30" },
+  RCS: { label: "RCS - Recepção", color: "bg-indigo-500/20 text-indigo-400 border-indigo-500/30" },
   NFD: { label: "NFD - Notificado", color: "bg-purple-500/20 text-purple-400 border-purple-500/30" },
   AWD: { label: "AWD - Em Espera", color: "bg-purple-500/20 text-purple-400 border-purple-500/30" },
   DLV: { label: "DLV - Entrega", color: "bg-emerald-500/20 text-emerald-400 border-emerald-500/30" },
@@ -41,6 +43,8 @@ const statusConfig: Record<string, { label: string; color: string }> = {
   FRO: { label: "FRO - Congelado", color: "bg-sky-500/20 text-sky-400 border-sky-500/30" },
   DIS: { label: "DIS - Divergência", color: "bg-destructive/20 text-destructive border-destructive/30" },
   OFLD: { label: "OFLD - Offload", color: "bg-destructive/20 text-destructive border-destructive/30" },
+  MAN: { label: "MAN - Manifestado", color: "bg-primary/20 text-primary border-primary/30" },
+  BKD: { label: "BKD - Reservado", color: "bg-primary/20 text-primary border-primary/30" },
 };
 
 export function StatusBadge({ status, className }: StatusBadgeProps) {
