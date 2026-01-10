@@ -376,13 +376,20 @@ export const VoucherTable = ({ vouchers, onViewDetails, onEdit, onDelete, onGoBa
                       onClick={() => onViewDetails(voucher)}
                     >
                       <TableCell className="font-mono font-medium">
-                        <div className="flex items-center gap-2">
-                          {voucher.numeroSPO}
-                          {(voucher.isMaster || voucher.origemCriacao === "MASTER") && (
-                            <Badge className="bg-purple-500/20 text-purple-400 border-purple-500/30 text-[10px] gap-1">
-                              <Layers className="h-3 w-3" />
-                              Master
-                            </Badge>
+                        <div className="flex flex-col gap-0.5">
+                          <div className="flex items-center gap-2">
+                            {voucher.numeroSPO}
+                            {(voucher.isMaster || voucher.origemCriacao === "MASTER") && (
+                              <Badge className="bg-purple-500/20 text-purple-400 border-purple-500/30 text-[10px] gap-1">
+                                <Layers className="h-3 w-3" />
+                                Master
+                              </Badge>
+                            )}
+                          </div>
+                          {voucher.isMaster && voucher.nomeMaster && (
+                            <span className="text-xs text-muted-foreground font-normal truncate max-w-[200px]" title={voucher.nomeMaster}>
+                              {voucher.nomeMaster}
+                            </span>
                           )}
                         </div>
                       </TableCell>
