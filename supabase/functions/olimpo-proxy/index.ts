@@ -1509,7 +1509,28 @@ serve(async (req) => {
               ORDER BY ts2.last_check DESC 
               LIMIT 1
             ) as vessel_imo,
-            MAX(ts.eta) as eta,
+            -- ETA priorizado: usar t_master_dados.eta se disponível, senão usar t_tracking_sea.eta
+            COALESCE(
+              (
+                SELECT md.eta 
+                FROM dados_dachser.t_master_dados md 
+                WHERE TRIM(md.mawb) = ts.mbl_id 
+                  AND md.eta IS NOT NULL 
+                  AND md.active = 1
+                LIMIT 1
+              ),
+              MAX(ts.eta)
+            ) as eta,
+            -- ETA do master para referência (auditoria)
+            (
+              SELECT md.eta 
+              FROM dados_dachser.t_master_dados md 
+              WHERE TRIM(md.mawb) = ts.mbl_id 
+                AND md.active = 1
+              LIMIT 1
+            ) as eta_master,
+            -- ETA da API para referência
+            MAX(ts.eta) as eta_api,
             MAX(ts.email_analista) as email_analista,
             MAX(ts.email_cliente) as email_cliente,
             COUNT(DISTINCT CASE WHEN ts.container NOT IN ('NAO_ENCONTRADO', 'PENDENTE', '') AND ts.container IS NOT NULL THEN ts.container END) as container_count,
@@ -1521,12 +1542,48 @@ serve(async (req) => {
             MAX(ts.updated_at) as updated_at,
             -- DELAYED por ETA: se ETA passou há mais de 3 dias e não está entregue
             CASE 
-              WHEN MAX(ts.eta) IS NOT NULL 
-                AND MAX(ts.eta) < DATE_SUB(NOW(), INTERVAL 3 DAY)
+              WHEN COALESCE(
+                (SELECT md.eta FROM dados_dachser.t_master_dados md WHERE TRIM(md.mawb) = ts.mbl_id AND md.eta IS NOT NULL AND md.active = 1 LIMIT 1),
+                MAX(ts.eta)
+              ) IS NOT NULL 
+                AND COALESCE(
+                  (SELECT md.eta FROM dados_dachser.t_master_dados md WHERE TRIM(md.mawb) = ts.mbl_id AND md.eta IS NOT NULL AND md.active = 1 LIMIT 1),
+                  MAX(ts.eta)
+                ) < DATE_SUB(NOW(), INTERVAL 3 DAY)
                 AND UPPER(COALESCE(MAX(ts.container_status), '')) NOT IN ('DELIVERED', 'GATE_OUT', 'DLV', 'GOD', 'EMPTY_RETURNED', 'EMPTY_RECEIVED_AT_CY')
               THEN 1 
               ELSE 0 
             END as is_eta_delayed,
+            -- CRÍTICO: atraso >= 7 dias
+            CASE 
+              WHEN COALESCE(
+                (SELECT md.eta FROM dados_dachser.t_master_dados md WHERE TRIM(md.mawb) = ts.mbl_id AND md.eta IS NOT NULL AND md.active = 1 LIMIT 1),
+                MAX(ts.eta)
+              ) IS NOT NULL 
+                AND COALESCE(
+                  (SELECT md.eta FROM dados_dachser.t_master_dados md WHERE TRIM(md.mawb) = ts.mbl_id AND md.eta IS NOT NULL AND md.active = 1 LIMIT 1),
+                  MAX(ts.eta)
+                ) < DATE_SUB(NOW(), INTERVAL 7 DAY)
+                AND UPPER(COALESCE(MAX(ts.container_status), '')) NOT IN ('DELIVERED', 'GATE_OUT', 'DLV', 'GOD', 'EMPTY_RETURNED', 'EMPTY_RECEIVED_AT_CY')
+              THEN 1 
+              ELSE 0 
+            END as is_critico,
+            -- Dias de atraso calculados
+            CASE 
+              WHEN COALESCE(
+                (SELECT md.eta FROM dados_dachser.t_master_dados md WHERE TRIM(md.mawb) = ts.mbl_id AND md.eta IS NOT NULL AND md.active = 1 LIMIT 1),
+                MAX(ts.eta)
+              ) IS NOT NULL 
+                AND COALESCE(
+                  (SELECT md.eta FROM dados_dachser.t_master_dados md WHERE TRIM(md.mawb) = ts.mbl_id AND md.eta IS NOT NULL AND md.active = 1 LIMIT 1),
+                  MAX(ts.eta)
+                ) < CURDATE()
+              THEN DATEDIFF(CURDATE(), COALESCE(
+                (SELECT md.eta FROM dados_dachser.t_master_dados md WHERE TRIM(md.mawb) = ts.mbl_id AND md.eta IS NOT NULL AND md.active = 1 LIMIT 1),
+                MAX(ts.eta)
+              ))
+              ELSE 0 
+            END as dias_atraso,
             -- Porto de transbordo: agregar de histórico de eventos
             (
               SELECT GROUP_CONCAT(DISTINCT h.location SEPARATOR ', ')
@@ -1614,7 +1671,18 @@ serve(async (req) => {
           SELECT 
             ts.id, ts.mbl_id, ts.container, ts.shipping_line, 
             ts.container_status, ts.last_event, ts.last_check, 
-            ts.eta, 
+            -- ETA priorizado: usar t_master_dados.eta se disponível
+            COALESCE(
+              (
+                SELECT md.eta 
+                FROM dados_dachser.t_master_dados md 
+                WHERE TRIM(md.mawb) = ts.mbl_id 
+                  AND md.eta IS NOT NULL 
+                  AND md.active = 1
+                LIMIT 1
+              ),
+              ts.eta
+            ) as eta, 
             COALESCE(ts.navio, (
               SELECT t2.navio 
               FROM dados_dachser.t_tracking_sea t2 
