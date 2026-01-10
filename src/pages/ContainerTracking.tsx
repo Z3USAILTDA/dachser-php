@@ -133,6 +133,8 @@ interface MblTrackingData {
   navio: string;
   vessel_imo: string | null;
   eta: string;
+  eta_master: string | null; // ETA do t_master_dados (auditoria)
+  eta_api: string | null; // ETA retornado pela API
   email_analista: string;
   email_cliente: string;
   container_count: number;
@@ -140,6 +142,8 @@ interface MblTrackingData {
   last_event: string;
   last_check: string;
   is_eta_delayed: number; // 1 se ETA passou há mais de 3 dias
+  is_critico: number; // 1 se atraso >= 7 dias
+  dias_atraso: number; // Dias de atraso calculados
   transshipment_port: string | null; // Porto(s) de escala/transbordo
 }
 
@@ -170,7 +174,7 @@ const ContainerTracking = () => {
   const [searchTerm, setSearchTerm] = useState("");
   const [filterLine, setFilterLine] = useState("all");
   
-  const [activeCardFilter, setActiveCardFilter] = useState<"all" | "transito" | "alerta" | "entregues">("all");
+  const [activeCardFilter, setActiveCardFilter] = useState<"all" | "transito" | "alerta" | "critico" | "entregues">("all");
   const [mblList, setMblList] = useState<MblTrackingData[]>([]);
   const [currentPage, setCurrentPage] = useState(1);
   const [isLoadingData, setIsLoadingData] = useState(false);
@@ -220,6 +224,16 @@ const ContainerTracking = () => {
   const isEntregue = (lastEvent: string | null): boolean => {
     const status = getReportStatus(lastEvent);
     return ['GOD', 'DLV'].includes(status.code);
+  };
+
+  // Status crítico: atraso >= 7 dias
+  const isEmCritico = (isCritico?: number): boolean => isCritico === 1;
+  
+  // Verificar se deve mostrar o mapa do navio (ocultar para DCH e posteriores)
+  const shouldShowVesselMap = (lastEvent: string | null): boolean => {
+    const status = getReportStatus(lastEvent);
+    // Ocultar mapa para status DCH ou posteriores (índice de etapa >= 3)
+    return !['DCH', 'INS', 'GOD', 'DLV'].includes(status.code);
   };
 
   // Check authentication - redirect to login if not authenticated
@@ -638,9 +652,11 @@ const ContainerTracking = () => {
       
       let matchesCardFilter = true;
       if (activeCardFilter === "transito") {
-        matchesCardFilter = isEmTransito(m.last_event) && !isEntregue(m.last_event) && !isEmAlerta(m.last_event, m.is_eta_delayed);
+        matchesCardFilter = isEmTransito(m.last_event) && !isEntregue(m.last_event) && !isEmAlerta(m.last_event, m.is_eta_delayed) && !isEmCritico(m.is_critico);
       } else if (activeCardFilter === "alerta") {
-        matchesCardFilter = isEmAlerta(m.last_event, m.is_eta_delayed);
+        matchesCardFilter = isEmAlerta(m.last_event, m.is_eta_delayed) && !isEmCritico(m.is_critico);
+      } else if (activeCardFilter === "critico") {
+        matchesCardFilter = isEmCritico(m.is_critico);
       } else if (activeCardFilter === "entregues") {
         matchesCardFilter = isEntregue(m.last_event);
       }
@@ -659,11 +675,12 @@ const ContainerTracking = () => {
   // Dashboard stats
   const stats = useMemo(() => {
     const total = mblList.length;
-    const emTransito = mblList.filter((m) => isEmTransito(m.last_event) && !isEntregue(m.last_event) && !isEmAlerta(m.last_event, m.is_eta_delayed)).length;
-    const emAlerta = mblList.filter((m) => isEmAlerta(m.last_event, m.is_eta_delayed)).length;
+    const criticos = mblList.filter((m) => isEmCritico(m.is_critico)).length;
+    const emTransito = mblList.filter((m) => isEmTransito(m.last_event) && !isEntregue(m.last_event) && !isEmAlerta(m.last_event, m.is_eta_delayed) && !isEmCritico(m.is_critico)).length;
+    const emAlerta = mblList.filter((m) => isEmAlerta(m.last_event, m.is_eta_delayed) && !isEmCritico(m.is_critico)).length;
     const entregues = mblList.filter((m) => isEntregue(m.last_event)).length;
 
-    return { total, emTransito, emAlerta, entregues };
+    return { total, emTransito, emAlerta, criticos, entregues };
   }, [mblList]);
 
   // Dynamic list of armadores
@@ -797,7 +814,7 @@ const ContainerTracking = () => {
       <main className="relative z-10 max-w-[95%] mx-auto mb-12 px-2 space-y-[18px]">
 
         {/* Dashboard Cards */}
-        <section className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <section className="grid grid-cols-1 md:grid-cols-5 gap-4">
           <Card 
             className={`bg-card/90 border-border backdrop-blur-sm shadow-lg cursor-pointer transition-all hover:scale-[1.02] ${activeCardFilter === "all" ? "ring-2 ring-primary" : ""}`}
             onClick={() => { setActiveCardFilter("all"); setCurrentPage(1); }}
@@ -859,7 +876,29 @@ const ContainerTracking = () => {
                 <span className="text-3xl font-semibold text-primary">
                   {stats.emAlerta}
                 </span>
-                <span className="text-xs text-primary/80">DELAYED, HOLD</span>
+                <span className="text-xs text-primary/80">Atraso 3-6 dias</span>
+              </div>
+            </div>
+          </Card>
+
+          <Card 
+            className={`bg-gradient-to-br from-red-900/50 via-red-900/20 to-card border-red-600/60 shadow-lg cursor-pointer transition-all hover:scale-[1.02] ${activeCardFilter === "critico" ? "ring-2 ring-red-500" : ""}`}
+            onClick={() => { setActiveCardFilter("critico"); setCurrentPage(1); }}
+          >
+            <div className="p-4 flex flex-col h-full">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-xs uppercase tracking-wide text-red-300">
+                  Crítico
+                </span>
+                <span className="inline-flex items-center justify-center w-8 h-8 rounded-full bg-red-900/60 text-red-400 animate-pulse">
+                  <Clock className="w-4 h-4" />
+                </span>
+              </div>
+              <div className="flex items-end justify-between mt-auto">
+                <span className="text-3xl font-semibold text-red-400">
+                  {stats.criticos}
+                </span>
+                <span className="text-xs text-red-300/80">Atraso ≥ 7 dias</span>
               </div>
             </div>
           </Card>
@@ -1130,18 +1169,31 @@ const ContainerTracking = () => {
                             </td>
                             <td className="px-3 py-3 text-center">
                               {(() => {
+                                const critico = isEmCritico(mbl.is_critico);
                                 const emAtraso = isEmAlerta(mbl.last_event, mbl.is_eta_delayed);
-                                return emAtraso ? (
-                                  <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium bg-red-500/20 text-red-400 border border-red-500/30">
-                                    <AlertTriangle className="w-3 h-3" />
-                                    Em Atraso
-                                  </span>
-                                ) : (
-                                  <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium bg-green-500/20 text-green-400 border border-green-500/30">
-                                    <Check className="w-3 h-3" />
-                                    No Prazo
-                                  </span>
-                                );
+                                
+                                if (critico) {
+                                  return (
+                                    <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-bold bg-red-600/30 text-red-400 border border-red-500/50 animate-pulse">
+                                      <Clock className="w-3 h-3" />
+                                      CRÍTICO ({mbl.dias_atraso}d)
+                                    </span>
+                                  );
+                                } else if (emAtraso) {
+                                  return (
+                                    <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium bg-primary/20 text-primary border border-primary/30">
+                                      <AlertTriangle className="w-3 h-3" />
+                                      Em Atraso
+                                    </span>
+                                  );
+                                } else {
+                                  return (
+                                    <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium bg-green-500/20 text-green-400 border border-green-500/30">
+                                      <Check className="w-3 h-3" />
+                                      No Prazo
+                                    </span>
+                                  );
+                                }
                               })()}
                             </td>
                             <td className="px-3 py-3 text-center">
@@ -1222,12 +1274,20 @@ const ContainerTracking = () => {
                                       Containers do MBL {mbl.mbl_id}
                                     </div>
                                     
-                                    {/* VesselFinder Map */}
-                                    <VesselFinderMap 
-                                      vesselName={vesselName}
-                                      imo={vesselImo}
-                                      height={300}
-                                    />
+                                    {/* VesselFinder Map - Ocultar após descarga (DCH) */}
+                                    {shouldShowVesselMap(mbl.last_event) && (
+                                      <VesselFinderMap 
+                                        vesselName={vesselName}
+                                        imo={vesselImo}
+                                        height={300}
+                                      />
+                                    )}
+                                    {!shouldShowVesselMap(mbl.last_event) && (
+                                      <div className="bg-[rgba(0,0,0,.3)] border border-[rgba(255,255,255,.1)] rounded-lg p-4 flex items-center justify-center text-[#888]">
+                                        <Ship className="w-5 h-5 mr-2 opacity-50" />
+                                        <span className="text-sm">Navio já descarregou - mapa não disponível</span>
+                                      </div>
+                                    )}
                                     
                                     <div className="overflow-x-auto">
                                       <table className="w-full text-sm">
