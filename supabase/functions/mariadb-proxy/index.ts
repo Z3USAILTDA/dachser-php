@@ -6929,6 +6929,7 @@ serve(async (req) => {
         // Create a master voucher consolidating multiple child vouchers
         const {
           voucher_ids,
+          nome_master,
           fornecedor,
           cnpj_fornecedor,
           valor_total,
@@ -6957,7 +6958,8 @@ serve(async (req) => {
           await client.execute(`
             ALTER TABLE dados_dachser.t_vouchers 
             ADD COLUMN IF NOT EXISTS voucher_master_id VARCHAR(36) NULL,
-            ADD COLUMN IF NOT EXISTS is_master TINYINT(1) DEFAULT 0
+            ADD COLUMN IF NOT EXISTS is_master TINYINT(1) DEFAULT 0,
+            ADD COLUMN IF NOT EXISTS nome_master VARCHAR(255) NULL
           `);
         } catch (alterErr) {
           console.log('Note: ALTER TABLE might have failed (columns may already exist)');
@@ -7021,14 +7023,15 @@ serve(async (req) => {
         // Create the master voucher - goes directly to FISCAL
         await client.execute(`
           INSERT INTO dados_dachser.t_vouchers (
-            id, numero_spo, fornecedor, cnpj_fornecedor, valor, moeda, vencimento,
+            id, numero_spo, nome_master, fornecedor, cnpj_fornecedor, valor, moeda, vencimento,
             forma_pagamento, tipo_documento, cobranca_em_nome_de, filial,
             comentarios_operacao, etapa_atual, status_baixa, status_financeiro,
             criado_por_user_id, is_master, origem_processo, processo_id, created_at, updated_at
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'FISCAL', 'PENDENTE', 'PENDENTE', ?, 1, ?, ?, NOW(), NOW())
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'FISCAL', 'PENDENTE', 'PENDENTE', ?, 1, ?, ?, NOW(), NOW())
         `, [
           masterId,
           numeroSpoMaster,
+          nome_master || null,
           fornecedor || null,
           cnpj_fornecedor || null,
           totalValor,
@@ -7148,9 +7151,13 @@ serve(async (req) => {
       }
 
       case 'disassemble_master_voucher': {
-        // Disassemble a master voucher: restore children and delete master
-        const { master_id } = body as { master_id: string };
-        console.log('Disassembling master voucher:', master_id);
+        // Disassemble a master voucher: restore children and optionally delete master
+        const { master_id, child_ids, keep_master } = body as { 
+          master_id: string; 
+          child_ids?: string[];
+          keep_master?: boolean;
+        };
+        console.log('Disassembling master voucher:', master_id, 'child_ids:', child_ids, 'keep_master:', keep_master);
 
         if (!master_id) {
           return new Response(
@@ -7159,26 +7166,46 @@ serve(async (req) => {
           );
         }
 
-        // Count child vouchers before restoring
-        const childCount = await client.query(`
+        let childrenRestored = 0;
+
+        if (child_ids && child_ids.length > 0) {
+          // Desmembrar apenas os filhos selecionados
+          await client.execute(`
+            UPDATE dados_dachser.t_vouchers 
+            SET voucher_master_id = NULL, updated_at = NOW()
+            WHERE id IN (${child_ids.map(() => '?').join(',')})
+          `, child_ids);
+          childrenRestored = child_ids.length;
+        } else {
+          // Desmembrar todos (comportamento original)
+          const childCount = await client.query(`
+            SELECT COUNT(*) as count FROM dados_dachser.t_vouchers WHERE voucher_master_id = ?
+          `, [master_id]);
+          childrenRestored = childCount?.[0]?.count || 0;
+
+          await client.execute(`
+            UPDATE dados_dachser.t_vouchers 
+            SET voucher_master_id = NULL, updated_at = NOW()
+            WHERE voucher_master_id = ?
+          `, [master_id]);
+        }
+
+        // Verificar se o master deve ser excluído
+        const remainingChildren = await client.query(`
           SELECT COUNT(*) as count FROM dados_dachser.t_vouchers WHERE voucher_master_id = ?
         `, [master_id]);
-        const childrenRestored = childCount?.[0]?.count || 0;
+        const remainingCount = remainingChildren?.[0]?.count || 0;
 
-        // Restore all child vouchers by clearing voucher_master_id
-        await client.execute(`
-          UPDATE dados_dachser.t_vouchers 
-          SET voucher_master_id = NULL, updated_at = NOW()
-          WHERE voucher_master_id = ?
-        `, [master_id]);
+        // Se keep_master é false OU se não há mais filhos, excluir o master
+        if (!keep_master || remainingCount === 0) {
+          await client.execute(`
+            DELETE FROM dados_dachser.t_vouchers WHERE id = ?
+          `, [master_id]);
+          console.log(`Master voucher ${master_id} deleted.`);
+        }
 
-        // Delete the master voucher
-        await client.execute(`
-          DELETE FROM dados_dachser.t_vouchers WHERE id = ?
-        `, [master_id]);
-
-        console.log(`Master voucher ${master_id} disassembled. ${childrenRestored} children restored.`);
-        result = { success: true, childrenRestored };
+        console.log(`Master voucher ${master_id} disassembled. ${childrenRestored} children restored. ${remainingCount} remaining.`);
+        result = { success: true, childrenRestored, remainingChildren: remainingCount, masterDeleted: !keep_master || remainingCount === 0 };
         break;
       }
 

@@ -310,6 +310,7 @@ export interface Voucher {
   voucherMasterId?: string;
   isMaster?: boolean;
   vouchersFilhos?: VoucherFilho[];
+  nomeMaster?: string; // Nome personalizado do voucher master
 }
 
 export interface RemessaItem {

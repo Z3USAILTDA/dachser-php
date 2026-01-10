@@ -28,13 +28,15 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { useState } from "react";
+import { VoucherFilho } from "@/types/voucher";
+import { DesmembrarMasterDialog } from "./DesmembrarMasterDialog";
 
 interface VoucherActionsMenuProps {
   onEdit: () => void;
   onDelete: () => void;
   onGoBack: (justificativa: string) => void;
   onCancel?: () => void;
-  onDisassemble?: () => void;
+  onDisassemble?: (selectedChildIds: string[], keepMaster: boolean) => Promise<void>;
   canGoBack: boolean;
   canGoBackStage?: boolean;
   canEdit?: boolean;
@@ -42,6 +44,8 @@ interface VoucherActionsMenuProps {
   canCancelVoucher?: boolean;
   canDisassemble?: boolean;
   isCancelled?: boolean;
+  vouchersFilhos?: VoucherFilho[];
+  masterId?: string;
 }
 
 export const VoucherActionsMenu = ({
@@ -57,11 +61,14 @@ export const VoucherActionsMenu = ({
   canCancelVoucher = false,
   canDisassemble = false,
   isCancelled = false,
+  vouchersFilhos = [],
+  masterId,
 }: VoucherActionsMenuProps) => {
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [showGoBackDialog, setShowGoBackDialog] = useState(false);
   const [showDisassembleDialog, setShowDisassembleDialog] = useState(false);
   const [justificativa, setJustificativa] = useState("");
+  const [disassembleLoading, setDisassembleLoading] = useState(false);
 
   // If voucher is cancelled, only show view (no actions)
   if (isCancelled) {
@@ -80,6 +87,17 @@ export const VoucherActionsMenu = ({
     onGoBack(justificativa);
     setShowGoBackDialog(false);
     setJustificativa("");
+  };
+
+  const handleDisassembleConfirm = async (selectedChildIds: string[], keepMaster: boolean) => {
+    if (!onDisassemble) return;
+    try {
+      setDisassembleLoading(true);
+      await onDisassemble(selectedChildIds, keepMaster);
+      setShowDisassembleDialog(false);
+    } finally {
+      setDisassembleLoading(false);
+    }
   };
 
   return (
@@ -205,30 +223,17 @@ export const VoucherActionsMenu = ({
         </DialogContent>
       </Dialog>
 
-      <AlertDialog open={showDisassembleDialog} onOpenChange={setShowDisassembleDialog}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Desmembrar Voucher/SPO Master</AlertDialogTitle>
-            <AlertDialogDescription>
-              Esta ação irá restaurar todos os vouchers/SPO filhos como vouchers/SPO individuais e 
-              excluir o voucher/SPO master. Os vouchers/SPO filhos voltarão a aparecer separadamente 
-              na esteira. Deseja continuar?
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancelar</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={() => {
-                onDisassemble?.();
-                setShowDisassembleDialog(false);
-              }}
-              className="bg-orange-600 hover:bg-orange-700"
-            >
-              Desmembrar
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      {/* Desmembrar Master com seleção de filhos */}
+      {masterId && vouchersFilhos.length > 0 && (
+        <DesmembrarMasterDialog
+          open={showDisassembleDialog}
+          onOpenChange={setShowDisassembleDialog}
+          masterId={masterId}
+          vouchersFilhos={vouchersFilhos}
+          onConfirm={handleDisassembleConfirm}
+          loading={disassembleLoading}
+        />
+      )}
     </>
   );
 };

@@ -1,10 +1,11 @@
 /**
  * Utility to safely parse dates from MariaDB
  * MariaDB stores dates in local time (UTC-3 São Paulo/Brasília).
- * We need to explicitly add the timezone offset to ensure correct parsing
- * regardless of the browser's timezone setting.
  * 
  * Handles various date formats: date-only, datetime, ISO with/without timezone
+ * 
+ * IMPORTANT: For date-only strings (YYYY-MM-DD), we create a local date
+ * to avoid off-by-one errors caused by UTC interpretation.
  */
 export const parseMariaDBDate = (dateStr: string | null | undefined): Date | null => {
   if (!dateStr) return null;
@@ -15,17 +16,25 @@ export const parseMariaDBDate = (dateStr: string | null | undefined): Date | nul
   }
   
   // Se é formato MariaDB "YYYY-MM-DD HH:mm:ss", adicionar offset de São Paulo (-03:00)
-  // Isso garante que a data seja interpretada corretamente independente do timezone do navegador
   if (dateStr.includes(' ')) {
-    // Converter para ISO format e adicionar offset de São Paulo
     return new Date(dateStr.replace(' ', 'T') + '-03:00');
   }
   
-  // Se tem 'T' sem timezone, adicionar offset de São Paulo
-  if (dateStr.includes('T') && !dateStr.includes('Z') && !dateStr.includes('+') && !dateStr.includes('-', 10)) {
+  // Se tem 'T' sem timezone (datetime ISO sem offset), adicionar offset de São Paulo
+  if (dateStr.includes('T')) {
     return new Date(dateStr + '-03:00');
   }
   
-  // Se é apenas data (YYYY-MM-DD), criar como meia-noite no horário de São Paulo
-  return new Date(dateStr + 'T00:00:00-03:00');
+  // CORREÇÃO: Se é apenas data (YYYY-MM-DD), criar como data local
+  // Isso evita o problema de "um dia a menos" quando o browser interpreta como UTC
+  const parts = dateStr.split('-');
+  if (parts.length === 3) {
+    const year = parseInt(parts[0], 10);
+    const month = parseInt(parts[1], 10) - 1; // JavaScript months are 0-indexed
+    const day = parseInt(parts[2], 10);
+    return new Date(year, month, day); // Creates local date at 00:00
+  }
+  
+  // Fallback: try native parsing
+  return new Date(dateStr);
 };

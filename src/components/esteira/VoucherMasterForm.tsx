@@ -34,6 +34,7 @@ interface VoucherMasterFormProps {
 }
 
 const formSchema = z.object({
+  nomeMaster: z.string().optional(), // Nome personalizado do master
   fornecedor: z.string().optional(),
   cnpjFornecedor: z.string().optional(),
   valorTotal: z.string().optional(),
@@ -189,16 +190,26 @@ export const VoucherMasterForm = ({ onSuccess, onClose }: VoucherMasterFormProps
       const storedUser = localStorage.getItem("user") || localStorage.getItem("dachser_user");
       const userData = storedUser ? JSON.parse(storedUser) : { id: 0, username: "sistema" };
 
+      // Format vencimento as YYYY-MM-DD to avoid timezone issues
+      const formatDateForDB = (date: Date | undefined): string | null => {
+        if (!date) return null;
+        const year = date.getFullYear();
+        const month = String(date.getMonth() + 1).padStart(2, '0');
+        const day = String(date.getDate()).padStart(2, '0');
+        return `${year}-${month}-${day}`;
+      };
+
       // Create master voucher
       const { data: masterResult, error: masterError } = await supabase.functions.invoke("mariadb-proxy", {
         body: {
           action: "create_voucher_master",
           voucher_ids: selectedVouchers.map(v => v.id),
+          nome_master: values.nomeMaster || null,
           fornecedor: values.fornecedor || null,
           cnpj_fornecedor: values.cnpjFornecedor || null,
           valor_total: values.valorTotal ? parseFloat(values.valorTotal.replace(",", ".")) : null,
           moeda: values.moeda,
-          vencimento: values.vencimento?.toISOString() || null,
+          vencimento: formatDateForDB(values.vencimento),
           forma_pagamento: values.formaPagamento,
           tipo_documento: values.tipoDocumento || null,
           cobranca_em_nome_de: values.cobrancaEmNomeDe,
@@ -423,6 +434,24 @@ export const VoucherMasterForm = ({ onSuccess, onClose }: VoucherMasterFormProps
             </Button>
           </CollapsibleTrigger>
           <CollapsibleContent className="mt-4 space-y-4 p-4 rounded-xl border border-border/30 bg-background/20">
+            {/* Nome do Master */}
+            <FormField
+              control={form.control}
+              name="nomeMaster"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Nome do Voucher Master</FormLabel>
+                  <FormControl>
+                    <Input 
+                      {...field} 
+                      placeholder="Ex: Consolidado Fornecedor X - Janeiro"
+                      className="bg-background/50 border-border" 
+                    />
+                  </FormControl>
+                </FormItem>
+              )}
+            />
+
             <div className="grid grid-cols-3 gap-4">
               <FormField
                 control={form.control}

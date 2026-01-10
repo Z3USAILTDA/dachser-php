@@ -4,10 +4,11 @@ import { Voucher, TipoAnexo } from "@/types/voucher";
 import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
-import { Edit, Send, Trash2, Loader2, Upload, FileText, AlertCircle } from "lucide-react";
+import { Edit, Send, Trash2, Loader2, Upload, FileText, AlertCircle, CalendarIcon } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { FileUpload } from "./FileUpload";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Label } from "@/components/ui/label";
 import {
   Select,
   SelectContent,
@@ -15,6 +16,14 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -26,6 +35,12 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { EditVoucherDialog } from "./EditVoucherDialog";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Calendar } from "@/components/ui/calendar";
+import { format } from "date-fns";
+import { ptBR } from "date-fns/locale";
+import { cn } from "@/lib/utils";
+import { parseMariaDBDate } from "@/utils/parseMariaDBDate";
 
 interface VoucherRascunhoActionsProps {
   voucher: Voucher;
@@ -37,9 +52,13 @@ export const VoucherRascunhoActions = ({ voucher, onUpdate }: VoucherRascunhoAct
   const [loading, setLoading] = useState(false);
   const [showEditDialog, setShowEditDialog] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
-  const [showEnviarConfirm, setShowEnviarConfirm] = useState(false);
+  const [showEnviarDialog, setShowEnviarDialog] = useState(false);
   const [selectedTipo, setSelectedTipo] = useState<TipoAnexo>("FATURA_DEMONSTRATIVO");
   const { toast } = useToast();
+
+  // Estado para vencimento editável no envio
+  const initialVencimento = voucher.vencimento ? parseMariaDBDate(voucher.vencimento.toString()) : undefined;
+  const [vencimentoEnvio, setVencimentoEnvio] = useState<Date | undefined>(initialVencimento || undefined);
 
   // Get user data from localStorage (MariaDB auth)
   const getUserData = () => {
@@ -116,10 +135,44 @@ export const VoucherRascunhoActions = ({ voucher, onUpdate }: VoucherRascunhoAct
     }
   };
 
+  // Helper para formatar data para o banco
+  const formatDateForDB = (date: Date): string => {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  };
+
   // Enviar voucher (sair do rascunho)
   const handleEnviar = async () => {
     try {
       setLoading(true);
+      const userData = getUserData();
+
+      // Se vencimento foi alterado, atualizar antes de mudar etapa
+      const originalVenc = initialVencimento?.getTime();
+      const newVenc = vencimentoEnvio?.getTime();
+      if (vencimentoEnvio && originalVenc !== newVenc) {
+        await supabase.functions.invoke("mariadb-proxy", {
+          body: {
+            action: "update_voucher_esteira",
+            voucher_id: voucher.id,
+            vencimento: formatDateForDB(vencimentoEnvio),
+          },
+        });
+
+        // Log da alteração de vencimento
+        await supabase.functions.invoke("mariadb-proxy", {
+          body: {
+            action: "save_voucher_log",
+            voucher_id: voucher.id,
+            user_id: userData.id?.toString(),
+            user_name: userData.username,
+            acao: "VENCIMENTO_ALTERADO",
+            detalhe: `Vencimento alterado para ${format(vencimentoEnvio, 'dd/MM/yyyy', { locale: ptBR })} antes do envio`,
+          },
+        });
+      }
 
       // Determinar próxima etapa
       let proximaEtapa: "OPERACAO" | "FISCAL" | "FINANCEIRO" | "SUPERVISOR";
@@ -145,7 +198,6 @@ export const VoucherRascunhoActions = ({ voucher, onUpdate }: VoucherRascunhoAct
 
       if (error) throw error;
 
-      const userData = getUserData();
       const etapaLabel = proximaEtapa === "SUPERVISOR" ? "Supervisor" : 
                          proximaEtapa === "FISCAL" ? "Fiscal" : "Financeiro";
       
@@ -174,7 +226,7 @@ export const VoucherRascunhoActions = ({ voucher, onUpdate }: VoucherRascunhoAct
       });
     } finally {
       setLoading(false);
-      setShowEnviarConfirm(false);
+      setShowEnviarDialog(false);
     }
   };
 
@@ -311,7 +363,7 @@ export const VoucherRascunhoActions = ({ voucher, onUpdate }: VoucherRascunhoAct
         </Button>
 
         <Button
-          onClick={() => setShowEnviarConfirm(true)}
+          onClick={() => setShowEnviarDialog(true)}
           disabled={loading || !canEnviar}
           className="gap-2 bg-primary hover:bg-primary/90"
         >
@@ -340,24 +392,70 @@ export const VoucherRascunhoActions = ({ voucher, onUpdate }: VoucherRascunhoAct
         />
       )}
 
-      {/* Confirmação de envio */}
-      <AlertDialog open={showEnviarConfirm} onOpenChange={setShowEnviarConfirm}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Enviar Voucher/SPO</AlertDialogTitle>
-            <AlertDialogDescription>
-              Ao enviar, o voucher/SPO sairá do modo rascunho e seguirá para a próxima etapa do fluxo.
-              Deseja continuar?
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancelar</AlertDialogCancel>
-            <AlertDialogAction onClick={handleEnviar} disabled={loading}>
-              {loading ? "Enviando..." : "Enviar"}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      {/* Dialog de envio com campo de vencimento editável */}
+      <Dialog open={showEnviarDialog} onOpenChange={setShowEnviarDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Enviar Voucher/SPO</DialogTitle>
+            <DialogDescription>
+              Confirme os dados antes de enviar para a próxima etapa do fluxo.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4 py-4">
+            {/* Campo de vencimento editável */}
+            <div className="space-y-2">
+              <Label>Data de Vencimento</Label>
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button
+                    variant="outline"
+                    className={cn(
+                      "w-full justify-start text-left font-normal",
+                      !vencimentoEnvio && "text-muted-foreground"
+                    )}
+                  >
+                    <CalendarIcon className="mr-2 h-4 w-4" />
+                    {vencimentoEnvio ? format(vencimentoEnvio, 'dd/MM/yyyy', { locale: ptBR }) : 'Selecione...'}
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-auto p-0" align="start">
+                  <Calendar
+                    mode="single"
+                    selected={vencimentoEnvio}
+                    onSelect={setVencimentoEnvio}
+                    className="pointer-events-auto"
+                    locale={ptBR}
+                  />
+                </PopoverContent>
+              </Popover>
+            </div>
+
+            {/* Resumo do voucher */}
+            <div className="text-sm text-muted-foreground space-y-1 p-3 rounded-lg bg-muted/50">
+              <p><span className="font-medium text-foreground">Nº:</span> {voucher.numeroSPO}</p>
+              <p><span className="font-medium text-foreground">Valor:</span> {voucher.moeda} {Number(voucher.valor || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
+              <p><span className="font-medium text-foreground">Fornecedor:</span> {voucher.fornecedor}</p>
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowEnviarDialog(false)} disabled={loading}>
+              Cancelar
+            </Button>
+            <Button onClick={handleEnviar} disabled={loading}>
+              {loading ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Enviando...
+                </>
+              ) : (
+                "Confirmar e Enviar"
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Confirmação de exclusão */}
       <AlertDialog open={showDeleteConfirm} onOpenChange={setShowDeleteConfirm}>
