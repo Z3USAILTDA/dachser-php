@@ -2640,21 +2640,14 @@ serve(async (req) => {
           const isFrozen = frozenStatuses.includes(statusCode);
           const isBlock = blockStatuses.includes(statusCode);
 
-          // Derive CCT status from ultimo_status
-          const statusMap: Record<string, string> = {
-            'ARR': 'CHEGADA_INFORMADA',
-            'ATA': 'CHEGADA_CONFIRMADA',
-            'RCF': 'RECEPCIONADO',
-            'RCS': 'RECEPCIONADO',
-            'NFD': 'DISPONIVEL_RETIRADA',
-            'AWD': 'DISPONIVEL_RETIRADA',
-            'DLV': 'ENTREGUE',
-            'POD': 'ENTREGUE',
-            'FRO': 'FROZEN',
-            'DIS': 'BLOQUEIO',
-            'OFLD': 'BLOQUEIO',
-          };
-          const derivedStatus = statusMap[statusCode] || statusCode || 'AGUARDANDO_MANIFESTACAO';
+          // Keep IATA code for hybrid nomenclature display (DEP - Embarcado, ARR - Chegada, etc.)
+          // Valid IATA codes that should be displayed as-is
+          const validIataCodes = ['DEP', 'ARR', 'ATA', 'RCF', 'RCS', 'NFD', 'AWD', 'DLV', 'POD', 'FRO', 'DIS', 'OFLD', 'MAN', 'BKD'];
+          
+          // Use IATA code directly if valid, otherwise fallback to original status or default
+          const displayStatus = validIataCodes.includes(statusCode) 
+            ? statusCode 
+            : statusCode || 'AGUARDANDO_MANIFESTACAO';
 
           return {
             id: row.id?.toString() || row.master,
@@ -2663,7 +2656,7 @@ serve(async (req) => {
             cliente: row.cliente || '',
             aeroporto_origem: row.aeroporto_origem || 'N/A',
             aeroporto_destino: row.aeroporto_destino || 'GRU',
-            status_cct_oficial: derivedStatus,
+            status_cct_oficial: displayStatus,
             status_manifestacao: row.status_manifestacao || 'AGUARDANDO',
             sla_status: slaStatus,
             sla_info: {
