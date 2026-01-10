@@ -5777,6 +5777,81 @@ serve(async (req) => {
       }
     }
 
+    // ==================== SEA NOTIFICATION RULES ====================
+    if (action === 'get_sea_regras_notificacao') {
+      console.log('[olimpo-proxy] Fetching sea notification rules...');
+      await client.execute(`
+        CREATE TABLE IF NOT EXISTS ${database}.t_sea_regras_notificacao (
+          id INT PRIMARY KEY AUTO_INCREMENT,
+          cliente_nome VARCHAR(255),
+          cnpj_consignatario VARCHAR(20),
+          tipo_processo ENUM('IMPORT', 'EXPORT', 'BOTH') DEFAULT 'BOTH',
+          portos TEXT,
+          eventos_disparo TEXT,
+          frequencia VARCHAR(20) DEFAULT 'IMEDIATO',
+          canais TEXT,
+          emails_import TEXT,
+          emails_export TEXT,
+          template_id VARCHAR(100) DEFAULT 'default',
+          ativo BOOLEAN DEFAULT TRUE,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+        )
+      `);
+      const regras = await client.query(`SELECT * FROM ${database}.t_sea_regras_notificacao ORDER BY created_at DESC`);
+      await client.close();
+      return new Response(JSON.stringify({ success: true, data: regras || [] }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      });
+    }
+
+    if (action === 'create_sea_regra_notificacao') {
+      const { cliente_nome, cnpj_consignatario, tipo_processo, portos, eventos_disparo, frequencia, canais, emails_import, emails_export, template_id, ativo } = body;
+      await client.execute(`
+        INSERT INTO ${database}.t_sea_regras_notificacao 
+        (cliente_nome, cnpj_consignatario, tipo_processo, portos, eventos_disparo, frequencia, canais, emails_import, emails_export, template_id, ativo)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `, [cliente_nome, cnpj_consignatario, tipo_processo || 'BOTH', portos || '[]', eventos_disparo || '[]', frequencia || 'IMEDIATO', canais || '[]', emails_import, emails_export, template_id || 'default', ativo !== false ? 1 : 0]);
+      await client.close();
+      return new Response(JSON.stringify({ success: true, message: 'Regra criada com sucesso' }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      });
+    }
+
+    if (action === 'update_sea_regra_notificacao') {
+      const { id, cliente_nome, cnpj_consignatario, tipo_processo, portos, eventos_disparo, frequencia, canais, emails_import, emails_export, template_id, ativo } = body;
+      const fields: string[] = [];
+      const values: any[] = [];
+      if (cliente_nome !== undefined) { fields.push('cliente_nome = ?'); values.push(cliente_nome); }
+      if (cnpj_consignatario !== undefined) { fields.push('cnpj_consignatario = ?'); values.push(cnpj_consignatario); }
+      if (tipo_processo !== undefined) { fields.push('tipo_processo = ?'); values.push(tipo_processo); }
+      if (portos !== undefined) { fields.push('portos = ?'); values.push(portos); }
+      if (eventos_disparo !== undefined) { fields.push('eventos_disparo = ?'); values.push(eventos_disparo); }
+      if (frequencia !== undefined) { fields.push('frequencia = ?'); values.push(frequencia); }
+      if (canais !== undefined) { fields.push('canais = ?'); values.push(canais); }
+      if (emails_import !== undefined) { fields.push('emails_import = ?'); values.push(emails_import); }
+      if (emails_export !== undefined) { fields.push('emails_export = ?'); values.push(emails_export); }
+      if (template_id !== undefined) { fields.push('template_id = ?'); values.push(template_id); }
+      if (ativo !== undefined) { fields.push('ativo = ?'); values.push(ativo ? 1 : 0); }
+      if (fields.length > 0) {
+        values.push(id);
+        await client.execute(`UPDATE ${database}.t_sea_regras_notificacao SET ${fields.join(', ')} WHERE id = ?`, values);
+      }
+      await client.close();
+      return new Response(JSON.stringify({ success: true, message: 'Regra atualizada com sucesso' }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      });
+    }
+
+    if (action === 'delete_sea_regra_notificacao') {
+      const { id } = body;
+      await client.execute(`DELETE FROM ${database}.t_sea_regras_notificacao WHERE id = ?`, [id]);
+      await client.close();
+      return new Response(JSON.stringify({ success: true, message: 'Regra excluída com sucesso' }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      });
+    }
+
     return new Response(JSON.stringify({ error: 'Ação não reconhecida' }), {
       status: 400,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' }

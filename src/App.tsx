@@ -72,6 +72,7 @@ import ManualSubmeterHblMbl from "./pages/sea/ManualSubmeterHblMbl";
 import ManualSubmeterManifestHbl from "./pages/sea/ManualSubmeterManifestHbl";
 import ManualInvoicesDraft from "./pages/sea/ManualInvoicesDraft";
 import ManualDraftExportacao from "./pages/sea/ManualDraftExportacao";
+import SeaRegrasNotificacao from "./pages/sea/SeaRegrasNotificacao";
 
 // CHB Module
 import ManualChb from "./pages/chb/ManualChb";
@@ -127,6 +128,7 @@ const App = () => (
           <Route path="/sea/submeter-manifest-hbl/manual" element={<ManualSubmeterManifestHbl />} />
           <Route path="/sea/invoices-draft-hbl/manual" element={<ManualInvoicesDraft />} />
           <Route path="/sea/tracking" element={<ContainerTracking />} />
+          <Route path="/sea/tracking/notificacoes" element={<SeaRegrasNotificacao />} />
           <Route path="/maritimo" element={<SeaAnalysis />} />
           <Route path="/sea/cadastro-hbl" element={<CadastroHbl />} />
           <Route path="/sea/cadastro-manifest" element={<CadastroManifest />} />
