@@ -2597,10 +2597,41 @@ serve(async (req) => {
                 slaStatus = 'VENCIDO';
               } else if (horasRestantes <= 2) {
                 slaStatus = 'CRITICO';
-              } else if (horasRestantes <= 6 || percentual >= 75) {
+              } else if (horasRestantes <= 4) {
                 slaStatus = 'ALERTA';
               }
             }
+          }
+
+          // Helper function to calculate divergence percentage
+          const calcDivergencia = (declarado: number | null, constatado: number | null): number | null => {
+            if (!declarado || !constatado || declarado === 0) return null;
+            return Math.abs(((constatado - declarado) / declarado) * 100);
+          };
+
+          // Check for weight/volume divergence > 0%
+          const divergenciaPeso = calcDivergencia(
+            row.peso_declarado ? Number(row.peso_declarado) : null,
+            row.peso_constatado ? Number(row.peso_constatado) : null
+          );
+          const divergenciaVolume = calcDivergencia(
+            row.volume_declarado ? Number(row.volume_declarado) : null,
+            row.volume_constatado ? Number(row.volume_constatado) : null
+          );
+          const temDivergencia = (divergenciaPeso !== null && divergenciaPeso > 0) || 
+                                 (divergenciaVolume !== null && divergenciaVolume > 0);
+
+          // Mark as CRITICO if there's any divergence (unless already VENCIDO)
+          if (temDivergencia && slaStatus !== 'VENCIDO') {
+            slaStatus = 'CRITICO';
+          }
+
+          // Check for flight delay from tracking screen (data_atraso)
+          const temAtrasoVoo = row.data_atraso !== null && row.data_atraso !== undefined;
+
+          // If flight is delayed, mark as ALERTA (unless already VENCIDO or CRITICO)
+          if (temAtrasoVoo && slaStatus === 'OK') {
+            slaStatus = 'ALERTA';
           }
 
           // Check for alert/frozen statuses
