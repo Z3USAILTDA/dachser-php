@@ -2585,8 +2585,8 @@ serve(async (req) => {
               percentual = 100;
             }
             horasRestantes = null; // Não aplicável para tempo de resposta
-          } else {
-            // Fallback: use original logic based on time since last update
+          } else if (depDatetime || manifestacaoDatetime) {
+            // Has at least one reference date - use time-based SLA
             const hoursSinceUpdate = lastUpdate ? (now.getTime() - lastUpdate.getTime()) / (1000 * 60 * 60) : null;
             
             if (hoursSinceUpdate !== null) {
@@ -2601,6 +2601,13 @@ serve(async (req) => {
                 slaStatus = 'ALERTA';
               }
             }
+          } else {
+            // NO departure date AND no manifestation date - keep as OK
+            // SLA will only be affected by divergence or flight delay (below)
+            // This prevents false positives for AWBs without departure info
+            slaStatus = 'OK';
+            horasRestantes = null;
+            percentual = null;
           }
 
           // Helper function to calculate divergence percentage
