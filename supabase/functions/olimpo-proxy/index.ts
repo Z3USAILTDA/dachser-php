@@ -5780,76 +5780,204 @@ serve(async (req) => {
     // ==================== SEA NOTIFICATION RULES ====================
     if (action === 'get_sea_regras_notificacao') {
       console.log('[olimpo-proxy] Fetching sea notification rules...');
-      await client.execute(`
-        CREATE TABLE IF NOT EXISTS ${database}.t_sea_regras_notificacao (
-          id INT PRIMARY KEY AUTO_INCREMENT,
-          cliente_nome VARCHAR(255),
-          cnpj_consignatario VARCHAR(20),
-          tipo_processo ENUM('IMPORT', 'EXPORT', 'BOTH') DEFAULT 'BOTH',
-          portos TEXT,
-          eventos_disparo TEXT,
-          frequencia VARCHAR(20) DEFAULT 'IMEDIATO',
-          canais TEXT,
-          emails_import TEXT,
-          emails_export TEXT,
-          template_id VARCHAR(100) DEFAULT 'default',
-          ativo BOOLEAN DEFAULT TRUE,
-          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
-        )
-      `);
-      const regras = await client.query(`SELECT * FROM ${database}.t_sea_regras_notificacao ORDER BY created_at DESC`);
-      await client.close();
-      return new Response(JSON.stringify({ success: true, data: regras || [] }), {
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      
+      const mariadbHost = Deno.env.get('MARIADB_HOST');
+      const mariadbPort = Deno.env.get('MARIADB_PORT') || '3306';
+      const mariadbUser = Deno.env.get('MARIADB_USER');
+      const mariadbPass = Deno.env.get('MARIADB_PASSWORD');
+      const database = 'dados_dachser';
+
+      if (!mariadbHost || !mariadbUser || !mariadbPass) {
+        return new Response(JSON.stringify({ error: 'MariaDB não configurado' }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      }
+
+      const { Client } = await import("https://deno.land/x/mysql@v2.12.1/mod.ts");
+      const client = await new Client().connect({
+        hostname: mariadbHost,
+        port: parseInt(mariadbPort, 10),
+        username: mariadbUser,
+        password: mariadbPass,
+        db: database,
       });
+
+      try {
+        // Create table if not exists
+        await client.execute(`
+          CREATE TABLE IF NOT EXISTS ${database}.t_sea_regras_notificacao (
+            id INT PRIMARY KEY AUTO_INCREMENT,
+            cliente_nome VARCHAR(255),
+            cnpj_consignatario VARCHAR(20),
+            tipo_processo ENUM('IMPORT', 'EXPORT', 'BOTH') DEFAULT 'BOTH',
+            portos TEXT,
+            eventos_disparo TEXT,
+            frequencia VARCHAR(20) DEFAULT 'IMEDIATO',
+            canais TEXT,
+            emails_import TEXT,
+            emails_export TEXT,
+            template_id VARCHAR(100) DEFAULT 'default',
+            ativo BOOLEAN DEFAULT TRUE,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+          )
+        `);
+        const regras = await client.query(`SELECT * FROM ${database}.t_sea_regras_notificacao ORDER BY created_at DESC`);
+        await client.close();
+        return new Response(JSON.stringify({ success: true, data: regras || [] }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      } catch (e: any) {
+        await client.close();
+        console.error('[get_sea_regras_notificacao] Error:', e);
+        return new Response(JSON.stringify({ error: e.message }), {
+          status: 500,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      }
     }
 
     if (action === 'create_sea_regra_notificacao') {
+      const body = await req.json();
       const { cliente_nome, cnpj_consignatario, tipo_processo, portos, eventos_disparo, frequencia, canais, emails_import, emails_export, template_id, ativo } = body;
-      await client.execute(`
-        INSERT INTO ${database}.t_sea_regras_notificacao 
-        (cliente_nome, cnpj_consignatario, tipo_processo, portos, eventos_disparo, frequencia, canais, emails_import, emails_export, template_id, ativo)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      `, [cliente_nome, cnpj_consignatario, tipo_processo || 'BOTH', portos || '[]', eventos_disparo || '[]', frequencia || 'IMEDIATO', canais || '[]', emails_import, emails_export, template_id || 'default', ativo !== false ? 1 : 0]);
-      await client.close();
-      return new Response(JSON.stringify({ success: true, message: 'Regra criada com sucesso' }), {
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      
+      const mariadbHost = Deno.env.get('MARIADB_HOST');
+      const mariadbPort = Deno.env.get('MARIADB_PORT') || '3306';
+      const mariadbUser = Deno.env.get('MARIADB_USER');
+      const mariadbPass = Deno.env.get('MARIADB_PASSWORD');
+      const database = 'dados_dachser';
+
+      if (!mariadbHost || !mariadbUser || !mariadbPass) {
+        return new Response(JSON.stringify({ error: 'MariaDB não configurado' }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      }
+
+      const { Client } = await import("https://deno.land/x/mysql@v2.12.1/mod.ts");
+      const client = await new Client().connect({
+        hostname: mariadbHost,
+        port: parseInt(mariadbPort, 10),
+        username: mariadbUser,
+        password: mariadbPass,
+        db: database,
       });
+
+      try {
+        await client.execute(`
+          INSERT INTO ${database}.t_sea_regras_notificacao 
+          (cliente_nome, cnpj_consignatario, tipo_processo, portos, eventos_disparo, frequencia, canais, emails_import, emails_export, template_id, ativo)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `, [cliente_nome, cnpj_consignatario, tipo_processo || 'BOTH', portos || '[]', eventos_disparo || '[]', frequencia || 'IMEDIATO', canais || '[]', emails_import, emails_export, template_id || 'default', ativo !== false ? 1 : 0]);
+        await client.close();
+        return new Response(JSON.stringify({ success: true, message: 'Regra criada com sucesso' }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      } catch (e: any) {
+        await client.close();
+        console.error('[create_sea_regra_notificacao] Error:', e);
+        return new Response(JSON.stringify({ error: e.message }), {
+          status: 500,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      }
     }
 
     if (action === 'update_sea_regra_notificacao') {
+      const body = await req.json();
       const { id, cliente_nome, cnpj_consignatario, tipo_processo, portos, eventos_disparo, frequencia, canais, emails_import, emails_export, template_id, ativo } = body;
-      const fields: string[] = [];
-      const values: any[] = [];
-      if (cliente_nome !== undefined) { fields.push('cliente_nome = ?'); values.push(cliente_nome); }
-      if (cnpj_consignatario !== undefined) { fields.push('cnpj_consignatario = ?'); values.push(cnpj_consignatario); }
-      if (tipo_processo !== undefined) { fields.push('tipo_processo = ?'); values.push(tipo_processo); }
-      if (portos !== undefined) { fields.push('portos = ?'); values.push(portos); }
-      if (eventos_disparo !== undefined) { fields.push('eventos_disparo = ?'); values.push(eventos_disparo); }
-      if (frequencia !== undefined) { fields.push('frequencia = ?'); values.push(frequencia); }
-      if (canais !== undefined) { fields.push('canais = ?'); values.push(canais); }
-      if (emails_import !== undefined) { fields.push('emails_import = ?'); values.push(emails_import); }
-      if (emails_export !== undefined) { fields.push('emails_export = ?'); values.push(emails_export); }
-      if (template_id !== undefined) { fields.push('template_id = ?'); values.push(template_id); }
-      if (ativo !== undefined) { fields.push('ativo = ?'); values.push(ativo ? 1 : 0); }
-      if (fields.length > 0) {
-        values.push(id);
-        await client.execute(`UPDATE ${database}.t_sea_regras_notificacao SET ${fields.join(', ')} WHERE id = ?`, values);
+      
+      const mariadbHost = Deno.env.get('MARIADB_HOST');
+      const mariadbPort = Deno.env.get('MARIADB_PORT') || '3306';
+      const mariadbUser = Deno.env.get('MARIADB_USER');
+      const mariadbPass = Deno.env.get('MARIADB_PASSWORD');
+      const database = 'dados_dachser';
+
+      if (!mariadbHost || !mariadbUser || !mariadbPass) {
+        return new Response(JSON.stringify({ error: 'MariaDB não configurado' }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
       }
-      await client.close();
-      return new Response(JSON.stringify({ success: true, message: 'Regra atualizada com sucesso' }), {
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+
+      const { Client } = await import("https://deno.land/x/mysql@v2.12.1/mod.ts");
+      const client = await new Client().connect({
+        hostname: mariadbHost,
+        port: parseInt(mariadbPort, 10),
+        username: mariadbUser,
+        password: mariadbPass,
+        db: database,
       });
+
+      try {
+        const fields: string[] = [];
+        const values: any[] = [];
+        if (cliente_nome !== undefined) { fields.push('cliente_nome = ?'); values.push(cliente_nome); }
+        if (cnpj_consignatario !== undefined) { fields.push('cnpj_consignatario = ?'); values.push(cnpj_consignatario); }
+        if (tipo_processo !== undefined) { fields.push('tipo_processo = ?'); values.push(tipo_processo); }
+        if (portos !== undefined) { fields.push('portos = ?'); values.push(portos); }
+        if (eventos_disparo !== undefined) { fields.push('eventos_disparo = ?'); values.push(eventos_disparo); }
+        if (frequencia !== undefined) { fields.push('frequencia = ?'); values.push(frequencia); }
+        if (canais !== undefined) { fields.push('canais = ?'); values.push(canais); }
+        if (emails_import !== undefined) { fields.push('emails_import = ?'); values.push(emails_import); }
+        if (emails_export !== undefined) { fields.push('emails_export = ?'); values.push(emails_export); }
+        if (template_id !== undefined) { fields.push('template_id = ?'); values.push(template_id); }
+        if (ativo !== undefined) { fields.push('ativo = ?'); values.push(ativo ? 1 : 0); }
+        if (fields.length > 0) {
+          values.push(id);
+          await client.execute(`UPDATE ${database}.t_sea_regras_notificacao SET ${fields.join(', ')} WHERE id = ?`, values);
+        }
+        await client.close();
+        return new Response(JSON.stringify({ success: true, message: 'Regra atualizada com sucesso' }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      } catch (e: any) {
+        await client.close();
+        console.error('[update_sea_regra_notificacao] Error:', e);
+        return new Response(JSON.stringify({ error: e.message }), {
+          status: 500,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      }
     }
 
     if (action === 'delete_sea_regra_notificacao') {
+      const body = await req.json();
       const { id } = body;
-      await client.execute(`DELETE FROM ${database}.t_sea_regras_notificacao WHERE id = ?`, [id]);
-      await client.close();
-      return new Response(JSON.stringify({ success: true, message: 'Regra excluída com sucesso' }), {
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      
+      const mariadbHost = Deno.env.get('MARIADB_HOST');
+      const mariadbPort = Deno.env.get('MARIADB_PORT') || '3306';
+      const mariadbUser = Deno.env.get('MARIADB_USER');
+      const mariadbPass = Deno.env.get('MARIADB_PASSWORD');
+      const database = 'dados_dachser';
+
+      if (!mariadbHost || !mariadbUser || !mariadbPass) {
+        return new Response(JSON.stringify({ error: 'MariaDB não configurado' }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      }
+
+      const { Client } = await import("https://deno.land/x/mysql@v2.12.1/mod.ts");
+      const client = await new Client().connect({
+        hostname: mariadbHost,
+        port: parseInt(mariadbPort, 10),
+        username: mariadbUser,
+        password: mariadbPass,
+        db: database,
       });
+
+      try {
+        await client.execute(`DELETE FROM ${database}.t_sea_regras_notificacao WHERE id = ?`, [id]);
+        await client.close();
+        return new Response(JSON.stringify({ success: true, message: 'Regra excluída com sucesso' }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      } catch (e: any) {
+        await client.close();
+        console.error('[delete_sea_regra_notificacao] Error:', e);
+        return new Response(JSON.stringify({ error: e.message }), {
+          status: 500,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      }
     }
 
     return new Response(JSON.stringify({ error: 'Ação não reconhecida' }), {
