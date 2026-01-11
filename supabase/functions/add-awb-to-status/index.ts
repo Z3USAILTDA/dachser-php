@@ -16,6 +16,14 @@ serve(async (req) => {
   const extractStatusCode = (lastEvent: string | null): string => {
     if (!lastEvent) return 'AGUARDANDO';
     
+    // AWB_INVALID - MUST be checked BEFORE ERRO to preserve the specific status
+    if (lastEvent === 'AWB_INVALID' ||
+        lastEvent.includes('AWB_INVALID') ||
+        lastEvent.includes('Formato de AWB inválido') ||
+        lastEvent.includes('Dígito verificador inválido')) {
+      return 'AWB_INVALID';
+    }
+    
     // Error cases - check for exact status codes first
     if (lastEvent === 'NOT_FOUND' || 
         lastEvent.includes('AWB_NOT_FOUND') || 

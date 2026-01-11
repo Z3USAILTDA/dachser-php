@@ -286,3 +286,6 @@ verify_jwt = false
 [functions.compare-documents-llm]
 verify_jwt = false
 timeout = 120
+
+[functions.reclassify-awb-errors]
+verify_jwt = false
