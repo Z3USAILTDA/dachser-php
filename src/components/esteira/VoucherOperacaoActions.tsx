@@ -48,13 +48,17 @@ export const VoucherOperacaoActions = ({ voucher, onUpdate }: VoucherOperacaoAct
   // Verificar se voucher está com RM pendente
   const isRmPendente = voucher.fonteDados === "RM_PENDENTE";
   const isAjusteOperacao = voucher.etapaAtual === "AJUSTE_OPERACAO";
+  
+  // Verificar se é voucher master (não precisa de anexos)
+  const isMaster = voucher.isMaster || voucher.origemCriacao === "MASTER" || voucher.numeroSPO?.startsWith("MASTER-");
 
-  // Verificar anexos obrigatórios
+  // Verificar anexos obrigatórios (não se aplica a masters)
   const hasFatura = voucher.anexos.some(a => a.tipo === "FATURA_DEMONSTRATIVO" || a.tipo === "FATURA");
   const hasBoleto = voucher.anexos.some(a => a.tipo === "BOLETO_INSTRUCOES" || a.tipo === "BOLETO");
   // Boleto só é obrigatório se forma de pagamento for BOLETO
   const boletoObrigatorio = voucher.formaPagamento === "BOLETO";
-  const canEnviar = hasFatura && (!boletoObrigatorio || hasBoleto) && !isRmPendente;
+  // Masters podem enviar sem anexos obrigatórios
+  const canEnviar = isMaster ? !isRmPendente : (hasFatura && (!boletoObrigatorio || hasBoleto) && !isRmPendente);
 
   // Get user data from localStorage (MariaDB auth)
   const getUserData = () => {
@@ -211,23 +215,27 @@ export const VoucherOperacaoActions = ({ voucher, onUpdate }: VoucherOperacaoAct
         return;
       }
 
-      // Verificar anexos obrigatórios
-      const hasFatura = voucher.anexos.some(a => a.tipo === "FATURA_DEMONSTRATIVO" || a.tipo === "FATURA");
-      const hasBoleto = voucher.anexos.some(a => a.tipo === "BOLETO_INSTRUCOES" || a.tipo === "BOLETO");
+      // Verificar anexos obrigatórios (não se aplica a masters)
+      if (!isMaster) {
+        const hasFatura = voucher.anexos.some(a => a.tipo === "FATURA_DEMONSTRATIVO" || a.tipo === "FATURA");
+        const hasBoleto = voucher.anexos.some(a => a.tipo === "BOLETO_INSTRUCOES" || a.tipo === "BOLETO");
 
-      if (!hasFatura || !hasBoleto) {
-        toast({
-          title: "Anexos obrigatórios faltando",
-          description: "É necessário anexar Fatura/Demonstrativo e Boleto/Instruções",
-          variant: "destructive",
-        });
-        return;
+        if (!hasFatura || !hasBoleto) {
+          toast({
+            title: "Anexos obrigatórios faltando",
+            description: "É necessário anexar Fatura/Demonstrativo e Boleto/Instruções",
+            variant: "destructive",
+          });
+          return;
+        }
       }
 
-      // Determinar próxima etapa
+      // Determinar próxima etapa (Masters sempre vão para FISCAL)
       let proximaEtapa: "FISCAL" | "FINANCEIRO" | "SUPERVISOR";
       
-      if (voucher.tipoDocumento === "ADF") {
+      if (isMaster) {
+        proximaEtapa = "FISCAL";
+      } else if (voucher.tipoDocumento === "ADF") {
         proximaEtapa = "FINANCEIRO";
       } else if (voucher.urgenciaTipo === "URGENTE_REAL") {
         proximaEtapa = "SUPERVISOR";
@@ -261,6 +269,11 @@ export const VoucherOperacaoActions = ({ voucher, onUpdate }: VoucherOperacaoAct
       const userData = getUserData();
       const etapaLabel = proximaEtapa === "SUPERVISOR" ? "Supervisor" : 
                          proximaEtapa === "FISCAL" ? "Fiscal" : "Financeiro";
+      const acaoLog = isMaster ? "MASTER_APROVADO_OPERACAO" : 
+                      isAjusteOperacao ? "REENVIO_APOS_AJUSTE" : "ENVIADO_OPERACAO";
+      const detalheLog = isMaster 
+        ? `Voucher master aprovado pela Operação e enviado para ${etapaLabel}`
+        : `Voucher/SPO enviado para ${etapaLabel}`;
       
       await supabase.functions.invoke("mariadb-proxy", {
         body: {
@@ -268,14 +281,14 @@ export const VoucherOperacaoActions = ({ voucher, onUpdate }: VoucherOperacaoAct
           voucher_id: voucher.id,
           user_id: userData.id?.toString(),
           user_name: userData.username,
-          acao: isAjusteOperacao ? "REENVIO_APOS_AJUSTE" : "ENVIADO_OPERACAO",
-          detalhe: `Voucher/SPO enviado para ${etapaLabel}`,
+          acao: acaoLog,
+          detalhe: detalheLog,
         },
       });
 
       toast({
-        title: "Voucher/SPO enviado!",
-        description: `Voucher/SPO enviado para ${etapaLabel}`,
+        title: isMaster ? "Voucher master aprovado!" : "Voucher/SPO enviado!",
+        description: detalheLog,
       });
 
       onUpdate();
@@ -355,36 +368,50 @@ export const VoucherOperacaoActions = ({ voucher, onUpdate }: VoucherOperacaoAct
         </Card>
       )}
 
-      {/* Checklist de Anexos Obrigatórios */}
-      <Card className="border-[rgba(255,255,255,0.12)]" style={{ backgroundColor: 'rgba(5,6,18,0.9)' }}>
-        <CardHeader className="pb-3">
-          <CardTitle className="text-base flex items-center gap-2">
-            <FileText className="h-5 w-5 text-primary" />
-            Anexos {boletoObrigatorio ? "Obrigatórios" : ""}
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-3">
-          <div className="flex items-center gap-3">
-            <div className={`w-5 h-5 rounded-full flex items-center justify-center ${hasFatura ? 'bg-green-500/20 text-green-500' : 'bg-muted text-muted-foreground'}`}>
-              {hasFatura ? <CheckCircle2 className="h-4 w-4" /> : '○'}
-            </div>
-            <span className={hasFatura ? 'text-foreground' : 'text-muted-foreground'}>
-              Fatura / Demonstrativo <span className="text-xs text-muted-foreground">(obrigatório)</span>
-            </span>
-          </div>
-          <div className="flex items-center gap-3">
-            <div className={`w-5 h-5 rounded-full flex items-center justify-center ${hasBoleto ? 'bg-green-500/20 text-green-500' : boletoObrigatorio ? 'bg-muted text-muted-foreground' : 'bg-muted/50 text-muted-foreground/50'}`}>
-              {hasBoleto ? <CheckCircle2 className="h-4 w-4" /> : '○'}
-            </div>
-            <span className={hasBoleto ? 'text-foreground' : boletoObrigatorio ? 'text-muted-foreground' : 'text-muted-foreground/70'}>
-              Boleto / Instruções de Pagamento{' '}
-              <span className="text-xs text-muted-foreground">
-                {boletoObrigatorio ? "(obrigatório)" : "(opcional)"}
+      {/* Checklist de Anexos Obrigatórios - Não exibido para Masters */}
+      {!isMaster && (
+        <Card className="border-[rgba(255,255,255,0.12)]" style={{ backgroundColor: 'rgba(5,6,18,0.9)' }}>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base flex items-center gap-2">
+              <FileText className="h-5 w-5 text-primary" />
+              Anexos {boletoObrigatorio ? "Obrigatórios" : ""}
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <div className="flex items-center gap-3">
+              <div className={`w-5 h-5 rounded-full flex items-center justify-center ${hasFatura ? 'bg-green-500/20 text-green-500' : 'bg-muted text-muted-foreground'}`}>
+                {hasFatura ? <CheckCircle2 className="h-4 w-4" /> : '○'}
+              </div>
+              <span className={hasFatura ? 'text-foreground' : 'text-muted-foreground'}>
+                Fatura / Demonstrativo <span className="text-xs text-muted-foreground">(obrigatório)</span>
               </span>
-            </span>
-          </div>
-        </CardContent>
-      </Card>
+            </div>
+            <div className="flex items-center gap-3">
+              <div className={`w-5 h-5 rounded-full flex items-center justify-center ${hasBoleto ? 'bg-green-500/20 text-green-500' : boletoObrigatorio ? 'bg-muted text-muted-foreground' : 'bg-muted/50 text-muted-foreground/50'}`}>
+                {hasBoleto ? <CheckCircle2 className="h-4 w-4" /> : '○'}
+              </div>
+              <span className={hasBoleto ? 'text-foreground' : boletoObrigatorio ? 'text-muted-foreground' : 'text-muted-foreground/70'}>
+                Boleto / Instruções de Pagamento{' '}
+                <span className="text-xs text-muted-foreground">
+                  {boletoObrigatorio ? "(obrigatório)" : "(opcional)"}
+                </span>
+              </span>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Info para Voucher Master */}
+      {isMaster && (
+        <Alert className="bg-purple-500/10 border-purple-500/30">
+          <AlertTriangle className="h-4 w-4 text-purple-500" />
+          <AlertTitle className="text-purple-500">Voucher Master</AlertTitle>
+          <AlertDescription className="mt-2 text-foreground">
+            Este é um voucher agrupador (master). Ao aprovar, ele será enviado para a etapa Fiscal.
+            Os anexos são opcionais para vouchers master.
+          </AlertDescription>
+        </Alert>
+      )}
 
       {/* Seção de Upload de Anexos - Sempre Visível */}
       <Card className="border-primary/30 bg-primary/5">
@@ -426,9 +453,11 @@ export const VoucherOperacaoActions = ({ voucher, onUpdate }: VoucherOperacaoAct
               ? "Sincronize os dados do RM para liberar o envio" 
               : isAjusteOperacao
                 ? "Corrija os anexos e reenvie o voucher/SPO"
-                : canEnviar 
-                  ? "Anexos completos! Você pode enviar o voucher/SPO." 
-                  : "Adicione os anexos obrigatórios para enviar."}
+                : isMaster
+                  ? "Voucher master pronto para aprovação. Clique para enviar ao Fiscal."
+                  : canEnviar 
+                    ? "Anexos completos! Você pode enviar o voucher/SPO." 
+                    : "Adicione os anexos obrigatórios para enviar."}
           </p>
         </div>
       </div>
@@ -445,16 +474,18 @@ export const VoucherOperacaoActions = ({ voucher, onUpdate }: VoucherOperacaoAct
         <Button
           onClick={() => setShowConfirm(true)}
           disabled={loading || !canEnviar}
-          className="gap-2 bg-primary hover:bg-primary/90"
+          className={`gap-2 ${isMaster ? 'bg-purple-600 hover:bg-purple-700' : 'bg-primary hover:bg-primary/90'}`}
         >
           <Send className="h-4 w-4" />
-          {isAjusteOperacao 
-            ? "Reenviar para Fiscal" 
-            : voucher.tipoDocumento === "ADF"
-              ? "Enviar para Financeiro"
-              : voucher.cobrancaEmNomeDe === "DACHSER" 
-                ? "Enviar para Fiscal" 
-                : "Enviar para Financeiro"}
+          {isMaster
+            ? "Aprovar e Enviar para Fiscal"
+            : isAjusteOperacao 
+              ? "Reenviar para Fiscal" 
+              : voucher.tipoDocumento === "ADF"
+                ? "Enviar para Financeiro"
+                : voucher.cobrancaEmNomeDe === "DACHSER" 
+                  ? "Enviar para Fiscal" 
+                  : "Enviar para Financeiro"}
         </Button>
 
       </div>

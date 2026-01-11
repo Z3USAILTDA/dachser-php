@@ -135,6 +135,10 @@ const EsteiraVoucherDetails = () => {
         canceladoPorUserId: data.cancelado_por_user_id,
         canceladoEm: parseMariaDBDate(data.cancelado_em) || undefined,
         chavePix: data.chave_pix || null,
+        // Master voucher fields
+        isMaster: data.is_master === 1 || data.is_master === true,
+        origemCriacao: data.is_master ? "MASTER" : data.id_rm ? "RM" : "MANUAL",
+        nomeMaster: data.nome_master || null,
       };
 
       setVoucher(mappedVoucher);
