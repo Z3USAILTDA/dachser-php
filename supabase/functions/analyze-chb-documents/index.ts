@@ -1236,39 +1236,118 @@ async function getCachedExtractedData(itemId: number): Promise<Record<string, { 
 }
 
 // Parse extracted data from LLM response for caching
+// IMPROVED: Extract from HTML table for better accuracy
 function parseExtractedFields(response: string, filename: string): Record<string, any> {
   const fields: Record<string, any> = {};
   
-  // Try to extract common fields from the HTML response
-  const fieldPatterns: Record<string, RegExp[]> = {
-    peso_bruto: [/peso\s*bruto[:\s]*([0-9.,]+)\s*(kg)?/gi],
-    peso_liquido: [/peso\s*l[íi]quido[:\s]*([0-9.,]+)\s*(kg)?/gi],
-    valor_total: [/valor\s*total[:\s]*([A-Z]{3})?\s*([0-9.,]+)/gi],
-    moeda: [/moeda[:\s]*([A-Z]{3})/gi, /(USD|EUR|BRL)/g],
-    incoterm: [/incoterm[:\s]*([A-Z]{3})/gi, /(FOB|CIF|DDP|DAP|CFR|EXW|FCA)/g],
-    quantidade: [/quantidade[:\s]*([0-9.,]+)/gi, /qty[:\s]*([0-9.,]+)/gi],
-    ncm: [/ncm[:\s]*([0-9]{4,8})/gi],
-    consignee: [/consignee[:\s]*([^\n<]+)/gi, /consignat[áa]rio[:\s]*([^\n<]+)/gi],
-    shipper: [/shipper[:\s]*([^\n<]+)/gi, /exportador[:\s]*([^\n<]+)/gi],
-    container: [/container[:\s]*([A-Z]{4}[0-9]{7})/gi],
-    bl_number: [/bl\s*n[°o]?[:\s]*([^\n<]+)/gi, /b\/l[:\s]*([^\n<]+)/gi],
-    hawb: [/hawb[:\s]*([^\n<]+)/gi],
-    mawb: [/mawb[:\s]*([^\n<]+)/gi],
-    invoice_number: [/invoice\s*n[°o]?[:\s]*([^\n<]+)/gi, /fatura[:\s]*([^\n<]+)/gi],
-    data_emissao: [/data\s*emiss[ãa]o[:\s]*([0-9\/.-]+)/gi, /date[:\s]*([0-9\/.-]+)/gi],
-    valor_frete: [/frete[:\s]*([A-Z]{3})?\s*([0-9.,]+)/gi, /freight[:\s]*([0-9.,]+)/gi],
-  };
+  // CAMPOS CRÍTICOS que devem ser persistidos
+  const criticalFields = [
+    'peso_bruto', 'peso_liquido', 'valor_mercadoria', 'valor_total_frete',
+    'ncm', 'incoterm', 'moeda', 'valor_seguro', 'quantidade', 'consignee', 'cnpj'
+  ];
   
-  for (const [field, patterns] of Object.entries(fieldPatterns)) {
-    for (const pattern of patterns) {
-      const match = response.match(pattern);
-      if (match && match[1]) {
-        fields[field] = match[1].trim();
-        break;
+  // Try to extract from HTML table first (more reliable)
+  const tableMatch = response.match(/<table[^>]*>([\s\S]*?)<\/table>/i);
+  if (tableMatch) {
+    const tableHtml = tableMatch[1];
+    
+    // Extract headers to find column for this filename
+    const headerMatch = tableHtml.match(/<thead[^>]*>([\s\S]*?)<\/thead>/i);
+    let filenameColumnIndex = -1;
+    
+    if (headerMatch) {
+      const headerCells = headerMatch[1].match(/<th[^>]*>([\s\S]*?)<\/th>/gi) || [];
+      for (let i = 0; i < headerCells.length; i++) {
+        const cellText = headerCells[i].replace(/<[^>]+>/g, '').trim();
+        if (cellText.toLowerCase().includes(filename.toLowerCase().replace('.pdf', '').replace('.xlsx', ''))) {
+          filenameColumnIndex = i;
+          break;
+        }
+      }
+    }
+    
+    // Extract rows
+    const rows = tableHtml.match(/<tr[^>]*>([\s\S]*?)<\/tr>/gi) || [];
+    for (const row of rows) {
+      const cells = row.match(/<td[^>]*>([\s\S]*?)<\/td>/gi) || [];
+      if (cells.length >= 3) {
+        // First cell is status, second is field name
+        const fieldName = cells[1]?.replace(/<[^>]+>/g, '').trim().toLowerCase();
+        
+        // Get value from the column matching this filename (or last column as fallback)
+        const valueIndex = filenameColumnIndex >= 0 ? filenameColumnIndex : cells.length - 1;
+        const value = cells[valueIndex]?.replace(/<[^>]+>/g, '').trim();
+        
+        if (fieldName && value && value !== 'ND' && value !== '-') {
+          // Map field names to normalized keys
+          const fieldMapping: Record<string, string> = {
+            'peso bruto': 'peso_bruto',
+            'gross weight': 'peso_bruto',
+            'peso líquido': 'peso_liquido',
+            'peso liquido': 'peso_liquido',
+            'net weight': 'peso_liquido',
+            'valor mercadoria': 'valor_mercadoria',
+            'valor total mercadoria': 'valor_mercadoria',
+            'merchandise value': 'valor_mercadoria',
+            'invoice amount': 'valor_mercadoria',
+            'valor total frete': 'valor_total_frete',
+            'total prepaid': 'valor_total_frete',
+            'total collect': 'valor_total_frete',
+            'total charges': 'valor_total_frete',
+            'valor seguro': 'valor_seguro',
+            'insurance': 'valor_seguro',
+            'insurance amount': 'valor_seguro',
+            'ncm': 'ncm',
+            'hs code': 'ncm',
+            'incoterm': 'incoterm',
+            'moeda': 'moeda',
+            'currency': 'moeda',
+            'quantidade': 'quantidade',
+            'quantity': 'quantidade',
+            'packages': 'quantidade',
+            'consignee': 'consignee',
+            'consignatário': 'consignee',
+            'cnpj': 'cnpj',
+          };
+          
+          const normalizedKey = fieldMapping[fieldName];
+          if (normalizedKey && criticalFields.includes(normalizedKey)) {
+            fields[normalizedKey] = value;
+          }
+        }
       }
     }
   }
   
+  // Fallback: Try to extract common fields from raw text using regex
+  if (Object.keys(fields).length < 3) {
+    const fieldPatterns: Record<string, RegExp[]> = {
+      peso_bruto: [/peso\s*bruto[:\s]*([0-9.,]+)\s*(kg)?/gi, /gross\s*weight[:\s]*([0-9.,]+)/gi],
+      peso_liquido: [/peso\s*l[íi]quido[:\s]*([0-9.,]+)\s*(kg)?/gi, /net\s*weight[:\s]*([0-9.,]+)/gi],
+      valor_mercadoria: [/valor\s*mercadoria[:\s]*([A-Z]{3})?\s*([0-9.,]+)/gi, /merchandise[:\s]*([0-9.,]+)/gi],
+      valor_total_frete: [/valor\s*total\s*frete[:\s]*([A-Z]{3})?\s*([0-9.,]+)/gi, /total\s*prepaid[:\s]*([0-9.,]+)/gi],
+      valor_seguro: [/valor\s*seguro[:\s]*([A-Z]{3})?\s*([0-9.,]+)/gi, /insurance[:\s]*([0-9.,]+)/gi],
+      moeda: [/moeda[:\s]*([A-Z]{3})/gi, /(USD|EUR|BRL)/g],
+      incoterm: [/incoterm[:\s]*([A-Z]{3})/gi, /(FOB|CIF|DDP|DAP|CFR|EXW|FCA)/g],
+      quantidade: [/quantidade[:\s]*([0-9.,]+)/gi, /qty[:\s]*([0-9.,]+)/gi, /packages[:\s]*([0-9]+)/gi],
+      ncm: [/ncm[:\s]*([0-9]{4,8})/gi, /hs\s*code[:\s]*([0-9]{4,8})/gi],
+      consignee: [/consignee[:\s]*([^\n<]+)/gi, /consignat[áa]rio[:\s]*([^\n<]+)/gi],
+      cnpj: [/cnpj[:\s]*([0-9./-]+)/gi],
+    };
+    
+    for (const [field, patterns] of Object.entries(fieldPatterns)) {
+      if (fields[field]) continue; // Skip if already found from table
+      for (const pattern of patterns) {
+        const match = response.match(pattern);
+        if (match && match[1]) {
+          fields[field] = match[1].trim();
+          break;
+        }
+      }
+    }
+  }
+  
+  console.log(`[parseExtractedFields] Extracted ${Object.keys(fields).length} fields from ${filename}:`, Object.keys(fields));
   return fields;
 }
 
@@ -1320,20 +1399,44 @@ async function processAnalysisInBackground(
     
     let cachedContext = '';
     if (cachedFiles.length > 0) {
+      // Build list of fixed/validated fields
+      const fixedFieldsList: string[] = [];
+      for (const cached of cachedFiles) {
+        for (const [key, value] of Object.entries(cached.fields)) {
+          if (value && value !== 'ND') {
+            fixedFieldsList.push(`${cached.name} → ${key}: ${value}`);
+          }
+        }
+      }
+      
       cachedContext = `
 ═══════════════════════════════════════════════════════════════════════════════
-⚠️ DADOS DE REFERÊNCIA — EXTRAÍDOS NA ETAPA 1 (USAR PARA COMPARAÇÃO!)
+⚠️ VALORES JÁ EXTRAÍDOS E VALIDADOS — REGRA DE PERSISTÊNCIA
 ═══════════════════════════════════════════════════════════════════════════════
+
+OS SEGUINTES CAMPOS JÁ FORAM EXTRAÍDOS E VALIDADOS EM ANÁLISE ANTERIOR.
+VOCÊ DEVE MANTER ESSES VALORES NA TABELA — NÃO SUBSTITUIR POR "ND"!
+
+CAMPOS FIXADOS (NÃO ALTERAR):
+${fixedFieldsList.map(f => `  ✓ ${f}`).join('\n')}
+
+REGRA CRÍTICA DE PERSISTÊNCIA:
+1. Se um campo foi extraído e validado anteriormente → MANTER O VALOR
+2. NUNCA substituir um campo fixado por "ND" em uma re-análise
+3. Se você encontrar valor diferente no documento atual → COMPARAR com o valor fixado
+4. Divergência entre valor fixado e novo valor → 🟨 ou 🔴 conforme gravidade
+5. Campos fixados: Peso Bruto, Peso Líquido, Valor Mercadoria, Valor Total Frete, NCM, Incoterm
+
+═══════════════════════════════════════════════════════════════════════════════
+
 `;
       for (const cached of cachedFiles) {
-        cachedContext += `\n[${cached.name}] Campos extraídos:\n`;
+        cachedContext += `[${cached.name}] Campos extraídos anteriormente:\n`;
         for (const [key, value] of Object.entries(cached.fields)) {
           cachedContext += `  • ${key}: ${value}\n`;
         }
+        cachedContext += '\n';
       }
-      cachedContext += `
-═══════════════════════════════════════════════════════════════════════════════
-`;
     }
     
     const fileNames = files.map((f: any) => f.name);
@@ -1405,13 +1508,17 @@ async function processAnalysisInBackground(
 
     console.log(`[BG] Request ${requestId} completed successfully`);
 
-    // Save extracted data to cache for future steps (fire and forget)
+    // Save extracted data to cache for future steps
+    // IMPROVED: Extract fields from each file column in the HTML table
     if (itemId) {
       try {
-        console.log(`[BG Cache] Saving extracted data for ${files.length} files...`);
+        console.log(`[BG Cache] Saving extracted data for ${files.length} files to itemId ${itemId}...`);
+        
         for (const file of files) {
+          // Parse fields specifically for this file from the response
           const extractedFields = parseExtractedFields(responseText, file.name);
           
+          // Extract raw text for Excel files (useful for future reference)
           let rawText = '';
           if (file.mimeType.includes('spreadsheet') || file.mimeType.includes('excel') || 
               file.name.endsWith('.xlsx') || file.name.endsWith('.xls')) {
@@ -1422,12 +1529,22 @@ async function processAnalysisInBackground(
             }
           }
           
-          await saveExtractedData(itemId, file.name, stepId.toString(), extractedFields, rawText);
+          // Only save if we extracted meaningful fields
+          if (Object.keys(extractedFields).length > 0) {
+            await saveExtractedData(itemId, file.name, stepId.toString(), extractedFields, rawText);
+            console.log(`[BG Cache] Saved ${Object.keys(extractedFields).length} fields for ${file.name}`);
+          } else {
+            console.log(`[BG Cache] No fields extracted for ${file.name}, skipping save`);
+          }
         }
-        console.log(`[BG Cache] Saved extracted data for item ${itemId}`);
+        
+        console.log(`[BG Cache] Finished saving extracted data for item ${itemId}`);
       } catch (e) {
         console.error('[BG Cache] Error saving extracted data:', e);
+        // Don't fail the whole analysis if caching fails
       }
+    } else {
+      console.log('[BG Cache] No itemId provided, skipping cache save');
     }
 
   } catch (error) {
