@@ -115,7 +115,7 @@ const menuItems: MenuItem[] = [
         href: "/fin/regua",
       },
       {
-        label: "Voucher",
+        label: "Voucher/SPO",
         href: "/fin/esteira",
       },
     ],
