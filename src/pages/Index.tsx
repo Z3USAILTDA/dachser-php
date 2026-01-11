@@ -473,14 +473,19 @@ const Index = () => {
           arr_check_count: item.arr_check_count || 0,
         }));
 
-        // Deduplicate by AWB - keep only the most recent record based on last_check
+        // Deduplicate by AWB + HAWB combination - keep only the most recent record
+        // An AWB can have multiple houses, so we use awb+hawb as the unique key
         const deduplicatedData = convertedData.reduce((acc: AWBData[], current: AWBData) => {
-          const existingIndex = acc.findIndex(item => item.awb === current.awb);
+          const currentKey = `${current.awb}|${current.hawb || '-'}`;
+          const existingIndex = acc.findIndex(item => {
+            const itemKey = `${item.awb}|${item.hawb || '-'}`;
+            return itemKey === currentKey;
+          });
           if (existingIndex === -1) {
-            // AWB doesn't exist yet, add it
+            // AWB+HAWB combination doesn't exist yet, add it
             acc.push(current);
           } else {
-            // AWB exists, keep the one with most recent last_check
+            // Combination exists, keep the one with most recent last_check
             const existing = acc[existingIndex];
             const existingDate = new Date(existing.last_check || 0).getTime();
             const currentDate = new Date(current.last_check || 0).getTime();
