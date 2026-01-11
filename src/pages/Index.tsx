@@ -1802,25 +1802,29 @@ const Index = () => {
     // 1 = Success (tracking working), 2 = Invalid AWB, 3 = Query failure
     const getStatusPriority = (awb: AWBData): number => {
       const status = (awb.status || "").toUpperCase();
-      const lastEventCode = getStatusCode(awb.last_event).toUpperCase();
+      const lastEvent = (awb.last_event || "").toUpperCase(); // Raw value from database
+      const lastEventCode = getStatusCode(awb.last_event).toUpperCase(); // Translated value for display
       
       // Success statuses (tracking working) - priority 1 (first)
       const successStatuses = ["BKD", "BKF", "AWB", "RCS", "MAN", "DEP", "FOH", "TFD", 
         "RCT", "RCP", "PRE", "LOF", "ARRT", "TDE", "ARR", "RCF", "DLV", "FFM", "AUD",
         "DIS", "OFLD", "NIL", "NIF"];
-      if (successStatuses.includes(status) || successStatuses.includes(lastEventCode)) {
+      if (successStatuses.includes(status) || successStatuses.includes(lastEvent) || successStatuses.includes(lastEventCode)) {
         return 1;
       }
       
-      // Invalid AWB - priority 2
-      if (status === "AWB_INVALID" || lastEventCode === "AWB_INVALID" || 
-          status === "NOT_FOUND" || lastEventCode === "NOT_FOUND") {
+      // Invalid AWB - priority 2 (check both raw and translated values)
+      if (status === "AWB_INVALID" || lastEvent === "AWB_INVALID" || 
+          lastEventCode === "AWB INVÁLIDO" ||
+          status === "NOT_FOUND" || lastEvent === "NOT_FOUND" ||
+          lastEventCode === "STATUS NÃO ENCONTRADO") {
         return 2;
       }
       
       // Query failure (ERRO, COMPANY_NOT_REGISTERED, etc) - priority 3 (last)
-      if (status === "ERRO" || status === "COMPANY_NOT_REGISTERED" || 
-          lastEventCode === "ERRO" || lastEventCode === "COMPANY_NOT_REGISTERED") {
+      if (status === "ERRO" || lastEvent === "ERRO" || 
+          status === "COMPANY_NOT_REGISTERED" || lastEvent === "COMPANY_NOT_REGISTERED" ||
+          lastEventCode === "FALHA NA CONSULTA") {
         return 3;
       }
       
