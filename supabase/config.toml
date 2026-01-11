@@ -289,3 +289,6 @@ timeout = 120
 
 [functions.reclassify-awb-errors]
 verify_jwt = false
+
+[functions.check-specific-awbs]
+verify_jwt = false
