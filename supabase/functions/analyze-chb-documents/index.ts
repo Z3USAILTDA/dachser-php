@@ -224,7 +224,8 @@ function buildTableSpec(clientConfig?: ClientConfig): string {
     valor_item: 'Valor por Item',
     moeda: 'Moeda',
     incoterm: 'Incoterm',
-    frete: 'Frete',
+    valor_total_frete: 'Valor Total Frete',
+    valor_seguro: 'Valor Seguro',
     quantidade: 'Quantidade',
     ncm: 'NCM',
     descricao: 'Descrição',
@@ -317,6 +318,15 @@ function buildTableSpec(clientConfig?: ClientConfig): string {
   return `
 REGRAS DE CONTEÚDO DA TABELA
 
+0) ⚠️ REGRA CRÍTICA DE CORRELAÇÃO DE ARQUIVOS (PRIORIDADE MÁXIMA):
+   - CADA valor deve aparecer APENAS na coluna do arquivo de onde foi extraído
+   - Valor encontrado no CCT.pdf → coluna "CCT.pdf" APENAS
+   - Valor encontrado no HAWB.pdf → coluna "HAWB.pdf" APENAS
+   - NUNCA inferir, copiar ou mover valores entre colunas de arquivos diferentes
+   - Se um campo não existe em um arquivo específico → marcar como "ND" nessa coluna
+   - PROIBIDO: Colocar valor do CCT na coluna do HAWB ou vice-versa
+   - Esta regra é ABSOLUTA e deve ser seguida para TODOS os campos
+
 1) COLUNAS DINÂMICAS — REGRA CRÍTICA:
    - A tabela deve ter: Status | Campo | [Arquivo1] | [Arquivo2] | ...
    - STATUS VEM PRIMEIRO para decisão rápida
@@ -333,6 +343,15 @@ REGRAS DE CONTEÚDO DA TABELA
    - CNPJ: formatado ou apenas dígitos
    - Ausência: "ND" (não disponível) ou "Ilegível"
    - Status: SOMENTE ícones ✅, 🟨, 🔴
+   
+   ⚠️ NORMALIZAÇÃO DE CARACTERES ANTES DE COMPARAR:
+   - REMOVER caracteres especiais antes de qualquer comparação:
+     → Hífen isolado no final: "10.841,00-" → "10.841,00"
+     → Ponto-e-vírgula: "USD 1.500;00" → "USD 1.500,00"
+     → Espaços extras entre números
+     → Caracteres não-numéricos em valores monetários (exceto separadores decimais)
+   - APÓS normalização, se valores são iguais → ✅ CONFORME
+   - Aplicar normalização ANTES de qualquer comparação numérica
 
 3) TOLERÂNCIA NUMÉRICA — APLICAÇÃO CORRETA:
    ⚠️ TOLERÂNCIA SE APLICA APENAS PARA DIFERENÇAS DE ARREDONDAMENTO/FORMATAÇÃO!
@@ -361,18 +380,31 @@ REGRAS DE CONTEÚDO DA TABELA
    - Se um campo obrigatório estiver ausente (ND) em QUALQUER documento → 🟨 (alerta)
    - Se um campo obrigatório tiver divergência acima da tolerância → 🔴 (crítico)
 
+   ⚠️ CAMPOS A NÃO INCLUIR NA TABELA:
+   - Data de Emissão / Issue Date — NÃO incluir como linha de comparação
+   - Este campo não é relevante para a conferência documental
+
 5) Regras de PESO — CRÍTICO (linhas separadas obrigatórias):
    - PESO BRUTO (Gross Weight): linha própria na tabela
    - PESO LÍQUIDO (Net Weight): linha própria na tabela (NÃO assumir Gross como padrão)
    - TARA: linha própria quando presente
+   
+   ⚠️ REGRA CRÍTICA — DIFERENÇA BRUTO vs LÍQUIDO É NORMAL:
+   - Peso Bruto > Peso Líquido é comportamento ESPERADO
+   - A diferença representa tara/embalagem
+   - NÃO marcar como divergência quando Bruto ≠ Líquido NO MESMO DOCUMENTO
+   - Divergência é quando o MESMO campo difere ENTRE documentos:
+     → Peso Bruto no Doc A ≠ Peso Bruto no Doc B → 🔴 divergência
+     → Peso Bruto ≠ Peso Líquido no mesmo doc → ✅ NORMAL (não alertar!)
+   
    - Se Gross(BL) ≈ Net(PL) e há diferença de tara → 🟨 com nota explicativa
-   - Divergência > ${toleranciaPeso}% sem explicação → 🔴
+   - Divergência do MESMO campo > ${toleranciaPeso}% entre documentos → 🔴
    - Se DI usa líquido como bruto → 🔴 CRÍTICO
 
-6) INCOTERM e FRETE — LINHAS SEPARADAS OBRIGATÓRIAS:
+6) INCOTERM e VALOR TOTAL FRETE — LINHAS SEPARADAS OBRIGATÓRIAS:
    - INCOTERM: linha própria (ex.: FOB, CFR, CIF, EXW, etc.)
-   - FRETE/FREIGHT: linha própria com VALOR DO FRETE (não confundir com valor da mercadoria!)
-   - NUNCA unificar em uma única linha de validação
+   - VALOR TOTAL FRETE: linha própria (frete + taxas acessórias combinados)
+   - NUNCA criar linha separada "Frete" isolado — usar apenas "Valor Total Frete"
    - Incoterms diferentes (ex.: CFR × FOB) → 🔴
    - Incoterm coerente mas rótulo faltante → 🟨
 
@@ -386,23 +418,55 @@ REGRAS DE CONTEÚDO DA TABELA
       - Linha da tabela: "Valor Mercadoria"
       - ⚠️ NÃO usar "Final Amount" ou "Total Amount" para mercadoria (podem incluir frete!)
    
-   B) VALOR DO FRETE (Freight / Ocean Freight / Air Freight):
-      - É o custo do TRANSPORTE da carga
-      - Aparece no BL, HBL, AWB, ou documentos de frete
-      - Linha da tabela: "Frete" ou "Freight"
-      - ATENÇÃO: Frete pode ser "COLLECT" ou "PREPAID" — indicar na observação
-   
-   C) VALOR TOTAL FRETE (Total do Documento):
-      - É a soma de TODOS os custos (mercadoria + frete + taxas + impostos)
+   B) VALOR TOTAL FRETE (campo unificado — NÃO criar "Frete" isolado):
+      - Incluir frete + taxas acessórias em uma ÚNICA linha
       - ONDE PROCURAR:
         → CCT/BL/AWB: Linha "Total" na coluna "Prepaid" ou "Collect"
         → Invoice: "Final Amount", "Total Amount", "Grand Total", "Amount Due"
         → Packing List: geralmente não tem (ND é aceitável)
       - Sinônimos: "Total Prepaid", "Total Collect", "Total Charges", "Grand Total",
                    "Final Amount", "Total Amount", "Amount Due", "Total Invoice"
-       - Linha da tabela: "Valor Total Frete"
+      - Linha da tabela: "Valor Total Frete"
+      - ⚠️ Campo "Frete" isolado NÃO deve existir na tabela — usar SEMPRE "Valor Total Frete"
+      - ATENÇÃO: Frete pode ser "COLLECT" ou "PREPAID" — indicar na observação
    
-   D) REGRA ESPECIAL PARA RELATÓRIO DI / RASCUNHO DI:
+   C) VALOR SEGURO (apenas para arquivos de seguro):
+      - Apenas quando há arquivo de seguro (Insurance.pdf, Seguro.pdf, Apólice.pdf)
+      - Procurar por: "ADDED VALUE SERVICES FEE", "Insurance Amount", "Premium", "Coverage Value"
+      - Linha da tabela: "Valor Seguro"
+      - ⚠️ Se arquivo de seguro existe → campo "Valor Seguro" é OBRIGATÓRIO
+      - Se NÃO existe arquivo de seguro → NÃO incluir linha "Valor Seguro" na tabela
+   
+   D) REGRA ESPECIAL PARA "TOTAL NET" EM INVOICES:
+      ⚠️ REGRA ABSOLUTA: "Total net" em Invoice NUNCA é "Valor de Frete"!
+      
+      CENÁRIO A — Invoice COM linha de frete:
+      Se a Invoice contém uma linha de frete/freight ANTES de "Total net":
+      1. Procurar o valor que aparece ANTES da linha de frete
+         - Geralmente rotulado como: "Total itens", "Subtotal", "Merchandise Total", "Goods Value"
+      2. ESSE valor (antes do frete) = VALOR MERCADORIA
+      3. "Total net" = Total geral da fatura (informativo, não usar como campo principal)
+      
+      Exemplo de estrutura:
+        Item A: USD 500
+        Item B: USD 300
+        ─────────────────
+        Subtotal: USD 800     ← ESTE é o VALOR MERCADORIA
+        ─────────────────
+        Freight: USD 100
+        ─────────────────
+        Total net: USD 900    ← Total geral (informativo)
+      
+      CENÁRIO B — Invoice SEM linha de frete:
+      Se a Invoice NÃO contém frete/freight:
+      1. "Total net" = VALOR MERCADORIA
+      2. Não há valor de frete a extrair dessa Invoice
+      
+      CENÁRIO C — Contexto de PESO:
+      Se "Total net" aparece ao lado de "Weight", "kg", "Gross":
+      - É PESO LÍQUIDO (valor numérico em kg), não é valor monetário
+   
+   E) REGRA ESPECIAL PARA RELATÓRIO DI / RASCUNHO DI:
       ⚠️ O Relatório DI brasileiro frequentemente exibe DUAS COLUNAS:
       - Coluna "Moeda Estrangeira" (USD, EUR, etc.) → USAR ESTE VALOR!
       - Coluna "Moeda Nacional" (BRL) → IGNORAR para comparação
@@ -421,18 +485,27 @@ REGRAS DE CONTEÚDO DA TABELA
    NUNCA inventar valores que não existam no documento
    Se documento não tem valor → "ND" (não "0" ou valor inventado)
 
-8) NCM — Regra aduaneira:
+8) EXCEÇÕES PARA INVOICES COMERCIAIS (NÃO ALERTAR):
+   ⚠️ Invoice comercial NÃO precisa ter campo "Frete" → ausência NÃO é alerta
+   ⚠️ Invoice comercial NÃO precisa ter campo "NCM" → ausência NÃO é alerta
+   - Esses campos são esperados no BL/AWB e no Draft DI, não na Invoice
+   - Ausência desses campos na Invoice = marcar "ND" SEM ícone de alerta
+   - Se demais campos estão conformes, linha pode ter ✅
+
+9) NCM — Regra aduaneira:
    - Divergência na RAIZ (4 primeiros dígitos) → 🔴 CRÍTICO
    - Divergência apenas no sufixo com descrição compatível → 🟨
+   - ⚠️ NCM ausente em Invoice comercial → NÃO é alerta (ver regra 8)
 
-9) CNPJ/Consignee:
+10) CNPJ/Consignee:
    - CNPJ divergente → 🔴 CRÍTICO
    - Razão social diferente (mesmo CNPJ) → 🟨
 
-10) IDENTIFICAÇÃO DE MODAL — AUTOMÁTICA:
+11) IDENTIFICAÇÃO DE MODAL — AUTOMÁTICA:
    - Se documento contém "AWB", "Airway Bill", "MAWB", "HAWB" → MODAL = AIR
    - Se documento contém "BL", "Bill of Lading", "HBL", "MBL", "Container" → MODAL = SEA
    - Reportar o modal detectado no bloco METADATA
+
 ${fiscalRulesSection}${armadorSection}${taxasSection}
 
 14) REGRAS ESPECÍFICAS PARA AWB/HAWB (ATENÇÃO MÁXIMA):
