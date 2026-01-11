@@ -12,6 +12,7 @@ export type SyncStatus =
 export interface MBLRecord {
   mbl_id: string;
   tipo_processo: string;
+  shipper?: string | null;
 }
 
 // Dados de tracking (t_consulta_armador)
@@ -107,6 +108,7 @@ export interface BookingInfo {
 export interface CombinedMBLData {
   mbl_id: string;
   tipo_processo: string;
+  shipper?: string | null;
   trackingData: TrackingData | null;
   status: SyncStatus;
   lastConsulted: string | null;

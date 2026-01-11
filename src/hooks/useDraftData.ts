@@ -97,6 +97,7 @@ export const useDraftData = () => {
       return {
         mbl_id: mbl.mbl_id,
         tipo_processo: mbl.tipo_processo,
+        shipper: mbl.shipper || null,
         trackingData: tracking,
         status,
         lastConsulted: tracking?.data_hora_consulta || null

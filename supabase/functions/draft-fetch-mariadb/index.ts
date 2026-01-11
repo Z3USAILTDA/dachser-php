@@ -44,7 +44,8 @@ serve(async (req) => {
       SELECT 
         tmd.mawb as mbl_id,
         tmd.tipo_processo,
-        tmd.etd
+        tmd.etd,
+        tmd.shipper
       FROM 
         dados_dachser.t_master_dados tmd
       WHERE 
@@ -66,7 +67,8 @@ serve(async (req) => {
     const data = results.map((row: any) => ({
       mbl_id: row.mbl_id?.toString().trim() || '',
       tipo_processo: row.tipo_processo?.toString().trim() || '',
-      etd: row.etd || null
+      etd: row.etd || null,
+      shipper: row.shipper?.toString().trim() || null
     }));
 
     return new Response(JSON.stringify({
