@@ -7020,14 +7020,14 @@ serve(async (req) => {
         
         const vencFormatted = formatDateForMariaDB(venc);
 
-        // Create the master voucher - goes directly to FISCAL
+        // Create the master voucher - starts in OPERACAO for user approval
         await client.execute(`
           INSERT INTO dados_dachser.t_vouchers (
             id, numero_spo, nome_master, fornecedor, cnpj_fornecedor, valor, moeda, vencimento,
             forma_pagamento, tipo_documento, cobranca_em_nome_de, filial,
             comentarios_operacao, etapa_atual, status_baixa, status_financeiro,
             criado_por_user_id, is_master, origem_processo, processo_id, created_at, updated_at
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'FISCAL', 'PENDENTE', 'PENDENTE', ?, 1, ?, ?, NOW(), NOW())
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'OPERACAO', 'PENDENTE', 'PENDENTE', ?, 1, ?, ?, NOW(), NOW())
         `, [
           masterId,
           numeroSpoMaster,

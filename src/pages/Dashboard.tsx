@@ -116,17 +116,7 @@ const menuItems: MenuItem[] = [
       },
       {
         label: "Voucher",
-        expandableId: "voucher",
-        subChildren: [
-          {
-            label: "Análise Documental",
-            href: "/fin/analise-documental",
-          },
-          {
-            label: "Esteira",
-            href: "/fin/esteira",
-          },
-        ],
+        href: "/fin/esteira",
       },
     ],
   },
