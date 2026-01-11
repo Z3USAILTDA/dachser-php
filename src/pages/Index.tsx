@@ -1771,7 +1771,36 @@ const Index = () => {
       });
     }
 
-    // Apply sorting if active
+    // Helper function to determine status priority for smart sorting
+    // 1 = Success (tracking working), 2 = Invalid AWB, 3 = Query failure
+    const getStatusPriority = (awb: AWBData): number => {
+      const status = (awb.status || "").toUpperCase();
+      const lastEventCode = getStatusCode(awb.last_event).toUpperCase();
+      
+      // Success statuses (tracking working) - priority 1 (first)
+      const successStatuses = ["BKD", "BKF", "AWB", "RCS", "MAN", "DEP", "FOH", "TFD", 
+        "RCT", "RCP", "PRE", "LOF", "ARRT", "TDE", "ARR", "RCF", "DLV", "FFM", "AUD",
+        "DIS", "OFLD", "NIL", "NIF"];
+      if (successStatuses.includes(status) || successStatuses.includes(lastEventCode)) {
+        return 1;
+      }
+      
+      // Invalid AWB - priority 2
+      if (status === "AWB_INVALID" || lastEventCode === "AWB_INVALID" || 
+          status === "NOT_FOUND" || lastEventCode === "NOT_FOUND") {
+        return 2;
+      }
+      
+      // Query failure (ERRO, COMPANY_NOT_REGISTERED, etc) - priority 3 (last)
+      if (status === "ERRO" || status === "COMPANY_NOT_REGISTERED" || 
+          lastEventCode === "ERRO" || lastEventCode === "COMPANY_NOT_REGISTERED") {
+        return 3;
+      }
+      
+      return 2; // Default: middle
+    };
+
+    // Apply user sorting if active, otherwise use smart default sorting
     if (sortAnalyst !== null) {
       awbs = [...awbs].sort((a, b) => {
         const nameA = a.nome_analista || "";
@@ -1799,6 +1828,22 @@ const Index = () => {
         const dateB = b.last_check ? new Date(b.last_check).getTime() : 0;
         const comparison = dateA - dateB;
         return sortLastCheck === "asc" ? comparison : -comparison;
+      });
+    } else {
+      // Smart default sorting: success first, then invalid, then failures
+      // Within each group, sort by last_check (most recent first)
+      awbs = [...awbs].sort((a, b) => {
+        const priorityA = getStatusPriority(a);
+        const priorityB = getStatusPriority(b);
+        
+        if (priorityA !== priorityB) {
+          return priorityA - priorityB; // Lower priority number first (success = 1)
+        }
+        
+        // Same priority: sort by last_check (most recent first)
+        const dateA = a.last_check ? new Date(a.last_check).getTime() : 0;
+        const dateB = b.last_check ? new Date(b.last_check).getTime() : 0;
+        return dateB - dateA;
       });
     }
 
