@@ -644,27 +644,63 @@ export default function ConferenciaChb() {
           await fetchClientConfigs();
         }
         
-        const clienteLower = analysisData.cliente?.toLowerCase() || '';
+        const clienteLower = analysisData.cliente?.toLowerCase().trim() || '';
         const activeConfigs = allClientConfigs.filter(c => c.ativo);
-        const match = activeConfigs.find((c) => {
-          const nomeLower = c.cliente_nome?.toLowerCase() || '';
-          const cnpj = c.cliente_cnpj || '';
-          // Match by name (partial) or by CNPJ appearing in the client string
-          return clienteLower.includes(nomeLower) ||
-                 nomeLower.includes(clienteLower) ||
-                 clienteLower.includes(cnpj.replace(/\D/g, '')) ||
-                 (c.cliente_cnpj && clienteLower.includes(c.cliente_cnpj));
+        
+        // === IMPROVED MATCHING LOGIC (Fase 3 - Ponto 5) ===
+        
+        // 1. PRIORIDADE MÁXIMA: Match por CNPJ exato (mais confiável)
+        const cnpjMatch = activeConfigs.find((c) => {
+          if (!c.cliente_cnpj) return false;
+          const cnpjClean = c.cliente_cnpj.replace(/\D/g, '');
+          // CNPJ deve ter pelo menos 8 dígitos para ser válido
+          if (cnpjClean.length < 8) return false;
+          // Verificar se o CNPJ aparece na string do cliente
+          return clienteLower.includes(cnpjClean) || 
+                 clienteLower.includes(c.cliente_cnpj);
         });
-        if (match) {
-          setClientConfig(match);
-          const hasSpecialRules = match.beneficio_fiscal || match.armador || match.estado_uf;
+        
+        if (cnpjMatch) {
+          setClientConfig(cnpjMatch);
+          console.log(`[CHB Config] Matched by CNPJ: ${cnpjMatch.cliente_cnpj} → ${cnpjMatch.cliente_nome}`);
+          const hasSpecialRules = cnpjMatch.beneficio_fiscal || cnpjMatch.armador || cnpjMatch.estado_uf;
           if (hasSpecialRules) {
             toast.info(
-              `Configuração do cliente "${match.cliente_nome}" carregada. Clique em "Re-analisar" para aplicar as regras específicas (${match.beneficio_fiscal ? `${match.beneficio_fiscal}, ` : ''}${match.estado_uf ? `UF: ${match.estado_uf}, ` : ''}${match.armador ? 'Armador configurado' : ''})`.replace(/, $/, '.'),
+              `Configuração do cliente "${cnpjMatch.cliente_nome}" carregada (CNPJ). Clique em "Re-analisar" para aplicar as regras específicas.`,
               { duration: 8000 }
             );
           } else {
-            toast.info(`Configuração do cliente "${match.cliente_nome}" carregada automaticamente.`);
+            toast.info(`Configuração do cliente "${cnpjMatch.cliente_nome}" carregada automaticamente (CNPJ).`);
+          }
+        } else {
+          // 2. FALLBACK: Match por nome completo (mais rigoroso que antes)
+          const nameMatch = activeConfigs.find((c) => {
+            const nomeLower = c.cliente_nome?.toLowerCase().trim() || '';
+            // Nome deve ter pelo menos 3 caracteres para evitar matches acidentais
+            if (nomeLower.length < 3) return false;
+            
+            // Match rigoroso: nome da config deve estar COMPLETAMENTE contido no cliente
+            // OU cliente deve estar COMPLETAMENTE contido no nome da config
+            const configInClient = clienteLower.includes(nomeLower);
+            const clientInConfig = nomeLower.includes(clienteLower) && clienteLower.length >= 5;
+            
+            return configInClient || clientInConfig;
+          });
+          
+          if (nameMatch) {
+            setClientConfig(nameMatch);
+            console.log(`[CHB Config] Matched by name: "${nameMatch.cliente_nome}"`);
+            const hasSpecialRules = nameMatch.beneficio_fiscal || nameMatch.armador || nameMatch.estado_uf;
+            if (hasSpecialRules) {
+              toast.info(
+                `Configuração do cliente "${nameMatch.cliente_nome}" carregada (nome). Clique em "Re-analisar" para aplicar as regras específicas.`,
+                { duration: 8000 }
+              );
+            } else {
+              toast.info(`Configuração do cliente "${nameMatch.cliente_nome}" carregada automaticamente (nome).`);
+            }
+          } else {
+            console.log(`[CHB Config] No match found for cliente: "${analysisData.cliente}"`);
           }
         }
       }
