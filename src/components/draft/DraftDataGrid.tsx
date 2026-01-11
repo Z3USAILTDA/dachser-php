@@ -88,16 +88,25 @@ export const DraftDataGrid = ({ data, onRefresh, isLoading, statusFilter, onStat
       }
     }
     
-    // Apply search filter
+    // Apply search filter (including shipper)
     if (searchTerm.trim()) {
       const term = searchTerm.toLowerCase();
       filtered = filtered.filter(item => 
         item.mbl_id.toLowerCase().includes(term) ||
+        item.shipper?.toLowerCase().includes(term) ||
         item.trackingData?.booking?.toLowerCase().includes(term) ||
         item.trackingData?.origem?.toLowerCase().includes(term) ||
         item.trackingData?.destino?.toLowerCase().includes(term)
       );
     }
+    
+    // Sort: filled rows first (with trackingData), then by MBL
+    filtered = [...filtered].sort((a, b) => {
+      const aHasData = a.trackingData !== null ? 1 : 0;
+      const bHasData = b.trackingData !== null ? 1 : 0;
+      if (bHasData !== aHasData) return bHasData - aHasData;
+      return a.mbl_id.localeCompare(b.mbl_id);
+    });
     
     return filtered;
   }, [data, searchTerm, statusFilter]);
@@ -266,6 +275,7 @@ export const DraftDataGrid = ({ data, onRefresh, isLoading, statusFilter, onStat
     const exportData = filteredData.map((item, index) => ({
       '#': index + 1,
       'MBL ID': item.mbl_id,
+      'Shipper': item.shipper || '-',
       'Booking': item.trackingData?.booking || '-',
       'Viagem': item.trackingData?.voyage || '-',
       'Status': item.status,
@@ -428,6 +438,7 @@ export const DraftDataGrid = ({ data, onRefresh, isLoading, statusFilter, onStat
               <TableRow className="hover:bg-transparent border-[rgba(255,255,255,0.08)]">
                 <TableHead className="text-[#888] text-[0.75rem] uppercase tracking-wider font-medium w-12">#</TableHead>
                 <TableHead className="text-[#888] text-[0.75rem] uppercase tracking-wider font-medium">MBL ID</TableHead>
+                <TableHead className="text-[#888] text-[0.75rem] uppercase tracking-wider font-medium hidden lg:table-cell">Shipper</TableHead>
                 <TableHead className="text-[#888] text-[0.75rem] uppercase tracking-wider font-medium">Booking</TableHead>
                 <TableHead className="text-[#888] text-[0.75rem] uppercase tracking-wider font-medium hidden lg:table-cell">Viagem</TableHead>
                 <TableHead className="text-[#888] text-[0.75rem] uppercase tracking-wider font-medium">Status</TableHead>
@@ -443,14 +454,14 @@ export const DraftDataGrid = ({ data, onRefresh, isLoading, statusFilter, onStat
             <TableBody>
               {isLoading ? (
                 <TableRow>
-                  <TableCell colSpan={12} className="text-center py-12">
+                  <TableCell colSpan={13} className="text-center py-12">
                     <Loader2 className="h-8 w-8 animate-spin mx-auto mb-3 text-primary" />
                     <span className="text-[#aaaaaa] text-[0.85rem]">Carregando...</span>
                   </TableCell>
                 </TableRow>
               ) : paginatedData.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={12} className="text-center py-12 text-[#aaaaaa]">
+                  <TableCell colSpan={13} className="text-center py-12 text-[#aaaaaa]">
                     {searchTerm ? `Nenhum resultado para "${searchTerm}"` : 'Nenhum dado disponível'}
                   </TableCell>
                 </TableRow>
@@ -464,6 +475,9 @@ export const DraftDataGrid = ({ data, onRefresh, isLoading, statusFilter, onStat
                       {(currentPage - 1) * ITEMS_PER_PAGE + index + 1}
                     </TableCell>
                     <TableCell className="font-mono text-primary text-[0.85rem]">{item.mbl_id}</TableCell>
+                    <TableCell className="text-[#aaaaaa] text-[0.85rem] hidden lg:table-cell max-w-[180px] truncate" title={item.shipper || '-'}>
+                      {item.shipper || '-'}
+                    </TableCell>
                     <TableCell className="text-white text-[0.85rem]">{item.trackingData?.booking || '-'}</TableCell>
                     <TableCell className="text-[#aaaaaa] text-[0.85rem] hidden lg:table-cell">{item.trackingData?.voyage || '-'}</TableCell>
                     <TableCell><TrackingStatusBadge status={item.status} showIcon={false} /></TableCell>
