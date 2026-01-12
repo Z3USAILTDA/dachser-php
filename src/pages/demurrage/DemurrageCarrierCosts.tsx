@@ -6,10 +6,13 @@ import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
-import { Ship, Plus, Search, AlertTriangle, CheckCircle2, FileSearch, FileSpreadsheet, DollarSign, Clock } from "lucide-react";
+import { Ship, Plus, Search, AlertTriangle, CheckCircle2, FileSearch, FileSpreadsheet, DollarSign, Clock, Calculator, Eye, TrendingUp, TrendingDown, Minus } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { TablePagination } from "@/components/layout/TablePagination";
-import { useDemurrageData } from "@/hooks/useDemurrageData";
+import { useDemurrageData, useUpdateDemurrageContainer } from "@/hooks/useDemurrageData";
+import { AuditCostDialog, AuditData } from "@/components/demurrage/AuditCostDialog";
+import { toast } from "sonner";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 
 type QuickFilter = "all" | "validated" | "discrepancy" | "pending";
 const PAGE_SIZE = 15;
@@ -19,12 +22,15 @@ export default function DemurrageCarrierCosts() {
   const [searchTerm, setSearchTerm] = useState("");
   const [quickFilter, setQuickFilter] = useState<QuickFilter>("all");
   const [currentPage, setCurrentPage] = useState(1);
+  const [auditDialogOpen, setAuditDialogOpen] = useState(false);
+  const [selectedContainer, setSelectedContainer] = useState<typeof containers[0] | null>(null);
 
   const { data: containers = [], isLoading } = useDemurrageData();
+  const updateContainer = useUpdateDemurrageContainer();
 
-  // Filter containers that have carrier invoice data
+  // Filter containers that have carrier invoice data OR have demurrage to audit
   const carrierContainers = useMemo(() => {
-    return containers.filter(c => c.armador_invoice_number || c.armador_cost_usd);
+    return containers.filter(c => c.armador_invoice_number || c.armador_cost_usd || c.excedente_dias > 0);
   }, [containers]);
 
   const formatCurrency = (value: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'USD', minimumFractionDigits: 2 }).format(value);
@@ -42,13 +48,68 @@ export default function DemurrageCarrierCosts() {
     }
   };
 
+  const getDiffBadge = (container: typeof containers[0]) => {
+    const carrierCost = container.armador_cost_usd || 0;
+    const calculatedCost = container.expected_cost_usd || 0;
+    const diff = carrierCost - calculatedCost;
+    
+    if (carrierCost === 0) return null;
+    
+    const tolerance = Math.max(calculatedCost * 0.05, 50);
+    if (Math.abs(diff) <= tolerance) {
+      return (
+        <span className="flex items-center gap-1 text-green-400 text-xs">
+          <Minus className="h-3 w-3" /> OK
+        </span>
+      );
+    }
+    
+    if (diff > 0) {
+      return (
+        <TooltipProvider>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <span className="flex items-center gap-1 text-red-400 text-xs cursor-help">
+                <TrendingUp className="h-3 w-3" /> +{formatCurrency(diff)}
+              </span>
+            </TooltipTrigger>
+            <TooltipContent>
+              <p>Cobrança acima do calculado</p>
+            </TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
+      );
+    }
+    
+    return (
+      <TooltipProvider>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <span className="flex items-center gap-1 text-orange-400 text-xs cursor-help">
+              <TrendingDown className="h-3 w-3" /> {formatCurrency(diff)}
+            </span>
+          </TooltipTrigger>
+          <TooltipContent>
+            <p>Cobrança abaixo do calculado</p>
+          </TooltipContent>
+        </Tooltip>
+      </TooltipProvider>
+    );
+  };
+
   const stats = useMemo(() => {
     const totalCost = carrierContainers.reduce((sum, c) => sum + (c.armador_cost_usd || 0), 0);
+    const totalCalculated = carrierContainers.reduce((sum, c) => sum + (c.expected_cost_usd || 0), 0);
     const validated = carrierContainers.filter(c => c.audit_status === 'validated').reduce((sum, c) => sum + (c.armador_cost_usd || 0), 0);
-    const discrepancy = carrierContainers.filter(c => c.audit_status === 'discrepancy').reduce((sum, c) => sum + (c.armador_cost_usd || 0), 0);
-    const pending = carrierContainers.filter(c => !c.audit_status || c.audit_status === 'pending').reduce((sum, c) => sum + (c.armador_cost_usd || 0), 0);
+    const discrepancy = carrierContainers.filter(c => c.audit_status === 'discrepancy' || c.audit_status === 'disputed').reduce((sum, c) => sum + (c.armador_cost_usd || 0), 0);
+    const pending = carrierContainers.filter(c => !c.audit_status || c.audit_status === 'pending').reduce((sum, c) => sum + (c.expected_cost_usd || 0), 0);
+    
+    // Total discrepancy amount (overcharges)
+    const totalDiscrepancyAmount = carrierContainers
+      .filter(c => c.audit_status === 'discrepancy' || c.audit_status === 'disputed')
+      .reduce((sum, c) => sum + Math.max(0, (c.armador_cost_usd || 0) - (c.expected_cost_usd || 0)), 0);
 
-    return { totalCost, validated, discrepancy, pending };
+    return { totalCost, totalCalculated, validated, discrepancy, pending, totalDiscrepancyAmount };
   }, [carrierContainers]);
 
   const filteredInvoices = useMemo(() => {
@@ -60,11 +121,19 @@ export default function DemurrageCarrierCosts() {
         c.numero.toLowerCase().includes(searchTerm.toLowerCase());
       
       let matchesQuickFilter = true;
-      if (quickFilter !== "all") {
+      if (quickFilter === "discrepancy") {
+        matchesQuickFilter = c.audit_status === 'discrepancy' || c.audit_status === 'disputed';
+      } else if (quickFilter !== "all") {
         matchesQuickFilter = c.audit_status === quickFilter || (!c.audit_status && quickFilter === "pending");
       }
       
-      const matchesStatus = statusFilter === "all" || c.audit_status === statusFilter || (!c.audit_status && statusFilter === "pending");
+      let matchesStatus = true;
+      if (statusFilter === "discrepancy") {
+        matchesStatus = c.audit_status === 'discrepancy' || c.audit_status === 'disputed';
+      } else if (statusFilter !== "all") {
+        matchesStatus = c.audit_status === statusFilter || (!c.audit_status && statusFilter === "pending");
+      }
+      
       return matchesSearch && matchesQuickFilter && matchesStatus;
     });
   }, [carrierContainers, searchTerm, quickFilter, statusFilter]);
@@ -83,6 +152,46 @@ export default function DemurrageCarrierCosts() {
     setQuickFilter(filter);
   };
 
+  const handleOpenAudit = (container: typeof containers[0]) => {
+    setSelectedContainer(container);
+    setAuditDialogOpen(true);
+  };
+
+  const handleAudit = async (containerId: number, auditData: AuditData) => {
+    try {
+      await updateContainer.mutateAsync({
+        containerId,
+        updates: {
+          armador_invoice_number: auditData.armador_invoice_number,
+          armador_cost_usd: auditData.armador_cost_usd,
+          armador_days_charged: auditData.armador_days_charged,
+          audit_status: auditData.audit_status,
+          discrepancy_usd: auditData.discrepancy_usd,
+          notes: auditData.audit_notes || null,
+          // If opening dispute, also set dispute fields
+          ...(auditData.audit_status === 'disputed' && {
+            dispute_status: 'open',
+            dispute_reason: `Discrepância de ${formatCurrency(auditData.discrepancy_usd)} detectada na auditoria`,
+            disputed_amount_usd: Math.abs(auditData.discrepancy_usd),
+          }),
+        },
+      });
+      
+      const statusMessages = {
+        validated: 'Fatura validada com sucesso',
+        discrepancy: 'Discrepância registrada',
+        disputed: 'Disputa aberta com sucesso',
+      };
+      
+      toast.success(statusMessages[auditData.audit_status]);
+      setAuditDialogOpen(false);
+      setSelectedContainer(null);
+    } catch (error) {
+      toast.error('Erro ao processar auditoria');
+      console.error(error);
+    }
+  };
+
   const rightActions = (
     <div className="flex gap-2">
       <Button variant="outline" className="bg-[rgba(0,0,0,0.7)] border-[rgba(255,255,255,0.25)] text-[#aaaaaa] hover:text-white hover:bg-[rgba(0,0,0,0.9)]">
@@ -99,9 +208,9 @@ export default function DemurrageCarrierCosts() {
   const customCards = (
     <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
       <KpiCard
-        title="TOTAL CUSTOS"
+        title="TOTAL ARMADOR"
         value={formatCurrency(stats.totalCost)}
-        subtitle="Faturas recebidas"
+        subtitle={`Calculado: ${formatCurrency(stats.totalCalculated)}`}
         icon={<DollarSign className="h-6 w-6" />}
         variant="default"
         isActive={quickFilter === "all"}
@@ -119,7 +228,7 @@ export default function DemurrageCarrierCosts() {
       <KpiCard
         title="DISCREPÂNCIAS"
         value={formatCurrency(stats.discrepancy)}
-        subtitle="Requer análise"
+        subtitle={`Sobrecobrança: ${formatCurrency(stats.totalDiscrepancyAmount)}`}
         icon={<AlertTriangle className="h-6 w-6" />}
         variant="critical"
         isActive={quickFilter === "discrepancy"}
@@ -168,7 +277,6 @@ export default function DemurrageCarrierCosts() {
                   <SelectItem value="pending">Pendentes</SelectItem>
                   <SelectItem value="validated">Validadas</SelectItem>
                   <SelectItem value="discrepancy">Discrepâncias</SelectItem>
-                  <SelectItem value="disputed">Em Disputa</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -180,42 +288,67 @@ export default function DemurrageCarrierCosts() {
           <CardHeader className="pb-3">
             <CardTitle className="flex items-center gap-2 text-foreground text-base">
               <Ship className="h-5 w-5 text-[#ffc800]" />
-              Faturas de Armadores
+              Auditoria de Custos de Armadores
             </CardTitle>
-            <CardDescription>{filteredInvoices.length} faturas encontradas</CardDescription>
+            <CardDescription>{filteredInvoices.length} containers para auditoria</CardDescription>
           </CardHeader>
           <CardContent>
             {!filteredInvoices.length ? (
               <div className="text-center py-8 text-muted-foreground">
                 <Ship className="h-12 w-12 mx-auto mb-4 opacity-50" />
-                <p>Nenhuma fatura encontrada</p>
+                <p>Nenhum container encontrado</p>
               </div>
             ) : (
               <>
                 <Table>
                   <TableHeader>
                     <TableRow className="border-[rgba(255,255,255,0.1)]">
-                      <TableHead>Fatura</TableHead>
-                      <TableHead>Armador</TableHead>
                       <TableHead>Container</TableHead>
-                      <TableHead>Cliente</TableHead>
+                      <TableHead>Armador</TableHead>
+                      <TableHead>Fatura</TableHead>
                       <TableHead className="text-center">Dias</TableHead>
-                      <TableHead className="text-right">Custo USD</TableHead>
                       <TableHead className="text-right">Calculado</TableHead>
+                      <TableHead className="text-right">Armador</TableHead>
+                      <TableHead className="text-center">Diferença</TableHead>
                       <TableHead>Status</TableHead>
+                      <TableHead className="text-center">Ação</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {paginatedInvoices.map((container) => (
-                      <TableRow key={container.id} className="border-[rgba(255,255,255,0.1)] cursor-pointer hover:bg-[rgba(255,200,0,0.05)]">
-                        <TableCell className="font-mono">{container.armador_invoice_number || '-'}</TableCell>
+                      <TableRow key={container.id} className="border-[rgba(255,255,255,0.1)] hover:bg-[rgba(255,200,0,0.05)]">
+                        <TableCell>
+                          <div>
+                            <p className="font-mono font-medium">{container.numero}</p>
+                            <p className="text-xs text-muted-foreground">{container.cliente || '-'}</p>
+                          </div>
+                        </TableCell>
                         <TableCell>{container.armador || '-'}</TableCell>
-                        <TableCell className="font-mono">{container.numero}</TableCell>
-                        <TableCell>{container.cliente || '-'}</TableCell>
-                        <TableCell className="text-center"><Badge variant="outline">{container.armador_days_charged || container.excedente_dias} dias</Badge></TableCell>
-                        <TableCell className="text-right font-semibold text-[#ffc800]">{formatCurrency(container.armador_cost_usd || 0)}</TableCell>
-                        <TableCell className="text-right text-muted-foreground">{formatCurrency(container.expected_cost_usd)}</TableCell>
+                        <TableCell className="font-mono text-sm">{container.armador_invoice_number || '-'}</TableCell>
+                        <TableCell className="text-center">
+                          <div className="flex flex-col items-center">
+                            <Badge variant="outline">{container.armador_days_charged || container.excedente_dias}</Badge>
+                            {container.armador_days_charged && container.armador_days_charged !== container.excedente_dias && (
+                              <span className="text-xs text-muted-foreground">calc: {container.excedente_dias}</span>
+                            )}
+                          </div>
+                        </TableCell>
+                        <TableCell className="text-right text-blue-400">{formatCurrency(container.expected_cost_usd)}</TableCell>
+                        <TableCell className="text-right font-semibold text-[#ffc800]">
+                          {container.armador_cost_usd ? formatCurrency(container.armador_cost_usd) : '-'}
+                        </TableCell>
+                        <TableCell className="text-center">{getDiffBadge(container)}</TableCell>
                         <TableCell>{getStatusBadge(container.audit_status)}</TableCell>
+                        <TableCell className="text-center">
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            onClick={() => handleOpenAudit(container)}
+                            className="h-8 w-8 p-0 hover:bg-[rgba(255,200,0,0.1)]"
+                          >
+                            <Calculator className="h-4 w-4 text-[#ffc800]" />
+                          </Button>
+                        </TableCell>
                       </TableRow>
                     ))}
                   </TableBody>
@@ -226,6 +359,14 @@ export default function DemurrageCarrierCosts() {
           </CardContent>
         </Card>
       </div>
+
+      <AuditCostDialog
+        open={auditDialogOpen}
+        onOpenChange={setAuditDialogOpen}
+        container={selectedContainer}
+        onAudit={handleAudit}
+        isLoading={updateContainer.isPending}
+      />
     </DemurrageLayout>
   );
 }
