@@ -1,4 +1,7 @@
-import { AlertTriangle, CheckCircle2, XCircle, FileText, MessageSquareWarning, ListChecks } from 'lucide-react';
+import { useState, useEffect, useCallback } from 'react';
+import { AlertTriangle, CheckCircle2, XCircle, FileText, MessageSquareWarning, ListChecks, Pencil } from 'lucide-react';
+import { EditableCell } from './EditableCell';
+import { useChbCorrections, ChbCorrection } from '@/hooks/useChbCorrections';
 
 interface ComparisonRow {
   status: 'success' | 'warning' | 'error';
@@ -15,6 +18,9 @@ interface ParsedSections {
 
 interface ChbComparisonGridProps {
   htmlContent: string;
+  itemId?: number;
+  editable?: boolean;
+  onCorrectionSaved?: () => void;
 }
 
 // Parse HTML table to structured data for better rendering
@@ -279,9 +285,63 @@ function ActionsCard({ actions }: { actions: string[] }) {
   );
 }
 
-export function ChbComparisonGrid({ htmlContent }: ChbComparisonGridProps) {
+// Helper to normalize field name for matching
+function normalizeFieldName(campo: string): string {
+  return campo
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9]/g, '_')
+    .replace(/_+/g, '_')
+    .replace(/^_|_$/g, '');
+}
+
+export function ChbComparisonGrid({ 
+  htmlContent, 
+  itemId,
+  editable = false,
+  onCorrectionSaved
+}: ChbComparisonGridProps) {
   const parsed = parseHtmlToRows(htmlContent);
   const sections = parseSections(htmlContent);
+  
+  const {
+    corrections,
+    isSaving,
+    fetchCorrections,
+    saveCorrection,
+    getCorrectionForField,
+  } = useChbCorrections(itemId);
+
+  // Load corrections when itemId changes
+  useEffect(() => {
+    if (itemId && editable) {
+      fetchCorrections(itemId);
+    }
+  }, [itemId, editable, fetchCorrections]);
+
+  const handleSaveCorrection = useCallback(async (
+    filename: string,
+    fieldName: string,
+    originalValue: string,
+    newValue: string
+  ): Promise<boolean> => {
+    if (!itemId) return false;
+
+    const result = await saveCorrection({
+      item_id: itemId,
+      filename,
+      field_name: normalizeFieldName(fieldName),
+      original_value: originalValue,
+      corrected_value: newValue,
+    });
+
+    if (result.success) {
+      onCorrectionSaved?.();
+    }
+
+    return result.success;
+  }, [itemId, saveCorrection, onCorrectionSaved]);
   
   // If parsing fails, fall back to raw HTML rendering with improved styles
   if (!parsed || parsed.rows.length === 0) {
@@ -363,6 +423,19 @@ export function ChbComparisonGrid({ htmlContent }: ChbComparisonGridProps) {
   // Render parsed structured grid with sections
   return (
     <div className="space-y-6">
+      {/* Editable Mode Indicator */}
+      {editable && (
+        <div className="flex items-center gap-2 px-3 py-2 bg-blue-500/10 border border-blue-500/20 rounded-lg text-xs text-blue-300">
+          <Pencil className="w-3.5 h-3.5" />
+          <span>Modo de edição ativo. Clique em qualquer valor para corrigir.</span>
+          {corrections.length > 0 && (
+            <span className="ml-auto text-blue-400 font-medium">
+              {corrections.length} correção(ões) salva(s)
+            </span>
+          )}
+        </div>
+      )}
+
       {/* Main Comparison Table */}
       <div className="overflow-x-auto rounded-lg border border-white/10">
         <table className="w-full text-[0.75rem]">
@@ -402,21 +475,47 @@ export function ChbComparisonGrid({ htmlContent }: ChbComparisonGridProps) {
                 <td className="px-3 py-2 font-medium text-white">
                   {row.campo}
                 </td>
-                {parsed.headers.map((header, colIdx) => (
-                  <td 
-                    key={colIdx}
-                    className={`px-3 py-2 max-w-[180px] ${
-                      row.status === 'error' ? 'text-red-300' :
-                      row.status === 'warning' ? 'text-amber-300' :
-                      'text-white/80'
-                    }`}
-                    title={row.valores[header] || '—'}
-                  >
-                    <span className="block truncate">
-                      {row.valores[header] || '—'}
-                    </span>
-                  </td>
-                ))}
+                {parsed.headers.map((header, colIdx) => {
+                  const value = row.valores[header] || '—';
+                  const normalizedField = normalizeFieldName(row.campo);
+                  const correction = editable ? getCorrectionForField(header, normalizedField) : undefined;
+
+                  if (editable) {
+                    return (
+                      <td key={colIdx} className="px-3 py-2 max-w-[180px]">
+                        <EditableCell
+                          value={value}
+                          filename={header}
+                          fieldName={row.campo}
+                          status={row.status}
+                          correction={correction ? {
+                            original_value: correction.original_value,
+                            corrected_value: correction.corrected_value,
+                            location_reference: correction.location_reference,
+                            location_confidence: correction.location_confidence,
+                            is_validated: correction.is_validated,
+                          } : undefined}
+                          onSave={(newValue) => handleSaveCorrection(header, row.campo, value, newValue)}
+                          disabled={isSaving}
+                        />
+                      </td>
+                    );
+                  }
+
+                  return (
+                    <td 
+                      key={colIdx}
+                      className={`px-3 py-2 max-w-[180px] ${
+                        row.status === 'error' ? 'text-red-300' :
+                        row.status === 'warning' ? 'text-amber-300' :
+                        'text-white/80'
+                      }`}
+                      title={value}
+                    >
+                      <span className="block truncate">{value}</span>
+                    </td>
+                  );
+                })}
               </tr>
             ))}
           </tbody>
