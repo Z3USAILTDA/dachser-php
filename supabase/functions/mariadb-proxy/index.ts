@@ -201,6 +201,7 @@ interface QueryRequest {
   error_message?: string;
   edge_function?: string;
   user_email?: string;
+  cycle_key?: string;
   // Demurrage module
   container_id?: number;
   rate_id?: number;
@@ -6966,6 +6967,62 @@ serve(async (req) => {
         ]);
 
         console.log(`[log_api_call] Logged: ${api_name} - ${status_code || 'N/A'} - ${response_time_ms}ms`);
+        result = { success: true };
+        break;
+      }
+
+      case 'check_api_alert_sent': {
+        // Check if an API usage alert was already sent for this cycle
+        const { api_name, cycle_key } = body;
+        console.log(`[check_api_alert_sent] Checking: ${api_name} - ${cycle_key}`);
+        
+        // Ensure table exists
+        await client.execute(`
+          CREATE TABLE IF NOT EXISTS ai_agente.t_api_alerts_sent (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            api_name VARCHAR(100) NOT NULL,
+            cycle_key VARCHAR(50) NOT NULL,
+            sent_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE KEY uk_api_cycle (api_name, cycle_key)
+          )
+        `);
+        
+        const existing = await client.query(`
+          SELECT id FROM ai_agente.t_api_alerts_sent 
+          WHERE api_name = ? AND cycle_key = ?
+          LIMIT 1
+        `, [api_name, cycle_key]);
+        
+        const alertSent = existing && existing.length > 0;
+        console.log(`[check_api_alert_sent] ${api_name} ${cycle_key}: ${alertSent ? 'ALREADY SENT' : 'NOT SENT'}`);
+        
+        result = { success: true, alert_sent: alertSent };
+        break;
+      }
+
+      case 'mark_api_alert_sent': {
+        // Mark that an API usage alert was sent for this cycle
+        const { api_name, cycle_key } = body;
+        console.log(`[mark_api_alert_sent] Marking: ${api_name} - ${cycle_key}`);
+        
+        // Ensure table exists
+        await client.execute(`
+          CREATE TABLE IF NOT EXISTS ai_agente.t_api_alerts_sent (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            api_name VARCHAR(100) NOT NULL,
+            cycle_key VARCHAR(50) NOT NULL,
+            sent_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE KEY uk_api_cycle (api_name, cycle_key)
+          )
+        `);
+        
+        // Insert or ignore if already exists
+        await client.execute(`
+          INSERT IGNORE INTO ai_agente.t_api_alerts_sent (api_name, cycle_key)
+          VALUES (?, ?)
+        `, [api_name, cycle_key]);
+        
+        console.log(`[mark_api_alert_sent] Marked ${api_name} ${cycle_key} as sent`);
         result = { success: true };
         break;
       }
