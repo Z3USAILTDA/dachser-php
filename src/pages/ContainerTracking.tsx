@@ -197,6 +197,7 @@ const ContainerTracking = () => {
   const [isRunningEnrich, setIsRunningEnrich] = useState(false);
   const [isRunningTrack, setIsRunningTrack] = useState(false);
   const [isRunningRetrack, setIsRunningRetrack] = useState(false);
+  const [isRunningImoRefresh, setIsRunningImoRefresh] = useState(false);
   
   // Expansion state
   const [expandedMbl, setExpandedMbl] = useState<string | null>(null);
@@ -1024,6 +1025,112 @@ const ContainerTracking = () => {
     }
   };
 
+  // Refresh all vessel IMOs by searching via vessel name (vessel/finder)
+  const handleAdminRefreshImos = async () => {
+    if (!isAdmin) return;
+    
+    const confirmResult = await Swal.fire({
+      title: 'Atualizar IMOs dos Navios?',
+      html: `
+        <p class="text-gray-600">Esta ação irá buscar a IMO correta de cada navio pelo <strong>nome</strong>, usando a API vessel/finder.</p>
+        <p class="text-blue-600 text-sm mt-2">ℹ️ IMOs incorretas serão corrigidas automaticamente.</p>
+      `,
+      icon: 'question',
+      showCancelButton: true,
+      confirmButtonColor: '#3085d6',
+      cancelButtonColor: '#6b7280',
+      confirmButtonText: 'Sim, atualizar IMOs',
+      cancelButtonText: 'Cancelar'
+    });
+    
+    if (!confirmResult.isConfirmed) return;
+    
+    setIsRunningImoRefresh(true);
+    
+    Swal.fire({
+      title: 'Atualizando IMOs dos Navios',
+      html: `
+        <div class="text-left">
+          <p class="mb-3">Buscando IMOs pelo nome de cada navio...</p>
+          <div class="w-full bg-gray-200 rounded-full h-2.5 mb-2">
+            <div class="bg-gradient-to-r from-indigo-500 to-purple-600 h-2.5 rounded-full animate-pulse" style="width: 50%"></div>
+          </div>
+          <p class="text-sm text-gray-500">Isso pode levar alguns minutos...</p>
+        </div>
+      `,
+      allowOutsideClick: false,
+      showConfirmButton: false,
+      didOpen: () => {
+        Swal.showLoading();
+      }
+    });
+
+    try {
+      const res = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/olimpo-proxy?action=refresh_all_vessel_imos`,
+        {
+          method: 'GET',
+          headers: {
+            'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
+            'Content-Type': 'application/json',
+          }
+        }
+      );
+      
+      const result = await res.json();
+      
+      await fetchMblData();
+      
+      Swal.fire({
+        icon: 'success',
+        title: 'IMOs Atualizadas!',
+        html: `
+          <div class="text-left">
+            <div class="bg-gray-100 rounded-lg p-3 mb-3">
+              <div class="text-center">
+                <div class="text-2xl font-bold text-indigo-600">${result.updated || 0}</div>
+                <div class="text-sm text-gray-500">IMOs corrigidas</div>
+              </div>
+            </div>
+            <div class="grid grid-cols-2 gap-2 text-sm">
+              <div class="flex items-center gap-2">
+                <span class="inline-flex items-center justify-center w-6 h-6 bg-blue-100 text-blue-600 rounded-full text-sm font-bold">${result.total || 0}</span>
+                <span>Total analisados</span>
+              </div>
+              <div class="flex items-center gap-2">
+                <span class="inline-flex items-center justify-center w-6 h-6 bg-gray-100 text-gray-600 rounded-full text-sm font-bold">${result.unchanged || 0}</span>
+                <span>Sem alteração</span>
+              </div>
+            </div>
+            ${result.errors > 0 ? `
+            <div class="mt-2 p-2 bg-red-50 rounded text-sm text-red-700">
+              ⚠️ ${result.errors} erros durante o processo
+            </div>
+            ` : ''}
+            ${result.changes && result.changes.length > 0 ? `
+            <div class="mt-3 max-h-32 overflow-y-auto text-xs">
+              <div class="font-medium text-gray-700 mb-1">Principais correções:</div>
+              ${result.changes.slice(0, 5).map((c: any) => `
+                <div class="text-gray-600">• ${c.vessel}: ${c.old_imo || 'vazio'} → ${c.new_imo}</div>
+              `).join('')}
+            </div>
+            ` : ''}
+          </div>
+        `,
+        confirmButtonColor: '#3085d6',
+      });
+    } catch (error) {
+      Swal.fire({
+        icon: 'error',
+        title: 'Erro ao Atualizar IMOs',
+        text: 'Falha ao processar atualização. Tente novamente.',
+        confirmButtonColor: '#d33',
+      });
+    } finally {
+      setIsRunningImoRefresh(false);
+    }
+  };
+
   // Set up 12-hour interval for auto sync (NOT on page load)
   useEffect(() => {
     if (!user) return;
@@ -1568,6 +1675,24 @@ const ContainerTracking = () => {
                         </TooltipTrigger>
                         <TooltipContent>
                           <p className="text-xs">Forçar re-rastreio de TODOS os containers</p>
+                        </TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
+                    
+                    <TooltipProvider>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <button
+                            onClick={handleAdminRefreshImos}
+                            disabled={isRunningImoRefresh || !!autoSyncStatus}
+                            className="h-8 px-3 rounded-full bg-[rgba(99,102,241,.2)] text-indigo-400 text-[0.7rem] font-medium flex items-center gap-1.5 border border-indigo-500/30 hover:bg-[rgba(99,102,241,.3)] transition disabled:opacity-50"
+                          >
+                            {isRunningImoRefresh ? <Loader2 className="w-3 h-3 animate-spin" /> : <Ship className="w-3 h-3" />}
+                            Fix IMO
+                          </button>
+                        </TooltipTrigger>
+                        <TooltipContent>
+                          <p className="text-xs">Corrigir IMOs buscando pelo nome do navio</p>
                         </TooltipContent>
                       </Tooltip>
                     </TooltipProvider>
