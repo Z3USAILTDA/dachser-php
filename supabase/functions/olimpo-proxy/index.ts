@@ -1889,7 +1889,7 @@ serve(async (req) => {
             -- This prevents adding new "PENDENTE" records to MBLs that already have enriched containers
             AND NOT EXISTS (
               SELECT 1 FROM dados_dachser.t_tracking_sea t 
-              WHERE t.mbl_id = TRIM(md.mawb)
+              WHERE BINARY t.mbl_id = BINARY TRIM(md.mawb)
             )
         `);
 
