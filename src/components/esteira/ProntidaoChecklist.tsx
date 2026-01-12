@@ -50,6 +50,15 @@ export const ProntidaoChecklist = ({ voucher, className }: ProntidaoChecklistPro
     });
   }
 
+  // 4. Para ADF: documento fiscal deve estar anexado
+  if (voucher.tipoDocumento === "ADF") {
+    items.push({
+      label: "Documento fiscal anexado (ADF)",
+      checked: voucher.statusDocumentoFiscal === "ANEXADO",
+      required: true
+    });
+  }
+
   // 5. Para REMESSA: validação de lote removida - não faz parte do MVP
 
   const allChecked = items.filter(i => i.required).every(i => i.checked);

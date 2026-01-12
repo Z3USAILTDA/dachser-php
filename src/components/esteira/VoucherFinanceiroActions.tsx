@@ -6,7 +6,7 @@ import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
-import { CheckCircle2, XCircle, AlertTriangle, Loader2 } from "lucide-react";
+import { CheckCircle2, XCircle, AlertTriangle, Loader2, FileWarning } from "lucide-react";
 import { ProntidaoChecklist } from "./ProntidaoChecklist";
 
 interface VoucherFinanceiroActionsProps {
@@ -289,6 +289,22 @@ export const VoucherFinanceiroActions = ({ voucher, onUpdate }: VoucherFinanceir
           Revise e processe a baixa do voucher/SPO
         </p>
       </div>
+
+      {/* Alerta ADF - Documento Fiscal Pendente */}
+      {voucher.tipoDocumento === 'ADF' && voucher.statusDocumentoFiscal === 'PENDENTE' && (
+        <div className="flex items-start gap-3 p-4 rounded-lg bg-amber-500/10 border border-amber-500/30 animate-pulse">
+          <FileWarning className="h-5 w-5 text-amber-500 shrink-0 mt-0.5" />
+          <div>
+            <p className="font-medium text-amber-600 dark:text-amber-400">
+              ADF - Aguardando Documento Fiscal
+            </p>
+            <p className="text-sm text-muted-foreground mt-1">
+              Este voucher foi criado como ADF (Aguardando Documento Fiscal). 
+              O documento fiscal deve ser anexado na aba "Anexos" antes de enviar para o ROBÔ.
+            </p>
+          </div>
+        </div>
+      )}
 
       {/* Checklist de Prontidão */}
       <div className="p-4 rounded-lg bg-secondary/30 border border-border">

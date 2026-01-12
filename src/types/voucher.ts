@@ -25,6 +25,8 @@ export type StatusEnvioCliente = "PENDENTE" | "ENVIADO" | "NAO_APLICAVEL" | "AGU
 
 export type StatusComprovante = "PENDENTE" | "ANEXADO" | "VALIDADO";
 
+export type StatusDocumentoFiscal = "PENDENTE" | "ANEXADO";
+
 export type AccrualStatus = "MATCH_OK" | "MATCH_PARCIAL" | "SEM_ACCRUAL";
 
 export type FormaPagamento = 
@@ -310,6 +312,8 @@ export interface Voucher {
   voucherMasterId?: string;
   isMaster?: boolean;
   vouchersFilhos?: VoucherFilho[];
+  // ADF Status - tracks if document was attached after creation
+  statusDocumentoFiscal?: StatusDocumentoFiscal;
   nomeMaster?: string; // Nome personalizado do voucher master
 }
 
@@ -398,6 +402,11 @@ export const validarProntoParaRobo = (voucher: Voucher): ValidacaoProntoParaRobo
     if (!db?.banco || !db?.agencia || !db?.conta) {
       pendencias.push("Dados bancários incompletos para remessa");
     }
+  }
+
+  // 4. Para ADF: documento fiscal deve estar anexado
+  if (voucher.tipoDocumento === 'ADF' && voucher.statusDocumentoFiscal === 'PENDENTE') {
+    pendencias.push("Documento fiscal não anexado (ADF aguardando documento)");
   }
 
   return { valido: pendencias.length === 0, pendencias };

@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { VoucherActionsMenu } from "./VoucherActionsMenu";
-import { AlertCircle, Eye, Clock, Building2, User, Plane, Ship, Package, FileCheck, FileClock, ArrowUpDown, ArrowUp, ArrowDown, Layers } from "lucide-react";
+import { AlertCircle, Eye, Clock, Building2, User, Plane, Ship, Package, FileCheck, FileClock, ArrowUpDown, ArrowUp, ArrowDown, Layers, FileQuestion } from "lucide-react";
 import { format, isToday, isPast } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { cn } from "@/lib/utils";
@@ -384,6 +384,21 @@ export const VoucherTable = ({ vouchers, onViewDetails, onEdit, onDelete, onGoBa
                                 <Layers className="h-3 w-3" />
                                 Master
                               </Badge>
+                            )}
+                            {/* Indicador ADF Aguardando Documento */}
+                            {voucher.tipoDocumento === "ADF" && voucher.statusDocumentoFiscal === "PENDENTE" && (
+                              <Tooltip>
+                                <TooltipTrigger onClick={(e) => e.stopPropagation()}>
+                                  <Badge className="bg-amber-500/20 text-amber-500 border-amber-500/30 text-[10px] gap-1 animate-pulse">
+                                    <FileQuestion className="h-3 w-3" />
+                                    Aguardando Doc
+                                  </Badge>
+                                </TooltipTrigger>
+                                <TooltipContent>
+                                  <p className="font-medium">ADF - Aguardando Documento Fiscal</p>
+                                  <p className="text-xs text-muted-foreground">O documento fiscal deve ser anexado antes de enviar para o ROBÔ</p>
+                                </TooltipContent>
+                              </Tooltip>
                             )}
                           </div>
                           {voucher.isMaster && voucher.nomeMaster && (
