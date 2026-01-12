@@ -1613,12 +1613,12 @@ serve(async (req) => {
                 SELECT 1 FROM dados_dachser.t_client_free_time ft
                 WHERE ft.ativo = 1
                   AND (
-                    -- Free Time por processo (MBL específico)
-                    (ft.tipo_ft = 'PROCESSO' AND ft.mbl = ts.mbl_id)
+                    -- Free Time por processo (MBL específico) - usando BINARY para evitar conflitos de collation
+                    (ft.tipo_ft = 'PROCESSO' AND BINARY ft.mbl = BINARY ts.mbl_id)
                     -- OU Free Time por contrato (cliente com vigência válida)
                     OR (
                       ft.tipo_ft = 'CONTRATO' 
-                      AND ft.cliente_nome = MAX(ts.consignee)
+                      AND BINARY ft.cliente_nome = BINARY MAX(ts.consignee)
                       AND (ft.vigencia_inicio IS NULL OR ft.vigencia_inicio <= CURDATE())
                       AND (ft.vigencia_fim IS NULL OR ft.vigencia_fim >= CURDATE())
                     )
@@ -1709,7 +1709,7 @@ serve(async (req) => {
               (
                 SELECT md.eta 
                 FROM dados_dachser.t_master_dados md 
-                WHERE TRIM(md.mawb) COLLATE utf8_general_ci = ts.mbl_id COLLATE utf8_general_ci
+                WHERE BINARY TRIM(md.mawb) = BINARY ts.mbl_id
                   AND md.eta IS NOT NULL 
                   AND md.active = 1
                 LIMIT 1
@@ -1719,7 +1719,7 @@ serve(async (req) => {
             COALESCE(ts.navio, (
               SELECT t2.navio 
               FROM dados_dachser.t_tracking_sea t2 
-              WHERE t2.mbl_id COLLATE utf8_general_ci = ts.mbl_id COLLATE utf8_general_ci
+              WHERE BINARY t2.mbl_id = BINARY ts.mbl_id
                 AND t2.navio IS NOT NULL 
                 AND t2.navio != ''
               ORDER BY t2.last_check DESC 
@@ -1728,14 +1728,14 @@ serve(async (req) => {
             COALESCE(ts.vessel_imo, (
               SELECT t2.vessel_imo 
               FROM dados_dachser.t_tracking_sea t2 
-              WHERE t2.mbl_id COLLATE utf8_general_ci = ts.mbl_id COLLATE utf8_general_ci
+              WHERE BINARY t2.mbl_id = BINARY ts.mbl_id
                 AND t2.vessel_imo IS NOT NULL 
               ORDER BY t2.last_check DESC 
               LIMIT 1
             )) as vessel_imo, 
             ts.origem, ts.destino, ts.consignee
           FROM dados_dachser.t_tracking_sea ts
-          WHERE ts.mbl_id COLLATE utf8_general_ci = ? COLLATE utf8_general_ci
+          WHERE BINARY ts.mbl_id = BINARY ?
           ORDER BY ts.container
         `, [mbl_id]);
 
