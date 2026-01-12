@@ -1,5 +1,5 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2.78.0";
+import { Client } from "https://deno.land/x/mysql@v2.12.1/mod.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -7,32 +7,34 @@ const corsHeaders = {
 };
 
 interface Container {
-  id: string;
+  id: number;
   numero: string;
+  mbl: string;
   tipo_conteiner: string | null;
   excedente_dias: number | null;
   expected_cost_usd: number | null;
   free_time_end_date: string | null;
+  free_time_days: number | null;
   ft_started_at: string | null;
-  shipments: {
-    id: string;
-    master: string;
-    cliente: string;
-    armador: string;
-    porto_origem: string | null;
-    porto_destino: string | null;
-    data_atracacao: string | null;
-  } | null;
+  cliente: string | null;
+  armador: string | null;
+  navio: string | null;
+  voyage: string | null;
+  porto_origem: string | null;
+  porto_destino: string | null;
+  data_atracacao: string | null;
+  rate_usd_per_day: number | null;
+  pre_invoice_number: string | null;
 }
 
 interface ClientProfile {
-  client_name: string;
-  auto_alert_enabled: boolean;
+  cliente: string;
+  auto_alert_enabled: number;
 }
 
 interface DemurrageRate {
+  armador: string;
   container_type: string;
-  container_subtype: string | null;
   free_time_days: number;
   period_type: string;
   period_start_day: number | null;
@@ -45,96 +47,86 @@ serve(async (req) => {
     return new Response(null, { headers: corsHeaders });
   }
 
-  console.log("=== Starting Auto-Invoice Generation ===");
+  console.log("=== Starting Auto-Invoice Generation (MariaDB) ===");
+  console.log(`Timestamp: ${new Date().toISOString()}`);
+
+  let client: Client | null = null;
 
   try {
-    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-    const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-    const supabase = createClient(supabaseUrl, supabaseKey);
+    const mariaConfig = {
+      hostname: Deno.env.get("MARIADB_HOST") || "",
+      port: parseInt(Deno.env.get("MARIADB_PORT") || "3306"),
+      username: Deno.env.get("MARIADB_USER") || "",
+      password: Deno.env.get("MARIADB_PASSWORD") || "",
+      db: Deno.env.get("MARIADB_DATABASE") || "",
+    };
+
+    if (!mariaConfig.hostname || !mariaConfig.username) {
+      throw new Error("MariaDB credentials not configured");
+    }
+
+    console.log(`Connecting to MariaDB at ${mariaConfig.hostname}:${mariaConfig.port}`);
+    client = await new Client().connect(mariaConfig);
+    console.log("✓ Connected to MariaDB");
 
     // Get client profiles to check which clients should be invoiced
-    const { data: clientProfiles } = await supabase
-      .from('client_profiles')
-      .select('client_name, auto_alert_enabled');
+    const clientProfiles = await client.query(`
+      SELECT cliente, auto_alert_enabled 
+      FROM dados_dachser.t_dachser_demurrage_client_profiles
+    `) as ClientProfile[];
 
     const invoicableClients = new Set(
       (clientProfiles || [])
-        .filter((p: ClientProfile) => p.auto_alert_enabled)
-        .map((p: ClientProfile) => p.client_name)
+        .filter((p) => p.auto_alert_enabled === 1)
+        .map((p) => p.cliente)
     );
 
+    console.log(`Found ${invoicableClients.size} invoicable clients`);
+
     // Get containers with exceeded free time that don't have pre-invoices yet
-    const { data: containers, error: containersError } = await supabase
-      .from('containers')
-      .select(`
-        id,
-        numero,
-        tipo_conteiner,
-        excedente_dias,
-        expected_cost_usd,
-        free_time_end_date,
-        ft_started_at,
-        shipments (
-          id,
-          master,
-          cliente,
-          armador,
-          porto_origem,
-          porto_destino,
-          data_atracacao
-        )
-      `)
-      .eq('risk_status', 'exceeded')
-      .gt('excedente_dias', 0);
+    const containers = await client.query(`
+      SELECT 
+        id, numero, mbl, tipo_conteiner, excedente_dias, expected_cost_usd,
+        free_time_end_date, free_time_days, ft_started_at, cliente, armador,
+        navio, voyage, porto_origem, porto_destino, data_atracacao,
+        rate_usd_per_day, pre_invoice_number
+      FROM dados_dachser.t_dachser_demurrage_containers
+      WHERE active = 1 
+        AND risk_status IN ('exceeded', 'critical')
+        AND excedente_dias > 0
+        AND (pre_invoice_number IS NULL OR pre_invoice_number = '')
+      ORDER BY cliente, mbl
+    `) as Container[];
 
-    if (containersError) {
-      throw new Error(`Error fetching containers: ${containersError.message}`);
-    }
-
-    const containerList = (containers || []) as unknown as Container[];
-    console.log(`Found ${containerList.length} containers with exceeded free time`);
-
-    // Get existing pre-invoice items to avoid duplicates
-    const containerIds = containerList.map(c => c.id);
-    const { data: existingItems } = await supabase
-      .from('pre_invoice_items')
-      .select('container_id')
-      .in('container_id', containerIds);
-
-    const alreadyInvoiced = new Set((existingItems || []).map(item => item.container_id));
+    console.log(`Found ${containers.length} containers with exceeded free time without pre-invoice`);
 
     // Get demurrage rates for calculations
-    const { data: rates } = await supabase
-      .from('demurrage_rates')
-      .select('container_type, container_subtype, free_time_days, period_type, period_start_day, period_end_day, rate_usd')
-      .eq('active', true);
+    const rates = await client.query(`
+      SELECT armador, container_type, free_time_days, period_type, 
+             period_start_day, period_end_day, rate_usd
+      FROM dados_dachser.t_dachser_demurrage_rates
+      WHERE active = 1
+    `) as DemurrageRate[];
 
-    const ratesList = (rates || []) as DemurrageRate[];
+    console.log(`Loaded ${rates.length} demurrage rates`);
 
     const results = {
-      total_containers: containerList.length,
-      already_invoiced: 0,
+      total_containers: containers.length,
       client_not_invoicable: 0,
       invoices_created: 0,
       items_created: 0,
+      containers_updated: 0,
       errors: 0,
     };
 
-    // Group containers by shipment for invoice creation
-    const containersByShipment: Record<string, Container[]> = {};
+    // Group containers by MBL for invoice creation
+    const containersByMbl: Record<string, Container[]> = {};
 
-    for (const container of containerList) {
-      // Skip if already invoiced
-      if (alreadyInvoiced.has(container.id)) {
-        results.already_invoiced++;
-        continue;
-      }
-
+    for (const container of containers) {
       // Check if client is invoicable (if profile exists and auto_alert_enabled)
-      const clientName = container.shipments?.cliente;
-      if (clientName && clientProfiles && clientProfiles.length > 0) {
-        // If client has a profile, check if they should be invoiced
-        const hasProfile = clientProfiles.some((p: ClientProfile) => p.client_name === clientName);
+      const clientName = container.cliente;
+      if (clientName && clientProfiles.length > 0) {
+        const hasProfile = clientProfiles.some((p) => p.cliente === clientName);
         if (hasProfile && !invoicableClients.has(clientName)) {
           results.client_not_invoicable++;
           console.log(`Skipping ${container.numero} - client ${clientName} not configured for invoicing`);
@@ -142,43 +134,49 @@ serve(async (req) => {
         }
       }
 
-      const shipmentId = container.shipments?.id || 'no_shipment';
-      if (!containersByShipment[shipmentId]) {
-        containersByShipment[shipmentId] = [];
+      const mblKey = container.mbl || 'no_mbl';
+      if (!containersByMbl[mblKey]) {
+        containersByMbl[mblKey] = [];
       }
-      containersByShipment[shipmentId].push(container);
+      containersByMbl[mblKey].push(container);
     }
 
-    // Create pre-invoices for each shipment group
-    for (const [shipmentId, shipmentContainers] of Object.entries(containersByShipment)) {
-      try {
-        const firstContainer = shipmentContainers[0];
-        const shipment = firstContainer.shipments;
+    console.log(`Grouped into ${Object.keys(containersByMbl).length} MBL groups`);
 
-        if (!shipment) {
-          console.warn(`No shipment info for containers in group ${shipmentId}`);
-          continue;
-        }
+    // Create pre-invoices for each MBL group
+    for (const [mblKey, mblContainers] of Object.entries(containersByMbl)) {
+      try {
+        const firstContainer = mblContainers[0];
 
         // Calculate totals
         let totalUsd = 0;
         const invoiceItems: any[] = [];
 
-        for (const container of shipmentContainers) {
+        for (const container of mblContainers) {
           const cost = container.expected_cost_usd || 0;
           totalUsd += cost;
 
-          // Get rate info for this container type
+          // Get rate info for this container type and armador
           const containerType = container.tipo_conteiner || '40DV';
-          const applicableRates = ratesList.filter(r => r.container_type === containerType);
-          const freeTimeDays = applicableRates[0]?.free_time_days || 5;
-          const dailyRate = applicableRates.find(r => r.period_type !== 'free_period')?.rate_usd || 150;
+          const armador = container.armador || 'DEFAULT';
+          
+          // Find applicable rate
+          let dailyRate = container.rate_usd_per_day;
+          if (!dailyRate) {
+            const applicableRate = rates.find(r => 
+              (r.armador === armador || r.armador === 'DEFAULT') && 
+              r.container_type === containerType &&
+              r.period_type !== 'free_period'
+            );
+            dailyRate = applicableRate?.rate_usd || 150;
+          }
+
+          const freeTimeDays = container.free_time_days || 14;
 
           invoiceItems.push({
             container_id: container.id,
             container_number: container.numero,
             container_type: containerType,
-            container_subtype: null,
             free_time_days: freeTimeDays,
             period_start_date: container.free_time_end_date,
             period_end_date: new Date().toISOString().split('T')[0],
@@ -190,65 +188,102 @@ serve(async (req) => {
         }
 
         // Generate invoice number
-        const invoiceNumber = `PRE-${Date.now().toString(36).toUpperCase()}`;
+        const invoiceNumber = `PRE-${Date.now().toString(36).toUpperCase()}-${mblKey.substring(0, 8).toUpperCase()}`;
 
-        // Create pre-invoice
-        const { data: newInvoice, error: invoiceError } = await supabase
-          .from('pre_invoices')
-          .insert({
-            shipment_id: shipmentId === 'no_shipment' ? null : shipmentId,
-            invoice_number: invoiceNumber,
-            client_name: shipment.cliente,
-            bl_number: shipment.master,
-            vessel_name: null,
-            voyage_number: null,
-            origin_port: shipment.porto_origem,
-            destination_port: shipment.porto_destino,
-            arrival_date: shipment.data_atracacao || new Date().toISOString().split('T')[0],
-            issue_date: new Date().toISOString().split('T')[0],
-            due_date: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-            total_usd: totalUsd,
-            total_brl: totalUsd * 6.16, // Default exchange rate
-            status: 'pending',
-            workflow_status: 'calculated',
-            financial_status: 'PENDING',
-          })
-          .select('id')
-          .single();
+        // Format dates for MariaDB
+        const today = new Date().toISOString().split('T')[0];
+        const dueDate = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+        const arrivalDate = firstContainer.data_atracacao 
+          ? new Date(firstContainer.data_atracacao).toISOString().split('T')[0]
+          : today;
 
-        if (invoiceError) {
-          console.error(`Error creating invoice:`, invoiceError);
+        // Create pre-invoice in MariaDB
+        await client.execute(`
+          INSERT INTO dados_dachser.t_dachser_demurrage_pre_invoices (
+            invoice_number, shipment_mbl, client_name, bl_number, vessel_name, voyage_number,
+            origin_port, destination_port, arrival_date, issue_date, due_date,
+            total_usd, total_brl, exchange_rate, status, workflow_status, financial_status,
+            created_by
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `, [
+          invoiceNumber,
+          mblKey === 'no_mbl' ? null : mblKey,
+          firstContainer.cliente || null,
+          mblKey === 'no_mbl' ? null : mblKey,
+          firstContainer.navio || null,
+          firstContainer.voyage || null,
+          firstContainer.porto_origem || null,
+          firstContainer.porto_destino || null,
+          arrivalDate,
+          today,
+          dueDate,
+          totalUsd,
+          totalUsd * 6.16, // Default exchange rate
+          6.16,
+          'pending',
+          'calculated',
+          'PENDING',
+          'auto-invoice-cron'
+        ]);
+
+        // Get the inserted pre-invoice ID
+        const lastIdResult = await client.query('SELECT LAST_INSERT_ID() as id');
+        const preInvoiceId = lastIdResult?.[0]?.id;
+
+        if (!preInvoiceId) {
+          console.error(`Could not get pre-invoice ID for ${invoiceNumber}`);
           results.errors++;
           continue;
         }
 
         results.invoices_created++;
-        console.log(`Created pre-invoice ${invoiceNumber} for ${shipment.cliente}`);
+        console.log(`✓ Created pre-invoice ${invoiceNumber} for ${firstContainer.cliente} with ${mblContainers.length} containers, total: $${totalUsd.toFixed(2)}`);
 
         // Create invoice items
-        const itemsWithInvoiceId = invoiceItems.map(item => ({
-          ...item,
-          pre_invoice_id: newInvoice.id,
-        }));
-
-        const { error: itemsError } = await supabase
-          .from('pre_invoice_items')
-          .insert(itemsWithInvoiceId);
-
-        if (itemsError) {
-          console.error(`Error creating invoice items:`, itemsError);
-        } else {
-          results.items_created += itemsWithInvoiceId.length;
+        for (const item of invoiceItems) {
+          await client.execute(`
+            INSERT INTO dados_dachser.t_dachser_demurrage_pre_invoice_items (
+              pre_invoice_id, container_id, container_number, container_type,
+              free_time_days, period_start_date, period_end_date, days_count,
+              daily_rate_usd, total_usd, period_type
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          `, [
+            preInvoiceId,
+            item.container_id,
+            item.container_number,
+            item.container_type,
+            item.free_time_days,
+            item.period_start_date,
+            item.period_end_date,
+            item.days_count,
+            item.daily_rate_usd,
+            item.total_usd,
+            item.period_type
+          ]);
+          results.items_created++;
         }
 
+        // Update containers with pre-invoice number
+        const containerIds = mblContainers.map(c => c.id);
+        await client.execute(`
+          UPDATE dados_dachser.t_dachser_demurrage_containers
+          SET pre_invoice_number = ?, pre_invoice_status = 'GERADO', updated_at = NOW()
+          WHERE id IN (${containerIds.join(',')})
+        `, [invoiceNumber]);
+        
+        results.containers_updated += containerIds.length;
+
       } catch (groupError) {
-        console.error(`Error processing shipment group:`, groupError);
+        console.error(`Error processing MBL group ${mblKey}:`, groupError);
         results.errors++;
       }
     }
 
+    await client.close();
+    console.log("✓ MariaDB connection closed");
+
     console.log("=== Auto-Invoice Generation Complete ===");
-    console.log(`Results: ${JSON.stringify(results)}`);
+    console.log(`Results: ${JSON.stringify(results, null, 2)}`);
 
     return new Response(
       JSON.stringify({
@@ -261,6 +296,9 @@ serve(async (req) => {
 
   } catch (error) {
     console.error("Auto-invoice error:", error);
+    if (client) {
+      try { await client.close(); } catch {}
+    }
     return new Response(
       JSON.stringify({
         success: false,
