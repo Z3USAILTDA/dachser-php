@@ -48,7 +48,7 @@ export function ContainerDetailsSheet({
 
   const handleViewTracking = () => {
     if (container.mbl) {
-      navigate(`/sea/container-tracking?mbl=${encodeURIComponent(container.mbl)}`);
+      navigate(`/sea/tracking?mbl=${encodeURIComponent(container.mbl)}`);
       onOpenChange(false);
     }
   };
