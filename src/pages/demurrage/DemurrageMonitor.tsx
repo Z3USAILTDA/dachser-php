@@ -19,10 +19,12 @@ import {
   FileSpreadsheet,
   Ship,
   TrendingUp,
-  Plus
+  Plus,
+  Loader2
 } from "lucide-react";
 import { toast } from "sonner";
 import { useDemurrageData, useDemurrageStats, useSyncDemurrage, useRecalcDemurrage, type DemurrageContainer, type DemurrageFilters } from "@/hooks/useDemurrageData";
+import { exportDemurrageToExcel } from "@/utils/demurrageExcelExport";
 
 type QuickFilter = "all" | "in_transit" | "at_risk" | "delivered";
 const PAGE_SIZE = 15;
@@ -32,6 +34,7 @@ export default function DemurrageMonitor() {
   const [filterStatus, setFilterStatus] = useState<string>("all");
   const [quickFilter, setQuickFilter] = useState<QuickFilter>("all");
   const [currentPage, setCurrentPage] = useState(1);
+  const [isExporting, setIsExporting] = useState(false);
   
   // Sheet and dialog states
   const [selectedContainer, setSelectedContainer] = useState<DemurrageContainer | null>(null);
@@ -117,6 +120,24 @@ export default function DemurrageMonitor() {
     }
   };
 
+  const handleExport = async () => {
+    if (filteredContainers.length === 0) {
+      toast.error("Não há dados para exportar");
+      return;
+    }
+    
+    setIsExporting(true);
+    try {
+      const fileName = exportDemurrageToExcel(filteredContainers);
+      toast.success(`Exportado: ${fileName}`);
+    } catch (error) {
+      console.error("Export error:", error);
+      toast.error("Erro ao exportar dados");
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
   const getRiskBadge = (status: string) => {
     switch (status) {
       case 'safe':
@@ -181,8 +202,17 @@ export default function DemurrageMonitor() {
         <Plus className="h-4 w-4 mr-2" />
         Registrar Free Time
       </Button>
-      <Button variant="outline" className="bg-[rgba(0,0,0,0.7)] border-[rgba(255,255,255,0.25)] text-[#aaaaaa] hover:text-white hover:bg-[rgba(0,0,0,0.9)]">
-        <FileSpreadsheet className="h-4 w-4 mr-2" />
+      <Button 
+        variant="outline" 
+        className="bg-[rgba(0,0,0,0.7)] border-[rgba(255,255,255,0.25)] text-[#aaaaaa] hover:text-white hover:bg-[rgba(0,0,0,0.9)]"
+        onClick={handleExport}
+        disabled={isExporting || filteredContainers.length === 0}
+      >
+        {isExporting ? (
+          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+        ) : (
+          <FileSpreadsheet className="h-4 w-4 mr-2" />
+        )}
         Exportar
       </Button>
     </div>
