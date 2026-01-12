@@ -17,9 +17,11 @@ import {
   Anchor,
   MapPin,
   Navigation,
-  History
+  History,
+  Loader2
 } from "lucide-react";
 import type { DemurrageContainer } from "@/hooks/useDemurrageData";
+import { useDemurrageContainerEvents } from "@/hooks/useDemurrageData";
 import { format, parseISO } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { ContainerTimeline } from "./ContainerTimeline";
@@ -36,6 +38,11 @@ export function ContainerDetailsSheet({
   onOpenChange
 }: ContainerDetailsSheetProps) {
   const navigate = useNavigate();
+  
+  // Fetch container events when the sheet opens
+  const { data: containerEvents = [], isLoading: eventsLoading } = useDemurrageContainerEvents(
+    open && container?.numero ? container.numero : null
+  );
 
   if (!container) return null;
 
@@ -252,11 +259,18 @@ export function ContainerDetailsSheet({
           </TabsContent>
 
           <TabsContent value="timeline" className="mt-4">
-            <ContainerTimeline 
-              events={(container as any).events || []}
-              freeTimeStart={container.ft_started_at}
-              freeTimeEnd={container.free_time_end_date}
-            />
+            {eventsLoading ? (
+              <div className="flex items-center justify-center py-8">
+                <Loader2 className="h-6 w-6 animate-spin text-[#ffc800]" />
+                <span className="ml-2 text-muted-foreground">Carregando timeline...</span>
+              </div>
+            ) : (
+              <ContainerTimeline 
+                events={containerEvents}
+                freeTimeStart={container.ft_started_at}
+                freeTimeEnd={container.free_time_end_date}
+              />
+            )}
           </TabsContent>
         </Tabs>
       </SheetContent>

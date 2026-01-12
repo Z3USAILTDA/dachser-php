@@ -349,3 +349,40 @@ export function useDemurrageArmadores() {
     },
   });
 }
+
+export interface ContainerEvent {
+  id: number;
+  mbl_id: string;
+  container: string;
+  event_code: string;
+  event_description: string | null;
+  event_datetime: string | null;
+  location: string | null;
+  vessel_name: string | null;
+  voyage: string | null;
+  container_status: string | null;
+  eta: string | null;
+  source: string;
+  created_at: string;
+}
+
+export function useDemurrageContainerEvents(containerNumber: string | null) {
+  return useQuery({
+    queryKey: ['demurrage_container_events', containerNumber],
+    queryFn: async () => {
+      if (!containerNumber) return [];
+
+      const { data, error } = await supabase.functions.invoke('mariadb-proxy', {
+        body: {
+          action: 'demurrage_get_container_events',
+          container_number: containerNumber,
+        }
+      });
+
+      if (error) throw error;
+      if (!data.success) throw new Error(data.error || 'Failed to fetch container events');
+      return (data.data || []) as ContainerEvent[];
+    },
+    enabled: !!containerNumber,
+  });
+}

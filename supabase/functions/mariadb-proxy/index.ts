@@ -7518,6 +7518,54 @@ serve(async (req) => {
         break;
       }
 
+      case 'demurrage_get_container_events': {
+        const { container_number, mbl_id, limit: evtLimit = 50 } = body as any;
+        console.log('Fetching container events:', { container_number, mbl_id });
+
+        if (!container_number && !mbl_id) {
+          return new Response(
+            JSON.stringify({ error: 'container_number ou mbl_id é obrigatório' }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+
+        const evtWhereConditions: string[] = [];
+        const evtParams: (string | number)[] = [];
+
+        if (container_number) {
+          evtWhereConditions.push('container = ?');
+          evtParams.push(container_number);
+        }
+        if (mbl_id) {
+          evtWhereConditions.push('mbl_id = ?');
+          evtParams.push(mbl_id);
+        }
+
+        const containerEvents = await client.query(`
+          SELECT 
+            id,
+            mbl_id,
+            container,
+            event_code,
+            event_description,
+            event_datetime,
+            location,
+            vessel_name,
+            voyage,
+            container_status,
+            eta,
+            source,
+            created_at
+          FROM dados_dachser.t_tracking_sea_history
+          WHERE ${evtWhereConditions.join(' AND ')}
+          ORDER BY event_datetime DESC, created_at DESC
+          LIMIT ?
+        `, [...evtParams, evtLimit]);
+
+        result = { success: true, data: containerEvents || [] };
+        break;
+      }
+
       case 'demurrage_get_settings': {
         console.log('Fetching demurrage settings');
 
