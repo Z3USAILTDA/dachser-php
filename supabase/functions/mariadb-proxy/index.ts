@@ -610,6 +610,15 @@ serve(async (req) => {
         break;
       }
 
+      case 'get_metric_users': {
+        const usersResult = await client.query(
+          `SELECT DISTINCT username FROM ai_agente.t_dachser_usage_logs ORDER BY username ASC`
+        );
+        const users = usersResult.map((row: { username: string }) => row.username);
+        result = { success: true, users };
+        break;
+      }
+
       // ==================== RULE MATRIX ====================
       case 'get_rule_matrices': {
         const { customer, isActive } = body;
