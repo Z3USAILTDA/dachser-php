@@ -3288,11 +3288,13 @@ serve(async (req) => {
       // Mapping MBL prefixes to shipping line codes for API
       const MBL_PREFIX_TO_SHIPPING_LINE: Record<string, string> = {
         'COSU': 'COSCO', 'CSNU': 'COSCO', 'CBHU': 'COSCO', 'OOLU': 'COSCO',
-        'HLCU': 'HAPAG_LLOYD', 'HLXU': 'HAPAG_LLOYD',
+        // Hapag-Lloyd - all possible formats
+        'HLCU': 'HAPAG_LLOYD', 'HLXU': 'HAPAG_LLOYD', 'HLCS': 'HAPAG_LLOYD',
+        'SAHL': 'HAPAG_LLOYD', // South Africa prefix
         'MAEU': 'MAERSK', 'MRKU': 'MAERSK', 'MSKU': 'MAERSK',
         'MSCU': 'MSC', 'MEDU': 'MSC',
         'CMAU': 'CMA_CGM', 'CCLU': 'CMA_CGM', 'CXDU': 'CMA_CGM',
-        'ONEY': 'ONE', 'ONEU': 'ONE',
+        'ONEY': 'ONE', 'ONEU': 'ONE', 'ONEYHAMA': 'ONE', 'ONEYHAM': 'ONE',
         'HDMU': 'HMM', 'HMMU': 'HMM',
         'EISU': 'EVERGREEN', 'EITU': 'EVERGREEN', 'EGSU': 'EVERGREEN', 'EGHU': 'EVERGREEN', 'EBKG': 'EVERGREEN',
         'YMLU': 'YANG_MING', 'YMMU': 'YANG_MING',
@@ -3300,10 +3302,49 @@ serve(async (req) => {
         'GLNL': 'HAPAG_LLOYD', 'GLSL': 'CMA_CGM',
       };
 
+      // Normalize MBL to try alternative formats for API calls
+      const getMblVariations = (mblId: string): string[] => {
+        const variations = [mblId];
+        const upperMbl = mblId.toUpperCase();
+        
+        // Hapag-Lloyd: HLCUSS* -> try HLCU* (remove SS)
+        if (upperMbl.startsWith('HLCUSS')) {
+          variations.push(upperMbl.replace('HLCUSS', 'HLCU'));
+        }
+        // Hapag-Lloyd: HLCUHAM* -> try HLCU* (remove HAM port code)
+        if (upperMbl.startsWith('HLCUHAM')) {
+          variations.push(upperMbl.replace('HLCUHAM', 'HLCU'));
+        }
+        // ONE: ONEYHAMFA* -> try ONEYHAMA* and ONEY*
+        if (upperMbl.startsWith('ONEYHAMFA')) {
+          variations.push(upperMbl.replace('ONEYHAMFA', 'ONEYHAMA'));
+          variations.push(upperMbl.replace('ONEYHAMFA', 'ONEY'));
+        }
+        if (upperMbl.startsWith('ONEYHAMA')) {
+          variations.push(upperMbl.replace('ONEYHAMA', 'ONEY'));
+        }
+        
+        return [...new Set(variations)]; // Remove duplicates
+      };
+
       const detectShippingLineFromMbl = (mblId: string): string | null => {
         if (!mblId) return null;
-        const prefix = mblId.substring(0, 4).toUpperCase();
-        return MBL_PREFIX_TO_SHIPPING_LINE[prefix] || null;
+        const upperMbl = mblId.toUpperCase();
+        
+        // Try exact 4-char prefix first
+        const prefix4 = upperMbl.substring(0, 4);
+        if (MBL_PREFIX_TO_SHIPPING_LINE[prefix4]) {
+          return MBL_PREFIX_TO_SHIPPING_LINE[prefix4];
+        }
+        
+        // Try longer prefixes for special cases like ONEYHAMA
+        for (const prefix of Object.keys(MBL_PREFIX_TO_SHIPPING_LINE)) {
+          if (upperMbl.startsWith(prefix)) {
+            return MBL_PREFIX_TO_SHIPPING_LINE[prefix];
+          }
+        }
+        
+        return null;
       };
 
       const { Client } = await import("https://deno.land/x/mysql@v2.12.1/mod.ts");
@@ -3400,24 +3441,53 @@ serve(async (req) => {
           }
 
           try {
-            // Call JsonCargo API to get containers for this MBL
-            const apiRes = await jcJson(
-              `http://api.jsoncargo.com/api/v1/containers/bol/${encodeURIComponent(mblId)}`,
-              { shipping_line: shippingLine }
-            );
+            // Try different MBL format variations
+            const mblVariations = getMblVariations(mblId);
+            let containers: string[] = [];
+            let successVariation = mblId;
+            let lastApiError: string | null = null;
+            
+            console.log(`[enrich_sea_containers] Trying ${mblVariations.length} variations for MBL ${mblId}: ${mblVariations.join(', ')}`);
+            
+            for (const mblVariation of mblVariations) {
+              // Call JsonCargo API to get containers for this MBL variation
+              const apiRes = await jcJson(
+                `http://api.jsoncargo.com/api/v1/containers/bol/${encodeURIComponent(mblVariation)}`,
+                { shipping_line: shippingLine }
+              );
 
-            if (apiRes.__curl_error) {
-              console.log(`[enrich_sea_containers] API error for MBL ${mblId}: ${apiRes.__curl_error}`);
-              details.push({ mbl: mblId, status: 'api_error', error: apiRes.__curl_error });
+              if (apiRes.__curl_error) {
+                console.log(`[enrich_sea_containers] API error for MBL variation ${mblVariation}: ${apiRes.__curl_error}`);
+                lastApiError = apiRes.__curl_error;
+                continue; // Try next variation
+              }
+
+              const data = apiRes.data || apiRes;
+              const foundContainers = data.associated_container_numbers || [];
+              
+              console.log(`[enrich_sea_containers] API response for ${mblVariation}: ${JSON.stringify(data).substring(0, 300)}`);
+              
+              if (foundContainers.length > 0) {
+                containers = foundContainers;
+                successVariation = mblVariation;
+                console.log(`[enrich_sea_containers] Success with variation ${mblVariation}: found ${containers.length} containers`);
+                break; // Found containers, stop trying variations
+              }
+              
+              // Wait before trying next variation
+              await new Promise(r => setTimeout(r, 300));
+            }
+            
+            // If all variations failed with API error
+            if (containers.length === 0 && lastApiError) {
+              console.log(`[enrich_sea_containers] All variations failed for MBL ${mblId}: ${lastApiError}`);
+              details.push({ mbl: mblId, status: 'api_error', error: lastApiError, variations_tried: mblVariations.length });
               errors++;
               continue;
             }
 
-            const data = apiRes.data || apiRes;
-            const containers = data.associated_container_numbers || [];
-
             if (containers.length === 0) {
-              console.log(`[enrich_sea_containers] No containers found for MBL ${mblId}`);
+              console.log(`[enrich_sea_containers] No containers found for MBL ${mblId} after trying ${mblVariations.length} variations`);
               // Marcar como NAO_ENCONTRADO para não reprocessar
               await client.execute(`
                 UPDATE dados_dachser.t_tracking_sea 
