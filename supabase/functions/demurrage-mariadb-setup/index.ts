@@ -198,6 +198,25 @@ serve(async (req) => {
     `);
     console.log("✓ Inserted default settings");
 
+    // Create client profiles table
+    console.log("Creating t_dachser_demurrage_client_profiles table...");
+    await client.execute(`
+      CREATE TABLE IF NOT EXISTS dados_dachser.t_dachser_demurrage_client_profiles (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        cliente VARCHAR(255) NOT NULL,
+        auto_alert_enabled TINYINT(1) DEFAULT 1,
+        alert_days_before INT DEFAULT 3,
+        report_frequency VARCHAR(30) DEFAULT 'WEEKLY',
+        contact_emails JSON DEFAULT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        UNIQUE KEY unique_cliente (cliente),
+        INDEX idx_cliente (cliente),
+        INDEX idx_auto_alert (auto_alert_enabled)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    `);
+    console.log("✓ Created t_dachser_demurrage_client_profiles table");
+
     // Insert some sample rates for common armadores
     console.log("Inserting sample demurrage rates...");
     await client.execute(`
@@ -243,7 +262,8 @@ serve(async (req) => {
         tables: [
           "t_dachser_demurrage_containers",
           "t_dachser_demurrage_rates",
-          "t_dachser_demurrage_settings"
+          "t_dachser_demurrage_settings",
+          "t_dachser_demurrage_client_profiles"
         ],
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
