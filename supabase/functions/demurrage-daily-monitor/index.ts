@@ -1,19 +1,43 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2.78.0";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-interface Container {
-  id: string;
-  numero: string;
-  updated_at: string | null;
-  risk_status: string | null;
-  shipments: {
-    armador: string;
-  } | null;
+async function callMariaDBProxy(action: string, params: Record<string, any> = {}): Promise<any> {
+  const SUPABASE_URL = Deno.env.get("SUPABASE_URL");
+  const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+
+  const response = await fetch(`${SUPABASE_URL}/functions/v1/mariadb-proxy`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
+    },
+    body: JSON.stringify({ action, ...params }),
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`MariaDB proxy error: ${response.status} - ${errorText}`);
+  }
+
+  return response.json();
+}
+
+async function callEdgeFunction(functionName: string, body: Record<string, any> = {}): Promise<Response> {
+  const SUPABASE_URL = Deno.env.get("SUPABASE_URL");
+  const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+
+  return fetch(`${SUPABASE_URL}/functions/v1/${functionName}`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
+    },
+    body: JSON.stringify(body),
+  });
 }
 
 serve(async (req) => {
@@ -26,43 +50,30 @@ serve(async (req) => {
   console.log(`Execution time: ${new Date().toISOString()}`);
 
   try {
-    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-    const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-    const supabase = createClient(supabaseUrl, supabaseKey);
+    // Step 1: Get all active containers from MariaDB (not returned)
+    const containersResponse = await callMariaDBProxy('demurrage_list', {
+      filters: { data_devolucao: null },
+      limit: 1000
+    });
 
-    // Step 1: Get all active containers (not returned)
-    const { data: containers, error: containersError } = await supabase
-      .from('containers')
-      .select(`
-        id,
-        numero,
-        updated_at,
-        risk_status,
-        shipments (armador)
-      `)
-      .is('data_devolucao', null)
-      .not('ft_started_at', 'is', null);
-
-    if (containersError) {
-      throw new Error(`Error fetching containers: ${containersError.message}`);
-    }
-
-    const containerList = (containers || []) as unknown as Container[];
-    console.log(`Found ${containerList.length} active containers to monitor`);
+    const containers = containersResponse.data || [];
+    console.log(`Found ${containers.length} active containers to monitor`);
 
     const results = {
-      total: containerList.length,
+      total: containers.length,
       updated_via_api: 0,
       not_updated_24h: 0,
       api_errors: 0,
       demurrage_recalculated: false,
+      pre_invoices_generated: false,
+      alerts_sent: false,
     };
 
     // Step 2: Identify containers not updated in 24h
     const now = new Date();
     const twentyFourHoursAgo = new Date(now.getTime() - 24 * 60 * 60 * 1000);
 
-    const outdatedContainers = containerList.filter(c => {
+    const outdatedContainers = containers.filter((c: any) => {
       if (!c.updated_at) return true;
       const lastUpdate = new Date(c.updated_at);
       return lastUpdate < twentyFourHoursAgo;
@@ -73,62 +84,67 @@ serve(async (req) => {
 
     // Step 3: Update containers via JSON Cargo API (using fetch-timelines)
     console.log("Fetching container timelines...");
-    const timelineResponse = await fetch(`${supabaseUrl}/functions/v1/demurrage-fetch-timelines`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${supabaseKey}`,
-      },
-      body: JSON.stringify({ limit: 100 }),
-    });
+    try {
+      const timelineResponse = await callEdgeFunction('demurrage-fetch-timelines', { limit: 100 });
 
-    if (timelineResponse.ok) {
-      const timelineData = await timelineResponse.json();
-      results.updated_via_api = timelineData.processed || 0;
-      results.api_errors = timelineData.errors || 0;
-      console.log(`Timeline fetch: ${results.updated_via_api} updated, ${results.api_errors} errors`);
-    } else {
-      console.error("Failed to fetch timelines");
+      if (timelineResponse.ok) {
+        const timelineData = await timelineResponse.json();
+        results.updated_via_api = timelineData.processed || 0;
+        results.api_errors = timelineData.errors || 0;
+        console.log(`Timeline fetch: ${results.updated_via_api} updated, ${results.api_errors} errors`);
+      } else {
+        console.error("Failed to fetch timelines:", await timelineResponse.text());
+      }
+    } catch (e) {
+      console.error("Error fetching timelines:", e);
     }
 
     // Step 4: Recalculate demurrage for all containers
     console.log("Recalculating demurrage...");
-    const recalcResponse = await fetch(`${supabaseUrl}/functions/v1/demurrage-recalc`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${supabaseKey}`,
-      },
-      body: JSON.stringify({}),
-    });
+    try {
+      const recalcResponse = await callEdgeFunction('demurrage-recalc', {});
 
-    if (recalcResponse.ok) {
-      results.demurrage_recalculated = true;
-      console.log("Demurrage recalculated successfully");
-    } else {
-      console.error("Failed to recalculate demurrage");
+      if (recalcResponse.ok) {
+        results.demurrage_recalculated = true;
+        console.log("Demurrage recalculated successfully");
+      } else {
+        console.error("Failed to recalculate demurrage:", await recalcResponse.text());
+      }
+    } catch (e) {
+      console.error("Error recalculating demurrage:", e);
     }
 
     // Step 5: Call auto-invoice to generate pre-invoices for exceeded containers
     console.log("Checking for auto-invoice generation...");
-    await fetch(`${supabaseUrl}/functions/v1/demurrage-auto-invoice`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${supabaseKey}`,
-      },
-      body: JSON.stringify({}),
-    });
+    try {
+      const invoiceResponse = await callEdgeFunction('demurrage-auto-invoice', {});
+
+      if (invoiceResponse.ok) {
+        const invoiceData = await invoiceResponse.json();
+        results.pre_invoices_generated = invoiceData.invoices_created > 0;
+        console.log(`Pre-invoices generated: ${invoiceData.invoices_created || 0}`);
+      } else {
+        console.error("Failed to generate pre-invoices:", await invoiceResponse.text());
+      }
+    } catch (e) {
+      console.error("Error generating pre-invoices:", e);
+    }
 
     // Step 6: Trigger demurrage alerts
     console.log("Triggering demurrage alerts...");
-    await fetch(`${supabaseUrl}/functions/v1/demurrage-alert-cron`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${supabaseKey}`,
-      },
-    });
+    try {
+      const alertResponse = await callEdgeFunction('demurrage-alert-cron', {});
+
+      if (alertResponse.ok) {
+        const alertData = await alertResponse.json();
+        results.alerts_sent = alertData.emailsSent > 0;
+        console.log(`Alerts sent: ${alertData.emailsSent || 0}`);
+      } else {
+        console.error("Failed to send alerts:", await alertResponse.text());
+      }
+    } catch (e) {
+      console.error("Error sending alerts:", e);
+    }
 
     const duration = Date.now() - startTime;
     console.log("=== Daily Monitor Cron Complete ===");
