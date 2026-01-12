@@ -13,6 +13,7 @@ import { TablePagination } from "@/components/layout/TablePagination";
 import { useDemurrageData, useUpdateDemurrageContainer } from "@/hooks/useDemurrageData";
 import { AuditCostDialog, AuditData } from "@/components/demurrage/AuditCostDialog";
 import { BulkAuditDialog } from "@/components/demurrage/BulkAuditDialog";
+import { NewInvoiceDialog } from "@/components/demurrage/NewInvoiceDialog";
 import { toast } from "sonner";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { exportDiscrepancyReport } from "@/utils/demurrageExcelExport";
@@ -27,8 +28,10 @@ export default function DemurrageCarrierCosts() {
   const [currentPage, setCurrentPage] = useState(1);
   const [auditDialogOpen, setAuditDialogOpen] = useState(false);
   const [bulkAuditDialogOpen, setBulkAuditDialogOpen] = useState(false);
+  const [newInvoiceDialogOpen, setNewInvoiceDialogOpen] = useState(false);
   const [selectedContainer, setSelectedContainer] = useState<typeof containers[0] | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
+  const [isSubmittingInvoice, setIsSubmittingInvoice] = useState(false);
 
   const { data: containers = [], isLoading } = useDemurrageData();
   const updateContainer = useUpdateDemurrageContainer();
@@ -265,7 +268,7 @@ export default function DemurrageCarrierCosts() {
         <FileWarning className="h-4 w-4 mr-2" />
         Exportar Discrepâncias ({discrepancyCount})
       </Button>
-      <Button className="bg-[#ffc800] text-black hover:bg-[#e6b400]">
+      <Button onClick={() => setNewInvoiceDialogOpen(true)} className="bg-[#ffc800] text-black hover:bg-[#e6b400]">
         <Plus className="h-4 w-4 mr-2" />
         Nova Fatura
       </Button>
@@ -452,6 +455,35 @@ export default function DemurrageCarrierCosts() {
         onOpenChange={setBulkAuditDialogOpen}
         containers={selectedContainers}
         onSuccess={handleBulkAuditSuccess}
+      />
+
+      <NewInvoiceDialog
+        open={newInvoiceDialogOpen}
+        onOpenChange={setNewInvoiceDialogOpen}
+        containers={containers}
+        isLoading={isSubmittingInvoice}
+        onSubmit={async (data) => {
+          setIsSubmittingInvoice(true);
+          try {
+            await updateContainer.mutateAsync({
+              containerId: data.containerId,
+              updates: {
+                armador_invoice_number: data.armador_invoice_number,
+                armador_cost_usd: data.armador_cost_usd,
+                armador_days_charged: data.armador_days_charged,
+                notes: data.notes || null,
+                audit_status: 'pending',
+              },
+            });
+            toast.success('Fatura registrada com sucesso!');
+            setNewInvoiceDialogOpen(false);
+          } catch (error) {
+            toast.error('Erro ao registrar fatura');
+            console.error(error);
+          } finally {
+            setIsSubmittingInvoice(false);
+          }
+        }}
       />
     </DemurrageLayout>
   );
