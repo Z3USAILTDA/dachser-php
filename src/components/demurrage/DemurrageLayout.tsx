@@ -1,6 +1,6 @@
 import { ReactNode } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
-import { ArrowLeft, Ship, Activity, DollarSign, FileText, Scale, Users, BarChart3, HelpCircle, RefreshCw, Clock } from "lucide-react";
+import { ArrowLeft, Ship, Activity, DollarSign, FileText, Scale, Users, BarChart3, HelpCircle, RefreshCw, Clock, Settings } from "lucide-react";
 import { cn } from "@/lib/utils";
 import dachserBg from "@/assets/dachser-background.jpg";
 
@@ -26,6 +26,7 @@ const navTabs = [
   { id: "disputes", label: "Disputas", icon: Scale, href: "/sea/demurrage/disputes" },
   { id: "clients", label: "Clientes", icon: Users, href: "/sea/demurrage/clients" },
   { id: "analytics", label: "Analytics", icon: BarChart3, href: "/sea/demurrage/analytics" },
+  { id: "settings", label: "Config", icon: Settings, href: "/sea/demurrage/settings" },
 ];
 
 export function DemurrageLayout({
@@ -52,6 +53,7 @@ export function DemurrageLayout({
     if (path.includes("disputes")) return "disputes";
     if (path.includes("clients")) return "clients";
     if (path.includes("analytics")) return "analytics";
+    if (path.includes("settings")) return "settings";
     return "monitor";
   };
 

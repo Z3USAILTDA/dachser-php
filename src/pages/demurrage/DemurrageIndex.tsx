@@ -2,7 +2,7 @@ import { useState } from "react";
 import { PageLayout } from "@/components/layout/PageLayout";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Ship, Activity, DollarSign, BarChart3, Scale, Users, FileText, Settings } from "lucide-react";
+import { Ship, Activity, DollarSign, BarChart3, Scale, Users, FileText, Settings, Clock } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 
 const modules = [
@@ -12,6 +12,13 @@ const modules = [
     icon: Activity, 
     description: "Monitoramento de containers em tempo real",
     href: "/sea/demurrage/monitor"
+  },
+  { 
+    id: "free-times", 
+    label: "Free Times", 
+    icon: Clock, 
+    description: "Gestão de free times por cliente e processo",
+    href: "/sea/demurrage/free-times"
   },
   { 
     id: "rates", 
