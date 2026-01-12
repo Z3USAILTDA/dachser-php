@@ -6179,6 +6179,113 @@ serve(async (req) => {
       }
     }
 
+    // ========== ACTION: REFRESH ALL VESSEL IMOS ==========
+    // Atualiza em lote as IMOs de todos os containers usando busca por nome do navio
+    if (action === 'refresh_all_vessel_imos') {
+      const mariadbHost = Deno.env.get('MARIADB_HOST');
+      const mariadbPort = Deno.env.get('MARIADB_PORT') || '3306';
+      const mariadbUser = Deno.env.get('MARIADB_USER');
+      const mariadbPass = Deno.env.get('MARIADB_PASSWORD');
+
+      if (!mariadbHost || !mariadbUser || !mariadbPass) {
+        return new Response(JSON.stringify({ error: 'MariaDB não configurado' }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      }
+
+      const { Client } = await import("https://deno.land/x/mysql@v2.12.1/mod.ts");
+      const client = await new Client().connect({
+        hostname: mariadbHost,
+        port: parseInt(mariadbPort, 10),
+        username: mariadbUser,
+        password: mariadbPass,
+        db: 'dados_dachser',
+      });
+
+      try {
+        console.log('[refresh_all_vessel_imos] Starting batch IMO refresh...');
+        
+        // Buscar todos os containers ativos com nome de navio
+        const rows = await client.query(`
+          SELECT DISTINCT id, container, navio, vessel_imo, mbl_id
+          FROM dados_dachser.t_tracking_sea 
+          WHERE active = 1 
+            AND navio IS NOT NULL 
+            AND navio != ''
+          ORDER BY last_check DESC
+        `);
+        
+        console.log(`[refresh_all_vessel_imos] Found ${rows.length} containers with vessel names`);
+        
+        let updated = 0;
+        let unchanged = 0;
+        let errors = 0;
+        const changes: any[] = [];
+        
+        // Processar em lotes para não sobrecarregar a API
+        for (const row of rows) {
+          const vesselName = row.navio;
+          const currentImo = row.vessel_imo;
+          
+          try {
+            // Buscar IMO pelo nome usando vessel/finder
+            const foundImo = await findVesselImo(vesselName);
+            
+            if (foundImo && foundImo !== currentImo) {
+              // Atualizar com nova IMO
+              await client.execute(`
+                UPDATE dados_dachser.t_tracking_sea 
+                SET vessel_imo = ?, updated_at = NOW()
+                WHERE id = ?
+              `, [foundImo, row.id]);
+              
+              updated++;
+              changes.push({
+                container: row.container,
+                mbl_id: row.mbl_id,
+                vessel: vesselName,
+                old_imo: currentImo,
+                new_imo: foundImo
+              });
+              
+              console.log(`[refresh_all_vessel_imos] Updated ${row.container}: ${currentImo} -> ${foundImo}`);
+            } else {
+              unchanged++;
+            }
+          } catch (e: any) {
+            errors++;
+            console.error(`[refresh_all_vessel_imos] Error processing ${row.container}:`, e.message);
+          }
+          
+          // Pequeno delay para não sobrecarregar a API
+          await new Promise(resolve => setTimeout(resolve, 100));
+        }
+        
+        await client.close();
+        
+        console.log(`[refresh_all_vessel_imos] Complete: ${updated} updated, ${unchanged} unchanged, ${errors} errors`);
+        
+        return new Response(JSON.stringify({
+          success: true,
+          total: rows.length,
+          updated,
+          unchanged,
+          errors,
+          changes: changes.slice(0, 50) // Limitar a 50 mudanças no response
+        }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+        
+      } catch (e: any) {
+        await client.close();
+        console.error('[refresh_all_vessel_imos] Error:', e);
+        return new Response(JSON.stringify({ error: e.message }), {
+          status: 500,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      }
+    }
+
     return new Response(JSON.stringify({ error: 'Ação não reconhecida' }), {
       status: 400,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' }
