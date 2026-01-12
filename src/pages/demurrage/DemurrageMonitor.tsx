@@ -2,6 +2,7 @@ import { useState, useMemo, useEffect } from "react";
 import { DemurrageLayout } from "@/components/demurrage/DemurrageLayout";
 import { KpiCard } from "@/components/demurrage/KpiCard";
 import { ContainerDetailsSheet } from "@/components/demurrage/ContainerDetailsSheet";
+import { ImportMblDialog } from "@/components/demurrage/ImportMblDialog";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -18,11 +19,14 @@ import {
   FileSpreadsheet,
   Ship,
   TrendingUp,
-  Loader2
+  Loader2,
+  Plus,
+  FileText
 } from "lucide-react";
 import { toast } from "sonner";
 import { useDemurrageData, useDemurrageStats, useSyncDemurrage, useRecalcDemurrage, type DemurrageContainer, type DemurrageFilters } from "@/hooks/useDemurrageData";
 import { exportDemurrageToExcel } from "@/utils/demurrageExcelExport";
+import { exportDemurrageReportPDF } from "@/utils/demurragePdfExport";
 
 type QuickFilter = "all" | "in_transit" | "at_risk" | "delivered";
 const PAGE_SIZE = 15;
@@ -33,6 +37,7 @@ export default function DemurrageMonitor() {
   const [quickFilter, setQuickFilter] = useState<QuickFilter>("all");
   const [currentPage, setCurrentPage] = useState(1);
   const [isExporting, setIsExporting] = useState(false);
+  const [importDialogOpen, setImportDialogOpen] = useState(false);
   
   // Sheet state
   const [selectedContainer, setSelectedContainer] = useState<DemurrageContainer | null>(null);
@@ -113,6 +118,19 @@ export default function DemurrageMonitor() {
     }
   };
 
+  const handleExportPDF = async () => {
+    if (filteredContainers.length === 0) {
+      toast.error("Não há dados para exportar");
+      return;
+    }
+    try {
+      const fileName = exportDemurrageReportPDF(filteredContainers);
+      toast.success(`PDF exportado: ${fileName}`);
+    } catch (error) {
+      toast.error("Erro ao exportar PDF");
+    }
+  };
+
   const getRiskBadge = (status: string) => {
     switch (status) {
       case 'safe':
@@ -169,19 +187,33 @@ export default function DemurrageMonitor() {
   };
 
   const rightActions = (
-    <Button 
-      variant="outline" 
-      className="bg-[rgba(0,0,0,0.7)] border-[rgba(255,255,255,0.25)] text-[#aaaaaa] hover:text-white hover:bg-[rgba(0,0,0,0.9)]"
-      onClick={handleExport}
-      disabled={isExporting || filteredContainers.length === 0}
-    >
-      {isExporting ? (
-        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-      ) : (
-        <FileSpreadsheet className="h-4 w-4 mr-2" />
-      )}
-      Exportar
-    </Button>
+    <div className="flex gap-2">
+      <Button 
+        variant="outline" 
+        className="bg-[rgba(0,0,0,0.7)] border-[rgba(255,255,255,0.25)] text-[#aaaaaa] hover:text-white hover:bg-[rgba(0,0,0,0.9)]"
+        onClick={handleExportPDF}
+        disabled={filteredContainers.length === 0}
+      >
+        <FileText className="h-4 w-4 mr-2" />
+        PDF
+      </Button>
+      <Button 
+        variant="outline" 
+        className="bg-[rgba(0,0,0,0.7)] border-[rgba(255,255,255,0.25)] text-[#aaaaaa] hover:text-white hover:bg-[rgba(0,0,0,0.9)]"
+        onClick={handleExport}
+        disabled={isExporting || filteredContainers.length === 0}
+      >
+        {isExporting ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <FileSpreadsheet className="h-4 w-4 mr-2" />}
+        Excel
+      </Button>
+      <Button 
+        className="bg-[#ffc800] text-black hover:bg-[#e6b400]"
+        onClick={() => setImportDialogOpen(true)}
+      >
+        <Plus className="h-4 w-4 mr-2" />
+        Importar MBL
+      </Button>
+    </div>
   );
 
   const customCards = (
@@ -341,6 +373,13 @@ export default function DemurrageMonitor() {
         container={selectedContainer}
         open={sheetOpen}
         onOpenChange={setSheetOpen}
+      />
+
+      {/* Import MBL Dialog */}
+      <ImportMblDialog
+        open={importDialogOpen}
+        onOpenChange={setImportDialogOpen}
+        onSuccess={() => refetch()}
       />
     </DemurrageLayout>
   );
