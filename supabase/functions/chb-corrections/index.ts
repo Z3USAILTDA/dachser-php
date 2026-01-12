@@ -1,33 +1,21 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { Client } from "https://deno.land/x/mysql@v2.12.1/mod.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-// Helper to call MariaDB proxy
-async function callMariaDBProxy(action: string, params: Record<string, any> = {}): Promise<any> {
-  const supabaseUrl = Deno.env.get('SUPABASE_URL');
-  const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
-  if (!supabaseUrl || !supabaseKey) {
-    throw new Error('Missing Supabase credentials');
-  }
-  
-  const response = await fetch(`${supabaseUrl}/functions/v1/mariadb-proxy`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${supabaseKey}`,
-    },
-    body: JSON.stringify({ action, ...params }),
+// Direct MariaDB connection
+async function getMariaDBClient(): Promise<Client> {
+  const client = await new Client().connect({
+    hostname: Deno.env.get('MARIADB_HOST')!,
+    port: parseInt(Deno.env.get('MARIADB_PORT') || '3306'),
+    db: Deno.env.get('MARIADB_DATABASE')!,
+    username: Deno.env.get('MARIADB_USER')!,
+    password: Deno.env.get('MARIADB_PASSWORD')!,
   });
-  
-  if (!response.ok) {
-    const errorText = await response.text();
-    throw new Error(`mariadb-proxy error: ${errorText}`);
-  }
-  
-  return response.json();
+  return client;
 }
 
 // Use LLM to locate corrected value in file
@@ -37,8 +25,6 @@ async function locateValueInFile(
   correctedValue: string,
   fileContent: string
 ): Promise<{ found: boolean; location: string; context: string; confidence: 'alta' | 'media' | 'baixa' }> {
-  const supabaseUrl = Deno.env.get('SUPABASE_URL');
-  const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
   const lovableApiKey = Deno.env.get('LOVABLE_API_KEY');
   
   if (!lovableApiKey) {
@@ -135,33 +121,30 @@ Se o valor for numérico, considere formatações diferentes (97,3 vs 97.30 vs 9
 }
 
 // Setup table if not exists
-async function ensureTableExists(): Promise<void> {
+async function ensureTableExists(client: Client): Promise<void> {
   try {
-    await callMariaDBProxy('execute', {
-      query: `
-        CREATE TABLE IF NOT EXISTS ai_agente.t_dachser_chb_user_corrections (
-          id INT AUTO_INCREMENT PRIMARY KEY,
-          item_id INT NOT NULL,
-          filename VARCHAR(255) NOT NULL,
-          field_name VARCHAR(100) NOT NULL,
-          original_value VARCHAR(500),
-          corrected_value VARCHAR(500) NOT NULL,
-          location_reference TEXT,
-          location_context TEXT,
-          location_confidence ENUM('alta', 'media', 'baixa') DEFAULT 'baixa',
-          corrected_by VARCHAR(100),
-          correction_reason TEXT,
-          applied_count INT DEFAULT 0,
-          is_validated BOOLEAN DEFAULT FALSE,
-          created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-          updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-          INDEX idx_item_id (item_id),
-          INDEX idx_filename (filename),
-          INDEX idx_field (field_name)
-        )
-      `,
-      params: []
-    });
+    await client.execute(`
+      CREATE TABLE IF NOT EXISTS ai_agente.t_dachser_chb_user_corrections (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        item_id INT NOT NULL,
+        filename VARCHAR(255) NOT NULL,
+        field_name VARCHAR(100) NOT NULL,
+        original_value VARCHAR(500),
+        corrected_value VARCHAR(500) NOT NULL,
+        location_reference TEXT,
+        location_context TEXT,
+        location_confidence ENUM('alta', 'media', 'baixa') DEFAULT 'baixa',
+        corrected_by VARCHAR(100),
+        correction_reason TEXT,
+        applied_count INT DEFAULT 0,
+        is_validated BOOLEAN DEFAULT FALSE,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        INDEX idx_item_id (item_id),
+        INDEX idx_filename (filename),
+        INDEX idx_field (field_name)
+      )
+    `);
     console.log('[chb-corrections] Table ensured');
   } catch (e) {
     console.error('[chb-corrections] Table creation error:', e);
@@ -174,39 +157,43 @@ serve(async (req) => {
     return new Response(null, { headers: corsHeaders });
   }
 
+  let client: Client | null = null;
+
   try {
     const url = new URL(req.url);
     const pathParts = url.pathname.split('/').filter(Boolean);
     const action = pathParts[pathParts.length - 1] || 'list';
     
+    // Connect to MariaDB
+    client = await getMariaDBClient();
+    
     // Ensure table exists
-    await ensureTableExists();
+    await ensureTableExists(client);
 
     if (req.method === 'GET') {
       // GET /list?item_id=123 - List corrections for an item
       const itemId = url.searchParams.get('item_id');
       
       if (!itemId) {
+        await client.close();
         return new Response(
           JSON.stringify({ success: false, error: 'item_id is required' }),
           { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
       }
 
-      const result = await callMariaDBProxy('execute', {
-        query: `
-          SELECT id, item_id, filename, field_name, original_value, corrected_value,
-                 location_reference, location_context, location_confidence,
-                 corrected_by, applied_count, is_validated, created_at
-          FROM ai_agente.t_dachser_chb_user_corrections
-          WHERE item_id = ?
-          ORDER BY created_at DESC
-        `,
-        params: [parseInt(itemId)]
-      });
+      const rows = await client.query(`
+        SELECT id, item_id, filename, field_name, original_value, corrected_value,
+               location_reference, location_context, location_confidence,
+               corrected_by, applied_count, is_validated, created_at
+        FROM ai_agente.t_dachser_chb_user_corrections
+        WHERE item_id = ?
+        ORDER BY created_at DESC
+      `, [parseInt(itemId)]);
 
+      await client.close();
       return new Response(
-        JSON.stringify({ success: true, corrections: result.rows || [] }),
+        JSON.stringify({ success: true, corrections: rows || [] }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
@@ -227,6 +214,7 @@ serve(async (req) => {
         } = body;
 
         if (!item_id || !filename || !field_name || !corrected_value) {
+          await client.close();
           return new Response(
             JSON.stringify({ 
               success: false, 
@@ -257,70 +245,62 @@ serve(async (req) => {
         }
 
         // Check if correction already exists
-        const existing = await callMariaDBProxy('execute', {
-          query: `
-            SELECT id FROM ai_agente.t_dachser_chb_user_corrections
-            WHERE item_id = ? AND filename = ? AND field_name = ?
-            LIMIT 1
-          `,
-          params: [item_id, filename, field_name]
-        });
+        const existing = await client.query(`
+          SELECT id FROM ai_agente.t_dachser_chb_user_corrections
+          WHERE item_id = ? AND filename = ? AND field_name = ?
+          LIMIT 1
+        `, [item_id, filename, field_name]);
 
         let correctionId: number;
 
-        if (existing.rows && existing.rows.length > 0) {
+        if (existing && existing.length > 0) {
           // Update existing
-          correctionId = existing.rows[0].id;
-          await callMariaDBProxy('execute', {
-            query: `
-              UPDATE ai_agente.t_dachser_chb_user_corrections
-              SET corrected_value = ?,
-                  original_value = ?,
-                  location_reference = ?,
-                  location_context = ?,
-                  location_confidence = ?,
-                  corrected_by = ?,
-                  is_validated = ?,
-                  updated_at = NOW()
-              WHERE id = ?
-            `,
-            params: [
-              corrected_value,
-              original_value || null,
-              locationResult.location,
-              locationResult.context,
-              locationResult.confidence,
-              corrected_by || null,
-              locationResult.found,
-              correctionId
-            ]
-          });
+          correctionId = existing[0].id;
+          await client.execute(`
+            UPDATE ai_agente.t_dachser_chb_user_corrections
+            SET corrected_value = ?,
+                original_value = ?,
+                location_reference = ?,
+                location_context = ?,
+                location_confidence = ?,
+                corrected_by = ?,
+                is_validated = ?,
+                updated_at = NOW()
+            WHERE id = ?
+          `, [
+            corrected_value,
+            original_value || null,
+            locationResult.location,
+            locationResult.context,
+            locationResult.confidence,
+            corrected_by || null,
+            locationResult.found,
+            correctionId
+          ]);
         } else {
           // Insert new
-          const insertResult = await callMariaDBProxy('execute', {
-            query: `
-              INSERT INTO ai_agente.t_dachser_chb_user_corrections
-              (item_id, filename, field_name, original_value, corrected_value,
-               location_reference, location_context, location_confidence,
-               corrected_by, is_validated)
-              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            `,
-            params: [
-              item_id,
-              filename,
-              field_name,
-              original_value || null,
-              corrected_value,
-              locationResult.location,
-              locationResult.context,
-              locationResult.confidence,
-              corrected_by || null,
-              locationResult.found
-            ]
-          });
-          correctionId = insertResult.insertId;
+          const insertResult = await client.execute(`
+            INSERT INTO ai_agente.t_dachser_chb_user_corrections
+            (item_id, filename, field_name, original_value, corrected_value,
+             location_reference, location_context, location_confidence,
+             corrected_by, is_validated)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          `, [
+            item_id,
+            filename,
+            field_name,
+            original_value || null,
+            corrected_value,
+            locationResult.location,
+            locationResult.context,
+            locationResult.confidence,
+            corrected_by || null,
+            locationResult.found
+          ]);
+          correctionId = insertResult.lastInsertId as number;
         }
 
+        await client.close();
         return new Response(
           JSON.stringify({
             success: true,
@@ -336,17 +316,19 @@ serve(async (req) => {
         const { correction_id } = body;
 
         if (!correction_id) {
+          await client.close();
           return new Response(
             JSON.stringify({ success: false, error: 'correction_id is required' }),
             { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
           );
         }
 
-        await callMariaDBProxy('execute', {
-          query: 'DELETE FROM ai_agente.t_dachser_chb_user_corrections WHERE id = ?',
-          params: [correction_id]
-        });
+        await client.execute(
+          'DELETE FROM ai_agente.t_dachser_chb_user_corrections WHERE id = ?',
+          [correction_id]
+        );
 
+        await client.close();
         return new Response(
           JSON.stringify({ success: true, deleted: correction_id }),
           { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
@@ -358,21 +340,20 @@ serve(async (req) => {
         const { correction_id } = body;
 
         if (!correction_id) {
+          await client.close();
           return new Response(
             JSON.stringify({ success: false, error: 'correction_id is required' }),
             { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
           );
         }
 
-        await callMariaDBProxy('execute', {
-          query: `
-            UPDATE ai_agente.t_dachser_chb_user_corrections
-            SET applied_count = applied_count + 1, updated_at = NOW()
-            WHERE id = ?
-          `,
-          params: [correction_id]
-        });
+        await client.execute(`
+          UPDATE ai_agente.t_dachser_chb_user_corrections
+          SET applied_count = applied_count + 1, updated_at = NOW()
+          WHERE id = ?
+        `, [correction_id]);
 
+        await client.close();
         return new Response(
           JSON.stringify({ success: true }),
           { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
@@ -381,13 +362,15 @@ serve(async (req) => {
     }
 
     // Default response
+    await client?.close();
     return new Response(
-      JSON.stringify({ success: false, error: 'Unknown action' }),
+      JSON.stringify({ success: false, error: `Ação não suportada: ${action}` }),
       { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
 
   } catch (error) {
     console.error('[chb-corrections] Error:', error);
+    await client?.close();
     return new Response(
       JSON.stringify({ 
         success: false, 
