@@ -1,9 +1,10 @@
 import { DemurrageLayout } from "@/components/demurrage/DemurrageLayout";
 import { DemurrageSettingsPanel } from "@/components/demurrage/DemurrageSettingsPanel";
 import { HealthDashboard } from "@/components/demurrage/HealthDashboard";
+import { JobExecutionLogsPanel } from "@/components/demurrage/JobExecutionLogsPanel";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Settings, Activity, Database, FileText } from "lucide-react";
+import { Settings, Activity, History } from "lucide-react";
 
 export default function DemurrageSettings() {
   return (
@@ -31,6 +32,10 @@ export default function DemurrageSettings() {
               <Activity className="h-4 w-4 mr-2" />
               Saúde do Sistema
             </TabsTrigger>
+            <TabsTrigger value="logs" className="data-[state=active]:bg-[#ffc800] data-[state=active]:text-black">
+              <History className="h-4 w-4 mr-2" />
+              Logs de Jobs
+            </TabsTrigger>
           </TabsList>
 
           <TabsContent value="settings">
@@ -39,6 +44,10 @@ export default function DemurrageSettings() {
 
           <TabsContent value="health">
             <HealthDashboard />
+          </TabsContent>
+
+          <TabsContent value="logs">
+            <JobExecutionLogsPanel />
           </TabsContent>
         </Tabs>
       </div>
