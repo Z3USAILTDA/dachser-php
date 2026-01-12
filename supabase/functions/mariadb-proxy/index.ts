@@ -1554,12 +1554,12 @@ serve(async (req) => {
                   `);
                   const meta = metaResult[0] || { updated_at: null, effective: null };
                   
-                  // Only get rows from the most recent update
+                  // Only get rows from the most recent update DATE (not exact timestamp)
                   const rows = await dbClient.query(`
                     SELECT empresa, charge_description, charge_code, container_type, currency, fee,
                            unit_of_measure, effective_date, expiry_date, effective, data_atualizacao, user_atualizacao
                     FROM ${preferredTable}
-                    WHERE data_atualizacao = (SELECT MAX(data_atualizacao) FROM ${preferredTable})
+                    WHERE DATE(data_atualizacao) = (SELECT DATE(MAX(data_atualizacao)) FROM ${preferredTable})
                     ORDER BY charge_description, container_type
                   `);
                   
@@ -1586,13 +1586,13 @@ serve(async (req) => {
                   `, [empresa]);
                   const meta = metaResult[0] || { updated_at: null, effective: null };
                   
-                  // Only get rows from the most recent update for this empresa
+                  // Only get rows from the most recent update DATE for this empresa
                   const rows = await dbClient.query(`
                     SELECT empresa, charge_description, charge_code, container_type, currency, fee,
                            unit_of_measure, effective_date, expiry_date, effective, data_atualizacao, user_atualizacao
                     FROM ${fallbackTable}
                     WHERE empresa = ? 
-                      AND data_atualizacao = (SELECT MAX(data_atualizacao) FROM ${fallbackTable} WHERE empresa = ?)
+                      AND DATE(data_atualizacao) = (SELECT DATE(MAX(data_atualizacao)) FROM ${fallbackTable} WHERE empresa = ?)
                     ORDER BY charge_description, container_type
                   `, [empresa, empresa]);
                   
