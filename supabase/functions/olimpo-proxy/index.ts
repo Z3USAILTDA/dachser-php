@@ -1606,7 +1606,26 @@ serve(async (req) => {
                 AND UPPER(h.event_code) IN ('TRANSSHIPMENT', 'TSP', 'TRANSSHIPMENT_DISCHARGED', 'TRANSSHIPMENT_LOADED', 'TRANSHIPMENT_ARRIVAL', 'TRANSHIPMENT_DEPARTURE')
                 AND h.location IS NOT NULL
                 AND h.location != ''
-            ) as transshipment_port
+            ) as transshipment_port,
+            -- Indicador de Free Time cadastrado: verifica se existe registro ativo na tabela t_client_free_time
+            CASE
+              WHEN EXISTS (
+                SELECT 1 FROM dados_dachser.t_client_free_time ft
+                WHERE ft.ativo = 1
+                  AND (
+                    -- Free Time por processo (MBL específico)
+                    (ft.tipo_ft = 'PROCESSO' AND ft.mbl = ts.mbl_id)
+                    -- OU Free Time por contrato (cliente com vigência válida)
+                    OR (
+                      ft.tipo_ft = 'CONTRATO' 
+                      AND ft.cliente_nome = MAX(ts.consignee)
+                      AND (ft.vigencia_inicio IS NULL OR ft.vigencia_inicio <= CURDATE())
+                      AND (ft.vigencia_fim IS NULL OR ft.vigencia_fim >= CURDATE())
+                    )
+                  )
+              ) THEN 1
+              ELSE 0
+            END as has_free_time
           FROM dados_dachser.t_tracking_sea ts
           WHERE ts.active = 1
           GROUP BY ts.mbl_id

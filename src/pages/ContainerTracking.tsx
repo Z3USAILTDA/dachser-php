@@ -146,6 +146,7 @@ interface MblTrackingData {
   is_critico: number; // 1 se atraso >= 7 dias
   dias_atraso: number; // Dias de atraso calculados
   transshipment_port: string | null; // Porto(s) de escala/transbordo
+  has_free_time: number; // 1 se possui Free Time cadastrado
 }
 
 // Container detail interface (expanded view)
@@ -1057,7 +1058,25 @@ const ContainerTracking = () => {
                         <Fragment key={`${mbl.mbl_id}-${idx}`}>
                           <tr className="border-b border-[rgba(255,255,255,.05)] hover:bg-[rgba(255,255,255,.03)] transition">
                             <td className="px-4 py-3">
-                              <span className="text-[#f5f5f5] font-mono text-sm">{mbl.mbl_id}</span>
+                              <div className="flex items-center gap-2">
+                                <span className="text-[#f5f5f5] font-mono text-sm">{mbl.mbl_id}</span>
+                                {!mbl.has_free_time && (
+                                  <TooltipProvider>
+                                    <Tooltip>
+                                      <TooltipTrigger asChild>
+                                        <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[0.65rem] font-medium bg-amber-500/20 text-amber-400 border border-amber-500/30 cursor-help whitespace-nowrap">
+                                          <Clock className="w-3 h-3" />
+                                          Sem FT
+                                        </span>
+                                      </TooltipTrigger>
+                                      <TooltipContent>
+                                        <p className="text-xs">Este MBL não possui Free Time cadastrado</p>
+                                        <p className="text-xs text-muted-foreground">Clique em "Registrar FT" para cadastrar</p>
+                                      </TooltipContent>
+                                    </Tooltip>
+                                  </TooltipProvider>
+                                )}
+                              </div>
                             </td>
                             <td className="px-4 py-3">
                               <TooltipProvider>
