@@ -32,6 +32,7 @@ import DemurrageCarrierCosts from "./pages/demurrage/DemurrageCarrierCosts";
 import DemurrageDisputes from "./pages/demurrage/DemurrageDisputes";
 import DemurrageClients from "./pages/demurrage/DemurrageClients";
 import DemurrageAnalytics from "./pages/demurrage/DemurrageAnalytics";
+import DemurrageFreeTimes from "./pages/demurrage/DemurrageFreeTimes";
 import ManualDemurrage from "./pages/demurrage/ManualDemurrage";
 import AlteracoesFee from "./pages/AlteracoesFee";
 import ReguaCobranca from "./pages/ReguaCobranca";
@@ -146,6 +147,7 @@ const App = () => (
           <Route path="/sea/manual-drafts" element={<ManualDraftExportacao />} />
           <Route path="/sea/demurrage" element={<DemurrageMonitor />} />
           <Route path="/sea/demurrage/monitor" element={<DemurrageMonitor />} />
+          <Route path="/sea/demurrage/free-times" element={<DemurrageFreeTimes />} />
           <Route path="/sea/demurrage/rates" element={<DemurrageRates />} />
           <Route path="/sea/demurrage/pre-invoicing" element={<DemurragePreInvoicing />} />
           <Route path="/sea/demurrage/carrier-costs" element={<DemurrageCarrierCosts />} />

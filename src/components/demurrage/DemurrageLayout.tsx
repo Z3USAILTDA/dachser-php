@@ -1,6 +1,6 @@
 import { ReactNode } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
-import { ArrowLeft, Ship, Activity, DollarSign, FileText, Scale, Users, BarChart3, HelpCircle, RefreshCw } from "lucide-react";
+import { ArrowLeft, Ship, Activity, DollarSign, FileText, Scale, Users, BarChart3, HelpCircle, RefreshCw, Clock } from "lucide-react";
 import { cn } from "@/lib/utils";
 import dachserBg from "@/assets/dachser-background.jpg";
 
@@ -19,6 +19,7 @@ interface DemurrageLayoutProps {
 
 const navTabs = [
   { id: "monitor", label: "Monitor", icon: Activity, href: "/sea/demurrage" },
+  { id: "free-times", label: "Free Times", icon: Clock, href: "/sea/demurrage/free-times" },
   { id: "pre-invoicing", label: "Pré-Faturamento", icon: FileText, href: "/sea/demurrage/pre-invoicing" },
   { id: "carrier-costs", label: "Custos Armadores", icon: Ship, href: "/sea/demurrage/carrier-costs" },
   { id: "rates", label: "Tarifas", icon: DollarSign, href: "/sea/demurrage/rates" },
@@ -44,6 +45,7 @@ export function DemurrageLayout({
   const getActiveTab = () => {
     const path = location.pathname;
     if (path === "/sea/demurrage" || path === "/sea/demurrage/monitor") return "monitor";
+    if (path.includes("free-times")) return "free-times";
     if (path.includes("pre-invoicing")) return "pre-invoicing";
     if (path.includes("carrier-costs")) return "carrier-costs";
     if (path.includes("rates")) return "rates";
