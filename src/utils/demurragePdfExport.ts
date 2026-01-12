@@ -2,7 +2,7 @@ import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import type { DemurrageContainer } from "@/hooks/useDemurrageData";
+import type { DemurrageContainer, PreInvoice, PreInvoiceItem } from "@/hooks/useDemurrageData";
 
 const formatCurrency = (value: number | undefined): string => {
   if (value === undefined || value === null || value === 0) return "-";
@@ -10,6 +10,15 @@ const formatCurrency = (value: number | undefined): string => {
     style: "currency",
     currency: "USD",
     minimumFractionDigits: 0,
+  }).format(value);
+};
+
+const formatCurrencyBRL = (value: number | undefined): string => {
+  if (value === undefined || value === null || value === 0) return "-";
+  return new Intl.NumberFormat("pt-BR", {
+    style: "currency",
+    currency: "BRL",
+    minimumFractionDigits: 2,
   }).format(value);
 };
 
@@ -327,6 +336,218 @@ export const exportDemurrageReportPDF = (data: DemurrageContainer[]) => {
 
   // Save
   const fileName = `demurrage_report_${format(new Date(), "yyyy-MM-dd_HH-mm")}.pdf`;
+  doc.save(fileName);
+
+  return fileName;
+};
+
+// =====================================================
+// PRE-INVOICE PDF EXPORT
+// =====================================================
+
+export const exportPreInvoicePDF = (
+  preInvoice: PreInvoice, 
+  items: PreInvoiceItem[]
+) => {
+  const doc = new jsPDF({
+    orientation: "portrait",
+    unit: "mm",
+    format: "a4",
+  });
+
+  const pageWidth = doc.internal.pageSize.width;
+
+  // Header with Dachser branding
+  doc.setFillColor(255, 200, 0);
+  doc.rect(0, 0, pageWidth, 35, "F");
+
+  doc.setTextColor(0, 0, 0);
+  doc.setFontSize(22);
+  doc.setFont("helvetica", "bold");
+  doc.text("PRÉ-FATURA DE DEMURRAGE", pageWidth / 2, 15, { align: "center" });
+
+  doc.setFontSize(14);
+  doc.setFont("helvetica", "normal");
+  doc.text(preInvoice.invoice_number, pageWidth / 2, 25, { align: "center" });
+
+  doc.setFontSize(10);
+  doc.text(`Emissão: ${formatDate(preInvoice.issue_date)}`, pageWidth / 2, 32, { align: "center" });
+
+  // Invoice Details Box
+  let y = 45;
+
+  doc.setFillColor(245, 245, 245);
+  doc.roundedRect(15, y, pageWidth - 30, 45, 3, 3, "F");
+
+  doc.setTextColor(80, 80, 80);
+  doc.setFontSize(9);
+  doc.setFont("helvetica", "normal");
+
+  // Left column
+  doc.text("Cliente:", 20, y + 10);
+  doc.setFont("helvetica", "bold");
+  doc.setTextColor(0, 0, 0);
+  doc.text(preInvoice.client_name || "-", 45, y + 10);
+
+  doc.setFont("helvetica", "normal");
+  doc.setTextColor(80, 80, 80);
+  doc.text("MBL:", 20, y + 18);
+  doc.setFont("helvetica", "bold");
+  doc.setTextColor(0, 0, 0);
+  doc.text(preInvoice.shipment_mbl || "-", 45, y + 18);
+
+  doc.setFont("helvetica", "normal");
+  doc.setTextColor(80, 80, 80);
+  doc.text("Navio:", 20, y + 26);
+  doc.setFont("helvetica", "bold");
+  doc.setTextColor(0, 0, 0);
+  doc.text(preInvoice.vessel_name || "-", 45, y + 26);
+
+  doc.setFont("helvetica", "normal");
+  doc.setTextColor(80, 80, 80);
+  doc.text("Viagem:", 20, y + 34);
+  doc.setFont("helvetica", "bold");
+  doc.setTextColor(0, 0, 0);
+  doc.text(preInvoice.voyage_number || "-", 45, y + 34);
+
+  // Right column
+  doc.setFont("helvetica", "normal");
+  doc.setTextColor(80, 80, 80);
+  doc.text("BL:", 110, y + 10);
+  doc.setFont("helvetica", "bold");
+  doc.setTextColor(0, 0, 0);
+  doc.text(preInvoice.bl_number || "-", 130, y + 10);
+
+  doc.setFont("helvetica", "normal");
+  doc.setTextColor(80, 80, 80);
+  doc.text("Origem:", 110, y + 18);
+  doc.setFont("helvetica", "bold");
+  doc.setTextColor(0, 0, 0);
+  doc.text(preInvoice.origin_port || "-", 130, y + 18);
+
+  doc.setFont("helvetica", "normal");
+  doc.setTextColor(80, 80, 80);
+  doc.text("Destino:", 110, y + 26);
+  doc.setFont("helvetica", "bold");
+  doc.setTextColor(0, 0, 0);
+  doc.text(preInvoice.destination_port || "-", 130, y + 26);
+
+  doc.setFont("helvetica", "normal");
+  doc.setTextColor(80, 80, 80);
+  doc.text("Vencimento:", 110, y + 34);
+  doc.setFont("helvetica", "bold");
+  doc.setTextColor(0, 0, 0);
+  doc.text(formatDate(preInvoice.due_date), 140, y + 34);
+
+  y += 55;
+
+  // Items Table Header
+  doc.setTextColor(0, 0, 0);
+  doc.setFontSize(12);
+  doc.setFont("helvetica", "bold");
+  doc.text("Detalhamento por Container", 15, y);
+
+  y += 5;
+
+  // Items Table
+  const tableData = items.map((item) => [
+    item.container_number || "-",
+    item.container_type || "-",
+    item.free_time_days?.toString() || "-",
+    item.days_count?.toString() || "0",
+    formatCurrency(item.daily_rate_usd || 0),
+    formatCurrency(item.total_usd || 0),
+  ]);
+
+  autoTable(doc, {
+    startY: y,
+    head: [[
+      "Container",
+      "Tipo",
+      "Free Time",
+      "Dias",
+      "Taxa/Dia",
+      "Total USD",
+    ]],
+    body: tableData,
+    theme: "grid",
+    headStyles: {
+      fillColor: [255, 200, 0],
+      textColor: [0, 0, 0],
+      fontStyle: "bold",
+      fontSize: 9,
+      halign: "center",
+    },
+    bodyStyles: {
+      fontSize: 8,
+      cellPadding: 3,
+    },
+    alternateRowStyles: {
+      fillColor: [250, 250, 250],
+    },
+    columnStyles: {
+      0: { cellWidth: 35, halign: "center", fontStyle: "bold" },
+      1: { cellWidth: 25, halign: "center" },
+      2: { cellWidth: 25, halign: "center" },
+      3: { cellWidth: 20, halign: "center" },
+      4: { cellWidth: 30, halign: "right" },
+      5: { cellWidth: 35, halign: "right", fontStyle: "bold" },
+    },
+    margin: { left: 15, right: 15 },
+  });
+
+  const afterTableY = (doc as any).lastAutoTable.finalY + 10;
+
+  // Totals Box
+  doc.setFillColor(255, 248, 220);
+  doc.roundedRect(pageWidth - 95, afterTableY, 80, 35, 3, 3, "F");
+  doc.setDrawColor(255, 200, 0);
+  doc.setLineWidth(0.5);
+  doc.roundedRect(pageWidth - 95, afterTableY, 80, 35, 3, 3, "S");
+
+  doc.setTextColor(80, 80, 80);
+  doc.setFontSize(9);
+  doc.setFont("helvetica", "normal");
+  doc.text("Total USD:", pageWidth - 90, afterTableY + 12);
+  doc.setFontSize(14);
+  doc.setFont("helvetica", "bold");
+  doc.setTextColor(0, 0, 0);
+  doc.text(formatCurrency(preInvoice.total_usd), pageWidth - 20, afterTableY + 12, { align: "right" });
+
+  if (preInvoice.total_brl > 0 && preInvoice.exchange_rate) {
+    doc.setTextColor(80, 80, 80);
+    doc.setFontSize(9);
+    doc.setFont("helvetica", "normal");
+    doc.text("Total BRL:", pageWidth - 90, afterTableY + 22);
+    doc.setFontSize(11);
+    doc.setFont("helvetica", "bold");
+    doc.setTextColor(0, 0, 0);
+    doc.text(formatCurrencyBRL(preInvoice.total_brl), pageWidth - 20, afterTableY + 22, { align: "right" });
+
+    doc.setTextColor(120, 120, 120);
+    doc.setFontSize(7);
+    doc.setFont("helvetica", "normal");
+    doc.text(`Taxa: ${preInvoice.exchange_rate.toFixed(4)}`, pageWidth - 20, afterTableY + 30, { align: "right" });
+  }
+
+  // Footer
+  const pageHeight = doc.internal.pageSize.height;
+  doc.setFontSize(8);
+  doc.setTextColor(128, 128, 128);
+  doc.text(
+    `Gerado em: ${format(new Date(), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })}`,
+    15,
+    pageHeight - 10
+  );
+  doc.text(
+    "Sistema Z3US.AI - Módulo Demurrage",
+    pageWidth - 15,
+    pageHeight - 10,
+    { align: "right" }
+  );
+
+  // Save
+  const fileName = `pre_fatura_${preInvoice.invoice_number}_${format(new Date(), "yyyy-MM-dd")}.pdf`;
   doc.save(fileName);
 
   return fileName;

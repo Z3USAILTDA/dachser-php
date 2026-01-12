@@ -1,13 +1,16 @@
 import { useState, useEffect } from "react";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
-import { FileText, Package, Calendar, DollarSign, Ship, Loader2 } from "lucide-react";
+import { FileText, Package, Calendar, DollarSign, Ship, Loader2, Download } from "lucide-react";
 import { useDemurragePreInvoiceItems, type PreInvoice, type PreInvoiceItem } from "@/hooks/useDemurrageData";
+import { exportPreInvoicePDF } from "@/utils/demurragePdfExport";
 import { format, parseISO } from "date-fns";
 import { ptBR } from "date-fns/locale";
+import { toast } from "sonner";
 
 interface PreInvoiceDetailsDialogProps {
   open: boolean;
@@ -193,8 +196,24 @@ export function PreInvoiceDetailsDialog({ open, onOpenChange, preInvoice }: PreI
             )}
           </div>
 
-          {/* Totals */}
-          <div className="flex justify-end pt-2">
+          {/* Actions Footer */}
+          <div className="flex justify-between items-center pt-4 border-t border-[rgba(255,255,255,0.1)]">
+            <Button
+              variant="outline"
+              onClick={() => {
+                try {
+                  exportPreInvoicePDF(preInvoice, items);
+                  toast.success("PDF exportado com sucesso");
+                } catch (error) {
+                  toast.error("Erro ao exportar PDF");
+                }
+              }}
+              disabled={isLoading || items.length === 0}
+              className="bg-transparent border-[rgba(255,255,255,0.2)]"
+            >
+              <Download className="h-4 w-4 mr-2" />
+              Exportar PDF
+            </Button>
             <div className="bg-[rgba(255,200,0,0.1)] border border-[#ffc800]/30 rounded-lg p-4 min-w-[200px]">
               <div className="flex justify-between items-center">
                 <span className="text-muted-foreground">Total USD:</span>
