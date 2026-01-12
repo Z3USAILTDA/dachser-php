@@ -18,10 +18,14 @@ export function SelectContainerForDisputeDialog({ open, onOpenChange, containers
   const [search, setSearch] = useState("");
 
   // Filter containers that don't already have a dispute open
+  // Include containers with calculated cost, carrier cost, or excess days
   const availableContainers = useMemo(() => {
     return containers.filter(c => 
-      !c.dispute_status && 
-      c.expected_cost_usd > 0
+      !c.dispute_status && (
+        c.expected_cost_usd > 0 ||      // Has calculated cost
+        c.armador_cost_usd > 0 ||       // Has carrier invoice cost
+        c.excedente_dias > 0            // Has excess days (potential demurrage)
+      )
     );
   }, [containers]);
 

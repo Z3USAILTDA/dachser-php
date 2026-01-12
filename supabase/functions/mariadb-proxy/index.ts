@@ -7420,7 +7420,7 @@ serve(async (req) => {
         const rates = await client.query(`
           SELECT * FROM dados_dachser.t_dachser_demurrage_rates
           WHERE active = 1
-          ORDER BY armador ASC, container_type ASC, period_start_day ASC
+          ORDER BY created_at DESC, armador ASC, container_type ASC
         `);
 
         result = { success: true, data: rates || [] };

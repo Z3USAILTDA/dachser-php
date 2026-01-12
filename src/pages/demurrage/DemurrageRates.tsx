@@ -344,6 +344,7 @@ export default function DemurrageRates() {
                       <TableHead>Período</TableHead>
                       <TableHead className="text-center">Dias</TableHead>
                       <TableHead className="text-right">USD/dia</TableHead>
+                      <TableHead>Criado em</TableHead>
                       <TableHead className="text-right">Ações</TableHead>
                     </TableRow>
                   </TableHeader>
@@ -356,6 +357,11 @@ export default function DemurrageRates() {
                         <TableCell><Badge className={getPeriodBadgeColor(rate.period_type || 'standard')}>{formatPeriodType(rate.period_type || 'standard')}</Badge></TableCell>
                         <TableCell className="text-center text-sm text-muted-foreground">{rate.period_start_day && rate.period_end_day ? `${rate.period_start_day}-${rate.period_end_day}` : '-'}</TableCell>
                         <TableCell className="text-right font-semibold text-[#ffc800]">{formatCurrency(rate.rate_usd)}</TableCell>
+                        <TableCell className="text-sm text-muted-foreground">
+                          {rate.created_at 
+                            ? new Date(rate.created_at).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: '2-digit' }) 
+                            : '-'}
+                        </TableCell>
                         <TableCell className="text-right">
                           <Button variant="ghost" size="sm" className="text-muted-foreground hover:text-white" onClick={() => openEditDialog(rate)}><Edit className="h-4 w-4" /></Button>
                           <Button variant="ghost" size="sm" className="text-red-500 hover:text-red-400" onClick={() => setDeletingRate(rate)}><Trash2 className="h-4 w-4" /></Button>
