@@ -8,7 +8,8 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { AlertTriangle, CheckCircle2, TrendingUp, TrendingDown, Minus, DollarSign, Calculator, Ship, Calendar, Package } from "lucide-react";
-import { DemurrageContainer } from "@/hooks/useDemurrageData";
+import { DemurrageContainer, useCreateDemurrageDispute } from "@/hooks/useDemurrageData";
+import { toast } from "sonner";
 
 interface AuditCostDialogProps {
   open: boolean;
@@ -25,6 +26,9 @@ export interface AuditData {
   audit_status: 'validated' | 'discrepancy' | 'disputed';
   discrepancy_usd: number;
   audit_notes?: string;
+  // For dispute creation
+  disputed_amount_usd?: number;
+  dispute_reason?: string;
 }
 
 export function AuditCostDialog({ open, onOpenChange, container, onAudit, isLoading }: AuditCostDialogProps) {
@@ -32,6 +36,8 @@ export function AuditCostDialog({ open, onOpenChange, container, onAudit, isLoad
   const [carrierCost, setCarrierCost] = useState<number>(0);
   const [carrierDays, setCarrierDays] = useState<number>(0);
   const [auditNotes, setAuditNotes] = useState("");
+  
+  const createDispute = useCreateDemurrageDispute();
 
   useEffect(() => {
     if (container) {
@@ -96,17 +102,38 @@ export function AuditCostDialog({ open, onOpenChange, container, onAudit, isLoad
     });
   };
 
-  const handleOpenDispute = () => {
+  const handleOpenDispute = async () => {
     if (!container || !analysis) return;
     
-    onAudit(container.id, {
-      armador_invoice_number: invoiceNumber,
-      armador_cost_usd: carrierCost,
-      armador_days_charged: carrierDays,
-      audit_status: 'disputed',
-      discrepancy_usd: analysis.costDiff,
-      audit_notes: auditNotes || undefined,
-    });
+    try {
+      // Create dispute in the disputes table
+      await createDispute.mutateAsync({
+        container_id: container.id,
+        container_number: container.numero,
+        client_name: container.cliente || undefined,
+        armador: container.armador || undefined,
+        disputed_amount_usd: analysis.costDiff > 0 ? analysis.costDiff : 0,
+        reason: auditNotes || `Discrepância de ${formatCurrency(analysis.costDiff)} detectada na auditoria`,
+        success_probability: 70,
+      });
+      
+      // Then call the regular audit callback to update container
+      onAudit(container.id, {
+        armador_invoice_number: invoiceNumber,
+        armador_cost_usd: carrierCost,
+        armador_days_charged: carrierDays,
+        audit_status: 'disputed',
+        discrepancy_usd: analysis.costDiff,
+        audit_notes: auditNotes || undefined,
+        disputed_amount_usd: analysis.costDiff > 0 ? analysis.costDiff : 0,
+        dispute_reason: auditNotes || `Discrepância de ${formatCurrency(analysis.costDiff)} detectada na auditoria`,
+      });
+      
+      toast.success("Disputa aberta com sucesso");
+    } catch (error) {
+      console.error('Error creating dispute:', error);
+      toast.error("Erro ao abrir disputa");
+    }
   };
 
   if (!container) return null;
@@ -301,10 +328,14 @@ export function AuditCostDialog({ open, onOpenChange, container, onAudit, isLoad
           {analysis?.hasDiscrepancy && analysis.isOvercharge && (
             <Button
               onClick={handleOpenDispute}
-              disabled={isLoading || !invoiceNumber}
+              disabled={isLoading || createDispute.isPending || !invoiceNumber}
               className="bg-orange-500 hover:bg-orange-600 text-white"
             >
-              <AlertTriangle className="h-4 w-4 mr-2" />
+              {createDispute.isPending ? (
+                <span className="animate-spin h-4 w-4 mr-2 border-2 border-white border-t-transparent rounded-full" />
+              ) : (
+                <AlertTriangle className="h-4 w-4 mr-2" />
+              )}
               Abrir Disputa
             </Button>
           )}

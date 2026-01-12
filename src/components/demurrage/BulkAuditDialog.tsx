@@ -7,7 +7,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Loader2, CheckCircle2, AlertTriangle, Calculator } from "lucide-react";
 import type { DemurrageContainer } from "@/hooks/useDemurrageData";
-import { useUpdateDemurrageContainer } from "@/hooks/useDemurrageData";
+import { useBulkUpdateDemurrageContainers } from "@/hooks/useDemurrageData";
 import { toast } from "sonner";
 
 interface BulkAuditDialogProps {
@@ -25,22 +25,21 @@ export function BulkAuditDialog({
 }: BulkAuditDialogProps) {
   const [auditStatus, setAuditStatus] = useState<string>("validated");
   const [notes, setNotes] = useState("");
-  const [isLoading, setIsLoading] = useState(false);
   
-  const updateContainer = useUpdateDemurrageContainer();
+  const bulkUpdate = useBulkUpdateDemurrageContainers();
 
   const handleSubmit = async () => {
-    setIsLoading(true);
     try {
-      for (const container of containers) {
-        await updateContainer.mutateAsync({
-          containerId: container.id,
-          updates: {
-            audit_status: auditStatus,
-            notes: notes || null,
-          },
-        });
-      }
+      const containerIds = containers.map(c => c.id);
+      
+      await bulkUpdate.mutateAsync({
+        containerIds,
+        updates: {
+          audit_status: auditStatus,
+          notes: notes || null,
+        },
+      });
+      
       toast.success(`${containers.length} containers atualizados com sucesso`);
       setNotes("");
       setAuditStatus("validated");
@@ -49,10 +48,10 @@ export function BulkAuditDialog({
     } catch (error) {
       toast.error("Erro ao processar auditoria em lote");
       console.error(error);
-    } finally {
-      setIsLoading(false);
     }
   };
+
+  const isLoading = bulkUpdate.isPending;
 
   const formatCurrency = (value: number) => 
     new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 0 }).format(value);

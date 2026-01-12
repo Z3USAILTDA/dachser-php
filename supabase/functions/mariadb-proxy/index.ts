@@ -8748,6 +8748,58 @@ serve(async (req) => {
         break;
       }
 
+      // ==================== DEMURRAGE BULK UPDATE ====================
+      case 'demurrage_bulk_update_containers': {
+        const bulkBody = body as unknown as { container_ids: number[]; updates: Record<string, unknown> };
+        const { container_ids, updates: bulkUpdates } = bulkBody;
+        console.log('Bulk updating demurrage containers:', container_ids?.length, 'containers');
+
+        if (!container_ids || container_ids.length === 0 || !bulkUpdates) {
+          return new Response(
+            JSON.stringify({ error: 'container_ids e updates são obrigatórios' }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+
+        const bulkAllowedFields = [
+          'notes', 'pre_invoice_number', 'pre_invoice_status', 'pre_invoice_total_usd',
+          'disputed_amount_usd', 'recovered_amount_usd', 'dispute_status', 'dispute_reason',
+          'armador_invoice_number', 'armador_cost_usd', 'armador_days_charged', 'audit_status', 'discrepancy_usd',
+          'client_auto_alert', 'client_alert_days_before', 'client_report_frequency',
+          'ft_started_at', 'data_devolucao', 'free_time_days'
+        ];
+
+        const bulkSetClauses: string[] = [];
+        const bulkValues: unknown[] = [];
+        for (const [key, value] of Object.entries(bulkUpdates)) {
+          if (bulkAllowedFields.includes(key)) {
+            bulkSetClauses.push(`${key} = ?`);
+            bulkValues.push(value);
+          }
+        }
+
+        if (bulkSetClauses.length === 0) {
+          return new Response(
+            JSON.stringify({ error: 'Nenhum campo válido para atualizar' }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+
+        bulkSetClauses.push('updated_at = NOW()');
+
+        // Build placeholders for IN clause
+        const placeholders = container_ids.map(() => '?').join(', ');
+
+        await client.execute(`
+          UPDATE dados_dachser.t_dachser_demurrage_containers
+          SET ${bulkSetClauses.join(', ')}
+          WHERE id IN (${placeholders})
+        `, [...bulkValues, ...container_ids]);
+
+        result = { success: true, updated: container_ids.length };
+        break;
+      }
+
       default:
         return new Response(
           JSON.stringify({ error: `Ação não suportada: ${action}` }),

@@ -514,3 +514,62 @@ export function useGeneratePreInvoices() {
     },
   });
 }
+
+// Bulk Update Containers
+export function useBulkUpdateDemurrageContainers() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({ containerIds, updates }: { containerIds: number[]; updates: Record<string, unknown> }) => {
+      const { data, error } = await supabase.functions.invoke('mariadb-proxy', {
+        body: {
+          action: 'demurrage_bulk_update_containers',
+          container_ids: containerIds,
+          updates,
+        }
+      });
+      if (error) throw error;
+      if (!data.success) throw new Error(data.error || 'Failed to bulk update containers');
+      return data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['demurrage_containers'] });
+      queryClient.invalidateQueries({ queryKey: ['demurrage_stats'] });
+    },
+  });
+}
+
+// Create Demurrage Dispute
+export interface CreateDisputeData {
+  container_id: number;
+  container_number?: string;
+  client_name?: string;
+  armador?: string;
+  disputed_amount_usd: number;
+  reason?: string;
+  success_probability?: number;
+  opened_by?: string;
+}
+
+export function useCreateDemurrageDispute() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (disputeData: CreateDisputeData) => {
+      const { data, error } = await supabase.functions.invoke('mariadb-proxy', {
+        body: {
+          action: 'demurrage_create_dispute',
+          ...disputeData,
+        }
+      });
+      if (error) throw error;
+      if (!data.success) throw new Error(data.error || 'Failed to create dispute');
+      return data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['demurrage_containers'] });
+      queryClient.invalidateQueries({ queryKey: ['demurrage_disputes'] });
+      queryClient.invalidateQueries({ queryKey: ['demurrage_stats'] });
+    },
+  });
+}
