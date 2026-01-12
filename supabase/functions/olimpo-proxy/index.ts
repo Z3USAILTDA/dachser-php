@@ -1709,7 +1709,7 @@ serve(async (req) => {
               (
                 SELECT md.eta 
                 FROM dados_dachser.t_master_dados md 
-                WHERE TRIM(md.mawb) COLLATE utf8mb4_general_ci = ts.mbl_id COLLATE utf8mb4_general_ci
+                WHERE TRIM(md.mawb) COLLATE utf8_general_ci = ts.mbl_id COLLATE utf8_general_ci
                   AND md.eta IS NOT NULL 
                   AND md.active = 1
                 LIMIT 1
@@ -1719,7 +1719,7 @@ serve(async (req) => {
             COALESCE(ts.navio, (
               SELECT t2.navio 
               FROM dados_dachser.t_tracking_sea t2 
-              WHERE t2.mbl_id COLLATE utf8mb4_general_ci = ts.mbl_id COLLATE utf8mb4_general_ci
+              WHERE t2.mbl_id COLLATE utf8_general_ci = ts.mbl_id COLLATE utf8_general_ci
                 AND t2.navio IS NOT NULL 
                 AND t2.navio != ''
               ORDER BY t2.last_check DESC 
@@ -1728,14 +1728,14 @@ serve(async (req) => {
             COALESCE(ts.vessel_imo, (
               SELECT t2.vessel_imo 
               FROM dados_dachser.t_tracking_sea t2 
-              WHERE t2.mbl_id COLLATE utf8mb4_general_ci = ts.mbl_id COLLATE utf8mb4_general_ci
+              WHERE t2.mbl_id COLLATE utf8_general_ci = ts.mbl_id COLLATE utf8_general_ci
                 AND t2.vessel_imo IS NOT NULL 
               ORDER BY t2.last_check DESC 
               LIMIT 1
             )) as vessel_imo, 
             ts.origem, ts.destino, ts.consignee
           FROM dados_dachser.t_tracking_sea ts
-          WHERE ts.mbl_id COLLATE utf8mb4_general_ci = ? COLLATE utf8mb4_general_ci
+          WHERE ts.mbl_id COLLATE utf8_general_ci = ? COLLATE utf8_general_ci
           ORDER BY ts.container
         `, [mbl_id]);
 
