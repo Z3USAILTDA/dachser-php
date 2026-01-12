@@ -2619,18 +2619,26 @@ serve(async (req) => {
               lastEventDescription = data.last_movement.description;
             }
             
-            // Extract vessel IMO from various possible response fields
-            let vesselImo = data.vessel?.imo || data.current_vessel_imo || data.vessel_imo || data.imo || null;
+            // Extract vessel name first, then prioritize IMO search by name
             const vesselName = data.current_vessel_name || data.last_vessel_name || data.vessel?.name || null;
+            let vesselImo = null;
             
-            // Se não obteve IMO mas tem nome do navio, buscar via vessel/finder
-            if (!vesselImo && vesselName) {
-              console.log(`[refresh_sea_tracking] No IMO from API for ${containerId}, searching for vessel "${vesselName}"...`);
+            // PRIORIDADE 1: Buscar IMO pelo nome do navio (mais confiável)
+            if (vesselName) {
+              console.log(`[refresh_sea_tracking] Searching IMO by vessel name "${vesselName}" for ${containerId}...`);
               const foundImo = await findVesselImo(vesselName);
               if (foundImo) {
                 vesselImo = foundImo;
                 imoLookups++;
                 console.log(`[refresh_sea_tracking] Found IMO ${foundImo} via vessel/finder for ${containerId}`);
+              }
+            }
+            
+            // FALLBACK: Usar IMO direta da API apenas se busca por nome falhar
+            if (!vesselImo) {
+              vesselImo = data.vessel?.imo || data.current_vessel_imo || data.vessel_imo || data.imo || null;
+              if (vesselImo) {
+                console.log(`[refresh_sea_tracking] Using API direct IMO as fallback for ${containerId}: ${vesselImo}`);
               }
             }
             
@@ -2816,9 +2824,17 @@ serve(async (req) => {
                     
                     // Step 4: Apply sibling data to our leasing container
                     const vesselName = sibData.current_vessel_name || sibData.last_vessel_name || sibData.vessel?.name || null;
-                    const vesselImo = sibData.vessel?.imo || sibData.current_vessel_imo || null;
                     const containerStatus = sibData.container_status || null;
                     const lastEvent = sibData.last_movement?.description || containerStatus;
+                    
+                    // Priorizar busca de IMO pelo nome do navio
+                    let vesselImo = null;
+                    if (vesselName) {
+                      vesselImo = await findVesselImo(vesselName);
+                    }
+                    if (!vesselImo) {
+                      vesselImo = sibData.vessel?.imo || sibData.current_vessel_imo || null;
+                    }
                     
                     console.log(`[refresh_sea_tracking] Sibling ${nonLeasingSibling} data: status=${containerStatus}, vessel=${vesselName}, eta=${sibData.eta_final_destination || sibData.eta}`);
                     
@@ -3817,8 +3833,22 @@ serve(async (req) => {
         lastEventDescription = data.last_movement.description;
       }
 
-      // Extract vessel IMO from various possible response fields
-      const vesselImo = data.vessel?.imo || data.current_vessel_imo || data.vessel_imo || data.imo || null;
+      // Priorizar busca de IMO pelo nome do navio (mais confiável que IMO direta da API)
+      const vesselName = data.vessel?.name || data.current_vessel_name || data.last_vessel_name || null;
+      let vesselImo = null;
+      
+      if (vesselName) {
+        console.log(`[track_sea_container] Searching IMO by vessel name "${vesselName}"...`);
+        vesselImo = await findVesselImo(vesselName);
+      }
+      
+      // Fallback para IMO direta da API
+      if (!vesselImo) {
+        vesselImo = data.vessel?.imo || data.current_vessel_imo || data.vessel_imo || data.imo || null;
+        if (vesselImo) {
+          console.log(`[track_sea_container] Using API direct IMO as fallback: ${vesselImo}`);
+        }
+      }
       
       const trackingData = {
         container: containerId,
@@ -3826,12 +3856,12 @@ serve(async (req) => {
         loading_port: data.loading_port?.name || data.pol || data.loading_port || null,
         discharging_port: data.discharging_port?.name || data.pod || data.discharging_port || null,
         eta: data.eta_final_destination || data.eta || null,
-        vessel: data.vessel?.name || data.current_vessel_name || null,
+        vessel: vesselName,
         vessel_imo: vesselImo,
         last_event: lastEventDescription,
       };
       
-      console.log(`[track_sea_container] Container ${containerId}: vessel=${trackingData.vessel}, imo=${vesselImo}`);
+      console.log(`[track_sea_container] Container ${containerId}: vessel=${vesselName}, imo=${vesselImo}`);
 
       const mariadbHost = Deno.env.get('MARIADB_HOST');
       const mariadbPort = Deno.env.get('MARIADB_PORT') || '3306';
