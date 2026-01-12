@@ -1,22 +1,9 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
-
-interface ContainerWithShipment {
-  id: string;
-  numero: string;
-  shipment: {
-    armador: string;
-    master: string;
-  } | {
-    armador: string;
-    master: string;
-  }[] | null;
-}
 
 interface TimelineEvent {
   event_type: string;
@@ -64,16 +51,56 @@ function parseEventDate(dateStr: string | null | undefined): string | null {
   if (!dateStr) return null;
   try {
     const date = new Date(dateStr);
-    if (!isNaN(date.getTime())) return date.toISOString();
+    if (!isNaN(date.getTime())) {
+      return date.toISOString().slice(0, 19).replace('T', ' ');
+    }
   } catch { /* ignore */ }
   return null;
+}
+
+// Identify special events and extract dates
+function extractSpecialDates(events: TimelineEvent[]): { gateOut: string | null; devolucao: string | null } {
+  let gateOut: string | null = null;
+  let devolucao: string | null = null;
+
+  for (const event of events) {
+    const eventType = (event.event_type || '').toUpperCase();
+    const eventCode = (event.event_code || '').toUpperCase();
+    const eventDesc = (event.event_description || '').toUpperCase();
+
+    // Gate Out detection
+    if (
+      eventType.includes('GATE_OUT') || eventType.includes('GATE OUT') ||
+      eventCode.includes('GATE_OUT') || eventCode === 'OA' ||
+      eventDesc.includes('GATE OUT') || eventDesc.includes('SAIDA DO TERMINAL')
+    ) {
+      const parsed = parseEventDate(event.event_date);
+      if (parsed && (!gateOut || parsed > gateOut)) {
+        gateOut = parsed;
+      }
+    }
+
+    // Empty return / Devolução detection
+    if (
+      eventType.includes('EMPTY_RETURN') || eventType.includes('GATE_IN') || eventType.includes('GATE IN') ||
+      eventCode.includes('EMPTY') || eventCode === 'ER' || eventCode === 'RD' ||
+      eventDesc.includes('EMPTY RETURN') || eventDesc.includes('DEVOLUCAO') || eventDesc.includes('GATE IN')
+    ) {
+      const parsed = parseEventDate(event.event_date);
+      if (parsed && (!devolucao || parsed > devolucao)) {
+        devolucao = parsed;
+      }
+    }
+  }
+
+  return { gateOut, devolucao };
 }
 
 async function fetchContainerTimeline(
   containerNumber: string,
   shippingLine: string,
   apiKey: string
-): Promise<{ success: boolean; events?: TimelineEvent[]; error?: string; raw?: any }> {
+): Promise<{ success: boolean; events?: TimelineEvent[]; error?: string; raw?: any; containerType?: string }> {
   const carrier = normalizeShippingLine(shippingLine);
   const apiUrl = `http://api.jsoncargo.com/api/v1/containers/${encodeURIComponent(containerNumber)}?shipping_line=${carrier}`;
   
@@ -101,6 +128,9 @@ async function fetchContainerTimeline(
     }
 
     const events: TimelineEvent[] = [];
+    
+    // Extract container type
+    const containerType = containerData.container_type || containerData.size_type || null;
     
     if (containerData.tracking_events && Array.isArray(containerData.tracking_events)) {
       for (const event of containerData.tracking_events) {
@@ -157,12 +187,33 @@ async function fetchContainerTimeline(
     }
 
     console.log(`[FETCH-TIMELINE] Found ${events.length} events for ${containerNumber}`);
-    return { success: true, events, raw: containerData };
+    return { success: true, events, raw: containerData, containerType };
 
   } catch (error) {
     console.error(`[FETCH-TIMELINE] Error fetching ${containerNumber}:`, error);
     return { success: false, error: error instanceof Error ? error.message : 'Unknown error' };
   }
+}
+
+async function callMariaDBProxy(action: string, params: Record<string, any>): Promise<any> {
+  const SUPABASE_URL = Deno.env.get("SUPABASE_URL");
+  const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+
+  const response = await fetch(`${SUPABASE_URL}/functions/v1/mariadb-proxy`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
+    },
+    body: JSON.stringify({ action, ...params }),
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`MariaDB proxy error: ${response.status} - ${errorText}`);
+  }
+
+  return response.json();
 }
 
 serve(async (req) => {
@@ -171,8 +222,6 @@ serve(async (req) => {
   }
 
   const JSONCARGO_API_KEY = Deno.env.get("JSONCARGO_API_KEY");
-  const SUPABASE_URL = Deno.env.get("SUPABASE_URL");
-  const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
   
   if (!JSONCARGO_API_KEY) {
     return new Response(
@@ -181,17 +230,8 @@ serve(async (req) => {
     );
   }
 
-  if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
-    return new Response(
-      JSON.stringify({ error: "Supabase credentials not configured" }),
-      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-    );
-  }
-
-  const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
-
   try {
-    let containerIds: string[] | undefined;
+    let containerIds: number[] | undefined;
     let limit = 200;
     
     if (req.method === 'POST') {
@@ -204,42 +244,36 @@ serve(async (req) => {
 
     console.log(`[FETCH-TIMELINE] Starting timeline fetch, limit: ${limit}`);
 
-    let query = supabase
-      .from('containers')
-      .select('id, numero, shipment:shipments(armador, master)')
-      .order('updated_at', { ascending: false })
-      .limit(limit);
+    // Fetch containers from MariaDB
+    const containersResponse = await callMariaDBProxy('demurrage_list', {
+      filters: { data_devolucao: null },
+      limit: limit
+    });
 
-    if (containerIds && containerIds.length > 0) {
-      query = query.in('id', containerIds);
-    }
+    const containers = containersResponse.data || [];
 
-    const { data: containers, error: fetchError } = await query;
-
-    if (fetchError) {
-      return new Response(
-        JSON.stringify({ error: fetchError.message }),
-        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
-
-    if (!containers || containers.length === 0) {
+    if (containers.length === 0) {
       return new Response(
         JSON.stringify({ message: "No containers found", processed: 0 }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
-    console.log(`[FETCH-TIMELINE] Processing ${containers.length} containers`);
+    // Filter by containerIds if provided
+    let filteredContainers = containers;
+    if (containerIds && containerIds.length > 0) {
+      filteredContainers = containers.filter((c: any) => containerIds!.includes(c.id));
+    }
+
+    console.log(`[FETCH-TIMELINE] Processing ${filteredContainers.length} containers`);
 
     let processed = 0;
     let eventsInserted = 0;
     let errors = 0;
     const results: { container: string; events: number; error?: string }[] = [];
 
-    for (const container of containers) {
-      const shipment = Array.isArray(container.shipment) ? container.shipment[0] : container.shipment;
-      const armador = shipment?.armador;
+    for (const container of filteredContainers) {
+      const armador = container.armador;
       
       if (!armador) {
         results.push({ container: container.numero, events: 0, error: 'No armador' });
@@ -254,34 +288,66 @@ serve(async (req) => {
         continue;
       }
 
-      const eventsToInsert = result.events.map(event => ({
-        container_id: container.id,
-        container_number: container.numero,
-        event_type: event.event_type,
-        event_code: event.event_code,
-        event_description: event.event_description,
-        event_date: parseEventDate(event.event_date),
-        location: event.location,
-        vessel_name: event.vessel_name,
-        voyage_number: event.voyage_number,
-        terminal: event.terminal,
-        raw_data: result.raw,
-        source: 'JSONCARGO'
-      }));
+      // Extract special dates from events
+      const specialDates = extractSpecialDates(result.events);
 
-      await supabase.from('container_events').delete().eq('container_id', container.id);
+      // Insert events into MariaDB (bulk)
+      try {
+        const eventsToInsert = result.events.map(event => ({
+          container_id: container.id,
+          container_number: container.numero,
+          event_type: event.event_type,
+          event_code: event.event_code || null,
+          event_description: event.event_description || null,
+          event_datetime: parseEventDate(event.event_date),
+          location: event.location || null,
+          vessel_name: event.vessel_name || null,
+          voyage_number: event.voyage_number || null,
+          terminal: event.terminal || null,
+          source: 'JSONCARGO',
+          raw_data: JSON.stringify(result.raw)
+        }));
 
-      const { error: insertError } = await supabase.from('container_events').insert(eventsToInsert);
+        await callMariaDBProxy('demurrage_bulk_create_events', {
+          container_id: container.id,
+          events: eventsToInsert
+        });
 
-      if (insertError) {
-        errors++;
-        results.push({ container: container.numero, events: 0, error: insertError.message });
-      } else {
-        processed++;
         eventsInserted += eventsToInsert.length;
+
+        // Update container with extracted dates and container type
+        const updateFields: Record<string, any> = {};
+        
+        if (specialDates.gateOut) {
+          updateFields.data_gate_out = specialDates.gateOut;
+        }
+        if (specialDates.devolucao) {
+          updateFields.data_devolucao = specialDates.devolucao;
+        }
+        if (result.containerType) {
+          updateFields.tipo_conteiner = result.containerType;
+        }
+
+        if (Object.keys(updateFields).length > 0) {
+          await callMariaDBProxy('demurrage_update', {
+            id: container.id,
+            ...updateFields
+          });
+        }
+
+        processed++;
         results.push({ container: container.numero, events: eventsToInsert.length });
+
+      } catch (insertError) {
+        errors++;
+        results.push({ 
+          container: container.numero, 
+          events: 0, 
+          error: insertError instanceof Error ? insertError.message : 'Insert error' 
+        });
       }
 
+      // Rate limiting
       await new Promise(resolve => setTimeout(resolve, 200));
     }
 
@@ -290,7 +356,7 @@ serve(async (req) => {
     return new Response(
       JSON.stringify({
         status: 'success',
-        total_containers: containers.length,
+        total_containers: filteredContainers.length,
         processed,
         events_inserted: eventsInserted,
         errors,

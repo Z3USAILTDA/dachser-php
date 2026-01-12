@@ -1,29 +1,29 @@
-import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-interface ShipmentInfo {
-  cliente: string;
-  armador: string;
-  master: string;
-}
+async function callMariaDBProxy(action: string, params: Record<string, any> = {}): Promise<any> {
+  const SUPABASE_URL = Deno.env.get("SUPABASE_URL");
+  const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
 
-interface Container {
-  id: string;
-  numero: string;
-  risk_status: string;
-  days_remaining: number | null;
-  expected_cost_usd: number | null;
-  shipments: ShipmentInfo | null;
-}
+  const response = await fetch(`${SUPABASE_URL}/functions/v1/mariadb-proxy`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
+    },
+    body: JSON.stringify({ action, ...params }),
+  });
 
-interface ClientProfile {
-  client_name: string;
-  auto_alert_enabled: boolean;
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`MariaDB proxy error: ${response.status} - ${errorText}`);
+  }
+
+  return response.json();
 }
 
 serve(async (req: Request) => {
@@ -34,54 +34,31 @@ serve(async (req: Request) => {
   console.log("Starting demurrage alert cron job...");
 
   try {
-    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-    const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-    
-    const supabase = createClient(supabaseUrl, supabaseServiceKey);
+    const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
+    const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 
-    // Get client profiles to check who should receive alerts
-    const { data: clientProfiles, error: profilesError } = await supabase
-      .from("client_profiles")
-      .select("client_name, auto_alert_enabled");
-
-    if (profilesError) {
-      console.error("Error fetching client profiles:", profilesError);
-      throw profilesError;
-    }
+    // Get client profiles from MariaDB
+    const profilesResponse = await callMariaDBProxy('demurrage_get_client_profiles', {});
+    const clientProfiles = profilesResponse.data || [];
 
     const alertEnabledClients = new Set(
-      (clientProfiles || [])
-        .filter((p: ClientProfile) => p.auto_alert_enabled)
-        .map((p: ClientProfile) => p.client_name)
+      clientProfiles
+        .filter((p: any) => p.auto_alert_enabled)
+        .map((p: any) => p.client_name)
     );
 
-    // Get all containers at risk with their shipment info
-    const { data: containers, error: containerError } = await supabase
-      .from("containers")
-      .select(`
-        id,
-        numero,
-        risk_status,
-        days_remaining,
-        expected_cost_usd,
-        shipments (
-          cliente,
-          armador,
-          master
-        )
-      `)
-      .in("risk_status", ["at_risk", "critical", "exceeded"]);
+    console.log(`${alertEnabledClients.size} clients have auto-alerts enabled`);
 
-    if (containerError) {
-      console.error("Error fetching containers:", containerError);
-      throw containerError;
-    }
+    // Get all containers at risk from MariaDB
+    const containersResponse = await callMariaDBProxy('demurrage_list', {
+      filters: { risk_status: ['at_risk', 'critical', 'exceeded'] },
+      limit: 500
+    });
 
-    const typedContainers = (containers || []) as unknown as Container[];
+    const containers = containersResponse.data || [];
+    console.log(`Found ${containers.length} containers at risk`);
 
-    console.log(`Found ${typedContainers.length} containers at risk`);
-
-    if (typedContainers.length === 0) {
+    if (containers.length === 0) {
       return new Response(
         JSON.stringify({ success: true, message: "No containers at risk", emailsSent: 0 }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
@@ -89,26 +66,32 @@ serve(async (req: Request) => {
     }
 
     // Filter containers based on client profile settings
-    const alertableContainers = typedContainers.filter(c => {
-      const clientName = c.shipments?.cliente;
+    const alertableContainers = containers.filter((c: any) => {
+      const clientName = c.cliente;
       if (!clientName) return true;
       return alertEnabledClients.has(clientName);
     });
 
     console.log(`${alertableContainers.length} containers eligible for alerts`);
 
-    // Check if we already sent alerts today
+    // Check if we already sent alerts today from MariaDB
     const today = new Date().toISOString().split('T')[0];
-    const containerIds = alertableContainers.map(c => c.id);
+    const containerIds = alertableContainers.map((c: any) => c.id);
     
-    const { data: existingAlerts } = await supabase
-      .from("demurrage_alerts")
-      .select("container_id")
-      .in("container_id", containerIds)
-      .gte("created_at", today);
+    let alreadyAlerted = new Set<number>();
+    try {
+      const alertsResponse = await callMariaDBProxy('demurrage_get_alerts', {
+        filters: { 
+          container_ids: containerIds,
+          sent_after: today
+        }
+      });
+      alreadyAlerted = new Set((alertsResponse.data || []).map((a: any) => a.container_id));
+    } catch (e) {
+      console.log("Could not fetch existing alerts, proceeding with all containers");
+    }
 
-    const alreadyAlerted = new Set((existingAlerts || []).map(a => a.container_id));
-    const newAlerts = alertableContainers.filter(c => !alreadyAlerted.has(c.id));
+    const newAlerts = alertableContainers.filter((c: any) => !alreadyAlerted.has(c.id));
 
     if (newAlerts.length === 0) {
       console.log("All alerts already sent today");
@@ -120,7 +103,6 @@ serve(async (req: Request) => {
 
     let emailsSent = 0;
     const errors: string[] = [];
-
     const notificationEmails = ["demurrage@dachser.com"];
 
     for (const container of newAlerts) {
@@ -131,30 +113,66 @@ serve(async (req: Request) => {
             ? "risk_critical" 
             : "risk_warning";
 
-        const response = await fetch(`${supabaseUrl}/functions/v1/demurrage-send-alert`, {
+        // Send alert via demurrage-send-alert function
+        const response = await fetch(`${SUPABASE_URL}/functions/v1/demurrage-send-alert`, {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
-            "Authorization": `Bearer ${supabaseServiceKey}`,
+            "Authorization": `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
           },
           body: JSON.stringify({
             container_id: container.id,
             container_number: container.numero,
-            client_name: container.shipments?.cliente || "N/A",
-            shipment_master: container.shipments?.master || "N/A",
+            client_name: container.cliente || "N/A",
+            shipment_master: container.shipment_master || "N/A",
             days_remaining: container.days_remaining || 0,
-            expected_cost_usd: container.expected_cost_usd || 0,
+            expected_cost_usd: container.demurrage_usd || 0,
             alert_type: alertType,
             recipient_emails: notificationEmails,
           }),
         });
 
         if (response.ok) {
+          // Record alert in MariaDB
+          try {
+            await callMariaDBProxy('demurrage_create_alert', {
+              container_id: container.id,
+              container_number: container.numero,
+              alert_type: alertType,
+              client_name: container.cliente || "N/A",
+              shipment_master: container.shipment_master || "N/A",
+              days_remaining: container.days_remaining || 0,
+              expected_cost_usd: container.demurrage_usd || 0,
+              recipient_emails: notificationEmails,
+              status: 'sent'
+            });
+          } catch (e) {
+            console.error("Failed to record alert:", e);
+          }
+
           emailsSent++;
           console.log(`Alert sent for container ${container.numero}`);
         } else {
           const errorText = await response.text();
           errors.push(`Failed to send alert for ${container.numero}: ${errorText}`);
+          
+          // Record failed alert
+          try {
+            await callMariaDBProxy('demurrage_create_alert', {
+              container_id: container.id,
+              container_number: container.numero,
+              alert_type: alertType,
+              client_name: container.cliente || "N/A",
+              shipment_master: container.shipment_master || "N/A",
+              days_remaining: container.days_remaining || 0,
+              expected_cost_usd: container.demurrage_usd || 0,
+              recipient_emails: notificationEmails,
+              status: 'failed',
+              error_message: errorText
+            });
+          } catch (e) {
+            console.error("Failed to record alert error:", e);
+          }
         }
       } catch (e) {
         const error = e as Error;
@@ -168,6 +186,9 @@ serve(async (req: Request) => {
       JSON.stringify({
         success: true,
         emailsSent,
+        totalAtRisk: containers.length,
+        eligibleForAlert: alertableContainers.length,
+        newAlerts: newAlerts.length,
         errors: errors.length > 0 ? errors : undefined,
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
