@@ -292,6 +292,40 @@ async function jcJson(url: string, qs: Record<string, string> = {}, timeout = 25
   return result;
 }
 
+// Helper function for retrying JSONCargo API calls with backoff on timeout
+async function jcJsonWithRetry(
+  url: string, 
+  qs: Record<string, string> = {}, 
+  timeout = 25000,
+  maxRetries = 2,
+  backoffMs = 2000
+): Promise<any> {
+  let lastResult: any = null;
+  
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    const result = await jcJson(url, qs, timeout);
+    lastResult = result;
+    
+    // Check if this is a timeout/abort error that we should retry
+    const isTimeoutError = result.__curl_error && (
+      result.__curl_error.includes('abort') || 
+      result.__curl_error.includes('timeout') ||
+      result.__curl_error.includes('signal')
+    );
+    
+    if (isTimeoutError && attempt < maxRetries) {
+      console.log(`[jcJsonWithRetry] Timeout on attempt ${attempt + 1}/${maxRetries + 1}, retrying in ${backoffMs}ms...`);
+      await new Promise(r => setTimeout(r, backoffMs));
+      continue;
+    }
+    
+    // Either success or non-retriable error
+    return result;
+  }
+  
+  return lastResult;
+}
+
 // Cache de IMO de navios já buscados (durante o batch de re-rastreio)
 const vesselImoCache = new Map<string, string | null>();
 
@@ -2406,10 +2440,12 @@ serve(async (req) => {
             // STEP B: Query MBL/BOL API to find sibling containers
             console.log(`[refresh_sea_tracking] No DB sibling found, querying BOL API for MBL ${mblId}...`);
             
-            const bolApiRes = await jcJson(
+            const bolApiRes = await jcJsonWithRetry(
               `http://api.jsoncargo.com/api/v1/containers/bol/${encodeURIComponent(mblId)}`,
               { shipping_line: apiShippingLine },
-              15000
+              25000,
+              2,  // max retries
+              2000 // backoff ms
             );
             
             if (!bolApiRes.__curl_error && !bolApiRes.error && bolApiRes.data) {
@@ -2430,10 +2466,12 @@ serve(async (req) => {
                 console.log(`[refresh_sea_tracking] Found non-leasing sibling ${nonLeasingSibling}, tracking it...`);
                 
                 // STEP D: Track the non-leasing sibling
-                const siblingApiRes = await jcJson(
+                const siblingApiRes = await jcJsonWithRetry(
                   `http://api.jsoncargo.com/api/v1/containers/${encodeURIComponent(nonLeasingSibling)}`,
                   { shipping_line: apiShippingLine },
-                  15000
+                  25000,
+                  2,  // max retries
+                  2000 // backoff ms
                 );
                 
                 if (!siblingApiRes.__curl_error && !siblingApiRes.error && siblingApiRes.data) {
@@ -2569,7 +2607,7 @@ serve(async (req) => {
           const qs: Record<string, string> = {};
           if (apiShippingLine) qs['shipping_line'] = apiShippingLine;
           
-          const apiRes = await jcJson(`http://api.jsoncargo.com/api/v1/containers/${encodeURIComponent(containerId)}`, qs, 15000);
+          const apiRes = await jcJsonWithRetry(`http://api.jsoncargo.com/api/v1/containers/${encodeURIComponent(containerId)}`, qs, 25000, 2, 2000);
           
           if (!apiRes.__curl_error && !apiRes.error && (apiRes.data || apiRes.container_status)) {
             const data = apiRes.data || apiRes;
@@ -2741,10 +2779,12 @@ serve(async (req) => {
               console.log(`[refresh_sea_tracking] Trying sibling fallback for leasing container ${containerId} via MBL ${mblId}`);
               
               // Step 1: Get list of containers from MBL
-              const bolApiRes = await jcJson(
+              const bolApiRes = await jcJsonWithRetry(
                 `http://api.jsoncargo.com/api/v1/containers/bol/${encodeURIComponent(mblId)}`,
                 { shipping_line: apiShippingLine },
-                15000
+                25000,
+                2,  // max retries
+                2000 // backoff ms
               );
               
               let siblingSuccess = false;
@@ -2763,10 +2803,12 @@ serve(async (req) => {
                   console.log(`[refresh_sea_tracking] Tracking non-leasing sibling ${nonLeasingSibling} to get data for ${containerId}`);
                   
                   // Step 3: Track the sibling container
-                  const siblingApiRes = await jcJson(
+                  const siblingApiRes = await jcJsonWithRetry(
                     `http://api.jsoncargo.com/api/v1/containers/${encodeURIComponent(nonLeasingSibling)}`,
                     { shipping_line: apiShippingLine },
-                    15000
+                    25000,
+                    2,  // max retries
+                    2000 // backoff ms
                   );
                   
                   if (!siblingApiRes.__curl_error && !siblingApiRes.error && siblingApiRes.data) {
