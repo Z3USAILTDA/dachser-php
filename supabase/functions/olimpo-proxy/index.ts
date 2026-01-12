@@ -3288,7 +3288,7 @@ serve(async (req) => {
       // Mapping MBL prefixes to shipping line codes for API
       const MBL_PREFIX_TO_SHIPPING_LINE: Record<string, string> = {
         'COSU': 'COSCO', 'CSNU': 'COSCO', 'CBHU': 'COSCO', 'OOLU': 'COSCO',
-        // Hapag-Lloyd - all possible formats
+        // Hapag-Lloyd - all possible formats (BC, NG, LGB, LE, HAM, SS são códigos de escritório)
         'HLCU': 'HAPAG_LLOYD', 'HLXU': 'HAPAG_LLOYD', 'HLCS': 'HAPAG_LLOYD',
         'SAHL': 'HAPAG_LLOYD', // South Africa prefix
         'MAEU': 'MAERSK', 'MRKU': 'MAERSK', 'MSKU': 'MAERSK',
@@ -3300,6 +3300,10 @@ serve(async (req) => {
         'YMLU': 'YANG_MING', 'YMMU': 'YANG_MING',
         'ZIMU': 'ZIM', 'ZCSU': 'ZIM',
         'GLNL': 'HAPAG_LLOYD', 'GLSL': 'CMA_CGM',
+        // Regional Container Lines (Bangkok)
+        'BKKM': 'RCL', 'BKMR': 'RCL',
+        // Sinotrans Container Lines
+        'GLHK': 'SINOTRANS', 'SNKO': 'SINOTRANS', 'SNTU': 'SINOTRANS',
       };
 
       // Normalize MBL to try alternative formats for API calls
@@ -3307,14 +3311,21 @@ serve(async (req) => {
         const variations = [mblId];
         const upperMbl = mblId.toUpperCase();
         
-        // Hapag-Lloyd: HLCUSS* -> try HLCU* (remove SS)
-        if (upperMbl.startsWith('HLCUSS')) {
-          variations.push(upperMbl.replace('HLCUSS', 'HLCU'));
+        // Hapag-Lloyd: remover códigos de escritório (BC, NG, LGB, LE, HAM, SS)
+        // HLCUBC1234567 → HLCU1234567
+        // HLCUNG1234567 → HLCU1234567
+        // HLCULGB1234567 → HLCU1234567
+        // HLCULE1234567 → HLCU1234567
+        const hapagOfficeCodes = ['BC', 'NG', 'LGB', 'LE', 'HAM', 'SS', 'NYC', 'CHI', 'ATL', 'HOU', 'SEA', 'LAX'];
+        for (const code of hapagOfficeCodes) {
+          const pattern = new RegExp(`^HLCU${code}(\\d+.*)$`, 'i');
+          const match = upperMbl.match(pattern);
+          if (match) {
+            variations.push(`HLCU${match[1]}`);
+            break;
+          }
         }
-        // Hapag-Lloyd: HLCUHAM* -> try HLCU* (remove HAM port code)
-        if (upperMbl.startsWith('HLCUHAM')) {
-          variations.push(upperMbl.replace('HLCUHAM', 'HLCU'));
-        }
+        
         // ONE: ONEYHAMFA* -> try ONEYHAMA* and ONEY*
         if (upperMbl.startsWith('ONEYHAMFA')) {
           variations.push(upperMbl.replace('ONEYHAMFA', 'ONEYHAMA'));
@@ -3373,8 +3384,8 @@ serve(async (req) => {
       };
 
       // Batch processing parameters to avoid timeout
-      const batchSize = parseInt(url.searchParams.get('batch_size') || '10', 10);
-      const maxTimeMs = parseInt(url.searchParams.get('max_time_ms') || '45000', 10);
+      const batchSize = parseInt(url.searchParams.get('batch_size') || '20', 10);
+      const maxTimeMs = parseInt(url.searchParams.get('max_time_ms') || '60000', 10);
       const startTime = Date.now();
 
       try {
@@ -3427,17 +3438,11 @@ serve(async (req) => {
 
           const shippingLine = detectShippingLineFromMbl(mblId);
 
+          // Se armador desconhecido, tentar API sem especificar shipping_line (auto-detect)
+          let effectiveShippingLine = shippingLine;
           if (!shippingLine) {
-            console.log(`[enrich_sea_containers] Could not detect shipping line for MBL ${mblId}`);
-            // Marcar como ARMADOR_DESCONHECIDO para não reprocessar
-            await client.execute(`
-              UPDATE dados_dachser.t_tracking_sea 
-              SET container = 'ARMADOR_DESCONHECIDO'
-              WHERE mbl_id = ? AND (container = 'PENDENTE' OR container IS NULL OR container = '')
-            `, [mblId]);
-            details.push({ mbl: mblId, status: 'unknown_shipping_line' });
-            errors++;
-            continue;
+            console.log(`[enrich_sea_containers] Unknown shipping line for MBL ${mblId}, will try API auto-detect`);
+            effectiveShippingLine = null; // API will try to auto-detect
           }
 
           try {
@@ -3451,9 +3456,13 @@ serve(async (req) => {
             
             for (const mblVariation of mblVariations) {
               // Call JsonCargo API to get containers for this MBL variation
+              const apiParams: Record<string, string> = {};
+              if (effectiveShippingLine) {
+                apiParams.shipping_line = effectiveShippingLine;
+              }
               const apiRes = await jcJson(
                 `http://api.jsoncargo.com/api/v1/containers/bol/${encodeURIComponent(mblVariation)}`,
-                { shipping_line: shippingLine }
+                apiParams
               );
 
               if (apiRes.__curl_error) {
@@ -3529,7 +3538,7 @@ serve(async (req) => {
                 row.consignee || null,
                 row.email_analista || null,
                 row.email_cliente || null,
-                normalizeShippingLine(shippingLine)
+                normalizeShippingLine(effectiveShippingLine || 'UNKNOWN')
               ]);
             }
 
