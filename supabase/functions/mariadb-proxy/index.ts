@@ -7636,6 +7636,133 @@ serve(async (req) => {
         break;
       }
 
+      case 'demurrage_get_client_profiles': {
+        console.log('Fetching demurrage client profiles');
+
+        const profiles = await client.query(`
+          SELECT * FROM dados_dachser.t_dachser_demurrage_client_profiles
+          ORDER BY cliente ASC
+        `);
+
+        // Parse contact_emails JSON
+        const parsed = (profiles || []).map((p: any) => ({
+          ...p,
+          contact_emails: p.contact_emails ? JSON.parse(p.contact_emails) : []
+        }));
+
+        result = { success: true, data: parsed };
+        break;
+      }
+
+      case 'demurrage_create_client_profile': {
+        const { cliente, auto_alert_enabled, alert_days_before, report_frequency, contact_emails } = body as any;
+        console.log('Creating demurrage client profile:', cliente);
+
+        if (!cliente) {
+          return new Response(
+            JSON.stringify({ error: 'cliente é obrigatório' }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+
+        // Check if profile already exists
+        const existing = await client.query(
+          `SELECT id FROM dados_dachser.t_dachser_demurrage_client_profiles WHERE cliente = ?`,
+          [cliente]
+        );
+
+        if (existing && existing.length > 0) {
+          return new Response(
+            JSON.stringify({ error: 'Perfil já existe para este cliente' }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+
+        await client.execute(`
+          INSERT INTO dados_dachser.t_dachser_demurrage_client_profiles 
+            (cliente, auto_alert_enabled, alert_days_before, report_frequency, contact_emails)
+          VALUES (?, ?, ?, ?, ?)
+        `, [
+          cliente,
+          auto_alert_enabled ? 1 : 0,
+          alert_days_before || 3,
+          report_frequency || 'WEEKLY',
+          JSON.stringify(contact_emails || [])
+        ]);
+
+        result = { success: true };
+        break;
+      }
+
+      case 'demurrage_update_client_profile': {
+        const { cliente: profileCliente, updates: profileUpdates } = body as { cliente: string; updates: Record<string, unknown> };
+        console.log('Updating demurrage client profile:', profileCliente);
+
+        if (!profileCliente || !profileUpdates) {
+          return new Response(
+            JSON.stringify({ error: 'cliente e updates são obrigatórios' }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+
+        const allowedProfileFields = ['auto_alert_enabled', 'alert_days_before', 'report_frequency', 'contact_emails'];
+        const profileSetClauses: string[] = [];
+        const profileValues: unknown[] = [];
+
+        for (const [key, value] of Object.entries(profileUpdates)) {
+          if (allowedProfileFields.includes(key)) {
+            if (key === 'contact_emails') {
+              profileSetClauses.push(`${key} = ?`);
+              profileValues.push(JSON.stringify(value));
+            } else if (key === 'auto_alert_enabled') {
+              profileSetClauses.push(`${key} = ?`);
+              profileValues.push(value ? 1 : 0);
+            } else {
+              profileSetClauses.push(`${key} = ?`);
+              profileValues.push(value);
+            }
+          }
+        }
+
+        if (profileSetClauses.length === 0) {
+          return new Response(
+            JSON.stringify({ error: 'Nenhum campo válido para atualizar' }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+
+        profileSetClauses.push('updated_at = NOW()');
+
+        await client.execute(`
+          UPDATE dados_dachser.t_dachser_demurrage_client_profiles
+          SET ${profileSetClauses.join(', ')}
+          WHERE cliente = ?
+        `, [...profileValues, profileCliente]);
+
+        result = { success: true };
+        break;
+      }
+
+      case 'demurrage_delete_client_profile': {
+        const { cliente: deleteCliente } = body as { cliente: string };
+        console.log('Deleting demurrage client profile:', deleteCliente);
+
+        if (!deleteCliente) {
+          return new Response(
+            JSON.stringify({ error: 'cliente é obrigatório' }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+
+        await client.execute(`
+          DELETE FROM dados_dachser.t_dachser_demurrage_client_profiles
+          WHERE cliente = ?
+        `, [deleteCliente]);
+
+        result = { success: true };
+        break;
+      }
+
       // ==================== CHB CLIENT CONFIG (ai_agente) ====================
       case 'get_chb_client_configs': {
         console.log('Fetching CHB client configs from ai_agente');
