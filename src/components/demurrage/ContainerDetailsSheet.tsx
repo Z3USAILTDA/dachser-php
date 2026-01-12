@@ -87,22 +87,57 @@ export function ContainerDetailsSheet({
 
   const getFtSourceLabel = (source: string | null) => {
     switch (source) {
-      case 'PROCESSO': return 'Por MBL';
-      case 'CONTRATO': return 'Contrato Cliente';
-      case 'TARIFA': return 'Tarifa Armador';
-      case 'CONTAINER': return 'Container';
+      case 'HISTORICAL': return 'Dados Históricos';
+      case 'SYNC': return 'Sincronização';
+      case 'ETA': return 'ETA Estimado';
+      case 'MANUAL': return 'Configuração Manual';
+      case 'CLIENT_CONFIG': return 'Contrato Cliente';
+      case 'RATE_TABLE': return 'Tabela de Tarifas';
       default: return 'Padrão (14 dias)';
     }
   };
 
   const getFtSourceBadge = (source: string | null) => {
     switch (source) {
-      case 'PROCESSO':
-        return <Badge className="bg-emerald-500/10 text-emerald-400 border-emerald-500/20">MBL</Badge>;
-      case 'CONTRATO':
-        return <Badge className="bg-blue-500/10 text-blue-400 border-blue-500/20">Contrato</Badge>;
-      case 'TARIFA':
-        return <Badge className="bg-purple-500/10 text-purple-400 border-purple-500/20">Tarifa</Badge>;
+      case 'HISTORICAL':
+        return (
+          <Badge className="bg-purple-500/10 text-purple-400 border-purple-500/20">
+            <History className="h-3 w-3 mr-1" />
+            Histórico
+          </Badge>
+        );
+      case 'SYNC':
+        return (
+          <Badge className="bg-blue-500/10 text-blue-400 border-blue-500/20">
+            <Clock className="h-3 w-3 mr-1" />
+            Sincronização
+          </Badge>
+        );
+      case 'ETA':
+        return (
+          <Badge className="bg-yellow-500/10 text-yellow-400 border-yellow-500/20">
+            <Calendar className="h-3 w-3 mr-1" />
+            ETA
+          </Badge>
+        );
+      case 'MANUAL':
+        return (
+          <Badge className="bg-emerald-500/10 text-emerald-400 border-emerald-500/20">
+            Manual
+          </Badge>
+        );
+      case 'CLIENT_CONFIG':
+        return (
+          <Badge className="bg-cyan-500/10 text-cyan-400 border-cyan-500/20">
+            Contrato
+          </Badge>
+        );
+      case 'RATE_TABLE':
+        return (
+          <Badge className="bg-orange-500/10 text-orange-400 border-orange-500/20">
+            Tarifa
+          </Badge>
+        );
       default:
         return <Badge variant="secondary">Default</Badge>;
     }
