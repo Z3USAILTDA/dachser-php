@@ -7,19 +7,27 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { TablePagination } from "@/components/layout/TablePagination";
-import { Users, Plus, Edit, Bell, BellOff, Search, DollarSign, AlertTriangle } from "lucide-react";
+import { Users, Plus, Edit, Bell, BellOff, Search, DollarSign, AlertTriangle, Mail } from "lucide-react";
 import { useDemurrageData } from "@/hooks/useDemurrageData";
+import { useClientProfiles, useCreateClientProfile, useUpdateClientProfile } from "@/hooks/useClientProfiles";
+import { ClientProfileDialog, ClientProfileData } from "@/components/demurrage/ClientProfileDialog";
+import { toast } from "sonner";
 
 type QuickFilter = "all" | "reports" | "no_reports" | "demurrage" | "pending";
 const PAGE_SIZE = 15;
 
-interface ClientProfile {
+interface ClientProfileView {
   cliente: string;
   auto_alert_enabled: boolean;
+  alert_days_before: number;
+  report_frequency: string;
+  contact_emails: string[];
   containers: number;
   total_demurrage: number;
   exceeded: number;
+  hasProfile: boolean;
 }
 
 export default function DemurrageClients() {
@@ -27,23 +35,43 @@ export default function DemurrageClients() {
   const [filterReports, setFilterReports] = useState<string>("all");
   const [quickFilter, setQuickFilter] = useState<QuickFilter>("all");
   const [currentPage, setCurrentPage] = useState(1);
+  
+  // Dialog state
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [selectedProfile, setSelectedProfile] = useState<ClientProfileData | null>(null);
+  const [isNewProfile, setIsNewProfile] = useState(false);
 
   const { data: containers = [], isLoading } = useDemurrageData();
+  const { data: clientProfiles = [] } = useClientProfiles();
+  const createProfile = useCreateClientProfile();
+  const updateProfile = useUpdateClientProfile();
 
-  // Group containers by client
-  const clientProfiles = useMemo(() => {
-    const clientMap = new Map<string, ClientProfile>();
+  // Create a map of profiles by cliente name
+  const profileMap = useMemo(() => {
+    const map = new Map<string, typeof clientProfiles[0]>();
+    clientProfiles.forEach(p => map.set(p.cliente, p));
+    return map;
+  }, [clientProfiles]);
+
+  // Group containers by client and merge with profiles
+  const clientProfileViews = useMemo(() => {
+    const clientMap = new Map<string, ClientProfileView>();
 
     containers.forEach(c => {
       const clientName = c.cliente || 'SEM CLIENTE';
+      const existingProfile = profileMap.get(clientName);
       
       if (!clientMap.has(clientName)) {
         clientMap.set(clientName, {
           cliente: clientName,
-          auto_alert_enabled: c.client_auto_alert,
+          auto_alert_enabled: existingProfile?.auto_alert_enabled ?? c.client_auto_alert ?? false,
+          alert_days_before: existingProfile?.alert_days_before ?? c.client_alert_days_before ?? 3,
+          report_frequency: existingProfile?.report_frequency ?? c.client_report_frequency ?? 'WEEKLY',
+          contact_emails: existingProfile?.contact_emails ?? [],
           containers: 0,
           total_demurrage: 0,
           exceeded: 0,
+          hasProfile: !!existingProfile,
         });
       }
 
@@ -56,23 +84,22 @@ export default function DemurrageClients() {
     });
 
     return Array.from(clientMap.values()).sort((a, b) => b.total_demurrage - a.total_demurrage);
-  }, [containers]);
+  }, [containers, profileMap]);
 
   const formatCurrency = (value: number) => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 0 }).format(value);
 
   const stats = useMemo(() => {
-    const total = clientProfiles.length;
-    const reportsEnabled = clientProfiles.filter(p => p.auto_alert_enabled).length;
-    const noReports = clientProfiles.filter(p => !p.auto_alert_enabled).length;
-    const totalDemurrage = clientProfiles.reduce((sum, p) => sum + p.total_demurrage, 0);
-    // Count unique clients in containers that don't have a profile yet (approximation)
-    const pendingProfiles = 0; // This would need a separate query to determine
+    const total = clientProfileViews.length;
+    const reportsEnabled = clientProfileViews.filter(p => p.auto_alert_enabled).length;
+    const noReports = clientProfileViews.filter(p => !p.auto_alert_enabled).length;
+    const totalDemurrage = clientProfileViews.reduce((sum, p) => sum + p.total_demurrage, 0);
+    const pendingProfiles = clientProfileViews.filter(p => !p.hasProfile).length;
 
     return { total, reportsEnabled, noReports, totalDemurrage, pendingProfiles };
-  }, [clientProfiles]);
+  }, [clientProfileViews]);
 
   const filteredProfiles = useMemo(() => {
-    return clientProfiles.filter(p => {
+    return clientProfileViews.filter(p => {
       const matchesSearch = p.cliente.toLowerCase().includes(searchTerm.toLowerCase());
       
       let matchesQuickFilter = true;
@@ -80,6 +107,8 @@ export default function DemurrageClients() {
         matchesQuickFilter = p.auto_alert_enabled;
       } else if (quickFilter === "no_reports") {
         matchesQuickFilter = !p.auto_alert_enabled;
+      } else if (quickFilter === "pending") {
+        matchesQuickFilter = !p.hasProfile;
       }
       
       const matchesFilter = filterReports === "all" || 
@@ -87,7 +116,7 @@ export default function DemurrageClients() {
         (filterReports === "no-reports" && !p.auto_alert_enabled);
       return matchesSearch && matchesQuickFilter && matchesFilter;
     });
-  }, [clientProfiles, searchTerm, quickFilter, filterReports]);
+  }, [clientProfileViews, searchTerm, quickFilter, filterReports]);
 
   useEffect(() => {
     setCurrentPage(1);
@@ -103,8 +132,80 @@ export default function DemurrageClients() {
     setQuickFilter(filter);
   };
 
+  // Handler: Open new profile dialog
+  const handleNewProfile = () => {
+    setSelectedProfile(null);
+    setIsNewProfile(true);
+    setDialogOpen(true);
+  };
+
+  // Handler: Edit profile
+  const handleEditProfile = (profile: ClientProfileView) => {
+    setSelectedProfile({
+      cliente: profile.cliente,
+      auto_alert_enabled: profile.auto_alert_enabled,
+      alert_days_before: profile.alert_days_before,
+      report_frequency: profile.report_frequency,
+      contact_emails: profile.contact_emails,
+    });
+    setIsNewProfile(false);
+    setDialogOpen(true);
+  };
+
+  // Handler: Toggle alert
+  const handleToggleAlert = async (profile: ClientProfileView) => {
+    try {
+      if (profile.hasProfile) {
+        await updateProfile.mutateAsync({
+          cliente: profile.cliente,
+          auto_alert_enabled: !profile.auto_alert_enabled,
+        });
+      } else {
+        await createProfile.mutateAsync({
+          cliente: profile.cliente,
+          auto_alert_enabled: !profile.auto_alert_enabled,
+          alert_days_before: profile.alert_days_before,
+          report_frequency: profile.report_frequency,
+          contact_emails: [],
+        });
+      }
+      toast.success(profile.auto_alert_enabled ? "Alertas desativados" : "Alertas ativados");
+    } catch (error) {
+      console.error('Error toggling alert:', error);
+      toast.error("Erro ao atualizar alertas");
+    }
+  };
+
+  // Handler: Submit profile (create or update)
+  const handleSubmitProfile = async (data: ClientProfileData) => {
+    try {
+      if (isNewProfile) {
+        await createProfile.mutateAsync(data);
+        toast.success("Perfil criado com sucesso!");
+      } else {
+        await updateProfile.mutateAsync(data);
+        toast.success("Perfil atualizado com sucesso!");
+      }
+    } catch (error) {
+      console.error('Error saving profile:', error);
+      toast.error(isNewProfile ? "Erro ao criar perfil" : "Erro ao atualizar perfil");
+      throw error;
+    }
+  };
+
+  const getReportFrequencyLabel = (freq: string) => {
+    const labels: Record<string, string> = {
+      DAILY: 'Diário',
+      WEEKLY: 'Semanal',
+      BIWEEKLY: 'Quinzenal',
+      MONTHLY: 'Mensal',
+      NONE: 'Sem relatório',
+    };
+    return labels[freq] || freq;
+  };
+
   const rightActions = (
-    <Button className="bg-[#ffc800] text-black hover:bg-[#e6b400]">
+    <Button onClick={handleNewProfile} className="bg-[#ffc800] text-black hover:bg-[#e6b400]">
       <Plus className="h-4 w-4 mr-2" />
       Novo Perfil
     </Button>
@@ -159,6 +260,8 @@ export default function DemurrageClients() {
       />
     </div>
   );
+
+  const isUpdating = createProfile.isPending || updateProfile.isPending;
 
   return (
     <DemurrageLayout
@@ -218,6 +321,8 @@ export default function DemurrageClients() {
                     <TableRow className="border-[rgba(255,255,255,0.1)]">
                       <TableHead>Cliente</TableHead>
                       <TableHead>Reporta</TableHead>
+                      <TableHead>Frequência</TableHead>
+                      <TableHead className="text-center">E-mails</TableHead>
                       <TableHead className="text-center">Containers</TableHead>
                       <TableHead className="text-right">Demurrage</TableHead>
                       <TableHead className="text-center">Excedidos</TableHead>
@@ -225,25 +330,78 @@ export default function DemurrageClients() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {paginatedProfiles.map((profile) => (
-                      <TableRow key={profile.cliente} className="border-[rgba(255,255,255,0.1)]">
-                        <TableCell className="font-medium">{profile.cliente}</TableCell>
-                        <TableCell>
-                          <Button size="sm" variant={profile.auto_alert_enabled ? "default" : "secondary"} className={profile.auto_alert_enabled ? "gap-1 bg-green-500/20 text-green-500 hover:bg-green-500/30 border-green-500/30" : "gap-1 bg-[rgba(255,255,255,0.1)] text-muted-foreground"}>
-                            {profile.auto_alert_enabled ? <Bell className="h-3 w-3" /> : <BellOff className="h-3 w-3" />}
-                            {profile.auto_alert_enabled ? 'Sim' : 'Não'}
-                          </Button>
-                        </TableCell>
-                        <TableCell className="text-center font-medium">{profile.containers}</TableCell>
-                        <TableCell className="text-right font-semibold text-[#ffc800]">{formatCurrency(profile.total_demurrage)}</TableCell>
-                        <TableCell className="text-center">
-                          {profile.exceeded ? <Badge variant="destructive">{profile.exceeded}</Badge> : <Badge variant="outline" className="text-muted-foreground">0</Badge>}
-                        </TableCell>
-                        <TableCell>
-                          <Button size="sm" variant="ghost" className="text-muted-foreground hover:text-white"><Edit className="h-4 w-4" /></Button>
-                        </TableCell>
-                      </TableRow>
-                    ))}
+                    <TooltipProvider>
+                      {paginatedProfiles.map((profile) => (
+                        <TableRow key={profile.cliente} className="border-[rgba(255,255,255,0.1)]">
+                          <TableCell className="font-medium">
+                            <div className="flex items-center gap-2">
+                              {profile.cliente}
+                              {!profile.hasProfile && (
+                                <Badge variant="outline" className="text-xs text-muted-foreground border-muted-foreground/30">
+                                  Sem perfil
+                                </Badge>
+                              )}
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Button 
+                                  size="sm" 
+                                  variant={profile.auto_alert_enabled ? "default" : "secondary"} 
+                                  className={profile.auto_alert_enabled ? "gap-1 bg-green-500/20 text-green-500 hover:bg-green-500/30 border-green-500/30" : "gap-1 bg-[rgba(255,255,255,0.1)] text-muted-foreground"}
+                                  onClick={() => handleToggleAlert(profile)}
+                                  disabled={isUpdating}
+                                >
+                                  {profile.auto_alert_enabled ? <Bell className="h-3 w-3" /> : <BellOff className="h-3 w-3" />}
+                                  {profile.auto_alert_enabled ? 'Sim' : 'Não'}
+                                </Button>
+                              </TooltipTrigger>
+                              <TooltipContent>Clique para {profile.auto_alert_enabled ? 'desativar' : 'ativar'} alertas</TooltipContent>
+                            </Tooltip>
+                          </TableCell>
+                          <TableCell className="text-sm text-muted-foreground">
+                            {getReportFrequencyLabel(profile.report_frequency)}
+                          </TableCell>
+                          <TableCell className="text-center">
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <div className="flex items-center justify-center gap-1">
+                                  <Mail className="h-3 w-3 text-muted-foreground" />
+                                  <span>{profile.contact_emails.length}</span>
+                                </div>
+                              </TooltipTrigger>
+                              <TooltipContent>
+                                {profile.contact_emails.length > 0 
+                                  ? profile.contact_emails.join(', ')
+                                  : 'Nenhum e-mail configurado'
+                                }
+                              </TooltipContent>
+                            </Tooltip>
+                          </TableCell>
+                          <TableCell className="text-center font-medium">{profile.containers}</TableCell>
+                          <TableCell className="text-right font-semibold text-[#ffc800]">{formatCurrency(profile.total_demurrage)}</TableCell>
+                          <TableCell className="text-center">
+                            {profile.exceeded ? <Badge variant="destructive">{profile.exceeded}</Badge> : <Badge variant="outline" className="text-muted-foreground">0</Badge>}
+                          </TableCell>
+                          <TableCell>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Button 
+                                  size="sm" 
+                                  variant="ghost" 
+                                  className="text-muted-foreground hover:text-white"
+                                  onClick={() => handleEditProfile(profile)}
+                                >
+                                  <Edit className="h-4 w-4" />
+                                </Button>
+                              </TooltipTrigger>
+                              <TooltipContent>Editar perfil</TooltipContent>
+                            </Tooltip>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TooltipProvider>
                   </TableBody>
                 </Table>
                 <TablePagination currentPage={currentPage} totalPages={totalPages} onPageChange={setCurrentPage} maxVisiblePages={5} showFirstLast={false} />
@@ -252,6 +410,16 @@ export default function DemurrageClients() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Profile Dialog */}
+      <ClientProfileDialog
+        open={dialogOpen}
+        onOpenChange={setDialogOpen}
+        profile={selectedProfile}
+        isNew={isNewProfile}
+        onSubmit={handleSubmitProfile}
+        isLoading={isUpdating}
+      />
     </DemurrageLayout>
   );
 }
