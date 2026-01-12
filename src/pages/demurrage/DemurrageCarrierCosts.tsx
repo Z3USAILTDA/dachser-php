@@ -7,10 +7,10 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Ship, Plus, Search, AlertTriangle, CheckCircle2, FileSearch, FileSpreadsheet, DollarSign, Clock, Calculator, TrendingUp, TrendingDown, Minus, FileWarning, CheckCheck } from "lucide-react";
+import { Ship, Plus, Search, AlertTriangle, CheckCircle2, FileSearch, FileSpreadsheet, DollarSign, Clock, Calculator, TrendingUp, TrendingDown, Minus, FileWarning, CheckCheck, Anchor } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { TablePagination } from "@/components/layout/TablePagination";
-import { useDemurrageData, useUpdateDemurrageContainer } from "@/hooks/useDemurrageData";
+import { useDemurrageData, useUpdateDemurrageContainer, useDemurrageArmadores, useCreateAuditEvent } from "@/hooks/useDemurrageData";
 import { AuditCostDialog, AuditData } from "@/components/demurrage/AuditCostDialog";
 import { BulkAuditDialog } from "@/components/demurrage/BulkAuditDialog";
 import { NewInvoiceDialog } from "@/components/demurrage/NewInvoiceDialog";
@@ -23,6 +23,7 @@ const PAGE_SIZE = 15;
 
 export default function DemurrageCarrierCosts() {
   const [statusFilter, setStatusFilter] = useState<string>("all");
+  const [armadorFilter, setArmadorFilter] = useState<string>("all");
   const [searchTerm, setSearchTerm] = useState("");
   const [quickFilter, setQuickFilter] = useState<QuickFilter>("all");
   const [currentPage, setCurrentPage] = useState(1);
@@ -34,7 +35,9 @@ export default function DemurrageCarrierCosts() {
   const [isSubmittingInvoice, setIsSubmittingInvoice] = useState(false);
 
   const { data: containers = [], isLoading } = useDemurrageData();
+  const { data: armadores = [] } = useDemurrageArmadores();
   const updateContainer = useUpdateDemurrageContainer();
+  const createAuditEvent = useCreateAuditEvent();
 
   // Filter containers that have carrier invoice data OR have demurrage to audit
   const carrierContainers = useMemo(() => {

@@ -8,11 +8,13 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { TablePagination } from "@/components/layout/TablePagination";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import { Scale, Plus, CheckCircle, XCircle, Clock, MessageSquare, DollarSign, TrendingUp } from "lucide-react";
-import { useDemurrageData, useUpdateDemurrageContainer, DemurrageContainer } from "@/hooks/useDemurrageData";
+import { Scale, Plus, CheckCircle, XCircle, Clock, MessageSquare, DollarSign, TrendingUp, History } from "lucide-react";
+import { useDemurrageData, useUpdateDemurrageContainer, useDemurrageDisputesList, useUpdateDemurrageDispute, useDemurrageContainerEvents, DemurrageContainer, DemurrageDispute } from "@/hooks/useDemurrageData";
 import { OpenDisputeDialog } from "@/components/demurrage/OpenDisputeDialog";
 import { ResolveDisputeDialog } from "@/components/demurrage/ResolveDisputeDialog";
 import { SelectContainerForDisputeDialog } from "@/components/demurrage/SelectContainerForDisputeDialog";
+import { ContainerTimeline } from "@/components/demurrage/ContainerTimeline";
+import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet";
 import { toast } from "sonner";
 
 type QuickFilter = "all" | "total" | "recovered" | "in_progress" | "success_rate";
@@ -29,14 +31,34 @@ export default function DemurrageDisputes() {
   const [resolveDialogOpen, setResolveDialogOpen] = useState(false);
   const [selectedContainer, setSelectedContainer] = useState<DemurrageContainer | null>(null);
   const [resolveType, setResolveType] = useState<"won" | "lost">("won");
+  const [selectedDispute, setSelectedDispute] = useState<DemurrageDispute | null>(null);
+  const [timelineOpen, setTimelineOpen] = useState(false);
 
-  const { data: containers = [], isLoading } = useDemurrageData();
+  const { data: containers = [], isLoading: containersLoading } = useDemurrageData();
+  const { data: disputes = [], isLoading: disputesLoading } = useDemurrageDisputesList();
   const updateContainer = useUpdateDemurrageContainer();
+  const updateDispute = useUpdateDemurrageDispute();
+  
+  const isLoading = containersLoading || disputesLoading;
 
-  // Filter containers that have dispute data
+  // Merge disputes with container data for display
   const disputeContainers = useMemo(() => {
-    return containers.filter(c => c.dispute_status || c.disputed_amount_usd > 0);
-  }, [containers]);
+    // Create a map of containers by ID for quick lookup
+    const containerMap = new Map<number, DemurrageContainer>();
+    containers.forEach(c => containerMap.set(c.id, c));
+    
+    // Use disputes from the dedicated table, enriching with container data
+    return disputes.map(d => {
+      const container = containerMap.get(d.container_id);
+      return {
+        ...d,
+        numero: d.container_number || container?.numero || '-',
+        cliente: d.client_name || container?.cliente || '-',
+        armador: d.armador || container?.armador || '-',
+        container,
+      };
+    });
+  }, [disputes, containers]);
 
   const formatCurrency = (value: number) => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 0 }).format(value);
 
@@ -64,10 +86,10 @@ export default function DemurrageDisputes() {
 
   const stats = useMemo(() => {
     const total = disputeContainers.length;
-    const opened = disputeContainers.filter(d => d.dispute_status === 'opened').length;
-    const negotiating = disputeContainers.filter(d => d.dispute_status === 'negotiating').length;
-    const won = disputeContainers.filter(d => d.dispute_status === 'won').length;
-    const lost = disputeContainers.filter(d => d.dispute_status === 'lost').length;
+    const opened = disputeContainers.filter(d => d.status === 'opened').length;
+    const negotiating = disputeContainers.filter(d => d.status === 'negotiating').length;
+    const won = disputeContainers.filter(d => d.status === 'won').length;
+    const lost = disputeContainers.filter(d => d.status === 'lost').length;
     const totalDisputed = disputeContainers.reduce((sum, d) => sum + (d.disputed_amount_usd || 0), 0);
     const totalRecovered = disputeContainers.reduce((sum, d) => sum + (d.recovered_amount_usd || 0), 0);
     const inProgress = opened + negotiating;
@@ -78,7 +100,7 @@ export default function DemurrageDisputes() {
 
   const filteredDisputes = useMemo(() => {
     if (activeTab === 'all') return disputeContainers;
-    return disputeContainers.filter(d => d.dispute_status === activeTab);
+    return disputeContainers.filter(d => d.status === activeTab);
   }, [disputeContainers, activeTab]);
 
   useEffect(() => {
@@ -134,13 +156,15 @@ export default function DemurrageDisputes() {
     }
   };
 
-  // Handler: Mark as negotiating
-  const handleNegotiate = async (container: DemurrageContainer) => {
+  // Handler: Mark as negotiating (uses dispute from table)
+  type DisputeWithContainer = typeof disputeContainers[0];
+  
+  const handleNegotiate = async (dispute: DisputeWithContainer) => {
     try {
-      await updateContainer.mutateAsync({
-        containerId: container.id,
+      await updateDispute.mutateAsync({
+        disputeId: dispute.id,
         updates: {
-          dispute_status: 'negotiating',
+          status: 'negotiating',
         }
       });
       toast.success("Disputa marcada como em negociação");
@@ -151,39 +175,44 @@ export default function DemurrageDisputes() {
   };
 
   // Handler: Open resolve dialog (won/lost)
-  const handleOpenResolveDialog = (container: DemurrageContainer, type: "won" | "lost") => {
-    setSelectedContainer(container);
+  const handleOpenResolveDialog = (dispute: DisputeWithContainer, type: "won" | "lost") => {
+    setSelectedDispute(dispute);
+    if (dispute.container) {
+      setSelectedContainer(dispute.container);
+    }
     setResolveType(type);
     setResolveDialogOpen(true);
   };
 
   // Handler: Submit resolution
   const handleSubmitResolution = async (data: { recovered_amount_usd: number; notes?: string }) => {
-    if (!selectedContainer) return;
+    if (!selectedDispute) return;
     
     try {
-      const updates: Record<string, unknown> = {
-        dispute_status: resolveType,
-        recovered_amount_usd: data.recovered_amount_usd,
-      };
-      
-      if (data.notes) {
-        updates.notes = (selectedContainer.notes ? selectedContainer.notes + '\n' : '') + 
-          `[${new Date().toLocaleDateString('pt-BR')}] Disputa ${resolveType === 'won' ? 'ganha' : 'perdida'}: ${data.notes}`;
-      }
-      
-      await updateContainer.mutateAsync({
-        containerId: selectedContainer.id,
-        updates,
+      await updateDispute.mutateAsync({
+        disputeId: selectedDispute.id,
+        updates: {
+          status: resolveType,
+          recovered_amount_usd: data.recovered_amount_usd,
+          resolution_notes: data.notes || null,
+          resolved_at: new Date().toISOString(),
+        },
       });
       
       toast.success(resolveType === 'won' ? "Disputa marcada como ganha!" : "Disputa marcada como perdida");
+      setSelectedDispute(null);
       setSelectedContainer(null);
     } catch (error) {
       console.error('Error resolving dispute:', error);
       toast.error("Erro ao resolver disputa");
       throw error;
     }
+  };
+
+  // Handler: View timeline
+  const handleViewTimeline = (dispute: DisputeWithContainer) => {
+    setSelectedDispute(dispute);
+    setTimelineOpen(true);
   };
 
   const rightActions = (
@@ -283,31 +312,31 @@ export default function DemurrageDisputes() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {paginatedDisputes.map((container) => (
-                      <TableRow key={container.id} className="border-[rgba(255,255,255,0.1)]">
-                        <TableCell className="font-mono">{container.numero}</TableCell>
-                        <TableCell>{container.cliente || '-'}</TableCell>
-                        <TableCell>{container.armador || '-'}</TableCell>
-                        <TableCell className="text-right font-medium">{formatCurrency(container.disputed_amount_usd)}</TableCell>
-                        <TableCell>{getStatusBadge(container.dispute_status)}</TableCell>
-                        <TableCell className="max-w-[150px] truncate" title={container.dispute_reason || ''}>
-                          {container.dispute_reason || '-'}
+                    {paginatedDisputes.map((dispute) => (
+                      <TableRow key={dispute.id} className="border-[rgba(255,255,255,0.1)]">
+                        <TableCell className="font-mono">{dispute.numero}</TableCell>
+                        <TableCell>{dispute.cliente || '-'}</TableCell>
+                        <TableCell>{dispute.armador || '-'}</TableCell>
+                        <TableCell className="text-right font-medium">{formatCurrency(dispute.disputed_amount_usd)}</TableCell>
+                        <TableCell>{getStatusBadge(dispute.status)}</TableCell>
+                        <TableCell className="max-w-[150px] truncate" title={dispute.reason || ''}>
+                          {dispute.reason || '-'}
                         </TableCell>
                         <TableCell className="text-right font-medium text-green-500">
-                          {container.dispute_status === 'won' ? formatCurrency(container.recovered_amount_usd) : '-'}
+                          {dispute.status === 'won' ? formatCurrency(dispute.recovered_amount_usd) : '-'}
                         </TableCell>
                         <TableCell>
                           <TooltipProvider>
                             <div className="flex gap-1">
-                              {container.dispute_status === 'opened' && (
+                              {dispute.status === 'opened' && (
                                 <Tooltip>
                                   <TooltipTrigger asChild>
                                     <Button 
                                       size="sm" 
                                       variant="outline" 
                                       className="border-[rgba(255,255,255,0.2)] text-xs"
-                                      onClick={() => handleNegotiate(container)}
-                                      disabled={updateContainer.isPending}
+                                      onClick={() => handleNegotiate(dispute)}
+                                      disabled={updateDispute.isPending}
                                     >
                                       <MessageSquare className="h-3 w-3 mr-1" />
                                       Negociar
@@ -316,15 +345,15 @@ export default function DemurrageDisputes() {
                                   <TooltipContent>Iniciar negociação</TooltipContent>
                                 </Tooltip>
                               )}
-                              {(container.dispute_status === 'opened' || container.dispute_status === 'negotiating') && (
+                              {(dispute.status === 'opened' || dispute.status === 'negotiating') && (
                                 <>
                                   <Tooltip>
                                     <TooltipTrigger asChild>
                                       <Button 
                                         size="sm" 
                                         className="bg-green-500/20 text-green-500 hover:bg-green-500/30 h-8 w-8 p-0"
-                                        onClick={() => handleOpenResolveDialog(container, "won")}
-                                        disabled={updateContainer.isPending}
+                                        onClick={() => handleOpenResolveDialog(dispute, "won")}
+                                        disabled={updateDispute.isPending}
                                       >
                                         <CheckCircle className="h-4 w-4" />
                                       </Button>
@@ -336,8 +365,8 @@ export default function DemurrageDisputes() {
                                       <Button 
                                         size="sm" 
                                         className="bg-red-500/20 text-red-500 hover:bg-red-500/30 h-8 w-8 p-0"
-                                        onClick={() => handleOpenResolveDialog(container, "lost")}
-                                        disabled={updateContainer.isPending}
+                                        onClick={() => handleOpenResolveDialog(dispute, "lost")}
+                                        disabled={updateDispute.isPending}
                                       >
                                         <XCircle className="h-4 w-4" />
                                       </Button>
@@ -346,6 +375,19 @@ export default function DemurrageDisputes() {
                                   </Tooltip>
                                 </>
                               )}
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <Button 
+                                    size="sm" 
+                                    variant="ghost" 
+                                    className="h-8 w-8 p-0"
+                                    onClick={() => handleViewTimeline(dispute)}
+                                  >
+                                    <History className="h-4 w-4" />
+                                  </Button>
+                                </TooltipTrigger>
+                                <TooltipContent>Ver histórico</TooltipContent>
+                              </Tooltip>
                             </div>
                           </TooltipProvider>
                         </TableCell>
@@ -382,8 +424,45 @@ export default function DemurrageDisputes() {
         container={selectedContainer}
         resolution={resolveType}
         onSubmit={handleSubmitResolution}
-        isLoading={updateContainer.isPending}
+        isLoading={updateDispute.isPending}
       />
+
+      {/* Timeline Sheet */}
+      <Sheet open={timelineOpen} onOpenChange={setTimelineOpen}>
+        <SheetContent className="bg-[rgba(5,6,18,0.95)] border-[rgba(255,255,255,0.1)] w-[500px] sm:max-w-[500px]">
+          <SheetHeader>
+            <SheetTitle className="flex items-center gap-2">
+              <History className="h-5 w-5 text-[#ffc800]" />
+              Histórico da Disputa
+            </SheetTitle>
+            <SheetDescription>
+              {selectedDispute?.container_number} - {selectedDispute?.client_name}
+            </SheetDescription>
+          </SheetHeader>
+          <div className="mt-6 space-y-4">
+            <div className="p-4 bg-[rgba(255,255,255,0.05)] rounded-lg">
+              <p className="text-sm text-muted-foreground">Status atual</p>
+              <p className="font-medium">{selectedDispute?.status === 'opened' ? 'Aberta' : selectedDispute?.status === 'negotiating' ? 'Em negociação' : selectedDispute?.status === 'won' ? 'Ganha' : 'Perdida'}</p>
+            </div>
+            <div className="p-4 bg-[rgba(255,255,255,0.05)] rounded-lg">
+              <p className="text-sm text-muted-foreground">Valor Disputado</p>
+              <p className="font-medium text-[#ffc800]">{formatCurrency(selectedDispute?.disputed_amount_usd || 0)}</p>
+            </div>
+            {selectedDispute?.reason && (
+              <div className="p-4 bg-[rgba(255,255,255,0.05)] rounded-lg">
+                <p className="text-sm text-muted-foreground">Motivo</p>
+                <p className="text-sm">{selectedDispute.reason}</p>
+              </div>
+            )}
+            {selectedDispute?.resolution_notes && (
+              <div className="p-4 bg-[rgba(255,255,255,0.05)] rounded-lg">
+                <p className="text-sm text-muted-foreground">Notas de Resolução</p>
+                <p className="text-sm">{selectedDispute.resolution_notes}</p>
+              </div>
+            )}
+          </div>
+        </SheetContent>
+      </Sheet>
     </DemurrageLayout>
   );
 }
