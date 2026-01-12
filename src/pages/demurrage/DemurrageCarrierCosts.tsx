@@ -6,11 +6,13 @@ import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
-import { Ship, Plus, Search, AlertTriangle, CheckCircle2, FileSearch, FileSpreadsheet, DollarSign, Clock, Calculator, TrendingUp, TrendingDown, Minus, FileWarning } from "lucide-react";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Ship, Plus, Search, AlertTriangle, CheckCircle2, FileSearch, FileSpreadsheet, DollarSign, Clock, Calculator, TrendingUp, TrendingDown, Minus, FileWarning, CheckCheck } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { TablePagination } from "@/components/layout/TablePagination";
 import { useDemurrageData, useUpdateDemurrageContainer } from "@/hooks/useDemurrageData";
 import { AuditCostDialog, AuditData } from "@/components/demurrage/AuditCostDialog";
+import { BulkAuditDialog } from "@/components/demurrage/BulkAuditDialog";
 import { toast } from "sonner";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { exportDiscrepancyReport } from "@/utils/demurrageExcelExport";
@@ -24,7 +26,9 @@ export default function DemurrageCarrierCosts() {
   const [quickFilter, setQuickFilter] = useState<QuickFilter>("all");
   const [currentPage, setCurrentPage] = useState(1);
   const [auditDialogOpen, setAuditDialogOpen] = useState(false);
+  const [bulkAuditDialogOpen, setBulkAuditDialogOpen] = useState(false);
   const [selectedContainer, setSelectedContainer] = useState<typeof containers[0] | null>(null);
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
 
   const { data: containers = [], isLoading } = useDemurrageData();
   const updateContainer = useUpdateDemurrageContainer();
@@ -141,7 +145,36 @@ export default function DemurrageCarrierCosts() {
 
   useEffect(() => {
     setCurrentPage(1);
+    setSelectedIds(new Set());
   }, [searchTerm, quickFilter, statusFilter]);
+
+  // Selection handlers
+  const handleSelectAll = (checked: boolean) => {
+    if (checked) {
+      setSelectedIds(new Set(filteredInvoices.map(c => c.id)));
+    } else {
+      setSelectedIds(new Set());
+    }
+  };
+
+  const handleSelectOne = (id: number, checked: boolean) => {
+    const newSet = new Set(selectedIds);
+    if (checked) {
+      newSet.add(id);
+    } else {
+      newSet.delete(id);
+    }
+    setSelectedIds(newSet);
+  };
+
+  const selectedContainers = useMemo(() => {
+    return containers.filter(c => selectedIds.has(c.id));
+  }, [containers, selectedIds]);
+
+  const handleBulkAuditSuccess = () => {
+    setSelectedIds(new Set());
+    setBulkAuditDialogOpen(false);
+  };
 
   const totalPages = Math.ceil(filteredInvoices.length / PAGE_SIZE);
   const paginatedInvoices = useMemo(() => {
@@ -213,6 +246,16 @@ export default function DemurrageCarrierCosts() {
 
   const rightActions = (
     <div className="flex gap-2">
+      {selectedIds.size > 0 && (
+        <Button 
+          variant="outline" 
+          onClick={() => setBulkAuditDialogOpen(true)}
+          className="bg-[#ffc800]/10 border-[#ffc800]/30 text-[#ffc800] hover:bg-[#ffc800]/20"
+        >
+          <CheckCheck className="h-4 w-4 mr-2" />
+          Auditar Selecionados ({selectedIds.size})
+        </Button>
+      )}
       <Button 
         variant="outline" 
         onClick={handleExportDiscrepancies}
@@ -327,6 +370,12 @@ export default function DemurrageCarrierCosts() {
                 <Table>
                   <TableHeader>
                     <TableRow className="border-[rgba(255,255,255,0.1)]">
+                      <TableHead className="w-12">
+                        <Checkbox
+                          checked={selectedIds.size > 0 && selectedIds.size === filteredInvoices.length}
+                          onCheckedChange={handleSelectAll}
+                        />
+                      </TableHead>
                       <TableHead>Container</TableHead>
                       <TableHead>Armador</TableHead>
                       <TableHead>Fatura</TableHead>
@@ -341,6 +390,12 @@ export default function DemurrageCarrierCosts() {
                   <TableBody>
                     {paginatedInvoices.map((container) => (
                       <TableRow key={container.id} className="border-[rgba(255,255,255,0.1)] hover:bg-[rgba(255,200,0,0.05)]">
+                        <TableCell>
+                          <Checkbox
+                            checked={selectedIds.has(container.id)}
+                            onCheckedChange={(checked) => handleSelectOne(container.id, !!checked)}
+                          />
+                        </TableCell>
                         <TableCell>
                           <div>
                             <p className="font-mono font-medium">{container.numero}</p>
@@ -390,6 +445,13 @@ export default function DemurrageCarrierCosts() {
         container={selectedContainer}
         onAudit={handleAudit}
         isLoading={updateContainer.isPending}
+      />
+
+      <BulkAuditDialog
+        open={bulkAuditDialogOpen}
+        onOpenChange={setBulkAuditDialogOpen}
+        containers={selectedContainers}
+        onSuccess={handleBulkAuditSuccess}
       />
     </DemurrageLayout>
   );

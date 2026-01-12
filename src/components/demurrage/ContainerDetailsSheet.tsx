@@ -2,6 +2,7 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sh
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useNavigate } from "react-router-dom";
 import { 
   Package, 
@@ -15,11 +16,13 @@ import {
   Building2,
   Anchor,
   MapPin,
-  Navigation
+  Navigation,
+  History
 } from "lucide-react";
 import type { DemurrageContainer } from "@/hooks/useDemurrageData";
 import { format, parseISO } from "date-fns";
 import { ptBR } from "date-fns/locale";
+import { ContainerTimeline } from "./ContainerTimeline";
 
 interface ContainerDetailsSheetProps {
   container: DemurrageContainer | null;
@@ -108,132 +111,154 @@ export function ContainerDetailsSheet({
           </SheetTitle>
         </SheetHeader>
 
-        <div className="space-y-6">
-          {/* Status do Risco */}
-          <div className="flex items-center justify-between p-3 rounded-lg bg-[rgba(255,255,255,0.03)] border border-[rgba(255,255,255,0.1)]">
-            <span className="text-sm text-muted-foreground">Status de Risco</span>
-            {getRiskBadge(container.risk_status)}
-          </div>
+        <Tabs defaultValue="details" className="mt-4">
+          <TabsList className="bg-[rgba(0,0,0,0.5)] border border-[rgba(255,255,255,0.1)] w-full">
+            <TabsTrigger value="details" className="flex-1 data-[state=active]:bg-[#ffc800] data-[state=active]:text-black">
+              <Package className="h-4 w-4 mr-2" />
+              Detalhes
+            </TabsTrigger>
+            <TabsTrigger value="timeline" className="flex-1 data-[state=active]:bg-[#ffc800] data-[state=active]:text-black">
+              <History className="h-4 w-4 mr-2" />
+              Timeline
+            </TabsTrigger>
+          </TabsList>
 
-          {/* Informações Principais */}
-          <div className="space-y-3">
-            <div className="flex items-center justify-between">
-              <h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wider">Informações</h3>
-              {container.mbl && (
-                <Button 
-                  size="sm" 
-                  variant="outline" 
-                  onClick={handleViewTracking}
-                  className="border-[#ffc800]/30 text-[#ffc800] hover:bg-[#ffc800]/10"
-                >
-                  <Navigation className="h-4 w-4 mr-2" />
-                  Ver Rastreio
-                </Button>
-              )}
+          <TabsContent value="details" className="mt-4 space-y-6">
+            {/* Status do Risco */}
+            <div className="flex items-center justify-between p-3 rounded-lg bg-[rgba(255,255,255,0.03)] border border-[rgba(255,255,255,0.1)]">
+              <span className="text-sm text-muted-foreground">Status de Risco</span>
+              {getRiskBadge(container.risk_status)}
             </div>
-            <div className="grid grid-cols-2 gap-3">
-              <InfoItem icon={<FileText className="w-4 h-4" />} label="MBL" value={container.mbl} mono />
-              <InfoItem icon={<Building2 className="w-4 h-4" />} label="Cliente" value={container.cliente || '-'} />
-              <InfoItem icon={<Anchor className="w-4 h-4" />} label="Armador" value={container.armador || '-'} />
-              <InfoItem icon={<Package className="w-4 h-4" />} label="Tipo" value={container.tipo_conteiner || '-'} />
-              <InfoItem icon={<Ship className="w-4 h-4" />} label="Navio" value={container.navio || '-'} />
-              <InfoItem icon={<MapPin className="w-4 h-4" />} label="Destino" value={container.porto_destino || '-'} />
-            </div>
-          </div>
 
-          <Separator className="bg-[rgba(255,255,255,0.1)]" />
-
-          {/* Datas */}
-          <div className="space-y-3">
-            <h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wider">Datas</h3>
-            <div className="grid grid-cols-2 gap-3">
-              <InfoItem icon={<Calendar className="w-4 h-4" />} label="ETD" value={formatDate(container.etd)} />
-              <InfoItem icon={<Calendar className="w-4 h-4" />} label="ETA" value={formatDate(container.eta)} />
-              <InfoItem icon={<Calendar className="w-4 h-4" />} label="Atracação" value={formatDate(container.data_atracacao)} />
-              <InfoItem icon={<Calendar className="w-4 h-4" />} label="Gate Out" value={formatDate(container.data_gate_out)} />
-            </div>
-          </div>
-
-          <Separator className="bg-[rgba(255,255,255,0.1)]" />
-
-          {/* Free Time */}
-          <div className="space-y-3">
-            <div className="flex items-center justify-between">
-              <h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wider">Free Time</h3>
-              {getFtSourceBadge(container.ft_source)}
-            </div>
-            <div className="p-4 rounded-lg bg-[rgba(255,200,0,0.05)] border border-[rgba(255,200,0,0.2)]">
-              <div className="grid grid-cols-3 gap-4 text-center">
-                <div>
-                  <p className="text-2xl font-bold text-[#ffc800]">{container.free_time_days}</p>
-                  <p className="text-xs text-muted-foreground">Dias FT</p>
-                </div>
-                <div>
-                  <p className="text-2xl font-bold text-foreground">
-                    {container.days_remaining !== null ? container.days_remaining : '-'}
-                  </p>
-                  <p className="text-xs text-muted-foreground">Restantes</p>
-                </div>
-                <div>
-                  <p className="text-2xl font-bold text-red-400">
-                    {container.excedente_dias > 0 ? container.excedente_dias : '-'}
-                  </p>
-                  <p className="text-xs text-muted-foreground">Excedidos</p>
-                </div>
-              </div>
-              <div className="mt-3 pt-3 border-t border-[rgba(255,200,0,0.2)]">
-                <p className="text-xs text-muted-foreground">
-                  Origem: <span className="text-foreground">{getFtSourceLabel(container.ft_source)}</span>
-                </p>
-                {container.ft_started_at && (
-                  <p className="text-xs text-muted-foreground mt-1">
-                    Início: <span className="text-foreground">{formatDate(container.ft_started_at)}</span>
-                  </p>
-                )}
-                {container.free_time_end_date && (
-                  <p className="text-xs text-muted-foreground mt-1">
-                    Término: <span className="text-foreground">{formatDate(container.free_time_end_date)}</span>
-                  </p>
-                )}
-              </div>
-            </div>
-          </div>
-
-          <Separator className="bg-[rgba(255,255,255,0.1)]" />
-
-          {/* Demurrage */}
-          <div className="space-y-3">
-            <h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wider">Demurrage</h3>
-            <div className="p-4 rounded-lg bg-[rgba(255,255,255,0.03)] border border-[rgba(255,255,255,0.1)]">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2 text-muted-foreground">
-                  <DollarSign className="w-4 h-4" />
-                  <span>Custo Estimado</span>
-                </div>
-                <span className="text-xl font-bold text-[#ffc800]">
-                  {container.expected_cost_usd > 0 ? formatCurrency(container.expected_cost_usd) : '-'}
-                </span>
-              </div>
-              {container.rate_usd_per_day && container.rate_usd_per_day > 0 && (
-                <p className="text-xs text-muted-foreground mt-2">
-                  Taxa: {formatCurrency(container.rate_usd_per_day)}/dia
-                </p>
-              )}
-            </div>
-          </div>
-
-          <Separator className="bg-[rgba(255,255,255,0.1)]" />
-
-          {/* Notas */}
-          {container.notes && (
+            {/* Informações Principais */}
             <div className="space-y-3">
-              <h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wider">Notas</h3>
-              <div className="p-3 rounded-lg bg-[rgba(255,255,255,0.03)] border border-[rgba(255,255,255,0.1)]">
-                <p className="text-sm text-muted-foreground">{container.notes}</p>
+              <div className="flex items-center justify-between">
+                <h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wider">Informações</h3>
+                {container.mbl && (
+                  <Button 
+                    size="sm" 
+                    variant="outline" 
+                    onClick={handleViewTracking}
+                    className="border-[#ffc800]/30 text-[#ffc800] hover:bg-[#ffc800]/10"
+                  >
+                    <Navigation className="h-4 w-4 mr-2" />
+                    Ver Rastreio
+                  </Button>
+                )}
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <InfoItem icon={<FileText className="w-4 h-4" />} label="MBL" value={container.mbl} mono />
+                <InfoItem icon={<Building2 className="w-4 h-4" />} label="Cliente" value={container.cliente || '-'} />
+                <InfoItem icon={<Anchor className="w-4 h-4" />} label="Armador" value={container.armador || '-'} />
+                <InfoItem icon={<Package className="w-4 h-4" />} label="Tipo" value={container.tipo_conteiner || '-'} />
+                <InfoItem icon={<Ship className="w-4 h-4" />} label="Navio" value={container.navio || '-'} />
+                <InfoItem icon={<MapPin className="w-4 h-4" />} label="Destino" value={container.porto_destino || '-'} />
               </div>
             </div>
-          )}
-        </div>
+
+            <Separator className="bg-[rgba(255,255,255,0.1)]" />
+
+            {/* Datas */}
+            <div className="space-y-3">
+              <h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wider">Datas</h3>
+              <div className="grid grid-cols-2 gap-3">
+                <InfoItem icon={<Calendar className="w-4 h-4" />} label="ETD" value={formatDate(container.etd)} />
+                <InfoItem icon={<Calendar className="w-4 h-4" />} label="ETA" value={formatDate(container.eta)} />
+                <InfoItem icon={<Calendar className="w-4 h-4" />} label="Atracação" value={formatDate(container.data_atracacao)} />
+                <InfoItem icon={<Calendar className="w-4 h-4" />} label="Gate Out" value={formatDate(container.data_gate_out)} />
+              </div>
+            </div>
+
+            <Separator className="bg-[rgba(255,255,255,0.1)]" />
+
+            {/* Free Time */}
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wider">Free Time</h3>
+                {getFtSourceBadge(container.ft_source)}
+              </div>
+              <div className="p-4 rounded-lg bg-[rgba(255,200,0,0.05)] border border-[rgba(255,200,0,0.2)]">
+                <div className="grid grid-cols-3 gap-4 text-center">
+                  <div>
+                    <p className="text-2xl font-bold text-[#ffc800]">{container.free_time_days}</p>
+                    <p className="text-xs text-muted-foreground">Dias FT</p>
+                  </div>
+                  <div>
+                    <p className="text-2xl font-bold text-foreground">
+                      {container.days_remaining !== null ? container.days_remaining : '-'}
+                    </p>
+                    <p className="text-xs text-muted-foreground">Restantes</p>
+                  </div>
+                  <div>
+                    <p className="text-2xl font-bold text-red-400">
+                      {container.excedente_dias > 0 ? container.excedente_dias : '-'}
+                    </p>
+                    <p className="text-xs text-muted-foreground">Excedidos</p>
+                  </div>
+                </div>
+                <div className="mt-3 pt-3 border-t border-[rgba(255,200,0,0.2)]">
+                  <p className="text-xs text-muted-foreground">
+                    Origem: <span className="text-foreground">{getFtSourceLabel(container.ft_source)}</span>
+                  </p>
+                  {container.ft_started_at && (
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Início: <span className="text-foreground">{formatDate(container.ft_started_at)}</span>
+                    </p>
+                  )}
+                  {container.free_time_end_date && (
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Término: <span className="text-foreground">{formatDate(container.free_time_end_date)}</span>
+                    </p>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            <Separator className="bg-[rgba(255,255,255,0.1)]" />
+
+            {/* Demurrage */}
+            <div className="space-y-3">
+              <h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wider">Demurrage</h3>
+              <div className="p-4 rounded-lg bg-[rgba(255,255,255,0.03)] border border-[rgba(255,255,255,0.1)]">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2 text-muted-foreground">
+                    <DollarSign className="w-4 h-4" />
+                    <span>Custo Estimado</span>
+                  </div>
+                  <span className="text-xl font-bold text-[#ffc800]">
+                    {container.expected_cost_usd > 0 ? formatCurrency(container.expected_cost_usd) : '-'}
+                  </span>
+                </div>
+                {container.rate_usd_per_day && container.rate_usd_per_day > 0 && (
+                  <p className="text-xs text-muted-foreground mt-2">
+                    Taxa: {formatCurrency(container.rate_usd_per_day)}/dia
+                  </p>
+                )}
+              </div>
+            </div>
+
+            {/* Notas */}
+            {container.notes && (
+              <>
+                <Separator className="bg-[rgba(255,255,255,0.1)]" />
+                <div className="space-y-3">
+                  <h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wider">Notas</h3>
+                  <div className="p-3 rounded-lg bg-[rgba(255,255,255,0.03)] border border-[rgba(255,255,255,0.1)]">
+                    <p className="text-sm text-muted-foreground">{container.notes}</p>
+                  </div>
+                </div>
+              </>
+            )}
+          </TabsContent>
+
+          <TabsContent value="timeline" className="mt-4">
+            <ContainerTimeline 
+              events={(container as any).events || []}
+              freeTimeStart={container.ft_started_at}
+              freeTimeEnd={container.free_time_end_date}
+            />
+          </TabsContent>
+        </Tabs>
       </SheetContent>
     </Sheet>
   );

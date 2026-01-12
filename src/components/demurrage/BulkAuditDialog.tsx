@@ -7,31 +7,51 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Loader2, CheckCircle2, AlertTriangle, Calculator } from "lucide-react";
 import type { DemurrageContainer } from "@/hooks/useDemurrageData";
+import { useUpdateDemurrageContainer } from "@/hooks/useDemurrageData";
+import { toast } from "sonner";
 
 interface BulkAuditDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   containers: DemurrageContainer[];
-  onBulkAudit: (containerIds: number[], status: string, notes?: string) => Promise<void>;
-  isLoading: boolean;
+  onSuccess?: () => void;
 }
 
 export function BulkAuditDialog({ 
   open, 
   onOpenChange, 
-  containers, 
-  onBulkAudit,
-  isLoading 
+  containers,
+  onSuccess
 }: BulkAuditDialogProps) {
   const [auditStatus, setAuditStatus] = useState<string>("validated");
   const [notes, setNotes] = useState("");
+  const [isLoading, setIsLoading] = useState(false);
+  
+  const updateContainer = useUpdateDemurrageContainer();
 
   const handleSubmit = async () => {
-    const containerIds = containers.map(c => c.id);
-    await onBulkAudit(containerIds, auditStatus, notes || undefined);
-    setNotes("");
-    setAuditStatus("validated");
-    onOpenChange(false);
+    setIsLoading(true);
+    try {
+      for (const container of containers) {
+        await updateContainer.mutateAsync({
+          containerId: container.id,
+          updates: {
+            audit_status: auditStatus,
+            notes: notes || null,
+          },
+        });
+      }
+      toast.success(`${containers.length} containers atualizados com sucesso`);
+      setNotes("");
+      setAuditStatus("validated");
+      onOpenChange(false);
+      onSuccess?.();
+    } catch (error) {
+      toast.error("Erro ao processar auditoria em lote");
+      console.error(error);
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const formatCurrency = (value: number) => 
