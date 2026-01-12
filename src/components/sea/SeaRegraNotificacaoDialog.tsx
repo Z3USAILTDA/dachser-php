@@ -10,13 +10,11 @@ import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { X, Ship, Anchor } from 'lucide-react';
 import { 
   SeaRegraNotificacao, 
-  CanalNotificacaoSea, 
   TipoProcessoMaritimo,
   FrequenciaNotificacao,
   STATUS_MARITIMOS, 
   STATUS_MARITIMOS_LABELS,
   PORTOS_COMUNS_BRASIL,
-  CANAIS_NOTIFICACAO_SEA,
   FREQUENCIAS_NOTIFICACAO
 } from '@/types/sea';
 
@@ -35,10 +33,8 @@ export function SeaRegraNotificacaoDialog({ open, onOpenChange, regra, onSave }:
   const [portoInput, setPortoInput] = useState('');
   const [eventosDisparo, setEventosDisparo] = useState<string[]>([]);
   const [frequencia, setFrequencia] = useState<FrequenciaNotificacao>('IMEDIATO');
-  const [canais, setCanais] = useState<CanalNotificacaoSea[]>([]);
   const [emailsImport, setEmailsImport] = useState('');
   const [emailsExport, setEmailsExport] = useState('');
-  const [templateId, setTemplateId] = useState('default');
   const [ativo, setAtivo] = useState(true);
   const [saving, setSaving] = useState(false);
 
@@ -50,10 +46,8 @@ export function SeaRegraNotificacaoDialog({ open, onOpenChange, regra, onSave }:
       setPortos(regra.portos || []);
       setEventosDisparo(regra.eventos_disparo || []);
       setFrequencia(regra.frequencia || 'IMEDIATO');
-      setCanais(regra.canais || []);
       setEmailsImport(regra.emails_import || '');
       setEmailsExport(regra.emails_export || '');
-      setTemplateId(regra.template_id || 'default');
       setAtivo(regra.ativo);
     } else {
       setClienteNome('');
@@ -62,10 +56,8 @@ export function SeaRegraNotificacaoDialog({ open, onOpenChange, regra, onSave }:
       setPortos([]);
       setEventosDisparo([]);
       setFrequencia('IMEDIATO');
-      setCanais([]);
       setEmailsImport('');
       setEmailsExport('');
-      setTemplateId('default');
       setAtivo(true);
     }
   }, [regra, open]);
@@ -90,19 +82,11 @@ export function SeaRegraNotificacaoDialog({ open, onOpenChange, regra, onSave }:
     }
   };
 
-  const toggleCanal = (canal: CanalNotificacaoSea) => {
-    if (canais.includes(canal)) {
-      setCanais(canais.filter(c => c !== canal));
-    } else {
-      setCanais([...canais, canal]);
-    }
-  };
-
   const handleSave = async () => {
     if (!clienteNome.trim() && !cnpj.trim()) {
       return;
     }
-    if (eventosDisparo.length === 0 || canais.length === 0) {
+    if (eventosDisparo.length === 0) {
       return;
     }
 
@@ -114,10 +98,10 @@ export function SeaRegraNotificacaoDialog({ open, onOpenChange, regra, onSave }:
       portos,
       eventos_disparo: eventosDisparo,
       frequencia,
-      canais,
+      canais: ['EMAIL_CLIENTE'], // Sempre será email cliente
       emails_import: emailsImport || null,
       emails_export: emailsExport || null,
-      template_id: templateId || 'default',
+      template_id: 'default', // Sempre default
       ativo,
     });
     setSaving(false);
@@ -275,29 +259,6 @@ export function SeaRegraNotificacaoDialog({ open, onOpenChange, regra, onSave }:
             </RadioGroup>
           </div>
 
-          {/* Canais */}
-          <div className="space-y-2">
-            <Label className="text-white/70">Canais de Notificação</Label>
-            <div className="flex gap-4">
-              {CANAIS_NOTIFICACAO_SEA.map(canal => (
-                <label
-                  key={canal.value}
-                  className={`flex items-center gap-2 p-3 rounded cursor-pointer border ${
-                    canais.includes(canal.value)
-                      ? 'bg-cyan-500/20 border-cyan-500/50'
-                      : 'bg-white/5 border-white/10 hover:bg-white/10'
-                  }`}
-                >
-                  <Checkbox
-                    checked={canais.includes(canal.value)}
-                    onCheckedChange={() => toggleCanal(canal.value)}
-                  />
-                  <span className="text-sm text-white/80">{canal.label}</span>
-                </label>
-              ))}
-            </div>
-          </div>
-
           {/* Emails por tipo de processo */}
           <div className="grid grid-cols-2 gap-4">
             {showImportEmails && (
@@ -330,17 +291,6 @@ export function SeaRegraNotificacaoDialog({ open, onOpenChange, regra, onSave }:
             )}
           </div>
 
-          {/* Template */}
-          <div className="space-y-2">
-            <Label className="text-white/70">Template ID</Label>
-            <Input
-              value={templateId}
-              onChange={(e) => setTemplateId(e.target.value)}
-              placeholder="default"
-              className="bg-white/5 border-white/12 text-white"
-            />
-          </div>
-
           {/* Ativo */}
           <label className="flex items-center gap-2 cursor-pointer">
             <Checkbox
@@ -357,7 +307,7 @@ export function SeaRegraNotificacaoDialog({ open, onOpenChange, regra, onSave }:
           </Button>
           <Button 
             onClick={handleSave} 
-            disabled={saving || (!clienteNome.trim() && !cnpj.trim()) || eventosDisparo.length === 0 || canais.length === 0}
+            disabled={saving || (!clienteNome.trim() && !cnpj.trim()) || eventosDisparo.length === 0}
             className="bg-cyan-500 hover:bg-cyan-600 text-black"
           >
             {saving ? 'Salvando...' : 'Salvar'}
