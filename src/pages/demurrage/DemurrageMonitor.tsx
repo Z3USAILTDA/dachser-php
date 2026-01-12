@@ -2,7 +2,6 @@ import { useState, useMemo, useEffect } from "react";
 import { DemurrageLayout } from "@/components/demurrage/DemurrageLayout";
 import { KpiCard } from "@/components/demurrage/KpiCard";
 import { ContainerDetailsSheet } from "@/components/demurrage/ContainerDetailsSheet";
-import { RegisterFreeTimeDialog } from "@/components/tracking/RegisterFreeTimeDialog";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -19,7 +18,6 @@ import {
   FileSpreadsheet,
   Ship,
   TrendingUp,
-  Plus,
   Loader2
 } from "lucide-react";
 import { toast } from "sonner";
@@ -36,11 +34,9 @@ export default function DemurrageMonitor() {
   const [currentPage, setCurrentPage] = useState(1);
   const [isExporting, setIsExporting] = useState(false);
   
-  // Sheet and dialog states
+  // Sheet state
   const [selectedContainer, setSelectedContainer] = useState<DemurrageContainer | null>(null);
   const [sheetOpen, setSheetOpen] = useState(false);
-  const [freeTimeDialogOpen, setFreeTimeDialogOpen] = useState(false);
-  const [freeTimeDefaults, setFreeTimeDefaults] = useState<{ mbl: string; cliente: string }>({ mbl: '', cliente: '' });
 
   // Build filters object - memoized to avoid unnecessary re-fetches
   const filters = useMemo<DemurrageFilters>(() => {
@@ -97,27 +93,6 @@ export default function DemurrageMonitor() {
   const handleContainerClick = (container: DemurrageContainer) => {
     setSelectedContainer(container);
     setSheetOpen(true);
-  };
-
-  const handleRegisterFreeTimeFromSheet = (mbl: string, cliente: string) => {
-    setFreeTimeDefaults({ mbl, cliente });
-    setSheetOpen(false);
-    setFreeTimeDialogOpen(true);
-  };
-
-  const handleRegisterFreeTimeGeneral = () => {
-    setFreeTimeDefaults({ mbl: '', cliente: '' });
-    setFreeTimeDialogOpen(true);
-  };
-
-  const handleFreeTimeSuccess = async () => {
-    toast.success("Free Time cadastrado! Recalculando...");
-    try {
-      await recalcMutation.mutateAsync();
-      toast.success("Demurrage recalculado com sucesso");
-    } catch {
-      toast.error("Erro ao recalcular demurrage");
-    }
   };
 
   const handleExport = async () => {
@@ -194,28 +169,19 @@ export default function DemurrageMonitor() {
   };
 
   const rightActions = (
-    <div className="flex gap-2">
-      <Button 
-        onClick={handleRegisterFreeTimeGeneral}
-        className="bg-[#ffc800] text-black hover:bg-[#ffdc50]"
-      >
-        <Plus className="h-4 w-4 mr-2" />
-        Registrar Free Time
-      </Button>
-      <Button 
-        variant="outline" 
-        className="bg-[rgba(0,0,0,0.7)] border-[rgba(255,255,255,0.25)] text-[#aaaaaa] hover:text-white hover:bg-[rgba(0,0,0,0.9)]"
-        onClick={handleExport}
-        disabled={isExporting || filteredContainers.length === 0}
-      >
-        {isExporting ? (
-          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-        ) : (
-          <FileSpreadsheet className="h-4 w-4 mr-2" />
-        )}
-        Exportar
-      </Button>
-    </div>
+    <Button 
+      variant="outline" 
+      className="bg-[rgba(0,0,0,0.7)] border-[rgba(255,255,255,0.25)] text-[#aaaaaa] hover:text-white hover:bg-[rgba(0,0,0,0.9)]"
+      onClick={handleExport}
+      disabled={isExporting || filteredContainers.length === 0}
+    >
+      {isExporting ? (
+        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+      ) : (
+        <FileSpreadsheet className="h-4 w-4 mr-2" />
+      )}
+      Exportar
+    </Button>
   );
 
   const customCards = (
@@ -375,16 +341,6 @@ export default function DemurrageMonitor() {
         container={selectedContainer}
         open={sheetOpen}
         onOpenChange={setSheetOpen}
-        onRegisterFreeTime={handleRegisterFreeTimeFromSheet}
-      />
-
-      {/* Register Free Time Dialog */}
-      <RegisterFreeTimeDialog
-        open={freeTimeDialogOpen}
-        onOpenChange={setFreeTimeDialogOpen}
-        onSuccess={handleFreeTimeSuccess}
-        defaultMbl={freeTimeDefaults.mbl}
-        defaultCliente={freeTimeDefaults.cliente}
       />
     </DemurrageLayout>
   );

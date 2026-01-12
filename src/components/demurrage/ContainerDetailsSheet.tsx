@@ -23,14 +23,12 @@ interface ContainerDetailsSheetProps {
   container: DemurrageContainer | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onRegisterFreeTime: (mbl: string, cliente: string) => void;
 }
 
 export function ContainerDetailsSheet({ 
   container, 
   open, 
-  onOpenChange,
-  onRegisterFreeTime 
+  onOpenChange
 }: ContainerDetailsSheetProps) {
   if (!container) return null;
 
@@ -202,20 +200,15 @@ export function ContainerDetailsSheet({
 
           <Separator className="bg-[rgba(255,255,255,0.1)]" />
 
-          {/* Ações */}
-          <div className="space-y-3">
-            <h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wider">Ações</h3>
-            <Button
-              onClick={() => onRegisterFreeTime(container.mbl, container.cliente || '')}
-              className="w-full bg-[#ffc800] text-black hover:bg-[#ffdc50]"
-            >
-              <Clock className="w-4 h-4 mr-2" />
-              Cadastrar Free Time para este MBL
-            </Button>
-            <p className="text-xs text-muted-foreground text-center">
-              O Free Time cadastrado terá prioridade máxima (PROCESSO)
-            </p>
-          </div>
+          {/* Notas */}
+          {container.notes && (
+            <div className="space-y-3">
+              <h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wider">Notas</h3>
+              <div className="p-3 rounded-lg bg-[rgba(255,255,255,0.03)] border border-[rgba(255,255,255,0.1)]">
+                <p className="text-sm text-muted-foreground">{container.notes}</p>
+              </div>
+            </div>
+          )}
         </div>
       </SheetContent>
     </Sheet>
