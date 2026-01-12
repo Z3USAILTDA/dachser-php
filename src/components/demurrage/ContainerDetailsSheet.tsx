@@ -169,10 +169,10 @@ export function ContainerDetailsSheet({
             <div className="space-y-3">
               <h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wider">Datas</h3>
               <div className="grid grid-cols-2 gap-3">
-                <InfoItem icon={<Calendar className="w-4 h-4" />} label="ETD" value={formatDate(container.etd)} />
                 <InfoItem icon={<Calendar className="w-4 h-4" />} label="ETA" value={formatDate(container.eta)} />
                 <InfoItem icon={<Calendar className="w-4 h-4" />} label="Atracação" value={formatDate(container.data_atracacao)} />
                 <InfoItem icon={<Calendar className="w-4 h-4" />} label="Gate Out" value={formatDate(container.data_gate_out)} />
+                <InfoItem icon={<Calendar className="w-4 h-4" />} label="Devolução" value={formatDate(container.data_devolucao)} />
               </div>
             </div>
 
