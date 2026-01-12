@@ -121,7 +121,7 @@ serve(async (req) => {
 
         // Check if record already exists
         const existing = await client.query(`
-          SELECT id, cronos_status, ft_started_at, data_atracacao, data_gate_out, data_devolucao
+          SELECT id, cronos_status, ft_started_at, data_atracacao, data_gate_out, data_devolucao, ft_source
           FROM dados_dachser.t_dachser_demurrage_containers
           WHERE numero = ? AND mbl = ?
           LIMIT 1
@@ -131,41 +131,67 @@ serve(async (req) => {
         const etd = row.etd ? formatDate(row.etd) : null;
         const eta = row.eta_confirmado ? formatDate(row.eta_confirmado) : (row.eta ? formatDate(row.eta) : null);
 
-        // Calculate dates based on status transitions
+        // Fetch historical dates from t_tracking_sea_history
+        const historicalDates = await fetchHistoricalDates(client, numero);
+        console.log(`[${numero}] Historical dates: discharge=${historicalDates.discharge_date}, gate_out=${historicalDates.gate_out_date}, return=${historicalDates.return_date}`);
+
+        // Calculate dates based on historical events first, then status transitions
         let ftStartedAt = existing?.[0]?.ft_started_at || null;
         let dataAtracacao = existing?.[0]?.data_atracacao || null;
         let dataGateOut = existing?.[0]?.data_gate_out || null;
         let dataDevolucao = existing?.[0]?.data_devolucao || null;
+        let ftSource = existing?.[0]?.ft_source || null;
 
-        // Set dates when status changes
-        if (cronosStatus === 'ARRIVED' && !dataAtracacao) {
-          dataAtracacao = now.split(' ')[0];
-        }
-        if (cronosStatus === 'ARRIVED' && !ftStartedAt) {
-          ftStartedAt = now;
-        }
-        if (cronosStatus === 'GATE_OUT' && !dataGateOut) {
-          dataGateOut = now.split(' ')[0];
-        }
-        if (cronosStatus === 'RETURNED' && !dataDevolucao) {
-          dataDevolucao = now.split(' ')[0];
+        // Priority: Historical dates > Status-based dates > Fallback
+        
+        // Data atracação: prioriza histórico (discharge = atracação/descarga)
+        if (!dataAtracacao) {
+          if (historicalDates.discharge_date) {
+            dataAtracacao = historicalDates.discharge_date;
+          } else if (cronosStatus === 'ARRIVED') {
+            dataAtracacao = now.split(' ')[0];
+          }
         }
 
-        // IMPORTANT: Always set ft_started_at if null - use ETA, data_atracacao, or now
-        // This ensures demurrage-recalc can calculate days_remaining
+        // ft_started_at: SEMPRE priorizar data real de descarga do histórico
         if (!ftStartedAt) {
-          if (eta) {
-            ftStartedAt = `${eta} 00:00:00`;
-          } else if (dataAtracacao) {
-            ftStartedAt = `${dataAtracacao} 00:00:00`;
-          } else {
-            // Fallback to created_at/now for pending containers
+          if (historicalDates.discharge_date) {
+            ftStartedAt = `${historicalDates.discharge_date} 00:00:00`;
+            ftSource = 'HISTORICAL';
+          } else if (cronosStatus === 'ARRIVED') {
             ftStartedAt = now;
+            ftSource = 'SYNC';
+          } else if (eta) {
+            ftStartedAt = `${eta} 00:00:00`;
+            ftSource = 'ETA';
+          }
+          // Não usar fallback para now - deixar null se não houver evento de descarga
+        }
+
+        // Gate out: prioriza histórico
+        if (!dataGateOut) {
+          if (historicalDates.gate_out_date) {
+            dataGateOut = historicalDates.gate_out_date;
+          } else if (cronosStatus === 'GATE_OUT') {
+            dataGateOut = now.split(' ')[0];
+          }
+        }
+
+        // Devolução: prioriza histórico
+        if (!dataDevolucao) {
+          if (historicalDates.return_date) {
+            dataDevolucao = historicalDates.return_date;
+          } else if (cronosStatus === 'RETURNED') {
+            dataDevolucao = now.split(' ')[0];
           }
         }
 
         if (existing && existing.length > 0) {
-          // Update existing record
+          // Update existing record - if historical dates found, update even existing values
+          const shouldUpdateFt = historicalDates.discharge_date && ftSource === 'HISTORICAL';
+          const shouldUpdateGateOut = historicalDates.gate_out_date;
+          const shouldUpdateDevolucao = historicalDates.return_date;
+
           await client.execute(`
             UPDATE dados_dachser.t_dachser_demurrage_containers SET
               booking = ?,
@@ -186,10 +212,23 @@ serve(async (req) => {
               email_analista = ?,
               email_cliente = ?,
               tipo_conteiner = COALESCE(tipo_conteiner, ?),
-              ft_started_at = COALESCE(ft_started_at, ?),
-              data_atracacao = COALESCE(data_atracacao, ?),
-              data_gate_out = COALESCE(data_gate_out, ?),
-              data_devolucao = COALESCE(data_devolucao, ?),
+              ft_started_at = CASE 
+                WHEN ? = 'HISTORICAL' THEN ?
+                ELSE COALESCE(ft_started_at, ?)
+              END,
+              ft_source = COALESCE(?, ft_source),
+              data_atracacao = CASE 
+                WHEN ? IS NOT NULL THEN ?
+                ELSE COALESCE(data_atracacao, ?)
+              END,
+              data_gate_out = CASE 
+                WHEN ? IS NOT NULL THEN ?
+                ELSE COALESCE(data_gate_out, ?)
+              END,
+              data_devolucao = CASE 
+                WHEN ? IS NOT NULL THEN ?
+                ELSE COALESCE(data_devolucao, ?)
+              END,
               mariadb_id = ?,
               last_sync_at = NOW(),
               updated_at = NOW()
@@ -213,10 +252,16 @@ serve(async (req) => {
             row.email_analista || null,
             row.email_cliente || null,
             tipoConteiner,
-            ftStartedAt,
-            dataAtracacao,
-            dataGateOut,
-            dataDevolucao,
+            // ft_started_at CASE params
+            ftSource, ftStartedAt, ftStartedAt,
+            // ft_source
+            ftSource,
+            // data_atracacao CASE params
+            historicalDates.discharge_date, dataAtracacao, dataAtracacao,
+            // data_gate_out CASE params
+            historicalDates.gate_out_date, dataGateOut, dataGateOut,
+            // data_devolucao CASE params
+            historicalDates.return_date, dataDevolucao, dataDevolucao,
             row.id,
             existing[0].id
           ]);
@@ -229,9 +274,9 @@ serve(async (req) => {
               porto_origem, porto_destino, navio, vessel_imo, voyage,
               etd, eta, last_event, container_status, status_armador, cronos_status,
               email_analista, email_cliente, tipo_conteiner,
-              ft_started_at, data_atracacao, data_gate_out, data_devolucao,
+              ft_started_at, ft_source, data_atracacao, data_gate_out, data_devolucao,
               mariadb_id, last_sync_at, active
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), 1)
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), 1)
           `, [
             numero,
             mbl,
@@ -254,6 +299,7 @@ serve(async (req) => {
             row.email_cliente || null,
             tipoConteiner,
             ftStartedAt,
+            ftSource,
             dataAtracacao,
             dataGateOut,
             dataDevolucao,
@@ -303,6 +349,96 @@ serve(async (req) => {
 function formatDate(date: Date | string): string {
   if (typeof date === 'string') return date.split('T')[0];
   return date.toISOString().split('T')[0];
+}
+
+// Fetch historical dates from t_tracking_sea_history
+async function fetchHistoricalDates(client: Client, container: string): Promise<{
+  discharge_date: string | null;
+  gate_out_date: string | null;
+  return_date: string | null;
+}> {
+  try {
+    // Single query with UNION ALL for efficiency
+    const query = `
+      SELECT event_type, MIN(event_datetime) as event_datetime
+      FROM (
+        SELECT 'discharge' as event_type, event_datetime
+        FROM dados_dachser.t_tracking_sea_history 
+        WHERE container = ?
+          AND (
+            event_description LIKE '%Discharged%' 
+            OR event_description = 'Discharge'
+            OR event_description LIKE '%Unloaded from Vessel%'
+            OR event_description LIKE '%Import Discharged%'
+            OR event_description LIKE '%Descarga%'
+          )
+        
+        UNION ALL
+        
+        SELECT 'gate_out' as event_type, event_datetime
+        FROM dados_dachser.t_tracking_sea_history 
+        WHERE container = ?
+          AND (
+            event_description LIKE '%Gate out%'
+            OR event_description LIKE '%Gate-out%'
+            OR event_description = 'Import to consignee'
+            OR event_description LIKE '%Saída%'
+            OR event_description LIKE '%Saida%'
+          )
+        
+        UNION ALL
+        
+        SELECT 'return' as event_type, event_datetime
+        FROM dados_dachser.t_tracking_sea_history 
+        WHERE container = ?
+          AND (
+            event_description LIKE '%Empty%returned%'
+            OR event_description LIKE '%Gate in%'
+            OR event_description LIKE '%Devolução%'
+            OR event_description LIKE '%Devolvido%'
+            OR event_description LIKE '%Empty to shipper%'
+          )
+      ) AS events
+      GROUP BY event_type
+    `;
+
+    const results = await client.query(query, [container, container, container]) as Array<{
+      event_type: string;
+      event_datetime: Date | string | null;
+    }>;
+
+    const dates: {
+      discharge_date: string | null;
+      gate_out_date: string | null;
+      return_date: string | null;
+    } = {
+      discharge_date: null,
+      gate_out_date: null,
+      return_date: null,
+    };
+
+    for (const row of results) {
+      if (row.event_datetime) {
+        const dateStr = formatDate(row.event_datetime);
+        switch (row.event_type) {
+          case 'discharge':
+            dates.discharge_date = dateStr;
+            break;
+          case 'gate_out':
+            dates.gate_out_date = dateStr;
+            break;
+          case 'return':
+            dates.return_date = dateStr;
+            break;
+        }
+      }
+    }
+
+    return dates;
+  } catch (error) {
+    console.error(`Error fetching historical dates for ${container}:`, error);
+    return { discharge_date: null, gate_out_date: null, return_date: null };
+  }
 }
 
 function mapCronosStatus(lastEvent: string | null, statusArmador: string | null, containerStatus: string | null): string {
