@@ -18,7 +18,7 @@ interface DemurrageLayoutProps {
 }
 
 const navTabs = [
-  { id: "monitor", label: "Monitor", icon: Activity, href: "/sea/demurrage" },
+  { id: "monitor", label: "Monitor", icon: Activity, href: "/sea/demurrage/monitor" },
   { id: "pre-invoicing", label: "Pré-Faturamento", icon: FileText, href: "/sea/demurrage/pre-invoicing" },
   { id: "carrier-costs", label: "Custos Armadores", icon: Ship, href: "/sea/demurrage/carrier-costs" },
   { id: "rates", label: "Tarifas", icon: DollarSign, href: "/sea/demurrage/rates" },
