@@ -1528,7 +1528,7 @@ serve(async (req) => {
               (
                 SELECT md.eta 
                 FROM dados_dachser.t_master_dados md 
-                WHERE TRIM(md.mawb) COLLATE utf8mb4_general_ci = ts.mbl_id COLLATE utf8mb4_general_ci
+                WHERE BINARY TRIM(md.mawb) = BINARY ts.mbl_id
                   AND md.eta IS NOT NULL 
                   AND md.active = 1
                 LIMIT 1
@@ -1539,7 +1539,7 @@ serve(async (req) => {
             (
               SELECT md.eta 
               FROM dados_dachser.t_master_dados md 
-              WHERE TRIM(md.mawb) COLLATE utf8mb4_general_ci = ts.mbl_id COLLATE utf8mb4_general_ci
+              WHERE BINARY TRIM(md.mawb) = BINARY ts.mbl_id
                 AND md.active = 1
               LIMIT 1
             ) as eta_master,
@@ -1557,11 +1557,11 @@ serve(async (req) => {
             -- DELAYED por ETA: se ETA passou há mais de 3 dias e não está entregue
             CASE 
               WHEN COALESCE(
-                (SELECT md.eta FROM dados_dachser.t_master_dados md WHERE TRIM(md.mawb) COLLATE utf8mb4_general_ci = ts.mbl_id COLLATE utf8mb4_general_ci AND md.eta IS NOT NULL AND md.active = 1 LIMIT 1),
+                (SELECT md.eta FROM dados_dachser.t_master_dados md WHERE BINARY TRIM(md.mawb) = BINARY ts.mbl_id AND md.eta IS NOT NULL AND md.active = 1 LIMIT 1),
                 MAX(ts.eta)
               ) IS NOT NULL 
                 AND COALESCE(
-                  (SELECT md.eta FROM dados_dachser.t_master_dados md WHERE TRIM(md.mawb) COLLATE utf8mb4_general_ci = ts.mbl_id COLLATE utf8mb4_general_ci AND md.eta IS NOT NULL AND md.active = 1 LIMIT 1),
+                  (SELECT md.eta FROM dados_dachser.t_master_dados md WHERE BINARY TRIM(md.mawb) = BINARY ts.mbl_id AND md.eta IS NOT NULL AND md.active = 1 LIMIT 1),
                   MAX(ts.eta)
                 ) < DATE_SUB(NOW(), INTERVAL 3 DAY)
                 AND UPPER(COALESCE(MAX(ts.container_status), '')) NOT IN ('DELIVERED', 'GATE_OUT', 'DLV', 'GOD', 'EMPTY_RETURNED', 'EMPTY_RECEIVED_AT_CY')
@@ -1571,11 +1571,11 @@ serve(async (req) => {
             -- CRÍTICO: atraso >= 7 dias
             CASE 
               WHEN COALESCE(
-                (SELECT md.eta FROM dados_dachser.t_master_dados md WHERE TRIM(md.mawb) COLLATE utf8mb4_general_ci = ts.mbl_id COLLATE utf8mb4_general_ci AND md.eta IS NOT NULL AND md.active = 1 LIMIT 1),
+                (SELECT md.eta FROM dados_dachser.t_master_dados md WHERE BINARY TRIM(md.mawb) = BINARY ts.mbl_id AND md.eta IS NOT NULL AND md.active = 1 LIMIT 1),
                 MAX(ts.eta)
               ) IS NOT NULL 
                 AND COALESCE(
-                  (SELECT md.eta FROM dados_dachser.t_master_dados md WHERE TRIM(md.mawb) COLLATE utf8mb4_general_ci = ts.mbl_id COLLATE utf8mb4_general_ci AND md.eta IS NOT NULL AND md.active = 1 LIMIT 1),
+                  (SELECT md.eta FROM dados_dachser.t_master_dados md WHERE BINARY TRIM(md.mawb) = BINARY ts.mbl_id AND md.eta IS NOT NULL AND md.active = 1 LIMIT 1),
                   MAX(ts.eta)
                 ) < DATE_SUB(NOW(), INTERVAL 7 DAY)
                 AND UPPER(COALESCE(MAX(ts.container_status), '')) NOT IN ('DELIVERED', 'GATE_OUT', 'DLV', 'GOD', 'EMPTY_RETURNED', 'EMPTY_RECEIVED_AT_CY')
@@ -1585,15 +1585,15 @@ serve(async (req) => {
             -- Dias de atraso calculados
             CASE 
               WHEN COALESCE(
-                (SELECT md.eta FROM dados_dachser.t_master_dados md WHERE TRIM(md.mawb) COLLATE utf8mb4_general_ci = ts.mbl_id COLLATE utf8mb4_general_ci AND md.eta IS NOT NULL AND md.active = 1 LIMIT 1),
+                (SELECT md.eta FROM dados_dachser.t_master_dados md WHERE BINARY TRIM(md.mawb) = BINARY ts.mbl_id AND md.eta IS NOT NULL AND md.active = 1 LIMIT 1),
                 MAX(ts.eta)
               ) IS NOT NULL 
                 AND COALESCE(
-                  (SELECT md.eta FROM dados_dachser.t_master_dados md WHERE TRIM(md.mawb) COLLATE utf8mb4_general_ci = ts.mbl_id COLLATE utf8mb4_general_ci AND md.eta IS NOT NULL AND md.active = 1 LIMIT 1),
+                  (SELECT md.eta FROM dados_dachser.t_master_dados md WHERE BINARY TRIM(md.mawb) = BINARY ts.mbl_id AND md.eta IS NOT NULL AND md.active = 1 LIMIT 1),
                   MAX(ts.eta)
                 ) < CURDATE()
               THEN DATEDIFF(CURDATE(), COALESCE(
-                (SELECT md.eta FROM dados_dachser.t_master_dados md WHERE TRIM(md.mawb) COLLATE utf8mb4_general_ci = ts.mbl_id COLLATE utf8mb4_general_ci AND md.eta IS NOT NULL AND md.active = 1 LIMIT 1),
+                (SELECT md.eta FROM dados_dachser.t_master_dados md WHERE BINARY TRIM(md.mawb) = BINARY ts.mbl_id AND md.eta IS NOT NULL AND md.active = 1 LIMIT 1),
                 MAX(ts.eta)
               ))
               ELSE 0 
