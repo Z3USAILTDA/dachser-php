@@ -51,6 +51,8 @@ export default function DemurrageRates() {
     armador: '',
   });
 
+  const [formErrors, setFormErrors] = useState<Record<string, string>>({});
+
   const armadors = useMemo(() => [...new Set(rates.map(r => r.armador))].sort(), [rates]);
 
   const filteredRates = useMemo(() => rates.filter(rate => {
@@ -113,6 +115,73 @@ export default function DemurrageRates() {
       period_end_day: '',
       armador: '',
     });
+    setFormErrors({});
+  };
+
+  const validateForm = (): boolean => {
+    const errors: Record<string, string> = {};
+    
+    // Required fields
+    if (!formData.armador.trim()) {
+      errors.armador = "Armador é obrigatório";
+    } else if (formData.armador.length > 50) {
+      errors.armador = "Máximo 50 caracteres";
+    }
+    
+    if (!formData.container_type) {
+      errors.container_type = "Tipo de container é obrigatório";
+    }
+    
+    // Free time validation (1-365 days)
+    const freeTimeDays = parseInt(formData.free_time_days);
+    if (isNaN(freeTimeDays) || freeTimeDays < 1) {
+      errors.free_time_days = "Mínimo: 1 dia";
+    } else if (freeTimeDays > 365) {
+      errors.free_time_days = "Máximo: 365 dias";
+    }
+    
+    // Rate validation (0.01 - 10000 USD)
+    const rateUsd = parseFloat(formData.rate_usd);
+    if (isNaN(rateUsd) || rateUsd < 0.01) {
+      errors.rate_usd = "Mínimo: $0.01";
+    } else if (rateUsd > 10000) {
+      errors.rate_usd = "Máximo: $10,000";
+    }
+    
+    // Period days validation
+    const startDay = formData.period_start_day ? parseInt(formData.period_start_day) : null;
+    const endDay = formData.period_end_day ? parseInt(formData.period_end_day) : null;
+    
+    if (startDay !== null) {
+      if (startDay < 1) {
+        errors.period_start_day = "Mínimo: 1";
+      } else if (startDay > 365) {
+        errors.period_start_day = "Máximo: 365";
+      }
+    }
+    
+    if (endDay !== null) {
+      if (endDay < 1) {
+        errors.period_end_day = "Mínimo: 1";
+      } else if (endDay > 365) {
+        errors.period_end_day = "Máximo: 365";
+      }
+    }
+    
+    // Cross-field validation: start day must be less than end day
+    if (startDay !== null && endDay !== null && startDay >= endDay) {
+      errors.period_start_day = "Deve ser menor que dia fim";
+      errors.period_end_day = "Deve ser maior que dia início";
+    }
+    
+    // If one period field is filled, the other should be too
+    if ((startDay !== null && endDay === null) || (startDay === null && endDay !== null)) {
+      if (!startDay) errors.period_start_day = "Preencha ambos os dias";
+      if (!endDay) errors.period_end_day = "Preencha ambos os dias";
+    }
+    
+    setFormErrors(errors);
+    return Object.keys(errors).length === 0;
   };
 
   const openAddDialog = () => {
@@ -136,17 +205,17 @@ export default function DemurrageRates() {
   };
 
   const handleSave = async () => {
-    if (!formData.armador || !formData.container_type) {
-      toast.error("Armador e tipo de container são obrigatórios");
+    if (!validateForm()) {
+      toast.error("Corrija os erros no formulário");
       return;
     }
 
     try {
       const payload = {
-        armador: formData.armador.toUpperCase(),
+        armador: formData.armador.trim().toUpperCase(),
         container_type: formData.container_type,
-        free_time_days: parseInt(formData.free_time_days) || 7,
-        rate_usd: parseFloat(formData.rate_usd) || 0,
+        free_time_days: parseInt(formData.free_time_days),
+        rate_usd: parseFloat(formData.rate_usd),
         period_type: formData.period_type,
         period_start_day: formData.period_start_day ? parseInt(formData.period_start_day) : undefined,
         period_end_day: formData.period_end_day ? parseInt(formData.period_end_day) : undefined,
@@ -313,19 +382,30 @@ export default function DemurrageRates() {
               <div>
                 <h4 className="text-sm font-medium mb-3">Identificação</h4>
                 <div className="grid grid-cols-2 gap-4">
-                  <div>
+                  <div className="space-y-1">
                     <Label>Armador</Label>
                     <Input 
                       value={formData.armador} 
-                      onChange={e => setFormData({...formData, armador: e.target.value})} 
+                      onChange={e => {
+                        setFormData({...formData, armador: e.target.value});
+                        if (formErrors.armador) setFormErrors(prev => ({ ...prev, armador: '' }));
+                      }} 
                       placeholder="MSC, MAERSK, HAPAG..."
-                      className="bg-[rgba(0,0,0,0.5)] border-[rgba(255,255,255,0.1)]"
+                      className={`bg-[rgba(0,0,0,0.5)] border-[rgba(255,255,255,0.1)] ${formErrors.armador ? 'border-red-500' : ''}`}
+                      maxLength={50}
                     />
+                    {formErrors.armador && <p className="text-xs text-red-400">{formErrors.armador}</p>}
                   </div>
-                  <div>
+                  <div className="space-y-1">
                     <Label>Tipo de Container</Label>
-                    <Select value={formData.container_type} onValueChange={(v) => setFormData(p => ({...p, container_type: v}))}>
-                      <SelectTrigger className="bg-[rgba(0,0,0,0.5)] border-[rgba(255,255,255,0.1)]">
+                    <Select 
+                      value={formData.container_type} 
+                      onValueChange={(v) => {
+                        setFormData(p => ({...p, container_type: v}));
+                        if (formErrors.container_type) setFormErrors(prev => ({ ...prev, container_type: '' }));
+                      }}
+                    >
+                      <SelectTrigger className={`bg-[rgba(0,0,0,0.5)] border-[rgba(255,255,255,0.1)] ${formErrors.container_type ? 'border-red-500' : ''}`}>
                         <SelectValue placeholder="Selecione" />
                       </SelectTrigger>
                       <SelectContent>
@@ -334,6 +414,7 @@ export default function DemurrageRates() {
                         ))}
                       </SelectContent>
                     </Select>
+                    {formErrors.container_type && <p className="text-xs text-red-400">{formErrors.container_type}</p>}
                   </div>
                 </div>
               </div>
@@ -343,16 +424,23 @@ export default function DemurrageRates() {
               <div>
                 <h4 className="text-sm font-medium mb-3">Free Time e Período</h4>
                 <div className="grid grid-cols-2 gap-4">
-                  <div>
+                  <div className="space-y-1">
                     <Label>Free Time (dias)</Label>
                     <Input 
                       type="number" 
+                      min={1}
+                      max={365}
                       value={formData.free_time_days} 
-                      onChange={e => setFormData({...formData, free_time_days: e.target.value})}
-                      className="bg-[rgba(0,0,0,0.5)] border-[rgba(255,255,255,0.1)]"
+                      onChange={e => {
+                        setFormData({...formData, free_time_days: e.target.value});
+                        if (formErrors.free_time_days) setFormErrors(prev => ({ ...prev, free_time_days: '' }));
+                      }}
+                      className={`bg-[rgba(0,0,0,0.5)] border-[rgba(255,255,255,0.1)] ${formErrors.free_time_days ? 'border-red-500' : ''}`}
                     />
+                    {formErrors.free_time_days && <p className="text-xs text-red-400">{formErrors.free_time_days}</p>}
+                    <p className="text-xs text-muted-foreground">1-365 dias</p>
                   </div>
-                  <div>
+                  <div className="space-y-1">
                     <Label>Período</Label>
                     <Select value={formData.period_type} onValueChange={(v) => setFormData(p => ({...p, period_type: v}))}>
                       <SelectTrigger className="bg-[rgba(0,0,0,0.5)] border-[rgba(255,255,255,0.1)]">
@@ -368,34 +456,54 @@ export default function DemurrageRates() {
                   </div>
                 </div>
                 <div className="grid grid-cols-3 gap-4 mt-4">
-                  <div>
+                  <div className="space-y-1">
                     <Label>Dia Início</Label>
                     <Input 
-                      type="number" 
+                      type="number"
+                      min={1}
+                      max={365}
                       value={formData.period_start_day} 
-                      onChange={e => setFormData({...formData, period_start_day: e.target.value})}
+                      onChange={e => {
+                        setFormData({...formData, period_start_day: e.target.value});
+                        if (formErrors.period_start_day) setFormErrors(prev => ({ ...prev, period_start_day: '', period_end_day: '' }));
+                      }}
                       placeholder="Ex: 8"
-                      className="bg-[rgba(0,0,0,0.5)] border-[rgba(255,255,255,0.1)]"
+                      className={`bg-[rgba(0,0,0,0.5)] border-[rgba(255,255,255,0.1)] ${formErrors.period_start_day ? 'border-red-500' : ''}`}
                     />
+                    {formErrors.period_start_day && <p className="text-xs text-red-400">{formErrors.period_start_day}</p>}
                   </div>
-                  <div>
+                  <div className="space-y-1">
                     <Label>Dia Fim</Label>
                     <Input 
-                      type="number" 
+                      type="number"
+                      min={1}
+                      max={365}
                       value={formData.period_end_day} 
-                      onChange={e => setFormData({...formData, period_end_day: e.target.value})}
+                      onChange={e => {
+                        setFormData({...formData, period_end_day: e.target.value});
+                        if (formErrors.period_end_day) setFormErrors(prev => ({ ...prev, period_start_day: '', period_end_day: '' }));
+                      }}
                       placeholder="Ex: 14"
-                      className="bg-[rgba(0,0,0,0.5)] border-[rgba(255,255,255,0.1)]"
+                      className={`bg-[rgba(0,0,0,0.5)] border-[rgba(255,255,255,0.1)] ${formErrors.period_end_day ? 'border-red-500' : ''}`}
                     />
+                    {formErrors.period_end_day && <p className="text-xs text-red-400">{formErrors.period_end_day}</p>}
                   </div>
-                  <div>
+                  <div className="space-y-1">
                     <Label>Taxa USD/dia</Label>
                     <Input 
-                      type="number" 
+                      type="number"
+                      min={0.01}
+                      max={10000}
+                      step={0.01}
                       value={formData.rate_usd} 
-                      onChange={e => setFormData({...formData, rate_usd: e.target.value})}
-                      className="bg-[rgba(0,0,0,0.5)] border-[rgba(255,255,255,0.1)]"
+                      onChange={e => {
+                        setFormData({...formData, rate_usd: e.target.value});
+                        if (formErrors.rate_usd) setFormErrors(prev => ({ ...prev, rate_usd: '' }));
+                      }}
+                      className={`bg-[rgba(0,0,0,0.5)] border-[rgba(255,255,255,0.1)] ${formErrors.rate_usd ? 'border-red-500' : ''}`}
                     />
+                    {formErrors.rate_usd && <p className="text-xs text-red-400">{formErrors.rate_usd}</p>}
+                    <p className="text-xs text-muted-foreground">$0.01 - $10,000</p>
                   </div>
                 </div>
               </div>
