@@ -7,8 +7,13 @@ import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { TablePagination } from "@/components/layout/TablePagination";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Scale, Plus, CheckCircle, XCircle, Clock, MessageSquare, DollarSign, TrendingUp } from "lucide-react";
-import { useDemurrageData } from "@/hooks/useDemurrageData";
+import { useDemurrageData, useUpdateDemurrageContainer, DemurrageContainer } from "@/hooks/useDemurrageData";
+import { OpenDisputeDialog } from "@/components/demurrage/OpenDisputeDialog";
+import { ResolveDisputeDialog } from "@/components/demurrage/ResolveDisputeDialog";
+import { SelectContainerForDisputeDialog } from "@/components/demurrage/SelectContainerForDisputeDialog";
+import { toast } from "sonner";
 
 type QuickFilter = "all" | "total" | "recovered" | "in_progress" | "success_rate";
 const PAGE_SIZE = 15;
@@ -17,8 +22,16 @@ export default function DemurrageDisputes() {
   const [activeTab, setActiveTab] = useState("all");
   const [quickFilter, setQuickFilter] = useState<QuickFilter>("all");
   const [currentPage, setCurrentPage] = useState(1);
+  
+  // Dialog states
+  const [selectContainerOpen, setSelectContainerOpen] = useState(false);
+  const [openDisputeDialogOpen, setOpenDisputeDialogOpen] = useState(false);
+  const [resolveDialogOpen, setResolveDialogOpen] = useState(false);
+  const [selectedContainer, setSelectedContainer] = useState<DemurrageContainer | null>(null);
+  const [resolveType, setResolveType] = useState<"won" | "lost">("won");
 
   const { data: containers = [], isLoading } = useDemurrageData();
+  const updateContainer = useUpdateDemurrageContainer();
 
   // Filter containers that have dispute data
   const disputeContainers = useMemo(() => {
@@ -87,8 +100,94 @@ export default function DemurrageDisputes() {
     }
   };
 
+  // Handler: Open new dispute button
+  const handleOpenNewDispute = () => {
+    setSelectContainerOpen(true);
+  };
+
+  // Handler: Container selected from list
+  const handleContainerSelected = (container: DemurrageContainer) => {
+    setSelectedContainer(container);
+    setOpenDisputeDialogOpen(true);
+  };
+
+  // Handler: Submit new dispute
+  const handleSubmitDispute = async (data: { disputed_amount_usd: number; dispute_reason: string }) => {
+    if (!selectedContainer) return;
+    
+    try {
+      await updateContainer.mutateAsync({
+        containerId: selectedContainer.id,
+        updates: {
+          dispute_status: 'opened',
+          disputed_amount_usd: data.disputed_amount_usd,
+          dispute_reason: data.dispute_reason,
+          recovered_amount_usd: 0,
+        }
+      });
+      toast.success("Disputa aberta com sucesso!");
+      setSelectedContainer(null);
+    } catch (error) {
+      console.error('Error opening dispute:', error);
+      toast.error("Erro ao abrir disputa");
+      throw error;
+    }
+  };
+
+  // Handler: Mark as negotiating
+  const handleNegotiate = async (container: DemurrageContainer) => {
+    try {
+      await updateContainer.mutateAsync({
+        containerId: container.id,
+        updates: {
+          dispute_status: 'negotiating',
+        }
+      });
+      toast.success("Disputa marcada como em negociação");
+    } catch (error) {
+      console.error('Error updating dispute:', error);
+      toast.error("Erro ao atualizar disputa");
+    }
+  };
+
+  // Handler: Open resolve dialog (won/lost)
+  const handleOpenResolveDialog = (container: DemurrageContainer, type: "won" | "lost") => {
+    setSelectedContainer(container);
+    setResolveType(type);
+    setResolveDialogOpen(true);
+  };
+
+  // Handler: Submit resolution
+  const handleSubmitResolution = async (data: { recovered_amount_usd: number; notes?: string }) => {
+    if (!selectedContainer) return;
+    
+    try {
+      const updates: Record<string, unknown> = {
+        dispute_status: resolveType,
+        recovered_amount_usd: data.recovered_amount_usd,
+      };
+      
+      if (data.notes) {
+        updates.notes = (selectedContainer.notes ? selectedContainer.notes + '\n' : '') + 
+          `[${new Date().toLocaleDateString('pt-BR')}] Disputa ${resolveType === 'won' ? 'ganha' : 'perdida'}: ${data.notes}`;
+      }
+      
+      await updateContainer.mutateAsync({
+        containerId: selectedContainer.id,
+        updates,
+      });
+      
+      toast.success(resolveType === 'won' ? "Disputa marcada como ganha!" : "Disputa marcada como perdida");
+      setSelectedContainer(null);
+    } catch (error) {
+      console.error('Error resolving dispute:', error);
+      toast.error("Erro ao resolver disputa");
+      throw error;
+    }
+  };
+
   const rightActions = (
-    <Button className="bg-[#ffc800] text-black hover:bg-[#e6b400]">
+    <Button onClick={handleOpenNewDispute} className="bg-[#ffc800] text-black hover:bg-[#e6b400]">
       <Plus className="h-4 w-4 mr-2" />
       Abrir Disputa
     </Button>
@@ -178,6 +277,7 @@ export default function DemurrageDisputes() {
                       <TableHead>Armador</TableHead>
                       <TableHead className="text-right">Valor Disputado</TableHead>
                       <TableHead>Status</TableHead>
+                      <TableHead>Motivo</TableHead>
                       <TableHead className="text-right">Recuperado</TableHead>
                       <TableHead>Ações</TableHead>
                     </TableRow>
@@ -190,17 +290,64 @@ export default function DemurrageDisputes() {
                         <TableCell>{container.armador || '-'}</TableCell>
                         <TableCell className="text-right font-medium">{formatCurrency(container.disputed_amount_usd)}</TableCell>
                         <TableCell>{getStatusBadge(container.dispute_status)}</TableCell>
-                        <TableCell className="text-right font-medium text-green-500">{container.dispute_status === 'won' ? formatCurrency(container.recovered_amount_usd) : '-'}</TableCell>
+                        <TableCell className="max-w-[150px] truncate" title={container.dispute_reason || ''}>
+                          {container.dispute_reason || '-'}
+                        </TableCell>
+                        <TableCell className="text-right font-medium text-green-500">
+                          {container.dispute_status === 'won' ? formatCurrency(container.recovered_amount_usd) : '-'}
+                        </TableCell>
                         <TableCell>
-                          <div className="flex gap-1">
-                            {container.dispute_status === 'opened' && <Button size="sm" variant="outline" className="border-[rgba(255,255,255,0.2)] text-xs">Negociar</Button>}
-                            {(container.dispute_status === 'opened' || container.dispute_status === 'negotiating') && (
-                              <>
-                                <Button size="sm" className="bg-green-500/20 text-green-500 hover:bg-green-500/30 h-8 w-8 p-0"><CheckCircle className="h-4 w-4" /></Button>
-                                <Button size="sm" className="bg-red-500/20 text-red-500 hover:bg-red-500/30 h-8 w-8 p-0"><XCircle className="h-4 w-4" /></Button>
-                              </>
-                            )}
-                          </div>
+                          <TooltipProvider>
+                            <div className="flex gap-1">
+                              {container.dispute_status === 'opened' && (
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <Button 
+                                      size="sm" 
+                                      variant="outline" 
+                                      className="border-[rgba(255,255,255,0.2)] text-xs"
+                                      onClick={() => handleNegotiate(container)}
+                                      disabled={updateContainer.isPending}
+                                    >
+                                      <MessageSquare className="h-3 w-3 mr-1" />
+                                      Negociar
+                                    </Button>
+                                  </TooltipTrigger>
+                                  <TooltipContent>Iniciar negociação</TooltipContent>
+                                </Tooltip>
+                              )}
+                              {(container.dispute_status === 'opened' || container.dispute_status === 'negotiating') && (
+                                <>
+                                  <Tooltip>
+                                    <TooltipTrigger asChild>
+                                      <Button 
+                                        size="sm" 
+                                        className="bg-green-500/20 text-green-500 hover:bg-green-500/30 h-8 w-8 p-0"
+                                        onClick={() => handleOpenResolveDialog(container, "won")}
+                                        disabled={updateContainer.isPending}
+                                      >
+                                        <CheckCircle className="h-4 w-4" />
+                                      </Button>
+                                    </TooltipTrigger>
+                                    <TooltipContent>Marcar como ganha</TooltipContent>
+                                  </Tooltip>
+                                  <Tooltip>
+                                    <TooltipTrigger asChild>
+                                      <Button 
+                                        size="sm" 
+                                        className="bg-red-500/20 text-red-500 hover:bg-red-500/30 h-8 w-8 p-0"
+                                        onClick={() => handleOpenResolveDialog(container, "lost")}
+                                        disabled={updateContainer.isPending}
+                                      >
+                                        <XCircle className="h-4 w-4" />
+                                      </Button>
+                                    </TooltipTrigger>
+                                    <TooltipContent>Marcar como perdida</TooltipContent>
+                                  </Tooltip>
+                                </>
+                              )}
+                            </div>
+                          </TooltipProvider>
                         </TableCell>
                       </TableRow>
                     ))}
@@ -212,6 +359,31 @@ export default function DemurrageDisputes() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Dialogs */}
+      <SelectContainerForDisputeDialog
+        open={selectContainerOpen}
+        onOpenChange={setSelectContainerOpen}
+        containers={containers}
+        onSelect={handleContainerSelected}
+      />
+      
+      <OpenDisputeDialog
+        open={openDisputeDialogOpen}
+        onOpenChange={setOpenDisputeDialogOpen}
+        container={selectedContainer}
+        onSubmit={handleSubmitDispute}
+        isLoading={updateContainer.isPending}
+      />
+      
+      <ResolveDisputeDialog
+        open={resolveDialogOpen}
+        onOpenChange={setResolveDialogOpen}
+        container={selectedContainer}
+        resolution={resolveType}
+        onSubmit={handleSubmitResolution}
+        isLoading={updateContainer.isPending}
+      />
     </DemurrageLayout>
   );
 }
