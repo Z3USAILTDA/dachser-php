@@ -1630,26 +1630,38 @@ serve(async (req) => {
           WHERE ts.active = 1
           GROUP BY ts.mbl_id
           HAVING 
-            -- Mostrar MBLs que têm pelo menos 1 container válido (não NAO_ENCONTRADO/PENDENTE)
-            COUNT(DISTINCT CASE 
-              WHEN ts.container NOT IN ('NAO_ENCONTRADO', 'PENDENTE', 'IGNORADO', '') 
-              AND ts.container IS NOT NULL 
-              THEN ts.container 
-            END) > 0
-            -- E que NÃO tenham TODOS os containers com erro "Prefix not found"
+            -- Mostrar MBLs que:
+            -- 1. Têm pelo menos 1 container válido (não NAO_ENCONTRADO/IGNORADO)
+            -- 2. OU têm apenas container PENDENTE (recém-sincronizados, aguardando enriquecimento)
+            (
+              COUNT(DISTINCT CASE 
+                WHEN ts.container NOT IN ('NAO_ENCONTRADO', 'PENDENTE', 'IGNORADO', '') 
+                AND ts.container IS NOT NULL 
+                THEN ts.container 
+              END) > 0
+              OR 
+              (COUNT(*) = 1 AND MAX(ts.container) = 'PENDENTE')
+            )
+            -- E que NÃO tenham TODOS os containers com erro "Prefix not found" (exceto se for PENDENTE)
             AND NOT (
               COUNT(DISTINCT ts.container) = COUNT(DISTINCT CASE 
                 WHEN ts.last_error LIKE '%Prefix not found%' 
                 THEN ts.container 
               END)
               AND COUNT(DISTINCT CASE WHEN ts.last_error LIKE '%Prefix not found%' THEN ts.container END) > 0
+              AND MAX(ts.container) != 'PENDENTE'
             )
-            -- Ocultar containers entregues há mais de 24 horas
+            -- Ocultar containers entregues há mais de 24 horas (exceto se tiver container pendente)
             AND NOT (
               UPPER(COALESCE(MAX(ts.container_status), '')) IN ('DELIVERED', 'DLV', 'GOD', 'GATE_OUT_FULL', 'EMPTY_RETURNED', 'EMPTY_RECEIVED_AT_CY')
               AND MAX(ts.last_check) < DATE_SUB(NOW(), INTERVAL 24 HOUR)
+              AND MAX(ts.container) != 'PENDENTE'
             )
-          ORDER BY MAX(ts.last_check) DESC, ts.mbl_id
+          ORDER BY 
+            -- MBLs pendentes primeiro (para facilitar visualização e ação)
+            CASE WHEN MAX(ts.container) = 'PENDENTE' THEN 0 ELSE 1 END,
+            MAX(ts.last_check) DESC, 
+            ts.mbl_id
         `);
 
         await client.close();
