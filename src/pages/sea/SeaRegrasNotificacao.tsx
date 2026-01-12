@@ -79,10 +79,10 @@ export default function SeaRegrasNotificacao() {
       <div className="absolute inset-0 bg-gradient-to-br from-[#0A0A0A]/95 via-[#0A0A0A]/90 to-[#0A0A0A]/95" />
 
       {/* Content */}
-      <div className="relative z-10 p-6 max-w-7xl mx-auto">
+      <div className="relative z-10 p-4 sm:p-6">
         {/* Header */}
-        <div className="flex items-center gap-4 mb-8">
-          <Link to="/container-tracking">
+        <div className="flex items-center gap-4 mb-6">
+          <Link to="/sea/tracking">
             <Button variant="ghost" size="icon" className="text-white/60 hover:text-white hover:bg-white/10">
               <ArrowLeft className="h-5 w-5" />
             </Button>
@@ -97,7 +97,7 @@ export default function SeaRegrasNotificacao() {
         </div>
 
         {/* Actions */}
-        <div className="flex items-center justify-between mb-6">
+        <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-3">
             <div className="relative">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-white/40" />
@@ -123,26 +123,25 @@ export default function SeaRegrasNotificacao() {
           <Table>
             <TableHeader>
               <TableRow className="border-white/8 hover:bg-transparent">
-                <TableHead className="text-white/60">Cliente</TableHead>
-                <TableHead className="text-white/60">Tipo</TableHead>
-                <TableHead className="text-white/60">Portos</TableHead>
-                <TableHead className="text-white/60">Eventos</TableHead>
-                <TableHead className="text-white/60">Frequência</TableHead>
-                <TableHead className="text-white/60">Canais</TableHead>
-                <TableHead className="text-white/60 text-center">Ativo</TableHead>
-                <TableHead className="text-white/60 text-right">Ações</TableHead>
+                <TableHead className="text-white/60 text-sm py-3">Cliente</TableHead>
+                <TableHead className="text-white/60 text-sm py-3">Tipo</TableHead>
+                <TableHead className="text-white/60 text-sm py-3">Portos</TableHead>
+                <TableHead className="text-white/60 text-sm py-3">Eventos</TableHead>
+                <TableHead className="text-white/60 text-sm py-3">Frequência</TableHead>
+                <TableHead className="text-white/60 text-sm py-3 text-center">Ativo</TableHead>
+                <TableHead className="text-white/60 text-sm py-3 text-right">Ações</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {loading && regras.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={8} className="text-center py-12 text-white/50">
+                  <TableCell colSpan={7} className="text-center py-12 text-white/50">
                     Carregando regras...
                   </TableCell>
                 </TableRow>
               ) : filteredRegras.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={8} className="text-center py-12 text-white/50">
+                  <TableCell colSpan={7} className="text-center py-12 text-white/50">
                     <Ship className="h-8 w-8 mx-auto mb-2 opacity-50" />
                     Nenhuma regra encontrada
                   </TableCell>
@@ -150,77 +149,68 @@ export default function SeaRegrasNotificacao() {
               ) : (
                 filteredRegras.map((regra) => (
                   <TableRow key={regra.id} className="border-white/8 hover:bg-white/5">
-                    <TableCell>
+                    <TableCell className="py-3">
                       <div>
-                        <div className="text-white font-medium">{regra.cliente_nome || '—'}</div>
-                        <div className="text-white/50 font-mono text-[10px]">{regra.cnpj_consignatario || ''}</div>
+                        <div className="text-white font-medium text-sm">{regra.cliente_nome || '—'}</div>
+                        <div className="text-white/50 font-mono text-xs">{regra.cnpj_consignatario || ''}</div>
                       </div>
                     </TableCell>
-                    <TableCell>
-                      <Badge variant="secondary" className={`text-[10px] ${getTipoProcessoColor(regra.tipo_processo)}`}>
+                    <TableCell className="py-3">
+                      <Badge variant="secondary" className={`text-xs ${getTipoProcessoColor(regra.tipo_processo)}`}>
                         {regra.tipo_processo === 'IMPORT' ? 'Importação' : regra.tipo_processo === 'EXPORT' ? 'Exportação' : 'Ambos'}
                       </Badge>
                     </TableCell>
-                    <TableCell>
+                    <TableCell className="py-3">
                       <div className="flex flex-wrap gap-1">
                         {regra.portos.length > 0 ? (
                           regra.portos.slice(0, 3).map(p => (
-                            <Badge key={p} variant="secondary" className="bg-cyan-500/20 text-cyan-300 text-[10px]">
-                              <Anchor className="h-2 w-2 mr-1" />
+                            <Badge key={p} variant="secondary" className="bg-cyan-500/20 text-cyan-300 text-xs">
+                              <Anchor className="h-3 w-3 mr-1" />
                               {p}
                             </Badge>
                           ))
                         ) : (
-                          <span className="text-white/40 text-xs">Todos</span>
+                          <span className="text-white/40 text-sm">Todos</span>
                         )}
                         {regra.portos.length > 3 && (
-                          <Badge variant="secondary" className="bg-white/10 text-white/60 text-[10px]">
+                          <Badge variant="secondary" className="bg-white/10 text-white/60 text-xs">
                             +{regra.portos.length - 3}
                           </Badge>
                         )}
                       </div>
                     </TableCell>
-                    <TableCell>
+                    <TableCell className="py-3">
                       <div className="flex flex-wrap gap-1">
                         {regra.eventos_disparo.slice(0, 2).map(e => (
-                          <Badge key={e} variant="secondary" className="bg-white/10 text-white/70 text-[10px]">
+                          <Badge key={e} variant="secondary" className="bg-white/10 text-white/70 text-xs">
                             {e}
                           </Badge>
                         ))}
                         {regra.eventos_disparo.length > 2 && (
-                          <Badge variant="secondary" className="bg-white/10 text-white/60 text-[10px]">
+                          <Badge variant="secondary" className="bg-white/10 text-white/60 text-xs">
                             +{regra.eventos_disparo.length - 2}
                           </Badge>
                         )}
                       </div>
                     </TableCell>
-                    <TableCell>
-                      <Badge variant="secondary" className={`text-[10px] ${getFrequenciaColor(regra.frequencia)}`}>
+                    <TableCell className="py-3">
+                      <Badge variant="secondary" className={`text-xs ${getFrequenciaColor(regra.frequencia)}`}>
                         {regra.frequencia}
                       </Badge>
                     </TableCell>
-                    <TableCell>
-                      <div className="flex flex-wrap gap-1">
-                        {regra.canais.map(c => (
-                          <Badge key={c} variant="secondary" className={`text-[10px] ${getCanalColorSea(c)}`}>
-                            {c.replace(/_/g, ' ')}
-                          </Badge>
-                        ))}
-                      </div>
-                    </TableCell>
-                    <TableCell className="text-center">
+                    <TableCell className="text-center py-3">
                       <Switch
                         checked={regra.ativo}
                         onCheckedChange={(checked) => toggleAtivo(regra.id, checked)}
                       />
                     </TableCell>
-                    <TableCell className="text-right">
+                    <TableCell className="text-right py-3">
                       <div className="flex justify-end gap-1">
                         <Button
                           variant="ghost"
                           size="icon"
                           onClick={() => handleEdit(regra)}
-                          className="h-8 w-8 text-white/60 hover:text-white hover:bg-white/10"
+                          className="h-9 w-9 text-white/60 hover:text-white hover:bg-white/10"
                         >
                           <Pencil className="h-4 w-4" />
                         </Button>
@@ -228,7 +218,7 @@ export default function SeaRegrasNotificacao() {
                           variant="ghost"
                           size="icon"
                           onClick={() => handleDeleteClick(regra.id)}
-                          className="h-8 w-8 text-red-400/60 hover:text-red-400 hover:bg-red-500/10"
+                          className="h-9 w-9 text-red-400/60 hover:text-red-400 hover:bg-red-500/10"
                         >
                           <Trash2 className="h-4 w-4" />
                         </Button>
@@ -242,7 +232,7 @@ export default function SeaRegrasNotificacao() {
         </div>
 
         {/* Stats */}
-        <div className="mt-4 flex gap-4 text-xs text-white/50">
+        <div className="mt-3 flex gap-4 text-sm text-white/50">
           <span>Total: {regras.length} regras</span>
           <span>•</span>
           <span>Ativas: {regras.filter(r => r.ativo).length}</span>
