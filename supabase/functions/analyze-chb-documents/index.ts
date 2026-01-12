@@ -229,6 +229,10 @@ function buildTableSpec(clientConfig?: ClientConfig): string {
     quantidade: 'Quantidade',
     ncm: 'NCM',
     descricao: 'Descrição',
+    // Novos campos - Fase A Ponto 2 e 7
+    aeroporto_origem: 'Aeroporto Origem',
+    aeroporto_destino: 'Aeroporto Destino',
+    numero_master: 'Número Master',
   };
   
   const camposObrigatoriosText = camposObrigatorios.map(c => camposLabel[c] || c).join(', ');
@@ -362,6 +366,21 @@ REGRAS DE CONTEÚDO DA TABELA
    - 10.841,00 e 10841 e 10.841 são EQUIVALENTES (✅)
    - Ignore zeros à direita e diferenças de formatação de decimais
    
+   ⚠️ REGRA CRÍTICA DE ZEROS APÓS VÍRGULA (PONTO 4 — NÃO É DIVERGÊNCIA!):
+   - 97,3 e 97,30 e 97,300 são EQUIVALENTES → ✅ CONFORME
+   - 100 e 100,00 e 100,000 são EQUIVALENTES → ✅ CONFORME
+   - 1.234,5 e 1.234,50 são EQUIVALENTES → ✅ CONFORME
+   - NUNCA marcar como 🔴 ou 🟨 apenas por diferença em zeros decimais!
+   - Normalizar ANTES de comparar: remover zeros trailing após decimal
+   
+   EXEMPLOS CORRETOS DE EQUIVALÊNCIA:
+   | Valor 1     | Valor 2      | Status | Razão                    |
+   |-------------|--------------|--------|--------------------------|
+   | 97,3        | 97,30        | ✅     | Mesma quantidade         |
+   | 1.000,00    | 1000         | ✅     | Formatação diferente     |
+   | 97,3        | 97,4         | 🟨     | Diferença real (0,1)     |
+   | 97,3        | 98,0         | 🟨/🔴  | Diferença real (0,7)     |
+   
    ⚠️ REGRA CRÍTICA DE EQUIVALÊNCIA NUMÉRICA:
    - ANTES de comparar valores numéricos, NORMALIZAR:
      → Remover zeros à direita após decimal (97,30 → 97,3)
@@ -485,9 +504,14 @@ REGRAS DE CONTEÚDO DA TABELA
    NUNCA inventar valores que não existam no documento
    Se documento não tem valor → "ND" (não "0" ou valor inventado)
 
-8) EXCEÇÕES PARA INVOICES COMERCIAIS (NÃO ALERTAR):
+8) EXCEÇÕES PARA INVOICES COMERCIAIS (NÃO ALERTAR — PONTO 3):
    ⚠️ Invoice comercial NÃO precisa ter campo "Frete" → ausência NÃO é alerta
    ⚠️ Invoice comercial NÃO precisa ter campo "NCM" → ausência NÃO é alerta
+   ⚠️ Invoice comercial NÃO precisa ter campo "Peso Bruto" → ausência NÃO é alerta
+   ⚠️ Invoice comercial NÃO precisa ter campo "Peso Líquido" → ausência NÃO é alerta
+   - Campos de PESO são esperados no BL/AWB e Packing List, NÃO obrigatórios na Invoice
+   - Invoice comercial é documento de VALOR, não de peso
+   - Ausência de peso na Invoice = marcar "ND" SEM ícone de alerta (não é divergência!)
    - Esses campos são esperados no BL/AWB e no Draft DI, não na Invoice
    - Ausência desses campos na Invoice = marcar "ND" SEM ícone de alerta
    - Se demais campos estão conformes, linha pode ter ✅
@@ -507,6 +531,61 @@ REGRAS DE CONTEÚDO DA TABELA
    - Reportar o modal detectado no bloco METADATA
 
 ${fiscalRulesSection}${armadorSection}${taxasSection}
+
+18) CAMPOS DE VERIFICAÇÃO: AEROPORTO ORIGEM E DESTINO (PONTO 2):
+   - Incluir linhas na tabela: "Aeroporto Origem" e "Aeroporto Destino"
+   - Códigos IATA de 3 letras (ex.: GRU, VCP, MIA, FRA, JFK, CDG)
+   - Extrair de: AWB, HAWB, BL, HBL e documentos de transporte
+   - Comparar entre AWB/BL e demais documentos
+   
+   REGRAS DE COMPARAÇÃO:
+   - Códigos IATA diferentes para MESMO aeroporto → ✅ CONFORME
+     (ex.: GRU e SBGR referem-se ao mesmo aeroporto de Guarulhos)
+   - Aeroportos claramente DIFERENTES → 🔴 CRÍTICO
+     (ex.: GRU vs VCP = Guarulhos vs Campinas = DIVERGÊNCIA!)
+   - Campo ausente em documento que deveria ter → 🟨 alerta
+   - Campo ausente em Invoice/Packing List → OK (ND sem alerta)
+   
+   CÓDIGOS EQUIVALENTES CONHECIDOS:
+   - GRU = SBGR (São Paulo/Guarulhos)
+   - VCP = SBKP (Campinas/Viracopos)
+   - GIG = SBGL (Rio de Janeiro/Galeão)
+   - MIA = KMIA (Miami)
+   - FRA = EDDF (Frankfurt)
+
+19) REGRA DE MOEDA — COMPARAÇÃO RESTRITA (PONTO 5):
+   
+   ⚠️ DIFERENÇA DE MOEDA SÓ É RELEVANTE ENTRE CCT E HAWB/AWB:
+   - CCT mostra EUR, HAWB mostra USD → 🔴 CRÍTICO (mesma operação, moedas diferentes)
+   - Invoice em EUR, Seguro em USD → ✅ NORMAL (documentos independentes podem ter moedas diferentes)
+   - BL em USD, Packing List em EUR → NÃO alertar (Packing List geralmente não tem valores)
+   
+   REGRA GERAL:
+   - Documentos do MESMO emissor (armador/cia aérea) DEVEM ter mesma moeda
+   - Documentos de emissores diferentes PODEM ter moedas diferentes
+   - CCT + AWB/HAWB = mesmo emissor → moeda DEVE ser igual
+   - Invoice + Seguro + PL = emissores diferentes → moeda PODE diferir
+   
+   QUANDO NÃO ALERTAR:
+   - Invoice comercial em moeda diferente do AWB → NÃO é divergência
+   - Certificado de seguro em moeda diferente → NÃO é divergência
+   - Packing List geralmente não tem valores monetários
+   - Apenas CCT vs AWB/HAWB com moedas diferentes → 🔴 CRÍTICO
+
+20) QUANTIDADE DE MERCADORIA — SEVERIDADE ALERTA (PONTO 6):
+   
+   ⚠️ DIVERGÊNCIA DE QUANTIDADE NÃO É CRÍTICO:
+   - Quantidade de volumes/packages divergente → 🟨 ALERTA (NÃO 🔴!)
+   - Quantidade de itens divergente → 🟨 ALERTA (NÃO 🔴!)
+   - Apenas verificar, não bloquear o processo
+   
+   RAZÃO: Divergências de quantidade frequentemente se resolvem com conferência física
+   e não impedem o registro da DI. São itens de verificação, não de bloqueio.
+   
+   EXCEÇÃO — QUANDO QUANTIDADE É CRÍTICO:
+   - Quantidade ZERO em documento oficial (AWB, BL) → 🔴 CRÍTICO
+   - Quantidade NEGATIVA → 🔴 CRÍTICO (erro de digitação evidente)
+   - Quantidade ausente em TODOS os documentos → 🔴 CRÍTICO
 
 14) REGRAS ESPECÍFICAS PARA AWB/HAWB (ATENÇÃO MÁXIMA):
    
@@ -695,6 +774,37 @@ FOCO PRINCIPAL:
 3. Verificar cálculo de tributos (se visível no draft)
 4. Confirmar que dados do importador/exportador estão corretos
 5. Identificar QUALQUER divergência que poderia causar multa ou retenção
+
+═══════════════════════════════════════════════════════════════════════════════
+⚠️ FOCO ADICIONAL — COMPARAÇÃO HOUSE × MASTER (PONTO 7):
+═══════════════════════════════════════════════════════════════════════════════
+
+Assim como comparamos HAWB/HBL, agora também devemos verificar o MAWB/MBL:
+
+1. NÚMERO DO MASTER:
+   - Extrair MAWB (Master Airway Bill) ou MBL (Master Bill of Lading)
+   - Incluir como linha na tabela: "Número Master"
+   - Comparar com referência no Draft DI se existir
+   - Se não houver documento Master fornecido, marcar como "ND" sem alerta
+
+2. DADOS DO MASTER (quando documento Master estiver presente):
+   - Peso Bruto no Master vs Peso Bruto no House
+   - Valor Total no Master (soma de houses, se consolidado)
+   - Consignee/Agente no Master
+   - Aeroporto/Porto de Origem e Destino
+
+3. REGRAS DE COMPARAÇÃO MASTER vs HOUSE:
+   - Master vs House: pesos podem diferir se houver consolidação → 🟨 apenas alerta
+   - Master indica destino diferente do House → 🔴 CRÍTICO
+   - Master não encontrado nos documentos → 🟨 (campo "ND" com nota)
+   - Número do Master diverge entre documentos → 🔴 CRÍTICO
+
+4. IDENTIFICAÇÃO DO DOCUMENTO MASTER:
+   - Nomes típicos: "MAWB.pdf", "MasterBL.pdf", "MBL.pdf", "Master_AWB.pdf"
+   - Contém indicadores: "Master", "MAWB", "MBL", "Consolidation"
+   - Se documento contém referência a múltiplos houses → é provável Master
+
+═══════════════════════════════════════════════════════════════════════════════
 
 ⚠️ REGRA CRÍTICA PARA DRAFT DI:
 - O DI brasileiro tem valores em "Moeda Estrangeira" e "Moeda Nacional"
