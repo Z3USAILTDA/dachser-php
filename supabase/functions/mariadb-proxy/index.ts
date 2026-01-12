@@ -9,6 +9,7 @@ const corsHeaders = {
 
 interface QueryRequest {
   action: string;
+  doc_id?: number | string;
   id?: number | string;
   query?: string;
   observacoes?: string;
@@ -140,7 +141,7 @@ interface QueryRequest {
   criado_por_user_id?: string;
   criado_por_user_name?: string;
   lote_id?: string;
-  item_id?: string;
+  item_id?: number | string;
   voucher_id?: string;
   status_lote?: string;
   arquivo_remessa_url?: string;
@@ -7843,6 +7844,47 @@ serve(async (req) => {
         
         await client.execute(`DELETE FROM dados_dachser.t_accrual_entries`);
         
+        result = { success: true };
+        break;
+      }
+
+      // ==================== CHB DOCUMENTS ====================
+      case 'get_chb_docs': {
+        const { item_id } = body;
+        if (!item_id) {
+          return new Response(
+            JSON.stringify({ error: 'item_id é obrigatório' }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+
+        const docs = await client.query(
+          `SELECT d.id, d.doc_role, d.created_at, f.filename, f.file_url, f.file_size, d.etapa
+           FROM ai_agente.t_dachser_chb_docs d
+           JOIN ai_agente.t_dachser_chb_files f ON d.file_id = f.id
+           WHERE d.item_id = ?
+           ORDER BY d.created_at ASC`,
+          [item_id]
+        );
+
+        result = { success: true, rows: docs };
+        break;
+      }
+
+      case 'delete_chb_doc': {
+        const { doc_id } = body;
+        if (!doc_id) {
+          return new Response(
+            JSON.stringify({ error: 'doc_id é obrigatório' }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+
+        await client.execute(
+          'DELETE FROM ai_agente.t_dachser_chb_docs WHERE id = ?',
+          [doc_id]
+        );
+
         result = { success: true };
         break;
       }

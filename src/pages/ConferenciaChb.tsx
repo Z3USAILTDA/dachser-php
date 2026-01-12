@@ -66,13 +66,8 @@ export default function ConferenciaChb() {
     try {
       const { data, error } = await supabase.functions.invoke('mariadb-proxy', {
         body: {
-          action: 'query',
-          query: `SELECT d.id, d.doc_role, d.created_at, f.filename, f.file_url, f.file_size, d.etapa
-                  FROM ai_agente.t_dachser_chb_docs d
-                  JOIN ai_agente.t_dachser_chb_files f ON d.file_id = f.id
-                  WHERE d.item_id = ?
-                  ORDER BY d.created_at ASC`,
-          params: [itemId],
+          action: 'get_chb_docs',
+          item_id: itemId,
         },
       });
 
@@ -870,9 +865,8 @@ export default function ConferenciaChb() {
     try {
       const { error } = await supabase.functions.invoke('mariadb-proxy', {
         body: {
-          action: 'query',
-          query: `DELETE FROM ai_agente.t_dachser_chb_docs WHERE id = ?`,
-          params: [docId],
+          action: 'delete_chb_doc',
+          doc_id: docId,
         },
       });
       
