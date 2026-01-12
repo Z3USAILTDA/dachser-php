@@ -13,33 +13,31 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { 
-  Clock, Plus, Edit, Trash2, Search, FileText, Ship, Calendar, 
-  CheckCircle2, AlertCircle, Package
+  Clock, Edit, Trash2, Search, FileText, Ship, Calendar, 
+  CheckCircle2, AlertCircle, Package, Info
 } from "lucide-react";
 import { 
   useClientFreeTimeList, 
   useUpdateClientFreeTime, 
   useDeleteClientFreeTime,
-  useCreateClientFreeTime,
   ClientFreeTime,
-  CreateClientFreeTimeData
 } from "@/hooks/useClientFreeTime";
 import { format, parseISO } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import { RegisterFreeTimeDialog } from "@/components/tracking/RegisterFreeTimeDialog";
 import { useRecalcDemurrage } from "@/hooks/useDemurrageData";
+import { useNavigate } from "react-router-dom";
 
 type QuickFilter = "all" | "contrato" | "processo" | "active" | "expired";
 const PAGE_SIZE = 15;
 
 export default function DemurrageFreeTimes() {
+  const navigate = useNavigate();
   const [searchTerm, setSearchTerm] = useState("");
   const [filterType, setFilterType] = useState<string>("all");
   const [quickFilter, setQuickFilter] = useState<QuickFilter>("all");
   const [currentPage, setCurrentPage] = useState(1);
   
   // Dialog states
-  const [isRegisterOpen, setIsRegisterOpen] = useState(false);
   const [editingFreeTime, setEditingFreeTime] = useState<ClientFreeTime | null>(null);
   const [deletingFreeTime, setDeletingFreeTime] = useState<ClientFreeTime | null>(null);
   
@@ -129,20 +127,6 @@ export default function DemurrageFreeTimes() {
     recalcMutation.mutate();
   };
 
-  const handleRegisterSuccess = () => {
-    refetch();
-    recalcMutation.mutate();
-  };
-
-  const rightActions = (
-    <Button 
-      className="bg-[#ffc800] text-black hover:bg-[#e6b400]"
-      onClick={() => setIsRegisterOpen(true)}
-    >
-      <Plus className="h-4 w-4 mr-2" />
-      Novo Free Time
-    </Button>
-  );
 
   const customCards = (
     <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
@@ -196,7 +180,6 @@ export default function DemurrageFreeTimes() {
 
   return (
     <DemurrageLayout
-      rightActions={rightActions}
       customCards={customCards}
       loading={isLoading}
     >
@@ -244,14 +227,24 @@ export default function DemurrageFreeTimes() {
               <div className="flex flex-col items-center justify-center py-8 text-muted-foreground">
                 <Clock className="h-12 w-12 mb-4 opacity-50" />
                 <p>Nenhum Free Time cadastrado</p>
-                <Button 
-                  variant="outline" 
-                  className="mt-4"
-                  onClick={() => setIsRegisterOpen(true)}
-                >
-                  <Plus className="h-4 w-4 mr-2" />
-                  Cadastrar Primeiro Free Time
-                </Button>
+                <div className="mt-4 p-4 bg-blue-500/10 border border-blue-500/20 rounded-lg max-w-md text-center">
+                  <div className="flex items-center justify-center gap-2 text-blue-400 mb-2">
+                    <Info className="h-4 w-4" />
+                    <span className="font-medium">Como cadastrar?</span>
+                  </div>
+                  <p className="text-sm text-muted-foreground mb-3">
+                    O cadastro de Free Time é feito na tela de Rastreio de Container/MBL, 
+                    diretamente no contexto do processo sendo rastreado.
+                  </p>
+                  <Button 
+                    variant="outline" 
+                    className="border-blue-500/30 text-blue-400 hover:bg-blue-500/10"
+                    onClick={() => navigate('/sea/demurrage/monitor')}
+                  >
+                    <Ship className="h-4 w-4 mr-2" />
+                    Ir para Monitoramento
+                  </Button>
+                </div>
               </div>
             ) : (
               <>
@@ -363,12 +356,6 @@ export default function DemurrageFreeTimes() {
         </Card>
       </div>
 
-      {/* Register Free Time Dialog */}
-      <RegisterFreeTimeDialog
-        open={isRegisterOpen}
-        onOpenChange={setIsRegisterOpen}
-        onSuccess={handleRegisterSuccess}
-      />
 
       {/* Edit Free Time Dialog */}
       <EditFreeTimeDialog
