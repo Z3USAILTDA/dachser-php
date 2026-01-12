@@ -3900,11 +3900,12 @@ serve(async (req) => {
         };
         
         // Insert voucher data into existing t_vouchers table (with id_rm support)
-        // Ensure processo_id, origem_processo and chave_pix columns exist
+        // Ensure processo_id, origem_processo, chave_pix and status_documento_fiscal columns exist
         try {
           await client.execute(`ALTER TABLE dados_dachser.t_vouchers ADD COLUMN IF NOT EXISTS processo_id VARCHAR(100) DEFAULT NULL`);
           await client.execute(`ALTER TABLE dados_dachser.t_vouchers ADD COLUMN IF NOT EXISTS origem_processo VARCHAR(10) DEFAULT NULL`);
           await client.execute(`ALTER TABLE dados_dachser.t_vouchers ADD COLUMN IF NOT EXISTS chave_pix VARCHAR(255) DEFAULT NULL`);
+          await client.execute(`ALTER TABLE dados_dachser.t_vouchers ADD COLUMN IF NOT EXISTS status_documento_fiscal VARCHAR(20) DEFAULT 'ANEXADO'`);
         } catch (e) {
           console.log('Columns may already exist:', e);
         }
@@ -3918,8 +3919,8 @@ serve(async (req) => {
             cliente_email, filial, data_emissao_documento,
             comentarios_operacao, comentarios_fiscal, comentarios_financeiro,
             ajuste_operacao, ajuste_fiscal, criado_por_user_id,
-            processo_id, origem_processo, chave_pix
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            processo_id, origem_processo, chave_pix, status_documento_fiscal
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `, [
           voucherId,
           emptyToNull(voucherData.id_rm),
@@ -3950,7 +3951,8 @@ serve(async (req) => {
           emptyToNull(voucherData.criado_por_user_id),
           emptyToNull(voucherData.processo_id),
           emptyToNull(voucherData.origem_processo),
-          emptyToNull(voucherData.chave_pix)
+          emptyToNull(voucherData.chave_pix),
+          emptyToNull(voucherData.status_documento_fiscal) || 'ANEXADO'
         ]);
         
         console.log('Voucher saved to MariaDB t_vouchers, ID:', voucherId, 'id_rm:', voucherData.id_rm);
@@ -4009,6 +4011,33 @@ serve(async (req) => {
           anexoData.file_size || 0
         ]);
         
+        // Se o anexo é do tipo FATURA ou FATURA_DEMONSTRATIVO, e o voucher é ADF, 
+        // atualizar status_documento_fiscal para ANEXADO
+        if (anexoData.tipo === 'FATURA' || anexoData.tipo === 'FATURA_DEMONSTRATIVO') {
+          try {
+            // Verificar se o voucher é do tipo ADF e está com status PENDENTE
+            const voucherCheck = await client.execute(`
+              SELECT tipo_documento, status_documento_fiscal 
+              FROM dados_dachser.t_vouchers 
+              WHERE id = ?
+            `, [anexoData.voucher_id]);
+            
+            const voucherRows = voucherCheck.rows as Array<{tipo_documento: string; status_documento_fiscal: string}>;
+            if (voucherRows.length > 0 && 
+                voucherRows[0].tipo_documento === 'ADF' && 
+                voucherRows[0].status_documento_fiscal === 'PENDENTE') {
+              await client.execute(`
+                UPDATE dados_dachser.t_vouchers 
+                SET status_documento_fiscal = 'ANEXADO', updated_at = NOW() 
+                WHERE id = ?
+              `, [anexoData.voucher_id]);
+              console.log('ADF voucher status_documento_fiscal updated to ANEXADO for:', anexoData.voucher_id);
+            }
+          } catch (updateErr) {
+            console.log('Could not update status_documento_fiscal:', updateErr);
+          }
+        }
+        
         console.log('Anexo saved to MariaDB t_voucher_anexos, ID:', anexoId);
         result = { success: true, anexoId };
         break;
@@ -4057,6 +4086,8 @@ serve(async (req) => {
           remessa: 'remessa',
           // PIX field
           chave_pix: 'chave_pix',
+          // ADF status
+          status_documento_fiscal: 'status_documento_fiscal',
         };
         
         for (const [key, dbField] of Object.entries(fieldMapping)) {

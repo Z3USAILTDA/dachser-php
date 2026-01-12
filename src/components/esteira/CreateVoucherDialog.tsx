@@ -357,7 +357,8 @@ export const CreateVoucherDialog = ({
         return;
       }
 
-      if (faturaFiles.length === 0) {
+      // ADF não requer anexo na criação (será anexado depois)
+      if (faturaFiles.length === 0 && values.tipoDocumento !== "ADF") {
         toast({
           title: "Erro de validação",
           description: "Fatura e Demonstrativo é obrigatório",
@@ -402,6 +403,11 @@ export const CreateVoucherDialog = ({
         etapaAtual = "FINANCEIRO";
       }
 
+      // ADF criado sem anexo recebe status_documento_fiscal = PENDENTE
+      const statusDocumentoFiscal = values.tipoDocumento === "ADF" && faturaFiles.length === 0 
+        ? "PENDENTE" 
+        : "ANEXADO";
+
       const voucherData = {
         numero_spo: values.numeroRM || `MANUAL-${Date.now()}`,
         fornecedor: values.fornecedor || null,
@@ -421,6 +427,7 @@ export const CreateVoucherDialog = ({
         status_financeiro: "PENDENTE",
         criado_por_user_id: null, // MariaDB user ID is integer, not UUID
         origem_criacao: entryMode === "rm" ? "RM" : "MANUAL",
+        status_documento_fiscal: statusDocumentoFiscal,
       };
 
       // Generate UUID for voucher (100% MariaDB - no Supabase insert)
@@ -456,6 +463,7 @@ export const CreateVoucherDialog = ({
           processo_id: values.processoId || null,
           origem_processo: origemProcesso || null,
           chave_pix: values.formaPagamento === "PIX" ? (values.chavePix || null) : null,
+          status_documento_fiscal: voucherData.status_documento_fiscal,
         },
       });
 
