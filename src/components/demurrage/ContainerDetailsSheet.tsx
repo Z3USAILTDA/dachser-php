@@ -2,6 +2,7 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sh
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
+import { useNavigate } from "react-router-dom";
 import { 
   Package, 
   Ship, 
@@ -13,7 +14,8 @@ import {
   FileText,
   Building2,
   Anchor,
-  MapPin
+  MapPin,
+  Navigation
 } from "lucide-react";
 import type { DemurrageContainer } from "@/hooks/useDemurrageData";
 import { format, parseISO } from "date-fns";
@@ -30,7 +32,16 @@ export function ContainerDetailsSheet({
   open, 
   onOpenChange
 }: ContainerDetailsSheetProps) {
+  const navigate = useNavigate();
+
   if (!container) return null;
+
+  const handleViewTracking = () => {
+    if (container.mbl) {
+      navigate(`/sea/container-tracking?mbl=${encodeURIComponent(container.mbl)}`);
+      onOpenChange(false);
+    }
+  };
 
   const formatDate = (dateStr: string | null) => {
     if (!dateStr) return '-';
@@ -106,7 +117,20 @@ export function ContainerDetailsSheet({
 
           {/* Informações Principais */}
           <div className="space-y-3">
-            <h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wider">Informações</h3>
+            <div className="flex items-center justify-between">
+              <h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wider">Informações</h3>
+              {container.mbl && (
+                <Button 
+                  size="sm" 
+                  variant="outline" 
+                  onClick={handleViewTracking}
+                  className="border-[#ffc800]/30 text-[#ffc800] hover:bg-[#ffc800]/10"
+                >
+                  <Navigation className="h-4 w-4 mr-2" />
+                  Ver Rastreio
+                </Button>
+              )}
+            </div>
             <div className="grid grid-cols-2 gap-3">
               <InfoItem icon={<FileText className="w-4 h-4" />} label="MBL" value={container.mbl} mono />
               <InfoItem icon={<Building2 className="w-4 h-4" />} label="Cliente" value={container.cliente || '-'} />
