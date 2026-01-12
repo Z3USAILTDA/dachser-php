@@ -573,3 +573,160 @@ export function useCreateDemurrageDispute() {
     },
   });
 }
+
+// Demurrage Disputes List (from t_dachser_demurrage_disputes table)
+export interface DemurrageDispute {
+  id: number;
+  container_id: number;
+  container_number: string | null;
+  client_name: string | null;
+  armador: string | null;
+  status: string;
+  disputed_amount_usd: number;
+  recovered_amount_usd: number;
+  reason: string | null;
+  success_probability: number | null;
+  resolution_notes: string | null;
+  opened_by: string | null;
+  resolved_by: string | null;
+  opened_at: string;
+  resolved_at: string | null;
+  updated_at: string;
+}
+
+export interface DisputeFilters {
+  status?: string;
+  client_name?: string;
+}
+
+export function useDemurrageDisputesList(filters?: DisputeFilters) {
+  return useQuery({
+    queryKey: ['demurrage_disputes', filters],
+    queryFn: async () => {
+      const body: Record<string, unknown> = {
+        action: 'demurrage_get_disputes',
+      };
+      
+      if (filters?.status) body.status = filters.status;
+      if (filters?.client_name) body.client_name = filters.client_name;
+
+      const { data, error } = await supabase.functions.invoke('mariadb-proxy', { body });
+      if (error) throw error;
+      if (!data.success) throw new Error(data.error || 'Failed to fetch disputes');
+      return (data.data || []) as DemurrageDispute[];
+    },
+  });
+}
+
+export function useUpdateDemurrageDispute() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({ disputeId, updates }: { disputeId: number; updates: Record<string, unknown> }) => {
+      const { data, error } = await supabase.functions.invoke('mariadb-proxy', {
+        body: {
+          action: 'demurrage_update_dispute',
+          id: disputeId,
+          updates,
+        }
+      });
+      if (error) throw error;
+      if (!data.success) throw new Error(data.error || 'Failed to update dispute');
+      return data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['demurrage_disputes'] });
+      queryClient.invalidateQueries({ queryKey: ['demurrage_containers'] });
+    },
+  });
+}
+
+// Demurrage Alerts
+export interface DemurrageAlert {
+  id: number;
+  container_id: number;
+  container_number: string | null;
+  alert_type: string | null;
+  client_name: string | null;
+  shipment_master: string | null;
+  days_remaining: number | null;
+  expected_cost_usd: number | null;
+  recipient_emails: string[];
+  status: string;
+  error_message: string | null;
+  sent_at: string;
+}
+
+export function useDemurrageAlerts(clientName?: string) {
+  return useQuery({
+    queryKey: ['demurrage_alerts', clientName],
+    queryFn: async () => {
+      const body: Record<string, unknown> = {
+        action: 'demurrage_get_alerts',
+        limit: 100,
+      };
+
+      const { data, error } = await supabase.functions.invoke('mariadb-proxy', { body });
+      if (error) throw error;
+      if (!data.success) throw new Error(data.error || 'Failed to fetch alerts');
+      
+      let alerts = (data.data || []) as DemurrageAlert[];
+      if (clientName) {
+        alerts = alerts.filter(a => a.client_name === clientName);
+      }
+      return alerts;
+    },
+    enabled: true,
+  });
+}
+
+export function useSendTestAlert() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({ clientName, emails }: { clientName: string; emails: string[] }) => {
+      const { data, error } = await supabase.functions.invoke('demurrage-send-alert', {
+        body: {
+          test_mode: true,
+          client_name: clientName,
+          recipient_emails: emails,
+        }
+      });
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['demurrage_alerts'] });
+    },
+  });
+}
+
+// Create Audit Event
+export function useCreateAuditEvent() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (eventData: {
+      container_id: number;
+      container_number?: string;
+      event_type: string;
+      event_code: string;
+      event_description?: string;
+      source?: string;
+    }) => {
+      const { data, error } = await supabase.functions.invoke('mariadb-proxy', {
+        body: {
+          action: 'demurrage_create_container_event',
+          ...eventData,
+          event_datetime: new Date().toISOString(),
+        }
+      });
+      if (error) throw error;
+      if (!data.success) throw new Error(data.error || 'Failed to create audit event');
+      return data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['demurrage_container_events'] });
+    },
+  });
+}
