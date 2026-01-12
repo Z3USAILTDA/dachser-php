@@ -202,6 +202,58 @@ Ver Dashboard: https://dachser.z3us.app/
 Z3US.AI - Monitoramento de APIs`;
 };
 
+// Verifica no banco se já foi enviado alerta para este ciclo
+const checkAlertSentForCycle = async (apiName: string, cycleKey: string): Promise<boolean> => {
+  try {
+    const supabaseUrl = Deno.env.get("SUPABASE_URL");
+    const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+    if (!supabaseUrl || !supabaseKey) return false;
+    
+    const response = await fetch(`${supabaseUrl}/functions/v1/mariadb-proxy`, {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${supabaseKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        action: "check_api_alert_sent",
+        api_name: apiName,
+        cycle_key: cycleKey
+      }),
+    });
+    
+    const data = await response.json();
+    return data?.alert_sent === true;
+  } catch (e) {
+    console.error("[checkAlertSentForCycle] Failed:", e);
+    return false;
+  }
+};
+
+// Marca no banco que o alerta foi enviado para este ciclo
+const markAlertSentForCycle = async (apiName: string, cycleKey: string): Promise<void> => {
+  try {
+    const supabaseUrl = Deno.env.get("SUPABASE_URL");
+    const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+    if (!supabaseUrl || !supabaseKey) return;
+    
+    await fetch(`${supabaseUrl}/functions/v1/mariadb-proxy`, {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${supabaseKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        action: "mark_api_alert_sent",
+        api_name: apiName,
+        cycle_key: cycleKey
+      }),
+    });
+  } catch (e) {
+    console.error("[markAlertSentForCycle] Failed:", e);
+  }
+};
+
 const handler = async (req: Request): Promise<Response> => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -241,6 +293,27 @@ const handler = async (req: Request): Promise<Response> => {
         status: 200,
         headers: { "Content-Type": "application/json", ...corsHeaders },
       });
+    }
+
+    // Gerar chave do ciclo baseada no período (ex: "JSONCargo_2026_01")
+    const now = new Date();
+    const cycleKey = `${api_name}_${now.getFullYear()}_${String(now.getMonth() + 1).padStart(2, '0')}`;
+
+    // Verificar se já enviou alerta para este ciclo (exceto em modo de teste)
+    if (!test_mode) {
+      const alreadySent = await checkAlertSentForCycle(api_name, cycleKey);
+      if (alreadySent) {
+        console.log(`[API Alert] Alerta já enviado para ${api_name} neste ciclo (${cycleKey}). Ignorando.`);
+        return new Response(JSON.stringify({ 
+          success: true, 
+          message: `Alerta já foi enviado para este ciclo (${cycleKey}). Apenas 1 email por ciclo.`,
+          alert_sent: false,
+          already_sent: true
+        }), {
+          status: 200,
+          headers: { "Content-Type": "application/json", ...corsHeaders },
+        });
+      }
     }
 
     const resendApiKey = Deno.env.get("RESEND_API_KEY");
@@ -319,6 +392,12 @@ const handler = async (req: Request): Promise<Response> => {
     }
 
     console.log(`API usage alert sent successfully, id: ${data?.id}`);
+
+    // Marcar no banco que o alerta foi enviado para este ciclo (exceto em modo de teste)
+    if (!test_mode) {
+      await markAlertSentForCycle(api_name, cycleKey);
+      console.log(`[API Alert] Marked ${api_name} ${cycleKey} as sent in database`);
+    }
 
     return new Response(JSON.stringify({ 
       success: true, 
