@@ -25,13 +25,11 @@ import {
 import { format, parseISO } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { useRecalcDemurrage } from "@/hooks/useDemurrageData";
-import { useNavigate } from "react-router-dom";
 
 type QuickFilter = "all" | "contrato" | "processo" | "active" | "expired";
 const PAGE_SIZE = 15;
 
 export default function DemurrageFreeTimes() {
-  const navigate = useNavigate();
   const [searchTerm, setSearchTerm] = useState("");
   const [filterType, setFilterType] = useState<string>("all");
   const [quickFilter, setQuickFilter] = useState<QuickFilter>("all");
@@ -232,18 +230,10 @@ export default function DemurrageFreeTimes() {
                     <Info className="h-4 w-4" />
                     <span className="font-medium">Como cadastrar?</span>
                   </div>
-                  <p className="text-sm text-muted-foreground mb-3">
+                  <p className="text-sm text-muted-foreground">
                     O cadastro de Free Time é feito na tela de Rastreio de Container/MBL, 
                     diretamente no contexto do processo sendo rastreado.
                   </p>
-                  <Button 
-                    variant="outline" 
-                    className="border-blue-500/30 text-blue-400 hover:bg-blue-500/10"
-                    onClick={() => navigate('/sea/demurrage/monitor')}
-                  >
-                    <Ship className="h-4 w-4 mr-2" />
-                    Ir para Monitoramento
-                  </Button>
                 </div>
               </div>
             ) : (
