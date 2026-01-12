@@ -144,7 +144,7 @@ const App = () => (
           <Route path="/sea/local-charges" element={<LocalCharges />} />
           <Route path="/sea/draft-exportacao" element={<DraftExportacao />} />
           <Route path="/sea/manual-drafts" element={<ManualDraftExportacao />} />
-          <Route path="/sea/demurrage" element={<DemurrageIndex />} />
+          <Route path="/sea/demurrage" element={<DemurrageMonitor />} />
           <Route path="/sea/demurrage/monitor" element={<DemurrageMonitor />} />
           <Route path="/sea/demurrage/rates" element={<DemurrageRates />} />
           <Route path="/sea/demurrage/pre-invoicing" element={<DemurragePreInvoicing />} />
