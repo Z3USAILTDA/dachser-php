@@ -55,6 +55,13 @@ const modules = [
     description: "Visão gerencial e dashboards",
     href: "/sea/demurrage/analytics"
   },
+  { 
+    id: "settings", 
+    label: "Configurações", 
+    icon: Settings, 
+    description: "Parâmetros e diagnóstico do sistema",
+    href: "/sea/demurrage/settings"
+  },
 ];
 
 export default function DemurrageIndex() {
