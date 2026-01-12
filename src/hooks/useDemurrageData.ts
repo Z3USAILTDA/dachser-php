@@ -386,3 +386,131 @@ export function useDemurrageContainerEvents(containerNumber: string | null) {
     enabled: !!containerNumber,
   });
 }
+
+// Pre-Invoice interfaces
+export interface PreInvoice {
+  id: number;
+  invoice_number: string;
+  shipment_mbl: string | null;
+  client_name: string | null;
+  bl_number: string | null;
+  vessel_name: string | null;
+  voyage_number: string | null;
+  origin_port: string | null;
+  destination_port: string | null;
+  arrival_date: string | null;
+  issue_date: string | null;
+  due_date: string | null;
+  total_usd: number;
+  total_brl: number;
+  exchange_rate: number;
+  status: string;
+  workflow_status: string;
+  financial_status: string;
+  posted_at: string | null;
+  created_at: string;
+  updated_at: string;
+  items?: PreInvoiceItem[];
+}
+
+export interface PreInvoiceItem {
+  id: number;
+  pre_invoice_id: number;
+  container_id: number;
+  container_number: string;
+  container_type: string | null;
+  free_time_days: number | null;
+  period_start_date: string | null;
+  period_end_date: string | null;
+  days_count: number;
+  daily_rate_usd: number | null;
+  total_usd: number;
+  period_type: string | null;
+  created_at: string;
+}
+
+export interface PreInvoiceFilters {
+  status?: string;
+  workflow_status?: string;
+  client_name?: string;
+}
+
+export function useDemurragePreInvoices(filters?: PreInvoiceFilters) {
+  return useQuery({
+    queryKey: ['demurrage_pre_invoices', filters],
+    queryFn: async () => {
+      const body: Record<string, unknown> = {
+        action: 'demurrage_get_pre_invoices',
+      };
+      
+      if (filters?.status) body.status = filters.status;
+      if (filters?.workflow_status) body.workflow_status = filters.workflow_status;
+      if (filters?.client_name) body.client_name = filters.client_name;
+
+      const { data, error } = await supabase.functions.invoke('mariadb-proxy', { body });
+      if (error) throw error;
+      if (!data.success) throw new Error(data.error || 'Failed to fetch pre-invoices');
+      return (data.data || []) as PreInvoice[];
+    },
+  });
+}
+
+export function useDemurragePreInvoiceItems(preInvoiceId: number | null) {
+  return useQuery({
+    queryKey: ['demurrage_pre_invoice_items', preInvoiceId],
+    queryFn: async () => {
+      if (!preInvoiceId) return [];
+
+      const { data, error } = await supabase.functions.invoke('mariadb-proxy', {
+        body: {
+          action: 'demurrage_get_pre_invoice_items',
+          pre_invoice_id: preInvoiceId,
+        }
+      });
+
+      if (error) throw error;
+      if (!data.success) throw new Error(data.error || 'Failed to fetch pre-invoice items');
+      return (data.data || []) as PreInvoiceItem[];
+    },
+    enabled: !!preInvoiceId,
+  });
+}
+
+export function useUpdatePreInvoice() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({ invoiceId, updates }: { invoiceId: number; updates: Record<string, unknown> }) => {
+      const { data, error } = await supabase.functions.invoke('mariadb-proxy', {
+        body: {
+          action: 'demurrage_update_pre_invoice',
+          invoice_id: invoiceId,
+          updates,
+        }
+      });
+      if (error) throw error;
+      if (!data.success) throw new Error(data.error || 'Failed to update pre-invoice');
+      return data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['demurrage_pre_invoices'] });
+      queryClient.invalidateQueries({ queryKey: ['demurrage_containers'] });
+    },
+  });
+}
+
+export function useGeneratePreInvoices() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async () => {
+      const { data, error } = await supabase.functions.invoke('demurrage-auto-invoice');
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['demurrage_pre_invoices'] });
+      queryClient.invalidateQueries({ queryKey: ['demurrage_containers'] });
+    },
+  });
+}

@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { 
   FileText, Clock, CheckCircle2, Send, Eye, AlertTriangle, DollarSign,
-  MoreHorizontal, FileSpreadsheet, Loader2
+  MoreHorizontal, FileSpreadsheet, Loader2, RefreshCw, Plus
 } from "lucide-react";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -29,9 +29,15 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { useDemurrageData, useUpdateDemurrageContainer, type DemurrageContainer } from "@/hooks/useDemurrageData";
+import { 
+  useDemurragePreInvoices, 
+  useUpdatePreInvoice,
+  useGeneratePreInvoices,
+  type PreInvoice 
+} from "@/hooks/useDemurrageData";
 import { toast } from "sonner";
-import { exportDemurrageToExcel } from "@/utils/demurrageExcelExport";
+import { format, parseISO } from "date-fns";
+import { ptBR } from "date-fns/locale";
 
 type QuickFilter = "all" | "waiting" | "total_usd" | "pending";
 type BulkAction = "revisar" | "lancar" | "marcar_pago" | null;
@@ -43,65 +49,83 @@ export default function DemurragePreInvoicing() {
   const [currentPage, setCurrentPage] = useState(1);
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const [bulkAction, setBulkAction] = useState<BulkAction>(null);
-  const [isExporting, setIsExporting] = useState(false);
+  const [isGenerating, setIsGenerating] = useState(false);
 
-  const { data: containers = [], isLoading, refetch } = useDemurrageData();
-  const updateMutation = useUpdateDemurrageContainer();
+  const { data: preInvoices = [], isLoading, refetch } = useDemurragePreInvoices();
+  const updateMutation = useUpdatePreInvoice();
+  const generateMutation = useGeneratePreInvoices();
 
-  // Filter containers that have pre-invoice data or expected_cost > 0
-  const invoiceableContainers = useMemo(() => {
-    return containers.filter(c => c.expected_cost_usd > 0 || c.pre_invoice_number);
-  }, [containers]);
+  const formatCurrency = (value: number) => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(value || 0);
 
-  const formatCurrency = (value: number) => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(value);
+  const formatDate = (dateStr: string | null) => {
+    if (!dateStr) return '-';
+    try {
+      return format(parseISO(dateStr), "dd/MM/yyyy", { locale: ptBR });
+    } catch {
+      return dateStr;
+    }
+  };
 
   const getWorkflowBadge = (status: string) => {
     switch (status) {
-      case 'CALCULADO':
+      case 'calculated':
         return <Badge className="bg-yellow-500/10 text-yellow-500 border-yellow-500/20"><Clock className="h-3 w-3 mr-1" />Calculada</Badge>;
-      case 'REVISADO':
+      case 'reviewed':
         return <Badge className="bg-blue-500/10 text-blue-500 border-blue-500/20"><Eye className="h-3 w-3 mr-1" />Revisada</Badge>;
-      case 'ENVIADO':
+      case 'sent':
         return <Badge className="bg-purple-500/10 text-purple-500 border-purple-500/20"><Send className="h-3 w-3 mr-1" />Lançada</Badge>;
-      case 'FATURADO':
+      case 'invoiced':
         return <Badge className="bg-green-500/10 text-green-500 border-green-500/20"><CheckCircle2 className="h-3 w-3 mr-1" />Faturada</Badge>;
-      case 'PAGO':
+      case 'paid':
         return <Badge className="bg-green-600/10 text-green-400 border-green-600/20"><CheckCircle2 className="h-3 w-3 mr-1" />Paga</Badge>;
       default:
         return <Badge variant="secondary"><Clock className="h-3 w-3 mr-1" />Pendente</Badge>;
     }
   };
 
+  const getFinancialBadge = (status: string) => {
+    switch (status) {
+      case 'PENDING':
+        return <Badge variant="outline" className="text-yellow-400 border-yellow-400/30">Pendente</Badge>;
+      case 'POSTED':
+        return <Badge variant="outline" className="text-blue-400 border-blue-400/30">Lançado</Badge>;
+      case 'PAID':
+        return <Badge variant="outline" className="text-green-400 border-green-400/30">Pago</Badge>;
+      default:
+        return <Badge variant="outline">-</Badge>;
+    }
+  };
+
   const stats = useMemo(() => {
-    const total = invoiceableContainers.length;
-    const calculated = invoiceableContainers.filter(c => c.pre_invoice_status === 'PENDENTE' || !c.pre_invoice_status).length;
-    const reviewed = invoiceableContainers.filter(c => c.pre_invoice_status === 'REVISADO').length;
-    const sent = invoiceableContainers.filter(c => c.pre_invoice_status === 'ENVIADO').length;
-    const finalized = invoiceableContainers.filter(c => ['FATURADO', 'PAGO'].includes(c.pre_invoice_status)).length;
-    const totalUsd = invoiceableContainers.reduce((sum, c) => sum + (c.expected_cost_usd || 0), 0);
-    const pendingUsd = invoiceableContainers
-      .filter(c => !['FATURADO', 'PAGO'].includes(c.pre_invoice_status))
-      .reduce((sum, c) => sum + (c.expected_cost_usd || 0), 0);
+    const total = preInvoices.length;
+    const calculated = preInvoices.filter(p => p.workflow_status === 'calculated' || !p.workflow_status).length;
+    const reviewed = preInvoices.filter(p => p.workflow_status === 'reviewed').length;
+    const sent = preInvoices.filter(p => p.workflow_status === 'sent').length;
+    const finalized = preInvoices.filter(p => ['invoiced', 'paid'].includes(p.workflow_status)).length;
+    const totalUsd = preInvoices.reduce((sum, p) => sum + (p.total_usd || 0), 0);
+    const pendingUsd = preInvoices
+      .filter(p => p.financial_status === 'PENDING')
+      .reduce((sum, p) => sum + (p.total_usd || 0), 0);
 
     return { total, calculated, reviewed, sent, finalized, totalUsd, pendingUsd };
-  }, [invoiceableContainers]);
+  }, [preInvoices]);
 
   const filteredInvoices = useMemo(() => {
-    if (activeTab === 'all') return invoiceableContainers;
+    if (activeTab === 'all') return preInvoices;
     
     const statusMap: Record<string, string[]> = {
-      calculated: ['PENDENTE', ''],
-      reviewed: ['REVISADO'],
-      sent_to_otelo: ['ENVIADO'],
-      finalized: ['FATURADO', 'PAGO'],
+      calculated: ['calculated', ''],
+      reviewed: ['reviewed'],
+      sent_to_otelo: ['sent'],
+      finalized: ['invoiced', 'paid'],
     };
     
     const validStatuses = statusMap[activeTab] || [];
-    return invoiceableContainers.filter(c => 
-      validStatuses.includes(c.pre_invoice_status) || 
-      (activeTab === 'calculated' && !c.pre_invoice_status)
+    return preInvoices.filter(p => 
+      validStatuses.includes(p.workflow_status) || 
+      (activeTab === 'calculated' && !p.workflow_status)
     );
-  }, [invoiceableContainers, activeTab]);
+  }, [preInvoices, activeTab]);
 
   useEffect(() => {
     setCurrentPage(1);
@@ -128,7 +152,7 @@ export default function DemurragePreInvoicing() {
     if (selectedIds.size === paginatedInvoices.length) {
       setSelectedIds(new Set());
     } else {
-      setSelectedIds(new Set(paginatedInvoices.map(c => c.id)));
+      setSelectedIds(new Set(paginatedInvoices.map(p => p.id)));
     }
   };
 
@@ -142,14 +166,32 @@ export default function DemurragePreInvoicing() {
     setSelectedIds(newSet);
   };
 
+  // Generate Pre-Invoices
+  const handleGenerateInvoices = async () => {
+    setIsGenerating(true);
+    try {
+      const result = await generateMutation.mutateAsync();
+      if (result.success) {
+        toast.success(`${result.results?.invoices_created || 0} pré-fatura(s) gerada(s)`);
+        refetch();
+      } else {
+        toast.error(result.error || "Erro ao gerar pré-faturas");
+      }
+    } catch (error) {
+      toast.error("Erro ao gerar pré-faturas");
+    } finally {
+      setIsGenerating(false);
+    }
+  };
+
   // Action handlers
-  const handleSingleAction = async (container: DemurrageContainer, newStatus: string) => {
+  const handleSingleAction = async (invoice: PreInvoice, newStatus: string) => {
     try {
       await updateMutation.mutateAsync({
-        containerId: container.id,
-        updates: { pre_invoice_status: newStatus }
+        invoiceId: invoice.id,
+        updates: { workflow_status: newStatus }
       });
-      toast.success(`Container ${container.numero} atualizado para ${newStatus}`);
+      toast.success(`Pré-fatura ${invoice.invoice_number} atualizada para ${newStatus}`);
     } catch (error) {
       toast.error("Erro ao atualizar status");
     }
@@ -159,47 +201,30 @@ export default function DemurragePreInvoicing() {
     if (!bulkAction || selectedIds.size === 0) return;
 
     const statusMap: Record<string, string> = {
-      revisar: 'REVISADO',
-      lancar: 'ENVIADO',
-      marcar_pago: 'PAGO',
+      revisar: 'reviewed',
+      lancar: 'sent',
+      marcar_pago: 'paid',
     };
 
     const newStatus = statusMap[bulkAction];
-    const selectedContainers = filteredInvoices.filter(c => selectedIds.has(c.id));
+    const selectedInvoices = filteredInvoices.filter(p => selectedIds.has(p.id));
 
     try {
       await Promise.all(
-        selectedContainers.map(c => 
+        selectedInvoices.map(p => 
           updateMutation.mutateAsync({
-            containerId: c.id,
-            updates: { pre_invoice_status: newStatus }
+            invoiceId: p.id,
+            updates: { workflow_status: newStatus }
           })
         )
       );
-      toast.success(`${selectedContainers.length} container(s) atualizado(s) para ${newStatus}`);
+      toast.success(`${selectedInvoices.length} pré-fatura(s) atualizada(s) para ${newStatus}`);
       setSelectedIds(new Set());
       refetch();
     } catch (error) {
-      toast.error("Erro ao atualizar containers");
+      toast.error("Erro ao atualizar pré-faturas");
     } finally {
       setBulkAction(null);
-    }
-  };
-
-  const handleExport = async () => {
-    if (filteredInvoices.length === 0) {
-      toast.error("Não há dados para exportar");
-      return;
-    }
-    
-    setIsExporting(true);
-    try {
-      const fileName = exportDemurrageToExcel(filteredInvoices);
-      toast.success(`Exportado: ${fileName}`);
-    } catch (error) {
-      toast.error("Erro ao exportar dados");
-    } finally {
-      setIsExporting(false);
     }
   };
 
@@ -214,10 +239,22 @@ export default function DemurragePreInvoicing() {
 
   const rightActions = (
     <div className="flex gap-2">
+      <Button 
+        onClick={handleGenerateInvoices}
+        disabled={isGenerating}
+        className="bg-[#ffc800] text-black hover:bg-[#ffdc50]"
+      >
+        {isGenerating ? (
+          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+        ) : (
+          <Plus className="h-4 w-4 mr-2" />
+        )}
+        Gerar Pré-Faturas
+      </Button>
       {selectedIds.size > 0 && (
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <Button className="bg-[#ffc800] text-black hover:bg-[#ffdc50]">
+            <Button variant="outline" className="border-[#ffc800]/30 text-[#ffc800]">
               Ações ({selectedIds.size})
             </Button>
           </DropdownMenuTrigger>
@@ -240,16 +277,10 @@ export default function DemurragePreInvoicing() {
       )}
       <Button 
         variant="outline" 
+        onClick={() => refetch()}
         className="bg-[rgba(0,0,0,0.7)] border-[rgba(255,255,255,0.25)] text-[#aaaaaa] hover:text-white hover:bg-[rgba(0,0,0,0.9)]"
-        onClick={handleExport}
-        disabled={isExporting || filteredInvoices.length === 0}
       >
-        {isExporting ? (
-          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-        ) : (
-          <FileSpreadsheet className="h-4 w-4 mr-2" />
-        )}
-        Exportar
+        <RefreshCw className="h-4 w-4" />
       </Button>
     </div>
   );
@@ -259,7 +290,7 @@ export default function DemurragePreInvoicing() {
       <KpiCard
         title="TOTAL PRÉ-FATURAS"
         value={stats.total}
-        subtitle="Containers com demurrage"
+        subtitle="Geradas no sistema"
         icon={<FileText className="h-6 w-6" />}
         variant="default"
         isActive={quickFilter === "all"}
@@ -316,7 +347,7 @@ export default function DemurragePreInvoicing() {
               <div>
                 <CardTitle className="flex items-center gap-2 text-foreground text-base">
                   <FileText className="h-5 w-5 text-[#ffc800]" />
-                  Pré-Faturas
+                  Pré-Faturas de Demurrage
                 </CardTitle>
                 <CardDescription>{filteredInvoices.length} encontrada(s)</CardDescription>
               </div>
@@ -332,6 +363,7 @@ export default function DemurragePreInvoicing() {
               <div className="text-center py-12 text-muted-foreground">
                 <FileText className="h-12 w-12 mx-auto mb-4 opacity-50" />
                 <p>Nenhuma pré-fatura encontrada</p>
+                <p className="text-sm mt-2">Clique em "Gerar Pré-Faturas" para criar novas pré-faturas</p>
               </div>
             ) : (
               <>
@@ -344,43 +376,43 @@ export default function DemurragePreInvoicing() {
                           onCheckedChange={toggleSelectAll}
                         />
                       </TableHead>
-                      <TableHead>Container</TableHead>
+                      <TableHead>Nº Pré-Fatura</TableHead>
                       <TableHead>MBL</TableHead>
                       <TableHead>Cliente</TableHead>
-                      <TableHead>Armador</TableHead>
-                      <TableHead className="text-center">Dias Exc.</TableHead>
+                      <TableHead>Navio</TableHead>
+                      <TableHead>Data Emissão</TableHead>
                       <TableHead className="text-right">Total USD</TableHead>
                       <TableHead>Status</TableHead>
+                      <TableHead>Financeiro</TableHead>
                       <TableHead className="w-[50px]"></TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {paginatedInvoices.map((container) => (
+                    {paginatedInvoices.map((invoice) => (
                       <TableRow 
-                        key={container.id} 
+                        key={invoice.id} 
                         className={`border-[rgba(255,255,255,0.1)] hover:bg-[rgba(255,200,0,0.05)] ${
-                          selectedIds.has(container.id) ? 'bg-[rgba(255,200,0,0.08)]' : ''
+                          selectedIds.has(invoice.id) ? 'bg-[rgba(255,200,0,0.08)]' : ''
                         }`}
                       >
                         <TableCell>
                           <Checkbox 
-                            checked={selectedIds.has(container.id)}
-                            onCheckedChange={() => toggleSelect(container.id)}
+                            checked={selectedIds.has(invoice.id)}
+                            onCheckedChange={() => toggleSelect(invoice.id)}
                           />
                         </TableCell>
-                        <TableCell className="font-mono font-medium">{container.numero}</TableCell>
-                        <TableCell className="font-mono text-sm">{container.mbl}</TableCell>
-                        <TableCell>{container.cliente || '-'}</TableCell>
-                        <TableCell>{container.armador || '-'}</TableCell>
-                        <TableCell className="text-center">
-                          <Badge variant={container.excedente_dias > 0 ? "destructive" : "outline"}>
-                            {container.excedente_dias}d
-                          </Badge>
+                        <TableCell className="font-mono font-medium text-[#ffc800]">
+                          {invoice.invoice_number}
                         </TableCell>
+                        <TableCell className="font-mono text-sm">{invoice.shipment_mbl || '-'}</TableCell>
+                        <TableCell>{invoice.client_name || '-'}</TableCell>
+                        <TableCell>{invoice.vessel_name || '-'}</TableCell>
+                        <TableCell>{formatDate(invoice.issue_date)}</TableCell>
                         <TableCell className="text-right font-semibold text-[#ffc800]">
-                          {formatCurrency(container.expected_cost_usd)}
+                          {formatCurrency(invoice.total_usd)}
                         </TableCell>
-                        <TableCell>{getWorkflowBadge(container.pre_invoice_status)}</TableCell>
+                        <TableCell>{getWorkflowBadge(invoice.workflow_status)}</TableCell>
+                        <TableCell>{getFinancialBadge(invoice.financial_status)}</TableCell>
                         <TableCell>
                           <DropdownMenu>
                             <DropdownMenuTrigger asChild>
@@ -390,26 +422,26 @@ export default function DemurragePreInvoicing() {
                             </DropdownMenuTrigger>
                             <DropdownMenuContent align="end" className="bg-[#1a1a1a] border-[rgba(255,255,255,0.1)]">
                               <DropdownMenuItem 
-                                onClick={() => handleSingleAction(container, 'REVISADO')}
+                                onClick={() => handleSingleAction(invoice, 'reviewed')}
                                 className="cursor-pointer"
-                                disabled={container.pre_invoice_status === 'REVISADO'}
+                                disabled={invoice.workflow_status === 'reviewed'}
                               >
                                 <Eye className="h-4 w-4 mr-2" />
                                 Marcar como Revisada
                               </DropdownMenuItem>
                               <DropdownMenuItem 
-                                onClick={() => handleSingleAction(container, 'ENVIADO')}
+                                onClick={() => handleSingleAction(invoice, 'sent')}
                                 className="cursor-pointer"
-                                disabled={container.pre_invoice_status === 'ENVIADO'}
+                                disabled={invoice.workflow_status === 'sent'}
                               >
                                 <Send className="h-4 w-4 mr-2" />
                                 Lançar no Othello
                               </DropdownMenuItem>
                               <DropdownMenuSeparator className="bg-[rgba(255,255,255,0.1)]" />
                               <DropdownMenuItem 
-                                onClick={() => handleSingleAction(container, 'PAGO')}
+                                onClick={() => handleSingleAction(invoice, 'paid')}
                                 className="cursor-pointer text-green-400"
-                                disabled={container.pre_invoice_status === 'PAGO'}
+                                disabled={invoice.workflow_status === 'paid'}
                               >
                                 <CheckCircle2 className="h-4 w-4 mr-2" />
                                 Marcar como Pago
@@ -441,9 +473,9 @@ export default function DemurragePreInvoicing() {
             <AlertDialogTitle>Confirmar Ação em Lote</AlertDialogTitle>
             <AlertDialogDescription>
               Você está prestes a <strong className="text-white">{getBulkActionLabel()}</strong> para{" "}
-              <strong className="text-[#ffc800]">{selectedIds.size}</strong> container(s).
+              <strong className="text-[#ffc800]">{selectedIds.size}</strong> pré-fatura(s).
               <br /><br />
-              Esta ação atualizará o status de pré-faturamento de todos os containers selecionados.
+              Esta ação atualizará o status de todas as pré-faturas selecionadas.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
