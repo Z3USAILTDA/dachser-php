@@ -66,6 +66,7 @@ const MetricsUsage = () => {
   });
   const [dailyData, setDailyData] = useState<DailyData[]>([]);
   const [endpointData, setEndpointData] = useState<EndpointData[]>([]);
+  const [availableUsers, setAvailableUsers] = useState<string[]>([]);
 
   const today = new Date();
   const defaultFrom = new Date(today);
@@ -78,6 +79,23 @@ const MetricsUsage = () => {
   const [perPage, setPerPage] = useState(50);
   const [currentPage, setCurrentPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
+
+  // Fetch available users for the filter dropdown
+  useEffect(() => {
+    const fetchAvailableUsers = async () => {
+      try {
+        const { data, error } = await supabase.functions.invoke("mariadb-proxy", {
+          body: { action: "get_metric_users" },
+        });
+        if (!error && data?.users) {
+          setAvailableUsers(data.users);
+        }
+      } catch (err) {
+        console.error("Error fetching users for filter:", err);
+      }
+    };
+    fetchAvailableUsers();
+  }, []);
 
   useEffect(() => {
     const storedUser = localStorage.getItem("user");
@@ -376,13 +394,16 @@ const MetricsUsage = () => {
             </div>
             <div>
               <label className="text-[10px] uppercase tracking-[0.12em] text-muted-foreground block mb-1">Usuário</label>
-              <input
-                type="text"
-                placeholder="login..."
+              <select
                 value={usernameFilter}
                 onChange={(e) => { setUsernameFilter(e.target.value); setCurrentPage(1); }}
                 className="w-full px-3 py-2 rounded-full border border-white/20 bg-[#13141a] text-foreground text-sm outline-none focus:border-primary focus:ring-1 focus:ring-primary"
-              />
+              >
+                <option value="">(todos)</option>
+                {availableUsers.map((username) => (
+                  <option key={username} value={username}>{username}</option>
+                ))}
+              </select>
             </div>
             <div>
               <label className="text-[10px] uppercase tracking-[0.12em] text-muted-foreground block mb-1">Módulo</label>
