@@ -84,7 +84,7 @@ const API_LIMITS: Record<string, ApiLimitConfig> = {
     monthlyLimit: 5000,
     alertThreshold: 4000, // 80% de 5000
     plan: "Navigator (€299/mês)",
-    renewalDay: 15 // Renova dia 15 de cada mês
+    renewalDay: 29 // Renova dia 29 de cada mês
   }
   // Adicionar outras APIs aqui conforme necessário
 };
