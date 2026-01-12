@@ -220,6 +220,45 @@ interface QueryRequest {
   period_type?: string;
   period_start_day?: number;
   period_end_day?: number;
+  // Demurrage pre-invoices, events, disputes
+  pre_invoice_id?: number;
+  invoice_number?: string;
+  shipment_mbl?: string;
+  bl_number?: string;
+  vessel_name?: string;
+  voyage_number?: string;
+  origin_port?: string;
+  destination_port?: string;
+  arrival_date?: string;
+  issue_date?: string;
+  due_date?: string;
+  total_usd?: number;
+  total_brl?: number;
+  exchange_rate?: number;
+  workflow_status?: string;
+  financial_status?: string;
+  created_by?: string;
+  events?: any[];
+  demurrage_event_type?: string;
+  demurrage_event_code?: string;
+  demurrage_event_description?: string;
+  demurrage_event_datetime?: string;
+  demurrage_location?: string;
+  demurrage_terminal?: string;
+  demurrage_source?: string;
+  demurrage_raw_data?: object;
+  alert_type?: string;
+  shipment_master?: string;
+  recipient_emails?: string[];
+  disputed_amount_usd?: number;
+  recovered_amount_usd?: number;
+  dispute_reason?: string;
+  success_probability?: number;
+  resolution_notes?: string;
+  opened_by?: string;
+  resolved_by?: string;
+  resolved_at?: string;
+  client_name?: string;
 }
 
 serve(async (req) => {
@@ -7760,6 +7799,620 @@ serve(async (req) => {
         `, [deleteCliente]);
 
         result = { success: true };
+        break;
+      }
+
+      // ==================== DEMURRAGE PRE-INVOICES ====================
+      case 'demurrage_get_pre_invoices': {
+        const { status: piStatus, workflow_status: piWorkflowStatus, client_name: piClient, limit: piLimit = 100 } = body as any;
+        console.log('Fetching demurrage pre-invoices:', { piStatus, piWorkflowStatus, piClient });
+
+        let piWhereConditions: string[] = [];
+        let piParams: (string | number)[] = [];
+
+        if (piStatus && piStatus !== 'all') {
+          piWhereConditions.push('status = ?');
+          piParams.push(piStatus);
+        }
+        if (piWorkflowStatus && piWorkflowStatus !== 'all') {
+          piWhereConditions.push('workflow_status = ?');
+          piParams.push(piWorkflowStatus);
+        }
+        if (piClient) {
+          piWhereConditions.push('client_name LIKE ?');
+          piParams.push(`%${piClient}%`);
+        }
+
+        const piWhere = piWhereConditions.length > 0 ? `WHERE ${piWhereConditions.join(' AND ')}` : '';
+
+        const preInvoices = await client.query(`
+          SELECT * FROM dados_dachser.t_dachser_demurrage_pre_invoices
+          ${piWhere}
+          ORDER BY created_at DESC
+          LIMIT ?
+        `, [...piParams, piLimit]);
+
+        result = { success: true, data: preInvoices || [] };
+        break;
+      }
+
+      case 'demurrage_get_pre_invoice': {
+        const { id: piId } = body as { id: number };
+        console.log('Fetching demurrage pre-invoice:', piId);
+
+        if (!piId) {
+          return new Response(
+            JSON.stringify({ error: 'id é obrigatório' }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+
+        const piRows = await client.query(`
+          SELECT * FROM dados_dachser.t_dachser_demurrage_pre_invoices WHERE id = ?
+        `, [piId]);
+
+        result = { success: true, data: piRows?.[0] || null };
+        break;
+      }
+
+      case 'demurrage_create_pre_invoice': {
+        const piData = body as any;
+        console.log('Creating demurrage pre-invoice:', piData.invoice_number);
+
+        if (!piData.invoice_number) {
+          return new Response(
+            JSON.stringify({ error: 'invoice_number é obrigatório' }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+
+        await client.execute(`
+          INSERT INTO dados_dachser.t_dachser_demurrage_pre_invoices (
+            invoice_number, shipment_mbl, client_name, bl_number, vessel_name, voyage_number,
+            origin_port, destination_port, arrival_date, issue_date, due_date,
+            total_usd, total_brl, exchange_rate, status, workflow_status, financial_status,
+            notes, created_by
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `, [
+          piData.invoice_number,
+          piData.shipment_mbl || null,
+          piData.client_name || null,
+          piData.bl_number || null,
+          piData.vessel_name || null,
+          piData.voyage_number || null,
+          piData.origin_port || null,
+          piData.destination_port || null,
+          piData.arrival_date || null,
+          piData.issue_date || null,
+          piData.due_date || null,
+          piData.total_usd || 0,
+          piData.total_brl || 0,
+          piData.exchange_rate || 6.16,
+          piData.status || 'pending',
+          piData.workflow_status || 'calculated',
+          piData.financial_status || 'PENDING',
+          piData.notes || null,
+          piData.created_by || null
+        ]);
+
+        // Get the inserted ID
+        const lastId = await client.query('SELECT LAST_INSERT_ID() as id');
+        result = { success: true, id: lastId?.[0]?.id };
+        break;
+      }
+
+      case 'demurrage_update_pre_invoice': {
+        const { id: updatePiId, updates: piUpdates } = body as { id: number; updates: Record<string, unknown> };
+        console.log('Updating demurrage pre-invoice:', updatePiId);
+
+        if (!updatePiId || !piUpdates) {
+          return new Response(
+            JSON.stringify({ error: 'id e updates são obrigatórios' }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+
+        const allowedPiFields = [
+          'shipment_mbl', 'client_name', 'bl_number', 'vessel_name', 'voyage_number',
+          'origin_port', 'destination_port', 'arrival_date', 'issue_date', 'due_date',
+          'total_usd', 'total_brl', 'exchange_rate', 'status', 'workflow_status', 'financial_status',
+          'notes', 'posted_at'
+        ];
+
+        const piSetClauses: string[] = [];
+        const piValues: unknown[] = [];
+
+        for (const [key, value] of Object.entries(piUpdates)) {
+          if (allowedPiFields.includes(key)) {
+            piSetClauses.push(`${key} = ?`);
+            piValues.push(value);
+          }
+        }
+
+        if (piSetClauses.length === 0) {
+          return new Response(
+            JSON.stringify({ error: 'Nenhum campo válido para atualizar' }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+
+        piSetClauses.push('updated_at = NOW()');
+
+        await client.execute(`
+          UPDATE dados_dachser.t_dachser_demurrage_pre_invoices
+          SET ${piSetClauses.join(', ')}
+          WHERE id = ?
+        `, [...piValues, updatePiId]);
+
+        result = { success: true };
+        break;
+      }
+
+      case 'demurrage_delete_pre_invoice': {
+        const { id: deletePiId } = body as { id: number };
+        console.log('Deleting demurrage pre-invoice:', deletePiId);
+
+        if (!deletePiId) {
+          return new Response(
+            JSON.stringify({ error: 'id é obrigatório' }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+
+        // Delete items first
+        await client.execute(`
+          DELETE FROM dados_dachser.t_dachser_demurrage_pre_invoice_items WHERE pre_invoice_id = ?
+        `, [deletePiId]);
+
+        // Delete pre-invoice
+        await client.execute(`
+          DELETE FROM dados_dachser.t_dachser_demurrage_pre_invoices WHERE id = ?
+        `, [deletePiId]);
+
+        result = { success: true };
+        break;
+      }
+
+      // ==================== DEMURRAGE PRE-INVOICE ITEMS ====================
+      case 'demurrage_get_pre_invoice_items': {
+        const { pre_invoice_id: itemPiId } = body as { pre_invoice_id: number };
+        console.log('Fetching pre-invoice items for:', itemPiId);
+
+        if (!itemPiId) {
+          return new Response(
+            JSON.stringify({ error: 'pre_invoice_id é obrigatório' }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+
+        const piItems = await client.query(`
+          SELECT * FROM dados_dachser.t_dachser_demurrage_pre_invoice_items
+          WHERE pre_invoice_id = ?
+          ORDER BY container_number ASC
+        `, [itemPiId]);
+
+        result = { success: true, data: piItems || [] };
+        break;
+      }
+
+      case 'demurrage_create_pre_invoice_item': {
+        const itemData = body as any;
+        console.log('Creating pre-invoice item for container:', itemData.container_number);
+
+        if (!itemData.pre_invoice_id || !itemData.container_id) {
+          return new Response(
+            JSON.stringify({ error: 'pre_invoice_id e container_id são obrigatórios' }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+
+        await client.execute(`
+          INSERT INTO dados_dachser.t_dachser_demurrage_pre_invoice_items (
+            pre_invoice_id, container_id, container_number, container_type,
+            free_time_days, period_start_date, period_end_date, days_count,
+            daily_rate_usd, total_usd, period_type
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `, [
+          itemData.pre_invoice_id,
+          itemData.container_id,
+          itemData.container_number || null,
+          itemData.container_type || null,
+          itemData.free_time_days || 14,
+          itemData.period_start_date || null,
+          itemData.period_end_date || null,
+          itemData.days_count || 0,
+          itemData.daily_rate_usd || null,
+          itemData.total_usd || 0,
+          itemData.period_type || null
+        ]);
+
+        const lastItemId = await client.query('SELECT LAST_INSERT_ID() as id');
+        result = { success: true, id: lastItemId?.[0]?.id };
+        break;
+      }
+
+      // ==================== DEMURRAGE CONTAINER EVENTS ====================
+      case 'demurrage_get_container_events_new': {
+        const { container_id: evtContainerId, container_number: evtContainerNumber, limit: evtNewLimit = 50 } = body as any;
+        console.log('Fetching container events:', { evtContainerId, evtContainerNumber });
+
+        if (!evtContainerId && !evtContainerNumber) {
+          return new Response(
+            JSON.stringify({ error: 'container_id ou container_number é obrigatório' }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+
+        const evtNewConditions: string[] = [];
+        const evtNewParams: (string | number)[] = [];
+
+        if (evtContainerId) {
+          evtNewConditions.push('container_id = ?');
+          evtNewParams.push(evtContainerId);
+        }
+        if (evtContainerNumber) {
+          evtNewConditions.push('container_number = ?');
+          evtNewParams.push(evtContainerNumber);
+        }
+
+        const evtNewRows = await client.query(`
+          SELECT * FROM dados_dachser.t_dachser_demurrage_container_events
+          WHERE ${evtNewConditions.join(' OR ')}
+          ORDER BY event_datetime DESC
+          LIMIT ?
+        `, [...evtNewParams, evtNewLimit]);
+
+        result = { success: true, data: evtNewRows || [] };
+        break;
+      }
+
+      case 'demurrage_create_container_event': {
+        const evtData = body as any;
+        console.log('Creating container event:', evtData.event_type);
+
+        if (!evtData.container_id) {
+          return new Response(
+            JSON.stringify({ error: 'container_id é obrigatório' }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+
+        await client.execute(`
+          INSERT INTO dados_dachser.t_dachser_demurrage_container_events (
+            container_id, container_number, event_type, event_code, event_description,
+            event_datetime, location, vessel_name, voyage_number, terminal, source, raw_data
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `, [
+          evtData.container_id,
+          evtData.container_number || null,
+          evtData.event_type || null,
+          evtData.event_code || null,
+          evtData.event_description || null,
+          evtData.event_datetime || null,
+          evtData.location || null,
+          evtData.vessel_name || null,
+          evtData.voyage_number || null,
+          evtData.terminal || null,
+          evtData.source || 'JSONCARGO',
+          evtData.raw_data ? JSON.stringify(evtData.raw_data) : null
+        ]);
+
+        result = { success: true };
+        break;
+      }
+
+      case 'demurrage_bulk_create_events': {
+        const { events } = body as { events: any[] };
+        console.log('Bulk creating container events:', events?.length);
+
+        if (!events || events.length === 0) {
+          result = { success: true, inserted: 0 };
+          break;
+        }
+
+        let evtInserted = 0;
+        for (const evt of events) {
+          await client.execute(`
+            INSERT INTO dados_dachser.t_dachser_demurrage_container_events (
+              container_id, container_number, event_type, event_code, event_description,
+              event_datetime, location, vessel_name, voyage_number, terminal, source, raw_data
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          `, [
+            evt.container_id,
+            evt.container_number || null,
+            evt.event_type || null,
+            evt.event_code || null,
+            evt.event_description || null,
+            evt.event_datetime || null,
+            evt.location || null,
+            evt.vessel_name || null,
+            evt.voyage_number || null,
+            evt.terminal || null,
+            evt.source || 'JSONCARGO',
+            evt.raw_data ? JSON.stringify(evt.raw_data) : null
+          ]);
+          evtInserted++;
+        }
+
+        result = { success: true, inserted: evtInserted };
+        break;
+      }
+
+      // ==================== DEMURRAGE ALERTS ====================
+      case 'demurrage_get_alerts': {
+        const { container_id: alertContainerId, status: alertStatus, limit: alertLimit = 100 } = body as any;
+        console.log('Fetching demurrage alerts:', { alertContainerId, alertStatus });
+
+        let alertConditions: string[] = [];
+        let alertParams: (string | number)[] = [];
+
+        if (alertContainerId) {
+          alertConditions.push('container_id = ?');
+          alertParams.push(alertContainerId);
+        }
+        if (alertStatus && alertStatus !== 'all') {
+          alertConditions.push('status = ?');
+          alertParams.push(alertStatus);
+        }
+
+        const alertWhere = alertConditions.length > 0 ? `WHERE ${alertConditions.join(' AND ')}` : '';
+
+        const alerts = await client.query(`
+          SELECT * FROM dados_dachser.t_dachser_demurrage_alerts
+          ${alertWhere}
+          ORDER BY sent_at DESC
+          LIMIT ?
+        `, [...alertParams, alertLimit]);
+
+        // Parse recipient_emails JSON
+        const parsedAlerts = (alerts || []).map((a: any) => ({
+          ...a,
+          recipient_emails: a.recipient_emails ? JSON.parse(a.recipient_emails) : []
+        }));
+
+        result = { success: true, data: parsedAlerts };
+        break;
+      }
+
+      case 'demurrage_create_alert': {
+        const alertData = body as any;
+        console.log('Creating demurrage alert for container:', alertData.container_number);
+
+        if (!alertData.container_id) {
+          return new Response(
+            JSON.stringify({ error: 'container_id é obrigatório' }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+
+        await client.execute(`
+          INSERT INTO dados_dachser.t_dachser_demurrage_alerts (
+            container_id, container_number, alert_type, client_name, shipment_master,
+            days_remaining, expected_cost_usd, recipient_emails, status
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `, [
+          alertData.container_id,
+          alertData.container_number || null,
+          alertData.alert_type || null,
+          alertData.client_name || null,
+          alertData.shipment_master || null,
+          alertData.days_remaining || null,
+          alertData.expected_cost_usd || null,
+          JSON.stringify(alertData.recipient_emails || []),
+          alertData.status || 'sent'
+        ]);
+
+        const lastAlertId = await client.query('SELECT LAST_INSERT_ID() as id');
+        result = { success: true, id: lastAlertId?.[0]?.id };
+        break;
+      }
+
+      case 'demurrage_update_alert': {
+        const { id: alertId, status: alertNewStatus, error_message: alertError } = body as any;
+        console.log('Updating demurrage alert:', alertId);
+
+        if (!alertId) {
+          return new Response(
+            JSON.stringify({ error: 'id é obrigatório' }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+
+        await client.execute(`
+          UPDATE dados_dachser.t_dachser_demurrage_alerts
+          SET status = ?, error_message = ?
+          WHERE id = ?
+        `, [alertNewStatus || 'sent', alertError || null, alertId]);
+
+        result = { success: true };
+        break;
+      }
+
+      // ==================== DEMURRAGE DISPUTES ====================
+      case 'demurrage_get_disputes': {
+        const { container_id: dispContainerId, status: dispStatus, client_name: dispClient, limit: dispLimit = 100 } = body as any;
+        console.log('Fetching demurrage disputes:', { dispContainerId, dispStatus, dispClient });
+
+        let dispConditions: string[] = [];
+        let dispParams: (string | number)[] = [];
+
+        if (dispContainerId) {
+          dispConditions.push('container_id = ?');
+          dispParams.push(dispContainerId);
+        }
+        if (dispStatus && dispStatus !== 'all') {
+          dispConditions.push('status = ?');
+          dispParams.push(dispStatus);
+        }
+        if (dispClient) {
+          dispConditions.push('client_name LIKE ?');
+          dispParams.push(`%${dispClient}%`);
+        }
+
+        const dispWhere = dispConditions.length > 0 ? `WHERE ${dispConditions.join(' AND ')}` : '';
+
+        const disputes = await client.query(`
+          SELECT * FROM dados_dachser.t_dachser_demurrage_disputes
+          ${dispWhere}
+          ORDER BY opened_at DESC
+          LIMIT ?
+        `, [...dispParams, dispLimit]);
+
+        result = { success: true, data: disputes || [] };
+        break;
+      }
+
+      case 'demurrage_get_dispute': {
+        const { id: dispGetId } = body as { id: number };
+        console.log('Fetching demurrage dispute:', dispGetId);
+
+        if (!dispGetId) {
+          return new Response(
+            JSON.stringify({ error: 'id é obrigatório' }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+
+        const dispRows = await client.query(`
+          SELECT * FROM dados_dachser.t_dachser_demurrage_disputes WHERE id = ?
+        `, [dispGetId]);
+
+        result = { success: true, data: dispRows?.[0] || null };
+        break;
+      }
+
+      case 'demurrage_create_dispute': {
+        const dispData = body as any;
+        console.log('Creating demurrage dispute for container:', dispData.container_number);
+
+        if (!dispData.container_id) {
+          return new Response(
+            JSON.stringify({ error: 'container_id é obrigatório' }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+
+        await client.execute(`
+          INSERT INTO dados_dachser.t_dachser_demurrage_disputes (
+            container_id, container_number, client_name, armador, status,
+            disputed_amount_usd, reason, success_probability, opened_by
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `, [
+          dispData.container_id,
+          dispData.container_number || null,
+          dispData.client_name || null,
+          dispData.armador || null,
+          dispData.status || 'opened',
+          dispData.disputed_amount_usd || 0,
+          dispData.reason || null,
+          dispData.success_probability || 50,
+          dispData.opened_by || null
+        ]);
+
+        // Update container dispute_status
+        await client.execute(`
+          UPDATE dados_dachser.t_dachser_demurrage_containers
+          SET dispute_status = 'opened', disputed_amount_usd = ?, updated_at = NOW()
+          WHERE id = ?
+        `, [dispData.disputed_amount_usd || 0, dispData.container_id]);
+
+        const lastDispId = await client.query('SELECT LAST_INSERT_ID() as id');
+        result = { success: true, id: lastDispId?.[0]?.id };
+        break;
+      }
+
+      case 'demurrage_update_dispute': {
+        const { id: updateDispId, updates: dispUpdates } = body as { id: number; updates: Record<string, unknown> };
+        console.log('Updating demurrage dispute:', updateDispId);
+
+        if (!updateDispId || !dispUpdates) {
+          return new Response(
+            JSON.stringify({ error: 'id e updates são obrigatórios' }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+
+        const allowedDispFields = [
+          'status', 'disputed_amount_usd', 'recovered_amount_usd', 'reason',
+          'success_probability', 'resolution_notes', 'resolved_by', 'resolved_at'
+        ];
+
+        const dispSetClauses: string[] = [];
+        const dispValues: unknown[] = [];
+
+        for (const [key, value] of Object.entries(dispUpdates)) {
+          if (allowedDispFields.includes(key)) {
+            dispSetClauses.push(`${key} = ?`);
+            dispValues.push(value);
+          }
+        }
+
+        if (dispSetClauses.length === 0) {
+          return new Response(
+            JSON.stringify({ error: 'Nenhum campo válido para atualizar' }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+
+        dispSetClauses.push('updated_at = NOW()');
+
+        await client.execute(`
+          UPDATE dados_dachser.t_dachser_demurrage_disputes
+          SET ${dispSetClauses.join(', ')}
+          WHERE id = ?
+        `, [...dispValues, updateDispId]);
+
+        // If status is resolved, update container too
+        if (dispUpdates.status === 'won' || dispUpdates.status === 'lost') {
+          const dispInfo = await client.query(
+            'SELECT container_id, recovered_amount_usd FROM dados_dachser.t_dachser_demurrage_disputes WHERE id = ?',
+            [updateDispId]
+          );
+          if (dispInfo?.[0]) {
+            await client.execute(`
+              UPDATE dados_dachser.t_dachser_demurrage_containers
+              SET dispute_status = ?, recovered_amount_usd = ?, updated_at = NOW()
+              WHERE id = ?
+            `, [dispUpdates.status, dispUpdates.recovered_amount_usd || 0, dispInfo[0].container_id]);
+          }
+        }
+
+        result = { success: true };
+        break;
+      }
+
+      case 'demurrage_get_dispute_stats': {
+        console.log('Fetching demurrage dispute stats');
+
+        const dispStats = await client.query(`
+          SELECT 
+            COUNT(*) as total_disputes,
+            SUM(CASE WHEN status = 'opened' THEN 1 ELSE 0 END) as opened,
+            SUM(CASE WHEN status = 'negotiating' THEN 1 ELSE 0 END) as negotiating,
+            SUM(CASE WHEN status = 'won' THEN 1 ELSE 0 END) as won,
+            SUM(CASE WHEN status = 'lost' THEN 1 ELSE 0 END) as lost,
+            COALESCE(SUM(disputed_amount_usd), 0) as total_disputed_usd,
+            COALESCE(SUM(recovered_amount_usd), 0) as total_recovered_usd
+          FROM dados_dachser.t_dachser_demurrage_disputes
+        `);
+
+        const stats = dispStats?.[0] || {};
+        const totalResolved = Number(stats.won || 0) + Number(stats.lost || 0);
+        const successRate = totalResolved > 0 ? (Number(stats.won || 0) / totalResolved * 100) : 0;
+
+        result = { 
+          success: true, 
+          data: {
+            totalDisputes: Number(stats.total_disputes || 0),
+            opened: Number(stats.opened || 0),
+            negotiating: Number(stats.negotiating || 0),
+            won: Number(stats.won || 0),
+            lost: Number(stats.lost || 0),
+            totalDisputedUsd: Number(stats.total_disputed_usd || 0),
+            totalRecoveredUsd: Number(stats.total_recovered_usd || 0),
+            successRate: Math.round(successRate * 10) / 10
+          }
+        };
         break;
       }
 

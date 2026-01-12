@@ -250,6 +250,146 @@ serve(async (req) => {
     `);
     console.log("✓ Inserted sample demurrage rates");
 
+    // Create pre-invoices table
+    console.log("Creating t_dachser_demurrage_pre_invoices table...");
+    await client.execute(`
+      CREATE TABLE IF NOT EXISTS dados_dachser.t_dachser_demurrage_pre_invoices (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        invoice_number VARCHAR(50) NOT NULL UNIQUE,
+        shipment_mbl VARCHAR(100) DEFAULT NULL,
+        client_name VARCHAR(255) DEFAULT NULL,
+        bl_number VARCHAR(100) DEFAULT NULL,
+        vessel_name VARCHAR(150) DEFAULT NULL,
+        voyage_number VARCHAR(50) DEFAULT NULL,
+        origin_port VARCHAR(100) DEFAULT NULL,
+        destination_port VARCHAR(100) DEFAULT NULL,
+        arrival_date DATE DEFAULT NULL,
+        issue_date DATE DEFAULT NULL,
+        due_date DATE DEFAULT NULL,
+        total_usd DECIMAL(12,2) DEFAULT 0,
+        total_brl DECIMAL(12,2) DEFAULT 0,
+        exchange_rate DECIMAL(10,4) DEFAULT 6.16,
+        status VARCHAR(30) DEFAULT 'pending',
+        workflow_status VARCHAR(30) DEFAULT 'calculated',
+        financial_status VARCHAR(30) DEFAULT 'PENDING',
+        notes TEXT DEFAULT NULL,
+        posted_at DATETIME DEFAULT NULL,
+        created_by VARCHAR(100) DEFAULT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        INDEX idx_invoice_number (invoice_number),
+        INDEX idx_client_name (client_name),
+        INDEX idx_status (status),
+        INDEX idx_workflow_status (workflow_status)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    `);
+    console.log("✓ Created t_dachser_demurrage_pre_invoices table");
+
+    // Create pre-invoice items table
+    console.log("Creating t_dachser_demurrage_pre_invoice_items table...");
+    await client.execute(`
+      CREATE TABLE IF NOT EXISTS dados_dachser.t_dachser_demurrage_pre_invoice_items (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        pre_invoice_id INT NOT NULL,
+        container_id INT NOT NULL,
+        container_number VARCHAR(20) DEFAULT NULL,
+        container_type VARCHAR(20) DEFAULT NULL,
+        free_time_days INT DEFAULT 14,
+        period_start_date DATE DEFAULT NULL,
+        period_end_date DATE DEFAULT NULL,
+        days_count INT DEFAULT 0,
+        daily_rate_usd DECIMAL(10,2) DEFAULT NULL,
+        total_usd DECIMAL(12,2) DEFAULT 0,
+        period_type VARCHAR(30) DEFAULT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        INDEX idx_pre_invoice (pre_invoice_id),
+        INDEX idx_container (container_id),
+        INDEX idx_container_number (container_number)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    `);
+    console.log("✓ Created t_dachser_demurrage_pre_invoice_items table");
+
+    // Create container events table (timeline from API)
+    console.log("Creating t_dachser_demurrage_container_events table...");
+    await client.execute(`
+      CREATE TABLE IF NOT EXISTS dados_dachser.t_dachser_demurrage_container_events (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        container_id INT NOT NULL,
+        container_number VARCHAR(20) DEFAULT NULL,
+        event_type VARCHAR(50) DEFAULT NULL,
+        event_code VARCHAR(30) DEFAULT NULL,
+        event_description TEXT DEFAULT NULL,
+        event_datetime DATETIME DEFAULT NULL,
+        location VARCHAR(255) DEFAULT NULL,
+        vessel_name VARCHAR(150) DEFAULT NULL,
+        voyage_number VARCHAR(50) DEFAULT NULL,
+        terminal VARCHAR(150) DEFAULT NULL,
+        source VARCHAR(30) DEFAULT 'JSONCARGO',
+        raw_data JSON DEFAULT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        INDEX idx_container (container_id),
+        INDEX idx_container_number (container_number),
+        INDEX idx_event_datetime (event_datetime),
+        INDEX idx_event_type (event_type)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    `);
+    console.log("✓ Created t_dachser_demurrage_container_events table");
+
+    // Create alerts table
+    console.log("Creating t_dachser_demurrage_alerts table...");
+    await client.execute(`
+      CREATE TABLE IF NOT EXISTS dados_dachser.t_dachser_demurrage_alerts (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        container_id INT NOT NULL,
+        container_number VARCHAR(20) DEFAULT NULL,
+        alert_type VARCHAR(30) DEFAULT NULL,
+        client_name VARCHAR(255) DEFAULT NULL,
+        shipment_master VARCHAR(100) DEFAULT NULL,
+        days_remaining INT DEFAULT NULL,
+        expected_cost_usd DECIMAL(12,2) DEFAULT NULL,
+        recipient_emails JSON DEFAULT NULL,
+        sent_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        status VARCHAR(20) DEFAULT 'sent',
+        error_message TEXT DEFAULT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        INDEX idx_container (container_id),
+        INDEX idx_container_number (container_number),
+        INDEX idx_sent_at (sent_at),
+        INDEX idx_status (status),
+        INDEX idx_alert_type (alert_type)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    `);
+    console.log("✓ Created t_dachser_demurrage_alerts table");
+
+    // Create disputes table
+    console.log("Creating t_dachser_demurrage_disputes table...");
+    await client.execute(`
+      CREATE TABLE IF NOT EXISTS dados_dachser.t_dachser_demurrage_disputes (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        container_id INT NOT NULL,
+        container_number VARCHAR(20) DEFAULT NULL,
+        client_name VARCHAR(255) DEFAULT NULL,
+        armador VARCHAR(100) DEFAULT NULL,
+        status VARCHAR(30) DEFAULT 'opened',
+        disputed_amount_usd DECIMAL(12,2) DEFAULT 0,
+        recovered_amount_usd DECIMAL(12,2) DEFAULT 0,
+        reason TEXT DEFAULT NULL,
+        success_probability INT DEFAULT 50,
+        resolution_notes TEXT DEFAULT NULL,
+        opened_by VARCHAR(100) DEFAULT NULL,
+        resolved_by VARCHAR(100) DEFAULT NULL,
+        opened_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        resolved_at DATETIME DEFAULT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        INDEX idx_container (container_id),
+        INDEX idx_container_number (container_number),
+        INDEX idx_status (status),
+        INDEX idx_client_name (client_name)
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    `);
+    console.log("✓ Created t_dachser_demurrage_disputes table");
+
     await client.close();
     console.log("✓ MariaDB connection closed");
 
@@ -263,7 +403,12 @@ serve(async (req) => {
           "t_dachser_demurrage_containers",
           "t_dachser_demurrage_rates",
           "t_dachser_demurrage_settings",
-          "t_dachser_demurrage_client_profiles"
+          "t_dachser_demurrage_client_profiles",
+          "t_dachser_demurrage_pre_invoices",
+          "t_dachser_demurrage_pre_invoice_items",
+          "t_dachser_demurrage_container_events",
+          "t_dachser_demurrage_alerts",
+          "t_dachser_demurrage_disputes"
         ],
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
