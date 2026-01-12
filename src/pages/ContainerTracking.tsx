@@ -40,6 +40,7 @@ import dachserBg from "@/assets/dachser-background.jpg";
 import { TablePagination } from "@/components/layout/TablePagination";
 import { Filter as FilterIcon } from "lucide-react";
 import VesselFinderMap from "@/components/tracking/VesselFinderMap";
+import Swal from 'sweetalert2';
 
 // Normaliza códigos de armadores do banco para nomes legíveis
 const normalizeShippingLine = (code: string | null | undefined): string => {
@@ -537,8 +538,32 @@ const ContainerTracking = () => {
   const handleAdminSync = async () => {
     if (!isAdmin) return;
     setIsRunningSync(true);
+    
+    Swal.fire({
+      title: 'Sincronizando MBLs',
+      html: `
+        <div class="text-left">
+          <p class="mb-2">Buscando novos MBLs do banco de dados...</p>
+          <div class="w-full bg-gray-200 rounded-full h-2.5 mb-2">
+            <div class="bg-blue-600 h-2.5 rounded-full" style="width: 0%" id="sync-progress"></div>
+          </div>
+          <p class="text-sm text-gray-500" id="sync-status">Iniciando...</p>
+        </div>
+      `,
+      allowOutsideClick: false,
+      showConfirmButton: false,
+      didOpen: () => {
+        Swal.showLoading();
+      }
+    });
+
     try {
-      toast({ title: "Sincronizando MBLs...", description: "Buscando novos MBLs do banco de dados" });
+      const progressEl = document.getElementById('sync-progress');
+      const statusEl = document.getElementById('sync-status');
+      
+      if (progressEl) progressEl.style.width = '30%';
+      if (statusEl) statusEl.textContent = 'Conectando ao banco de dados...';
+      
       const res = await fetch(
         `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/olimpo-proxy?action=sync_sea_tracking`,
         {
@@ -549,14 +574,42 @@ const ContainerTracking = () => {
           }
         }
       );
+      
+      if (progressEl) progressEl.style.width = '80%';
+      if (statusEl) statusEl.textContent = 'Processando resposta...';
+      
       const result = await res.json();
-      toast({ 
-        title: "Sincronização concluída", 
-        description: `${result.inserted || 0} novos MBLs inseridos` 
-      });
+      
+      if (progressEl) progressEl.style.width = '100%';
+      
       await fetchMblData();
+      
+      Swal.fire({
+        icon: 'success',
+        title: 'Sincronização Concluída!',
+        html: `
+          <div class="text-left">
+            <div class="flex items-center gap-2 mb-2">
+              <span class="inline-flex items-center justify-center w-8 h-8 bg-green-100 text-green-600 rounded-full font-bold">${result.inserted || 0}</span>
+              <span>Novos MBLs inseridos</span>
+            </div>
+            ${result.updated ? `
+            <div class="flex items-center gap-2">
+              <span class="inline-flex items-center justify-center w-8 h-8 bg-blue-100 text-blue-600 rounded-full font-bold">${result.updated}</span>
+              <span>MBLs atualizados</span>
+            </div>
+            ` : ''}
+          </div>
+        `,
+        confirmButtonColor: '#3085d6',
+      });
     } catch (error) {
-      toast({ title: "Erro", description: "Falha ao sincronizar MBLs", variant: "destructive" });
+      Swal.fire({
+        icon: 'error',
+        title: 'Erro na Sincronização',
+        text: 'Falha ao sincronizar MBLs. Tente novamente.',
+        confirmButtonColor: '#d33',
+      });
     } finally {
       setIsRunningSync(false);
     }
@@ -566,13 +619,56 @@ const ContainerTracking = () => {
   const handleAdminEnrich = async () => {
     if (!isAdmin) return;
     setIsRunningEnrich(true);
+    
+    let totalEnriched = 0;
+    let totalErrors = 0;
+    let remaining = 1;
+    let iteration = 0;
+    const maxIterations = 10;
+    
+    Swal.fire({
+      title: 'Enriquecendo Containers',
+      html: `
+        <div class="text-left">
+          <p class="mb-3">Buscando containers para cada MBL...</p>
+          <div class="w-full bg-gray-200 rounded-full h-2.5 mb-2">
+            <div class="bg-purple-600 h-2.5 rounded-full transition-all duration-300" style="width: 0%" id="enrich-progress"></div>
+          </div>
+          <div class="grid grid-cols-3 gap-2 text-center mt-3">
+            <div class="bg-gray-100 rounded p-2">
+              <div class="text-lg font-bold text-purple-600" id="enrich-count">0</div>
+              <div class="text-xs text-gray-500">Enriquecidos</div>
+            </div>
+            <div class="bg-gray-100 rounded p-2">
+              <div class="text-lg font-bold text-orange-600" id="enrich-remaining">-</div>
+              <div class="text-xs text-gray-500">Pendentes</div>
+            </div>
+            <div class="bg-gray-100 rounded p-2">
+              <div class="text-lg font-bold text-blue-600" id="enrich-iteration">0/${maxIterations}</div>
+              <div class="text-xs text-gray-500">Batch</div>
+            </div>
+          </div>
+        </div>
+      `,
+      allowOutsideClick: false,
+      showConfirmButton: false,
+      didOpen: () => {
+        Swal.showLoading();
+      }
+    });
+
     try {
-      toast({ title: "Enriquecendo containers...", description: "Buscando containers para cada MBL" });
-      let totalEnriched = 0;
-      let remaining = 1;
-      let iteration = 0;
-      while (remaining > 0 && iteration < 10) {
+      while (remaining > 0 && iteration < maxIterations) {
         iteration++;
+        
+        const progressEl = document.getElementById('enrich-progress');
+        const countEl = document.getElementById('enrich-count');
+        const remainingEl = document.getElementById('enrich-remaining');
+        const iterationEl = document.getElementById('enrich-iteration');
+        
+        if (progressEl) progressEl.style.width = `${(iteration / maxIterations) * 100}%`;
+        if (iterationEl) iterationEl.textContent = `${iteration}/${maxIterations}`;
+        
         const res = await fetch(
           `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/olimpo-proxy?action=enrich_sea_containers&batch_size=30&max_time_ms=45000`,
           {
@@ -585,16 +681,49 @@ const ContainerTracking = () => {
         );
         const result = await res.json();
         totalEnriched += result.enriched || 0;
+        totalErrors += result.errors || 0;
         remaining = result.remaining || 0;
+        
+        if (countEl) countEl.textContent = String(totalEnriched);
+        if (remainingEl) remainingEl.textContent = String(remaining);
+        
         if (result.enriched === 0 && result.errors === 0) break;
       }
-      toast({ 
-        title: "Enriquecimento concluído", 
-        description: `${totalEnriched} MBLs enriquecidos com containers` 
-      });
+      
       await fetchMblData();
+      
+      Swal.fire({
+        icon: 'success',
+        title: 'Enriquecimento Concluído!',
+        html: `
+          <div class="text-left">
+            <div class="flex items-center gap-2 mb-2">
+              <span class="inline-flex items-center justify-center w-8 h-8 bg-purple-100 text-purple-600 rounded-full font-bold">${totalEnriched}</span>
+              <span>MBLs enriquecidos com containers</span>
+            </div>
+            ${totalErrors > 0 ? `
+            <div class="flex items-center gap-2 mb-2">
+              <span class="inline-flex items-center justify-center w-8 h-8 bg-red-100 text-red-600 rounded-full font-bold">${totalErrors}</span>
+              <span>Erros encontrados</span>
+            </div>
+            ` : ''}
+            ${remaining > 0 ? `
+            <div class="flex items-center gap-2">
+              <span class="inline-flex items-center justify-center w-8 h-8 bg-orange-100 text-orange-600 rounded-full font-bold">${remaining}</span>
+              <span>MBLs ainda pendentes</span>
+            </div>
+            ` : ''}
+          </div>
+        `,
+        confirmButtonColor: '#3085d6',
+      });
     } catch (error) {
-      toast({ title: "Erro", description: "Falha ao enriquecer containers", variant: "destructive" });
+      Swal.fire({
+        icon: 'error',
+        title: 'Erro no Enriquecimento',
+        text: 'Falha ao enriquecer containers. Tente novamente.',
+        confirmButtonColor: '#d33',
+      });
     } finally {
       setIsRunningEnrich(false);
     }
@@ -604,13 +733,64 @@ const ContainerTracking = () => {
   const handleAdminTrack = async () => {
     if (!isAdmin) return;
     setIsRunningTrack(true);
+    
+    let totalProcessed = 0;
+    let totalSuccess = 0;
+    let totalErrors = 0;
+    let remaining = 1;
+    let iteration = 0;
+    const maxIterations = 15;
+    
+    Swal.fire({
+      title: 'Rastreando Containers',
+      html: `
+        <div class="text-left">
+          <p class="mb-3">Atualizando status via API de rastreamento...</p>
+          <div class="w-full bg-gray-200 rounded-full h-2.5 mb-2">
+            <div class="bg-cyan-600 h-2.5 rounded-full transition-all duration-300" style="width: 0%" id="track-progress"></div>
+          </div>
+          <div class="grid grid-cols-4 gap-2 text-center mt-3">
+            <div class="bg-gray-100 rounded p-2">
+              <div class="text-lg font-bold text-cyan-600" id="track-processed">0</div>
+              <div class="text-xs text-gray-500">Processados</div>
+            </div>
+            <div class="bg-gray-100 rounded p-2">
+              <div class="text-lg font-bold text-green-600" id="track-success">0</div>
+              <div class="text-xs text-gray-500">Sucesso</div>
+            </div>
+            <div class="bg-gray-100 rounded p-2">
+              <div class="text-lg font-bold text-red-600" id="track-errors">0</div>
+              <div class="text-xs text-gray-500">Erros</div>
+            </div>
+            <div class="bg-gray-100 rounded p-2">
+              <div class="text-lg font-bold text-orange-600" id="track-remaining">-</div>
+              <div class="text-xs text-gray-500">Restantes</div>
+            </div>
+          </div>
+          <p class="text-sm text-gray-500 mt-2" id="track-batch">Batch 0/${maxIterations}</p>
+        </div>
+      `,
+      allowOutsideClick: false,
+      showConfirmButton: false,
+      didOpen: () => {
+        Swal.showLoading();
+      }
+    });
+
     try {
-      toast({ title: "Rastreando containers...", description: "Atualizando status via API" });
-      let totalProcessed = 0;
-      let remaining = 1;
-      let iteration = 0;
-      while (remaining > 0 && iteration < 15) {
+      while (remaining > 0 && iteration < maxIterations) {
         iteration++;
+        
+        const progressEl = document.getElementById('track-progress');
+        const processedEl = document.getElementById('track-processed');
+        const successEl = document.getElementById('track-success');
+        const errorsEl = document.getElementById('track-errors');
+        const remainingEl = document.getElementById('track-remaining');
+        const batchEl = document.getElementById('track-batch');
+        
+        if (progressEl) progressEl.style.width = `${(iteration / maxIterations) * 100}%`;
+        if (batchEl) batchEl.textContent = `Batch ${iteration}/${maxIterations}`;
+        
         const res = await fetch(
           `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/olimpo-proxy?action=refresh_sea_tracking&batch_size=20&stale_hours=4&refresh_valid_hours=48`,
           {
@@ -623,16 +803,58 @@ const ContainerTracking = () => {
         );
         const result = await res.json();
         totalProcessed += result.processed || 0;
+        totalSuccess += result.success || 0;
+        totalErrors += result.errors || 0;
         remaining = result.remaining || 0;
+        
+        if (processedEl) processedEl.textContent = String(totalProcessed);
+        if (successEl) successEl.textContent = String(totalSuccess);
+        if (errorsEl) errorsEl.textContent = String(totalErrors);
+        if (remainingEl) remainingEl.textContent = String(remaining);
+        
         if (result.processed === 0) break;
       }
-      toast({ 
-        title: "Rastreamento concluído", 
-        description: `${totalProcessed} containers atualizados` 
-      });
+      
       await fetchMblData();
+      
+      const successRate = totalProcessed > 0 ? Math.round((totalSuccess / totalProcessed) * 100) : 0;
+      
+      Swal.fire({
+        icon: 'success',
+        title: 'Rastreamento Concluído!',
+        html: `
+          <div class="text-left">
+            <div class="flex items-center gap-2 mb-2">
+              <span class="inline-flex items-center justify-center w-8 h-8 bg-cyan-100 text-cyan-600 rounded-full font-bold">${totalProcessed}</span>
+              <span>Containers processados</span>
+            </div>
+            <div class="flex items-center gap-2 mb-2">
+              <span class="inline-flex items-center justify-center w-8 h-8 bg-green-100 text-green-600 rounded-full font-bold">${successRate}%</span>
+              <span>Taxa de sucesso</span>
+            </div>
+            ${totalErrors > 0 ? `
+            <div class="flex items-center gap-2 mb-2">
+              <span class="inline-flex items-center justify-center w-8 h-8 bg-red-100 text-red-600 rounded-full font-bold">${totalErrors}</span>
+              <span>Erros (timeout/API)</span>
+            </div>
+            ` : ''}
+            ${remaining > 0 ? `
+            <div class="flex items-center gap-2">
+              <span class="inline-flex items-center justify-center w-8 h-8 bg-orange-100 text-orange-600 rounded-full font-bold">${remaining}</span>
+              <span>Containers ainda pendentes</span>
+            </div>
+            ` : ''}
+          </div>
+        `,
+        confirmButtonColor: '#3085d6',
+      });
     } catch (error) {
-      toast({ title: "Erro", description: "Falha ao rastrear containers", variant: "destructive" });
+      Swal.fire({
+        icon: 'error',
+        title: 'Erro no Rastreamento',
+        text: 'Falha ao rastrear containers. Tente novamente.',
+        confirmButtonColor: '#d33',
+      });
     } finally {
       setIsRunningTrack(false);
     }
@@ -641,14 +863,89 @@ const ContainerTracking = () => {
   // Force re-track ALL containers (ignores stale threshold)
   const handleAdminRetrack = async () => {
     if (!isAdmin) return;
+    
+    // Confirmação antes de iniciar
+    const confirmResult = await Swal.fire({
+      title: 'Re-rastrear Todos os Containers?',
+      html: `
+        <p class="text-gray-600">Esta ação irá forçar a atualização de <strong>todos</strong> os containers, independente do último rastreio.</p>
+        <p class="text-orange-600 text-sm mt-2">⚠️ Este processo pode demorar vários minutos.</p>
+      `,
+      icon: 'warning',
+      showCancelButton: true,
+      confirmButtonColor: '#3085d6',
+      cancelButtonColor: '#6b7280',
+      confirmButtonText: 'Sim, re-rastrear todos',
+      cancelButtonText: 'Cancelar'
+    });
+    
+    if (!confirmResult.isConfirmed) return;
+    
     setIsRunningRetrack(true);
+    
+    let totalProcessed = 0;
+    let totalSuccess = 0;
+    let totalErrors = 0;
+    let remaining = 1;
+    let iteration = 0;
+    const maxIterations = 30;
+    const startTime = Date.now();
+    
+    Swal.fire({
+      title: 'Re-rastreando Todos os Containers',
+      html: `
+        <div class="text-left">
+          <p class="mb-3 text-orange-600 font-medium">⚠️ Forçando atualização completa...</p>
+          <div class="w-full bg-gray-200 rounded-full h-3 mb-2">
+            <div class="bg-gradient-to-r from-orange-500 to-red-500 h-3 rounded-full transition-all duration-300" style="width: 0%" id="retrack-progress"></div>
+          </div>
+          <div class="grid grid-cols-4 gap-2 text-center mt-3">
+            <div class="bg-gray-100 rounded p-2">
+              <div class="text-lg font-bold text-orange-600" id="retrack-processed">0</div>
+              <div class="text-xs text-gray-500">Processados</div>
+            </div>
+            <div class="bg-gray-100 rounded p-2">
+              <div class="text-lg font-bold text-green-600" id="retrack-success">0</div>
+              <div class="text-xs text-gray-500">Sucesso</div>
+            </div>
+            <div class="bg-gray-100 rounded p-2">
+              <div class="text-lg font-bold text-red-600" id="retrack-errors">0</div>
+              <div class="text-xs text-gray-500">Erros</div>
+            </div>
+            <div class="bg-gray-100 rounded p-2">
+              <div class="text-lg font-bold text-blue-600" id="retrack-remaining">-</div>
+              <div class="text-xs text-gray-500">Restantes</div>
+            </div>
+          </div>
+          <div class="flex justify-between text-sm text-gray-500 mt-3">
+            <span id="retrack-batch">Batch 0/${maxIterations}</span>
+            <span id="retrack-time">Tempo: 0s</span>
+          </div>
+        </div>
+      `,
+      allowOutsideClick: false,
+      showConfirmButton: false,
+      didOpen: () => {
+        Swal.showLoading();
+      }
+    });
+
     try {
-      toast({ title: "Re-rastreando todos...", description: "Forçando atualização de todos os containers" });
-      let totalProcessed = 0;
-      let remaining = 1;
-      let iteration = 0;
-      while (remaining > 0 && iteration < 30) {
+      while (remaining > 0 && iteration < maxIterations) {
         iteration++;
+        
+        const progressEl = document.getElementById('retrack-progress');
+        const processedEl = document.getElementById('retrack-processed');
+        const successEl = document.getElementById('retrack-success');
+        const errorsEl = document.getElementById('retrack-errors');
+        const remainingEl = document.getElementById('retrack-remaining');
+        const batchEl = document.getElementById('retrack-batch');
+        const timeEl = document.getElementById('retrack-time');
+        
+        const elapsedSeconds = Math.round((Date.now() - startTime) / 1000);
+        if (timeEl) timeEl.textContent = `Tempo: ${elapsedSeconds}s`;
+        if (batchEl) batchEl.textContent = `Batch ${iteration}/${maxIterations}`;
+        
         const res = await fetch(
           `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/olimpo-proxy?action=refresh_sea_tracking&batch_size=20&stale_hours=0&refresh_valid_hours=0`,
           {
@@ -661,16 +958,67 @@ const ContainerTracking = () => {
         );
         const result = await res.json();
         totalProcessed += result.processed || 0;
+        totalSuccess += result.success || 0;
+        totalErrors += result.errors || 0;
         remaining = result.remaining || 0;
+        
+        // Calculate progress based on remaining vs total
+        const initialRemaining = totalProcessed + remaining;
+        const progressPct = initialRemaining > 0 ? ((totalProcessed / initialRemaining) * 100) : (iteration / maxIterations) * 100;
+        
+        if (progressEl) progressEl.style.width = `${Math.min(progressPct, 100)}%`;
+        if (processedEl) processedEl.textContent = String(totalProcessed);
+        if (successEl) successEl.textContent = String(totalSuccess);
+        if (errorsEl) errorsEl.textContent = String(totalErrors);
+        if (remainingEl) remainingEl.textContent = String(remaining);
+        
         if (result.processed === 0) break;
       }
-      toast({ 
-        title: "Re-rastreamento concluído", 
-        description: `${totalProcessed} containers re-rastreados` 
-      });
+      
+      const totalTime = Math.round((Date.now() - startTime) / 1000);
+      const successRate = totalProcessed > 0 ? Math.round((totalSuccess / totalProcessed) * 100) : 0;
+      
       await fetchMblData();
+      
+      Swal.fire({
+        icon: 'success',
+        title: 'Re-rastreamento Concluído!',
+        html: `
+          <div class="text-left">
+            <div class="bg-gray-100 rounded-lg p-3 mb-3">
+              <div class="text-center">
+                <div class="text-2xl font-bold text-green-600">${totalProcessed}</div>
+                <div class="text-sm text-gray-500">containers re-rastreados em ${totalTime}s</div>
+              </div>
+            </div>
+            <div class="grid grid-cols-2 gap-2">
+              <div class="flex items-center gap-2">
+                <span class="inline-flex items-center justify-center w-6 h-6 bg-green-100 text-green-600 rounded-full text-sm font-bold">${successRate}%</span>
+                <span class="text-sm">Taxa de sucesso</span>
+              </div>
+              ${totalErrors > 0 ? `
+              <div class="flex items-center gap-2">
+                <span class="inline-flex items-center justify-center w-6 h-6 bg-red-100 text-red-600 rounded-full text-sm font-bold">${totalErrors}</span>
+                <span class="text-sm">Erros</span>
+              </div>
+              ` : ''}
+            </div>
+            ${remaining > 0 ? `
+            <div class="mt-3 p-2 bg-orange-50 rounded text-sm text-orange-700">
+              ⚠️ ${remaining} containers ainda pendentes (limite de batches atingido)
+            </div>
+            ` : ''}
+          </div>
+        `,
+        confirmButtonColor: '#3085d6',
+      });
     } catch (error) {
-      toast({ title: "Erro", description: "Falha ao re-rastrear containers", variant: "destructive" });
+      Swal.fire({
+        icon: 'error',
+        title: 'Erro no Re-rastreamento',
+        text: 'Falha ao re-rastrear containers. Tente novamente.',
+        confirmButtonColor: '#d33',
+      });
     } finally {
       setIsRunningRetrack(false);
     }
