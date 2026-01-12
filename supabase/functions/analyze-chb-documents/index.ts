@@ -1507,7 +1507,69 @@ async function processAnalysisInBackground(
       }
     }
     
+    // Fetch user corrections if itemId provided
+    let userCorrections: { filename: string; field_name: string; corrected_value: string; location_reference?: string; location_context?: string; location_confidence?: string }[] = [];
+    if (itemId) {
+      try {
+        console.log(`[BG] Fetching user corrections for item ${itemId}...`);
+        const correctionsResult = await callMariaDBProxy('execute', {
+          query: `
+            SELECT filename, field_name, corrected_value, location_reference, location_context, location_confidence
+            FROM ai_agente.t_dachser_chb_user_corrections
+            WHERE item_id = ? AND is_validated = TRUE
+            ORDER BY updated_at DESC
+          `,
+          params: [itemId]
+        });
+        userCorrections = correctionsResult.rows || [];
+        console.log(`[BG] Found ${userCorrections.length} validated user corrections`);
+      } catch (e) {
+        console.error('[BG] Error fetching user corrections:', e);
+      }
+    }
+    
     let cachedContext = '';
+    
+    // Add user corrections context first (highest priority)
+    if (userCorrections.length > 0) {
+      cachedContext += `
+═══════════════════════════════════════════════════════════════════════════════
+⚠️ CORREÇÕES VALIDADAS PELO USUÁRIO — PRIORIDADE MÁXIMA
+═══════════════════════════════════════════════════════════════════════════════
+
+O usuário CORRIGIU os seguintes valores. VOCÊ DEVE USAR ESSES VALORES CORRIGIDOS!
+
+`;
+      for (const corr of userCorrections) {
+        cachedContext += `Arquivo: ${corr.filename}\n`;
+        cachedContext += `  ✓ ${corr.field_name}: ${corr.corrected_value}\n`;
+        if (corr.location_reference) {
+          cachedContext += `    📍 Localização confirmada: ${corr.location_reference}\n`;
+        }
+        if (corr.location_context) {
+          cachedContext += `    📝 Contexto: "${corr.location_context}"\n`;
+        }
+        if (corr.location_confidence) {
+          cachedContext += `    🎯 Confiança: ${corr.location_confidence}\n`;
+        }
+        cachedContext += '\n';
+      }
+      
+      cachedContext += `
+REGRA CRÍTICA DE CORREÇÕES DO USUÁRIO:
+1. Os valores acima foram validados MANUALMENTE pelo usuário
+2. A localização foi verificada AUTOMATICAMENTE pelo sistema
+3. SE você encontrar valor diferente do corrigido → MANTER O VALOR CORRIGIDO
+4. Adicionar observação explicando a divergência encontrada se houver
+5. NUNCA substituir um valor corrigido pelo usuário por outro valor
+6. A confiança da localização indica quão certo o sistema está sobre onde o valor está
+
+═══════════════════════════════════════════════════════════════════════════════
+
+`;
+    }
+    
+    // Add cached data context
     if (cachedFiles.length > 0) {
       // Build list of fixed/validated fields
       const fixedFieldsList: string[] = [];
@@ -1519,7 +1581,7 @@ async function processAnalysisInBackground(
         }
       }
       
-      cachedContext = `
+      cachedContext += `
 ═══════════════════════════════════════════════════════════════════════════════
 ⚠️ VALORES JÁ EXTRAÍDOS E VALIDADOS — REGRA DE PERSISTÊNCIA
 ═══════════════════════════════════════════════════════════════════════════════
