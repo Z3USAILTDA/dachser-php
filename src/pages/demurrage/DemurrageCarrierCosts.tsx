@@ -6,13 +6,14 @@ import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
-import { Ship, Plus, Search, AlertTriangle, CheckCircle2, FileSearch, FileSpreadsheet, DollarSign, Clock, Calculator, Eye, TrendingUp, TrendingDown, Minus } from "lucide-react";
+import { Ship, Plus, Search, AlertTriangle, CheckCircle2, FileSearch, FileSpreadsheet, DollarSign, Clock, Calculator, TrendingUp, TrendingDown, Minus, FileWarning } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { TablePagination } from "@/components/layout/TablePagination";
 import { useDemurrageData, useUpdateDemurrageContainer } from "@/hooks/useDemurrageData";
 import { AuditCostDialog, AuditData } from "@/components/demurrage/AuditCostDialog";
 import { toast } from "sonner";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { exportDiscrepancyReport } from "@/utils/demurrageExcelExport";
 
 type QuickFilter = "all" | "validated" | "discrepancy" | "pending";
 const PAGE_SIZE = 15;
@@ -192,11 +193,34 @@ export default function DemurrageCarrierCosts() {
     }
   };
 
+  const handleExportDiscrepancies = () => {
+    try {
+      const fileName = exportDiscrepancyReport(containers);
+      toast.success(`Relatório exportado: ${fileName}`);
+    } catch (error) {
+      toast.error('Erro ao exportar relatório');
+      console.error(error);
+    }
+  };
+
+  const discrepancyCount = useMemo(() => {
+    return containers.filter(c => 
+      c.audit_status === 'discrepancy' || 
+      c.audit_status === 'disputed' ||
+      (c.armador_cost_usd && c.armador_cost_usd > 0 && Math.abs((c.armador_cost_usd || 0) - c.expected_cost_usd) > Math.max(c.expected_cost_usd * 0.05, 50))
+    ).length;
+  }, [containers]);
+
   const rightActions = (
     <div className="flex gap-2">
-      <Button variant="outline" className="bg-[rgba(0,0,0,0.7)] border-[rgba(255,255,255,0.25)] text-[#aaaaaa] hover:text-white hover:bg-[rgba(0,0,0,0.9)]">
-        <FileSpreadsheet className="h-4 w-4 mr-2" />
-        Exportar Excel
+      <Button 
+        variant="outline" 
+        onClick={handleExportDiscrepancies}
+        disabled={discrepancyCount === 0}
+        className="bg-red-500/10 border-red-500/30 text-red-400 hover:text-red-300 hover:bg-red-500/20"
+      >
+        <FileWarning className="h-4 w-4 mr-2" />
+        Exportar Discrepâncias ({discrepancyCount})
       </Button>
       <Button className="bg-[#ffc800] text-black hover:bg-[#e6b400]">
         <Plus className="h-4 w-4 mr-2" />
