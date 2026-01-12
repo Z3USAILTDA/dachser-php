@@ -30,11 +30,12 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { 
-  useDemurragePreInvoices, 
+  useDemurragePreInvoices,
   useUpdatePreInvoice,
   useGeneratePreInvoices,
   type PreInvoice 
 } from "@/hooks/useDemurrageData";
+import { PreInvoiceDetailsDialog } from "@/components/demurrage/PreInvoiceDetailsDialog";
 import { toast } from "sonner";
 import { format, parseISO } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -50,10 +51,17 @@ export default function DemurragePreInvoicing() {
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const [bulkAction, setBulkAction] = useState<BulkAction>(null);
   const [isGenerating, setIsGenerating] = useState(false);
+  const [detailsDialogOpen, setDetailsDialogOpen] = useState(false);
+  const [selectedInvoice, setSelectedInvoice] = useState<PreInvoice | null>(null);
 
   const { data: preInvoices = [], isLoading, refetch } = useDemurragePreInvoices();
   const updateMutation = useUpdatePreInvoice();
   const generateMutation = useGeneratePreInvoices();
+  
+  const handleViewDetails = (invoice: PreInvoice) => {
+    setSelectedInvoice(invoice);
+    setDetailsDialogOpen(true);
+  };
 
   const formatCurrency = (value: number) => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(value || 0);
 
@@ -422,11 +430,19 @@ export default function DemurragePreInvoicing() {
                             </DropdownMenuTrigger>
                             <DropdownMenuContent align="end" className="bg-[#1a1a1a] border-[rgba(255,255,255,0.1)]">
                               <DropdownMenuItem 
+                                onClick={() => handleViewDetails(invoice)}
+                                className="cursor-pointer"
+                              >
+                                <Eye className="h-4 w-4 mr-2" />
+                                Ver Detalhes
+                              </DropdownMenuItem>
+                              <DropdownMenuSeparator className="bg-[rgba(255,255,255,0.1)]" />
+                              <DropdownMenuItem 
                                 onClick={() => handleSingleAction(invoice, 'reviewed')}
                                 className="cursor-pointer"
                                 disabled={invoice.workflow_status === 'reviewed'}
                               >
-                                <Eye className="h-4 w-4 mr-2" />
+                                <CheckCircle2 className="h-4 w-4 mr-2" />
                                 Marcar como Revisada
                               </DropdownMenuItem>
                               <DropdownMenuItem 
@@ -492,6 +508,13 @@ export default function DemurragePreInvoicing() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Pre-Invoice Details Dialog */}
+      <PreInvoiceDetailsDialog
+        open={detailsDialogOpen}
+        onOpenChange={setDetailsDialogOpen}
+        preInvoice={selectedInvoice}
+      />
     </DemurrageLayout>
   );
 }

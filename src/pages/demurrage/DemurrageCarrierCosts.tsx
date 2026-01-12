@@ -7,16 +7,18 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Ship, Plus, Search, AlertTriangle, CheckCircle2, FileSearch, FileSpreadsheet, DollarSign, Clock, Calculator, TrendingUp, TrendingDown, Minus, FileWarning, CheckCheck, Anchor } from "lucide-react";
+import { Ship, Plus, Search, AlertTriangle, CheckCircle2, FileSearch, FileSpreadsheet, DollarSign, Clock, Calculator, TrendingUp, TrendingDown, Minus, FileWarning, CheckCheck, Anchor, Upload } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { TablePagination } from "@/components/layout/TablePagination";
 import { useDemurrageData, useUpdateDemurrageContainer, useDemurrageArmadores, useCreateAuditEvent } from "@/hooks/useDemurrageData";
 import { AuditCostDialog, AuditData } from "@/components/demurrage/AuditCostDialog";
 import { BulkAuditDialog } from "@/components/demurrage/BulkAuditDialog";
 import { NewInvoiceDialog } from "@/components/demurrage/NewInvoiceDialog";
+import { UploadInvoiceDialog } from "@/components/demurrage/UploadInvoiceDialog";
 import { toast } from "sonner";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { exportDiscrepancyReport } from "@/utils/demurrageExcelExport";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 
 type QuickFilter = "all" | "validated" | "discrepancy" | "pending";
 const PAGE_SIZE = 15;
@@ -30,6 +32,7 @@ export default function DemurrageCarrierCosts() {
   const [auditDialogOpen, setAuditDialogOpen] = useState(false);
   const [bulkAuditDialogOpen, setBulkAuditDialogOpen] = useState(false);
   const [newInvoiceDialogOpen, setNewInvoiceDialogOpen] = useState(false);
+  const [uploadDialogOpen, setUploadDialogOpen] = useState(false);
   const [selectedContainer, setSelectedContainer] = useState<typeof containers[0] | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const [isSubmittingInvoice, setIsSubmittingInvoice] = useState(false);
@@ -145,9 +148,11 @@ export default function DemurrageCarrierCosts() {
         matchesStatus = c.audit_status === statusFilter || (!c.audit_status && statusFilter === "pending");
       }
       
-      return matchesSearch && matchesQuickFilter && matchesStatus;
+      const matchesArmador = armadorFilter === "all" || c.armador === armadorFilter;
+      
+      return matchesSearch && matchesQuickFilter && matchesStatus && matchesArmador;
     });
-  }, [carrierContainers, searchTerm, quickFilter, statusFilter]);
+  }, [carrierContainers, searchTerm, quickFilter, statusFilter, armadorFilter]);
 
   useEffect(() => {
     setCurrentPage(1);
@@ -271,10 +276,24 @@ export default function DemurrageCarrierCosts() {
         <FileWarning className="h-4 w-4 mr-2" />
         Exportar Discrepâncias ({discrepancyCount})
       </Button>
-      <Button onClick={() => setNewInvoiceDialogOpen(true)} className="bg-[#ffc800] text-black hover:bg-[#e6b400]">
-        <Plus className="h-4 w-4 mr-2" />
-        Nova Fatura
-      </Button>
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button className="bg-[#ffc800] text-black hover:bg-[#e6b400]">
+            <Plus className="h-4 w-4 mr-2" />
+            Nova Fatura
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end" className="bg-[#1a1a1a] border-[rgba(255,255,255,0.1)]">
+          <DropdownMenuItem onClick={() => setNewInvoiceDialogOpen(true)} className="cursor-pointer">
+            <FileSpreadsheet className="h-4 w-4 mr-2" />
+            Cadastrar Manualmente
+          </DropdownMenuItem>
+          <DropdownMenuItem onClick={() => setUploadDialogOpen(true)} className="cursor-pointer">
+            <Upload className="h-4 w-4 mr-2" />
+            Upload de Fatura
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
     </div>
   );
 
@@ -350,6 +369,17 @@ export default function DemurrageCarrierCosts() {
                   <SelectItem value="pending">Pendentes</SelectItem>
                   <SelectItem value="validated">Validadas</SelectItem>
                   <SelectItem value="discrepancy">Discrepâncias</SelectItem>
+                </SelectContent>
+              </Select>
+              <Select value={armadorFilter} onValueChange={setArmadorFilter}>
+                <SelectTrigger className="w-48 bg-[rgba(0,0,0,0.5)] border-[rgba(255,255,255,0.1)]">
+                  <SelectValue placeholder="Armador" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Todos armadores</SelectItem>
+                  {armadores.map((a) => (
+                    <SelectItem key={a.armador} value={a.armador}>{a.armador}</SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </div>
@@ -486,6 +516,14 @@ export default function DemurrageCarrierCosts() {
           } finally {
             setIsSubmittingInvoice(false);
           }
+        }}
+      />
+
+      <UploadInvoiceDialog
+        open={uploadDialogOpen}
+        onOpenChange={setUploadDialogOpen}
+        onSuccess={(data) => {
+          toast.success(`Fatura ${data.invoice_number} importada com ${data.containers.length} containers`);
         }}
       />
     </DemurrageLayout>

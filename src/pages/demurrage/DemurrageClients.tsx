@@ -9,11 +9,14 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { TablePagination } from "@/components/layout/TablePagination";
-import { Users, Plus, Edit, Bell, BellOff, Search, DollarSign, AlertTriangle, Mail } from "lucide-react";
-import { useDemurrageData } from "@/hooks/useDemurrageData";
+import { Users, Plus, Edit, Bell, BellOff, Search, DollarSign, AlertTriangle, Mail, Send, History, Loader2 } from "lucide-react";
+import { useDemurrageData, useSendTestAlert, useDemurrageAlerts } from "@/hooks/useDemurrageData";
 import { useClientProfiles, useCreateClientProfile, useUpdateClientProfile } from "@/hooks/useClientProfiles";
 import { ClientProfileDialog, ClientProfileData } from "@/components/demurrage/ClientProfileDialog";
 import { toast } from "sonner";
+import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet";
+import { format, parseISO } from "date-fns";
+import { ptBR } from "date-fns/locale";
 
 type QuickFilter = "all" | "reports" | "no_reports" | "demurrage" | "pending";
 const PAGE_SIZE = 15;
@@ -40,11 +43,15 @@ export default function DemurrageClients() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [selectedProfile, setSelectedProfile] = useState<ClientProfileData | null>(null);
   const [isNewProfile, setIsNewProfile] = useState(false);
+  const [alertHistoryOpen, setAlertHistoryOpen] = useState(false);
+  const [selectedClientForHistory, setSelectedClientForHistory] = useState<string | null>(null);
 
   const { data: containers = [], isLoading } = useDemurrageData();
   const { data: clientProfiles = [] } = useClientProfiles();
+  const { data: alertHistory = [] } = useDemurrageAlerts(selectedClientForHistory || undefined);
   const createProfile = useCreateClientProfile();
   const updateProfile = useUpdateClientProfile();
+  const sendTestAlert = useSendTestAlert();
 
   // Create a map of profiles by cliente name
   const profileMap = useMemo(() => {
@@ -204,6 +211,33 @@ export default function DemurrageClients() {
     return labels[freq] || freq;
   };
 
+  const handleSendTestAlert = async (profile: ClientProfileView) => {
+    if (profile.contact_emails.length === 0) {
+      toast.error("Configure e-mails de contato para enviar alertas");
+      return;
+    }
+    try {
+      await sendTestAlert.mutateAsync({ clientName: profile.cliente, emails: profile.contact_emails });
+      toast.success("Alerta de teste enviado com sucesso");
+    } catch (error) {
+      console.error("Error sending test alert:", error);
+      toast.error("Erro ao enviar alerta de teste");
+    }
+  };
+
+  const handleViewAlertHistory = (cliente: string) => {
+    setSelectedClientForHistory(cliente);
+    setAlertHistoryOpen(true);
+  };
+
+  const formatAlertDate = (dateStr: string) => {
+    try {
+      return format(parseISO(dateStr), "dd/MM/yyyy HH:mm", { locale: ptBR });
+    } catch {
+      return dateStr;
+    }
+  };
+
   const rightActions = (
     <Button onClick={handleNewProfile} className="bg-[#ffc800] text-black hover:bg-[#e6b400]">
       <Plus className="h-4 w-4 mr-2" />
@@ -326,7 +360,7 @@ export default function DemurrageClients() {
                       <TableHead className="text-center">Containers</TableHead>
                       <TableHead className="text-right">Demurrage</TableHead>
                       <TableHead className="text-center">Excedidos</TableHead>
-                      <TableHead></TableHead>
+                      <TableHead className="text-center">Ações</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -385,19 +419,56 @@ export default function DemurrageClients() {
                             {profile.exceeded ? <Badge variant="destructive">{profile.exceeded}</Badge> : <Badge variant="outline" className="text-muted-foreground">0</Badge>}
                           </TableCell>
                           <TableCell>
-                            <Tooltip>
-                              <TooltipTrigger asChild>
-                                <Button 
-                                  size="sm" 
-                                  variant="ghost" 
-                                  className="text-muted-foreground hover:text-white"
-                                  onClick={() => handleEditProfile(profile)}
-                                >
-                                  <Edit className="h-4 w-4" />
-                                </Button>
-                              </TooltipTrigger>
-                              <TooltipContent>Editar perfil</TooltipContent>
-                            </Tooltip>
+                            <div className="flex items-center justify-center gap-1">
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <Button 
+                                    size="sm" 
+                                    variant="ghost" 
+                                    className="text-muted-foreground hover:text-white h-8 w-8 p-0"
+                                    onClick={() => handleEditProfile(profile)}
+                                  >
+                                    <Edit className="h-4 w-4" />
+                                  </Button>
+                                </TooltipTrigger>
+                                <TooltipContent>Editar perfil</TooltipContent>
+                              </Tooltip>
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <Button 
+                                    size="sm" 
+                                    variant="ghost" 
+                                    className="text-muted-foreground hover:text-[#ffc800] h-8 w-8 p-0"
+                                    onClick={() => handleSendTestAlert(profile)}
+                                    disabled={sendTestAlert.isPending || !profile.auto_alert_enabled}
+                                  >
+                                    {sendTestAlert.isPending ? (
+                                      <Loader2 className="h-4 w-4 animate-spin" />
+                                    ) : (
+                                      <Send className="h-4 w-4" />
+                                    )}
+                                  </Button>
+                                </TooltipTrigger>
+                                <TooltipContent>
+                                  {profile.auto_alert_enabled 
+                                    ? "Enviar alerta de teste" 
+                                    : "Ative os alertas para testar"}
+                                </TooltipContent>
+                              </Tooltip>
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <Button 
+                                    size="sm" 
+                                    variant="ghost" 
+                                    className="text-muted-foreground hover:text-blue-400 h-8 w-8 p-0"
+                                    onClick={() => handleViewAlertHistory(profile.cliente)}
+                                  >
+                                    <History className="h-4 w-4" />
+                                  </Button>
+                                </TooltipTrigger>
+                                <TooltipContent>Ver histórico de alertas</TooltipContent>
+                              </Tooltip>
+                            </div>
                           </TableCell>
                         </TableRow>
                       ))}
@@ -420,6 +491,64 @@ export default function DemurrageClients() {
         onSubmit={handleSubmitProfile}
         isLoading={isUpdating}
       />
+
+      {/* Alert History Sheet */}
+      <Sheet open={alertHistoryOpen} onOpenChange={setAlertHistoryOpen}>
+        <SheetContent className="bg-[#0a0a0a] border-[rgba(255,255,255,0.1)] w-[500px] sm:w-[540px]">
+          <SheetHeader>
+            <SheetTitle className="text-[#ffc800] flex items-center gap-2">
+              <History className="h-5 w-5" />
+              Histórico de Alertas
+            </SheetTitle>
+            <SheetDescription>
+              Alertas enviados para {selectedClientForHistory}
+            </SheetDescription>
+          </SheetHeader>
+          <div className="mt-6 space-y-3 max-h-[calc(100vh-200px)] overflow-y-auto">
+            {alertHistory.length === 0 ? (
+              <div className="text-center py-8 text-muted-foreground">
+                <Mail className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                <p>Nenhum alerta enviado</p>
+              </div>
+            ) : (
+              alertHistory.map((alert) => (
+                <div
+                  key={alert.id}
+                  className="p-4 rounded-lg bg-[rgba(255,255,255,0.03)] border border-[rgba(255,255,255,0.1)]"
+                >
+                  <div className="flex items-start justify-between">
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <Badge 
+                          variant="outline" 
+                          className={
+                            alert.status === 'sent' 
+                              ? 'text-green-400 border-green-400/30' 
+                              : alert.status === 'failed'
+                              ? 'text-red-400 border-red-400/30'
+                              : 'text-yellow-400 border-yellow-400/30'
+                          }
+                        >
+                          {alert.status === 'sent' ? 'Enviado' : alert.status === 'failed' ? 'Falhou' : 'Pendente'}
+                        </Badge>
+                        <span className="text-xs text-muted-foreground">
+                          {formatAlertDate(alert.sent_at)}
+                        </span>
+                      </div>
+                      <p className="text-sm mt-2">{alert.alert_type}</p>
+                      {alert.container_number && (
+                        <p className="text-xs text-muted-foreground mt-1 font-mono">
+                          Container: {alert.container_number}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        </SheetContent>
+      </Sheet>
     </DemurrageLayout>
   );
 }
