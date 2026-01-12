@@ -15,6 +15,7 @@ interface ChbAnalysisPanelProps {
   isStepCompleted?: boolean;
   analysisProgress?: string;
   reference?: string;
+  itemId?: number | null;
 }
 
 const copyAnalysisResult = (html: string) => {
@@ -33,7 +34,8 @@ export function ChbAnalysisPanel({
   hasFiles,
   isStepCompleted = false,
   analysisProgress = '',
-  reference = ''
+  reference = '',
+  itemId = null
 }: ChbAnalysisPanelProps) {
 
   const handleExportPDF = () => {
@@ -155,7 +157,11 @@ export function ChbAnalysisPanel({
 
       {/* Analysis HTML content - using new comparison grid */}
       <div className="p-4 rounded-lg bg-black/30 border border-white/10 overflow-auto max-h-[500px]">
-        <ChbComparisonGrid htmlContent={analysisResult.html} />
+        <ChbComparisonGrid 
+          htmlContent={analysisResult.html} 
+          itemId={itemId} 
+          editable={!isStepCompleted} 
+        />
       </div>
 
       {/* Action buttons - only show if step is not completed */}

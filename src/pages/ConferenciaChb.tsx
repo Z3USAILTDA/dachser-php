@@ -923,6 +923,7 @@ export default function ConferenciaChb() {
             isStepCompleted={isStepCompleted}
             analysisProgress={analysisProgress}
             reference={itemId ? `#${itemId}` : ''}
+            itemId={itemId}
           />
         );
       case 'historico':
