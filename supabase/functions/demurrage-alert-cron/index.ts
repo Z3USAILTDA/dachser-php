@@ -50,8 +50,8 @@ serve(async (req: Request) => {
     console.log(`${alertEnabledClients.size} clients have auto-alerts enabled`);
 
     // Get all containers at risk from MariaDB
-    const containersResponse = await callMariaDBProxy('demurrage_list', {
-      filters: { risk_status: ['at_risk', 'critical', 'exceeded'] },
+    const containersResponse = await callMariaDBProxy('demurrage_get_containers', {
+      risk_status: 'at_risk',
       limit: 500
     });
 

@@ -51,8 +51,7 @@ serve(async (req) => {
 
   try {
     // Step 1: Get all active containers from MariaDB (not returned)
-    const containersResponse = await callMariaDBProxy('demurrage_list', {
-      filters: { data_devolucao: null },
+    const containersResponse = await callMariaDBProxy('demurrage_get_containers', {
       limit: 1000
     });
 

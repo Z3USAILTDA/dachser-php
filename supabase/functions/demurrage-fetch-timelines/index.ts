@@ -244,9 +244,8 @@ serve(async (req) => {
 
     console.log(`[FETCH-TIMELINE] Starting timeline fetch, limit: ${limit}`);
 
-    // Fetch containers from MariaDB
-    const containersResponse = await callMariaDBProxy('demurrage_list', {
-      filters: { data_devolucao: null },
+    // Fetch containers from MariaDB (containers without return date)
+    const containersResponse = await callMariaDBProxy('demurrage_get_containers', {
       limit: limit
     });
 
