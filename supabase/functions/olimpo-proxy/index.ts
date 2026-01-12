@@ -1776,6 +1776,9 @@ serve(async (req) => {
         db: 'dados_dachser',
       });
 
+      // Fix collation mismatch between tables
+      await client.execute('SET NAMES utf8mb4 COLLATE utf8mb4_general_ci');
+
       try {
         // Prefixos válidos de MBL por armador
         const VALID_MBL_PREFIXES = [
