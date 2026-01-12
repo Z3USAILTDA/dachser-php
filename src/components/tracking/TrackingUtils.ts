@@ -1,6 +1,7 @@
 import { DhlAwbTracking, AlertCategory } from "./TrackingTypes";
 
 export const airlineTrackingLinks: Record<string, string> = {
+  "014": "https://www.aircanada.com/cargo/tracking?awbnb=${pr}-${awb}",
   "074": "https://www.latamcargo.com/pt/cargo-status/tracking?awbPrefix=045&awbSuffix=${awb}",
   "145": "https://www.latamcargo.com/pt/cargo-status/tracking?awbPrefix=045&awbSuffix=${awb}",
   "045": "https://www.latamcargo.com/pt/cargo-status/tracking?awbPrefix=045&awbSuffix=${awb}",
