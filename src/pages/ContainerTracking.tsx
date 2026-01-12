@@ -27,6 +27,10 @@ import {
   Package,
   Clock,
   Bell,
+  Play,
+  Database,
+  Radar,
+  RotateCcw,
 } from "lucide-react";
 import { RegisterFreeTimeDialog } from "@/components/tracking/RegisterFreeTimeDialog";
 import { useToast } from "@/hooks/use-toast";
@@ -186,6 +190,12 @@ const ContainerTracking = () => {
   // Auto sync state
   const [autoSyncStatus, setAutoSyncStatus] = useState<'sync' | 'enrich' | 'track' | 'imo' | null>(null);
   const [lastAutoSync, setLastAutoSync] = useState<Date | null>(null);
+  
+  // Admin action states
+  const [isRunningSync, setIsRunningSync] = useState(false);
+  const [isRunningEnrich, setIsRunningEnrich] = useState(false);
+  const [isRunningTrack, setIsRunningTrack] = useState(false);
+  const [isRunningRetrack, setIsRunningRetrack] = useState(false);
   
   // Expansion state
   const [expandedMbl, setExpandedMbl] = useState<string | null>(null);
@@ -521,6 +531,150 @@ const ContainerTracking = () => {
       setAutoSyncStatus(null);
     }
   }, [fetchMblData]);
+
+  // ===== ADMIN-ONLY ACTIONS =====
+  // Force sync new MBLs from t_master_dados
+  const handleAdminSync = async () => {
+    if (!isAdmin) return;
+    setIsRunningSync(true);
+    try {
+      toast({ title: "Sincronizando MBLs...", description: "Buscando novos MBLs do banco de dados" });
+      const res = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/olimpo-proxy?action=sync_sea_tracking`,
+        {
+          method: 'GET',
+          headers: {
+            'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
+            'Content-Type': 'application/json',
+          }
+        }
+      );
+      const result = await res.json();
+      toast({ 
+        title: "Sincronização concluída", 
+        description: `${result.inserted || 0} novos MBLs inseridos` 
+      });
+      await fetchMblData();
+    } catch (error) {
+      toast({ title: "Erro", description: "Falha ao sincronizar MBLs", variant: "destructive" });
+    } finally {
+      setIsRunningSync(false);
+    }
+  };
+
+  // Enrich MBLs with container info
+  const handleAdminEnrich = async () => {
+    if (!isAdmin) return;
+    setIsRunningEnrich(true);
+    try {
+      toast({ title: "Enriquecendo containers...", description: "Buscando containers para cada MBL" });
+      let totalEnriched = 0;
+      let remaining = 1;
+      let iteration = 0;
+      while (remaining > 0 && iteration < 10) {
+        iteration++;
+        const res = await fetch(
+          `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/olimpo-proxy?action=enrich_sea_containers&batch_size=30&max_time_ms=45000`,
+          {
+            method: 'GET',
+            headers: {
+              'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
+              'Content-Type': 'application/json',
+            }
+          }
+        );
+        const result = await res.json();
+        totalEnriched += result.enriched || 0;
+        remaining = result.remaining || 0;
+        if (result.enriched === 0 && result.errors === 0) break;
+      }
+      toast({ 
+        title: "Enriquecimento concluído", 
+        description: `${totalEnriched} MBLs enriquecidos com containers` 
+      });
+      await fetchMblData();
+    } catch (error) {
+      toast({ title: "Erro", description: "Falha ao enriquecer containers", variant: "destructive" });
+    } finally {
+      setIsRunningEnrich(false);
+    }
+  };
+
+  // Track/refresh containers (only stale ones - 4h threshold)
+  const handleAdminTrack = async () => {
+    if (!isAdmin) return;
+    setIsRunningTrack(true);
+    try {
+      toast({ title: "Rastreando containers...", description: "Atualizando status via API" });
+      let totalProcessed = 0;
+      let remaining = 1;
+      let iteration = 0;
+      while (remaining > 0 && iteration < 15) {
+        iteration++;
+        const res = await fetch(
+          `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/olimpo-proxy?action=refresh_sea_tracking&batch_size=20&stale_hours=4&refresh_valid_hours=48`,
+          {
+            method: 'GET',
+            headers: {
+              'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
+              'Content-Type': 'application/json',
+            }
+          }
+        );
+        const result = await res.json();
+        totalProcessed += result.processed || 0;
+        remaining = result.remaining || 0;
+        if (result.processed === 0) break;
+      }
+      toast({ 
+        title: "Rastreamento concluído", 
+        description: `${totalProcessed} containers atualizados` 
+      });
+      await fetchMblData();
+    } catch (error) {
+      toast({ title: "Erro", description: "Falha ao rastrear containers", variant: "destructive" });
+    } finally {
+      setIsRunningTrack(false);
+    }
+  };
+
+  // Force re-track ALL containers (ignores stale threshold)
+  const handleAdminRetrack = async () => {
+    if (!isAdmin) return;
+    setIsRunningRetrack(true);
+    try {
+      toast({ title: "Re-rastreando todos...", description: "Forçando atualização de todos os containers" });
+      let totalProcessed = 0;
+      let remaining = 1;
+      let iteration = 0;
+      while (remaining > 0 && iteration < 30) {
+        iteration++;
+        const res = await fetch(
+          `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/olimpo-proxy?action=refresh_sea_tracking&batch_size=20&stale_hours=0&refresh_valid_hours=0`,
+          {
+            method: 'GET',
+            headers: {
+              'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
+              'Content-Type': 'application/json',
+            }
+          }
+        );
+        const result = await res.json();
+        totalProcessed += result.processed || 0;
+        remaining = result.remaining || 0;
+        if (result.processed === 0) break;
+      }
+      toast({ 
+        title: "Re-rastreamento concluído", 
+        description: `${totalProcessed} containers re-rastreados` 
+      });
+      await fetchMblData();
+    } catch (error) {
+      toast({ title: "Erro", description: "Falha ao re-rastrear containers", variant: "destructive" });
+    } finally {
+      setIsRunningRetrack(false);
+    }
+  };
 
   // Set up 12-hour interval for auto sync (NOT on page load)
   useEffect(() => {
@@ -994,7 +1148,86 @@ const ContainerTracking = () => {
                 )}
               </div>
 
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 flex-wrap">
+                {/* Admin-only action buttons */}
+                {isAdmin && (
+                  <>
+                    <TooltipProvider>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <button
+                            onClick={handleAdminSync}
+                            disabled={isRunningSync || !!autoSyncStatus}
+                            className="h-8 px-3 rounded-full bg-[rgba(59,130,246,.2)] text-blue-400 text-[0.7rem] font-medium flex items-center gap-1.5 border border-blue-500/30 hover:bg-[rgba(59,130,246,.3)] transition disabled:opacity-50"
+                          >
+                            {isRunningSync ? <Loader2 className="w-3 h-3 animate-spin" /> : <Database className="w-3 h-3" />}
+                            Sync
+                          </button>
+                        </TooltipTrigger>
+                        <TooltipContent>
+                          <p className="text-xs">Sincronizar novos MBLs do banco (t_master_dados)</p>
+                        </TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
+                    
+                    <TooltipProvider>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <button
+                            onClick={handleAdminEnrich}
+                            disabled={isRunningEnrich || !!autoSyncStatus}
+                            className="h-8 px-3 rounded-full bg-[rgba(16,185,129,.2)] text-emerald-400 text-[0.7rem] font-medium flex items-center gap-1.5 border border-emerald-500/30 hover:bg-[rgba(16,185,129,.3)] transition disabled:opacity-50"
+                          >
+                            {isRunningEnrich ? <Loader2 className="w-3 h-3 animate-spin" /> : <Package className="w-3 h-3" />}
+                            Enrich
+                          </button>
+                        </TooltipTrigger>
+                        <TooltipContent>
+                          <p className="text-xs">Buscar containers para cada MBL via API</p>
+                        </TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
+                    
+                    <TooltipProvider>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <button
+                            onClick={handleAdminTrack}
+                            disabled={isRunningTrack || !!autoSyncStatus}
+                            className="h-8 px-3 rounded-full bg-[rgba(139,92,246,.2)] text-violet-400 text-[0.7rem] font-medium flex items-center gap-1.5 border border-violet-500/30 hover:bg-[rgba(139,92,246,.3)] transition disabled:opacity-50"
+                          >
+                            {isRunningTrack ? <Loader2 className="w-3 h-3 animate-spin" /> : <Radar className="w-3 h-3" />}
+                            Track
+                          </button>
+                        </TooltipTrigger>
+                        <TooltipContent>
+                          <p className="text-xs">Atualizar status dos containers (apenas desatualizados)</p>
+                        </TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
+                    
+                    <TooltipProvider>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <button
+                            onClick={handleAdminRetrack}
+                            disabled={isRunningRetrack || !!autoSyncStatus}
+                            className="h-8 px-3 rounded-full bg-[rgba(239,68,68,.2)] text-red-400 text-[0.7rem] font-medium flex items-center gap-1.5 border border-red-500/30 hover:bg-[rgba(239,68,68,.3)] transition disabled:opacity-50"
+                          >
+                            {isRunningRetrack ? <Loader2 className="w-3 h-3 animate-spin" /> : <RotateCcw className="w-3 h-3" />}
+                            Re-Track
+                          </button>
+                        </TooltipTrigger>
+                        <TooltipContent>
+                          <p className="text-xs">Forçar re-rastreio de TODOS os containers</p>
+                        </TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
+                    
+                    <div className="w-px h-6 bg-[rgba(255,255,255,.15)]" />
+                  </>
+                )}
+                
                 <button
                   onClick={() => setFreeTimeDialogOpen(true)}
                   className="h-8 px-4 rounded-full bg-[#ffc800] text-[#000] text-[0.75rem] font-medium flex items-center gap-1.5 hover:bg-[#ffdc50] transition shadow-[0_0_20px_rgba(255,200,0,.3)]"
