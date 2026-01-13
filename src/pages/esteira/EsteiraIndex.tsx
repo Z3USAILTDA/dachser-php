@@ -686,16 +686,14 @@ const EsteiraIndex = () => {
       // First sync from RM to ensure latest data, then load vouchers
       await syncFromRM();
 
-      // Load from MariaDB t_vouchers AND pending RM vouchers in parallel
+      // Load from MariaDB t_vouchers AND ALL pending RM vouchers in parallel (no limits)
       const [esteiraResult, rmPendingResult] = await Promise.all([supabase.functions.invoke("mariadb-proxy", {
         body: {
-          action: "get_vouchers_esteira",
-          limit: 500
+          action: "get_vouchers_esteira"
         }
       }), supabase.functions.invoke("mariadb-proxy", {
         body: {
-          action: "get_vouchers_pendentes_rm",
-          limit: 200
+          action: "get_vouchers_pendentes_rm"
         }
       })]);
       if (esteiraResult.error) throw esteiraResult.error;
