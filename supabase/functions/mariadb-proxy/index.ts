@@ -4324,8 +4324,8 @@ serve(async (req) => {
       }
 
       case 'get_vouchers_esteira': {
-        const { search, etapa, limit = 100, offset = 0 } = body as any;
-        console.log('Fetching vouchers from dados_dachser.t_vouchers');
+        const { search, etapa } = body as any;
+        console.log('Fetching ALL vouchers from dados_dachser.t_vouchers (no limit)');
         
         let whereConditions: string[] = [];
         let params: any[] = [];
@@ -4346,8 +4346,8 @@ serve(async (req) => {
         const whereClause = whereConditions.length > 0 ? `WHERE ${whereConditions.join(' AND ')}` : '';
         
         const vouchers = await client.query(`
-          SELECT * FROM dados_dachser.t_vouchers ${whereClause} ORDER BY created_at DESC LIMIT ? OFFSET ?
-        `, [...params, limit, offset]);
+          SELECT * FROM dados_dachser.t_vouchers ${whereClause} ORDER BY created_at DESC
+        `, params);
         
         result = { success: true, data: vouchers };
         break;
@@ -6676,11 +6676,9 @@ serve(async (req) => {
 
       // ==================== GET VOUCHERS PENDENTES RM ====================
       case 'get_vouchers_pendentes_rm': {
-        // Busca vouchers da t_dados_financeiro_voucher que não existem na t_vouchers
-        // Esses são os vouchers "A Processar" - backlog do RM
-        console.log('Fetching pending RM vouchers not yet in esteira...');
-        
-        const { limit = 100 } = body as { limit?: number };
+        // Busca TODOS os vouchers da t_dados_financeiro_voucher que não existem na t_vouchers
+        // Excluindo apenas registros onde nome_beneficiario contém "dachser"
+        console.log('Fetching ALL pending RM vouchers not yet in esteira (excluding Dachser beneficiaries)...');
 
         const pendentes = await client.query(`
           SELECT 
@@ -6703,11 +6701,11 @@ serve(async (req) => {
           FROM dados_dachser.t_dados_financeiro_voucher dfv
           LEFT JOIN dados_dachser.t_vouchers v ON dfv.nd COLLATE utf8mb4_unicode_ci = v.numero_spo COLLATE utf8mb4_unicode_ci
           WHERE v.id IS NULL
+            AND (dfv.nome_beneficiario IS NULL OR LOWER(dfv.nome_beneficiario) NOT LIKE '%dachser%')
           ORDER BY dfv.data_vencimento ASC
-          LIMIT ?
-        `, [limit]);
+        `);
 
-        console.log(`Found ${pendentes?.length || 0} pending RM vouchers`);
+        console.log(`Found ${pendentes?.length || 0} pending RM vouchers (excluding Dachser)`);
         result = { success: true, data: pendentes || [], count: pendentes?.length || 0 };
         break;
       }
