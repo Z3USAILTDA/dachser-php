@@ -28,22 +28,24 @@ serve(async (req) => {
     client = await getMariaDBClient();
     console.log("Connected to MariaDB");
 
-    // Query para encontrar o timestamp da última atualização
+    // Query para encontrar o timestamp da última atualização (excluindo ADM)
     const lastUpdateQuery = `
       SELECT MAX(data_insert) as last_update
       FROM t_dados_financeiro_voucher
+      WHERE modal IS NULL OR modal <> 'ADM'
     `;
 
     const lastUpdateResult = await client.query(lastUpdateQuery);
     const lastUpdate = lastUpdateResult[0]?.last_update || null;
     console.log("Last update t_dados_financeiro_voucher:", lastUpdate);
 
-    // Query para contar total de registros e soma de valores
+    // Query para contar total de registros e soma de valores (excluindo ADM)
     const statsQuery = `
       SELECT 
         COUNT(*) as total_records,
         COALESCE(SUM(valor_nf), 0) as total_valor
       FROM t_dados_financeiro_voucher
+      WHERE modal IS NULL OR modal <> 'ADM'
     `;
 
     const statsResult = await client.query(statsQuery);
