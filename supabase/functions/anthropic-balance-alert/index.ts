@@ -11,7 +11,7 @@ const corsHeaders = {
 
 const ALERT_THRESHOLD = 5.00; // $5.00
 const ALERT_RECIPIENTS = ["davi.santos@br.dachser.com"]; // Email para receber alertas
-const TEST_EMAIL = "ti@z3us.ai"; // Email verificado no Resend para testes
+const TEST_EMAIL = "devs@z3us.ai"; // Email para testes
 
 serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -158,7 +158,7 @@ serve(async (req) => {
     // Enviar email de alerta
     console.log(`[anthropic-balance-alert] Sending alert to: ${recipients.join(", ")} (test mode: ${testMode})`);
     const emailResponse = await resend.emails.send({
-      from: "Dachser Alerts <onboarding@resend.dev>",
+      from: "Dachser Alerts <alerts@z3us.ai>",
       to: recipients,
       subject: `⚠️ ALERTA: Saldo Anthropic Baixo - $${estimatedBalance.toFixed(2)}`,
       html: `
