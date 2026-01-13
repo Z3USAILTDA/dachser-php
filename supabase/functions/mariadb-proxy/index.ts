@@ -6700,7 +6700,9 @@ serve(async (req) => {
             dfv.razao_social
           FROM dados_dachser.t_dados_financeiro_voucher dfv
           LEFT JOIN dados_dachser.t_vouchers v ON dfv.nd COLLATE utf8mb4_unicode_ci = v.numero_spo COLLATE utf8mb4_unicode_ci
+          LEFT JOIN dados_dachser.tbaixas b ON dfv.id_rm = b.IdLancamentoRM
           WHERE v.id IS NULL
+            AND b.IdLancamentoRM IS NULL
             AND (dfv.nome_beneficiario IS NULL OR LOWER(dfv.nome_beneficiario) NOT LIKE '%dachser%')
           ORDER BY dfv.data_vencimento ASC
         `);
