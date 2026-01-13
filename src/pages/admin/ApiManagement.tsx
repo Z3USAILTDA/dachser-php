@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { Activity, Server, TrendingUp, AlertCircle, RefreshCw, Loader2, Calendar, DollarSign, LayoutDashboard, BarChart3, HelpCircle, X, Clock, CheckCircle, XCircle, ExternalLink, History, ArrowUpRight, ArrowDownRight, Minus, Plus, Wallet } from "lucide-react";
+import { Activity, Server, TrendingUp, AlertCircle, RefreshCw, Loader2, Calendar, DollarSign, LayoutDashboard, BarChart3, HelpCircle, X, Clock, CheckCircle, XCircle, ExternalLink, History, ArrowUpRight, ArrowDownRight, Minus, Plus, Wallet, Settings2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
@@ -14,7 +14,7 @@ import { PageCard } from "@/components/layout/PageCard";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { useAnthropicCredits, AnthropicTopupDialog, AnthropicHistoryDialog, getBalanceStatus, formatAnthropicCurrency } from "@/components/admin/AnthropicCreditsCard";
+import { useAnthropicCredits, AnthropicTopupDialog, AnthropicHistoryDialog, AnthropicBalanceAdjustDialog, getBalanceStatus, formatAnthropicCurrency } from "@/components/admin/AnthropicCreditsCard";
 
 interface ApiStats {
   api_name: string;
@@ -437,6 +437,7 @@ const DashboardTab = ({
   const { balance, topups, isLoading: creditsLoading, fetchCreditsData } = useAnthropicCredits();
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
   const [isHistoryDialogOpen, setIsHistoryDialogOpen] = useState(false);
+  const [isAdjustDialogOpen, setIsAdjustDialogOpen] = useState(false);
   
   const handleTopupSuccess = () => {
     fetchCreditsData();
@@ -561,7 +562,7 @@ const DashboardTab = ({
                   </div>
                   
                   {/* Botões de ação para créditos */}
-                  <div className="mt-3 pt-3 border-t border-white/5 flex items-center justify-between gap-2">
+                  <div className="mt-3 pt-3 border-t border-white/5 flex items-center justify-between gap-1">
                     <Button
                       size="sm"
                       variant="outline"
@@ -570,6 +571,15 @@ const DashboardTab = ({
                     >
                       <History className="w-3 h-3 mr-1" />
                       Histórico
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={(e) => { e.stopPropagation(); setIsAdjustDialogOpen(true); }}
+                      className="h-7 px-2 text-[10px] border-blue-500/30 hover:bg-blue-500/10 hover:border-blue-500/50"
+                    >
+                      <Settings2 className="w-3 h-3 mr-1" />
+                      Ajustar
                     </Button>
                     <Button
                       size="sm"
@@ -714,6 +724,12 @@ const DashboardTab = ({
         isOpen={isHistoryDialogOpen} 
         onOpenChange={setIsHistoryDialogOpen} 
         topups={topups}
+      />
+      <AnthropicBalanceAdjustDialog
+        isOpen={isAdjustDialogOpen}
+        onOpenChange={setIsAdjustDialogOpen}
+        onSuccess={handleTopupSuccess}
+        currentBalance={balance?.estimated_balance}
       />
     </div>
   );
