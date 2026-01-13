@@ -9,42 +9,21 @@ interface StatusBadgeProps {
 }
 
 const statusConfig: Record<string, { label: string; color: string }> = {
-  // Main CCT Status
-  AGUARDANDO_MANIFESTACAO: { label: "Aguard. Manif.", color: "bg-yellow-500/20 text-yellow-400 border-yellow-500/30" },
-  COLETA_REALIZADA: { label: "Coleta", color: "bg-blue-500/20 text-blue-400 border-blue-500/30" },
-  CARGA_RECEBIDA_TECA: { label: "TECA", color: "bg-blue-500/20 text-blue-400 border-blue-500/30" },
-  MANIFESTADO: { label: "Manifestado", color: "bg-primary/20 text-primary border-primary/30" },
-  AREA_TRANSFERENCIA: { label: "Área Transf.", color: "bg-blue-500/20 text-blue-400 border-blue-500/30" },
-  CHEGADA_INFORMADA: { label: "Chegada Inf.", color: "bg-cyan-500/20 text-cyan-400 border-cyan-500/30" },
-  RECEPCIONADO: { label: "Recepcionado", color: "bg-indigo-500/20 text-indigo-400 border-indigo-500/30" },
-  DISPONIVEL_RETIRADA: { label: "Disponível", color: "bg-purple-500/20 text-purple-400 border-purple-500/30" },
-  EM_TRANSITO: { label: "Em Trânsito", color: "bg-orange-500/20 text-orange-400 border-orange-500/30" },
-  EM_TRANSITO_LAST_MILE: { label: "Last Mile", color: "bg-orange-500/20 text-orange-400 border-orange-500/30" },
+  // Status de Manifestação CCT (Nomenclatura Aduaneira)
+  INFORMADA: { label: "Informada", color: "bg-cyan-500/20 text-cyan-400 border-cyan-500/30" },
+  MANIFESTADA: { label: "Manifestada", color: "bg-primary/20 text-primary border-primary/30" },
+  EM_AREA_TRANSFERENCIA: { label: "Em área de Transferência", color: "bg-blue-500/20 text-blue-400 border-blue-500/30" },
+  RECEPCIONADA: { label: "Recepcionada", color: "bg-indigo-500/20 text-indigo-400 border-indigo-500/30" },
+  EM_TROCA_RECINTOS: { label: "Em Troca entre Recintos", color: "bg-orange-500/20 text-orange-400 border-orange-500/30" },
+  EM_TRANSITO_TERRESTRE: { label: "Em Trânsito Terrestre", color: "bg-amber-500/20 text-amber-400 border-amber-500/30" },
   ENTREGUE: { label: "Entregue", color: "bg-emerald-500/20 text-emerald-400 border-emerald-500/30" },
   BLOQUEIO: { label: "Bloqueio", color: "bg-destructive/20 text-destructive border-destructive/30" },
-  FROZEN: { label: "Congelado", color: "bg-sky-500/20 text-sky-400 border-sky-500/30" },
   
-  // Legacy SLA Status (for compatibility)
+  // SLA Status (for compatibility)
   OK: { label: "OK", color: "bg-emerald-500/20 text-emerald-400 border-emerald-500/30" },
   ALERTA: { label: "Alerta", color: "bg-yellow-500/20 text-yellow-400 border-yellow-500/30" },
   CRITICO: { label: "Crítico", color: "bg-destructive/20 text-destructive border-destructive/30" },
   VENCIDO: { label: "Vencido", color: "bg-red-600/20 text-red-500 border-red-600/30" },
-  
-  // Raw tracking codes - Nomenclatura Híbrida IATA (código + descrição)
-  DEP: { label: "DEP - Embarcado", color: "bg-orange-500/20 text-orange-400 border-orange-500/30" },
-  ARR: { label: "ARR - Chegada", color: "bg-cyan-500/20 text-cyan-400 border-cyan-500/30" },
-  ATA: { label: "ATA - Chegada", color: "bg-cyan-500/20 text-cyan-400 border-cyan-500/30" },
-  RCF: { label: "RCF - Recepção", color: "bg-indigo-500/20 text-indigo-400 border-indigo-500/30" },
-  RCS: { label: "RCS - Recepção", color: "bg-indigo-500/20 text-indigo-400 border-indigo-500/30" },
-  NFD: { label: "NFD - Notificado", color: "bg-purple-500/20 text-purple-400 border-purple-500/30" },
-  AWD: { label: "AWD - Em Espera", color: "bg-purple-500/20 text-purple-400 border-purple-500/30" },
-  DLV: { label: "DLV - Entrega", color: "bg-emerald-500/20 text-emerald-400 border-emerald-500/30" },
-  POD: { label: "POD - Comprovado", color: "bg-emerald-500/20 text-emerald-400 border-emerald-500/30" },
-  FRO: { label: "FRO - Congelado", color: "bg-sky-500/20 text-sky-400 border-sky-500/30" },
-  DIS: { label: "DIS - Divergência", color: "bg-destructive/20 text-destructive border-destructive/30" },
-  OFLD: { label: "OFLD - Offload", color: "bg-destructive/20 text-destructive border-destructive/30" },
-  MAN: { label: "MAN - Manifestado", color: "bg-primary/20 text-primary border-primary/30" },
-  BKD: { label: "BKD - Reservado", color: "bg-primary/20 text-primary border-primary/30" },
 };
 
 export function StatusBadge({ status, className }: StatusBadgeProps) {

@@ -167,15 +167,18 @@ export function ProcessosTable({ processos, onAssignAnalista, metricFilter }: Pr
                   </TableCell>
                   <TableCell>
                     {(() => {
-                      const manifestacao = processo.shipment.status_manifestacao;
+                      const statusOficial = processo.status_atual?.status_cct_oficial || 'INFORMADA';
                       const manifestacaoDots: Record<string, { label: string; bgColor: string }> = {
-                        'EM_TRANSITO': { label: 'Em Trânsito', bgColor: 'bg-blue-500' },
-                        'CHEGOU': { label: 'Chegou', bgColor: 'bg-green-500' },
-                        'DISPONIVEL': { label: 'Disponível', bgColor: 'bg-yellow-500' },
+                        'INFORMADA': { label: 'Informada', bgColor: 'bg-cyan-500' },
+                        'MANIFESTADA': { label: 'Manifestada', bgColor: 'bg-primary' },
+                        'EM_AREA_TRANSFERENCIA': { label: 'Em área de Transferência', bgColor: 'bg-blue-500' },
+                        'RECEPCIONADA': { label: 'Recepcionada', bgColor: 'bg-indigo-500' },
+                        'EM_TROCA_RECINTOS': { label: 'Em Troca entre Recintos', bgColor: 'bg-orange-500' },
+                        'EM_TRANSITO_TERRESTRE': { label: 'Em Trânsito Terrestre', bgColor: 'bg-amber-500' },
                         'ENTREGUE': { label: 'Entregue', bgColor: 'bg-emerald-500' },
-                        'AGUARDANDO': { label: 'Aguardando', bgColor: 'bg-gray-500' },
+                        'BLOQUEIO': { label: 'Bloqueio', bgColor: 'bg-destructive' },
                       };
-                      const { label, bgColor } = manifestacaoDots[manifestacao || 'AGUARDANDO'] || manifestacaoDots['AGUARDANDO'];
+                      const { label, bgColor } = manifestacaoDots[statusOficial] || manifestacaoDots['INFORMADA'];
                       return (
                         <div className="flex justify-center">
                           <span 

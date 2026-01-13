@@ -118,7 +118,7 @@ function mapRowToProcessoCCT(row: any): ProcessoCCT {
   const status_atual: CCTStatusAtual = {
     id: `status-${row.id}`,
     shipment_id: row.id?.toString() || row.master,
-    status_cct_oficial: row.status_cct_oficial as StatusCCTOficial || 'AGUARDANDO_MANIFESTACAO',
+    status_cct_oficial: row.status_cct_oficial as StatusCCTOficial || 'INFORMADA',
     sla_status: sla_info.status,
     sla_limite: row.sla_limite,
     sla_info,
