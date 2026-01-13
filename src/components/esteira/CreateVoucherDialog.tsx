@@ -1224,10 +1224,20 @@ export const CreateVoucherDialog = ({
                 {faturaFiles.length > 0 && (
                   <div className="space-y-2 mt-3">
                     {faturaFiles.map((file, index) => (
-                      <div key={index} className="flex items-center justify-between p-2 bg-secondary/30 rounded">
-                        <span className="text-sm truncate">{file.name}</span>
-                        <Button type="button" variant="ghost" size="sm" onClick={() => removeFaturaFile(index)}>
+                      <div key={index} className="flex items-center justify-between p-2 bg-secondary/30 rounded group hover:bg-secondary/50 transition-colors">
+                        <div className="flex items-center gap-2 min-w-0">
+                          <FileText className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                          <span className="text-sm truncate">{file.name}</span>
+                        </div>
+                        <Button 
+                          type="button" 
+                          variant="ghost" 
+                          size="sm" 
+                          onClick={() => removeFaturaFile(index)}
+                          className="text-destructive hover:text-destructive hover:bg-destructive/10 opacity-70 group-hover:opacity-100"
+                        >
                           <X className="h-4 w-4" />
+                          <span className="ml-1 text-xs">Excluir</span>
                         </Button>
                       </div>
                     ))}
@@ -1262,10 +1272,20 @@ export const CreateVoucherDialog = ({
                 {boletoFiles.length > 0 && (
                   <div className="space-y-2 mt-3">
                     {boletoFiles.map((file, index) => (
-                      <div key={index} className="flex items-center justify-between p-2 bg-secondary/30 rounded">
-                        <span className="text-sm truncate">{file.name}</span>
-                        <Button type="button" variant="ghost" size="sm" onClick={() => removeBoletoFile(index)}>
+                      <div key={index} className="flex items-center justify-between p-2 bg-secondary/30 rounded group hover:bg-secondary/50 transition-colors">
+                        <div className="flex items-center gap-2 min-w-0">
+                          <FileText className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                          <span className="text-sm truncate">{file.name}</span>
+                        </div>
+                        <Button 
+                          type="button" 
+                          variant="ghost" 
+                          size="sm" 
+                          onClick={() => removeBoletoFile(index)}
+                          className="text-destructive hover:text-destructive hover:bg-destructive/10 opacity-70 group-hover:opacity-100"
+                        >
                           <X className="h-4 w-4" />
+                          <span className="ml-1 text-xs">Excluir</span>
                         </Button>
                       </div>
                     ))}
