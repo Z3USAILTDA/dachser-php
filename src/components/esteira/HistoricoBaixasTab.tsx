@@ -72,6 +72,11 @@ export const HistoricoBaixasTab = () => {
       const valor = b.valor_baixa || b.valor_nf || 0;
       if (valor === 0) return false;
       
+      // Filtrar registros com valores que começam com "null"
+      if (b.nd?.toLowerCase().startsWith("null")) return false;
+      if (b.nome_beneficiario?.toLowerCase().startsWith("null")) return false;
+      if (b.numero_processo?.toLowerCase().startsWith("null")) return false;
+      
       const matchesSearch = searchTerm === "" || 
         b.nd?.toLowerCase().includes(searchTerm.toLowerCase()) ||
         b.documento?.toLowerCase().includes(searchTerm.toLowerCase()) ||
