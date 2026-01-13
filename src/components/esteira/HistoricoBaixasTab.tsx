@@ -3,7 +3,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { format, parseISO } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import { RefreshCw, Search, Download, Calendar, DollarSign, CreditCard, CheckCircle2 } from "lucide-react";
+import { RefreshCw, Search, Download, Calendar, DollarSign, CheckCircle2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -36,7 +36,6 @@ export const HistoricoBaixasTab = () => {
   const [baixas, setBaixas] = useState<BaixaRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
-  const [filterFormaPag, setFilterFormaPag] = useState("all");
   const [filterPeriodo, setFilterPeriodo] = useState<"all" | "hoje" | "7dias" | "30dias" | "90dias">("30dias");
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 20;
@@ -87,11 +86,9 @@ export const HistoricoBaixasTab = () => {
         b.nome_beneficiario?.toLowerCase().includes(searchTerm.toLowerCase()) ||
         b.numero_processo?.toLowerCase().includes(searchTerm.toLowerCase());
       
-      const matchesFormaPag = filterFormaPag === "all" || b.forma_pag === filterFormaPag;
-      
-      return matchesSearch && matchesFormaPag;
+      return matchesSearch;
     });
-  }, [baixas, searchTerm, filterFormaPag]);
+  }, [baixas, searchTerm]);
 
   const totalPages = Math.ceil(filteredBaixas.length / itemsPerPage);
   
@@ -103,7 +100,7 @@ export const HistoricoBaixasTab = () => {
   // Reset page when filters change
   useEffect(() => {
     setCurrentPage(1);
-  }, [searchTerm, filterFormaPag, filterPeriodo]);
+  }, [searchTerm, filterPeriodo]);
 
   const totalValor = useMemo(() => {
     return filteredBaixas.reduce((acc, b) => {
@@ -132,11 +129,6 @@ export const HistoricoBaixasTab = () => {
     const symbol = currencyMap[moeda] || moeda;
     return `${symbol} ${value.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}`;
   };
-
-  const formasPagamento = useMemo(() => {
-    const formas = new Set(baixas.map(b => b.forma_pag).filter(Boolean));
-    return Array.from(formas).sort();
-  }, [baixas]);
 
   const exportToExcel = () => {
     if (filteredBaixas.length === 0) {
@@ -235,7 +227,7 @@ export const HistoricoBaixasTab = () => {
   return (
     <div className="space-y-4">
       {/* Header com KPIs */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+      <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
         <div className="p-3 rounded-xl bg-[#0a0b10] border border-white/10">
           <div className="flex items-center gap-2 text-[10px] uppercase tracking-[0.15em] text-muted-foreground">
             <CheckCircle2 className="h-3.5 w-3.5 text-green-400" />
@@ -253,14 +245,6 @@ export const HistoricoBaixasTab = () => {
             {formatCurrency(totalValor, "BRL")}
           </div>
           <div className="text-[10px] text-muted-foreground mt-0.5">Soma dos valores baixados</div>
-        </div>
-        <div className="p-3 rounded-xl bg-[#0a0b10] border border-white/10">
-          <div className="flex items-center gap-2 text-[10px] uppercase tracking-[0.15em] text-muted-foreground">
-            <CreditCard className="h-3.5 w-3.5 text-blue-400" />
-            Formas Pagamento
-          </div>
-          <div className="text-xl font-bold mt-1">{formasPagamento.length}</div>
-          <div className="text-[10px] text-muted-foreground mt-0.5">Tipos utilizados</div>
         </div>
         <div className="p-3 rounded-xl bg-[#0a0b10] border border-white/10">
           <div className="flex items-center gap-2 text-[10px] uppercase tracking-[0.15em] text-muted-foreground">
@@ -296,18 +280,6 @@ export const HistoricoBaixasTab = () => {
             <SelectItem value="30dias">Últimos 30 dias</SelectItem>
             <SelectItem value="90dias">Últimos 90 dias</SelectItem>
             <SelectItem value="all">Todo período</SelectItem>
-          </SelectContent>
-        </Select>
-
-        <Select value={filterFormaPag} onValueChange={setFilterFormaPag}>
-          <SelectTrigger className="w-[150px] bg-[#0a0b10] border-white/10 rounded-full">
-            <SelectValue placeholder="Forma Pagamento" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">Todas Formas</SelectItem>
-            {formasPagamento.map(fp => (
-              <SelectItem key={fp} value={fp}>{fp}</SelectItem>
-            ))}
           </SelectContent>
         </Select>
 
