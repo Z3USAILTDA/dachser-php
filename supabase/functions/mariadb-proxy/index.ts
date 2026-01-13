@@ -9018,9 +9018,19 @@ serve(async (req) => {
             notes VARCHAR(500),
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             created_by VARCHAR(255),
+            is_balance_adjustment TINYINT(1) DEFAULT 0,
+            consumption_baseline DECIMAL(10,2) DEFAULT 0,
             INDEX idx_credit_date (credit_date)
           )
         `);
+        
+        // Add columns if they don't exist (for existing tables)
+        try {
+          await client.execute(`ALTER TABLE ai_agente.t_anthropic_credits ADD COLUMN IF NOT EXISTS is_balance_adjustment TINYINT(1) DEFAULT 0`);
+          await client.execute(`ALTER TABLE ai_agente.t_anthropic_credits ADD COLUMN IF NOT EXISTS consumption_baseline DECIMAL(10,2) DEFAULT 0`);
+        } catch (e) {
+          console.log('[anthropic_credits] Columns may already exist');
+        }
         
         console.log('[anthropic_credits] Table created/verified');
         result = { success: true };
@@ -9030,7 +9040,7 @@ serve(async (req) => {
       case 'get_anthropic_credits': {
         console.log('[anthropic_credits] Fetching credits data...');
         
-        // Ensure table exists
+        // Ensure table exists with new columns
         await client.execute(`
           CREATE TABLE IF NOT EXISTS ai_agente.t_anthropic_credits (
             id INT AUTO_INCREMENT PRIMARY KEY,
@@ -9039,40 +9049,102 @@ serve(async (req) => {
             notes VARCHAR(500),
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             created_by VARCHAR(255),
+            is_balance_adjustment TINYINT(1) DEFAULT 0,
+            consumption_baseline DECIMAL(10,2) DEFAULT 0,
             INDEX idx_credit_date (credit_date)
           )
         `);
         
-        // Get all topups
+        // Add columns if they don't exist
+        try {
+          await client.execute(`ALTER TABLE ai_agente.t_anthropic_credits ADD COLUMN IF NOT EXISTS is_balance_adjustment TINYINT(1) DEFAULT 0`);
+          await client.execute(`ALTER TABLE ai_agente.t_anthropic_credits ADD COLUMN IF NOT EXISTS consumption_baseline DECIMAL(10,2) DEFAULT 0`);
+        } catch (e) {
+          console.log('[anthropic_credits] Columns may already exist');
+        }
+        
+        // Get all topups and adjustments
         const topups = await client.query(`
-          SELECT id, credit_date, amount_usd, notes, created_at
+          SELECT id, credit_date, amount_usd, notes, created_at, 
+                 COALESCE(is_balance_adjustment, 0) as is_balance_adjustment,
+                 COALESCE(consumption_baseline, 0) as consumption_baseline
           FROM ai_agente.t_anthropic_credits
-          ORDER BY credit_date DESC
+          ORDER BY credit_date DESC, created_at DESC
         `);
         
-        // Get total credits
-        const totalCreditsResult = await client.query(`
-          SELECT COALESCE(SUM(amount_usd), 0) as total
+        // Find the most recent balance adjustment
+        const lastAdjustmentResult = await client.query(`
+          SELECT id, credit_date, amount_usd, created_at, consumption_baseline
           FROM ai_agente.t_anthropic_credits
+          WHERE is_balance_adjustment = 1
+          ORDER BY created_at DESC
+          LIMIT 1
         `);
-        const totalCredits = Number(totalCreditsResult[0]?.total || 0);
+        const lastAdjustment = lastAdjustmentResult.length > 0 ? lastAdjustmentResult[0] : null;
         
-        // Get Anthropic API consumption from logs (estimated cost per call: $0.015)
-        const consumptionResult = await client.query(`
-          SELECT 
-            COUNT(*) as call_count,
-            COALESCE(SUM(CASE WHEN status_code < 400 AND error_message IS NULL THEN 1 ELSE 0 END), 0) as successful_calls
-          FROM ai_agente.t_api_usage_logs
-          WHERE api_name = 'Anthropic'
-        `);
-        const successfulCalls = Number(consumptionResult[0]?.successful_calls || 0);
         const costPerCall = 0.015; // $0.015 per call (avg ~1K tokens)
-        const totalConsumption = successfulCalls * costPerCall;
+        let estimatedBalance = 0;
+        let totalCredits = 0;
+        let totalConsumption = 0;
+        let consumptionSinceAdjustment = 0;
         
-        // Get last topup
+        if (lastAdjustment) {
+          // NEW LOGIC: Start from the last balance adjustment
+          const adjustmentDate = lastAdjustment.created_at;
+          const baseBalance = Number(lastAdjustment.amount_usd);
+          const consumptionBaseline = Number(lastAdjustment.consumption_baseline || 0);
+          
+          // Get topups AFTER the adjustment
+          const topupsAfterResult = await client.query(`
+            SELECT COALESCE(SUM(amount_usd), 0) as total
+            FROM ai_agente.t_anthropic_credits
+            WHERE is_balance_adjustment = 0
+              AND created_at > ?
+          `, [adjustmentDate]);
+          const topupsAfter = Number(topupsAfterResult[0]?.total || 0);
+          
+          // Get consumption SINCE the adjustment (calls after adjustment date)
+          const consumptionResult = await client.query(`
+            SELECT COUNT(*) as successful_calls
+            FROM ai_agente.t_api_usage_logs
+            WHERE api_name = 'Anthropic'
+              AND created_at > ?
+              AND status_code < 400
+              AND error_message IS NULL
+          `, [adjustmentDate]);
+          consumptionSinceAdjustment = Number(consumptionResult[0]?.successful_calls || 0) * costPerCall;
+          
+          // Calculate: baseBalance + topups_after - consumption_since_adjustment
+          estimatedBalance = Math.max(0, baseBalance + topupsAfter - consumptionSinceAdjustment);
+          totalCredits = baseBalance + topupsAfter;
+          totalConsumption = consumptionSinceAdjustment;
+          
+          console.log(`[anthropic_credits] Using adjustment: base=$${baseBalance}, topups_after=$${topupsAfter}, consumption_since=$${consumptionSinceAdjustment.toFixed(2)}`);
+        } else {
+          // OLD LOGIC (fallback): Sum all topups - all consumption
+          const totalCreditsResult = await client.query(`
+            SELECT COALESCE(SUM(amount_usd), 0) as total
+            FROM ai_agente.t_anthropic_credits
+            WHERE is_balance_adjustment = 0 OR is_balance_adjustment IS NULL
+          `);
+          totalCredits = Number(totalCreditsResult[0]?.total || 0);
+          
+          const consumptionResult = await client.query(`
+            SELECT COUNT(*) as successful_calls
+            FROM ai_agente.t_api_usage_logs
+            WHERE api_name = 'Anthropic'
+              AND status_code < 400
+              AND error_message IS NULL
+          `);
+          totalConsumption = Number(consumptionResult[0]?.successful_calls || 0) * costPerCall;
+          estimatedBalance = Math.max(0, totalCredits - totalConsumption);
+        }
+        
+        // Get last topup (not adjustment)
         const lastTopupResult = await client.query(`
           SELECT credit_date, amount_usd
           FROM ai_agente.t_anthropic_credits
+          WHERE is_balance_adjustment = 0 OR is_balance_adjustment IS NULL
           ORDER BY credit_date DESC
           LIMIT 1
         `);
@@ -9098,8 +9170,7 @@ serve(async (req) => {
         const calls30d = Number(dailyConsumptionResult[0]?.calls_30d || 0);
         const avgDailyConsumption = (calls30d / 30) * costPerCall;
         
-        // Calculate estimated balance and projected days
-        const estimatedBalance = Math.max(0, totalCredits - totalConsumption);
+        // Calculate projected days
         const projectedDaysRemaining = avgDailyConsumption > 0 
           ? Math.floor(estimatedBalance / avgDailyConsumption) 
           : 999;
@@ -9112,7 +9183,10 @@ serve(async (req) => {
           last_topup_amount: lastTopup ? Number(lastTopup.amount_usd) : null,
           avg_daily_consumption: avgDailyConsumption,
           projected_days_remaining: Math.min(projectedDaysRemaining, 999),
-          days_since_last_topup: daysSinceLastTopup
+          days_since_last_topup: daysSinceLastTopup,
+          has_adjustment: !!lastAdjustment,
+          last_adjustment_date: lastAdjustment?.created_at || null,
+          last_adjustment_amount: lastAdjustment ? Number(lastAdjustment.amount_usd) : null
         };
         
         console.log(`[anthropic_credits] Balance: $${estimatedBalance.toFixed(2)}, ${projectedDaysRemaining} days remaining`);
@@ -9137,22 +9211,9 @@ serve(async (req) => {
         
         console.log(`[anthropic_credits] Adding credit: $${creditBody.amount_usd} on ${creditBody.credit_date}`);
         
-        // Ensure table exists
         await client.execute(`
-          CREATE TABLE IF NOT EXISTS ai_agente.t_anthropic_credits (
-            id INT AUTO_INCREMENT PRIMARY KEY,
-            credit_date DATE NOT NULL,
-            amount_usd DECIMAL(10,2) NOT NULL,
-            notes VARCHAR(500),
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            created_by VARCHAR(255),
-            INDEX idx_credit_date (credit_date)
-          )
-        `);
-        
-        await client.execute(`
-          INSERT INTO ai_agente.t_anthropic_credits (credit_date, amount_usd, notes, created_by)
-          VALUES (?, ?, ?, ?)
+          INSERT INTO ai_agente.t_anthropic_credits (credit_date, amount_usd, notes, created_by, is_balance_adjustment)
+          VALUES (?, ?, ?, ?, 0)
         `, [
           creditBody.credit_date,
           creditBody.amount_usd,
@@ -9161,6 +9222,58 @@ serve(async (req) => {
         ]);
         
         console.log('[anthropic_credits] Credit added successfully');
+        result = { success: true };
+        break;
+      }
+
+      case 'set_anthropic_balance': {
+        // Set a balance adjustment - this becomes the new baseline
+        const balanceBody = body as unknown as { 
+          balance_usd: number; 
+          notes?: string;
+          created_by?: string;
+        };
+        
+        if (balanceBody.balance_usd === undefined || balanceBody.balance_usd === null) {
+          return new Response(
+            JSON.stringify({ error: 'balance_usd é obrigatório' }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+        
+        console.log(`[anthropic_credits] Setting balance adjustment: $${balanceBody.balance_usd}`);
+        
+        // Add columns if they don't exist
+        try {
+          await client.execute(`ALTER TABLE ai_agente.t_anthropic_credits ADD COLUMN IF NOT EXISTS is_balance_adjustment TINYINT(1) DEFAULT 0`);
+          await client.execute(`ALTER TABLE ai_agente.t_anthropic_credits ADD COLUMN IF NOT EXISTS consumption_baseline DECIMAL(10,2) DEFAULT 0`);
+        } catch (e) {
+          console.log('[anthropic_credits] Columns may already exist');
+        }
+        
+        // Get current total consumption to store as baseline
+        const consumptionResult = await client.query(`
+          SELECT COUNT(*) as successful_calls
+          FROM ai_agente.t_api_usage_logs
+          WHERE api_name = 'Anthropic'
+            AND status_code < 400
+            AND error_message IS NULL
+        `);
+        const currentConsumption = Number(consumptionResult[0]?.successful_calls || 0) * 0.015;
+        
+        // Insert the balance adjustment
+        await client.execute(`
+          INSERT INTO ai_agente.t_anthropic_credits 
+            (credit_date, amount_usd, notes, created_by, is_balance_adjustment, consumption_baseline)
+          VALUES (CURDATE(), ?, ?, ?, 1, ?)
+        `, [
+          balanceBody.balance_usd,
+          balanceBody.notes || 'Ajuste manual de saldo',
+          balanceBody.created_by || null,
+          currentConsumption
+        ]);
+        
+        console.log(`[anthropic_credits] Balance adjustment set: $${balanceBody.balance_usd} (consumption baseline: $${currentConsumption.toFixed(2)})`);
         result = { success: true };
         break;
       }
