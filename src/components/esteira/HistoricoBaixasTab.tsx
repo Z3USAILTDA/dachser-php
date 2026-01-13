@@ -105,7 +105,10 @@ export const HistoricoBaixasTab = () => {
   }, [searchTerm, filterFormaPag, filterPeriodo]);
 
   const totalValor = useMemo(() => {
-    return filteredBaixas.reduce((acc, b) => acc + (b.valor_baixa || b.valor_nf || 0), 0);
+    return filteredBaixas.reduce((acc, b) => {
+      const valor = Number(b.valor_baixa) || Number(b.valor_nf) || 0;
+      return acc + valor;
+    }, 0);
   }, [filteredBaixas]);
 
   const formatDate = (dateStr: string | null) => {
