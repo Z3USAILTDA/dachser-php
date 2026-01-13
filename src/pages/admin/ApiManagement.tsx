@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { Activity, Server, TrendingUp, AlertCircle, RefreshCw, Loader2, Calendar, DollarSign, LayoutDashboard, BarChart3, HelpCircle, X, Clock, CheckCircle, XCircle, ExternalLink, History, ArrowUpRight, ArrowDownRight, Minus } from "lucide-react";
+import { Activity, Server, TrendingUp, AlertCircle, RefreshCw, Loader2, Calendar, DollarSign, LayoutDashboard, BarChart3, HelpCircle, X, Clock, CheckCircle, XCircle, ExternalLink, History, ArrowUpRight, ArrowDownRight, Minus, Plus, Wallet } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
@@ -14,7 +14,7 @@ import { PageCard } from "@/components/layout/PageCard";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { AnthropicCreditsCard } from "@/components/admin/AnthropicCreditsCard";
+import { useAnthropicCredits, AnthropicTopupDialog, AnthropicHistoryDialog, getBalanceStatus, formatAnthropicCurrency } from "@/components/admin/AnthropicCreditsCard";
 
 interface ApiStats {
   api_name: string;
@@ -433,21 +433,18 @@ const DashboardTab = ({
   onApiClick: (api: ApiStats) => void;
   onRefresh: () => void;
 }) => {
-  // Get Anthropic stats for the credits card
-  const anthropicStats = apiStats.find(api => api.api_name === 'Anthropic');
+  // Anthropic credits management
+  const { balance, topups, isLoading: creditsLoading, fetchCreditsData } = useAnthropicCredits();
+  const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
+  const [isHistoryDialogOpen, setIsHistoryDialogOpen] = useState(false);
+  
+  const handleTopupSuccess = () => {
+    fetchCreditsData();
+    onRefresh();
+  };
   
   return (
     <div className="space-y-5 animate-fade-in">
-      {/* Anthropic Credits Card - Special highlight */}
-      <AnthropicCreditsCard 
-        anthropicStats={anthropicStats ? {
-          total_calls: Number(anthropicStats.total_calls || 0),
-          error_count: Number(anthropicStats.error_count || 0),
-          success_rate: Number(anthropicStats.success_rate || 0)
-        } : undefined}
-        onRefresh={onRefresh}
-      />
-
       {/* API Cards Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         {isLoading ? (
@@ -481,6 +478,111 @@ const DashboardTab = ({
               if (pct >= 60) return "bg-yellow-500";
               return "bg-emerald-500";
             };
+
+            // Card especial para Anthropic com controle de créditos
+            if (api.api_name === "Anthropic") {
+              const status = getBalanceStatus(balance);
+              return (
+                <PageCard 
+                  key={api.api_name} 
+                  className="border-2 border-purple-500/30 hover:border-purple-500/50 hover:bg-white/[0.02] transition cursor-pointer group"
+                  onClick={() => onApiClick(api)}
+                >
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="flex items-center gap-2">
+                      <div className="w-3 h-3 rounded-full" style={{ backgroundColor: getApiColor(api.api_name) }} />
+                      <span className="text-base font-semibold text-white group-hover:text-purple-400 transition">{api.api_name}</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Badge className={getStatusColor(Number(api.success_rate || 0))}>
+                        {Number(api.success_rate || 0).toFixed(1)}%
+                      </Badge>
+                      <ExternalLink className="w-3.5 h-3.5 text-white/30 group-hover:text-purple-400 transition" />
+                    </div>
+                  </div>
+                  <p className="text-[10px] text-muted-foreground mb-3">
+                    Última chamada: {formatDate(api.last_call)}
+                  </p>
+                  
+                  {/* Seção de créditos Anthropic */}
+                  {balance && (
+                    <div className="mb-3 p-2.5 rounded-lg bg-purple-500/10 border border-purple-500/30">
+                      <div className="flex items-center justify-between mb-2">
+                        <div className="flex items-center gap-1.5">
+                          <Wallet className="w-3 h-3 text-purple-400" />
+                          <span className="text-[9px] uppercase tracking-wider text-purple-300">Saldo</span>
+                        </div>
+                        <Badge className={cn("text-[9px]", status.bg)}>
+                          {status.label}
+                        </Badge>
+                      </div>
+                      <div className="flex items-baseline justify-between">
+                        <span className={cn("text-lg font-bold", status.color)}>
+                          {formatAnthropicCurrency(balance.estimated_balance)}
+                        </span>
+                        <span className="text-[10px] text-white/50">
+                          ~{balance.projected_days_remaining} dias
+                        </span>
+                      </div>
+                      {balance.estimated_balance <= 30 && (
+                        <div className="mt-2 flex items-center gap-1 text-[10px] text-amber-400">
+                          <AlertCircle className="w-3 h-3" />
+                          <span>Considere recarregar</span>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                  
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="p-2 rounded-lg bg-[#0a0b10] border border-white/10">
+                      <div className="text-[9px] uppercase tracking-wider text-muted-foreground">Chamadas</div>
+                      <div className="text-lg font-bold text-white mt-0.5">
+                        {Number(api.total_calls || 0).toLocaleString()}
+                      </div>
+                    </div>
+                    <div className="p-2 rounded-lg bg-[#0a0b10] border border-white/10">
+                      <div className="text-[9px] uppercase tracking-wider text-muted-foreground">Custo Est.</div>
+                      <div className="text-lg font-bold text-emerald-400 mt-0.5">
+                        {formatCurrency(cost)}
+                      </div>
+                    </div>
+                    <div className="p-2 rounded-lg bg-[#0a0b10] border border-white/10">
+                      <div className="text-[9px] uppercase tracking-wider text-muted-foreground">Tempo Médio</div>
+                      <div className="text-lg font-bold text-white mt-0.5">
+                        {api.avg_response_time_ms ? `${Number(api.avg_response_time_ms)}ms` : "N/A"}
+                      </div>
+                    </div>
+                    <div className="p-2 rounded-lg bg-[#0a0b10] border border-white/10">
+                      <div className="text-[9px] uppercase tracking-wider text-muted-foreground">Erros</div>
+                      <div className={`text-lg font-bold mt-0.5 ${Number(api.error_count || 0) > 0 ? "text-red-400" : "text-green-400"}`}>
+                        {Number(api.error_count || 0)}
+                      </div>
+                    </div>
+                  </div>
+                  
+                  {/* Botões de ação para créditos */}
+                  <div className="mt-3 pt-3 border-t border-white/5 flex items-center justify-between gap-2">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={(e) => { e.stopPropagation(); setIsHistoryDialogOpen(true); }}
+                      className="h-7 px-2 text-[10px] border-purple-500/30 hover:bg-purple-500/10 hover:border-purple-500/50"
+                    >
+                      <History className="w-3 h-3 mr-1" />
+                      Histórico
+                    </Button>
+                    <Button
+                      size="sm"
+                      onClick={(e) => { e.stopPropagation(); setIsAddDialogOpen(true); }}
+                      className="h-7 px-2 text-[10px] bg-purple-600 hover:bg-purple-700"
+                    >
+                      <Plus className="w-3 h-3 mr-1" />
+                      Recarga
+                    </Button>
+                  </div>
+                </PageCard>
+              );
+            }
             
             return (
               <PageCard 
@@ -601,6 +703,18 @@ const DashboardTab = ({
           </span>
         </p>
       </div>
+
+      {/* Dialogs de créditos Anthropic */}
+      <AnthropicTopupDialog 
+        isOpen={isAddDialogOpen} 
+        onOpenChange={setIsAddDialogOpen} 
+        onSuccess={handleTopupSuccess}
+      />
+      <AnthropicHistoryDialog 
+        isOpen={isHistoryDialogOpen} 
+        onOpenChange={setIsHistoryDialogOpen} 
+        topups={topups}
+      />
     </div>
   );
 };
