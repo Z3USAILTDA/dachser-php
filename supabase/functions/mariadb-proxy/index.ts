@@ -6704,6 +6704,7 @@ serve(async (req) => {
           WHERE v.id IS NULL
             AND b.IdLancamentoRM IS NULL
             AND (dfv.nome_beneficiario IS NULL OR LOWER(dfv.nome_beneficiario) NOT LIKE '%dachser%')
+            AND (dfv.modal IS NULL OR dfv.modal <> 'ADM')
           ORDER BY dfv.data_vencimento ASC
         `);
 
@@ -6754,6 +6755,7 @@ serve(async (req) => {
           LEFT JOIN dados_dachser.t_dados_financeiro_voucher dfv 
             ON b.IdLancamentoRM = dfv.id_rm
           WHERE 1=1 ${dateFilter}
+            AND (dfv.modal IS NULL OR dfv.modal <> 'ADM')
           ORDER BY b.DataDaBaixa DESC
           LIMIT 1000
         `);
