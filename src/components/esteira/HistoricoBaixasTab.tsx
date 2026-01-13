@@ -11,6 +11,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 import { TablePagination } from "@/components/layout/TablePagination";
+import * as XLSX from "xlsx-js-style";
 
 interface BaixaRecord {
   IdLancamentoRM: number;
@@ -138,9 +139,96 @@ export const HistoricoBaixasTab = () => {
   }, [baixas]);
 
   const exportToExcel = () => {
+    if (filteredBaixas.length === 0) {
+      toast({
+        title: "Sem dados",
+        description: "Não há baixas para exportar",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    const COLORS = {
+      header: { fgColor: { rgb: "D4AF37" } },
+      headerText: { color: { rgb: "000000" } },
+      alternateRow: { fgColor: { rgb: "F5F5F5" } },
+      border: {
+        top: { style: "thin", color: { rgb: "CCCCCC" } },
+        bottom: { style: "thin", color: { rgb: "CCCCCC" } },
+        left: { style: "thin", color: { rgb: "CCCCCC" } },
+        right: { style: "thin", color: { rgb: "CCCCCC" } },
+      },
+    };
+
+    const excelData = filteredBaixas.map((b) => ({
+      "ND": b.nd || "-",
+      "Documento": b.documento || "-",
+      "Beneficiário": b.nome_beneficiario || "-",
+      "Processo": b.numero_processo || "-",
+      "Valor Baixa": Number(b.valor_baixa) || Number(b.valor_nf) || 0,
+      "Moeda": b.moeda || "BRL",
+      "Vencimento": b.data_vencimento ? format(parseISO(b.data_vencimento), "dd/MM/yyyy", { locale: ptBR }) : "-",
+      "Data Baixa": b.data_baixa ? format(parseISO(b.data_baixa), "dd/MM/yyyy", { locale: ptBR }) : "-",
+    }));
+
+    const ws = XLSX.utils.json_to_sheet(excelData);
+    const range = XLSX.utils.decode_range(ws["!ref"] || "A1");
+
+    // Estilizar cabeçalho
+    for (let col = range.s.c; col <= range.e.c; col++) {
+      const cellAddress = XLSX.utils.encode_cell({ r: 0, c: col });
+      if (!ws[cellAddress]) continue;
+      ws[cellAddress].s = {
+        fill: COLORS.header,
+        font: { bold: true, sz: 12, color: COLORS.headerText.color },
+        alignment: { horizontal: "center", vertical: "center" },
+        border: COLORS.border,
+      };
+    }
+
+    // Estilizar linhas de dados
+    for (let row = range.s.r + 1; row <= range.e.r; row++) {
+      const isAlternate = row % 2 === 0;
+      for (let col = range.s.c; col <= range.e.c; col++) {
+        const cellAddress = XLSX.utils.encode_cell({ r: row, c: col });
+        if (!ws[cellAddress]) continue;
+        ws[cellAddress].s = {
+          fill: isAlternate ? COLORS.alternateRow : { fgColor: { rgb: "FFFFFF" } },
+          font: { sz: 10 },
+          alignment: { horizontal: col === 4 ? "right" : "left", vertical: "center" },
+          border: COLORS.border,
+        };
+      }
+    }
+
+    // Ajustar largura das colunas
+    ws["!cols"] = [
+      { wch: 15 }, // ND
+      { wch: 15 }, // Documento
+      { wch: 35 }, // Beneficiário
+      { wch: 18 }, // Processo
+      { wch: 15 }, // Valor Baixa
+      { wch: 8 },  // Moeda
+      { wch: 12 }, // Vencimento
+      { wch: 12 }, // Data Baixa
+    ];
+
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Histórico Baixas");
+
+    wb.Props = {
+      Title: "Histórico de Baixas",
+      Subject: "Baixas Z3US.AI",
+      Author: "Sistema Z3US.AI",
+      CreatedDate: new Date(),
+    };
+
+    const fileName = `historico_baixas_${format(new Date(), "yyyy-MM-dd_HH-mm")}.xlsx`;
+    XLSX.writeFile(wb, fileName, { cellStyles: true });
+
     toast({
-      title: "Em desenvolvimento",
-      description: "Exportação para Excel será implementada em breve"
+      title: "Exportado!",
+      description: `Arquivo ${fileName} gerado com ${filteredBaixas.length} registros`,
     });
   };
 
