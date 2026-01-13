@@ -14,6 +14,7 @@ import { PageCard } from "@/components/layout/PageCard";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { AnthropicCreditsCard } from "@/components/admin/AnthropicCreditsCard";
 
 interface ApiStats {
   api_name: string;
@@ -421,7 +422,8 @@ const DashboardTab = ({
   isLoading,
   formatDate,
   getStatusColor,
-  onApiClick
+  onApiClick,
+  onRefresh
 }: { 
   apiStats: ApiStats[];
   recentLogs: ApiUsageLog[];
@@ -429,9 +431,23 @@ const DashboardTab = ({
   formatDate: (dateStr: string | null) => string;
   getStatusColor: (successRate: number) => string;
   onApiClick: (api: ApiStats) => void;
+  onRefresh: () => void;
 }) => {
+  // Get Anthropic stats for the credits card
+  const anthropicStats = apiStats.find(api => api.api_name === 'Anthropic');
+  
   return (
     <div className="space-y-5 animate-fade-in">
+      {/* Anthropic Credits Card - Special highlight */}
+      <AnthropicCreditsCard 
+        anthropicStats={anthropicStats ? {
+          total_calls: Number(anthropicStats.total_calls || 0),
+          error_count: Number(anthropicStats.error_count || 0),
+          success_rate: Number(anthropicStats.success_rate || 0)
+        } : undefined}
+        onRefresh={onRefresh}
+      />
+
       {/* API Cards Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         {isLoading ? (
@@ -1444,6 +1460,7 @@ export default function ApiManagement() {
           formatDate={formatDate}
           getStatusColor={getStatusColor}
           onApiClick={handleApiClick}
+          onRefresh={handleRefresh}
         />
       )}
 
