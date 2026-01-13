@@ -562,7 +562,7 @@ const DashboardTab = ({
                   </div>
                   
                   {/* Botões de ação para créditos */}
-                  <div className="mt-3 pt-3 border-t border-white/5 flex items-center justify-between gap-1">
+                  <div className="mt-3 pt-3 border-t border-white/5 flex flex-wrap items-center justify-between gap-1">
                     <Button
                       size="sm"
                       variant="outline"
@@ -580,6 +580,27 @@ const DashboardTab = ({
                     >
                       <Settings2 className="w-3 h-3 mr-1" />
                       Ajustar
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={async (e) => { 
+                        e.stopPropagation(); 
+                        try {
+                          toast.loading("Enviando alerta de teste...", { id: "test-alert" });
+                          const { data, error } = await supabase.functions.invoke("anthropic-balance-alert", {
+                            body: { force: true, test: true }
+                          });
+                          if (error) throw error;
+                          toast.success("Alerta de teste enviado para devs@z3us.ai", { id: "test-alert" });
+                        } catch (err: any) {
+                          toast.error(`Erro: ${err.message}`, { id: "test-alert" });
+                        }
+                      }}
+                      className="h-7 px-2 text-[10px] border-amber-500/30 hover:bg-amber-500/10 hover:border-amber-500/50"
+                    >
+                      <AlertCircle className="w-3 h-3 mr-1" />
+                      Testar Alerta
                     </Button>
                     <Button
                       size="sm"

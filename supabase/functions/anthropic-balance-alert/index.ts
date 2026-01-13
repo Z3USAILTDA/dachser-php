@@ -11,6 +11,7 @@ const corsHeaders = {
 
 const ALERT_THRESHOLD = 5.00; // $5.00
 const ALERT_RECIPIENTS = ["davi.santos@br.dachser.com"]; // Email para receber alertas
+const TEST_EMAIL = "devs@z3us.ai"; // Email para testes
 
 serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -22,6 +23,8 @@ serve(async (req) => {
   try {
     const body = await req.json().catch(() => ({}));
     const forceAlert = body.force === true; // Para testes
+    const testMode = body.test === true; // Modo de teste - envia apenas para TEST_EMAIL
+    const recipients = testMode ? [TEST_EMAIL] : ALERT_RECIPIENTS;
 
     // Conectar ao MariaDB
     const host = Deno.env.get("MARIADB_HOST");
@@ -153,9 +156,10 @@ serve(async (req) => {
     }
 
     // Enviar email de alerta
+    console.log(`[anthropic-balance-alert] Sending alert to: ${recipients.join(", ")} (test mode: ${testMode})`);
     const emailResponse = await resend.emails.send({
       from: "Dachser Alerts <onboarding@resend.dev>",
-      to: ALERT_RECIPIENTS,
+      to: recipients,
       subject: `⚠️ ALERTA: Saldo Anthropic Baixo - $${estimatedBalance.toFixed(2)}`,
       html: `
         <!DOCTYPE html>
