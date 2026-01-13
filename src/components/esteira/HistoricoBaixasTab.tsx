@@ -3,14 +3,14 @@ import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { format, parseISO } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import { RefreshCw, Search, Download, Calendar, DollarSign, FileText, User, Building2, CreditCard, CheckCircle2 } from "lucide-react";
+import { RefreshCw, Search, Download, Calendar, DollarSign, CreditCard, CheckCircle2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
+import { TablePagination } from "@/components/layout/TablePagination";
 
 interface BaixaRecord {
   IdLancamentoRM: number;
@@ -37,6 +37,8 @@ export const HistoricoBaixasTab = () => {
   const [searchTerm, setSearchTerm] = useState("");
   const [filterFormaPag, setFilterFormaPag] = useState("all");
   const [filterPeriodo, setFilterPeriodo] = useState<"all" | "hoje" | "7dias" | "30dias" | "90dias">("30dias");
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 20;
   const { toast } = useToast();
 
   const loadBaixas = async () => {
@@ -81,6 +83,18 @@ export const HistoricoBaixasTab = () => {
       return matchesSearch && matchesFormaPag;
     });
   }, [baixas, searchTerm, filterFormaPag]);
+
+  const totalPages = Math.ceil(filteredBaixas.length / itemsPerPage);
+  
+  const paginatedBaixas = useMemo(() => {
+    const startIndex = (currentPage - 1) * itemsPerPage;
+    return filteredBaixas.slice(startIndex, startIndex + itemsPerPage);
+  }, [filteredBaixas, currentPage, itemsPerPage]);
+
+  // Reset page when filters change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm, filterFormaPag, filterPeriodo]);
 
   const totalValor = useMemo(() => {
     return filteredBaixas.reduce((acc, b) => acc + (b.valor_baixa || b.valor_nf || 0), 0);
@@ -246,7 +260,7 @@ export const HistoricoBaixasTab = () => {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {filteredBaixas.map((baixa, index) => (
+              {paginatedBaixas.map((baixa, index) => (
                 <TableRow key={`${baixa.IdLancamentoRM}-${index}`} className="border-white/5 hover:bg-white/5">
                   <TableCell className="font-mono text-xs">{baixa.nd || "-"}</TableCell>
                   <TableCell className="max-w-[200px] truncate text-xs" title={baixa.nome_beneficiario}>
@@ -269,10 +283,17 @@ export const HistoricoBaixasTab = () => {
         )}
       </div>
 
-      {/* Footer com contagem */}
+      {/* Paginação */}
       {!loading && filteredBaixas.length > 0 && (
-        <div className="text-xs text-muted-foreground text-center">
-          Exibindo {filteredBaixas.length} de {baixas.length} baixas
+        <div className="flex items-center justify-between">
+          <div className="text-xs text-muted-foreground">
+            Exibindo {((currentPage - 1) * itemsPerPage) + 1} - {Math.min(currentPage * itemsPerPage, filteredBaixas.length)} de {filteredBaixas.length} baixas
+          </div>
+          <TablePagination
+            currentPage={currentPage}
+            totalPages={totalPages}
+            onPageChange={setCurrentPage}
+          />
         </div>
       )}
     </div>
