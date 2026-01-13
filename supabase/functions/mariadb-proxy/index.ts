@@ -5442,6 +5442,93 @@ serve(async (req) => {
         break;
       }
 
+      case 'sync_baixa_remessa_to_dados_rm': {
+        // Find vouchers with BAIXA_REMESSA that are not yet in t_dados_rm
+        console.log('Syncing BAIXA_REMESSA vouchers to t_dados_rm...');
+        
+        // Get vouchers with BAIXA_REMESSA status
+        const vouchersToSync = await client.query(`
+          SELECT v.id, v.numero_spo, v.forma_pagamento, v.fornecedor, v.cnpj_fornecedor,
+                 v.linha_digitavel, v.codigo_barras, v.chave_pix
+          FROM dados_dachser.t_vouchers v
+          WHERE v.status_baixa = 'BAIXA_REMESSA'
+            AND v.numero_spo IS NOT NULL
+            AND NOT EXISTS (
+              SELECT 1 FROM dados_dachser.t_dados_rm r 
+              WHERE r.id_rm COLLATE utf8mb4_unicode_ci = v.numero_spo COLLATE utf8mb4_unicode_ci
+            )
+        `);
+
+        console.log(`Found ${vouchersToSync.length} vouchers to sync`);
+
+        let inserted = 0;
+        let errors: string[] = [];
+
+        for (const v of vouchersToSync) {
+          try {
+            // Determine regras_forma_pag based on bank
+            let regrasFormaPag = "DOC (Compe)";
+            
+            if (v.cnpj_fornecedor) {
+              try {
+                const dadosBancarios = await client.query(`
+                  SELECT banco
+                  FROM dados_dachser.t_dados_financeiro_pag
+                  WHERE REPLACE(REPLACE(REPLACE(cnpj, '.', ''), '/', ''), '-', '') = ?
+                  LIMIT 1
+                `, [v.cnpj_fornecedor.replace(/\D/g, '')]);
+                
+                if (dadosBancarios && dadosBancarios.length > 0) {
+                  const bancoUpper = (dadosBancarios[0].banco || "").toUpperCase();
+                  if (bancoUpper.includes("ITAU") || bancoUpper.includes("ITAÚ") || bancoUpper.includes("341")) {
+                    regrasFormaPag = "Crédito em Conta Corrente da Mesma Titularidade";
+                  }
+                }
+              } catch (bankErr) {
+                console.log('Could not lookup bank info:', bankErr);
+              }
+            }
+
+            // Insert into t_dados_rm
+            await client.execute(`
+              INSERT INTO dados_dachser.t_dados_rm 
+              (id_rm, nf_disputa, voucher_boleto, chave_pix, pix_tipo_chave, forma_pag, fornecedor, regras_forma_pag)
+              VALUES (?, 0, ?, ?, ?, ?, ?, ?)
+            `, [
+              v.numero_spo, 
+              v.linha_digitavel || v.codigo_barras || null, 
+              v.chave_pix || null, 
+              null, 
+              v.forma_pagamento || null, 
+              v.fornecedor || null, 
+              regrasFormaPag
+            ]);
+
+            // Update status_integracao_rm
+            await client.execute(`
+              UPDATE dados_dachser.t_vouchers 
+              SET status_integracao_rm = 'ENVIADO_T_DADOS_RM', updated_at = NOW() 
+              WHERE id = ?
+            `, [v.id]);
+
+            inserted++;
+            console.log(`Synced voucher ${v.numero_spo} to t_dados_rm`);
+          } catch (insertErr: any) {
+            console.error(`Error syncing voucher ${v.numero_spo}:`, insertErr);
+            errors.push(`${v.numero_spo}: ${insertErr.message}`);
+          }
+        }
+
+        console.log(`Sync complete: ${inserted} inserted, ${errors.length} errors`);
+        result = { 
+          success: true, 
+          total: vouchersToSync.length, 
+          inserted, 
+          errors: errors.length > 0 ? errors : undefined 
+        };
+        break;
+      }
+
       case 'save_linha_digitavel': {
         const { voucher_id: vId, linha_digitavel: linhaDigitavel } = body as { 
           voucher_id?: string; 
