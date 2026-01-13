@@ -6712,6 +6712,57 @@ serve(async (req) => {
         break;
       }
 
+      // ==================== GET HISTORICO BAIXAS ====================
+      case 'get_historico_baixas': {
+        // Busca vouchers que já foram baixados (existem na tbaixas)
+        const periodoBody = body as unknown as { periodo?: string };
+        const periodo = periodoBody.periodo || '30dias';
+        
+        let dateFilter = '';
+        const now = new Date();
+        if (periodo === 'hoje') {
+          dateFilter = `AND DATE(b.DataHoraBaixa) = CURDATE()`;
+        } else if (periodo === '7dias') {
+          dateFilter = `AND b.DataHoraBaixa >= DATE_SUB(NOW(), INTERVAL 7 DAY)`;
+        } else if (periodo === '30dias') {
+          dateFilter = `AND b.DataHoraBaixa >= DATE_SUB(NOW(), INTERVAL 30 DAY)`;
+        } else if (periodo === '90dias') {
+          dateFilter = `AND b.DataHoraBaixa >= DATE_SUB(NOW(), INTERVAL 90 DAY)`;
+        }
+        // 'all' = sem filtro de data
+        
+        console.log(`Fetching historico baixas (periodo: ${periodo})...`);
+
+        const baixas = await client.query(`
+          SELECT 
+            b.IdLancamentoRM,
+            b.DataHoraBaixa as data_baixa,
+            b.ValorBaixa as valor_baixa,
+            b.UsuarioBaixa as usuario_baixa,
+            b.TipoBaixa as tipo_baixa,
+            b.Observacao as observacao_baixa,
+            dfv.nd,
+            dfv.documento,
+            dfv.nome_beneficiario,
+            dfv.nome_cobranca,
+            dfv.numero_processo,
+            dfv.forma_pag,
+            dfv.data_vencimento,
+            dfv.valor_nf,
+            dfv.moeda
+          FROM dados_dachser.tbaixas b
+          LEFT JOIN dados_dachser.t_dados_financeiro_voucher dfv 
+            ON b.IdLancamentoRM = dfv.id_rm
+          WHERE 1=1 ${dateFilter}
+          ORDER BY b.DataHoraBaixa DESC
+          LIMIT 1000
+        `);
+
+        console.log(`Found ${baixas?.length || 0} baixas`);
+        result = { success: true, data: baixas || [], count: baixas?.length || 0 };
+        break;
+      }
+
       // ==================== IMPORT VOUCHER FROM RM ====================
       case 'import_voucher_from_rm': {
         // Importa um voucher pendente do RM para a esteira como OPERACAO

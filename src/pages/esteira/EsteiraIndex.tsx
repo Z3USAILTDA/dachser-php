@@ -22,6 +22,7 @@ import { RoboTab } from "@/components/tabs/RoboTab";
 import { ReportsTab } from "@/components/tabs/ReportsTab";
 // Removed: FaturasDoDiaTab - apenas Pagamentos agora
 import { PagamentosTab } from "@/components/esteira/PagamentosTab";
+import { HistoricoBaixasTab } from "@/components/esteira/HistoricoBaixasTab";
 // BacklogTab removed - RM pending vouchers now shown in main grid as A_PROCESSAR
 import { MetricCard } from "@/components/cct/MetricCard";
 import { FinDbStatsPanel, FinDbStats } from "@/components/esteira/FinDbStatsPanel";
@@ -560,7 +561,7 @@ const EsteiraIndex = () => {
   const [vouchers, setVouchers] = useState<Voucher[]>([]);
   const [loading, setLoading] = useState(true);
   const [isRefetching, setIsRefetching] = useState(false);
-  const [activeTab, setActiveTab] = useState<"processos" | "dashboard" | "analytics" | "robo" | "relatorios" | "pagamentos">("processos");
+  const [activeTab, setActiveTab] = useState<"processos" | "dashboard" | "analytics" | "robo" | "relatorios" | "pagamentos" | "historico">("processos");
   const [filters, setFilters] = useState<FilterValues>({
     search: "",
     etapa: "all",
@@ -1556,6 +1557,10 @@ const EsteiraIndex = () => {
             id: "pagamentos" as const,
             label: "Pagamentos",
             icon: CreditCard
+          }, {
+            id: "historico" as const,
+            label: "Histórico Baixas",
+            icon: CheckCircle2
           }].map(tab => {
             const Icon = tab.icon;
             const isActive = activeTab === tab.id;
@@ -1716,6 +1721,9 @@ const EsteiraIndex = () => {
           {activeTab === "relatorios" && <ReportsTab />}
           {activeTab === "pagamentos" && <div className="rounded-2xl p-5 bg-[rgba(5,6,18,0.9)] border border-[rgba(255,255,255,0.12)] backdrop-blur-[18px] shadow-[0_18px_40px_rgba(0,0,0,0.85)]">
               <PagamentosTab />
+            </div>}
+          {activeTab === "historico" && <div className="rounded-2xl p-5 bg-[rgba(5,6,18,0.9)] border border-[rgba(255,255,255,0.12)] backdrop-blur-[18px] shadow-[0_18px_40px_rgba(0,0,0,0.85)]">
+              <HistoricoBaixasTab />
             </div>}
         </div>
       </main>
