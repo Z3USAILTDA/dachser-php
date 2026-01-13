@@ -66,6 +66,10 @@ export const HistoricoBaixasTab = () => {
 
   const filteredBaixas = useMemo(() => {
     return baixas.filter(b => {
+      // Filtrar valores zerados
+      const valor = b.valor_baixa || b.valor_nf || 0;
+      if (valor === 0) return false;
+      
       const matchesSearch = searchTerm === "" || 
         b.nd?.toLowerCase().includes(searchTerm.toLowerCase()) ||
         b.documento?.toLowerCase().includes(searchTerm.toLowerCase()) ||
