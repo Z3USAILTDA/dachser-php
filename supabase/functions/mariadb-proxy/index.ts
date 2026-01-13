@@ -2582,6 +2582,8 @@ serve(async (req) => {
                AND s.arr_datetime <= NOW() - INTERVAL 120 HOUR
                AND s.data_atraso IS NULL)
             )
+            -- CCT RESET: Só mostrar AWBs que entraram em DEP a partir de 2025-01-13
+            AND (s.dep_datetime IS NULL OR s.dep_datetime >= '2025-01-13 00:00:00')
           ) sub
           WHERE sub.rn = 1
           ORDER BY sub.ultimo_evento_data DESC
