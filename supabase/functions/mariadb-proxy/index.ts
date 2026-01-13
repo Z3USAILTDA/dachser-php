@@ -2539,12 +2539,7 @@ serve(async (req) => {
               TRIM(s.destino) as aeroporto_destino,
               s.data_atraso,
               s.arr_datetime,
-              (SELECT h.data_evento 
-               FROM ${database}.t_status_historico h 
-               WHERE TRIM(h.awb) COLLATE utf8mb4_unicode_ci = TRIM(s.awb) COLLATE utf8mb4_unicode_ci
-                 AND h.status_code = 'DEP' 
-               ORDER BY h.data_evento DESC 
-               LIMIT 1) as dep_datetime,
+              s.dep_datetime,
               COALESCE(s.tipo_servico, 'N/A') as tipo_servico,
               LEFT(TRIM(s.awb), 3) as airline_code,
               cct.peso_declarado,
