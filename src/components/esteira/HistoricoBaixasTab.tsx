@@ -236,11 +236,9 @@ export const HistoricoBaixasTab = () => {
                 <TableHead className="text-muted-foreground text-xs">ND</TableHead>
                 <TableHead className="text-muted-foreground text-xs">Beneficiário</TableHead>
                 <TableHead className="text-muted-foreground text-xs">Processo</TableHead>
-                <TableHead className="text-muted-foreground text-xs">Forma Pag.</TableHead>
                 <TableHead className="text-muted-foreground text-xs text-right">Valor</TableHead>
                 <TableHead className="text-muted-foreground text-xs">Vencimento</TableHead>
                 <TableHead className="text-muted-foreground text-xs">Data Baixa</TableHead>
-                <TableHead className="text-muted-foreground text-xs">Usuário</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -251,11 +249,6 @@ export const HistoricoBaixasTab = () => {
                     {baixa.nome_beneficiario || "-"}
                   </TableCell>
                   <TableCell className="text-xs">{baixa.numero_processo || "-"}</TableCell>
-                  <TableCell>
-                    <Badge variant="outline" className="text-[10px] font-normal">
-                      {baixa.forma_pag || "-"}
-                    </Badge>
-                  </TableCell>
                   <TableCell className="text-right font-mono text-xs">
                     {formatCurrency(baixa.valor_baixa || baixa.valor_nf, baixa.moeda)}
                   </TableCell>
@@ -264,9 +257,6 @@ export const HistoricoBaixasTab = () => {
                   </TableCell>
                   <TableCell className="text-xs">
                     <span className="text-green-400">{formatDate(baixa.data_baixa)}</span>
-                  </TableCell>
-                  <TableCell className="text-xs text-muted-foreground">
-                    {baixa.usuario_baixa || "-"}
                   </TableCell>
                 </TableRow>
               ))}
