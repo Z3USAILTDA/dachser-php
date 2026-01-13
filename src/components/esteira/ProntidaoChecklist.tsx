@@ -39,7 +39,7 @@ export const ProntidaoChecklist = ({ voucher, className }: ProntidaoChecklistPro
   }
 
   // 3. Para REMESSA (não boleto): dados bancários para transferência
-  if (voucher.tipoExecucaoPagamento === "REMESSA" && !isBoleto(voucher.formaPagamento as any)) {
+  if ((voucher.tipoExecucaoPagamento === "REMESSA_10H" || voucher.tipoExecucaoPagamento === "REMESSA_15H") && !isBoleto(voucher.formaPagamento as any)) {
     const hasBankData = voucher.dadosBancarios?.banco && 
                         voucher.dadosBancarios?.agencia && 
                         voucher.dadosBancarios?.conta;
