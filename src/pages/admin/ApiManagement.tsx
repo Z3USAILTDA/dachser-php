@@ -587,12 +587,12 @@ const DashboardTab = ({
                       onClick={async (e) => { 
                         e.stopPropagation(); 
                         try {
-                          toast.loading("Enviando alerta de teste...", { id: "test-alert" });
+                          toast.loading("Enviando alerta...", { id: "test-alert" });
                           const { data, error } = await supabase.functions.invoke("anthropic-balance-alert", {
-                            body: { force: true, test: true }
+                            body: { force: true }
                           });
                           if (error) throw error;
-                          toast.success("Alerta de teste enviado para devs@z3us.ai", { id: "test-alert" });
+                          toast.success("Alerta enviado com sucesso!", { id: "test-alert" });
                         } catch (err: any) {
                           toast.error(`Erro: ${err.message}`, { id: "test-alert" });
                         }
@@ -600,7 +600,7 @@ const DashboardTab = ({
                       className="h-7 px-2 text-[10px] border-amber-500/30 hover:bg-amber-500/10 hover:border-amber-500/50"
                     >
                       <AlertCircle className="w-3 h-3 mr-1" />
-                      Testar Alerta
+                      Enviar Alerta
                     </Button>
                     <Button
                       size="sm"

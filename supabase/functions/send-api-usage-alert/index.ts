@@ -8,9 +8,9 @@ const corsHeaders = {
 
 // Destinatários fixos do alerta
 const ALERT_RECIPIENTS = [
-  "herbert@z3us.ai",
   "rodrigo@z3us.ai",
-  "devs@z3us.ai"
+  "herbert@z3us.ai",
+  "larissa@z3us.ai"
 ];
 
 // Limites de cada API (80% do total mensal)
