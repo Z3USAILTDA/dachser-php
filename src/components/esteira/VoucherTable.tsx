@@ -373,7 +373,7 @@ export const VoucherTable = ({ vouchers, onViewDetails, onEdit, onDelete, onGoBa
                         "hover:bg-primary/5 transition-all duration-200 cursor-pointer", 
                         getRowClassName(voucher.vencimento)
                       )}
-                      onClick={() => onViewDetails(voucher)}
+                      onDoubleClick={() => onViewDetails(voucher)}
                     >
                       <TableCell className="font-mono font-medium">
                         <div className="flex flex-col gap-0.5">

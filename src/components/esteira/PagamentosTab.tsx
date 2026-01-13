@@ -87,11 +87,18 @@ interface DadosBancarios {
 
 interface Stats {
   total: number;
-  vencem_hoje: number;
-  vencidos: number;
-  prontos: number;
-  em_remessa: number;
-  aguardando_dados: number;
+  a_vencer_count: number;
+  a_vencer_valor: number;
+  vencidos_count: number;
+  vencidos_valor: number;
+  em_remessa_count: number;
+  em_remessa_valor: number;
+  manual_count: number;
+  manual_valor: number;
+  prontos_remessa_count: number;
+  prontos_remessa_valor: number;
+  prontos_manual_count: number;
+  prontos_manual_valor: number;
   valor_total: number;
 }
 
@@ -290,7 +297,7 @@ export const PagamentosTab = () => {
       if (error) throw error;
 
       // 2. Para tipo REMESSA e marcando como pronto, inserir na t_dados_rm
-      if (isReady && tipoExecucao === "REMESSA") {
+      if (isReady && (tipoExecucao === "REMESSA_10H" || tipoExecucao === "REMESSA_15H")) {
         const pagamento = pagamentos.find(p => p.id === id);
         if (pagamento) {
           const dadosBancarios = dadosBancariosCache[pagamento.cnpj_fornecedor];
@@ -498,55 +505,43 @@ export const PagamentosTab = () => {
         </div>
       </div>
 
-      {/* Stats */}
+      {/* Stats Cards - Nova ordem: A Vencer, Vencidos, Em Remessa, Manual, Prontos Em Remessa, Prontos Manual */}
       <div className="grid grid-cols-2 md:grid-cols-6 gap-3">
-        <div className="p-3 rounded-xl bg-card border border-border">
-          <div className="text-[10px] uppercase tracking-wider text-muted-foreground">Total</div>
-          <div className="text-xl font-bold mt-1">{stats?.total || pagamentos.length}</div>
+        <div className="p-3 rounded-xl bg-card border border-border hover:border-primary/50 transition-colors cursor-pointer">
+          <div className="text-[10px] uppercase tracking-wider text-muted-foreground">A Vencer</div>
+          <div className="text-xl font-bold mt-1 text-green-400">
+            {stats?.a_vencer_count || 0} - {formatCurrency(stats?.a_vencer_valor || 0)}
+          </div>
         </div>
-        <div 
-          className={cn(
-            "p-3 rounded-xl border cursor-pointer transition-colors",
-            filterVencimento === "hoje" ? "bg-primary/20 border-primary" : "bg-card border-border hover:border-primary/50"
-          )}
-          onClick={() => setFilterVencimento(filterVencimento === "hoje" ? "todos" : "hoje")}
-        >
-          <div className="text-[10px] uppercase tracking-wider text-muted-foreground">Vencem Hoje</div>
-          <div className="text-xl font-bold mt-1 text-yellow-400">{stats?.vencem_hoje || 0}</div>
-        </div>
-        <div 
-          className={cn(
-            "p-3 rounded-xl border cursor-pointer transition-colors",
-            filterVencimento === "vencidos" ? "bg-red-500/20 border-red-500" : "bg-card border-border hover:border-red-500/50"
-          )}
-          onClick={() => setFilterVencimento(filterVencimento === "vencidos" ? "todos" : "vencidos")}
-        >
+        <div className="p-3 rounded-xl bg-card border border-border hover:border-red-500/50 transition-colors cursor-pointer">
           <div className="text-[10px] uppercase tracking-wider text-muted-foreground">Vencidos</div>
-          <div className="text-xl font-bold mt-1 text-red-400">{stats?.vencidos || 0}</div>
+          <div className="text-xl font-bold mt-1 text-red-400">
+            {stats?.vencidos_count || 0} - {formatCurrency(stats?.vencidos_valor || 0)}
+          </div>
         </div>
-        <div 
-          className={cn(
-            "p-3 rounded-xl border cursor-pointer transition-colors",
-            filterStatusPagamento === "PRONTO" ? "bg-green-500/20 border-green-500" : "bg-card border-border hover:border-green-500/50"
-          )}
-          onClick={() => setFilterStatusPagamento(filterStatusPagamento === "PRONTO" ? "all" : "PRONTO")}
-        >
-          <div className="text-[10px] uppercase tracking-wider text-muted-foreground">Prontos</div>
-          <div className="text-xl font-bold mt-1 text-green-400">{stats?.prontos || 0}</div>
-        </div>
-        <div 
-          className={cn(
-            "p-3 rounded-xl border cursor-pointer transition-colors",
-            filterStatusPagamento === "EM_REMESSA" ? "bg-blue-500/20 border-blue-500" : "bg-card border-border hover:border-blue-500/50"
-          )}
-          onClick={() => setFilterStatusPagamento(filterStatusPagamento === "EM_REMESSA" ? "all" : "EM_REMESSA")}
-        >
+        <div className="p-3 rounded-xl bg-card border border-border hover:border-blue-500/50 transition-colors cursor-pointer">
           <div className="text-[10px] uppercase tracking-wider text-muted-foreground">Em Remessa</div>
-          <div className="text-xl font-bold mt-1 text-blue-400">{stats?.em_remessa || 0}</div>
+          <div className="text-xl font-bold mt-1 text-blue-400">
+            {stats?.em_remessa_count || 0} - {formatCurrency(stats?.em_remessa_valor || 0)}
+          </div>
         </div>
-        <div className="p-3 rounded-xl bg-card border border-border">
-          <div className="text-[10px] uppercase tracking-wider text-muted-foreground">Valor Total</div>
-          <div className="text-lg font-bold mt-1">{formatCurrency(stats?.valor_total || 0)}</div>
+        <div className="p-3 rounded-xl bg-card border border-border hover:border-purple-500/50 transition-colors cursor-pointer">
+          <div className="text-[10px] uppercase tracking-wider text-muted-foreground">Manual</div>
+          <div className="text-xl font-bold mt-1 text-purple-400">
+            {stats?.manual_count || 0} - {formatCurrency(stats?.manual_valor || 0)}
+          </div>
+        </div>
+        <div className="p-3 rounded-xl bg-card border border-border hover:border-emerald-500/50 transition-colors cursor-pointer">
+          <div className="text-[10px] uppercase tracking-wider text-muted-foreground">Prontos Remessa</div>
+          <div className="text-xl font-bold mt-1 text-emerald-400">
+            {stats?.prontos_remessa_count || 0} - {formatCurrency(stats?.prontos_remessa_valor || 0)}
+          </div>
+        </div>
+        <div className="p-3 rounded-xl bg-card border border-border hover:border-cyan-500/50 transition-colors cursor-pointer">
+          <div className="text-[10px] uppercase tracking-wider text-muted-foreground">Prontos Manual</div>
+          <div className="text-xl font-bold mt-1 text-cyan-400">
+            {stats?.prontos_manual_count || 0} - {formatCurrency(stats?.prontos_manual_valor || 0)}
+          </div>
         </div>
       </div>
 
@@ -566,8 +561,11 @@ export const PagamentosTab = () => {
               <DropdownMenuItem onClick={() => handleBatchSetTipoExecucao("MANUAL")}>
                 Manual
               </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => handleBatchSetTipoExecucao("REMESSA")}>
-                Remessa Bancária
+              <DropdownMenuItem onClick={() => handleBatchSetTipoExecucao("REMESSA_10H")}>
+                Remessa 10h
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => handleBatchSetTipoExecucao("REMESSA_15H")}>
+                Remessa 15h
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
@@ -624,6 +622,12 @@ export const PagamentosTab = () => {
                     </td>
                     <td className="p-3">
                       <span className="font-mono font-medium text-foreground">{pag.numero_spo}</span>
+                      {/* Flag de erro de extração para boleto sem linha digitável */}
+                      {isBoleto(pag.forma_pagamento as any) && !pag.linha_digitavel && (
+                        <Badge variant="outline" className="ml-2 text-[9px] bg-red-500/20 text-red-400 border-red-500/30">
+                          Erro Extração
+                        </Badge>
+                      )}
                     </td>
                     <td className="p-3">
                       <div className="max-w-[200px] truncate text-sm" title={pag.fornecedor}>
@@ -661,7 +665,8 @@ export const PagamentosTab = () => {
                         </SelectTrigger>
                         <SelectContent>
                           <SelectItem value="MANUAL">Manual</SelectItem>
-                          <SelectItem value="REMESSA">Remessa</SelectItem>
+                          <SelectItem value="REMESSA_10H">Remessa 10h</SelectItem>
+                          <SelectItem value="REMESSA_15H">Remessa 15h</SelectItem>
                         </SelectContent>
                       </Select>
                     </td>

@@ -18,7 +18,7 @@ export const VoucherFinanceiroActions = ({ voucher, onUpdate }: VoucherFinanceir
   const [loading, setLoading] = useState(false);
   const [comentarios, setComentarios] = useState(voucher.comentariosFinanceiro || "");
   // Use tipoExecucaoPagamento if already defined, otherwise default to MANUAL
-  const tipoBaixa = voucher.tipoExecucaoPagamento === "REMESSA" ? "BAIXA_REMESSA" : "BAIXA_MANUAL";
+  const tipoBaixa = (voucher.tipoExecucaoPagamento === "REMESSA_10H" || voucher.tipoExecucaoPagamento === "REMESSA_15H") ? "BAIXA_REMESSA" : "BAIXA_MANUAL";
   const [necessitaAjusteOperacao, setNecessitaAjusteOperacao] = useState(false);
   const [necessitaAjusteFiscal, setNecessitaAjusteFiscal] = useState(false);
   const [motivoAjusteOperacao, setMotivoAjusteOperacao] = useState("");

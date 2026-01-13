@@ -82,8 +82,8 @@ export type UserRole =
   | "FINANCEIRO";
 
 // New types for Pagamentos module
-// Simplificado para apenas MANUAL ou REMESSA
-export type TipoExecucaoPagamento = "MANUAL" | "REMESSA";
+// Simplificado para MANUAL ou REMESSA (10h ou 15h)
+export type TipoExecucaoPagamento = "MANUAL" | "REMESSA_10H" | "REMESSA_15H";
 
 export type StatusPagamento = "PENDENTE_DADOS" | "PRONTO" | "EM_REMESSA" | "PAGO" | "ERRO";
 
@@ -136,7 +136,8 @@ export const STATUS_PAGAMENTO_LABELS: Record<StatusPagamento, string> = {
 
 export const TIPO_EXECUCAO_LABELS: Record<TipoExecucaoPagamento, string> = {
   MANUAL: "Manual",
-  REMESSA: "Remessa Bancária",
+  REMESSA_10H: "Remessa 10h",
+  REMESSA_15H: "Remessa 15h",
 };
 
 export const STATUS_LOTE_REMESSA_LABELS: Record<StatusLoteRemessa, string> = {
@@ -397,7 +398,7 @@ export const validarProntoParaRobo = (voucher: Voucher): ValidacaoProntoParaRobo
   }
 
   // 3. Para REMESSA: dados bancários para transferência
-  if (voucher.tipoExecucaoPagamento === 'REMESSA' && !isBoleto(voucher.formaPagamento)) {
+  if ((voucher.tipoExecucaoPagamento === 'REMESSA_10H' || voucher.tipoExecucaoPagamento === 'REMESSA_15H') && !isBoleto(voucher.formaPagamento)) {
     const db = voucher.dadosBancarios;
     if (!db?.banco || !db?.agencia || !db?.conta) {
       pendencias.push("Dados bancários incompletos para remessa");

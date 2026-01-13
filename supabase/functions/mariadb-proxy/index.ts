@@ -5668,7 +5668,11 @@ serve(async (req) => {
         };
 
         const offset = (page - 1) * perPage;
-        const conditions: string[] = ["v.etapa_atual = 'FINANCEIRO'"];
+        // Filtrar FINANCEIRO ou ROBO sem comprovante, e excluir modal ADM
+        const conditions: string[] = [
+          "(v.etapa_atual = 'FINANCEIRO' OR (v.etapa_atual = 'ROBO' AND NOT EXISTS (SELECT 1 FROM dados_dachser.t_voucher_anexos a WHERE a.voucher_id = v.id AND a.tipo = 'COMPROVANTE')))",
+          "(v.modal IS NULL OR v.modal <> 'ADM')"
+        ];
         const params: (string | number)[] = [];
 
         // Date filters
@@ -5744,18 +5748,33 @@ serve(async (req) => {
           [...params, perPage, offset]
         );
 
-        // Get summary stats
+        // Get summary stats with new cards
         const statsResult = await client.query(
           `SELECT 
             COUNT(*) as total,
-            SUM(CASE WHEN v.vencimento = CURDATE() THEN 1 ELSE 0 END) as vencem_hoje,
-            SUM(CASE WHEN v.vencimento < CURDATE() THEN 1 ELSE 0 END) as vencidos,
-            SUM(CASE WHEN v.status_pagamento = 'PRONTO' THEN 1 ELSE 0 END) as prontos,
-            SUM(CASE WHEN v.status_pagamento = 'EM_REMESSA' THEN 1 ELSE 0 END) as em_remessa,
-            SUM(CASE WHEN v.status_pagamento = 'PENDENTE_DADOS' THEN 1 ELSE 0 END) as aguardando_dados,
+            -- A Vencer (vencimento >= hoje)
+            SUM(CASE WHEN v.vencimento >= CURDATE() AND (v.is_pronto_para_robo = 0 OR v.is_pronto_para_robo IS NULL) THEN 1 ELSE 0 END) as a_vencer_count,
+            SUM(CASE WHEN v.vencimento >= CURDATE() AND (v.is_pronto_para_robo = 0 OR v.is_pronto_para_robo IS NULL) THEN COALESCE(v.valor, 0) ELSE 0 END) as a_vencer_valor,
+            -- Vencidos (vencimento < hoje)
+            SUM(CASE WHEN v.vencimento < CURDATE() AND (v.is_pronto_para_robo = 0 OR v.is_pronto_para_robo IS NULL) THEN 1 ELSE 0 END) as vencidos_count,
+            SUM(CASE WHEN v.vencimento < CURDATE() AND (v.is_pronto_para_robo = 0 OR v.is_pronto_para_robo IS NULL) THEN COALESCE(v.valor, 0) ELSE 0 END) as vencidos_valor,
+            -- Em Remessa (não pronto, tipo execução REMESSA_10H ou REMESSA_15H)
+            SUM(CASE WHEN (v.is_pronto_para_robo = 0 OR v.is_pronto_para_robo IS NULL) AND v.tipo_execucao_pagamento IN ('REMESSA_10H', 'REMESSA_15H') THEN 1 ELSE 0 END) as em_remessa_count,
+            SUM(CASE WHEN (v.is_pronto_para_robo = 0 OR v.is_pronto_para_robo IS NULL) AND v.tipo_execucao_pagamento IN ('REMESSA_10H', 'REMESSA_15H') THEN COALESCE(v.valor, 0) ELSE 0 END) as em_remessa_valor,
+            -- Manual (não pronto, tipo execução MANUAL)
+            SUM(CASE WHEN (v.is_pronto_para_robo = 0 OR v.is_pronto_para_robo IS NULL) AND v.tipo_execucao_pagamento = 'MANUAL' THEN 1 ELSE 0 END) as manual_count,
+            SUM(CASE WHEN (v.is_pronto_para_robo = 0 OR v.is_pronto_para_robo IS NULL) AND v.tipo_execucao_pagamento = 'MANUAL' THEN COALESCE(v.valor, 0) ELSE 0 END) as manual_valor,
+            -- Prontos Em Remessa (is_pronto = 1 E tipo_execucao IN (REMESSA_10H, REMESSA_15H))
+            SUM(CASE WHEN v.is_pronto_para_robo = 1 AND v.tipo_execucao_pagamento IN ('REMESSA_10H', 'REMESSA_15H') THEN 1 ELSE 0 END) as prontos_remessa_count,
+            SUM(CASE WHEN v.is_pronto_para_robo = 1 AND v.tipo_execucao_pagamento IN ('REMESSA_10H', 'REMESSA_15H') THEN COALESCE(v.valor, 0) ELSE 0 END) as prontos_remessa_valor,
+            -- Prontos Manual (is_pronto = 1 E tipo_execucao = MANUAL)
+            SUM(CASE WHEN v.is_pronto_para_robo = 1 AND v.tipo_execucao_pagamento = 'MANUAL' THEN 1 ELSE 0 END) as prontos_manual_count,
+            SUM(CASE WHEN v.is_pronto_para_robo = 1 AND v.tipo_execucao_pagamento = 'MANUAL' THEN COALESCE(v.valor, 0) ELSE 0 END) as prontos_manual_valor,
+            -- Total valor
             SUM(COALESCE(v.valor, 0)) as valor_total
           FROM dados_dachser.t_vouchers v
-          WHERE v.etapa_atual = 'FINANCEIRO'`
+          WHERE (v.etapa_atual = 'FINANCEIRO' OR (v.etapa_atual = 'ROBO' AND NOT EXISTS (SELECT 1 FROM dados_dachser.t_voucher_anexos a WHERE a.voucher_id = v.id AND a.tipo = 'COMPROVANTE')))
+          AND (v.modal IS NULL OR v.modal <> 'ADM')`
         );
 
         result = {
