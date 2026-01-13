@@ -9006,6 +9006,214 @@ serve(async (req) => {
         break;
       }
 
+      // ==================== ANTHROPIC CREDITS ====================
+      case 'setup_anthropic_credits_table': {
+        console.log('[anthropic_credits] Setting up credits table...');
+        
+        await client.execute(`
+          CREATE TABLE IF NOT EXISTS ai_agente.t_anthropic_credits (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            credit_date DATE NOT NULL,
+            amount_usd DECIMAL(10,2) NOT NULL,
+            notes VARCHAR(500),
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            created_by VARCHAR(255),
+            INDEX idx_credit_date (credit_date)
+          )
+        `);
+        
+        console.log('[anthropic_credits] Table created/verified');
+        result = { success: true };
+        break;
+      }
+
+      case 'get_anthropic_credits': {
+        console.log('[anthropic_credits] Fetching credits data...');
+        
+        // Ensure table exists
+        await client.execute(`
+          CREATE TABLE IF NOT EXISTS ai_agente.t_anthropic_credits (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            credit_date DATE NOT NULL,
+            amount_usd DECIMAL(10,2) NOT NULL,
+            notes VARCHAR(500),
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            created_by VARCHAR(255),
+            INDEX idx_credit_date (credit_date)
+          )
+        `);
+        
+        // Get all topups
+        const topups = await client.query(`
+          SELECT id, credit_date, amount_usd, notes, created_at
+          FROM ai_agente.t_anthropic_credits
+          ORDER BY credit_date DESC
+        `);
+        
+        // Get total credits
+        const totalCreditsResult = await client.query(`
+          SELECT COALESCE(SUM(amount_usd), 0) as total
+          FROM ai_agente.t_anthropic_credits
+        `);
+        const totalCredits = Number(totalCreditsResult[0]?.total || 0);
+        
+        // Get Anthropic API consumption from logs (estimated cost per call: $0.015)
+        const consumptionResult = await client.query(`
+          SELECT 
+            COUNT(*) as call_count,
+            COALESCE(SUM(CASE WHEN status_code < 400 AND error_message IS NULL THEN 1 ELSE 0 END), 0) as successful_calls
+          FROM ai_agente.t_api_usage_logs
+          WHERE api_name = 'Anthropic'
+        `);
+        const successfulCalls = Number(consumptionResult[0]?.successful_calls || 0);
+        const costPerCall = 0.015; // $0.015 per call (avg ~1K tokens)
+        const totalConsumption = successfulCalls * costPerCall;
+        
+        // Get last topup
+        const lastTopupResult = await client.query(`
+          SELECT credit_date, amount_usd
+          FROM ai_agente.t_anthropic_credits
+          ORDER BY credit_date DESC
+          LIMIT 1
+        `);
+        const lastTopup = lastTopupResult.length > 0 ? lastTopupResult[0] : null;
+        
+        // Calculate days since last topup
+        let daysSinceLastTopup = 0;
+        if (lastTopup?.credit_date) {
+          const lastDate = new Date(lastTopup.credit_date);
+          const now = new Date();
+          daysSinceLastTopup = Math.floor((now.getTime() - lastDate.getTime()) / (1000 * 60 * 60 * 24));
+        }
+        
+        // Calculate average daily consumption (last 30 days)
+        const dailyConsumptionResult = await client.query(`
+          SELECT COUNT(*) as calls_30d
+          FROM ai_agente.t_api_usage_logs
+          WHERE api_name = 'Anthropic'
+            AND created_at >= DATE_SUB(NOW(), INTERVAL 30 DAY)
+            AND status_code < 400
+            AND error_message IS NULL
+        `);
+        const calls30d = Number(dailyConsumptionResult[0]?.calls_30d || 0);
+        const avgDailyConsumption = (calls30d / 30) * costPerCall;
+        
+        // Calculate estimated balance and projected days
+        const estimatedBalance = Math.max(0, totalCredits - totalConsumption);
+        const projectedDaysRemaining = avgDailyConsumption > 0 
+          ? Math.floor(estimatedBalance / avgDailyConsumption) 
+          : 999;
+        
+        const balance = {
+          total_credits: totalCredits,
+          total_consumption: totalConsumption,
+          estimated_balance: estimatedBalance,
+          last_topup_date: lastTopup?.credit_date || null,
+          last_topup_amount: lastTopup ? Number(lastTopup.amount_usd) : null,
+          avg_daily_consumption: avgDailyConsumption,
+          projected_days_remaining: Math.min(projectedDaysRemaining, 999),
+          days_since_last_topup: daysSinceLastTopup
+        };
+        
+        console.log(`[anthropic_credits] Balance: $${estimatedBalance.toFixed(2)}, ${projectedDaysRemaining} days remaining`);
+        result = { success: true, balance, topups };
+        break;
+      }
+
+      case 'add_anthropic_credit': {
+        const creditBody = body as unknown as { 
+          credit_date: string; 
+          amount_usd: number; 
+          notes?: string;
+          created_by?: string;
+        };
+        
+        if (!creditBody.credit_date || !creditBody.amount_usd) {
+          return new Response(
+            JSON.stringify({ error: 'credit_date e amount_usd são obrigatórios' }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+        
+        console.log(`[anthropic_credits] Adding credit: $${creditBody.amount_usd} on ${creditBody.credit_date}`);
+        
+        // Ensure table exists
+        await client.execute(`
+          CREATE TABLE IF NOT EXISTS ai_agente.t_anthropic_credits (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            credit_date DATE NOT NULL,
+            amount_usd DECIMAL(10,2) NOT NULL,
+            notes VARCHAR(500),
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            created_by VARCHAR(255),
+            INDEX idx_credit_date (credit_date)
+          )
+        `);
+        
+        await client.execute(`
+          INSERT INTO ai_agente.t_anthropic_credits (credit_date, amount_usd, notes, created_by)
+          VALUES (?, ?, ?, ?)
+        `, [
+          creditBody.credit_date,
+          creditBody.amount_usd,
+          creditBody.notes || null,
+          creditBody.created_by || null
+        ]);
+        
+        console.log('[anthropic_credits] Credit added successfully');
+        result = { success: true };
+        break;
+      }
+
+      case 'import_anthropic_credits_history': {
+        // Import historical credits from the provided data
+        console.log('[anthropic_credits] Importing historical credits...');
+        
+        // Ensure table exists
+        await client.execute(`
+          CREATE TABLE IF NOT EXISTS ai_agente.t_anthropic_credits (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            credit_date DATE NOT NULL,
+            amount_usd DECIMAL(10,2) NOT NULL,
+            notes VARCHAR(500),
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            created_by VARCHAR(255),
+            INDEX idx_credit_date (credit_date)
+          )
+        `);
+        
+        // Historical data from user's screenshot (2024-2025)
+        const historicalCredits = [
+          { date: '2024-10-17', amount: 60.00, notes: 'Recarga histórica importada' },
+          { date: '2024-11-27', amount: 60.00, notes: 'Recarga histórica importada' },
+          { date: '2024-12-27', amount: 100.00, notes: 'Recarga histórica importada' },
+          { date: '2025-02-11', amount: 60.00, notes: 'Recarga histórica importada' },
+          { date: '2025-03-05', amount: 100.00, notes: 'Recarga histórica importada' },
+          { date: '2025-04-08', amount: 80.00, notes: 'Recarga histórica importada' },
+        ];
+        
+        let imported = 0;
+        for (const credit of historicalCredits) {
+          // Check if already exists
+          const existing = await client.query(`
+            SELECT id FROM ai_agente.t_anthropic_credits
+            WHERE credit_date = ? AND amount_usd = ?
+          `, [credit.date, credit.amount]);
+          
+          if (existing.length === 0) {
+            await client.execute(`
+              INSERT INTO ai_agente.t_anthropic_credits (credit_date, amount_usd, notes, created_by)
+              VALUES (?, ?, ?, 'Sistema - Importação')
+            `, [credit.date, credit.amount, credit.notes]);
+            imported++;
+          }
+        }
+        
+        console.log(`[anthropic_credits] Imported ${imported} historical credits`);
+        result = { success: true, imported };
+        break;
+      }
+
       default:
         return new Response(
           JSON.stringify({ error: `Ação não suportada: ${action}` }),
