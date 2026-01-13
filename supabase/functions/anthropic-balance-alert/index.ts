@@ -13,6 +13,120 @@ const ALERT_THRESHOLD = 5.00; // $5.00
 const ALERT_RECIPIENTS = ["davi.santos@br.dachser.com"]; // Email para receber alertas
 const TEST_EMAIL = "devs@z3us.ai"; // Email para testes
 
+// Gera o HTML do email no padrão Z3US
+const generateAlertEmailHtml = (estimatedBalance: number): string => {
+  const logoLight = "https://i.ibb.co/TgXzCqz/logo-preto.png";
+  const logoDark = "https://i.ibb.co/sJkY7y5/logo-branco.png";
+  const dashboardUrl = "https://dachser.z3us.app/admin/apis";
+  const brand = "Z3US";
+  const brandPlain = "Z3US&#8203;.AI";
+  const consoleUrl = "https://console.anthropic.com";
+
+  return `<!doctype html>
+<html lang="pt-br">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width">
+<meta name="color-scheme" content="light dark"><meta name="supported-color-schemes" content="light dark">
+<title>Alerta de Saldo Anthropic</title>
+<style>
+  .bg{background:#fff}
+  .panel{background:#fff;border:1px solid #e8e8e8;border-radius:12px}
+  .text{color:#111}.muted{color:#666}
+  .btn{display:inline-block;background:#ffa500;color:#111;text-decoration:none;font-weight:700;border-radius:999px;padding:12px 20px}
+  .btn-secondary{display:inline-block;background:#8b5cf6;color:#fff;text-decoration:none;font-weight:700;border-radius:999px;padding:12px 20px;margin-left:8px}
+  .alert-badge{display:inline-block;background:#fef2f2;color:#dc2626;padding:4px 12px;border-radius:999px;font-weight:600;font-size:12px;border:1px solid #f87171}
+  @media (prefers-color-scheme: dark){
+    .bg{background:#0b0b0b!important}
+    .panel{background:#141414!important;border-color:#262626!important}
+    .text{color:#ededed!important}.muted{color:#bdbdbd!important}
+    .logo-light{display:none!important}.logo-dark{display:block!important}
+    .alert-badge{background:#450a0a!important;color:#f87171!important;border-color:#991b1b!important}
+  }
+</style>
+</head>
+<body class="bg" style="margin:0;padding:24px">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse">
+    <tr><td align="center">
+      <table role="presentation" width="640" cellpadding="0" cellspacing="0" class="panel" style="border-collapse:collapse;max-width:640px">
+        <tr><td style="padding:28px 28px 0" align="center">
+          <img src="${logoLight}" width="120" alt="${brand}" class="logo-light" style="display:block;margin:0 auto 8px;border:0">
+          <img src="${logoDark}" width="120" alt="${brand}" class="logo-dark" style="display:none;margin:0 auto 8px;border:0">
+        </td></tr>
+
+        <tr><td style="padding:16px 28px 0" align="center">
+          <span class="alert-badge">🚨 ALERTA DE SALDO BAIXO</span>
+        </td></tr>
+
+        <tr><td style="padding:16px 28px 0" align="left" class="text">
+          <h1 style="margin:8px 0 4px;font-family:Arial,Helvetica,sans-serif;font-size:22px;line-height:1.3">
+            API Anthropic com saldo crítico
+          </h1>
+          <p style="margin:0 0 16px;font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.5" class="muted">
+            O saldo da API <strong>Anthropic</strong> está abaixo do limite mínimo de <strong>$${ALERT_THRESHOLD.toFixed(2)}</strong>.
+          </p>
+        </td></tr>
+
+        <tr><td style="padding:0 28px 16px" align="left">
+          <table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="border-collapse:collapse;background:rgba(239,68,68,0.1);border-radius:8px;border:1px solid rgba(239,68,68,0.3)">
+            <tr><td style="padding:16px">
+              <table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="border-collapse:collapse">
+                <tr>
+                  <td style="font-family:Arial,Helvetica,sans-serif;font-size:14px;padding:6px 0" class="text">
+                    <strong>API:</strong> Anthropic (Claude)
+                  </td>
+                </tr>
+                <tr>
+                  <td style="font-family:Arial,Helvetica,sans-serif;font-size:14px;padding:6px 0" class="text">
+                    <strong>Plano:</strong> API Direta
+                  </td>
+                </tr>
+                <tr>
+                  <td style="font-family:Arial,Helvetica,sans-serif;font-size:14px;padding:6px 0" class="text">
+                    <strong>Saldo Estimado:</strong> <span style="color:#dc2626;font-weight:700;font-size:18px">$${estimatedBalance.toFixed(2)}</span>
+                  </td>
+                </tr>
+                <tr>
+                  <td style="font-family:Arial,Helvetica,sans-serif;font-size:14px;padding:6px 0" class="text">
+                    <strong>Limite de Alerta:</strong> $${ALERT_THRESHOLD.toFixed(2)}
+                  </td>
+                </tr>
+              </table>
+            </td></tr>
+          </table>
+        </td></tr>
+
+        <tr><td style="padding:0 28px 12px" align="left">
+          <p style="margin:0 0 16px;font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.5" class="muted">
+            <strong>Ação Necessária:</strong>
+          </p>
+          <ul style="margin:0 0 16px;padding-left:20px;font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.7" class="muted">
+            <li>Acesse o Console Anthropic para recarregar</li>
+            <li>Verifique o consumo recente no Dashboard</li>
+            <li>Evite interrupção nos serviços de IA</li>
+          </ul>
+        </td></tr>
+
+        <tr><td style="padding:10px 28px 22px" align="left">
+          <a href="${consoleUrl}" class="btn-secondary" style="font-family:Arial,Helvetica,sans-serif">Recarregar no Console</a>
+          <a href="${dashboardUrl}" class="btn" style="font-family:Arial,Helvetica,sans-serif;margin-left:8px">Ver Dashboard</a>
+        </td></tr>
+
+        <tr><td style="padding:0 28px 26px" align="left">
+          <p style="margin:0;font-family:Arial,Helvetica,sans-serif;font-size:12px;line-height:1.5" class="muted">
+            Este é um alerta automático gerado pelo sistema de monitoramento ${brandPlain}.
+          </p>
+        </td></tr>
+      </table>
+      <div style="height:20px;line-height:20px">&nbsp;</div>
+      <div style="font-family:Arial,Helvetica,sans-serif;font-size:11px;color:#888;text-align:center" class="muted">
+        © ${brand} — Monitoramento de APIs
+      </div>
+    </td></tr>
+  </table>
+</body>
+</html>`;
+};
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -158,63 +272,21 @@ serve(async (req) => {
     // Enviar email de alerta
     console.log(`[anthropic-balance-alert] Sending alert to: ${recipients.join(", ")} (test mode: ${testMode})`);
     const emailResponse = await resend.emails.send({
-      from: "Dachser Alerts <alerts@z3us.ai>",
+      from: "Z3US.AI - Alertas <alertas@hermes.z3us.ai>",
       to: recipients,
-      subject: `⚠️ ALERTA: Saldo Anthropic Baixo - $${estimatedBalance.toFixed(2)}`,
-      html: `
-        <!DOCTYPE html>
-        <html>
-        <head>
-          <style>
-            body { font-family: Arial, sans-serif; background: #f5f5f5; padding: 20px; }
-            .container { max-width: 600px; margin: 0 auto; background: white; border-radius: 8px; padding: 30px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
-            .header { text-align: center; margin-bottom: 30px; }
-            .alert-badge { display: inline-block; background: #ef4444; color: white; padding: 8px 16px; border-radius: 20px; font-weight: bold; font-size: 14px; }
-            .balance { text-align: center; margin: 30px 0; }
-            .balance-value { font-size: 48px; font-weight: bold; color: #ef4444; }
-            .balance-label { color: #666; font-size: 14px; margin-top: 5px; }
-            .message { background: #fef2f2; border-left: 4px solid #ef4444; padding: 15px; margin: 20px 0; }
-            .footer { text-align: center; color: #999; font-size: 12px; margin-top: 30px; padding-top: 20px; border-top: 1px solid #eee; }
-          </style>
-        </head>
-        <body>
-          <div class="container">
-            <div class="header">
-              <span class="alert-badge">🚨 ALERTA DE SALDO</span>
-              <h1 style="color: #333; margin-top: 20px;">Anthropic API</h1>
-            </div>
-            
-            <div class="balance">
-              <div class="balance-value">$${estimatedBalance.toFixed(2)}</div>
-              <div class="balance-label">Saldo Estimado Atual</div>
-            </div>
-            
-            <div class="message">
-              <strong>⚠️ Atenção:</strong> O saldo da API Anthropic está abaixo de $${ALERT_THRESHOLD.toFixed(2)}. 
-              Recomendamos recarregar a conta para evitar interrupções nos serviços.
-            </div>
-            
-            <p style="color: #666; text-align: center;">
-              Acesse o <a href="https://console.anthropic.com" style="color: #8b5cf6;">Console Anthropic</a> para recarregar.
-            </p>
-            
-            <div class="footer">
-              <p>Este é um email automático do sistema de monitoramento Dachser.</p>
-              <p>Data/Hora: ${new Date().toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" })}</p>
-            </div>
-          </div>
-        </body>
-        </html>
-      `,
+      subject: `🚨 ALERTA: Saldo Anthropic Baixo - $${estimatedBalance.toFixed(2)}`,
+      html: generateAlertEmailHtml(estimatedBalance),
     });
 
     console.log(`[anthropic-balance-alert] Alert email sent:`, emailResponse);
 
-    // Registrar que o alerta foi enviado
-    await client.execute(`
-      INSERT INTO ai_agente.t_anthropic_alerts (alert_type, balance_at_alert)
-      VALUES ('low_balance', ?)
-    `, [estimatedBalance]);
+    // Registrar que o alerta foi enviado (apenas se não for teste)
+    if (!testMode) {
+      await client.execute(`
+        INSERT INTO ai_agente.t_anthropic_alerts (alert_type, balance_at_alert)
+        VALUES ('low_balance', ?)
+      `, [estimatedBalance]);
+    }
 
     await client.close();
 
