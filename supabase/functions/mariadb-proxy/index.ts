@@ -5922,6 +5922,48 @@ serve(async (req) => {
         break;
       }
 
+      case 'list_comprovantes': {
+        console.log('Fetching comprovantes from t_voucher_anexos');
+        
+        const { page = 1, perPage = 100 } = body as { page?: number; perPage?: number };
+        const offset = (page - 1) * perPage;
+        
+        const comprovantesResult = await client.execute(`
+          SELECT 
+            a.id,
+            a.voucher_id,
+            v.numero_spo,
+            a.file_name,
+            a.file_url,
+            a.file_size,
+            a.created_at,
+            v.forma_pagamento,
+            v.valor
+          FROM dados_dachser.t_voucher_anexos a
+          LEFT JOIN dados_dachser.t_vouchers v ON a.voucher_id = v.id
+          WHERE a.tipo = 'COMPROVANTE'
+          ORDER BY a.created_at DESC
+          LIMIT ? OFFSET ?
+        `, [perPage, offset]);
+        
+        const countResult = await client.execute(`
+          SELECT COUNT(*) as total 
+          FROM dados_dachser.t_voucher_anexos 
+          WHERE tipo = 'COMPROVANTE'
+        `);
+        
+        const total = countResult.rows?.[0]?.total || 0;
+        
+        result = { 
+          comprovantes: comprovantesResult.rows,
+          total,
+          page,
+          perPage,
+          totalPages: Math.ceil(total / perPage)
+        };
+        break;
+      }
+
       // ==================== REMESSA MODULE ====================
       case 'create_remessa_lote': {
         const { banco, criado_por_user_id, criado_por_user_name } = body as {

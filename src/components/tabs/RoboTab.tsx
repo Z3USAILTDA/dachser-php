@@ -7,8 +7,9 @@ import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
-import { Bot, Upload, CheckCircle2, XCircle, AlertCircle, FileText } from "lucide-react";
+import { Bot, Upload, CheckCircle2, XCircle, AlertCircle, FileText, Search, Edit2, X } from "lucide-react";
 import { TipoAnexo } from "@/types/voucher";
+import { UploadZone } from "@/components/maritimo/UploadZone";
 
 interface FileMatch {
   file: File;
@@ -17,6 +18,8 @@ interface FileMatch {
   voucherId: string | null;
   status: "pending" | "processing" | "success" | "error";
   error?: string;
+  manualSpoInput?: string;
+  isEditingSpo?: boolean;
 }
 
 export function RoboTab() {
@@ -26,10 +29,18 @@ export function RoboTab() {
   const [progress, setProgress] = useState(0);
 
   const extractSPOFromFilename = (filename: string): string | null => {
+    // Enhanced patterns for SPO extraction
     const patterns = [
-      /^(\d{5,})[-_]/,
-      /SPO[-_]?(\d{5,})/i,
-      /[-_](\d{5,})\./,
+      /^(\d{5,})[-_]/,              // 12345_comprovante.pdf
+      /SPO[-_]?(\d{5,})/i,          // SPO12345.pdf or SPO-12345.pdf
+      /[-_](\d{5,})\./,              // comprovante_12345.pdf
+      /(\d{5,})[-_]comprovante/i,    // 12345-comprovante.pdf
+      /comprovante[-_](\d{5,})/i,    // comprovante_12345.pdf
+      /pgto[-_]?(\d{5,})/i,          // pgto12345.pdf
+      /pag[-_]?(\d{5,})/i,           // pag_12345.pdf
+      /voucher[-_]?(\d{5,})/i,       // voucher_12345.pdf
+      /^(\d{5,})\s/,                  // "12345 alguma coisa.pdf"
+      /\s(\d{5,})\./,                 // "alguma coisa 12345.pdf"
     ];
 
     for (const pattern of patterns) {
@@ -42,9 +53,26 @@ export function RoboTab() {
     return null;
   };
 
-  const handleFileSelect = async (event: React.ChangeEvent<HTMLInputElement>) => {
-    const selectedFiles = Array.from(event.target.files || []);
-    
+  const searchVoucherBySPO = async (spo: string): Promise<string | null> => {
+    try {
+      const { data, error } = await supabase.functions.invoke('mariadb-proxy', {
+        body: {
+          action: 'query',
+          query: `SELECT id FROM t_vouchers WHERE numero_spo = ? AND etapa_atual = 'ROBO' LIMIT 1`,
+          params: [spo],
+        },
+      });
+
+      if (!error && data?.rows?.length > 0) {
+        return data.rows[0].id;
+      }
+    } catch (e) {
+      console.error('Error fetching voucher:', e);
+    }
+    return null;
+  };
+
+  const handleFilesSelected = async (selectedFiles: File[]) => {
     if (selectedFiles.length === 0) return;
 
     const fileMatches: FileMatch[] = await Promise.all(
@@ -53,22 +81,7 @@ export function RoboTab() {
         let voucherId = null;
 
         if (numeroSPO) {
-          // Query MariaDB via proxy for voucher
-          try {
-            const { data, error } = await supabase.functions.invoke('mariadb-proxy', {
-              body: {
-                action: 'query',
-                query: `SELECT id FROM t_vouchers WHERE numero_spo = ? AND etapa_atual = 'ROBO' LIMIT 1`,
-                params: [numeroSPO],
-              },
-            });
-
-            if (!error && data?.rows?.length > 0) {
-              voucherId = data.rows[0].id;
-            }
-          } catch (e) {
-            console.error('Error fetching voucher:', e);
-          }
+          voucherId = await searchVoucherBySPO(numeroSPO);
         }
 
         return {
@@ -77,16 +90,78 @@ export function RoboTab() {
           numeroSPO,
           voucherId,
           status: "pending" as const,
+          manualSpoInput: "",
+          isEditingSpo: !numeroSPO,
         };
       })
     );
 
-    setFiles(fileMatches);
+    setFiles((prev) => [...prev, ...fileMatches]);
 
     toast({
       title: "Arquivos carregados",
       description: `${selectedFiles.length} arquivo(s) prontos para processamento`,
     });
+  };
+
+  const handleManualSpoSearch = async (index: number) => {
+    const file = files[index];
+    if (!file.manualSpoInput?.trim()) {
+      toast({
+        title: "Informe o SPO",
+        description: "Digite o número SPO para buscar o voucher",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const voucherId = await searchVoucherBySPO(file.manualSpoInput.trim());
+
+    setFiles((prev) =>
+      prev.map((f, i) =>
+        i === index
+          ? {
+              ...f,
+              numeroSPO: file.manualSpoInput?.trim() || null,
+              voucherId,
+              isEditingSpo: false,
+            }
+          : f
+      )
+    );
+
+    if (voucherId) {
+      toast({
+        title: "Voucher encontrado",
+        description: `SPO ${file.manualSpoInput} vinculado com sucesso`,
+      });
+    } else {
+      toast({
+        title: "Voucher não encontrado",
+        description: `Nenhum voucher com SPO ${file.manualSpoInput} na etapa ROBO`,
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleUpdateManualSpo = (index: number, value: string) => {
+    setFiles((prev) =>
+      prev.map((f, i) =>
+        i === index ? { ...f, manualSpoInput: value } : f
+      )
+    );
+  };
+
+  const handleToggleEditSpo = (index: number) => {
+    setFiles((prev) =>
+      prev.map((f, i) =>
+        i === index ? { ...f, isEditingSpo: !f.isEditingSpo } : f
+      )
+    );
+  };
+
+  const handleRemoveFile = (index: number) => {
+    setFiles((prev) => prev.filter((_, i) => i !== index));
   };
 
   const processFiles = async () => {
@@ -125,7 +200,7 @@ export function RoboTab() {
           .from("voucher-anexos")
           .getPublicUrl(filePath);
 
-        // Save attachment metadata to MariaDB
+        // Save attachment metadata to MariaDB (only t_voucher_anexos)
         const { error: attachmentError } = await supabase.functions.invoke('mariadb-proxy', {
           body: {
             action: 'insert',
@@ -216,6 +291,8 @@ export function RoboTab() {
     return <Badge className="bg-primary text-primary-foreground">SPO {fileMatch.numeroSPO}</Badge>;
   };
 
+  const canProcess = files.length > 0 && files.some((f) => f.voucherId && f.status === "pending");
+
   return (
     <div className="space-y-6 animate-fade-in">
       <Card className="bg-card/80 backdrop-blur-sm border-border/50">
@@ -227,7 +304,7 @@ export function RoboTab() {
             <div>
               <CardTitle>Upload em Lote</CardTitle>
               <CardDescription>
-                Selecione múltiplos arquivos de comprovantes. O sistema identificará automaticamente 
+                Arraste ou selecione múltiplos comprovantes. O sistema identificará automaticamente 
                 o número SPO no nome do arquivo.
               </CardDescription>
             </div>
@@ -235,21 +312,21 @@ export function RoboTab() {
         </CardHeader>
 
         <CardContent className="space-y-6">
-          <div className="space-y-2">
-            <Label htmlFor="files">Selecionar Comprovantes</Label>
-            <div className="flex gap-3">
-              <Input
-                id="files"
-                type="file"
-                multiple
-                accept=".pdf,.jpg,.jpeg,.png"
-                onChange={handleFileSelect}
-                disabled={processing}
-                className="flex-1 bg-input/50 border-border/50"
-              />
+          {/* UploadZone for drag & drop */}
+          <UploadZone
+            onFilesSelected={handleFilesSelected}
+            accept=".pdf,.jpg,.jpeg,.png"
+            multiple={true}
+            label="Arraste comprovantes aqui ou clique para selecionar"
+            description="Aceitos: PDF, JPG, PNG - Múltiplos arquivos permitidos"
+          />
+
+          {/* Process button */}
+          {files.length > 0 && (
+            <div className="flex justify-end">
               <Button
                 onClick={processFiles}
-                disabled={files.length === 0 || processing}
+                disabled={!canProcess || processing}
                 className="gap-2 bg-primary text-primary-foreground hover:bg-primary/90 shadow-lg shadow-primary/20"
               >
                 {processing ? (
@@ -260,12 +337,12 @@ export function RoboTab() {
                 ) : (
                   <>
                     <Upload className="h-4 w-4" />
-                    Processar {files.length > 0 && `(${files.length})`}
+                    Processar ({files.filter((f) => f.voucherId && f.status === "pending").length})
                   </>
                 )}
               </Button>
             </div>
-          </div>
+          )}
 
           {processing && (
             <div className="space-y-2">
@@ -279,27 +356,88 @@ export function RoboTab() {
 
           {files.length > 0 && (
             <div className="space-y-3">
-              <h3 className="font-semibold text-foreground">Arquivos ({files.length})</h3>
+              <div className="flex items-center justify-between">
+                <h3 className="font-semibold text-foreground">Arquivos ({files.length})</h3>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setFiles([])}
+                  className="text-muted-foreground hover:text-destructive"
+                >
+                  Limpar lista
+                </Button>
+              </div>
               <div className="space-y-2 max-h-96 overflow-y-auto">
                 {files.map((fileMatch, index) => (
                   <div
                     key={index}
-                    className="flex items-center gap-3 p-3 border border-border/50 rounded-lg bg-muted/30 hover:bg-muted/50 transition-colors animate-fade-in"
+                    className="flex items-start gap-3 p-3 border border-border/50 rounded-lg bg-muted/30 hover:bg-muted/50 transition-colors animate-fade-in"
                     style={{ animationDelay: `${index * 50}ms` }}
                   >
-                    <FileText className="h-5 w-5 text-muted-foreground flex-shrink-0" />
+                    <FileText className="h-5 w-5 text-muted-foreground flex-shrink-0 mt-1" />
                     <div className="flex-1 min-w-0">
                       <p className="font-medium text-sm truncate text-foreground">
                         {fileMatch.fileName}
                       </p>
-                      <div className="flex items-center gap-2 mt-1">
+                      <div className="flex items-center gap-2 mt-1 flex-wrap">
                         {getStatusBadge(fileMatch)}
                         {fileMatch.error && (
                           <span className="text-xs text-destructive">{fileMatch.error}</span>
                         )}
                       </div>
+
+                      {/* Manual SPO input */}
+                      {fileMatch.isEditingSpo && fileMatch.status === "pending" && (
+                        <div className="flex items-center gap-2 mt-2">
+                          <Input
+                            placeholder="Digite o SPO"
+                            value={fileMatch.manualSpoInput || ""}
+                            onChange={(e) => handleUpdateManualSpo(index, e.target.value)}
+                            className="h-8 w-32 text-sm"
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter") {
+                                handleManualSpoSearch(index);
+                              }
+                            }}
+                          />
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="h-8 gap-1"
+                            onClick={() => handleManualSpoSearch(index)}
+                          >
+                            <Search className="h-3 w-3" />
+                            Buscar
+                          </Button>
+                        </div>
+                      )}
+
+                      {/* Edit SPO button for already identified SPOs */}
+                      {!fileMatch.isEditingSpo && fileMatch.numeroSPO && !fileMatch.voucherId && fileMatch.status === "pending" && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-6 mt-1 text-xs text-muted-foreground"
+                          onClick={() => handleToggleEditSpo(index)}
+                        >
+                          <Edit2 className="h-3 w-3 mr-1" />
+                          Editar SPO
+                        </Button>
+                      )}
                     </div>
-                    {getStatusIcon(fileMatch.status)}
+                    <div className="flex items-center gap-2">
+                      {getStatusIcon(fileMatch.status)}
+                      {fileMatch.status === "pending" && (
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-6 w-6 text-muted-foreground hover:text-destructive"
+                          onClick={() => handleRemoveFile(index)}
+                        >
+                          <X className="h-4 w-4" />
+                        </Button>
+                      )}
+                    </div>
                   </div>
                 ))}
               </div>
@@ -315,10 +453,15 @@ export function RoboTab() {
               <li>• <code className="bg-muted px-1 rounded">12345_comprovante.pdf</code> - SPO no início</li>
               <li>• <code className="bg-muted px-1 rounded">SPO12345.pdf</code> ou <code className="bg-muted px-1 rounded">SPO-12345.pdf</code> - Com prefixo SPO</li>
               <li>• <code className="bg-muted px-1 rounded">comprovante_12345.pdf</code> - SPO no meio/fim</li>
+              <li>• <code className="bg-muted px-1 rounded">pgto_12345.pdf</code> ou <code className="bg-muted px-1 rounded">pag-12345.pdf</code> - Variações</li>
             </ul>
             <p className="text-sm text-muted-foreground mt-3 flex items-center gap-1">
               <AlertCircle className="h-3 w-3 text-warning" />
               O voucher deve estar na etapa <strong className="text-foreground">ROBO</strong> para receber comprovantes automaticamente.
+            </p>
+            <p className="text-sm text-muted-foreground mt-1 flex items-center gap-1">
+              <Edit2 className="h-3 w-3 text-primary" />
+              Se o SPO não for identificado, você pode informar manualmente.
             </p>
           </div>
         </CardContent>
