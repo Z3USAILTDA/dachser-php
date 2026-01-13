@@ -14,6 +14,8 @@ import { cn } from "@/lib/utils";
 
 interface BaixaRecord {
   IdLancamentoRM: number;
+  IdBaixa: number;
+  tipo_pag_rec: string;
   nd: string;
   documento: string;
   nome_beneficiario: string;
@@ -26,8 +28,7 @@ interface BaixaRecord {
   data_baixa: string;
   valor_baixa: number;
   usuario_baixa: string;
-  tipo_baixa: string;
-  observacao_baixa: string;
+  status_lan: string;
 }
 
 export const HistoricoBaixasTab = () => {

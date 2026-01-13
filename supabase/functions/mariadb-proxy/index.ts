@@ -6719,15 +6719,14 @@ serve(async (req) => {
         const periodo = periodoBody.periodo || '30dias';
         
         let dateFilter = '';
-        const now = new Date();
         if (periodo === 'hoje') {
-          dateFilter = `AND DATE(b.DataHoraBaixa) = CURDATE()`;
+          dateFilter = `AND DATE(b.DataDaBaixa) = CURDATE()`;
         } else if (periodo === '7dias') {
-          dateFilter = `AND b.DataHoraBaixa >= DATE_SUB(NOW(), INTERVAL 7 DAY)`;
+          dateFilter = `AND b.DataDaBaixa >= DATE_SUB(NOW(), INTERVAL 7 DAY)`;
         } else if (periodo === '30dias') {
-          dateFilter = `AND b.DataHoraBaixa >= DATE_SUB(NOW(), INTERVAL 30 DAY)`;
+          dateFilter = `AND b.DataDaBaixa >= DATE_SUB(NOW(), INTERVAL 30 DAY)`;
         } else if (periodo === '90dias') {
-          dateFilter = `AND b.DataHoraBaixa >= DATE_SUB(NOW(), INTERVAL 90 DAY)`;
+          dateFilter = `AND b.DataDaBaixa >= DATE_SUB(NOW(), INTERVAL 90 DAY)`;
         }
         // 'all' = sem filtro de data
         
@@ -6736,11 +6735,12 @@ serve(async (req) => {
         const baixas = await client.query(`
           SELECT 
             b.IdLancamentoRM,
-            b.DataHoraBaixa as data_baixa,
-            b.ValorBaixa as valor_baixa,
+            b.IdBaixa,
+            b.TipoPagRec as tipo_pag_rec,
+            b.ValorBaixado as valor_baixa,
+            b.DataDaBaixa as data_baixa,
             b.UsuarioBaixa as usuario_baixa,
-            b.TipoBaixa as tipo_baixa,
-            b.Observacao as observacao_baixa,
+            b.StatusLan as status_lan,
             dfv.nd,
             dfv.documento,
             dfv.nome_beneficiario,
@@ -6754,7 +6754,7 @@ serve(async (req) => {
           LEFT JOIN dados_dachser.t_dados_financeiro_voucher dfv 
             ON b.IdLancamentoRM = dfv.id_rm
           WHERE 1=1 ${dateFilter}
-          ORDER BY b.DataHoraBaixa DESC
+          ORDER BY b.DataDaBaixa DESC
           LIMIT 1000
         `);
 
