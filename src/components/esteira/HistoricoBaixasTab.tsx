@@ -72,6 +72,9 @@ export const HistoricoBaixasTab = () => {
       const valor = b.valor_baixa || b.valor_nf || 0;
       if (valor === 0) return false;
       
+      // Filtrar registros com moeda "null" ou inválida
+      if (!b.moeda || b.moeda.toLowerCase() === "null") return false;
+      
       // Filtrar registros com valores que começam com "null"
       if (b.nd?.toLowerCase().startsWith("null")) return false;
       if (b.nome_beneficiario?.toLowerCase().startsWith("null")) return false;
