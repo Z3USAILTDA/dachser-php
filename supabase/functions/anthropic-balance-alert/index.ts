@@ -10,8 +10,8 @@ const corsHeaders = {
 };
 
 const ALERT_THRESHOLD = 5.00; // $5.00
-const ALERT_RECIPIENTS = ["davi.santos@br.dachser.com"]; // Email para receber alertas
-const TEST_EMAIL = "devs@z3us.ai"; // Email para testes
+const ALERT_RECIPIENTS = ["rodrigo@z3us.ai", "herbert@z3us.ai", "larissa@z3us.ai"];
+const TEST_EMAIL = "devs@z3us.ai"; // Email para testes manuais
 
 // Gera o HTML do email no padrão Z3US
 const generateAlertEmailHtml = (estimatedBalance: number): string => {
