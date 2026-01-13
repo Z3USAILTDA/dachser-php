@@ -2552,14 +2552,16 @@ serve(async (req) => {
               cct.cnpj_consignatario,
               cct.data_manifestacao_cct,
               TRIM(m.tratamento) as tratamento,
-              -- Status de manifestação baseado no status atual
+              -- Status de manifestação CCT (Nomenclatura Aduaneira)
               CASE 
-                WHEN s.\`último_status\` = 'DEP' THEN 'EM_TRANSITO'
-                WHEN s.\`último_status\` IN ('ARR', 'RCF') THEN 'CHEGOU'
-                WHEN s.\`último_status\` IN ('ATA', 'NFD', 'AWD') THEN 'DISPONIVEL'
+                WHEN s.\`último_status\` IN ('ARR', 'ATA') THEN 'INFORMADA'
+                WHEN s.\`último_status\` IN ('DEP', 'MAN', 'BKD') THEN 'MANIFESTADA'
+                WHEN s.\`último_status\` IN ('RCF', 'RCS') THEN 'EM_AREA_TRANSFERENCIA'
+                WHEN s.\`último_status\` IN ('NFD', 'AWD') THEN 'RECEPCIONADA'
                 WHEN s.\`último_status\` IN ('DLV', 'POD') THEN 'ENTREGUE'
-                ELSE 'AGUARDANDO'
-              END as status_manifestacao,
+                WHEN s.\`último_status\` IN ('FRO', 'DIS', 'OFLD') THEN 'BLOQUEIO'
+                ELSE 'INFORMADA'
+              END as status_cct_oficial,
               ROW_NUMBER() OVER (PARTITION BY TRIM(s.hawb) ORDER BY s.\`última atualização\` DESC) as rn
             FROM ${database}.t_status_aereo s
             LEFT JOIN ${database}.t_cct_shipments cct ON TRIM(s.awb) COLLATE utf8mb4_unicode_ci = TRIM(cct.master) COLLATE utf8mb4_unicode_ci

@@ -4,19 +4,14 @@
 export type OrigemCCT = "POS_CHEGADA" | "ARR_EXPIRADO" | "OUTRO";
 
 export type StatusCCTOficial = 
-  | "AGUARDANDO_MANIFESTACAO"
-  | "COLETA_REALIZADA"
-  | "CARGA_RECEBIDA_TECA"
-  | "MANIFESTADO"
-  | "AREA_TRANSFERENCIA"
-  | "CHEGADA_INFORMADA"
-  | "RECEPCIONADO"
-  | "DISPONIVEL_RETIRADA"
-  | "EM_TRANSITO"
-  | "EM_TRANSITO_LAST_MILE"
+  | "INFORMADA"
+  | "MANIFESTADA"
+  | "EM_AREA_TRANSFERENCIA"
+  | "RECEPCIONADA"
+  | "EM_TROCA_RECINTOS"
+  | "EM_TRANSITO_TERRESTRE"
   | "ENTREGUE"
-  | "BLOQUEIO"
-  | "FROZEN";
+  | "BLOQUEIO";
 
 export type SLAStatus = "OK" | "ALERTA" | "CRITICO" | "VENCIDO";
 
@@ -151,36 +146,33 @@ export const SLA_POR_STATUS: Record<string, SLAConfig> = {
   },
 };
 
-// Status mapping from tracking codes to CCT official status
+// Status mapping from tracking codes to CCT official status (Manifestação)
 export const STATUS_MAPPING: Record<string, StatusCCTOficial> = {
-  // Departure / Transit
-  'DEP': 'EM_TRANSITO',
-  'MAN': 'MANIFESTADO',
-  'BKD': 'MANIFESTADO',
+  // Carga informada à RFB (chegou e foi notificada)
+  'ARR': 'INFORMADA',
+  'ATA': 'INFORMADA',
   
-  // Arrival
-  'ARR': 'CHEGADA_INFORMADA',
-  'ATA': 'CHEGADA_INFORMADA',
+  // Carga manifestada no sistema
+  'MAN': 'MANIFESTADA',
+  'BKD': 'MANIFESTADA',
+  'DEP': 'MANIFESTADA', // DEP = já manifestado e embarcado
   
-  // Reception / Processing
-  'RCF': 'RECEPCIONADO',
-  'RCS': 'RECEPCIONADO',
+  // Em área de transferência ou não descarregada
+  'RCF': 'EM_AREA_TRANSFERENCIA',
+  'RCS': 'EM_AREA_TRANSFERENCIA',
   
-  // Available for pickup
-  'NFD': 'DISPONIVEL_RETIRADA',
-  'AWD': 'DISPONIVEL_RETIRADA',
+  // Recepcionada pelo terminal
+  'NFD': 'RECEPCIONADA',
+  'AWD': 'RECEPCIONADA',
   
-  // Delivery
+  // Entrega realizada
   'DLV': 'ENTREGUE',
   'POD': 'ENTREGUE',
   
-  // Problems / Blocks
-  'FRO': 'FROZEN',
+  // Bloqueios e problemas
+  'FRO': 'BLOQUEIO',
   'DIS': 'BLOQUEIO',
   'OFLD': 'BLOQUEIO',
-  
-  // Default
-  'AGUARDANDO_MANIFESTACAO': 'AGUARDANDO_MANIFESTACAO',
 };
 
 // List of registered airline codes (synchronized with track-awb)

@@ -117,12 +117,19 @@ export default function AnalyticsContent({
     const statusMap: Record<string, number> = {
       "Aguard. Manif.": 0,
       "Manifestado": 0,
-      "Em Trânsito": 0,
+      "Informada": 0,
+      "Manifestada": 0,
+      "Em área de Transferência": 0,
+      "Recepcionada": 0,
       "Entregue": 0
     };
     filteredProcessos.forEach(p => {
-      const status = p.status_atual?.status_cct_oficial || "AGUARDANDO_MANIFESTACAO";
-      if (status === "AGUARDANDO_MANIFESTACAO") statusMap["Aguard. Manif."]++;else if (status === "MANIFESTADO") statusMap["Manifestado"]++;else if (status === "EM_TRANSITO") statusMap["Em Trânsito"]++;else if (status === "ENTREGUE") statusMap["Entregue"]++;
+      const status = p.status_atual?.status_cct_oficial || "INFORMADA";
+      if (status === "INFORMADA") statusMap["Informada"]++;
+      else if (status === "MANIFESTADA") statusMap["Manifestada"]++;
+      else if (status === "EM_AREA_TRANSFERENCIA") statusMap["Em área de Transferência"]++;
+      else if (status === "RECEPCIONADA") statusMap["Recepcionada"]++;
+      else if (status === "ENTREGUE") statusMap["Entregue"]++;
     });
     return Object.entries(statusMap).filter(([_, value]) => value > 0).map(([name, value]) => ({
       name,
