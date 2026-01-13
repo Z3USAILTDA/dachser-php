@@ -11,7 +11,7 @@ const corsHeaders = {
 
 const ALERT_THRESHOLD = 5.00; // $5.00
 const ALERT_RECIPIENTS = ["davi.santos@br.dachser.com"]; // Email para receber alertas
-const TEST_EMAIL = "devs@z3us.ai"; // Email para testes
+const TEST_EMAIL = "ti@z3us.ai"; // Email verificado no Resend para testes
 
 serve(async (req) => {
   if (req.method === "OPTIONS") {
