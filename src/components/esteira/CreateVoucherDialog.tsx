@@ -1044,8 +1044,6 @@ export const CreateVoucherDialog = ({
                     name="vencimento"
                     label="Data de Vencimento"
                     required
-                    disabled={isRmMode}
-                    showSyncIcon={isRmMode}
                   />
                   <DateInputField
                     control={form.control}
