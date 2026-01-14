@@ -290,7 +290,7 @@ Financeiro Dachser`;
         body: {
           cnpj: selectedRow.cnpj,
           cliente: selectedRow.razao_base || selectedRow.razao_social,
-          email_to: "devs@z3us.ai", // Fixed test email
+          email_to: "devs@z3us.ai; bia.souza@dachser.com; jessica.costa@dachser.com", // Fixed test email
           custom_text: agingEmailText, // Custom email text
         },
       });
