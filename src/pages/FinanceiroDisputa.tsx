@@ -538,7 +538,7 @@ export default function FinanceiroDisputa() {
       subtitle="NFs em disputa"
       rightContent={rightContent}
       pageIcon={Scale}
-      backTo="/dashboard"
+      backTo="/fin/regua"
     >
       {/* Filter Card */}
       <FilterCard>
