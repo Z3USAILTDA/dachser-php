@@ -12,6 +12,7 @@ interface AgingRequest {
   cnpj: string;
   cliente: string;
   email_to: string;
+  custom_text?: string;
 }
 
 interface InvoiceRow {
@@ -330,7 +331,7 @@ serve(async (req: Request): Promise<Response> => {
   let client: Client | null = null;
 
   try {
-    const { cnpj, cliente, email_to }: AgingRequest = await req.json();
+    const { cnpj, cliente, email_to, custom_text }: AgingRequest = await req.json();
 
     if (!cnpj || !email_to) {
       return new Response(
@@ -450,9 +451,19 @@ serve(async (req: Request): Promise<Response> => {
     // Build CNPJs list for email body
     const cnpjsList = allCnpjs.map((c: string) => `<strong>${formatCnpj(c)}</strong>`).join("<br/>");
 
-    // Email body
-    const emailHtml = `
-<div style="font-family: Arial, sans-serif; font-size: 14px; color: #333;">
+    // Build email body - use custom_text if provided, otherwise use default
+    let emailBodyHtml: string;
+    
+    if (custom_text && custom_text.trim()) {
+      // Convert plain text to HTML (replace newlines with <br/>, emails with links)
+      const htmlContent = custom_text
+        .replace(/\n/g, "<br/>")
+        .replace(/([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})/g, '<a href="mailto:$1">$1</a>');
+      
+      emailBodyHtml = `<p>${htmlContent}</p>`;
+    } else {
+      // Default email body
+      emailBodyHtml = `
   <p>Boa tarde!<br/>Tudo bem?</p>
   
   <p>Segue anexo, aging list para os CNPJ's:</p>
@@ -465,8 +476,11 @@ serve(async (req: Request): Promise<Response> => {
   
   <p>Agradecemos a sua atenção e colaboração.</p>
   
-  <p>Atenciosamente,<br/><strong>Financeiro Dachser</strong></p>
-  
+  <p>Atenciosamente,<br/><strong>Financeiro Dachser</strong></p>`;
+    }
+
+    // Fixed legal footer (cannot be modified)
+    const legalFooter = `
   <hr style="border: none; border-top: 1px solid #ccc; margin: 20px 0;"/>
   
   <p style="font-size: 11px; color: #666;">
@@ -475,7 +489,13 @@ serve(async (req: Request): Promise<Response> => {
   
   <p style="font-size: 11px; color: #666;">
     Our legal services are governed by the GENERAL CONDITIONS OF BUSINESS, registered in the 1º RTD - Oficial de Registro de Títulos e Documentos e Civil de Pessoa Jurídica of the County of Campinas, SP, under No. 1.216.692, also available in our website dachser.com.br. Special remark is made to the FIATA Model Rules limits the liability of the freight forwarder, in case of loss or damage to goods, to 2 Special Drawing Rights (SDR) per kilogram. For any other loss not mentioned in FIATA rules, the liability shall not exceed 50,000 SDR per occurrence.
-  </p>
+  </p>`;
+
+    // Complete email HTML
+    const emailHtml = `
+<div style="font-family: Arial, sans-serif; font-size: 14px; color: #333;">
+  ${emailBodyHtml}
+  ${legalFooter}
 </div>
 `;
 

@@ -92,6 +92,12 @@ export default function FinanceiroDisputa() {
   const [editingObservacoes, setEditingObservacoes] = useState<string | null>(null);
   const debounceTimers = useRef<Record<string, NodeJS.Timeout>>({});
   const observacoesInputRef = useRef<HTMLInputElement>(null);
+
+  // Responsável editing state
+  const [savingResponsavel, setSavingResponsavel] = useState<Record<string, boolean>>({});
+  const [editingResponsavel, setEditingResponsavel] = useState<string | null>(null);
+  const responsavelDebounceTimers = useRef<Record<string, NodeJS.Timeout>>({});
+  const responsavelInputRef = useRef<HTMLInputElement>(null);
   useEffect(() => {
     fetchDisputas();
   }, [tipoFilter]);
@@ -313,6 +319,37 @@ export default function FinanceiroDisputa() {
         toast({ title: "Erro", description: "Falha ao salvar observações", variant: "destructive" });
       } finally {
         setSavingObservacoes(prev => ({ ...prev, [docKey]: false }));
+      }
+    }, 500);
+  }, [toast]);
+
+  // Debounced responsavel update
+  const handleResponsavelChange = useCallback((docKey: string, value: string) => {
+    // Update local state immediately
+    setRows(prev => prev.map(r => r.doc_key === docKey ? { ...r, responsavel: value } : r));
+
+    // Clear existing timer
+    if (responsavelDebounceTimers.current[docKey]) {
+      clearTimeout(responsavelDebounceTimers.current[docKey]);
+    }
+
+    // Set new debounce timer (500ms)
+    responsavelDebounceTimers.current[docKey] = setTimeout(async () => {
+      setSavingResponsavel(prev => ({ ...prev, [docKey]: true }));
+      try {
+        const { data, error } = await supabase.functions.invoke("mariadb-proxy", {
+          body: { action: "update_disputa_responsavel", doc_key: docKey, responsavel: value },
+        });
+
+        if (error) throw error;
+        if (!data?.success) {
+          toast({ title: "Erro", description: "Falha ao salvar responsável", variant: "destructive" });
+        }
+      } catch (err) {
+        console.error("Erro ao salvar responsável:", err);
+        toast({ title: "Erro", description: "Falha ao salvar responsável", variant: "destructive" });
+      } finally {
+        setSavingResponsavel(prev => ({ ...prev, [docKey]: false }));
       }
     }, 500);
   }, [toast]);
@@ -659,7 +696,40 @@ export default function FinanceiroDisputa() {
                         <Clock className="w-3 h-3" /> {formatElapsed(r.created_at)}
                       </Badge>
                     </td>
-                    <td className="px-4 py-[14px] whitespace-nowrap">{r.responsavel || "-"}</td>
+                    <td className="px-4 py-[14px] whitespace-nowrap min-w-[140px] max-w-[180px]">
+                      {editingResponsavel === r.doc_key ? (
+                        <div className="relative flex items-center gap-2">
+                          <Input
+                            ref={responsavelInputRef}
+                            value={r.responsavel || ""}
+                            onChange={(e) => handleResponsavelChange(r.doc_key, e.target.value)}
+                            onBlur={() => setEditingResponsavel(null)}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter' || e.key === 'Escape') {
+                                setEditingResponsavel(null);
+                              }
+                            }}
+                            placeholder="Responsável..."
+                            className="h-8 text-[0.85rem] bg-[#0a0a0f] border-white/15 rounded-lg pr-8"
+                            autoFocus
+                          />
+                          {savingResponsavel[r.doc_key] && (
+                            <Loader2 className="w-4 h-4 animate-spin absolute right-2 text-muted-foreground" />
+                          )}
+                        </div>
+                      ) : (
+                        <span 
+                          onClick={() => setEditingResponsavel(r.doc_key)}
+                          className="cursor-pointer hover:text-primary transition-colors block overflow-hidden text-ellipsis"
+                          title={r.responsavel || "Clique para editar"}
+                        >
+                          {r.responsavel || <span className="text-muted-foreground italic">—</span>}
+                          {savingResponsavel[r.doc_key] && (
+                            <Loader2 className="w-3 h-3 animate-spin inline ml-2 text-muted-foreground" />
+                          )}
+                        </span>
+                      )}
+                    </td>
                     <td className="px-4 py-[14px] whitespace-nowrap">{formatMoney(r.valor)}</td>
                     <td className="px-4 py-[14px] whitespace-nowrap">{r.tipo || "-"}</td>
                     <td className="px-4 py-[14px] whitespace-nowrap min-w-[200px] max-w-[300px]">

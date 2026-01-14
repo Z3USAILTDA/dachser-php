@@ -2109,6 +2109,37 @@ serve(async (req) => {
         break;
       }
 
+      case 'update_disputa_responsavel': {
+        const { doc_key, responsavel } = body as { doc_key?: string; responsavel?: string };
+        
+        if (!doc_key) {
+          return new Response(
+            JSON.stringify({ error: 'doc_key é obrigatório', success: false }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+        
+        // Update responsavel_disp in t_dados_financeiro_nfs
+        await client.execute(`
+          UPDATE dados_dachser.t_dados_financeiro_nfs 
+          SET responsavel_disp = ?
+          WHERE documento = ? OR numero_nf = ? OR nd = ?
+        `, [responsavel || null, doc_key, doc_key, doc_key]);
+        
+        // Also update in t_dados_rm if record exists
+        await client.execute(`
+          UPDATE dados_dachser.t_dados_rm rm
+          INNER JOIN dados_dachser.t_dados_financeiro_nfs nf 
+            ON rm.id_rm = nf.id_rm
+          SET rm.responsavel_disp = ?
+          WHERE nf.documento = ? OR nf.numero_nf = ? OR nf.nd = ?
+        `, [responsavel || null, doc_key, doc_key, doc_key]);
+        
+        console.log(`Disputa responsavel updated for: ${doc_key} -> ${responsavel}`);
+        result = { success: true };
+        break;
+      }
+
       case 'lookup_documento': {
         const { nd } = body as { nd?: string };
         

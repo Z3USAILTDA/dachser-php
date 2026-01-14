@@ -6,6 +6,7 @@ import { FileText, Clock, Flag, Search, X, RefreshCw } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Textarea } from "@/components/ui/textarea";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { PageLayout } from "@/components/layout/PageLayout";
@@ -19,6 +20,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
 
 interface StageCounts {
   PRE: number;
@@ -103,6 +105,7 @@ export default function ReguaCobranca() {
   const [agingModalOpen, setAgingModalOpen] = useState(false);
   const [selectedRow, setSelectedRow] = useState<StageRow | null>(null);
   const [sendingAging, setSendingAging] = useState(false);
+  const [agingEmailText, setAgingEmailText] = useState("");
 
   // Bulk send state (admin only)
   const [bulkSendModalOpen, setBulkSendModalOpen] = useState(false);
@@ -212,8 +215,27 @@ export default function ReguaCobranca() {
     setClienteSearch("");
   };
 
+  const getDefaultAgingText = (cnpj: string) => {
+    const cnpjFormatted = cnpj ? cnpj.replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})$/, "$1.$2.$3/$4-$5") : "xx.xxx.xxx/xxxx-xx";
+    return `Boa tarde!
+Tudo bem?
+
+Segue anexo, aging list para os CNPJ's:
+
+${cnpjFormatted}
+
+Por gentileza, poderia verificar e nos retornar com a programação de pagamento para essa semana?
+
+Em caso de dúvidas ou eventuais divergências, nossa equipe está à disposição através do e-mail jessica.costa@dachser.com ou pelo telefone +55 (19) 3312-6185.
+
+Agradecemos a sua atenção e colaboração.
+
+Atenciosamente,
+Financeiro Dachser`;
+  };
+
   const handleSendAgingCliente = (cliente: ClienteResumo) => {
-    setSelectedRow({
+    const row = {
       razao_base: cliente.razao_base,
       razao_social: cliente.razao_social,
       cnpj: cliente.cnpj,
@@ -223,7 +245,9 @@ export default function ReguaCobranca() {
       dias: 0,
       tipo_pagto: "",
       valor_br: ""
-    });
+    };
+    setSelectedRow(row);
+    setAgingEmailText(getDefaultAgingText(cliente.cnpj));
     setAgingModalOpen(true);
   };
 
@@ -253,6 +277,7 @@ export default function ReguaCobranca() {
 
   const handleSendAging = (row: StageRow) => {
     setSelectedRow(row);
+    setAgingEmailText(getDefaultAgingText(row.cnpj));
     setAgingModalOpen(true);
   };
 
@@ -266,6 +291,7 @@ export default function ReguaCobranca() {
           cnpj: selectedRow.cnpj,
           cliente: selectedRow.razao_base || selectedRow.razao_social,
           email_to: "devs@z3us.ai", // Fixed test email
+          custom_text: agingEmailText, // Custom email text
         },
       });
 
@@ -646,7 +672,7 @@ export default function ReguaCobranca() {
 
       {/* Aging Confirmation Modal */}
       <Dialog open={agingModalOpen} onOpenChange={setAgingModalOpen}>
-        <DialogContent className="sm:max-w-md">
+        <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Enviar Aging List</DialogTitle>
             <DialogDescription>
@@ -655,20 +681,36 @@ export default function ReguaCobranca() {
           </DialogHeader>
           
           {selectedRow && (
-            <div className="py-4 space-y-3">
-              <div>
-                <span className="text-muted-foreground text-sm">Cliente:</span>
-                <p className="font-medium">{selectedRow.razao_base || selectedRow.razao_social}</p>
-              </div>
-              <div>
-                <span className="text-muted-foreground text-sm">CNPJ:</span>
-                <p className="font-mono text-sm">{selectedRow.cnpj || selectedRow.documento?.slice(0, 18) || "—"}</p>
+            <div className="py-4 space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <span className="text-muted-foreground text-sm">Cliente:</span>
+                  <p className="font-medium">{selectedRow.razao_base || selectedRow.razao_social}</p>
+                </div>
+                <div>
+                  <span className="text-muted-foreground text-sm">CNPJ:</span>
+                  <p className="font-mono text-sm">{selectedRow.cnpj || selectedRow.documento?.slice(0, 18) || "—"}</p>
+                </div>
               </div>
               <div>
                 <span className="text-muted-foreground text-sm">E-mail destino (teste):</span>
                 <p className="font-medium text-orange-400">devs@z3us.ai</p>
               </div>
-              <p className="text-sm text-muted-foreground mt-2">
+              
+              <div className="space-y-2">
+                <Label className="text-sm text-muted-foreground">Texto do e-mail (editável)</Label>
+                <Textarea
+                  value={agingEmailText}
+                  onChange={(e) => setAgingEmailText(e.target.value)}
+                  className="min-h-[240px] bg-[#13141a] border-white/20 text-sm font-normal leading-relaxed"
+                  placeholder="Texto do e-mail..."
+                />
+                <p className="text-xs text-muted-foreground">
+                  O rodapé legal do e-mail (condições gerais de negócios) não pode ser alterado e será incluído automaticamente.
+                </p>
+              </div>
+              
+              <p className="text-sm text-muted-foreground">
                 Será gerada uma Aging List com todas as faturas em atraso deste cliente (incluindo todos os CNPJs do mesmo grupo).
               </p>
             </div>
