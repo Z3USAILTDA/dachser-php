@@ -9387,6 +9387,244 @@ serve(async (req) => {
         break;
       }
 
+      // ==================== SYNC VOUCHERS INCREMENTAL ====================
+      case 'sync_vouchers_incremental': {
+        // Busca apenas novos registros da t_dados_financeiro_voucher desde o último sync
+        console.log('[sync_incremental] Starting incremental voucher sync...');
+        
+        // 1. Buscar último sync timestamp
+        let lastSyncResult;
+        try {
+          lastSyncResult = await client.query(`
+            SELECT last_sync_datetime, last_sync_id_rm 
+            FROM dados_dachser.t_sync_control 
+            WHERE sync_type = 'voucher_rm'
+          `);
+        } catch (err) {
+          // Table may not exist, create it
+          console.log('[sync_incremental] Creating t_sync_control table...');
+          await client.execute(`
+            CREATE TABLE IF NOT EXISTS dados_dachser.t_sync_control (
+              id INT PRIMARY KEY AUTO_INCREMENT,
+              sync_type VARCHAR(50) NOT NULL UNIQUE,
+              last_sync_datetime DATETIME DEFAULT NULL,
+              last_sync_id_rm BIGINT DEFAULT NULL,
+              records_synced INT DEFAULT 0,
+              total_records INT DEFAULT 0,
+              updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+              created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+          `);
+          await client.execute(`
+            INSERT INTO dados_dachser.t_sync_control (sync_type, last_sync_datetime) VALUES ('voucher_rm', NULL)
+          `);
+          lastSyncResult = [{ last_sync_datetime: null, last_sync_id_rm: null }];
+        }
+        
+        const lastSync = lastSyncResult?.[0] || { last_sync_datetime: null, last_sync_id_rm: null };
+        console.log(`[sync_incremental] Last sync: ${lastSync.last_sync_datetime || 'NEVER'}`);
+        
+        // 2. Buscar apenas novos registros
+        let whereClause = `
+          WHERE (dfv.nome_beneficiario IS NULL OR LOWER(dfv.nome_beneficiario) NOT LIKE '%dachser%')
+            AND (dfv.modal IS NULL OR dfv.modal <> 'ADM')
+        `;
+        
+        if (lastSync.last_sync_datetime) {
+          whereClause += ` AND dfv.data_insert > '${lastSync.last_sync_datetime}'`;
+        }
+        
+        const newVouchers = await client.query(`
+          SELECT 
+            dfv.id_rm, dfv.nd, dfv.documento, dfv.nome_beneficiario, dfv.nome_cobranca,
+            dfv.numero_nf, dfv.numero_processo, dfv.modal, dfv.tipo_pag, dfv.forma_pag,
+            dfv.data_emissao, dfv.data_vencimento, dfv.valor_nf, dfv.moeda, dfv.cnpj,
+            dfv.razao_social, dfv.data_insert
+          FROM dados_dachser.t_dados_financeiro_voucher dfv
+          LEFT JOIN dados_dachser.t_vouchers v 
+            ON dfv.nd COLLATE utf8mb4_unicode_ci = v.numero_spo COLLATE utf8mb4_unicode_ci
+          LEFT JOIN dados_dachser.tbaixas b ON dfv.id_rm = b.IdLancamentoRM
+          ${whereClause}
+            AND v.id IS NULL
+            AND b.IdLancamentoRM IS NULL
+          ORDER BY dfv.data_insert ASC
+          LIMIT 500
+        `);
+        
+        console.log(`[sync_incremental] Found ${newVouchers?.length || 0} new vouchers to sync`);
+        
+        let inserted = 0;
+        let lastDataInsert: string | null = null;
+        let lastIdRm: number | null = null;
+        
+        // 3. Insert new vouchers into t_vouchers
+        for (const rm of (newVouchers || [])) {
+          try {
+            const voucherId = crypto.randomUUID();
+            const mapFormaPag = (fp: string | null): string => {
+              const mapping: Record<string, string> = {
+                'BOL': 'BOLETO', 'BOLETO': 'BOLETO', 'PIX': 'TRANSFERENCIA_PIX',
+                'TED': 'TRANSFERENCIA_PIX', 'TRANSF': 'TRANSFERENCIA_PIX',
+                'DEBITO': 'DEBITO', 'CAMBIO': 'CAMBIO', 'DARF': 'BOLETO', 'GPS': 'BOLETO'
+              };
+              return mapping[(fp || '').toUpperCase()] || 'BOLETO';
+            };
+            
+            await client.execute(`
+              INSERT INTO dados_dachser.t_vouchers (
+                id, numero_spo, fornecedor, cnpj_fornecedor, valor, moeda,
+                vencimento, data_emissao_documento, cobranca_em_nome_de, forma_pagamento,
+                etapa_atual, status_baixa, criado_por_user_id, id_rm, data_insert_rm, sync_status,
+                processo_id, origem_processo
+              ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'OPERACAO', 'PENDENTE', 'SISTEMA_SYNC', ?, ?, 'ATIVO', ?, 'RM')
+            `, [
+              voucherId,
+              rm.nd || rm.documento,
+              rm.nome_beneficiario || rm.razao_social || '',
+              rm.cnpj || '',
+              rm.valor_nf || 0,
+              rm.moeda || 'BRL',
+              rm.data_vencimento || new Date().toISOString().split('T')[0],
+              rm.data_emissao || null,
+              rm.nome_cobranca === 'CLIENTE' ? 'CLIENTE' : 'DACHSER',
+              mapFormaPag(rm.forma_pag),
+              rm.id_rm,
+              rm.data_insert,
+              rm.numero_processo || null
+            ]);
+            
+            inserted++;
+            lastDataInsert = rm.data_insert;
+            lastIdRm = rm.id_rm;
+          } catch (insertErr) {
+            console.warn(`[sync_incremental] Error inserting ${rm.nd}:`, insertErr);
+          }
+        }
+        
+        // 4. Update sync control
+        if (inserted > 0 && lastDataInsert) {
+          await client.execute(`
+            UPDATE dados_dachser.t_sync_control 
+            SET last_sync_datetime = ?, last_sync_id_rm = ?, records_synced = ?
+            WHERE sync_type = 'voucher_rm'
+          `, [lastDataInsert, lastIdRm, inserted]);
+        }
+        
+        // Update total count
+        const totalResult = await client.query(`SELECT COUNT(*) as cnt FROM dados_dachser.t_vouchers`);
+        await client.execute(`
+          UPDATE dados_dachser.t_sync_control SET total_records = ? WHERE sync_type = 'voucher_rm'
+        `, [totalResult?.[0]?.cnt || 0]);
+        
+        console.log(`[sync_incremental] Synced ${inserted} new vouchers`);
+        result = { 
+          success: true, 
+          synced: inserted, 
+          found: newVouchers?.length || 0,
+          lastSyncDatetime: lastDataInsert,
+          hasMore: (newVouchers?.length || 0) >= 500
+        };
+        break;
+      }
+
+      // ==================== GET VOUCHERS ATIVOS (FAST) ====================
+      case 'get_vouchers_ativos': {
+        // Fast query - only active vouchers from t_vouchers with sync_status = ATIVO
+        const { search, etapa } = body as any;
+        console.log('[get_vouchers_ativos] Fetching active vouchers (fast mode)');
+        
+        let whereConditions: string[] = ['sync_status = "ATIVO"'];
+        let params: any[] = [];
+        
+        // Exclude child vouchers (consolidated into a master)
+        whereConditions.push('(voucher_master_id IS NULL OR voucher_master_id = "")');
+        
+        if (search) {
+          whereConditions.push('(numero_spo LIKE ? OR fornecedor LIKE ? OR cnpj_fornecedor LIKE ?)');
+          params.push(`%${search}%`, `%${search}%`, `%${search}%`);
+        }
+        
+        if (etapa && etapa !== 'all') {
+          whereConditions.push('etapa_atual = ?');
+          params.push(etapa);
+        }
+        
+        const whereClause = whereConditions.length > 0 ? `WHERE ${whereConditions.join(' AND ')}` : '';
+        
+        const vouchers = await client.query(`
+          SELECT * FROM dados_dachser.t_vouchers ${whereClause} ORDER BY created_at DESC
+        `, params);
+        
+        console.log(`[get_vouchers_ativos] Found ${vouchers?.length || 0} active vouchers`);
+        result = { success: true, data: vouchers || [], count: vouchers?.length || 0 };
+        break;
+      }
+
+      // ==================== SYNC VOUCHERS BAIXADOS ====================
+      case 'sync_vouchers_baixados': {
+        // Mark vouchers as BAIXADO if they exist in tbaixas
+        console.log('[sync_baixados] Marking baixados vouchers...');
+        
+        // First ensure sync_status column exists
+        try {
+          await client.execute(`
+            ALTER TABLE dados_dachser.t_vouchers 
+            ADD COLUMN IF NOT EXISTS sync_status ENUM('ATIVO', 'BAIXADO') DEFAULT 'ATIVO'
+          `);
+        } catch (e) {
+          // Column may already exist
+        }
+        
+        const updateResult = await client.execute(`
+          UPDATE dados_dachser.t_vouchers v
+          JOIN dados_dachser.t_dados_financeiro_voucher dfv 
+            ON v.numero_spo COLLATE utf8mb4_unicode_ci = dfv.nd COLLATE utf8mb4_unicode_ci
+          JOIN dados_dachser.tbaixas b ON dfv.id_rm = b.IdLancamentoRM
+          SET v.sync_status = 'BAIXADO', v.etapa_atual = 'CONCLUIDO'
+          WHERE v.sync_status = 'ATIVO'
+        `);
+        
+        console.log(`[sync_baixados] Marked ${updateResult.affectedRows || 0} vouchers as BAIXADO`);
+        result = { success: true, marked: updateResult.affectedRows || 0 };
+        break;
+      }
+
+      // ==================== GET SYNC STATUS ====================
+      case 'get_sync_status': {
+        console.log('[get_sync_status] Fetching sync control info...');
+        
+        try {
+          const controlResult = await client.query(`
+            SELECT * FROM dados_dachser.t_sync_control WHERE sync_type = 'voucher_rm'
+          `);
+          
+          const ativoResult = await client.query(`
+            SELECT COUNT(*) as cnt FROM dados_dachser.t_vouchers WHERE sync_status = 'ATIVO'
+          `);
+          const baixadoResult = await client.query(`
+            SELECT COUNT(*) as cnt FROM dados_dachser.t_vouchers WHERE sync_status = 'BAIXADO'
+          `);
+          const totalRmResult = await client.query(`
+            SELECT COUNT(*) as cnt FROM dados_dachser.t_dados_financeiro_voucher 
+            WHERE (nome_beneficiario IS NULL OR LOWER(nome_beneficiario) NOT LIKE '%dachser%')
+              AND (modal IS NULL OR modal <> 'ADM')
+          `);
+          
+          result = { 
+            success: true, 
+            control: controlResult?.[0] || null,
+            stats: {
+              ativos: ativoResult?.[0]?.cnt || 0,
+              baixados: baixadoResult?.[0]?.cnt || 0,
+              totalRm: totalRmResult?.[0]?.cnt || 0
+            }
+          };
+        } catch (err) {
+          result = { success: false, error: 'Sync control not initialized' };
+        }
+        break;
+      }
+
       default:
         return new Response(
           JSON.stringify({ error: `Ação não suportada: ${action}` }),
