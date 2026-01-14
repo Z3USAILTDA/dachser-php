@@ -142,6 +142,20 @@ const summaryValueStyle = {
 export const exportDisputasToExcel = (rows: DisputaRow[], filterLabel?: string): void => {
   const wb = XLSX.utils.book_new();
 
+  // Column headers
+  const headers = [
+    "Cliente",
+    "Documento/NF",
+    "Emissão",
+    "Vencimento",
+    "Tempo em Disputa",
+    "Responsável",
+    "Valor (R$)",
+    "Tipo",
+    "Status",
+    "Observações",
+  ];
+
   // Prepare data rows
   const dataRows: (string | number)[][] = rows.map((r) => [
     r.cliente || r.razao_base || "-",
@@ -160,37 +174,7 @@ export const exportDisputasToExcel = (rows: DisputaRow[], filterLabel?: string):
   const totalValor = rows.reduce((sum, r) => sum + (r.valor || 0), 0);
   const totalRegistros = rows.length;
 
-  // Create worksheet with empty rows for header section
-  const wsData: (string | number)[][] = [
-    [], // Row 1: Title
-    [], // Row 2: Subtitle
-    [], // Row 3: Empty spacing
-    [], // Row 4: Headers
-    ...dataRows,
-    [], // Empty row before summary
-    [], // Summary row
-  ];
-
-  const ws = XLSX.utils.aoa_to_sheet(wsData);
-
-  // Column definitions
-  const headers = [
-    "Cliente",
-    "Documento/NF",
-    "Emissão",
-    "Vencimento",
-    "Tempo em Disputa",
-    "Responsável",
-    "Valor (R$)",
-    "Tipo",
-    "Status",
-    "Observações",
-  ];
-
-  // Set title (Row 1)
-  ws["A1"] = { v: "Relatório de Disputas Financeiras", s: titleStyle };
-
-  // Set subtitle with date and filter info (Row 2)
+  // Generate subtitle
   const now = new Date();
   const dateStr = now.toLocaleDateString("pt-BR", {
     day: "2-digit",
@@ -200,7 +184,19 @@ export const exportDisputasToExcel = (rows: DisputaRow[], filterLabel?: string):
     minute: "2-digit",
   });
   const filterInfo = filterLabel ? ` | Filtro: ${filterLabel}` : "";
-  ws["A2"] = { v: `Gerado em: ${dateStr}${filterInfo}`, s: subtitleStyle };
+
+  // Create worksheet data array with all rows
+  const wsData: (string | number)[][] = [
+    ["Relatório de Disputas Financeiras", "", "", "", "", "", "", "", "", ""], // Row 1: Title
+    [`Gerado em: ${dateStr}${filterInfo}`, "", "", "", "", "", "", "", "", ""], // Row 2: Subtitle
+    ["", "", "", "", "", "", "", "", "", ""], // Row 3: Empty spacing
+    headers, // Row 4: Headers
+    ...dataRows, // Data rows
+    ["", "", "", "", "", "", "", "", "", ""], // Empty row before summary
+    ["", "", "", "", "Total de Registros:", totalRegistros, "Total Valor:", formatMoney(totalValor), "", ""], // Summary row
+  ];
+
+  const ws = XLSX.utils.aoa_to_sheet(wsData);
 
   // Merge title and subtitle cells
   ws["!merges"] = [
@@ -208,10 +204,18 @@ export const exportDisputasToExcel = (rows: DisputaRow[], filterLabel?: string):
     { s: { r: 1, c: 0 }, e: { r: 1, c: 9 } }, // Subtitle merge
   ];
 
-  // Set headers (Row 4, index 3)
-  headers.forEach((header, colIdx) => {
+  // Apply title style (Row 1)
+  ws["A1"].s = titleStyle;
+
+  // Apply subtitle style (Row 2)
+  ws["A2"].s = subtitleStyle;
+
+  // Apply header styles (Row 4, index 3)
+  headers.forEach((_, colIdx) => {
     const cellRef = XLSX.utils.encode_cell({ r: 3, c: colIdx });
-    ws[cellRef] = { v: header, s: headerStyle };
+    if (ws[cellRef]) {
+      ws[cellRef].s = headerStyle;
+    }
   });
 
   // Style data rows (starting from row 5, index 4)
