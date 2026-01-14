@@ -4324,28 +4324,35 @@ serve(async (req) => {
 
       case 'get_vouchers_esteira': {
         const { search, etapa } = body as any;
-        console.log('Fetching ALL vouchers from dados_dachser.t_vouchers (no limit)');
+        console.log('Fetching ALL vouchers from dados_dachser.t_vouchers (no limit, excluding ADM modal)');
         
         let whereConditions: string[] = [];
         let params: any[] = [];
         
         // CRITICAL: Exclude child vouchers (consolidated into a master) from main grid
-        whereConditions.push('(voucher_master_id IS NULL OR voucher_master_id = "")');
+        whereConditions.push('(v.voucher_master_id IS NULL OR v.voucher_master_id = "")');
+        
+        // CRITICAL: Exclude ADM modal vouchers via JOIN with t_dados_financeiro_voucher
+        whereConditions.push('(dfv.modal IS NULL OR dfv.modal <> "ADM")');
         
         if (search) {
-          whereConditions.push('(numero_spo LIKE ? OR fornecedor LIKE ? OR cnpj_fornecedor LIKE ?)');
+          whereConditions.push('(v.numero_spo LIKE ? OR v.fornecedor LIKE ? OR v.cnpj_fornecedor LIKE ?)');
           params.push(`%${search}%`, `%${search}%`, `%${search}%`);
         }
         
         if (etapa) {
-          whereConditions.push('etapa_atual = ?');
+          whereConditions.push('v.etapa_atual = ?');
           params.push(etapa);
         }
         
         const whereClause = whereConditions.length > 0 ? `WHERE ${whereConditions.join(' AND ')}` : '';
         
         const vouchers = await client.query(`
-          SELECT * FROM dados_dachser.t_vouchers ${whereClause} ORDER BY created_at DESC
+          SELECT v.* 
+          FROM dados_dachser.t_vouchers v
+          LEFT JOIN dados_dachser.t_dados_financeiro_voucher dfv ON v.id_rm = dfv.id_rm
+          ${whereClause} 
+          ORDER BY v.created_at DESC
         `, params);
         
         result = { success: true, data: vouchers };
