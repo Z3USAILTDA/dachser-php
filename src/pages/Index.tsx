@@ -50,6 +50,7 @@ import { Filter as FilterIcon } from "lucide-react";
 import { AwbTimelineModal } from "@/components/air/AwbTimelineModal";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
+import { parseMariaDBDate } from "@/utils/parseMariaDBDate";
 
 // TEMPORARIAMENTE DESATIVADO - Mudar para true para reativar envio de emails
 const EMAIL_SENDING_ENABLED = false;
@@ -2454,7 +2455,8 @@ const Index = () => {
                                 const eventDate = awb.last_check || awb.created_at;
                                 if (!eventDate) return <span className="text-muted-foreground">—</span>;
                                 try {
-                                  const date = new Date(eventDate);
+                                  const date = parseMariaDBDate(eventDate);
+                                  if (!date) return <span className="text-muted-foreground">—</span>;
                                   return format(date, "dd/MM/yy HH:mm", { locale: ptBR });
                                 } catch {
                                   return <span className="text-muted-foreground">—</span>;
