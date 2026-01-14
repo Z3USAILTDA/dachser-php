@@ -170,6 +170,14 @@ export const exportDisputasToExcel = (rows: DisputaRow[], filterLabel?: string):
     r.observacoes || "-",
   ]);
 
+  // Calculate max length for Observações column (index 9)
+  const obsHeader = "Observações";
+  const maxObsLength = Math.max(
+    obsHeader.length,
+    ...dataRows.map((row) => String(row[9] || "").length)
+  );
+  const obsColumnWidth = Math.min(Math.max(maxObsLength + 2, 20), 100); // Min 20, max 100
+
   // Calculate totals
   const totalValor = rows.reduce((sum, r) => sum + (r.valor || 0), 0);
   const totalRegistros = rows.length;
@@ -252,12 +260,12 @@ export const exportDisputasToExcel = (rows: DisputaRow[], filterLabel?: string):
     { wch: 18 }, // Documento/NF
     { wch: 12 }, // Emissão
     { wch: 12 }, // Vencimento
-    { wch: 17 }, // Tempo em Disputa (+5%)
+    { wch: 25 }, // Tempo em Disputa
     { wch: 20 }, // Responsável
     { wch: 14 }, // Valor
     { wch: 14 }, // Tipo
     { wch: 12 }, // Status
-    { wch: 40 }, // Observações (+15%)
+    { wch: obsColumnWidth }, // Observações (dinâmico)
   ];
 
   // Set row heights
