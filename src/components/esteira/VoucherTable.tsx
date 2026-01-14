@@ -148,6 +148,14 @@ export const VoucherTable = ({ vouchers, onViewDetails, onEdit, onDelete, onGoBa
   };
 
   const sortedVouchers = [...vouchers].sort((a, b) => {
+    // A_PROCESSAR always goes to the end, regardless of other sorting
+    const aIsAProcessar = a.etapaAtual === "A_PROCESSAR";
+    const bIsAProcessar = b.etapaAtual === "A_PROCESSAR";
+    
+    if (aIsAProcessar && !bIsAProcessar) return 1;
+    if (!aIsAProcessar && bIsAProcessar) return -1;
+    
+    // Both are A_PROCESSAR or both are not - apply normal sorting
     let comparison = 0;
     
     switch (sortField) {
