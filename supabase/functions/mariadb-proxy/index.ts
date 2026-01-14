@@ -2522,7 +2522,7 @@ serve(async (req) => {
             sub.cnpj_consignatario,
             sub.data_manifestacao_cct,
             sub.tratamento,
-            sub.status_manifestacao
+            sub.ultimo_status_raw
           FROM (
             SELECT 
               s.id,
@@ -2713,7 +2713,7 @@ serve(async (req) => {
             aeroporto_origem: row.aeroporto_origem || 'N/A',
             aeroporto_destino: row.aeroporto_destino || 'GRU',
             status_cct_oficial: displayStatus,
-            status_manifestacao: row.status_manifestacao || 'AGUARDANDO',
+            status_manifestacao: row.status_cct_oficial || 'INFORMADA',
             sla_status: slaStatus,
             sla_info: {
               status: slaStatus,
