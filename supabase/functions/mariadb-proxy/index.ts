@@ -9750,6 +9750,40 @@ serve(async (req) => {
         break;
       }
 
+      // ==================== GET FINANCEIRO NFS STATS ====================
+      case 'get_financeiro_nfs_stats': {
+        console.log('[get_financeiro_nfs_stats] Fetching stats from t_dados_financeiro_nfs...');
+        
+        const minDate = '2026-01-14 18:00:00';
+        
+        const lastUpdateResult = await client.query(`
+          SELECT MAX(data_insert) as last_update
+          FROM dados_dachser.t_dados_financeiro_nfs
+          WHERE data_insert >= ?
+        `, [minDate]);
+        
+        const lastUpdate = lastUpdateResult[0]?.last_update || null;
+        
+        const countResult = await client.query(`
+          SELECT COUNT(*) as total_records
+          FROM dados_dachser.t_dados_financeiro_nfs
+          WHERE data_insert >= ?
+        `, [minDate]);
+        
+        const totalRecords = Number(countResult[0]?.total_records || 0);
+        
+        console.log(`[get_financeiro_nfs_stats] Last update: ${lastUpdate}, Total: ${totalRecords}`);
+        
+        result = { 
+          success: true, 
+          stats: {
+            lastUpdate: lastUpdate,
+            totalRecords: totalRecords
+          }
+        };
+        break;
+      }
+
       default:
         return new Response(
           JSON.stringify({ error: `Ação não suportada: ${action}` }),

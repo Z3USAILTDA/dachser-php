@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { CalendarRange, HelpCircle, Mail, Send } from "lucide-react";
 import { useUsageLog } from "@/hooks/useUsageLog";
@@ -21,6 +21,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
+import { ReguaDbStatsPanel, ReguaDbStats } from "@/components/fin/ReguaDbStatsPanel";
 
 interface StageCounts {
   PRE: number;
@@ -95,6 +96,10 @@ export default function ReguaCobranca() {
   const [lastSync, setLastSync] = useState<string>("");
   const [loading, setLoading] = useState(true);
 
+  // DB Stats
+  const [dbStats, setDbStats] = useState<ReguaDbStats | null>(null);
+  const [isLoadingDbStats, setIsLoadingDbStats] = useState(false);
+
   const [openStage, setOpenStage] = useState<string | null>(null);
   const [stageRows, setStageRows] = useState<StageRow[]>([]);
   const [stageLoading, setStageLoading] = useState(false);
@@ -123,10 +128,6 @@ export default function ReguaCobranca() {
   const user = storedUser ? JSON.parse(storedUser) : null;
   const isAdmin = user?.is_admin === 1 || user?.is_admin === "1" || user?.is_admin === true;
 
-  useEffect(() => {
-    fetchCounts();
-  }, []);
-
   const fetchCounts = async () => {
     setLoading(true);
     try {
@@ -147,6 +148,35 @@ export default function ReguaCobranca() {
       setLastSync(new Date().toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" }) + " GMT-3");
     }
   };
+
+  const fetchDbStats = useCallback(async () => {
+    setIsLoadingDbStats(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("mariadb-proxy", {
+        body: { action: "get_financeiro_nfs_stats" },
+      });
+
+      if (error) {
+        console.error("Error fetching db stats:", error);
+        return;
+      }
+
+      if (data?.success && data?.stats) {
+        setDbStats(data.stats);
+      }
+    } catch (error) {
+      console.error("Error in fetchDbStats:", error);
+    } finally {
+      setIsLoadingDbStats(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchCounts();
+    fetchDbStats();
+    const statsInterval = setInterval(fetchDbStats, 60000);
+    return () => clearInterval(statsInterval);
+  }, [fetchDbStats]);
 
   const fetchStageRows = async (stage: string) => {
     setStageLoading(true);
@@ -366,6 +396,7 @@ Financeiro Dachser`;
 
   const rightContent = (
     <div className="flex items-center gap-3">
+      <ReguaDbStatsPanel stats={dbStats} isLoading={isLoadingDbStats} onRefresh={fetchDbStats} />
       <button
         onClick={() => navigate("/fin/manual")}
         className="w-8 h-8 rounded-full border border-white/25 flex items-center justify-center bg-black/70 text-gray-400 hover:text-[#ffc800] transition-colors"
