@@ -80,8 +80,34 @@ serve(async (req) => {
     
     console.log(`Fetched ${Array.isArray(rows) ? rows.length : 0} records from t_status_aereo`);
 
+    // Convert dates to local format without Z suffix (MariaDB stores in São Paulo timezone)
+    const processedRows = (rows || []).map((row: any) => {
+      const processed = { ...row };
+      
+      // Convert última atualização - remove Z suffix to treat as local time
+      if (processed['última atualização']) {
+        const dateStr = String(processed['última atualização']);
+        // If it ends with Z or has timezone, remove it to keep as local time
+        processed['última atualização'] = dateStr.replace(/Z$/, '').replace(/\.\d{3}Z$/, '');
+      }
+      
+      // Convert arr_datetime
+      if (processed.arr_datetime) {
+        const dateStr = String(processed.arr_datetime);
+        processed.arr_datetime = dateStr.replace(/Z$/, '').replace(/\.\d{3}Z$/, '');
+      }
+      
+      // Convert dep_datetime
+      if (processed.dep_datetime) {
+        const dateStr = String(processed.dep_datetime);
+        processed.dep_datetime = dateStr.replace(/Z$/, '').replace(/\.\d{3}Z$/, '');
+      }
+      
+      return processed;
+    });
+
     return new Response(
-      JSON.stringify({ success: true, data: rows }),
+      JSON.stringify({ success: true, data: processedRows }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
 
