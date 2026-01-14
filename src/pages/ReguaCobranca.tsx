@@ -42,6 +42,13 @@ interface StageRow {
   cnpj: string;
 }
 
+interface ClienteResumo {
+  razao_base: string;
+  razao_social: string;
+  cnpj: string;
+  qtd_faturas: number;
+}
+
 const STAGE_LABELS: Record<string, string> = {
   PRE: "Antes do vencimento",
   D1: "D+1",
@@ -101,6 +108,12 @@ export default function ReguaCobranca() {
   const [bulkSendModalOpen, setBulkSendModalOpen] = useState(false);
   const [sendingBulk, setSendingBulk] = useState(false);
   const [bulkResult, setBulkResult] = useState<{ sent: number; skipped: number; errors?: string[] } | null>(null);
+
+  // Client search state
+  const [clienteSearch, setClienteSearch] = useState("");
+  const [clienteRows, setClienteRows] = useState<ClienteResumo[]>([]);
+  const [clienteLoading, setClienteLoading] = useState(false);
+  const [showClienteResults, setShowClienteResults] = useState(false);
 
   // Check admin status
   const storedUser = localStorage.getItem("user");
@@ -164,6 +177,49 @@ export default function ReguaCobranca() {
       setCurrentPage(1);
       fetchStageRows(stage);
     }
+  };
+
+  // Client search functions
+  const searchByCliente = async () => {
+    if (!clienteSearch.trim()) return;
+    setClienteLoading(true);
+    setShowClienteResults(true);
+    
+    try {
+      const { data, error } = await supabase.functions.invoke("mariadb-proxy", {
+        body: { action: "get_regua_clientes_resumo", cliente: clienteSearch.trim() },
+      });
+      
+      if (error) throw error;
+      setClienteRows(data?.rows || []);
+    } catch (err) {
+      console.error("Erro ao buscar cliente:", err);
+      toast({ title: "Erro", description: "Falha ao buscar cliente", variant: "destructive" });
+      setClienteRows([]);
+    } finally {
+      setClienteLoading(false);
+    }
+  };
+
+  const clearClienteSearch = () => {
+    setShowClienteResults(false);
+    setClienteRows([]);
+    setClienteSearch("");
+  };
+
+  const handleSendAgingCliente = (cliente: ClienteResumo) => {
+    setSelectedRow({
+      razao_base: cliente.razao_base,
+      razao_social: cliente.razao_social,
+      cnpj: cliente.cnpj,
+      documento: "",
+      nf_exibicao: "",
+      data_venc_br: "",
+      dias: 0,
+      tipo_pagto: "",
+      valor_br: ""
+    });
+    setAgingModalOpen(true);
   };
 
   const filteredRows = useMemo(() => {
@@ -312,8 +368,8 @@ export default function ReguaCobranca() {
       pageIcon={CalendarRange}
       backTo="/dashboard"
     >
-      {/* Meta pills */}
-      <div className="flex flex-wrap gap-[10px] mb-[18px]">
+      {/* Meta pills + Client search */}
+      <div className="flex flex-wrap items-center gap-[10px] mb-[18px]">
         <span className="px-3 py-2 rounded-full bg-white/6 border border-white/12 text-[#ddd] text-[0.85rem] inline-flex items-center gap-[6px]">
           <FileText className="w-4 h-4" />
           <span>Total de títulos na régua:</span>
@@ -323,6 +379,38 @@ export default function ReguaCobranca() {
           <Clock className="w-4 h-4" />
           <span>Última atualização:</span> {lastSync || "..."}
         </span>
+
+        {/* Client search */}
+        <div className="flex items-center gap-2 ml-auto">
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+            <Input
+              value={clienteSearch}
+              onChange={(e) => setClienteSearch(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && searchByCliente()}
+              placeholder="Buscar cliente..."
+              className="pl-9 w-[220px] h-9 rounded-full bg-[#13141a] border-white/20 text-[0.85rem]"
+            />
+          </div>
+          <Button
+            onClick={searchByCliente}
+            disabled={clienteLoading}
+            size="sm"
+            className="h-9 rounded-full"
+          >
+            {clienteLoading ? <RefreshCw className="h-4 w-4 animate-spin" /> : "Buscar"}
+          </Button>
+          {showClienteResults && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={clearClienteSearch}
+              className="h-9 px-2"
+            >
+              <X className="h-4 w-4" />
+            </Button>
+          )}
+        </div>
       </div>
 
       {/* Ruler Panel */}
@@ -370,6 +458,70 @@ export default function ReguaCobranca() {
           </span>
         </div>
       </PageCard>
+
+      {/* Client Search Results (below the ruler) */}
+      {showClienteResults && (
+        <PageCard className="mt-4">
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="text-base font-bold">
+              Resultado da busca: "{clienteSearch}"
+              <span className="text-muted-foreground font-normal ml-2">
+                ({clienteRows.length} cliente{clienteRows.length !== 1 ? 's' : ''} encontrado{clienteRows.length !== 1 ? 's' : ''})
+              </span>
+            </h3>
+            <Button variant="ghost" size="sm" onClick={clearClienteSearch}>
+              <X className="h-4 w-4 mr-1" /> Fechar
+            </Button>
+          </div>
+
+          {clienteLoading ? (
+            <div className="text-muted-foreground py-4">Buscando...</div>
+          ) : clienteRows.length === 0 ? (
+            <div className="text-muted-foreground py-4">Nenhum cliente encontrado.</div>
+          ) : (
+            <div className="rounded-xl border border-white/16 overflow-hidden">
+              <table className="w-full text-[0.85rem]">
+                <thead>
+                  <tr className="bg-[#15151f]">
+                    <th className="px-4 py-3 text-left text-[0.75rem] uppercase tracking-wider font-bold">
+                      Cliente
+                    </th>
+                    <th className="px-4 py-3 text-center text-[0.75rem] uppercase tracking-wider font-bold">
+                      Faturas na Régua
+                    </th>
+                    <th className="px-4 py-3 text-center text-[0.75rem] uppercase tracking-wider font-bold">
+                      Ação
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {clienteRows.map((c, idx) => (
+                    <tr key={idx} className="border-b border-white/9 hover:bg-white/5">
+                      <td className="px-4 py-3">{c.razao_base}</td>
+                      <td className="px-4 py-3 text-center">
+                        <Badge variant="secondary" className="text-[0.8rem]">
+                          {c.qtd_faturas}
+                        </Badge>
+                      </td>
+                      <td className="px-4 py-3 text-center">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="h-7 text-[0.75rem] gap-1"
+                          onClick={() => handleSendAgingCliente(c)}
+                        >
+                          <Mail className="h-3 w-3" />
+                          Aging
+                        </Button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </PageCard>
+      )}
 
       {/* Stage List Panel */}
       {openStage && (

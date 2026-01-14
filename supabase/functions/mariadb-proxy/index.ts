@@ -2008,6 +2008,39 @@ serve(async (req) => {
         break;
       }
 
+      case 'get_regua_clientes_resumo': {
+        const { cliente } = body as { cliente?: string };
+        if (!cliente) {
+          return new Response(
+            JSON.stringify({ error: 'Cliente é obrigatório' }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+        
+        const searchTerm = `%${cliente}%`;
+        
+        const sql = `
+          SELECT
+            SUBSTRING_INDEX(t.razao_social, ' - ', 1) AS razao_base,
+            t.razao_social,
+            t.cnpj,
+            COUNT(*) AS qtd_faturas
+          FROM dados_dachser.t_dados_financeiro_nfs t
+          LEFT JOIN ai_agente.t_financeiro_soft_delete sd ON sd.documento = t.documento
+          WHERE COALESCE(sd.active, 1) = 1
+            AND (t.razao_social LIKE ? OR t.cnpj LIKE ?)
+          GROUP BY t.cnpj, t.razao_social
+          ORDER BY razao_base ASC
+          LIMIT 50
+        `;
+        
+        const rows = await client.query(sql, [searchTerm, searchTerm]);
+        
+        console.log(`Régua clientes resumo: ${rows.length} clientes encontrados para "${cliente}"`);
+        result = { success: true, rows };
+        break;
+      }
+
       // ==================== DISPUTAS ====================
       case 'get_disputas': {
         const { tipo } = body as { tipo?: string };
