@@ -2026,7 +2026,7 @@ serve(async (req) => {
             t.cnpj,
             COUNT(*) AS qtd_faturas
           FROM dados_dachser.t_dados_financeiro_nfs t
-          LEFT JOIN ai_agente.t_financeiro_soft_delete sd ON sd.documento = t.documento
+          LEFT JOIN ai_agente.t_financeiro_soft_delete sd ON sd.documento COLLATE utf8mb4_general_ci = t.documento COLLATE utf8mb4_general_ci
           WHERE COALESCE(sd.active, 1) = 1
             AND (t.razao_social LIKE ? OR t.cnpj LIKE ?)
           GROUP BY t.cnpj, t.razao_social
@@ -2071,11 +2071,11 @@ serve(async (req) => {
             fd.escalation
           FROM dados_dachser.t_dados_financeiro_nfs t
           LEFT JOIN ai_agente.t_financeiro_soft_delete sd
-            ON sd.documento = t.documento
-            OR sd.documento = t.nd
-            OR sd.documento = t.numero_nf
+            ON sd.documento COLLATE utf8mb4_general_ci = t.documento COLLATE utf8mb4_general_ci
+            OR sd.documento COLLATE utf8mb4_general_ci = t.nd COLLATE utf8mb4_general_ci
+            OR sd.documento COLLATE utf8mb4_general_ci = t.numero_nf COLLATE utf8mb4_general_ci
           LEFT JOIN ai_agente.t_fin_disputas fd
-            ON fd.nf = COALESCE(NULLIF(t.documento,''), NULLIF(t.nd,''), NULLIF(t.numero_nf,''))
+            ON fd.nf COLLATE utf8mb4_general_ci = COALESCE(NULLIF(t.documento,''), NULLIF(t.nd,''), NULLIF(t.numero_nf,'')) COLLATE utf8mb4_general_ci
           WHERE ${whereClause}
           ORDER BY t.inicio_disputa DESC, t.razao_social ASC
         `;
