@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { useUsageLog } from "@/hooks/useUsageLog";
 import * as XLSX from "xlsx";
+import { exportDisputasToExcel } from "@/utils/disputaExcelExport";
 import { Flag, Search, Filter, X, Plus, Check, Trash2, Clock, Scale, Upload, FileSpreadsheet, Loader2, Download, HelpCircle } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -508,30 +509,9 @@ export default function FinanceiroDisputa() {
       return;
     }
 
-    const exportData = filteredRows.map(r => ({
-      "Cliente": r.cliente || r.razao_base || "-",
-      "Documento/NF": r.nf || r.nd || "-",
-      "Emissão": formatDate(r.emissao),
-      "Vencimento": formatDate(r.vencimento),
-      "Tempo em Disputa": formatElapsed(r.created_at),
-      "Responsável": r.responsavel || "-",
-      "Valor": r.valor ? formatMoney(r.valor) : "-",
-      "Tipo": r.tipo || "-",
-      "Observações": r.observacoes || "-",
-    }));
+    const filterLabel = tipoFilter !== "all" ? tipoFilter : undefined;
 
-    const worksheet = XLSX.utils.json_to_sheet(exportData);
-    const workbook = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(workbook, worksheet, "Disputas");
-    
-    // Auto-size columns
-    const colWidths = Object.keys(exportData[0] || {}).map(key => ({
-      wch: Math.max(key.length, ...exportData.map(row => String(row[key as keyof typeof row] || "").length))
-    }));
-    worksheet["!cols"] = colWidths;
-
-    const fileName = `disputas_${new Date().toISOString().split("T")[0]}.xlsx`;
-    XLSX.writeFile(workbook, fileName);
+    exportDisputasToExcel(filteredRows, filterLabel);
     
     toast({ title: "Exportado", description: `${filteredRows.length} registro(s) exportado(s)` });
   };
