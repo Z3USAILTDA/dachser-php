@@ -252,12 +252,12 @@ export const exportDisputasToExcel = (rows: DisputaRow[], filterLabel?: string):
     { wch: 18 }, // Documento/NF
     { wch: 12 }, // Emissão
     { wch: 12 }, // Vencimento
-    { wch: 16 }, // Tempo em Disputa
+    { wch: 17 }, // Tempo em Disputa (+5%)
     { wch: 20 }, // Responsável
     { wch: 14 }, // Valor
     { wch: 14 }, // Tipo
     { wch: 12 }, // Status
-    { wch: 35 }, // Observações
+    { wch: 40 }, // Observações (+15%)
   ];
 
   // Set row heights
