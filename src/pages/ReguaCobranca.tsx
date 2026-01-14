@@ -168,6 +168,11 @@ export default function ReguaCobranca() {
   };
 
   const toggleStage = (stage: string) => {
+    // Clear client search when opening a stage
+    if (showClienteResults) {
+      clearClienteSearch();
+    }
+    
     if (openStage === stage) {
       setOpenStage(null);
       setStageRows([]);
