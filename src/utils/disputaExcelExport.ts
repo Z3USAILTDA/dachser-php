@@ -152,7 +152,6 @@ export const exportDisputasToExcel = (rows: DisputaRow[], filterLabel?: string):
     "Responsável",
     "Valor (R$)",
     "Tipo",
-    "Status",
     "Observações",
   ];
 
@@ -166,15 +165,14 @@ export const exportDisputasToExcel = (rows: DisputaRow[], filterLabel?: string):
     r.responsavel || "-",
     r.valor ?? 0,
     r.tipo || "-",
-    r.status || "-",
     r.observacoes || "-",
   ]);
 
-  // Calculate max length for Observações column (index 9)
+  // Calculate max length for Observações column (index 8)
   const obsHeader = "Observações";
   const maxObsLength = Math.max(
     obsHeader.length,
-    ...dataRows.map((row) => String(row[9] || "").length)
+    ...dataRows.map((row) => String(row[8] || "").length)
   );
   const obsColumnWidth = Math.min(Math.max(maxObsLength + 2, 20), 100); // Min 20, max 100
 
@@ -195,21 +193,21 @@ export const exportDisputasToExcel = (rows: DisputaRow[], filterLabel?: string):
 
   // Create worksheet data array with all rows
   const wsData: (string | number)[][] = [
-    ["Relatório de Disputas Financeiras", "", "", "", "", "", "", "", "", ""], // Row 1: Title
-    [`Gerado em: ${dateStr}${filterInfo}`, "", "", "", "", "", "", "", "", ""], // Row 2: Subtitle
-    ["", "", "", "", "", "", "", "", "", ""], // Row 3: Empty spacing
+    ["Relatório de Disputas Financeiras", "", "", "", "", "", "", "", ""], // Row 1: Title
+    [`Gerado em: ${dateStr}${filterInfo}`, "", "", "", "", "", "", "", ""], // Row 2: Subtitle
+    ["", "", "", "", "", "", "", "", ""], // Row 3: Empty spacing
     headers, // Row 4: Headers
     ...dataRows, // Data rows
-    ["", "", "", "", "", "", "", "", "", ""], // Empty row before summary
-    ["", "", "", "", "Total de Registros:", totalRegistros, "Total Valor:", formatMoney(totalValor), "", ""], // Summary row
+    ["", "", "", "", "", "", "", "", ""], // Empty row before summary
+    ["", "", "", "", "Total de Registros:", totalRegistros, "Total Valor:", formatMoney(totalValor), ""], // Summary row
   ];
 
   const ws = XLSX.utils.aoa_to_sheet(wsData);
 
   // Merge title and subtitle cells
   ws["!merges"] = [
-    { s: { r: 0, c: 0 }, e: { r: 0, c: 9 } }, // Title merge
-    { s: { r: 1, c: 0 }, e: { r: 1, c: 9 } }, // Subtitle merge
+    { s: { r: 0, c: 0 }, e: { r: 0, c: 8 } }, // Title merge
+    { s: { r: 1, c: 0 }, e: { r: 1, c: 8 } }, // Subtitle merge
   ];
 
   // Apply title style (Row 1)
@@ -236,8 +234,8 @@ export const exportDisputasToExcel = (rows: DisputaRow[], filterLabel?: string):
       if (colIdx === 6) {
         // Valor column - right aligned with currency format
         style = isAlt ? moneyStyleAlt : moneyStyle;
-      } else if (colIdx === 2 || colIdx === 3 || colIdx === 4 || colIdx === 8) {
-        // Date/Status columns - centered
+      } else if (colIdx === 2 || colIdx === 3 || colIdx === 4) {
+        // Date columns - centered
         style = isAlt ? centerStyleAlt : centerStyle;
       } else {
         style = isAlt ? dataStyleAlt : dataStyle;
@@ -264,7 +262,6 @@ export const exportDisputasToExcel = (rows: DisputaRow[], filterLabel?: string):
     { wch: 20 }, // Responsável
     { wch: 14 }, // Valor
     { wch: 14 }, // Tipo
-    { wch: 12 }, // Status
     { wch: obsColumnWidth }, // Observações (dinâmico)
   ];
 
