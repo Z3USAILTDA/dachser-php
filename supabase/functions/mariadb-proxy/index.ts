@@ -2204,6 +2204,17 @@ serve(async (req) => {
         `;
         await client.execute(updateSql, [responsavel || null, searchTerm, searchTerm, searchTerm]);
         
+        // Also insert/update dispute info in t_dados_rm
+        const rmUpsertSql = `
+          INSERT INTO dados_dachser.t_dados_rm (id_rm, nf_disputa, inicio_disputa, responsavel_disp)
+          VALUES (?, 1, NOW(), ?)
+          ON DUPLICATE KEY UPDATE 
+            nf_disputa = 1,
+            inicio_disputa = COALESCE(inicio_disputa, NOW()),
+            responsavel_disp = VALUES(responsavel_disp)
+        `;
+        await client.execute(rmUpsertSql, [docKey, responsavel || null]);
+        
         // Insert/update extra data in t_fin_disputas with all required fields
         const upsertSql = `
           INSERT INTO ai_agente.t_fin_disputas (nf, cliente, vencimento, valor, tipo, responsavel, departamento, observacoes, escalation, updated_at)
@@ -2276,6 +2287,15 @@ serve(async (req) => {
           WHERE documento = ? OR numero_nf = ? OR nd = ?
         `;
         await client.execute(updateSql, [doc_key, doc_key, doc_key]);
+        
+        // Also update dispute resolution in t_dados_rm
+        const rmUpdateSql = `
+          UPDATE dados_dachser.t_dados_rm 
+          SET nf_disputa = 0, 
+              fim_disputa = NOW()
+          WHERE id_rm = ?
+        `;
+        await client.execute(rmUpdateSql, [doc_key]);
         
         console.log(`Disputa resolved: ${doc_key}`);
         result = { success: true };
@@ -2354,6 +2374,17 @@ serve(async (req) => {
             WHERE documento = ? OR numero_nf = ? OR nd = ?
           `;
           await client.execute(updateSql, [item.responsavel || null, nd, nd, nd]);
+          
+          // Also insert/update dispute info in t_dados_rm
+          const rmUpsertSql = `
+            INSERT INTO dados_dachser.t_dados_rm (id_rm, nf_disputa, inicio_disputa, responsavel_disp)
+            VALUES (?, 1, NOW(), ?)
+            ON DUPLICATE KEY UPDATE 
+              nf_disputa = 1,
+              inicio_disputa = COALESCE(inicio_disputa, NOW()),
+              responsavel_disp = VALUES(responsavel_disp)
+          `;
+          await client.execute(rmUpsertSql, [docKey, item.responsavel || null]);
           
           // Insert new disputa (only if not exists)
           const insertSql = `
