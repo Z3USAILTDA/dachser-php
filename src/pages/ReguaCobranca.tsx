@@ -694,7 +694,7 @@ Financeiro Dachser`;
               </div>
               <div>
                 <span className="text-muted-foreground text-sm">E-mail destino (teste):</span>
-                <p className="font-medium text-orange-400">devs@z3us.ai</p>
+                <p className="font-medium text-orange-400">devs@z3us.ai; bia.souza@dachser.com; jessica.costa@dachser.com</p>
               </div>
               
               <div className="space-y-2">
