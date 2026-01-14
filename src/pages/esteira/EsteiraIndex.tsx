@@ -660,7 +660,37 @@ const EsteiraIndex = () => {
     getCurrentUser();
   }, []);
 
-  // Sync vouchers from RM on page load
+  // Background incremental sync - runs without blocking UI
+  const runIncrementalSync = async () => {
+    try {
+      console.log("[sync] Running incremental sync in background...");
+      
+      // Run incremental sync (doesn't block)
+      const { data: syncResult } = await supabase.functions.invoke("mariadb-proxy", {
+        body: { action: "sync_vouchers_incremental" }
+      });
+      
+      console.log("[sync] Incremental sync result:", syncResult);
+      
+      // If there are more records to sync, continue syncing
+      if (syncResult?.hasMore) {
+        console.log("[sync] More records available, scheduling next batch...");
+        setTimeout(runIncrementalSync, 1000);
+      }
+      
+      // Also check for baixados
+      await supabase.functions.invoke("mariadb-proxy", {
+        body: { action: "sync_vouchers_baixados" }
+      });
+      
+      return syncResult;
+    } catch (err) {
+      console.error("[sync] Incremental sync error:", err);
+      return null;
+    }
+  };
+
+  // Legacy sync from RM (kept for compatibility but now runs less frequently)
   const syncFromRM = async () => {
     try {
       console.log("Syncing vouchers from RM...");
@@ -680,12 +710,182 @@ const EsteiraIndex = () => {
     }
   };
 
-  const loadVouchers = async () => {
+  // Helper function to map voucher from DB
+  const mapVoucherFromDB = (v: any): Voucher => ({
+    id: v.id,
+    numeroSPO: v.numero_spo,
+    fornecedor: v.fornecedor,
+    cnpjFornecedor: v.cnpj_fornecedor,
+    valor: v.valor ? parseFloat(v.valor) : null,
+    moeda: v.moeda || "BRL",
+    vencimento: parseMariaDBDate(v.vencimento) || new Date(),
+    dataEmissaoDocumento: parseMariaDBDate(v.data_emissao_documento) || undefined,
+    cobrancaEmNomeDe: v.cobranca_em_nome_de || "DACHSER",
+    formaPagamento: v.forma_pagamento || "BOLETO",
+    tipoDocumento: v.tipo_documento,
+    filial: v.filial,
+    remessa: v.remessa,
+    urgente: v.urgente === 1 || v.urgencia_tipo !== "NORMAL",
+    urgenciaTipo: v.urgencia_tipo || "NORMAL",
+    comentariosOperacao: v.comentarios_operacao,
+    comentariosFiscal: v.comentarios_fiscal,
+    comentariosFinanceiro: v.comentarios_financeiro,
+    ajusteOperacao: v.ajuste_operacao,
+    ajusteFiscal: v.ajuste_fiscal,
+    etapaAtual: v.etapa_atual || "OPERACAO",
+    statusBaixa: v.status_baixa || "PENDENTE",
+    statusFinanceiro: v.status_financeiro || "PENDENTE",
+    statusEnvioCliente: v.status_envio_cliente,
+    criadoPorUserId: v.criado_por_user_id,
+    criadoPorUserName: v.criado_por_user_name,
+    responsavelOperacaoUserId: v.responsavel_operacao_user_id,
+    responsavelFiscalUserId: v.responsavel_fiscal_user_id,
+    responsavelSupervisorUserId: v.responsavel_supervisor_user_id,
+    responsavelFinanceiroUserId: v.responsavel_financeiro_user_id,
+    aprovadoPorUserId: v.aprovado_por_user_id,
+    clienteEmail: v.cliente_email,
+    isMaster: v.is_master === 1 || v.is_master === true,
+    origemCriacao: v.is_master ? "MASTER" : v.id_rm ? "RM" : "MANUAL",
+    processoId: v.processo_id || null,
+    origemProcesso: v.origem_processo || null,
+    chavePix: v.chave_pix || null,
+    statusDocumentoFiscal: v.status_documento_fiscal || "ANEXADO",
+    tipoExecucaoPagamento: v.tipo_execucao_pagamento || null,
+    isProntoParaRobo: v.is_pronto_para_robo === 1 || v.is_pronto_para_robo === true,
+    linhaDigitavel: v.linha_digitavel || null,
+    codigoBarras: v.codigo_barras || null,
+    statusIntegracaoRm: v.status_integracao_rm || null,
+    createdAt: parseMariaDBDate(v.created_at) || new Date(),
+    updatedAt: parseMariaDBDate(v.updated_at || v.created_at) || new Date(),
+    anexos: [],
+    logs: []
+  });
+
+  // Helper function to map RM pending voucher
+  const mapRMPendingVoucher = (rm: any): Voucher => {
+    const mapFormaPag = (fp: string | null): string => {
+      const mapping: Record<string, string> = {
+        'BOL': 'BOLETO', 'BOLETO': 'BOLETO', 'PIX': 'PIX',
+        'TED': 'TRANSFERENCIA', 'TRANSF': 'TRANSFERENCIA',
+        'DEBITO': 'DEBITO', 'CAMBIO': 'CAMBIO', 'DARF': 'DARF', 'GPS': 'GPS'
+      };
+      return mapping[(fp || '').toUpperCase()] || 'BOLETO';
+    };
+
+    const mapTipoDoc = (tp: string | null): string => {
+      const mapping: Record<string, string> = {
+        'NF': 'NOTA_FISCAL', 'FAT': 'FATURA', 'FATURA': 'FATURA',
+        'DEM': 'DEMONSTRATIVO', 'NFS': 'NF_SERVICO'
+      };
+      return mapping[(tp || '').toUpperCase()] || 'FATURA';
+    };
+
+    return {
+      id: `rm_pending_${rm.nd}`,
+      numeroSPO: rm.nd,
+      fornecedor: rm.nome_beneficiario || rm.razao_social || '',
+      cnpjFornecedor: rm.cnpj,
+      valor: rm.valor_nf ? parseFloat(rm.valor_nf) : null,
+      moeda: rm.moeda || "BRL",
+      vencimento: parseMariaDBDate(rm.data_vencimento) || new Date(),
+      dataEmissaoDocumento: parseMariaDBDate(rm.data_emissao) || undefined,
+      cobrancaEmNomeDe: rm.nome_cobranca === "CLIENTE" ? "CLIENTE" : "DACHSER",
+      formaPagamento: mapFormaPag(rm.forma_pag) as any,
+      tipoDocumento: mapTipoDoc(rm.tipo_pag) as any,
+      filial: undefined,
+      remessa: "NENHUM" as any,
+      urgente: false,
+      urgenciaTipo: "NORMAL" as any,
+      etapaAtual: "A_PROCESSAR" as any,
+      statusBaixa: "PENDENTE" as any,
+      statusFinanceiro: "PENDENTE" as any,
+      origemCriacao: "RM" as any,
+      processoId: rm.numero_processo || null,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+      anexos: [],
+      logs: [],
+      idRm: rm.id_rm,
+      fonteDados: "RM_PENDENTE"
+    } as Voucher;
+  };
+
+  // Helper function to calculate metrics
+  const calculateMetrics = (allVouchers: Voucher[]) => {
+    const now = new Date();
+    const tomorrow = new Date(now);
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    const yesterday = new Date(now);
+    yesterday.setDate(yesterday.getDate() - 1);
+
+    const ativos = allVouchers.filter(v => v.etapaAtual !== "CONCLUIDO" && v.etapaAtual !== "A_PROCESSAR");
+    const slaAtencao = allVouchers.filter(v => {
+      if (v.etapaAtual === "CONCLUIDO") return false;
+      return v.vencimento <= tomorrow;
+    });
+    const pendenciasFinanceiras = allVouchers.filter(v => {
+      if (v.etapaAtual === "CONCLUIDO" || v.etapaAtual === "A_PROCESSAR") return false;
+      const aguardandoComprovante = v.etapaAtual === "FINANCEIRO" || v.etapaAtual === "ROBO";
+      const emExcecao = v.urgenciaTipo === "URGENTE_REAL";
+      return aguardandoComprovante || emExcecao;
+    });
+    const recentVouchers = allVouchers.filter(v => v.updatedAt >= yesterday);
+
+    setMetrics({
+      ativos: ativos.length,
+      slaAtencao: slaAtencao.length,
+      pendenciasFinanceiras: pendenciasFinanceiras.length,
+      eventos24h: recentVouchers.length
+    });
+  };
+
+  const loadVouchers = async (fastMode: boolean = true) => {
     try {
       setLoading(true);
       setIsRefetching(true);
 
-      // First sync from RM to ensure latest data, then load vouchers
+      // FAST MODE: Use get_vouchers_ativos for quick load, sync in background
+      if (fastMode) {
+        // Start incremental sync in background (non-blocking)
+        runIncrementalSync();
+        
+        // Load active vouchers quickly (only from t_vouchers where sync_status = ATIVO)
+        const [ativosResult, rmPendingResult] = await Promise.all([
+          supabase.functions.invoke("mariadb-proxy", {
+            body: { action: "get_vouchers_ativos" }
+          }),
+          supabase.functions.invoke("mariadb-proxy", {
+            body: { action: "get_vouchers_pendentes_rm" }
+          })
+        ]);
+        
+        if (ativosResult.error) throw ativosResult.error;
+        
+        // Map vouchers from ativos
+        const mappedVouchers: Voucher[] = (ativosResult.data?.data || []).map((v: any) => mapVoucherFromDB(v));
+        
+        // Map pending RM vouchers
+        const rmPendingVouchers: Voucher[] = (rmPendingResult.data?.data || []).map((rm: any) => mapRMPendingVoucher(rm));
+        
+        // Merge both arrays
+        const allVouchers = [...rmPendingVouchers, ...mappedVouchers].filter(v => {
+          if ((v.isMaster || v.origemCriacao === "MASTER") && v.etapaAtual === "A_PROCESSAR") {
+            return false;
+          }
+          return true;
+        });
+        
+        setVouchers(allVouchers);
+        calculateMetrics(allVouchers);
+        setLoading(false);
+        setIsRefetching(false);
+        setLastUpdateTime(new Date());
+        
+        console.log(`[loadVouchers] Fast mode loaded ${allVouchers.length} vouchers`);
+        return;
+      }
+
+      // LEGACY MODE: Full sync (used for manual refresh)
       await syncFromRM();
 
       // Load from MariaDB t_vouchers AND ALL pending RM vouchers in parallel (no limits)
