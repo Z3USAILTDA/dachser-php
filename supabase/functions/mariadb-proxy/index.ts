@@ -5677,7 +5677,7 @@ serve(async (req) => {
         // Filtrar FINANCEIRO ou ROBO sem comprovante, e excluir modal ADM
         const conditions: string[] = [
           "(v.etapa_atual = 'FINANCEIRO' OR (v.etapa_atual = 'ROBO' AND NOT EXISTS (SELECT 1 FROM dados_dachser.t_voucher_anexos a WHERE a.voucher_id = v.id AND a.tipo = 'COMPROVANTE')))",
-          "(v.modal IS NULL OR v.modal <> 'ADM')"
+          "(dfv.modal IS NULL OR dfv.modal <> 'ADM')"
         ];
         const params: (string | number)[] = [];
 
@@ -5734,7 +5734,9 @@ serve(async (req) => {
 
         // Count total
         const countResult = await client.query(
-          `SELECT COUNT(*) as total FROM dados_dachser.t_vouchers v ${whereClause}`,
+          `SELECT COUNT(*) as total FROM dados_dachser.t_vouchers v
+           LEFT JOIN dados_dachser.t_dados_financeiro_voucher dfv ON v.id_rm = dfv.id_rm
+           ${whereClause}`,
           params
         );
         const total = Number(countResult[0]?.total || 0);
@@ -5748,6 +5750,7 @@ serve(async (req) => {
             v.tipo_execucao_pagamento, v.is_pronto_para_robo, v.lote_remessa_id,
             v.status_integracao_rm, v.etapa_atual, v.status_baixa, v.created_at, v.updated_at
           FROM dados_dachser.t_vouchers v
+          LEFT JOIN dados_dachser.t_dados_financeiro_voucher dfv ON v.id_rm = dfv.id_rm
           ${whereClause}
           ORDER BY v.vencimento ASC, v.created_at DESC
           LIMIT ? OFFSET ?`,
@@ -5779,8 +5782,9 @@ serve(async (req) => {
             -- Total valor
             SUM(COALESCE(v.valor, 0)) as valor_total
           FROM dados_dachser.t_vouchers v
+          LEFT JOIN dados_dachser.t_dados_financeiro_voucher dfv ON v.id_rm = dfv.id_rm
           WHERE (v.etapa_atual = 'FINANCEIRO' OR (v.etapa_atual = 'ROBO' AND NOT EXISTS (SELECT 1 FROM dados_dachser.t_voucher_anexos a WHERE a.voucher_id = v.id AND a.tipo = 'COMPROVANTE')))
-          AND (v.modal IS NULL OR v.modal <> 'ADM')`
+          AND (dfv.modal IS NULL OR dfv.modal <> 'ADM')`
         );
 
         result = {
