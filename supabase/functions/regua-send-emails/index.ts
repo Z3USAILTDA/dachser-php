@@ -68,7 +68,7 @@ const htmlEncode = (s: string): string => {
 // Constrói tabela HTML - Design escuro igual ao modelo com PROCESSO, MASTER, HOUSE
 // Cores conforme especificação:
 // - Cabeçalho: preto (#000000) para colunas 1-11, azul (#0070C0) para PROCESSO/MASTER/HOUSE
-// - Linhas de dados: cinza muito escuro (#1A1A1A), bordas #2A2A2A
+// - Linhas de dados: fundo transparente, bordas pretas, texto preto
 const buildTableHtml = (rows: InvoiceRow[]): string => {
   let rowsHtml = "";
 
@@ -76,10 +76,10 @@ const buildTableHtml = (rows: InvoiceRow[]): string => {
   const headerBgBlack = "#000000";
   const headerBgBlue = "#0070C0";
   const headerColor = "#FFFFFF";
-  const headerBorder = "border:1px solid #333333;";
-  const rowBg = "#1A1A1A";
-  const rowColor = "#FFFFFF";
-  const rowBorder = "border:1px solid #2A2A2A;";
+  const headerBorder = "border:1px solid #000000;";
+  const rowBg = "transparent";
+  const rowColor = "#000000";
+  const rowBorder = "border:1px solid #000000;";
   const cellPadding = "padding:6px 8px;";
 
   for (const r of rows) {
@@ -101,9 +101,9 @@ const buildTableHtml = (rows: InvoiceRow[]): string => {
     </tr>`;
   }
 
-  // Header com cores diferenciadas: preto para colunas 1-11, azul para PROCESSO/MASTER/HOUSE
-  const thStyleBlack = `background-color:${headerBgBlack};color:${headerColor};${headerBorder}${cellPadding}text-align:left;white-space:nowrap;font-weight:bold;`;
-  const thStyleBlue = `background-color:${headerBgBlue};color:${headerColor};${headerBorder}${cellPadding}text-align:left;white-space:nowrap;font-weight:bold;`;
+  // Header com cores diferenciadas: preto para colunas 1-11, azul para PROCESSO/MASTER/HOUSE (texto centralizado)
+  const thStyleBlack = `background-color:${headerBgBlack};color:${headerColor};${headerBorder}${cellPadding}text-align:center;white-space:nowrap;font-weight:bold;`;
+  const thStyleBlue = `background-color:${headerBgBlue};color:${headerColor};${headerBorder}${cellPadding}text-align:center;white-space:nowrap;font-weight:bold;`;
 
   return `
 <table border="0" style="width:100%;border-collapse:collapse;mso-table-lspace:0pt;mso-table-rspace:0pt;border-spacing:0;font-family:Arial,Helvetica,sans-serif;font-size:12px;line-height:1.3;" cellpadding="0" cellspacing="0">
