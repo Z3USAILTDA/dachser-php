@@ -29,6 +29,7 @@ import {
   HelpCircle,
   Settings,
   Clock,
+  Info,
 } from "lucide-react";
 import { EmailClienteRegrasDialog } from "@/components/air/EmailClienteRegrasDialog";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -2429,9 +2430,23 @@ const Index = () => {
                               })()}
                             </td>
                             <td className="px-3 py-3">
-                              <span className="text-sm font-bold" style={{ color: "hsl(120 100% 35%)" }}>
-                                {getStatusCode(awb.last_event)}
-                              </span>
+                              <div className="flex items-center gap-1.5">
+                                <span className="text-sm font-bold" style={{ color: "hsl(120 100% 35%)" }}>
+                                  {getStatusCode(awb.last_event)}
+                                </span>
+                                {awb.awb?.startsWith('577') && (
+                                  <TooltipProvider>
+                                    <Tooltip>
+                                      <TooltipTrigger asChild>
+                                        <Info className="h-4 w-4 text-blue-400 cursor-help" />
+                                      </TooltipTrigger>
+                                      <TooltipContent side="top" className="max-w-xs">
+                                        <p>Status enviado diretamente pela companhia aérea Azul, não obtido através do site da companhia.</p>
+                                      </TooltipContent>
+                                    </Tooltip>
+                                  </TooltipProvider>
+                                )}
+                              </div>
                             </td>
                             <td className="px-3 py-3 text-[#aaaaaa] text-sm whitespace-nowrap">
                               {(() => {
