@@ -2167,10 +2167,11 @@ serve(async (req) => {
         
         const searchTerm = nf.toString().trim();
         
-        // Check if document exists and get all required fields
+        // Check if document exists and get all required fields including id_rm
         const checkSql = `
           SELECT 
             COALESCE(NULLIF(documento,''), NULLIF(nd,''), NULLIF(numero_nf,'')) AS doc_key,
+            id_rm,
             razao_social AS cliente,
             data_vencimento AS vencimento,
             valor_nf AS valor,
@@ -2189,6 +2190,7 @@ serve(async (req) => {
         }
         
         const docKey = existingRows[0].doc_key;
+        const idRm = existingRows[0].id_rm;
         const cliente = existingRows[0].cliente || 'N/A';
         const vencimento = existingRows[0].vencimento || new Date().toISOString().split('T')[0];
         const valor = existingRows[0].valor || 0;
@@ -2204,16 +2206,18 @@ serve(async (req) => {
         `;
         await client.execute(updateSql, [responsavel || null, searchTerm, searchTerm, searchTerm]);
         
-        // Also insert/update dispute info in t_dados_rm
-        const rmUpsertSql = `
-          INSERT INTO dados_dachser.t_dados_rm (id_rm, nf_disputa, inicio_disputa, responsavel_disp)
-          VALUES (?, 1, NOW(), ?)
-          ON DUPLICATE KEY UPDATE 
-            nf_disputa = 1,
-            inicio_disputa = COALESCE(inicio_disputa, NOW()),
-            responsavel_disp = VALUES(responsavel_disp)
-        `;
-        await client.execute(rmUpsertSql, [docKey, responsavel || null]);
+        // Also insert/update dispute info in t_dados_rm (using id_rm, not doc_key)
+        if (idRm) {
+          const rmUpsertSql = `
+            INSERT INTO dados_dachser.t_dados_rm (id_rm, nf_disputa, inicio_disputa, responsavel_disp)
+            VALUES (?, 1, NOW(), ?)
+            ON DUPLICATE KEY UPDATE 
+              nf_disputa = 1,
+              inicio_disputa = COALESCE(inicio_disputa, NOW()),
+              responsavel_disp = VALUES(responsavel_disp)
+          `;
+          await client.execute(rmUpsertSql, [idRm, responsavel || null]);
+        }
         
         // Insert/update extra data in t_fin_disputas with all required fields
         const upsertSql = `
@@ -2279,6 +2283,15 @@ serve(async (req) => {
           );
         }
         
+        // First, get the id_rm for this document
+        const getIdRmSql = `
+          SELECT id_rm FROM dados_dachser.t_dados_financeiro_nfs 
+          WHERE documento = ? OR numero_nf = ? OR nd = ?
+          LIMIT 1
+        `;
+        const idRmRows = await client.query(getIdRmSql, [doc_key, doc_key, doc_key]);
+        const idRm = idRmRows?.[0]?.id_rm;
+        
         // Mark disputa as resolved (disputa = 0)
         const updateSql = `
           UPDATE dados_dachser.t_dados_financeiro_nfs 
@@ -2288,16 +2301,18 @@ serve(async (req) => {
         `;
         await client.execute(updateSql, [doc_key, doc_key, doc_key]);
         
-        // Also update dispute resolution in t_dados_rm
-        const rmUpdateSql = `
-          UPDATE dados_dachser.t_dados_rm 
-          SET nf_disputa = 0, 
-              fim_disputa = NOW()
-          WHERE id_rm = ?
-        `;
-        await client.execute(rmUpdateSql, [doc_key]);
+        // Also update dispute resolution in t_dados_rm (using id_rm)
+        if (idRm) {
+          const rmUpdateSql = `
+            UPDATE dados_dachser.t_dados_rm 
+            SET nf_disputa = 0, 
+                fim_disputa = NOW()
+            WHERE id_rm = ?
+          `;
+          await client.execute(rmUpdateSql, [idRm]);
+        }
         
-        console.log(`Disputa resolved: ${doc_key}`);
+        console.log(`Disputa resolved: ${doc_key} (id_rm: ${idRm})`);
         result = { success: true };
         break;
       }
@@ -2328,10 +2343,11 @@ serve(async (req) => {
           const nd = item.nd?.toString().trim();
           if (!nd) continue;
           
-          // Check if document exists and get all required fields
+          // Check if document exists and get all required fields including id_rm
           const checkSql = `
             SELECT 
               COALESCE(NULLIF(documento,''), NULLIF(nd,''), NULLIF(numero_nf,'')) AS doc_key,
+              id_rm,
               razao_social AS cliente,
               data_vencimento AS vencimento,
               valor_nf AS valor,
@@ -2351,6 +2367,7 @@ serve(async (req) => {
           
           const docData = existingRows[0];
           const docKey = docData.doc_key;
+          const idRm = docData.id_rm;
           
           // Check if already exists in t_fin_disputas (skip if exists)
           const checkDisputaSql = `
@@ -2375,16 +2392,18 @@ serve(async (req) => {
           `;
           await client.execute(updateSql, [item.responsavel || null, nd, nd, nd]);
           
-          // Also insert/update dispute info in t_dados_rm
-          const rmUpsertSql = `
-            INSERT INTO dados_dachser.t_dados_rm (id_rm, nf_disputa, inicio_disputa, responsavel_disp)
-            VALUES (?, 1, NOW(), ?)
-            ON DUPLICATE KEY UPDATE 
-              nf_disputa = 1,
-              inicio_disputa = COALESCE(inicio_disputa, NOW()),
-              responsavel_disp = VALUES(responsavel_disp)
-          `;
-          await client.execute(rmUpsertSql, [docKey, item.responsavel || null]);
+          // Also insert/update dispute info in t_dados_rm (using id_rm, not doc_key)
+          if (idRm) {
+            const rmUpsertSql = `
+              INSERT INTO dados_dachser.t_dados_rm (id_rm, nf_disputa, inicio_disputa, responsavel_disp)
+              VALUES (?, 1, NOW(), ?)
+              ON DUPLICATE KEY UPDATE 
+                nf_disputa = 1,
+                inicio_disputa = COALESCE(inicio_disputa, NOW()),
+                responsavel_disp = VALUES(responsavel_disp)
+            `;
+            await client.execute(rmUpsertSql, [idRm, item.responsavel || null]);
+          }
           
           // Insert new disputa (only if not exists)
           const insertSql = `
