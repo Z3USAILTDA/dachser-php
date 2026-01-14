@@ -2532,7 +2532,7 @@ serve(async (req) => {
               s.nome_analista,
               s.email_analista,
               s.email_cliente as emails_cliente,
-              s.\`último_status\` as status_cct_oficial,
+              s.\`último_status\` as ultimo_status_raw,
               s.\`última atualização\` as ultimo_evento_data,
               s.\`último_status\` as ultimo_evento_codigo,
               TRIM(s.origem) as aeroporto_origem,
