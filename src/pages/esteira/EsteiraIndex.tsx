@@ -1342,7 +1342,23 @@ const EsteiraIndex = () => {
       return true;
     });
   };
-  const filteredVouchers = filterVouchers(roleFilteredVouchers);
+  
+  // Sort vouchers: A_PROCESSAR always last, others by createdAt desc
+  const sortedVouchers = useMemo(() => {
+    return [...roleFilteredVouchers].sort((a, b) => {
+      // A_PROCESSAR goes to the end
+      const aIsAProcessar = a.etapaAtual === "A_PROCESSAR";
+      const bIsAProcessar = b.etapaAtual === "A_PROCESSAR";
+      
+      if (aIsAProcessar && !bIsAProcessar) return 1;
+      if (!aIsAProcessar && bIsAProcessar) return -1;
+      
+      // For same category, sort by createdAt desc (newest first)
+      return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+    });
+  }, [roleFilteredVouchers]);
+  
+  const filteredVouchers = filterVouchers(sortedVouchers);
 
   // Lista de fornecedores únicos para o filtro rápido
   const uniqueFornecedores = useMemo(() => {
