@@ -298,6 +298,10 @@ serve(async (req) => {
       charset: "utf8mb4",
     });
 
+    // Set connection collation to prevent "Illegal mix of collations" errors
+    // This ensures all string comparisons use the same collation across tables
+    await client.execute("SET NAMES utf8mb4 COLLATE utf8mb4_general_ci");
+
     let result;
 
     switch (action) {
