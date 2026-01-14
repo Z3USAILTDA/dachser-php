@@ -4332,9 +4332,6 @@ serve(async (req) => {
         // CRITICAL: Exclude child vouchers (consolidated into a master) from main grid
         whereConditions.push('(voucher_master_id IS NULL OR voucher_master_id = "")');
         
-        // CRITICAL: Exclude ADM modal vouchers from esteira FIN
-        whereConditions.push('(modal IS NULL OR modal <> "ADM")');
-        
         if (search) {
           whereConditions.push('(numero_spo LIKE ? OR fornecedor LIKE ? OR cnpj_fornecedor LIKE ?)');
           params.push(`%${search}%`, `%${search}%`, `%${search}%`);
