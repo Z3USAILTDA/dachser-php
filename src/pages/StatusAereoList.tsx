@@ -12,7 +12,13 @@ import {
   TableHeader, 
   TableRow 
 } from "@/components/ui/table";
-import { Search, Plane, Package, ArrowLeft, HelpCircle, Settings } from "lucide-react";
+import { Search, Plane, Package, ArrowLeft, HelpCircle, Settings, Info } from "lucide-react";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { useToast } from "@/hooks/use-toast";
 import { useNavigate } from "react-router-dom";
 import { DatabaseConnectionIndicator } from "@/components/DatabaseConnectionIndicator";
@@ -148,15 +154,29 @@ const StatusAereoList = () => {
                       </TableCell>
                       <TableCell>{item.destinatário || '-'}</TableCell>
                       <TableCell>
-                        <span className={`px-3 py-1 rounded-full text-xs font-semibold ${
-                          item.último_status === 'DLV' 
-                            ? 'bg-green-500/20 text-green-700 dark:text-green-300'
-                            : item.último_status === 'ERRO' || item.último_status === 'NOT_FOUND'
-                            ? 'bg-red-500/20 text-red-700 dark:text-red-300'
-                            : 'bg-blue-500/20 text-blue-700 dark:text-blue-300'
-                        }`}>
-                          {item.último_status || 'N/A'}
-                        </span>
+                        <div className="flex items-center gap-1.5">
+                          <span className={`px-3 py-1 rounded-full text-xs font-semibold ${
+                            item.último_status === 'DLV' 
+                              ? 'bg-green-500/20 text-green-700 dark:text-green-300'
+                              : item.último_status === 'ERRO' || item.último_status === 'NOT_FOUND'
+                              ? 'bg-red-500/20 text-red-700 dark:text-red-300'
+                              : 'bg-blue-500/20 text-blue-700 dark:text-blue-300'
+                          }`}>
+                            {item.último_status || 'N/A'}
+                          </span>
+                          {item.awb?.startsWith('577') && (
+                            <TooltipProvider>
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <Info className="h-4 w-4 text-blue-400 cursor-help" />
+                                </TooltipTrigger>
+                                <TooltipContent side="top" className="max-w-xs">
+                                  <p>Status enviado diretamente pela companhia aérea Azul, não obtido através do site da companhia.</p>
+                                </TooltipContent>
+                              </Tooltip>
+                            </TooltipProvider>
+                          )}
+                        </div>
                       </TableCell>
                       <TableCell className="max-w-md truncate">
                         {item.status_info || '-'}
