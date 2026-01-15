@@ -4,8 +4,6 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { FileText, AlertCircle, Building2, User, Clock, Trash2, Loader2 } from "lucide-react";
-import { format } from "date-fns";
-import { ptBR } from "date-fns/locale";
 import { useToast } from "@/hooks/use-toast";
 import { FilePreview } from "./FilePreview";
 import { ProcessoOrigemCard } from "./ProcessoOrigemCard";
@@ -13,6 +11,7 @@ import { AccrualMatchBadge } from "./AccrualMatchBadge";
 import { StatusComprovanteBadge } from "./StatusComprovanteBadge";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
+import { formatDateOnlyBR } from "@/utils/timezone";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -241,14 +240,14 @@ export const VoucherDetailsView = ({ voucher, onUpdate, canEditAttachments = fal
             <div>
               <p className="text-sm text-muted-foreground">Vencimento</p>
               <p className="font-medium text-foreground">
-                {format(new Date(voucher.vencimento), "dd/MM/yyyy", { locale: ptBR })}
+                {formatDateOnlyBR(voucher.vencimento)}
               </p>
             </div>
             {voucher.dataEmissaoDocumento && (
               <div>
                 <p className="text-sm text-muted-foreground">Data Emissão</p>
                 <p className="text-sm text-foreground">
-                  {format(new Date(voucher.dataEmissaoDocumento), "dd/MM/yyyy", { locale: ptBR })}
+                  {formatDateOnlyBR(voucher.dataEmissaoDocumento)}
                 </p>
               </div>
             )}
