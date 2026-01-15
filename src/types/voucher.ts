@@ -276,6 +276,7 @@ export interface Voucher {
   fonteDados?: string;
   criadoPorUserId?: string;
   criadoPorUserName?: string;
+  enviadoPorUserName?: string;
   responsavelOperacaoUserId?: string;
   responsavelOperacaoUserName?: string;
   responsavelFiscalUserId?: string;

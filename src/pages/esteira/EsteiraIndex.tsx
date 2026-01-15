@@ -738,6 +738,7 @@ const EsteiraIndex = () => {
     statusEnvioCliente: v.status_envio_cliente,
     criadoPorUserId: v.criado_por_user_id,
     criadoPorUserName: v.criado_por_user_name,
+    enviadoPorUserName: v.enviado_por_user_name || null,
     responsavelOperacaoUserId: v.responsavel_operacao_user_id,
     responsavelFiscalUserId: v.responsavel_fiscal_user_id,
     responsavelSupervisorUserId: v.responsavel_supervisor_user_id,
