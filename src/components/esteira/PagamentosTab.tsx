@@ -71,6 +71,7 @@ interface PagamentoItem {
   status_baixa: string;
   created_at: string;
   updated_at: string;
+  id_rm?: string; // id_rm from t_dados_financeiro_voucher
 }
 
 interface DadosBancarios {
@@ -315,7 +316,7 @@ export const PagamentosTab = () => {
           const { error: rmError } = await supabase.functions.invoke("mariadb-proxy", {
             body: {
               action: "insert_dados_rm",
-              id_rm: pagamento.numero_spo,
+              id_rm: pagamento.id_rm || pagamento.numero_spo, // Usar id_rm de t_dados_financeiro_voucher se disponível
               voucher_boleto: isBoleto(pagamento.forma_pagamento as any) 
                 ? (pagamento.linha_digitavel || pagamento.codigo_barras || null) 
                 : null,

@@ -32,6 +32,7 @@ interface FaturaItem {
   etapa_atual: string;
   linha_digitavel?: string;
   remessa?: string;
+  id_rm?: string; // id_rm from t_dados_financeiro_voucher
 }
 
 interface DadosBancarios {
@@ -177,7 +178,7 @@ export const FaturasDoDiaTab = () => {
       const { data, error } = await supabase.functions.invoke("mariadb-proxy", {
         body: { 
           action: "insert_dados_rm",
-          id_rm: fatura.numero_spo,
+          id_rm: fatura.id_rm || fatura.numero_spo, // Usar id_rm de t_dados_financeiro_voucher se disponível
           voucher_boleto: isBoleto(fatura.forma_pagamento) ? fatura.linha_digitavel : null,
           chave_pix: null, // PIX key would need to be loaded from voucher data if needed
           pix_tipo_chave: null,

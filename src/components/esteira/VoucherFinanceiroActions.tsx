@@ -79,7 +79,7 @@ export const VoucherFinanceiroActions = ({ voucher, onUpdate }: VoucherFinanceir
         await supabase.functions.invoke("mariadb-proxy", {
           body: {
             action: "insert_dados_rm",
-            id_rm: voucher.numeroSPO,
+            id_rm: voucher.idRm || voucher.numeroSPO, // Usar idRm de t_dados_financeiro_voucher se disponível
             voucher_boleto: voucher.linhaDigitavel || voucher.codigoBarras || null,
             chave_pix: voucher.chavePix || null,
             pix_tipo_chave: null, // Could be derived from chavePix format if needed
