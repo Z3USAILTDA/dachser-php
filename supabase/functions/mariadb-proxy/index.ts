@@ -301,6 +301,9 @@ serve(async (req) => {
     // Set connection collation to prevent "Illegal mix of collations" errors
     // This ensures all string comparisons use the same collation across tables
     await client.execute("SET NAMES utf8mb4 COLLATE utf8mb4_general_ci");
+    
+    // Set timezone to São Paulo to ensure consistent date/time handling
+    await client.execute("SET time_zone = 'America/Sao_Paulo'");
 
     let result;
 
@@ -4466,7 +4469,12 @@ serve(async (req) => {
         const whereClause = whereConditions.length > 0 ? `WHERE ${whereConditions.join(' AND ')}` : '';
         
         const vouchers = await client.query(`
-          SELECT v.* 
+          SELECT v.*,
+            (SELECT l.user_name FROM dados_dachser.t_voucher_logs l
+             WHERE l.voucher_id = v.id
+             AND l.acao IN ('ENVIADO_OPERACAO', 'APROVADO_FISCAL', 'APROVADO_SUPERVISOR', 
+                           'REENVIO_APOS_AJUSTE', 'APROVADO_URGENTE', 'BAIXA_MANUAL', 'VOUCHER_CRIADO')
+             ORDER BY l.data_hora DESC LIMIT 1) AS enviado_por_user_name
           FROM dados_dachser.t_vouchers v
           LEFT JOIN dados_dachser.t_dados_financeiro_voucher dfv ON v.id_rm = dfv.id_rm
           ${whereClause} 
@@ -5814,8 +5822,13 @@ serve(async (req) => {
         }
 
         if (filterTipoExecucao) {
-          conditions.push("v.tipo_execucao_pagamento = ?");
-          params.push(filterTipoExecucao);
+          // Support "REMESSA" as a combined filter for both REMESSA_10H and REMESSA_15H
+          if (filterTipoExecucao === 'REMESSA') {
+            conditions.push("v.tipo_execucao_pagamento IN ('REMESSA_10H', 'REMESSA_15H')");
+          } else {
+            conditions.push("v.tipo_execucao_pagamento = ?");
+            params.push(filterTipoExecucao);
+          }
         }
 
         if (filterFornecedor) {
@@ -5859,14 +5872,19 @@ serve(async (req) => {
         );
         const total = Number(countResult[0]?.total || 0);
 
-        // Get paginated data
+        // Get paginated data with enviado_por from logs
         const vouchers = await client.query(
           `SELECT 
             v.id, v.numero_spo, v.fornecedor, v.cnpj_fornecedor, v.valor, v.moeda,
             v.vencimento, v.forma_pagamento, v.tipo_documento, v.cobranca_em_nome_de,
             v.filial, v.linha_digitavel, v.codigo_barras, v.status_pagamento,
             v.tipo_execucao_pagamento, v.is_pronto_para_robo, v.lote_remessa_id,
-            v.status_integracao_rm, v.etapa_atual, v.status_baixa, v.created_at, v.updated_at
+            v.status_integracao_rm, v.etapa_atual, v.status_baixa, v.created_at, v.updated_at,
+            (SELECT l.user_name FROM dados_dachser.t_voucher_logs l
+             WHERE l.voucher_id = v.id
+             AND l.acao IN ('ENVIADO_OPERACAO', 'APROVADO_FISCAL', 'APROVADO_SUPERVISOR', 
+                           'REENVIO_APOS_AJUSTE', 'APROVADO_URGENTE')
+             ORDER BY l.data_hora DESC LIMIT 1) AS enviado_por_user_name
           FROM dados_dachser.t_vouchers v
           LEFT JOIN dados_dachser.t_dados_financeiro_voucher dfv ON v.id_rm COLLATE utf8mb4_general_ci = dfv.id_rm COLLATE utf8mb4_general_ci
           ${whereClause}
@@ -6679,11 +6697,11 @@ serve(async (req) => {
       }
 
       case 'get_vouchers_for_comprovante': {
-        // Get vouchers that are in FINANCEIRO stage and need comprovantes
+        // Get vouchers that are in FINANCEIRO or ROBO stage and need comprovantes
         const { search, limit = 50 } = body as { search?: string; limit?: number };
-        console.log('Fetching vouchers for comprovante attachment');
+        console.log('Fetching vouchers for comprovante attachment (FINANCEIRO + ROBO stages)');
         
-        let whereConditions = [`etapa_atual = 'FINANCEIRO'`];
+        let whereConditions = [`etapa_atual IN ('FINANCEIRO', 'ROBO')`];
         let params: any[] = [];
         
         if (search) {

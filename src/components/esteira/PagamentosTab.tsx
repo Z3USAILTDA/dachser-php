@@ -116,6 +116,7 @@ export const PagamentosTab = () => {
   const [filterTipoExecucao, setFilterTipoExecucao] = useState<string>("all");
   const [filterFormaPagamento, setFilterFormaPagamento] = useState<string>("all");
   const [filterStatusIntegracaoRm, setFilterStatusIntegracaoRm] = useState<string>("all");
+  const [activeCardFilter, setActiveCardFilter] = useState<string | null>(null);
   
   // Selection
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -507,37 +508,143 @@ export const PagamentosTab = () => {
 
       {/* Stats Cards - Nova ordem: A Vencer, Vencidos, Em Remessa, Manual, Prontos Em Remessa, Prontos Manual */}
       <div className="grid grid-cols-2 md:grid-cols-6 gap-3">
-        <div className="p-3 rounded-xl bg-card border border-border hover:border-primary/50 transition-colors cursor-pointer">
+        <div 
+          className={cn(
+            "p-3 rounded-xl bg-card border transition-colors cursor-pointer",
+            activeCardFilter === "a_vencer" 
+              ? "border-green-500 ring-2 ring-green-500/30" 
+              : "border-border hover:border-green-500/50"
+          )}
+          onClick={() => {
+            if (activeCardFilter === "a_vencer") {
+              setActiveCardFilter(null);
+              setFilterVencimento("todos");
+            } else {
+              setActiveCardFilter("a_vencer");
+              setFilterVencimento("proximos7");
+              setFilterTipoExecucao("all");
+            }
+          }}
+        >
           <div className="text-[10px] uppercase tracking-wider text-muted-foreground">A Vencer</div>
           <div className="text-xl font-bold mt-1 text-green-400">
             {stats?.a_vencer_count || 0} - {formatCurrency(stats?.a_vencer_valor || 0)}
           </div>
         </div>
-        <div className="p-3 rounded-xl bg-card border border-border hover:border-red-500/50 transition-colors cursor-pointer">
+        <div 
+          className={cn(
+            "p-3 rounded-xl bg-card border transition-colors cursor-pointer",
+            activeCardFilter === "vencidos" 
+              ? "border-red-500 ring-2 ring-red-500/30" 
+              : "border-border hover:border-red-500/50"
+          )}
+          onClick={() => {
+            if (activeCardFilter === "vencidos") {
+              setActiveCardFilter(null);
+              setFilterVencimento("todos");
+            } else {
+              setActiveCardFilter("vencidos");
+              setFilterVencimento("vencidos");
+              setFilterTipoExecucao("all");
+            }
+          }}
+        >
           <div className="text-[10px] uppercase tracking-wider text-muted-foreground">Vencidos</div>
           <div className="text-xl font-bold mt-1 text-red-400">
             {stats?.vencidos_count || 0} - {formatCurrency(stats?.vencidos_valor || 0)}
           </div>
         </div>
-        <div className="p-3 rounded-xl bg-card border border-border hover:border-blue-500/50 transition-colors cursor-pointer">
+        <div 
+          className={cn(
+            "p-3 rounded-xl bg-card border transition-colors cursor-pointer",
+            activeCardFilter === "em_remessa" 
+              ? "border-blue-500 ring-2 ring-blue-500/30" 
+              : "border-border hover:border-blue-500/50"
+          )}
+          onClick={() => {
+            if (activeCardFilter === "em_remessa") {
+              setActiveCardFilter(null);
+              setFilterTipoExecucao("all");
+            } else {
+              setActiveCardFilter("em_remessa");
+              setFilterTipoExecucao("REMESSA");
+              setFilterVencimento("todos");
+            }
+          }}
+        >
           <div className="text-[10px] uppercase tracking-wider text-muted-foreground">Em Remessa</div>
           <div className="text-xl font-bold mt-1 text-blue-400">
             {stats?.em_remessa_count || 0} - {formatCurrency(stats?.em_remessa_valor || 0)}
           </div>
         </div>
-        <div className="p-3 rounded-xl bg-card border border-border hover:border-purple-500/50 transition-colors cursor-pointer">
+        <div 
+          className={cn(
+            "p-3 rounded-xl bg-card border transition-colors cursor-pointer",
+            activeCardFilter === "manual" 
+              ? "border-purple-500 ring-2 ring-purple-500/30" 
+              : "border-border hover:border-purple-500/50"
+          )}
+          onClick={() => {
+            if (activeCardFilter === "manual") {
+              setActiveCardFilter(null);
+              setFilterTipoExecucao("all");
+            } else {
+              setActiveCardFilter("manual");
+              setFilterTipoExecucao("MANUAL");
+              setFilterVencimento("todos");
+            }
+          }}
+        >
           <div className="text-[10px] uppercase tracking-wider text-muted-foreground">Manual</div>
           <div className="text-xl font-bold mt-1 text-purple-400">
             {stats?.manual_count || 0} - {formatCurrency(stats?.manual_valor || 0)}
           </div>
         </div>
-        <div className="p-3 rounded-xl bg-card border border-border hover:border-emerald-500/50 transition-colors cursor-pointer">
+        <div 
+          className={cn(
+            "p-3 rounded-xl bg-card border transition-colors cursor-pointer",
+            activeCardFilter === "prontos_remessa" 
+              ? "border-emerald-500 ring-2 ring-emerald-500/30" 
+              : "border-border hover:border-emerald-500/50"
+          )}
+          onClick={() => {
+            if (activeCardFilter === "prontos_remessa") {
+              setActiveCardFilter(null);
+              setFilterStatusPagamento("all");
+              setFilterTipoExecucao("all");
+            } else {
+              setActiveCardFilter("prontos_remessa");
+              setFilterStatusPagamento("PRONTO");
+              setFilterTipoExecucao("REMESSA");
+              setFilterVencimento("todos");
+            }
+          }}
+        >
           <div className="text-[10px] uppercase tracking-wider text-muted-foreground">Prontos Remessa</div>
           <div className="text-xl font-bold mt-1 text-emerald-400">
             {stats?.prontos_remessa_count || 0} - {formatCurrency(stats?.prontos_remessa_valor || 0)}
           </div>
         </div>
-        <div className="p-3 rounded-xl bg-card border border-border hover:border-cyan-500/50 transition-colors cursor-pointer">
+        <div 
+          className={cn(
+            "p-3 rounded-xl bg-card border transition-colors cursor-pointer",
+            activeCardFilter === "prontos_manual" 
+              ? "border-cyan-500 ring-2 ring-cyan-500/30" 
+              : "border-border hover:border-cyan-500/50"
+          )}
+          onClick={() => {
+            if (activeCardFilter === "prontos_manual") {
+              setActiveCardFilter(null);
+              setFilterStatusPagamento("all");
+              setFilterTipoExecucao("all");
+            } else {
+              setActiveCardFilter("prontos_manual");
+              setFilterStatusPagamento("PRONTO");
+              setFilterTipoExecucao("MANUAL");
+              setFilterVencimento("todos");
+            }
+          }}
+        >
           <div className="text-[10px] uppercase tracking-wider text-muted-foreground">Prontos Manual</div>
           <div className="text-xl font-bold mt-1 text-cyan-400">
             {stats?.prontos_manual_count || 0} - {formatCurrency(stats?.prontos_manual_valor || 0)}
