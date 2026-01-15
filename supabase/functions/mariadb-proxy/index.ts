@@ -4220,6 +4220,25 @@ serve(async (req) => {
         // Support both formats: direct fields or nested 'updates' object
         const updateData = updatesObj || directFields;
         
+        // Ensure status_comprovante column exists (MariaDB compatible)
+        try {
+          const colCheck = await client.query(`
+            SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS 
+            WHERE TABLE_SCHEMA = 'dados_dachser' 
+            AND TABLE_NAME = 't_vouchers' 
+            AND COLUMN_NAME = 'status_comprovante'
+          `);
+          if (!colCheck || colCheck.length === 0) {
+            await client.execute(`
+              ALTER TABLE dados_dachser.t_vouchers 
+              ADD COLUMN status_comprovante VARCHAR(20) DEFAULT 'PENDENTE'
+            `);
+            console.log('Created status_comprovante column');
+          }
+        } catch (colErr) {
+          console.log('status_comprovante column check/create:', colErr);
+        }
+        
         const updateClauses: string[] = [];
         const params: any[] = [];
         
