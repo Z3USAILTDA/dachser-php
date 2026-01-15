@@ -9708,7 +9708,7 @@ serve(async (req) => {
           UPDATE dados_dachser.t_vouchers v
           JOIN dados_dachser.t_dados_financeiro_voucher dfv 
             ON v.numero_spo COLLATE utf8mb4_unicode_ci = dfv.nd COLLATE utf8mb4_unicode_ci
-          JOIN dados_dachser.tbaixas b ON dfv.id_rm = b.IdLancamentoRM
+          JOIN dados_dachser.tbaixas b ON CAST(dfv.id_rm AS UNSIGNED) = b.IdLancamentoRM
           SET v.sync_status = 'BAIXADO', v.etapa_atual = 'CONCLUIDO'
           WHERE v.sync_status = 'ATIVO'
         `);
