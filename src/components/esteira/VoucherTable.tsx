@@ -477,10 +477,10 @@ export const VoucherTable = ({ vouchers, onViewDetails, onEdit, onDelete, onGoBa
                       <TableCell className="text-sm max-w-[100px] truncate">
                         <Tooltip>
                           <TooltipTrigger onClick={(e) => e.stopPropagation()}>
-                            <span>{voucher.criadoPorUserName || "-"}</span>
+                            <span>{voucher.enviadoPorUserName || voucher.criadoPorUserName || "-"}</span>
                           </TooltipTrigger>
                           <TooltipContent>
-                            Enviado por: {voucher.criadoPorUserName || "Não informado"}
+                            Enviado por: {voucher.enviadoPorUserName || voucher.criadoPorUserName || "Não informado"}
                           </TooltipContent>
                         </Tooltip>
                       </TableCell>
