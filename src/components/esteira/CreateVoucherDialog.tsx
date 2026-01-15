@@ -161,6 +161,8 @@ export const CreateVoucherDialog = ({
   const [faturaFiles, setFaturaFiles] = useState<File[]>([]);
   const [boletoFiles, setBoletoFiles] = useState<File[]>([]);
   const [idRM, setIdRM] = useState<string | null>(null);
+  const [dragActiveFatura, setDragActiveFatura] = useState(false);
+  const [dragActiveBoleto, setDragActiveBoleto] = useState(false);
   const { toast } = useToast();
 
   const form = useForm<FormValues>({
@@ -324,6 +326,31 @@ export const CreateVoucherDialog = ({
 
   const removeBoletoFile = (index: number) => {
     setBoletoFiles(prev => prev.filter((_, i) => i !== index));
+  };
+
+  // Drag-and-drop handlers
+  const handleDragEvent = (e: React.DragEvent, setter: (value: boolean) => void, active: boolean) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setter(active);
+  };
+
+  const handleDropFatura = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setDragActiveFatura(false);
+    if (e.dataTransfer.files?.length) {
+      setFaturaFiles(prev => [...prev, ...Array.from(e.dataTransfer.files)]);
+    }
+  };
+
+  const handleDropBoleto = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setDragActiveBoleto(false);
+    if (e.dataTransfer.files?.length) {
+      setBoletoFiles(prev => [...prev, ...Array.from(e.dataTransfer.files)]);
+    }
   };
 
   const handleSubmitVoucher = async (values: FormValues, isDraft: boolean = false) => {
@@ -630,9 +657,23 @@ export const CreateVoucherDialog = ({
       onVoucherCreated?.();
     } catch (error: any) {
       console.error("Erro ao criar voucher:", error);
+      console.error("Detalhes do erro:", JSON.stringify(error, null, 2));
+      
+      let errorMessage = "Ocorreu um erro ao criar o voucher/SPO";
+      
+      if (error.message?.includes("409") || error.message?.includes("já existe")) {
+        errorMessage = "Este voucher já existe na esteira em outra etapa. Verifique na lista principal.";
+      } else if (error.message?.includes("numero_spo")) {
+        errorMessage = "Número do voucher/SPO é obrigatório.";
+      } else if (error.message?.includes("MANUAL-")) {
+        errorMessage = "Número de voucher/SPO inválido. Use um número real.";
+      } else if (error.message) {
+        errorMessage = error.message;
+      }
+      
       toast({
         title: "Erro ao criar voucher/SPO",
-        description: error.message || "Ocorreu um erro ao criar o voucher/SPO",
+        description: errorMessage,
         variant: "destructive",
       });
     } finally {
@@ -656,7 +697,11 @@ export const CreateVoucherDialog = ({
           </Button>
         </DialogTrigger>
       )}
-      <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto bg-[rgba(5,6,18,0.95)] border-border/50 backdrop-blur-xl shadow-[0_18px_40px_rgba(0,0,0,.85)]">
+      <DialogContent 
+        className="max-w-5xl max-h-[90vh] overflow-y-auto bg-[rgba(5,6,18,0.95)] border-border/50 backdrop-blur-xl shadow-[0_18px_40px_rgba(0,0,0,.85)]"
+        onInteractOutside={(e) => e.preventDefault()}
+        onEscapeKeyDown={(e) => e.preventDefault()}
+      >
         <DialogHeader>
           <DialogTitle className="text-xl font-semibold text-foreground flex items-center gap-2">
             <FileText className="h-5 w-5 text-primary" />
@@ -1069,6 +1114,7 @@ export const CreateVoucherDialog = ({
                     name="vencimento"
                     label="Data de Vencimento"
                     required
+                    disablePastDates
                   />
                   <DateInputField
                     control={form.control}
@@ -1227,7 +1273,18 @@ export const CreateVoucherDialog = ({
                 <Label className="text-sm font-medium">
                   Fatura e Demonstrativo <span className="text-destructive">*</span>
                 </Label>
-                <div className="mt-2 border-2 border-dashed border-border rounded-lg p-6 text-center hover:border-primary/50 transition-colors bg-background/30">
+                <div 
+                  className={cn(
+                    "mt-2 border-2 border-dashed rounded-lg p-6 text-center transition-colors bg-background/30",
+                    dragActiveFatura 
+                      ? "border-primary bg-primary/10" 
+                      : "border-border hover:border-primary/50"
+                  )}
+                  onDragEnter={(e) => handleDragEvent(e, setDragActiveFatura, true)}
+                  onDragLeave={(e) => handleDragEvent(e, setDragActiveFatura, false)}
+                  onDragOver={(e) => handleDragEvent(e, setDragActiveFatura, true)}
+                  onDrop={handleDropFatura}
+                >
                   <input
                     type="file"
                     multiple
@@ -1237,9 +1294,9 @@ export const CreateVoucherDialog = ({
                     accept=".pdf,.jpg,.jpeg,.png,.doc,.docx,.xls,.xlsx,.xml"
                   />
                   <label htmlFor="fatura-upload" className="cursor-pointer flex flex-col items-center gap-2">
-                    <Upload className="h-8 w-8 text-muted-foreground" />
-                    <span className="text-sm text-muted-foreground">
-                      Arraste o arquivo ou clique para selecionar
+                    <Upload className={cn("h-8 w-8", dragActiveFatura ? "text-primary" : "text-muted-foreground")} />
+                    <span className={cn("text-sm", dragActiveFatura ? "text-primary font-medium" : "text-muted-foreground")}>
+                      {dragActiveFatura ? "Solte o arquivo aqui" : "Arraste o arquivo ou clique para selecionar"}
                     </span>
                     <span className="text-xs text-muted-foreground">
                       Formatos: PDF, JPG, PNG, Excel, Word, XML (máx. 50MB)
@@ -1275,7 +1332,18 @@ export const CreateVoucherDialog = ({
                 <Label className="text-sm font-medium">
                   Boleto ou Instruções de Pagamento <span className="text-destructive">*</span>
                 </Label>
-                <div className="mt-2 border-2 border-dashed border-border rounded-lg p-6 text-center hover:border-primary/50 transition-colors bg-background/30">
+                <div 
+                  className={cn(
+                    "mt-2 border-2 border-dashed rounded-lg p-6 text-center transition-colors bg-background/30",
+                    dragActiveBoleto 
+                      ? "border-primary bg-primary/10" 
+                      : "border-border hover:border-primary/50"
+                  )}
+                  onDragEnter={(e) => handleDragEvent(e, setDragActiveBoleto, true)}
+                  onDragLeave={(e) => handleDragEvent(e, setDragActiveBoleto, false)}
+                  onDragOver={(e) => handleDragEvent(e, setDragActiveBoleto, true)}
+                  onDrop={handleDropBoleto}
+                >
                   <input
                     type="file"
                     multiple
@@ -1285,9 +1353,9 @@ export const CreateVoucherDialog = ({
                     accept=".pdf,.jpg,.jpeg,.png,.doc,.docx,.xls,.xlsx,.xml"
                   />
                   <label htmlFor="boleto-upload" className="cursor-pointer flex flex-col items-center gap-2">
-                    <Upload className="h-8 w-8 text-muted-foreground" />
-                    <span className="text-sm text-muted-foreground">
-                      Arraste o arquivo ou clique para selecionar
+                    <Upload className={cn("h-8 w-8", dragActiveBoleto ? "text-primary" : "text-muted-foreground")} />
+                    <span className={cn("text-sm", dragActiveBoleto ? "text-primary font-medium" : "text-muted-foreground")}>
+                      {dragActiveBoleto ? "Solte o arquivo aqui" : "Arraste o arquivo ou clique para selecionar"}
                     </span>
                     <span className="text-xs text-muted-foreground">
                       Formatos: PDF, JPG, PNG, Excel, Word, XML (máx. 50MB)

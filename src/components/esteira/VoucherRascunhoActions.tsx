@@ -60,6 +60,11 @@ export const VoucherRascunhoActions = ({ voucher, onUpdate }: VoucherRascunhoAct
   const initialVencimento = voucher.vencimento instanceof Date ? voucher.vencimento : undefined;
   const [vencimentoEnvio, setVencimentoEnvio] = useState<Date | undefined>(initialVencimento || undefined);
 
+  // Verificar se vencimento está expirado
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const isVencimentoExpirado = vencimentoEnvio ? vencimentoEnvio < today : false;
+
   // Get user data from localStorage (MariaDB auth)
   const getUserData = () => {
     const storedUser = localStorage.getItem("user") || localStorage.getItem("dachser_user");
@@ -320,6 +325,16 @@ export const VoucherRascunhoActions = ({ voucher, onUpdate }: VoucherRascunhoAct
         </AlertDescription>
       </Alert>
 
+      {/* Aviso de vencimento expirado */}
+      {isVencimentoExpirado && (
+        <Alert className="bg-red-500/10 border-red-500/30">
+          <AlertCircle className="h-4 w-4 text-red-500" />
+          <AlertDescription className="text-red-400">
+            <strong>Data de vencimento expirada!</strong> Altere a data de vencimento para uma data válida (hoje ou futura) antes de enviar o voucher.
+          </AlertDescription>
+        </Alert>
+      )}
+
       {/* Checklist de anexos */}
       <Card className="border-[rgba(255,255,255,0.12)]" style={{ backgroundColor: 'rgba(5,6,18,0.9)' }}>
         <CardHeader className="pb-3">
@@ -404,8 +419,9 @@ export const VoucherRascunhoActions = ({ voucher, onUpdate }: VoucherRascunhoAct
 
         <Button
           onClick={() => setShowEnviarDialog(true)}
-          disabled={loading || !canEnviar}
+          disabled={loading || !canEnviar || isVencimentoExpirado}
           className="gap-2 bg-primary hover:bg-primary/90"
+          title={isVencimentoExpirado ? "Altere a data de vencimento antes de enviar" : undefined}
         >
           {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
           Enviar Voucher/SPO
@@ -464,6 +480,11 @@ export const VoucherRascunhoActions = ({ voucher, onUpdate }: VoucherRascunhoAct
                     mode="single"
                     selected={vencimentoEnvio}
                     onSelect={setVencimentoEnvio}
+                    disabled={(date) => {
+                      const todayMidnight = new Date();
+                      todayMidnight.setHours(0, 0, 0, 0);
+                      return date < todayMidnight;
+                    }}
                     className="pointer-events-auto"
                     locale={ptBR}
                   />

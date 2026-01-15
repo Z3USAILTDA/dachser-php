@@ -4017,22 +4017,39 @@ serve(async (req) => {
           );
         }
         
-        // CHECK FOR DUPLICATES: Prevent creating voucher with same numero_spo
+        // CHECK FOR DUPLICATES: Replace A_PROCESSAR vouchers, block others
         const existingVoucher = await client.query(`
           SELECT id, numero_spo, etapa_atual FROM dados_dachser.t_vouchers 
           WHERE numero_spo = ? LIMIT 1
         `, [numeroSpo]);
         
         if (existingVoucher && existingVoucher.length > 0) {
-          console.log('Voucher already exists with numero_spo:', numeroSpo, 'ID:', existingVoucher[0].id);
-          return new Response(
-            JSON.stringify({ 
-              error: `Voucher com número ${numeroSpo} já existe na esteira`,
-              existingId: existingVoucher[0].id,
-              existingEtapa: existingVoucher[0].etapa_atual
-            }),
-            { status: 409, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-          );
+          const existing = existingVoucher[0];
+          
+          // Se está em A_PROCESSAR, deletar para substituir pelo novo
+          if (existing.etapa_atual === 'A_PROCESSAR') {
+            console.log('Replacing A_PROCESSAR voucher:', existing.id, 'numero_spo:', numeroSpo);
+            
+            // Deletar logs do voucher antigo
+            await client.execute(`DELETE FROM dados_dachser.t_voucher_logs WHERE voucher_id = ?`, [existing.id]);
+            // Deletar anexos do voucher antigo
+            await client.execute(`DELETE FROM dados_dachser.t_voucher_anexos WHERE voucher_id = ?`, [existing.id]);
+            // Deletar o voucher antigo
+            await client.execute(`DELETE FROM dados_dachser.t_vouchers WHERE id = ?`, [existing.id]);
+            
+            console.log('A_PROCESSAR voucher replaced successfully');
+          } else {
+            // Bloquear para outras etapas
+            console.log('Voucher already exists with numero_spo:', numeroSpo, 'ID:', existing.id, 'etapa:', existing.etapa_atual);
+            return new Response(
+              JSON.stringify({ 
+                error: `Voucher com número ${numeroSpo} já existe na etapa ${existing.etapa_atual}`,
+                existingId: existing.id,
+                existingEtapa: existing.etapa_atual
+              }),
+              { status: 409, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+            );
+          }
         }
         
         // Ensure id_rm column exists
