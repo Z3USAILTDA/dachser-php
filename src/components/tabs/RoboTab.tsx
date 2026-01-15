@@ -29,20 +29,34 @@ export function RoboTab() {
   const [progress, setProgress] = useState(0);
 
   const extractSPOFromFilename = (filename: string): string | null => {
+    // Remove extension for cleaner matching
+    const nameWithoutExt = filename.replace(/\.\w+$/, '');
+    
     // Enhanced patterns for SPO extraction
     const patterns = [
-      /^(\d{5,})[-_]/,              // 12345_comprovante.pdf
-      /SPO[-_]?(\d{5,})/i,          // SPO12345.pdf or SPO-12345.pdf
-      /[-_](\d{5,})\./,              // comprovante_12345.pdf
-      /(\d{5,})[-_]comprovante/i,    // 12345-comprovante.pdf
-      /comprovante[-_](\d{5,})/i,    // comprovante_12345.pdf
-      /pgto[-_]?(\d{5,})/i,          // pgto12345.pdf
-      /pag[-_]?(\d{5,})/i,           // pag_12345.pdf
-      /voucher[-_]?(\d{5,})/i,       // voucher_12345.pdf
+      /^(\d{6,})$/,                   // Pure number filename: 20262478210.pdf
+      /^(\d{5,})[-_]/,                // 12345_comprovante.pdf
+      /SPO[-_]?(\d{5,})/i,            // SPO12345.pdf or SPO-12345.pdf
+      /[-_](\d{5,})\./,               // comprovante_12345.pdf
+      /(\d{5,})[-_]comprovante/i,     // 12345-comprovante.pdf
+      /comprovante[-_](\d{5,})/i,     // comprovante_12345.pdf
+      /pgto[-_]?(\d{5,})/i,           // pgto12345.pdf
+      /pag[-_]?(\d{5,})/i,            // pag_12345.pdf
+      /voucher[-_]?(\d{5,})/i,        // voucher_12345.pdf
       /^(\d{5,})\s/,                  // "12345 alguma coisa.pdf"
       /\s(\d{5,})\./,                 // "alguma coisa 12345.pdf"
+      /^(\d{5,})$/,                   // Fallback: pure number with 5+ digits
     ];
 
+    // First try against name without extension (for pure number patterns)
+    for (const pattern of patterns) {
+      const match = nameWithoutExt.match(pattern);
+      if (match && match[1]) {
+        return match[1];
+      }
+    }
+
+    // Fallback: try against full filename
     for (const pattern of patterns) {
       const match = filename.match(pattern);
       if (match && match[1]) {
@@ -70,9 +84,42 @@ export function RoboTab() {
         }
       }
     } catch (e) {
-      console.error('Error fetching voucher:', e);
+      console.error('Error fetching voucher by SPO:', e);
     }
     return null;
+  };
+
+  const searchVoucherByND = async (nd: string): Promise<string | null> => {
+    try {
+      const { data, error } = await supabase.functions.invoke('mariadb-proxy', {
+        body: {
+          action: 'find_voucher_by_nd',
+          numero_nd: nd,
+        },
+      });
+
+      if (!error && data?.vouchers?.length > 0) {
+        // Filter for ROBO stage vouchers
+        const roboVoucher = data.vouchers.find((v: any) => v.etapa_atual === 'ROBO');
+        if (roboVoucher) {
+          return roboVoucher.id;
+        }
+      }
+    } catch (e) {
+      console.error('Error fetching voucher by ND:', e);
+    }
+    return null;
+  };
+
+  // Unified search: tries SPO first, then ND as fallback
+  const searchVoucher = async (numero: string): Promise<string | null> => {
+    // First try by SPO
+    let voucherId = await searchVoucherBySPO(numero);
+    if (voucherId) return voucherId;
+
+    // Fallback: try by ND
+    voucherId = await searchVoucherByND(numero);
+    return voucherId;
   };
 
   const handleFilesSelected = async (selectedFiles: File[]) => {
@@ -84,7 +131,8 @@ export function RoboTab() {
         let voucherId = null;
 
         if (numeroSPO) {
-          voucherId = await searchVoucherBySPO(numeroSPO);
+          // Use unified search (SPO + ND fallback)
+          voucherId = await searchVoucher(numeroSPO);
         }
 
         return {
@@ -118,7 +166,8 @@ export function RoboTab() {
       return;
     }
 
-    const voucherId = await searchVoucherBySPO(file.manualSpoInput.trim());
+    // Use unified search (SPO + ND fallback)
+    const voucherId = await searchVoucher(file.manualSpoInput.trim());
 
     setFiles((prev) =>
       prev.map((f, i) =>
@@ -453,6 +502,7 @@ export function RoboTab() {
               Padrões de Nome Aceitos
             </h4>
             <ul className="text-sm text-muted-foreground space-y-1 ml-6">
+              <li>• <code className="bg-muted px-1 rounded">20262478210.pdf</code> - Apenas número (SPO ou ND)</li>
               <li>• <code className="bg-muted px-1 rounded">12345_comprovante.pdf</code> - SPO no início</li>
               <li>• <code className="bg-muted px-1 rounded">SPO12345.pdf</code> ou <code className="bg-muted px-1 rounded">SPO-12345.pdf</code> - Com prefixo SPO</li>
               <li>• <code className="bg-muted px-1 rounded">comprovante_12345.pdf</code> - SPO no meio/fim</li>
