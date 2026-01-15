@@ -4320,6 +4320,63 @@ serve(async (req) => {
         break;
       }
 
+      // Update voucher by numero_spo instead of id
+      case 'update_voucher_by_numero_spo': {
+        const { numero_spo, ...updateFields } = body as any;
+        console.log('Updating voucher by numero_spo:', numero_spo);
+        
+        if (!numero_spo) {
+          return new Response(
+            JSON.stringify({ error: 'numero_spo é obrigatório' }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+        
+        // Get the voucher id from numero_spo
+        const voucherRows = await client.query(`
+          SELECT id FROM dados_dachser.t_vouchers WHERE numero_spo = ? LIMIT 1
+        `, [numero_spo]);
+        
+        if (!voucherRows || voucherRows.length === 0) {
+          return new Response(
+            JSON.stringify({ error: `Voucher com numero_spo '${numero_spo}' não encontrado` }),
+            { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+        
+        const voucherId = voucherRows[0].id;
+        
+        const updateClauses: string[] = [];
+        const params: any[] = [];
+        
+        const fieldMapping: Record<string, string> = {
+          etapa_atual: 'etapa_atual',
+          status_baixa: 'status_baixa',
+          status_financeiro: 'status_financeiro',
+          status_comprovante: 'status_comprovante',
+          status_documento_fiscal: 'status_documento_fiscal',
+        };
+        
+        for (const [key, dbField] of Object.entries(fieldMapping)) {
+          if (updateFields[key] !== undefined) {
+            updateClauses.push(`${dbField} = ?`);
+            params.push(updateFields[key]);
+          }
+        }
+        
+        if (updateClauses.length > 0) {
+          updateClauses.push('updated_at = NOW()');
+          params.push(voucherId);
+          await client.execute(`
+            UPDATE dados_dachser.t_vouchers SET ${updateClauses.join(', ')} WHERE id = ?
+          `, params);
+          console.log('Voucher updated by numero_spo:', numero_spo, 'ID:', voucherId);
+        }
+        
+        result = { success: true, voucher_id: voucherId };
+        break;
+      }
+
       // Admin action: Move all vouchers from one stage to another
       case 'admin_bulk_update_etapa': {
         const bulkBody = body as any;
