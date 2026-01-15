@@ -1577,6 +1577,14 @@ serve(async (req) => {
                 AND md.active = 1
               LIMIT 1
             ) as eta_master,
+            -- Nome do analista/coordenador do master
+            (
+              SELECT md.nome_analista 
+              FROM dados_dachser.t_master_dados md 
+              WHERE BINARY TRIM(md.mawb) = BINARY ts.mbl_id
+                AND md.active = 1
+              LIMIT 1
+            ) as nome_analista,
             -- ETA da API para referência
             MAX(ts.eta) as eta_api,
             MAX(ts.email_analista) as email_analista,

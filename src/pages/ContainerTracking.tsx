@@ -152,6 +152,7 @@ interface MblTrackingData {
   dias_atraso: number; // Dias de atraso calculados
   transshipment_port: string | null; // Porto(s) de escala/transbordo
   has_free_time: number; // 1 se possui Free Time cadastrado
+  nome_analista: string | null; // Coordenador do processo
 }
 
 // Container detail interface (expanded view)
@@ -180,6 +181,7 @@ const ContainerTracking = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
   const [filterLine, setFilterLine] = useState("all");
+  const [filterTipoProcesso, setFilterTipoProcesso] = useState<"all" | "SEA IMPORT" | "SEA EXPORT">("all");
   
   const [activeCardFilter, setActiveCardFilter] = useState<"all" | "transito" | "alerta" | "critico" | "entregues">("all");
   const [mblList, setMblList] = useState<MblTrackingData[]>([]);
@@ -1272,11 +1274,15 @@ const ContainerTracking = () => {
         matchesCardFilter = isEntregue(m.last_event);
       }
 
-      return matchesSearch && matchesLine && matchesCardFilter;
+      const matchesTipoProcesso = 
+        filterTipoProcesso === "all" || 
+        m.tipo_processo === filterTipoProcesso;
+
+      return matchesSearch && matchesLine && matchesCardFilter && matchesTipoProcesso;
     });
 
     return mbls;
-  }, [mblList, searchTerm, filterLine, activeCardFilter]);
+  }, [mblList, searchTerm, filterLine, activeCardFilter, filterTipoProcesso]);
 
   const totalPages = Math.ceil(filteredMbls.length / itemsPerPage);
   const startIndex = (currentPage - 1) * itemsPerPage;
@@ -1569,6 +1575,23 @@ const ContainerTracking = () => {
               <div className="flex flex-wrap items-center gap-3">
                 <div className="flex items-center gap-1.5">
                   <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-[rgba(0,0,0,.5)] border border-[rgba(255,255,255,.22)]">
+                    <Ship className="h-3 w-3 text-[#ffc800]" />
+                    <span className="text-[0.68rem] tracking-[0.1em] uppercase text-[#aaaaaa]">Tipo</span>
+                  </div>
+                  <Select value={filterTipoProcesso} onValueChange={(v) => setFilterTipoProcesso(v as "all" | "SEA IMPORT" | "SEA EXPORT")}>
+                    <SelectTrigger className="h-8 w-[140px] rounded-full bg-[#13141a] border border-[rgba(255,255,255,.14)] text-[0.78rem]">
+                      <SelectValue placeholder="Todos" />
+                    </SelectTrigger>
+                    <SelectContent className="bg-card border border-border z-50">
+                      <SelectItem value="all">Todos</SelectItem>
+                      <SelectItem value="SEA IMPORT">Importação</SelectItem>
+                      <SelectItem value="SEA EXPORT">Exportação</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                
+                <div className="flex items-center gap-1.5">
+                  <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-[rgba(0,0,0,.5)] border border-[rgba(255,255,255,.22)]">
                     <FilterIcon className="h-3 w-3 text-[#ffc800]" />
                     <span className="text-[0.68rem] tracking-[0.1em] uppercase text-[#aaaaaa]">Armador</span>
                   </div>
@@ -1742,6 +1765,7 @@ const ContainerTracking = () => {
                     <tr className="bg-[rgba(0,0,0,.4)] border-b border-[rgba(255,255,255,.08)]">
                       <th className="px-4 py-3 text-left text-[#aaaaaa] uppercase text-[0.68rem] tracking-[0.1em] font-medium">MBL</th>
                       <th className="px-4 py-3 text-left text-[#aaaaaa] uppercase text-[0.68rem] tracking-[0.1em] font-medium">Consignee</th>
+                      <th className="px-4 py-3 text-left text-[#aaaaaa] uppercase text-[0.68rem] tracking-[0.1em] font-medium">Coordenador</th>
                       <th className="px-4 py-3 text-left text-[#aaaaaa] uppercase text-[0.68rem] tracking-[0.1em] font-medium">Armador</th>
                       <th className="px-4 py-3 text-left text-[#aaaaaa] uppercase text-[0.68rem] tracking-[0.1em] font-medium">Origem</th>
                       <th className="px-4 py-3 text-left text-[#aaaaaa] uppercase text-[0.68rem] tracking-[0.1em] font-medium">Escala</th>
@@ -1794,6 +1818,20 @@ const ContainerTracking = () => {
                                   </TooltipTrigger>
                                   <TooltipContent>
                                     <p>{mbl.consignee || "-"}</p>
+                                  </TooltipContent>
+                                </Tooltip>
+                              </TooltipProvider>
+                            </td>
+                            <td className="px-4 py-3">
+                              <TooltipProvider>
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <span className="text-[#aaaaaa] text-sm cursor-help">
+                                      {abbreviateName(mbl.nome_analista || "-")}
+                                    </span>
+                                  </TooltipTrigger>
+                                  <TooltipContent>
+                                    <p>{mbl.nome_analista || "-"}</p>
                                   </TooltipContent>
                                 </Tooltip>
                               </TooltipProvider>
