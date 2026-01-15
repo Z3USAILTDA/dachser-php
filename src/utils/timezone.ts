@@ -33,8 +33,23 @@ export const parseDBDate = (dateStr: string | null | undefined): Date | null => 
   if (!dateStr) return null;
   
   try {
-    // Already has timezone info (Z or offset) - parse directly
-    if (dateStr.includes('Z') || dateStr.includes('+') || /[-+]\d{2}:\d{2}$/.test(dateStr)) {
+    // IMPORTANT: MariaDB is configured with -03:00 timezone (São Paulo)
+    // The MySQL driver creates JS Date objects from the local time values
+    // When JSON.stringify is called, it converts to ISO with Z suffix
+    // But the time value is actually São Paulo time, not UTC
+    // So "2026-01-14T22:09:31.000Z" is actually São Paulo time marked as UTC
+    // We need to correct this by interpreting the Z time as São Paulo
+    
+    // Has Z suffix - this is from our MariaDB proxy JSON serialization
+    // The time is actually São Paulo time, not UTC, so we need to adjust
+    if (dateStr.endsWith('Z') || dateStr.endsWith('.000Z')) {
+      // Remove the Z and treat as São Paulo time
+      const withoutZ = dateStr.replace(/\.000Z$/, '').replace(/Z$/, '');
+      return new Date(withoutZ + TIMEZONE_CONFIG.offsetString);
+    }
+    
+    // Has explicit offset (+ or -HH:MM) - parse directly
+    if (dateStr.includes('+') || /[-+]\d{2}:\d{2}$/.test(dateStr)) {
       return new Date(dateStr);
     }
     
