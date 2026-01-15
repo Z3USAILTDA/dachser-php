@@ -116,6 +116,39 @@ export const VoucherOperacaoActions = ({ voucher, onUpdate }: VoucherOperacaoAct
         },
       });
 
+      // Extrair linha digitável automaticamente se for boleto e forma de pagamento for BOLETO
+      const isBoletoAnexo = selectedTipo === "BOLETO_INSTRUCOES" || selectedTipo === "BOLETO";
+      if (isBoletoAnexo && voucher.formaPagamento === "BOLETO") {
+        try {
+          console.log("Extraindo linha digitável do boleto anexado...");
+          const { data: extractionResult, error: extractionError } = await supabase.functions.invoke("extract-boleto-barcode", {
+            body: { fileUrl }
+          });
+
+          if (!extractionError && extractionResult?.success && extractionResult?.linhaDigitavel) {
+            // Salvar linha digitável no voucher
+            await supabase.functions.invoke("mariadb-proxy", {
+              body: {
+                action: "save_linha_digitavel",
+                voucher_id: voucher.id,
+                linha_digitavel: extractionResult.linhaDigitavel,
+                codigo_barras: extractionResult.codigoBarras || null,
+              },
+            });
+            
+            toast({
+              title: "Linha digitável extraída",
+              description: "A linha digitável foi extraída automaticamente do boleto.",
+            });
+          } else {
+            console.warn("Não foi possível extrair linha digitável:", extractionError || extractionResult?.error);
+          }
+        } catch (extractError) {
+          console.error("Erro ao extrair linha digitável:", extractError);
+          // Não bloquear o fluxo se a extração falhar
+        }
+      }
+
       toast({
         title: existingAnexo ? "Anexo substituído" : "Anexo adicionado",
         description: existingAnexo 
