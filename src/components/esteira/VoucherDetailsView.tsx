@@ -93,9 +93,8 @@ export const VoucherDetailsView = ({ voucher, onUpdate, canEditAttachments = fal
       // Delete from MariaDB via proxy
       const { error } = await supabase.functions.invoke("mariadb-proxy", {
         body: {
-          action: "query",
-          query: "DELETE FROM t_voucher_anexos WHERE id = ?",
-          params: [attachmentId],
+          action: "delete_voucher_anexo",
+          anexo_id: attachmentId,
         },
       });
 
