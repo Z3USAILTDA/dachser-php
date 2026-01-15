@@ -42,7 +42,24 @@ function extractFromFilename(fileName: string): ExtractedData {
   // Remove file extension for cleaner parsing
   const nameWithoutExt = fileName.replace(/\.[^/.]+$/, '');
   
-  console.log(`[SPO Extract] Analyzing filename: "${fileName}"`);
+  console.log(`[SPO Extract] Analyzing filename: "${fileName}", without ext: "${nameWithoutExt}"`);
+
+  // ==========================================
+  // Pattern 0: PURE NUMBER - Filename is just digits
+  // Examples: "20262478210.pdf", "286102.pdf", "20262478210111111.pdf"
+  // When filename is just a number, return it in BOTH fields for flexible search
+  // ==========================================
+  const pureNumberPattern = /^(\d+)$/;
+  const pureNumberMatch = nameWithoutExt.match(pureNumberPattern);
+  if (pureNumberMatch) {
+    const extractedNumber = pureNumberMatch[1];
+    // Set in BOTH fields to allow search by SPO or ND/Voucher
+    result.numeroSPO = extractedNumber;
+    result.numeroND = extractedNumber;
+    result.confidence = 0.9;
+    console.log(`[SPO Extract] Pattern 0 - Pure number matched: "${extractedNumber}" (set in both SPO and ND for flexible search)`);
+    return result;
+  }
 
   // Pattern 1: SPO Remessa - "101-286102D26122025.35" → SPO 286102
   // Format: XXX-XXXXXXDDDMMYYYY.XX where the 6 digits after XXX- is the SPO
@@ -123,9 +140,12 @@ function extractFromFilename(fileName: string): ExtractedData {
     });
     
     if (validMatches.length > 0) {
-      result.numeroSPO = validMatches[0][1];
+      const extractedNumber = validMatches[0][1];
+      // Set in both fields for flexible search
+      result.numeroSPO = extractedNumber;
+      result.numeroND = extractedNumber;
       result.confidence = 0.75;
-      console.log(`[SPO Extract] Generic 6-7 digit pattern matched: ${result.numeroSPO}`);
+      console.log(`[SPO Extract] Generic 6-7 digit pattern matched: "${extractedNumber}" (set in both fields)`);
       return result;
     }
   }
@@ -134,9 +154,12 @@ function extractFromFilename(fileName: string): ExtractedData {
   const fiveDigitPattern = /(?<![0-9])(\d{5})(?![0-9])/g;
   const fiveMatches = [...nameWithoutExt.matchAll(fiveDigitPattern)];
   if (fiveMatches.length > 0) {
-    result.numeroSPO = fiveMatches[0][1];
+    const extractedNumber = fiveMatches[0][1];
+    // Set in both fields for flexible search
+    result.numeroSPO = extractedNumber;
+    result.numeroND = extractedNumber;
     result.confidence = 0.7;
-    console.log(`[SPO Extract] Generic 5 digit pattern matched: ${result.numeroSPO}`);
+    console.log(`[SPO Extract] Generic 5 digit pattern matched: "${extractedNumber}" (set in both fields)`);
     return result;
   }
 
