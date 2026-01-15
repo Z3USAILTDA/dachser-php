@@ -75,11 +75,11 @@ export const VoucherRoboActions = ({ voucher, onUpdate }: VoucherRoboActionsProp
     }
   };
 
-  const handleIntegrateRM = async () => {
+  const handleSalvarComprovante = async () => {
     if (!hasComprovante) {
       toast({
         title: "Comprovante necessário",
-        description: "É necessário anexar um comprovante antes de integrar ao RM",
+        description: "É necessário anexar um comprovante antes de salvar",
         variant: "destructive",
       });
       return;
@@ -89,28 +89,18 @@ export const VoucherRoboActions = ({ voucher, onUpdate }: VoucherRoboActionsProp
       setLoading(true);
       const userData = getUserData();
 
-      const { data, error } = await supabase.functions.invoke("voucher-integrate-rm", {
-        body: { 
-          action: "integrate",
-          voucherId: voucher.id 
+      // Update voucher status in MariaDB
+      const { error } = await supabase.functions.invoke("mariadb-proxy", {
+        body: {
+          action: "update_voucher_esteira",
+          voucher_id: voucher.id,
+          status_comprovante: "ANEXADO",
+          etapa_atual: "CONCLUIDO",
+          status_baixa: "BAIXADO_RM",
         },
       });
 
       if (error) throw error;
-
-      if (!data.success) {
-        throw new Error(data.error || "Erro ao integrar com RM");
-      }
-
-      // Update voucher status in MariaDB
-      await supabase.functions.invoke("mariadb-proxy", {
-        body: {
-          action: "update_voucher_esteira",
-          voucher_id: voucher.id,
-          etapa_atual: "CONCLUIDO",
-          status_baixa: "CONCLUIDO",
-        },
-      });
 
       // Log the action
       await supabase.functions.invoke("mariadb-proxy", {
@@ -119,21 +109,21 @@ export const VoucherRoboActions = ({ voucher, onUpdate }: VoucherRoboActionsProp
           voucher_id: voucher.id,
           user_id: userData.id?.toString(),
           user_name: userData.username,
-          acao: "INTEGRADO_RM",
-          detalhe: `Voucher integrado ao RM. Protocolo: ${data.rm_protocol || 'N/A'}`,
+          acao: "COMPROVANTE_SALVO",
+          detalhe: "Comprovante salvo e voucher concluído",
         },
       });
 
       toast({
-        title: "Integração concluída!",
-        description: `Voucher integrado ao RM. Protocolo: ${data.rm_protocol || 'N/A'}`,
+        title: "Comprovante salvo!",
+        description: "Voucher concluído com sucesso",
       });
 
       onUpdate();
     } catch (error: any) {
-      console.error("Erro ao integrar RM:", error);
+      console.error("Erro ao salvar comprovante:", error);
       toast({
-        title: "Erro na integração",
+        title: "Erro ao salvar",
         description: error.message,
         variant: "destructive",
       });
@@ -206,12 +196,12 @@ export const VoucherRoboActions = ({ voucher, onUpdate }: VoucherRoboActionsProp
             )}
 
             <Button
-              onClick={handleIntegrateRM}
+              onClick={handleSalvarComprovante}
               disabled={loading || !hasComprovante}
               className="w-full gap-2 bg-primary hover:bg-primary/90"
             >
               <Bot className="h-4 w-4" />
-              {loading ? "Integrando..." : "Integrar ao Sistema RM"}
+              {loading ? "Salvando..." : "Salvar Comprovante"}
             </Button>
           </div>
 

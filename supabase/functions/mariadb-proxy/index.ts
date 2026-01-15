@@ -4069,12 +4069,13 @@ serve(async (req) => {
         };
         
         // Insert voucher data into existing t_vouchers table (with id_rm support)
-        // Ensure processo_id, origem_processo, chave_pix and status_documento_fiscal columns exist
+        // Ensure processo_id, origem_processo, chave_pix, status_documento_fiscal and status_comprovante columns exist
         try {
           await client.execute(`ALTER TABLE dados_dachser.t_vouchers ADD COLUMN IF NOT EXISTS processo_id VARCHAR(100) DEFAULT NULL`);
           await client.execute(`ALTER TABLE dados_dachser.t_vouchers ADD COLUMN IF NOT EXISTS origem_processo VARCHAR(10) DEFAULT NULL`);
           await client.execute(`ALTER TABLE dados_dachser.t_vouchers ADD COLUMN IF NOT EXISTS chave_pix VARCHAR(255) DEFAULT NULL`);
           await client.execute(`ALTER TABLE dados_dachser.t_vouchers ADD COLUMN IF NOT EXISTS status_documento_fiscal VARCHAR(20) DEFAULT 'ANEXADO'`);
+          await client.execute(`ALTER TABLE dados_dachser.t_vouchers ADD COLUMN IF NOT EXISTS status_comprovante VARCHAR(20) DEFAULT 'PENDENTE'`);
         } catch (e) {
           console.log('Columns may already exist:', e);
         }
@@ -5422,7 +5423,8 @@ serve(async (req) => {
             v.status_baixa,
             v.etapa_atual,
             v.linha_digitavel,
-            v.remessa
+            v.remessa,
+            v.id_rm
           FROM dados_dachser.t_vouchers v
           WHERE DATE(v.vencimento) = CURDATE()
             AND v.etapa_atual IN ('FINANCEIRO', 'ROBO')
@@ -5584,13 +5586,13 @@ serve(async (req) => {
         // Get vouchers with BAIXA_REMESSA status
         const vouchersToSync = await client.query(`
           SELECT v.id, v.numero_spo, v.forma_pagamento, v.fornecedor, v.cnpj_fornecedor,
-                 v.linha_digitavel, v.codigo_barras, v.chave_pix
+                 v.linha_digitavel, v.codigo_barras, v.chave_pix, v.id_rm
           FROM dados_dachser.t_vouchers v
           WHERE v.status_baixa = 'BAIXA_REMESSA'
             AND v.numero_spo IS NOT NULL
             AND NOT EXISTS (
               SELECT 1 FROM dados_dachser.t_dados_rm r 
-              WHERE r.id_rm COLLATE utf8mb4_unicode_ci = v.numero_spo COLLATE utf8mb4_unicode_ci
+              WHERE r.id_rm COLLATE utf8mb4_unicode_ci = COALESCE(v.id_rm, v.numero_spo) COLLATE utf8mb4_unicode_ci
             )
         `);
 
@@ -5624,13 +5626,13 @@ serve(async (req) => {
               }
             }
 
-            // Insert into t_dados_rm
+            // Insert into t_dados_rm - usar id_rm de t_dados_financeiro_voucher se disponível
             await client.execute(`
               INSERT INTO dados_dachser.t_dados_rm 
               (id_rm, nf_disputa, voucher_boleto, chave_pix, pix_tipo_chave, forma_pag, fornecedor, regras_forma_pag)
               VALUES (?, 0, ?, ?, ?, ?, ?, ?)
             `, [
-              v.numero_spo, 
+              v.id_rm || v.numero_spo, // Usar id_rm se disponível, senão numero_spo
               v.linha_digitavel || v.codigo_barras || null, 
               v.chave_pix || null, 
               null, 
