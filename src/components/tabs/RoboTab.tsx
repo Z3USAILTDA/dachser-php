@@ -28,9 +28,18 @@ export function RoboTab() {
   const [processing, setProcessing] = useState(false);
   const [progress, setProgress] = useState(0);
 
-  const extractSPOFromFilename = (filename: string): string | null => {
+  const extractSPOFromFilename = (filename: string): { numero: string; formatted: string | null } | null => {
     // Remove extension for cleaner matching
     const nameWithoutExt = filename.replace(/\.\w+$/, '');
+    
+    // Special pattern for concatenated XXX-YYYYYY format (e.g., 101285230010206 → 101-285230)
+    // This is commonly used: 3 digits + 6 digits + optional extra digits
+    const concatenatedPattern = /^(\d{3})(\d{6})\d*/;
+    const concatMatch = nameWithoutExt.match(concatenatedPattern);
+    if (concatMatch) {
+      const formatted = `${concatMatch[1]}-${concatMatch[2]}`;
+      return { numero: concatMatch[1] + concatMatch[2], formatted };
+    }
     
     // Enhanced patterns for SPO extraction
     const patterns = [
@@ -52,7 +61,7 @@ export function RoboTab() {
     for (const pattern of patterns) {
       const match = nameWithoutExt.match(pattern);
       if (match && match[1]) {
-        return match[1];
+        return { numero: match[1], formatted: null };
       }
     }
 
@@ -60,7 +69,7 @@ export function RoboTab() {
     for (const pattern of patterns) {
       const match = filename.match(pattern);
       if (match && match[1]) {
-        return match[1];
+        return { numero: match[1], formatted: null };
       }
     }
 
@@ -127,22 +136,32 @@ export function RoboTab() {
 
     const fileMatches: FileMatch[] = await Promise.all(
       selectedFiles.map(async (file) => {
-        const numeroSPO = extractSPOFromFilename(file.name);
+        const extracted = extractSPOFromFilename(file.name);
         let voucherId = null;
+        let displaySPO: string | null = null;
 
-        if (numeroSPO) {
-          // Use unified search (SPO + ND fallback)
-          voucherId = await searchVoucher(numeroSPO);
+        if (extracted) {
+          // Try formatted version first (e.g., "101-285230")
+          if (extracted.formatted) {
+            voucherId = await searchVoucher(extracted.formatted);
+            displaySPO = extracted.formatted;
+          }
+          
+          // Fallback to raw number
+          if (!voucherId) {
+            voucherId = await searchVoucher(extracted.numero);
+            displaySPO = extracted.formatted || extracted.numero;
+          }
         }
 
         return {
           file,
           fileName: file.name,
-          numeroSPO,
+          numeroSPO: displaySPO,
           voucherId,
           status: "pending" as const,
           manualSpoInput: "",
-          isEditingSpo: !numeroSPO,
+          isEditingSpo: !extracted,
         };
       })
     );
@@ -266,16 +285,20 @@ export function RoboTab() {
 
         if (attachmentError) throw attachmentError;
 
-        // Update voucher status_comprovante to ANEXADO
+        // Update voucher status_comprovante to ANEXADO and etapa to CONCLUIDO
         await supabase.functions.invoke('mariadb-proxy', {
           body: {
             action: 'update_voucher_esteira',
             voucher_id: fileMatch.voucherId,
-            status_comprovante: 'ANEXADO',
+            updates: {
+              status_comprovante: 'ANEXADO',
+              etapa_atual: 'CONCLUIDO',
+              status_baixa: 'PROCESSADO',
+            },
           },
         });
 
-        // Log action to MariaDB using the correct action
+        // Log comprovante anexado
         await supabase.functions.invoke('mariadb-proxy', {
           body: {
             action: 'save_voucher_log',
@@ -284,6 +307,18 @@ export function RoboTab() {
             user_name: userData.user?.email || 'Sistema',
             acao: "COMPROVANTE_ANEXADO",
             detalhe: `Comprovante ${fileMatch.file.name} anexado automaticamente pelo robô`,
+          },
+        });
+
+        // Log conclusão automática
+        await supabase.functions.invoke('mariadb-proxy', {
+          body: {
+            action: 'save_voucher_log',
+            voucher_id: fileMatch.voucherId,
+            user_id: userData.user?.id || null,
+            user_name: userData.user?.email || 'Sistema',
+            acao: "CONCLUIDO_ROBO",
+            detalhe: `Voucher concluído automaticamente após processamento do comprovante`,
           },
         });
 
@@ -504,6 +539,7 @@ export function RoboTab() {
               Padrões de Nome Aceitos
             </h4>
             <ul className="text-sm text-muted-foreground space-y-1 ml-6">
+              <li>• <code className="bg-muted px-1 rounded">101285230010206.pdf</code> - Formato concatenado (101-285230)</li>
               <li>• <code className="bg-muted px-1 rounded">20262478210.pdf</code> - Apenas número (SPO ou ND)</li>
               <li>• <code className="bg-muted px-1 rounded">12345_comprovante.pdf</code> - SPO no início</li>
               <li>• <code className="bg-muted px-1 rounded">SPO12345.pdf</code> ou <code className="bg-muted px-1 rounded">SPO-12345.pdf</code> - Com prefixo SPO</li>
