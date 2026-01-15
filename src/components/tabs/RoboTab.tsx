@@ -8,7 +8,7 @@ import { Progress } from "@/components/ui/progress";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { Bot, Upload, CheckCircle2, XCircle, AlertCircle, FileText, Search, Edit2, X } from "lucide-react";
-import { TipoAnexo } from "@/types/voucher";
+
 import { UploadZone } from "@/components/maritimo/UploadZone";
 
 interface FileMatch {
@@ -252,36 +252,29 @@ export function RoboTab() {
           .from("voucher-anexos")
           .getPublicUrl(filePath);
 
-        // Save attachment metadata to MariaDB (only t_voucher_anexos)
+        // Save attachment metadata to MariaDB using the correct action
         const { error: attachmentError } = await supabase.functions.invoke('mariadb-proxy', {
           body: {
-            action: 'insert',
-            table: 't_voucher_anexos',
-            data: {
-              voucher_id: fileMatch.voucherId,
-              tipo: "COMPROVANTE" as TipoAnexo,
-              file_url: publicUrl,
-              file_name: fileMatch.file.name,
-              file_size: fileMatch.file.size,
-              created_at: new Date().toISOString().slice(0, 19).replace('T', ' '),
-            },
+            action: 'save_voucher_anexo',
+            voucher_id: fileMatch.voucherId,
+            tipo: "COMPROVANTE",
+            file_url: publicUrl,
+            file_name: fileMatch.file.name,
+            file_size: fileMatch.file.size,
           },
         });
 
         if (attachmentError) throw attachmentError;
 
-        // Log action to MariaDB
+        // Log action to MariaDB using the correct action
         await supabase.functions.invoke('mariadb-proxy', {
           body: {
-            action: 'insert',
-            table: 't_log_entries',
-            data: {
-              voucher_id: fileMatch.voucherId,
-              user_id: userData.user?.id,
-              acao: "COMPROVANTE_ANEXADO",
-              detalhe: `Comprovante ${fileMatch.file.name} anexado automaticamente pelo robô`,
-              data_hora: new Date().toISOString().slice(0, 19).replace('T', ' '),
-            },
+            action: 'save_voucher_log',
+            voucher_id: fileMatch.voucherId,
+            user_id: userData.user?.id || null,
+            user_name: userData.user?.email || 'Sistema',
+            acao: "COMPROVANTE_ANEXADO",
+            detalhe: `Comprovante ${fileMatch.file.name} anexado automaticamente pelo robô`,
           },
         });
 
