@@ -6,12 +6,15 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { VoucherActionsMenu } from "./VoucherActionsMenu";
-import { AlertCircle, Eye, Clock, Building2, User, Plane, Ship, Package, FileCheck, FileClock, ArrowUpDown, ArrowUp, ArrowDown, Layers, FileQuestion } from "lucide-react";
+import { AlertCircle, Eye, Clock, Building2, User, Plane, Ship, Package, FileCheck, FileClock, ArrowUpDown, ArrowUp, ArrowDown, Layers, FileQuestion, RotateCcw } from "lucide-react";
 import { format, isToday, isPast } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { cn } from "@/lib/utils";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { TablePagination } from "@/components/layout/TablePagination";
+import { RetornarPendenteDialog } from "./RetornarPendenteDialog";
+import { supabase } from "@/integrations/supabase/client";
+import { toast } from "sonner";
 
 const PAGE_SIZE = 10;
 
@@ -131,6 +134,68 @@ export const VoucherTable = ({ vouchers, onViewDetails, onEdit, onDelete, onGoBa
   const [sortField, setSortField] = useState<SortField>("createdAt");
   const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
   const [currentPage, setCurrentPage] = useState(1);
+  const [showRetornarDialog, setShowRetornarDialog] = useState(false);
+  const [selectedVoucherForRetorno, setSelectedVoucherForRetorno] = useState<Voucher | null>(null);
+
+  const handleRetornarPendente = async (justificativa: string) => {
+    if (!selectedVoucherForRetorno) return;
+    
+    try {
+      // Get user data
+      const userDataStr = localStorage.getItem("dachser_user");
+      const userData = userDataStr ? JSON.parse(userDataStr) : null;
+      const userName = userData?.name || userData?.email || "Usuário";
+      
+      // Update status_comprovante to PENDENTE
+      const { error: updateError } = await supabase.functions.invoke("mariadb-proxy", {
+        body: {
+          operation: "update",
+          table: "vouchers_master",
+          data: { status_comprovante: "PENDENTE" },
+          where: { id: selectedVoucherForRetorno.id },
+        },
+      });
+
+      if (updateError) throw updateError;
+
+      // Log the action
+      await supabase.functions.invoke("mariadb-proxy", {
+        body: {
+          operation: "insert",
+          table: "voucher_logs",
+          data: {
+            voucher_id: selectedVoucherForRetorno.id,
+            acao: "COMPROVANTE_RETORNADO_PENDENTE",
+            usuario: userName,
+            detalhes: JSON.stringify({ justificativa, status_anterior: selectedVoucherForRetorno.statusComprovante || "VALIDADO" }),
+          },
+        },
+      });
+
+      // Send notification to financial team
+      await supabase.functions.invoke("send-voucher-notification", {
+        body: {
+          type: "COMPROVANTE_RETORNADO_PENDENTE",
+          voucherId: selectedVoucherForRetorno.id,
+          numeroSPO: selectedVoucherForRetorno.numeroSPO,
+          justificativa,
+          userName,
+        },
+      });
+
+      toast.success("Comprovante retornado para pendente", {
+        description: "A equipe financeira foi notificada.",
+      });
+
+      // Force page refresh to update data
+      window.location.reload();
+    } catch (error) {
+      console.error("Erro ao retornar para pendente:", error);
+      toast.error("Erro ao retornar comprovante", {
+        description: "Não foi possível atualizar o status.",
+      });
+    }
+  };
   const handleFilterChange = (key: keyof FilterValues, value: string) => {
     onFilterChange({ ...filters, [key]: value });
     setCurrentPage(1); // Reset page when filter changes
@@ -543,6 +608,7 @@ export const VoucherTable = ({ vouchers, onViewDetails, onEdit, onDelete, onGoBa
                           const { icon: Icon, label, className } = config[status as keyof typeof config] || config.PENDENTE;
                           const isValidating = validatingVoucherId === voucher.id;
                           const canValidate = canValidateComprovante && status === "ANEXADO" && onValidateComprovante;
+                          const canRetornar = voucher.etapaAtual === "CONCLUIDO" && (status === "ANEXADO" || status === "VALIDADO");
                           
                           const handleValidate = async (e: React.MouseEvent) => {
                             e.stopPropagation();
@@ -553,6 +619,12 @@ export const VoucherTable = ({ vouchers, onViewDetails, onEdit, onDelete, onGoBa
                             } finally {
                               setValidatingVoucherId(null);
                             }
+                          };
+
+                          const handleRetornarClick = (e: React.MouseEvent) => {
+                            e.stopPropagation();
+                            setSelectedVoucherForRetorno(voucher);
+                            setShowRetornarDialog(true);
                           };
                           
                           return (
@@ -575,6 +647,24 @@ export const VoucherTable = ({ vouchers, onViewDetails, onEdit, onDelete, onGoBa
                                     "✓ Validar"
                                   )}
                                 </Button>
+                              )}
+                              {canRetornar && (
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <Button
+                                      variant="ghost"
+                                      size="sm"
+                                      className="h-6 px-2 text-xs bg-yellow-500/10 hover:bg-yellow-500/20 text-yellow-500 border border-yellow-500/30"
+                                      onClick={handleRetornarClick}
+                                    >
+                                      <RotateCcw className="h-3 w-3 mr-1" />
+                                      Retornar
+                                    </Button>
+                                  </TooltipTrigger>
+                                  <TooltipContent>
+                                    <p>Retornar comprovante para pendente</p>
+                                  </TooltipContent>
+                                </Tooltip>
                               )}
                             </div>
                           );
@@ -637,6 +727,14 @@ export const VoucherTable = ({ vouchers, onViewDetails, onEdit, onDelete, onGoBa
           </div>
         )}
       </div>
+
+      {/* Dialog para retornar comprovante para pendente */}
+      <RetornarPendenteDialog
+        open={showRetornarDialog}
+        onOpenChange={setShowRetornarDialog}
+        onConfirm={handleRetornarPendente}
+        voucherSpo={selectedVoucherForRetorno?.numeroSPO || ""}
+      />
     </TooltipProvider>
   );
 };
