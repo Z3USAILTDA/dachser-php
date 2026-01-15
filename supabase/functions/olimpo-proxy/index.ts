@@ -1640,14 +1640,29 @@ serve(async (req) => {
               ))
               ELSE 0 
             END as dias_atraso,
-            -- Porto de transbordo: agregar de histórico de eventos
-            (
-              SELECT GROUP_CONCAT(DISTINCT h.location SEPARATOR ', ')
-              FROM dados_dachser.t_tracking_sea_history h
-              WHERE h.mbl_id = ts.mbl_id
-                AND UPPER(h.event_code) IN ('TRANSSHIPMENT', 'TSP', 'TRANSSHIPMENT_DISCHARGED', 'TRANSSHIPMENT_LOADED', 'TRANSHIPMENT_ARRIVAL', 'TRANSHIPMENT_DEPARTURE')
-                AND h.location IS NOT NULL
-                AND h.location != ''
+            -- Porto de transbordo: priorizar campo direto, fallback para histórico
+            COALESCE(
+              -- Prioridade 1: Valor extraído direto da API e salvo na tabela
+              (
+                SELECT ts2.transshipment_port 
+                FROM dados_dachser.t_tracking_sea ts2 
+                WHERE ts2.mbl_id = ts.mbl_id 
+                  AND ts2.transshipment_port IS NOT NULL 
+                  AND ts2.transshipment_port != ''
+                LIMIT 1
+              ),
+              -- Fallback: agregar de histórico de eventos
+              (
+                SELECT GROUP_CONCAT(DISTINCT h.location SEPARATOR ', ')
+                FROM dados_dachser.t_tracking_sea_history h
+                WHERE h.mbl_id = ts.mbl_id
+                  AND UPPER(h.event_code) IN ('TRANSSHIPMENT', 'TSP', 'TRANSSHIPMENT_DISCHARGED', 'TRANSSHIPMENT_LOADED', 'TRANSHIPMENT_ARRIVAL', 'TRANSHIPMENT_DEPARTURE', 'DISCHARGED', 'LOADED')
+                  AND h.location IS NOT NULL
+                  AND h.location != ''
+                  -- Evitar incluir origem/destino como transbordo
+                  AND UPPER(h.location) != UPPER(COALESCE(MAX(ts.origem), ''))
+                  AND UPPER(h.location) != UPPER(COALESCE(MAX(ts.destino), ''))
+              )
             ) as transshipment_port,
             -- Indicador de Free Time cadastrado: verifica se existe registro ativo na tabela t_client_free_time
             CASE
@@ -2569,6 +2584,15 @@ serve(async (req) => {
                   
                   const lastEventFromBol = bolContainerStatus || (bolVessel ? `Em trânsito - ${bolVessel}` : 'Dados via MBL');
                   
+                  // Extrair transshipment do BOL data
+                  const bolTransshipmentSources: string[] = [];
+                  if (bolData.transshipment_port) bolTransshipmentSources.push(bolData.transshipment_port);
+                  if (bolData.via_port) bolTransshipmentSources.push(bolData.via_port);
+                  if (bolData.transit_port) bolTransshipmentSources.push(bolData.transit_port);
+                  if (bolData.route?.via) bolTransshipmentSources.push(bolData.route.via);
+                  if (bolData.routing?.transshipment_port) bolTransshipmentSources.push(bolData.routing.transshipment_port);
+                  const bolTransshipment = [...new Set(bolTransshipmentSources.filter(p => p && p.trim()).map(p => p.trim().toUpperCase()))].join(', ') || null;
+                  
                   await client.execute(`
                     UPDATE dados_dachser.t_tracking_sea 
                     SET 
@@ -2579,6 +2603,7 @@ serve(async (req) => {
                       navio = COALESCE(?, navio),
                       vessel_imo = COALESCE(?, vessel_imo),
                       last_event = ?,
+                      transshipment_port = COALESCE(?, transshipment_port),
                       last_check = NOW(),
                       last_error = NULL,
                       sibling_synced = 1,
@@ -2592,6 +2617,7 @@ serve(async (req) => {
                     bolVessel,
                     bolVesselImo,
                     lastEventFromBol,
+                    bolTransshipment,
                     row.id
                   ]);
                   
@@ -2650,9 +2676,58 @@ serve(async (req) => {
               }
             }
             
+            // ===== EXTRACT TRANSSHIPMENT PORT =====
+            // Buscar porto(s) de transbordo de múltiplas fontes possíveis na API
+            const transshipmentSources: string[] = [];
+            
+            // Fontes diretas da resposta
+            if (data.transshipment_port) transshipmentSources.push(data.transshipment_port);
+            if (data.via_port) transshipmentSources.push(data.via_port);
+            if (data.transit_port) transshipmentSources.push(data.transit_port);
+            if (data.transshipment?.port) transshipmentSources.push(data.transshipment.port);
+            if (data.transshipment?.name) transshipmentSources.push(data.transshipment.name);
+            if (data.route?.via) transshipmentSources.push(data.route.via);
+            if (data.route?.transshipment) transshipmentSources.push(data.route.transshipment);
+            if (data.routing?.transshipment_port) transshipmentSources.push(data.routing.transshipment_port);
+            if (data.routing?.via) transshipmentSources.push(data.routing.via);
+            
+            // Também verificar no array de eventos se existir
+            if (data.events && Array.isArray(data.events)) {
+              for (const event of data.events) {
+                const eventCode = (event.event_code || event.event_type || event.code || '').toUpperCase();
+                // Eventos de transbordo típicos
+                if (eventCode.includes('TRANSSHIP') || eventCode.includes('TSP') || 
+                    eventCode.includes('TRANSIT') || eventCode.includes('T/S') ||
+                    eventCode === 'DISCHARGED' || eventCode === 'LOADED') {
+                  const loc = event.location || event.port || event.terminal || null;
+                  if (loc && loc.trim() !== '') {
+                    // Evitar adicionar origem/destino como transbordo
+                    const locUpper = loc.toUpperCase().trim();
+                    const origemUpper = (data.loading_port || data.shipped_from || '').toUpperCase().trim();
+                    const destinoUpper = (data.discharging_port || data.shipped_to || '').toUpperCase().trim();
+                    if (locUpper !== origemUpper && locUpper !== destinoUpper) {
+                      transshipmentSources.push(loc);
+                    }
+                  }
+                }
+              }
+            }
+            
+            // Combinar todas as fontes não-nulas e deduplicar
+            const uniqueTransshipments = [...new Set(
+              transshipmentSources
+                .filter(p => p && typeof p === 'string' && p.trim() !== '')
+                .map(p => p.trim().toUpperCase())
+            )];
+            const transshipmentPort = uniqueTransshipments.length > 0 ? uniqueTransshipments.join(', ') : null;
+            
+            if (transshipmentPort) {
+              console.log(`[refresh_sea_tracking] Found transshipment port(s) for ${containerId}: ${transshipmentPort}`);
+            }
+            
             console.log(`[refresh_sea_tracking] Container ${containerId}: vessel=${vesselName}, imo=${vesselImo}`);
             
-            // Update main tracking table including vessel_imo
+            // Update main tracking table including vessel_imo and transshipment_port
             await client.execute(`
               UPDATE dados_dachser.t_tracking_sea 
               SET 
@@ -2664,6 +2739,7 @@ serve(async (req) => {
                 vessel_imo = COALESCE(?, vessel_imo),
                 last_event = ?,
                 shipping_line = COALESCE(?, shipping_line),
+                transshipment_port = COALESCE(?, transshipment_port),
                 last_check = NOW(),
                 last_error = NULL
               WHERE id = ?
@@ -2676,6 +2752,7 @@ serve(async (req) => {
               vesselImo,
               lastEventDescription,
               shippingLine ? normalizeShippingLine(shippingLine) : null,
+              transshipmentPort,
               row.id
             ]);
             
@@ -2844,7 +2921,16 @@ serve(async (req) => {
                       vesselImo = sibData.vessel?.imo || sibData.current_vessel_imo || null;
                     }
                     
-                    console.log(`[refresh_sea_tracking] Sibling ${nonLeasingSibling} data: status=${containerStatus}, vessel=${vesselName}, eta=${sibData.eta_final_destination || sibData.eta}`);
+                    // Extrair transshipment_port do sibling
+                    const sibTransshipmentSources: string[] = [];
+                    if (sibData.transshipment_port) sibTransshipmentSources.push(sibData.transshipment_port);
+                    if (sibData.via_port) sibTransshipmentSources.push(sibData.via_port);
+                    if (sibData.transit_port) sibTransshipmentSources.push(sibData.transit_port);
+                    if (sibData.route?.via) sibTransshipmentSources.push(sibData.route.via);
+                    if (sibData.routing?.transshipment_port) sibTransshipmentSources.push(sibData.routing.transshipment_port);
+                    const sibTransshipment = [...new Set(sibTransshipmentSources.filter(p => p && p.trim()).map(p => p.trim().toUpperCase()))].join(', ') || null;
+                    
+                    console.log(`[refresh_sea_tracking] Sibling ${nonLeasingSibling} data: status=${containerStatus}, vessel=${vesselName}, eta=${sibData.eta_final_destination || sibData.eta}, transshipment=${sibTransshipment}`);
                     
                     if (containerStatus) {
                       await client.execute(`
@@ -2858,6 +2944,7 @@ serve(async (req) => {
                           vessel_imo = COALESCE(?, vessel_imo),
                           last_event = ?,
                           shipping_line = COALESCE(?, shipping_line),
+                          transshipment_port = COALESCE(?, transshipment_port),
                           last_check = NOW(),
                           last_error = NULL,
                           sibling_synced = 1,
@@ -2872,6 +2959,7 @@ serve(async (req) => {
                         vesselImo,
                         lastEvent || containerStatus,
                         shippingLine ? normalizeShippingLine(shippingLine) : null,
+                        sibTransshipment,
                         row.id
                       ]);
                       
@@ -6287,6 +6375,67 @@ serve(async (req) => {
       } catch (e: any) {
         await client.close();
         console.error('[refresh_all_vessel_imos] Error:', e);
+        return new Response(JSON.stringify({ error: e.message }), {
+          status: 500,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      }
+    }
+
+    // ===== ADD TRANSSHIPMENT_PORT COLUMN TO T_TRACKING_SEA =====
+    if (action === 'add_transshipment_port_column') {
+      const mariadbHost = Deno.env.get('MARIADB_HOST');
+      const mariadbPort = Deno.env.get('MARIADB_PORT') || '3306';
+      const mariadbUser = Deno.env.get('MARIADB_USER');
+      const mariadbPass = Deno.env.get('MARIADB_PASSWORD');
+      const database = 'dados_dachser';
+
+      if (!mariadbHost || !mariadbUser || !mariadbPass) {
+        return new Response(JSON.stringify({ error: 'MariaDB não configurado' }), {
+          status: 500,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      }
+
+      const { Client } = await import("https://deno.land/x/mysql@v2.12.1/mod.ts");
+      const client = await new Client().connect({
+        hostname: mariadbHost,
+        port: parseInt(mariadbPort, 10),
+        username: mariadbUser,
+        password: mariadbPass,
+        db: database,
+      });
+
+      try {
+        // Check if column exists
+        const columns = await client.query(`
+          SELECT COLUMN_NAME 
+          FROM INFORMATION_SCHEMA.COLUMNS 
+          WHERE TABLE_SCHEMA = '${database}' 
+            AND TABLE_NAME = 't_tracking_sea' 
+            AND COLUMN_NAME = 'transshipment_port'
+        `);
+        
+        if (columns.length === 0) {
+          await client.execute(`
+            ALTER TABLE ${database}.t_tracking_sea 
+            ADD COLUMN transshipment_port VARCHAR(500) NULL 
+            COMMENT 'Porto(s) de transbordo extraído da API JSONCargo'
+          `);
+          console.log('[add_transshipment_port_column] Column added successfully');
+          await client.close();
+          return new Response(JSON.stringify({ success: true, message: 'Coluna transshipment_port adicionada com sucesso' }), {
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+          });
+        } else {
+          await client.close();
+          return new Response(JSON.stringify({ success: true, message: 'Coluna transshipment_port já existe' }), {
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+          });
+        }
+      } catch (e: any) {
+        await client.close();
+        console.error('[add_transshipment_port_column] Error:', e);
         return new Response(JSON.stringify({ error: e.message }), {
           status: 500,
           headers: { ...corsHeaders, 'Content-Type': 'application/json' }
