@@ -468,7 +468,32 @@ export const CreateVoucherDialog = ({
       });
 
       if (mariaError) {
+        // Check if it's a duplicate error (status 409)
+        const errorMessage = mariaError.message || "";
+        if (errorMessage.includes("já existe") || errorMessage.includes("409")) {
+          toast({
+            title: "Voucher duplicado",
+            description: `Este voucher já foi cadastrado na esteira. Verifique na lista principal.`,
+            variant: "destructive",
+          });
+          setIsSubmitting(false);
+          return;
+        }
         throw new Error(`Erro ao salvar voucher no MariaDB: ${mariaError.message}`);
+      }
+      
+      // Check response data for duplicate error
+      if (mariaResult?.error) {
+        if (mariaResult.error.includes("já existe")) {
+          toast({
+            title: "Voucher duplicado",
+            description: mariaResult.error,
+            variant: "destructive",
+          });
+          setIsSubmitting(false);
+          return;
+        }
+        throw new Error(mariaResult.error);
       }
 
       console.log("Voucher saved to MariaDB t_vouchers, ID:", voucherId);
