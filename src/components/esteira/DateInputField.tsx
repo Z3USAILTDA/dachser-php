@@ -68,6 +68,16 @@ export function DateInputField<T extends FieldValues>({
           if (digits.length === 8) {
             const parsed = parse(masked, "dd/MM/yyyy", new Date());
             if (isValid(parsed)) {
+              // Validar se não permite datas passadas
+              if (disablePastDates) {
+                const today = new Date();
+                today.setHours(0, 0, 0, 0);
+                if (parsed < today) {
+                  // Não aceitar data passada - reverter para valor anterior ou limpar
+                  setInputValue(field.value ? format(field.value, "dd/MM/yyyy") : "");
+                  return;
+                }
+              }
               field.onChange(parsed);
             }
           } else if (digits.length === 0) {
