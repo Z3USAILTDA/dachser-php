@@ -9806,6 +9806,35 @@ serve(async (req) => {
         break;
       }
 
+      // ==================== CLEANUP AUTO SYNC VOUCHERS ====================
+      case 'cleanup_auto_sync_vouchers': {
+        console.log('[cleanup] Removing vouchers created by auto sync (no user)...');
+        
+        // Delete vouchers where criado_por_user_id is 'SISTEMA_SYNC' or NULL/empty (created by auto sync)
+        const deleteResult = await client.execute(`
+          DELETE FROM dados_dachser.t_vouchers 
+          WHERE criado_por_user_id = 'SISTEMA_SYNC' 
+             OR criado_por_user_id IS NULL 
+             OR criado_por_user_id = ''
+        `);
+        
+        console.log(`[cleanup] Deleted ${deleteResult.affectedRows || 0} auto-synced vouchers`);
+        
+        // Also reset the sync control to prevent re-syncing
+        await client.execute(`
+          UPDATE dados_dachser.t_sync_control 
+          SET last_sync_datetime = NULL, last_sync_id_rm = NULL, records_synced = 0
+          WHERE sync_type = 'voucher_rm'
+        `);
+        
+        result = { 
+          success: true, 
+          deletedCount: deleteResult.affectedRows || 0,
+          message: `Removed ${deleteResult.affectedRows || 0} vouchers created by auto sync`
+        };
+        break;
+      }
+
       default:
         return new Response(
           JSON.stringify({ error: `Ação não suportada: ${action}` }),
