@@ -102,7 +102,7 @@ interface Stats {
   valor_total: number;
 }
 
-type FilterVencimento = "todos" | "hoje" | "vencidos" | "proximos7";
+type FilterVencimento = "todos" | "hoje" | "vencidos" | "proximos7" | "a_vencer";
 
 export const PagamentosTab = () => {
   const [pagamentos, setPagamentos] = useState<PagamentoItem[]>([]);
@@ -521,7 +521,7 @@ export const PagamentosTab = () => {
               setFilterVencimento("todos");
             } else {
               setActiveCardFilter("a_vencer");
-              setFilterVencimento("proximos7");
+              setFilterVencimento("a_vencer");
               setFilterTipoExecucao("all");
             }
           }}
