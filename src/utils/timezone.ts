@@ -43,8 +43,23 @@ export const parseDBDate = (dateStr: string | null | undefined): Date | null => 
     // Has Z suffix - this is from our MariaDB proxy JSON serialization
     // The time is actually São Paulo time, not UTC, so we need to adjust
     if (dateStr.endsWith('Z') || dateStr.endsWith('.000Z')) {
-      // Remove the Z and treat as São Paulo time
       const withoutZ = dateStr.replace(/\.000Z$/, '').replace(/Z$/, '');
+      
+      // Check if it's a date-only ISO string (e.g., "2026-01-15T00:00:00Z")
+      // These should be treated as pure dates, not datetime with timezone
+      if (withoutZ.endsWith('T00:00:00') || withoutZ.endsWith('T03:00:00')) {
+        // Extract just the date part and create as local date
+        const datePart = withoutZ.split('T')[0];
+        const parts = datePart.split('-');
+        if (parts.length === 3) {
+          const year = parseInt(parts[0], 10);
+          const month = parseInt(parts[1], 10) - 1;
+          const day = parseInt(parts[2], 10);
+          return new Date(year, month, day);
+        }
+      }
+      
+      // For actual datetime values, treat as São Paulo time
       return new Date(withoutZ + TIMEZONE_CONFIG.offsetString);
     }
     

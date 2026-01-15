@@ -3,9 +3,15 @@ import { Voucher, TipoAnexo } from "@/types/voucher";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
-import { CheckCircle2, Bot, AlertCircle } from "lucide-react";
+import { CheckCircle2, Bot, AlertCircle, Clock, FileCheck, ChevronDown } from "lucide-react";
 import { FileUpload } from "./FileUpload";
 
 interface VoucherRoboActionsProps {
@@ -16,10 +22,12 @@ interface VoucherRoboActionsProps {
 export const VoucherRoboActions = ({ voucher, onUpdate }: VoucherRoboActionsProps) => {
   const [loading, setLoading] = useState(false);
   const [uploadingComprovante, setUploadingComprovante] = useState(false);
+  const [changingStatus, setChangingStatus] = useState(false);
   const { toast } = useToast();
 
   const hasComprovante = voucher.anexos.some((a) => a.tipo === "COMPROVANTE");
   const comprovanteFile = voucher.anexos.find((a) => a.tipo === "COMPROVANTE");
+  const currentStatus = voucher.statusComprovante || "PENDENTE";
 
   // Get user data from localStorage (MariaDB auth)
   const getUserData = () => {
@@ -72,6 +80,53 @@ export const VoucherRoboActions = ({ voucher, onUpdate }: VoucherRoboActionsProp
       });
     } finally {
       setUploadingComprovante(false);
+    }
+  };
+
+  const handleChangeStatus = async (newStatus: string) => {
+    try {
+      setChangingStatus(true);
+      const userData = getUserData();
+
+      // Update voucher status in MariaDB
+      const { error } = await supabase.functions.invoke("mariadb-proxy", {
+        body: {
+          action: "update_voucher_esteira",
+          voucher_id: voucher.id,
+          updates: {
+            status_comprovante: newStatus,
+          },
+        },
+      });
+
+      if (error) throw error;
+
+      // Log the action
+      await supabase.functions.invoke("mariadb-proxy", {
+        body: {
+          action: "save_voucher_log",
+          voucher_id: voucher.id,
+          user_id: userData.id?.toString(),
+          user_name: userData.username,
+          acao: "STATUS_COMPROVANTE_ALTERADO",
+          detalhe: `Status do comprovante alterado para ${newStatus}`,
+        },
+      });
+
+      toast({
+        title: "Status alterado!",
+        description: `Status do comprovante alterado para ${newStatus}`,
+      });
+
+      onUpdate();
+    } catch (error: any) {
+      toast({
+        title: "Erro ao alterar status",
+        description: error.message,
+        variant: "destructive",
+      });
+    } finally {
+      setChangingStatus(false);
     }
   };
 
@@ -154,24 +209,64 @@ export const VoucherRoboActions = ({ voucher, onUpdate }: VoucherRoboActionsProp
             <div className="flex-1">
               <p className="font-medium">Status do Comprovante</p>
               <p className="text-sm text-muted-foreground">
-                {hasComprovante
+                {currentStatus === "VALIDADO"
+                  ? "Comprovante validado"
+                  : currentStatus === "ANEXADO"
                   ? "Comprovante anexado e pronto para processamento"
                   : "Aguardando anexo do comprovante de pagamento"}
               </p>
             </div>
-            <Badge variant={hasComprovante ? "default" : "secondary"}>
-              {hasComprovante ? (
-                <>
-                  <CheckCircle2 className="h-4 w-4 mr-1" />
-                  Pronto
-                </>
-              ) : (
-                <>
-                  <AlertCircle className="h-4 w-4 mr-1" />
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button 
+                  variant="outline" 
+                  size="sm" 
+                  className="gap-1"
+                  disabled={changingStatus}
+                >
+                  {currentStatus === "VALIDADO" ? (
+                    <>
+                      <CheckCircle2 className="h-4 w-4 text-green-500" />
+                      Validado
+                    </>
+                  ) : currentStatus === "ANEXADO" ? (
+                    <>
+                      <FileCheck className="h-4 w-4 text-blue-500" />
+                      Anexado
+                    </>
+                  ) : (
+                    <>
+                      <Clock className="h-4 w-4 text-yellow-500" />
+                      Pendente
+                    </>
+                  )}
+                  <ChevronDown className="h-3 w-3" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem 
+                  onClick={() => handleChangeStatus("PENDENTE")}
+                  disabled={currentStatus === "PENDENTE"}
+                >
+                  <Clock className="h-4 w-4 mr-2 text-yellow-500" />
                   Pendente
-                </>
-              )}
-            </Badge>
+                </DropdownMenuItem>
+                <DropdownMenuItem 
+                  onClick={() => handleChangeStatus("ANEXADO")}
+                  disabled={currentStatus === "ANEXADO"}
+                >
+                  <FileCheck className="h-4 w-4 mr-2 text-blue-500" />
+                  Anexado
+                </DropdownMenuItem>
+                <DropdownMenuItem 
+                  onClick={() => handleChangeStatus("VALIDADO")}
+                  disabled={currentStatus === "VALIDADO"}
+                >
+                  <CheckCircle2 className="h-4 w-4 mr-2 text-green-500" />
+                  Validado
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
           </div>
 
           <div className="space-y-3">

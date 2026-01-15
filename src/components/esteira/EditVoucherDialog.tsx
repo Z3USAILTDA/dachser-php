@@ -5,10 +5,11 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { Voucher } from "@/types/voucher";
-import { Loader2 } from "lucide-react";
+import { Loader2, AlertCircle } from "lucide-react";
 
 interface EditVoucherDialogProps {
   open: boolean;
@@ -85,9 +86,27 @@ export const EditVoucherDialog = ({ open, onOpenChange, onSuccess, voucher }: Ed
     }
   }, [voucher]);
 
+  // Check if vencimento is in the past
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const todayStr = today.toISOString().split('T')[0];
+  
+  const vencimentoDate = formData.vencimento ? new Date(formData.vencimento + 'T00:00:00') : null;
+  const isVencido = vencimentoDate ? vencimentoDate < today : false;
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!voucher) return;
+    
+    // Block submission if date is expired
+    if (isVencido) {
+      toast({
+        title: "Data de vencimento inválida",
+        description: "A data de vencimento não pode ser anterior a hoje",
+        variant: "destructive",
+      });
+      return;
+    }
 
     setLoading(true);
     try {
@@ -222,6 +241,16 @@ export const EditVoucherDialog = ({ open, onOpenChange, onSuccess, voucher }: Ed
             </div>
           </div>
 
+          {/* Alert for expired date */}
+          {isVencido && (
+            <Alert className="bg-red-500/10 border-red-500/30">
+              <AlertCircle className="h-4 w-4 text-red-500" />
+              <AlertDescription className="text-red-400">
+                Data de vencimento expirada! Altere para uma data válida (hoje ou futura) antes de salvar.
+              </AlertDescription>
+            </Alert>
+          )}
+
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
               <Label htmlFor="edit-vencimento">Vencimento *</Label>
@@ -230,6 +259,7 @@ export const EditVoucherDialog = ({ open, onOpenChange, onSuccess, voucher }: Ed
                 type="date"
                 value={formData.vencimento}
                 onChange={(e) => setFormData({ ...formData, vencimento: e.target.value })}
+                min={todayStr}
                 required
               />
             </div>
@@ -322,7 +352,6 @@ export const EditVoucherDialog = ({ open, onOpenChange, onSuccess, voucher }: Ed
                   <SelectItem value="BOLETO">Boleto</SelectItem>
                   <SelectItem value="PIX">PIX</SelectItem>
                   <SelectItem value="TRANSFERENCIA">Transferência</SelectItem>
-                  <SelectItem value="TRANSFERENCIA_PIX">Transferência/Pix (legado)</SelectItem>
                   <SelectItem value="CARTAO">Cartão</SelectItem>
                   <SelectItem value="DEPOSITO">Depósito</SelectItem>
                   <SelectItem value="DARF">DARF</SelectItem>
@@ -370,7 +399,7 @@ export const EditVoucherDialog = ({ open, onOpenChange, onSuccess, voucher }: Ed
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
               Cancelar
             </Button>
-            <Button type="submit" disabled={loading}>
+            <Button type="submit" disabled={loading || isVencido}>
               {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               Salvar Alterações
             </Button>
