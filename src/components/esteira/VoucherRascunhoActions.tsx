@@ -234,14 +234,17 @@ export const VoucherRascunhoActions = ({ voucher, onUpdate }: VoucherRascunhoAct
       const etapaLabel = proximaEtapa === "SUPERVISOR" ? "Supervisor" : 
                          proximaEtapa === "FISCAL" ? "Fiscal" : "Financeiro";
       
+      const isFromAProcessar = voucher.etapaAtual === "A_PROCESSAR";
       await supabase.functions.invoke("mariadb-proxy", {
         body: {
           action: "save_voucher_log",
           voucher_id: voucher.id,
           user_id: userData.id?.toString(),
           user_name: userData.username,
-          acao: "RASCUNHO_ENVIADO",
-          detalhe: `Rascunho finalizado e enviado para ${etapaLabel}`,
+          acao: isFromAProcessar ? "VOUCHER_ENVIADO" : "RASCUNHO_ENVIADO",
+          detalhe: isFromAProcessar 
+            ? `Voucher processado e enviado para ${etapaLabel}`
+            : `Rascunho finalizado e enviado para ${etapaLabel}`,
         },
       });
 
@@ -286,14 +289,14 @@ export const VoucherRascunhoActions = ({ voucher, onUpdate }: VoucherRascunhoAct
       if (error) throw error;
 
       toast({
-        title: "Rascunho excluído",
-        description: "O rascunho foi excluído com sucesso.",
+        title: "Voucher excluído",
+        description: "O voucher foi excluído com sucesso.",
       });
 
       navigate("/fin/esteira");
     } catch (error: any) {
       toast({
-        title: "Erro ao excluir rascunho",
+        title: "Erro ao excluir voucher",
         description: error.message,
         variant: "destructive",
       });
@@ -303,13 +306,17 @@ export const VoucherRascunhoActions = ({ voucher, onUpdate }: VoucherRascunhoAct
     }
   };
 
+  const isAProcessar = voucher.etapaAtual === "A_PROCESSAR";
+  const stageLabel = isAProcessar ? "a processar" : "rascunho";
+  const stageLabelCapitalized = isAProcessar ? "A Processar" : "Rascunho";
+
   return (
     <div className="space-y-6">
-      {/* Info sobre rascunho */}
+      {/* Info sobre rascunho/a processar */}
       <Alert className="bg-amber-500/10 border-amber-500/30">
         <AlertCircle className="h-4 w-4 text-amber-500" />
         <AlertDescription className="text-foreground">
-          Este voucher/SPO está em <strong>rascunho</strong>. Complete os dados e anexos obrigatórios para enviá-lo.
+          Este voucher/SPO está em <strong>{stageLabel}</strong>. Complete os dados e anexos obrigatórios para enviá-lo.
         </AlertDescription>
       </Alert>
 
@@ -376,7 +383,7 @@ export const VoucherRascunhoActions = ({ voucher, onUpdate }: VoucherRascunhoAct
       {/* Ações */}
       <div className="flex items-center justify-between pt-4 border-t border-[rgba(255,255,255,0.12)]">
         <div>
-          <h3 className="text-lg font-semibold">Ações do Rascunho</h3>
+          <h3 className="text-lg font-semibold">Ações - {stageLabelCapitalized}</h3>
           <p className="text-sm text-muted-foreground">
             {canEnviar 
               ? "Anexos completos! Você pode enviar o voucher/SPO." 
@@ -411,7 +418,7 @@ export const VoucherRascunhoActions = ({ voucher, onUpdate }: VoucherRascunhoAct
           className="gap-2"
         >
           <Trash2 className="h-4 w-4" />
-          Excluir Rascunho
+          Excluir Voucher
         </Button>
       </div>
 
@@ -494,9 +501,9 @@ export const VoucherRascunhoActions = ({ voucher, onUpdate }: VoucherRascunhoAct
       <AlertDialog open={showDeleteConfirm} onOpenChange={setShowDeleteConfirm}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Excluir Rascunho</AlertDialogTitle>
+            <AlertDialogTitle>Excluir Voucher</AlertDialogTitle>
             <AlertDialogDescription>
-              Esta ação não pode ser desfeita. O rascunho e todos os anexos serão excluídos permanentemente.
+              Esta ação não pode ser desfeita. O voucher e todos os anexos serão excluídos permanentemente.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
