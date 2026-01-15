@@ -4481,6 +4481,94 @@ serve(async (req) => {
         break;
       }
 
+      // Fix vouchers created by SISTEMA_SYNC that should be in A_PROCESSAR
+      case 'fix_sync_vouchers_to_a_processar': {
+        console.log('Fixing SISTEMA_SYNC vouchers to A_PROCESSAR...');
+        
+        // Find vouchers created by SISTEMA_SYNC that are in wrong stages
+        // (they should start in A_PROCESSAR, not OPERACAO or other stages)
+        const affectedVouchers = await client.query(`
+          SELECT id, numero_spo, etapa_atual, fornecedor 
+          FROM dados_dachser.t_vouchers 
+          WHERE criado_por_user_id = 'SISTEMA_SYNC' 
+            AND etapa_atual IN ('OPERACAO', 'FISCAL', 'SUPERVISOR', 'FINANCEIRO')
+            AND sync_status = 'ATIVO'
+        `);
+        
+        const totalAffected = affectedVouchers.length;
+        console.log(`Found ${totalAffected} SISTEMA_SYNC vouchers in wrong stages:`, affectedVouchers.slice(0, 10));
+        
+        if (totalAffected > 0) {
+          // Update them to A_PROCESSAR
+          await client.execute(`
+            UPDATE dados_dachser.t_vouchers 
+            SET etapa_atual = 'A_PROCESSAR', updated_at = NOW() 
+            WHERE criado_por_user_id = 'SISTEMA_SYNC' 
+              AND etapa_atual IN ('OPERACAO', 'FISCAL', 'SUPERVISOR', 'FINANCEIRO')
+              AND sync_status = 'ATIVO'
+          `);
+          
+          console.log(`Fixed ${totalAffected} vouchers to A_PROCESSAR`);
+        }
+        
+        result = { success: true, fixed: totalAffected, samples: affectedVouchers.slice(0, 5) };
+        break;
+      }
+
+      // Delete vouchers created by SISTEMA_SYNC that shouldn't exist (duplicates of RM data)
+      case 'delete_sync_duplicates': {
+        console.log('Deleting SISTEMA_SYNC duplicate vouchers...');
+        
+        // These are vouchers that were incorrectly synced and should not be in the esteira
+        // They have SISTEMA_SYNC as creator but are duplicates
+        const duplicateVouchers = await client.query(`
+          SELECT v1.id, v1.numero_spo, v1.etapa_atual, v1.created_at
+          FROM dados_dachser.t_vouchers v1
+          WHERE v1.criado_por_user_id = 'SISTEMA_SYNC'
+            AND EXISTS (
+              SELECT 1 FROM dados_dachser.t_vouchers v2 
+              WHERE v2.numero_spo = v1.numero_spo 
+                AND v2.id != v1.id
+                AND v2.criado_por_user_id != 'SISTEMA_SYNC'
+            )
+        `);
+        
+        const totalDuplicates = duplicateVouchers.length;
+        console.log(`Found ${totalDuplicates} duplicate SISTEMA_SYNC vouchers:`, duplicateVouchers.slice(0, 10));
+        
+        if (totalDuplicates > 0) {
+          // Delete related anexos first
+          for (const v of duplicateVouchers) {
+            await client.execute(`DELETE FROM dados_dachser.t_voucher_anexos WHERE voucher_id = ?`, [v.id]);
+            await client.execute(`DELETE FROM dados_dachser.t_voucher_logs WHERE voucher_id = ?`, [v.id]);
+          }
+          
+          // Delete the duplicates
+          await client.execute(`
+            DELETE FROM dados_dachser.t_vouchers 
+            WHERE criado_por_user_id = 'SISTEMA_SYNC'
+              AND id IN (
+                SELECT id FROM (
+                  SELECT v1.id
+                  FROM dados_dachser.t_vouchers v1
+                  WHERE v1.criado_por_user_id = 'SISTEMA_SYNC'
+                    AND EXISTS (
+                      SELECT 1 FROM dados_dachser.t_vouchers v2 
+                      WHERE v2.numero_spo = v1.numero_spo 
+                        AND v2.id != v1.id
+                        AND v2.criado_por_user_id != 'SISTEMA_SYNC'
+                    )
+                ) as duplicates
+              )
+          `);
+          
+          console.log(`Deleted ${totalDuplicates} duplicate vouchers`);
+        }
+        
+        result = { success: true, deleted: totalDuplicates, samples: duplicateVouchers.slice(0, 5) };
+        break;
+      }
+
       // Admin action: Move all vouchers from one stage to another
       case 'admin_bulk_update_etapa': {
         const bulkBody = body as any;
