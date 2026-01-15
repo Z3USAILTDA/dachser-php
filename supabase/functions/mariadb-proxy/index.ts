@@ -302,8 +302,8 @@ serve(async (req) => {
     // This ensures all string comparisons use the same collation across tables
     await client.execute("SET NAMES utf8mb4 COLLATE utf8mb4_general_ci");
     
-    // Set timezone to São Paulo to ensure consistent date/time handling
-    await client.execute("SET time_zone = 'America/Sao_Paulo'");
+    // Set timezone to São Paulo (UTC-3) using offset since named timezone may not be installed on server
+    await client.execute("SET time_zone = '-03:00'");
 
     let result;
 
