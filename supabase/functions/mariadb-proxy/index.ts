@@ -4257,6 +4257,8 @@ serve(async (req) => {
           chave_pix: 'chave_pix',
           // ADF status
           status_documento_fiscal: 'status_documento_fiscal',
+          // Comprovante status
+          status_comprovante: 'status_comprovante',
         };
         
         for (const [key, dbField] of Object.entries(fieldMapping)) {
