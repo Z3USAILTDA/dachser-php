@@ -6662,7 +6662,7 @@ serve(async (req) => {
         const vouchers = await client.query(`
           SELECT 
             id, numero_spo, fornecedor, valor, vencimento, etapa_atual, 
-            status_comprovante, cobranca_em_nome_de, moeda
+            cobranca_em_nome_de, moeda
           FROM dados_dachser.t_vouchers
           WHERE numero_spo = ? OR numero_spo LIKE ?
           ORDER BY created_at DESC
@@ -6689,7 +6689,7 @@ serve(async (req) => {
         const vouchers = await client.query(`
           SELECT 
             id, numero_spo, fornecedor, valor, vencimento, etapa_atual,
-            status_comprovante, cobranca_em_nome_de, moeda, id_rm, processo_id
+            cobranca_em_nome_de, moeda, id_rm, processo_id
           FROM dados_dachser.t_vouchers
           WHERE id_rm = ? OR id_rm LIKE ? OR processo_id LIKE ?
           ORDER BY created_at DESC
