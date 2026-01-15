@@ -18,6 +18,7 @@ import { VoucherFinanceiroActions } from "@/components/esteira/VoucherFinanceiro
 import { VoucherRoboActions } from "@/components/esteira/VoucherRoboActions";
 import { VoucherRascunhoActions } from "@/components/esteira/VoucherRascunhoActions";
 import { DadosPagamentoPanel } from "@/components/esteira/DadosPagamentoPanel";
+import { parseDBDate } from "@/utils/timezone";
 
 const EsteiraVoucherDetails = () => {
   const { id } = useParams();
@@ -26,25 +27,6 @@ const EsteiraVoucherDetails = () => {
   const { role, isAdmin, hasRole } = useUserRole();
   const [voucher, setVoucher] = useState<Voucher | null>(null);
   const [loading, setLoading] = useState(true);
-
-  // Helper para parsear datas do MariaDB como UTC
-  const parseMariaDBDate = (dateStr: string | null | undefined): Date | null => {
-    if (!dateStr) return null;
-    // Se já contém 'Z' ou timezone, parse diretamente
-    if (dateStr.includes('Z') || dateStr.includes('+')) {
-      return new Date(dateStr);
-    }
-    // Se tem 'T', é ISO sem timezone - adicionar Z
-    if (dateStr.includes('T')) {
-      return new Date(dateStr + 'Z');
-    }
-    // Se tem espaço (formato "YYYY-MM-DD HH:mm:ss"), converter para ISO
-    if (dateStr.includes(' ')) {
-      return new Date(dateStr.replace(' ', 'T') + 'Z');
-    }
-    // Se é apenas data (YYYY-MM-DD), adicionar horário meia-noite UTC
-    return new Date(dateStr + 'T00:00:00Z');
-  };
 
   const loadVoucher = async () => {
     if (!id) return;
@@ -74,8 +56,8 @@ const EsteiraVoucherDetails = () => {
         cnpjFornecedor: data.cnpj_fornecedor,
         valor: data.valor ? parseFloat(data.valor) : undefined,
         moeda: data.moeda || "BRL",
-        vencimento: parseMariaDBDate(data.vencimento) || new Date(),
-        dataEmissaoDocumento: parseMariaDBDate(data.data_emissao_documento) || undefined,
+        vencimento: parseDBDate(data.vencimento) || new Date(),
+        dataEmissaoDocumento: parseDBDate(data.data_emissao_documento) || undefined,
         cobrancaEmNomeDe: data.cobranca_em_nome_de || 'DACHSER',
         formaPagamento: data.forma_pagamento || 'BOLETO',
         tipoDocumento: data.tipo_documento,
@@ -101,8 +83,8 @@ const EsteiraVoucherDetails = () => {
         clienteEmail: data.cliente_email,
         processoId: data.processo_id || null,
         origemProcesso: data.origem_processo || null,
-        createdAt: parseMariaDBDate(data.created_at) || new Date(),
-        updatedAt: parseMariaDBDate(data.updated_at) || new Date(),
+        createdAt: parseDBDate(data.created_at) || new Date(),
+        updatedAt: parseDBDate(data.updated_at) || new Date(),
         anexos: anexos.map((a: any) => ({
           id: a.id,
           voucherId: data.id,
@@ -111,12 +93,12 @@ const EsteiraVoucherDetails = () => {
           fileUrl: a.file_url,
           fileSize: a.file_size,
           uploadedByUserId: data.criado_por_user_id,
-          createdAt: parseMariaDBDate(a.created_at) || new Date(),
+          createdAt: parseDBDate(a.created_at) || new Date(),
         })),
         logs: logs.map((l: any) => ({
           id: l.id,
           voucherId: data.id,
-          dataHora: parseMariaDBDate(l.data_hora) || new Date(),
+          dataHora: parseDBDate(l.data_hora) || new Date(),
           userId: l.user_id,
           userName: l.user_name,
           acao: l.acao,
@@ -133,7 +115,7 @@ const EsteiraVoucherDetails = () => {
         cancelamentoMotivo: data.cancelamento_motivo,
         cancelamentoVoucherCredito: data.cancelamento_voucher_credito,
         canceladoPorUserId: data.cancelado_por_user_id,
-        canceladoEm: parseMariaDBDate(data.cancelado_em) || undefined,
+        canceladoEm: parseDBDate(data.cancelado_em) || undefined,
         chavePix: data.chave_pix || null,
         // ADF status
         statusDocumentoFiscal: data.status_documento_fiscal || "ANEXADO",
