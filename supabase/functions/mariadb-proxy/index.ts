@@ -4000,6 +4000,41 @@ serve(async (req) => {
         const voucherData = body as any;
         console.log('Saving voucher to dados_dachser.t_vouchers:', voucherData.numero_spo);
         
+        // VALIDATION: numero_spo is required and must not be empty
+        const numeroSpo = voucherData.numero_spo?.toString().trim();
+        if (!numeroSpo || numeroSpo === '') {
+          return new Response(
+            JSON.stringify({ error: 'numero_spo é obrigatório para criar voucher' }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+        
+        // Reject MANUAL- generated IDs that indicate incomplete form data
+        if (numeroSpo.startsWith('MANUAL-')) {
+          return new Response(
+            JSON.stringify({ error: 'Número de voucher/SPO inválido. Use um número real do RM.' }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+        
+        // CHECK FOR DUPLICATES: Prevent creating voucher with same numero_spo
+        const existingVoucher = await client.query(`
+          SELECT id, numero_spo, etapa_atual FROM dados_dachser.t_vouchers 
+          WHERE numero_spo = ? LIMIT 1
+        `, [numeroSpo]);
+        
+        if (existingVoucher && existingVoucher.length > 0) {
+          console.log('Voucher already exists with numero_spo:', numeroSpo, 'ID:', existingVoucher[0].id);
+          return new Response(
+            JSON.stringify({ 
+              error: `Voucher com número ${numeroSpo} já existe na esteira`,
+              existingId: existingVoucher[0].id,
+              existingEtapa: existingVoucher[0].etapa_atual
+            }),
+            { status: 409, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+        
         // Ensure id_rm column exists
         try {
           await client.execute(`ALTER TABLE dados_dachser.t_vouchers ADD COLUMN IF NOT EXISTS id_rm VARCHAR(50) DEFAULT NULL`);
@@ -4374,6 +4409,75 @@ serve(async (req) => {
         }
         
         result = { success: true, voucher_id: voucherId };
+        break;
+      }
+
+      // Clean up invalid vouchers (MANUAL-*, empty numero_spo, etc.)
+      case 'cleanup_invalid_vouchers': {
+        console.log('Cleaning up invalid vouchers...');
+        
+        // Count invalid vouchers first
+        const invalidCount = await client.query(`
+          SELECT COUNT(*) as total FROM dados_dachser.t_vouchers 
+          WHERE numero_spo IS NULL 
+             OR numero_spo = '' 
+             OR numero_spo LIKE 'MANUAL-%'
+             OR (fornecedor IS NULL AND valor IS NULL AND etapa_atual NOT IN ('RASCUNHO', 'CANCELADO'))
+        `);
+        
+        const totalInvalid = Number(invalidCount[0]?.total || 0);
+        console.log(`Found ${totalInvalid} invalid vouchers`);
+        
+        if (totalInvalid > 0) {
+          // Get list of IDs to be deleted (for logging)
+          const invalidVouchers = await client.query(`
+            SELECT id, numero_spo, fornecedor, etapa_atual FROM dados_dachser.t_vouchers 
+            WHERE numero_spo IS NULL 
+               OR numero_spo = '' 
+               OR numero_spo LIKE 'MANUAL-%'
+               OR (fornecedor IS NULL AND valor IS NULL AND etapa_atual NOT IN ('RASCUNHO', 'CANCELADO'))
+            LIMIT 100
+          `);
+          
+          console.log('Invalid vouchers to delete:', invalidVouchers);
+          
+          // Delete related anexos first
+          await client.execute(`
+            DELETE FROM dados_dachser.t_voucher_anexos 
+            WHERE voucher_id IN (
+              SELECT id FROM dados_dachser.t_vouchers 
+              WHERE numero_spo IS NULL 
+                 OR numero_spo = '' 
+                 OR numero_spo LIKE 'MANUAL-%'
+                 OR (fornecedor IS NULL AND valor IS NULL AND etapa_atual NOT IN ('RASCUNHO', 'CANCELADO'))
+            )
+          `);
+          
+          // Delete related logs
+          await client.execute(`
+            DELETE FROM dados_dachser.t_voucher_logs 
+            WHERE voucher_id IN (
+              SELECT id FROM dados_dachser.t_vouchers 
+              WHERE numero_spo IS NULL 
+                 OR numero_spo = '' 
+                 OR numero_spo LIKE 'MANUAL-%'
+                 OR (fornecedor IS NULL AND valor IS NULL AND etapa_atual NOT IN ('RASCUNHO', 'CANCELADO'))
+            )
+          `);
+          
+          // Delete invalid vouchers
+          await client.execute(`
+            DELETE FROM dados_dachser.t_vouchers 
+            WHERE numero_spo IS NULL 
+               OR numero_spo = '' 
+               OR numero_spo LIKE 'MANUAL-%'
+               OR (fornecedor IS NULL AND valor IS NULL AND etapa_atual NOT IN ('RASCUNHO', 'CANCELADO'))
+          `);
+          
+          console.log(`Deleted ${totalInvalid} invalid vouchers`);
+        }
+        
+        result = { success: true, deleted: totalInvalid };
         break;
       }
 
