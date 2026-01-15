@@ -844,10 +844,10 @@ const EsteiraIndex = () => {
       setLoading(true);
       setIsRefetching(true);
 
-      // FAST MODE: Use get_vouchers_ativos for quick load, sync in background
+      // FAST MODE: Use get_vouchers_ativos for quick load
       if (fastMode) {
-        // Start incremental sync in background (non-blocking)
-        runIncrementalSync();
+        // DISABLED: runIncrementalSync was inserting incorrect data into t_vouchers
+        // runIncrementalSync();
         
         // Load active vouchers quickly (only from t_vouchers where sync_status = ATIVO)
         const [ativosResult, rmPendingResult] = await Promise.all([

@@ -99,7 +99,8 @@ serve(async (req) => {
       );
     }
 
-    console.log(`Processing ${mediaType} file for barcode extraction (size: ${base64Data.length} chars)...`);
+    console.log(`[extract-boleto] Processing ${mediaType} file for barcode extraction (size: ${base64Data.length} chars)...`);
+    console.log(`[extract-boleto] Media type detected: ${mediaType}`);
 
     // Use Claude to extract the barcode - Claude supports PDFs natively
     const response = await fetch('https://api.anthropic.com/v1/messages', {
@@ -144,7 +145,7 @@ NÃO inclua explicações, apenas os números.`
 
     if (!response.ok) {
       const errorText = await response.text();
-      console.error('Anthropic API error:', response.status, errorText);
+      console.error('[extract-boleto] Anthropic API error:', response.status, errorText);
       return new Response(
         JSON.stringify({ error: 'Error calling Anthropic API', details: errorText, success: false }),
         { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
@@ -154,7 +155,9 @@ NÃO inclua explicações, apenas os números.`
     const data = await response.json();
     const extractedText = data.content?.[0]?.text?.trim() || '';
     
-    console.log('Extracted text:', extractedText);
+    console.log('[extract-boleto] Claude response received');
+    console.log('[extract-boleto] Extracted text:', extractedText);
+    console.log('[extract-boleto] Stop reason:', data.stop_reason);
 
     // Clean up the extracted barcode (remove non-numeric characters)
     const cleanBarcode = extractedText.replace(/\D/g, '');
