@@ -4471,12 +4471,13 @@ serve(async (req) => {
         const vouchers = await client.query(`
           SELECT v.*,
             (SELECT l.user_name FROM dados_dachser.t_voucher_logs l
-             WHERE l.voucher_id = v.id
+             WHERE l.voucher_id COLLATE utf8mb4_general_ci = v.id COLLATE utf8mb4_general_ci
              AND l.acao IN ('ENVIADO_OPERACAO', 'APROVADO_FISCAL', 'APROVADO_SUPERVISOR', 
-                           'REENVIO_APOS_AJUSTE', 'APROVADO_URGENTE', 'BAIXA_MANUAL', 'VOUCHER_CRIADO')
+                           'REENVIO_APOS_AJUSTE', 'APROVADO_URGENTE', 'BAIXA_MANUAL', 'VOUCHER_CRIADO',
+                           'RASCUNHO_ENVIADO', 'MASTER_APROVADO_OPERACAO')
              ORDER BY l.data_hora DESC LIMIT 1) AS enviado_por_user_name
           FROM dados_dachser.t_vouchers v
-          LEFT JOIN dados_dachser.t_dados_financeiro_voucher dfv ON v.id_rm = dfv.id_rm
+          LEFT JOIN dados_dachser.t_dados_financeiro_voucher dfv ON v.id_rm COLLATE utf8mb4_general_ci = dfv.id_rm COLLATE utf8mb4_general_ci
           ${whereClause} 
           ORDER BY v.created_at DESC
         `, params);
