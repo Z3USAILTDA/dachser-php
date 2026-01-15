@@ -3,8 +3,7 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Download, File, Trash2, AlertTriangle } from "lucide-react";
-import { format } from "date-fns";
-import { ptBR } from "date-fns/locale";
+import { formatDateOnlyBR, formatDateTimeBR } from "@/utils/timezone";
 
 interface VoucherDetailsViewProps {
   voucher: Voucher;
@@ -47,11 +46,11 @@ export const VoucherDetailsView = ({ voucher, canEditAttachments = false }: Vouc
         />
         <InfoItem 
           label="Vencimento" 
-          value={format(new Date(voucher.vencimento), "dd/MM/yyyy", { locale: ptBR })} 
+          value={formatDateOnlyBR(voucher.vencimento)} 
         />
         <InfoItem 
           label="Data Emissão" 
-          value={voucher.dataEmissaoDocumento ? format(new Date(voucher.dataEmissaoDocumento), "dd/MM/yyyy", { locale: ptBR }) : undefined} 
+          value={voucher.dataEmissaoDocumento ? formatDateOnlyBR(voucher.dataEmissaoDocumento) : undefined} 
         />
         <div className="space-y-1">
           <p className="text-xs text-muted-foreground uppercase tracking-wider">Urgência</p>
@@ -173,8 +172,8 @@ export const VoucherDetailsView = ({ voucher, canEditAttachments = false }: Vouc
 
       {/* Timestamps */}
       <div className="flex justify-between text-xs text-muted-foreground">
-        <p>Criado em: {format(new Date(voucher.createdAt), "dd/MM/yyyy HH:mm", { locale: ptBR })}</p>
-        <p>Atualizado em: {format(new Date(voucher.updatedAt), "dd/MM/yyyy HH:mm", { locale: ptBR })}</p>
+        <p>Criado em: {formatDateTimeBR(voucher.createdAt)}</p>
+        <p>Atualizado em: {formatDateTimeBR(voucher.updatedAt)}</p>
       </div>
     </div>
   );
