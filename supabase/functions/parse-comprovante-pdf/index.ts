@@ -39,6 +39,11 @@ function extractFromFilename(fileName: string): ExtractedData {
     source: 'filename',
   };
 
+  // Remove file extension for cleaner parsing
+  const nameWithoutExt = fileName.replace(/\.[^/.]+$/, '');
+  
+  console.log(`[SPO Extract] Analyzing filename: "${fileName}"`);
+
   // Pattern 1: SPO Remessa - "101-286102D26122025.35" → SPO 286102
   // Format: XXX-XXXXXXDDDMMYYYY.XX where the 6 digits after XXX- is the SPO
   const spoRemessaPattern = /(\d{3})-(\d{6})[A-Z]\d{8}\.\d{2}/i;
@@ -46,6 +51,7 @@ function extractFromFilename(fileName: string): ExtractedData {
   if (spoRemessaMatch) {
     result.numeroSPO = spoRemessaMatch[2];
     result.confidence = 0.95;
+    console.log(`[SPO Extract] Pattern SPO Remessa matched: ${result.numeroSPO}`);
     return result;
   }
 
@@ -56,6 +62,7 @@ function extractFromFilename(fileName: string): ExtractedData {
   if (spoManualMatch) {
     result.numeroSPO = spoManualMatch[2];
     result.confidence = 0.9;
+    console.log(`[SPO Extract] Pattern SPO Manual matched: ${result.numeroSPO}`);
     return result;
   }
 
@@ -66,6 +73,7 @@ function extractFromFilename(fileName: string): ExtractedData {
   if (voucherRemessaMatch) {
     result.numeroND = voucherRemessaMatch[1];
     result.confidence = 0.9;
+    console.log(`[SPO Extract] Pattern Voucher Remessa matched: ${result.numeroND}`);
     return result;
   }
 
@@ -74,29 +82,75 @@ function extractFromFilename(fileName: string): ExtractedData {
   const voucherManualPattern = /OT\s*\d{3}-(\d{10,})/gi;
   const voucherManualMatches = [...fileName.matchAll(voucherManualPattern)];
   if (voucherManualMatches.length > 0) {
-    // Take the first ND found
     result.numeroND = voucherManualMatches[0][1];
     result.confidence = 0.85;
+    console.log(`[SPO Extract] Pattern Voucher Manual matched: ${result.numeroND}`);
     return result;
   }
 
-  // Fallback patterns for generic SPO extraction
-  const genericPatterns = [
-    /SPO[-_\s]?(\d{5,7})/i,
-    /comprovante[-_\s]+(\d{5,7})/i,
-    /^(\d{5,7})[-_]/,
-    /[-_](\d{5,7})\./,
+  // Pattern 5: SPO explicit patterns
+  const explicitPatterns = [
+    /SPO[-_\s]*(\d{5,7})/i,           // "SPO 286102" or "SPO_286102" or "SPO-286102"
+    /comprovante[-_\s]*(\d{5,7})/i,   // "comprovante_286102"
+    /spo\s*n[°ºo]?\s*(\d{5,7})/i,     // "SPO nº 286102"
   ];
 
-  for (const pattern of genericPatterns) {
+  for (const pattern of explicitPatterns) {
     const match = fileName.match(pattern);
     if (match) {
       result.numeroSPO = match[1];
-      result.confidence = 0.7;
+      result.confidence = 0.85;
+      console.log(`[SPO Extract] Explicit pattern matched: ${result.numeroSPO}`);
       return result;
     }
   }
 
+  // Pattern 6: GENERIC - Look for any 5-7 digit sequence in the filename
+  // This is the most flexible pattern and should catch most cases
+  // Priorities longer matches first (6-7 digits are more likely SPO numbers)
+  
+  // First try 6-7 digit sequences (most likely SPO)
+  const sixSevenDigitPattern = /(?<![0-9])(\d{6,7})(?![0-9])/g;
+  const sixSevenMatches = [...nameWithoutExt.matchAll(sixSevenDigitPattern)];
+  if (sixSevenMatches.length > 0) {
+    // Filter out date-like patterns (DDMMYYYY, YYYYMMDD)
+    const validMatches = sixSevenMatches.filter(m => {
+      const num = m[1];
+      // Exclude if it looks like a date (starts with 2024, 2025, etc or common day patterns)
+      if (/^20\d{4,5}$/.test(num)) return false;
+      if (/^\d{2}(0[1-9]|1[0-2])(20\d{2})$/.test(num)) return false;
+      return true;
+    });
+    
+    if (validMatches.length > 0) {
+      result.numeroSPO = validMatches[0][1];
+      result.confidence = 0.75;
+      console.log(`[SPO Extract] Generic 6-7 digit pattern matched: ${result.numeroSPO}`);
+      return result;
+    }
+  }
+  
+  // Then try 5 digit sequences
+  const fiveDigitPattern = /(?<![0-9])(\d{5})(?![0-9])/g;
+  const fiveMatches = [...nameWithoutExt.matchAll(fiveDigitPattern)];
+  if (fiveMatches.length > 0) {
+    result.numeroSPO = fiveMatches[0][1];
+    result.confidence = 0.7;
+    console.log(`[SPO Extract] Generic 5 digit pattern matched: ${result.numeroSPO}`);
+    return result;
+  }
+
+  // Pattern 7: ND patterns (10+ digit numbers starting with year)
+  const ndPattern = /(?<![0-9])(20\d{8,})(?![0-9])/g;
+  const ndMatches = [...nameWithoutExt.matchAll(ndPattern)];
+  if (ndMatches.length > 0) {
+    result.numeroND = ndMatches[0][1];
+    result.confidence = 0.7;
+    console.log(`[SPO Extract] ND pattern matched: ${result.numeroND}`);
+    return result;
+  }
+
+  console.log(`[SPO Extract] No pattern matched for filename: "${fileName}"`);
   return result;
 }
 
