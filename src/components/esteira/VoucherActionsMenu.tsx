@@ -1,4 +1,4 @@
-import { MoreHorizontal, Edit, Trash2, Undo2, XCircle, Unlink } from "lucide-react";
+import { MoreHorizontal, Edit, Trash2, Undo2, XCircle, Unlink, RotateCcw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -37,12 +37,14 @@ interface VoucherActionsMenuProps {
   onGoBack: (justificativa: string) => void;
   onCancel?: () => void;
   onDisassemble?: (selectedChildIds: string[], keepMaster: boolean) => Promise<void>;
+  onRetornarPendente?: () => void;
   canGoBack: boolean;
   canGoBackStage?: boolean;
   canEdit?: boolean;
   canDelete?: boolean;
   canCancelVoucher?: boolean;
   canDisassemble?: boolean;
+  canRetornarPendente?: boolean;
   isCancelled?: boolean;
   vouchersFilhos?: VoucherFilho[];
   masterId?: string;
@@ -54,12 +56,14 @@ export const VoucherActionsMenu = ({
   onGoBack,
   onCancel,
   onDisassemble,
+  onRetornarPendente,
   canGoBack,
   canGoBackStage = false,
   canEdit = true,
   canDelete = true,
   canCancelVoucher = false,
   canDisassemble = false,
+  canRetornarPendente = false,
   isCancelled = false,
   vouchersFilhos = [],
   masterId,
@@ -76,7 +80,7 @@ export const VoucherActionsMenu = ({
   }
 
   // If user can't perform any action, don't show the menu at all
-  if (!canEdit && !canDelete && !(canGoBack && canGoBackStage) && !canCancelVoucher && !canDisassemble) {
+  if (!canEdit && !canDelete && !(canGoBack && canGoBackStage) && !canCancelVoucher && !canDisassemble && !canRetornarPendente) {
     return null;
   }
 
@@ -133,9 +137,21 @@ export const VoucherActionsMenu = ({
               </DropdownMenuItem>
             </>
           )}
-          {canCancelVoucher && onCancel && (
+          {canRetornarPendente && onRetornarPendente && (
             <>
               {(canEdit || (canGoBack && canGoBackStage) || canDisassemble) && <DropdownMenuSeparator />}
+              <DropdownMenuItem
+                onClick={onRetornarPendente}
+                className="text-yellow-600 focus:text-yellow-600"
+              >
+                <RotateCcw className="mr-2 h-4 w-4" />
+                Retornar Comprovante para Pendente
+              </DropdownMenuItem>
+            </>
+          )}
+          {canCancelVoucher && onCancel && (
+            <>
+              {(canEdit || (canGoBack && canGoBackStage) || canDisassemble || canRetornarPendente) && <DropdownMenuSeparator />}
               <DropdownMenuItem
                 onClick={onCancel}
                 className="text-destructive focus:text-destructive"
