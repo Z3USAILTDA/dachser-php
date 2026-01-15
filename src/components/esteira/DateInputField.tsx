@@ -26,6 +26,7 @@ interface DateInputFieldProps<T extends FieldValues> {
   required?: boolean;
   disabled?: boolean;
   showSyncIcon?: boolean;
+  disablePastDates?: boolean;
 }
 
 export function DateInputField<T extends FieldValues>({
@@ -35,6 +36,7 @@ export function DateInputField<T extends FieldValues>({
   required = false,
   disabled = false,
   showSyncIcon = false,
+  disablePastDates = false,
 }: DateInputFieldProps<T>) {
   return (
     <FormField
@@ -127,6 +129,11 @@ export function DateInputField<T extends FieldValues>({
                     onSelect={handleCalendarSelect}
                     locale={ptBR}
                     className="pointer-events-auto"
+                    disabled={disablePastDates ? (date) => {
+                      const today = new Date();
+                      today.setHours(0, 0, 0, 0);
+                      return date < today;
+                    } : undefined}
                   />
                 </PopoverContent>
               </Popover>
