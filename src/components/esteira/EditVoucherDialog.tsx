@@ -37,6 +37,33 @@ export const EditVoucherDialog = ({ open, onOpenChange, onSuccess, voucher }: Ed
     chavePix: "",
   });
 
+  // Helper to extract date string as YYYY-MM-DD without timezone conversion
+  const extractDateStr = (dateValue: Date | string | null | undefined): string => {
+    if (!dateValue) return "";
+    
+    // If it's already a string in YYYY-MM-DD format, use it directly
+    if (typeof dateValue === 'string') {
+      // Check if it's already YYYY-MM-DD format
+      if (/^\d{4}-\d{2}-\d{2}$/.test(dateValue)) {
+        return dateValue;
+      }
+      // Extract date part from ISO string or datetime
+      const match = dateValue.match(/^(\d{4}-\d{2}-\d{2})/);
+      if (match) {
+        return match[1];
+      }
+    }
+    
+    // For Date objects, use local date parts to avoid UTC conversion issues
+    const d = dateValue instanceof Date ? dateValue : new Date(dateValue);
+    if (isNaN(d.getTime())) return "";
+    
+    const year = d.getFullYear();
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  };
+
   // Update form data when voucher changes
   useEffect(() => {
     if (voucher) {
@@ -46,8 +73,8 @@ export const EditVoucherDialog = ({ open, onOpenChange, onSuccess, voucher }: Ed
         cnpjFornecedor: voucher.cnpjFornecedor || "",
         valor: voucher.valor?.toString() || "",
         moeda: voucher.moeda || "BRL",
-        vencimento: voucher.vencimento ? new Date(voucher.vencimento).toISOString().split("T")[0] : "",
-        dataEmissaoDocumento: voucher.dataEmissaoDocumento ? new Date(voucher.dataEmissaoDocumento).toISOString().split("T")[0] : "",
+        vencimento: extractDateStr(voucher.vencimento),
+        dataEmissaoDocumento: extractDateStr(voucher.dataEmissaoDocumento),
         cobrancaEmNomeDe: (voucher.cobrancaEmNomeDe || "DACHSER") as "DACHSER" | "CLIENTE",
         formaPagamento: voucher.formaPagamento || "BOLETO",
         tipoDocumento: voucher.tipoDocumento || "",
