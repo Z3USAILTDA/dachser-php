@@ -8,11 +8,13 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
+  DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
-import { CheckCircle2, Bot, AlertCircle, Clock, FileCheck, ChevronDown } from "lucide-react";
+import { CheckCircle2, Bot, AlertCircle, Clock, FileCheck, ChevronDown, RotateCcw, Trash2 } from "lucide-react";
 import { FileUpload } from "./FileUpload";
+import { RetornarPendenteDialog } from "./RetornarPendenteDialog";
 
 interface VoucherRoboActionsProps {
   voucher: Voucher;
@@ -23,6 +25,8 @@ export const VoucherRoboActions = ({ voucher, onUpdate }: VoucherRoboActionsProp
   const [loading, setLoading] = useState(false);
   const [uploadingComprovante, setUploadingComprovante] = useState(false);
   const [changingStatus, setChangingStatus] = useState(false);
+  const [showRetornarDialog, setShowRetornarDialog] = useState(false);
+  const [deletingComprovante, setDeletingComprovante] = useState(false);
   const { toast } = useToast();
 
   const hasComprovante = voucher.anexos.some((a) => a.tipo === "COMPROVANTE");
@@ -127,6 +131,124 @@ export const VoucherRoboActions = ({ voucher, onUpdate }: VoucherRoboActionsProp
       });
     } finally {
       setChangingStatus(false);
+    }
+  };
+
+  const handleRetornarPendente = async (justificativa: string) => {
+    const userData = getUserData();
+
+    try {
+      // Update voucher status to PENDENTE
+      const { error: updateError } = await supabase.functions.invoke("mariadb-proxy", {
+        body: {
+          action: "update_voucher_esteira",
+          voucher_id: voucher.id,
+          updates: {
+            status_comprovante: "PENDENTE",
+          },
+        },
+      });
+
+      if (updateError) throw updateError;
+
+      // Log the action with justification
+      await supabase.functions.invoke("mariadb-proxy", {
+        body: {
+          action: "save_voucher_log",
+          voucher_id: voucher.id,
+          user_id: userData.id?.toString(),
+          user_name: userData.username,
+          acao: "COMPROVANTE_RETORNADO_PENDENTE",
+          detalhe: `Comprovante retornado para pendente. Justificativa: ${justificativa}`,
+        },
+      });
+
+      // Send notification to financial team
+      try {
+        await supabase.functions.invoke("send-voucher-notification", {
+          body: {
+            type: "COMPROVANTE_RETORNADO",
+            voucher_id: voucher.id,
+            voucher_spo: voucher.numeroSPO,
+            justificativa: justificativa,
+            usuario: userData.username,
+          },
+        });
+      } catch (notifyError) {
+        console.warn("Não foi possível enviar notificação:", notifyError);
+        // Don't fail the whole operation if notification fails
+      }
+
+      toast({
+        title: "Status alterado!",
+        description: "Comprovante retornado para pendente. Equipe financeira notificada.",
+      });
+
+      onUpdate();
+    } catch (error: any) {
+      toast({
+        title: "Erro ao retornar status",
+        description: error.message,
+        variant: "destructive",
+      });
+      throw error;
+    }
+  };
+
+  const handleRemoverComprovante = async () => {
+    if (!comprovanteFile) return;
+
+    try {
+      setDeletingComprovante(true);
+      const userData = getUserData();
+
+      // Delete attachment from MariaDB
+      const { error } = await supabase.functions.invoke("mariadb-proxy", {
+        body: {
+          action: "delete_voucher_anexo",
+          anexo_id: comprovanteFile.id,
+        },
+      });
+
+      if (error) throw error;
+
+      // Update status to PENDENTE
+      await supabase.functions.invoke("mariadb-proxy", {
+        body: {
+          action: "update_voucher_esteira",
+          voucher_id: voucher.id,
+          updates: {
+            status_comprovante: "PENDENTE",
+          },
+        },
+      });
+
+      // Log the action
+      await supabase.functions.invoke("mariadb-proxy", {
+        body: {
+          action: "save_voucher_log",
+          voucher_id: voucher.id,
+          user_id: userData.id?.toString(),
+          user_name: userData.username,
+          acao: "COMPROVANTE_REMOVIDO",
+          detalhe: `Comprovante ${comprovanteFile.fileName} removido para substituição`,
+        },
+      });
+
+      toast({
+        title: "Comprovante removido!",
+        description: "Você pode anexar um novo comprovante",
+      });
+
+      onUpdate();
+    } catch (error: any) {
+      toast({
+        title: "Erro ao remover comprovante",
+        description: error.message,
+        variant: "destructive",
+      });
+    } finally {
+      setDeletingComprovante(false);
     }
   };
 
@@ -244,13 +366,18 @@ export const VoucherRoboActions = ({ voucher, onUpdate }: VoucherRoboActionsProp
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
-                <DropdownMenuItem 
-                  onClick={() => handleChangeStatus("PENDENTE")}
-                  disabled={currentStatus === "PENDENTE"}
-                >
-                  <Clock className="h-4 w-4 mr-2 text-yellow-500" />
-                  Pendente
-                </DropdownMenuItem>
+                {currentStatus !== "PENDENTE" && (
+                  <>
+                    <DropdownMenuItem 
+                      onClick={() => setShowRetornarDialog(true)}
+                      className="text-yellow-600"
+                    >
+                      <RotateCcw className="h-4 w-4 mr-2" />
+                      Retornar para Pendente
+                    </DropdownMenuItem>
+                    <DropdownMenuSeparator />
+                  </>
+                )}
                 <DropdownMenuItem 
                   onClick={() => handleChangeStatus("ANEXADO")}
                   disabled={currentStatus === "ANEXADO"}
@@ -280,14 +407,29 @@ export const VoucherRoboActions = ({ voucher, onUpdate }: VoucherRoboActionsProp
             )}
 
             {hasComprovante && comprovanteFile && (
-              <FileUpload
-                label="Comprovante de Pagamento"
-                existingFile={{
-                  name: comprovanteFile.fileName,
-                  url: comprovanteFile.fileUrl,
-                }}
-                onFileUpload={handleComprovanteUpload}
-              />
+              <div className="space-y-2">
+                <FileUpload
+                  label="Comprovante de Pagamento"
+                  existingFile={{
+                    name: comprovanteFile.fileName,
+                    url: comprovanteFile.fileUrl,
+                  }}
+                  onFileUpload={handleComprovanteUpload}
+                />
+                
+                {currentStatus === "PENDENTE" && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handleRemoverComprovante}
+                    disabled={deletingComprovante}
+                    className="w-full gap-2 text-red-600 hover:text-red-700 hover:bg-red-50"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                    {deletingComprovante ? "Removendo..." : "Remover e Substituir Comprovante"}
+                  </Button>
+                )}
+              </div>
             )}
 
             <Button
@@ -317,6 +459,13 @@ export const VoucherRoboActions = ({ voucher, onUpdate }: VoucherRoboActionsProp
           )}
         </CardContent>
       </Card>
+
+      <RetornarPendenteDialog
+        open={showRetornarDialog}
+        onOpenChange={setShowRetornarDialog}
+        onConfirm={handleRetornarPendente}
+        voucherSpo={voucher.numeroSPO}
+      />
     </div>
   );
 };
