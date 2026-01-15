@@ -6,11 +6,10 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { ScrollArea } from "@/components/ui/scroll-area";
-import { FileText, Search, Eye, Download, RefreshCw, Calendar, Loader2 } from "lucide-react";
+import { FileText, Search, RefreshCw, Calendar, Loader2 } from "lucide-react";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
+import { FilePreview } from "./FilePreview";
 
 interface ComprovanteItem {
   id: number;
@@ -29,8 +28,6 @@ export function ComprovantesTab() {
   const [comprovantes, setComprovantes] = useState<ComprovanteItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
-  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
-  const [previewName, setPreviewName] = useState<string>("");
 
   const loadComprovantes = async () => {
     setLoading(true);
@@ -76,17 +73,6 @@ export function ComprovantesTab() {
     return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
   };
 
-  const handlePreview = (url: string, name: string) => {
-    // Open PDFs in new tab to avoid X-Frame-Options blocking
-    if (isPdf(name)) {
-      window.open(url, '_blank', 'noopener,noreferrer');
-      return;
-    }
-    // For images, use the dialog
-    setPreviewUrl(url);
-    setPreviewName(name);
-  };
-
   const handleDownload = (url: string, name: string) => {
     const link = document.createElement("a");
     link.href = url;
@@ -95,15 +81,6 @@ export function ComprovantesTab() {
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
-  };
-
-  const isPdf = (fileName: string) => {
-    return fileName?.toLowerCase().endsWith(".pdf");
-  };
-
-  const isImage = (fileName: string) => {
-    const ext = fileName?.toLowerCase();
-    return ext?.endsWith(".jpg") || ext?.endsWith(".jpeg") || ext?.endsWith(".png") || ext?.endsWith(".webp");
   };
 
   return (
@@ -222,24 +199,12 @@ export function ComprovantesTab() {
                       </TableCell>
                       <TableCell>
                         <div className="flex items-center justify-end gap-2">
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-8 w-8"
-                            onClick={() => handlePreview(comp.file_url, comp.file_name)}
-                            title="Visualizar"
-                          >
-                            <Eye className="h-4 w-4" />
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-8 w-8"
-                            onClick={() => handleDownload(comp.file_url, comp.file_name)}
-                            title="Download"
-                          >
-                            <Download className="h-4 w-4" />
-                          </Button>
+                          <FilePreview
+                            fileName={comp.file_name}
+                            fileUrl={comp.file_url}
+                            fileType="COMPROVANTE"
+                            onDownload={() => handleDownload(comp.file_url, comp.file_name)}
+                          />
                         </div>
                       </TableCell>
                     </TableRow>
@@ -250,48 +215,6 @@ export function ComprovantesTab() {
           )}
         </CardContent>
       </Card>
-
-      {/* Preview Dialog */}
-      <Dialog open={!!previewUrl} onOpenChange={() => setPreviewUrl(null)}>
-        <DialogContent className="max-w-4xl max-h-[90vh]">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <FileText className="h-5 w-5" />
-              {previewName}
-            </DialogTitle>
-          </DialogHeader>
-          <ScrollArea className="h-[70vh]">
-            {previewUrl && isPdf(previewName) && (
-              <iframe
-                src={previewUrl}
-                className="w-full h-[65vh] border rounded-lg"
-                title={previewName}
-              />
-            )}
-            {previewUrl && isImage(previewName) && (
-              <img
-                src={previewUrl}
-                alt={previewName}
-                className="max-w-full h-auto mx-auto rounded-lg"
-              />
-            )}
-            {previewUrl && !isPdf(previewName) && !isImage(previewName) && (
-              <div className="flex flex-col items-center justify-center py-12 text-muted-foreground">
-                <FileText className="h-16 w-16 mb-4" />
-                <p>Pré-visualização não disponível para este tipo de arquivo</p>
-                <Button
-                  variant="outline"
-                  className="mt-4"
-                  onClick={() => handleDownload(previewUrl, previewName)}
-                >
-                  <Download className="h-4 w-4 mr-2" />
-                  Fazer Download
-                </Button>
-              </div>
-            )}
-          </ScrollArea>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 }
