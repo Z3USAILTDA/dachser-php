@@ -47,6 +47,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { DadosPagamentoPanel } from "./DadosPagamentoPanel";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { parseDBDate, formatDateOnlyBR } from "@/utils/timezone";
 
 interface PagamentoItem {
   id: string;
@@ -363,20 +364,25 @@ export const PagamentosTab = () => {
   };
 
   const formatDate = (dateStr: string) => {
-    return new Date(dateStr).toLocaleDateString('pt-BR');
+    return formatDateOnlyBR(dateStr);
   };
 
   const isVencido = (dateStr: string) => {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
-    const vencimento = new Date(dateStr);
+    const vencimento = parseDBDate(dateStr);
+    if (!vencimento) return false;
     vencimento.setHours(0, 0, 0, 0);
     return vencimento < today;
   };
 
   const isHoje = (dateStr: string) => {
-    const today = new Date().toISOString().split('T')[0];
-    return dateStr.split('T')[0] === today;
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const vencimento = parseDBDate(dateStr);
+    if (!vencimento) return false;
+    vencimento.setHours(0, 0, 0, 0);
+    return vencimento.getTime() === today.getTime();
   };
 
   const getStatusPagamentoBadge = (status?: StatusPagamento) => {
