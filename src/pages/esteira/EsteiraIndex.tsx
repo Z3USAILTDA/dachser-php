@@ -1584,6 +1584,50 @@ const EsteiraIndex = () => {
       });
     }
   };
+
+  const handleValidateComprovante = async (voucher: Voucher) => {
+    try {
+      const storedUser = localStorage.getItem("user") || localStorage.getItem("dachser_user");
+      const userData = storedUser ? JSON.parse(storedUser) : { id: 0, username: "sistema" };
+
+      // Update status_comprovante to VALIDADO
+      const { data, error } = await supabase.functions.invoke("mariadb-proxy", {
+        body: {
+          action: "update_voucher_esteira",
+          voucher_id: voucher.id,
+          status_comprovante: "VALIDADO"
+        }
+      });
+
+      if (error || !data?.success) throw new Error(data?.error || error?.message || "Erro ao validar");
+
+      // Log the action
+      await supabase.functions.invoke("mariadb-proxy", {
+        body: {
+          action: "save_voucher_log",
+          voucher_id: voucher.id,
+          user_id: userData.id?.toString(),
+          user_name: userData.username,
+          acao: "COMPROVANTE_VALIDADO",
+          detalhe: `Comprovante validado pelo financeiro`
+        }
+      });
+
+      toast({
+        title: "Comprovante validado!",
+        description: `Voucher ${voucher.numeroSPO} teve o comprovante validado com sucesso`
+      });
+
+      loadVouchers();
+    } catch (error: any) {
+      toast({
+        title: "Erro ao validar comprovante",
+        description: error.message,
+        variant: "destructive"
+      });
+    }
+  };
+
   const handleCancel = (voucher: Voucher) => {
     setSelectedVoucher(voucher);
     setShowCancelDialog(true);
@@ -1940,7 +1984,7 @@ const EsteiraIndex = () => {
           {/* Tab Content */}
           {activeTab === "processos" && <div className="mt-3">
               {loading ? <div className="h-96 rounded-2xl bg-[rgba(5,6,18,0.9)] border border-[rgba(255,255,255,0.12)] animate-pulse" /> : <div className="rounded-2xl bg-[rgba(5,6,18,0.9)] border border-[rgba(255,255,255,0.12)] backdrop-blur-[18px] shadow-[0_18px_40px_rgba(0,0,0,0.85)] overflow-hidden">
-                    <VoucherTable vouchers={filteredVouchers} onViewDetails={handleViewDetails} onEdit={handleEdit} onDelete={handleDelete} onGoBack={handleGoBack} onCancel={handleCancel} onDisassemble={handleDisassemble} filters={filters} onFilterChange={setFilters} canEdit={canEditVoucher} canDelete={canDeleteVoucher} canGoBackStage={canGoBackStage} canCancelVoucher={canCancelVoucher} canDisassembleMaster={canDisassembleMaster} lastUpdateTime={lastUpdateTime} />
+                    <VoucherTable vouchers={filteredVouchers} onViewDetails={handleViewDetails} onEdit={handleEdit} onDelete={handleDelete} onGoBack={handleGoBack} onCancel={handleCancel} onDisassemble={handleDisassemble} onValidateComprovante={handleValidateComprovante} filters={filters} onFilterChange={setFilters} canEdit={canEditVoucher} canDelete={canDeleteVoucher} canGoBackStage={canGoBackStage} canCancelVoucher={canCancelVoucher} canDisassembleMaster={canDisassembleMaster} canValidateComprovante={isFinanceiro || isAdmin || isSystemAdmin} lastUpdateTime={lastUpdateTime} />
                 </div>}
             </div>}
 

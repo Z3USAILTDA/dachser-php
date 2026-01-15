@@ -51,6 +51,7 @@ interface VoucherTableProps {
   onGoBack: (voucher: Voucher, justificativa: string) => void;
   onCancel?: (voucher: Voucher) => void;
   onDisassemble?: (voucher: Voucher, selectedChildIds: string[], keepMaster: boolean) => Promise<void>;
+  onValidateComprovante?: (voucher: Voucher) => Promise<void>;
   filters: FilterValues;
   onFilterChange: (filters: FilterValues) => void;
   canEdit?: boolean;
@@ -58,6 +59,7 @@ interface VoucherTableProps {
   canGoBackStage?: boolean;
   canCancelVoucher?: boolean;
   canDisassembleMaster?: boolean;
+  canValidateComprovante?: boolean;
   lastUpdateTime?: Date | null;
 }
 
@@ -124,7 +126,8 @@ const getSlaColor = (status: "ok" | "warning" | "critical") => {
   return colors[status];
 };
 
-export const VoucherTable = ({ vouchers, onViewDetails, onEdit, onDelete, onGoBack, onCancel, onDisassemble, filters, onFilterChange, canEdit = true, canDelete = true, canGoBackStage = false, canCancelVoucher = false, canDisassembleMaster = false, lastUpdateTime }: VoucherTableProps) => {
+export const VoucherTable = ({ vouchers, onViewDetails, onEdit, onDelete, onGoBack, onCancel, onDisassemble, onValidateComprovante, filters, onFilterChange, canEdit = true, canDelete = true, canGoBackStage = false, canCancelVoucher = false, canDisassembleMaster = false, canValidateComprovante = false, lastUpdateTime }: VoucherTableProps) => {
+  const [validatingVoucherId, setValidatingVoucherId] = useState<string | null>(null);
   const [sortField, setSortField] = useState<SortField>("createdAt");
   const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
   const [currentPage, setCurrentPage] = useState(1);
@@ -538,11 +541,42 @@ export const VoucherTable = ({ vouchers, onViewDetails, onEdit, onDelete, onGoBa
                             VALIDADO: { icon: FileCheck, label: "Validado", className: "bg-green-500/10 text-green-500 border-green-500/30" },
                           };
                           const { icon: Icon, label, className } = config[status as keyof typeof config] || config.PENDENTE;
+                          const isValidating = validatingVoucherId === voucher.id;
+                          const canValidate = canValidateComprovante && status === "ANEXADO" && onValidateComprovante;
+                          
+                          const handleValidate = async (e: React.MouseEvent) => {
+                            e.stopPropagation();
+                            if (!onValidateComprovante || isValidating) return;
+                            setValidatingVoucherId(voucher.id);
+                            try {
+                              await onValidateComprovante(voucher);
+                            } finally {
+                              setValidatingVoucherId(null);
+                            }
+                          };
+                          
                           return (
-                            <Badge variant="outline" className={cn("gap-1", className)}>
-                              <Icon className="h-3 w-3" />
-                              {label}
-                            </Badge>
+                            <div className="flex items-center gap-2">
+                              <Badge variant="outline" className={cn("gap-1", className)}>
+                                <Icon className="h-3 w-3" />
+                                {label}
+                              </Badge>
+                              {canValidate && (
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  className="h-6 px-2 text-xs bg-green-500/10 hover:bg-green-500/20 text-green-500 border border-green-500/30"
+                                  onClick={handleValidate}
+                                  disabled={isValidating}
+                                >
+                                  {isValidating ? (
+                                    <span className="animate-spin">⏳</span>
+                                  ) : (
+                                    "✓ Validar"
+                                  )}
+                                </Button>
+                              )}
+                            </div>
                           );
                         })()}
                       </TableCell>
