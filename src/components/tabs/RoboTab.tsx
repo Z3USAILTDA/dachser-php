@@ -266,6 +266,15 @@ export function RoboTab() {
 
         if (attachmentError) throw attachmentError;
 
+        // Update voucher status_comprovante to ANEXADO
+        await supabase.functions.invoke('mariadb-proxy', {
+          body: {
+            action: 'update_voucher_esteira',
+            voucher_id: fileMatch.voucherId,
+            status_comprovante: 'ANEXADO',
+          },
+        });
+
         // Log action to MariaDB using the correct action
         await supabase.functions.invoke('mariadb-proxy', {
           body: {
