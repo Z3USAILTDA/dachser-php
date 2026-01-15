@@ -77,6 +77,12 @@ export function ComprovantesTab() {
   };
 
   const handlePreview = (url: string, name: string) => {
+    // Open PDFs in new tab to avoid X-Frame-Options blocking
+    if (isPdf(name)) {
+      window.open(url, '_blank', 'noopener,noreferrer');
+      return;
+    }
+    // For images, use the dialog
     setPreviewUrl(url);
     setPreviewName(name);
   };
