@@ -57,14 +57,17 @@ export function RoboTab() {
     try {
       const { data, error } = await supabase.functions.invoke('mariadb-proxy', {
         body: {
-          action: 'query',
-          query: `SELECT id FROM t_vouchers WHERE numero_spo = ? AND etapa_atual = 'ROBO' LIMIT 1`,
-          params: [spo],
+          action: 'find_voucher_by_spo',
+          numero_spo: spo,
         },
       });
 
-      if (!error && data?.rows?.length > 0) {
-        return data.rows[0].id;
+      if (!error && data?.vouchers?.length > 0) {
+        // Filter for ROBO stage vouchers
+        const roboVoucher = data.vouchers.find((v: any) => v.etapa_atual === 'ROBO');
+        if (roboVoucher) {
+          return roboVoucher.id;
+        }
       }
     } catch (e) {
       console.error('Error fetching voucher:', e);
