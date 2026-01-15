@@ -5853,7 +5853,7 @@ serve(async (req) => {
         // Count total
         const countResult = await client.query(
           `SELECT COUNT(*) as total FROM dados_dachser.t_vouchers v
-           LEFT JOIN dados_dachser.t_dados_financeiro_voucher dfv ON v.id_rm = dfv.id_rm
+           LEFT JOIN dados_dachser.t_dados_financeiro_voucher dfv ON v.id_rm COLLATE utf8mb4_general_ci = dfv.id_rm COLLATE utf8mb4_general_ci
            ${whereClause}`,
           params
         );
@@ -5868,7 +5868,7 @@ serve(async (req) => {
             v.tipo_execucao_pagamento, v.is_pronto_para_robo, v.lote_remessa_id,
             v.status_integracao_rm, v.etapa_atual, v.status_baixa, v.created_at, v.updated_at
           FROM dados_dachser.t_vouchers v
-          LEFT JOIN dados_dachser.t_dados_financeiro_voucher dfv ON v.id_rm = dfv.id_rm
+          LEFT JOIN dados_dachser.t_dados_financeiro_voucher dfv ON v.id_rm COLLATE utf8mb4_general_ci = dfv.id_rm COLLATE utf8mb4_general_ci
           ${whereClause}
           ORDER BY v.vencimento ASC, v.created_at DESC
           LIMIT ? OFFSET ?`,
@@ -5900,7 +5900,7 @@ serve(async (req) => {
             -- Total valor
             SUM(COALESCE(v.valor, 0)) as valor_total
           FROM dados_dachser.t_vouchers v
-          LEFT JOIN dados_dachser.t_dados_financeiro_voucher dfv ON v.id_rm = dfv.id_rm
+          LEFT JOIN dados_dachser.t_dados_financeiro_voucher dfv ON v.id_rm COLLATE utf8mb4_general_ci = dfv.id_rm COLLATE utf8mb4_general_ci
           WHERE (v.etapa_atual = 'FINANCEIRO' OR (v.etapa_atual = 'ROBO' AND NOT EXISTS (SELECT 1 FROM dados_dachser.t_voucher_anexos a WHERE a.voucher_id = v.id AND a.tipo = 'COMPROVANTE')))
           AND (dfv.modal IS NULL OR dfv.modal <> 'ADM')`
         );
