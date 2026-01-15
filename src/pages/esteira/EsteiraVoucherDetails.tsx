@@ -145,13 +145,14 @@ const EsteiraVoucherDetails = () => {
 
   const canShowRascunhoActions = () => {
     if (!voucher || !role) return false;
-    const isRascunho = voucher.etapaAtual === "RASCUNHO";
-    // Operação, Supervisor, Financeiro e Admin podem editar rascunhos
+    // A_PROCESSAR também usa o mesmo componente de ações que RASCUNHO
+    const isRascunhoOrAProcessar = voucher.etapaAtual === "RASCUNHO" || voucher.etapaAtual === "A_PROCESSAR";
+    // Operação, Supervisor, Financeiro e Admin podem editar rascunhos e A_PROCESSAR
     const canAct = hasRole("OPERACAO") || hasRole("GESTOR_OPERACAO") || 
                    hasRole("SUPERVISOR") || hasRole("GESTOR_SUPERVISOR") ||
                    hasRole("FINANCEIRO") || hasRole("GESTOR_FINANCEIRO") ||
                    hasRole("ADMIN");
-    return isRascunho && canAct;
+    return isRascunhoOrAProcessar && canAct;
   };
 
   const canShowOperacaoActions = () => {
