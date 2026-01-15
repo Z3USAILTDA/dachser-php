@@ -9700,7 +9700,15 @@ serve(async (req) => {
         const whereClause = whereConditions.length > 0 ? `WHERE ${whereConditions.join(' AND ')}` : '';
         
         const vouchers = await client.query(`
-          SELECT * FROM dados_dachser.t_vouchers ${whereClause} ORDER BY created_at DESC
+          SELECT v.*,
+            (SELECT l.user_name FROM dados_dachser.t_voucher_logs l
+             WHERE l.voucher_id COLLATE utf8mb4_general_ci = v.id COLLATE utf8mb4_general_ci
+             AND l.acao IN ('ENVIADO_OPERACAO', 'APROVADO_FISCAL', 'APROVADO_SUPERVISOR', 
+                           'REENVIO_APOS_AJUSTE', 'APROVADO_URGENTE', 'BAIXA_MANUAL', 'VOUCHER_CRIADO',
+                           'RASCUNHO_ENVIADO', 'MASTER_APROVADO_OPERACAO')
+             ORDER BY l.data_hora DESC LIMIT 1) AS enviado_por_user_name
+          FROM dados_dachser.t_vouchers v
+          ${whereClause} ORDER BY v.created_at DESC
         `, params);
         
         console.log(`[get_vouchers_ativos] Found ${vouchers?.length || 0} active vouchers`);
