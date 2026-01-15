@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { VoucherActionsMenu } from "./VoucherActionsMenu";
-import { AlertCircle, Eye, Clock, Building2, User, Plane, Ship, Package, FileCheck, FileClock, ArrowUpDown, ArrowUp, ArrowDown, Layers, FileQuestion, RotateCcw } from "lucide-react";
+import { AlertCircle, Eye, Clock, Building2, User, Plane, Ship, Package, FileCheck, FileClock, ArrowUpDown, ArrowUp, ArrowDown, Layers, FileQuestion } from "lucide-react";
 import { format, isToday, isPast } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { cn } from "@/lib/utils";
@@ -608,7 +608,6 @@ export const VoucherTable = ({ vouchers, onViewDetails, onEdit, onDelete, onGoBa
                           const { icon: Icon, label, className } = config[status as keyof typeof config] || config.PENDENTE;
                           const isValidating = validatingVoucherId === voucher.id;
                           const canValidate = canValidateComprovante && status === "ANEXADO" && onValidateComprovante;
-                          const canRetornar = voucher.etapaAtual === "CONCLUIDO" && (status === "ANEXADO" || status === "VALIDADO");
                           
                           const handleValidate = async (e: React.MouseEvent) => {
                             e.stopPropagation();
@@ -619,12 +618,6 @@ export const VoucherTable = ({ vouchers, onViewDetails, onEdit, onDelete, onGoBa
                             } finally {
                               setValidatingVoucherId(null);
                             }
-                          };
-
-                          const handleRetornarClick = (e: React.MouseEvent) => {
-                            e.stopPropagation();
-                            setSelectedVoucherForRetorno(voucher);
-                            setShowRetornarDialog(true);
                           };
                           
                           return (
@@ -648,24 +641,6 @@ export const VoucherTable = ({ vouchers, onViewDetails, onEdit, onDelete, onGoBa
                                   )}
                                 </Button>
                               )}
-                              {canRetornar && (
-                                <Tooltip>
-                                  <TooltipTrigger asChild>
-                                    <Button
-                                      variant="ghost"
-                                      size="sm"
-                                      className="h-6 px-2 text-xs bg-yellow-500/10 hover:bg-yellow-500/20 text-yellow-500 border border-yellow-500/30"
-                                      onClick={handleRetornarClick}
-                                    >
-                                      <RotateCcw className="h-3 w-3 mr-1" />
-                                      Retornar
-                                    </Button>
-                                  </TooltipTrigger>
-                                  <TooltipContent>
-                                    <p>Retornar comprovante para pendente</p>
-                                  </TooltipContent>
-                                </Tooltip>
-                              )}
                             </div>
                           );
                         })()}
@@ -687,12 +662,17 @@ export const VoucherTable = ({ vouchers, onViewDetails, onEdit, onDelete, onGoBa
                             onDisassemble={onDisassemble ? async (selectedChildIds, keepMaster) => {
                               await onDisassemble(voucher, selectedChildIds, keepMaster);
                             } : undefined}
+                            onRetornarPendente={voucher.etapaAtual === "CONCLUIDO" && (voucher.statusComprovante === "ANEXADO" || voucher.statusComprovante === "VALIDADO") ? () => {
+                              setSelectedVoucherForRetorno(voucher);
+                              setShowRetornarDialog(true);
+                            } : undefined}
                             canGoBack={canGoBack(voucher)}
                             canGoBackStage={canGoBackStage}
                             canEdit={canEdit && voucher.etapaAtual !== "CANCELADO"}
                             canDelete={canDelete && voucher.etapaAtual !== "CANCELADO"}
                             canCancelVoucher={canCancelVoucher && voucher.etapaAtual !== "CANCELADO" && voucher.etapaAtual !== "CONCLUIDO"}
                             canDisassemble={canDisassembleMaster && (voucher.isMaster || voucher.origemCriacao === "MASTER")}
+                            canRetornarPendente={voucher.etapaAtual === "CONCLUIDO" && (voucher.statusComprovante === "ANEXADO" || voucher.statusComprovante === "VALIDADO")}
                             isCancelled={voucher.etapaAtual === "CANCELADO"}
                             vouchersFilhos={voucher.vouchersFilhos || []}
                             masterId={voucher.id}
