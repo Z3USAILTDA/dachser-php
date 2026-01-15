@@ -57,7 +57,7 @@ export const VoucherRascunhoActions = ({ voucher, onUpdate }: VoucherRascunhoAct
   const { toast } = useToast();
 
   // Estado para vencimento editável no envio
-  const initialVencimento = voucher.vencimento ? parseMariaDBDate(voucher.vencimento.toString()) : undefined;
+  const initialVencimento = voucher.vencimento instanceof Date ? voucher.vencimento : undefined;
   const [vencimentoEnvio, setVencimentoEnvio] = useState<Date | undefined>(initialVencimento || undefined);
 
   // Get user data from localStorage (MariaDB auth)
