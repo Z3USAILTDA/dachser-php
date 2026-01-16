@@ -502,9 +502,17 @@ serve(async (req: Request): Promise<Response> => {
     // Send email with attachment
     const dateForFile = new Date().toLocaleDateString("pt-BR").replace(/\//g, ".");
     
+    // Parse email_to - can be separated by ; or ,
+    const recipientEmails = email_to
+      .split(/[;,]/)
+      .map((e: string) => e.trim())
+      .filter((e: string) => e.length > 0 && e.includes("@"));
+    
+    console.log("Sending aging email to recipients:", recipientEmails);
+    
     const emailResponse = await resend.emails.send({
       from: "Financeiro Dachser <noreply@hermes.z3us.ai>",
-      to: ["devs@z3us.ai"],
+      to: recipientEmails,
       subject: `Aging List - ${clienteName}`,
       html: emailHtml,
       attachments: [
