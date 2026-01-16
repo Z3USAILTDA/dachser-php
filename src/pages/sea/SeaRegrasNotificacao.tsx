@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { Ship, Plus, Pencil, Trash2, Search, RefreshCw, ArrowLeft, Anchor } from "lucide-react";
+import { Ship, Plus, Pencil, Trash2, Search, RefreshCw, ArrowLeft, Anchor, Sun, Moon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -12,9 +12,11 @@ import { SeaRegraNotificacaoDialog } from "@/components/sea/SeaRegraNotificacaoD
 import { SeaRegraNotificacao, getCanalColorSea, getTipoProcessoColor, getFrequenciaColor } from "@/types/sea";
 import { format } from "date-fns";
 import dachserBg from "@/assets/dachser-background.jpg";
+import { useTheme } from "@/hooks/useTheme";
 
 export default function SeaRegrasNotificacao() {
   const { regras, loading, fetchRegras, createRegra, updateRegra, deleteRegra, toggleAtivo } = useSeaRegrasNotificacao();
+  const { theme, toggleTheme } = useTheme();
   const [search, setSearch] = useState("");
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingRegra, setEditingRegra] = useState<SeaRegraNotificacao | null>(null);
@@ -108,11 +110,18 @@ export default function SeaRegrasNotificacao() {
                 className="pl-9 w-80 bg-white/5 border-white/12 text-white placeholder:text-white/40"
               />
             </div>
-            <Button variant="ghost" size="icon" onClick={fetchRegras} disabled={loading}>
-              <RefreshCw className={`h-4 w-4 text-white/60 ${loading ? 'animate-spin' : ''}`} />
-            </Button>
-          </div>
-          <Button onClick={handleNew} className="bg-cyan-500 hover:bg-cyan-600 text-black">
+          <Button variant="ghost" size="icon" onClick={fetchRegras} disabled={loading}>
+            <RefreshCw className={`h-4 w-4 text-white/60 ${loading ? 'animate-spin' : ''}`} />
+          </Button>
+          <button
+            onClick={toggleTheme}
+            className="w-8 h-8 rounded-full border border-[rgba(255,255,255,.25)] flex items-center justify-center bg-[rgba(0,0,0,.7)] text-[#aaaaaa] hover:text-[#ffc800] hover:bg-[rgba(0,0,0,.9)] transition"
+            title={theme === "dark" ? "Mudar para tema claro" : "Mudar para tema escuro"}
+          >
+            {theme === "dark" ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
+          </button>
+        </div>
+        <Button onClick={handleNew} className="bg-cyan-500 hover:bg-cyan-600 text-black">
             <Plus className="h-4 w-4 mr-2" />
             Nova Regra
           </Button>

@@ -12,6 +12,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { toast } from "sonner";
 import { maritimoApi } from "@/services/maritimoApi";
+import { ThemeToggleButton } from "@/components/ThemeToggleButton";
 type AnalysisDiagnostics = {
   manifest?: {
     sheets_processed?: number;
@@ -484,16 +485,19 @@ export default function SubmeterManifestHbl() {
     return null;
   }
   const showManifestDiagnostic = analysisResult?.result_data?.manifest?.invoice_tokens?.length === 0 || analysisResult?.result_data?.manifest?.ncm8?.length === 0;
-  const helpButton = (
-    <button
-      onClick={() => navigate("/sea/submeter-manifest-hbl/manual")}
-      className="w-8 h-8 rounded-full border border-[rgba(255,255,255,.25)] flex items-center justify-center bg-[rgba(0,0,0,.7)] text-[#aaaaaa] hover:text-[#ffc800] hover:bg-[rgba(0,0,0,.9)] transition"
-      title="Ajuda"
-    >
-      <HelpCircle className="w-4 h-4" />
-    </button>
+  const rightContent = (
+    <div className="flex items-center gap-2">
+      <ThemeToggleButton />
+      <button
+        onClick={() => navigate("/sea/submeter-manifest-hbl/manual")}
+        className="w-8 h-8 rounded-full border border-[rgba(255,255,255,.25)] flex items-center justify-center bg-[rgba(0,0,0,.7)] text-[#aaaaaa] hover:text-[#ffc800] hover:bg-[rgba(0,0,0,.9)] transition"
+        title="Ajuda"
+      >
+        <HelpCircle className="w-4 h-4" />
+      </button>
+    </div>
   );
-  return <PageLayout title="DACHSER" subtitle="Submeter – Manifest/Pack List × Draft HBL" pageIcon={FileStack} backTo="/maritimo" rightContent={helpButton}>
+  return <PageLayout title="DACHSER" subtitle="Submeter – Manifest/Pack List × Draft HBL" pageIcon={FileStack} backTo="/maritimo" rightContent={rightContent}>
       <PageCard className="max-w-4xl mx-auto">
             <h1 className="text-2xl font-bold text-white mb-2">Submeter – Manifest/Pack List × Draft HBL</h1>
             <p className="text-sm text-neutral-400 mb-8">Adicione os arquivos HBL para análise comparativa</p>

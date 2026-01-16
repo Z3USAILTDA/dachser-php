@@ -9,6 +9,7 @@ import { FileItem } from "@/components/maritimo/FileItem";
 import { Progress } from "@/components/ui/progress";
 import { toast } from "sonner";
 import { maritimoApi } from "@/services/maritimoApi";
+import { ThemeToggleButton } from "@/components/ThemeToggleButton";
 interface BaseInfo {
   itemId: string;
   arquivo: string;
@@ -387,16 +388,19 @@ export default function SubmeterHblMbl() {
   if (!baseInfo) {
     return null;
   }
-  const helpButton = (
-    <button
-      onClick={() => navigate("/sea/submeter-hbl-mbl/manual")}
-      className="w-8 h-8 rounded-full border border-[rgba(255,255,255,.25)] flex items-center justify-center bg-[rgba(0,0,0,.7)] text-[#aaaaaa] hover:text-[#ffc800] hover:bg-[rgba(0,0,0,.9)] transition"
-      title="Ajuda"
-    >
-      <HelpCircle className="w-4 h-4" />
-    </button>
+  const rightContent = (
+    <div className="flex items-center gap-2">
+      <ThemeToggleButton />
+      <button
+        onClick={() => navigate("/sea/submeter-hbl-mbl/manual")}
+        className="w-8 h-8 rounded-full border border-[rgba(255,255,255,.25)] flex items-center justify-center bg-[rgba(0,0,0,.7)] text-[#aaaaaa] hover:text-[#ffc800] hover:bg-[rgba(0,0,0,.9)] transition"
+        title="Ajuda"
+      >
+        <HelpCircle className="w-4 h-4" />
+      </button>
+    </div>
   );
-  return <PageLayout title="DACHSER" subtitle="Submeter – HBL × MBL" pageIcon={GitCompare} backTo="/maritimo" rightContent={helpButton}>
+  return <PageLayout title="DACHSER" subtitle="Submeter – HBL × MBL" pageIcon={GitCompare} backTo="/maritimo" rightContent={rightContent}>
       <PageCard className="max-w-4xl mx-auto">
         <h1 className="text-2xl font-bold text-white mb-2">Submeter – HBL × MBL</h1>
         <p className="text-sm text-neutral-400 mb-8">Envie o arquivo MBL para comparação com o HBL base</p>
