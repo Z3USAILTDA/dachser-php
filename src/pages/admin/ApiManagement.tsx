@@ -129,11 +129,11 @@ const API_PRICING: Record<string, ApiPricing> = {
     notes: "Claude Sonnet 4: $3/1M input, $15/1M output",
     tier: "API Direta"
   },
-  "LovableAI": { 
-    costPerCall: 0.002,
-    unit: "por chamada",
-    notes: "Gemini 2.5 Flash via Lovable Gateway",
-    tier: "Lovable Workspace"
+  "Gemini": { 
+    costPerCall: 0.00035, // Gemini 2.5 Flash: $0.15/1M input + $0.60/1M output (~500 tokens cada)
+    unit: "por chamada (~1K tokens)",
+    notes: "API Direta: Flash $0.15-0.60/1M, Pro $1.25-5.00/1M tokens",
+    tier: "API Direta"
   },
   "Resend": { 
     costPerCall: 0.0009, // $0.90/1000 após tier gratuito
@@ -178,7 +178,7 @@ const RESTRICTED_USERS = ["ana.tozzo"];
 const API_COLORS: Record<string, string> = {
   "JSONCargo": "#3b82f6",      // Azul
   "Anthropic": "#8b5cf6",      // Roxo
-  "LovableAI": "#10b981",      // Verde
+  "Gemini": "#10b981",         // Verde
   "Resend": "#f59e0b",         // Âmbar
   "FlightRadar24": "#ef4444",  // Vermelho
   "Leadcomex": "#06b6d4",      // Ciano
