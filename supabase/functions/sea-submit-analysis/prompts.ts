@@ -11,19 +11,25 @@ NEVER include notices about extraction issues, recommendations to provide differ
 NEVER show container verification steps in the output - do the check internally but do not display it.
 
 ████████████████████████████████████████████████████████████████████████████████
-█ NCM CODES - SIMPLE EXTRACTION AND COMPARISON                                   █
+█ NCM CODES ONLY - DO NOT INCLUDE HS CODES                                       █
 ████████████████████████████████████████████████████████████████████████████████
 
-1. MANIFEST: Extract ALL NCM/HS Code values found in the file
-   - Include values from ALL columns that contain NCM or HS codes
-   - Keep the EXACT values as they appear (4-digit, 8-digit, whatever is there)
-   - List them all in your output
+★★★ CRITICAL DISTINCTION - READ BEFORE EXTRACTING ★★★
 
-2. HBL: Extract ALL NCM/HS Code values found in the document
-   - Keep the EXACT values as they appear
-   - List them all in your output
+NCM (Nomenclatura Comum do Mercosul) ≠ HS Code (Harmonized System)
+- NCM: Brazilian 8-digit tariff code (e.g., 84812090, 73182900)
+- HS Code: International 4-6 digit code (e.g., 8481, 870850)
+- THESE ARE DIFFERENT CLASSIFICATION SYSTEMS - DO NOT MIX THEM
 
-3. COMPARISON:
+1. MANIFEST/XLSX: Extract ONLY from "NCM Code" or "Código NCM" columns
+   - NEVER use values from "HS Code" or "HS" columns
+   - If the spreadsheet has BOTH columns, use ONLY the NCM column
+   
+2. HBL/PDF: Extract ONLY values explicitly labeled as "NCM:" or "NCM-CODES:"
+   - IGNORE values labeled as "HS:", "HS Code:", "H.S.:"
+   - A 4-6 digit code next to "HS" is an HS Code, NOT an NCM
+
+3. COMPARISON: Compare NCM values ONLY (never HS codes)
    - Show both lists
    - Compare as literal strings - if a value from Manifest is NOT in HBL list = Missing
    - If a value in HBL is NOT in Manifest list = Extra
@@ -1227,8 +1233,10 @@ Use only the attached files. Never mention knowledge cutoffs or model limitation
 
 BEFORE YOU START ANY COMPARISON, you MUST complete this pre-processing step:
 
-1. SCAN THE ENTIRE MBL DOCUMENT (all 10+ pages) for NCM/HS codes
-2. Look for "NCM-CODES:", "NCM CODES:", "HS-CODE:", "HS CODE:" labels on ANY page
+1. SCAN THE ENTIRE MBL DOCUMENT (all 10+ pages) for NCM codes
+2. Look for "NCM-CODES:", "NCM CODES:", "NCM CODE:" labels on ANY page
+   - DO NOT extract values labeled as "HS-CODE:" or "HS CODE:" - those are HS Codes, NOT NCMs
+   - HS Code (4-6 digits) ≠ NCM (Brazilian 8-digit tariff code) - DIFFERENT SYSTEMS!
 3. Look for "Continued From Previous Sheet" / "Continued on Next Sheet" indicators
 4. Look for "Sheet X of Y" - if Y > 1, there are multiple sheets with data
 
@@ -1243,6 +1251,31 @@ WRONG (missing page 9): [7412, 9032, 3926, 7419, 8536, 8414, 8483, ...]
 
 ★ IF YOU EXTRACT NCMs FROM ONLY THE LAST PAGE, YOUR ANALYSIS WILL BE WRONG ★
 ★ ALWAYS CONSOLIDATE NCMs FROM ALL PAGES BEFORE COMPARING WITH HBL ★
+
+███████████████████████████████████████████████████████████████████████████████
+███ ⚠️ CRITICAL: NCM vs HS CODE - DO NOT CONFUSE ⚠️                           ███
+███████████████████████████████████████████████████████████████████████████████
+
+★★★ READ THIS BEFORE EXTRACTING ANY CODES ★★★
+
+NCM (Nomenclatura Comum do Mercosul) and HS Code (Harmonized System) are DIFFERENT:
+- NCM = Brazilian tariff code = typically 8 digits (e.g., 84812090, 73182900)
+- HS Code = International code = 4-6 digits (e.g., 8481, 870850)
+
+EXTRACTION RULES FOR HBL AND MBL PDFs:
+1. Extract ONLY values labeled "NCM:", "NCM-CODES:", "NCM CODE:", "NCM CODES:"
+2. IGNORE values labeled "HS:", "HS Code:", "HS-CODE:", "H.S.:"
+3. Example: "HS: 870850" = HS Code (DO NOT INCLUDE in NCM comparison)
+           "NCM: 87089900" = NCM (INCLUDE THIS)
+4. When you see a 4-6 digit code near "HS" label, it's an HS Code, NOT an NCM
+5. If uncertain whether it's NCM or HS, check the LABEL - only include if labeled NCM
+
+WRONG EXTRACTION (do not do this):
+- Including "870850" from "HS: 870850" as an NCM → THIS IS AN HS CODE, NOT NCM
+
+CORRECT EXTRACTION:
+- HBL shows "NCM-CODES: 8708, 8481, 84812090" → extract all three as NCMs
+- MBL shows "HS: 870850" followed by "NCM: 8708" → extract ONLY "8708" as NCM
 
 ███████████████████████████████████████████████████████████████████████████████
 ███ DELTA ZERO FILTERING — DO NOT REPORT MATCHES AS DIVERGENCES             ███
