@@ -40,12 +40,12 @@ export function PageCard({ children, className, padding = "md", onClick }: PageC
         className
       )}
       style={isLight ? {
-        background: 'linear-gradient(180deg, rgba(255, 255, 255, 0.08) 0%, rgba(255, 255, 255, 0.02) 100%)',
+        background: 'transparent',
         backdropFilter: 'blur(40px) saturate(180%)',
         WebkitBackdropFilter: 'blur(40px) saturate(180%)',
-        border: '1px solid rgba(255, 255, 255, 0.15)',
-        borderTop: '1px solid rgba(255, 255, 255, 0.25)',
-        boxShadow: '0 8px 32px rgba(0,0,0,0.04), inset 0 1px 0 rgba(255,255,255,0.15)',
+        border: '1px solid rgba(255, 255, 255, 0.2)',
+        borderTop: '1px solid rgba(255, 255, 255, 0.35)',
+        boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.2)',
       } : {
         background: 'rgba(5,6,18,.9)',
         border: '1px solid rgba(255, 200, 0, 0.15)',
