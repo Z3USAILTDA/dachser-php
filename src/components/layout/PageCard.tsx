@@ -41,11 +41,11 @@ export function PageCard({ children, className, padding = "md", onClick }: PageC
       )}
       style={isLight ? {
         background: 'rgba(240, 242, 245, 0.95)',
-        border: '1px solid rgba(0, 0, 0, 0.15)',
+        border: '1px solid rgba(255, 200, 0, 0.25)',
         boxShadow: '0 4px 12px rgba(0,0,0,0.10), 0 16px 32px rgba(0,0,0,0.12)',
       } : {
         background: 'rgba(5,6,18,.9)',
-        border: '1px solid rgba(255,255,255,.06)',
+        border: '1px solid rgba(255, 200, 0, 0.15)',
         boxShadow: '0 18px 40px rgba(0,0,0,.85)',
       }}
       onClick={onClick}
