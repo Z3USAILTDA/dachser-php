@@ -34,17 +34,18 @@ export function PageCard({ children, className, padding = "md", onClick }: PageC
   return (
     <section 
       className={cn(
-        "rounded-2xl transition-all duration-300",
+        "rounded-3xl transition-all duration-300",
         paddingMap[padding],
         onClick && "cursor-pointer",
         className
       )}
       style={isLight ? {
-        background: 'linear-gradient(135deg, rgba(255, 255, 255, 0.55), rgba(220, 230, 245, 0.50))',
-        backdropFilter: 'blur(12px)',
-        WebkitBackdropFilter: 'blur(12px)',
-        border: '1px solid rgba(255, 255, 255, 0.3)',
-        boxShadow: '0 8px 32px rgba(0,0,0,0.15)',
+        background: 'linear-gradient(180deg, rgba(255, 255, 255, 0.45) 0%, rgba(255, 255, 255, 0.25) 100%)',
+        backdropFilter: 'blur(40px) saturate(180%)',
+        WebkitBackdropFilter: 'blur(40px) saturate(180%)',
+        border: '1px solid rgba(255, 255, 255, 0.5)',
+        borderTop: '1px solid rgba(255, 255, 255, 0.8)',
+        boxShadow: '0 8px 32px rgba(0,0,0,0.12), inset 0 1px 0 rgba(255,255,255,0.6), inset 0 -1px 0 rgba(0,0,0,0.05)',
       } : {
         background: 'rgba(5,6,18,.9)',
         border: '1px solid rgba(255, 200, 0, 0.15)',
