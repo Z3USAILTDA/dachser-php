@@ -65,7 +65,7 @@ export function PageLayout({
             <div 
               className="absolute inset-0"
               style={{
-                background: 'linear-gradient(120deg, rgba(245, 242, 235, 0.88), rgba(250, 248, 243, 0.85))',
+                background: 'linear-gradient(120deg, rgba(245, 242, 235, 0.65), rgba(250, 248, 243, 0.60))',
               }}
             />
             
