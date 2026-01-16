@@ -1,5 +1,6 @@
 import { useState, useMemo } from "react";
-import { RefreshCw, Trash2, Play, FileText, ArrowRightLeft, Download, FolderOpen, Ship, HelpCircle, FileSpreadsheet } from "lucide-react";
+import { RefreshCw, Trash2, Play, FileText, ArrowRightLeft, Download, FolderOpen, Ship, HelpCircle, FileSpreadsheet, Sun, Moon } from "lucide-react";
+import { useTheme } from "@/hooks/useTheme";
 import { useUsageLog } from "@/hooks/useUsageLog";
 import { NavTabs } from "@/components/maritimo/NavTabs";
 import { BadgeStatus } from "@/components/maritimo/BadgeStatus";
@@ -35,6 +36,7 @@ export default function SeaAnalysis() {
   useUsageLog({ endpoint: "/maritimo" });
   const navigate = useNavigate();
   const { user } = useAuth();
+  const { theme, toggleTheme } = useTheme();
   const { isDevOrAdmin, isLoading: devAccessLoading } = useDevAccess();
   const [activeTab, setActiveTab] = useState<'manifest_hbl' | 'hbl_mbl' | 'invoices_hbl'>('manifest_hbl');
   const [searchTerm, setSearchTerm] = useState("");
@@ -205,7 +207,7 @@ export default function SeaAnalysis() {
         <button
           type="button"
           onClick={() => navigate("/admin/system-logs")}
-          className="w-8 h-8 rounded-full border border-[rgba(255,255,255,.25)] bg-[rgba(0,0,0,.7)] flex items-center justify-center hover:bg-[rgba(0,0,0,.9)] transition"
+          className="sea-header-btn w-8 h-8 rounded-full border border-[rgba(255,255,255,.25)] bg-[rgba(0,0,0,.7)] flex items-center justify-center hover:bg-[rgba(0,0,0,.9)] transition"
           title="Logs do sistema"
         >
           <FontAwesomeIcon icon={faTerminal} className="w-4 h-4 text-[#ffc800]" />
@@ -214,10 +216,19 @@ export default function SeaAnalysis() {
       <button
         type="button"
         onClick={() => navigate("/sea/analysis/manual")}
-        className="w-8 h-8 rounded-full border border-[rgba(255,255,255,.25)] flex items-center justify-center bg-[rgba(0,0,0,.7)] text-[#aaaaaa] hover:text-[#ffc800] hover:bg-[rgba(0,0,0,.9)] transition"
+        className="sea-header-btn w-8 h-8 rounded-full border border-[rgba(255,255,255,.25)] flex items-center justify-center bg-[rgba(0,0,0,.7)] text-[#aaaaaa] hover:text-[#ffc800] hover:bg-[rgba(0,0,0,.9)] transition"
         title="Ajuda"
       >
         <HelpCircle className="w-4 h-4" />
+      </button>
+      {/* Botão Toggle Tema */}
+      <button
+        type="button"
+        onClick={toggleTheme}
+        className="sea-header-btn w-8 h-8 rounded-full border border-[rgba(255,255,255,.25)] flex items-center justify-center bg-[rgba(0,0,0,.7)] text-[#aaaaaa] hover:text-[#ffc800] hover:bg-[rgba(0,0,0,.9)] transition"
+        title={theme === "dark" ? "Mudar para tema claro" : "Mudar para tema escuro"}
+      >
+        {theme === "dark" ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
       </button>
     </>
   );
@@ -225,7 +236,7 @@ export default function SeaAnalysis() {
   return (
     <PageLayout title="DACHSER" subtitle="Análise Documental SEA" rightContent={rightContent} pageIcon={Ship} backTo="/dashboard">
       {/* Card de Filtros */}
-      <PageCard>
+      <PageCard className="sea-card">
         <FilterBar
           searchValue={searchTerm}
           onSearchChange={handleSearchChange}
@@ -242,7 +253,7 @@ export default function SeaAnalysis() {
               <button
                 onClick={handleExportReport}
                 disabled={isExporting}
-                className="h-8 px-4 rounded-full border border-border/50 bg-background/50 text-muted-foreground text-[0.75rem] font-medium flex items-center gap-1.5 hover:bg-background/70 hover:text-foreground transition"
+                className="sea-filter-btn h-8 px-4 rounded-full border border-border/50 bg-background/50 text-muted-foreground text-[0.75rem] font-medium flex items-center gap-1.5 hover:bg-background/70 hover:text-foreground transition"
               >
                 <FileSpreadsheet className={`w-3.5 h-3.5 ${isExporting ? 'animate-spin' : ''}`} />
                 {isExporting ? 'Exportando...' : 'Exportar'}
@@ -251,7 +262,7 @@ export default function SeaAnalysis() {
                 <button
                   onClick={handleReextractMetadata}
                   disabled={isReextracting}
-                  className="h-8 px-4 rounded-full border border-border/50 bg-background/50 text-muted-foreground text-[0.75rem] font-medium flex items-center gap-1.5 hover:bg-background/70 hover:text-foreground transition"
+                  className="sea-filter-btn h-8 px-4 rounded-full border border-border/50 bg-background/50 text-muted-foreground text-[0.75rem] font-medium flex items-center gap-1.5 hover:bg-background/70 hover:text-foreground transition"
                 >
                   <ArrowRightLeft className={`w-3.5 h-3.5 ${isReextracting ? 'animate-spin' : ''}`} />
                   {isReextracting ? 'Reextraindo...' : 'Reextrair'}
@@ -263,13 +274,13 @@ export default function SeaAnalysis() {
       </PageCard>
 
       {/* Card da Tabela */}
-      <PageCard>
+      <PageCard className="sea-card">
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-4">
             <NavTabs activeTab={getTabValue()} onTabChange={handleTabChange} />
           </div>
           <div className="flex items-center gap-3">
-            <div className="flex items-center gap-2 px-3 py-1 rounded-full bg-[rgba(0,0,0,.5)] border border-[rgba(255,255,255,.22)]">
+            <div className="sea-pending-badge flex items-center gap-2 px-3 py-1 rounded-full bg-[rgba(0,0,0,.5)] border border-[rgba(255,255,255,.22)]">
               <Clock className="h-3.5 w-3.5 text-[#ffc800]" />
               <span className="text-[0.75rem] text-[#aaaaaa]">
                 Pendentes: <span className="text-[#ffc800] font-semibold">{pendingCount}</span>
@@ -310,20 +321,20 @@ export default function SeaAnalysis() {
             <div className="rounded-xl overflow-hidden border border-[rgba(255,255,255,.09)]">
               <table className="w-full">
                 <thead>
-                  <tr className="bg-[#14151c]">
-                    <th className="px-[10px] py-[10px] text-left text-[0.75rem] uppercase tracking-[0.12em] text-[#aaaaaa] font-medium border-b border-[rgba(255,255,255,.09)]">Arquivo</th>
-                    <th className="px-[10px] py-[10px] text-left text-[0.75rem] uppercase tracking-[0.12em] text-[#aaaaaa] font-medium border-b border-[rgba(255,255,255,.09)]">Consignee</th>
-                    <th className="px-[10px] py-[10px] text-left text-[0.75rem] uppercase tracking-[0.12em] text-[#aaaaaa] font-medium border-b border-[rgba(255,255,255,.09)]">Container</th>
-                    <th className="px-[10px] py-[10px] text-left text-[0.75rem] uppercase tracking-[0.12em] text-[#aaaaaa] font-medium border-b border-[rgba(255,255,255,.09)]">Status</th>
-                    <th className="px-[10px] py-[10px] text-right text-[0.75rem] uppercase tracking-[0.12em] text-[#aaaaaa] font-medium border-b border-[rgba(255,255,255,.09)]">Ações</th>
+                  <tr className="sea-table-header bg-[#14151c]">
+                    <th className="px-[10px] py-[10px] text-left text-[0.75rem] uppercase tracking-[0.12em] font-medium border-b border-[rgba(255,255,255,.09)]">Arquivo</th>
+                    <th className="px-[10px] py-[10px] text-left text-[0.75rem] uppercase tracking-[0.12em] font-medium border-b border-[rgba(255,255,255,.09)]">Consignee</th>
+                    <th className="px-[10px] py-[10px] text-left text-[0.75rem] uppercase tracking-[0.12em] font-medium border-b border-[rgba(255,255,255,.09)]">Container</th>
+                    <th className="px-[10px] py-[10px] text-left text-[0.75rem] uppercase tracking-[0.12em] font-medium border-b border-[rgba(255,255,255,.09)]">Status</th>
+                    <th className="px-[10px] py-[10px] text-right text-[0.75rem] uppercase tracking-[0.12em] font-medium border-b border-[rgba(255,255,255,.09)]">Ações</th>
                   </tr>
                 </thead>
                 <tbody>
                   {paginatedData.map((item) => (
-                    <tr key={item.id} className="border-b border-[rgba(255,255,255,.06)] hover:bg-[rgba(255,255,255,.03)] transition-colors">
-                      <td className="px-[10px] py-[9px] text-[0.82rem] text-[#f5f5f5]">{item.base_file_name}</td>
-                      <td className="px-[10px] py-[9px] text-[0.82rem] text-[#aaaaaa]">{item.consignee || '-'}</td>
-                      <td className="px-[10px] py-[9px] text-[0.82rem] text-[#aaaaaa]">{item.container || '-'}</td>
+                    <tr key={item.id} className="sea-table-row border-b border-[rgba(255,255,255,.06)] hover:bg-[rgba(255,255,255,.03)] transition-colors">
+                      <td className="sea-table-cell px-[10px] py-[9px] text-[0.82rem]">{item.base_file_name}</td>
+                      <td className="sea-table-cell-muted px-[10px] py-[9px] text-[0.82rem]">{item.consignee || '-'}</td>
+                      <td className="sea-table-cell-muted px-[10px] py-[9px] text-[0.82rem]">{item.container || '-'}</td>
                       <td className="px-[10px] py-[9px]">
                         <BadgeStatus status={item.status} />
                       </td>
@@ -338,7 +349,7 @@ export default function SeaAnalysis() {
                           </button>
                           <button
                             onClick={() => handleHistory(item.id)}
-                            className="w-7 h-7 rounded-full border border-[rgba(255,255,255,.2)] bg-transparent text-[#aaaaaa] flex items-center justify-center hover:bg-[rgba(255,255,255,.1)] hover:text-white transition"
+                            className="sea-action-btn w-7 h-7 rounded-full border border-[rgba(255,255,255,.2)] bg-transparent text-[#aaaaaa] flex items-center justify-center hover:bg-[rgba(255,255,255,.1)] hover:text-white transition"
                             title="Histórico"
                           >
                             <FileText className="h-3.5 w-3.5" />

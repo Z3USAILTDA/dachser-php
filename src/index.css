@@ -146,6 +146,105 @@
 }
 
 /* Custom Animations */
+/* ============================================
+   TEMA CLARO - Afeta apenas elementos UI
+   O fundo da página permanece inalterado
+   ============================================ */
+.theme-light {
+  /* Cards e containers */
+  --card: 0 0% 98%;
+  --card-foreground: 220 15% 10%;
+  --popover: 0 0% 100%;
+  --popover-foreground: 220 15% 10%;
+  
+  /* Inputs e áreas mutáveis */
+  --input: 220 10% 95%;
+  --muted: 220 10% 92%;
+  --muted-foreground: 220 10% 35%;
+  
+  /* Accent e secondary */
+  --accent: 220 10% 94%;
+  --accent-foreground: 220 15% 10%;
+  --secondary: 220 10% 96%;
+  --secondary-foreground: 220 15% 15%;
+  
+  /* Borders mais suaves */
+  --border: 220 10% 82%;
+  
+  /* Foreground para textos */
+  --foreground: 220 15% 10%;
+}
+
+/* Estilos específicos para tema claro em tabelas e cards */
+.theme-light .sea-table-header {
+  background: hsl(220 10% 95%) !important;
+  color: hsl(220 15% 25%) !important;
+}
+
+.theme-light .sea-table-row {
+  background: hsl(0 0% 100%) !important;
+  border-color: hsl(220 10% 90%) !important;
+}
+
+.theme-light .sea-table-row:hover {
+  background: hsl(220 10% 98%) !important;
+}
+
+.theme-light .sea-table-cell {
+  color: hsl(220 15% 15%) !important;
+}
+
+.theme-light .sea-table-cell-muted {
+  color: hsl(220 10% 40%) !important;
+}
+
+.theme-light .sea-card {
+  background: rgba(255, 255, 255, 0.95) !important;
+  border-color: hsl(220 10% 85%) !important;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1) !important;
+}
+
+.theme-light .sea-pending-badge {
+  background: rgba(255, 255, 255, 0.9) !important;
+  border-color: hsl(220 10% 80%) !important;
+}
+
+.theme-light .sea-pending-badge span {
+  color: hsl(220 10% 35%) !important;
+}
+
+.theme-light .sea-header-btn {
+  background: rgba(255, 255, 255, 0.9) !important;
+  border-color: hsl(220 10% 75%) !important;
+  color: hsl(220 10% 30%) !important;
+}
+
+.theme-light .sea-header-btn:hover {
+  background: rgba(255, 255, 255, 1) !important;
+}
+
+.theme-light .sea-filter-btn {
+  background: rgba(255, 255, 255, 0.8) !important;
+  border-color: hsl(220 10% 80%) !important;
+  color: hsl(220 10% 30%) !important;
+}
+
+.theme-light .sea-filter-btn:hover {
+  background: rgba(255, 255, 255, 0.95) !important;
+  color: hsl(220 15% 10%) !important;
+}
+
+.theme-light .sea-action-btn {
+  background: transparent !important;
+  border-color: hsl(220 10% 75%) !important;
+  color: hsl(220 10% 40%) !important;
+}
+
+.theme-light .sea-action-btn:hover {
+  background: hsl(220 10% 95%) !important;
+  color: hsl(220 15% 20%) !important;
+}
+
 @keyframes float {
   0%, 100% { transform: translateY(0) translateX(0); }
   25% { transform: translateY(-10px) translateX(5px); }
