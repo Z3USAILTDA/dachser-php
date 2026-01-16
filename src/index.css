@@ -206,23 +206,23 @@ html {
 
 /* Cards premium com sombra elegante */
 .theme-light .sea-card {
-  background: rgba(255, 255, 255, 0.92) !important;
-  border: 1px solid rgba(0, 0, 0, 0.06) !important;
+  background: rgba(220, 230, 245, 0.85) !important;
+  border: 1px solid rgba(180, 200, 230, 0.4) !important;
   box-shadow: 
     0 1px 2px rgba(0, 0, 0, 0.03),
     0 4px 12px rgba(0, 0, 0, 0.04),
     0 16px 32px rgba(0, 0, 0, 0.06),
-    inset 0 1px 0 rgba(255, 255, 255, 0.9) !important;
+    inset 0 1px 0 rgba(255, 255, 255, 0.3) !important;
   backdrop-filter: blur(12px);
 }
 
 /* Tabela header com gradiente suave */
 .theme-light .sea-table-header {
   background: linear-gradient(180deg, 
-    hsl(40 15% 96%) 0%, 
-    hsl(40 12% 93%) 100%) !important;
-  color: hsl(220 18% 28%) !important;
-  border-bottom: 1px solid rgba(0, 0, 0, 0.06) !important;
+    rgba(210, 225, 245, 0.92) 0%, 
+    rgba(200, 218, 240, 0.88) 100%) !important;
+  color: hsl(220 35% 15%) !important;
+  border-bottom: 1px solid rgba(180, 200, 230, 0.4) !important;
 }
 
 .theme-light .sea-table-header th {
@@ -233,17 +233,17 @@ html {
 /* Rows com fundo sempre visível para melhor contraste */
 .theme-light .sea-table-row {
   background: linear-gradient(90deg, 
-    rgba(250, 248, 242, 0.98) 0%, 
-    rgba(248, 245, 238, 0.96) 50%,
-    rgba(250, 248, 242, 0.98) 100%) !important;
-  border-color: rgba(0, 0, 0, 0.06) !important;
+    rgba(220, 232, 248, 0.85) 0%, 
+    rgba(215, 228, 245, 0.82) 50%,
+    rgba(220, 232, 248, 0.85) 100%) !important;
+  border-color: rgba(180, 200, 230, 0.35) !important;
 }
 
 .theme-light .sea-table-row:hover {
   background: linear-gradient(90deg, 
-    rgba(245, 242, 232, 0.99) 0%, 
-    rgba(242, 238, 228, 0.98) 50%,
-    rgba(245, 242, 232, 0.99) 100%) !important;
+    rgba(230, 240, 255, 0.92) 0%, 
+    rgba(225, 235, 250, 0.90) 50%,
+    rgba(230, 240, 255, 0.92) 100%) !important;
   box-shadow: 
     0 2px 8px rgba(0, 0, 0, 0.06),
     inset 0 0 0 1px rgba(180, 150, 0, 0.15) !important;
@@ -261,15 +261,15 @@ html {
 
 /* Badge de pendente */
 .theme-light .sea-pending-badge {
-  background: rgba(255, 255, 255, 0.95) !important;
-  border: 1px solid rgba(0, 0, 0, 0.08) !important;
+  background: rgba(220, 230, 245, 0.90) !important;
+  border: 1px solid rgba(180, 200, 230, 0.35) !important;
   box-shadow: 
     0 1px 3px rgba(0, 0, 0, 0.04),
     0 4px 12px rgba(0, 0, 0, 0.05) !important;
 }
 
 .theme-light .sea-pending-badge span {
-  color: hsl(220 15% 32%) !important;
+  color: hsl(220 30% 25%) !important;
 }
 
 /* Nav tabs com texto preto no tema claro */
@@ -281,28 +281,28 @@ html {
 }
 
 .theme-light .sea-nav-tab-inactive {
-  background: rgba(255, 255, 255, 0.9) !important;
-  color: hsl(0 0% 0%) !important;
-  border: 1px solid rgba(0, 0, 0, 0.12) !important;
+  background: rgba(220, 230, 245, 0.88) !important;
+  color: hsl(220 35% 15%) !important;
+  border: 1px solid rgba(180, 200, 230, 0.35) !important;
 }
 
 .theme-light .sea-nav-tab-inactive:hover {
-  background: rgba(255, 255, 255, 1) !important;
+  background: rgba(230, 238, 250, 0.95) !important;
   border-color: rgba(201, 160, 0, 0.4) !important;
 }
 
 /* Header buttons premium */
 .theme-light .sea-header-btn {
-  background: rgba(255, 255, 255, 0.92) !important;
-  border: 1px solid rgba(0, 0, 0, 0.1) !important;
-  color: hsl(220 15% 30%) !important;
+  background: rgba(220, 230, 245, 0.88) !important;
+  border: 1px solid rgba(180, 200, 230, 0.35) !important;
+  color: hsl(220 30% 20%) !important;
   box-shadow: 
     0 1px 2px rgba(0, 0, 0, 0.04),
     0 2px 6px rgba(0, 0, 0, 0.03) !important;
 }
 
 .theme-light .sea-header-btn:hover {
-  background: rgba(255, 255, 255, 1) !important;
+  background: rgba(230, 238, 250, 0.95) !important;
   border-color: rgba(255, 200, 0, 0.4) !important;
   box-shadow: 
     0 2px 8px rgba(0, 0, 0, 0.06),
@@ -311,30 +311,30 @@ html {
 
 /* Filter buttons */
 .theme-light .sea-filter-btn {
-  background: rgba(255, 255, 255, 0.88) !important;
-  border: 1px solid rgba(0, 0, 0, 0.08) !important;
-  color: hsl(220 15% 32%) !important;
+  background: rgba(220, 230, 245, 0.82) !important;
+  border: 1px solid rgba(180, 200, 230, 0.30) !important;
+  color: hsl(220 30% 22%) !important;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.03) !important;
 }
 
 .theme-light .sea-filter-btn:hover {
-  background: rgba(255, 255, 255, 0.98) !important;
-  border-color: rgba(0, 0, 0, 0.12) !important;
-  color: hsl(220 18% 15%) !important;
+  background: rgba(230, 238, 250, 0.92) !important;
+  border-color: rgba(180, 200, 230, 0.45) !important;
+  color: hsl(220 35% 15%) !important;
   box-shadow: 0 2px 6px rgba(0, 0, 0, 0.05) !important;
 }
 
 /* Action buttons */
 .theme-light .sea-action-btn {
-  background: rgba(255, 255, 255, 0.75) !important;
-  border: 1px solid rgba(0, 0, 0, 0.1) !important;
-  color: hsl(220 12% 42%) !important;
+  background: rgba(220, 230, 245, 0.75) !important;
+  border: 1px solid rgba(180, 200, 230, 0.30) !important;
+  color: hsl(220 25% 35%) !important;
 }
 
 .theme-light .sea-action-btn:hover {
-  background: rgba(255, 255, 255, 0.95) !important;
+  background: rgba(230, 238, 250, 0.92) !important;
   border-color: rgba(255, 200, 0, 0.5) !important;
-  color: hsl(220 18% 20%) !important;
+  color: hsl(220 35% 15%) !important;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06) !important;
 }
 
@@ -357,9 +357,9 @@ html {
 .theme-light input,
 .theme-light select,
 .theme-light textarea {
-  background: rgba(255, 255, 255, 0.95) !important;
-  border-color: rgba(0, 0, 0, 0.1) !important;
-  color: hsl(220 18% 15%) !important;
+  background: rgba(230, 238, 250, 0.90) !important;
+  border-color: rgba(180, 200, 230, 0.4) !important;
+  color: hsl(220 35% 12%) !important;
   box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.03) !important;
 }
 
