@@ -45,19 +45,25 @@ Start your response directly with "Hello, team." and the analysis content.
 ███████████████████████████████████████████████████████████████████████████████
 
 ████████████████████████████████████████████████████████████████████████████████
-█ NCM CODES - SIMPLE EXTRACTION AND COMPARISON                                   █
+█ NCM CODES ONLY - DO NOT INCLUDE HS CODES                                       █
 ████████████████████████████████████████████████████████████████████████████████
 
-1. MANIFEST: Extract ALL NCM/HS Code values found in the file
-   - Include values from ALL columns that contain NCM or HS codes
-   - Keep the EXACT values as they appear (4-digit, 8-digit, whatever is there)
-   - List them all in your output
+★★★ CRITICAL DISTINCTION - READ BEFORE EXTRACTING ★★★
 
-2. HBL: Extract ALL NCM/HS Code values found in the document
-   - Keep the EXACT values as they appear
-   - List them all in your output
+NCM (Nomenclatura Comum do Mercosul) ≠ HS Code (Harmonized System)
+- NCM: Brazilian 8-digit tariff code (e.g., 84812090, 73182900)
+- HS Code: International 4-6 digit code (e.g., 8481, 870850)
+- THESE ARE DIFFERENT CLASSIFICATION SYSTEMS - DO NOT MIX THEM
 
-3. COMPARISON:
+1. MANIFEST/XLSX: Extract ONLY from "NCM Code" or "Código NCM" columns
+   - NEVER use values from "HS Code" or "HS" columns
+   - If the spreadsheet has BOTH columns, use ONLY the NCM column
+   
+2. HBL/PDF: Extract ONLY values explicitly labeled as "NCM:" or "NCM-CODES:"
+   - IGNORE values labeled as "HS:", "HS Code:", "H.S.:"
+   - A 4-6 digit code next to "HS" is an HS Code, NOT an NCM
+
+3. COMPARISON: Compare NCM values ONLY (never HS codes)
    - Show both lists
    - Compare as literal strings - if a value from Manifest is NOT in HBL list = Missing
    - If a value in HBL is NOT in Manifest list = Extra

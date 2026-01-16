@@ -126,13 +126,22 @@ export function checkNCMCompleteness(
 
 /**
  * Extract NCM codes from text using regex patterns
+ * IMPORTANT: Only extracts explicitly labeled NCM values - NEVER HS Codes
+ * NCM = Nomenclatura Comum do Mercosul (Brazilian 8-digit tariff code)
+ * HS Code = Harmonized System (International 4-6 digit code) - DO NOT EXTRACT
  */
 export function extractNCMFromText(text: string): string[] {
+  // ONLY extract values explicitly labeled as NCM - NEVER HS Code
   const ncmPatterns = [
-    /\bNCM[:\s-]*(\d{4,8})/gi,
-    /\bHS[:\s-]*(\d{4,8})/gi,
-    /\b(\d{4}\.\d{2}\.\d{2})\b/g,  // 8-digit with dots
-    /\b(\d{8})\b/g,                 // 8-digit plain
+    /\bNCM[:\s-]*(\d{4,8})/gi,           // NCM: 12345678
+    /\bNCM\s*CODE[:\s]*(\d{4,8})/gi,     // NCM Code: 12345678
+    /\bCODIGO\s*NCM[:\s]*(\d{4,8})/gi,   // Codigo NCM: 12345678
+    /\bCÓDIGO\s*NCM[:\s]*(\d{4,8})/gi,   // Código NCM: 12345678
+    /\bNCM[-_]?CODES?[:\s]*(\d{4,8})/gi, // NCM-CODES: 12345678
+    // Note: DO NOT include HS pattern - HS codes are a DIFFERENT classification system
+    // Removed: /\bHS[:\s-]*(\d{4,8})/gi - This was incorrectly extracting HS codes as NCMs
+    /\b(\d{4}\.\d{2}\.\d{2})\b/g,        // 8-digit with dots (8481.20.90) - NCM format
+    /\b(\d{8})\b/g,                       // 8-digit plain (84812090) - NCM format
   ];
   
   const found: string[] = [];
@@ -141,10 +150,13 @@ export function extractNCMFromText(text: string): string[] {
     const matches = text.matchAll(pattern);
     for (const match of matches) {
       const ncm = match[1] || match[0];
+      // Only include codes that are likely NCMs (6-8 digits preferred)
+      // 4-digit codes are often HS chapter codes, not full NCMs
       found.push(ncm);
     }
   }
   
+  console.log(`[NCM Extract] Found ${found.length} potential NCM codes (HS codes excluded)`);
   return normalizeNCMList(found);
 }
 
