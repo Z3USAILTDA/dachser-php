@@ -26,6 +26,7 @@ import { toast } from "sonner";
 import { PageLayout } from "@/components/layout/PageLayout";
 import { PageCard } from "@/components/layout/PageCard";
 import { TablePagination } from "@/components/layout/TablePagination";
+import { ThemeToggleButton } from "@/components/ThemeToggleButton";
 
 // Types
 interface LocalChargeRow {
@@ -231,6 +232,7 @@ export default function LocalCharges() {
         <RefreshCw className={`h-4 w-4 mr-2 ${isLoading ? 'animate-spin' : ''}`} />
         Atualizar
       </Button>
+      <ThemeToggleButton />
     </div>
   );
 

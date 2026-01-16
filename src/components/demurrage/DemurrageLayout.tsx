@@ -1,8 +1,9 @@
 import { ReactNode } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
-import { ArrowLeft, Ship, Activity, DollarSign, FileText, Scale, Users, BarChart3, HelpCircle, RefreshCw, Clock, Settings } from "lucide-react";
+import { ArrowLeft, Ship, Activity, DollarSign, FileText, Scale, Users, BarChart3, HelpCircle, RefreshCw, Clock, Settings, Sun, Moon } from "lucide-react";
 import { cn } from "@/lib/utils";
 import dachserBg from "@/assets/dachser-background.jpg";
+import { useTheme } from "@/hooks/useTheme";
 
 type QuickFilter = string;
 
@@ -39,6 +40,7 @@ export function DemurrageLayout({
 }: DemurrageLayoutProps) {
   const navigate = useNavigate();
   const location = useLocation();
+  const { theme, toggleTheme } = useTheme();
   
   const storedUser = localStorage.getItem("user") || localStorage.getItem("dachser_user");
   const user = storedUser ? JSON.parse(storedUser) : null;
@@ -160,6 +162,15 @@ export function DemurrageLayout({
               @{user.username || user.email}
             </div>
           )}
+
+          {/* Theme Toggle */}
+          <button
+            onClick={toggleTheme}
+            className="w-8 h-8 rounded-full border border-[rgba(255,255,255,.25)] flex items-center justify-center bg-[rgba(0,0,0,.7)] text-[#aaaaaa] hover:text-[#ffc800] hover:bg-[rgba(0,0,0,.9)] transition"
+            title={theme === "dark" ? "Mudar para tema claro" : "Mudar para tema escuro"}
+          >
+            {theme === "dark" ? <Sun size={16} /> : <Moon size={16} />}
+          </button>
 
           {/* Help Button */}
           <button

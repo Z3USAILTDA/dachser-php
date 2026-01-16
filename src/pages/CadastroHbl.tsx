@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { UploadZone } from "@/components/maritimo/UploadZone";
 import { FileItem } from "@/components/maritimo/FileItem";
 import { maritimoApi } from "@/services/maritimoApi";
+import { ThemeToggleButton } from "@/components/ThemeToggleButton";
 
 export default function CadastroHbl() {
   const navigate = useNavigate();
@@ -55,14 +56,17 @@ export default function CadastroHbl() {
     }
   };
 
-  const helpButton = (
-    <button
-      onClick={() => navigate("/sea/cadastro-hbl/manual")}
-      className="w-8 h-8 rounded-full border border-[rgba(255,255,255,.25)] flex items-center justify-center bg-[rgba(0,0,0,.7)] text-[#aaaaaa] hover:text-[#ffc800] hover:bg-[rgba(0,0,0,.9)] transition"
-      title="Ajuda"
-    >
-      <HelpCircle className="w-4 h-4" />
-    </button>
+  const rightContent = (
+    <div className="flex items-center gap-2">
+      <ThemeToggleButton />
+      <button
+        onClick={() => navigate("/sea/cadastro-hbl/manual")}
+        className="w-8 h-8 rounded-full border border-[rgba(255,255,255,.25)] flex items-center justify-center bg-[rgba(0,0,0,.7)] text-[#aaaaaa] hover:text-[#ffc800] hover:bg-[rgba(0,0,0,.9)] transition"
+        title="Ajuda"
+      >
+        <HelpCircle className="w-4 h-4" />
+      </button>
+    </div>
   );
 
   return (
@@ -71,7 +75,7 @@ export default function CadastroHbl() {
       subtitle="Cadastro – HBL"
       pageIcon={FileText}
       backTo="/maritimo"
-      rightContent={helpButton}
+      rightContent={rightContent}
     >
       <PageCard className="max-w-4xl mx-auto">
         <h1 className="text-2xl font-bold text-white mb-2">Cadastro – HBL</h1>

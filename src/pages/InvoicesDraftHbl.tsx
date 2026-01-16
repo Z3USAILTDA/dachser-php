@@ -11,6 +11,7 @@ import { faFileContract } from "@fortawesome/free-solid-svg-icons";
 import { PageLayout } from "@/components/layout/PageLayout";
 import { PageCard } from "@/components/layout/PageCard";
 import { FilePreviewDialog } from "@/components/maritimo/FilePreviewDialog";
+import { ThemeToggleButton } from "@/components/ThemeToggleButton";
 import {
   Dialog,
   DialogContent,
@@ -1046,14 +1047,17 @@ export default function InvoicesDraftHbl() {
     );
   };
 
-  const helpButton = (
-    <button
-      onClick={() => navigate("/sea/invoices-draft/manual")}
-      className="w-8 h-8 rounded-full border border-[rgba(255,255,255,.25)] flex items-center justify-center bg-[rgba(0,0,0,.7)] text-[#aaaaaa] hover:text-[#ffc800] hover:bg-[rgba(0,0,0,.9)] transition"
-      title="Ajuda"
-    >
-      <HelpCircle className="w-4 h-4" />
-    </button>
+  const rightContent = (
+    <div className="flex items-center gap-2">
+      <ThemeToggleButton />
+      <button
+        onClick={() => navigate("/sea/invoices-draft/manual")}
+        className="w-8 h-8 rounded-full border border-[rgba(255,255,255,.25)] flex items-center justify-center bg-[rgba(0,0,0,.7)] text-[#aaaaaa] hover:text-[#ffc800] hover:bg-[rgba(0,0,0,.9)] transition"
+        title="Ajuda"
+      >
+        <HelpCircle className="w-4 h-4" />
+      </button>
+    </div>
   );
 
   return (
@@ -1062,7 +1066,7 @@ export default function InvoicesDraftHbl() {
       subtitle="Invoices × Draft HBL"
       backTo="/maritimo"
       pageIcon={FileText}
-      rightContent={helpButton}
+      rightContent={rightContent}
     >
       <PageCard>
         {/* Upload and Options Grid */}

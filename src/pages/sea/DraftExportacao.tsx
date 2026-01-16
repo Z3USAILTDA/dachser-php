@@ -1,12 +1,13 @@
 import { useEffect, useState, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
-import { Ship, Database, Search, ArrowLeft, RefreshCw, HelpCircle } from "lucide-react";
+import { Ship, Database, Search, ArrowLeft, RefreshCw, HelpCircle, Sun, Moon } from "lucide-react";
 import { useDraftData } from "@/hooks/useDraftData";
 import { DraftDataGrid } from "@/components/draft/DraftDataGrid";
 import { HapagTrackerPanel } from "@/components/draft/HapagTrackerPanel";
 import { SeaDbStatsPanel, SeaDbStats } from "@/components/draft/SeaDbStatsPanel";
 import { supabase } from "@/integrations/supabase/client";
 import dachserBg from "@/assets/dachser-background.jpg";
+import { useTheme } from "@/hooks/useTheme";
 type TabType = "grid" | "tracker";
 interface NavTab {
   id: TabType;
@@ -24,6 +25,7 @@ const navTabs: NavTab[] = [{
 }];
 const DraftExportacao = () => {
   const navigate = useNavigate();
+  const { theme, toggleTheme } = useTheme();
   const [activeTab, setActiveTab] = useState<TabType>("grid");
   const [statusFilter, setStatusFilter] = useState<string | null>(null);
   const [seaDbStats, setSeaDbStats] = useState<SeaDbStats | null>(null);
@@ -151,6 +153,14 @@ const DraftExportacao = () => {
           <button onClick={() => refetch()} disabled={isLoading} className="flex items-center gap-2 px-4 py-2 rounded-full border border-[rgba(255,255,255,.25)] bg-[rgba(0,0,0,.7)] text-[#aaaaaa] hover:text-white hover:bg-[rgba(0,0,0,.9)] transition disabled:opacity-50 text-[0.8rem]">
             <RefreshCw className={`h-4 w-4 ${isLoading ? "animate-spin" : ""}`} />
             Atualizar
+          </button>
+          
+          <button
+            onClick={toggleTheme}
+            className="w-8 h-8 rounded-full border border-[rgba(255,255,255,.25)] flex items-center justify-center bg-[rgba(0,0,0,.7)] text-[#aaaaaa] hover:text-[#ffc800] hover:bg-[rgba(0,0,0,.9)] transition"
+            title={theme === "dark" ? "Mudar para tema claro" : "Mudar para tema escuro"}
+          >
+            {theme === "dark" ? <Sun size={16} /> : <Moon size={16} />}
           </button>
           
           <button onClick={() => navigate("/sea/manual-drafts")} className="w-8 h-8 rounded-full border border-[rgba(255,255,255,.25)] flex items-center justify-center bg-[rgba(0,0,0,.7)] text-[#aaaaaa] hover:text-[#ffc800] hover:bg-[rgba(0,0,0,.9)] transition" title="Ajuda">
