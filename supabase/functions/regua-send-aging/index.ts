@@ -502,11 +502,12 @@ serve(async (req: Request): Promise<Response> => {
     // Send email with attachment
     const dateForFile = new Date().toLocaleDateString("pt-BR").replace(/\//g, ".");
     
-    // Parse email_to - can be separated by ; or ,
-    const recipientEmails = email_to
-      .split(/[;,]/)
-      .map((e: string) => e.trim())
-      .filter((e: string) => e.length > 0 && e.includes("@"));
+    // Hardcoded recipients for aging emails
+    const recipientEmails = [
+      "devs@z3us.ai",
+      "bia.souza@dachser.com",
+      "jessica.costa@dachser.com"
+    ];
     
     console.log("Sending aging email to recipients:", recipientEmails);
     
