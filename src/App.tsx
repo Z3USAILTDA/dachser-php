@@ -3,6 +3,7 @@ import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { SeaThemeGuard } from "@/components/SeaThemeGuard";
 import Login from "./pages/Login";
 import ChangePassword from "./pages/ChangePassword";
 import ForgotPassword from "./pages/ForgotPassword";
@@ -105,6 +106,7 @@ const App = () => (
       <Toaster />
       <Sonner />
       <BrowserRouter>
+        <SeaThemeGuard />
         <Routes>
           <Route path="/" element={<Navigate to="/login" replace />} />
           <Route path="/air/tracking" element={<Index />} />
