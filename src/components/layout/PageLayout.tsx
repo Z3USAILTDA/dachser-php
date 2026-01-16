@@ -59,42 +59,41 @@ export function PageLayout({
               }}
             />
             
-            {/* Overlay suave com tom dourado */}
+            {/* Overlay suave com tom dourado - sem brilho branco */}
             <div 
               className="absolute inset-0"
               style={{
                 background: `
-                  radial-gradient(ellipse at 15% 15%, rgba(255, 200, 0, 0.08) 0%, transparent 45%),
-                  radial-gradient(ellipse at 85% 85%, rgba(255, 200, 0, 0.05) 0%, transparent 50%),
-                  radial-gradient(ellipse at 50% 50%, rgba(255, 255, 255, 0.4) 0%, transparent 70%)
+                  radial-gradient(ellipse at 15% 15%, rgba(201, 160, 0, 0.04) 0%, transparent 40%),
+                  radial-gradient(ellipse at 85% 85%, rgba(201, 160, 0, 0.03) 0%, transparent 40%)
                 `
               }}
             />
             
-            {/* Linhas decorativas sutis */}
-            <div className="absolute inset-0 opacity-[0.03]">
-              {[...Array(6)].map((_, i) => (
+            {/* Linhas decorativas muito sutis */}
+            <div className="absolute inset-0 opacity-[0.015]">
+              {[...Array(5)].map((_, i) => (
                 <div
                   key={`line-light-${i}`}
-                  className="absolute h-full w-px bg-gradient-to-b from-[#c9a000] to-transparent"
+                  className="absolute h-full w-px bg-gradient-to-b from-[#a08000]/50 to-transparent"
                   style={{
-                    left: `${15 + i * 14}%`,
-                    transform: `skewX(${-20 + i * 8}deg)`,
+                    left: `${18 + i * 16}%`,
+                    transform: `skewX(${-15 + i * 7}deg)`,
                   }}
                 />
               ))}
             </div>
 
-            {/* Partículas sutis */}
-            {[...Array(12)].map((_, i) => (
+            {/* Partículas muito sutis - menos quantidade */}
+            {[...Array(6)].map((_, i) => (
               <div
                 key={`particle-light-${i}`}
-                className="absolute w-1 h-1 rounded-full bg-[#c9a000]/20 animate-float"
+                className="absolute w-0.5 h-0.5 rounded-full bg-[#a08000]/10 animate-float"
                 style={{
-                  left: `${Math.random() * 100}%`,
-                  top: `${Math.random() * 100}%`,
-                  animationDelay: `${Math.random() * 5}s`,
-                  animationDuration: `${4 + Math.random() * 4}s`,
+                  left: `${15 + i * 12}%`,
+                  top: `${20 + i * 10}%`,
+                  animationDelay: `${i * 0.8}s`,
+                  animationDuration: `${5 + i}s`,
                 }}
               />
             ))}
@@ -185,9 +184,9 @@ export function PageLayout({
               </p>
             )}
             <div className="flex gap-1.5 mt-1.5">
-              <span className={`w-1.5 h-1.5 rounded-full ${isLight ? "bg-[#d4a800] shadow-[0_0_8px_rgba(212,168,0,.7)]" : "bg-[#ffc800] shadow-[0_0_10px_rgba(255,200,0,.9)]"}`} />
-              <span className={`w-1.5 h-1.5 rounded-full ${isLight ? "bg-[#d4a800] shadow-[0_0_8px_rgba(212,168,0,.7)]" : "bg-[#ffc800] shadow-[0_0_10px_rgba(255,200,0,.9)]"}`} />
-              <span className={`w-1.5 h-1.5 rounded-full ${isLight ? "bg-[#d4a800] shadow-[0_0_8px_rgba(212,168,0,.7)]" : "bg-[#ffc800] shadow-[0_0_10px_rgba(255,200,0,.9)]"}`} />
+              <span className={`w-1.5 h-1.5 rounded-full ${isLight ? "bg-[#b08c00]" : "bg-[#ffc800] shadow-[0_0_10px_rgba(255,200,0,.9)]"}`} />
+              <span className={`w-1.5 h-1.5 rounded-full ${isLight ? "bg-[#b08c00]" : "bg-[#ffc800] shadow-[0_0_10px_rgba(255,200,0,.9)]"}`} />
+              <span className={`w-1.5 h-1.5 rounded-full ${isLight ? "bg-[#b08c00]" : "bg-[#ffc800] shadow-[0_0_10px_rgba(255,200,0,.9)]"}`} />
             </div>
           </header>
         </div>
