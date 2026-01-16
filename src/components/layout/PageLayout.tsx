@@ -49,29 +49,39 @@ export function PageLayout({
       {/* Background - Diferente para cada tema */}
       <div className="fixed inset-0 z-0">
         {isLight ? (
-          /* ============ TEMA CLARO - Background Premium ============ */
+          /* ============ TEMA CLARO - Background com Imagem ============ */
           <>
-            {/* Base off-white cremoso */}
+            {/* Imagem de fundo dos caminhões */}
             <div 
               className="absolute inset-0"
               style={{
-                background: 'linear-gradient(135deg, #f9f7f3 0%, #f0ede7 30%, #e8e4dc 70%, #f5f2ec 100%)',
+                backgroundImage: `url(${dachserBg})`,
+                backgroundSize: 'cover',
+                backgroundPosition: 'center',
               }}
             />
             
-            {/* Overlay suave com tom dourado - sem brilho branco */}
+            {/* Overlay claro semi-transparente */}
+            <div 
+              className="absolute inset-0"
+              style={{
+                background: 'linear-gradient(120deg, rgba(245, 242, 235, 0.88), rgba(250, 248, 243, 0.85))',
+              }}
+            />
+            
+            {/* Overlay suave com tom dourado */}
             <div 
               className="absolute inset-0"
               style={{
                 background: `
-                  radial-gradient(ellipse at 15% 15%, rgba(201, 160, 0, 0.04) 0%, transparent 40%),
-                  radial-gradient(ellipse at 85% 85%, rgba(201, 160, 0, 0.03) 0%, transparent 40%)
+                  radial-gradient(ellipse at 15% 15%, rgba(201, 160, 0, 0.06) 0%, transparent 40%),
+                  radial-gradient(ellipse at 85% 85%, rgba(201, 160, 0, 0.04) 0%, transparent 40%)
                 `
               }}
             />
             
-            {/* Linhas decorativas muito sutis */}
-            <div className="absolute inset-0 opacity-[0.015]">
+            {/* Linhas decorativas sutis */}
+            <div className="absolute inset-0 opacity-[0.02]">
               {[...Array(5)].map((_, i) => (
                 <div
                   key={`line-light-${i}`}
@@ -83,20 +93,6 @@ export function PageLayout({
                 />
               ))}
             </div>
-
-            {/* Partículas muito sutis - menos quantidade */}
-            {[...Array(6)].map((_, i) => (
-              <div
-                key={`particle-light-${i}`}
-                className="absolute w-0.5 h-0.5 rounded-full bg-[#a08000]/10 animate-float"
-                style={{
-                  left: `${15 + i * 12}%`,
-                  top: `${20 + i * 10}%`,
-                  animationDelay: `${i * 0.8}s`,
-                  animationDuration: `${5 + i}s`,
-                }}
-              />
-            ))}
           </>
         ) : (
           /* ============ TEMA ESCURO - Background Original ============ */
