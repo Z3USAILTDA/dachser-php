@@ -160,29 +160,25 @@ export function PageLayout({
         <div className="flex items-center gap-[18px]">
           <button
             onClick={handleBack}
-            className={`w-8 h-8 rounded-full border flex items-center justify-center backdrop-blur-sm transition-all ${
-              isLight 
-                ? "border-[rgba(0,0,0,.1)] bg-white/90 text-[#555] hover:bg-white hover:text-[#333] shadow-sm" 
-                : "border-[rgba(255,255,255,.12)] bg-[rgba(5,6,18,0.9)] text-[#aaaaaa] hover:bg-[rgba(5,6,18,1)] hover:text-white"
-            }`}
+            className="w-8 h-8 rounded-full border border-[rgba(255,255,255,.12)] bg-[rgba(5,6,18,0.9)] text-[#aaaaaa] flex items-center justify-center backdrop-blur-sm hover:bg-[rgba(5,6,18,1)] hover:text-white transition-all"
             title={exclusiveAccess ? "Sair" : "Voltar"}
           >
             {exclusiveAccess ? <LogOut size={16} /> : <ArrowLeft size={16} />}
           </button>
 
           <header>
-            <h1 className={`text-[1.6rem] tracking-[0.24em] uppercase font-semibold ${isLight ? "text-[#1a1a1a]" : "text-[#f5f5f5]"}`}>
+            <h1 className="text-[1.6rem] tracking-[0.24em] uppercase font-semibold text-[#f5f5f5]">
               {title}
             </h1>
             {subtitle && (
-              <p className={`text-[0.9rem] mt-0.5 font-medium ${isLight ? "text-[#333]" : "text-[#aaaaaa]"}`}>
+              <p className="text-[0.9rem] mt-0.5 font-medium text-[#aaaaaa]">
                 Intelligent Logistics – {subtitle}
               </p>
             )}
             <div className="flex gap-1.5 mt-1.5">
-              <span className={`w-1.5 h-1.5 rounded-full ${isLight ? "bg-[#9a7800]" : "bg-[#ffc800] shadow-[0_0_10px_rgba(255,200,0,.9)]"}`} />
-              <span className={`w-1.5 h-1.5 rounded-full ${isLight ? "bg-[#9a7800]" : "bg-[#ffc800] shadow-[0_0_10px_rgba(255,200,0,.9)]"}`} />
-              <span className={`w-1.5 h-1.5 rounded-full ${isLight ? "bg-[#9a7800]" : "bg-[#ffc800] shadow-[0_0_10px_rgba(255,200,0,.9)]"}`} />
+              <span className="w-1.5 h-1.5 rounded-full bg-[#ffc800] shadow-[0_0_10px_rgba(255,200,0,.9)]" />
+              <span className="w-1.5 h-1.5 rounded-full bg-[#ffc800] shadow-[0_0_10px_rgba(255,200,0,.9)]" />
+              <span className="w-1.5 h-1.5 rounded-full bg-[#ffc800] shadow-[0_0_10px_rgba(255,200,0,.9)]" />
             </div>
           </header>
         </div>
@@ -190,20 +186,12 @@ export function PageLayout({
         {/* Right - User + Actions */}
         <div className="flex items-center gap-2.5 text-[0.85rem]">
           {rightContent}
-          <div className={`px-[14px] py-1.5 rounded-full border max-w-[220px] truncate font-medium ${
-            isLight 
-              ? "bg-white/95 border-[rgba(0,0,0,.12)] text-[#1a1a1a] shadow-sm" 
-              : "bg-[rgba(0,0,0,.70)] border-[rgba(255,255,255,.18)] text-[#aaaaaa]"
-          }`}>
+          <div className="px-[14px] py-1.5 rounded-full border max-w-[220px] truncate font-medium bg-[rgba(0,0,0,.70)] border-[rgba(255,255,255,.18)] text-[#aaaaaa]">
             @{user?.username || user?.email?.split("@")[0] || "usuario"}
           </div>
           {PageIcon ? (
             <div
-              className={`w-8 h-8 rounded-full border flex items-center justify-center ${
-                isLight 
-                  ? "border-[rgba(0,0,0,.12)] bg-white/90 text-[#d4a800] shadow-sm" 
-                  : "border-[rgba(255,255,255,.25)] bg-[rgba(0,0,0,.7)] text-[#ffc800]"
-              }`}
+              className="w-8 h-8 rounded-full border border-[rgba(255,255,255,.25)] bg-[rgba(0,0,0,.7)] text-[#ffc800] flex items-center justify-center"
               title={subtitle || title}
             >
               <PageIcon className="w-4 h-4" />
@@ -212,11 +200,7 @@ export function PageLayout({
             <button
               type="button"
               onClick={handleLogout}
-              className={`w-8 h-8 rounded-full border flex items-center justify-center transition ${
-                isLight 
-                  ? "border-[rgba(0,0,0,.12)] bg-white/90 text-[#d4a800] hover:bg-white shadow-sm" 
-                  : "border-[rgba(255,255,255,.25)] bg-[rgba(0,0,0,.7)] text-[#ffc800] hover:bg-[rgba(0,0,0,.9)]"
-              }`}
+              className="w-8 h-8 rounded-full border border-[rgba(255,255,255,.25)] bg-[rgba(0,0,0,.7)] text-[#ffc800] hover:bg-[rgba(0,0,0,.9)] flex items-center justify-center transition"
               title="Logout"
             >
               <LogOut className="w-4 h-4" />
