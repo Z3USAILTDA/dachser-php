@@ -16,14 +16,15 @@ export const NavTabs = ({ activeTab, onTabChange }: NavTabsProps) => {
     <div className="flex gap-2">
       {tabs.map((tab) => {
         const Icon = tab.icon;
+        const isActive = activeTab === tab.id;
         return (
           <button
             key={tab.id}
             onClick={() => onTabChange(tab.id)}
-            className={`flex items-center gap-2 px-4 py-2 rounded-full font-medium transition-all text-xs ${
-              activeTab === tab.id
-                ? "bg-black/86 text-white border border-amber-400/60 shadow-[0_0_15px_rgba(251,191,36,0.3)]"
-                : "bg-transparent text-neutral-400 hover:text-white hover:bg-black/60 border border-white/10"
+            className={`sea-nav-tab flex items-center gap-2 px-4 py-2 rounded-full font-medium transition-all text-xs ${
+              isActive
+                ? "sea-nav-tab-active bg-black/86 text-white border border-amber-400/60 shadow-[0_0_15px_rgba(251,191,36,0.3)]"
+                : "sea-nav-tab-inactive bg-transparent text-neutral-400 hover:text-white hover:bg-black/60 border border-white/10"
             }`}
           >
             <Icon className="w-4 h-4" />

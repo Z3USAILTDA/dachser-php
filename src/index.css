@@ -272,6 +272,25 @@ html {
   color: hsl(220 15% 32%) !important;
 }
 
+/* Nav tabs com texto preto no tema claro */
+.theme-light .sea-nav-tab-active {
+  background: hsl(45 100% 50%) !important;
+  color: hsl(0 0% 0%) !important;
+  border-color: hsl(45 100% 40%) !important;
+  box-shadow: 0 2px 8px rgba(201, 160, 0, 0.3) !important;
+}
+
+.theme-light .sea-nav-tab-inactive {
+  background: rgba(255, 255, 255, 0.9) !important;
+  color: hsl(0 0% 0%) !important;
+  border: 1px solid rgba(0, 0, 0, 0.12) !important;
+}
+
+.theme-light .sea-nav-tab-inactive:hover {
+  background: rgba(255, 255, 255, 1) !important;
+  border-color: rgba(201, 160, 0, 0.4) !important;
+}
+
 /* Header buttons premium */
 .theme-light .sea-header-btn {
   background: rgba(255, 255, 255, 0.92) !important;
