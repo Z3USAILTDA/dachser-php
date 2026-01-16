@@ -230,20 +230,23 @@ html {
   letter-spacing: 0.02em !important;
 }
 
-/* Rows com hover elegante */
+/* Rows com fundo sempre visível para melhor contraste */
 .theme-light .sea-table-row {
-  background: rgba(255, 255, 255, 0.85) !important;
-  border-color: rgba(0, 0, 0, 0.04) !important;
+  background: linear-gradient(90deg, 
+    rgba(250, 248, 242, 0.98) 0%, 
+    rgba(248, 245, 238, 0.96) 50%,
+    rgba(250, 248, 242, 0.98) 100%) !important;
+  border-color: rgba(0, 0, 0, 0.06) !important;
 }
 
 .theme-light .sea-table-row:hover {
   background: linear-gradient(90deg, 
-    rgba(255, 252, 245, 0.98) 0%, 
-    rgba(255, 250, 240, 0.95) 50%,
-    rgba(255, 252, 245, 0.98) 100%) !important;
+    rgba(245, 242, 232, 0.99) 0%, 
+    rgba(242, 238, 228, 0.98) 50%,
+    rgba(245, 242, 232, 0.99) 100%) !important;
   box-shadow: 
-    0 2px 8px rgba(0, 0, 0, 0.04),
-    inset 0 0 0 1px rgba(255, 200, 0, 0.1) !important;
+    0 2px 8px rgba(0, 0, 0, 0.06),
+    inset 0 0 0 1px rgba(180, 150, 0, 0.15) !important;
 }
 
 /* Células da tabela */
