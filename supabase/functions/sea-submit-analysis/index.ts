@@ -581,8 +581,8 @@ async function analyzeWithGeminiPro(
   approvedExamplesText: string = '',
   analysisType: string = ''
 ): Promise<{ text: string; model: string }> {
-  const lovableKey = Deno.env.get('LOVABLE_API_KEY');
-  if (!lovableKey) throw new Error('LOVABLE_API_KEY not configured');
+  const geminiApiKey = Deno.env.get('GEMINI_API_KEY');
+  if (!geminiApiKey) throw new Error('GEMINI_API_KEY not configured');
   
   let fullPrompt = prompt;
   
@@ -600,9 +600,10 @@ async function analyzeWithGeminiPro(
   // Add shipping data extraction instructions based on analysis type
   fullPrompt += getShippingDataExtractionInstructions(analysisType);
   
-  console.log(`🔄 Fallback: Calling Gemini Pro with ${pdfFiles.length} PDFs + manifest text (${manifestText.length} chars)`);
+  console.log(`🔄 Fallback: Calling Gemini Pro API directly with ${pdfFiles.length} PDFs + manifest text (${manifestText.length} chars)`);
   
-  const contentParts: any[] = [{ type: 'text', text: fullPrompt }];
+  // Build parts for Gemini native format
+  const parts: any[] = [{ text: fullPrompt }];
   
   for (let i = 0; i < pdfFiles.length; i++) {
     const file = pdfFiles[i];
@@ -617,22 +618,25 @@ async function analyzeWithGeminiPro(
       docLabel = '★★★ THIS IS THE HBL (House Bill of Lading) ★★★';
     }
     
-    contentParts.push({ type: 'text', text: `[${docLabel}]\n[Arquivo PDF: ${file.name}]` });
-    contentParts.push({
-      type: 'image_url',
-      image_url: { url: `data:application/pdf;base64,${file.base64}` }
+    parts.push({ text: `[${docLabel}]\n[Arquivo PDF: ${file.name}]` });
+    parts.push({
+      inline_data: {
+        mime_type: 'application/pdf',
+        data: file.base64
+      }
     });
   }
   
-  const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
+  const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-pro-preview-06-05:generateContent?key=${geminiApiKey}`, {
     method: 'POST',
     headers: {
-      'Authorization': `Bearer ${lovableKey}`,
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({
-      model: 'google/gemini-2.5-pro',
-      messages: [{ role: 'user', content: contentParts }]
+      contents: [{ role: 'user', parts }],
+      generationConfig: {
+        maxOutputTokens: 32000,
+      },
     }),
   });
   
@@ -643,7 +647,7 @@ async function analyzeWithGeminiPro(
   }
   
   const data = await response.json();
-  const resultText = data.choices?.[0]?.message?.content || '';
+  const resultText = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
   console.log(`✅ Gemini Pro response: ${resultText.length} chars`);
   
   return { text: resultText, model: 'gemini-2.5-pro' };

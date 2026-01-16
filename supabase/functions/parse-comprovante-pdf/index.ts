@@ -206,16 +206,16 @@ serve(async (req) => {
     // If filename didn't work, use Lovable AI to extract from PDF content
     console.log('Filename extraction failed, attempting AI content extraction...');
 
-    const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
-    if (!LOVABLE_API_KEY) {
-      console.warn('LOVABLE_API_KEY not configured, returning filename-only result');
+    const GEMINI_API_KEY = Deno.env.get('GEMINI_API_KEY');
+    if (!GEMINI_API_KEY) {
+      console.warn('GEMINI_API_KEY not configured, returning filename-only result');
       return new Response(
         JSON.stringify({ success: true, data: filenameResult }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
-    // Call Lovable AI to analyze PDF content
+    // Call Gemini API to analyze PDF content
     const prompt = `Analyze this bank payment receipt/proof PDF and extract the following information in JSON format:
     
     1. "numeroSPO" - Look for SPO number, usually 5-7 digits
@@ -238,33 +238,35 @@ serve(async (req) => {
     }`;
 
     try {
-      const aiResponse = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
+      const aiResponse = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-05-20:generateContent?key=${GEMINI_API_KEY}`, {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${LOVABLE_API_KEY}`,
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          model: 'google/gemini-2.5-flash',
-          messages: [
+          contents: [
             { 
               role: 'user', 
-              content: [
-                { type: 'text', text: prompt },
+              parts: [
+                { text: prompt },
                 { 
-                  type: 'image_url', 
-                  image_url: { url: `data:application/pdf;base64,${pdfBase64.substring(0, 50000)}` }
+                  inline_data: { 
+                    mime_type: 'application/pdf',
+                    data: pdfBase64.substring(0, 50000)
+                  }
                 }
               ]
             }
           ],
-          max_tokens: 1000,
+          generationConfig: {
+            maxOutputTokens: 1000,
+          },
         }),
       });
 
       if (aiResponse.ok) {
         const aiData = await aiResponse.json();
-        const content = aiData.choices?.[0]?.message?.content || '';
+        const content = aiData.candidates?.[0]?.content?.parts?.[0]?.text || '';
         
         // Try to parse JSON from the response
         const jsonMatch = content.match(/\{[\s\S]*\}/);
