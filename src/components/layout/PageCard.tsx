@@ -40,9 +40,9 @@ export function PageCard({ children, className, padding = "md", onClick }: PageC
         className
       )}
       style={isLight ? {
-        background: 'rgba(255, 255, 255, 0.98)',
-        border: '1px solid rgba(0, 0, 0, 0.12)',
-        boxShadow: '0 2px 6px rgba(0,0,0,0.06), 0 12px 24px rgba(0,0,0,0.08)',
+        background: 'rgba(240, 242, 245, 0.95)',
+        border: '1px solid rgba(0, 0, 0, 0.15)',
+        boxShadow: '0 4px 12px rgba(0,0,0,0.10), 0 16px 32px rgba(0,0,0,0.12)',
       } : {
         background: 'rgba(5,6,18,.9)',
         border: '1px solid rgba(255,255,255,.06)',
