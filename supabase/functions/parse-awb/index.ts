@@ -11,9 +11,9 @@ serve(async (req) => {
   }
 
   try {
-    const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
-    if (!LOVABLE_API_KEY) {
-      throw new Error('LOVABLE_API_KEY not configured');
+    const GEMINI_API_KEY = Deno.env.get('GEMINI_API_KEY');
+    if (!GEMINI_API_KEY) {
+      throw new Error('GEMINI_API_KEY not configured');
     }
 
     let file_base64: string;
@@ -186,40 +186,47 @@ IMPORTANTE: Procure especificamente por padrões "XX-XX" que indicam filial/sufi
       },
     ];
 
-    const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
+    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-05-20:generateContent?key=${GEMINI_API_KEY}`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${LOVABLE_API_KEY}`,
       },
       body: JSON.stringify({
-        model: 'google/gemini-2.5-flash',
-        messages: [
-          { role: 'system', content: systemPrompt },
-          { role: 'user', content: messageContent },
+        contents: [
+          {
+            role: 'user',
+            parts: [
+              { text: systemPrompt + "\n\n" + messageContent[0].text },
+              {
+                inline_data: {
+                  mime_type: mediaType,
+                  data: file_base64,
+                },
+              },
+            ],
+          },
         ],
-        max_tokens: 2048,
+        generationConfig: {
+          maxOutputTokens: 2048,
+        },
       }),
     });
 
     if (!response.ok) {
       const errorText = await response.text();
-      console.error('Lovable AI error:', response.status, errorText);
+      console.error('Gemini API error:', response.status, errorText);
       
       if (response.status === 429) {
         throw new Error('Rate limit exceeded. Please try again later.');
       }
-      if (response.status === 402) {
-        throw new Error('Payment required. Please add credits to your workspace.');
-      }
-      throw new Error(`AI Gateway error: ${response.status}`);
+      throw new Error(`Gemini API error: ${response.status}`);
     }
 
     const data = await response.json();
-    console.log('Lovable AI response received');
+    console.log('Gemini API response received');
 
     // Extract the text content from the response
-    const textContent = data.choices?.[0]?.message?.content;
+    const textContent = data.candidates?.[0]?.content?.parts?.[0]?.text;
     if (!textContent) {
       throw new Error('No text content in response');
     }

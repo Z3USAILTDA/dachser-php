@@ -381,7 +381,7 @@ async function analyzeWithAnthropic(
 }
 
 /**
- * Fallback: Use Gemini if Anthropic fails
+ * Fallback: Use Gemini directly if Anthropic fails
  */
 async function analyzeWithGemini(
   prompt: string,
@@ -390,14 +390,14 @@ async function analyzeWithGemini(
   metadata: { consignee?: string; container?: string },
   analysisType: string = ''
 ): Promise<{ text: string; model: string }> {
-  console.log(`[Fallback] Using Gemini for analysis`);
+  console.log(`[Fallback] Using Gemini API directly for analysis`);
   const startTime = Date.now();
   
-  const lovableApiKey = Deno.env.get('LOVABLE_API_KEY');
-  if (!lovableApiKey) throw new Error('LOVABLE_API_KEY not configured');
+  const geminiApiKey = Deno.env.get('GEMINI_API_KEY');
+  if (!geminiApiKey) throw new Error('GEMINI_API_KEY not configured');
   
-  // Build content
-  const contentParts: any[] = [];
+  // Build content parts for Gemini native format
+  const parts: any[] = [];
   
   let fullPrompt = prompt;
   if (metadata.consignee) fullPrompt += `\n\nConsignee: ${metadata.consignee}`;
@@ -406,26 +406,28 @@ async function analyzeWithGemini(
   // Add shipping data extraction instructions based on analysis type
   fullPrompt += getShippingDataExtractionInstructions(analysisType);
   
-  contentParts.push({ type: 'text', text: fullPrompt });
+  parts.push({ text: fullPrompt });
   
   if (manifestText.length > 0) {
-    contentParts.push({ type: 'text', text: `\n\n=== MANIFEST DATA ===\n${manifestText}\n=== END MANIFEST ===\n` });
+    parts.push({ text: `\n\n=== MANIFEST DATA ===\n${manifestText}\n=== END MANIFEST ===\n` });
   }
   
   for (const file of pdfFiles) {
     const pdfData = await fetchFileAsBase64(file.file_url);
     if (pdfData && pdfData.size >= 100) {
-      contentParts.push({
-        type: 'image_url',
-        image_url: { url: `data:application/pdf;base64,${pdfData.base64}` }
+      parts.push({
+        inline_data: {
+          mime_type: 'application/pdf',
+          data: pdfData.base64
+        }
       });
-      contentParts.push({ type: 'text', text: `[Document: ${file.file_name}]` });
+      parts.push({ text: `[Document: ${file.file_name}]` });
     } else {
       console.warn(`  Skipped invalid/empty PDF in Gemini: ${file.file_name}`);
     }
   }
   
-  contentParts.push({ type: 'text', text: '\n\nProvide your complete analysis following the specified format.' });
+  parts.push({ text: '\n\nProvide your complete analysis following the specified format.' });
   
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), 300000); // 5 minutes
@@ -437,17 +439,17 @@ async function analyzeWithGemini(
     try {
       console.log(`[Fallback] Gemini attempt ${attempt}/${maxRetries}`);
       
-      const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
+      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-05-20:generateContent?key=${geminiApiKey}`, {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${lovableApiKey}`,
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          model: 'google/gemini-2.5-flash',
-          messages: [{ role: 'user', content: contentParts }],
-          max_tokens: 16000,
-          temperature: 0, // Zero for deterministic/consistent output
+          contents: [{ role: 'user', parts }],
+          generationConfig: {
+            maxOutputTokens: 16000,
+            temperature: 0,
+          },
         }),
         signal: controller.signal,
       });
@@ -457,19 +459,19 @@ async function analyzeWithGemini(
       
       if (response.ok) {
         const data = await response.json();
-        const text = data.choices?.[0]?.message?.content || '';
+        const text = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
         console.log(`[Fallback] Gemini completed in ${elapsed}ms (${text.length} chars)`);
         
         // Log successful API call
-        logApiCall('LovableAI', '/v1/chat/completions', 'POST', response.status, elapsed);
+        logApiCall('Gemini', '/v1beta/models/gemini-2.5-flash:generateContent', 'POST', response.status, elapsed);
         
-        return { text, model: 'google/gemini-2.5-flash' };
+        return { text, model: 'gemini-2.5-flash' };
       } else {
         const errorText = await response.text();
         console.error(`[Fallback] Gemini failed (${response.status}): ${errorText.substring(0, 200)}`);
         
         // Log failed API call
-        logApiCall('LovableAI', '/v1/chat/completions', 'POST', response.status, elapsed, errorText.substring(0, 200));
+        logApiCall('Gemini', '/v1beta/models/gemini-2.5-flash:generateContent', 'POST', response.status, elapsed, errorText.substring(0, 200));
         
         lastError = new Error(`Gemini API error: ${response.status}`);
         

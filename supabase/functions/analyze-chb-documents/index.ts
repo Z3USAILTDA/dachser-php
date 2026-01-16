@@ -1043,25 +1043,24 @@ async function callAnthropicAPI(prompt: string, files: FileForAnalysis[]): Promi
   return { text: textContent.text, warnings };
 }
 
-// Call Lovable AI (Gemini) as fallback
-async function callLovableAI(prompt: string, files: FileForAnalysis[]): Promise<ApiResponse> {
-  const supabaseUrl = Deno.env.get('SUPABASE_URL');
-  const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+// Call Gemini API directly as fallback
+async function callGeminiAPI(prompt: string, files: FileForAnalysis[]): Promise<ApiResponse> {
+  const geminiApiKey = Deno.env.get('GEMINI_API_KEY');
   
-  if (!supabaseUrl || !supabaseKey) {
-    throw new Error('Supabase credentials not configured');
+  if (!geminiApiKey) {
+    throw new Error('GEMINI_API_KEY not configured');
   }
   
   const warnings: ChbFileError[] = [];
   
-  // Build parts for Gemini
+  // Build parts for Gemini native format
   const parts: any[] = [];
   
   for (const file of files) {
     if (file.mimeType.startsWith('image/') || file.mimeType === 'application/pdf') {
       parts.push({
-        inlineData: {
-          mimeType: file.mimeType,
+        inline_data: {
+          mime_type: file.mimeType,
           data: file.content,
         },
       });
@@ -1103,14 +1102,12 @@ async function callLovableAI(prompt: string, files: FileForAnalysis[]): Promise<
   
   const startTime = Date.now();
   
-  const response = await fetch(`${supabaseUrl}/functions/v1/lovable-ai-proxy`, {
+  const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-pro-preview-06-05:generateContent?key=${geminiApiKey}`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      'Authorization': `Bearer ${supabaseKey}`,
     },
     body: JSON.stringify({
-      model: 'google/gemini-2.5-pro',
       contents: [
         {
           role: 'user',
@@ -1128,19 +1125,17 @@ async function callLovableAI(prompt: string, files: FileForAnalysis[]): Promise<
   
   if (!response.ok) {
     const errorText = await response.text();
-    console.error('Lovable AI error:', errorText);
-    throw new Error(`Lovable AI error: ${response.status} - ${errorText}`);
+    console.error('Gemini API error:', errorText);
+    throw new Error(`Gemini API error: ${response.status} - ${errorText}`);
   }
   
   const result = await response.json();
   
   // Extract text from Gemini response format
-  const text = result.candidates?.[0]?.content?.parts?.[0]?.text || 
-               result.text || 
-               '';
+  const text = result.candidates?.[0]?.content?.parts?.[0]?.text || '';
   
   if (!text) {
-    throw new Error('No text content in Lovable AI response');
+    throw new Error('No text content in Gemini API response');
   }
   
   return { text, warnings };
@@ -1629,17 +1624,17 @@ REGRA CRÍTICA DE PERSISTÊNCIA:
       fileWarnings = result.warnings;
       console.log('[BG] Anthropic API succeeded');
     } catch (anthropicError) {
-      console.error('[BG] Anthropic API failed, trying Lovable AI (Gemini) fallback:', anthropicError);
+      console.error('[BG] Anthropic API failed, trying Gemini API fallback:', anthropicError);
       usedFallback = true;
       
       try {
-        console.log('[BG] Attempting Lovable AI (Gemini) fallback...');
-        const result = await callLovableAI(prompt, files);
+        console.log('[BG] Attempting Gemini API fallback...');
+        const result = await callGeminiAPI(prompt, files);
         responseText = result.text;
         fileWarnings = result.warnings;
-        console.log('[BG] Lovable AI succeeded');
+        console.log('[BG] Gemini API succeeded');
       } catch (geminiError) {
-        console.error('[BG] Lovable AI also failed:', geminiError);
+        console.error('[BG] Gemini API also failed:', geminiError);
         
         // Update request with error in MariaDB
         await callMariaDBProxy('execute', {
