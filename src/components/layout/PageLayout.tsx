@@ -61,11 +61,11 @@ export function PageLayout({
               }}
             />
             
-            {/* Overlay azulado semi-transparente - padrão do projeto */}
+            {/* Overlay azul escuro - padrão do projeto */}
             <div 
               className="absolute inset-0"
               style={{
-                background: 'linear-gradient(120deg, rgba(240, 245, 250, 0.75), rgba(220, 235, 250, 0.70))',
+                background: 'linear-gradient(120deg, rgba(4, 17, 45, 0.92), rgba(26, 93, 173, 0.55))',
               }}
             />
             
