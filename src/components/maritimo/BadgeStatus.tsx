@@ -11,7 +11,7 @@ export const BadgeStatus = ({ status }: BadgeStatusProps) => {
       return {
         label: 'REALIZADO',
         variant: 'default' as const,
-        className: 'bg-emerald-500/15 text-emerald-300 border-emerald-500/40 px-3 py-1 rounded-full text-xs font-semibold'
+        className: 'sea-badge-realizado bg-emerald-500/15 text-emerald-400 border-emerald-500/40 px-3 py-1 rounded-full text-xs font-semibold'
       };
     }
     
@@ -19,7 +19,7 @@ export const BadgeStatus = ({ status }: BadgeStatusProps) => {
     return {
       label: 'PENDENTE',
       variant: 'secondary' as const,
-      className: 'bg-amber-500/15 text-amber-300 border-amber-500/40 px-3 py-1 rounded-full text-xs font-semibold'
+      className: 'sea-badge-pendente bg-amber-500/15 text-amber-400 border-amber-500/40 px-3 py-1 rounded-full text-xs font-semibold'
     };
   };
 

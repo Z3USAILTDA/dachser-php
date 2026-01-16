@@ -156,29 +156,29 @@
   
   /* Cards com tom quente sutil */
   --card: 40 15% 99%;
-  --card-foreground: 220 20% 12%;
+  --card-foreground: 220 25% 10%;
   --popover: 40 20% 99%;
-  --popover-foreground: 220 20% 12%;
+  --popover-foreground: 220 25% 10%;
   
   /* Inputs com melhor contraste */
   --input: 40 15% 96%;
   --muted: 40 12% 93%;
-  --muted-foreground: 220 12% 42%;
+  --muted-foreground: 220 15% 35%;
   
   /* Accent e secondary refinados */
   --accent: 40 12% 95%;
-  --accent-foreground: 220 20% 12%;
+  --accent-foreground: 220 25% 10%;
   --secondary: 40 12% 96%;
-  --secondary-foreground: 220 18% 18%;
+  --secondary-foreground: 220 22% 15%;
   
   /* Borders mais definidas */
-  --border: 220 12% 82%;
+  --border: 220 12% 78%;
   
-  /* Foreground para textos */
-  --foreground: 220 20% 12%;
+  /* Foreground para textos - mais escuro */
+  --foreground: 220 25% 8%;
   
   /* Ring mantido dourado */
-  --ring: 45 100% 50%;
+  --ring: 45 100% 45%;
 }
 
 /* Transição suave entre temas */
@@ -249,13 +249,14 @@ html {
     inset 0 0 0 1px rgba(180, 150, 0, 0.15) !important;
 }
 
-/* Células da tabela */
+/* Células da tabela - contraste melhorado */
 .theme-light .sea-table-cell {
-  color: hsl(220 18% 18%) !important;
+  color: hsl(220 22% 12%) !important;
+  font-weight: 500 !important;
 }
 
 .theme-light .sea-table-cell-muted {
-  color: hsl(220 12% 45%) !important;
+  color: hsl(220 15% 38%) !important;
 }
 
 /* Badge de pendente */
@@ -316,6 +317,21 @@ html {
   border-color: rgba(255, 200, 0, 0.5) !important;
   color: hsl(220 18% 20%) !important;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06) !important;
+}
+
+/* Badges com contraste melhorado no tema claro */
+.theme-light .sea-badge-realizado {
+  background: rgba(16, 185, 129, 0.18) !important;
+  color: hsl(155 70% 28%) !important;
+  border-color: rgba(16, 185, 129, 0.5) !important;
+  font-weight: 700 !important;
+}
+
+.theme-light .sea-badge-pendente {
+  background: rgba(245, 158, 11, 0.18) !important;
+  color: hsl(35 85% 32%) !important;
+  border-color: rgba(217, 119, 6, 0.5) !important;
+  font-weight: 700 !important;
 }
 
 /* Inputs premium no tema claro */
