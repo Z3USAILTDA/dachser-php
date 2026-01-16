@@ -1127,8 +1127,13 @@ NCM CODES:
   → Update: Add missing NCM codes to HBL that are in Manifest.
 
 EXTRACTION RULES FOR NCM CODES:
-1. From MANIFEST: Extract ALL values from "HS Code" or "NCM Code" columns EXACTLY as they appear.
+1. From MANIFEST: Extract ONLY values from "NCM Code" or "Código NCM" columns.
+   ★★★ NEVER extract from "HS Code" columns - HS and NCM are different classification systems ★★★
+   - NCM = Brazilian 8-digit tariff code (e.g., 84812090, 73182900)
+   - HS Code = International 4-6 digit code (e.g., 8481, 870850) - DO NOT INCLUDE THESE
 2. From HBL: Extract ALL NCM values from NCM-CODES section and cargo descriptions EXACTLY as they appear.
+   - Look for labels: "NCM:", "NCM-CODES:", "NCM CODE:", "CODIGO NCM:"
+   - IGNORE labels: "HS:", "HS-CODE:", "HS CODE:", "H.S.:" - these are HS codes, NOT NCMs
 3. DEDUPLICATE before comparison.
 4. COMPARE AS LITERAL STRINGS - each value must be identical to be a match.
 5. Report Missing = items in Manifest not found in HBL.
@@ -1429,13 +1434,20 @@ DOCUMENT STRUCTURE DIFFERENCES:
      * "FREIGHT COLLECT" = "COLLECT" = "FREIGHT PAYABLE AT DESTINATION"
    - COMPARISON RULE: Normalize to PREPAID or COLLECT before comparing
 
-9) NCM/HS CODES - CRITICAL EXTRACTION RULE:
-   - Look for NCM/HS codes in cargo/goods description area of ANY length (4-digit, 8-digit, etc.)
-   - Search keywords: "NCM", "HS", "HS CODE", "HSCODE", "H.S.", "TARIC", "TARIFF"
-   - Use ±60 character context window around keywords
-   - Extract ALL unique codes from each document EXACTLY as they appear (preserve original length)
+9) NCM CODES - CRITICAL EXTRACTION RULE (★★★ NCM ONLY - NOT HS CODES ★★★):
+   - Look for NCM codes in cargo/goods description area of ANY length (4-digit, 8-digit, etc.)
+   - Search keywords: "NCM", "NCM-CODES", "NCM CODES", "NCM CODE", "CODIGO NCM", "CÓDIGO NCM"
+   - ★★★ DO NOT search for "HS", "HS CODE", "HSCODE", "H.S.", "TARIC" - these are different systems ★★★
+   - Use ±60 character context window around NCM keywords only
+   - Extract ALL unique NCM codes from each document EXACTLY as they appear (preserve original length)
    - Include BOTH 4-digit codes (like 8481) AND 8-digit codes (like 84819090)
    - COMPARISON RULE: Compare as literal strings - "8481" ≠ "84819090" (different values!)
+   
+   ★★★ CRITICAL: NCM vs HS CODE - DO NOT CONFUSE ★★★
+   - NCM (Nomenclatura Comum do Mercosul) = Brazilian tariff code = typically 8 digits
+   - HS Code (Harmonized System) = International code = 4-6 digits
+   - If you see "HS: 870850" → This is an HS CODE, DO NOT INCLUDE
+   - If you see "NCM: 8708" or "NCM-CODES: 8708, 8481" → These are NCMs, INCLUDE THESE
 
 ███████████████████████████████████████████████████████████████████████████████
 ███ MASTER EXTRACTION RULE - APPLY TO ALL FIELDS                            ███
@@ -1543,21 +1555,44 @@ NOTE: Extract Vessel and Voyage SEPARATELY. If HBL has combined "VESSEL / VOYAGE
 
 ★★★ CRITICAL: YOU MUST ALWAYS INCLUDE THIS EXACT NCM CODES SECTION ★★★
 
-★★★ NCM/HS CODE EXTRACTION FROM PDFs - READ CAREFULLY ★★★
+★★★ NCM CODE EXTRACTION FROM PDFs - READ CAREFULLY ★★★
+
+███████████████████████████████████████████████████████████████████████████████
+███ ⚠️ CRITICAL: NCM vs HS CODE - DO NOT CONFUSE ⚠️                           ███
+███████████████████████████████████████████████████████████████████████████████
+
+NCM (Nomenclatura Comum do Mercosul) and HS Code (Harmonized System) are DIFFERENT:
+- NCM = Brazilian tariff code = typically 8 digits (e.g., 84812090, 73182900)
+- HS Code = International code = 4-6 digits (e.g., 8481, 870850)
+
+EXTRACTION RULES:
+1. From HBL/MBL PDFs: Extract ONLY values labeled "NCM:", "NCM-CODES:", "NCM CODE:"
+2. IGNORE values labeled "HS:", "HS Code:", "HS-CODE:", "H.S.:"
+3. Example: "HS: 870850" = HS Code (DO NOT INCLUDE)
+           "NCM: 87089900" = NCM (INCLUDE THIS)
+4. When you see a 4-6 digit code, verify it's from an NCM label, NOT HS label
+5. If uncertain, DO NOT include the code
+
+WRONG EXTRACTION (do not do this):
+- Including "870850" from "HS: 870850" as an NCM → THIS IS AN HS CODE, NOT NCM
+
+CORRECT EXTRACTION:
+- HBL shows "NCM-CODES: 8708, 8481, 84812090" → extract all three
+- MBL shows "HS: 870850" followed by "NCM: 8708" → extract ONLY "8708"
 
 STEP 1: LOCATE NCM CODES IN EACH PDF
 Both HBL and MBL documents typically contain NCM codes in:
 - A dedicated "NCM-CODES:" section (often on later pages, like page 4-6 of multi-page BLs)
 - Listed vertically as a series of 4-digit or 8-digit numbers (e.g., 8481, 8483, 8414...)
-- Near "HS-CODE:" labels in cargo description sections
 - Sometimes in "Marks and Numbers" column as a series of numbers
 - Look for semicolon-separated 8-digit codes (e.g., "74152900; 84819090; 84818092; 85443000")
+- ★★★ NEVER extract from "HS-CODE:" labels - these are HS codes, NOT NCMs ★★★
 
 STEP 2: SCAN ALL PAGES OF EACH DOCUMENT
 - NCM codes are often on LATER pages (page 4, 5, 6, etc.), NOT on page 1
 - HBL and MBL often have "Rider" or "Continuation" pages with NCM lists
 - Search for the keyword "NCM" or "NCM-CODES:" to find the section
-- Also look for "HS-CODE:" labels in cargo line items
+- ★★★ DO NOT look for "HS-CODE:" labels - ignore these entirely ★★★
 
 STEP 3: EXTRACT ALL UNIQUE NCM CODES
 From HBL: Extract ALL NCM codes, including:
@@ -1579,12 +1614,13 @@ NCM CODES
 - Status: MATCH (if lists are 100% identical) or UPDATE REQUIRED (if ANY difference)
 
 ★★★ COMPARISON RULES ★★★
-1. Extract ALL NCM/HS codes from both documents exactly as they appear
-2. Include codes of ANY length: 4-digit (8481), 8-digit (84819090), or any other format
+1. Extract ONLY NCM codes from both documents (★★★ NEVER include HS codes ★★★)
+2. Include NCM codes of ANY length: 4-digit (8481), 8-digit (84819090), or any other format
 3. DO NOT truncate or normalize code lengths - preserve exactly as written
 4. Compare as literal strings: "8481" ≠ "84819090" (different codes!)
 5. A code is "Missing in MBL" if it appears in HBL but not in MBL
 6. A code is "Extra in MBL" if it appears in MBL but not in HBL
+7. ★★★ If you extracted a code from an "HS:" label, REMOVE IT from the list ★★★
 
 ★★★ EXAMPLE OUTPUT ★★★
 NCM CODES
