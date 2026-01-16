@@ -147,102 +147,225 @@
 
 /* Custom Animations */
 /* ============================================
-   TEMA CLARO - Afeta apenas elementos UI
-   O fundo da página permanece inalterado
+   TEMA CLARO PREMIUM - Afeta elementos UI
+   Background premium aplicado no PageLayout
    ============================================ */
 .theme-light {
-  /* Cards e containers */
-  --card: 0 0% 98%;
-  --card-foreground: 220 15% 10%;
-  --popover: 0 0% 100%;
-  --popover-foreground: 220 15% 10%;
+  /* Background off-white cremoso */
+  --background: 40 20% 97%;
   
-  /* Inputs e áreas mutáveis */
-  --input: 220 10% 95%;
-  --muted: 220 10% 92%;
-  --muted-foreground: 220 10% 35%;
+  /* Cards com tom quente sutil */
+  --card: 40 15% 99%;
+  --card-foreground: 220 20% 12%;
+  --popover: 40 20% 99%;
+  --popover-foreground: 220 20% 12%;
   
-  /* Accent e secondary */
-  --accent: 220 10% 94%;
-  --accent-foreground: 220 15% 10%;
-  --secondary: 220 10% 96%;
-  --secondary-foreground: 220 15% 15%;
+  /* Inputs com melhor contraste */
+  --input: 40 15% 96%;
+  --muted: 40 12% 93%;
+  --muted-foreground: 220 12% 42%;
   
-  /* Borders mais suaves */
-  --border: 220 10% 82%;
+  /* Accent e secondary refinados */
+  --accent: 40 12% 95%;
+  --accent-foreground: 220 20% 12%;
+  --secondary: 40 12% 96%;
+  --secondary-foreground: 220 18% 18%;
+  
+  /* Borders mais definidas */
+  --border: 220 12% 82%;
   
   /* Foreground para textos */
-  --foreground: 220 15% 10%;
+  --foreground: 220 20% 12%;
+  
+  /* Ring mantido dourado */
+  --ring: 45 100% 50%;
 }
 
-/* Estilos específicos para tema claro em tabelas e cards */
+/* Transição suave entre temas */
+html {
+  transition: background-color 0.3s ease;
+}
+
+.sea-card,
+.sea-table-header,
+.sea-table-row,
+.sea-action-btn,
+.sea-header-btn,
+.sea-filter-btn,
+.sea-pending-badge {
+  transition: 
+    background 0.3s ease,
+    border-color 0.3s ease,
+    box-shadow 0.3s ease,
+    color 0.3s ease;
+}
+
+/* ============================================
+   ESTILOS PREMIUM PARA TEMA CLARO
+   ============================================ */
+
+/* Cards premium com sombra elegante */
+.theme-light .sea-card {
+  background: rgba(255, 255, 255, 0.92) !important;
+  border: 1px solid rgba(0, 0, 0, 0.06) !important;
+  box-shadow: 
+    0 1px 2px rgba(0, 0, 0, 0.03),
+    0 4px 12px rgba(0, 0, 0, 0.04),
+    0 16px 32px rgba(0, 0, 0, 0.06),
+    inset 0 1px 0 rgba(255, 255, 255, 0.9) !important;
+  backdrop-filter: blur(12px);
+}
+
+/* Tabela header com gradiente suave */
 .theme-light .sea-table-header {
-  background: hsl(220 10% 95%) !important;
-  color: hsl(220 15% 25%) !important;
+  background: linear-gradient(180deg, 
+    hsl(40 15% 96%) 0%, 
+    hsl(40 12% 93%) 100%) !important;
+  color: hsl(220 18% 28%) !important;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.06) !important;
 }
 
+.theme-light .sea-table-header th {
+  font-weight: 600 !important;
+  letter-spacing: 0.02em !important;
+}
+
+/* Rows com hover elegante */
 .theme-light .sea-table-row {
-  background: hsl(0 0% 100%) !important;
-  border-color: hsl(220 10% 90%) !important;
+  background: rgba(255, 255, 255, 0.85) !important;
+  border-color: rgba(0, 0, 0, 0.04) !important;
 }
 
 .theme-light .sea-table-row:hover {
-  background: hsl(220 10% 98%) !important;
+  background: linear-gradient(90deg, 
+    rgba(255, 252, 245, 0.98) 0%, 
+    rgba(255, 250, 240, 0.95) 50%,
+    rgba(255, 252, 245, 0.98) 100%) !important;
+  box-shadow: 
+    0 2px 8px rgba(0, 0, 0, 0.04),
+    inset 0 0 0 1px rgba(255, 200, 0, 0.1) !important;
 }
 
+/* Células da tabela */
 .theme-light .sea-table-cell {
-  color: hsl(220 15% 15%) !important;
+  color: hsl(220 18% 18%) !important;
 }
 
 .theme-light .sea-table-cell-muted {
-  color: hsl(220 10% 40%) !important;
+  color: hsl(220 12% 45%) !important;
 }
 
-.theme-light .sea-card {
-  background: rgba(255, 255, 255, 0.95) !important;
-  border-color: hsl(220 10% 85%) !important;
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1) !important;
-}
-
+/* Badge de pendente */
 .theme-light .sea-pending-badge {
-  background: rgba(255, 255, 255, 0.9) !important;
-  border-color: hsl(220 10% 80%) !important;
+  background: rgba(255, 255, 255, 0.95) !important;
+  border: 1px solid rgba(0, 0, 0, 0.08) !important;
+  box-shadow: 
+    0 1px 3px rgba(0, 0, 0, 0.04),
+    0 4px 12px rgba(0, 0, 0, 0.05) !important;
 }
 
 .theme-light .sea-pending-badge span {
-  color: hsl(220 10% 35%) !important;
+  color: hsl(220 15% 32%) !important;
 }
 
+/* Header buttons premium */
 .theme-light .sea-header-btn {
-  background: rgba(255, 255, 255, 0.9) !important;
-  border-color: hsl(220 10% 75%) !important;
-  color: hsl(220 10% 30%) !important;
+  background: rgba(255, 255, 255, 0.92) !important;
+  border: 1px solid rgba(0, 0, 0, 0.1) !important;
+  color: hsl(220 15% 30%) !important;
+  box-shadow: 
+    0 1px 2px rgba(0, 0, 0, 0.04),
+    0 2px 6px rgba(0, 0, 0, 0.03) !important;
 }
 
 .theme-light .sea-header-btn:hover {
   background: rgba(255, 255, 255, 1) !important;
+  border-color: rgba(255, 200, 0, 0.4) !important;
+  box-shadow: 
+    0 2px 8px rgba(0, 0, 0, 0.06),
+    0 0 0 2px rgba(255, 200, 0, 0.1) !important;
 }
 
+/* Filter buttons */
 .theme-light .sea-filter-btn {
-  background: rgba(255, 255, 255, 0.8) !important;
-  border-color: hsl(220 10% 80%) !important;
-  color: hsl(220 10% 30%) !important;
+  background: rgba(255, 255, 255, 0.88) !important;
+  border: 1px solid rgba(0, 0, 0, 0.08) !important;
+  color: hsl(220 15% 32%) !important;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.03) !important;
 }
 
 .theme-light .sea-filter-btn:hover {
-  background: rgba(255, 255, 255, 0.95) !important;
-  color: hsl(220 15% 10%) !important;
+  background: rgba(255, 255, 255, 0.98) !important;
+  border-color: rgba(0, 0, 0, 0.12) !important;
+  color: hsl(220 18% 15%) !important;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.05) !important;
 }
 
+/* Action buttons */
 .theme-light .sea-action-btn {
-  background: transparent !important;
-  border-color: hsl(220 10% 75%) !important;
-  color: hsl(220 10% 40%) !important;
+  background: rgba(255, 255, 255, 0.75) !important;
+  border: 1px solid rgba(0, 0, 0, 0.1) !important;
+  color: hsl(220 12% 42%) !important;
 }
 
 .theme-light .sea-action-btn:hover {
-  background: hsl(220 10% 95%) !important;
-  color: hsl(220 15% 20%) !important;
+  background: rgba(255, 255, 255, 0.95) !important;
+  border-color: rgba(255, 200, 0, 0.5) !important;
+  color: hsl(220 18% 20%) !important;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06) !important;
+}
+
+/* Inputs premium no tema claro */
+.theme-light input,
+.theme-light select,
+.theme-light textarea {
+  background: rgba(255, 255, 255, 0.95) !important;
+  border-color: rgba(0, 0, 0, 0.1) !important;
+  color: hsl(220 18% 15%) !important;
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.03) !important;
+}
+
+.theme-light input::placeholder,
+.theme-light textarea::placeholder {
+  color: hsl(220 10% 55%) !important;
+}
+
+.theme-light input:focus,
+.theme-light select:focus,
+.theme-light textarea:focus {
+  border-color: hsl(45 100% 50%) !important;
+  box-shadow: 
+    inset 0 1px 2px rgba(0, 0, 0, 0.03),
+    0 0 0 3px rgba(255, 200, 0, 0.12) !important;
+  outline: none !important;
+}
+
+/* Scrollbar para tema claro */
+.theme-light ::-webkit-scrollbar-track {
+  background: hsl(40 15% 95%);
+}
+
+.theme-light ::-webkit-scrollbar-thumb {
+  background: hsl(220 10% 78%);
+}
+
+.theme-light ::-webkit-scrollbar-thumb:hover {
+  background: hsl(220 10% 65%);
+}
+
+/* Status badges no tema claro */
+.theme-light [class*="bg-green"],
+.theme-light [class*="bg-emerald"] {
+  background: hsl(142 65% 42%) !important;
+}
+
+.theme-light [class*="bg-yellow"],
+.theme-light [class*="bg-amber"] {
+  background: hsl(45 95% 48%) !important;
+}
+
+.theme-light [class*="bg-red"] {
+  background: hsl(0 65% 50%) !important;
 }
 
 @keyframes float {
