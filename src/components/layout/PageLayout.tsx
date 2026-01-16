@@ -175,18 +175,18 @@ export function PageLayout({
           </button>
 
           <header>
-            <h1 className={`text-[1.6rem] tracking-[0.24em] uppercase ${isLight ? "text-[#2a2a2a]" : "text-[#f5f5f5]"}`}>
+            <h1 className={`text-[1.6rem] tracking-[0.24em] uppercase font-semibold ${isLight ? "text-[#1a1a1a]" : "text-[#f5f5f5]"}`}>
               {title}
             </h1>
             {subtitle && (
-              <p className={`text-[0.9rem] mt-0.5 ${isLight ? "text-[#666]" : "text-[#aaaaaa]"}`}>
+              <p className={`text-[0.9rem] mt-0.5 font-medium ${isLight ? "text-[#333]" : "text-[#aaaaaa]"}`}>
                 Intelligent Logistics – {subtitle}
               </p>
             )}
             <div className="flex gap-1.5 mt-1.5">
-              <span className={`w-1.5 h-1.5 rounded-full ${isLight ? "bg-[#b08c00]" : "bg-[#ffc800] shadow-[0_0_10px_rgba(255,200,0,.9)]"}`} />
-              <span className={`w-1.5 h-1.5 rounded-full ${isLight ? "bg-[#b08c00]" : "bg-[#ffc800] shadow-[0_0_10px_rgba(255,200,0,.9)]"}`} />
-              <span className={`w-1.5 h-1.5 rounded-full ${isLight ? "bg-[#b08c00]" : "bg-[#ffc800] shadow-[0_0_10px_rgba(255,200,0,.9)]"}`} />
+              <span className={`w-1.5 h-1.5 rounded-full ${isLight ? "bg-[#9a7800]" : "bg-[#ffc800] shadow-[0_0_10px_rgba(255,200,0,.9)]"}`} />
+              <span className={`w-1.5 h-1.5 rounded-full ${isLight ? "bg-[#9a7800]" : "bg-[#ffc800] shadow-[0_0_10px_rgba(255,200,0,.9)]"}`} />
+              <span className={`w-1.5 h-1.5 rounded-full ${isLight ? "bg-[#9a7800]" : "bg-[#ffc800] shadow-[0_0_10px_rgba(255,200,0,.9)]"}`} />
             </div>
           </header>
         </div>
@@ -194,9 +194,9 @@ export function PageLayout({
         {/* Right - User + Actions */}
         <div className="flex items-center gap-2.5 text-[0.85rem]">
           {rightContent}
-          <div className={`px-[14px] py-1.5 rounded-full border max-w-[220px] truncate ${
+          <div className={`px-[14px] py-1.5 rounded-full border max-w-[220px] truncate font-medium ${
             isLight 
-              ? "bg-white/90 border-[rgba(0,0,0,.1)] text-[#555] shadow-sm" 
+              ? "bg-white/95 border-[rgba(0,0,0,.12)] text-[#1a1a1a] shadow-sm" 
               : "bg-[rgba(0,0,0,.70)] border-[rgba(255,255,255,.18)] text-[#aaaaaa]"
           }`}>
             @{user?.username || user?.email?.split("@")[0] || "usuario"}
