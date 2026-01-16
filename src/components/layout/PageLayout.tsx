@@ -61,31 +61,31 @@ export function PageLayout({
               }}
             />
             
-            {/* Overlay claro semi-transparente */}
+            {/* Overlay azulado semi-transparente - padrão do projeto */}
             <div 
               className="absolute inset-0"
               style={{
-                background: 'linear-gradient(120deg, rgba(245, 242, 235, 0.65), rgba(250, 248, 243, 0.60))',
+                background: 'linear-gradient(120deg, rgba(240, 245, 250, 0.75), rgba(220, 235, 250, 0.70))',
               }}
             />
             
-            {/* Overlay suave com tom dourado */}
+            {/* Overlay com tom dourado intensificado */}
             <div 
               className="absolute inset-0"
               style={{
                 background: `
-                  radial-gradient(ellipse at 15% 15%, rgba(201, 160, 0, 0.06) 0%, transparent 40%),
-                  radial-gradient(ellipse at 85% 85%, rgba(201, 160, 0, 0.04) 0%, transparent 40%)
+                  radial-gradient(ellipse at 20% 20%, rgba(245, 184, 67, 0.15) 0%, transparent 50%),
+                  radial-gradient(ellipse at 80% 80%, rgba(245, 184, 67, 0.10) 0%, transparent 50%)
                 `
               }}
             />
             
-            {/* Linhas decorativas sutis */}
-            <div className="absolute inset-0 opacity-[0.02]">
+            {/* Linhas decorativas douradas */}
+            <div className="absolute inset-0 opacity-[0.08]">
               {[...Array(5)].map((_, i) => (
                 <div
                   key={`line-light-${i}`}
-                  className="absolute h-full w-px bg-gradient-to-b from-[#a08000]/50 to-transparent"
+                  className="absolute h-full w-px bg-gradient-to-b from-[#ffc800]/40 to-transparent"
                   style={{
                     left: `${18 + i * 16}%`,
                     transform: `skewX(${-15 + i * 7}deg)`,
