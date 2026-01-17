@@ -25,7 +25,10 @@ const navTabs: NavTab[] = [{
 }];
 const DraftExportacao = () => {
   const navigate = useNavigate();
-  const { theme, toggleTheme } = useTheme();
+  const {
+    theme,
+    toggleTheme
+  } = useTheme();
   const [activeTab, setActiveTab] = useState<TabType>("grid");
   const [statusFilter, setStatusFilter] = useState<string | null>(null);
   const [seaDbStats, setSeaDbStats] = useState<SeaDbStats | null>(null);
@@ -43,13 +46,14 @@ const DraftExportacao = () => {
   const fetchSeaDbStats = useCallback(async () => {
     setIsLoadingDbStats(true);
     try {
-      const { data, error } = await supabase.functions.invoke("fetch-sea-master-dados-stats");
-      
+      const {
+        data,
+        error
+      } = await supabase.functions.invoke("fetch-sea-master-dados-stats");
       if (error) {
         console.error("Error fetching sea db stats:", error);
         return;
       }
-
       if (data?.success && data?.stats) {
         setSeaDbStats(data.stats);
       }
@@ -59,37 +63,31 @@ const DraftExportacao = () => {
       setIsLoadingDbStats(false);
     }
   }, []);
-
   useEffect(() => {
     fetchSeaDbStats();
   }, [fetchSeaDbStats]);
-
   useEffect(() => {
     if (!storedUser) {
       navigate("/");
     }
   }, [navigate, storedUser]);
-
   if (!storedUser) {
-    return (
-      <div className="min-h-screen relative overflow-x-hidden">
+    return <div className="min-h-screen relative overflow-x-hidden">
         <div className="fixed inset-0 z-0">
           <div className="absolute inset-0" style={{
-            backgroundImage: `url(${dachserBg})`,
-            backgroundSize: 'cover',
-            backgroundPosition: 'center'
-          }} />
+          backgroundImage: `url(${dachserBg})`,
+          backgroundSize: 'cover',
+          backgroundPosition: 'center'
+        }} />
           <div className="absolute inset-0" style={{
-            background: 'linear-gradient(120deg, rgba(4, 17, 45, 0.92), rgba(26, 93, 173, 0.55))'
-          }} />
+          background: 'linear-gradient(120deg, rgba(4, 17, 45, 0.92), rgba(26, 93, 173, 0.55))'
+        }} />
         </div>
         <div className="relative z-10 flex items-center justify-center h-screen">
           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#ffc800]"></div>
         </div>
-      </div>
-    );
+      </div>;
   }
-
   return <div className="min-h-screen relative overflow-x-hidden">
       {/* Background with image and gradient overlay */}
       <div className="fixed inset-0 z-0">
@@ -155,13 +153,7 @@ const DraftExportacao = () => {
             Atualizar
           </button>
           
-          <button
-            onClick={toggleTheme}
-            className="w-8 h-8 rounded-full border border-[rgba(255,255,255,.25)] flex items-center justify-center bg-[rgba(0,0,0,.7)] text-[#aaaaaa] hover:text-[#ffc800] hover:bg-[rgba(0,0,0,.9)] transition"
-            title={theme === "dark" ? "Mudar para tema claro" : "Mudar para tema escuro"}
-          >
-            {theme === "dark" ? <Sun size={16} /> : <Moon size={16} />}
-          </button>
+          
           
           <button onClick={() => navigate("/sea/manual-drafts")} className="w-8 h-8 rounded-full border border-[rgba(255,255,255,.25)] flex items-center justify-center bg-[rgba(0,0,0,.7)] text-[#aaaaaa] hover:text-[#ffc800] hover:bg-[rgba(0,0,0,.9)] transition" title="Ajuda">
             <HelpCircle size={16} />
