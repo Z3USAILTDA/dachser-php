@@ -47,14 +47,10 @@ export type Remessa = "NENHUM" | "REMESSA_12H" | "REMESSA_15H" | "REMESSA_SIMPLE
 export type CobrancaEmNomeDe = "DACHSER" | "CLIENTE";
 
 export type TipoDocumento = 
-  | "FATURA" 
-  | "NOTA_FISCAL" 
-  | "DEMONSTRATIVO" 
+  | "VOUCHER"
+  | "SPO"
   | "ICMS" 
   | "ARMAZENAGEM"
-  | "NF_SERVICO"
-  | "NF_DEBITO"
-  | "BOLETO"
   | "ADF"
   | "OUTROS";
 

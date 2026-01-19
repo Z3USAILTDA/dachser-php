@@ -296,15 +296,8 @@ export const EditVoucherDialog = ({ open, onOpenChange, onSuccess, voucher }: Ed
                 <SelectContent>
                   <SelectItem value="VOUCHER">Voucher</SelectItem>
                   <SelectItem value="SPO">SPO</SelectItem>
-                  <SelectItem value="FATURA">Fatura</SelectItem>
-                  <SelectItem value="NOTA_FISCAL">Nota Fiscal</SelectItem>
-                  <SelectItem value="DEMONSTRATIVO">Demonstrativo</SelectItem>
-                  <SelectItem value="ICMS">ICMS (urgente)</SelectItem>
-                  <SelectItem value="ARMAZENAGEM">Armazenagem (urgente)</SelectItem>
-                  <SelectItem value="NF_SERVICO">NF Serviço</SelectItem>
-                  <SelectItem value="NF_DEBITO">NF Débito</SelectItem>
-                  <SelectItem value="BOLETO">Boleto</SelectItem>
-                  <SelectItem value="ADMINISTRATIVO">Administrativo</SelectItem>
+                  <SelectItem value="ICMS">ICMS</SelectItem>
+                  <SelectItem value="ARMAZENAGEM">Armazenagem</SelectItem>
                   <SelectItem value="ADF">ADF</SelectItem>
                   <SelectItem value="OUTROS">Outros</SelectItem>
                 </SelectContent>
