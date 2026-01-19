@@ -279,6 +279,10 @@ const ContainerTracking = () => {
   const {
     isAdmin
   } = useUserRole();
+  
+  // Get username from localStorage (MariaDB auth)
+  const storedUser = localStorage.getItem("user") || localStorage.getItem("dachser_user");
+  const loggedUsername = storedUser ? JSON.parse(storedUser)?.username : null;
   const {
     theme,
     toggleTheme
@@ -1385,7 +1389,7 @@ const ContainerTracking = () => {
 
         <div className="flex items-center gap-2.5 text-[0.85rem]">
           <div className="px-[14px] py-1.5 rounded-full bg-[rgba(0,0,0,.70)] border border-[rgba(255,255,255,.18)] text-[#aaaaaa] max-w-[220px] truncate">
-            @{user?.email?.split("@")[0] || "admin"}
+            @{loggedUsername || "usuário"}
           </div>
           
           <button onClick={() => navigate("/sea/tracking/notificacoes")} className="w-8 h-8 rounded-full border border-[rgba(255,255,255,.25)] flex items-center justify-center bg-[rgba(0,0,0,.7)] text-[#aaaaaa] hover:text-[#ffc800] hover:bg-[rgba(0,0,0,.9)] transition" title="Regras de Notificação">
