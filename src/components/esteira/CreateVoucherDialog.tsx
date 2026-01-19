@@ -1093,11 +1093,7 @@ export const CreateVoucherDialog = ({
                             <SelectItem value="SPO">SPO</SelectItem>
                             <SelectItem value="ICMS">ICMS</SelectItem>
                             <SelectItem value="ARMAZENAGEM">Armazenagem</SelectItem>
-                            <SelectItem value="ADMINISTRATIVO">Administrativo</SelectItem>
                             <SelectItem value="ADF">ADF</SelectItem>
-                            <SelectItem value="FATURA">Fatura</SelectItem>
-                            <SelectItem value="NOTA_FISCAL">Nota Fiscal</SelectItem>
-                            <SelectItem value="DEMONSTRATIVO">Demonstrativo</SelectItem>
                             <SelectItem value="OUTROS">Outros</SelectItem>
                           </SelectContent>
                         </Select>
