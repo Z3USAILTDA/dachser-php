@@ -288,6 +288,7 @@ const ContainerTracking = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
   const [filterLine, setFilterLine] = useState("all");
+  const [filterCoordenador, setFilterCoordenador] = useState("all");
   const [filterTipoProcesso, setFilterTipoProcesso] = useState<"all" | "SEA IMPORT" | "SEA EXPORT">("all");
   const [activeCardFilter, setActiveCardFilter] = useState<"all" | "transito" | "alerta" | "critico" | "entregues">("all");
   const [mblList, setMblList] = useState<MblTrackingData[]>([]);
@@ -1248,6 +1249,7 @@ const ContainerTracking = () => {
       const matchesSearch = !searchTerm || m.mbl_id.toLowerCase().includes(searchLower) || m.consignee && m.consignee.toLowerCase().includes(searchLower) || m.shipping_line && m.shipping_line.toLowerCase().includes(searchLower) || m.navio && m.navio.toLowerCase().includes(searchLower);
       const armador = normalizeShippingLine(m.shipping_line);
       const matchesLine = filterLine === "all" || armador === filterLine;
+      const matchesCoordenador = filterCoordenador === "all" || (m.nome_analista || "-") === filterCoordenador;
       let matchesCardFilter = true;
       if (activeCardFilter === "transito") {
         matchesCardFilter = isEmTransito(m.last_event) && !isEntregue(m.last_event) && !isEmAlerta(m.last_event, m.is_eta_delayed) && !isEmCritico(m.is_critico);
@@ -1259,10 +1261,10 @@ const ContainerTracking = () => {
         matchesCardFilter = isEntregue(m.last_event);
       }
       const matchesTipoProcesso = filterTipoProcesso === "all" || m.tipo_processo === filterTipoProcesso;
-      return matchesSearch && matchesLine && matchesCardFilter && matchesTipoProcesso;
+      return matchesSearch && matchesLine && matchesCardFilter && matchesTipoProcesso && matchesCoordenador;
     });
     return mbls;
-  }, [mblList, searchTerm, filterLine, activeCardFilter, filterTipoProcesso]);
+  }, [mblList, searchTerm, filterLine, filterCoordenador, activeCardFilter, filterTipoProcesso]);
   const totalPages = Math.ceil(filteredMbls.length / itemsPerPage);
   const startIndex = (currentPage - 1) * itemsPerPage;
   const endIndex = startIndex + itemsPerPage;
@@ -1294,6 +1296,20 @@ const ContainerTracking = () => {
       }
     });
     return Array.from(armadoresSet).sort();
+  }, [mblList]);
+
+  // Dynamic list of coordenadores
+  const dynamicCoordenadores = useMemo(() => {
+    const coordenadoresSet = new Set<string>();
+    mblList.forEach(m => {
+      const coordenador = m.nome_analista || "-";
+      coordenadoresSet.add(coordenador);
+    });
+    return Array.from(coordenadoresSet).sort((a, b) => {
+      if (a === "-") return 1;
+      if (b === "-") return -1;
+      return a.localeCompare(b);
+    });
   }, [mblList]);
 
   // Get auto sync status label
@@ -1544,6 +1560,24 @@ const ContainerTracking = () => {
                       <SelectItem value="all">Todos</SelectItem>
                       {dynamicArmadores.map(armador => <SelectItem key={armador} value={armador}>
                           {armador}
+                        </SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </div>
+                
+                <div className="flex items-center gap-1.5">
+                  <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-[rgba(0,0,0,.5)] border border-[rgba(255,255,255,.22)]">
+                    <span className="text-[0.68rem] tracking-[0.1em] uppercase text-[#aaaaaa]">👤</span>
+                    <span className="text-[0.68rem] tracking-[0.1em] uppercase text-[#aaaaaa]">Coordenador</span>
+                  </div>
+                  <Select value={filterCoordenador} onValueChange={setFilterCoordenador}>
+                    <SelectTrigger className="h-8 w-[160px] rounded-full bg-[#13141a] border border-[rgba(255,255,255,.14)] text-[0.78rem]">
+                      <SelectValue placeholder="Todos" />
+                    </SelectTrigger>
+                    <SelectContent className="bg-card border border-border z-50">
+                      <SelectItem value="all">Todos</SelectItem>
+                      {dynamicCoordenadores.map(coordenador => <SelectItem key={coordenador} value={coordenador}>
+                          {coordenador}
                         </SelectItem>)}
                     </SelectContent>
                   </Select>
