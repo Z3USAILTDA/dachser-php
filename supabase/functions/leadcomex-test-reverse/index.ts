@@ -14,6 +14,7 @@ interface AttemptLog {
   http_status: number;
   response_time_ms: number;
   error_message?: string;
+  full_response?: any;
 }
 
 interface TestResult {
@@ -179,6 +180,7 @@ serve(async (req) => {
         status: 'not_found',
         http_status: 204,
         response_time_ms: 0,
+        full_response: null,
       };
 
       // Tentar cada variação do HAWB
@@ -190,6 +192,7 @@ serve(async (req) => {
         
         if (result.found && result.data) {
           attemptResult.status = 'found';
+          attemptResult.full_response = result.data;
           matchedDate = testDate;
           foundData = result.data;
           console.log(`[LEADCOMEX-TEST] ENCONTRADO com variação ${hawbVariation} na data ${testDate}`);
@@ -197,6 +200,14 @@ serve(async (req) => {
         } else if (result.error) {
           attemptResult.status = 'error';
           attemptResult.error_message = result.error;
+          attemptResult.full_response = { error: result.error, status: result.status };
+        } else {
+          // 204 No Content
+          attemptResult.full_response = { 
+            message: 'Nenhum dado encontrado (204 No Content)', 
+            hawb_tested: hawbVariation,
+            date_tested: testDate 
+          };
         }
       }
 
