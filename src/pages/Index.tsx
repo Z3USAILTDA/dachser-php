@@ -2435,14 +2435,14 @@ const Index = () => {
                                 <span className="text-sm font-bold" style={{ color: "hsl(120 100% 35%)" }}>
                                   {getStatusCode(awb.last_event)}
                                 </span>
-                                {awb.awb?.startsWith('577') && (
+                                {['083', '147', '160', '615', '865', '016'].some(prefix => awb.awb?.startsWith(prefix)) && (
                                   <TooltipProvider>
                                     <Tooltip>
                                       <TooltipTrigger asChild>
-                                        <Info className="h-4 w-4 text-blue-400 cursor-help" />
+                                        <Info className="h-4 w-4 text-amber-400 cursor-help" />
                                       </TooltipTrigger>
                                       <TooltipContent side="top" className="max-w-xs">
-                                        <p>Status enviado diretamente pela companhia aérea Azul, não obtido através do site da companhia.</p>
+                                        <p>Essa companhia está passando por ajustes, podendo apresentar inconsistência.</p>
                                       </TooltipContent>
                                     </Tooltip>
                                   </TooltipProvider>
