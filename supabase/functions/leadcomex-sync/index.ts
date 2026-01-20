@@ -188,6 +188,49 @@ function normalizeHawb(hawb: string): string {
   return hawb.trim().toUpperCase().replace(/[\s\-_\.\/\\]+/g, '');
 }
 
+// Normaliza MAWB para matching (formato padrão internacional: 057-12345678 ou 05712345678)
+// Remove hífens, espaços e deixa apenas dígitos para comparação uniforme
+function normalizeMawb(mawb: string): string {
+  if (!mawb) return '';
+  // Remove todos os caracteres não-numéricos para matching consistente
+  return mawb.trim().replace(/\D/g, '');
+}
+
+// Gera variações do MAWB para matching flexível
+function generateMawbVariations(mawb: string): string[] {
+  const variations: Set<string> = new Set();
+  if (!mawb) return [];
+  
+  const original = mawb.trim().toUpperCase();
+  
+  // 1. Original
+  variations.add(original);
+  
+  // 2. Normalizado (apenas dígitos)
+  const normalized = normalizeMawb(mawb);
+  if (normalized.length >= 8) {
+    variations.add(normalized);
+    
+    // 3. Formato com hífen após 3 primeiros dígitos (057-12345678)
+    if (normalized.length === 11) {
+      variations.add(`${normalized.slice(0, 3)}-${normalized.slice(3)}`);
+      variations.add(`${normalized.slice(0, 3)} ${normalized.slice(3)}`);
+    }
+    
+    // 4. Últimos 8 dígitos (parte numérica sem prefixo)
+    if (normalized.length > 8) {
+      variations.add(normalized.slice(-8));
+    }
+  }
+  
+  // 5. Se já tem hífen, adicionar versão sem
+  if (original.includes('-')) {
+    variations.add(original.replace(/-/g, ''));
+  }
+  
+  return [...variations].filter(v => v.length > 0);
+}
+
 // Extrai parte numérica do HAWB para matching adicional
 // Formato MariaDB: "FMO-16537219" ou "STR-15230632" → extrai "16537219" ou "15230632"
 // Formato LeadComex: pode ser "16537219" direto ou formato semelhante
@@ -655,23 +698,69 @@ serve(async (req) => {
         );
       }
 
-      // 2. Criar mapa de HAWBs da LeadComex para lookup rápido (múltiplas chaves por house)
-      const leadcomexMap = new Map<string, LeadComexHouse>();
+      // 2. NOVA ESTRATÉGIA: Buscar detalhes de cada house para obter MAWB
+      // Criar mapa: MAWB normalizado → {house, carga}
+      console.log(`[LEADCOMEX] Buscando detalhes e MAWB para ${leadcomexHouses.length} houses...`);
+      
+      interface LeadComexEntry {
+        house: LeadComexHouse;
+        carga: LeadComexCarga;
+        mawb: string;
+      }
+      
+      const mawbToDataMap = new Map<string, LeadComexEntry>();
+      let detailsFetched = 0;
+      let detailsWithMawb = 0;
+      
       for (const house of leadcomexHouses) {
-        // Gerar todas as variações possíveis do HAWB
-        const variations = generateHawbVariations(house.hawb);
-        for (const variation of variations) {
-          if (!leadcomexMap.has(variation)) {
-            leadcomexMap.set(variation, house);
+        try {
+          // Buscar detalhes completos (inclui MAWB)
+          const carga = await fetchCargaDetalhada(leadcomexToken, house.hawb, house.dataEmissao);
+          detailsFetched++;
+          
+          if (!carga) continue;
+          
+          // Extrair MAWB do response (suporta múltiplos nomes de campo)
+          const cargaAny = carga as any;
+          const detalhe = cargaAny.conhecimentoCargaDetalhada || cargaAny.conhecimentoCargaDetalhado;
+          
+          const mawb = detalhe?.nroMawbAssociado || 
+                       detalhe?.mawbAssociado || 
+                       (detalhe?.mawbAssociados && detalhe.mawbAssociados[0]?.identificacao);
+          
+          if (!mawb) {
+            // Log apenas para debug, não é erro - alguns houses podem não ter MAWB
+            continue;
           }
+          
+          detailsWithMawb++;
+          
+          // Gerar variações do MAWB para lookup flexível
+          const mawbVariations = generateMawbVariations(mawb);
+          const entry: LeadComexEntry = { house, carga, mawb };
+          
+          for (const variation of mawbVariations) {
+            if (!mawbToDataMap.has(variation)) {
+              mawbToDataMap.set(variation, entry);
+            }
+          }
+          
+          // Delay para não sobrecarregar a API (rate limiting)
+          if (detailsFetched % 10 === 0) {
+            await new Promise(resolve => setTimeout(resolve, 100));
+          }
+          
+        } catch (error) {
+          console.error(`[LEADCOMEX] Erro ao buscar detalhes de ${house.hawb}:`, error);
         }
       }
-
-      console.log(`[LEADCOMEX] Mapa de ${leadcomexMap.size} variações de HAWBs criado para match`);
       
-      // Debug: logar alguns exemplos de HAWBs da LeadComex
-      const sampleLeadcomex = leadcomexHouses.slice(0, 5).map(h => h.hawb);
-      console.log(`[LEADCOMEX] Exemplos de HAWBs LeadComex: ${JSON.stringify(sampleLeadcomex)}`);
+      console.log(`[LEADCOMEX] Detalhes buscados: ${detailsFetched}, com MAWB: ${detailsWithMawb}`);
+      console.log(`[LEADCOMEX] Mapa de ${mawbToDataMap.size} variações de MAWB criado para match`);
+      
+      // Debug: logar alguns exemplos de MAWBs da LeadComex
+      const sampleMawbs = [...mawbToDataMap.entries()].slice(0, 5).map(([k, v]) => ({ key: k, mawb: v.mawb, hawb: v.house.hawb }));
+      console.log(`[LEADCOMEX] Exemplos de MAWBs LeadComex: ${JSON.stringify(sampleMawbs)}`);
 
       // 3. Buscar HAWBs pendentes do MariaDB (via mariadb-proxy)
       // Esses são os registros do t_status_aereo que precisam de enriquecimento
@@ -715,15 +804,16 @@ serve(async (req) => {
         shipments = (sbShipments || []).map(s => ({ house: s.house, master: s.master, status_manifestacao: s.status_manifestacao }));
       }
 
-      console.log(`[LEADCOMEX] Buscando match para ${shipments.length} HAWBs do CCT`);
+      console.log(`[LEADCOMEX] Iniciando matching por MAWB para ${shipments.length} processos`);
       
-      // Debug: logar alguns exemplos de HAWBs
-      const sampleMariaDb = shipments.slice(0, 5).map(s => s.house);
-      console.log(`[LEADCOMEX] Exemplos de HAWBs MariaDB: ${JSON.stringify(sampleMariaDb)}`);
+      // Debug: logar alguns exemplos de MAWBs do MariaDB
+      const sampleMariaDb = shipments.slice(0, 5).map(s => ({ house: s.house, master: s.master }));
+      console.log(`[LEADCOMEX] Exemplos do MariaDB: ${JSON.stringify(sampleMariaDb)}`);
 
       const syncStats = {
         total_leadcomex: leadcomexHouses.length,
-        total_supabase: shipments?.length || 0,
+        total_with_mawb: detailsWithMawb,
+        total_mariadb: shipments?.length || 0,
         matched: 0,
         not_matched: 0,
         updated: 0,
@@ -731,44 +821,42 @@ serve(async (req) => {
         bloqueios: 0,
         divergencias: 0,
         errors: 0,
-        matches_detail: [] as Array<{ supabase_hawb: string; leadcomex_hawb: string }>,
+        matches_detail: [] as Array<{ mariadb_hawb: string; mariadb_mawb: string; leadcomex_hawb: string; leadcomex_mawb: string }>,
       };
 
-      // 4. Para cada shipment, tentar encontrar match na LeadComex usando múltiplas variações
+      // 4. Para cada shipment, tentar match via MAWB (não mais via HAWB)
       for (const shipment of shipments || []) {
         try {
-          // Gerar variações do HAWB do shipment e tentar match
-          const shipmentVariations = generateHawbVariations(shipment.house);
-          let matchedHouse: LeadComexHouse | undefined;
+          // Gerar variações do MAWB do shipment e tentar match
+          const mawbVariations = generateMawbVariations(shipment.master);
+          let matchedEntry: LeadComexEntry | undefined;
+          let matchedVariation = '';
           
-          for (const variation of shipmentVariations) {
-            matchedHouse = leadcomexMap.get(variation);
-            if (matchedHouse) break;
+          for (const variation of mawbVariations) {
+            matchedEntry = mawbToDataMap.get(variation);
+            if (matchedEntry) {
+              matchedVariation = variation;
+              break;
+            }
           }
 
-          if (!matchedHouse) {
+          if (!matchedEntry) {
             syncStats.not_matched++;
             continue;
           }
 
           syncStats.matched++;
           syncStats.matches_detail.push({
-            supabase_hawb: shipment.house,
-            leadcomex_hawb: matchedHouse.hawb,
+            mariadb_hawb: shipment.house,
+            mariadb_mawb: shipment.master,
+            leadcomex_hawb: matchedEntry.house.hawb,
+            leadcomex_mawb: matchedEntry.mawb,
           });
 
-          console.log(`[LEADCOMEX] Match: ${shipment.house} ↔ ${matchedHouse.hawb}`);
+          console.log(`[LEADCOMEX] Match via MAWB: ${shipment.master} → ${matchedEntry.mawb} (HAWB: ${shipment.house} ↔ ${matchedEntry.house.hawb})`);
 
-          // 5. Buscar detalhes da carga na LeadComex
-          const carga = await fetchCargaDetalhada(leadcomexToken, matchedHouse.hawb, matchedHouse.dataEmissao);
-
-          if (!carga) {
-            console.log(`[LEADCOMEX] Sem detalhes para ${matchedHouse.hawb}`);
-            continue;
-          }
-
-          // 6. Processar dados do LeadComex (atualiza MariaDB diretamente)
-          await processLeadComexData(supabase, shipment.house, shipment.master, carga, syncStats);
+          // 5. Processar dados do LeadComex (já temos os dados, não precisa buscar novamente)
+          await processLeadComexData(supabase, shipment.house, shipment.master, matchedEntry.carga, syncStats);
 
         } catch (error) {
           console.error(`[LEADCOMEX] Erro ao processar ${shipment.house}:`, error);
