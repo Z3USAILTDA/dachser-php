@@ -2899,7 +2899,7 @@ serve(async (req) => {
             excecoes_abertas: isFrozen ? 1 : isBlock ? 1 : 0,
             is_frozen: isFrozen,
             data_atraso: row.data_atraso,
-            data_decolagem_ultimo_trecho: row.data_decolagem_ultimo_trecho || null,
+            data_decolagem_ultimo_trecho: row.dep_datetime || row.data_decolagem_ultimo_trecho || null,
             arr_datetime: row.arr_datetime,
             dep_datetime: row.dep_datetime, // Timestamp real do DEP da companhia aérea
             data_manifestacao_cct: row.data_manifestacao_cct, // Data de manifestação no CCT
