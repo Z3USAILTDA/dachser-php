@@ -2736,8 +2736,7 @@ serve(async (req) => {
               cct.data_decolagem_ultimo_trecho,
               cct.cnpj_consignatario,
               cct.data_manifestacao_cct,
-              -- Buscar tratamento de múltiplas fontes: por MAWB ou por HAWB
-              COALESCE(TRIM(m_mawb.tratamento), TRIM(m_hawb.tratamento)) as tratamento,
+              TRIM(m.tratamento) as tratamento,
               -- Status de manifestação CCT (Nomenclatura Aduaneira)
               CASE 
                 WHEN s.\`último_status\` IN ('ARR', 'ATA') THEN 'INFORMADA'
@@ -2751,12 +2750,10 @@ serve(async (req) => {
               ROW_NUMBER() OVER (PARTITION BY TRIM(s.hawb) ORDER BY s.\`última atualização\` DESC) as rn
             FROM ${database}.t_status_aereo s
             LEFT JOIN ${database}.t_cct_shipments cct ON TRIM(s.awb) COLLATE utf8mb4_unicode_ci = TRIM(cct.master) COLLATE utf8mb4_unicode_ci
-            -- JOIN por MAWB
-            LEFT JOIN ${database}.t_master_dados m_mawb ON TRIM(s.awb) COLLATE utf8mb4_unicode_ci = TRIM(m_mawb.mawb) COLLATE utf8mb4_unicode_ci
-              AND (m_mawb.tipo_processo = 'AIR IMPORT' OR m_mawb.tipo_processo IS NULL)
-            -- JOIN por HAWB (fallback quando MAWB não encontra)
-            LEFT JOIN ${database}.t_master_dados m_hawb ON TRIM(s.hawb) COLLATE utf8mb4_unicode_ci = TRIM(m_hawb.hawb) COLLATE utf8mb4_unicode_ci
-              AND (m_hawb.tipo_processo = 'AIR IMPORT' OR m_hawb.tipo_processo IS NULL)
+            LEFT JOIN ${database}.t_master_dados m ON (
+              TRIM(s.awb) COLLATE utf8mb4_unicode_ci = TRIM(m.mawb) COLLATE utf8mb4_unicode_ci
+              OR TRIM(s.hawb) COLLATE utf8mb4_unicode_ci = TRIM(m.hawb) COLLATE utf8mb4_unicode_ci
+            ) AND (m.tipo_processo = 'AIR IMPORT' OR m.tipo_processo IS NULL)
             WHERE LEFT(TRIM(s.awb), 3) IN (${airlineFilter})
             AND s.\`último_status\` NOT IN (${errorStatusFilter})
             AND (s.origem IS NOT NULL AND LOWER(TRIM(s.origem)) NOT IN ('n/a', 'na', 'erro', 'error', ''))
