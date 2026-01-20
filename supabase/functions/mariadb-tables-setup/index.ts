@@ -194,6 +194,127 @@ serve(async (req) => {
           results.push({ table: 't_accrual_entries', database: 'dados_dachser', status: 'error', error: (e as Error).message });
         }
 
+        // 3. t_leadcomex_enrichment_logs - LeadComex reverse ladder enrichment logs
+        try {
+          await dadosDachserClient.execute(`
+            CREATE TABLE IF NOT EXISTS t_leadcomex_enrichment_logs (
+              -- === CHAVE PRIMARIA ===
+              id INT AUTO_INCREMENT PRIMARY KEY,
+              
+              -- === METADADOS DE EXECUCAO ===
+              hawb VARCHAR(50) NOT NULL COMMENT 'HAWB buscado',
+              mawb VARCHAR(50) COMMENT 'MAWB associado',
+              dep_date DATE COMMENT 'Data DEP original do MariaDB',
+              success BOOLEAN NOT NULL DEFAULT FALSE COMMENT 'Se encontrou dados',
+              matched_date DATE COMMENT 'Data que retornou dados',
+              offset_days INT DEFAULT 0 COMMENT 'Dias de offset aplicado (0 a 15)',
+              total_attempts INT DEFAULT 1 COMMENT 'Quantidade de tentativas feitas',
+              total_time_ms INT COMMENT 'Tempo total de execucao em ms',
+              execution_source VARCHAR(50) DEFAULT 'manual' COMMENT 'manual, cron-hourly, batch',
+              
+              -- === IDENTIFICACAO (API) ===
+              lc_hawb VARCHAR(100) COMMENT 'identificacao.hawb retornado',
+              lc_data_emissao DATETIME COMMENT 'identificacao.dataEmissao',
+              lc_situacao_lead VARCHAR(50) COMMENT 'identificacao.situacaoLead',
+              lc_situacao_portal VARCHAR(50) COMMENT 'identificacao.situacaoPortal',
+              lc_data_ultima_atualizacao DATETIME COMMENT 'dataUltimaAtualizacaoCargaDetalhada',
+              lc_data_integracao_lead DATETIME COMMENT 'identificacao.dataIntegracaoLead',
+              
+              -- === CARGA DETALHADA - CAMPOS ESCALARES ===
+              lc_tipo VARCHAR(20) COMMENT 'tipo (HAWB/MAWB)',
+              lc_situacao VARCHAR(5) COMMENT 'situacao',
+              lc_situacao_carga INT COMMENT 'situacaoCarga',
+              lc_categoria_carga VARCHAR(10) COMMENT 'categoriaCarga',
+              lc_ruc VARCHAR(100) COMMENT 'ruc',
+              lc_identificacao VARCHAR(100) COMMENT 'identificacao',
+              lc_nro_mawb_associado VARCHAR(50) COMMENT 'nroMawbAssociado',
+              
+              -- === AEROPORTOS ===
+              lc_aeroporto_origem VARCHAR(10) COMMENT 'codigoAeroportoOrigemConhecimento',
+              lc_aeroporto_destino VARCHAR(10) COMMENT 'codigoAeroportoDestinoConhecimento',
+              lc_recinto_aduaneiro_destino VARCHAR(20) COMMENT 'recintoAduaneiroDestino',
+              
+              -- === PESO E VOLUMES ===
+              lc_peso_bruto DECIMAL(12,3) COMMENT 'pesoBrutoConhecimento',
+              lc_quantidade_volumes INT COMMENT 'quantidadeVolumesConhecimento',
+              lc_descricao_resumida TEXT COMMENT 'descricaoResumida',
+              lc_indicador_partes_madeira VARCHAR(5) COMMENT 'indicadorPartesMadeira',
+              
+              -- === CONSIGNATARIO ===
+              lc_cnpj_consignatario VARCHAR(20) COMMENT 'identificacaoDocumentoConsignatario',
+              lc_nome_consignatario VARCHAR(200) COMMENT 'nomeConsignatarioConhecimento',
+              lc_razao_social_consignatario VARCHAR(200) COMMENT 'razaoSocialDocumentoConsignatario',
+              lc_tipo_documento_consignatario VARCHAR(20) COMMENT 'tipoDocumentoConsignatario',
+              lc_endereco_consignatario TEXT COMMENT 'enderecoConsignatarioConhecimento',
+              lc_cidade_consignatario VARCHAR(100) COMMENT 'cidadeConsignatarioConhecimento',
+              lc_cep_consignatario VARCHAR(20) COMMENT 'caixaPostalConsignatarioConhecimento',
+              lc_pais_consignatario VARCHAR(5) COMMENT 'paisConsignatarioConhecimento',
+              
+              -- === EMBARCADOR ===
+              lc_nome_embarcador VARCHAR(200) COMMENT 'nomeEmbarcadorEstrangeiro',
+              lc_endereco_embarcador TEXT COMMENT 'enderecoEmbarcadorEstrangeiro',
+              lc_cidade_embarcador VARCHAR(100) COMMENT 'cidadeEmbarcadorEstrangeiro',
+              lc_cep_embarcador VARCHAR(20) COMMENT 'caixaPostalEmbarcadorEstrangeiro',
+              lc_pais_embarcador VARCHAR(5) COMMENT 'paisEmbarcadorEstrangeiro',
+              
+              -- === AGENTE DE CARGA ===
+              lc_nome_agente_carga VARCHAR(200) COMMENT 'nomeAgenteDeCargaConsolidadorEstrang',
+              lc_endereco_agente_carga TEXT COMMENT 'enderecoAgenteDeCargaConsolidadorEstrang',
+              lc_cidade_agente_carga VARCHAR(100) COMMENT 'cidadeAgenteDeCargaConsolidadorEstrang',
+              lc_pais_agente_carga VARCHAR(5) COMMENT 'paisAgenteDeCargaConsolidadorEstrang',
+              lc_cnpj_responsavel_arquivo VARCHAR(20) COMMENT 'cnpjResponsavelArquivo',
+              
+              -- === ASSINATURA TRANSPORTADOR ===
+              lc_nome_assinatura_transportador VARCHAR(200) COMMENT 'nomeAssinaturaTransportador',
+              lc_local_assinatura_transportador VARCHAR(100) COMMENT 'localAssinaturaTransportador',
+              lc_data_assinatura_transportador DATETIME COMMENT 'dataHoraAssinaturaTransportador',
+              lc_data_hora_situacao_atual DATETIME COMMENT 'dataHoraSituacaoAtual',
+              
+              -- === FRETE (resumo) ===
+              lc_frete_pendencia_pagamento VARCHAR(5) COMMENT 'frete.pendenciaPagamento',
+              lc_frete_moeda_codigo VARCHAR(10) COMMENT 'frete.moedaOrigem.codigo',
+              lc_frete_moeda_descricao VARCHAR(50) COMMENT 'frete.moedaOrigem.descricao',
+              lc_frete_valor_total DECIMAL(15,2) COMMENT 'frete total prepaid',
+              lc_frete_por_item DECIMAL(15,2) COMMENT 'somatorioFretePorItemCarga.valor',
+              
+              -- === ARRAYS/OBJETOS COMPLEXOS (JSON) ===
+              lc_bloqueios_ativos_json TEXT COMMENT 'bloqueiosAtivos JSON array',
+              lc_bloqueios_baixados_json TEXT COMMENT 'bloqueiosBaixados JSON array',
+              lc_divergencias_json TEXT COMMENT 'divergencias JSON array',
+              lc_viagens_associadas_json TEXT COMMENT 'viagensAssociadas JSON array',
+              lc_mawb_associados_json TEXT COMMENT 'mawbAwbAssociados JSON array',
+              lc_partes_estoque_json TEXT COMMENT 'partesEstoque JSON array',
+              lc_itens_carga_json TEXT COMMENT 'itensCarga JSON array',
+              lc_frete_json TEXT COMMENT 'frete JSON completo',
+              
+              -- === DETALHES DE TENTATIVAS ===
+              attempts_json TEXT COMMENT 'Array de tentativas com detalhes de cada offset',
+              
+              -- === RAW JSON COMPLETO ===
+              raw_response_json MEDIUMTEXT COMMENT 'Resposta completa da API LeadComex',
+              
+              -- === TIMESTAMPS ===
+              created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+              updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+              
+              -- === INDICES ===
+              INDEX idx_hawb (hawb),
+              INDEX idx_mawb (mawb),
+              INDEX idx_success (success),
+              INDEX idx_created_at (created_at),
+              INDEX idx_lc_cnpj (lc_cnpj_consignatario),
+              INDEX idx_lc_situacao (lc_situacao_lead),
+              INDEX idx_execution_source (execution_source)
+            ) ENGINE=InnoDB 
+              DEFAULT CHARSET=utf8mb4 
+              COLLATE=utf8mb4_general_ci 
+              COMMENT='Logs de enriquecimento LeadComex com escada reversa de datas'
+          `);
+          results.push({ table: 't_leadcomex_enrichment_logs', database: 'dados_dachser', status: 'success' });
+        } catch (e: unknown) {
+          results.push({ table: 't_leadcomex_enrichment_logs', database: 'dados_dachser', status: 'error', error: (e as Error).message });
+        }
+
         await dadosDachserClient.close();
       } catch (connError: unknown) {
         results.push({ table: 'connection', database: 'dados_dachser', status: 'error', error: (connError as Error).message });
