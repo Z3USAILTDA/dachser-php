@@ -343,6 +343,7 @@ serve(async (req) => {
       username: dbUser,
       password: dbPassword,
       charset: "utf8mb4",
+      timeout: 30000, // 30 seconds connection timeout
     });
 
     // Set connection collation to prevent "Illegal mix of collations" errors
@@ -2749,11 +2750,8 @@ serve(async (req) => {
               END as status_cct_oficial,
               ROW_NUMBER() OVER (PARTITION BY TRIM(s.hawb) ORDER BY s.\`última atualização\` DESC) as rn
             FROM ${database}.t_status_aereo s
-            LEFT JOIN ${database}.t_cct_shipments cct ON TRIM(s.awb) COLLATE utf8mb4_unicode_ci = TRIM(cct.master) COLLATE utf8mb4_unicode_ci
-            LEFT JOIN ${database}.t_master_dados m ON (
-              TRIM(s.awb) COLLATE utf8mb4_unicode_ci = TRIM(m.mawb) COLLATE utf8mb4_unicode_ci
-              OR TRIM(s.hawb) COLLATE utf8mb4_unicode_ci = TRIM(m.hawb) COLLATE utf8mb4_unicode_ci
-            ) AND (m.tipo_processo = 'AIR IMPORT' OR m.tipo_processo IS NULL)
+            LEFT JOIN ${database}.t_cct_shipments cct ON s.awb = cct.master
+            LEFT JOIN ${database}.t_master_dados m ON s.awb = m.mawb AND (m.tipo_processo = 'AIR IMPORT' OR m.tipo_processo IS NULL)
             WHERE LEFT(TRIM(s.awb), 3) IN (${airlineFilter})
             AND s.\`último_status\` NOT IN (${errorStatusFilter})
             AND (s.origem IS NOT NULL AND LOWER(TRIM(s.origem)) NOT IN ('n/a', 'na', 'erro', 'error', ''))
