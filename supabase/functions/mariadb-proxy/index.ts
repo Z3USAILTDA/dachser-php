@@ -10271,6 +10271,61 @@ serve(async (req) => {
         break;
       }
 
+      // ==================== CCT: Get Pending HAWBs for LeadComex Enrichment ====================
+      case 'get_cct_pending_hawbs': {
+        const limit = body.limit || 500;
+        
+        // Get HAWBs from t_status_aereo that need LeadComex enrichment
+        // Filter by registered airlines and exclude error statuses
+        const airlineCodes = [
+          '020', '055', '057', '074', '082', '112', '114', '117', '119', 
+          '125', '172', '176', '180', '195', '205', '220', '230', '232', 
+          '235', '236', '239', '257', '270', '279', '293', '297', '320', 
+          '724', '729', '932'
+        ];
+        const airlineFilter = airlineCodes.map(c => `'${c}'`).join(',');
+        
+        const errorStatuses = ['FMI', 'Error', 'OHD', 'NFD', 'FNA', 'DIS'];
+        const errorStatusFilter = errorStatuses.map(s => `'${s}'`).join(',');
+        
+        const rows = await client.query(`
+          SELECT DISTINCT
+            TRIM(s.hawb) as house,
+            TRIM(s.awb) as master,
+            s.dep_datetime,
+            s.arr_datetime,
+            s.\`último_status\` as status,
+            cct.peso_declarado,
+            cct.cnpj_consignatario
+          FROM ${database}.t_status_aereo s
+          LEFT JOIN ${database}.t_cct_shipments cct ON TRIM(s.awb) COLLATE utf8mb4_unicode_ci = TRIM(cct.master) COLLATE utf8mb4_unicode_ci
+          WHERE LEFT(TRIM(s.awb), 3) IN (${airlineFilter})
+            AND s.\`último_status\` NOT IN (${errorStatusFilter})
+            AND s.\`última atualização\` >= '2026-01-13 22:00:00'
+            -- Only get records that need enrichment (missing peso or cnpj)
+            AND (cct.peso_declarado IS NULL OR cct.cnpj_consignatario IS NULL)
+          ORDER BY s.\`última atualização\` DESC
+          LIMIT ${limit}
+        `);
+        
+        console.log(`[get_cct_pending_hawbs] Found ${rows.length} HAWBs needing LeadComex enrichment`);
+        
+        result = {
+          success: true,
+          shipments: rows.map((row: any) => ({
+            house: row.house,
+            master: row.master,
+            dep_datetime: row.dep_datetime,
+            arr_datetime: row.arr_datetime,
+            status: row.status,
+            peso_declarado: row.peso_declarado,
+            cnpj_consignatario: row.cnpj_consignatario,
+          })),
+          total: rows.length,
+        };
+        break;
+      }
+
       default:
         return new Response(
           JSON.stringify({ error: `Ação não suportada: ${action}` }),

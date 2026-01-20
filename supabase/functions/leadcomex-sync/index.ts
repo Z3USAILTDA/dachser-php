@@ -462,11 +462,12 @@ async function fetchCargaDetalhada(token: string, hawb: string, dataEmissao: str
   return await response.json();
 }
 
-// Processa dados do LeadComex e atualiza o shipment no Supabase + MariaDB (dual-write)
+// Processa dados do LeadComex e atualiza o shipment no MariaDB
+// Nota: Como o CCT usa MariaDB como fonte de dados, fazemos update apenas no MariaDB
 async function processLeadComexData(
   supabase: any,
-  shipmentId: string,
   hawb: string,
+  master: string,
   carga: LeadComexCarga,
   syncStats: any
 ) {
@@ -476,7 +477,7 @@ async function processLeadComexData(
   const detalhe = cargaAny.conhecimentoCargaDetalhada || cargaAny.conhecimentoCargaDetalhado;
   const identificacao = carga.identificacao;
 
-  // 1. Atualizar dados do shipment
+  // 1. Preparar dados para atualização
   const updateData: Record<string, any> = {};
   
   // Support multiple field name variations from API
@@ -500,191 +501,63 @@ async function processLeadComexData(
   const statusLower = identificacao.situacaoPortal?.toLowerCase() || '';
   if (statusLower.includes('informad') || statusLower.includes('recepcionad') ||
       statusLower.includes('entregue') || statusLower.includes('processad')) {
-    updateData.status_manifestacao = 'MANIFESTADO_CCT';
+    updateData.status_manifestacao_cct = 'MANIFESTADO_CCT';
     updateData.data_manifestacao_cct = parseBrazilianDate(identificacao.dataUltimaAtualizacaoCargaDetalhada) || new Date().toISOString();
   }
   
-  if (Object.keys(updateData).length > 0) {
-    const { error: updateError } = await supabase
-      .from('shipments')
-      .update(updateData)
-      .eq('id', shipmentId);
-    
-    if (!updateError) {
-      syncStats.updated++;
-      console.log(`[LEADCOMEX] Shipment ${hawb} atualizado com dados CCT no Supabase`);
-    }
-    
-    // === DUAL-WRITE: Atualizar também no MariaDB via mariadb-proxy ===
-    try {
-      const supabaseUrl = Deno.env.get('SUPABASE_URL');
-      const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
-      
-      if (supabaseUrl && supabaseKey) {
-        const mariadbUpdateData: Record<string, any> = {};
-        if (pesoBruto) mariadbUpdateData.peso_declarado = pesoBruto;
-        if (quantidadeVolumes) mariadbUpdateData.volume_declarado = quantidadeVolumes;
-        if (detalhe?.identificacaoDocumentoConsignatario) {
-          mariadbUpdateData.cnpj_consignatario = detalhe.identificacaoDocumentoConsignatario;
-        }
-        if (detalhe?.codigoAeroportoOrigemConhecimento) {
-          mariadbUpdateData.aeroporto_origem = detalhe.codigoAeroportoOrigemConhecimento;
-        }
-        if (detalhe?.codigoAeroportoDestinoConhecimento) {
-          mariadbUpdateData.aeroporto_destino = detalhe.codigoAeroportoDestinoConhecimento;
-        }
-        if (updateData.status_manifestacao) {
-          mariadbUpdateData.status_manifestacao = updateData.status_manifestacao;
-        }
-        if (updateData.data_manifestacao_cct) {
-          mariadbUpdateData.data_manifestacao_cct = updateData.data_manifestacao_cct;
-        }
-        
-        const mariadbResponse = await fetch(`${supabaseUrl}/functions/v1/mariadb-proxy`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${supabaseKey}`,
-          },
-          body: JSON.stringify({
-            action: 'update_leadcomex_data',
-            house: hawb,
-            updates: mariadbUpdateData,
-          }),
-        });
-        
-        if (mariadbResponse.ok) {
-          console.log(`[LEADCOMEX] Shipment ${hawb} atualizado no MariaDB (dual-write)`);
-        } else {
-          const errorText = await mariadbResponse.text();
-          console.warn(`[LEADCOMEX] Erro ao atualizar MariaDB para ${hawb}: ${errorText}`);
-        }
-      }
-    } catch (mariadbError) {
-      console.warn(`[LEADCOMEX] Erro dual-write MariaDB para ${hawb}:`, mariadbError);
-    }
+  if (Object.keys(updateData).length === 0) {
+    console.log(`[LEADCOMEX] Nenhum dado novo para ${hawb}`);
+    return;
   }
-
-  // 2. Criar eventos baseados no status do Portal (incluindo intermediários)
-  const statusPortal = identificacao.situacaoPortal;
-  const eventMapping = STATUS_TO_CCT_EVENT[statusPortal];
-
-  if (eventMapping) {
-    const currentEventIndex = EVENT_SEQUENCE.indexOf(eventMapping.codigo);
-    const baseDate = parseBrazilianDate(identificacao.dataUltimaAtualizacaoCargaDetalhada) || new Date().toISOString();
     
-    // Buscar eventos existentes para este shipment
-    const { data: existingEvents } = await supabase
-      .from('cct_evento_normalizado')
-      .select('codigo_evento')
-      .eq('shipment_id', shipmentId);
+  // === Atualizar no MariaDB via mariadb-proxy ===
+  try {
+    const supabaseUrl = Deno.env.get('SUPABASE_URL');
+    const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
     
-    const existingEventCodes = new Set(existingEvents?.map((e: { codigo_evento: string }) => e.codigo_evento) || []);
-    
-    // Criar todos os eventos intermediários que não existem (do início até o status atual)
-    // Começamos do índice 1 (MANIFESTADO) pois AGUARDANDO_EMBARQUE é criado pelo mariadb-dep-sync
-    for (let i = 1; i <= currentEventIndex; i++) {
-      const eventCode = EVENT_SEQUENCE[i];
+    if (supabaseUrl && supabaseKey) {
+      const mariadbResponse = await fetch(`${supabaseUrl}/functions/v1/mariadb-proxy`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${supabaseKey}`,
+        },
+        body: JSON.stringify({
+          action: 'update_leadcomex_data',
+          house: hawb,
+          master: master,
+          updates: updateData,
+        }),
+      });
       
-      if (!existingEventCodes.has(eventCode)) {
-        // Calcular data do evento: distribuir proporcionalmente antes da data final
-        // Evento mais antigo = baseDate - (currentEventIndex - i) * 5 minutos
-        const minutesOffset = (currentEventIndex - i) * 5;
-        const eventDate = new Date(new Date(baseDate).getTime() - (minutesOffset * 60 * 1000));
-        
-        await supabase
-          .from('cct_evento_normalizado')
-          .insert({
-            shipment_id: shipmentId,
-            codigo_evento: eventCode,
-            descricao_evento: EVENT_DESCRIPTIONS[eventCode] || `Evento ${eventCode}`,
-            fonte: 'RFB', // LeadComex é integrador RFB
-            aeroporto: detalhe?.codigoAeroportoDestinoConhecimento || 'GRU',
-            data_hora_evento: eventDate.toISOString(),
-            nivel_confianca: i === currentEventIndex ? 'PRIMARIA' : 'COMPLEMENTAR',
-            detalhes_raw: { 
-              source: 'leadcomex', 
-              situacaoLead: identificacao.situacaoLead,
-              inferred: i < currentEventIndex, // Marca eventos inferidos
-            },
-          });
-        syncStats.events++;
-        console.log(`[LEADCOMEX] Evento ${eventCode} criado para ${hawb}${i < currentEventIndex ? ' (inferido)' : ''}`);
+      if (mariadbResponse.ok) {
+        syncStats.updated++;
+        console.log(`[LEADCOMEX] Shipment ${hawb} atualizado no MariaDB com: ${JSON.stringify(updateData)}`);
+      } else {
+        const errorText = await mariadbResponse.text();
+        console.warn(`[LEADCOMEX] Erro ao atualizar MariaDB para ${hawb}: ${errorText}`);
+        syncStats.errors++;
       }
     }
-
-    // Atualizar status CCT para o evento mais recente
-    await supabase
-      .from('cct_status_atual')
-      .upsert({
-        shipment_id: shipmentId,
-        status_cct_oficial: eventMapping.codigo,
-        ultima_atualizacao: new Date().toISOString(),
-      }, { onConflict: 'shipment_id' });
+  } catch (mariadbError) {
+    console.warn(`[LEADCOMEX] Erro ao atualizar MariaDB para ${hawb}:`, mariadbError);
+    syncStats.errors++;
   }
 
-  // 3. Processar bloqueios ativos
+  // Nota: Bloqueios, divergências e eventos CCT são processados diretamente no MariaDB
+  // As tabelas cct_excecao_operacional e cct_evento_normalizado do Supabase não são usadas pelo CCT
+  
+  // Log bloqueios ativos
   if (detalhe?.bloqueiosAtivos && detalhe.bloqueiosAtivos.length > 0) {
-    for (const bloqueio of detalhe.bloqueiosAtivos) {
-      const { data: existingBloqueio } = await supabase
-        .from('cct_excecao_operacional')
-        .select('id')
-        .eq('shipment_id', shipmentId)
-        .ilike('descricao', `%${bloqueio.codigo}%`)
-        .eq('status_excecao', 'ABERTA')
-        .maybeSingle();
-
-      if (!existingBloqueio) {
-        await supabase
-          .from('cct_excecao_operacional')
-          .insert({
-            shipment_id: shipmentId,
-            tipo_excecao: 'ATRASO_EVENTO',
-            descricao: `🚫 BLOQUEIO ATIVO [${bloqueio.codigo}]: ${bloqueio.descricao}`,
-            fonte_detectou: 'LEADCOMEX',
-            status_excecao: 'ABERTA',
-          });
-        syncStats.bloqueios++;
-      }
-    }
+    syncStats.bloqueios += detalhe.bloqueiosAtivos.length;
+    console.log(`[LEADCOMEX] ${detalhe.bloqueiosAtivos.length} bloqueios ativos para ${hawb}`);
   }
 
-  // 4. Processar divergências
+  // Log divergências
   if (detalhe?.divergencias && detalhe.divergencias.length > 0) {
-    for (const divergencia of detalhe.divergencias) {
-      const { data: existingDiv } = await supabase
-        .from('cct_excecao_operacional')
-        .select('id')
-        .eq('shipment_id', shipmentId)
-        .ilike('descricao', `%${divergencia.campo}%`)
-        .eq('status_excecao', 'ABERTA')
-        .maybeSingle();
-
-      if (!existingDiv) {
-        await supabase
-          .from('cct_excecao_operacional')
-          .insert({
-            shipment_id: shipmentId,
-            tipo_excecao: 'DIVERGENCIA_DADOS',
-            descricao: `⚠️ DIVERGÊNCIA [${divergencia.campo}]: Informado: ${divergencia.valorInformado}, Detectado: ${divergencia.valorDetectado}`,
-            fonte_detectou: 'LEADCOMEX',
-            status_excecao: 'ABERTA',
-          });
-        syncStats.divergencias++;
-      }
-    }
+    syncStats.divergencias += detalhe.divergencias.length;
+    console.log(`[LEADCOMEX] ${detalhe.divergencias.length} divergências para ${hawb}`);
   }
-
-  // 5. Log da sincronização
-  await supabase
-    .from('cct_log_entry')
-    .insert({
-      conector: 'LEADCOMEX',
-      tipo: 'SYNC',
-      shipment_id: shipmentId,
-      house: hawb,
-      mensagem: `Sincronizado via LeadComex - Status: ${statusPortal}`,
-    });
 }
 
 serve(async (req) => {
@@ -800,25 +673,53 @@ serve(async (req) => {
       const sampleLeadcomex = leadcomexHouses.slice(0, 5).map(h => h.hawb);
       console.log(`[LEADCOMEX] Exemplos de HAWBs LeadComex: ${JSON.stringify(sampleLeadcomex)}`);
 
-      // 3. Buscar shipments capturados via DEP (todos os status ativos)
-      // Shipments entram via mariadb-dep-sync e permanecem para monitoramento
-      const { data: shipments, error: fetchError } = await supabase
-        .from('shipments')
-        .select('id, house, master, status_manifestacao')
-        .order('created_at', { ascending: false })
-        .limit(limit);
-
-      if (fetchError) {
-        throw new Error(`Erro ao buscar shipments: ${fetchError.message}`);
+      // 3. Buscar HAWBs pendentes do MariaDB (via mariadb-proxy)
+      // Esses são os registros do t_status_aereo que precisam de enriquecimento
+      console.log(`[LEADCOMEX] Buscando HAWBs pendentes do MariaDB...`);
+      
+      let shipments: Array<{house: string; master: string; status_manifestacao?: string}> = [];
+      try {
+        const proxyResponse = await fetch(`${supabaseUrl}/functions/v1/mariadb-proxy`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${supabaseKey}`,
+          },
+          body: JSON.stringify({
+            action: 'get_cct_pending_hawbs',
+            limit: limit,
+          }),
+        });
+        
+        if (!proxyResponse.ok) {
+          const errorText = await proxyResponse.text();
+          console.error(`[LEADCOMEX] Erro ao buscar HAWBs do MariaDB: ${errorText}`);
+          throw new Error(`MariaDB proxy error: ${proxyResponse.status}`);
+        }
+        
+        const proxyData = await proxyResponse.json();
+        shipments = proxyData.shipments || [];
+        console.log(`[LEADCOMEX] ${shipments.length} HAWBs pendentes encontrados no MariaDB`);
+      } catch (proxyError) {
+        console.error('[LEADCOMEX] Falha ao buscar do MariaDB, tentando Supabase como fallback:', proxyError);
+        // Fallback: try Supabase if MariaDB fails
+        const { data: sbShipments, error: fetchError } = await supabase
+          .from('shipments')
+          .select('id, house, master, status_manifestacao')
+          .order('created_at', { ascending: false })
+          .limit(limit);
+        
+        if (fetchError) {
+          throw new Error(`Erro ao buscar shipments: ${fetchError.message}`);
+        }
+        shipments = (sbShipments || []).map(s => ({ house: s.house, master: s.master, status_manifestacao: s.status_manifestacao }));
       }
 
-      console.log(`[LEADCOMEX] Buscando match para ${shipments?.length || 0} shipments capturados via DEP`);
-
-      console.log(`[LEADCOMEX] ${shipments?.length || 0} shipments pendentes no Supabase`);
+      console.log(`[LEADCOMEX] Buscando match para ${shipments.length} HAWBs do CCT`);
       
-      // Debug: logar alguns exemplos de HAWBs do Supabase
-      const sampleSupabase = shipments?.slice(0, 5).map(s => s.house) || [];
-      console.log(`[LEADCOMEX] Exemplos de HAWBs Supabase: ${JSON.stringify(sampleSupabase)}`);
+      // Debug: logar alguns exemplos de HAWBs
+      const sampleMariaDb = shipments.slice(0, 5).map(s => s.house);
+      console.log(`[LEADCOMEX] Exemplos de HAWBs MariaDB: ${JSON.stringify(sampleMariaDb)}`);
 
       const syncStats = {
         total_leadcomex: leadcomexHouses.length,
@@ -866,8 +767,8 @@ serve(async (req) => {
             continue;
           }
 
-          // 6. Processar dados do LeadComex
-          await processLeadComexData(supabase, shipment.id, shipment.house, carga, syncStats);
+          // 6. Processar dados do LeadComex (atualiza MariaDB diretamente)
+          await processLeadComexData(supabase, shipment.house, shipment.master, carga, syncStats);
 
         } catch (error) {
           console.error(`[LEADCOMEX] Erro ao processar ${shipment.house}:`, error);
@@ -875,13 +776,7 @@ serve(async (req) => {
         }
       }
 
-      // Log resumo
-      await supabase.from('cct_log_entry').insert({
-        conector: 'LEADCOMEX',
-        tipo: 'INFO',
-        mensagem: `Match reverso: ${syncStats.matched}/${syncStats.total_supabase} shipments encontrados na LeadComex`,
-      });
-
+      // Log resumo (só log console, não persiste no Supabase)
       console.log('[LEADCOMEX] Match reverso concluído:', syncStats);
 
       return new Response(
