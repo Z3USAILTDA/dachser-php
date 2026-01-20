@@ -3135,20 +3135,33 @@ serve(async (req) => {
         if (affectedRowsLead === 0) {
           console.log(`LEADCOMEX: No match found for ${house}, attempting UPSERT...`);
           
-          // Get master from t_status_aereo if available
-          const masterResultLead = await client.query(`
-            SELECT TRIM(awb) as master FROM ${database}.t_status_aereo 
+          // Get master and cliente from t_status_aereo if available
+          const statusResultLead = await client.query(`
+            SELECT TRIM(awb) as master, TRIM(\`destinatário\`) as cliente, TRIM(origem) as aeroporto_origem_status, TRIM(destino) as aeroporto_destino_status
+            FROM ${database}.t_status_aereo 
             WHERE REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(TRIM(hawb), '-', ''), ' ', ''), '.', ''), '/', ''), '_', '') = ?
             COLLATE utf8mb4_unicode_ci
             LIMIT 1
           `, [houseNormalized]);
 
-          const masterLead = masterResultLead?.[0]?.master || '';
+          const statusRow = statusResultLead?.[0];
+          const masterLead = statusRow?.master || '';
+          const clienteLead = statusRow?.cliente || 'N/A';
+          const aeroportoOrigemStatus = statusRow?.aeroporto_origem_status || '';
+          const aeroportoDestinoStatus = statusRow?.aeroporto_destino_status || '';
           
           if (masterLead) {
             const validUpdates = Object.keys(updates).filter(k => allowedFields.includes(k));
-            const insertColsLead = ['house', 'master', ...validUpdates, 'updated_at'];
-            const insertValuesLead = [house, masterLead, ...validUpdates.map(k => updates[k]), new Date()];
+            
+            // Generate a unique ID for new records
+            const newId = crypto.randomUUID();
+            
+            // Include aeroporto from t_status_aereo if not in updates
+            const finalAeroportoOrigem = updates.aeroporto_origem || aeroportoOrigemStatus || 'N/A';
+            const finalAeroportoDestino = updates.aeroporto_destino || aeroportoDestinoStatus || 'N/A';
+            
+            const insertColsLead = ['id', 'house', 'master', 'cliente', 'aeroporto_origem', 'aeroporto_destino', ...validUpdates.filter(k => k !== 'aeroporto_origem' && k !== 'aeroporto_destino'), 'created_at', 'updated_at'];
+            const insertValuesLead = [newId, house, masterLead, clienteLead, finalAeroportoOrigem, finalAeroportoDestino, ...validUpdates.filter(k => k !== 'aeroporto_origem' && k !== 'aeroporto_destino').map(k => updates[k]), new Date(), new Date()];
             const placeholdersLead = insertColsLead.map(() => '?').join(', ');
             const updateClausesLead = validUpdates
               .map(col => `${col} = VALUES(${col})`)
@@ -3159,7 +3172,7 @@ serve(async (req) => {
               VALUES (${placeholdersLead})
               ON DUPLICATE KEY UPDATE ${updateClausesLead}, updated_at = NOW()
             `, insertValuesLead);
-            console.log(`LEADCOMEX: Upserted t_cct_shipments for ${house} with master ${masterLead}`);
+            console.log(`LEADCOMEX: Upserted t_cct_shipments for ${house} with master ${masterLead} cliente ${clienteLead}`);
           } else {
             console.warn(`LEADCOMEX: Could not find master AWB for house ${house}`);
           }
