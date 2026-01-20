@@ -196,8 +196,10 @@ export function ProcessosTable({ processos, onAssignAnalista, metricFilter }: Pr
                     <SLAInfoBadge 
                       slaInfo={(processo.status_atual as any)?.sla_info || { 
                         status: processo.status_atual?.sla_status || 'OK', 
-                        horasRestantes: null 
+                        horasRestantes: null,
+                        tipoVoo: processo.status_atual?.tipo_voo || null,
                       }} 
+                      showTipoVoo={true}
                     />
                   </TableCell>
                   <TableCell className="text-[#aaaaaa] text-[0.85rem]">
