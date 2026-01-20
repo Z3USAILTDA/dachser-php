@@ -1,6 +1,6 @@
 import { useState, useMemo, useCallback, useEffect } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
-import { ArrowLeft, LayoutDashboard, BarChart3, AlertTriangle, Bell, Settings, HelpCircle, LogOut, Radio, RefreshCw, Database, Package, AlertCircle, Clock, Plane, List, CheckCircle2, Eye, CheckCircle, Download } from "lucide-react";
+import { ArrowLeft, LayoutDashboard, BarChart3, AlertTriangle, Bell, Settings, HelpCircle, LogOut, Radio, RefreshCw, Database, Package, AlertCircle, Clock, Plane, List, CheckCircle2, Eye, CheckCircle, Download, FlaskConical } from "lucide-react";
 import { toast } from "sonner";
 import { exportCCTWithoutDepDateToExcel } from "@/utils/cctExcelExport";
 import dachserBg from "@/assets/dachser-background.jpg";
@@ -215,20 +215,29 @@ export default function CCTDashboard() {
           </button>
           
           {isAdmin && (
-            <button 
-              onClick={() => {
-                const count = exportCCTWithoutDepDateToExcel(processos);
-                if (count > 0) {
-                  toast.success(`${count} AWBs sem data de decolagem exportadas`);
-                } else {
-                  toast.info("Nenhuma AWB sem data de decolagem encontrada");
-                }
-              }}
-              className="flex items-center gap-2 px-4 py-2 rounded-full border border-[rgba(255,255,255,.25)] bg-[rgba(0,0,0,.7)] text-[#aaaaaa] hover:text-white hover:bg-[rgba(0,0,0,.9)] transition text-[0.8rem]"
-            >
-              <Download className="h-4 w-4" />
-              Exportar Sem DEP
-            </button>
+            <>
+              <button 
+                onClick={() => navigate('/air/cct/leadcomex-test')}
+                className="flex items-center gap-2 px-4 py-2 rounded-full border border-amber-500/40 bg-[rgba(255,200,0,0.1)] text-amber-400 hover:bg-[rgba(255,200,0,0.2)] transition text-[0.8rem]"
+              >
+                <FlaskConical className="h-4 w-4" />
+                Teste LeadComex
+              </button>
+              <button 
+                onClick={() => {
+                  const count = exportCCTWithoutDepDateToExcel(processos);
+                  if (count > 0) {
+                    toast.success(`${count} AWBs sem data de decolagem exportadas`);
+                  } else {
+                    toast.info("Nenhuma AWB sem data de decolagem encontrada");
+                  }
+                }}
+                className="flex items-center gap-2 px-4 py-2 rounded-full border border-[rgba(255,255,255,.25)] bg-[rgba(0,0,0,.7)] text-[#aaaaaa] hover:text-white hover:bg-[rgba(0,0,0,.9)] transition text-[0.8rem]"
+              >
+                <Download className="h-4 w-4" />
+                Exportar Sem DEP
+              </button>
+            </>
           )}
           
           {activeTab === "dashboard" && <NovoShipmentDialog />}

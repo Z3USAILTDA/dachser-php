@@ -65,6 +65,7 @@ import ConsoleTecnico from "./pages/cct/ConsoleTecnico";
 import RegrasNotificacao from "./pages/cct/RegrasNotificacao";
 import AnalyticsDashboard from "./pages/cct/AnalyticsDashboard";
 import ProcessoTimeline from "./pages/cct/ProcessoTimeline";
+import LeadcomexTestPage from "./pages/cct/LeadcomexTestPage";
 
 // SEA Module Manuals
 import ManualSeaAnalysis from "./pages/sea/ManualSeaAnalysis";
@@ -186,6 +187,7 @@ const App = () => (
           <Route path="/air/cct/console" element={<ConsoleTecnico />} />
           <Route path="/air/cct/manual" element={<ManualUsuario />} />
           <Route path="/air/cct/processo/:id" element={<ProcessoTimeline />} />
+          <Route path="/air/cct/leadcomex-test" element={<LeadcomexTestPage />} />
           
           {/* AIR Module Manuals */}
           <Route path="/air/tracking/manual" element={<ManualTracking />} />
