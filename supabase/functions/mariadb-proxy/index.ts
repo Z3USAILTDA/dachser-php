@@ -10338,6 +10338,292 @@ serve(async (req) => {
         break;
       }
 
+      // ==================== LEADCOMEX ENRICHMENT LOGS ====================
+      case 'save_leadcomex_log': {
+        const { 
+          hawb, mawb, dep_date, success, matched_date, offset_days,
+          total_attempts, total_time_ms, execution_source,
+          attempts, leadcomex_data 
+        } = body as any;
+        
+        // Extract fields from LeadComex response
+        const id = leadcomex_data?.identificacao || {};
+        const det = leadcomex_data?.conhecimentoCargaDetalhada || {};
+        const frete = det.frete || {};
+        
+        // Parse Brazilian dates (DD/MM/YYYY HH:mm:ss format)
+        const parseBrDate = (dateStr: string | null | undefined): string | null => {
+          if (!dateStr) return null;
+          try {
+            // Handle "DD/MM/YYYY HH:mm:ss" format
+            const match = dateStr.match(/(\d{2})\/(\d{2})\/(\d{4})\s*(\d{2}):(\d{2}):(\d{2})?/);
+            if (match) {
+              const [, day, month, year, hour, min, sec = '00'] = match;
+              return `${year}-${month}-${day} ${hour}:${min}:${sec}`;
+            }
+            // Handle ISO format
+            if (dateStr.includes('T')) {
+              return dateStr.replace('T', ' ').substring(0, 19);
+            }
+            return dateStr;
+          } catch {
+            return null;
+          }
+        };
+        
+        // Extract frete total from totaisMoedaOrigem
+        let freteTotal: number | null = null;
+        const totais = frete.totaisMoedaOrigem || [];
+        const totalItem = totais.find((t: any) => t?.tipo?.codigo === 'T');
+        if (totalItem?.valorPrepaid?.valor) {
+          freteTotal = totalItem.valorPrepaid.valor;
+        }
+        
+        await client.execute(`
+          INSERT INTO dados_dachser.t_leadcomex_enrichment_logs (
+            hawb, mawb, dep_date, success, matched_date, offset_days,
+            total_attempts, total_time_ms, execution_source,
+            lc_hawb, lc_data_emissao, lc_situacao_lead, lc_situacao_portal,
+            lc_data_ultima_atualizacao, lc_data_integracao_lead,
+            lc_tipo, lc_situacao, lc_situacao_carga, lc_categoria_carga,
+            lc_ruc, lc_identificacao, lc_nro_mawb_associado,
+            lc_aeroporto_origem, lc_aeroporto_destino, lc_recinto_aduaneiro_destino,
+            lc_peso_bruto, lc_quantidade_volumes, lc_descricao_resumida, lc_indicador_partes_madeira,
+            lc_cnpj_consignatario, lc_nome_consignatario, lc_razao_social_consignatario,
+            lc_tipo_documento_consignatario, lc_endereco_consignatario, lc_cidade_consignatario,
+            lc_cep_consignatario, lc_pais_consignatario,
+            lc_nome_embarcador, lc_endereco_embarcador, lc_cidade_embarcador,
+            lc_cep_embarcador, lc_pais_embarcador,
+            lc_nome_agente_carga, lc_endereco_agente_carga, lc_cidade_agente_carga,
+            lc_pais_agente_carga, lc_cnpj_responsavel_arquivo,
+            lc_nome_assinatura_transportador, lc_local_assinatura_transportador,
+            lc_data_assinatura_transportador, lc_data_hora_situacao_atual,
+            lc_frete_pendencia_pagamento, lc_frete_moeda_codigo, lc_frete_moeda_descricao,
+            lc_frete_valor_total, lc_frete_por_item,
+            lc_bloqueios_ativos_json, lc_bloqueios_baixados_json, lc_divergencias_json,
+            lc_viagens_associadas_json, lc_mawb_associados_json, lc_partes_estoque_json,
+            lc_itens_carga_json, lc_frete_json,
+            attempts_json, raw_response_json
+          ) VALUES (
+            ?, ?, ?, ?, ?, ?,
+            ?, ?, ?,
+            ?, ?, ?, ?,
+            ?, ?,
+            ?, ?, ?, ?,
+            ?, ?, ?,
+            ?, ?, ?,
+            ?, ?, ?, ?,
+            ?, ?, ?,
+            ?, ?, ?,
+            ?, ?,
+            ?, ?, ?,
+            ?, ?,
+            ?, ?, ?,
+            ?, ?,
+            ?, ?,
+            ?, ?,
+            ?, ?, ?,
+            ?, ?,
+            ?, ?, ?,
+            ?, ?, ?,
+            ?, ?,
+            ?, ?
+          )
+        `, [
+          hawb, mawb || null, dep_date || null, success ? 1 : 0, matched_date || null, offset_days || 0,
+          total_attempts || 1, total_time_ms || null, execution_source || 'manual',
+          id.hawb || null, parseBrDate(id.dataEmissao), id.situacaoLead || null, id.situacaoPortal || null,
+          parseBrDate(id.dataUltimaAtualizacaoCargaDetalhada), parseBrDate(id.dataIntegracaoLead),
+          det.tipo || null, det.situacao || null, det.situacaoCarga || null, det.categoriaCarga || null,
+          det.ruc || null, det.identificacao || null, det.nroMawbAssociado || null,
+          det.codigoAeroportoOrigemConhecimento || null, det.codigoAeroportoDestinoConhecimento || null, det.recintoAduaneiroDestino || null,
+          det.pesoBrutoConhecimento || null, det.quantidadeVolumesConhecimento || null, 
+          (det.descricaoResumida || '').substring(0, 65000) || null, det.indicadorPartesMadeira || null,
+          det.identificacaoDocumentoConsignatario || null, det.nomeConsignatarioConhecimento || null, det.razaoSocialDocumentoConsignatario || null,
+          det.tipoDocumentoConsignatario || null, det.enderecoConsignatarioConhecimento || null, det.cidadeConsignatarioConhecimento || null,
+          det.caixaPostalConsignatarioConhecimento || null, det.paisConsignatarioConhecimento || null,
+          det.nomeEmbarcadorEstrangeiro || null, det.enderecoEmbarcadorEstrangeiro || null, det.cidadeEmbarcadorEstrangeiro || null,
+          det.caixaPostalEmbarcadorEstrangeiro || null, det.paisEmbarcadorEstrangeiro || null,
+          det.nomeAgenteDeCargaConsolidadorEstrang || null, det.enderecoAgenteDeCargaConsolidadorEstrang || null, det.cidadeAgenteDeCargaConsolidadorEstrang || null,
+          det.paisAgenteDeCargaConsolidadorEstrang || null, det.cnpjResponsavelArquivo || null,
+          det.nomeAssinaturaTransportador || null, det.localAssinaturaTransportador || null,
+          parseBrDate(det.dataHoraAssinaturaTransportador), parseBrDate(det.dataHoraSituacaoAtual),
+          frete.pendenciaPagamento || null, frete.moedaOrigem?.codigo || null, frete.moedaOrigem?.descricao || null,
+          freteTotal, frete.somatorioFretePorItemCarga?.valor || null,
+          det.bloqueiosAtivos?.length ? JSON.stringify(det.bloqueiosAtivos) : null,
+          det.bloqueiosBaixados?.length ? JSON.stringify(det.bloqueiosBaixados) : null,
+          det.divergencias?.length ? JSON.stringify(det.divergencias) : null,
+          det.viagensAssociadas?.length ? JSON.stringify(det.viagensAssociadas) : null,
+          det.mawbAwbAssociados?.length ? JSON.stringify(det.mawbAwbAssociados) : null,
+          det.partesEstoque?.length ? JSON.stringify(det.partesEstoque) : null,
+          det.itensCarga?.length ? JSON.stringify(det.itensCarga) : null,
+          frete ? JSON.stringify(frete) : null,
+          attempts ? JSON.stringify(attempts) : null,
+          leadcomex_data ? JSON.stringify(leadcomex_data) : null
+        ]);
+        
+        console.log(`[save_leadcomex_log] Saved log for HAWB ${hawb}, success=${success}`);
+        result = { success: true, message: 'Log saved successfully' };
+        break;
+      }
+
+      case 'get_leadcomex_logs': {
+        const { 
+          limit = 100, 
+          offset = 0, 
+          hawb: searchHawb, 
+          success: filterSuccess, 
+          date_from, 
+          date_to,
+          execution_source: filterSource
+        } = body as any;
+        
+        let query = `
+          SELECT 
+            id, hawb, mawb, dep_date, success, matched_date, offset_days,
+            total_attempts, total_time_ms, execution_source,
+            lc_hawb, lc_data_emissao, lc_situacao_lead, lc_situacao_portal,
+            lc_tipo, lc_situacao_carga, lc_categoria_carga,
+            lc_aeroporto_origem, lc_aeroporto_destino,
+            lc_peso_bruto, lc_quantidade_volumes,
+            lc_cnpj_consignatario, lc_nome_consignatario,
+            lc_nome_embarcador, lc_cidade_embarcador, lc_pais_embarcador,
+            lc_frete_valor_total, lc_frete_moeda_codigo,
+            lc_bloqueios_ativos_json, lc_viagens_associadas_json,
+            attempts_json,
+            created_at
+          FROM dados_dachser.t_leadcomex_enrichment_logs 
+          WHERE 1=1
+        `;
+        const params: any[] = [];
+        
+        if (searchHawb) { 
+          query += ` AND (hawb LIKE ? OR mawb LIKE ? OR lc_hawb LIKE ?)`; 
+          params.push(`%${searchHawb}%`, `%${searchHawb}%`, `%${searchHawb}%`); 
+        }
+        if (filterSuccess !== undefined && filterSuccess !== null && filterSuccess !== '') { 
+          query += ` AND success = ?`; 
+          params.push(filterSuccess ? 1 : 0); 
+        }
+        if (filterSource) {
+          query += ` AND execution_source = ?`;
+          params.push(filterSource);
+        }
+        if (date_from) { 
+          query += ` AND DATE(created_at) >= ?`; 
+          params.push(date_from); 
+        }
+        if (date_to) { 
+          query += ` AND DATE(created_at) <= ?`; 
+          params.push(date_to); 
+        }
+        
+        // Get total count
+        const countQuery = query.replace(/SELECT[\s\S]*?FROM/, 'SELECT COUNT(*) as total FROM');
+        const countResult = await client.query(countQuery, params);
+        const total = countResult[0]?.total || 0;
+        
+        query += ` ORDER BY created_at DESC LIMIT ? OFFSET ?`;
+        params.push(limit, offset);
+        
+        const rows = await client.query(query, params);
+        
+        // Parse JSON columns
+        const logs = rows.map((row: any) => ({
+          ...row,
+          success: row.success === 1,
+          lc_bloqueios_ativos: row.lc_bloqueios_ativos_json ? JSON.parse(row.lc_bloqueios_ativos_json) : [],
+          lc_viagens_associadas: row.lc_viagens_associadas_json ? JSON.parse(row.lc_viagens_associadas_json) : [],
+          attempts: row.attempts_json ? JSON.parse(row.attempts_json) : [],
+        }));
+        
+        console.log(`[get_leadcomex_logs] Found ${logs.length} logs (total: ${total})`);
+        result = { success: true, logs, total, limit, offset };
+        break;
+      }
+
+      case 'get_leadcomex_log_detail': {
+        const { id: logId } = body as any;
+        
+        const rows = await client.query(`
+          SELECT * FROM dados_dachser.t_leadcomex_enrichment_logs WHERE id = ?
+        `, [logId]);
+        
+        if (!rows || rows.length === 0) {
+          return new Response(
+            JSON.stringify({ error: 'Log não encontrado' }),
+            { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+        
+        const row = rows[0];
+        
+        // Parse all JSON columns
+        const log = {
+          ...row,
+          success: row.success === 1,
+          lc_bloqueios_ativos: row.lc_bloqueios_ativos_json ? JSON.parse(row.lc_bloqueios_ativos_json) : [],
+          lc_bloqueios_baixados: row.lc_bloqueios_baixados_json ? JSON.parse(row.lc_bloqueios_baixados_json) : [],
+          lc_divergencias: row.lc_divergencias_json ? JSON.parse(row.lc_divergencias_json) : [],
+          lc_viagens_associadas: row.lc_viagens_associadas_json ? JSON.parse(row.lc_viagens_associadas_json) : [],
+          lc_mawb_associados: row.lc_mawb_associados_json ? JSON.parse(row.lc_mawb_associados_json) : [],
+          lc_partes_estoque: row.lc_partes_estoque_json ? JSON.parse(row.lc_partes_estoque_json) : [],
+          lc_itens_carga: row.lc_itens_carga_json ? JSON.parse(row.lc_itens_carga_json) : [],
+          lc_frete: row.lc_frete_json ? JSON.parse(row.lc_frete_json) : null,
+          attempts: row.attempts_json ? JSON.parse(row.attempts_json) : [],
+          raw_response: row.raw_response_json ? JSON.parse(row.raw_response_json) : null,
+        };
+        
+        result = { success: true, log };
+        break;
+      }
+
+      case 'get_leadcomex_logs_stats': {
+        const { date_from, date_to } = body as any;
+        
+        let dateFilter = '';
+        const params: any[] = [];
+        
+        if (date_from) {
+          dateFilter += ` AND DATE(created_at) >= ?`;
+          params.push(date_from);
+        }
+        if (date_to) {
+          dateFilter += ` AND DATE(created_at) <= ?`;
+          params.push(date_to);
+        }
+        
+        const stats = await client.query(`
+          SELECT 
+            COUNT(*) as total,
+            SUM(CASE WHEN success = 1 THEN 1 ELSE 0 END) as success_count,
+            SUM(CASE WHEN success = 0 THEN 1 ELSE 0 END) as error_count,
+            AVG(total_time_ms) as avg_time_ms,
+            AVG(CASE WHEN success = 1 THEN offset_days ELSE NULL END) as avg_offset_days,
+            AVG(total_attempts) as avg_attempts,
+            COUNT(DISTINCT DATE(created_at)) as days_with_data
+          FROM dados_dachser.t_leadcomex_enrichment_logs
+          WHERE 1=1 ${dateFilter}
+        `, params);
+        
+        const row = stats[0] || {};
+        
+        result = {
+          success: true,
+          stats: {
+            total: row.total || 0,
+            success_count: row.success_count || 0,
+            error_count: row.error_count || 0,
+            success_rate: row.total > 0 ? ((row.success_count || 0) / row.total * 100).toFixed(1) : '0.0',
+            avg_time_ms: Math.round(row.avg_time_ms || 0),
+            avg_offset_days: (row.avg_offset_days || 0).toFixed(1),
+            avg_attempts: (row.avg_attempts || 0).toFixed(1),
+            days_with_data: row.days_with_data || 0
+          }
+        };
+        break;
+      }
+
       default:
         return new Response(
           JSON.stringify({ error: `Ação não suportada: ${action}` }),
