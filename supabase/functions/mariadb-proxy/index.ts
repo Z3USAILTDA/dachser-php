@@ -3071,6 +3071,104 @@ serve(async (req) => {
         break;
       }
 
+      // === NEW ACTION: Update LeadComex data (dual-write from leadcomex-sync) ===
+      case 'update_leadcomex_data': {
+        const { house, updates } = body as { 
+          house?: string; 
+          updates?: Record<string, any>;
+        };
+        
+        if (!house) {
+          return new Response(
+            JSON.stringify({ error: 'house (HAWB) é obrigatório' }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+
+        if (!updates || Object.keys(updates).length === 0) {
+          return new Response(
+            JSON.stringify({ error: 'updates é obrigatório' }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+
+        // Normalize HAWB for matching (remove special characters)
+        const houseNormalized = house.replace(/[\s\-_\.\/\\]+/g, '').toUpperCase();
+        console.log(`LEADCOMEX: Updating t_cct_shipments for house=${house} (normalized: ${houseNormalized})`);
+
+        // Fields allowed for LeadComex updates
+        const allowedFields = [
+          'peso_declarado', 'volume_declarado', 'cnpj_consignatario',
+          'aeroporto_origem', 'aeroporto_destino', 
+          'status_manifestacao', 'data_manifestacao_cct'
+        ];
+
+        const setClausesLead: string[] = [];
+        const valuesLead: any[] = [];
+
+        for (const [key, value] of Object.entries(updates)) {
+          if (allowedFields.includes(key) && value !== null && value !== undefined) {
+            setClausesLead.push(`${key} = ?`);
+            valuesLead.push(value);
+          }
+        }
+
+        if (setClausesLead.length === 0) {
+          return new Response(
+            JSON.stringify({ error: 'Nenhum campo válido para atualizar' }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+
+        // Try to match by normalized house (removing hyphens, spaces, etc.)
+        const updateResultLead = await client.execute(`
+          UPDATE ${database}.t_cct_shipments 
+          SET ${setClausesLead.join(', ')}, updated_at = NOW()
+          WHERE REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(house, '-', ''), ' ', ''), '.', ''), '/', ''), '_', '') = ?
+          COLLATE utf8mb4_unicode_ci
+        `, [...valuesLead, houseNormalized]);
+
+        const affectedRowsLead = (updateResultLead as any)?.affectedRows || 0;
+        console.log(`LEADCOMEX: Updated ${affectedRowsLead} rows in t_cct_shipments for ${house}`);
+
+        // If no match found, try to create a new record via UPSERT
+        if (affectedRowsLead === 0) {
+          console.log(`LEADCOMEX: No match found for ${house}, attempting UPSERT...`);
+          
+          // Get master from t_status_aereo if available
+          const masterResultLead = await client.query(`
+            SELECT TRIM(awb) as master FROM ${database}.t_status_aereo 
+            WHERE REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(TRIM(hawb), '-', ''), ' ', ''), '.', ''), '/', ''), '_', '') = ?
+            COLLATE utf8mb4_unicode_ci
+            LIMIT 1
+          `, [houseNormalized]);
+
+          const masterLead = masterResultLead?.[0]?.master || '';
+          
+          if (masterLead) {
+            const validUpdates = Object.keys(updates).filter(k => allowedFields.includes(k));
+            const insertColsLead = ['house', 'master', ...validUpdates, 'updated_at'];
+            const insertValuesLead = [house, masterLead, ...validUpdates.map(k => updates[k]), new Date()];
+            const placeholdersLead = insertColsLead.map(() => '?').join(', ');
+            const updateClausesLead = validUpdates
+              .map(col => `${col} = VALUES(${col})`)
+              .join(', ');
+
+            await client.execute(`
+              INSERT INTO ${database}.t_cct_shipments (${insertColsLead.join(', ')}) 
+              VALUES (${placeholdersLead})
+              ON DUPLICATE KEY UPDATE ${updateClausesLead}, updated_at = NOW()
+            `, insertValuesLead);
+            console.log(`LEADCOMEX: Upserted t_cct_shipments for ${house} with master ${masterLead}`);
+          } else {
+            console.warn(`LEADCOMEX: Could not find master AWB for house ${house}`);
+          }
+        }
+
+        result = { success: true, message: `LeadComex data updated for ${house}`, affectedRows: affectedRowsLead };
+        break;
+      }
+
       case 'get_cct_analytics': {
         console.log('Fetching CCT analytics...');
         

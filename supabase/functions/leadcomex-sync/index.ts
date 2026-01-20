@@ -231,6 +231,10 @@ function generateHawbVariations(hawb: string): string[] {
     if (numericPart.length > 8) {
       variations.add(numericPart.slice(-8));
     }
+    // Últimos 7 dígitos (comum em alguns formatos)
+    if (numericPart.length >= 7) {
+      variations.add(numericPart.slice(-7));
+    }
   }
   
   // 5. Tentar adicionar formatos com e sem hífen
@@ -243,6 +247,29 @@ function generateHawbVariations(hawb: string): string[] {
   if (prefixMatch) {
     variations.add(`${prefixMatch[1]}-${prefixMatch[2]}`);
     variations.add(`${prefixMatch[1]}${prefixMatch[2]}`);
+  }
+  
+  // 6. Tratar formato com barra (ex: 942796/2025/FI)
+  const slashMatch = original.match(/^(\d+)\/(\d+)\/(\w+)$/);
+  if (slashMatch) {
+    const numericPart = slashMatch[1];
+    variations.add(numericPart);
+    variations.add(`${slashMatch[3]}-${numericPart}`);
+    variations.add(`${slashMatch[3]}${numericPart}`);
+  }
+  
+  // 7. Tratar formato com prefixo ICAO (ex: ABCDE12345678 → 12345678)
+  const icaoMatch = original.match(/^([A-Z]{4,5})(\d+)$/);
+  if (icaoMatch) {
+    variations.add(icaoMatch[2]);
+    variations.add(`${icaoMatch[1]}-${icaoMatch[2]}`);
+  }
+  
+  // 8. Adicionar variação apenas com últimos 6-8 dígitos para match parcial
+  const allDigits = original.replace(/\D/g, '');
+  if (allDigits.length >= 6) {
+    variations.add(allDigits.slice(-6));
+    variations.add(allDigits.slice(-8));
   }
   
   return [...variations].filter(v => v.length > 0);
@@ -435,7 +462,7 @@ async function fetchCargaDetalhada(token: string, hawb: string, dataEmissao: str
   return await response.json();
 }
 
-// Processa dados do LeadComex e atualiza o shipment no Supabase
+// Processa dados do LeadComex e atualiza o shipment no Supabase + MariaDB (dual-write)
 async function processLeadComexData(
   supabase: any,
   shipmentId: string,
@@ -464,6 +491,9 @@ async function processLeadComexData(
   if (detalhe?.codigoAeroportoOrigemConhecimento) {
     updateData.aeroporto_origem = detalhe.codigoAeroportoOrigemConhecimento;
   }
+  if (detalhe?.codigoAeroportoDestinoConhecimento) {
+    updateData.aeroporto_destino = detalhe.codigoAeroportoDestinoConhecimento;
+  }
   
   // Se temos dados de manifestação ou entrega, atualizar status
   // Note: API returns "Informada" with "a", and also "Processado" for delivered
@@ -482,7 +512,56 @@ async function processLeadComexData(
     
     if (!updateError) {
       syncStats.updated++;
-      console.log(`[LEADCOMEX] Shipment ${hawb} atualizado com dados CCT`);
+      console.log(`[LEADCOMEX] Shipment ${hawb} atualizado com dados CCT no Supabase`);
+    }
+    
+    // === DUAL-WRITE: Atualizar também no MariaDB via mariadb-proxy ===
+    try {
+      const supabaseUrl = Deno.env.get('SUPABASE_URL');
+      const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+      
+      if (supabaseUrl && supabaseKey) {
+        const mariadbUpdateData: Record<string, any> = {};
+        if (pesoBruto) mariadbUpdateData.peso_declarado = pesoBruto;
+        if (quantidadeVolumes) mariadbUpdateData.volume_declarado = quantidadeVolumes;
+        if (detalhe?.identificacaoDocumentoConsignatario) {
+          mariadbUpdateData.cnpj_consignatario = detalhe.identificacaoDocumentoConsignatario;
+        }
+        if (detalhe?.codigoAeroportoOrigemConhecimento) {
+          mariadbUpdateData.aeroporto_origem = detalhe.codigoAeroportoOrigemConhecimento;
+        }
+        if (detalhe?.codigoAeroportoDestinoConhecimento) {
+          mariadbUpdateData.aeroporto_destino = detalhe.codigoAeroportoDestinoConhecimento;
+        }
+        if (updateData.status_manifestacao) {
+          mariadbUpdateData.status_manifestacao = updateData.status_manifestacao;
+        }
+        if (updateData.data_manifestacao_cct) {
+          mariadbUpdateData.data_manifestacao_cct = updateData.data_manifestacao_cct;
+        }
+        
+        const mariadbResponse = await fetch(`${supabaseUrl}/functions/v1/mariadb-proxy`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${supabaseKey}`,
+          },
+          body: JSON.stringify({
+            action: 'update_leadcomex_data',
+            house: hawb,
+            updates: mariadbUpdateData,
+          }),
+        });
+        
+        if (mariadbResponse.ok) {
+          console.log(`[LEADCOMEX] Shipment ${hawb} atualizado no MariaDB (dual-write)`);
+        } else {
+          const errorText = await mariadbResponse.text();
+          console.warn(`[LEADCOMEX] Erro ao atualizar MariaDB para ${hawb}: ${errorText}`);
+        }
+      }
+    } catch (mariadbError) {
+      console.warn(`[LEADCOMEX] Erro dual-write MariaDB para ${hawb}:`, mariadbError);
     }
   }
 
