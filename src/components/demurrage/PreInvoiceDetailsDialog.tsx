@@ -146,7 +146,7 @@ export function PreInvoiceDetailsDialog({ open, onOpenChange, preInvoice }: PreI
             </div>
             <div>
               <span className="text-muted-foreground">Taxa Câmbio:</span>
-              <p>{preInvoice.exchange_rate?.toFixed(4) || '-'}</p>
+              <p>{preInvoice.exchange_rate ? Number(preInvoice.exchange_rate).toFixed(4) : '-'}</p>
             </div>
           </div>
 
