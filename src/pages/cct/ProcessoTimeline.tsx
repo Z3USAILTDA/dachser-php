@@ -7,7 +7,7 @@ import { Label } from "@/components/ui/label";
 import { StatusBadge, SLAInfoBadge } from "@/components/cct/StatusBadge";
 import { InnerNavTabs } from "@/components/cct/InnerNavTabs";
 import { EventTimeline } from "@/components/cct/EventTimeline";
-import { useProcessosCCT, useRegistrarPeso, useUpdateTratamentos, useUpdateDecolagem, useCCTEvents } from "@/hooks/useCCTData";
+import { useProcessosCCT, useRegistrarPeso, useUpdateDecolagem, useCCTEvents } from "@/hooks/useCCTData";
 import { toast } from "sonner";
 import {
   Clock,
@@ -32,23 +32,12 @@ import { ptBR } from "date-fns/locale";
 import { cn } from "@/lib/utils";
 import type { ProcessoCCT } from "@/types/cct";
 
-const TRATAMENTOS_IATA = [
-  { code: "DGR", label: "Dangerous Goods" },
-  { code: "PER", label: "Perishable" },
-  { code: "VAL", label: "Valuable" },
-  { code: "AVI", label: "Live Animals" },
-  { code: "HUM", label: "Human Remains" },
-  { code: "EAT", label: "Foodstuff" },
-  { code: "ICE", label: "Dry Ice" },
-  { code: "MAG", label: "Magnetized" },
-];
 
 export default function ProcessoTimeline() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { data: processos = [], isLoading } = useProcessosCCT();
   const registrarPeso = useRegistrarPeso();
-  const updateTratamentos = useUpdateTratamentos();
   const updateDecolagem = useUpdateDecolagem();
 
   // Find the processo to get the AWB for events query
@@ -62,13 +51,11 @@ export default function ProcessoTimeline() {
   const [activeTab, setActiveTab] = useState("timeline");
   const [editingPeso, setEditingPeso] = useState(false);
   const [editingDecolagem, setEditingDecolagem] = useState(false);
-  const [editingTratamentos, setEditingTratamentos] = useState(false);
 
   // Form states
   const [pesoConstatado, setPesoConstatado] = useState("");
   const [volumeConstatado, setVolumeConstatado] = useState("");
   const [dataDecolagem, setDataDecolagem] = useState("");
-  const [tratamentosSelecionados, setTratamentosSelecionados] = useState<string[]>([]);
 
   // Combine historic events with fallback evento from processo
 
@@ -83,18 +70,6 @@ export default function ProcessoTimeline() {
       setDataDecolagem(depDate 
         ? format(new Date(depDate), "yyyy-MM-dd'T'HH:mm")
         : "");
-      
-      // Parse tratamentos - suportar array ou string separada por vírgula/espaço
-      const tratamentos = processo.shipment.tratamentos_especiais as string[] | string | null | undefined;
-      if (Array.isArray(tratamentos)) {
-        setTratamentosSelecionados(tratamentos.map(t => t.toUpperCase()));
-      } else if (typeof tratamentos === "string" && tratamentos) {
-        setTratamentosSelecionados(
-          tratamentos.split(/[,;\s]+/).filter(Boolean).map(t => t.toUpperCase())
-        );
-      } else {
-        setTratamentosSelecionados([]);
-      }
     }
   }, [processo]);
 
@@ -127,26 +102,6 @@ export default function ProcessoTimeline() {
     } catch (error) {
       toast.error("Erro ao atualizar decolagem");
     }
-  };
-
-  const handleSaveTratamentos = async () => {
-    if (!processo) return;
-    try {
-      await updateTratamentos.mutateAsync({
-        shipmentId: processo.shipment.id,
-        tratamentos: tratamentosSelecionados,
-      });
-      toast.success("Tratamentos atualizados");
-      setEditingTratamentos(false);
-    } catch (error) {
-      toast.error("Erro ao atualizar tratamentos");
-    }
-  };
-
-  const toggleTratamento = (code: string) => {
-    setTratamentosSelecionados(prev => 
-      prev.includes(code) ? prev.filter(t => t !== code) : [...prev, code]
-    );
   };
 
   const formatDate = (dateStr?: string | null) => {
@@ -430,67 +385,55 @@ export default function ProcessoTimeline() {
               )}
             </div>
 
-            {/* Tratamentos Especiais */}
+            {/* Tratamentos Especiais - Display Only */}
             <div className="rounded-2xl bg-[rgba(5,6,18,0.9)] border border-[rgba(255,255,255,0.12)] shadow-[0_18px_40px_rgba(0,0,0,0.85)] p-5">
               <div className="flex items-center justify-between mb-4">
                 <h3 className="text-base font-medium text-white flex items-center gap-2">
                   <AlertTriangle className="h-5 w-5 text-[#ffc800]" />
-                  Tratamentos Especiais IATA
+                  Tratamentos Especiais
                 </h3>
-                {!editingTratamentos ? (
-                  <button
-                    onClick={() => setEditingTratamentos(true)}
-                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs text-[#aaa] hover:text-[#ffc800] border border-[rgba(255,255,255,0.15)] hover:border-[#ffc800]/40 transition"
-                  >
-                    <Edit3 className="h-3.5 w-3.5" />
-                    Editar
-                  </button>
-                ) : (
-                  <div className="flex gap-2">
-                    <button
-                      onClick={handleSaveTratamentos}
-                      disabled={updateTratamentos.isPending}
-                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 hover:bg-emerald-500/30 transition"
-                    >
-                      <Save className="h-3.5 w-3.5" />
-                      Salvar
-                    </button>
-                    <button
-                      onClick={() => setEditingTratamentos(false)}
-                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs text-[#888] border border-[rgba(255,255,255,0.15)] hover:bg-[rgba(255,255,255,0.05)] transition"
-                    >
-                      <X className="h-3.5 w-3.5" />
-                    </button>
-                  </div>
-                )}
               </div>
               
-              <div className="flex flex-wrap gap-2">
-                {TRATAMENTOS_IATA.map((t) => {
-                  const isSelected = tratamentosSelecionados.includes(t.code);
+              {(() => {
+                // Get raw value from shipment
+                const rawTratamentos = shipment.tratamentos_especiais as string | string[] | null | undefined;
+                
+                // Parse tratamentos - handle string or array
+                let tratamentosList: string[] = [];
+                if (Array.isArray(rawTratamentos)) {
+                  tratamentosList = rawTratamentos.filter(Boolean);
+                } else if (typeof rawTratamentos === "string" && rawTratamentos.trim()) {
+                  // Filter out common "no treatment" phrases
+                  const normalized = rawTratamentos.trim();
+                  if (!normalized.toLowerCase().includes("sem tratamento") && 
+                      !normalized.toLowerCase().includes("nenhum") &&
+                      normalized.length > 0) {
+                    tratamentosList = normalized.split(/[,;\s]+/).filter(Boolean);
+                  }
+                }
+                
+                if (tratamentosList.length === 0) {
                   return (
-                    <button
-                      key={t.code}
-                      onClick={() => editingTratamentos && toggleTratamento(t.code)}
-                      disabled={!editingTratamentos}
-                      className={cn(
-                        "px-3 py-1.5 rounded-full text-xs font-medium border transition",
-                        isSelected
-                          ? "bg-[#ffc800]/20 text-[#ffc800] border-[#ffc800]/40"
-                          : "bg-[rgba(255,255,255,0.05)] text-[#888] border-[rgba(255,255,255,0.1)]",
-                        editingTratamentos && "cursor-pointer hover:bg-[rgba(255,255,255,0.1)]"
-                      )}
-                    >
-                      {t.code}
-                      {isSelected && <CheckCircle className="inline h-3 w-3 ml-1" />}
-                    </button>
+                    <div className="flex items-center gap-2">
+                      <CheckCircle className="h-4 w-4 text-emerald-400" />
+                      <span className="text-[#aaa] text-sm">Sem tratamento especial</span>
+                    </div>
                   );
-                })}
-              </div>
-              
-              {tratamentosSelecionados.length === 0 && !editingTratamentos && (
-                <p className="text-[#666] text-sm mt-2">Nenhum tratamento especial aplicado</p>
-              )}
+                }
+                
+                return (
+                  <div className="flex flex-wrap gap-2">
+                    {tratamentosList.map((t, idx) => (
+                      <Badge
+                        key={idx}
+                        className="px-3 py-1.5 text-xs font-medium bg-[#ffc800]/20 text-[#ffc800] border-[#ffc800]/40"
+                      >
+                        {t.toUpperCase()}
+                      </Badge>
+                    ))}
+                  </div>
+                );
+              })()}
             </div>
           </div>
         )}
