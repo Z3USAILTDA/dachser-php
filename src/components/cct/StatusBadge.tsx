@@ -54,10 +54,11 @@ export function SLABadge({ status, className }: SLABadgeProps) {
 interface SLAInfoBadgeProps {
   slaInfo: SLAInfo;
   className?: string;
+  showTipoVoo?: boolean;
 }
 
-export function SLAInfoBadge({ slaInfo, className }: SLAInfoBadgeProps) {
-  const { status, horasRestantes, tempoResposta, usouNovaLogica } = slaInfo;
+export function SLAInfoBadge({ slaInfo, className, showTipoVoo = false }: SLAInfoBadgeProps) {
+  const { status, horasRestantes, tipoVoo, slaLimite } = slaInfo;
   
   const getColor = () => {
     switch (status) {
@@ -74,14 +75,27 @@ export function SLAInfoBadge({ slaInfo, className }: SLAInfoBadgeProps) {
     }
   };
   
-  // Se usou nova lógica (DEP - Manifestação), mostrar tempo de resposta
-  const displayValue = usouNovaLogica && tempoResposta !== null
-    ? `${tempoResposta.toFixed(1)}h resp.`
-    : formatSLARestante(horasRestantes);
+  // Format remaining hours
+  const displayValue = formatSLARestante(horasRestantes);
+  
+  // Tipo de voo label
+  const tipoVooIcon = tipoVoo === 'VOO_CURTO' ? '✈️' : '🌍';
+  const tipoVooLabel = tipoVoo === 'VOO_CURTO' ? 'Curto' : 'Longo';
   
   return (
-    <Badge variant="outline" className={cn(getColor(), "font-mono text-xs", className)}>
-      {displayValue}
-    </Badge>
+    <div className={cn("flex items-center gap-1.5", className)}>
+      {showTipoVoo && tipoVoo && (
+        <Badge 
+          variant="outline" 
+          className="bg-muted/30 text-muted-foreground border-border text-[0.65rem] px-1.5"
+          title={tipoVoo === 'VOO_CURTO' ? 'América do Sul (+30min)' : 'Intercontinental (ETA -4h)'}
+        >
+          {tipoVooIcon} {tipoVooLabel}
+        </Badge>
+      )}
+      <Badge variant="outline" className={cn(getColor(), "font-mono text-xs")}>
+        {displayValue}
+      </Badge>
+    </div>
   );
 }

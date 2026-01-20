@@ -2566,8 +2566,72 @@ serve(async (req) => {
       }
 
       // ==================== CCT (Control Tower) ====================
+      
+      // === CCT SLA Helper Functions ===
+      // Países da América do Sul para determinar VOO_CURTO
+      const PAISES_AMERICA_SUL = [
+        'Brasil', 'Argentina', 'Chile', 'Uruguai', 'Paraguai', 
+        'Bolívia', 'Peru', 'Equador', 'Colômbia', 'Venezuela',
+        'Guiana', 'Suriname', 'Guiana Francesa'
+      ];
+      
+      // Determinar tipo de voo baseado no país de origem
+      function determinarTipoVoo(aeroportoOrigem: string, aeroportoPaisMap: Map<string, string>): 'VOO_CURTO' | 'VOO_LONGO' {
+        const pais = aeroportoPaisMap.get(aeroportoOrigem?.toUpperCase()?.trim());
+        return PAISES_AMERICA_SUL.includes(pais || '') ? 'VOO_CURTO' : 'VOO_LONGO';
+      }
+      
+      // Calcular limite do SLA baseado no tipo de voo
+      function calcularSlaLimite(
+        tipoVoo: string,
+        dataDecolagem: Date | null,
+        eta: Date | null,
+        statusManifestacao: string
+      ): Date | null {
+        // SLA só ativo para processos manifestados no CCT
+        if (statusManifestacao !== 'MANIFESTADO_CCT') return null;
+        
+        if (tipoVoo === 'VOO_CURTO' && dataDecolagem) {
+          return new Date(dataDecolagem.getTime() + 30 * 60 * 1000); // +30 min
+        }
+        
+        if (tipoVoo === 'VOO_LONGO' && eta) {
+          return new Date(eta.getTime() - 4 * 60 * 60 * 1000); // -4 horas
+        }
+        
+        return null;
+      }
+      
+      // Calcular status do SLA
+      function calcularSlaStatus(slaLimite: Date | null): 'OK' | 'ALERTA' | 'CRITICO' {
+        if (!slaLimite) return 'OK';
+        
+        const now = new Date();
+        const alertaLimite = new Date(slaLimite.getTime() - 60 * 60 * 1000); // -1 hora
+        
+        if (now >= slaLimite) return 'CRITICO';
+        if (now >= alertaLimite) return 'ALERTA';
+        return 'OK';
+      }
+      
       case 'get_cct_shipments': {
         console.log('Fetching CCT shipments (post-tracking AWBs from t_status_aereo)...');
+        
+        // Buscar mapa de aeroportos → países para cálculo de tipo_voo
+        let aeroportoPaisMap = new Map<string, string>();
+        try {
+          const aeroportosResult = await client.query(`
+            SELECT codigo, pais FROM ${database}.t_cct_aeroportos
+          `);
+          for (const aero of aeroportosResult || []) {
+            if (aero.codigo && aero.pais) {
+              aeroportoPaisMap.set(aero.codigo.toUpperCase().trim(), aero.pais);
+            }
+          }
+          console.log(`CCT: Loaded ${aeroportoPaisMap.size} airports for tipo_voo calculation`);
+        } catch (aeroportosError) {
+          console.warn('CCT: Could not load t_cct_aeroportos, defaulting to VOO_LONGO:', aeroportosError);
+        }
         
         // Registered airline codes for CCT filtering (43 airlines)
         const registeredAirlineCodes = [
@@ -2713,71 +2777,42 @@ serve(async (req) => {
           LIMIT 500
         `);
 
-        // Calculate SLA status based on specific status
-        // NEW LOGIC: For manifested AWBs, SLA = DEP datetime - Manifestation datetime
+        // Calculate SLA status using the correct logic:
+        // 1. Determine tipo_voo based on aeroporto_origem (América do Sul = VOO_CURTO, else VOO_LONGO)
+        // 2. Calculate sla_limite: VOO_CURTO = dep_datetime + 30min, VOO_LONGO = eta - 4h
+        // 3. Calculate sla_status: CRITICO if now >= sla_limite, ALERTA if now >= sla_limite - 1h
         const now = new Date();
         const processedShipments = (shipments || []).map((row: any) => {
           const lastUpdate = row.ultimo_evento_data ? new Date(row.ultimo_evento_data) : null;
           const statusCode = row.status_cct_oficial || 'AGUARDANDO_MANIFESTACAO';
           
-          // Parse dates for new SLA calculation
+          // Parse dates for SLA calculation
           const depDatetime = row.dep_datetime ? new Date(row.dep_datetime) : null;
-          const manifestacaoDatetime = row.data_manifestacao_cct ? new Date(row.data_manifestacao_cct) : null;
+          const eta = row.eta ? new Date(row.eta) : null;
+          const statusManifestacao = row.status_manifestacao_cct || 'RECEBIDO_NOVA';
           
-          // Get SLA hours for this specific status
-          const slaHours = slaConfigByStatus[statusCode] ?? 24;
+          // === NEW SLA LOGIC ===
+          // Determine tipo_voo based on aeroporto_origem
+          const tipoVoo = determinarTipoVoo(row.aeroporto_origem, aeroportoPaisMap);
+          const paisOrigem = aeroportoPaisMap.get(row.aeroporto_origem?.toUpperCase()?.trim()) || 'Desconhecido';
           
-          // SLA calculation
-          let slaStatus = 'OK';
-          let horasRestantes: number | null = null;
+          // Calculate sla_limite based on tipo_voo
+          const slaLimite = calcularSlaLimite(tipoVoo, depDatetime, eta, statusManifestacao);
+          
+          // Calculate sla_status
+          let slaStatus = calcularSlaStatus(slaLimite);
+          
+          // Calculate horasRestantes for display
+          const horasRestantes = slaLimite 
+            ? (slaLimite.getTime() - now.getTime()) / (1000 * 60 * 60) 
+            : null;
+          
+          // Calculate percentual for progress display
           let percentual: number | null = null;
-          let tempoResposta: number | null = null; // Horas entre DEP e Manifestação
-          let usouNovaLogica = false;
-          
-          // NEW LOGIC: If manifested and has DEP datetime, calculate SLA as DEP - Manifestação
-          // This shows how long after manifestation the flight departed
-          if (depDatetime && manifestacaoDatetime && statusCode === 'DEP') {
-            tempoResposta = (depDatetime.getTime() - manifestacaoDatetime.getTime()) / (1000 * 60 * 60);
-            usouNovaLogica = true;
-            
-            // SLA thresholds based on tempo de resposta (quanto menor, melhor)
-            // OK: decolou em até 24h após manifestar
-            // ALERTA: decolou entre 24h e 48h após manifestar
-            // VENCIDO: decolou mais de 48h após manifestar
-            if (tempoResposta <= 24) {
-              slaStatus = 'OK';
-              percentual = Math.min(100, (tempoResposta / 24) * 100);
-            } else if (tempoResposta <= 48) {
-              slaStatus = 'ALERTA';
-              percentual = Math.min(100, (tempoResposta / 48) * 100);
-            } else {
-              slaStatus = 'VENCIDO';
-              percentual = 100;
-            }
-            horasRestantes = null; // Não aplicável para tempo de resposta
-          } else if (depDatetime || manifestacaoDatetime) {
-            // Has at least one reference date - use time-based SLA
-            const hoursSinceUpdate = lastUpdate ? (now.getTime() - lastUpdate.getTime()) / (1000 * 60 * 60) : null;
-            
-            if (hoursSinceUpdate !== null) {
-              horasRestantes = slaHours - hoursSinceUpdate;
-              percentual = Math.min(100, Math.max(0, (hoursSinceUpdate / slaHours) * 100));
-              
-              if (horasRestantes <= 0) {
-                slaStatus = 'VENCIDO';
-              } else if (horasRestantes <= 2) {
-                slaStatus = 'CRITICO';
-              } else if (horasRestantes <= 4) {
-                slaStatus = 'ALERTA';
-              }
-            }
-          } else {
-            // NO departure date AND no manifestation date - keep as OK
-            // SLA will only be affected by divergence or flight delay (below)
-            // This prevents false positives for AWBs without departure info
-            slaStatus = 'OK';
-            horasRestantes = null;
-            percentual = null;
+          if (slaLimite && depDatetime) {
+            const totalHours = tipoVoo === 'VOO_CURTO' ? 0.5 : 4; // 30min or 4h in hours
+            const elapsedHours = (now.getTime() - depDatetime.getTime()) / (1000 * 60 * 60);
+            percentual = Math.min(100, Math.max(0, (elapsedHours / totalHours) * 100));
           }
 
           // Helper function to calculate divergence percentage
@@ -2798,15 +2833,15 @@ serve(async (req) => {
           const temDivergencia = (divergenciaPeso !== null && divergenciaPeso > 0) || 
                                  (divergenciaVolume !== null && divergenciaVolume > 0);
 
-          // Mark as CRITICO if there's any divergence (unless already VENCIDO)
-          if (temDivergencia && slaStatus !== 'VENCIDO') {
-            slaStatus = 'CRITICO';
+          // Escalar para CRITICO se houver divergência (complementar ao SLA principal)
+          if (temDivergencia && slaStatus === 'OK') {
+            slaStatus = 'ALERTA';
           }
 
           // Check for flight delay from tracking screen (data_atraso)
           const temAtrasoVoo = row.data_atraso !== null && row.data_atraso !== undefined;
 
-          // If flight is delayed, mark as ALERTA (unless already VENCIDO or CRITICO)
+          // If flight is delayed, escalate to ALERTA (unless already CRITICO)
           if (temAtrasoVoo && slaStatus === 'OK') {
             slaStatus = 'ALERTA';
           }
@@ -2834,18 +2869,19 @@ serve(async (req) => {
             aeroporto_origem: row.aeroporto_origem || 'N/A',
             aeroporto_destino: row.aeroporto_destino || 'GRU',
             status_cct_oficial: displayStatus,
-            status_manifestacao: row.status_cct_oficial || 'INFORMADA',
+            status_manifestacao: statusManifestacao,
             sla_status: slaStatus,
             sla_info: {
               status: slaStatus,
               horasRestantes: horasRestantes !== null ? Math.round(horasRestantes * 100) / 100 : null,
               percentual: percentual !== null ? Math.round(percentual * 100) / 100 : null,
-              slaConfigHoras: slaHours,
-              tempoResposta: tempoResposta !== null ? Math.round(tempoResposta * 100) / 100 : null, // Horas entre DEP e Manifestação
-              usouNovaLogica: usouNovaLogica, // Indica se usou a lógica DEP - Manifestação
+              tipoVoo: tipoVoo,
+              slaLimite: slaLimite?.toISOString() || null,
+              paisOrigem: paisOrigem,
+              aeroportoOrigem: row.aeroporto_origem || 'N/A',
             },
-            sla_limite: null,
-            tipo_voo: null,
+            sla_limite: slaLimite?.toISOString() || null,
+            tipo_voo: tipoVoo,
             ultimo_evento_data: row.ultimo_evento_data,
             ultimo_evento_codigo: statusCode,
             ultimo_evento_descricao: statusCode,

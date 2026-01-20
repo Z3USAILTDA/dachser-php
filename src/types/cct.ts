@@ -253,7 +253,12 @@ export interface SLAInfo {
   status: SLAStatus;
   horasRestantes: number | null;
   percentual: number | null;
-  slaConfigHoras: number;
+  tipoVoo?: 'VOO_CURTO' | 'VOO_LONGO' | null;
+  slaLimite?: string | null;
+  paisOrigem?: string | null;
+  aeroportoOrigem?: string | null;
+  // Legacy fields (kept for backwards compatibility)
+  slaConfigHoras?: number;
   vencidoEm?: string | null;
   proximoVencimento?: string | null;
   tempoResposta?: number | null;
