@@ -56,13 +56,18 @@ const CODIGOS_IATA: CodigoIATA[] = [
  */
 function mapRowToProcessoCCT(row: any): ProcessoCCT {
   // Parse tratamento from t_master_dados - this is the primary source
+  // Also check tratamentos_especiais as fallback
   let tratamentos: string[] | null = null;
-  const tratamentoSource = row.tratamento; // Use tratamento from t_master_dados
+  const tratamentoSource = row.tratamento || row.tratamentos_especiais;
   if (tratamentoSource) {
     if (Array.isArray(tratamentoSource)) {
       tratamentos = tratamentoSource;
     } else if (typeof tratamentoSource === 'string') {
-      tratamentos = tratamentoSource.split(',').map((t: string) => t.trim()).filter(Boolean);
+      // Parse comma-separated, semicolon-separated, or space-separated codes
+      tratamentos = tratamentoSource
+        .split(/[,;\/\s]+/)
+        .map((t: string) => t.trim().toUpperCase())
+        .filter((t: string) => t.length > 0 && t.length <= 5); // IATA codes are typically 2-4 chars
     }
   }
 
@@ -90,8 +95,9 @@ function mapRowToProcessoCCT(row: any): ProcessoCCT {
       email: row.email_analista || '',
     } : null,
     nome_analista_legado: row.nome_analista,
-    data_decolagem_ultimo_trecho: row.dep_datetime || row.data_decolagem_ultimo_trecho,
-    dep_datetime: row.dep_datetime,
+    // Priorizar dep_datetime (DEP real da companhia aérea) para data de decolagem
+    data_decolagem_ultimo_trecho: row.dep_datetime || row.data_decolagem_ultimo_trecho || null,
+    dep_datetime: row.dep_datetime || null,
     data_manifestacao_cct: row.data_manifestacao_cct,
     created_at: row.created_at,
     updated_at: row.updated_at,

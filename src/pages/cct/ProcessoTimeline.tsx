@@ -77,14 +77,21 @@ export default function ProcessoTimeline() {
     if (processo) {
       setPesoConstatado(processo.shipment.peso_constatado?.toString() || "");
       setVolumeConstatado(processo.shipment.volume_constatado?.toString() || "");
-      setDataDecolagem(processo.shipment.data_decolagem_ultimo_trecho 
-        ? format(new Date(processo.shipment.data_decolagem_ultimo_trecho), "yyyy-MM-dd'T'HH:mm")
+      
+      // Usar dep_datetime como fonte primária para data de decolagem
+      const depDate = processo.shipment.dep_datetime || processo.shipment.data_decolagem_ultimo_trecho;
+      setDataDecolagem(depDate 
+        ? format(new Date(depDate), "yyyy-MM-dd'T'HH:mm")
         : "");
+      
+      // Parse tratamentos - suportar array ou string separada por vírgula/espaço
       const tratamentos = processo.shipment.tratamentos_especiais as string[] | string | null | undefined;
       if (Array.isArray(tratamentos)) {
-        setTratamentosSelecionados(tratamentos);
+        setTratamentosSelecionados(tratamentos.map(t => t.toUpperCase()));
       } else if (typeof tratamentos === "string" && tratamentos) {
-        setTratamentosSelecionados(tratamentos.split(",").filter(Boolean));
+        setTratamentosSelecionados(
+          tratamentos.split(/[,;\s]+/).filter(Boolean).map(t => t.toUpperCase())
+        );
       } else {
         setTratamentosSelecionados([]);
       }
@@ -417,7 +424,9 @@ export default function ProcessoTimeline() {
                   className="max-w-xs h-9 bg-[rgba(0,0,0,0.3)] border-[rgba(255,255,255,0.12)]"
                 />
               ) : (
-                <p className="text-white font-mono">{formatDate(shipment.data_decolagem_ultimo_trecho)}</p>
+                <p className="text-white font-mono">
+                  {formatDate(shipment.dep_datetime || shipment.data_decolagem_ultimo_trecho)}
+                </p>
               )}
             </div>
 
