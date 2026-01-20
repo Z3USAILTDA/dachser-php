@@ -262,6 +262,53 @@ interface QueryRequest {
   client_name?: string;
 }
 
+// ==================== CCT SLA Helper Functions (Global) ====================
+// Países da América do Sul para determinar VOO_CURTO
+const PAISES_AMERICA_SUL = [
+  'Brasil', 'Argentina', 'Chile', 'Uruguai', 'Paraguai', 
+  'Bolívia', 'Peru', 'Equador', 'Colômbia', 'Venezuela',
+  'Guiana', 'Suriname', 'Guiana Francesa'
+];
+
+// Determinar tipo de voo baseado no país de origem
+function determinarTipoVoo(aeroportoOrigem: string, aeroportoPaisMap: Map<string, string>): 'VOO_CURTO' | 'VOO_LONGO' {
+  const pais = aeroportoPaisMap.get(aeroportoOrigem?.toUpperCase()?.trim());
+  return PAISES_AMERICA_SUL.includes(pais || '') ? 'VOO_CURTO' : 'VOO_LONGO';
+}
+
+// Calcular limite do SLA baseado no tipo de voo
+function calcularSlaLimite(
+  tipoVoo: string,
+  dataDecolagem: Date | null,
+  eta: Date | null,
+  statusManifestacao: string
+): Date | null {
+  // SLA só ativo para processos manifestados no CCT
+  if (statusManifestacao !== 'MANIFESTADO_CCT') return null;
+  
+  if (tipoVoo === 'VOO_CURTO' && dataDecolagem) {
+    return new Date(dataDecolagem.getTime() + 30 * 60 * 1000); // +30 min
+  }
+  
+  if (tipoVoo === 'VOO_LONGO' && eta) {
+    return new Date(eta.getTime() - 4 * 60 * 60 * 1000); // -4 horas
+  }
+  
+  return null;
+}
+
+// Calcular status do SLA
+function calcularSlaStatus(slaLimite: Date | null): 'OK' | 'ALERTA' | 'CRITICO' {
+  if (!slaLimite) return 'OK';
+  
+  const now = new Date();
+  const alertaLimite = new Date(slaLimite.getTime() - 60 * 60 * 1000); // -1 hora
+  
+  if (now >= slaLimite) return 'CRITICO';
+  if (now >= alertaLimite) return 'ALERTA';
+  return 'OK';
+}
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
@@ -2566,53 +2613,6 @@ serve(async (req) => {
       }
 
       // ==================== CCT (Control Tower) ====================
-      
-      // === CCT SLA Helper Functions ===
-      // Países da América do Sul para determinar VOO_CURTO
-      const PAISES_AMERICA_SUL = [
-        'Brasil', 'Argentina', 'Chile', 'Uruguai', 'Paraguai', 
-        'Bolívia', 'Peru', 'Equador', 'Colômbia', 'Venezuela',
-        'Guiana', 'Suriname', 'Guiana Francesa'
-      ];
-      
-      // Determinar tipo de voo baseado no país de origem
-      function determinarTipoVoo(aeroportoOrigem: string, aeroportoPaisMap: Map<string, string>): 'VOO_CURTO' | 'VOO_LONGO' {
-        const pais = aeroportoPaisMap.get(aeroportoOrigem?.toUpperCase()?.trim());
-        return PAISES_AMERICA_SUL.includes(pais || '') ? 'VOO_CURTO' : 'VOO_LONGO';
-      }
-      
-      // Calcular limite do SLA baseado no tipo de voo
-      function calcularSlaLimite(
-        tipoVoo: string,
-        dataDecolagem: Date | null,
-        eta: Date | null,
-        statusManifestacao: string
-      ): Date | null {
-        // SLA só ativo para processos manifestados no CCT
-        if (statusManifestacao !== 'MANIFESTADO_CCT') return null;
-        
-        if (tipoVoo === 'VOO_CURTO' && dataDecolagem) {
-          return new Date(dataDecolagem.getTime() + 30 * 60 * 1000); // +30 min
-        }
-        
-        if (tipoVoo === 'VOO_LONGO' && eta) {
-          return new Date(eta.getTime() - 4 * 60 * 60 * 1000); // -4 horas
-        }
-        
-        return null;
-      }
-      
-      // Calcular status do SLA
-      function calcularSlaStatus(slaLimite: Date | null): 'OK' | 'ALERTA' | 'CRITICO' {
-        if (!slaLimite) return 'OK';
-        
-        const now = new Date();
-        const alertaLimite = new Date(slaLimite.getTime() - 60 * 60 * 1000); // -1 hora
-        
-        if (now >= slaLimite) return 'CRITICO';
-        if (now >= alertaLimite) return 'ALERTA';
-        return 'OK';
-      }
       
       case 'get_cct_shipments': {
         console.log('Fetching CCT shipments (post-tracking AWBs from t_status_aereo)...');
