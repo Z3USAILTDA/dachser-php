@@ -1,5 +1,7 @@
-import { CheckCircle2, XCircle, AlertCircle, Loader2, Clock } from "lucide-react";
+import { CheckCircle2, XCircle, AlertCircle, Loader2, Clock, ChevronDown, ChevronUp } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useState } from "react";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 
 export interface AttemptLog {
   attempt_number: number;
@@ -8,6 +10,7 @@ export interface AttemptLog {
   http_status?: number;
   response_time_ms?: number;
   error_message?: string;
+  full_response?: any;
 }
 
 interface AttemptTimelineProps {
@@ -63,6 +66,20 @@ function formatDate(dateStr: string): string {
 }
 
 export function AttemptTimeline({ attempts, isProcessing }: AttemptTimelineProps) {
+  const [expandedAttempts, setExpandedAttempts] = useState<Set<number>>(new Set());
+
+  const toggleExpand = (attemptNumber: number) => {
+    setExpandedAttempts(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(attemptNumber)) {
+        newSet.delete(attemptNumber);
+      } else {
+        newSet.add(attemptNumber);
+      }
+      return newSet;
+    });
+  };
+
   if (attempts.length === 0 && !isProcessing) {
     return null;
   }
@@ -74,6 +91,8 @@ export function AttemptTimeline({ attempts, isProcessing }: AttemptTimelineProps
         const Icon = config.icon;
         const isLast = index === attempts.length - 1;
         const isFound = attempt.status === 'found';
+        const isExpanded = expandedAttempts.has(attempt.attempt_number);
+        const hasFullResponse = attempt.full_response !== undefined && attempt.full_response !== null;
 
         return (
           <div
@@ -115,52 +134,100 @@ export function AttemptTimeline({ attempts, isProcessing }: AttemptTimelineProps
             </div>
 
             {/* Content */}
-            <div 
-              className={cn(
-                "rounded-xl border p-4 transition-all",
-                isFound 
-                  ? "bg-emerald-500/10 border-emerald-500/30" 
-                  : "bg-[rgba(5,6,18,0.7)] border-white/10"
-              )}
-            >
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-sm font-medium text-white/80">
-                  Tentativa {attempt.attempt_number}
-                </span>
-                <span className={cn("text-xs font-mono", config.color)}>
-                  {formatDate(attempt.date)}
-                </span>
-              </div>
-
-              <div className="flex items-center gap-3 text-xs">
-                <span className={cn(
-                  "px-2 py-0.5 rounded-full border",
-                  config.color,
-                  config.borderColor,
-                  config.bgColor + '/10'
-                )}>
-                  {config.label}
-                </span>
-
-                {attempt.http_status && (
-                  <span className="text-white/50 font-mono">
-                    HTTP {attempt.http_status}
-                  </span>
+            <Collapsible open={isExpanded} onOpenChange={() => hasFullResponse && toggleExpand(attempt.attempt_number)}>
+              <div 
+                className={cn(
+                  "rounded-xl border transition-all",
+                  isFound 
+                    ? "bg-emerald-500/10 border-emerald-500/30" 
+                    : "bg-[rgba(5,6,18,0.7)] border-white/10"
                 )}
+              >
+                <div className="p-4">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-sm font-medium text-white/80">
+                      Tentativa {attempt.attempt_number}
+                    </span>
+                    <span className={cn("text-xs font-mono", config.color)}>
+                      {formatDate(attempt.date)}
+                    </span>
+                  </div>
 
-                {attempt.response_time_ms && (
-                  <span className="text-white/50 font-mono">
-                    {(attempt.response_time_ms / 1000).toFixed(2)}s
-                  </span>
-                )}
+                  <div className="flex items-center gap-3 text-xs">
+                    <span className={cn(
+                      "px-2 py-0.5 rounded-full border",
+                      config.color,
+                      config.borderColor,
+                      config.bgColor + '/10'
+                    )}>
+                      {config.label}
+                    </span>
+
+                    {attempt.http_status && (
+                      <span className="text-white/50 font-mono">
+                        HTTP {attempt.http_status}
+                      </span>
+                    )}
+
+                    {attempt.response_time_ms && (
+                      <span className="text-white/50 font-mono">
+                        {(attempt.response_time_ms / 1000).toFixed(2)}s
+                      </span>
+                    )}
+                  </div>
+
+                  {attempt.error_message && (
+                    <p className="mt-2 text-xs text-red-400/80 font-mono truncate">
+                      {attempt.error_message}
+                    </p>
+                  )}
+
+                  {/* Expand button */}
+                  {hasFullResponse && (
+                    <CollapsibleTrigger asChild>
+                      <button 
+                        className={cn(
+                          "mt-3 flex items-center gap-1.5 text-xs transition-colors",
+                          isFound ? "text-emerald-400 hover:text-emerald-300" : "text-white/50 hover:text-white/70"
+                        )}
+                      >
+                        {isExpanded ? (
+                          <>
+                            <ChevronUp className="h-3.5 w-3.5" />
+                            Ocultar resposta completa
+                          </>
+                        ) : (
+                          <>
+                            <ChevronDown className="h-3.5 w-3.5" />
+                            Ver resposta completa
+                          </>
+                        )}
+                      </button>
+                    </CollapsibleTrigger>
+                  )}
+                </div>
+
+                {/* Full response content */}
+                <CollapsibleContent>
+                  {hasFullResponse && (
+                    <div className="px-4 pb-4">
+                      <div className={cn(
+                        "rounded-lg border p-3 overflow-auto max-h-80",
+                        isFound 
+                          ? "bg-emerald-500/5 border-emerald-500/20" 
+                          : "bg-black/30 border-white/5"
+                      )}>
+                        <pre className="text-xs font-mono text-white/70 whitespace-pre-wrap break-all">
+                          {typeof attempt.full_response === 'string' 
+                            ? attempt.full_response 
+                            : JSON.stringify(attempt.full_response, null, 2)}
+                        </pre>
+                      </div>
+                    </div>
+                  )}
+                </CollapsibleContent>
               </div>
-
-              {attempt.error_message && (
-                <p className="mt-2 text-xs text-red-400/80 font-mono truncate">
-                  {attempt.error_message}
-                </p>
-              )}
-            </div>
+            </Collapsible>
           </div>
         );
       })}
