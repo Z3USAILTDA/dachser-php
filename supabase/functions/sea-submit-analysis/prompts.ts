@@ -606,9 +606,84 @@ CONCRETE EXAMPLE (WEIGHT 110 KG BUG FIX):
 - HBL shows 110.000 kg → Delta = 0.000 kg → NO UPDATE NEEDED
 - WRONG: Using container total (5,000 kg) which includes other HBLs' suppliers
 
-★★★ CBM ISOLATION BY SUPPLIER ★★★
-Same rule applies to CBM: sum ONLY from manifest lines matching THIS HBL's suppliers.
-VERIFY each CBM value exists in manifest before including it.
+████████████████████████████████████████████████████████████████████████████████
+█ CBM ISOLATION BY SUPPLIER - DETAILED ALGORITHM                                 █
+████████████████████████████████████████████████████████████████████████████████
+
+★★★ CRITICAL: Each exporter's CBM MUST be calculated ONLY from their rows in the manifest ★★★
+
+STEP-BY-STEP ALGORITHM:
+1. For each row in manifest, identify the "Supplier Name" value in that row
+2. Sum CBM values ONLY for rows where Supplier Name matches the current exporter
+3. NEVER use CBM values from other supplier rows
+4. If CBM column shows "within", the value is INCLUDED in previous row's CBM (do not count separately)
+
+VERIFICATION BEFORE OUTPUT:
+- List which manifest rows belong to each exporter
+- Show CBM values for each row belonging to that exporter
+- Sum = Total CBM for that exporter
+- NEVER use container-level totals for per-exporter CBM
+
+EXAMPLE (CORRECT ISOLATION):
+Manifest rows:
+Row 1: Supplier="ZF POLSKA", CBM=21.186
+Row 2: Supplier="ZF DE10", CBM=10.673  
+Row 3: Supplier="ADDUXI", CBM=0.672
+
+For EXPORTER "ZF POLSKA": Total CBM = 21.186 m³ (ONLY row 1)
+For EXPORTER "ZF DE10": Total CBM = 10.673 m³ (ONLY row 2)
+For EXPORTER "ADDUXI": Total CBM = 0.672 m³ (ONLY row 3)
+
+❌ WRONG: Using total container CBM (32.531 m³) for any individual exporter
+❌ WRONG: Swapping CBM values between exporters (e.g., showing ZF POLSKA with ADDUXI's CBM)
+
+████████████████████████████████████████████████████████████████████████████████
+█ MANDATORY VOLUME DETAILS PER EXPORTER - PALLETS AND PACKAGING TYPE            █
+████████████████████████████████████████████████████████████████████████████████
+
+FOR EACH EXPORTER, YOU MUST EXTRACT AND DISPLAY:
+
+1. PALLET/PACKAGE COUNT (Volume Qty):
+   - Extract from "QTY Packages" column in manifest
+   - If "within" appears, item is included in previous package count (NOT counted separately)
+   - Format: "- Pallet/Package Qty: Manifest: N | HBL: N | Status: ..."
+   
+2. PACKAGING TYPE (Volume Type):
+   - Extract from "Kind of Packaging" column in manifest
+   - Common types: PALLET, WOODEN PALLET, CARTON, BOX, CRATE, DRUM, BAG
+   - Format: "- Packaging Type: Manifest: TYPE | HBL: TYPE | Status: ..."
+
+3. MANDATORY OUTPUT RULE:
+   Even if HBL doesn't specify these details, ALWAYS show what manifest has:
+   "- Pallet/Package Qty: Manifest: 5 PALLETS | HBL: not specified | Status: VERIFY"
+   "- Packaging Type: Manifest: WOODEN PALLET | HBL: not specified | Status: VERIFY"
+
+★★★ NEVER OMIT these fields - they are CRITICAL for cargo verification ★★★
+
+████████████████████████████████████████████████████████████████████████████████
+█ CBM PRECISION RULES - PREVENT NUMBER CONFUSION                                 █
+████████████████████████████████████████████████████████████████████████████████
+
+1. EXTRACT CBM EXACTLY AS SHOWN in manifest - do not round or modify
+2. Use 3 decimal places: 21.186 m³, 10.673 m³, 0.672 m³
+3. NEVER swap CBM values between exporters
+4. If CBM appears similar for two exporters, DOUBLE-CHECK the row association
+
+ANTI-CONFUSION CHECKPOINT (EXECUTE BEFORE OUTPUT):
+Before outputting per-exporter CBM, verify:
+✓ Which row in manifest contains this exporter's name (check "Supplier Name" column)
+✓ What is the CBM value in that SPECIFIC row (check "CBM [m³]" column)
+✓ Confirm you are not using another exporter's CBM
+
+EXAMPLE OF CRITICAL ERROR (DO NOT DO THIS):
+Exporter "ZF POLSKA" shows CBM=0.672 (which belongs to "ADDUXI" row) = CRITICAL ERROR
+
+CORRECT VERIFICATION PROCESS:
+1. Find row where Supplier Name = "ZF POLSKA"
+2. Read CBM from that row only = 21.186 m³
+3. Output: "- Total CBM: Manifest: 21.186 m³ | ..."
+
+★★★ Row mismatch = Invalid analysis ★★★
 
 GENERAL CONTAINER EXAMPLE FOR CMAU5829745 with 3 HBLs:
 - 58ED0B91.PDF suppliers: DOEMER, BOGE, TRAKYA, DREHER, ZF, F&K, PLASTIC, BRÜNINGHAUS
@@ -1545,6 +1620,42 @@ DO NOT use placeholder text like "[Same structure]" - show FULL details for ALL.
 - Total Gross Weight: HBL sum: <#,###.000 kg> | MBL: <#,###.000 kg> | Delta: <±N kg> | Status: <MATCH | UPDATE REQUIRED>
 - Total CBM: HBL sum: <#,###.000 m³> | MBL: <#,###.000 m³> | Delta: <±N m³> | Status: <MATCH | UPDATE REQUIRED>
 - Total Packages: HBL sum: <N> | MBL: <N> | Delta: <±N> | Status: <MATCH | UPDATE REQUIRED>
+- Package Type: HBL: <type> | MBL: <type> | Status: <MATCH | UPDATE REQUIRED>
+
+████████████████████████████████████████████████████████████████████████████████
+█ MANDATORY VOLUME DETAILS - PACKAGES AND CBM                                    █
+████████████████████████████████████████████████████████████████████████████████
+
+FOR HBL × MBL COMPARISON, ALWAYS EXTRACT AND DISPLAY:
+
+1. PACKAGE/VOLUME INFORMATION:
+   - From HBL: Extract package count, type, and CBM from cargo description
+   - From MBL: Extract package count, type, and CBM from cargo particulars
+   
+2. OUTPUT FORMAT:
+   - Packages: HBL = <N PACKAGE_TYPE> | MBL = <N PACKAGE_TYPE> | Status: ...
+   - CBM: HBL = <X.XXX m³> | MBL = <X.XXX m³> | Delta: ... | Status: ...
+   
+3. PACKAGING TYPE COMPARISON:
+   - If HBL says "5 WOODEN PALLETS" and MBL says "5 PLT", these MATCH (normalize)
+   - Common equivalents: PALLET=PLT, CARTON=CTN, BOX=BX, PACKAGE=PKG
+
+★★★ NEVER OMIT package quantity and type from the output ★★★
+
+████████████████████████████████████████████████████████████████████████████████
+█ CBM PRECISION RULES - HBL vs MBL                                               █
+████████████████████████████████████████████████████████████████████████████████
+
+1. EXTRACT CBM EXACTLY as shown in each document
+2. Normalize format: "25.500 CBM" = "25.500 m³" = "25.5 M3"
+3. Compare numeric values with 3 decimal precision
+4. Report actual Delta, not approximated values
+
+VERIFICATION BEFORE COMPARISON:
+✓ Locate CBM in HBL (near "MEASUREMENT" or in cargo totals)
+✓ Locate CBM in MBL (near "MEASUREMENT" or in container summary)
+✓ Extract exact numeric values from each
+✓ Calculate Delta = HBL_CBM - MBL_CBM
 
 ████████████████████████████████████████████████████████████████████████████████
 █ MANDATORY NCM CODES SECTION - MUST ALWAYS BE INCLUDED                         █
