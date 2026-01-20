@@ -5386,31 +5386,32 @@ serve(async (req) => {
           );
         }
 
-        console.log('Fetching CCT events for AWB from t_status_historico:', queryAwb);
+        console.log('Fetching CCT events for AWB from t_cct_eventos_historico:', queryAwb);
 
-        // Query from t_status_historico (tracking history table)
+        // Query from t_cct_eventos_historico (CCT-specific tracking history table)
         try {
           const events = await client.query(`
             SELECT 
               id,
               TRIM(awb) as awb,
-              TRIM(status_code) as codigo_evento,
-              status_description as descricao_evento,
-              data_evento as data_hora_evento,
+              codigo_evento,
+              descricao_evento,
+              data_hora_evento,
               fonte,
-              destino as aeroporto,
-              'PRIMARIA' as nivel_confianca,
-              data_registro as created_at
-            FROM ${database}.t_status_historico
+              aeroporto,
+              recinto,
+              nivel_confianca,
+              created_at
+            FROM ${database}.t_cct_eventos_historico
             WHERE TRIM(awb) = TRIM(?)
-            ORDER BY data_evento DESC
+            ORDER BY data_hora_evento DESC
             LIMIT 100
           `, [queryAwb]);
 
-          console.log(`CCT: Found ${events?.length || 0} events in t_status_historico for AWB ${queryAwb}`);
+          console.log(`CCT: Found ${events?.length || 0} events in t_cct_eventos_historico for AWB ${queryAwb}`);
           result = { success: true, data: events || [] };
         } catch (tableErr) {
-          console.log('Error fetching from t_status_historico:', tableErr);
+          console.log('Error fetching from t_cct_eventos_historico:', tableErr);
           result = { success: true, data: [] };
         }
         break;

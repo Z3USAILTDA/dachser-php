@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { PageLayout } from "@/components/cct/PageLayout";
 import { Badge } from "@/components/ui/badge";
@@ -72,8 +72,8 @@ export default function ProcessoTimeline() {
 
   // Combine historic events with fallback evento from processo
 
-  // Initialize form values when processo loads
-  useMemo(() => {
+  // Initialize form values when processo loads - use useEffect to properly update state
+  useEffect(() => {
     if (processo) {
       setPesoConstatado(processo.shipment.peso_constatado?.toString() || "");
       setVolumeConstatado(processo.shipment.volume_constatado?.toString() || "");
