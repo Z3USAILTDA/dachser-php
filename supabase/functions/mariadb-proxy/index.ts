@@ -260,6 +260,8 @@ interface QueryRequest {
   resolved_by?: string;
   resolved_at?: string;
   client_name?: string;
+  // LeadComex reset
+  hawbs?: string[];
 }
 
 // ==================== CCT SLA Helper Functions (Global) ====================
@@ -10620,6 +10622,67 @@ serve(async (req) => {
             avg_attempts: Number(row.avg_attempts || 0).toFixed(1),
             days_with_data: Number(row.days_with_data) || 0
           }
+        };
+        break;
+      }
+
+      // =============================================
+      // RESET LEADCOMEX STATUS: Força reprocessamento de HAWBs
+      // =============================================
+      case 'reset_leadcomex_status': {
+        const limit = body.limit || 10;
+        const hawbs = body.hawbs || null; // Array de HAWBs específicos ou null para últimos N
+        
+        console.log(`[MARIADB] Resetando status LeadComex - limit: ${limit}, hawbs específicos: ${hawbs ? 'sim' : 'não'}`);
+        
+        let hawbsToReset: string[] = [];
+        
+        if (hawbs && Array.isArray(hawbs) && hawbs.length > 0) {
+          // Reset HAWBs específicos
+          hawbsToReset = hawbs;
+        } else {
+          // Buscar últimos N HAWBs processados para reset
+          const recentLogsResult = await client.execute(`
+            SELECT DISTINCT hawb
+            FROM dados_dachser.t_leadcomex_enrichment_logs
+            ORDER BY created_at DESC
+            LIMIT ${limit}
+          `);
+          const recentLogs = recentLogsResult?.rows || recentLogsResult || [];
+          hawbsToReset = Array.isArray(recentLogs) ? recentLogs.map((r: any) => r.hawb).filter(Boolean) : [];
+        }
+        
+        if (hawbsToReset.length === 0) {
+          result = { success: true, message: 'Nenhum HAWB para resetar', reset_count: 0 };
+          break;
+        }
+        
+        // Deletar logs existentes para forçar reprocessamento
+        const placeholders = hawbsToReset.map(() => '?').join(',');
+        const deleteResult = await client.execute(`
+          DELETE FROM dados_dachser.t_leadcomex_enrichment_logs
+          WHERE hawb IN (${placeholders})
+        `, hawbsToReset);
+        
+        const deletedRows = (deleteResult as any)?.affectedRows || 0;
+        
+        // Também limpar dados de enriquecimento na tabela t_cct_shipments
+        await client.execute(`
+          UPDATE dados_dachser.t_cct_shipments
+          SET peso_declarado = NULL, cnpj_consignatario = NULL
+          WHERE REPLACE(REPLACE(REPLACE(house, '-', ''), ' ', ''), '.', '') IN (
+            SELECT REPLACE(REPLACE(REPLACE(?, '-', ''), ' ', ''), '.', '')
+            ${hawbsToReset.slice(1).map(() => ' UNION SELECT REPLACE(REPLACE(REPLACE(?, \'-\', \'\'), \' \', \'\'), \'.\', \'\')').join('')}
+          )
+        `, hawbsToReset);
+        
+        console.log(`[MARIADB] Resetados ${deletedRows} logs, HAWBs: ${hawbsToReset.join(', ')}`);
+        
+        result = {
+          success: true,
+          message: `Resetados ${deletedRows} logs de ${hawbsToReset.length} HAWBs`,
+          reset_count: deletedRows,
+          hawbs_reset: hawbsToReset
         };
         break;
       }
