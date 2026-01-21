@@ -31,6 +31,12 @@ const LeadcomexLogsPage: React.FC = () => {
   const [isReprocessing, setIsReprocessing] = useState(false);
   const [selectedLog, setSelectedLog] = useState<LeadcomexLog | null>(null);
   
+  // Manual test states
+  const [manualHawb, setManualHawb] = useState('');
+  const [manualDate, setManualDate] = useState('');
+  const [isTestingManual, setIsTestingManual] = useState(false);
+  const [manualResult, setManualResult] = useState<any>(null);
+  
   // Filters
   const [filters, setFilters] = useState<LeadcomexLogFilters>({
     limit: 50,
@@ -177,6 +183,50 @@ const LeadcomexLogsPage: React.FC = () => {
       toast.error('Erro ao reprocessar HAWB');
     } finally {
       setIsReprocessing(false);
+    }
+  };
+
+  const testManualHawb = async () => {
+    if (!manualHawb || !manualDate) {
+      toast.error('Informe o HAWB e a data de emissão');
+      return;
+    }
+    
+    setIsTestingManual(true);
+    setManualResult(null);
+    
+    try {
+      // Convert date from dd/mm/yyyy to yyyy-mm-dd
+      let isoDate = manualDate;
+      if (manualDate.includes('/')) {
+        const parts = manualDate.split('/');
+        if (parts.length === 3) {
+          isoDate = `${parts[2]}-${parts[1].padStart(2, '0')}-${parts[0].padStart(2, '0')}`;
+        }
+      }
+      
+      const { data, error } = await supabase.functions.invoke('leadcomex-test-reverse', {
+        body: { 
+          hawb: manualHawb,
+          dep_date: isoDate,
+          max_retries: 30
+        }
+      });
+      
+      if (error) throw error;
+      
+      setManualResult(data);
+      
+      if (data.success) {
+        toast.success(`HAWB encontrado! Data: ${data.matched_date}, Offset: -${data.offset_days}d`);
+      } else {
+        toast.warning(`HAWB não encontrado após ${data.total_attempts} tentativas`);
+      }
+    } catch (err) {
+      console.error('Erro ao testar HAWB:', err);
+      toast.error('Erro ao testar HAWB manualmente');
+    } finally {
+      setIsTestingManual(false);
     }
   };
 
@@ -341,6 +391,139 @@ const LeadcomexLogsPage: React.FC = () => {
             </CardContent>
           </Card>
         </div>
+
+        {/* Manual Test Section */}
+        <Card className="bg-[#0d1117]/80 border-white/10 backdrop-blur-sm mb-6">
+          <CardContent className="p-4">
+            <div className="flex items-center gap-2 mb-3">
+              <Search className="h-4 w-4 text-[#F5B843]" />
+              <span className="text-white font-medium text-sm">Consulta Manual</span>
+              <span className="text-white/40 text-xs ml-2">Testar um HAWB específico na API LeadComex</span>
+            </div>
+            <div className="flex flex-wrap gap-3 items-end">
+              <div className="flex-1 min-w-[180px] max-w-[280px]">
+                <label className="text-white/60 text-xs mb-1 block">HAWB</label>
+                <Input
+                  placeholder="Ex: GRU-12345678"
+                  value={manualHawb}
+                  onChange={(e) => setManualHawb(e.target.value.toUpperCase())}
+                  className="bg-white/5 border-white/10 text-white placeholder:text-white/40 font-mono"
+                />
+              </div>
+              <div className="w-[150px]">
+                <label className="text-white/60 text-xs mb-1 block">Data Inicial</label>
+                <Input
+                  placeholder="dd/mm/aaaa"
+                  value={manualDate}
+                  onChange={(e) => {
+                    // Auto-format with slashes
+                    let val = e.target.value.replace(/\D/g, '');
+                    if (val.length > 2) val = val.slice(0, 2) + '/' + val.slice(2);
+                    if (val.length > 5) val = val.slice(0, 5) + '/' + val.slice(5, 9);
+                    setManualDate(val);
+                  }}
+                  maxLength={10}
+                  className="bg-white/5 border-white/10 text-white placeholder:text-white/40"
+                />
+              </div>
+              <Button
+                onClick={testManualHawb}
+                disabled={isTestingManual || !manualHawb || !manualDate}
+                className="bg-blue-600 hover:bg-blue-700 text-white"
+              >
+                {isTestingManual ? (
+                  <>
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    Testando...
+                  </>
+                ) : (
+                  <>
+                    <Zap className="h-4 w-4 mr-2" />
+                    Testar HAWB
+                  </>
+                )}
+              </Button>
+              {manualResult && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setManualResult(null)}
+                  className="text-white/60 hover:text-white"
+                >
+                  Limpar
+                </Button>
+              )}
+            </div>
+            
+            {/* Manual Test Result */}
+            {manualResult && (
+              <div className={`mt-4 p-4 rounded-lg border ${
+                manualResult.success 
+                  ? 'border-emerald-500/30 bg-emerald-500/5' 
+                  : 'border-red-500/30 bg-red-500/5'
+              }`}>
+                <div className="flex items-center justify-between mb-3">
+                  <div className="flex items-center gap-2">
+                    {manualResult.success ? (
+                      <CheckCircle2 className="h-5 w-5 text-emerald-400" />
+                    ) : (
+                      <XCircle className="h-5 w-5 text-red-400" />
+                    )}
+                    <span className={`font-medium ${manualResult.success ? 'text-emerald-400' : 'text-red-400'}`}>
+                      {manualResult.success ? 'HAWB Encontrado' : 'HAWB Não Encontrado'}
+                    </span>
+                  </div>
+                  <div className="text-white/60 text-xs flex items-center gap-3">
+                    <span>{manualResult.total_attempts} tentativas</span>
+                    <span>{manualResult.total_time_ms}ms</span>
+                  </div>
+                </div>
+                
+                {manualResult.success && (
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+                    <div>
+                      <span className="text-white/50 text-xs block">Data Match</span>
+                      <span className="text-white font-mono">{manualResult.matched_date}</span>
+                    </div>
+                    <div>
+                      <span className="text-white/50 text-xs block">Offset</span>
+                      <span className="text-white font-mono">-{manualResult.offset_days} dias</span>
+                    </div>
+                    <div>
+                      <span className="text-white/50 text-xs block">Data Original</span>
+                      <span className="text-white font-mono">{manualResult.original_dep_date}</span>
+                    </div>
+                    <div>
+                      <span className="text-white/50 text-xs block">HAWB Testado</span>
+                      <span className="text-white font-mono">{manualResult.hawb}</span>
+                    </div>
+                  </div>
+                )}
+                
+                {!manualResult.success && manualResult.attempts?.length > 0 && (
+                  <div className="mt-3">
+                    <span className="text-white/50 text-xs block mb-2">Últimas tentativas:</span>
+                    <div className="flex flex-wrap gap-1">
+                      {manualResult.attempts.slice(-10).map((att: any, idx: number) => (
+                        <Badge 
+                          key={idx}
+                          variant="outline" 
+                          className={`text-xs ${
+                            att.status === 'error' 
+                              ? 'border-red-500/30 text-red-400' 
+                              : 'border-white/20 text-white/60'
+                          }`}
+                        >
+                          {att.date} ({att.http_status})
+                        </Badge>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+          </CardContent>
+        </Card>
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* Left: Logs Table */}
