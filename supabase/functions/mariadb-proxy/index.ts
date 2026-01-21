@@ -10336,7 +10336,8 @@ serve(async (req) => {
             cct.cnpj_consignatario
           FROM ${database}.t_status_historico h
           LEFT JOIN ${database}.t_status_aereo s 
-            ON TRIM(h.awb) = TRIM(s.awb) AND TRIM(h.hawb) = TRIM(s.hawb)
+            ON TRIM(h.awb) COLLATE utf8mb4_unicode_ci = TRIM(s.awb) COLLATE utf8mb4_unicode_ci 
+            AND TRIM(h.hawb) COLLATE utf8mb4_unicode_ci = TRIM(s.hawb) COLLATE utf8mb4_unicode_ci
           LEFT JOIN ${database}.t_cct_shipments cct 
             ON TRIM(h.awb) COLLATE utf8mb4_unicode_ci = TRIM(cct.master) COLLATE utf8mb4_unicode_ci
           WHERE ${whereClause}
