@@ -2701,15 +2701,6 @@ serve(async (req) => {
             sub.dep_datetime,
             sub.tipo_servico,
             sub.airline_code,
-            sub.peso_declarado,
-            sub.peso_constatado,
-            sub.volume_declarado,
-            sub.volume_constatado,
-            sub.eta,
-            sub.etd,
-            sub.data_decolagem_ultimo_trecho,
-            sub.cnpj_consignatario,
-            sub.data_manifestacao_cct,
             sub.tratamento,
             sub.ultimo_status_raw
           FROM (
@@ -2731,15 +2722,6 @@ serve(async (req) => {
               s.dep_datetime,
               COALESCE(s.tipo_servico, 'N/A') as tipo_servico,
               LEFT(TRIM(s.awb), 3) as airline_code,
-              cct.peso_declarado,
-              cct.peso_constatado,
-              cct.volume_declarado,
-              cct.volume_constatado,
-              cct.eta,
-              cct.etd,
-              cct.data_decolagem_ultimo_trecho,
-              cct.cnpj_consignatario,
-              cct.data_manifestacao_cct,
               TRIM(m.tratamento) as tratamento,
               -- Status de manifestação CCT (Nomenclatura Aduaneira)
               CASE 
@@ -2754,7 +2736,6 @@ serve(async (req) => {
               ROW_NUMBER() OVER (PARTITION BY TRIM(s.hawb) ORDER BY s.\`última atualização\` DESC) as rn
             FROM ${database}.t_status_aereo s
             LEFT JOIN ${database}.t_master_dados m ON s.awb = m.mawb AND (m.tipo_processo = 'AIR IMPORT' OR m.tipo_processo IS NULL)
-            LEFT JOIN ${database}.t_cct_shipments cct ON TRIM(s.hawb) COLLATE utf8mb4_unicode_ci = TRIM(cct.house) COLLATE utf8mb4_unicode_ci
             WHERE LEFT(TRIM(s.awb), 3) IN (${airlineFilter})
             AND s.\`último_status\` NOT IN (${errorStatusFilter})
             AND (s.origem IS NOT NULL AND LOWER(TRIM(s.origem)) NOT IN ('n/a', 'na', 'erro', 'error', ''))
@@ -2780,12 +2761,60 @@ serve(async (req) => {
           LIMIT 500
         `);
 
+        // STEP 2: Enrich with CCT data using a separate, optimized query
+        // This avoids the heavy JOIN with TRIM/COLLATE in the main query
+        const houseList = (shipments || []).map((s: any) => s.house).filter((h: string) => h && h.trim() !== '');
+        
+        let cctDataMap = new Map<string, any>();
+        if (houseList.length > 0) {
+          const houseFilter = houseList.map((h: string) => `'${h.replace(/'/g, "''")}'`).join(',');
+          const cctData = await client.query(`
+            SELECT 
+              TRIM(house) as house,
+              peso_declarado,
+              peso_constatado,
+              volume_declarado,
+              volume_constatado,
+              eta,
+              etd,
+              data_decolagem_ultimo_trecho,
+              cnpj_consignatario,
+              data_manifestacao_cct
+            FROM ${database}.t_cct_shipments
+            WHERE TRIM(house) IN (${houseFilter})
+          `);
+          
+          // Build lookup map for fast access
+          for (const cct of (cctData || [])) {
+            const houseKey = (cct.house || '').trim().toUpperCase();
+            cctDataMap.set(houseKey, cct);
+          }
+        }
+
+        // Merge CCT data into shipments
+        const enrichedShipments = (shipments || []).map((row: any) => {
+          const houseKey = (row.house || '').trim().toUpperCase();
+          const cctInfo = cctDataMap.get(houseKey) || {};
+          return {
+            ...row,
+            peso_declarado: cctInfo.peso_declarado || null,
+            peso_constatado: cctInfo.peso_constatado || null,
+            volume_declarado: cctInfo.volume_declarado || null,
+            volume_constatado: cctInfo.volume_constatado || null,
+            eta: cctInfo.eta || null,
+            etd: cctInfo.etd || null,
+            data_decolagem_ultimo_trecho: cctInfo.data_decolagem_ultimo_trecho || null,
+            cnpj_consignatario: cctInfo.cnpj_consignatario || null,
+            data_manifestacao_cct: cctInfo.data_manifestacao_cct || null,
+          };
+        });
+
         // Calculate SLA status using the correct logic:
         // 1. Determine tipo_voo based on aeroporto_origem (América do Sul = VOO_CURTO, else VOO_LONGO)
         // 2. Calculate sla_limite: VOO_CURTO = dep_datetime + 30min, VOO_LONGO = eta - 4h
         // 3. Calculate sla_status: CRITICO if now >= sla_limite, ALERTA if now >= sla_limite - 1h
         const now = new Date();
-        const processedShipments = (shipments || []).map((row: any) => {
+        const processedShipments = (enrichedShipments || []).map((row: any) => {
           const lastUpdate = row.ultimo_evento_data ? new Date(row.ultimo_evento_data) : null;
           const statusCode = row.status_cct_oficial || 'AGUARDANDO_MANIFESTACAO';
           
