@@ -1120,6 +1120,7 @@ serve(async (req) => {
       console.log(`[LEADCOMEX] ========================================`);
 
       // 1. Buscar AWBs pendentes com DEP date do MariaDB
+      const hawbFilter = body?.hawb_filter || null;
       let shipments: Array<{house: string; master: string; dep_datetime: string | null}> = [];
       try {
         const proxyResponse = await fetch(`${supabaseUrl}/functions/v1/mariadb-proxy`, {
@@ -1130,7 +1131,8 @@ serve(async (req) => {
           },
           body: JSON.stringify({
             action: 'get_cct_pending_hawbs',
-            limit: limit,
+            limit: hawbFilter ? 1 : limit,
+            hawb_filter: hawbFilter,
           }),
         });
         
@@ -1142,7 +1144,7 @@ serve(async (req) => {
         
         const proxyData = await proxyResponse.json();
         shipments = proxyData.shipments || [];
-        console.log(`[LEADCOMEX] ${shipments.length} HAWBs pendentes encontrados`);
+        console.log(`[LEADCOMEX] ${shipments.length} HAWBs ${hawbFilter ? `(filtrado: ${hawbFilter})` : 'pendentes'} encontrados`);
       } catch (proxyError) {
         console.error('[LEADCOMEX] Falha ao buscar HAWBs:', proxyError);
         return new Response(

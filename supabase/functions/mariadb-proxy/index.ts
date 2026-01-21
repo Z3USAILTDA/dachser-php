@@ -213,6 +213,7 @@ interface QueryRequest {
   dispute_status?: string;
   audit_status?: string;
   limit?: number;
+  hawb_filter?: string;
   setting_key?: string;
   setting_value?: string;
   free_time_days?: number;
@@ -10288,6 +10289,7 @@ serve(async (req) => {
       // ==================== CCT: Get Pending HAWBs for LeadComex Enrichment ====================
       case 'get_cct_pending_hawbs': {
         const limit = body.limit || 500;
+        const hawbFilter = body.hawb_filter || null;
         
         // Get HAWBs from t_status_aereo that need LeadComex enrichment
         // Filter by registered airlines and exclude error statuses
@@ -10302,6 +10304,22 @@ serve(async (req) => {
         const errorStatuses = ['FMI', 'Error', 'OHD', 'NFD', 'FNA', 'DIS'];
         const errorStatusFilter = errorStatuses.map(s => `'${s}'`).join(',');
         
+        // Build WHERE clause based on whether we're filtering a specific HAWB
+        let whereClause = `LEFT(TRIM(s.awb), 3) IN (${airlineFilter})
+            AND s.\`último_status\` NOT IN (${errorStatusFilter})`;
+        
+        if (hawbFilter) {
+          // When reprocessing a specific HAWB, only filter by the HAWB value
+          // (ignore the pending enrichment conditions)
+          const sanitizedHawb = hawbFilter.replace(/'/g, "''");
+          whereClause += ` AND TRIM(s.hawb) = '${sanitizedHawb}'`;
+          console.log(`[get_cct_pending_hawbs] Filtering for specific HAWB: ${hawbFilter}`);
+        } else {
+          // Normal flow: only get records that need enrichment
+          whereClause += ` AND s.\`última atualização\` >= '2026-01-13 22:00:00'
+            AND (cct.peso_declarado IS NULL OR cct.cnpj_consignatario IS NULL)`;
+        }
+        
         const rows = await client.query(`
           SELECT DISTINCT
             TRIM(s.hawb) as house,
@@ -10313,16 +10331,12 @@ serve(async (req) => {
             cct.cnpj_consignatario
           FROM ${database}.t_status_aereo s
           LEFT JOIN ${database}.t_cct_shipments cct ON TRIM(s.awb) COLLATE utf8mb4_unicode_ci = TRIM(cct.master) COLLATE utf8mb4_unicode_ci
-          WHERE LEFT(TRIM(s.awb), 3) IN (${airlineFilter})
-            AND s.\`último_status\` NOT IN (${errorStatusFilter})
-            AND s.\`última atualização\` >= '2026-01-13 22:00:00'
-            -- Only get records that need enrichment (missing peso or cnpj)
-            AND (cct.peso_declarado IS NULL OR cct.cnpj_consignatario IS NULL)
+          WHERE ${whereClause}
           ORDER BY s.\`última atualização\` DESC
           LIMIT ${limit}
         `);
         
-        console.log(`[get_cct_pending_hawbs] Found ${rows.length} HAWBs needing LeadComex enrichment`);
+        console.log(`[get_cct_pending_hawbs] Found ${rows.length} HAWBs ${hawbFilter ? `(filter: ${hawbFilter})` : 'needing LeadComex enrichment'}`);
         
         result = {
           success: true,
