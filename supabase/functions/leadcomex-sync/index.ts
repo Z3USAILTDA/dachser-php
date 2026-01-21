@@ -315,7 +315,22 @@ function generateHawbVariations(hawb: string): string[] {
     variations.add(allDigits.slice(-8));
   }
   
-  return [...variations].filter(v => v.length > 0);
+  // CRÍTICO: Filtrar por limite de 11 caracteres da API LeadComex
+  // Remover hífens e priorizar variações numéricas puras
+  const filtered = [...variations]
+    .map(v => v.replace(/-/g, '')) // Remover hífens de todas as variações
+    .filter(v => v.length > 0 && v.length <= 11)
+    .sort((a, b) => {
+      // Priorizar: 1) numéricos puros, 2) mais longos
+      const aIsNumeric = /^\d+$/.test(a);
+      const bIsNumeric = /^\d+$/.test(b);
+      if (aIsNumeric && !bIsNumeric) return -1;
+      if (!aIsNumeric && bIsNumeric) return 1;
+      return b.length - a.length;
+    });
+  
+  // Remover duplicatas após remoção de hífens
+  return [...new Set(filtered)];
 }
 
 // Formata HAWB no padrão MariaDB (com hífen após prefixo de aeroporto)
