@@ -43,10 +43,11 @@ const LeadcomexLogsPage: React.FC = () => {
   const { data: stats, isLoading: isLoadingStats } = useLeadcomexLogsStats();
 
   useEffect(() => {
-    const userData = localStorage.getItem('dachser_user');
+    const userData = localStorage.getItem('user') || localStorage.getItem('dachser_user');
     if (userData) {
       const user = JSON.parse(userData);
-      if (user.is_admin === 1) {
+      const isAdminUser = user.is_admin === 1 || user.is_admin === "1" || user.is_admin === true;
+      if (isAdminUser) {
         setIsAdmin(true);
       } else {
         navigate('/air/cct');
