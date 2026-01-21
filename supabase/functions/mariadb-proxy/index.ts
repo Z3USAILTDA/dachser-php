@@ -10301,23 +10301,24 @@ serve(async (req) => {
         ];
         const airlineFilter = airlineCodes.map(c => `'${c}'`).join(',');
         
-        const errorStatuses = ['FMI', 'Error', 'OHD', 'NFD', 'FNA', 'DIS'];
-        const errorStatusFilter = errorStatuses.map(s => `'${s}'`).join(',');
-        
         // Build WHERE clause based on whether we're filtering a specific HAWB
+        // CRITICAL: Filter ONLY status DEP (decolagem) - this is the starting point for CCT
         let whereClause = `LEFT(TRIM(s.awb), 3) IN (${airlineFilter})
-            AND s.\`último_status\` NOT IN (${errorStatusFilter})`;
+            AND s.\`último_status\` = 'DEP'
+            AND s.hawb IS NOT NULL 
+            AND TRIM(s.hawb) != ''`;
         
         if (hawbFilter) {
           // When reprocessing a specific HAWB, only filter by the HAWB value
           // (ignore the pending enrichment conditions)
           const sanitizedHawb = hawbFilter.replace(/'/g, "''");
           whereClause += ` AND TRIM(s.hawb) = '${sanitizedHawb}'`;
-          console.log(`[get_cct_pending_hawbs] Filtering for specific HAWB: ${hawbFilter}`);
+          console.log(`[get_cct_pending_hawbs] Filtering for specific HAWB: ${hawbFilter}, status DEP only`);
         } else {
-          // Normal flow: only get records that need enrichment
+          // Normal flow: only get records that need enrichment (DEP status + missing data)
           whereClause += ` AND s.\`última atualização\` >= '2026-01-13 22:00:00'
             AND (cct.peso_declarado IS NULL OR cct.cnpj_consignatario IS NULL)`;
+          console.log(`[get_cct_pending_hawbs] Fetching only DEP status AWBs for LeadComex enrichment`);
         }
         
         const rows = await client.query(`
