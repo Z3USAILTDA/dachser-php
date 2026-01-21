@@ -316,16 +316,13 @@ function generateHawbVariations(hawb: string): string[] {
   }
   
   // CRÍTICO: Filtrar por limite de 11 caracteres da API LeadComex
-  // Remover hífens e priorizar variações numéricas puras
+  // Apenas remover hífens - NÃO remover prefixos de aeroporto
   const filtered = [...variations]
-    .map(v => v.replace(/-/g, '')) // Remover hífens de todas as variações
+    .map(v => v.replace(/-/g, '')) // Apenas remover hífens, manter prefixo
     .filter(v => v.length > 0 && v.length <= 11)
     .sort((a, b) => {
-      // Priorizar: 1) numéricos puros, 2) mais longos
-      const aIsNumeric = /^\d+$/.test(a);
-      const bIsNumeric = /^\d+$/.test(b);
-      if (aIsNumeric && !bIsNumeric) return -1;
-      if (!aIsNumeric && bIsNumeric) return 1;
+      // PRIORIZAR variações COM prefixo (alfanuméricos mais longos primeiro)
+      // Ex: VCP43302749 (11 chars) antes de 43302749 (8 chars)
       return b.length - a.length;
     });
   
