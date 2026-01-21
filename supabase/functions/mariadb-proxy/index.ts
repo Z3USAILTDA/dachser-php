@@ -2638,6 +2638,7 @@ serve(async (req) => {
         }
         
         // Registered airline codes for CCT filtering (43 airlines)
+        // Build LIKE conditions for better index usage (avoids LEFT(TRIM(...)))
         const registeredAirlineCodes = [
           '001', '005', '006', '014', '016', '020', '023', '045', '047', '055',
           '057', '072', '074', '075', '081', '082', '086', '112', '118', '125',
@@ -2645,7 +2646,8 @@ serve(async (req) => {
           '263', '369', '399', '406', '416', '489', '549', '577', '615', '695',
           '724', '729', '881', '996', '999'
         ];
-        const airlineFilter = registeredAirlineCodes.map(c => `'${c}'`).join(',');
+        // Use LIKE 'CODE-%' pattern for index usage instead of LEFT(TRIM(...), 3) IN (...)
+        const airlineLikeConditions = registeredAirlineCodes.map(c => `s.awb LIKE '${c}-%'`).join(' OR ');
         
         // SLA configuration by status (hours) for post-tracking
         const slaConfigByStatus: Record<string, number> = {
@@ -2736,7 +2738,7 @@ serve(async (req) => {
               ROW_NUMBER() OVER (PARTITION BY TRIM(s.hawb) ORDER BY s.\`última atualização\` DESC) as rn
             FROM ${database}.t_status_aereo s
             LEFT JOIN ${database}.t_master_dados m ON s.awb = m.mawb AND (m.tipo_processo = 'AIR IMPORT' OR m.tipo_processo IS NULL)
-            WHERE LEFT(TRIM(s.awb), 3) IN (${airlineFilter})
+            WHERE (${airlineLikeConditions})
             AND s.\`último_status\` NOT IN (${errorStatusFilter})
             AND (s.origem IS NOT NULL AND LOWER(TRIM(s.origem)) NOT IN ('n/a', 'na', 'erro', 'error', ''))
             AND (s.destino IS NOT NULL AND LOWER(TRIM(s.destino)) NOT IN ('n/a', 'na', 'erro', 'error', ''))
