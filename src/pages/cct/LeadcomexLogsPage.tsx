@@ -118,9 +118,10 @@ const LeadcomexLogsPage: React.FC = () => {
       const { data, error } = await supabase.functions.invoke('leadcomex-sync', {
         body: { 
           action: 'enrich-reverse-ladder',
-          limit: 20,
+          limit: 500, // Process all HAWBs available
           max_retries: 30,
-          execution_source: 'manual'
+          execution_source: 'manual',
+          process_all: true // Process ALL HAWBs, not just pending ones
         }
       });
       
