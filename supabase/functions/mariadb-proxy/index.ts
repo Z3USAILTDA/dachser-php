@@ -2731,15 +2731,15 @@ serve(async (req) => {
               s.dep_datetime,
               COALESCE(s.tipo_servico, 'N/A') as tipo_servico,
               LEFT(TRIM(s.awb), 3) as airline_code,
-              NULL as peso_declarado,
-              NULL as peso_constatado,
-              NULL as volume_declarado,
-              NULL as volume_constatado,
-              NULL as eta,
-              NULL as etd,
-              NULL as data_decolagem_ultimo_trecho,
-              NULL as cnpj_consignatario,
-              NULL as data_manifestacao_cct,
+              cct.peso_declarado,
+              cct.peso_constatado,
+              cct.volume_declarado,
+              cct.volume_constatado,
+              cct.eta,
+              cct.etd,
+              cct.data_decolagem_ultimo_trecho,
+              cct.cnpj_consignatario,
+              cct.data_manifestacao_cct,
               TRIM(m.tratamento) as tratamento,
               -- Status de manifestação CCT (Nomenclatura Aduaneira)
               CASE 
@@ -2754,6 +2754,7 @@ serve(async (req) => {
               ROW_NUMBER() OVER (PARTITION BY TRIM(s.hawb) ORDER BY s.\`última atualização\` DESC) as rn
             FROM ${database}.t_status_aereo s
             LEFT JOIN ${database}.t_master_dados m ON s.awb = m.mawb AND (m.tipo_processo = 'AIR IMPORT' OR m.tipo_processo IS NULL)
+            LEFT JOIN ${database}.t_cct_shipments cct ON TRIM(s.hawb) COLLATE utf8mb4_unicode_ci = TRIM(cct.house) COLLATE utf8mb4_unicode_ci
             WHERE LEFT(TRIM(s.awb), 3) IN (${airlineFilter})
             AND s.\`último_status\` NOT IN (${errorStatusFilter})
             AND (s.origem IS NOT NULL AND LOWER(TRIM(s.origem)) NOT IN ('n/a', 'na', 'erro', 'error', ''))
