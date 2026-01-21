@@ -119,7 +119,7 @@ const LeadcomexLogsPage: React.FC = () => {
         body: { 
           action: 'enrich-reverse-ladder',
           limit: 20,
-          max_retries: 7,
+          max_retries: 30,
           execution_source: 'manual'
         }
       });
@@ -155,7 +155,7 @@ const LeadcomexLogsPage: React.FC = () => {
           action: 'enrich-reverse-ladder',
           limit: 1,
           hawb_filter: hawb,
-          max_retries: 15,
+          max_retries: 30,
           execution_source: 'manual-reprocess'
         }
       });

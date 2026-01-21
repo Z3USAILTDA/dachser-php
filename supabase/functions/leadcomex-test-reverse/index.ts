@@ -140,7 +140,7 @@ serve(async (req) => {
   }
 
   try {
-    const { hawb, dep_date, max_retries = 7 } = await req.json();
+    const { hawb, dep_date, max_retries = 30 } = await req.json();
 
     if (!hawb || !dep_date) {
       return new Response(
