@@ -1113,11 +1113,12 @@ serve(async (req) => {
       const limit = body.limit || 2; // ALTERADO: limite padrão de 2 para debug detalhado
       const maxRetries = body.max_retries || 30;
       const executionSource = body.execution_source || 'cron-hourly';
+      const processAll = body.process_all === true; // When true, process ALL HAWBs (not just pending)
       
       console.log(`[LEADCOMEX] ========================================`);
-      console.log(`[LEADCOMEX] VERSION: 2026-01-21-v3 - DEPLOY FORCADO`);
+      console.log(`[LEADCOMEX] VERSION: 2026-01-21-v4 - PROCESS_ALL`);
       console.log(`[LEADCOMEX] Enrich Reverse Ladder - LOTE DE ${limit}`);
-      console.log(`[LEADCOMEX] max_retries: ${maxRetries} (DEVE SER 30)`);
+      console.log(`[LEADCOMEX] max_retries: ${maxRetries} | process_all: ${processAll}`);
       console.log(`[LEADCOMEX] ========================================`);
 
       // 1. Buscar AWBs pendentes com DEP date do MariaDB
@@ -1134,6 +1135,7 @@ serve(async (req) => {
             action: 'get_cct_pending_hawbs',
             limit: hawbFilter ? 1 : limit,
             hawb_filter: hawbFilter,
+            process_all: processAll, // Propagate to mariadb-proxy
           }),
         });
         

@@ -263,6 +263,8 @@ interface QueryRequest {
   client_name?: string;
   // LeadComex reset
   hawbs?: string[];
+  // LeadComex process all flag
+  process_all?: boolean;
 }
 
 // ==================== CCT SLA Helper Functions (Global) ====================
@@ -10322,6 +10324,7 @@ serve(async (req) => {
       case 'get_cct_pending_hawbs': {
         const limit = body.limit || 500;
         const hawbFilter = body.hawb_filter || null;
+        const processAll = body.process_all === true; // When true, process ALL HAWBs (not just pending)
         
         // Get HAWBs from t_status_aereo that need LeadComex enrichment
         // Filter by registered airlines and exclude error statuses
@@ -10348,6 +10351,10 @@ serve(async (req) => {
           const sanitizedHawb = hawbFilter.replace(/'/g, "''");
           whereClause += ` AND TRIM(h.hawb) = '${sanitizedHawb}'`;
           console.log(`[get_cct_pending_hawbs] Filtering for specific HAWB: ${hawbFilter} from history`);
+        } else if (processAll) {
+          // PROCESS ALL: Get all HAWBs with DEP since 2026-01-01 (ignore enrichment status)
+          whereClause += ` AND h.data_evento >= '2026-01-01 00:00:00'`;
+          console.log(`[get_cct_pending_hawbs] PROCESS ALL: Fetching ALL HAWBs with DEP history since 2026-01-01`);
         } else {
           // Normal flow: only get records that need enrichment (DEP status + missing data)
           // Filter from 01/01/2026 onwards
