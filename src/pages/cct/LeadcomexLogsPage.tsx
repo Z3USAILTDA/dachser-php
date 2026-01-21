@@ -3,7 +3,8 @@ import { useNavigate } from 'react-router-dom';
 import { 
   ArrowLeft, CheckCircle2, XCircle, Clock, TrendingUp, RefreshCw, Search, 
   ChevronDown, ChevronUp, Calendar, Zap, Play, Loader2, Database, 
-  Plane, Package, User, Building2, MapPin, FileText, AlertTriangle, Ship
+  Plane, Package, User, Building2, MapPin, FileText, AlertTriangle, Ship,
+  RotateCcw
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -27,6 +28,7 @@ const LeadcomexLogsPage: React.FC = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [expandedRows, setExpandedRows] = useState<Set<number>>(new Set());
   const [isRunningEnrich, setIsRunningEnrich] = useState(false);
+  const [isReprocessing, setIsReprocessing] = useState(false);
   const [selectedLog, setSelectedLog] = useState<LeadcomexLog | null>(null);
   
   // Filters
@@ -131,6 +133,49 @@ const LeadcomexLogsPage: React.FC = () => {
       toast.error('Erro ao executar enriquecimento');
     } finally {
       setIsRunningEnrich(false);
+    }
+  };
+
+  const reprocessHawb = async (hawb: string) => {
+    setIsReprocessing(true);
+    try {
+      // 1. Reset the HAWB status
+      const { error: resetError } = await supabase.functions.invoke('mariadb-proxy', {
+        body: { 
+          action: 'reset_leadcomex_status',
+          hawbs: [hawb]
+        }
+      });
+      
+      if (resetError) throw resetError;
+      
+      // 2. Reprocess it
+      const { data, error } = await supabase.functions.invoke('leadcomex-sync', {
+        body: { 
+          action: 'enrich-reverse-ladder',
+          limit: 1,
+          hawb_filter: hawb,
+          max_retries: 15,
+          execution_source: 'manual-reprocess'
+        }
+      });
+      
+      if (error) throw error;
+      
+      const success = data.stats?.success || 0;
+      if (success > 0) {
+        toast.success(`HAWB ${hawb} reprocessado com sucesso!`);
+      } else {
+        toast.warning(`HAWB ${hawb} reprocessado, mas não encontrado na LeadComex`);
+      }
+      
+      setSelectedLog(null);
+      refetch();
+    } catch (err) {
+      console.error('Erro ao reprocessar HAWB:', err);
+      toast.error('Erro ao reprocessar HAWB');
+    } finally {
+      setIsReprocessing(false);
     }
   };
 
@@ -512,8 +557,24 @@ const LeadcomexLogsPage: React.FC = () => {
                         {selectedLog.mawb && (
                           <div className="text-xs text-white/50 font-mono">MAWB: {selectedLog.mawb}</div>
                         )}
-                        <div className="text-xs text-white/40">
-                          Executado em: {formatDate(selectedLog.created_at)}
+                        <div className="flex items-center justify-between">
+                          <div className="text-xs text-white/40">
+                            Executado em: {formatDate(selectedLog.created_at)}
+                          </div>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => reprocessHawb(selectedLog.hawb)}
+                            disabled={isReprocessing}
+                            className="border-[#F5B843]/30 text-[#F5B843] hover:bg-[#F5B843]/10 text-xs h-7"
+                          >
+                            {isReprocessing ? (
+                              <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+                            ) : (
+                              <RotateCcw className="h-3 w-3 mr-1" />
+                            )}
+                            Reprocessar
+                          </Button>
                         </div>
                       </div>
 
