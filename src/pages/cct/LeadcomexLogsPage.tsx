@@ -1,25 +1,33 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, CheckCircle2, XCircle, Clock, TrendingUp, RefreshCw, Search, Filter, ChevronDown, ChevronUp, Eye, Calendar, Zap } from 'lucide-react';
+import { 
+  ArrowLeft, CheckCircle2, XCircle, Clock, TrendingUp, RefreshCw, Search, 
+  ChevronDown, ChevronUp, Calendar, Zap, Play, Loader2, Database, 
+  Plane, Package, User, Building2, MapPin, FileText, AlertTriangle, Ship
+} from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { Skeleton } from '@/components/ui/skeleton';
+import { Separator } from '@/components/ui/separator';
+import { ScrollArea } from '@/components/ui/scroll-area';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { AttemptTimeline } from '@/components/cct/AttemptTimeline';
 import { useLeadcomexLogs, useLeadcomexLogsStats, LeadcomexLog, LeadcomexLogFilters } from '@/hooks/useLeadcomexLogs';
+import { supabase } from '@/integrations/supabase/client';
 
 const LeadcomexLogsPage: React.FC = () => {
   const navigate = useNavigate();
   const [isAdmin, setIsAdmin] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [expandedRows, setExpandedRows] = useState<Set<number>>(new Set());
+  const [isRunningEnrich, setIsRunningEnrich] = useState(false);
+  const [selectedLog, setSelectedLog] = useState<LeadcomexLog | null>(null);
   
   // Filters
   const [filters, setFilters] = useState<LeadcomexLogFilters>({
@@ -65,6 +73,13 @@ const LeadcomexLogsPage: React.FC = () => {
   }, [searchTerm, statusFilter, sourceFilter]);
 
   const toggleRow = (id: number) => {
+    const log = logsData?.logs?.find(l => l.id === id);
+    if (selectedLog?.id === id) {
+      setSelectedLog(null);
+    } else if (log) {
+      setSelectedLog(log);
+    }
+    
     setExpandedRows(prev => {
       const next = new Set(prev);
       if (next.has(id)) {
@@ -79,7 +94,7 @@ const LeadcomexLogsPage: React.FC = () => {
   const formatDate = (dateStr: string | null) => {
     if (!dateStr) return '-';
     try {
-      return format(new Date(dateStr), 'dd/MM/yyyy HH:mm', { locale: ptBR });
+      return format(new Date(dateStr), 'dd/MM/yyyy HH:mm:ss', { locale: ptBR });
     } catch {
       return dateStr;
     }
@@ -91,6 +106,30 @@ const LeadcomexLogsPage: React.FC = () => {
       return format(new Date(dateStr), 'dd/MM/yyyy', { locale: ptBR });
     } catch {
       return dateStr;
+    }
+  };
+
+  const runEnrichReverseLadder = async () => {
+    setIsRunningEnrich(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('leadcomex-sync', {
+        body: { 
+          action: 'enrich-reverse-ladder',
+          limit: 20,
+          max_retries: 7,
+          execution_source: 'manual'
+        }
+      });
+      
+      if (error) throw error;
+      
+      toast.success(`Enriquecimento concluído: ${data.stats?.success || 0}/${data.stats?.processed || 0} HAWBs encontrados`);
+      refetch();
+    } catch (err) {
+      console.error('Erro ao executar enrich:', err);
+      toast.error('Erro ao executar enriquecimento');
+    } finally {
+      setIsRunningEnrich(false);
     }
   };
 
@@ -111,15 +150,15 @@ const LeadcomexLogsPage: React.FC = () => {
         background: 'linear-gradient(135deg, #050608 0%, #0a0c10 50%, #050608 100%)',
       }}
     >
-      {/* Background glow effect */}
+      {/* Background glow */}
       <div 
         className="absolute inset-0 pointer-events-none"
         style={{
-          background: 'radial-gradient(ellipse at 50% 0%, rgba(245, 184, 67, 0.08) 0%, transparent 60%)',
+          background: 'radial-gradient(ellipse at 50% 0%, rgba(245, 184, 67, 0.06) 0%, transparent 60%)',
         }}
       />
 
-      <div className="relative z-10 p-6 max-w-[1800px] mx-auto">
+      <div className="relative z-10 p-6 max-w-[1920px] mx-auto">
         {/* Header */}
         <div className="flex items-center justify-between mb-6">
           <div className="flex items-center gap-4">
@@ -132,379 +171,552 @@ const LeadcomexLogsPage: React.FC = () => {
               <ArrowLeft className="h-5 w-5" />
             </Button>
             <div>
-              <h1 className="text-2xl font-bold text-white">Logs LeadComex</h1>
-              <p className="text-sm text-white/60">Histórico de enriquecimento com escada reversa de datas</p>
+              <h1 className="text-2xl font-bold text-white flex items-center gap-2">
+                <Database className="h-6 w-6 text-[#F5B843]" />
+                Logs de Conexão LeadComex
+              </h1>
+              <p className="text-sm text-white/60">Histórico detalhado de cada tentativa de enriquecimento com a API LeadComex</p>
             </div>
           </div>
           
-          <Button
-            onClick={() => refetch()}
-            variant="outline"
-            className="border-[#F5B843]/30 text-[#F5B843] hover:bg-[#F5B843]/10"
-          >
-            <RefreshCw className="h-4 w-4 mr-2" />
-            Atualizar
-          </Button>
+          <div className="flex items-center gap-3">
+            <Button
+              onClick={runEnrichReverseLadder}
+              disabled={isRunningEnrich}
+              className="bg-[#F5B843] hover:bg-[#F5B843]/90 text-black font-medium"
+            >
+              {isRunningEnrich ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Processando...
+                </>
+              ) : (
+                <>
+                  <Play className="h-4 w-4 mr-2" />
+                  Executar Agora
+                </>
+              )}
+            </Button>
+            <Button
+              onClick={() => refetch()}
+              variant="outline"
+              className="border-white/20 text-white hover:bg-white/10"
+            >
+              <RefreshCw className="h-4 w-4 mr-2" />
+              Atualizar
+            </Button>
+          </div>
         </div>
 
         {/* KPI Cards */}
-        <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4 mb-6">
-          <Card className="bg-[#0d1117] border-white/10">
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 mb-6">
+          <Card className="bg-[#0d1117]/80 border-white/10 backdrop-blur-sm">
             <CardContent className="p-4">
-              <div className="flex items-center gap-2 text-white/60 text-sm mb-1">
-                <Zap className="h-4 w-4" />
-                Total
+              <div className="flex items-center gap-2 text-white/60 text-xs mb-1">
+                <Zap className="h-3.5 w-3.5" />
+                Total Execuções
               </div>
               {isLoadingStats ? (
-                <Skeleton className="h-8 w-20 bg-white/10" />
+                <Skeleton className="h-7 w-16 bg-white/10" />
               ) : (
-                <div className="text-2xl font-bold text-white">{stats?.total || 0}</div>
+                <div className="text-xl font-bold text-white">{stats?.total?.toLocaleString() || 0}</div>
               )}
             </CardContent>
           </Card>
 
-          <Card className="bg-[#0d1117] border-white/10">
+          <Card className="bg-[#0d1117]/80 border-white/10 backdrop-blur-sm">
             <CardContent className="p-4">
-              <div className="flex items-center gap-2 text-emerald-400/80 text-sm mb-1">
-                <CheckCircle2 className="h-4 w-4" />
+              <div className="flex items-center gap-2 text-emerald-400/80 text-xs mb-1">
+                <CheckCircle2 className="h-3.5 w-3.5" />
                 Sucesso
               </div>
               {isLoadingStats ? (
-                <Skeleton className="h-8 w-20 bg-white/10" />
+                <Skeleton className="h-7 w-16 bg-white/10" />
               ) : (
-                <div className="text-2xl font-bold text-emerald-400">{stats?.success_count || 0}</div>
+                <div className="text-xl font-bold text-emerald-400">{stats?.success_count?.toLocaleString() || 0}</div>
               )}
             </CardContent>
           </Card>
 
-          <Card className="bg-[#0d1117] border-white/10">
+          <Card className="bg-[#0d1117]/80 border-white/10 backdrop-blur-sm">
             <CardContent className="p-4">
-              <div className="flex items-center gap-2 text-red-400/80 text-sm mb-1">
-                <XCircle className="h-4 w-4" />
-                Falha
+              <div className="flex items-center gap-2 text-red-400/80 text-xs mb-1">
+                <XCircle className="h-3.5 w-3.5" />
+                Não Encontrados
               </div>
               {isLoadingStats ? (
-                <Skeleton className="h-8 w-20 bg-white/10" />
+                <Skeleton className="h-7 w-16 bg-white/10" />
               ) : (
-                <div className="text-2xl font-bold text-red-400">{stats?.error_count || 0}</div>
+                <div className="text-xl font-bold text-red-400">{stats?.error_count?.toLocaleString() || 0}</div>
               )}
             </CardContent>
           </Card>
 
-          <Card className="bg-[#0d1117] border-white/10">
+          <Card className="bg-[#0d1117]/80 border-white/10 backdrop-blur-sm">
             <CardContent className="p-4">
-              <div className="flex items-center gap-2 text-[#F5B843]/80 text-sm mb-1">
-                <TrendingUp className="h-4 w-4" />
-                Taxa
+              <div className="flex items-center gap-2 text-[#F5B843]/80 text-xs mb-1">
+                <TrendingUp className="h-3.5 w-3.5" />
+                Taxa de Sucesso
               </div>
               {isLoadingStats ? (
-                <Skeleton className="h-8 w-20 bg-white/10" />
+                <Skeleton className="h-7 w-16 bg-white/10" />
               ) : (
-                <div className="text-2xl font-bold text-[#F5B843]">{stats?.success_rate || '0'}%</div>
+                <div className="text-xl font-bold text-[#F5B843]">{stats?.success_rate || '0'}%</div>
               )}
             </CardContent>
           </Card>
 
-          <Card className="bg-[#0d1117] border-white/10">
+          <Card className="bg-[#0d1117]/80 border-white/10 backdrop-blur-sm">
             <CardContent className="p-4">
-              <div className="flex items-center gap-2 text-blue-400/80 text-sm mb-1">
-                <Clock className="h-4 w-4" />
+              <div className="flex items-center gap-2 text-blue-400/80 text-xs mb-1">
+                <Clock className="h-3.5 w-3.5" />
                 Tempo Médio
               </div>
               {isLoadingStats ? (
-                <Skeleton className="h-8 w-20 bg-white/10" />
+                <Skeleton className="h-7 w-16 bg-white/10" />
               ) : (
-                <div className="text-2xl font-bold text-blue-400">{stats?.avg_time_ms || 0}ms</div>
+                <div className="text-xl font-bold text-blue-400">{stats?.avg_time_ms || 0}ms</div>
               )}
             </CardContent>
           </Card>
 
-          <Card className="bg-[#0d1117] border-white/10">
+          <Card className="bg-[#0d1117]/80 border-white/10 backdrop-blur-sm">
             <CardContent className="p-4">
-              <div className="flex items-center gap-2 text-purple-400/80 text-sm mb-1">
-                <Calendar className="h-4 w-4" />
+              <div className="flex items-center gap-2 text-purple-400/80 text-xs mb-1">
+                <Calendar className="h-3.5 w-3.5" />
                 Offset Médio
               </div>
               {isLoadingStats ? (
-                <Skeleton className="h-8 w-20 bg-white/10" />
+                <Skeleton className="h-7 w-16 bg-white/10" />
               ) : (
-                <div className="text-2xl font-bold text-purple-400">-{stats?.avg_offset_days || '0'}d</div>
+                <div className="text-xl font-bold text-purple-400">-{stats?.avg_offset_days || '0'}d</div>
               )}
             </CardContent>
           </Card>
         </div>
 
-        {/* Filters */}
-        <Card className="bg-[#0d1117] border-white/10 mb-6">
-          <CardContent className="p-4">
-            <div className="flex flex-wrap gap-4 items-center">
-              <div className="flex-1 min-w-[200px]">
-                <div className="relative">
-                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-white/40" />
-                  <Input
-                    placeholder="Buscar HAWB ou MAWB..."
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
-                    className="pl-10 bg-white/5 border-white/10 text-white placeholder:text-white/40"
-                  />
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          {/* Left: Logs Table */}
+          <div className="lg:col-span-2">
+            {/* Filters */}
+            <Card className="bg-[#0d1117]/80 border-white/10 backdrop-blur-sm mb-4">
+              <CardContent className="p-4">
+                <div className="flex flex-wrap gap-4 items-center">
+                  <div className="flex-1 min-w-[200px]">
+                    <div className="relative">
+                      <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-white/40" />
+                      <Input
+                        placeholder="Buscar por HAWB ou MAWB..."
+                        value={searchTerm}
+                        onChange={(e) => setSearchTerm(e.target.value)}
+                        className="pl-10 bg-white/5 border-white/10 text-white placeholder:text-white/40"
+                      />
+                    </div>
+                  </div>
+                  
+                  <Select value={statusFilter} onValueChange={setStatusFilter}>
+                    <SelectTrigger className="w-[140px] bg-white/5 border-white/10 text-white">
+                      <SelectValue placeholder="Status" />
+                    </SelectTrigger>
+                    <SelectContent className="bg-[#1a1f2e] border-white/10">
+                      <SelectItem value="all">Todos</SelectItem>
+                      <SelectItem value="success">Sucesso</SelectItem>
+                      <SelectItem value="error">Não Encontrado</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  
+                  <Select value={sourceFilter} onValueChange={setSourceFilter}>
+                    <SelectTrigger className="w-[140px] bg-white/5 border-white/10 text-white">
+                      <SelectValue placeholder="Origem" />
+                    </SelectTrigger>
+                    <SelectContent className="bg-[#1a1f2e] border-white/10">
+                      <SelectItem value="all">Todas</SelectItem>
+                      <SelectItem value="manual">Manual</SelectItem>
+                      <SelectItem value="cron-hourly">Cron</SelectItem>
+                    </SelectContent>
+                  </Select>
                 </div>
-              </div>
-              
-              <Select value={statusFilter} onValueChange={setStatusFilter}>
-                <SelectTrigger className="w-[150px] bg-white/5 border-white/10 text-white">
-                  <SelectValue placeholder="Status" />
-                </SelectTrigger>
-                <SelectContent className="bg-[#1a1f2e] border-white/10">
-                  <SelectItem value="all">Todos</SelectItem>
-                  <SelectItem value="success">Sucesso</SelectItem>
-                  <SelectItem value="error">Falha</SelectItem>
-                </SelectContent>
-              </Select>
-              
-              <Select value={sourceFilter} onValueChange={setSourceFilter}>
-                <SelectTrigger className="w-[150px] bg-white/5 border-white/10 text-white">
-                  <SelectValue placeholder="Origem" />
-                </SelectTrigger>
-                <SelectContent className="bg-[#1a1f2e] border-white/10">
-                  <SelectItem value="all">Todas</SelectItem>
-                  <SelectItem value="manual">Manual</SelectItem>
-                  <SelectItem value="cron-hourly">Cron</SelectItem>
-                  <SelectItem value="batch">Batch</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-          </CardContent>
-        </Card>
+              </CardContent>
+            </Card>
 
-        {/* Logs Table */}
-        <Card className="bg-[#0d1117] border-white/10">
-          <CardHeader className="border-b border-white/10">
-            <CardTitle className="text-white text-lg">
-              Execuções ({logsData?.total || 0})
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="p-0">
-            {isLoadingLogs ? (
-              <div className="p-8 space-y-4">
-                {[...Array(5)].map((_, i) => (
-                  <Skeleton key={i} className="h-16 w-full bg-white/5" />
-                ))}
-              </div>
-            ) : !logsData?.logs?.length ? (
-              <div className="p-8 text-center text-white/60">
-                Nenhum log encontrado
-              </div>
-            ) : (
-              <Table>
-                <TableHeader>
-                  <TableRow className="border-white/10 hover:bg-transparent">
-                    <TableHead className="text-white/60 w-10"></TableHead>
-                    <TableHead className="text-white/60">HAWB</TableHead>
-                    <TableHead className="text-white/60">MAWB</TableHead>
-                    <TableHead className="text-white/60">DEP</TableHead>
-                    <TableHead className="text-white/60">Match</TableHead>
-                    <TableHead className="text-white/60">Offset</TableHead>
-                    <TableHead className="text-white/60">Tentativas</TableHead>
-                    <TableHead className="text-white/60">Tempo</TableHead>
-                    <TableHead className="text-white/60">Status</TableHead>
-                    <TableHead className="text-white/60">Origem</TableHead>
-                    <TableHead className="text-white/60">Data</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {logsData.logs.map((log) => (
-                    <React.Fragment key={log.id}>
-                      <TableRow 
-                        className="border-white/5 hover:bg-white/5 cursor-pointer"
-                        onClick={() => toggleRow(log.id)}
+            {/* Table */}
+            <Card className="bg-[#0d1117]/80 border-white/10 backdrop-blur-sm">
+              <CardHeader className="border-b border-white/10 py-3">
+                <CardTitle className="text-white text-base flex items-center gap-2">
+                  <FileText className="h-4 w-4 text-[#F5B843]" />
+                  Registros de Execução
+                  <Badge variant="outline" className="ml-2 border-white/20 text-white/60 text-xs">
+                    {logsData?.total || 0} registros
+                  </Badge>
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="p-0">
+                {isLoadingLogs ? (
+                  <div className="p-6 space-y-3">
+                    {[...Array(8)].map((_, i) => (
+                      <Skeleton key={i} className="h-12 w-full bg-white/5" />
+                    ))}
+                  </div>
+                ) : !logsData?.logs?.length ? (
+                  <div className="p-8 text-center text-white/60">
+                    <Database className="h-12 w-12 mx-auto mb-3 opacity-30" />
+                    <p>Nenhum log encontrado</p>
+                    <p className="text-xs mt-1">Execute o enriquecimento para gerar logs</p>
+                  </div>
+                ) : (
+                  <ScrollArea className="h-[600px]">
+                    <Table>
+                      <TableHeader>
+                        <TableRow className="border-white/10 hover:bg-transparent">
+                          <TableHead className="text-white/60 text-xs w-8"></TableHead>
+                          <TableHead className="text-white/60 text-xs">HAWB</TableHead>
+                          <TableHead className="text-white/60 text-xs">DEP</TableHead>
+                          <TableHead className="text-white/60 text-xs">Offset</TableHead>
+                          <TableHead className="text-white/60 text-xs">Status</TableHead>
+                          <TableHead className="text-white/60 text-xs">Tempo</TableHead>
+                          <TableHead className="text-white/60 text-xs">Origem</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {logsData.logs.map((log) => (
+                          <TableRow 
+                            key={log.id}
+                            className={`border-white/5 cursor-pointer transition-colors ${
+                              selectedLog?.id === log.id 
+                                ? 'bg-[#F5B843]/10 hover:bg-[#F5B843]/15' 
+                                : 'hover:bg-white/5'
+                            }`}
+                            onClick={() => toggleRow(log.id)}
+                          >
+                            <TableCell className="text-white/60 py-2">
+                              {selectedLog?.id === log.id ? (
+                                <ChevronUp className="h-4 w-4 text-[#F5B843]" />
+                              ) : (
+                                <ChevronDown className="h-4 w-4" />
+                              )}
+                            </TableCell>
+                            <TableCell className="py-2">
+                              <div className="font-mono text-sm text-white">{log.hawb}</div>
+                              {log.mawb && (
+                                <div className="font-mono text-xs text-white/50">{log.mawb}</div>
+                              )}
+                            </TableCell>
+                            <TableCell className="text-white/60 text-xs py-2">
+                              {formatDateOnly(log.dep_date)}
+                            </TableCell>
+                            <TableCell className="py-2">
+                              {log.success ? (
+                                <Badge variant="outline" className="border-purple-400/30 text-purple-400 bg-purple-400/10 text-xs">
+                                  -{log.offset_days}d
+                                </Badge>
+                              ) : (
+                                <span className="text-white/30 text-xs">-</span>
+                              )}
+                            </TableCell>
+                            <TableCell className="py-2">
+                              {log.success ? (
+                                <Badge className="bg-emerald-500/20 text-emerald-400 border-emerald-500/30 text-xs">
+                                  <CheckCircle2 className="h-3 w-3 mr-1" />
+                                  OK
+                                </Badge>
+                              ) : (
+                                <Badge className="bg-red-500/20 text-red-400 border-red-500/30 text-xs">
+                                  <XCircle className="h-3 w-3 mr-1" />
+                                  N/F
+                                </Badge>
+                              )}
+                            </TableCell>
+                            <TableCell className="text-white/60 text-xs py-2">
+                              {log.total_time_ms ? `${log.total_time_ms}ms` : '-'}
+                            </TableCell>
+                            <TableCell className="py-2">
+                              <Badge variant="outline" className="border-white/20 text-white/50 text-xs">
+                                {log.execution_source === 'cron-hourly' ? 'Cron' : log.execution_source}
+                              </Badge>
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </ScrollArea>
+                )}
+                
+                {/* Pagination */}
+                {logsData && logsData.total > logsData.limit && (
+                  <div className="flex items-center justify-between p-3 border-t border-white/10">
+                    <span className="text-white/50 text-xs">
+                      {Math.min(logsData.offset + 1, logsData.total)}-
+                      {Math.min(logsData.offset + logsData.limit, logsData.total)} de {logsData.total}
+                    </span>
+                    <div className="flex gap-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        disabled={logsData.offset === 0}
+                        onClick={() => setFilters(prev => ({ ...prev, offset: Math.max(0, (prev.offset || 0) - (prev.limit || 50)) }))}
+                        className="border-white/20 text-white hover:bg-white/10 h-7 text-xs"
                       >
-                        <TableCell className="text-white/60">
-                          {expandedRows.has(log.id) ? (
-                            <ChevronUp className="h-4 w-4" />
-                          ) : (
-                            <ChevronDown className="h-4 w-4" />
-                          )}
-                        </TableCell>
-                        <TableCell className="text-white font-mono text-sm">
-                          {log.hawb}
-                        </TableCell>
-                        <TableCell className="text-white/80 font-mono text-sm">
-                          {log.mawb || '-'}
-                        </TableCell>
-                        <TableCell className="text-white/60 text-sm">
-                          {formatDateOnly(log.dep_date)}
-                        </TableCell>
-                        <TableCell className="text-sm">
-                          {log.success ? (
-                            <span className="text-emerald-400">{formatDateOnly(log.matched_date)}</span>
-                          ) : (
-                            <span className="text-white/40">-</span>
-                          )}
-                        </TableCell>
-                        <TableCell className="text-sm">
-                          {log.success ? (
-                            <Badge variant="outline" className="border-purple-400/30 text-purple-400 bg-purple-400/10">
-                              -{log.offset_days}d
-                            </Badge>
-                          ) : (
-                            <span className="text-white/40">-</span>
-                          )}
-                        </TableCell>
-                        <TableCell className="text-white/60 text-sm">
-                          {log.total_attempts}
-                        </TableCell>
-                        <TableCell className="text-white/60 text-sm">
-                          {log.total_time_ms ? `${log.total_time_ms}ms` : '-'}
-                        </TableCell>
-                        <TableCell>
-                          {log.success ? (
+                        Anterior
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        disabled={logsData.offset + logsData.limit >= logsData.total}
+                        onClick={() => setFilters(prev => ({ ...prev, offset: (prev.offset || 0) + (prev.limit || 50) }))}
+                        className="border-white/20 text-white hover:bg-white/10 h-7 text-xs"
+                      >
+                        Próximo
+                      </Button>
+                    </div>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* Right: Detail Panel */}
+          <div className="lg:col-span-1">
+            <Card className="bg-[#0d1117]/80 border-white/10 backdrop-blur-sm sticky top-6">
+              <CardHeader className="border-b border-white/10 py-3">
+                <CardTitle className="text-white text-base flex items-center gap-2">
+                  <FileText className="h-4 w-4 text-[#F5B843]" />
+                  Detalhes da Execução
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="p-0">
+                {!selectedLog ? (
+                  <div className="p-8 text-center text-white/40">
+                    <FileText className="h-10 w-10 mx-auto mb-3 opacity-30" />
+                    <p className="text-sm">Selecione um registro para ver os detalhes</p>
+                  </div>
+                ) : (
+                  <ScrollArea className="h-[650px]">
+                    <div className="p-4 space-y-4">
+                      {/* Header Info */}
+                      <div className="space-y-2">
+                        <div className="flex items-center justify-between">
+                          <span className="font-mono text-lg text-white font-bold">{selectedLog.hawb}</span>
+                          {selectedLog.success ? (
                             <Badge className="bg-emerald-500/20 text-emerald-400 border-emerald-500/30">
                               <CheckCircle2 className="h-3 w-3 mr-1" />
-                              Sucesso
+                              Encontrado
                             </Badge>
                           ) : (
                             <Badge className="bg-red-500/20 text-red-400 border-red-500/30">
                               <XCircle className="h-3 w-3 mr-1" />
-                              Falha
+                              Não Encontrado
                             </Badge>
                           )}
-                        </TableCell>
-                        <TableCell>
-                          <Badge variant="outline" className="border-white/20 text-white/60">
-                            {log.execution_source}
-                          </Badge>
-                        </TableCell>
-                        <TableCell className="text-white/60 text-sm">
-                          {formatDate(log.created_at)}
-                        </TableCell>
-                      </TableRow>
-                      
-                      {/* Expanded Details */}
-                      {expandedRows.has(log.id) && (
-                        <TableRow className="border-white/5 bg-white/[0.02]">
-                          <TableCell colSpan={11} className="p-0">
-                            <div className="p-4 space-y-4">
-                              {/* Timeline */}
-                              {log.attempts && log.attempts.length > 0 && (
-                                <div>
-                                  <h4 className="text-sm font-medium text-white/80 mb-3">Timeline de Tentativas</h4>
-                                  <AttemptTimeline attempts={log.attempts} />
+                        </div>
+                        {selectedLog.mawb && (
+                          <div className="text-xs text-white/50 font-mono">MAWB: {selectedLog.mawb}</div>
+                        )}
+                        <div className="text-xs text-white/40">
+                          Executado em: {formatDate(selectedLog.created_at)}
+                        </div>
+                      </div>
+
+                      <Separator className="bg-white/10" />
+
+                      {/* Execution Details */}
+                      <div className="grid grid-cols-2 gap-3">
+                        <div className="bg-white/5 rounded-lg p-3">
+                          <div className="text-xs text-white/50 mb-1">Data DEP</div>
+                          <div className="text-sm text-white font-medium">{formatDateOnly(selectedLog.dep_date)}</div>
+                        </div>
+                        <div className="bg-white/5 rounded-lg p-3">
+                          <div className="text-xs text-white/50 mb-1">Data Match</div>
+                          <div className="text-sm text-white font-medium">
+                            {selectedLog.success ? formatDateOnly(selectedLog.matched_date) : '-'}
+                          </div>
+                        </div>
+                        <div className="bg-white/5 rounded-lg p-3">
+                          <div className="text-xs text-white/50 mb-1">Offset</div>
+                          <div className="text-sm text-purple-400 font-medium">
+                            {selectedLog.success ? `-${selectedLog.offset_days} dias` : '-'}
+                          </div>
+                        </div>
+                        <div className="bg-white/5 rounded-lg p-3">
+                          <div className="text-xs text-white/50 mb-1">Tentativas</div>
+                          <div className="text-sm text-white font-medium">{selectedLog.total_attempts}</div>
+                        </div>
+                        <div className="bg-white/5 rounded-lg p-3">
+                          <div className="text-xs text-white/50 mb-1">Tempo Total</div>
+                          <div className="text-sm text-blue-400 font-medium">{selectedLog.total_time_ms || 0}ms</div>
+                        </div>
+                        <div className="bg-white/5 rounded-lg p-3">
+                          <div className="text-xs text-white/50 mb-1">Origem</div>
+                          <div className="text-sm text-white font-medium capitalize">{selectedLog.execution_source}</div>
+                        </div>
+                      </div>
+
+                      {/* Timeline */}
+                      {selectedLog.attempts && selectedLog.attempts.length > 0 && (
+                        <>
+                          <Separator className="bg-white/10" />
+                          <div>
+                            <h4 className="text-sm font-medium text-white mb-3 flex items-center gap-2">
+                              <Clock className="h-4 w-4 text-[#F5B843]" />
+                              Timeline de Tentativas
+                            </h4>
+                            <AttemptTimeline attempts={selectedLog.attempts} />
+                          </div>
+                        </>
+                      )}
+
+                      {/* LeadComex Data */}
+                      {selectedLog.success && (
+                        <>
+                          <Separator className="bg-white/10" />
+                          <div>
+                            <h4 className="text-sm font-medium text-white mb-3 flex items-center gap-2">
+                              <Database className="h-4 w-4 text-[#F5B843]" />
+                              Dados LeadComex
+                            </h4>
+                            
+                            <div className="space-y-3">
+                              {/* Situação */}
+                              <div className="bg-white/5 rounded-lg p-3">
+                                <div className="flex items-center gap-2 mb-2">
+                                  <Zap className="h-3.5 w-3.5 text-[#F5B843]" />
+                                  <span className="text-xs text-white/60">Situação</span>
+                                </div>
+                                <div className="grid grid-cols-2 gap-2 text-xs">
+                                  <div>
+                                    <span className="text-white/40">Lead:</span>
+                                    <span className="text-white ml-1">{selectedLog.lc_situacao_lead || '-'}</span>
+                                  </div>
+                                  <div>
+                                    <span className="text-white/40">Portal:</span>
+                                    <span className="text-white ml-1">{selectedLog.lc_situacao_portal || '-'}</span>
+                                  </div>
+                                </div>
+                              </div>
+
+                              {/* Rota */}
+                              {(selectedLog.lc_aeroporto_origem || selectedLog.lc_aeroporto_destino) && (
+                                <div className="bg-white/5 rounded-lg p-3">
+                                  <div className="flex items-center gap-2 mb-2">
+                                    <Plane className="h-3.5 w-3.5 text-blue-400" />
+                                    <span className="text-xs text-white/60">Rota</span>
+                                  </div>
+                                  <div className="text-sm text-white font-medium">
+                                    {selectedLog.lc_aeroporto_origem || '???'} → {selectedLog.lc_aeroporto_destino || '???'}
+                                  </div>
                                 </div>
                               )}
-                              
-                              {/* LeadComex Data Summary */}
-                              {log.success && (
-                                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-4 pt-4 border-t border-white/10">
-                                  <div>
-                                    <span className="text-white/40 text-xs">Situação Lead</span>
-                                    <p className="text-white text-sm">{log.lc_situacao_lead || '-'}</p>
+
+                              {/* Carga */}
+                              {(selectedLog.lc_peso_bruto || selectedLog.lc_quantidade_volumes) && (
+                                <div className="bg-white/5 rounded-lg p-3">
+                                  <div className="flex items-center gap-2 mb-2">
+                                    <Package className="h-3.5 w-3.5 text-emerald-400" />
+                                    <span className="text-xs text-white/60">Carga</span>
                                   </div>
-                                  <div>
-                                    <span className="text-white/40 text-xs">Situação Portal</span>
-                                    <p className="text-white text-sm">{log.lc_situacao_portal || '-'}</p>
+                                  <div className="grid grid-cols-2 gap-2 text-xs">
+                                    <div>
+                                      <span className="text-white/40">Peso:</span>
+                                      <span className="text-white ml-1">{selectedLog.lc_peso_bruto || '-'} kg</span>
+                                    </div>
+                                    <div>
+                                      <span className="text-white/40">Volumes:</span>
+                                      <span className="text-white ml-1">{selectedLog.lc_quantidade_volumes || '-'}</span>
+                                    </div>
                                   </div>
-                                  <div>
-                                    <span className="text-white/40 text-xs">Peso Bruto</span>
-                                    <p className="text-white text-sm">{log.lc_peso_bruto ? `${log.lc_peso_bruto} kg` : '-'}</p>
+                                </div>
+                              )}
+
+                              {/* Consignatário */}
+                              {(selectedLog.lc_cnpj_consignatario || selectedLog.lc_nome_consignatario) && (
+                                <div className="bg-white/5 rounded-lg p-3">
+                                  <div className="flex items-center gap-2 mb-2">
+                                    <Building2 className="h-3.5 w-3.5 text-purple-400" />
+                                    <span className="text-xs text-white/60">Consignatário</span>
                                   </div>
-                                  <div>
-                                    <span className="text-white/40 text-xs">Volumes</span>
-                                    <p className="text-white text-sm">{log.lc_quantidade_volumes || '-'}</p>
+                                  <div className="space-y-1 text-xs">
+                                    {selectedLog.lc_nome_consignatario && (
+                                      <div className="text-white">{selectedLog.lc_nome_consignatario}</div>
+                                    )}
+                                    {selectedLog.lc_cnpj_consignatario && (
+                                      <div className="text-white/60 font-mono">{selectedLog.lc_cnpj_consignatario}</div>
+                                    )}
                                   </div>
-                                  <div>
-                                    <span className="text-white/40 text-xs">CNPJ Consignatário</span>
-                                    <p className="text-white text-sm font-mono">{log.lc_cnpj_consignatario || '-'}</p>
+                                </div>
+                              )}
+
+                              {/* Embarcador */}
+                              {selectedLog.lc_nome_embarcador && (
+                                <div className="bg-white/5 rounded-lg p-3">
+                                  <div className="flex items-center gap-2 mb-2">
+                                    <User className="h-3.5 w-3.5 text-orange-400" />
+                                    <span className="text-xs text-white/60">Embarcador</span>
                                   </div>
-                                  <div>
-                                    <span className="text-white/40 text-xs">Consignatário</span>
-                                    <p className="text-white text-sm">{log.lc_nome_consignatario || '-'}</p>
-                                  </div>
-                                  <div>
-                                    <span className="text-white/40 text-xs">Rota</span>
-                                    <p className="text-white text-sm">
-                                      {log.lc_aeroporto_origem} → {log.lc_aeroporto_destino}
-                                    </p>
-                                  </div>
-                                  <div>
-                                    <span className="text-white/40 text-xs">Frete Total</span>
-                                    <p className="text-white text-sm">
-                                      {log.lc_frete_valor_total 
-                                        ? `${log.lc_frete_moeda_codigo || ''} ${log.lc_frete_valor_total.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`
-                                        : '-'
-                                      }
-                                    </p>
-                                  </div>
-                                  
-                                  {/* Bloqueios */}
-                                  {log.lc_bloqueios_ativos && log.lc_bloqueios_ativos.length > 0 && (
-                                    <div className="col-span-full">
-                                      <span className="text-white/40 text-xs">Bloqueios Ativos</span>
-                                      <div className="flex flex-wrap gap-2 mt-1">
-                                        {log.lc_bloqueios_ativos.map((bloqueio: any, idx: number) => (
-                                          <Badge key={idx} className="bg-red-500/20 text-red-400 border-red-500/30">
-                                            {bloqueio.motivoBloqueio || bloqueio.tipoBloqueio}
-                                          </Badge>
-                                        ))}
-                                      </div>
+                                  <div className="text-xs text-white">{selectedLog.lc_nome_embarcador}</div>
+                                  {(selectedLog.lc_cidade_embarcador || selectedLog.lc_pais_embarcador) && (
+                                    <div className="text-xs text-white/50 mt-1">
+                                      {[selectedLog.lc_cidade_embarcador, selectedLog.lc_pais_embarcador].filter(Boolean).join(', ')}
                                     </div>
                                   )}
-                                  
-                                  {/* Viagens Associadas */}
-                                  {log.lc_viagens_associadas && log.lc_viagens_associadas.length > 0 && (
-                                    <div className="col-span-full">
-                                      <span className="text-white/40 text-xs">Viagens Associadas</span>
-                                      <div className="flex flex-wrap gap-2 mt-1">
-                                        {log.lc_viagens_associadas.map((viagem: any, idx: number) => (
-                                          <Badge key={idx} variant="outline" className="border-blue-400/30 text-blue-400">
-                                            {viagem.identificacaoViagem} ({viagem.dataPartidaPrevista})
-                                          </Badge>
-                                        ))}
-                                      </div>
-                                    </div>
-                                  )}
+                                </div>
+                              )}
+
+                              {/* Frete */}
+                              {selectedLog.lc_frete_valor_total && (
+                                <div className="bg-white/5 rounded-lg p-3">
+                                  <div className="flex items-center gap-2 mb-2">
+                                    <Ship className="h-3.5 w-3.5 text-cyan-400" />
+                                    <span className="text-xs text-white/60">Frete</span>
+                                  </div>
+                                  <div className="text-sm text-white font-medium">
+                                    {selectedLog.lc_frete_moeda_codigo || 'USD'} {Number(selectedLog.lc_frete_valor_total).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                                  </div>
+                                </div>
+                              )}
+
+                              {/* Bloqueios */}
+                              {selectedLog.lc_bloqueios_ativos && selectedLog.lc_bloqueios_ativos.length > 0 && (
+                                <div className="bg-red-500/10 border border-red-500/20 rounded-lg p-3">
+                                  <div className="flex items-center gap-2 mb-2">
+                                    <AlertTriangle className="h-3.5 w-3.5 text-red-400" />
+                                    <span className="text-xs text-red-400">Bloqueios Ativos</span>
+                                  </div>
+                                  <div className="flex flex-wrap gap-1.5">
+                                    {selectedLog.lc_bloqueios_ativos.map((bloqueio: any, idx: number) => (
+                                      <Badge key={idx} className="bg-red-500/20 text-red-400 border-red-500/30 text-xs">
+                                        {bloqueio.motivoBloqueio || bloqueio.tipoBloqueio || 'Bloqueio'}
+                                      </Badge>
+                                    ))}
+                                  </div>
+                                </div>
+                              )}
+
+                              {/* Viagens */}
+                              {selectedLog.lc_viagens_associadas && selectedLog.lc_viagens_associadas.length > 0 && (
+                                <div className="bg-white/5 rounded-lg p-3">
+                                  <div className="flex items-center gap-2 mb-2">
+                                    <Plane className="h-3.5 w-3.5 text-blue-400" />
+                                    <span className="text-xs text-white/60">Viagens Associadas</span>
+                                  </div>
+                                  <div className="flex flex-wrap gap-1.5">
+                                    {selectedLog.lc_viagens_associadas.map((viagem: any, idx: number) => (
+                                      <Badge key={idx} variant="outline" className="border-blue-400/30 text-blue-400 text-xs">
+                                        {viagem.identificacaoViagem}
+                                      </Badge>
+                                    ))}
+                                  </div>
                                 </div>
                               )}
                             </div>
-                          </TableCell>
-                        </TableRow>
+                          </div>
+                        </>
                       )}
-                    </React.Fragment>
-                  ))}
-                </TableBody>
-              </Table>
-            )}
-            
-            {/* Pagination */}
-            {logsData && logsData.total > logsData.limit && (
-              <div className="flex items-center justify-between p-4 border-t border-white/10">
-                <span className="text-white/60 text-sm">
-                  Mostrando {Math.min(logsData.offset + 1, logsData.total)}-
-                  {Math.min(logsData.offset + logsData.limit, logsData.total)} de {logsData.total}
-                </span>
-                <div className="flex gap-2">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    disabled={logsData.offset === 0}
-                    onClick={() => setFilters(prev => ({ ...prev, offset: Math.max(0, (prev.offset || 0) - (prev.limit || 50)) }))}
-                    className="border-white/20 text-white hover:bg-white/10"
-                  >
-                    Anterior
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    disabled={logsData.offset + logsData.limit >= logsData.total}
-                    onClick={() => setFilters(prev => ({ ...prev, offset: (prev.offset || 0) + (prev.limit || 50) }))}
-                    className="border-white/20 text-white hover:bg-white/10"
-                  >
-                    Próximo
-                  </Button>
-                </div>
-              </div>
-            )}
-          </CardContent>
-        </Card>
+                    </div>
+                  </ScrollArea>
+                )}
+              </CardContent>
+            </Card>
+          </div>
+        </div>
       </div>
     </div>
   );
