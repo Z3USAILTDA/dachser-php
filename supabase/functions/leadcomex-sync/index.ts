@@ -1115,8 +1115,9 @@ serve(async (req) => {
       const executionSource = body.execution_source || 'cron-hourly';
       
       console.log(`[LEADCOMEX] ========================================`);
+      console.log(`[LEADCOMEX] VERSION: 2026-01-21-v3 - DEPLOY FORCADO`);
       console.log(`[LEADCOMEX] Enrich Reverse Ladder - LOTE DE ${limit}`);
-      console.log(`[LEADCOMEX] max_retries: ${maxRetries}`);
+      console.log(`[LEADCOMEX] max_retries: ${maxRetries} (DEVE SER 30)`);
       console.log(`[LEADCOMEX] ========================================`);
 
       // 1. Buscar AWBs pendentes com DEP date do MariaDB
