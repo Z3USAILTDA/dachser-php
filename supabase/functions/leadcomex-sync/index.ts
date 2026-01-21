@@ -1137,8 +1137,162 @@ serve(async (req) => {
       );
     }
 
+    // =============================================
+    // ENRICH REVERSE LADDER: Escada reversa de datas para máxima recuperação
+    // =============================================
+    if (action === 'enrich-reverse-ladder') {
+      const limit = body.limit || 50;
+      const maxRetries = body.max_retries || 7;
+      const executionSource = body.execution_source || 'cron-hourly';
+      
+      console.log(`[LEADCOMEX] Enrich Reverse Ladder - limit: ${limit}, max_retries: ${maxRetries}`);
+
+      // 1. Buscar AWBs pendentes com DEP date do MariaDB
+      let shipments: Array<{house: string; master: string; dep_datetime: string | null}> = [];
+      try {
+        const proxyResponse = await fetch(`${supabaseUrl}/functions/v1/mariadb-proxy`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${supabaseKey}`,
+          },
+          body: JSON.stringify({
+            action: 'get_cct_pending_hawbs',
+            limit: limit,
+          }),
+        });
+        
+        if (!proxyResponse.ok) {
+          const errorText = await proxyResponse.text();
+          console.error(`[LEADCOMEX] Erro ao buscar HAWBs: ${errorText}`);
+          throw new Error(`MariaDB proxy error: ${proxyResponse.status}`);
+        }
+        
+        const proxyData = await proxyResponse.json();
+        shipments = proxyData.shipments || [];
+        console.log(`[LEADCOMEX] ${shipments.length} HAWBs pendentes encontrados`);
+      } catch (proxyError) {
+        console.error('[LEADCOMEX] Falha ao buscar HAWBs:', proxyError);
+        return new Response(
+          JSON.stringify({ success: false, error: 'Falha ao buscar HAWBs pendentes' }),
+          { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      if (shipments.length === 0) {
+        return new Response(
+          JSON.stringify({
+            success: true,
+            message: 'Nenhum HAWB pendente para enriquecer',
+            stats: { processed: 0, success: 0, failed: 0 },
+          }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      const syncStats = {
+        processed: 0,
+        success: 0,
+        failed: 0,
+        updated: 0,
+        bloqueios: 0,
+        divergencias: 0,
+        errors: 0,
+        details: [] as Array<{ house: string; success: boolean; offset: number; matched_date: string | null }>,
+      };
+
+      // 2. Para cada HAWB, aplicar escada reversa
+      for (const shipment of shipments) {
+        syncStats.processed++;
+        
+        // Formatar dep_date para YYYY-MM-DD
+        let depDate: string | null = null;
+        if (shipment.dep_datetime) {
+          try {
+            const dt = new Date(shipment.dep_datetime);
+            if (!isNaN(dt.getTime())) {
+              depDate = `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}-${String(dt.getDate()).padStart(2, '0')}`;
+            }
+          } catch {
+            console.log(`[LEADCOMEX] dep_datetime inválido para ${shipment.house}: ${shipment.dep_datetime}`);
+          }
+        }
+
+        // Se não tem dep_date, usar data atual
+        if (!depDate) {
+          const now = new Date();
+          depDate = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+        }
+
+        console.log(`[LEADCOMEX] Processando ${shipment.house} (DEP: ${depDate})`);
+
+        // Executar escada reversa
+        const ladderResult = await tryReverseLadder(leadcomexToken, shipment.house, depDate, maxRetries);
+
+        // 3. Salvar log no MariaDB
+        try {
+          await fetch(`${supabaseUrl}/functions/v1/mariadb-proxy`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${supabaseKey}`,
+            },
+            body: JSON.stringify({
+              action: 'save_leadcomex_log',
+              hawb: shipment.house,
+              mawb: shipment.master || null,
+              dep_date: depDate,
+              success: ladderResult.success,
+              matched_date: ladderResult.matchedDate,
+              offset_days: ladderResult.offsetDays,
+              total_attempts: ladderResult.attempts.length,
+              total_time_ms: ladderResult.totalTimeMs,
+              execution_source: executionSource,
+              attempts: ladderResult.attempts,
+              leadcomex_data: ladderResult.data || null,
+            }),
+          });
+          console.log(`[LEADCOMEX] Log salvo para ${shipment.house}`);
+        } catch (logError) {
+          console.error(`[LEADCOMEX] Erro ao salvar log para ${shipment.house}:`, logError);
+        }
+
+        // 4. Se encontrou, atualizar dados no MariaDB
+        if (ladderResult.success && ladderResult.data) {
+          syncStats.success++;
+          await processLeadComexData(supabase, shipment.house, shipment.master, ladderResult.data, syncStats);
+        } else {
+          syncStats.failed++;
+        }
+
+        syncStats.details.push({
+          house: shipment.house,
+          success: ladderResult.success,
+          offset: ladderResult.offsetDays,
+          matched_date: ladderResult.matchedDate,
+        });
+
+        // Delay entre processamentos (100ms)
+        await new Promise(resolve => setTimeout(resolve, 100));
+      }
+
+      console.log(`[LEADCOMEX] Enrich Reverse Ladder concluído:`, syncStats);
+
+      return new Response(
+        JSON.stringify({
+          success: true,
+          message: `Escada reversa: ${syncStats.success}/${syncStats.processed} HAWBs encontrados`,
+          stats: {
+            ...syncStats,
+            details: syncStats.details.slice(0, 100),
+          },
+        }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
     return new Response(
-      JSON.stringify({ error: 'Action inválida. Use: health, sync, enrich, enrich-individual, query' }),
+      JSON.stringify({ error: 'Action inválida. Use: health, sync, enrich, enrich-individual, enrich-reverse-ladder, query' }),
       { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
 
@@ -1151,3 +1305,109 @@ serve(async (req) => {
     );
   }
 });
+
+// =============================================
+// HELPER: Escada Reversa de Datas
+// =============================================
+interface ReverseLadderAttempt {
+  attempt_number: number;
+  date: string;
+  status: 'not_found' | 'error' | 'found';
+  http_status: number;
+  response_time_ms: number;
+  error_message?: string;
+}
+
+interface ReverseLadderResult {
+  success: boolean;
+  matchedDate: string | null;
+  offsetDays: number;
+  attempts: ReverseLadderAttempt[];
+  totalTimeMs: number;
+  data?: LeadComexCarga;
+}
+
+function subtractDays(dateStr: string, days: number): string {
+  const date = new Date(dateStr);
+  date.setDate(date.getDate() - days);
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+async function tryReverseLadder(
+  token: string,
+  hawb: string,
+  depDate: string,
+  maxRetries: number = 7
+): Promise<ReverseLadderResult> {
+  const attempts: ReverseLadderAttempt[] = [];
+  const startTotal = Date.now();
+  
+  // Gerar variações do HAWB para tentar
+  const hawbVariations = generateHawbVariations(hawb);
+  console.log(`[LEADCOMEX] Tentando ${hawbVariations.length} variações de HAWB: ${hawbVariations.slice(0, 3).join(', ')}...`);
+
+  // Escada reversa de datas
+  for (let i = 0; i <= maxRetries; i++) {
+    const testDate = subtractDays(depDate, i);
+    
+    let attemptResult: ReverseLadderAttempt = {
+      attempt_number: i + 1,
+      date: testDate,
+      status: 'not_found',
+      http_status: 204,
+      response_time_ms: 0,
+    };
+
+    // Tentar cada variação do HAWB
+    for (const hawbVariation of hawbVariations) {
+      const startAttempt = Date.now();
+      
+      try {
+        const carga = await fetchCargaDetalhada(token, hawbVariation, testDate);
+        const responseTime = Date.now() - startAttempt;
+        attemptResult.response_time_ms = responseTime;
+        
+        if (carga) {
+          attemptResult.status = 'found';
+          attemptResult.http_status = 200;
+          console.log(`[LEADCOMEX] ENCONTRADO ${hawb} → ${hawbVariation} em ${testDate} (offset: ${i})`);
+          
+          attempts.push(attemptResult);
+          
+          return {
+            success: true,
+            matchedDate: testDate,
+            offsetDays: i,
+            attempts,
+            totalTimeMs: Date.now() - startTotal,
+            data: carga,
+          };
+        }
+      } catch (error) {
+        attemptResult.status = 'error';
+        attemptResult.http_status = 0;
+        attemptResult.error_message = error instanceof Error ? error.message : 'Unknown error';
+      }
+    }
+
+    attempts.push(attemptResult);
+
+    // Delay entre tentativas (100ms)
+    if (i < maxRetries) {
+      await new Promise(resolve => setTimeout(resolve, 100));
+    }
+  }
+
+  console.log(`[LEADCOMEX] ${hawb} não encontrado após ${attempts.length} tentativas`);
+  
+  return {
+    success: false,
+    matchedDate: null,
+    offsetDays: 0,
+    attempts,
+    totalTimeMs: Date.now() - startTotal,
+  };
+}
