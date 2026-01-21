@@ -1142,7 +1142,7 @@ serve(async (req) => {
     // =============================================
     if (action === 'enrich-reverse-ladder') {
       const limit = body.limit || 50;
-      const maxRetries = body.max_retries || 7;
+      const maxRetries = body.max_retries || 15;
       const executionSource = body.execution_source || 'cron-hourly';
       
       console.log(`[LEADCOMEX] Enrich Reverse Ladder - limit: ${limit}, max_retries: ${maxRetries}`);
@@ -1340,7 +1340,7 @@ async function tryReverseLadder(
   token: string,
   hawb: string,
   depDate: string,
-  maxRetries: number = 7
+  maxRetries: number = 15
 ): Promise<ReverseLadderResult> {
   const attempts: ReverseLadderAttempt[] = [];
   const startTotal = Date.now();
