@@ -247,39 +247,44 @@ function extractHawbNumericPart(hawb: string): string {
   return numericOnly.slice(-11);
 }
 
-// Gera ÚNICA variação do HAWB: prefixo + número (sem hífen)
-// IMPORTANTE: NÃO gerar variações sem prefixo - LeadComex requer prefixo do aeroporto
+// Gera variações do HAWB para matching - MESMO FORMATO DO TESTE QUE FUNCIONOU
 function generateHawbVariations(hawb: string): string[] {
+  const variations: Set<string> = new Set();
   if (!hawb) return [];
   
   const original = hawb.trim().toUpperCase();
   
-  // ÚNICA operação: remover hífen, MANTER prefixo
-  // VCP-43302749 → VCP43302749
-  // HAM-15490551 → HAM15490551
-  const normalized = original.replace(/-/g, '');
+  // 1. Original (com hífen se tiver)
+  variations.add(original);
   
-  // Validar limite de 11 caracteres da API LeadComex
-  if (normalized.length > 11) {
-    console.warn(`[LEADCOMEX] HAWB ${hawb} excede 11 chars: ${normalized} (${normalized.length})`);
-    
-    // Tentar truncar mantendo prefixo + últimos dígitos
-    const prefixMatch = normalized.match(/^([A-Z]{2,4})(\d+)$/);
-    if (prefixMatch) {
-      const prefix = prefixMatch[1];
-      const numbers = prefixMatch[2];
-      const maxNumbers = 11 - prefix.length;
-      const truncated = `${prefix}${numbers.slice(-maxNumbers)}`;
-      console.log(`[LEADCOMEX] HAWB truncado: ${normalized} → ${truncated}`);
-      return [truncated];
-    }
-    
-    // Se não tem padrão reconhecível, retornar truncado simples
-    return [normalized.slice(0, 11)];
+  // 2. Normalizado (sem hífen, mas COM prefixo)
+  const normalized = original.replace(/[\s\-_\.\/\\]+/g, '');
+  variations.add(normalized);
+  
+  // 3. Sem prefixo de aeroporto (ex: VCP-43302749 → 43302749)
+  const withoutPrefix = original.replace(/^[A-Z]{2,4}[\-_]?/, '');
+  if (withoutPrefix && withoutPrefix !== original) {
+    variations.add(withoutPrefix);
+    variations.add(withoutPrefix.replace(/[\s\-_\.\/\\]+/g, ''));
   }
   
-  console.log(`[LEADCOMEX] HAWB ${hawb} → Normalizado: ${normalized}`);
-  return [normalized];
+  // 4. Parte numérica pura
+  const numericPart = original.replace(/\D/g, '');
+  if (numericPart.length >= 6) {
+    variations.add(numericPart);
+    // Últimos 8 dígitos se muito longo
+    if (numericPart.length > 8) {
+      variations.add(numericPart.slice(-8));
+    }
+  }
+  
+  // Filtrar variações válidas (máx 11 chars para LeadComex)
+  const filtered = [...variations]
+    .filter(v => v.length > 0 && v.length <= 11)
+    .sort((a, b) => b.length - a.length);  // Priorizar mais longas
+  
+  console.log(`[LEADCOMEX] HAWB ${hawb} → Variações (${filtered.length}): ${filtered.join(', ')}`);
+  return filtered;
 }
 
 // Formata HAWB no padrão MariaDB (com hífen após prefixo de aeroporto)
