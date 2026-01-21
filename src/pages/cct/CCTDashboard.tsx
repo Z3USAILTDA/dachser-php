@@ -217,7 +217,7 @@ export default function CCTDashboard() {
           {isAdmin && (
             <>
               <button 
-                onClick={() => navigate('/air/cct/leadcomex-test')}
+                onClick={() => navigate('/air/cct/leadcomex-logs')}
                 className="flex items-center gap-2 px-4 py-2 rounded-full border border-amber-500/40 bg-[rgba(255,200,0,0.1)] text-amber-400 hover:bg-[rgba(255,200,0,0.2)] transition text-[0.8rem]"
               >
                 <FlaskConical className="h-4 w-4" />
