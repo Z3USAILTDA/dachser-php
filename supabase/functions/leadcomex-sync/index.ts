@@ -247,87 +247,39 @@ function extractHawbNumericPart(hawb: string): string {
   return numericOnly.slice(-11);
 }
 
-// Gera múltiplas variações do HAWB para matching
+// Gera ÚNICA variação do HAWB: prefixo + número (sem hífen)
+// IMPORTANTE: NÃO gerar variações sem prefixo - LeadComex requer prefixo do aeroporto
 function generateHawbVariations(hawb: string): string[] {
-  const variations: Set<string> = new Set();
   if (!hawb) return [];
   
   const original = hawb.trim().toUpperCase();
   
-  // 1. Original
-  variations.add(original);
+  // ÚNICA operação: remover hífen, MANTER prefixo
+  // VCP-43302749 → VCP43302749
+  // HAM-15490551 → HAM15490551
+  const normalized = original.replace(/-/g, '');
   
-  // 2. Normalizado (sem hífens, pontos, espaços)
-  const normalized = normalizeHawb(hawb);
-  variations.add(normalized);
-  
-  // 3. Sem qualquer prefixo de aeroporto (ex: HAM-15490551 → 15490551)
-  const withoutPrefix = original.replace(/^[A-Z]{2,4}[\-_]?/, '');
-  variations.add(withoutPrefix);
-  variations.add(normalizeHawb(withoutPrefix));
-  
-  // 4. Extrair parte numérica
-  const numericPart = extractHawbNumericPart(hawb);
-  if (numericPart && numericPart.length >= 6) {
-    variations.add(numericPart);
-    // Últimos 8 dígitos
-    if (numericPart.length > 8) {
-      variations.add(numericPart.slice(-8));
+  // Validar limite de 11 caracteres da API LeadComex
+  if (normalized.length > 11) {
+    console.warn(`[LEADCOMEX] HAWB ${hawb} excede 11 chars: ${normalized} (${normalized.length})`);
+    
+    // Tentar truncar mantendo prefixo + últimos dígitos
+    const prefixMatch = normalized.match(/^([A-Z]{2,4})(\d+)$/);
+    if (prefixMatch) {
+      const prefix = prefixMatch[1];
+      const numbers = prefixMatch[2];
+      const maxNumbers = 11 - prefix.length;
+      const truncated = `${prefix}${numbers.slice(-maxNumbers)}`;
+      console.log(`[LEADCOMEX] HAWB truncado: ${normalized} → ${truncated}`);
+      return [truncated];
     }
-    // Últimos 7 dígitos (comum em alguns formatos)
-    if (numericPart.length >= 7) {
-      variations.add(numericPart.slice(-7));
-    }
+    
+    // Se não tem padrão reconhecível, retornar truncado simples
+    return [normalized.slice(0, 11)];
   }
   
-  // 5. Tentar adicionar formatos com e sem hífen
-  // Se tem hífen, adicionar versão sem
-  if (original.includes('-')) {
-    variations.add(original.replace(/-/g, ''));
-  }
-  // Se não tem hífen mas tem padrão ABC12345678, adicionar versão com hífen
-  const prefixMatch = original.match(/^([A-Z]{2,4})(\d+)$/);
-  if (prefixMatch) {
-    variations.add(`${prefixMatch[1]}-${prefixMatch[2]}`);
-    variations.add(`${prefixMatch[1]}${prefixMatch[2]}`);
-  }
-  
-  // 6. Tratar formato com barra (ex: 942796/2025/FI)
-  const slashMatch = original.match(/^(\d+)\/(\d+)\/(\w+)$/);
-  if (slashMatch) {
-    const numericPart = slashMatch[1];
-    variations.add(numericPart);
-    variations.add(`${slashMatch[3]}-${numericPart}`);
-    variations.add(`${slashMatch[3]}${numericPart}`);
-  }
-  
-  // 7. Tratar formato com prefixo ICAO (ex: ABCDE12345678 → 12345678)
-  const icaoMatch = original.match(/^([A-Z]{4,5})(\d+)$/);
-  if (icaoMatch) {
-    variations.add(icaoMatch[2]);
-    variations.add(`${icaoMatch[1]}-${icaoMatch[2]}`);
-  }
-  
-  // 8. Adicionar variação apenas com últimos 6-8 dígitos para match parcial
-  const allDigits = original.replace(/\D/g, '');
-  if (allDigits.length >= 6) {
-    variations.add(allDigits.slice(-6));
-    variations.add(allDigits.slice(-8));
-  }
-  
-  // CRÍTICO: Filtrar por limite de 11 caracteres da API LeadComex
-  // Apenas remover hífens - NÃO remover prefixos de aeroporto
-  const filtered = [...variations]
-    .map(v => v.replace(/-/g, '')) // Apenas remover hífens, manter prefixo
-    .filter(v => v.length > 0 && v.length <= 11)
-    .sort((a, b) => {
-      // PRIORIZAR variações COM prefixo (alfanuméricos mais longos primeiro)
-      // Ex: VCP43302749 (11 chars) antes de 43302749 (8 chars)
-      return b.length - a.length;
-    });
-  
-  // Remover duplicatas após remoção de hífens
-  return [...new Set(filtered)];
+  console.log(`[LEADCOMEX] HAWB ${hawb} → Normalizado: ${normalized}`);
+  return [normalized];
 }
 
 // Formata HAWB no padrão MariaDB (com hífen após prefixo de aeroporto)
@@ -1153,11 +1105,14 @@ serve(async (req) => {
     // ENRICH REVERSE LADDER: Escada reversa de datas para máxima recuperação
     // =============================================
     if (action === 'enrich-reverse-ladder') {
-      const limit = body.limit || 50;
+      const limit = body.limit || 2; // ALTERADO: limite padrão de 2 para debug detalhado
       const maxRetries = body.max_retries || 15;
       const executionSource = body.execution_source || 'cron-hourly';
       
-      console.log(`[LEADCOMEX] Enrich Reverse Ladder - limit: ${limit}, max_retries: ${maxRetries}`);
+      console.log(`[LEADCOMEX] ========================================`);
+      console.log(`[LEADCOMEX] Enrich Reverse Ladder - LOTE DE ${limit}`);
+      console.log(`[LEADCOMEX] max_retries: ${maxRetries}`);
+      console.log(`[LEADCOMEX] ========================================`);
 
       // 1. Buscar AWBs pendentes com DEP date do MariaDB
       let shipments: Array<{house: string; master: string; dep_datetime: string | null}> = [];
