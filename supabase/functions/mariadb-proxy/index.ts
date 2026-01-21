@@ -10611,14 +10611,14 @@ serve(async (req) => {
         result = {
           success: true,
           stats: {
-            total: row.total || 0,
-            success_count: row.success_count || 0,
-            error_count: row.error_count || 0,
-            success_rate: row.total > 0 ? ((row.success_count || 0) / row.total * 100).toFixed(1) : '0.0',
-            avg_time_ms: Math.round(row.avg_time_ms || 0),
-            avg_offset_days: (row.avg_offset_days || 0).toFixed(1),
-            avg_attempts: (row.avg_attempts || 0).toFixed(1),
-            days_with_data: row.days_with_data || 0
+            total: Number(row.total) || 0,
+            success_count: Number(row.success_count) || 0,
+            error_count: Number(row.error_count) || 0,
+            success_rate: row.total > 0 ? (Number(row.success_count || 0) / Number(row.total) * 100).toFixed(1) : '0.0',
+            avg_time_ms: Math.round(Number(row.avg_time_ms) || 0),
+            avg_offset_days: Number(row.avg_offset_days || 0).toFixed(1),
+            avg_attempts: Number(row.avg_attempts || 0).toFixed(1),
+            days_with_data: Number(row.days_with_data) || 0
           }
         };
         break;
