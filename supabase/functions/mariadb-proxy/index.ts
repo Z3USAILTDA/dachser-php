@@ -10302,42 +10302,49 @@ serve(async (req) => {
         const airlineFilter = airlineCodes.map(c => `'${c}'`).join(',');
         
         // Build WHERE clause based on whether we're filtering a specific HAWB
-        // CRITICAL: Filter ONLY status DEP (decolagem) - this is the starting point for CCT
-        let whereClause = `LEFT(TRIM(s.awb), 3) IN (${airlineFilter})
-            AND s.\`último_status\` = 'DEP'
-            AND s.hawb IS NOT NULL 
-            AND TRIM(s.hawb) != ''`;
+        // CRITICAL: Use t_status_historico to get ALL HAWBs that had DEP status at any point
+        // This ensures we capture shipments that have already moved past DEP (ARR, NFD, DLV, etc.)
+        let whereClause = `LEFT(TRIM(h.awb), 3) IN (${airlineFilter})
+            AND h.status_code = 'DEP'
+            AND h.hawb IS NOT NULL 
+            AND TRIM(h.hawb) != ''
+            AND h.hawb != 'N/A'`;
         
         if (hawbFilter) {
           // When reprocessing a specific HAWB, only filter by the HAWB value
           // (ignore the pending enrichment conditions)
           const sanitizedHawb = hawbFilter.replace(/'/g, "''");
-          whereClause += ` AND TRIM(s.hawb) = '${sanitizedHawb}'`;
-          console.log(`[get_cct_pending_hawbs] Filtering for specific HAWB: ${hawbFilter}, status DEP only`);
+          whereClause += ` AND TRIM(h.hawb) = '${sanitizedHawb}'`;
+          console.log(`[get_cct_pending_hawbs] Filtering for specific HAWB: ${hawbFilter} from history`);
         } else {
           // Normal flow: only get records that need enrichment (DEP status + missing data)
-          whereClause += ` AND s.\`última atualização\` >= '2026-01-13 22:00:00'
+          // Filter from 01/01/2026 onwards
+          whereClause += ` AND h.data_evento >= '2026-01-01 00:00:00'
             AND (cct.peso_declarado IS NULL OR cct.cnpj_consignatario IS NULL)`;
-          console.log(`[get_cct_pending_hawbs] Fetching only DEP status AWBs for LeadComex enrichment`);
+          console.log(`[get_cct_pending_hawbs] Fetching HAWBs with DEP history since 2026-01-01 for LeadComex enrichment`);
         }
         
+        // Query from t_status_historico (historical events) joined with current status
         const rows = await client.query(`
           SELECT DISTINCT
-            TRIM(s.hawb) as house,
-            TRIM(s.awb) as master,
-            s.dep_datetime,
+            TRIM(h.hawb) as house,
+            TRIM(h.awb) as master,
+            h.data_evento as dep_datetime,
             s.arr_datetime,
             s.\`último_status\` as status,
             cct.peso_declarado,
             cct.cnpj_consignatario
-          FROM ${database}.t_status_aereo s
-          LEFT JOIN ${database}.t_cct_shipments cct ON TRIM(s.awb) COLLATE utf8mb4_unicode_ci = TRIM(cct.master) COLLATE utf8mb4_unicode_ci
+          FROM ${database}.t_status_historico h
+          LEFT JOIN ${database}.t_status_aereo s 
+            ON TRIM(h.awb) = TRIM(s.awb) AND TRIM(h.hawb) = TRIM(s.hawb)
+          LEFT JOIN ${database}.t_cct_shipments cct 
+            ON TRIM(h.awb) COLLATE utf8mb4_unicode_ci = TRIM(cct.master) COLLATE utf8mb4_unicode_ci
           WHERE ${whereClause}
-          ORDER BY s.\`última atualização\` DESC
+          ORDER BY h.data_evento DESC
           LIMIT ${limit}
         `);
         
-        console.log(`[get_cct_pending_hawbs] Found ${rows.length} HAWBs ${hawbFilter ? `(filter: ${hawbFilter})` : 'needing LeadComex enrichment'}`);
+        console.log(`[get_cct_pending_hawbs] Found ${rows.length} HAWBs ${hawbFilter ? `(filter: ${hawbFilter})` : 'with DEP history needing enrichment'}`);
         
         result = {
           success: true,
