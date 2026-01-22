@@ -10352,15 +10352,15 @@ serve(async (req) => {
           whereClause += ` AND TRIM(h.hawb) = '${sanitizedHawb}'`;
           console.log(`[get_cct_pending_hawbs] Filtering for specific HAWB: ${hawbFilter} from history`);
         } else if (processAll) {
-          // PROCESS ALL: Get all HAWBs with DEP since 2026-01-01 (ignore enrichment status)
-          whereClause += ` AND h.data_evento >= '2026-01-01 00:00:00'`;
-          console.log(`[get_cct_pending_hawbs] PROCESS ALL: Fetching ALL HAWBs with DEP history since 2026-01-01`);
+          // PROCESS ALL: Get all HAWBs with DEP since 22/01/2026 15:00 (ignore enrichment status)
+          whereClause += ` AND h.data_evento >= '2026-01-22 15:00:00'`;
+          console.log(`[get_cct_pending_hawbs] PROCESS ALL: Fetching ALL HAWBs with DEP history since 2026-01-22 15:00`);
         } else {
           // Normal flow: only get records that need enrichment (DEP status + missing data)
-          // Filter from 01/01/2026 onwards
-          whereClause += ` AND h.data_evento >= '2026-01-01 00:00:00'
+          // Filter from 22/01/2026 15:00 onwards
+          whereClause += ` AND h.data_evento >= '2026-01-22 15:00:00'
             AND (cct.peso_declarado IS NULL OR cct.cnpj_consignatario IS NULL)`;
-          console.log(`[get_cct_pending_hawbs] Fetching HAWBs with DEP history since 2026-01-01 for LeadComex enrichment`);
+          console.log(`[get_cct_pending_hawbs] Fetching HAWBs with DEP history since 2026-01-22 15:00 for LeadComex enrichment`);
         }
         
         // Query from t_status_historico (historical events) joined with current status
