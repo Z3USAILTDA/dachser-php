@@ -1523,12 +1523,75 @@ serve(async (req) => {
       });
 
       try {
-        // Excluir MBLs que:
-        // 1. Só têm containers marcados como NAO_ENCONTRADO
-        // 2. Todos os containers têm erro "Prefix not found" (não rastreáveis)
-        // 3. Containers entregues há mais de 24h
-        // Incluir: is_eta_delayed, transshipment_port, navio/vessel_imo do registro mais recente
+        // OTIMIZADO: Query refatorada com CTEs e LEFT JOINs para melhor performance
+        // - Substituídas 7+ subqueries correlacionadas por JOINs
+        // - Removido BINARY TRIM() que impedia uso de índices
+        // - Adicionada paginação com LIMIT
         const rows = await client.query(`
+          WITH 
+            -- CTE 1: Pré-calcular dados do t_master_dados (eta, nome_analista) por mbl
+            master_data AS (
+              SELECT 
+                TRIM(mawb) as mbl_id,
+                eta,
+                nome_analista
+              FROM dados_dachser.t_master_dados
+              WHERE active = 1
+                AND mawb IS NOT NULL
+              GROUP BY TRIM(mawb)
+            ),
+            -- CTE 2: Pré-calcular navio/vessel_imo mais recente por mbl
+            latest_vessel AS (
+              SELECT 
+                mbl_id,
+                navio,
+                vessel_imo,
+                ROW_NUMBER() OVER (PARTITION BY mbl_id ORDER BY last_check DESC) as rn
+              FROM dados_dachser.t_tracking_sea
+              WHERE active = 1
+                AND (navio IS NOT NULL AND navio != '')
+            ),
+            -- CTE 3: Pré-calcular transshipment_port por mbl (prioridade campo direto)
+            transship_direct AS (
+              SELECT 
+                mbl_id,
+                transshipment_port
+              FROM dados_dachser.t_tracking_sea
+              WHERE transshipment_port IS NOT NULL 
+                AND transshipment_port != ''
+              GROUP BY mbl_id
+            ),
+            -- CTE 4: Transshipment do histórico (fallback)
+            transship_history AS (
+              SELECT 
+                mbl_id,
+                GROUP_CONCAT(DISTINCT location SEPARATOR ', ') as transshipment_port
+              FROM dados_dachser.t_tracking_sea_history
+              WHERE UPPER(event_code) IN ('TRANSSHIPMENT', 'TSP', 'TRANSSHIPMENT_DISCHARGED', 'TRANSSHIPMENT_LOADED', 'TRANSHIPMENT_ARRIVAL', 'TRANSHIPMENT_DEPARTURE', 'DISCHARGED', 'LOADED')
+                AND location IS NOT NULL
+                AND location != ''
+              GROUP BY mbl_id
+            ),
+            -- CTE 5: Verificar free time cadastrado
+            has_freetime AS (
+              SELECT DISTINCT
+                CASE 
+                  WHEN ft.tipo_ft = 'PROCESSO' THEN ft.mbl
+                  ELSE NULL
+                END as mbl_id,
+                ft.cliente_nome,
+                ft.tipo_ft
+              FROM dados_dachser.t_client_free_time ft
+              WHERE ft.ativo = 1
+                AND (
+                  (ft.tipo_ft = 'PROCESSO')
+                  OR (
+                    ft.tipo_ft = 'CONTRATO' 
+                    AND (ft.vigencia_inicio IS NULL OR ft.vigencia_inicio <= CURDATE())
+                    AND (ft.vigencia_fim IS NULL OR ft.vigencia_fim >= CURDATE())
+                  )
+                )
+            )
           SELECT 
             ts.mbl_id,
             MAX(ts.tipo_processo) as tipo_processo,
@@ -1536,56 +1599,13 @@ serve(async (req) => {
             MAX(ts.shipping_line) as shipping_line,
             MAX(ts.origem) as origem,
             MAX(ts.destino) as destino,
-            -- Navio do registro mais recente (subquery para corrigir visualização)
-            (
-              SELECT ts2.navio 
-              FROM dados_dachser.t_tracking_sea ts2 
-              WHERE ts2.mbl_id = ts.mbl_id 
-                AND ts2.navio IS NOT NULL 
-                AND ts2.navio != ''
-                AND ts2.active = 1
-              ORDER BY ts2.last_check DESC 
-              LIMIT 1
-            ) as navio,
-            -- Vessel IMO do registro mais recente
-            (
-              SELECT ts2.vessel_imo 
-              FROM dados_dachser.t_tracking_sea ts2 
-              WHERE ts2.mbl_id = ts.mbl_id 
-                AND ts2.vessel_imo IS NOT NULL 
-                AND ts2.active = 1
-              ORDER BY ts2.last_check DESC 
-              LIMIT 1
-            ) as vessel_imo,
-            -- ETA priorizado: usar t_master_dados.eta se disponível, senão usar t_tracking_sea.eta
-            COALESCE(
-              (
-                SELECT md.eta 
-                FROM dados_dachser.t_master_dados md 
-                WHERE BINARY TRIM(md.mawb) = BINARY ts.mbl_id
-                  AND md.eta IS NOT NULL 
-                  AND md.active = 1
-                LIMIT 1
-              ),
-              MAX(ts.eta)
-            ) as eta,
-            -- ETA do master para referência (auditoria)
-            (
-              SELECT md.eta 
-              FROM dados_dachser.t_master_dados md 
-              WHERE BINARY TRIM(md.mawb) = BINARY ts.mbl_id
-                AND md.active = 1
-              LIMIT 1
-            ) as eta_master,
-            -- Nome do analista/coordenador do master
-            (
-              SELECT md.nome_analista 
-              FROM dados_dachser.t_master_dados md 
-              WHERE BINARY TRIM(md.mawb) = BINARY ts.mbl_id
-                AND md.active = 1
-              LIMIT 1
-            ) as nome_analista,
-            -- ETA da API para referência
+            -- Navio do registro mais recente via CTE
+            MAX(lv.navio) as navio,
+            MAX(lv.vessel_imo) as vessel_imo,
+            -- ETA priorizado: t_master_dados > t_tracking_sea
+            COALESCE(MAX(md.eta), MAX(ts.eta)) as eta,
+            MAX(md.eta) as eta_master,
+            MAX(md.nome_analista) as nome_analista,
             MAX(ts.eta) as eta_api,
             MAX(ts.email_analista) as email_analista,
             MAX(ts.email_cliente) as email_cliente,
@@ -1598,92 +1618,45 @@ serve(async (req) => {
             MAX(ts.updated_at) as updated_at,
             -- DELAYED por ETA: se ETA passou há mais de 3 dias e não está entregue
             CASE 
-              WHEN COALESCE(
-                (SELECT md.eta FROM dados_dachser.t_master_dados md WHERE BINARY TRIM(md.mawb) = BINARY ts.mbl_id AND md.eta IS NOT NULL AND md.active = 1 LIMIT 1),
-                MAX(ts.eta)
-              ) IS NOT NULL 
-                AND COALESCE(
-                  (SELECT md.eta FROM dados_dachser.t_master_dados md WHERE BINARY TRIM(md.mawb) = BINARY ts.mbl_id AND md.eta IS NOT NULL AND md.active = 1 LIMIT 1),
-                  MAX(ts.eta)
-                ) < DATE_SUB(NOW(), INTERVAL 3 DAY)
+              WHEN COALESCE(MAX(md.eta), MAX(ts.eta)) IS NOT NULL 
+                AND COALESCE(MAX(md.eta), MAX(ts.eta)) < DATE_SUB(NOW(), INTERVAL 3 DAY)
                 AND UPPER(COALESCE(MAX(ts.container_status), '')) NOT IN ('DELIVERED', 'GATE_OUT', 'DLV', 'GOD', 'EMPTY_RETURNED', 'EMPTY_RECEIVED_AT_CY')
               THEN 1 
               ELSE 0 
             END as is_eta_delayed,
             -- CRÍTICO: atraso >= 7 dias
             CASE 
-              WHEN COALESCE(
-                (SELECT md.eta FROM dados_dachser.t_master_dados md WHERE BINARY TRIM(md.mawb) = BINARY ts.mbl_id AND md.eta IS NOT NULL AND md.active = 1 LIMIT 1),
-                MAX(ts.eta)
-              ) IS NOT NULL 
-                AND COALESCE(
-                  (SELECT md.eta FROM dados_dachser.t_master_dados md WHERE BINARY TRIM(md.mawb) = BINARY ts.mbl_id AND md.eta IS NOT NULL AND md.active = 1 LIMIT 1),
-                  MAX(ts.eta)
-                ) < DATE_SUB(NOW(), INTERVAL 7 DAY)
+              WHEN COALESCE(MAX(md.eta), MAX(ts.eta)) IS NOT NULL 
+                AND COALESCE(MAX(md.eta), MAX(ts.eta)) < DATE_SUB(NOW(), INTERVAL 7 DAY)
                 AND UPPER(COALESCE(MAX(ts.container_status), '')) NOT IN ('DELIVERED', 'GATE_OUT', 'DLV', 'GOD', 'EMPTY_RETURNED', 'EMPTY_RECEIVED_AT_CY')
               THEN 1 
               ELSE 0 
             END as is_critico,
             -- Dias de atraso calculados
             CASE 
-              WHEN COALESCE(
-                (SELECT md.eta FROM dados_dachser.t_master_dados md WHERE BINARY TRIM(md.mawb) = BINARY ts.mbl_id AND md.eta IS NOT NULL AND md.active = 1 LIMIT 1),
-                MAX(ts.eta)
-              ) IS NOT NULL 
-                AND COALESCE(
-                  (SELECT md.eta FROM dados_dachser.t_master_dados md WHERE BINARY TRIM(md.mawb) = BINARY ts.mbl_id AND md.eta IS NOT NULL AND md.active = 1 LIMIT 1),
-                  MAX(ts.eta)
-                ) < CURDATE()
-              THEN DATEDIFF(CURDATE(), COALESCE(
-                (SELECT md.eta FROM dados_dachser.t_master_dados md WHERE BINARY TRIM(md.mawb) = BINARY ts.mbl_id AND md.eta IS NOT NULL AND md.active = 1 LIMIT 1),
-                MAX(ts.eta)
-              ))
+              WHEN COALESCE(MAX(md.eta), MAX(ts.eta)) IS NOT NULL 
+                AND COALESCE(MAX(md.eta), MAX(ts.eta)) < CURDATE()
+              THEN DATEDIFF(CURDATE(), COALESCE(MAX(md.eta), MAX(ts.eta)))
               ELSE 0 
             END as dias_atraso,
             -- Porto de transbordo: priorizar campo direto, fallback para histórico
             COALESCE(
-              -- Prioridade 1: Valor extraído direto da API e salvo na tabela
-              (
-                SELECT ts2.transshipment_port 
-                FROM dados_dachser.t_tracking_sea ts2 
-                WHERE ts2.mbl_id = ts.mbl_id 
-                  AND ts2.transshipment_port IS NOT NULL 
-                  AND ts2.transshipment_port != ''
-                LIMIT 1
-              ),
-              -- Fallback: agregar de histórico de eventos
-              (
-                SELECT GROUP_CONCAT(DISTINCT h.location SEPARATOR ', ')
-                FROM dados_dachser.t_tracking_sea_history h
-                WHERE h.mbl_id = ts.mbl_id
-                  AND UPPER(h.event_code) IN ('TRANSSHIPMENT', 'TSP', 'TRANSSHIPMENT_DISCHARGED', 'TRANSSHIPMENT_LOADED', 'TRANSHIPMENT_ARRIVAL', 'TRANSHIPMENT_DEPARTURE', 'DISCHARGED', 'LOADED')
-                  AND h.location IS NOT NULL
-                  AND h.location != ''
-                  -- Evitar incluir origem/destino como transbordo
-                  AND UPPER(h.location) != UPPER(COALESCE(MAX(ts.origem), ''))
-                  AND UPPER(h.location) != UPPER(COALESCE(MAX(ts.destino), ''))
-              )
+              MAX(td.transshipment_port),
+              MAX(th.transshipment_port)
             ) as transshipment_port,
-            -- Indicador de Free Time cadastrado: verifica se existe registro ativo na tabela t_client_free_time
+            -- Indicador de Free Time cadastrado via CTE
             CASE
-              WHEN EXISTS (
-                SELECT 1 FROM dados_dachser.t_client_free_time ft
-                WHERE ft.ativo = 1
-                  AND (
-                    -- Free Time por processo (MBL específico) - usando BINARY para evitar conflitos de collation
-                    (ft.tipo_ft = 'PROCESSO' AND BINARY ft.mbl = BINARY ts.mbl_id)
-                    -- OU Free Time por contrato (cliente com vigência válida)
-                    OR (
-                      ft.tipo_ft = 'CONTRATO' 
-                      AND BINARY ft.cliente_nome = BINARY MAX(ts.consignee)
-                      AND (ft.vigencia_inicio IS NULL OR ft.vigencia_inicio <= CURDATE())
-                      AND (ft.vigencia_fim IS NULL OR ft.vigencia_fim >= CURDATE())
-                    )
-                  )
-              ) THEN 1
+              WHEN MAX(hf_proc.mbl_id) IS NOT NULL THEN 1
+              WHEN MAX(hf_cont.cliente_nome) IS NOT NULL THEN 1
               ELSE 0
             END as has_free_time
           FROM dados_dachser.t_tracking_sea ts
+          LEFT JOIN master_data md ON md.mbl_id = ts.mbl_id
+          LEFT JOIN latest_vessel lv ON lv.mbl_id = ts.mbl_id AND lv.rn = 1
+          LEFT JOIN transship_direct td ON td.mbl_id = ts.mbl_id
+          LEFT JOIN transship_history th ON th.mbl_id = ts.mbl_id
+          LEFT JOIN has_freetime hf_proc ON hf_proc.mbl_id = ts.mbl_id AND hf_proc.tipo_ft = 'PROCESSO'
+          LEFT JOIN has_freetime hf_cont ON hf_cont.cliente_nome = ts.consignee AND hf_cont.tipo_ft = 'CONTRATO'
           WHERE ts.active = 1
           GROUP BY ts.mbl_id
           HAVING 
@@ -1719,6 +1692,7 @@ serve(async (req) => {
             CASE WHEN MAX(ts.container) = 'PENDENTE' THEN 0 ELSE 1 END,
             MAX(ts.last_check) DESC, 
             ts.mbl_id
+          LIMIT 500
         `);
 
         await client.close();
