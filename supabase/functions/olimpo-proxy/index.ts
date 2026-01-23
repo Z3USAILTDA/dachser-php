@@ -1532,18 +1532,18 @@ serve(async (req) => {
             -- CTE 1: Pré-calcular dados do t_master_dados (eta, nome_analista) por mbl
             master_data AS (
               SELECT 
-                TRIM(mawb) as mbl_id,
+                TRIM(mawb) COLLATE utf8mb4_unicode_ci as mbl_id,
                 eta,
                 nome_analista
               FROM dados_dachser.t_master_dados
               WHERE active = 1
                 AND mawb IS NOT NULL
-              GROUP BY TRIM(mawb)
+              GROUP BY TRIM(mawb) COLLATE utf8mb4_unicode_ci
             ),
             -- CTE 2: Pré-calcular navio/vessel_imo mais recente por mbl
             latest_vessel AS (
               SELECT 
-                mbl_id,
+                mbl_id COLLATE utf8mb4_unicode_ci as mbl_id,
                 navio,
                 vessel_imo,
                 ROW_NUMBER() OVER (PARTITION BY mbl_id ORDER BY last_check DESC) as rn
@@ -1554,32 +1554,32 @@ serve(async (req) => {
             -- CTE 3: Pré-calcular transshipment_port por mbl (prioridade campo direto)
             transship_direct AS (
               SELECT 
-                mbl_id,
+                mbl_id COLLATE utf8mb4_unicode_ci as mbl_id,
                 transshipment_port
               FROM dados_dachser.t_tracking_sea
               WHERE transshipment_port IS NOT NULL 
                 AND transshipment_port != ''
-              GROUP BY mbl_id
+              GROUP BY mbl_id COLLATE utf8mb4_unicode_ci
             ),
             -- CTE 4: Transshipment do histórico (fallback)
             transship_history AS (
               SELECT 
-                mbl_id,
+                mbl_id COLLATE utf8mb4_unicode_ci as mbl_id,
                 GROUP_CONCAT(DISTINCT location SEPARATOR ', ') as transshipment_port
               FROM dados_dachser.t_tracking_sea_history
               WHERE UPPER(event_code) IN ('TRANSSHIPMENT', 'TSP', 'TRANSSHIPMENT_DISCHARGED', 'TRANSSHIPMENT_LOADED', 'TRANSHIPMENT_ARRIVAL', 'TRANSHIPMENT_DEPARTURE', 'DISCHARGED', 'LOADED')
                 AND location IS NOT NULL
                 AND location != ''
-              GROUP BY mbl_id
+              GROUP BY mbl_id COLLATE utf8mb4_unicode_ci
             ),
             -- CTE 5: Verificar free time cadastrado
             has_freetime AS (
               SELECT DISTINCT
                 CASE 
-                  WHEN ft.tipo_ft = 'PROCESSO' THEN ft.mbl
+                  WHEN ft.tipo_ft = 'PROCESSO' THEN ft.mbl COLLATE utf8mb4_unicode_ci
                   ELSE NULL
                 END as mbl_id,
-                ft.cliente_nome,
+                ft.cliente_nome COLLATE utf8mb4_unicode_ci as cliente_nome,
                 ft.tipo_ft
               FROM dados_dachser.t_client_free_time ft
               WHERE ft.ativo = 1
@@ -1651,12 +1651,12 @@ serve(async (req) => {
               ELSE 0
             END as has_free_time
           FROM dados_dachser.t_tracking_sea ts
-          LEFT JOIN master_data md ON md.mbl_id = ts.mbl_id
-          LEFT JOIN latest_vessel lv ON lv.mbl_id = ts.mbl_id AND lv.rn = 1
-          LEFT JOIN transship_direct td ON td.mbl_id = ts.mbl_id
-          LEFT JOIN transship_history th ON th.mbl_id = ts.mbl_id
-          LEFT JOIN has_freetime hf_proc ON hf_proc.mbl_id = ts.mbl_id AND hf_proc.tipo_ft = 'PROCESSO'
-          LEFT JOIN has_freetime hf_cont ON hf_cont.cliente_nome = ts.consignee AND hf_cont.tipo_ft = 'CONTRATO'
+          LEFT JOIN master_data md ON md.mbl_id = ts.mbl_id COLLATE utf8mb4_unicode_ci
+          LEFT JOIN latest_vessel lv ON lv.mbl_id = ts.mbl_id COLLATE utf8mb4_unicode_ci AND lv.rn = 1
+          LEFT JOIN transship_direct td ON td.mbl_id = ts.mbl_id COLLATE utf8mb4_unicode_ci
+          LEFT JOIN transship_history th ON th.mbl_id = ts.mbl_id COLLATE utf8mb4_unicode_ci
+          LEFT JOIN has_freetime hf_proc ON hf_proc.mbl_id = ts.mbl_id COLLATE utf8mb4_unicode_ci AND hf_proc.tipo_ft = 'PROCESSO'
+          LEFT JOIN has_freetime hf_cont ON hf_cont.cliente_nome = ts.consignee COLLATE utf8mb4_unicode_ci AND hf_cont.tipo_ft = 'CONTRATO'
           WHERE ts.active = 1
           GROUP BY ts.mbl_id
           HAVING 
