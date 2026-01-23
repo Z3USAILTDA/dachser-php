@@ -1249,6 +1249,10 @@ const ContainerTracking = () => {
   // Filter MBL list
   const filteredMbls = useMemo(() => {
     let mbls = mblList.filter(m => {
+      // Ocultar processos com status "Aguardando" (AGD)
+      const status = getReportStatus(m.last_event);
+      if (status.code === 'AGD') return false;
+      
       const searchLower = searchTerm.toLowerCase();
       const matchesSearch = !searchTerm || m.mbl_id.toLowerCase().includes(searchLower) || m.consignee && m.consignee.toLowerCase().includes(searchLower) || m.shipping_line && m.shipping_line.toLowerCase().includes(searchLower) || m.navio && m.navio.toLowerCase().includes(searchLower);
       const armador = normalizeShippingLine(m.shipping_line);
