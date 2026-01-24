@@ -10811,6 +10811,60 @@ serve(async (req) => {
         break;
       }
 
+      case 'fix_historical_dis_awbs': {
+        // Query para corrigir AWBs que tiveram DIS/OFLD no histórico mas têm data_atraso NULL
+        // Usa a data do primeiro evento de discrepância como data_atraso
+        console.log('[MARIADB] Corrigindo AWBs históricos com DIS/OFLD sem data_atraso...');
+        
+        // Primeiro, buscar AWBs afetados para logging
+        const affectedAwbs = await client.query(`
+          SELECT sa.awb, hist.primeira_discrepancia, hist.status_code
+          FROM t_status_aereo sa
+          INNER JOIN (
+            SELECT awb COLLATE utf8mb4_general_ci as awb, MIN(data_evento) as primeira_discrepancia, 
+                   (SELECT status_code FROM t_status_historico h2 
+                    WHERE h2.awb COLLATE utf8mb4_general_ci = t_status_historico.awb COLLATE utf8mb4_general_ci
+                    AND h2.status_code IN ('DIS', 'OFLD', 'NIL', 'NIF')
+                    ORDER BY data_evento ASC LIMIT 1) as status_code
+            FROM t_status_historico
+            WHERE status_code IN ('DIS', 'OFLD', 'NIL', 'NIF')
+            GROUP BY awb
+          ) hist ON sa.awb COLLATE utf8mb4_general_ci = hist.awb COLLATE utf8mb4_general_ci
+          WHERE sa.data_atraso IS NULL
+        `);
+        
+        console.log(`[MARIADB] AWBs a serem corrigidos: ${affectedAwbs.length}`);
+        
+        if (affectedAwbs.length > 0) {
+          // Executar a correção
+          const updateResult = await client.execute(`
+            UPDATE t_status_aereo sa
+            INNER JOIN (
+              SELECT awb COLLATE utf8mb4_general_ci as awb, MIN(data_evento) as primeira_discrepancia
+              FROM t_status_historico
+              WHERE status_code IN ('DIS', 'OFLD', 'NIL', 'NIF')
+              GROUP BY awb
+            ) hist ON sa.awb COLLATE utf8mb4_general_ci = hist.awb COLLATE utf8mb4_general_ci
+            SET sa.data_atraso = hist.primeira_discrepancia
+            WHERE sa.data_atraso IS NULL
+          `);
+          
+          console.log(`[MARIADB] Update result:`, updateResult);
+        }
+        
+        result = {
+          success: true,
+          message: `Corrigidos ${affectedAwbs.length} AWBs com histórico de DIS/OFLD`,
+          affected_count: affectedAwbs.length,
+          affected_awbs: affectedAwbs.map((row: any) => ({
+            awb: row.awb,
+            primeira_discrepancia: row.primeira_discrepancia,
+            status_code: row.status_code
+          }))
+        };
+        break;
+      }
+
       default:
         return new Response(
           JSON.stringify({ error: `Ação não suportada: ${action}` }),
