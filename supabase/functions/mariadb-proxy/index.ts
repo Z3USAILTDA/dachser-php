@@ -5452,6 +5452,68 @@ serve(async (req) => {
         break;
       }
 
+      // ==================== AWB TRACKING EVENTS (from t_status_historico) ====================
+      case 'get_awb_tracking_events': {
+        const { awb: queryAwb } = body as any;
+        
+        if (!queryAwb) {
+          return new Response(
+            JSON.stringify({ error: 'AWB é obrigatório' }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+
+        console.log('Fetching AWB tracking events from t_status_historico:', queryAwb);
+
+        try {
+          const events = await client.query(`
+            SELECT 
+              id,
+              TRIM(awb) as awb,
+              TRIM(hawb) as hawb,
+              status_code as codigo_evento,
+              CASE status_code
+                WHEN 'DEP' THEN 'Partida'
+                WHEN 'ARR' THEN 'Chegada'
+                WHEN 'RCF' THEN 'Recebido do voo'
+                WHEN 'DLV' THEN 'Entregue'
+                WHEN 'NFD' THEN 'Notificação de entrega'
+                WHEN 'MAN' THEN 'Manifestado'
+                WHEN 'BKD' THEN 'Reservado'
+                WHEN 'RCS' THEN 'Recebido do embarcador'
+                WHEN 'DIS' THEN 'Discrepância detectada'
+                WHEN 'NIL' THEN 'AWB não encontrado'
+                WHEN 'OFLD' THEN 'Descarregado (offload)'
+                WHEN 'FOH' THEN 'Fora de horário'
+                WHEN 'TRM' THEN 'Transferido'
+                WHEN 'PRE' THEN 'Pré-alerta'
+                WHEN 'TGC' THEN 'Transferido para armazém'
+                WHEN 'AWD' THEN 'Aguardando documentação'
+                WHEN 'CCD' THEN 'Desembaraço concluído'
+                WHEN 'DDL' THEN 'Atraso na entrega'
+                WHEN 'AWR' THEN 'Aguardando retirada'
+                ELSE status_code
+              END as descricao_evento,
+              data_evento as data_hora_evento,
+              'TRACKING' as fonte,
+              NULL as aeroporto,
+              'PRIMARIA' as nivel_confianca,
+              data_evento as created_at
+            FROM ${database}.t_status_historico
+            WHERE TRIM(awb) COLLATE utf8mb4_unicode_ci = TRIM(?) COLLATE utf8mb4_unicode_ci
+            ORDER BY data_evento DESC
+            LIMIT 100
+          `, [queryAwb]);
+
+          console.log(`Tracking: Found ${events?.length || 0} events in t_status_historico for AWB ${queryAwb}`);
+          result = { success: true, data: events || [] };
+        } catch (tableErr) {
+          console.log('Error fetching from t_status_historico:', tableErr);
+          result = { success: true, data: [] };
+        }
+        break;
+      }
+
       // ==================== PASSWORD RESET ====================
       case 'get_user_by_email': {
         const { email } = body as { email?: string };
