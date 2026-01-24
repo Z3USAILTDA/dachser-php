@@ -38,7 +38,7 @@ async function createShipmentWithEvent(supabase: any, awb: AwbRecord, source: st
     cliente: awb.destinatário || 'Cliente DEP',
     aeroporto_origem: aeroportoOrigem.length === 3 ? aeroportoOrigem : 'XXX',
     aeroporto_destino: aeroportoDestino.length === 3 ? aeroportoDestino : 'GRU',
-    nome_analista_legado: awb.nome_analista || null,
+    nome_analista: awb.nome_analista || null,
     emails_cliente: awb.email_cliente || null,
     status_manifestacao: 'RECEBIDO_NOVA' as const,
   };
