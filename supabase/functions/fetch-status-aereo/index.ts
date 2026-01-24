@@ -103,6 +103,12 @@ serve(async (req) => {
         processed.dep_datetime = dateStr.replace(/Z$/, '').replace(/\.\d{3}Z$/, '');
       }
       
+      // Convert data_atraso - ensure it's passed correctly to frontend
+      if (processed.data_atraso) {
+        const dateStr = String(processed.data_atraso);
+        processed.data_atraso = dateStr.replace(/Z$/, '').replace(/\.\d{3}Z$/, '');
+      }
+      
       return processed;
     });
 
