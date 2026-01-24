@@ -11,16 +11,10 @@ import {
 } from "@/components/ui/table";
 import { StatusBadge, SLAInfoBadge } from "./StatusBadge";
 import { TablePagination } from "@/components/layout/TablePagination";
-import { Search, Eye, AlertTriangle, CheckCircle2, XCircle, Clock } from "lucide-react";
+import { Search, Eye, AlertTriangle } from "lucide-react";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import type { ProcessoCCT } from "@/types/cct";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
 
 export type MetricFilterType = "total" | "alerta" | "critico" | "eventos24h" | null;
 
@@ -125,7 +119,6 @@ export function ProcessosTable({ processos, onAssignAnalista, metricFilter }: Pr
               <TableHead className="text-[#888] text-[0.75rem] uppercase tracking-wider font-medium">House</TableHead>
               <TableHead className="text-[#888] text-[0.75rem] uppercase tracking-wider font-medium">Master</TableHead>
               <TableHead className="text-[#888] text-[0.75rem] uppercase tracking-wider font-medium">Rota</TableHead>
-              <TableHead className="text-[#888] text-[0.75rem] uppercase tracking-wider font-medium">LeadComex</TableHead>
               <TableHead className="text-[#888] text-[0.75rem] uppercase tracking-wider font-medium">Manifestação</TableHead>
               <TableHead className="text-[#888] text-[0.75rem] uppercase tracking-wider font-medium">Status</TableHead>
               <TableHead className="text-[#888] text-[0.75rem] uppercase tracking-wider font-medium">SLA</TableHead>
@@ -165,55 +158,6 @@ export function ProcessosTable({ processos, onAssignAnalista, metricFilter }: Pr
                         {processo.shipment.aeroporto_destino}
                       </span>
                     </div>
-                  </TableCell>
-                  <TableCell>
-                    <TooltipProvider>
-                      <Tooltip>
-                        <TooltipTrigger>
-                          {(() => {
-                            const status = processo.shipment.leadcomex_status || 'pending';
-                            const attempts = processo.shipment.leadcomex_attempts;
-                            
-                            if (status === 'success') {
-                              return (
-                                <div className="flex items-center gap-1.5">
-                                  <CheckCircle2 className="h-4 w-4 text-emerald-500" />
-                                  <span className="text-emerald-500 text-[0.75rem]">OK</span>
-                                </div>
-                              );
-                            } else if (status === 'failed') {
-                              return (
-                                <div className="flex items-center gap-1.5">
-                                  <XCircle className="h-4 w-4 text-destructive" />
-                                  <span className="text-destructive text-[0.75rem]">Falhou</span>
-                                </div>
-                              );
-                            } else {
-                              return (
-                                <div className="flex items-center gap-1.5">
-                                  <Clock className="h-4 w-4 text-muted-foreground" />
-                                  <span className="text-muted-foreground text-[0.75rem]">Pendente</span>
-                                </div>
-                              );
-                            }
-                          })()}
-                        </TooltipTrigger>
-                        <TooltipContent side="top" className="bg-popover border-border">
-                          {(() => {
-                            const status = processo.shipment.leadcomex_status || 'pending';
-                            const attempts = processo.shipment.leadcomex_attempts;
-                            
-                            if (status === 'success') {
-                              return <p>Dados obtidos via LeadComex{attempts ? ` (${attempts} tentativa${attempts > 1 ? 's' : ''})` : ''}</p>;
-                            } else if (status === 'failed') {
-                              return <p>LeadComex não retornou dados{attempts ? ` após ${attempts} tentativas` : ''}</p>;
-                            } else {
-                              return <p>Aguardando consulta LeadComex</p>;
-                            }
-                          })()}
-                        </TooltipContent>
-                      </Tooltip>
-                    </TooltipProvider>
                   </TableCell>
                   <TableCell>
                     {(() => {
