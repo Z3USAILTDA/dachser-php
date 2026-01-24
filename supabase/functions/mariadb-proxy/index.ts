@@ -2770,7 +2770,7 @@ serve(async (req) => {
         const houseList = (shipments || []).map((s: any) => s.house).filter((h: string) => h && h.trim() !== '');
         
         let cctDataMap = new Map<string, any>();
-        let leadcomexStatusMap = new Map<string, { success: boolean; attempts: number; error_msg: string | null }>();
+        let leadcomexStatusMap = new Map<string, { success: boolean; attempts: number }>();
         
         if (houseList.length > 0) {
           const houseFilter = houseList.map((h: string) => `'${h.replace(/'/g, "''")}'`).join(',');
@@ -2797,8 +2797,7 @@ serve(async (req) => {
             SELECT 
               l.hawb,
               l.success,
-              l.total_attempts,
-              l.error_message
+              l.total_attempts
             FROM ${database}.t_leadcomex_enrichment_logs l
             INNER JOIN (
               SELECT hawb, MAX(created_at) as max_created
@@ -2818,8 +2817,7 @@ serve(async (req) => {
             const hawbKey = (log.hawb || '').trim().toUpperCase();
             leadcomexStatusMap.set(hawbKey, {
               success: log.success === 1 || log.success === true,
-              attempts: log.total_attempts || 1,
-              error_msg: log.error_message || null
+              attempts: log.total_attempts || 1
             });
           }
         }
