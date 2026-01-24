@@ -196,14 +196,21 @@ const getStatusCode = (lastEvent: string | null): string => {
     "OFLD", "NIL", "NIF", "DIS", "DLV", "DEP", "ARR", "RCF", "RCS", 
     "MAN", "NFD", "AWD", "BKD", "BKF", "AWB", "FWB", "FOH", "TFD", "RCT", 
     "RCP", "PRE", "LOF", "TDE", "CCD", "ASN", "MIS", "TFS", "POD", "TRM",
-    "ARRT", "CAN", "DISCREPANCY"
+    "ARRT", "CAN", "DISCREPANCY",
+    "ARR - DESTINO", "ARR - CONEXÃO"
   ];
   const upperEvent = lastEvent.toUpperCase().trim();
+  
+  // Preserve ARR status with suffix (ARR - Destino, ARR - Conexão)
+  if (upperEvent.startsWith('ARR - ')) {
+    return upperEvent;
+  }
+  
   if (knownStatusCodes.includes(upperEvent)) {
     return upperEvent;
   }
 
-  // Se tem o formato "XXX - Description", retorna a sigla
+  // Se tem o formato "XXX - Description" (mas não ARR), retorna a sigla
   if (lastEvent.includes(" - ")) {
     return lastEvent.split(" - ")[0];
   }

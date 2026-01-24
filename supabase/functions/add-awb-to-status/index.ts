@@ -148,11 +148,18 @@ serve(async (req) => {
       destinationUpper === 'N/A'
     );
     
+    // Define the ARR status with suffix based on connection or final destination
+    let statusToSave = finalLastEvent;
+    if (isArrStatus) {
+      statusToSave = isArrAtFinalDestination ? 'ARR - Destino' : 'ARR - Conexão';
+    }
+    
     console.log('ARR location check:', { 
       isArrStatus, 
       arr_location: sanitizedArrLocation, 
       destination: destinationUpper,
-      isArrAtFinalDestination 
+      isArrAtFinalDestination,
+      statusToSave
     });
     
     // Define critical/alert statuses that can override ARR
@@ -165,6 +172,7 @@ serve(async (req) => {
     
     // Update current status in t_status_aereo
     // ARR status is "locked" - only critical statuses (DIS, NIL, NIF, OFLD) can override it
+    // Now saves ARR with suffix: "ARR - Destino" or "ARR - Conexão"
     await client.execute(
       `INSERT INTO t_status_aereo (awb, destinatário, \`última atualização\`, último_status, origem, destino, hawb, nome_analista, email_analista, email_cliente, data_atraso, tipo_servico, arr_check_count, arr_datetime, dep_datetime) 
        VALUES (TRIM(?), TRIM(?), NOW(), TRIM(?), TRIM(?), TRIM(?), TRIM(?), TRIM(?), TRIM(?), TRIM(?), ${isAlertStatus ? 'NOW()' : 'NULL'}, TRIM(?), ${isArrStatus ? '1' : '0'}, ${isArrAtFinalDestination ? 'NOW()' : 'NULL'}, ${depDatetimeValue ? '?' : 'NULL'})
@@ -172,8 +180,8 @@ serve(async (req) => {
          destinatário = TRIM(?),
          \`última atualização\` = NOW(),
          último_status = IF(
-           último_status = 'ARR' AND ? = 0,
-           'ARR',
+           último_status LIKE 'ARR%' AND ? = 0,
+           último_status,
            TRIM(?)
          ),
          origem = IF(TRIM(?) != 'N/A', TRIM(?), origem),
@@ -184,13 +192,13 @@ serve(async (req) => {
          email_cliente = IF(? IS NOT NULL AND TRIM(?) != '', TRIM(?), email_cliente),
          data_atraso = IF(? = 1 AND data_atraso IS NULL, NOW(), data_atraso),
          tipo_servico = IF(TRIM(?) != 'N/A', TRIM(?), tipo_servico),
-         arr_check_count = IF(último_status = 'ARR' OR ? = 1, COALESCE(arr_check_count, 0) + 1, 0),
-         arr_datetime = IF(? = 1 AND arr_datetime IS NULL, NOW(), IF(último_status != 'ARR' AND ? = 0, NULL, arr_datetime)),
+         arr_check_count = IF(último_status LIKE 'ARR%' OR ? = 1, COALESCE(arr_check_count, 0) + 1, 0),
+         arr_datetime = IF(? = 1 AND arr_datetime IS NULL, NOW(), IF(último_status NOT LIKE 'ARR%' AND ? = 0, NULL, arr_datetime)),
          dep_datetime = IF(? = 1 AND dep_datetime IS NULL AND ? IS NOT NULL, ?, dep_datetime)`,
       depDatetimeValue ? [
-        sanitizedMawb, finalConsigneeName, finalLastEvent, finalOrigin, finalDestination, finalHawb, finalNomeAnalista, finalEmailAnalista, finalEmailCliente, finalTipoServico, depDatetimeValue,
+        sanitizedMawb, finalConsigneeName, statusToSave, finalOrigin, finalDestination, finalHawb, finalNomeAnalista, finalEmailAnalista, finalEmailCliente, finalTipoServico, depDatetimeValue,
         finalConsigneeName,
-        isCriticalStatus ? 1 : 0, finalLastEvent,
+        isCriticalStatus ? 1 : 0, statusToSave,
         finalOrigin, finalOrigin, 
         finalDestination, finalDestination, 
         finalHawb, finalHawb, 
@@ -203,9 +211,9 @@ serve(async (req) => {
         isArrAtFinalDestination ? 1 : 0, isArrAtFinalDestination ? 1 : 0,
         isDepStatus ? 1 : 0, depDatetimeValue, depDatetimeValue
       ] : [
-        sanitizedMawb, finalConsigneeName, finalLastEvent, finalOrigin, finalDestination, finalHawb, finalNomeAnalista, finalEmailAnalista, finalEmailCliente, finalTipoServico,
+        sanitizedMawb, finalConsigneeName, statusToSave, finalOrigin, finalDestination, finalHawb, finalNomeAnalista, finalEmailAnalista, finalEmailCliente, finalTipoServico,
         finalConsigneeName,
-        isCriticalStatus ? 1 : 0, finalLastEvent,
+        isCriticalStatus ? 1 : 0, statusToSave,
         finalOrigin, finalOrigin, 
         finalDestination, finalDestination, 
         finalHawb, finalHawb, 
