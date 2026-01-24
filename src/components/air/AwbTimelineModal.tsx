@@ -79,7 +79,7 @@ export const AwbTimelineModal: React.FC<AwbTimelineModalProps> = ({
 
       const { data, error } = await supabase.functions.invoke("mariadb-proxy", {
         body: {
-          action: "get_cct_events",
+          action: "get_awb_tracking_events",
           awb: awb,
         },
       });
@@ -103,18 +103,24 @@ export const AwbTimelineModal: React.FC<AwbTimelineModalProps> = ({
         fonte: row.fonte || "",
       }));
 
-      // Deduplicar eventos: manter apenas o mais recente de cada código de evento
-      const seen = new Set<string>();
-      const deduplicatedEvents = rawEvents.filter((event: TimelineEvent) => {
-        const key = event.codigo_evento?.toUpperCase() || "";
-        if (seen.has(key)) {
-          return false;
+      // Filtrar eventos consecutivamente duplicados
+      // Mantém o evento se for o primeiro OU se o código for diferente do anterior
+      const filteredEvents = rawEvents.filter((event: TimelineEvent, index: number) => {
+        // Primeiro evento sempre é mantido
+        if (index === 0) {
+          return true;
         }
-        seen.add(key);
-        return true;
+        
+        // Compara com o evento anterior
+        const previousEvent = rawEvents[index - 1];
+        const currentCode = event.codigo_evento?.toUpperCase() || "";
+        const previousCode = previousEvent.codigo_evento?.toUpperCase() || "";
+        
+        // Mantém apenas se o código for diferente do anterior (remove duplicatas consecutivas)
+        return currentCode !== previousCode;
       });
 
-      return deduplicatedEvents;
+      return filteredEvents;
     },
     enabled: open && !!awb,
   });
