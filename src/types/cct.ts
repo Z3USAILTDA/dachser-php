@@ -232,6 +232,8 @@ export interface CCTShipment {
   data_decolagem_ultimo_trecho?: string | null;
   dep_datetime?: string | null;
   data_manifestacao_cct?: string | null;
+  leadcomex_status?: 'success' | 'failed' | 'pending';
+  leadcomex_attempts?: number | null;
   created_at: string;
   updated_at: string;
 }

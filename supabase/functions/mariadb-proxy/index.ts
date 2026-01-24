@@ -2770,8 +2770,12 @@ serve(async (req) => {
         const houseList = (shipments || []).map((s: any) => s.house).filter((h: string) => h && h.trim() !== '');
         
         let cctDataMap = new Map<string, any>();
+        let leadcomexStatusMap = new Map<string, { success: boolean; attempts: number; error_msg: string | null }>();
+        
         if (houseList.length > 0) {
           const houseFilter = houseList.map((h: string) => `'${h.replace(/'/g, "''")}'`).join(',');
+          
+          // Query CCT enrichment data
           const cctData = await client.query(`
             SELECT 
               TRIM(house) as house,
@@ -2788,17 +2792,53 @@ serve(async (req) => {
             WHERE TRIM(house) IN (${houseFilter})
           `);
           
-          // Build lookup map for fast access
+          // Query LeadComex enrichment logs - get latest status for each HAWB
+          const leadcomexLogs = await client.query(`
+            SELECT 
+              l.hawb,
+              l.success,
+              l.total_attempts,
+              l.error_message
+            FROM ${database}.t_leadcomex_enrichment_logs l
+            INNER JOIN (
+              SELECT hawb, MAX(created_at) as max_created
+              FROM ${database}.t_leadcomex_enrichment_logs
+              WHERE hawb IN (${houseFilter})
+              GROUP BY hawb
+            ) latest ON l.hawb = latest.hawb AND l.created_at = latest.max_created
+          `);
+          
+          // Build lookup maps for fast access
           for (const cct of (cctData || [])) {
             const houseKey = (cct.house || '').trim().toUpperCase();
             cctDataMap.set(houseKey, cct);
           }
+          
+          for (const log of (leadcomexLogs || [])) {
+            const hawbKey = (log.hawb || '').trim().toUpperCase();
+            leadcomexStatusMap.set(hawbKey, {
+              success: log.success === 1 || log.success === true,
+              attempts: log.total_attempts || 1,
+              error_msg: log.error_message || null
+            });
+          }
         }
 
-        // Merge CCT data into shipments
+        // Merge CCT data and LeadComex status into shipments
         const enrichedShipments = (shipments || []).map((row: any) => {
           const houseKey = (row.house || '').trim().toUpperCase();
           const cctInfo = cctDataMap.get(houseKey) || {};
+          const leadcomexInfo = leadcomexStatusMap.get(houseKey);
+          
+          // Determine leadcomex_status:
+          // - 'success': API returned data successfully
+          // - 'failed': API was called but returned no data after multiple attempts
+          // - 'pending': No API call was made yet
+          let leadcomex_status: 'success' | 'failed' | 'pending' = 'pending';
+          if (leadcomexInfo) {
+            leadcomex_status = leadcomexInfo.success ? 'success' : 'failed';
+          }
+          
           return {
             ...row,
             peso_declarado: cctInfo.peso_declarado || null,
@@ -2810,6 +2850,8 @@ serve(async (req) => {
             data_decolagem_ultimo_trecho: cctInfo.data_decolagem_ultimo_trecho || null,
             cnpj_consignatario: cctInfo.cnpj_consignatario || null,
             data_manifestacao_cct: cctInfo.data_manifestacao_cct || null,
+            leadcomex_status,
+            leadcomex_attempts: leadcomexInfo?.attempts || null,
           };
         });
 
@@ -2941,6 +2983,8 @@ serve(async (req) => {
             data_manifestacao_cct: row.data_manifestacao_cct, // Data de manifestação no CCT
             created_at: row.ultimo_evento_data || new Date().toISOString(),
             updated_at: row.ultimo_evento_data || new Date().toISOString(),
+            leadcomex_status: row.leadcomex_status || 'pending',
+            leadcomex_attempts: row.leadcomex_attempts || null,
           };
         });
 
