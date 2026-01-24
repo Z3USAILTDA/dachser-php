@@ -1251,61 +1251,27 @@ const Index = () => {
   // Handle refresh button - checks queue and decides to process or retrack
   const handleRefresh = React.useCallback(async () => {
     try {
-      // Enable email sending - user explicitly clicked button
-      shouldSendEmailsRef.current = true;
-      emailEnableTimestampRef.current = Date.now();
-      // Clear the emails sent tracker at the start of each update cycle
-      emailsSentRef.current.clear();
-      console.log(`[EMAIL CONTROL] User clicked Atualizar button - enabling email sending at ${new Date().toISOString()}`);
-
-      // Step 1: Create queue table and populate it
-      console.log("Checking processing queue...");
-
-      await supabase.functions.invoke("manage-processing-queue", {
-        body: { action: "create_table" },
+      toast({
+        title: "Atualizando dados",
+        description: "Buscando dados mais recentes do banco...",
       });
-
-      const { data: populateData } = await supabase.functions.invoke("manage-processing-queue", {
-        body: { action: "populate" },
-      });
-
-      const queueCount = populateData?.count || 0;
-      console.log(`Queue has ${queueCount} unprocessed AWBs`);
-
-      // If there are unprocessed AWBs in queue, process them; otherwise start re-tracking
-      if (queueCount > 0) {
-        console.log("Found unprocessed AWBs in queue - starting batch processing");
-        toast({
-          title: "Processando novos AWBs",
-          description: `${queueCount} AWB(s) pendentes encontrados...`,
-        });
-        await fetchAWBsInBatches();
-      } else {
-        console.log("No unprocessed AWBs - starting re-track");
-        toast({
-          title: "Iniciando re-rastreio",
-          description: "Todos AWBs da tabela master processados. Iniciando re-rastreio da t_status_aereo...",
-        });
-        await retrackAWBsFromStatus(true); // User explicitly clicked button, send email if no changes
-      }
-
-      // Refresh status aereo data
+      
+      // Apenas atualiza os dados da tabela t_status_aereo (sem re-rastreio)
       await fetchStatusAereoData();
-
-      // Reset email flag after processing completes
-      shouldSendEmailsRef.current = false;
-      console.log("Processing complete - disabling email sending");
+      
+      toast({
+        title: "Dados atualizados",
+        description: "A lista foi atualizada com os dados mais recentes.",
+      });
     } catch (error) {
       console.error("Error in handleRefresh:", error);
-      // Reset email flag on error
-      shouldSendEmailsRef.current = false;
       toast({
         title: "Erro",
         description: "Erro ao atualizar dados",
         variant: "destructive",
       });
     }
-  }, [toast, retrackAWBsFromStatus, fetchAWBsInBatches, fetchStatusAereoData]);
+  }, [toast, fetchStatusAereoData]);
 
   // Auto-fetch disabled - user must click "Atualizar" button to process AWBs
   // useEffect(() => {
