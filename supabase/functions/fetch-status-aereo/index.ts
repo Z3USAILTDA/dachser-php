@@ -64,15 +64,20 @@ serve(async (req) => {
     if (hasArrDatetimeColumn) selectFields += ', arr_datetime';
     else selectFields += ', NULL as arr_datetime';
 
-    let query = `SELECT ${selectFields} FROM ${database}.t_status_aereo ORDER BY id DESC`;
-    let params: string[] = [];
+    // Filter to only show records with dep_datetime >= 2026-01-23
+    const dateThreshold = '2026-01-23 00:00:00';
+    
+    let query = `SELECT ${selectFields} FROM ${database}.t_status_aereo 
+                 WHERE dep_datetime >= ? 
+                 ORDER BY id DESC`;
+    let params: string[] = [dateThreshold];
 
     if (search && search.trim() !== '') {
       query = `SELECT ${selectFields} FROM ${database}.t_status_aereo 
-               WHERE awb LIKE ? OR hawb LIKE ? OR destinatário LIKE ? 
+               WHERE dep_datetime >= ? AND (awb LIKE ? OR hawb LIKE ? OR destinatário LIKE ?)
                ORDER BY id DESC`;
       const searchPattern = `%${search.trim()}%`;
-      params = [searchPattern, searchPattern, searchPattern];
+      params = [dateThreshold, searchPattern, searchPattern, searchPattern];
     }
 
     console.log(`Executing query: ${query} (hasArrCheckColumn: ${hasArrCheckColumn})`);
