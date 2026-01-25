@@ -476,6 +476,7 @@ async function fetchCargaDetalhada(token: string, hawb: string, dataEmissao: str
 
 // Processa dados do LeadComex e atualiza o shipment no MariaDB
 // Nota: Como o CCT usa MariaDB como fonte de dados, fazemos update apenas no MariaDB
+// NOVO: Registra eventos na timeline (t_cct_eventos_historico) para cada consulta bem-sucedida
 async function processLeadComexData(
   supabase: any,
   hawb: string,
@@ -488,6 +489,9 @@ async function processLeadComexData(
   const cargaAny = carga as any;
   const detalhe = cargaAny.conhecimentoCargaDetalhada || cargaAny.conhecimentoCargaDetalhado;
   const identificacao = carga.identificacao;
+
+  const supabaseUrl = Deno.env.get('SUPABASE_URL');
+  const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
 
   // 1. Preparar dados para atualização
   const updateData: Record<string, any> = {};
@@ -559,10 +563,72 @@ async function processLeadComexData(
   // Nota: Bloqueios, divergências e eventos CCT são processados diretamente no MariaDB
   // As tabelas cct_excecao_operacional e cct_evento_normalizado do Supabase não são usadas pelo CCT
   
-  // Log bloqueios ativos
+  // === NOVO: Registrar evento na timeline (t_cct_eventos_historico) ===
+  // Mapear status LeadComex para evento CCT
+  const situacaoLead = identificacao.situacaoLead;
+  const situacaoPortal = identificacao.situacaoPortal;
+  const eventMapping = STATUS_TO_CCT_EVENT[situacaoLead] || STATUS_TO_CCT_EVENT[situacaoPortal];
+  
+  if (eventMapping && supabaseUrl && supabaseKey) {
+    try {
+      // Inserir evento no histórico da timeline
+      const insertEventResponse = await fetch(`${supabaseUrl}/functions/v1/mariadb-proxy`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${supabaseKey}`,
+        },
+        body: JSON.stringify({
+          action: 'insert_cct_event',
+          awb: hawb,
+          codigo_evento: eventMapping.codigo,
+          descricao_evento: eventMapping.descricao,
+          data_hora_evento: parseBrazilianDate(identificacao.dataUltimaAtualizacaoCargaDetalhada) || new Date().toISOString(),
+          fonte: 'LEADCOMEX',
+          aeroporto: detalhe?.codigoAeroportoDestinoConhecimento || null,
+          nivel_confianca: 'PRIMARIA',
+        }),
+      });
+
+      if (insertEventResponse.ok) {
+        console.log(`[LEADCOMEX] Evento ${eventMapping.codigo} registrado na timeline para ${hawb}`);
+        syncStats.events = (syncStats.events || 0) + 1;
+      }
+    } catch (eventError) {
+      console.warn(`[LEADCOMEX] Erro ao inserir evento na timeline para ${hawb}:`, eventError);
+    }
+  }
+  
+  // Log bloqueios ativos E registrar cada bloqueio na timeline
   if (detalhe?.bloqueiosAtivos && detalhe.bloqueiosAtivos.length > 0) {
     syncStats.bloqueios += detalhe.bloqueiosAtivos.length;
     console.log(`[LEADCOMEX] ${detalhe.bloqueiosAtivos.length} bloqueios ativos para ${hawb}`);
+    
+    // Registrar cada bloqueio como evento separado na timeline
+    for (const bloqueio of detalhe.bloqueiosAtivos) {
+      if (supabaseUrl && supabaseKey) {
+        try {
+          await fetch(`${supabaseUrl}/functions/v1/mariadb-proxy`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${supabaseKey}`,
+            },
+            body: JSON.stringify({
+              action: 'insert_cct_event',
+              awb: hawb,
+              codigo_evento: 'BLOQUEIO',
+              descricao_evento: `Bloqueio ${bloqueio.codigo}: ${bloqueio.descricao}`,
+              data_hora_evento: parseBrazilianDate(bloqueio.dataHoraBloqueio) || new Date().toISOString(),
+              fonte: 'LEADCOMEX',
+              nivel_confianca: 'PRIMARIA',
+            }),
+          });
+        } catch (e) {
+          console.warn(`[LEADCOMEX] Erro ao inserir bloqueio na timeline:`, e);
+        }
+      }
+    }
   }
 
   // Log divergências
@@ -1268,8 +1334,150 @@ serve(async (req) => {
       );
     }
 
+    // =============================================
+    // REFRESH ALL ACTIVE: Atualiza todos os HAWBs ativos no CCT (cron 10min)
+    // =============================================
+    if (action === 'refresh-all-active') {
+      const executionSource = body.execution_source || 'cron-10min';
+      
+      console.log(`[LEADCOMEX] ========================================`);
+      console.log(`[LEADCOMEX] REFRESH-ALL-ACTIVE - Polling a cada 10min`);
+      console.log(`[LEADCOMEX] Fonte: ${executionSource}`);
+      console.log(`[LEADCOMEX] ========================================`);
+
+      // Buscar TODOS os HAWBs ativos no CCT (não apenas pendentes)
+      let shipments: Array<{house: string; master: string; dep_datetime: string | null}> = [];
+      try {
+        const proxyResponse = await fetch(`${supabaseUrl}/functions/v1/mariadb-proxy`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${supabaseKey}`,
+          },
+          body: JSON.stringify({
+            action: 'get_cct_pending_hawbs',
+            limit: 500,
+            process_all: true, // Processar TODOS os HAWBs ativos
+          }),
+        });
+        
+        if (!proxyResponse.ok) {
+          const errorText = await proxyResponse.text();
+          console.error(`[LEADCOMEX] Erro ao buscar HAWBs: ${errorText}`);
+          throw new Error(`MariaDB proxy error: ${proxyResponse.status}`);
+        }
+        
+        const proxyData = await proxyResponse.json();
+        shipments = proxyData.shipments || [];
+        console.log(`[LEADCOMEX] ${shipments.length} HAWBs ativos para refresh`);
+      } catch (proxyError) {
+        console.error('[LEADCOMEX] Falha ao buscar HAWBs:', proxyError);
+        return new Response(
+          JSON.stringify({ success: false, error: 'Falha ao buscar HAWBs ativos' }),
+          { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      if (shipments.length === 0) {
+        return new Response(
+          JSON.stringify({
+            success: true,
+            message: 'Nenhum HAWB ativo para atualizar',
+            stats: { processed: 0, success: 0, failed: 0 },
+          }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      const syncStats = {
+        processed: 0,
+        success: 0,
+        failed: 0,
+        updated: 0,
+        events: 0,
+        bloqueios: 0,
+        divergencias: 0,
+        errors: 0,
+      };
+
+      // Processar cada HAWB com escada reversa
+      for (const shipment of shipments) {
+        syncStats.processed++;
+        
+        // Formatar dep_date
+        let depDate: string | null = null;
+        if (shipment.dep_datetime) {
+          try {
+            const dt = new Date(shipment.dep_datetime);
+            if (!isNaN(dt.getTime())) {
+              depDate = `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}-${String(dt.getDate()).padStart(2, '0')}`;
+            }
+          } catch {
+            console.log(`[LEADCOMEX] dep_datetime inválido para ${shipment.house}`);
+          }
+        }
+
+        if (!depDate) {
+          const now = new Date();
+          depDate = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+        }
+
+        // Executar escada reversa (até 15 tentativas para polling frequente)
+        const ladderResult = await tryReverseLadder(leadcomexToken, shipment.house, depDate, 15);
+
+        // Salvar log
+        try {
+          await fetch(`${supabaseUrl}/functions/v1/mariadb-proxy`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${supabaseKey}`,
+            },
+            body: JSON.stringify({
+              action: 'save_leadcomex_log',
+              hawb: shipment.house,
+              mawb: shipment.master || null,
+              dep_date: depDate,
+              success: ladderResult.success,
+              matched_date: ladderResult.matchedDate,
+              offset_days: ladderResult.offsetDays,
+              total_attempts: ladderResult.attempts.length,
+              total_time_ms: ladderResult.totalTimeMs,
+              execution_source: executionSource,
+              attempts: ladderResult.attempts,
+              leadcomex_data: ladderResult.data || null,
+            }),
+          });
+        } catch (logError) {
+          console.error(`[LEADCOMEX] Erro ao salvar log para ${shipment.house}:`, logError);
+        }
+
+        // Processar dados se encontrou
+        if (ladderResult.success && ladderResult.data) {
+          syncStats.success++;
+          await processLeadComexData(supabase, shipment.house, shipment.master, ladderResult.data, syncStats);
+        } else {
+          syncStats.failed++;
+        }
+
+        // Delay para rate limiting
+        await new Promise(resolve => setTimeout(resolve, 50));
+      }
+
+      console.log(`[LEADCOMEX] Refresh-all-active concluído:`, syncStats);
+
+      return new Response(
+        JSON.stringify({
+          success: true,
+          message: `Refresh concluído: ${syncStats.success}/${syncStats.processed} HAWBs atualizados`,
+          stats: syncStats,
+        }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
     return new Response(
-      JSON.stringify({ error: 'Action inválida. Use: health, sync, enrich, enrich-individual, enrich-reverse-ladder, query' }),
+      JSON.stringify({ error: 'Action inválida. Use: health, sync, enrich, enrich-individual, enrich-reverse-ladder, refresh-all-active' }),
       { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
 
