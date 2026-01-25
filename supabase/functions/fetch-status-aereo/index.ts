@@ -64,17 +64,17 @@ serve(async (req) => {
     if (hasArrDatetimeColumn) selectFields += ', arr_datetime';
     else selectFields += ', NULL as arr_datetime';
 
-    // Filter to only show records with dep_datetime >= 2026-01-25
-    const dateThreshold = '2026-01-25 00:00:00';
+    // Filter to only show records with última atualização >= 2026-01-26
+    const dateThreshold = '2026-01-26 00:00:00';
     
     let query = `SELECT ${selectFields} FROM ${database}.t_status_aereo 
-                 WHERE dep_datetime >= ? 
+                 WHERE \`última atualização\` >= ? 
                  ORDER BY id DESC`;
     let params: string[] = [dateThreshold];
 
     if (search && search.trim() !== '') {
       query = `SELECT ${selectFields} FROM ${database}.t_status_aereo 
-               WHERE dep_datetime >= ? AND (awb LIKE ? OR hawb LIKE ? OR destinatário LIKE ?)
+               WHERE \`última atualização\` >= ? AND (awb LIKE ? OR hawb LIKE ? OR destinatário LIKE ?)
                ORDER BY id DESC`;
       const searchPattern = `%${search.trim()}%`;
       params = [dateThreshold, searchPattern, searchPattern, searchPattern];
