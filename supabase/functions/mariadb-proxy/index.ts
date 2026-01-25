@@ -10670,6 +10670,9 @@ serve(async (req) => {
           execution_source: filterSource
         } = body as any;
         
+        // Data de corte: apenas logs de processos com dep_date >= 26/01/2026
+        const LEADCOMEX_LOGS_DATE_THRESHOLD = '2026-01-26';
+        
         let query = `
           SELECT 
             id, hawb, mawb, dep_date, success, matched_date, offset_days,
@@ -10685,7 +10688,7 @@ serve(async (req) => {
             attempts_json,
             created_at
           FROM dados_dachser.t_leadcomex_enrichment_logs 
-          WHERE 1=1
+          WHERE DATE(dep_date) >= '${LEADCOMEX_LOGS_DATE_THRESHOLD}'
         `;
         const params: any[] = [];
         
@@ -10773,7 +10776,10 @@ serve(async (req) => {
       case 'get_leadcomex_logs_stats': {
         const { date_from, date_to } = body as any;
         
-        let dateFilter = '';
+        // Data de corte: apenas stats de processos com dep_date >= 26/01/2026
+        const LEADCOMEX_LOGS_DATE_THRESHOLD = '2026-01-26';
+        
+        let dateFilter = ` AND DATE(dep_date) >= '${LEADCOMEX_LOGS_DATE_THRESHOLD}'`;
         const params: any[] = [];
         
         if (date_from) {
