@@ -64,8 +64,8 @@ serve(async (req) => {
     if (hasArrDatetimeColumn) selectFields += ', arr_datetime';
     else selectFields += ', NULL as arr_datetime';
 
-    // Filter to only show records with dep_datetime >= 2026-01-23
-    const dateThreshold = '2026-01-23 00:00:00';
+    // Filter to only show records with dep_datetime >= 2026-01-25
+    const dateThreshold = '2026-01-25 00:00:00';
     
     let query = `SELECT ${selectFields} FROM ${database}.t_status_aereo 
                  WHERE dep_datetime >= ? 
