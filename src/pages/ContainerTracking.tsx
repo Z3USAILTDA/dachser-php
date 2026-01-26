@@ -10,7 +10,8 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
-import { Search, RefreshCw, Ship, Trash2, Mail, Check, ArrowLeft, Loader2, Anchor, AlertTriangle, HelpCircle, ChevronDown, ChevronUp, Package, Clock, Bell, Play, Database, Radar, RotateCcw, Sun, Moon } from "lucide-react";
+import { Search, RefreshCw, Ship, Trash2, Mail, Check, ArrowLeft, Loader2, Anchor, AlertTriangle, HelpCircle, ChevronDown, ChevronUp, Package, Clock, Bell, Play, Database, Radar, RotateCcw, Sun, Moon, FileSpreadsheet } from "lucide-react";
+import { exportSeaMblsToExcel } from "@/utils/seaMblExcelExport";
 import { RegisterFreeTimeDialog } from "@/components/tracking/RegisterFreeTimeDialog";
 import { useToast } from "@/hooks/use-toast";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
@@ -313,6 +314,7 @@ const ContainerTracking = () => {
   const [isRunningTrack, setIsRunningTrack] = useState(false);
   const [isRunningRetrack, setIsRunningRetrack] = useState(false);
   const [isRunningImoRefresh, setIsRunningImoRefresh] = useState(false);
+  const [isExportingExcel, setIsExportingExcel] = useState(false);
 
   // Expansion state
   const [expandedMbl, setExpandedMbl] = useState<string | null>(null);
@@ -1144,7 +1146,43 @@ const ContainerTracking = () => {
     }
   };
 
-  // Set up 12-hour interval for auto sync (NOT on page load)
+  // Export maritime MBLs from last 2 months to Excel (admin only)
+  const handleExportExcel = async () => {
+    if (!isAdmin) return;
+    setIsExportingExcel(true);
+    
+    toast({
+      title: "Exportando Excel...",
+      description: "Aguarde enquanto geramos o arquivo.",
+    });
+
+    try {
+      const result = await exportSeaMblsToExcel();
+      
+      if (result.success) {
+        toast({
+          title: "Exportação concluída!",
+          description: `${result.count} MBLs exportados para ${result.filename}`,
+        });
+      } else {
+        toast({
+          title: "Erro na exportação",
+          description: result.error || "Falha ao exportar dados",
+          variant: "destructive",
+        });
+      }
+    } catch (error) {
+      console.error('Export error:', error);
+      toast({
+        title: "Erro na exportação",
+        description: "Falha inesperada ao exportar dados",
+        variant: "destructive",
+      });
+    } finally {
+      setIsExportingExcel(false);
+    }
+  };
+
   useEffect(() => {
     if (!user) return;
     const TWELVE_HOURS_MS = 12 * 60 * 60 * 1000;
@@ -1672,6 +1710,20 @@ const ContainerTracking = () => {
                         </TooltipTrigger>
                         <TooltipContent>
                           <p className="text-xs">Corrigir IMOs buscando pelo nome do navio</p>
+                        </TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
+                    
+                    <TooltipProvider>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <button onClick={handleExportExcel} disabled={isExportingExcel || !!autoSyncStatus} className="h-8 px-3 rounded-full bg-[rgba(245,124,0,.2)] text-orange-400 text-[0.7rem] font-medium flex items-center gap-1.5 border border-orange-500/30 hover:bg-[rgba(245,124,0,.3)] transition disabled:opacity-50">
+                            {isExportingExcel ? <Loader2 className="w-3 h-3 animate-spin" /> : <FileSpreadsheet className="w-3 h-3" />}
+                            Export Excel
+                          </button>
+                        </TooltipTrigger>
+                        <TooltipContent>
+                          <p className="text-xs">Exportar MBLs marítimos (últimos 2 meses) para Excel</p>
                         </TooltipContent>
                       </Tooltip>
                     </TooltipProvider>
