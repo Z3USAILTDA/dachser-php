@@ -128,6 +128,13 @@ interface QueryRequest {
   forceAll?: boolean;
   fileContent?: string;
   role?: string;
+  // CHB extraction rules
+  field_name?: string;
+  document_type?: string;
+  extraction_pattern?: string;
+  location_hint?: string;
+  example_value?: string;
+  fields?: string[];
   metadata?: unknown;
   esteira_role?: string;
   esteira_active?: number;
@@ -10992,6 +10999,100 @@ serve(async (req) => {
           reset_count: deletedRows,
           hawbs_reset: hawbsToReset
         };
+        break;
+      }
+
+      // =============================================
+      // CHB EXTRACTION RULES: Learning from user corrections
+      // =============================================
+      case 'get_chb_extraction_rules': {
+        const { fields } = body as { fields?: string[] };
+        
+        console.log(`[MARIADB] Fetching CHB extraction rules for fields: ${fields?.join(', ') || 'all'}`);
+        
+        let query = `
+          SELECT field_name, document_type, extraction_pattern, location_hint, example_value, times_used, success_rate
+          FROM ai_agente.t_dachser_chb_extraction_rules
+          WHERE times_used > 0 AND success_rate >= 50
+        `;
+        const params: any[] = [];
+        
+        if (fields && fields.length > 0) {
+          const placeholders = fields.map(() => '?').join(',');
+          query += ` AND field_name IN (${placeholders})`;
+          params.push(...fields);
+        }
+        
+        query += ` ORDER BY success_rate DESC, times_used DESC`;
+        
+        try {
+          const rows = await client.query(query, params);
+          console.log(`[MARIADB] Found ${rows?.length || 0} extraction rules`);
+          result = { success: true, rules: rows || [] };
+        } catch (err) {
+          // Table might not exist yet
+          console.log(`[MARIADB] Extraction rules table not found or error:`, err);
+          result = { success: true, rules: [] };
+        }
+        break;
+      }
+
+      case 'save_chb_extraction_rule': {
+        const { field_name, document_type, extraction_pattern, location_hint, example_value } = body;
+        
+        if (!field_name || !extraction_pattern) {
+          return new Response(
+            JSON.stringify({ error: 'field_name and extraction_pattern are required' }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+        
+        console.log(`[MARIADB] Saving CHB extraction rule for ${field_name}/${document_type}`);
+        
+        try {
+          // Check if rule exists
+          const existing = await client.query(`
+            SELECT id, times_used, success_rate 
+            FROM ai_agente.t_dachser_chb_extraction_rules
+            WHERE field_name = ? AND document_type = ?
+            LIMIT 1
+          `, [field_name, document_type || 'Outros']);
+          
+          if (existing && existing.length > 0) {
+            // Update existing
+            const rule = existing[0];
+            const newTimesUsed = (rule.times_used || 0) + 1;
+            const newSuccessRate = Math.min(100, ((Number(rule.success_rate) || 50) + 100) / 2);
+            
+            await client.execute(`
+              UPDATE ai_agente.t_dachser_chb_extraction_rules
+              SET extraction_pattern = ?,
+                  location_hint = ?,
+                  example_value = ?,
+                  times_used = ?,
+                  success_rate = ?,
+                  updated_at = NOW()
+              WHERE id = ?
+            `, [extraction_pattern, location_hint, example_value, newTimesUsed, newSuccessRate, rule.id]);
+            
+            result = { success: true, updated: true, rule_id: rule.id };
+          } else {
+            // Insert new
+            const insertResult = await client.execute(`
+              INSERT INTO ai_agente.t_dachser_chb_extraction_rules
+              (field_name, document_type, extraction_pattern, location_hint, example_value, times_used, success_rate)
+              VALUES (?, ?, ?, ?, ?, 1, 80.00)
+            `, [field_name, document_type || 'Outros', extraction_pattern, location_hint, example_value]);
+            
+            result = { success: true, created: true, rule_id: (insertResult as any).lastInsertId };
+          }
+        } catch (err) {
+          console.error('[MARIADB] Error saving extraction rule:', err);
+          return new Response(
+            JSON.stringify({ error: 'Failed to save extraction rule' }),
+            { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
         break;
       }
 
