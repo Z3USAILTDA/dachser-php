@@ -193,7 +193,7 @@ IMPORTANTE:
     console.log(`[chb-corrections] Re-extracting "${correctedValue}" for field "${fieldName}" in ${filename}`);
     
     // Use more powerful model for deep analysis
-    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-pro-preview-06-05:generateContent?key=${geminiApiKey}`, {
+    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-pro:generateContent?key=${geminiApiKey}`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -431,8 +431,10 @@ async function ensureTableExists(client: Client): Promise<void> {
         INDEX idx_field (field_name)
       )
     `);
+    console.log('[chb-corrections] Corrections table ensured');
     
-    // Create extraction rules table for learning
+    // Create extraction rules table for learning - EXPLICITLY LOG SUCCESS/FAILURE
+    console.log('[chb-corrections] Creating extraction rules table if not exists...');
     await client.execute(`
       CREATE TABLE IF NOT EXISTS ai_agente.t_dachser_chb_extraction_rules (
         id INT AUTO_INCREMENT PRIMARY KEY,
@@ -448,10 +450,16 @@ async function ensureTableExists(client: Client): Promise<void> {
         INDEX idx_field_doc (field_name, document_type)
       )
     `);
-    
-    console.log('[chb-corrections] Tables ensured');
+    console.log('[chb-corrections] Extraction rules table ensured successfully');
   } catch (e) {
     console.error('[chb-corrections] Table creation error:', e);
+    // Attempt to verify extraction rules table exists
+    try {
+      await client.query('SELECT 1 FROM ai_agente.t_dachser_chb_extraction_rules LIMIT 1');
+      console.log('[chb-corrections] Extraction rules table already exists');
+    } catch {
+      console.error('[chb-corrections] CRITICAL: Extraction rules table does NOT exist and could not be created');
+    }
   }
 }
 
@@ -730,6 +738,159 @@ serve(async (req) => {
         await client.close();
         return new Response(
           JSON.stringify({ success: true }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      // POST /reprocess-pending - Reprocess all corrections with low confidence
+      if (action === 'reprocess-pending') {
+        console.log('[chb-corrections] Starting reprocessing of pending corrections');
+        
+        // Get all corrections with low confidence
+        const pendingCorrections = await client.query(`
+          SELECT id, item_id, filename, field_name, corrected_value
+          FROM ai_agente.t_dachser_chb_user_corrections
+          WHERE location_confidence = 'baixa' 
+             OR location_reference LIKE '%Erro%'
+             OR location_reference LIKE '%manual%'
+             OR location_reference LIKE '%não disponível%'
+          ORDER BY created_at DESC
+          LIMIT 50
+        `);
+        
+        console.log(`[chb-corrections] Found ${pendingCorrections?.length || 0} pending corrections`);
+        
+        const results: Array<{
+          id: number;
+          field: string;
+          file: string;
+          status: string;
+          location?: string;
+          confidence?: string;
+          error?: string;
+        }> = [];
+        
+        for (const correction of (pendingCorrections || [])) {
+          try {
+            // Fetch file content from storage
+            const docRows = await client.query(`
+              SELECT f.url as file_url
+              FROM ai_agente.t_dachser_chb_docs d
+              JOIN ai_agente.t_dachser_chb_files f ON d.file_id = f.id
+              WHERE d.item_id = ? AND f.filename = ?
+              LIMIT 1
+            `, [correction.item_id, correction.filename]);
+            
+            if (docRows && docRows.length > 0 && docRows[0].file_url) {
+              console.log(`[chb-corrections] Fetching content for ${correction.filename}`);
+              
+              const fileResponse = await fetch(docRows[0].file_url);
+              if (fileResponse.ok) {
+                const fileContent = await fileResponse.text();
+                console.log(`[chb-corrections] File content length: ${fileContent.length}`);
+                
+                // Run re-extraction using Gemini Pro
+                const reextractionResult = await reextractFieldWithContext(
+                  correction.filename,
+                  correction.field_name,
+                  correction.corrected_value,
+                  fileContent
+                );
+                
+                if (reextractionResult.found) {
+                  // Update correction with location
+                  await client.execute(`
+                    UPDATE ai_agente.t_dachser_chb_user_corrections
+                    SET location_reference = ?,
+                        location_context = ?,
+                        location_confidence = ?,
+                        updated_at = NOW()
+                    WHERE id = ?
+                  `, [
+                    reextractionResult.location,
+                    reextractionResult.nearbyText,
+                    reextractionResult.confidence,
+                    correction.id
+                  ]);
+                  
+                  // Save extraction rule for future use
+                  const docType = detectDocumentType(correction.filename);
+                  await saveExtractionRule(
+                    client,
+                    correction.field_name,
+                    docType,
+                    reextractionResult.pattern,
+                    reextractionResult.extractionHint,
+                    correction.corrected_value
+                  );
+                  
+                  results.push({
+                    id: correction.id,
+                    field: correction.field_name,
+                    file: correction.filename,
+                    status: 'processed',
+                    location: reextractionResult.location,
+                    confidence: reextractionResult.confidence
+                  });
+                  
+                  console.log(`[chb-corrections] Successfully processed correction ${correction.id}`);
+                } else {
+                  results.push({
+                    id: correction.id,
+                    field: correction.field_name,
+                    file: correction.filename,
+                    status: 'not_found'
+                  });
+                  console.log(`[chb-corrections] Value not found for correction ${correction.id}`);
+                }
+              } else {
+                results.push({
+                  id: correction.id,
+                  field: correction.field_name,
+                  file: correction.filename,
+                  status: 'fetch_failed',
+                  error: `HTTP ${fileResponse.status}`
+                });
+              }
+            } else {
+              results.push({
+                id: correction.id,
+                field: correction.field_name,
+                file: correction.filename,
+                status: 'no_file_url'
+              });
+            }
+          } catch (err) {
+            results.push({
+              id: correction.id,
+              field: correction.field_name,
+              file: correction.filename,
+              status: 'error',
+              error: err instanceof Error ? err.message : 'Unknown'
+            });
+            console.error(`[chb-corrections] Error processing correction ${correction.id}:`, err);
+          }
+        }
+        
+        // Also check and list extraction rules
+        let rulesCount = 0;
+        try {
+          const rules = await client.query(`
+            SELECT COUNT(*) as cnt FROM ai_agente.t_dachser_chb_extraction_rules
+          `);
+          rulesCount = rules?.[0]?.cnt || 0;
+        } catch {
+          console.log('[chb-corrections] Could not count extraction rules');
+        }
+        
+        await client.close();
+        return new Response(
+          JSON.stringify({ 
+            success: true, 
+            processed: results.length,
+            results,
+            extractionRulesCount: rulesCount
+          }),
           { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
       }
