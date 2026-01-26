@@ -42,7 +42,7 @@ async function locateValueInFile(
 TAREFA: Localizar onde o valor "${correctedValue}" aparece no arquivo "${filename}" para o campo "${fieldName}".
 
 CONTEÚDO DO ARQUIVO:
-${fileContent.substring(0, 15000)}
+${fileContent.substring(0, 50000)}
 
 INSTRUÇÕES:
 1. Procure o valor exato "${correctedValue}" no conteúdo
@@ -263,20 +263,19 @@ serve(async (req) => {
                 location_reference = ?,
                 location_context = ?,
                 location_confidence = ?,
-                corrected_by = ?,
-                is_validated = ?,
-                updated_at = NOW()
-            WHERE id = ?
-          `, [
-            corrected_value,
-            original_value || null,
-            locationResult.location,
-            locationResult.context,
-            locationResult.confidence,
-            corrected_by || null,
-            locationResult.found,
-            correctionId
-          ]);
+            corrected_by = ?,
+            is_validated = TRUE,
+            updated_at = NOW()
+        WHERE id = ?
+      `, [
+        corrected_value,
+        original_value || null,
+        locationResult.location,
+        locationResult.context,
+        locationResult.confidence,
+        corrected_by || null,
+        correctionId
+      ]);
         } else {
           // Insert new
           const insertResult = await client.execute(`
@@ -284,7 +283,7 @@ serve(async (req) => {
             (item_id, filename, field_name, original_value, corrected_value,
              location_reference, location_context, location_confidence,
              corrected_by, is_validated)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, TRUE)
           `, [
             item_id,
             filename,
@@ -294,8 +293,7 @@ serve(async (req) => {
             locationResult.location,
             locationResult.context,
             locationResult.confidence,
-            corrected_by || null,
-            locationResult.found
+            corrected_by || null
           ]);
           correctionId = insertResult.lastInsertId as number;
         }

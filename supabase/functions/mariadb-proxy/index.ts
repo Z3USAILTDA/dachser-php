@@ -3828,10 +3828,11 @@ serve(async (req) => {
         const { itemId } = body as any;
         console.log('Fetching CHB user corrections for item:', itemId);
         
+        // Buscar TODAS as correções do item (usuário é fonte de verdade)
         const corrections = await client.query(`
           SELECT filename, field_name, corrected_value, location_reference, location_context, location_confidence
           FROM ai_agente.t_dachser_chb_user_corrections
-          WHERE item_id = ? AND is_validated = TRUE
+          WHERE item_id = ?
           ORDER BY updated_at DESC
         `, [itemId]);
         
