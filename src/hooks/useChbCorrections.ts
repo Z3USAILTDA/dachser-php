@@ -47,12 +47,7 @@ export function useChbCorrections(itemId?: number) {
 
     setIsLoading(true);
     try {
-      const { data, error } = await supabase.functions.invoke('chb-corrections', {
-        body: null,
-        method: 'GET',
-      });
-
-      // Since we can't pass query params easily, we'll use POST for fetching
+      // Use fetch directly to pass query params
       const response = await fetch(
         `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/chb-corrections?item_id=${targetId}`,
         {
