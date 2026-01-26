@@ -1802,12 +1802,11 @@ serve(async (req) => {
       );
     }
 
-    // Create analysis request in MariaDB
-    const requestId = crypto.randomUUID();
+    // Create analysis request in MariaDB - use DB auto-increment ID
+    let requestId: string;
     
     try {
-      await callMariaDBProxy('create_chb_run', {
-        id: requestId,
+      const createRunResult = await callMariaDBProxy('create_chb_run', {
         itemId: itemId || 0,
         etapa: stepId.toString(),
         status: 'pending',
@@ -1817,7 +1816,8 @@ serve(async (req) => {
           hasClientConfig: !!clientConfig,
         })
       });
-      console.log(`[SUBMIT] Created request ${requestId} in MariaDB`);
+      requestId = String(createRunResult.runId);
+      console.log(`[SUBMIT] Created request ${requestId} in MariaDB (auto-generated ID)`);
     } catch (insertError) {
       console.error('[SUBMIT] Error creating request in MariaDB:', insertError);
       return new Response(
