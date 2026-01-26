@@ -331,6 +331,34 @@ REGRAS DE CONTEÚDO DA TABELA
    - PROIBIDO: Colocar valor do CCT na coluna do HAWB ou vice-versa
    - Esta regra é ABSOLUTA e deve ser seguida para TODOS os campos
 
+   🔴 REGRA DE EXTRAÇÃO DEFENSIVA (NÃO VIOLAR!):
+   
+   ANTES DE INCLUIR QUALQUER VALOR NA TABELA, VERIFIQUE:
+   1. Você LITERALMENTE viu esse texto/número no conteúdo do arquivo? 
+      → Se NÃO → use "ND"
+      → Se SIM → prossiga
+   
+   2. Esse valor está na coluna/seção correta do documento original?
+      → Se NÃO → use "ND"  
+      → Se SIM → prossiga
+   
+   3. Você está colocando esse valor na coluna do arquivo CORRETO?
+      → Se está no CCT.pdf, só pode ir na coluna "CCT.pdf"
+      → NUNCA copie valores entre colunas de arquivos diferentes
+   
+   EXEMPLOS DO QUE NÃO FAZER (PROIBIDO!):
+   ❌ CCT mostra peso 501.5 → colocar 501.5 na coluna do HAWB também
+   ❌ Invoice não tem peso → "inferir" peso do packing list
+   ❌ Valor não encontrado → inventar ou estimar
+   ❌ Campo ausente → copiar de outro documento
+   ❌ "Achar" que um valor deveria existir → inventar
+   
+   EXEMPLOS DO QUE FAZER (CORRETO):
+   ✅ CCT mostra peso 501.5 → coluna CCT = "501.5", outras = "ND" se não encontrar
+   ✅ Invoice não tem peso → coluna Invoice = "ND"
+   ✅ HAWB mostra peso 501,500 → coluna HAWB = "501,500"
+   ✅ Campo não encontrado → "ND" (nunca inventar)
+
 1) COLUNAS DINÂMICAS — REGRA CRÍTICA:
    - A tabela deve ter: Status | Campo | [Arquivo1] | [Arquivo2] | ...
    - STATUS VEM PRIMEIRO para decisão rápida
@@ -1525,13 +1553,20 @@ O usuário CORRIGIU os seguintes valores. VOCÊ DEVE USAR ESSES VALORES CORRIGID
       }
       
       cachedContext += `
-REGRA CRÍTICA DE CORREÇÕES DO USUÁRIO:
-1. Os valores acima foram validados MANUALMENTE pelo usuário
-2. A localização foi verificada AUTOMATICAMENTE pelo sistema
-3. SE você encontrar valor diferente do corrigido → MANTER O VALOR CORRIGIDO
-4. Adicionar observação explicando a divergência encontrada se houver
-5. NUNCA substituir um valor corrigido pelo usuário por outro valor
-6. A confiança da localização indica quão certo o sistema está sobre onde o valor está
+🔴 REGRA ABSOLUTA DE CORREÇÕES DO USUÁRIO (FONTE DE VERDADE FINAL):
+1. O usuário CORRIGIU manualmente os valores acima
+2. VOCÊ DEVE usar EXATAMENTE esses valores na tabela
+3. Se você encontrar valor DIFERENTE no documento → IGNORAR e usar o valor corrigido
+4. A correção do usuário é FONTE DE VERDADE FINAL
+5. NUNCA substituir uma correção do usuário por valor do documento
+6. Se houver divergência entre documento e correção → Usar correção + nota explicativa
+7. A confiança da localização indica quão certo o sistema está sobre onde o valor está
+
+⚠️ CHECKLIST DE VERIFICAÇÃO PARA CORREÇÕES:
+□ Usei o valor corrigido pelo usuário? (obrigatório)
+□ Coloquei o valor na coluna correta do arquivo?
+□ Se encontrei valor diferente, mantive o corrigido?
+□ Adicionei nota se houve divergência?
 
 ═══════════════════════════════════════════════════════════════════════════════
 
