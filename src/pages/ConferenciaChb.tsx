@@ -16,6 +16,7 @@ import { toast } from 'sonner';
 import { useChbFiles, useChbRuns, useChbItems, ChbFile, ChbRun } from '@/hooks/useChbData';
 import { useChbClientConfig, ChbClientConfig } from '@/hooks/useChbClientConfig';
 import { useChbCorrections } from '@/hooks/useChbCorrections';
+import { applyCorrectionsToHtml } from '@/utils/chbPdfCorrections';
 
 export default function ConferenciaChb() {
   useUsageLog({ endpoint: "/chb/conferencia" });
@@ -745,30 +746,36 @@ export default function ConferenciaChb() {
       return;
     }
 
-    // Save to database with status 'approved'
-    // Check if there's an existing draft to update instead of creating new
+    // Apply user corrections to the HTML before saving
+    const correctedHtml = applyCorrectionsToHtml(currentAnalysis.html, corrections);
+    const correctedAnalysis = {
+      ...currentAnalysis,
+      html: correctedHtml,
+    };
+
+    // Save to database with status 'approved' - with corrections applied
     try {
       const existingDraft = dbRuns.find(
         (r: ChbRun) => r.etapa === activeStep.toString() && r.status === 'draft'
       );
 
       if (existingDraft) {
-        // Update existing draft to approved
+        // Update existing draft to approved with corrected HTML
         await updateRun(existingDraft.id, {
           status: 'approved',
-          resultText: currentAnalysis.summary,
-          resultHtml: currentAnalysis.html,
-          resultJson: currentAnalysis,
+          resultText: correctedAnalysis.summary,
+          resultHtml: correctedHtml,
+          resultJson: correctedAnalysis,
         });
-        console.log('[CHB] Converted draft to approved for step', activeStep);
+        console.log('[CHB] Converted draft to approved for step', activeStep, 'with', corrections.length, 'corrections applied');
       } else {
-        // Create new approved run (fallback if no draft exists)
+        // Create new approved run with corrected HTML
         await createRun(
           activeStep.toString() as '1' | '2' | '3',
           'approved',
-          currentAnalysis.summary,
-          currentAnalysis.html,
-          currentAnalysis
+          correctedAnalysis.summary,
+          correctedHtml,
+          correctedAnalysis
         );
       }
 
@@ -798,16 +805,16 @@ export default function ConferenciaChb() {
       return;
     }
 
-    // Create history entry with HTML content from analysis
+    // Create history entry with CORRECTED HTML content
     const historyEntry: ChbApprovedHistory = {
       id: `h${Date.now()}`,
       stepId: activeStep,
       date: new Date().toLocaleString('pt-BR'),
       user: currentUser,
-      summary: currentAnalysis.summary,
-      detailedSummary: currentAnalysis.html, // Use HTML content for proper formatting
-      parecer: (currentAnalysis as any).parecer,
-      tags: currentAnalysis.tags,
+      summary: correctedAnalysis.summary,
+      detailedSummary: correctedHtml, // Use corrected HTML for proper formatting
+      parecer: (correctedAnalysis as any).parecer,
+      tags: correctedAnalysis.tags,
     };
 
     // Add to history for current step only (no duplicates)
