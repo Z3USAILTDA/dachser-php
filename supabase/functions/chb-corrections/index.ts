@@ -224,7 +224,7 @@ serve(async (req) => {
           );
         }
 
-        // Try to locate value automatically if file content is provided
+        // Try to locate value automatically
         let locationResult: { found: boolean; location: string; context: string; confidence: 'alta' | 'media' | 'baixa' } = {
           found: false,
           location: 'Localização manual não realizada',
@@ -232,16 +232,53 @@ serve(async (req) => {
           confidence: 'baixa'
         };
 
-        if (file_content) {
+        // Get file content - either from request or fetch from storage
+        let effectiveFileContent = file_content;
+        
+        if (!effectiveFileContent && item_id && filename) {
+          console.log(`[chb-corrections] file_content not provided, fetching from storage for ${filename}`);
+          
+          try {
+            // Query MariaDB to get the file URL
+            const docRows = await client.query(`
+              SELECT f.url as file_url
+              FROM ai_agente.t_dachser_chb_docs d
+              JOIN ai_agente.t_dachser_chb_files f ON d.file_id = f.id
+              WHERE d.item_id = ? AND f.filename = ?
+              LIMIT 1
+            `, [item_id, filename]);
+            
+            if (docRows && docRows.length > 0 && docRows[0].file_url) {
+              const fileUrl = docRows[0].file_url;
+              console.log(`[chb-corrections] Found file URL: ${fileUrl}`);
+              
+              const fileResponse = await fetch(fileUrl);
+              if (fileResponse.ok) {
+                effectiveFileContent = await fileResponse.text();
+                console.log(`[chb-corrections] Fetched file content, length: ${effectiveFileContent.length}`);
+              } else {
+                console.log(`[chb-corrections] Failed to fetch file: ${fileResponse.status}`);
+              }
+            } else {
+              console.log(`[chb-corrections] No file URL found in database for item ${item_id}, file ${filename}`);
+            }
+          } catch (fetchError) {
+            console.error('[chb-corrections] Error fetching file content:', fetchError);
+          }
+        }
+
+        if (effectiveFileContent) {
           console.log(`[chb-corrections] Locating value "${corrected_value}" in ${filename}`);
           const locateResult = await locateValueInFile(
             filename,
             field_name,
             corrected_value,
-            file_content
+            effectiveFileContent
           );
           locationResult = locateResult;
           console.log(`[chb-corrections] Location result:`, locationResult);
+        } else {
+          console.log(`[chb-corrections] No file content available for location detection`);
         }
 
         // Check if correction already exists
