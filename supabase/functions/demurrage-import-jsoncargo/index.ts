@@ -1,4 +1,11 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { 
+  MBL_PREFIX_MAP, 
+  normalizeShippingLine, 
+  detectCarrierFromMbl as detectCarrier,
+  isKnownCarrierMbl,
+  type ShippingLineCode
+} from "../_shared/shippingLineMapping.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -31,62 +38,11 @@ interface ShipmentData {
   raw_data: any;
 }
 
-const SHIPPING_LINE_MAP: Record<string, string> = {
-  'MSC': 'MSC',
-  'MAERSK': 'MAERSK',
-  'HAPAG': 'HAPAG_LLOYD',
-  'HAPAG-LLOYD': 'HAPAG_LLOYD',
-  'HAPAG LLOYD': 'HAPAG_LLOYD',
-  'HAPAG_LLOYD': 'HAPAG_LLOYD',
-  'HMM': 'HMM',
-  'ONE': 'ONE',
-  'EVERGREEN': 'EVERGREEN',
-  'CMA': 'CMA_CGM',
-  'CMA CGM': 'CMA_CGM',
-  'CMA-CGM': 'CMA_CGM',
-  'CMA_CGM': 'CMA_CGM',
-  'COSCO': 'COSCO',
-  'ZIM': 'ZIM',
-  'YANG MING': 'YANG_MING',
-  'YANGMING': 'YANG_MING',
-  'YANG_MING': 'YANG_MING',
-  'PIL': 'PIL',
-  'OOCL': 'OOCL',
-  'WAN HAI': 'WAN_HAI',
-  'WANHAI': 'WAN_HAI',
-  'WAN_HAI': 'WAN_HAI'
-};
-
-const MBL_PREFIX_TO_CARRIER: Record<string, string[]> = {
-  'MEDU': ['MSC'], 'MSCB': ['MSC'], 'MSCR': ['MSC'], 'MSCU': ['MSC'],
-  'MAEU': ['MAERSK'], 'MSKU': ['MAERSK'], 'SEAU': ['MAERSK'],
-  'HLCU': ['HAPAG_LLOYD'], 'HLXU': ['HAPAG_LLOYD'], 'HBG': ['HAPAG_LLOYD'],
-  'CMDU': ['CMA_CGM'], 'ANRM': ['CMA_CGM'], 'APHU': ['CMA_CGM'],
-  'HDMU': ['HMM'], 'HMMU': ['HMM'],
-  'ONEY': ['ONE'], 'ONEU': ['ONE'],
-  'EGHU': ['EVERGREEN'], 'EISU': ['EVERGREEN'],
-  'COSU': ['COSCO'], 'CBHU': ['COSCO'],
-  'ZIMU': ['ZIM'],
-  'YMLU': ['YANG_MING'],
-  'OOLU': ['OOCL'],
-  'WHLU': ['WAN_HAI'],
-};
-
-function normalizeShippingLine(input: string): string {
-  const upper = input.toUpperCase().trim();
-  return SHIPPING_LINE_MAP[upper] || upper.replace(/[\s-]+/g, '_');
-}
-
+// Usar mapeamento centralizado para detectar armador do MBL
 function detectCarrierFromMbl(mbl: string): string[] {
-  const upper = mbl.toUpperCase().trim();
-  const prefixes = Object.keys(MBL_PREFIX_TO_CARRIER).sort((a, b) => b.length - a.length);
-  
-  for (const prefix of prefixes) {
-    if (upper.startsWith(prefix)) {
-      return MBL_PREFIX_TO_CARRIER[prefix];
-    }
-  }
-  return [];
+  const info = detectCarrier(mbl);
+  if (info.code === 'UNKNOWN') return [];
+  return [info.code];
 }
 
 function isValidContainerNumber(num: string): boolean {
