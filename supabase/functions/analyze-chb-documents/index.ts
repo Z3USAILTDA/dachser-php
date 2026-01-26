@@ -1807,7 +1807,50 @@ async function processAnalysisInBackground(
     
     // Add learned extraction rules context (helps LLM find fields based on past corrections)
     if (extractionRules.length > 0) {
-      cachedContext += `
+      // Separate rules with processing instructions (highest priority)
+      const rulesWithProcessing = extractionRules.filter((r: any) => r.processing_instruction);
+      const rulesWithoutProcessing = extractionRules.filter((r: any) => !r.processing_instruction);
+      
+      // FIRST: Rules with processing instructions (CRITICAL - calculation rules)
+      if (rulesWithProcessing.length > 0) {
+        cachedContext += `
+═══════════════════════════════════════════════════════════════════════════════
+🔴🔴🔴 INSTRUÇÕES DE CÁLCULO OBRIGATÓRIAS (PRIORIDADE MÁXIMA) 🔴🔴🔴
+═══════════════════════════════════════════════════════════════════════════════
+
+O sistema APRENDEU que os seguintes campos requerem CÁLCULOS ESPECIAIS.
+VOCÊ DEVE SEGUIR ESTAS INSTRUÇÕES EXATAMENTE:
+
+`;
+        for (const rule of rulesWithProcessing) {
+          cachedContext += `📍 Campo: ${rule.field_name}\n`;
+          cachedContext += `   Documento: ${rule.document_type}\n`;
+          cachedContext += `   ⚠️ INSTRUÇÃO OBRIGATÓRIA: ${(rule as any).processing_instruction}\n`;
+          if (rule.extraction_pattern) {
+            cachedContext += `   Padrão de busca: ${rule.extraction_pattern}\n`;
+          }
+          if (rule.example_value) {
+            cachedContext += `   Exemplo de resultado: "${rule.example_value}"\n`;
+          }
+          cachedContext += `   Confiança: ${rule.success_rate}%\n\n`;
+        }
+        
+        cachedContext += `
+🔴 VOCÊ DEVE:
+1. EXECUTAR o cálculo indicado na "INSTRUÇÃO OBRIGATÓRIA"
+2. Se a instrução diz "SOME", você DEVE somar todos os valores individuais
+3. Se a instrução diz "CONVERTA", você DEVE aplicar a conversão indicada
+4. DOCUMENTAR o cálculo na coluna "Observações" (ex: "Peso calculado: 50 + 30 + 21.5 = 101.5")
+5. NÃO IGNORAR estas instruções - elas foram validadas pelo usuário
+
+═══════════════════════════════════════════════════════════════════════════════
+
+`;
+      }
+      
+      // SECOND: Regular extraction rules (location hints)
+      if (rulesWithoutProcessing.length > 0) {
+        cachedContext += `
 ═══════════════════════════════════════════════════════════════════════════════
 📚 REGRAS DE EXTRAÇÃO APRENDIDAS (ALTA PRIORIDADE)
 ═══════════════════════════════════════════════════════════════════════════════
@@ -1816,22 +1859,22 @@ Com base em CORREÇÕES ANTERIORES do usuário, o sistema aprendeu onde encontra
 USE ESTAS DICAS para localizar os campos CORRETAMENTE:
 
 `;
-      for (const rule of extractionRules) {
-        cachedContext += `📍 Campo: ${rule.field_name}\n`;
-        cachedContext += `   Documento típico: ${rule.document_type}\n`;
-        if (rule.extraction_pattern) {
-          cachedContext += `   Padrão de busca: ${rule.extraction_pattern}\n`;
+        for (const rule of rulesWithoutProcessing) {
+          cachedContext += `📍 Campo: ${rule.field_name}\n`;
+          cachedContext += `   Documento típico: ${rule.document_type}\n`;
+          if (rule.extraction_pattern) {
+            cachedContext += `   Padrão de busca: ${rule.extraction_pattern}\n`;
+          }
+          if (rule.location_hint) {
+            cachedContext += `   Localização comum: ${rule.location_hint}\n`;
+          }
+          if (rule.example_value) {
+            cachedContext += `   Exemplo de valor: "${rule.example_value}"\n`;
+          }
+          cachedContext += `   Confiança: ${rule.success_rate}%\n\n`;
         }
-        if (rule.location_hint) {
-          cachedContext += `   Localização comum: ${rule.location_hint}\n`;
-        }
-        if (rule.example_value) {
-          cachedContext += `   Exemplo de valor: "${rule.example_value}"\n`;
-        }
-        cachedContext += `   Confiança: ${rule.success_rate}%\n\n`;
-      }
-      
-      cachedContext += `
+        
+        cachedContext += `
 ⚠️ APLIQUE ESTAS DICAS:
 1. Procure cada campo seguindo o PADRÃO indicado acima
 2. A LOCALIZAÇÃO COMUM indica onde o campo geralmente aparece
@@ -1841,6 +1884,7 @@ USE ESTAS DICAS para localizar os campos CORRETAMENTE:
 ═══════════════════════════════════════════════════════════════════════════════
 
 `;
+      }
     }
     
     // Add user corrections context first (highest priority)
