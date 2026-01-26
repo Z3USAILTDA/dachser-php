@@ -1278,24 +1278,13 @@ async function saveExtractedData(
   rawText?: string
 ): Promise<void> {
   try {
-    // Save to MariaDB ai_agente.t_dachser_chb_extracted_data
-    await callMariaDBProxy('execute', {
-      query: `
-        INSERT INTO ai_agente.t_dachser_chb_extracted_data 
-        (item_id, filename, etapa, extracted_fields, raw_text, updated_at)
-        VALUES (?, ?, ?, ?, ?, NOW())
-        ON DUPLICATE KEY UPDATE 
-          extracted_fields = VALUES(extracted_fields),
-          raw_text = VALUES(raw_text),
-          updated_at = NOW()
-      `,
-      params: [
-        itemId,
-        filename,
-        etapa,
-        JSON.stringify(extractedFields),
-        rawText || null
-      ]
+    // Save to MariaDB using specific action
+    await callMariaDBProxy('save_chb_extracted_data', {
+      itemId,
+      filename,
+      etapa,
+      extractedFields,
+      rawText: rawText || null
     });
     console.log(`[saveExtractedData] Saved to MariaDB for item ${itemId}, file ${filename}`);
   } catch (e) {
@@ -1305,17 +1294,10 @@ async function saveExtractedData(
 
 async function getCachedExtractedData(itemId: number): Promise<Record<string, { fields: Record<string, any>; rawText?: string }>> {
   try {
-    const result = await callMariaDBProxy('query', {
-      query: `
-        SELECT filename, extracted_fields, raw_text 
-        FROM ai_agente.t_dachser_chb_extracted_data 
-        WHERE item_id = ?
-      `,
-      params: [itemId]
-    });
+    const result = await callMariaDBProxy('get_chb_extracted_data', { itemId });
     
     const cache: Record<string, { fields: Record<string, any>; rawText?: string }> = {};
-    const data = result.data || result || [];
+    const data = result.data || [];
     
     for (const item of data) {
       let fields = {};
@@ -1474,9 +1456,9 @@ async function processAnalysisInBackground(
     console.log(`[BG] Starting background analysis for request ${requestId}`);
     
     // Update status to processing in MariaDB
-    await callMariaDBProxy('execute', {
-      query: `UPDATE ai_agente.t_dachser_chb_runs SET status = 'processing' WHERE id = ?`,
-      params: [requestId]
+    await callMariaDBProxy('update_chb_run', {
+      runId: requestId,
+      status: 'processing'
     });
     
     console.log(`[BG] Processing ${files.length} files for step ${stepId}`);
@@ -1507,16 +1489,8 @@ async function processAnalysisInBackground(
     if (itemId) {
       try {
         console.log(`[BG] Fetching user corrections for item ${itemId}...`);
-        const correctionsResult = await callMariaDBProxy('execute', {
-          query: `
-            SELECT filename, field_name, corrected_value, location_reference, location_context, location_confidence
-            FROM ai_agente.t_dachser_chb_user_corrections
-            WHERE item_id = ? AND is_validated = TRUE
-            ORDER BY updated_at DESC
-          `,
-          params: [itemId]
-        });
-        userCorrections = correctionsResult.rows || [];
+        const correctionsResult = await callMariaDBProxy('get_chb_corrections', { itemId });
+        userCorrections = correctionsResult.data || [];
         console.log(`[BG] Found ${userCorrections.length} validated user corrections`);
       } catch (e) {
         console.error('[BG] Error fetching user corrections:', e);
@@ -1637,9 +1611,10 @@ REGRA CRÍTICA DE PERSISTÊNCIA:
         console.error('[BG] Gemini API also failed:', geminiError);
         
         // Update request with error in MariaDB
-        await callMariaDBProxy('execute', {
-          query: `UPDATE ai_agente.t_dachser_chb_runs SET status = 'error', result_text = ?, updated_at = NOW() WHERE id = ?`,
-          params: [`Falha na análise: ${geminiError instanceof Error ? geminiError.message : 'Erro desconhecido'}`, requestId]
+        await callMariaDBProxy('update_chb_run', {
+          runId: requestId,
+          status: 'error',
+          resultText: `Falha na análise: ${geminiError instanceof Error ? geminiError.message : 'Erro desconhecido'}`
         });
         
         return;
@@ -1668,9 +1643,11 @@ REGRA CRÍTICA DE PERSISTÊNCIA:
     };
 
     // Update request with result in MariaDB
-    await callMariaDBProxy('execute', {
-      query: `UPDATE ai_agente.t_dachser_chb_runs SET status = 'completed', result_html = ?, result_json = ?, updated_at = NOW() WHERE id = ?`,
-      params: [JSON.stringify(resultData), JSON.stringify(resultData), requestId]
+    await callMariaDBProxy('update_chb_run', {
+      runId: requestId,
+      status: 'completed',
+      resultHtml: JSON.stringify(resultData),
+      resultJson: resultData
     });
 
     console.log(`[BG] Request ${requestId} completed successfully`);
@@ -1718,9 +1695,10 @@ REGRA CRÍTICA DE PERSISTÊNCIA:
     console.error(`[BG] Error processing analysis ${requestId}:`, error);
     
     // Update request with error in MariaDB
-    await callMariaDBProxy('execute', {
-      query: `UPDATE ai_agente.t_dachser_chb_runs SET status = 'error', result_text = ?, updated_at = NOW() WHERE id = ?`,
-      params: [error instanceof Error ? error.message : 'Erro desconhecido', requestId]
+    await callMariaDBProxy('update_chb_run', {
+      runId: requestId,
+      status: 'error',
+      resultText: error instanceof Error ? error.message : 'Erro desconhecido'
     });
   }
 }
@@ -1746,10 +1724,7 @@ serve(async (req) => {
       console.log(`[POLL] Checking status for request ${requestId}`);
       
       try {
-        const pollResult = await callMariaDBProxy('query', {
-          query: `SELECT status, result_html, result_text FROM ai_agente.t_dachser_chb_runs WHERE id = ? LIMIT 1`,
-          params: [requestId]
-        });
+        const pollResult = await callMariaDBProxy('get_chb_run_by_id', { runId: requestId });
         
         const data = (pollResult.data || pollResult)?.[0];
         
@@ -1831,22 +1806,16 @@ serve(async (req) => {
     const requestId = crypto.randomUUID();
     
     try {
-      await callMariaDBProxy('execute', {
-        query: `
-          INSERT INTO ai_agente.t_dachser_chb_runs 
-          (id, item_id, etapa, status, result_text, created_at, updated_at)
-          VALUES (?, ?, ?, 'pending', ?, NOW(), NOW())
-        `,
-        params: [
-          requestId,
-          itemId || 0,
-          stepId.toString(),
-          JSON.stringify({ 
-            filesCount: files.length, 
-            fileNames: files.map((f: any) => f.name),
-            hasClientConfig: !!clientConfig,
-          })
-        ]
+      await callMariaDBProxy('create_chb_run', {
+        id: requestId,
+        itemId: itemId || 0,
+        etapa: stepId.toString(),
+        status: 'pending',
+        resultText: JSON.stringify({ 
+          filesCount: files.length, 
+          fileNames: files.map((f: any) => f.name),
+          hasClientConfig: !!clientConfig,
+        })
       });
       console.log(`[SUBMIT] Created request ${requestId} in MariaDB`);
     } catch (insertError) {
