@@ -45,6 +45,171 @@ async function logApiCall(params: {
 }
 
 // ============================================================================
+// OCR EXTRACTION - Extract text from scanned/image PDFs using Gemini Vision
+// ============================================================================
+
+interface OcrResult {
+  text: string;
+  method: 'native' | 'vision-ocr';
+  confidence: 'high' | 'medium' | 'low';
+}
+
+async function extractTextWithOCR(
+  base64Content: string,
+  mimeType: string,
+  fileName: string
+): Promise<OcrResult> {
+  const geminiApiKey = Deno.env.get('GEMINI_API_KEY');
+  
+  console.log(`[OCR] Starting extraction for ${fileName} (${mimeType})`);
+  
+  // For PDFs, try native extraction first using Gemini's inline_data (which does basic text extraction)
+  // Then validate if the extracted text is meaningful
+  
+  if (mimeType === 'application/pdf') {
+    // Use Gemini Vision to extract text - it handles both native PDFs and scanned/image PDFs
+    console.log(`[OCR] Using Gemini Vision for PDF: ${fileName}`);
+    
+    if (!geminiApiKey) {
+      console.error('[OCR] GEMINI_API_KEY not configured');
+      return { text: '', method: 'vision-ocr', confidence: 'low' };
+    }
+    
+    try {
+      const response = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${geminiApiKey}`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            contents: [{
+              parts: [
+                {
+                  text: `Extraia TODO o texto deste documento PDF de forma precisa e completa.
+                  
+INSTRUÇÕES CRÍTICAS:
+1. Extraia CADA palavra, número e símbolo exatamente como aparecem
+2. Mantenha a estrutura do documento (parágrafos, listas, tabelas)
+3. Para tabelas, use formato: "Coluna1 | Coluna2 | Coluna3"
+4. Preserve números com formatação original (ex: 10.841,00 ou 10,841.00)
+5. NÃO interprete, NÃO resuma - apenas extraia o texto RAW
+6. Se houver logos ou imagens com texto, extraia esse texto também
+7. Para documentos em português, mantenha acentuação correta
+
+Retorne APENAS o texto extraído, sem explicações ou marcadores adicionais.`
+                },
+                {
+                  inline_data: {
+                    mime_type: 'application/pdf',
+                    data: base64Content,
+                  },
+                },
+              ],
+            }],
+            generationConfig: {
+              maxOutputTokens: 16000,
+              temperature: 0.1,
+            },
+          }),
+        }
+      );
+      
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error(`[OCR] Gemini Vision error for ${fileName}:`, response.status, errorText);
+        return { text: '', method: 'vision-ocr', confidence: 'low' };
+      }
+      
+      const result = await response.json();
+      const extractedText = result.candidates?.[0]?.content?.parts?.[0]?.text || '';
+      
+      // Validate extraction quality
+      const hasGoodText = extractedText.length > 100 &&
+        (extractedText.match(/[a-zA-ZáéíóúàèìòùãõâêîôûçÁÉÍÓÚÀÈÌÒÙÃÕÂÊÎÔÛÇ]/g) || []).length > 50;
+      
+      if (hasGoodText) {
+        console.log(`[OCR] Successfully extracted ${extractedText.length} chars from ${fileName} via Vision OCR`);
+        return {
+          text: `[Arquivo: ${fileName}]\n${extractedText}`,
+          method: 'vision-ocr',
+          confidence: extractedText.length > 500 ? 'high' : 'medium',
+        };
+      } else {
+        console.warn(`[OCR] Vision OCR returned minimal text for ${fileName}: ${extractedText.length} chars`);
+        return { text: extractedText, method: 'vision-ocr', confidence: 'low' };
+      }
+      
+    } catch (error) {
+      console.error(`[OCR] Error extracting with Vision for ${fileName}:`, error);
+      return { text: '', method: 'vision-ocr', confidence: 'low' };
+    }
+  }
+  
+  // For images, always use Vision OCR
+  if (mimeType.startsWith('image/')) {
+    console.log(`[OCR] Using Gemini Vision for image: ${fileName}`);
+    
+    if (!geminiApiKey) {
+      console.error('[OCR] GEMINI_API_KEY not configured');
+      return { text: '', method: 'vision-ocr', confidence: 'low' };
+    }
+    
+    try {
+      const response = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${geminiApiKey}`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            contents: [{
+              parts: [
+                {
+                  text: `Extraia TODO o texto visível nesta imagem de forma precisa.
+Mantenha a estrutura e formatação. Para tabelas, use: "Coluna1 | Coluna2".
+Preserve números exatamente como aparecem. Retorne APENAS o texto extraído.`
+                },
+                {
+                  inline_data: {
+                    mime_type: mimeType,
+                    data: base64Content,
+                  },
+                },
+              ],
+            }],
+            generationConfig: {
+              maxOutputTokens: 8000,
+              temperature: 0.1,
+            },
+          }),
+        }
+      );
+      
+      if (!response.ok) {
+        console.error(`[OCR] Gemini Vision error for image ${fileName}`);
+        return { text: '', method: 'vision-ocr', confidence: 'low' };
+      }
+      
+      const result = await response.json();
+      const extractedText = result.candidates?.[0]?.content?.parts?.[0]?.text || '';
+      
+      console.log(`[OCR] Extracted ${extractedText.length} chars from image ${fileName}`);
+      return {
+        text: `[Arquivo: ${fileName}]\n${extractedText}`,
+        method: 'vision-ocr',
+        confidence: extractedText.length > 200 ? 'high' : 'medium',
+      };
+      
+    } catch (error) {
+      console.error(`[OCR] Error extracting from image ${fileName}:`, error);
+      return { text: '', method: 'vision-ocr', confidence: 'low' };
+    }
+  }
+  
+  // For other file types, return empty
+  return { text: '', method: 'native', confidence: 'low' };
+}
+
+// ============================================================================
 // EXCEL READER - Extract text from XLSX/XLS files for CHB analysis
 // ============================================================================
 
@@ -949,34 +1114,61 @@ async function callAnthropicAPI(prompt: string, files: FileForAnalysis[]): Promi
   // Build content array with files
   const content: any[] = [];
   
-  // Add files as images or text
+  // Add files as images or text (with OCR fallback for PDFs)
   for (const file of files) {
     if (file.mimeType.startsWith('image/')) {
-      content.push({
-        type: 'image',
-        source: {
-          type: 'base64',
-          media_type: file.mimeType,
-          data: file.content,
-        },
-      });
-      content.push({
-        type: 'text',
-        text: `[Arquivo: ${file.name}]`,
-      });
+      // For images, try OCR extraction first for better text analysis
+      const ocrResult = await extractTextWithOCR(file.content, file.mimeType, file.name);
+      
+      if (ocrResult.confidence !== 'low' && ocrResult.text.length > 50) {
+        // Use OCR extracted text for better structured analysis
+        content.push({
+          type: 'text',
+          text: ocrResult.text,
+        });
+        console.log(`[Anthropic] Using OCR text for image ${file.name}: ${ocrResult.text.length} chars`);
+      } else {
+        // Fallback to native image handling
+        content.push({
+          type: 'image',
+          source: {
+            type: 'base64',
+            media_type: file.mimeType,
+            data: file.content,
+          },
+        });
+        content.push({
+          type: 'text',
+          text: `[Arquivo: ${file.name}]`,
+        });
+      }
     } else if (file.mimeType === 'application/pdf') {
-      content.push({
-        type: 'document',
-        source: {
-          type: 'base64',
-          media_type: 'application/pdf',
-          data: file.content,
-        },
-      });
-      content.push({
-        type: 'text',
-        text: `[Arquivo PDF: ${file.name}]`,
-      });
+      // For PDFs, use OCR extraction to handle both native and scanned PDFs
+      const ocrResult = await extractTextWithOCR(file.content, file.mimeType, file.name);
+      
+      if (ocrResult.confidence !== 'low' && ocrResult.text.length > 100) {
+        // Use OCR extracted text - works for both native and scanned PDFs
+        content.push({
+          type: 'text',
+          text: ocrResult.text,
+        });
+        console.log(`[Anthropic] Using OCR text for PDF ${file.name}: ${ocrResult.text.length} chars (confidence: ${ocrResult.confidence})`);
+      } else {
+        // Fallback to Anthropic's native PDF handling
+        console.log(`[Anthropic] Falling back to native PDF handling for ${file.name}`);
+        content.push({
+          type: 'document',
+          source: {
+            type: 'base64',
+            media_type: 'application/pdf',
+            data: file.content,
+          },
+        });
+        content.push({
+          type: 'text',
+          text: `[Arquivo PDF: ${file.name}]`,
+        });
+      }
     } else if (file.mimeType.includes('spreadsheet') || file.mimeType.includes('excel') || 
                file.name.endsWith('.xlsx') || file.name.endsWith('.xls')) {
       // Extract text from Excel
@@ -1079,7 +1271,7 @@ async function callAnthropicAPI(prompt: string, files: FileForAnalysis[]): Promi
   return { text: textContent.text, warnings };
 }
 
-// Call Gemini API directly as fallback
+// Call Gemini API directly as fallback (with OCR support for scanned PDFs)
 async function callGeminiAPI(prompt: string, files: FileForAnalysis[]): Promise<ApiResponse> {
   const geminiApiKey = Deno.env.get('GEMINI_API_KEY');
   
@@ -1093,16 +1285,46 @@ async function callGeminiAPI(prompt: string, files: FileForAnalysis[]): Promise<
   const parts: any[] = [];
   
   for (const file of files) {
-    if (file.mimeType.startsWith('image/') || file.mimeType === 'application/pdf') {
-      parts.push({
-        inline_data: {
-          mime_type: file.mimeType,
-          data: file.content,
-        },
-      });
-      parts.push({
-        text: `[Arquivo: ${file.name}]`,
-      });
+    if (file.mimeType === 'application/pdf') {
+      // For PDFs, use OCR extraction to handle scanned documents
+      const ocrResult = await extractTextWithOCR(file.content, file.mimeType, file.name);
+      
+      if (ocrResult.confidence !== 'low' && ocrResult.text.length > 100) {
+        // Use OCR extracted text for better analysis
+        parts.push({ text: ocrResult.text });
+        console.log(`[Gemini] Using OCR text for PDF ${file.name}: ${ocrResult.text.length} chars`);
+      } else {
+        // Fallback to native Gemini PDF handling
+        console.log(`[Gemini] Using native inline_data for PDF ${file.name}`);
+        parts.push({
+          inline_data: {
+            mime_type: file.mimeType,
+            data: file.content,
+          },
+        });
+        parts.push({
+          text: `[Arquivo: ${file.name}]`,
+        });
+      }
+    } else if (file.mimeType.startsWith('image/')) {
+      // For images, use OCR extraction
+      const ocrResult = await extractTextWithOCR(file.content, file.mimeType, file.name);
+      
+      if (ocrResult.confidence !== 'low' && ocrResult.text.length > 50) {
+        parts.push({ text: ocrResult.text });
+        console.log(`[Gemini] Using OCR text for image ${file.name}: ${ocrResult.text.length} chars`);
+      } else {
+        // Fallback to native image handling
+        parts.push({
+          inline_data: {
+            mime_type: file.mimeType,
+            data: file.content,
+          },
+        });
+        parts.push({
+          text: `[Arquivo: ${file.name}]`,
+        });
+      }
     } else if (file.mimeType.includes('spreadsheet') || file.mimeType.includes('excel') ||
                file.name.endsWith('.xlsx') || file.name.endsWith('.xls')) {
       try {
