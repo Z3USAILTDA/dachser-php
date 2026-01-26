@@ -132,6 +132,10 @@ interface ReextractionResult {
   extractionHint: string;
   nearbyText: string;
   confidence: 'alta' | 'media' | 'baixa';
+  // NEW: Processing instruction for calculated values
+  isCalculated: boolean;
+  calculationFormula: string | null;
+  processingInstruction: string | null;
 }
 
 async function reextractFieldWithContext(
@@ -151,11 +155,14 @@ async function reextractFieldWithContext(
       pattern: '',
       extractionHint: '',
       nearbyText: '',
-      confidence: 'baixa'
+      confidence: 'baixa',
+      isCalculated: false,
+      calculationFormula: null,
+      processingInstruction: null,
     };
   }
 
-  const prompt = `TAREFA DE EXTRAÇÃO PRECISA - ANÁLISE PROFUNDA
+  const prompt = `TAREFA DE EXTRAÇÃO PRECISA - ANÁLISE PROFUNDA COM DETECÇÃO DE CÁLCULOS
 
 Você é um especialista em documentos de comércio exterior (AWBs, Invoices, Packing Lists, CCTs, BLs).
 
@@ -174,6 +181,13 @@ INSTRUÇÕES DETALHADAS:
 4. Identifique a LOCALIZAÇÃO exata (página, seção, tabela, linha)
 5. Capture o CONTEXTO próximo (10-15 palavras antes e depois)
 
+🔴 DETECÇÃO DE CÁLCULO (CRÍTICO):
+6. VERIFIQUE se o valor "${correctedValue}" é o RESULTADO DE UM CÁLCULO:
+   - O documento tem MÚLTIPLOS ITENS/LINHAS com valores que SOMADOS resultam em "${correctedValue}"?
+   - Exemplo: Se o documento tem itens com peso 50, 30, 21.5 e o valor corrigido é 101.5, então é uma SOMA
+   - Se for uma soma/cálculo, IDENTIFIQUE A FÓRMULA EXATA (ex: "50 + 30 + 21.5 = 101.5")
+   - Crie uma INSTRUÇÃO DE PROCESSAMENTO que ensine o LLM a fazer o mesmo cálculo
+
 RESPONDA EXATAMENTE no formato JSON:
 {
   "found": true ou false,
@@ -181,12 +195,16 @@ RESPONDA EXATAMENTE no formato JSON:
   "pattern": "padrão para localizar: ex: 'Após o label Gross Weight:' ou 'Na coluna G após o total'",
   "extractionHint": "dica para futuras extrações: ex: 'Procurar após TOTALS na seção de pesos, valor com 1 casa decimal'",
   "nearbyText": "texto próximo: ex: 'Total Gross Weight: [VALOR] kg | Net Weight:'",
-  "confidence": "alta" se encontrou exato, "media" se formato diferente, "baixa" se não encontrou
+  "confidence": "alta" se encontrou exato, "media" se formato diferente, "baixa" se não encontrou,
+  "isCalculated": true/false - SE O VALOR É RESULTADO DE UMA SOMA/CÁLCULO DE MÚLTIPLOS ITENS,
+  "calculationFormula": "50 + 30 + 21.5 = 101.5" ou null SE NÃO FOR CALCULADO,
+  "processingInstruction": "SOME todos os valores da coluna 'Gross Weight' para obter o total" ou null SE NÃO FOR CALCULADO
 }
 
 IMPORTANTE:
-- Se o valor não existir LITERALMENTE, retorne found=false
-- Se existir mas com formatação diferente (97,3 vs 97.30), indique found=true com confidence="media"
+- Se o valor não existir LITERALMENTE, verifique se é um CÁLCULO de outros valores
+- Se o valor é uma SOMA de itens, retorne found=true, isCalculated=true com fórmula e instrução
+- A "processingInstruction" deve ser uma instrução CLARA que ensine o LLM a extrair corretamente
 - Seja específico na localização para que possamos encontrar automaticamente em documentos similares`;
 
   try {
@@ -219,7 +237,10 @@ IMPORTANTE:
         pattern: '',
         extractionHint: '',
         nearbyText: '',
-        confidence: 'baixa'
+        confidence: 'baixa',
+        isCalculated: false,
+        calculationFormula: null,
+        processingInstruction: null,
       };
     }
 
@@ -238,7 +259,10 @@ IMPORTANTE:
         pattern: parsed.pattern || '',
         extractionHint: parsed.extractionHint || '',
         nearbyText: parsed.nearbyText || '',
-        confidence: parsed.confidence || 'baixa'
+        confidence: parsed.confidence || 'baixa',
+        isCalculated: parsed.isCalculated ?? false,
+        calculationFormula: parsed.calculationFormula || null,
+        processingInstruction: parsed.processingInstruction || null,
       };
     }
     
@@ -250,7 +274,10 @@ IMPORTANTE:
       pattern: '',
       extractionHint: '',
       nearbyText: '',
-      confidence: 'baixa'
+      confidence: 'baixa',
+      isCalculated: false,
+      calculationFormula: null,
+      processingInstruction: null,
     };
   } catch (error) {
     console.error('[chb-corrections] reextractFieldWithContext error:', error);
@@ -261,7 +288,10 @@ IMPORTANTE:
       pattern: '',
       extractionHint: '',
       nearbyText: '',
-      confidence: 'baixa'
+      confidence: 'baixa',
+      isCalculated: false,
+      calculationFormula: null,
+      processingInstruction: null,
     };
   }
 }
@@ -315,17 +345,18 @@ async function reextractAndUpdateCorrection(
       // Determine document type from filename
       const docType = detectDocumentType(filename);
       
-      // Save extraction rule for future use
+      // Save extraction rule for future use WITH processing instruction
       await saveExtractionRule(
         client,
         fieldName,
         docType,
         reextractionResult.pattern,
         reextractionResult.extractionHint,
-        correctedValue
+        correctedValue,
+        reextractionResult.processingInstruction // NEW: Pass processing instruction
       );
       
-      console.log(`[chb-corrections] Updated correction ${correctionId} and saved extraction rule`);
+      console.log(`[chb-corrections] Updated correction ${correctionId} and saved extraction rule (isCalculated: ${reextractionResult.isCalculated}, formula: ${reextractionResult.calculationFormula})`);
     } else {
       console.log(`[chb-corrections] Re-extraction did not find value for correction ${correctionId}`);
     }
@@ -353,19 +384,31 @@ function detectDocumentType(filename: string): string {
   return 'Outros';
 }
 
-// Save extraction rule for future learning
+// Save extraction rule for future learning WITH processing instruction
 async function saveExtractionRule(
   client: Client,
   fieldName: string,
   documentType: string,
   pattern: string,
   extractionHint: string,
-  exampleValue: string
+  exampleValue: string,
+  processingInstruction: string | null = null // NEW: Processing instruction for calculated values
 ): Promise<void> {
   try {
+    // First, ensure the processing_instruction column exists
+    try {
+      await client.execute(`
+        ALTER TABLE ai_agente.t_dachser_chb_extraction_rules
+        ADD COLUMN IF NOT EXISTS processing_instruction VARCHAR(1000) DEFAULT NULL
+      `);
+    } catch (alterError) {
+      // Column might already exist, ignore error
+      console.log('[chb-corrections] processing_instruction column check (might already exist)');
+    }
+    
     // Check if rule already exists
     const existing = await client.query(`
-      SELECT id, times_used, success_rate 
+      SELECT id, times_used, success_rate, processing_instruction 
       FROM ai_agente.t_dachser_chb_extraction_rules
       WHERE field_name = ? AND document_type = ?
       LIMIT 1
@@ -377,6 +420,9 @@ async function saveExtractionRule(
       const newTimesUsed = (rule.times_used || 0) + 1;
       const newSuccessRate = Math.min(100, ((rule.success_rate || 50) + 100) / 2); // Moving average
       
+      // Only update processing_instruction if we have a new one (don't clear existing)
+      const effectiveInstruction = processingInstruction || rule.processing_instruction || null;
+      
       await client.execute(`
         UPDATE ai_agente.t_dachser_chb_extraction_rules
         SET extraction_pattern = ?,
@@ -384,20 +430,21 @@ async function saveExtractionRule(
             example_value = ?,
             times_used = ?,
             success_rate = ?,
+            processing_instruction = ?,
             updated_at = NOW()
         WHERE id = ?
-      `, [pattern, extractionHint, exampleValue, newTimesUsed, newSuccessRate, rule.id]);
+      `, [pattern, extractionHint, exampleValue, newTimesUsed, newSuccessRate, effectiveInstruction, rule.id]);
       
-      console.log(`[chb-corrections] Updated extraction rule ${rule.id} for ${fieldName}/${documentType}`);
+      console.log(`[chb-corrections] Updated extraction rule ${rule.id} for ${fieldName}/${documentType} (processing_instruction: ${effectiveInstruction ? 'YES' : 'NO'})`);
     } else {
       // Insert new rule
       await client.execute(`
         INSERT INTO ai_agente.t_dachser_chb_extraction_rules
-        (field_name, document_type, extraction_pattern, location_hint, example_value, times_used, success_rate)
-        VALUES (?, ?, ?, ?, ?, 1, 80.00)
-      `, [fieldName, documentType, pattern, extractionHint, exampleValue]);
+        (field_name, document_type, extraction_pattern, location_hint, example_value, times_used, success_rate, processing_instruction)
+        VALUES (?, ?, ?, ?, ?, 1, 80.00, ?)
+      `, [fieldName, documentType, pattern, extractionHint, exampleValue, processingInstruction]);
       
-      console.log(`[chb-corrections] Created new extraction rule for ${fieldName}/${documentType}`);
+      console.log(`[chb-corrections] Created new extraction rule for ${fieldName}/${documentType} (processing_instruction: ${processingInstruction ? 'YES' : 'NO'})`);
     }
   } catch (error) {
     console.error('[chb-corrections] Error saving extraction rule:', error);
