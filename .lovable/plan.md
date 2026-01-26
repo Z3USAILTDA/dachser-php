@@ -1,116 +1,95 @@
 
-# Plano: Filtrar ETD >= 2026-01-01 para Exibição E Processamento
+# Plano: Corrigir Erro "Data Truncated" no CHB
 
-## Objetivo
-Aplicar o filtro ETD >= 01/01/2026 na Edge Function `draft-fetch-mariadb` para garantir que:
-1. Apenas processos de 2026 em diante sejam **exibidos** na tela
-2. Apenas processos de 2026 em diante sejam **processados** (tracking Hapag-Lloyd)
+## Problema Identificado
+
+O Edge Function `analyze-chb-documents` está falhando com:
+```
+Data truncated for column 'id' at row 1
+```
+
+A causa é a tentativa de inserir um UUID de 36 caracteres (ex: `550e8400-e29b-41d4-a716-446655440000`) na coluna `id` da tabela `ai_agente.t_dachser_chb_runs`, que provavelmente é do tipo `INT AUTO_INCREMENT`.
 
 ---
 
-## Por que isso funciona?
+## Solução
 
-A arquitetura do módulo Status Doc Exportação usa um único ponto de entrada de dados:
+Remover o uso de UUID customizado e usar o ID auto-incrementado gerado pelo banco de dados.
 
-```text
-draft-fetch-mariadb (fonte única)
-        │
-        ├──► Grid de Dados (exibição)
-        │
-        └──► Tracker (processamento)
-                │
-                └──► draft-track-hapag-multi
-                        │
-                        └──► draft-save-tracking (persiste em t_consulta_armador)
-```
+### Arquivo: `supabase/functions/analyze-chb-documents/index.ts`
 
-Ao filtrar na fonte (`draft-fetch-mariadb`), nenhum MBL antigo sequer chega ao pipeline de processamento.
+**Alterações:**
 
----
-
-## Alteração Técnica
-
-### Arquivo:
-**`supabase/functions/draft-fetch-mariadb/index.ts`**
-
-### Código Atual (linha 42-56):
+1. **Linha 1806-1820** - Criação do request:
 ```typescript
-// Execute query to get MBLs - filtered by ETD last 3 months
-const query = `
-  SELECT 
-    tmd.mawb as mbl_id,
-    tmd.tipo_processo,
-    tmd.etd,
-    tmd.shipper
-  FROM 
-    dados_dachser.t_master_dados tmd
-  WHERE 
-    tmd.tipo_processo = 'SEA EXPORT'
-    AND tmd.mawb LIKE '%HLC%'
-    AND tmd.etd >= DATE_SUB(CURDATE(), INTERVAL 3 MONTH)
-  ORDER BY tmd.etd DESC, tmd.mawb
-`;
+// ANTES:
+const requestId = crypto.randomUUID();
+await callMariaDBProxy('create_chb_run', {
+  id: requestId,
+  itemId: itemId || 0,
+  etapa: stepId.toString(),
+  status: 'pending',
+  resultText: JSON.stringify({ ... })
+});
+
+// DEPOIS:
+const createRunResult = await callMariaDBProxy('create_chb_run', {
+  itemId: itemId || 0,
+  etapa: stepId.toString(),
+  status: 'pending',
+  resultText: JSON.stringify({ ... })
+});
+const requestId = String(createRunResult.runId); // ID gerado pelo banco
 ```
 
-### Código Novo:
-```typescript
-// Execute query to get MBLs - filtered by ETD from 2026-01-01 onwards
-// This ensures both display AND processing only consider 2026+ data
-const query = `
-  SELECT 
-    tmd.mawb as mbl_id,
-    tmd.tipo_processo,
-    tmd.etd,
-    tmd.shipper
-  FROM 
-    dados_dachser.t_master_dados tmd
-  WHERE 
-    tmd.tipo_processo = 'SEA EXPORT'
-    AND tmd.mawb LIKE '%HLC%'
-    AND tmd.etd >= '2026-01-01'
-  ORDER BY tmd.etd DESC, tmd.mawb
-`;
-```
+2. **Todas as referências** a `requestId` continuam funcionando pois agora usam o ID do banco.
 
 ---
 
 ## Impacto
 
-| Componente | Efeito |
-|------------|--------|
-| Grid de Dados | Exibe apenas MBLs com ETD >= 2026-01-01 |
-| Tracker Manual | Só processa MBLs listados (todos com ETD >= 2026-01-01) |
-| KPIs/Estatísticas | Calculados apenas com dados de 2026+ |
-| `t_consulta_armador` | Novos registros serão apenas de 2026+ |
-| CCT Dashboard | Sem alteração (usa `mariadb-proxy`) |
+| Componente | Mudança |
+|------------|---------|
+| Criação de análise CHB | Usa ID auto-incrementado |
+| Polling de status | Continua funcionando (usa mesmo ID) |
+| Background processing | Continua funcionando |
+| Dados existentes | Sem impacto |
 
 ---
 
-## Reversibilidade
+## Benefícios
 
-Para alterar o filtro no futuro:
-```sql
--- Voltar para 3 meses dinâmicos:
-AND tmd.etd >= DATE_SUB(CURDATE(), INTERVAL 3 MONTH)
-
--- Outra data específica:
-AND tmd.etd >= 'YYYY-MM-DD'
-```
+- Compatibilidade com schema existente do MariaDB
+- Sem necessidade de alterar estrutura do banco
+- IDs menores e mais simples de debugar
 
 ---
 
 ## Passos de Implementação
 
-1. Editar `supabase/functions/draft-fetch-mariadb/index.ts`
-2. Alterar condição SQL de `DATE_SUB(CURDATE(), INTERVAL 3 MONTH)` para `'2026-01-01'`
-3. Atualizar comentário explicativo
+1. Editar `supabase/functions/analyze-chb-documents/index.ts`
+2. Remover `crypto.randomUUID()` 
+3. Usar `runId` retornado por `create_chb_run`
 4. Deploy automático da Edge Function
 
 ---
 
-## Resultado Esperado
+## Detalhes Técnicos
 
-Após a implementação:
-- A Grid mostrará apenas MBLs Hapag-Lloyd com ETD a partir de 01/01/2026
-- O Tracker só processará esses mesmos MBLs
-- Casos antigos (2025 e anteriores) não serão exibidos nem processados
+A ação `create_chb_run` no `mariadb-proxy` já suporta ambos os modos:
+
+```typescript
+// Com customId (atual - não funciona com INT):
+if (customId) {
+  await client.execute(`INSERT ... VALUES (?, ...)`, [customId, ...]);
+  result = { success: true, runId: customId };
+}
+
+// Sem customId (usar este):
+else {
+  const insertResult = await client.execute(`INSERT ...`, [...]);
+  result = { success: true, runId: insertResult.lastInsertId };
+}
+```
+
+Ao não passar o `id` na chamada, o banco gera automaticamente via AUTO_INCREMENT.
