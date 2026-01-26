@@ -612,6 +612,33 @@ REGRAS DE CONTEÚDO DA TABELA
    - Se Gross(BL) ≈ Net(PL) e há diferença de tara → 🟨 com nota explicativa
    - Divergência do MESMO campo > ${toleranciaPeso}% entre documentos → 🔴
    - Se DI usa líquido como bruto → 🔴 CRÍTICO
+   
+   ⚠️ REGRA CRÍTICA — AGREGAÇÃO DE PESO EM PACKING LIST:
+   Documentos de Packing List frequentemente apresentam PESO POR ITEM em vez de um total único.
+   
+   QUANDO IDENTIFICAR PESO ITEMIZADO NA PACKLIST:
+   1. Localize TODOS os valores de "Gross Weight" / "Peso Bruto" por linha/item
+   2. SOME todos os valores para obter o PESO BRUTO TOTAL
+   3. Use o TOTAL SOMADO na coluna da Packlist para comparação
+   4. Na seção Observações, indicar: "Peso Bruto na PL calculado a partir da soma de X itens"
+   
+   EXEMPLO:
+   Packlist contém:
+   - Item 001: Gross 10,5 kg
+   - Item 002: Gross 25,0 kg  
+   - Item 003: Gross 15,0 kg
+   
+   → Coluna "packlist.pdf" para campo "Peso Bruto" = "50,5" (soma: 10,5 + 25,0 + 15,0)
+   → Comparar esse total com CCT, HAWB, etc.
+   
+   MESMA REGRA APLICA PARA:
+   - Peso Líquido (Net Weight) por item → somar para total
+   - Quantidade de volumes por item → somar para total
+   - Valor por item → somar para valor total
+   
+   ⚠️ NÃO AGREGAR QUANDO:
+   - Documento já apresenta linha "Total" ou "Grand Total" explícita
+   - Nesse caso, usar o valor total explícito do documento
 
 6) INCOTERM e VALOR TOTAL FRETE — LINHAS SEPARADAS OBRIGATÓRIAS:
    - INCOTERM: linha própria (ex.: FOB, CFR, CIF, EXW, etc.)
