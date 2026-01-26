@@ -527,49 +527,27 @@ export default function ConferenciaChb() {
             
             const publicUrl = urlData?.publicUrl;
             
-            // Save file metadata to MariaDB
+            // Save file metadata to MariaDB using save_chb_file action
+            // This action inserts into t_dachser_chb_files AND links to t_dachser_chb_docs
             const { error: fileInsertError, data: fileData } = await supabase.functions.invoke('mariadb-proxy', {
               body: {
-                action: 'insert',
-                table: 'ai_agente.t_dachser_chb_files',
-                data: {
-                  item_id: itemId,
-                  filename: file.name,
-                  file_url: publicUrl || '',
-                  file_size: file.size,
-                  mime_type: file.type,
-                  created_at: new Date().toISOString().slice(0, 19).replace('T', ' '),
-                },
-                returnInsertId: true,
+                action: 'save_chb_file',
+                itemId: itemId,
+                filename: file.name,
+                mime: file.type,
+                sizeBytes: file.size,
+                sha256: null,
+                relPath: filePath,
+                url: publicUrl || '',
+                etapa: activeStep.toString(),
+                docRole: detectDocumentType(file.name),
+                userId: null,
               },
             });
             
-            if (fileInsertError) {
-              console.error('Error saving file to MariaDB:', fileInsertError);
+            if (fileInsertError || !fileData?.success) {
+              console.error('Error saving file to MariaDB:', fileInsertError || fileData);
               toast.error(`Erro ao salvar ${file.name}`);
-              continue;
-            }
-            
-            const fileId = fileData?.insertId;
-            
-            // Create document link
-            const { error: docInsertError } = await supabase.functions.invoke('mariadb-proxy', {
-              body: {
-                action: 'insert',
-                table: 'ai_agente.t_dachser_chb_docs',
-                data: {
-                  item_id: itemId,
-                  file_id: fileId,
-                  etapa: activeStep.toString(),
-                  doc_role: detectDocumentType(file.name),
-                  created_at: new Date().toISOString().slice(0, 19).replace('T', ' '),
-                },
-              },
-            });
-            
-            if (docInsertError) {
-              console.error('Error saving doc link to MariaDB:', docInsertError);
-              toast.error(`Erro ao salvar metadados de ${file.name}`);
               continue;
             }
             
