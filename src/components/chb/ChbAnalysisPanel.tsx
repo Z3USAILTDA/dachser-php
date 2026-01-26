@@ -13,6 +13,7 @@ interface ChbAnalysisPanelProps {
   isAnalyzing: boolean;
   hasFiles: boolean;
   isStepCompleted?: boolean;
+  isLastStepCompleted?: boolean;
   analysisProgress?: string;
   reference?: string;
   itemId?: number | null;
@@ -33,6 +34,7 @@ export function ChbAnalysisPanel({
   isAnalyzing,
   hasFiles,
   isStepCompleted = false,
+  isLastStepCompleted = false,
   analysisProgress = '',
   reference = '',
   itemId = null
@@ -175,14 +177,16 @@ export function ChbAnalysisPanel({
           Copiar Resultado
         </button>
 
-        <button
-          onClick={handleExportPDF}
-          className="flex items-center gap-1.5 px-4 py-2 rounded-full bg-white/10 border border-white/20
-            text-white text-xs font-medium hover:bg-white/20 transition-colors"
-        >
-          <FileDown className="w-3 h-3" />
-          Exportar PDF
-        </button>
+        {isLastStepCompleted && (
+          <button
+            onClick={handleExportPDF}
+            className="flex items-center gap-1.5 px-4 py-2 rounded-full bg-white/10 border border-white/20
+              text-white text-xs font-medium hover:bg-white/20 transition-colors"
+          >
+            <FileDown className="w-3 h-3" />
+            Exportar PDF
+          </button>
+        )}
 
         {!isStepCompleted && (
           <>

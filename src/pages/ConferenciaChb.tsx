@@ -884,6 +884,8 @@ export default function ConferenciaChb() {
       case 'analise':
         const currentStepData = steps.find(s => s.id === activeStep);
         const isStepCompleted = currentStepData?.status === 'completed';
+        const step3Data = steps.find(s => s.id === 3);
+        const isLastStepCompleted = step3Data?.status === 'completed';
         return (
           <ChbAnalysisPanel
             stepId={activeStep}
@@ -893,6 +895,7 @@ export default function ConferenciaChb() {
             isAnalyzing={isAnalyzing}
             hasFiles={(uploadedFiles[activeStep] || []).length > 0 || getDocumentsForStep(activeStep).some(d => d.file || d.url)}
             isStepCompleted={isStepCompleted}
+            isLastStepCompleted={isLastStepCompleted}
             analysisProgress={analysisProgress}
             reference={itemId ? `#${itemId}` : ''}
             itemId={itemId}
