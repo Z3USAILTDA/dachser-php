@@ -1525,7 +1525,56 @@ async function processAnalysisInBackground(
       }
     }
     
+    // Fetch learned extraction rules
+    let extractionRules: { field_name: string; document_type: string; extraction_pattern: string; location_hint: string; example_value: string; success_rate: number }[] = [];
+    try {
+      console.log(`[BG] Fetching learned extraction rules...`);
+      const rulesResult = await callMariaDBProxy('get_chb_extraction_rules', {});
+      extractionRules = rulesResult.rules || [];
+      console.log(`[BG] Found ${extractionRules.length} learned extraction rules`);
+    } catch (e) {
+      console.error('[BG] Error fetching extraction rules:', e);
+    }
+    
     let cachedContext = '';
+    
+    // Add learned extraction rules context (helps LLM find fields based on past corrections)
+    if (extractionRules.length > 0) {
+      cachedContext += `
+═══════════════════════════════════════════════════════════════════════════════
+📚 REGRAS DE EXTRAÇÃO APRENDIDAS (ALTA PRIORIDADE)
+═══════════════════════════════════════════════════════════════════════════════
+
+Com base em CORREÇÕES ANTERIORES do usuário, o sistema aprendeu onde encontrar cada campo.
+USE ESTAS DICAS para localizar os campos CORRETAMENTE:
+
+`;
+      for (const rule of extractionRules) {
+        cachedContext += `📍 Campo: ${rule.field_name}\n`;
+        cachedContext += `   Documento típico: ${rule.document_type}\n`;
+        if (rule.extraction_pattern) {
+          cachedContext += `   Padrão de busca: ${rule.extraction_pattern}\n`;
+        }
+        if (rule.location_hint) {
+          cachedContext += `   Localização comum: ${rule.location_hint}\n`;
+        }
+        if (rule.example_value) {
+          cachedContext += `   Exemplo de valor: "${rule.example_value}"\n`;
+        }
+        cachedContext += `   Confiança: ${rule.success_rate}%\n\n`;
+      }
+      
+      cachedContext += `
+⚠️ APLIQUE ESTAS DICAS:
+1. Procure cada campo seguindo o PADRÃO indicado acima
+2. A LOCALIZAÇÃO COMUM indica onde o campo geralmente aparece
+3. O EXEMPLO mostra o formato típico do valor
+4. Use estas dicas para NÃO errar na extração!
+
+═══════════════════════════════════════════════════════════════════════════════
+
+`;
+    }
     
     // Add user corrections context first (highest priority)
     if (userCorrections.length > 0) {

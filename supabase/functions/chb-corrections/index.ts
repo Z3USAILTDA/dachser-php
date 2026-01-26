@@ -120,9 +120,295 @@ Se o valor for numérico, considere formatações diferentes (97,3 vs 97.30 vs 9
   }
 }
 
+// ============================================================================
+// RE-EXTRACTION: Parallel deep analysis to find field location
+// ============================================================================
+
+interface ReextractionResult {
+  success: boolean;
+  found: boolean;
+  location: string;
+  pattern: string;
+  extractionHint: string;
+  nearbyText: string;
+  confidence: 'alta' | 'media' | 'baixa';
+}
+
+async function reextractFieldWithContext(
+  filename: string,
+  fieldName: string,
+  correctedValue: string,
+  fileContent: string
+): Promise<ReextractionResult> {
+  const geminiApiKey = Deno.env.get('GEMINI_API_KEY');
+  
+  if (!geminiApiKey) {
+    console.log('[chb-corrections] GEMINI_API_KEY not found for re-extraction');
+    return {
+      success: false,
+      found: false,
+      location: '',
+      pattern: '',
+      extractionHint: '',
+      nearbyText: '',
+      confidence: 'baixa'
+    };
+  }
+
+  const prompt = `TAREFA DE EXTRAÇÃO PRECISA - ANÁLISE PROFUNDA
+
+Você é um especialista em documentos de comércio exterior (AWBs, Invoices, Packing Lists, CCTs, BLs).
+
+OBJETIVO: Encontrar EXATAMENTE onde o valor "${correctedValue}" aparece para o campo "${fieldName}" no arquivo "${filename}".
+
+CONTEÚDO COMPLETO DO DOCUMENTO (analisar com atenção):
+${fileContent}
+
+INSTRUÇÕES DETALHADAS:
+1. Procure o valor "${correctedValue}" em TODO o documento
+2. Considere variações de formatação:
+   - Números: 97,3 = 97.3 = 97,30 = 97.30
+   - Milhares: 10.841 = 10,841 = 10841
+   - Com/sem unidades: "97,3 kg" vs "97,3"
+3. Identifique o PADRÃO de extração (como o campo é identificado no documento)
+4. Identifique a LOCALIZAÇÃO exata (página, seção, tabela, linha)
+5. Capture o CONTEXTO próximo (10-15 palavras antes e depois)
+
+RESPONDA EXATAMENTE no formato JSON:
+{
+  "found": true ou false,
+  "location": "descrição precisa: ex: 'Página 1, seção TOTALS, linha 5' ou 'Tabela principal, coluna Gross Weight'",
+  "pattern": "padrão para localizar: ex: 'Após o label Gross Weight:' ou 'Na coluna G após o total'",
+  "extractionHint": "dica para futuras extrações: ex: 'Procurar após TOTALS na seção de pesos, valor com 1 casa decimal'",
+  "nearbyText": "texto próximo: ex: 'Total Gross Weight: [VALOR] kg | Net Weight:'",
+  "confidence": "alta" se encontrou exato, "media" se formato diferente, "baixa" se não encontrou
+}
+
+IMPORTANTE:
+- Se o valor não existir LITERALMENTE, retorne found=false
+- Se existir mas com formatação diferente (97,3 vs 97.30), indique found=true com confidence="media"
+- Seja específico na localização para que possamos encontrar automaticamente em documentos similares`;
+
+  try {
+    console.log(`[chb-corrections] Re-extracting "${correctedValue}" for field "${fieldName}" in ${filename}`);
+    
+    // Use more powerful model for deep analysis
+    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-pro-preview-06-05:generateContent?key=${geminiApiKey}`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        contents: [
+          { role: 'user', parts: [{ text: prompt }] }
+        ],
+        generationConfig: {
+          maxOutputTokens: 2000,
+          temperature: 0.1,
+        },
+      }),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('[chb-corrections] Gemini Pro API error:', errorText);
+      return {
+        success: false,
+        found: false,
+        location: '',
+        pattern: '',
+        extractionHint: '',
+        nearbyText: '',
+        confidence: 'baixa'
+      };
+    }
+
+    const result = await response.json();
+    const content = result.candidates?.[0]?.content?.parts?.[0]?.text || '';
+    
+    // Parse JSON from response
+    const jsonMatch = content.match(/\{[\s\S]*\}/);
+    if (jsonMatch) {
+      const parsed = JSON.parse(jsonMatch[0]);
+      console.log(`[chb-corrections] Re-extraction result:`, parsed);
+      return {
+        success: true,
+        found: parsed.found ?? false,
+        location: parsed.location || '',
+        pattern: parsed.pattern || '',
+        extractionHint: parsed.extractionHint || '',
+        nearbyText: parsed.nearbyText || '',
+        confidence: parsed.confidence || 'baixa'
+      };
+    }
+    
+    console.log('[chb-corrections] Could not parse re-extraction response');
+    return {
+      success: false,
+      found: false,
+      location: '',
+      pattern: '',
+      extractionHint: '',
+      nearbyText: '',
+      confidence: 'baixa'
+    };
+  } catch (error) {
+    console.error('[chb-corrections] reextractFieldWithContext error:', error);
+    return {
+      success: false,
+      found: false,
+      location: '',
+      pattern: '',
+      extractionHint: '',
+      nearbyText: '',
+      confidence: 'baixa'
+    };
+  }
+}
+
+// Update correction with re-extracted location and save extraction rule
+async function reextractAndUpdateCorrection(
+  correctionId: number,
+  itemId: number,
+  filename: string,
+  fieldName: string,
+  correctedValue: string,
+  fileContent: string
+): Promise<void> {
+  console.log(`[chb-corrections] Starting parallel re-extraction for correction ${correctionId}`);
+  
+  let client: Client | null = null;
+  
+  try {
+    const reextractionResult = await reextractFieldWithContext(
+      filename,
+      fieldName,
+      correctedValue,
+      fileContent
+    );
+
+    if (!reextractionResult.success) {
+      console.log(`[chb-corrections] Re-extraction failed for correction ${correctionId}`);
+      return;
+    }
+
+    client = await getMariaDBClient();
+
+    // Update the correction with better location info if found
+    if (reextractionResult.found) {
+      console.log(`[chb-corrections] Re-extraction found location, updating correction ${correctionId}`);
+      
+      await client.execute(`
+        UPDATE ai_agente.t_dachser_chb_user_corrections
+        SET location_reference = ?,
+            location_context = ?,
+            location_confidence = ?,
+            updated_at = NOW()
+        WHERE id = ?
+      `, [
+        reextractionResult.location,
+        reextractionResult.nearbyText,
+        reextractionResult.confidence,
+        correctionId
+      ]);
+      
+      // Determine document type from filename
+      const docType = detectDocumentType(filename);
+      
+      // Save extraction rule for future use
+      await saveExtractionRule(
+        client,
+        fieldName,
+        docType,
+        reextractionResult.pattern,
+        reextractionResult.extractionHint,
+        correctedValue
+      );
+      
+      console.log(`[chb-corrections] Updated correction ${correctionId} and saved extraction rule`);
+    } else {
+      console.log(`[chb-corrections] Re-extraction did not find value for correction ${correctionId}`);
+    }
+
+    await client.close();
+  } catch (error) {
+    console.error(`[chb-corrections] Error in reextractAndUpdateCorrection:`, error);
+    await client?.close();
+  }
+}
+
+// Detect document type from filename
+function detectDocumentType(filename: string): string {
+  const lowerName = filename.toLowerCase();
+  
+  if (lowerName.includes('cct') || lowerName.includes('conhecimento')) return 'CCT';
+  if (lowerName.includes('hawb') || lowerName.includes('house')) return 'HAWB';
+  if (lowerName.includes('mawb') || lowerName.includes('master')) return 'MAWB';
+  if (lowerName.includes('invoice') || lowerName.includes('fatura')) return 'Invoice';
+  if (lowerName.includes('packing') || lowerName.includes('romaneio')) return 'PackingList';
+  if (lowerName.includes('bl') || lowerName.includes('bill')) return 'BL';
+  if (lowerName.includes('ce') || lowerName.includes('mercante')) return 'CE_Mercante';
+  if (lowerName.includes('di') || lowerName.includes('declaracao')) return 'DI';
+  
+  return 'Outros';
+}
+
+// Save extraction rule for future learning
+async function saveExtractionRule(
+  client: Client,
+  fieldName: string,
+  documentType: string,
+  pattern: string,
+  extractionHint: string,
+  exampleValue: string
+): Promise<void> {
+  try {
+    // Check if rule already exists
+    const existing = await client.query(`
+      SELECT id, times_used, success_rate 
+      FROM ai_agente.t_dachser_chb_extraction_rules
+      WHERE field_name = ? AND document_type = ?
+      LIMIT 1
+    `, [fieldName, documentType]);
+
+    if (existing && existing.length > 0) {
+      // Update existing rule
+      const rule = existing[0];
+      const newTimesUsed = (rule.times_used || 0) + 1;
+      const newSuccessRate = Math.min(100, ((rule.success_rate || 50) + 100) / 2); // Moving average
+      
+      await client.execute(`
+        UPDATE ai_agente.t_dachser_chb_extraction_rules
+        SET extraction_pattern = ?,
+            location_hint = ?,
+            example_value = ?,
+            times_used = ?,
+            success_rate = ?,
+            updated_at = NOW()
+        WHERE id = ?
+      `, [pattern, extractionHint, exampleValue, newTimesUsed, newSuccessRate, rule.id]);
+      
+      console.log(`[chb-corrections] Updated extraction rule ${rule.id} for ${fieldName}/${documentType}`);
+    } else {
+      // Insert new rule
+      await client.execute(`
+        INSERT INTO ai_agente.t_dachser_chb_extraction_rules
+        (field_name, document_type, extraction_pattern, location_hint, example_value, times_used, success_rate)
+        VALUES (?, ?, ?, ?, ?, 1, 80.00)
+      `, [fieldName, documentType, pattern, extractionHint, exampleValue]);
+      
+      console.log(`[chb-corrections] Created new extraction rule for ${fieldName}/${documentType}`);
+    }
+  } catch (error) {
+    console.error('[chb-corrections] Error saving extraction rule:', error);
+    // Don't throw - this is not critical
+  }
+}
+
 // Setup table if not exists
 async function ensureTableExists(client: Client): Promise<void> {
   try {
+    // Create corrections table
     await client.execute(`
       CREATE TABLE IF NOT EXISTS ai_agente.t_dachser_chb_user_corrections (
         id INT AUTO_INCREMENT PRIMARY KEY,
@@ -145,7 +431,25 @@ async function ensureTableExists(client: Client): Promise<void> {
         INDEX idx_field (field_name)
       )
     `);
-    console.log('[chb-corrections] Table ensured');
+    
+    // Create extraction rules table for learning
+    await client.execute(`
+      CREATE TABLE IF NOT EXISTS ai_agente.t_dachser_chb_extraction_rules (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        field_name VARCHAR(100) NOT NULL,
+        document_type VARCHAR(50),
+        extraction_pattern VARCHAR(500),
+        location_hint VARCHAR(500),
+        example_value VARCHAR(255),
+        times_used INT DEFAULT 0,
+        success_rate DECIMAL(5,2) DEFAULT 50.00,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        INDEX idx_field_doc (field_name, document_type)
+      )
+    `);
+    
+    console.log('[chb-corrections] Tables ensured');
   } catch (e) {
     console.error('[chb-corrections] Table creation error:', e);
   }
@@ -335,12 +639,47 @@ serve(async (req) => {
           correctionId = insertResult.lastInsertId as number;
         }
 
+        // ============================================================================
+        // PARALLEL RE-EXTRACTION: When location not found, trigger deep analysis
+        // ============================================================================
+        if (!locationResult.found && effectiveFileContent) {
+          console.log(`[chb-corrections] Location not found, starting parallel re-extraction for correction ${correctionId}`);
+          
+          // Dispatch parallel re-extraction (non-blocking)
+          // deno-lint-ignore no-explicit-any
+          const edgeRuntime = (globalThis as any).EdgeRuntime;
+          if (edgeRuntime?.waitUntil) {
+            edgeRuntime.waitUntil(
+              reextractAndUpdateCorrection(
+                correctionId,
+                item_id,
+                filename,
+                field_name,
+                corrected_value,
+                effectiveFileContent
+              )
+            );
+            console.log(`[chb-corrections] Parallel re-extraction dispatched for correction ${correctionId}`);
+          } else {
+            // Fallback: run async without waiting (best effort)
+            reextractAndUpdateCorrection(
+              correctionId,
+              item_id,
+              filename,
+              field_name,
+              corrected_value,
+              effectiveFileContent
+            ).catch(err => console.error('[chb-corrections] Re-extraction error:', err));
+          }
+        }
+
         await client.close();
         return new Response(
           JSON.stringify({
             success: true,
             correction_id: correctionId,
-            location: locationResult
+            location: locationResult,
+            parallelReextractionStarted: !locationResult.found && !!effectiveFileContent
           }),
           { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
         );
