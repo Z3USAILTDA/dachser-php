@@ -1,141 +1,170 @@
 
-# Plano: Sistema de Aprendizado CHB - Correções Ensinam o LLM (Não Mascaram)
+# Plano: Mapeamento Centralizado de Prefixos MBL para Identificação de Armadores
 
-## Problema Central Identificado
+## Objetivo
+Criar um mapeamento centralizado e completo de prefixos MBL (Bill of Lading) para identificar automaticamente o armador (shipping line) responsável pelo transporte marítimo.
 
-O sistema atual funciona assim:
-1. ✅ Correções são salvas em `t_dachser_chb_user_corrections`
-2. ✅ Regras de extração são criadas em `t_dachser_chb_extraction_rules`
-3. ✅ Regras são injetadas no prompt como "dicas de localização"
-4. ❌ **MAS as dicas são insuficientes** - apenas indicam "onde procurar"
-5. ❌ **Não ensinam COMO calcular** (ex: somar itens de uma Packlist)
+## Situação Atual
 
-### Exemplo do Problema
-Regra atual para `peso_bruto_kg`:
-```
-Padrão de busca: "O valor está no campo Gross Weight"
-Localização comum: "Tabela de totais"
-```
+O projeto possui **4 mapeamentos dispersos** em diferentes arquivos:
 
-Isso **não ensina** o LLM que quando há peso por item, ele deve **somar**.
+| Local | Escopo | Problema |
+|-------|--------|----------|
+| `olimpo-proxy/index.ts` | MBL + Container prefixes | Duplicado em múltiplas funções |
+| `demurrage-import-jsoncargo/index.ts` | MBL prefixes (array) | Incompleto |
+| `fetch-sea-master-dados-stats/index.ts` | SCAC para nomes | Apenas estatísticas |
+| `ImportMblDialog.tsx` | Frontend simplificado | Muito básico |
 
-## Solução: Enriquecer Regras com Instruções de Processamento
+## Implementação
 
-### Fase 1: Adicionar Campo de Instrução de Processamento
+### Fase 1: Criar Arquivo Central de Mapeamentos
 
-Modificar a tabela de regras para incluir um campo `processing_instruction` que contenha a **lógica de cálculo** quando necessário.
+**Arquivo:** `src/lib/shippingLineMapping.ts`
 
-```sql
-ALTER TABLE ai_agente.t_dachser_chb_extraction_rules
-ADD COLUMN processing_instruction VARCHAR(1000) DEFAULT NULL;
-```
-
-### Fase 2: Atualizar Geração de Regras no chb-corrections
-
-Quando o sistema aprende uma correção, usar o LLM para identificar se o valor é:
-- Direto (copiar do documento)
-- Calculado (soma de itens, conversão, etc.)
-
-E salvar a instrução de processamento:
-```
-Campo: peso_bruto_kg
-Documento: Packlist
-Instrução: "Este documento apresenta peso por item. SOME todos os valores 
-da coluna 'Gross Weight' para obter o total. Ex: 10.5 + 25.0 + 15.0 = 50.5"
-```
-
-### Fase 3: Injetar Instruções no Prompt de Análise
-
-Modificar `analyze-chb-documents` para incluir instruções de processamento:
-
-```typescript
-for (const rule of extractionRules) {
-  cachedContext += `📍 Campo: ${rule.field_name}\n`;
-  cachedContext += `   Documento típico: ${rule.document_type}\n`;
-  if (rule.extraction_pattern) {
-    cachedContext += `   Padrão de busca: ${rule.extraction_pattern}\n`;
-  }
-  // NOVO: Instrução de processamento
-  if (rule.processing_instruction) {
-    cachedContext += `   ⚠️ INSTRUÇÃO ESPECIAL: ${rule.processing_instruction}\n`;
-  }
-}
-```
-
-### Fase 4: Melhorar Prompt de Re-extração
-
-Atualizar `reextractFieldWithContext` em `chb-corrections` para identificar padrões de cálculo:
-
-```typescript
-const reextractionPrompt = `
-Analise esta correção feita pelo usuário:
-- Campo: ${fieldName}
-- Valor corrigido: ${correctedValue}
-- Arquivo: ${filename}
-
-CONTEÚDO DO ARQUIVO:
-${fileContent}
-
-DETERMINE:
-1. O valor foi extraído diretamente de um campo único?
-2. O valor foi CALCULADO (soma, média, conversão)?
-   - Se calculado, identifique a FÓRMULA usada
-   - Liste os valores originais e como foram somados/processados
-
-RETORNE JSON:
-{
-  "found": true,
-  "location": "onde está no documento",
-  "is_calculated": true/false,
-  "calculation_formula": "10.5 + 25.0 + 15.0 = 50.5" ou null,
-  "processing_instruction": "SOME todos os valores da coluna X" ou null,
-  "extraction_pattern": "padrão para encontrar o campo",
-  "confidence": "alta"
-}
-`;
-```
-
-## Resumo de Arquivos a Modificar
-
-| Arquivo | Alteração |
-|---------|-----------|
-| `supabase/functions/chb-corrections/index.ts` | 1. Adicionar coluna `processing_instruction` na tabela<br>2. Melhorar prompt de re-extração para detectar cálculos<br>3. Salvar instrução de processamento na regra |
-| `supabase/functions/analyze-chb-documents/index.ts` | 1. Injetar `processing_instruction` no contexto do prompt<br>2. Formatar instruções como obrigatórias |
-
-## Fluxo Completo Após Implementação
+Estrutura do mapeamento unificado:
 
 ```text
-┌─────────────────────────────────────────────────────────────────────────────┐
-│ 1. USUÁRIO CORRIGE: peso_bruto = "101,5" (era "ND" na Packlist)             │
-└─────────────────────────────────────────────────────────────────────────────┘
-                                    ↓
-┌─────────────────────────────────────────────────────────────────────────────┐
-│ 2. SISTEMA ANALISA O DOCUMENTO COM LLM:                                     │
-│    - "O arquivo tem 3 itens com Gross Weight: 50, 30, 21.5"                 │
-│    - "O valor 101.5 é a SOMA desses itens"                                  │
-│    - processing_instruction = "SOME todos os Gross Weight por item"         │
-└─────────────────────────────────────────────────────────────────────────────┘
-                                    ↓
-┌─────────────────────────────────────────────────────────────────────────────┐
-│ 3. REGRA SALVA EM t_dachser_chb_extraction_rules:                           │
-│    field_name: peso_bruto_kg                                                │
-│    document_type: Packlist                                                   │
-│    extraction_pattern: "Coluna 'Gross Weight' por item"                     │
-│    processing_instruction: "SOME todos os valores da coluna Gross Weight"  │
-└─────────────────────────────────────────────────────────────────────────────┘
-                                    ↓
-┌─────────────────────────────────────────────────────────────────────────────┐
-│ 4. PRÓXIMA ANÁLISE (qualquer item):                                         │
-│    Prompt inclui: "⚠️ INSTRUÇÃO ESPECIAL para peso_bruto_kg em Packlist:   │
-│    SOME todos os valores da coluna Gross Weight"                            │
-│    → LLM CALCULA CORRETAMENTE                                               │
-└─────────────────────────────────────────────────────────────────────────────┘
++------------------------+
+|  ShippingLineMapping   |
++------------------------+
+| - MBL_PREFIX_MAP       |  -> Prefixos MBL para código do armador
+| - CONTAINER_PREFIX_MAP |  -> Prefixos container para código do armador  
+| - SHIPPING_LINE_NAMES  |  -> Código para nome legível
+| - SHIPPING_LINE_COLORS |  -> Cores para UI (badges)
++------------------------+
+| + detectCarrierFromMbl |  -> Função de detecção automática
+| + getShippingLineName  |  -> Obter nome legível
+| + getShippingLineColor |  -> Obter cor do badge
+| + isValidMblFormat     |  -> Validar formato MBL
++------------------------+
 ```
+
+**Prefixos MBL a serem mapeados** (baseado em dados reais do banco):
+
+```text
+ARMADOR                  | PREFIXOS MBL
+-------------------------|------------------------------------------
+Hapag-Lloyd              | HLCU, HLXU, HLBU, HBG, SAHL, HLC
+MSC                      | MSCU, MEDU, MSCM, MSDU, MSCB, MSCR
+Maersk                   | MAEU, MRKU, MSKU, PONU, SUDU, HASL, HSUD
+Hamburg Sud (Maersk)     | SUDU, HASL, HSUD
+CMA CGM                  | CMAU, CGMU, CMDU, CXDU, APLU, APHU, ANLU
+ONE                      | ONEY, ONEU, NYKU, MOLU, KKFU, MOAU
+Evergreen                | EISU, EITU, EGSU, EGHU, EMCU, EGLV
+COSCO/OOCL               | COSU, CSNU, CBHU, OOLU, CSLU, CCLU
+Yang Ming                | YMLU, YMMU, YMPU
+HMM                      | HDMU, HMMU, HMCU, KMTU
+ZIM                      | ZIMU, ZCSU
+PIL                      | PCIU, PILU
+Wan Hai                  | WHLU, WANU
+Seaboard                 | SEAU
+Crowley                  | CROU, CLHU
+Arkas                    | ARKU
+Turkon                   | TRKU
+Grimaldi                 | GRIU
+SM Line                  | SMLM
+Transroll                | TRHU
+```
+
+**Prefixos internos DACHSER** (não são armadores):
+
+```text
+GLNL, GLSL, GLDL, BRSA, SSZ
+```
+
+### Fase 2: Criar Tipo TypeScript para Armadores
+
+**Arquivo:** `src/types/sea.ts` (adicionar ao existente)
+
+```typescript
+export type ShippingLineCode = 
+  | 'HAPAG_LLOYD' | 'MSC' | 'MAERSK' | 'CMA_CGM' 
+  | 'ONE' | 'EVERGREEN' | 'COSCO' | 'YANG_MING' 
+  | 'HMM' | 'ZIM' | 'PIL' | 'WAN_HAI' 
+  | 'SEABOARD' | 'CROWLEY' | 'ARKAS' | 'TURKON' 
+  | 'GRIMALDI' | 'SM_LINE' | 'TRANSROLL' | 'UNKNOWN';
+
+export interface ShippingLineInfo {
+  code: ShippingLineCode;
+  name: string;
+  country: string;
+  color: string;
+  apiSupported: boolean; // Se tem integração com API de tracking
+}
+```
+
+### Fase 3: Implementar Funções Utilitárias
+
+```typescript
+// Detecção automática de armador pelo MBL
+export function detectCarrierFromMbl(mbl: string): ShippingLineInfo {
+  const upper = mbl.toUpperCase().trim();
+  
+  // Tentar prefixos de 4 caracteres primeiro, depois 3
+  for (const length of [4, 3]) {
+    const prefix = upper.substring(0, length);
+    if (MBL_PREFIX_MAP[prefix]) {
+      return getShippingLineInfo(MBL_PREFIX_MAP[prefix]);
+    }
+  }
+  
+  return getShippingLineInfo('UNKNOWN');
+}
+
+// Verificar se MBL tem formato válido de armador
+export function isKnownCarrierMbl(mbl: string): boolean {
+  const info = detectCarrierFromMbl(mbl);
+  return info.code !== 'UNKNOWN';
+}
+
+// Obter lista de armadores com suporte a tracking API
+export function getTrackableCarriers(): ShippingLineInfo[] {
+  return Object.values(SHIPPING_LINE_INFO)
+    .filter(info => info.apiSupported);
+}
+```
+
+### Fase 4: Atualizar Edge Functions para Usar Mapeamento Central
+
+**Arquivos a modificar:**
+- `supabase/functions/olimpo-proxy/index.ts`
+- `supabase/functions/demurrage-import-jsoncargo/index.ts`
+- `supabase/functions/fetch-sea-master-dados-stats/index.ts`
+
+Como edge functions não podem importar de `src/`, o mapeamento será duplicado em:
+- `supabase/functions/_shared/shippingLineMapping.ts`
+
+### Fase 5: Atualizar Componentes Frontend
+
+**Arquivos a modificar:**
+- `src/components/demurrage/ImportMblDialog.tsx` - Usar novo utilitário
+- `src/pages/ContainerTracking.tsx` - Exibir badge com cor do armador
+
+## Arquivos a Criar/Modificar
+
+| Arquivo | Ação | Descrição |
+|---------|------|-----------|
+| `src/lib/shippingLineMapping.ts` | Criar | Mapeamento central para frontend |
+| `supabase/functions/_shared/shippingLineMapping.ts` | Criar | Mapeamento para edge functions |
+| `src/types/sea.ts` | Modificar | Adicionar tipos de armadores |
+| `src/components/demurrage/ImportMblDialog.tsx` | Modificar | Usar novo utilitário |
+| `supabase/functions/olimpo-proxy/index.ts` | Modificar | Importar mapeamento central |
+| `supabase/functions/demurrage-import-jsoncargo/index.ts` | Modificar | Importar mapeamento central |
 
 ## Resultado Esperado
 
-- Correções do usuário **ensinam** o LLM a processar corretamente
-- Regras incluem **instruções de cálculo** quando necessário
-- Próximas análises usam essas instruções para **extrair corretamente**
-- O sistema **aprende** e melhora com cada correção
-- Não há mais "mascaramento" - o LLM efetivamente corrige seu comportamento
+1. **Mapeamento único e centralizado** de 50+ prefixos MBL
+2. **Função `detectCarrierFromMbl()`** disponível em todo o projeto
+3. **Tipos TypeScript** para armadores com autocompletar
+4. **Cores consistentes** para badges de armadores na UI
+5. **Flag `apiSupported`** para identificar armadores com tracking disponível
+6. **Prefixos internos DACHSER** ignorados automaticamente
+
+## Armadores com API de Tracking Suportada
+
+| Armador | Integração | Status |
+|---------|------------|--------|
+| Hapag-Lloyd | `HAPAG_CLIENT_ID` + `HAPAG_API_KEY` | Ativa |
+| COSCO | Planejada | Pendente |
+| MSC | Via JSONCARGO | Parcial |
+| Maersk | Via JSONCARGO | Parcial |
