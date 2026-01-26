@@ -527,11 +527,11 @@ export default function ConferenciaChb() {
             
             const publicUrl = urlData?.publicUrl;
             
-            // Save file metadata to MariaDB using save_chb_file action
+            // Save file metadata to MariaDB using create_chb_file action
             // This action inserts into t_dachser_chb_files AND links to t_dachser_chb_docs
             const { error: fileInsertError, data: fileData } = await supabase.functions.invoke('mariadb-proxy', {
               body: {
-                action: 'save_chb_file',
+                action: 'create_chb_file',
                 itemId: itemId,
                 filename: file.name,
                 mime: file.type,
