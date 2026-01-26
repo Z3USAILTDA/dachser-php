@@ -11150,6 +11150,51 @@ serve(async (req) => {
         break;
       }
 
+      // ==================== SEA MBL EXPORT ====================
+      case 'get_sea_mbls_export': {
+        console.log('[MARIADB] Fetching maritime MBLs for Excel export (last 2 months)...');
+        
+        // Get MBLs from the last 2 months for SEA processes
+        const exportQuery = `
+          SELECT DISTINCT
+            tmd.mawb,
+            tmd.tipo_processo,
+            DATE_FORMAT(tmd.etd, '%Y-%m-%d') as etd,
+            DATE_FORMAT(tmd.eta, '%Y-%m-%d') as eta,
+            tmd.shipper,
+            tmd.consignee,
+            tmd.coordenador,
+            tmd.origem as origin,
+            tmd.destino as destination
+          FROM dados_dachser.t_master_dados tmd
+          WHERE tmd.tipo_processo LIKE '%SEA%'
+            AND tmd.etd >= DATE_SUB(CURDATE(), INTERVAL 2 MONTH)
+            AND tmd.mawb IS NOT NULL
+            AND tmd.mawb != ''
+          ORDER BY tmd.etd DESC, tmd.mawb
+        `;
+        
+        const exportRows = await client.query(exportQuery);
+        console.log(`[MARIADB] Found ${exportRows?.length || 0} maritime MBLs for export`);
+        
+        result = {
+          success: true,
+          data: (exportRows || []).map((row: any) => ({
+            mawb: row.mawb?.toString().trim() || '',
+            tipo_processo: row.tipo_processo?.toString().trim() || '',
+            etd: row.etd || null,
+            eta: row.eta || null,
+            shipper: row.shipper?.toString().trim() || null,
+            consignee: row.consignee?.toString().trim() || null,
+            coordenador: row.coordenador?.toString().trim() || null,
+            origin: row.origin?.toString().trim() || null,
+            destination: row.destination?.toString().trim() || null,
+          })),
+          count: exportRows?.length || 0
+        };
+        break;
+      }
+
       default:
         return new Response(
           JSON.stringify({ error: `Ação não suportada: ${action}` }),
