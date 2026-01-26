@@ -3722,25 +3722,116 @@ serve(async (req) => {
       }
 
       case 'create_chb_run': {
-        const { itemId, etapa, status, resultText, resultHtml, resultJson, usedAsCtx, userId } = body as any;
-        console.log('Creating CHB run:', { itemId, etapa, status, userId });
+        const { itemId, etapa, status, resultText, resultHtml, resultJson, usedAsCtx, userId, id: customId } = body as any;
+        console.log('Creating CHB run:', { itemId, etapa, status, userId, customId });
         
-        const insertResult = await client.execute(`
-          INSERT INTO ai_agente.t_dachser_chb_runs 
-          (item_id, etapa, status, result_text, result_html, result_json, used_as_ctx, created_by)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        // Support custom UUID for async background processing
+        if (customId) {
+          await client.execute(`
+            INSERT INTO ai_agente.t_dachser_chb_runs 
+            (id, item_id, etapa, status, result_text, result_html, result_json, used_as_ctx, created_by)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+          `, [
+            customId,
+            itemId, 
+            etapa || '1', 
+            status || 'pending', 
+            resultText || null, 
+            resultHtml || null, 
+            resultJson || null, 
+            usedAsCtx ? 1 : 0,
+            userId || null
+          ]);
+          result = { success: true, runId: customId };
+        } else {
+          const insertResult = await client.execute(`
+            INSERT INTO ai_agente.t_dachser_chb_runs 
+            (item_id, etapa, status, result_text, result_html, result_json, used_as_ctx, created_by)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+          `, [
+            itemId, 
+            etapa || '1', 
+            status || 'completed', 
+            resultText || null, 
+            resultHtml || null, 
+            resultJson || null, 
+            usedAsCtx ? 1 : 0,
+            userId || null
+          ]);
+          result = { success: true, runId: insertResult.lastInsertId };
+        }
+        break;
+      }
+      
+      // Save extracted data from CHB analysis for caching
+      case 'save_chb_extracted_data': {
+        const { itemId, filename, etapa, extractedFields, rawText } = body as any;
+        console.log('Saving CHB extracted data:', { itemId, filename, etapa });
+        
+        await client.execute(`
+          INSERT INTO ai_agente.t_dachser_chb_extracted_data 
+          (item_id, filename, etapa, extracted_fields, raw_text, updated_at)
+          VALUES (?, ?, ?, ?, ?, NOW())
+          ON DUPLICATE KEY UPDATE 
+            extracted_fields = VALUES(extracted_fields),
+            raw_text = VALUES(raw_text),
+            updated_at = NOW()
         `, [
-          itemId, 
-          etapa || '1', 
-          status || 'completed', 
-          resultText || null, 
-          resultHtml || null, 
-          resultJson || null, 
-          usedAsCtx ? 1 : 0,
-          userId || null
+          itemId,
+          filename,
+          etapa,
+          typeof extractedFields === 'string' ? extractedFields : JSON.stringify(extractedFields),
+          rawText || null
         ]);
         
-        result = { success: true, runId: insertResult.lastInsertId };
+        result = { success: true };
+        break;
+      }
+      
+      // Get cached extracted data for CHB item
+      case 'get_chb_extracted_data': {
+        const { itemId } = body as any;
+        console.log('Fetching CHB extracted data for item:', itemId);
+        
+        const data = await client.query(`
+          SELECT filename, extracted_fields, raw_text 
+          FROM ai_agente.t_dachser_chb_extracted_data 
+          WHERE item_id = ?
+        `, [itemId]);
+        
+        result = { success: true, data: data || [] };
+        break;
+      }
+      
+      // Get validated user corrections for CHB item
+      case 'get_chb_corrections': {
+        const { itemId } = body as any;
+        console.log('Fetching CHB user corrections for item:', itemId);
+        
+        const corrections = await client.query(`
+          SELECT filename, field_name, corrected_value, location_reference, location_context, location_confidence
+          FROM ai_agente.t_dachser_chb_user_corrections
+          WHERE item_id = ? AND is_validated = TRUE
+          ORDER BY updated_at DESC
+        `, [itemId]);
+        
+        result = { success: true, data: corrections || [] };
+        break;
+      }
+      
+      // Get single CHB run by ID (for polling)
+      case 'get_chb_run_by_id': {
+        const { runId } = body as any;
+        console.log('Fetching CHB run by ID:', runId);
+        
+        const runs = await client.query(`
+          SELECT status, result_html, result_text, result_json 
+          FROM ai_agente.t_dachser_chb_runs 
+          WHERE id = ? 
+          LIMIT 1
+        `, [runId]);
+        
+        result = { success: true, data: runs || [] };
         break;
       }
 
