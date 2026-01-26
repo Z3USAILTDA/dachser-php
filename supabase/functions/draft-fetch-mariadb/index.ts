@@ -39,7 +39,9 @@ serve(async (req) => {
 
     console.log('Connected to MariaDB successfully');
 
-    // Execute query to get MBLs - filtered by ETD last 3 months
+    // Execute query to get MBLs - filtered by ETD from 2026-01-01 onwards
+    // This ensures both display AND processing only consider 2026+ data
+    // To revert: change back to DATE_SUB(CURDATE(), INTERVAL 3 MONTH)
     const query = `
       SELECT 
         tmd.mawb as mbl_id,
@@ -51,7 +53,7 @@ serve(async (req) => {
       WHERE 
         tmd.tipo_processo = 'SEA EXPORT'
         AND tmd.mawb LIKE '%HLC%'
-        AND tmd.etd >= DATE_SUB(CURDATE(), INTERVAL 3 MONTH)
+        AND tmd.etd >= '2026-01-01'
       ORDER BY tmd.etd DESC, tmd.mawb
     `;
 
