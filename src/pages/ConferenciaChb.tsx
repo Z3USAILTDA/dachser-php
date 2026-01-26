@@ -15,6 +15,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { useChbFiles, useChbRuns, useChbItems, ChbFile, ChbRun } from '@/hooks/useChbData';
 import { useChbClientConfig, ChbClientConfig } from '@/hooks/useChbClientConfig';
+import { useChbCorrections } from '@/hooks/useChbCorrections';
 
 export default function ConferenciaChb() {
   useUsageLog({ endpoint: "/chb/conferencia" });
@@ -26,6 +27,7 @@ export default function ConferenciaChb() {
   const { runs: dbRuns, fetchRuns, createRun, updateRun } = useChbRuns(itemId);
   const { updateItem, updateItemClient } = useChbItems();
   const { getConfigByClient, configs: allClientConfigs, fetchConfigs: fetchClientConfigs } = useChbClientConfig();
+  const { corrections, fetchCorrections } = useChbCorrections(itemId ?? undefined);
   
   const [steps, setSteps] = useState<ChbStep[]>(initialSteps);
   const [activeStep, setActiveStep] = useState(1);
@@ -103,8 +105,9 @@ export default function ConferenciaChb() {
     if (itemId) {
       loadMariaDBFiles();
       fetchRuns();
+      fetchCorrections(itemId);
     }
-  }, [itemId, loadMariaDBFiles, fetchRuns]);
+  }, [itemId, loadMariaDBFiles, fetchRuns, fetchCorrections]);
 
   // Cleanup polling on unmount
   useEffect(() => {
@@ -900,6 +903,7 @@ export default function ConferenciaChb() {
             analysisProgress={analysisProgress}
             reference={itemId ? `#${itemId}` : ''}
             itemId={itemId}
+            corrections={corrections}
           />
         );
       case 'historico':
