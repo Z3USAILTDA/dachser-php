@@ -1,74 +1,116 @@
 
-# Plano: Zerar a Tela de Rastreio de AWB (/air/tracking)
+# Plano: Filtrar ETD >= 2026-01-01 para Exibição E Processamento
 
 ## Objetivo
-Forçar a tela de rastreio de AWB (`/air/tracking`) a não exibir nenhum processo até segunda ordem, através de um threshold de data futuro.
+Aplicar o filtro ETD >= 01/01/2026 na Edge Function `draft-fetch-mariadb` para garantir que:
+1. Apenas processos de 2026 em diante sejam **exibidos** na tela
+2. Apenas processos de 2026 em diante sejam **processados** (tracking Hapag-Lloyd)
 
 ---
 
-## Solução Técnica
+## Por que isso funciona?
 
-A abordagem mais simples e reversível é alterar o threshold de data na Edge Function `fetch-status-aereo` para uma data no futuro distante (ex: `2099-01-01`), fazendo com que nenhum registro atual seja retornado.
+A arquitetura do módulo Status Doc Exportação usa um único ponto de entrada de dados:
 
-### Arquivo a ser modificado:
-**`supabase/functions/fetch-status-aereo/index.ts`**
-
-### Alteração:
-Linha 68 - mudar de:
-```typescript
-const dateThreshold = '2026-01-26 00:00:00';
+```text
+draft-fetch-mariadb (fonte única)
+        │
+        ├──► Grid de Dados (exibição)
+        │
+        └──► Tracker (processamento)
+                │
+                └──► draft-track-hapag-multi
+                        │
+                        └──► draft-save-tracking (persiste em t_consulta_armador)
 ```
 
-Para:
+Ao filtrar na fonte (`draft-fetch-mariadb`), nenhum MBL antigo sequer chega ao pipeline de processamento.
+
+---
+
+## Alteração Técnica
+
+### Arquivo:
+**`supabase/functions/draft-fetch-mariadb/index.ts`**
+
+### Código Atual (linha 42-56):
 ```typescript
-// Screen intentionally cleared until further notice - set future date to exclude all records
-const dateThreshold = '2099-01-01 00:00:00';
+// Execute query to get MBLs - filtered by ETD last 3 months
+const query = `
+  SELECT 
+    tmd.mawb as mbl_id,
+    tmd.tipo_processo,
+    tmd.etd,
+    tmd.shipper
+  FROM 
+    dados_dachser.t_master_dados tmd
+  WHERE 
+    tmd.tipo_processo = 'SEA EXPORT'
+    AND tmd.mawb LIKE '%HLC%'
+    AND tmd.etd >= DATE_SUB(CURDATE(), INTERVAL 3 MONTH)
+  ORDER BY tmd.etd DESC, tmd.mawb
+`;
+```
+
+### Código Novo:
+```typescript
+// Execute query to get MBLs - filtered by ETD from 2026-01-01 onwards
+// This ensures both display AND processing only consider 2026+ data
+const query = `
+  SELECT 
+    tmd.mawb as mbl_id,
+    tmd.tipo_processo,
+    tmd.etd,
+    tmd.shipper
+  FROM 
+    dados_dachser.t_master_dados tmd
+  WHERE 
+    tmd.tipo_processo = 'SEA EXPORT'
+    AND tmd.mawb LIKE '%HLC%'
+    AND tmd.etd >= '2026-01-01'
+  ORDER BY tmd.etd DESC, tmd.mawb
+`;
 ```
 
 ---
 
 ## Impacto
 
-| Área | Efeito |
-|------|--------|
-| `/air/tracking` | Exibirá 0 registros - tela "zerada" |
-| `/air/status-aereo` (StatusAereoList) | Usa a mesma Edge Function, também ficará zerada |
-| CCT Dashboard | Não afetado (usa `mariadb-proxy`) |
-| Banco de dados | Nenhuma alteração - dados permanecem intactos |
+| Componente | Efeito |
+|------------|--------|
+| Grid de Dados | Exibe apenas MBLs com ETD >= 2026-01-01 |
+| Tracker Manual | Só processa MBLs listados (todos com ETD >= 2026-01-01) |
+| KPIs/Estatísticas | Calculados apenas com dados de 2026+ |
+| `t_consulta_armador` | Novos registros serão apenas de 2026+ |
+| CCT Dashboard | Sem alteração (usa `mariadb-proxy`) |
 
 ---
 
 ## Reversibilidade
 
-Para reativar a tela, basta alterar o threshold de volta para a data desejada:
-```typescript
-const dateThreshold = '2026-01-26 00:00:00'; // ou outra data
-```
-
----
-
-## Detalhes Técnicos
-
-A query SQL executada passará a ser:
+Para alterar o filtro no futuro:
 ```sql
-SELECT * FROM dados_dachser.t_status_aereo 
-WHERE `última atualização` >= '2099-01-01 00:00:00'
-ORDER BY id DESC
-```
+-- Voltar para 3 meses dinâmicos:
+AND tmd.etd >= DATE_SUB(CURDATE(), INTERVAL 3 MONTH)
 
-Como nenhum registro possui `última atualização` em 2099, o resultado será sempre um array vazio.
+-- Outra data específica:
+AND tmd.etd >= 'YYYY-MM-DD'
+```
 
 ---
 
 ## Passos de Implementação
 
-1. Editar `supabase/functions/fetch-status-aereo/index.ts`
-2. Alterar `dateThreshold` de `'2026-01-26 00:00:00'` para `'2099-01-01 00:00:00'`
-3. Adicionar comentário explicativo para referência futura
+1. Editar `supabase/functions/draft-fetch-mariadb/index.ts`
+2. Alterar condição SQL de `DATE_SUB(CURDATE(), INTERVAL 3 MONTH)` para `'2026-01-01'`
+3. Atualizar comentário explicativo
 4. Deploy automático da Edge Function
 
 ---
 
 ## Resultado Esperado
 
-Após a implementação, a tela `/air/tracking` exibirá a mensagem "Nenhum AWB encontrado" e todos os contadores/estatísticas mostrarão zero.
+Após a implementação:
+- A Grid mostrará apenas MBLs Hapag-Lloyd com ETD a partir de 01/01/2026
+- O Tracker só processará esses mesmos MBLs
+- Casos antigos (2025 e anteriores) não serão exibidos nem processados
