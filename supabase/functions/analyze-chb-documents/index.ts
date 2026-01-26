@@ -997,7 +997,7 @@ async function callAnthropicAPI(prompt: string, files: FileForAnalysis[]): Promi
     },
     body: JSON.stringify({
       model: 'claude-sonnet-4-20250514',
-      max_tokens: 32000,
+      max_tokens: 64000,
       messages: [
         {
           role: 'user',
