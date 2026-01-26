@@ -423,16 +423,13 @@ export function ChbComparisonGrid({
   // Render parsed structured grid with sections
   return (
     <div className="space-y-6">
-      {/* Editable Mode Indicator */}
-      {editable && (
+      {/* Corrections counter - only show if there are corrections */}
+      {editable && corrections.length > 0 && (
         <div className="flex items-center gap-2 px-3 py-2 bg-blue-500/10 border border-blue-500/20 rounded-lg text-xs text-blue-300">
           <Pencil className="w-3.5 h-3.5" />
-          <span>Modo de edição ativo. Clique em qualquer valor para corrigir.</span>
-          {corrections.length > 0 && (
-            <span className="ml-auto text-blue-400 font-medium">
-              {corrections.length} correção(ões) salva(s)
-            </span>
-          )}
+          <span className="text-blue-400 font-medium">
+            {corrections.length} correção(ões) salva(s)
+          </span>
         </div>
       )}
 
