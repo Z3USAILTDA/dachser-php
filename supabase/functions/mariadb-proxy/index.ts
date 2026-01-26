@@ -341,15 +341,35 @@ serve(async (req) => {
 
     console.log(`Connecting to MariaDB at ${host}:${port}/${database} - Action: ${action}`);
     
-    client = await new Client().connect({
-      hostname: host,
-      port: port,
-      db: database,
-      username: dbUser,
-      password: dbPassword,
-      charset: "utf8mb4",
-      timeout: 30000, // 30 seconds connection timeout
-    });
+    // Retry logic for transient connection errors
+    const maxRetries = 3;
+    let lastError: Error | null = null;
+    
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      try {
+        client = await new Client().connect({
+          hostname: host,
+          port: port,
+          db: database,
+          username: dbUser,
+          password: dbPassword,
+          charset: "utf8mb4",
+          timeout: 30000,
+        });
+        console.log(`Connected to MariaDB on attempt ${attempt}`);
+        break;
+      } catch (connError) {
+        lastError = connError as Error;
+        console.warn(`Connection attempt ${attempt}/${maxRetries} failed: ${lastError.message}`);
+        if (attempt < maxRetries) {
+          await new Promise(resolve => setTimeout(resolve, 500 * attempt));
+        }
+      }
+    }
+    
+    if (!client) {
+      throw lastError || new Error('Failed to connect after retries');
+    }
 
     // Set connection collation to prevent "Illegal mix of collations" errors
     // This ensures all string comparisons use the same collation across tables
