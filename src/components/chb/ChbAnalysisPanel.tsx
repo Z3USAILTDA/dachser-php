@@ -8,6 +8,7 @@ import { exportChbHistoryToPDF } from '@/utils/chbPdfExport';
 interface ChbAnalysisPanelProps {
   stepId: number;
   analysisResult: ChbAnalysisResult | null;
+  allAnalysisResults?: Record<number, ChbAnalysisResult | null>;
   onRunAnalysis: () => void;
   onApproveAndAdvance: () => void;
   isAnalyzing: boolean;
@@ -28,7 +29,8 @@ const copyAnalysisResult = (html: string) => {
 
 export function ChbAnalysisPanel({ 
   stepId, 
-  analysisResult, 
+  analysisResult,
+  allAnalysisResults,
   onRunAnalysis, 
   onApproveAndAdvance, 
   isAnalyzing,
@@ -41,19 +43,31 @@ export function ChbAnalysisPanel({
 }: ChbAnalysisPanelProps) {
 
   const handleExportPDF = () => {
-    if (!analysisResult) return;
+    // Build history entries from all analysis results (all 3 steps)
+    const historyEntries = [];
     
-    const historyEntry = {
-      id: 1,
-      etapa: String(stepId),
-      status: 'approved',
-      result_text: '',
-      result_html: analysisResult.html,
-      created_by_email: '',
-      created_at: analysisResult.generatedAt
-    };
+    const resultsToExport = allAnalysisResults || { [stepId]: analysisResult };
     
-    exportChbHistoryToPDF([historyEntry], reference || 'Análise CHB');
+    for (const [step, result] of Object.entries(resultsToExport)) {
+      if (result) {
+        historyEntries.push({
+          id: parseInt(step),
+          etapa: step,
+          status: 'approved',
+          result_text: result.summary || '',
+          result_html: result.html,
+          created_by_email: '',
+          created_at: result.generatedAt
+        });
+      }
+    }
+    
+    if (historyEntries.length === 0) {
+      toast.error('Nenhuma análise disponível para exportar');
+      return;
+    }
+    
+    exportChbHistoryToPDF(historyEntries, reference || 'Análise CHB');
     toast.success('PDF gerado com sucesso');
   };
   // No files uploaded yet

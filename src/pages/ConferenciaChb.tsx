@@ -890,6 +890,7 @@ export default function ConferenciaChb() {
           <ChbAnalysisPanel
             stepId={activeStep}
             analysisResult={analysisResults[activeStep]}
+            allAnalysisResults={analysisResults}
             onRunAnalysis={() => handleStartAnalysis(!!analysisResults[activeStep])}
             onApproveAndAdvance={handleApproveAndAdvance}
             isAnalyzing={isAnalyzing}
