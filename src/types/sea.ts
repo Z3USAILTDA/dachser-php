@@ -6,6 +6,22 @@ export type CanalNotificacaoSea = "EMAIL_CLIENTE" | "EMAIL_INTERNO" | "WEBHOOK";
 
 export type FrequenciaNotificacao = "IMEDIATO" | "DIARIO" | "SEMANAL";
 
+// Tipos para mapeamento de armadores (Shipping Lines)
+export type ShippingLineCode = 
+  | 'HAPAG_LLOYD' | 'MSC' | 'MAERSK' | 'HAMBURG_SUD' | 'CMA_CGM' 
+  | 'ONE' | 'EVERGREEN' | 'COSCO' | 'YANG_MING' 
+  | 'HMM' | 'ZIM' | 'PIL' | 'WAN_HAI' 
+  | 'SEABOARD' | 'CROWLEY' | 'ARKAS' | 'TURKON' 
+  | 'GRIMALDI' | 'SM_LINE' | 'TRANSROLL' | 'UNKNOWN';
+
+export interface ShippingLineInfo {
+  code: ShippingLineCode;
+  name: string;
+  country: string;
+  color: string;
+  apiSupported: boolean; // Se tem integração com API de tracking
+}
+
 // Status marítimos disponíveis para disparo de notificações
 export const STATUS_MARITIMOS = [
   "BKG",   // Booking criado

@@ -9,6 +9,11 @@ import { Badge } from "@/components/ui/badge";
 import { Loader2, Ship, Package, AlertTriangle, CheckCircle2, Info } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
+import { 
+  getAllShippingLines, 
+  detectCarrierFromMbl, 
+  getTrackableCarriers 
+} from "@/lib/shippingLineMapping";
 
 interface ImportMblDialogProps {
   open: boolean;
@@ -16,21 +21,15 @@ interface ImportMblDialogProps {
   onSuccess?: () => void;
 }
 
-const CARRIERS = [
-  { value: "MSC", label: "MSC" },
-  { value: "MAERSK", label: "Maersk" },
-  { value: "HAPAG_LLOYD", label: "Hapag-Lloyd" },
-  { value: "CMA_CGM", label: "CMA CGM" },
-  { value: "ONE", label: "ONE" },
-  { value: "EVERGREEN", label: "Evergreen" },
-  { value: "COSCO", label: "COSCO" },
-  { value: "HMM", label: "HMM" },
-  { value: "ZIM", label: "ZIM" },
-  { value: "YANG_MING", label: "Yang Ming" },
-  { value: "OOCL", label: "OOCL" },
-  { value: "WAN_HAI", label: "Wan Hai" },
-  { value: "PIL", label: "PIL" },
-];
+// Usar mapeamento centralizado - apenas armadores com suporte a API
+const CARRIERS = getTrackableCarriers()
+  .filter(carrier => carrier.code !== 'UNKNOWN')
+  .map(carrier => ({
+    value: carrier.code,
+    label: carrier.name.replace(' - ', ' ').split(' ')[0], // Nome curto
+    fullName: carrier.name,
+  }))
+  .sort((a, b) => a.label.localeCompare(b.label));
 
 interface ImportResult {
   mbl: string;
@@ -132,21 +131,12 @@ export function ImportMblDialog({ open, onOpenChange, onSuccess }: ImportMblDial
     }
   };
 
+  // Usar mapeamento centralizado para detectar armador
   const detectedCarrier = (mbl: string): string | null => {
-    const prefixes: Record<string, string> = {
-      MEDU: "MSC", MSCB: "MSC", MSCU: "MSC",
-      MAEU: "Maersk", MSKU: "Maersk",
-      HLCU: "Hapag-Lloyd", HLXU: "Hapag-Lloyd",
-      CMDU: "CMA CGM", APHU: "CMA CGM",
-      ONEY: "ONE", ONEU: "ONE",
-      COSU: "COSCO", CBHU: "COSCO",
-      ZIMU: "ZIM",
-    };
-    const upper = mbl.toUpperCase();
-    for (const [prefix, name] of Object.entries(prefixes)) {
-      if (upper.startsWith(prefix)) return name;
-    }
-    return null;
+    const info = detectCarrierFromMbl(mbl);
+    if (info.code === 'UNKNOWN') return null;
+    // Retorna nome curto para exibição no badge
+    return info.name.split(' - ')[0].split(' ')[0];
   };
 
   const mblsPreview = mblsText

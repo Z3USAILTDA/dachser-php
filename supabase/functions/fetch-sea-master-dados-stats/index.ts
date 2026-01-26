@@ -1,39 +1,14 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { Client } from "https://deno.land/x/mysql@v2.12.1/mod.ts";
+import { SHIPPING_LINE_NAMES, getShippingLineNameByScac } from "../_shared/shippingLineMapping.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-// Mapeamento de códigos SCAC para nomes de armadores marítimos
-const shippingLineNames: Record<string, string> = {
-  "HLCU": "Hapag-Lloyd",
-  "MAEU": "Maersk",
-  "MSCU": "MSC",
-  "CMDU": "CMA CGM",
-  "COSU": "COSCO",
-  "EGLV": "Evergreen",
-  "ONEY": "ONE (Ocean Network Express)",
-  "YMLU": "Yang Ming",
-  "HDMU": "Hyundai Merchant Marine",
-  "OOLU": "OOCL",
-  "ZIMU": "ZIM",
-  "ANRM": "ANL",
-  "APLU": "APL",
-  "SUDU": "Hamburg Süd",
-  "NYKU": "NYK Line",
-  "MOLU": "MOL",
-  "KKLU": "K Line",
-  "SEAU": "SEALAND",
-  "MEDU": "MEDITERRANEAN",
-  "PCIU": "PIL",
-  "WHLC": "WAN HAI",
-  "TRHU": "Transroll",
-  "SMLM": "SM Line",
-  "ARKU": "Arkas",
-  "BURU": "BURU",
-};
+// Usar mapeamento centralizado do _shared/shippingLineMapping.ts
+const shippingLineNames = SHIPPING_LINE_NAMES;
 
 serve(async (req) => {
   // Handle CORS preflight requests
