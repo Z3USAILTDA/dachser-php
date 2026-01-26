@@ -1,173 +1,232 @@
 
-# Plano de Correção: Extração de Informações CHB e Parâmetros de Localização
+# Plano de Correção: Identificação do Local das Informações CHB
 
-## Diagnóstico do Problema
+## Problema Identificado
 
-Após análise detalhada do sistema, identifiquei as seguintes causas raiz das falhas na extração de informações CHB:
+A identificação automática do local correto das informações **não está funcionando** porque o frontend não está enviando o conteúdo do documento (`file_content`) quando o usuário salva uma correção.
 
-### 1. Problema: Localização Automática Insuficiente
+### Diagnóstico Técnico
 
-A função `locateValueInFile` no `chb-corrections/index.ts` tem limitações críticas:
-- Usa apenas os primeiros 15.000 caracteres do conteúdo (`fileContent.substring(0, 15000)`)
-- Para documentos PDF maiores, o contexto completo não está disponível
-- A localização depende do Gemini Flash, que recebe conteúdo truncado
+| Componente | Problema |
+|------------|----------|
+| `ChbComparisonGrid.tsx` linha 331-337 | Chama `saveCorrection` **SEM** o parâmetro `file_content` |
+| `ChbAnalysisPanel.tsx` linha 162-166 | Passa apenas `htmlContent` e `itemId` para o Grid |
+| `ConferenciaChb.tsx` | Tem acesso aos documentos (`documents`) com URLs, mas não passa para o Grid |
+| `chb-corrections` Edge Function | Localização só ocorre SE `file_content` estiver presente (linha 235) |
 
-### 2. Problema: Correções do Usuário Não Estão Sendo Aplicadas Corretamente
+### Fluxo Atual (Quebrado)
 
-Na análise, as correções validadas pelo usuário deveriam sobrescrever os valores extraídos automaticamente, mas:
-- O fluxo busca correções com `is_validated = TRUE`, porém as correções são salvas com `is_validated = FALSE` inicialmente
-- A flag `is_validated` só é `TRUE` quando a localização automática encontra o valor (`locationResult.found`)
-
-### 3. Problema: Parâmetros de Localização Não Respeitados no Prompt
-
-O prompt de análise inclui:
-- A regra de "CORRELAÇÃO DE ARQUIVOS" (linhas 325-332)
-- Mas a instrução não é reforçada com exemplos negativos
-- O Claude pode ainda "inferir" valores quando não encontra explicitamente
-
-### 4. Problema: Contexto de Correções Não Passado na Reanalise
-
-Quando o usuário faz uma correção e re-executa a análise:
-- O sistema busca correções via `get_chb_corrections`
-- Mas busca apenas `is_validated = TRUE`
-- Se a correção não foi validada (localização não encontrada), ela é ignorada
+```text
+Usuario edita celula no Grid
+        |
+        v
+handleSaveCorrection() SEM file_content
+        |
+        v
+Edge Function recebe body.file_content = undefined
+        |
+        v
+locationResult = { found: false, location: "Localização manual não realizada" }
+```
 
 ## Solução Proposta
 
-### Fase 1: Corrigir a Persistência de Correções
+### Fase 1: Passar Documentos do ConferenciaChb para o Grid
 
-**Arquivo**: `supabase/functions/chb-corrections/index.ts`
+O componente `ConferenciaChb.tsx` já tem acesso à lista de documentos com suas URLs (`documents[stepId]`). Precisamos passar essa informação através da cadeia de componentes:
 
-1. Aumentar o limite de conteúdo para localização (15.000 → 50.000 caracteres)
-2. Marcar correções como `is_validated = TRUE` mesmo quando localização falha (o usuário validou manualmente)
-3. Adicionar campo `manually_validated` para distinguir validação automática vs manual
+**Mudanças:**
 
-### Fase 2: Corrigir a Query de Busca de Correções
+1. **`ConferenciaChb.tsx`**: Passar `documents` para `ChbAnalysisPanel`
+2. **`ChbAnalysisPanel.tsx`**: Receber e repassar `documents` para `ChbComparisonGrid`
+3. **`ChbComparisonGrid.tsx`**: Receber `documents`, buscar conteúdo do arquivo correspondente ao salvar correção
 
-**Arquivo**: `supabase/functions/mariadb-proxy/index.ts`
+### Fase 2: Buscar Conteúdo do Arquivo ao Salvar Correção
 
-Alterar a query `get_chb_corrections` para:
-- Buscar TODAS as correções do item (remover filtro `is_validated = TRUE`)
-- Ou alterar para buscar correções onde `is_validated = TRUE OR manually_validated = TRUE`
+Quando o usuário editar uma célula:
+1. Identificar qual documento está sendo corrigido pelo `filename`
+2. Buscar a URL do documento na lista de `documents`
+3. Fazer fetch do conteúdo do arquivo e converter para texto/base64
+4. Passar `file_content` para a Edge Function
 
-### Fase 3: Reforçar Prompt com Instruções Defensivas
+### Fase 3: Alternativa Backend (Se Fase 1 For Muito Complexa)
 
-**Arquivo**: `supabase/functions/analyze-chb-documents/index.ts`
+Se buscar o conteúdo no frontend causar lentidão, podemos fazer a busca na própria Edge Function:
+1. A Edge Function `chb-corrections` recebe apenas o `item_id` e `filename`
+2. Ela consulta o MariaDB para obter a URL do arquivo
+3. Faz o fetch do conteúdo diretamente no servidor
+4. Usa o conteúdo para localização
 
-1. Adicionar seção de "EXEMPLOS NEGATIVOS" no prompt:
-   - Mostrar o que NÃO fazer (inferir valores, copiar entre arquivos)
-   
-2. Reforçar regra de localização com instrução mais rígida:
-```
-REGRA ABSOLUTA - EXTRAÇÃO EXPLÍCITA:
-- Extraia APENAS dados que estão EXPLICITAMENTE escritos no documento
-- Se um campo não está visível → retorne "ND"
-- NUNCA infira, calcule ou adivinhe valores
-- Se você "acha" que um valor deveria estar lá mas não vê → "ND"
-```
-
-3. Adicionar validação de confiança para cada campo extraído:
-```
-PARA CADA CAMPO EXTRAÍDO, VALIDE:
-1. Você VIU esse valor explicitamente no documento? SIM/NÃO
-2. Se NÃO → use "ND"
-3. Se SIM → cite a localização (página, seção, tabela)
-```
-
-### Fase 4: Melhorar Injeção de Correções no Prompt
-
-**Arquivo**: `supabase/functions/analyze-chb-documents/index.ts`
-
-Atualizar a construção do `cachedContext` para:
-1. Incluir correções mesmo que `is_validated = FALSE`
-2. Adicionar instrução explícita: "Se o usuário corrigiu um valor, USE O VALOR CORRIGIDO mesmo se você encontrar outro valor no documento"
-3. Adicionar checklist de verificação final
+**Esta alternativa é mais robusta** pois não depende do frontend ter acesso ao arquivo.
 
 ---
 
-## Detalhamento Técnico das Alterações
+## Detalhamento Técnico
 
-### Alteração 1: `supabase/functions/chb-corrections/index.ts`
+### Alteração 1: `ConferenciaChb.tsx`
 
-```text
-Linha 45: Aumentar limite de caracteres
-- De: fileContent.substring(0, 15000)
-- Para: fileContent.substring(0, 50000)
+Passar a lista de documentos para o panel de análise:
 
-Linhas 224-229: Sempre marcar como validado quando salvo pelo usuário
-- Adicionar: is_validated = TRUE (o usuário é a fonte de verdade)
+```typescript
+// Linha ~900 (dentro do render do ChbAnalysisPanel)
+<ChbAnalysisPanel 
+  stepId={activeStep}
+  analysisResult={analysisResults[activeStep]}
+  onRunAnalysis={handleRunAnalysis}
+  onApproveAndAdvance={handleApproveAndAdvance}
+  isAnalyzing={isAnalyzing}
+  hasFiles={hasFilesForStep}
+  isStepCompleted={isCurrentStepCompleted}
+  isLastStepCompleted={isFinalStepCompleted}
+  analysisProgress={analysisProgress}
+  reference={reference}
+  itemId={itemId}
+  documents={documents}  // NOVA PROP
+/>
 ```
 
-### Alteração 2: `supabase/functions/mariadb-proxy/index.ts`
+### Alteração 2: `ChbAnalysisPanel.tsx`
 
-```text
-Linha ~3834: Alterar query de busca
-- De: WHERE item_id = ? AND is_validated = TRUE
-- Para: WHERE item_id = ? (buscar todas as correções)
+Receber e repassar documentos:
+
+```typescript
+// Interface (linha 8-20)
+interface ChbAnalysisPanelProps {
+  // ... props existentes
+  documents?: Record<number, ChbDocument[]>;  // NOVA PROP
+}
+
+// Render do Grid (linha 162-167)
+<ChbComparisonGrid 
+  htmlContent={analysisResult.html} 
+  itemId={itemId} 
+  editable={!isStepCompleted}
+  documents={documents?.[stepId] || []}  // NOVA PROP
+/>
 ```
 
-### Alteração 3: `supabase/functions/analyze-chb-documents/index.ts`
+### Alteração 3: `ChbComparisonGrid.tsx`
 
-Adicionar seção no prompt após "REGRA CRÍTICA DE CORRELAÇÃO DE ARQUIVOS":
+Receber documentos e buscar conteúdo ao salvar:
 
-```text
-REGRA DE EXTRAÇÃO DEFENSIVA (NÃO VIOLAR!):
+```typescript
+// Interface (linha 19-24)
+interface ChbComparisonGridProps {
+  htmlContent: string;
+  itemId?: number;
+  editable?: boolean;
+  onCorrectionSaved?: () => void;
+  documents?: ChbDocument[];  // NOVA PROP
+}
 
-ANTES DE INCLUIR QUALQUER VALOR NA TABELA, VERIFIQUE:
-1. Você LITERALMENTE viu esse texto/número no conteúdo do arquivo? 
-   → Se NÃO → use "ND"
-   → Se SIM → prossiga
+// Função helper para buscar conteúdo
+async function fetchDocumentContent(url: string): Promise<string | null> {
+  try {
+    const response = await fetch(url);
+    if (!response.ok) return null;
+    const blob = await response.blob();
+    return new Promise((resolve) => {
+      const reader = new FileReader();
+      reader.onloadend = () => resolve(reader.result as string);
+      reader.readAsText(blob);
+    });
+  } catch {
+    return null;
+  }
+}
 
-2. Esse valor está na coluna/seção correta do documento original?
-   → Se NÃO → use "ND"  
-   → Se SIM → prossiga
+// handleSaveCorrection (linhas 323-344)
+const handleSaveCorrection = useCallback(async (
+  filename: string,
+  fieldName: string,
+  originalValue: string,
+  newValue: string
+): Promise<boolean> => {
+  if (!itemId) return false;
 
-3. Você está colocando esse valor na coluna do arquivo CORRETO?
-   → Se está no CCT.pdf, só pode ir na coluna "CCT.pdf"
-   → NUNCA copie valores entre colunas de arquivos diferentes
+  // NOVO: Buscar conteúdo do documento
+  let fileContent: string | undefined;
+  const doc = documents?.find(d => d.name === filename);
+  if (doc?.url) {
+    fileContent = await fetchDocumentContent(doc.url) || undefined;
+  }
 
-EXEMPLOS DO QUE NÃO FAZER:
-❌ CCT mostra peso 501.5 → colocar 501.5 na coluna do HAWB também
-❌ Invoice não tem peso → "inferir" peso do packing list
-❌ Valor não encontrado → inventar ou estimar
-❌ Campo ausente → copiar de outro documento
+  const result = await saveCorrection({
+    item_id: itemId,
+    filename,
+    field_name: normalizeFieldName(fieldName),
+    original_value: originalValue,
+    corrected_value: newValue,
+    file_content: fileContent,  // NOVO
+  });
 
-EXEMPLOS DO QUE FAZER:
-✅ CCT mostra peso 501.5 → coluna CCT = "501.5", outras = "ND" se não encontrar
-✅ Invoice não tem peso → coluna Invoice = "ND"
-✅ HAWB mostra peso 501,500 → coluna HAWB = "501,500"
+  if (result.success) {
+    onCorrectionSaved?.();
+  }
+
+  return result.success;
+}, [itemId, saveCorrection, onCorrectionSaved, documents]);
 ```
 
-### Alteração 4: Atualizar construção de correções no prompt
+---
 
-```text
-Na função processAnalysisInBackground (linha ~1502):
+## Solução Alternativa (Backend-Only)
 
-Alterar a instrução de correções para:
-"REGRA ABSOLUTA DE CORREÇÕES:
-1. O usuário CORRIGIU manualmente os valores abaixo
-2. VOCÊ DEVE usar EXATAMENTE esses valores na tabela
-3. Se você encontrar valor DIFERENTE no documento → IGNORAR e usar o corrigido
-4. A correção do usuário é FONTE DE VERDADE FINAL
-5. NUNCA substituir uma correção do usuário por valor do documento"
+Se preferir não modificar o frontend extensivamente, a Edge Function pode buscar o documento diretamente:
+
+### Alteração em `chb-corrections/index.ts`
+
+```typescript
+// Após linha 214, adicionar busca automática do documento
+if (!file_content && item_id && filename) {
+  // Buscar URL do documento no MariaDB
+  const docRows = await client.query(
+    `SELECT f.url as file_url
+     FROM ai_agente.t_dachser_chb_docs d
+     JOIN ai_agente.t_dachser_chb_files f ON d.file_id = f.id
+     WHERE d.item_id = ? AND f.filename = ?
+     LIMIT 1`,
+    [item_id, filename]
+  );
+  
+  if (docRows && docRows.length > 0 && docRows[0].file_url) {
+    try {
+      const response = await fetch(docRows[0].file_url);
+      if (response.ok) {
+        file_content = await response.text();
+      }
+    } catch (e) {
+      console.log('[chb-corrections] Could not fetch file content:', e);
+    }
+  }
+}
 ```
+
+---
+
+## Recomendação
+
+**Implementar a Solução Alternativa (Backend-Only)** porque:
+
+1. Menor número de arquivos modificados (apenas 1 Edge Function)
+2. Funciona mesmo que o frontend não tenha acesso direto ao arquivo
+3. Mais robusto para documentos grandes
+4. Não impacta performance do frontend
 
 ---
 
 ## Ordem de Implementação
 
-1. **Primeiro**: Corrigir `chb-corrections/index.ts` (validação)
-2. **Segundo**: Corrigir `mariadb-proxy/index.ts` (query)
-3. **Terceiro**: Atualizar `analyze-chb-documents/index.ts` (prompt)
-4. **Quarto**: Deploy e teste
+1. **Primeiro**: Atualizar `chb-corrections/index.ts` para buscar documento automaticamente
+2. **Segundo**: Deploy da Edge Function
+3. **Terceiro**: Testar salvando uma correção e verificar logs de localização
 
 ## Testes de Validação
 
 Após implementação:
-1. Criar novo processo CHB
-2. Fazer upload de documentos
-3. Executar análise
-4. Verificar se valores aparecem APENAS na coluna correta
-5. Editar um valor manualmente
-6. Re-executar análise
-7. Verificar se valor corrigido foi mantido
+1. Abrir um item CHB existente (ex: item 82)
+2. Ir para a aba de Análise com dados já analisados
+3. Editar um valor em uma célula (ex: alterar peso)
+4. Verificar logs da Edge Function por `[chb-corrections] Locating value`
+5. Confirmar toast mostrando localização encontrada
+
