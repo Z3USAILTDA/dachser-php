@@ -671,12 +671,20 @@ ${fiscalRulesSection}${armadorSection}${taxasSection}
 
    ⚠️ STATUS 🔴 CRÍTICO — USAR OBRIGATORIAMENTE QUANDO:
    - Valores numéricos diferem em mais de 20% (ex.: 28.234 vs 508 → claramente diferentes!)
+     ⚠️ EXCEÇÃO: "Valor Mercadoria" / "Valor Total" → SEMPRE 🟨 ALERTA, mesmo >20%
    - Moedas diferentes para o MESMO campo em documentos que DEVERIAM ter mesma moeda
    - CNPJ divergente entre documentos
    - NCM divergente na raiz (4 primeiros dígitos)
    - Frete marcado COLLECT em um doc vs PREPAID em outro
    - Incoterms diferentes (CFR vs FOB vs CIF)
    - Valores de ordens de magnitude diferentes (ex.: 10.000 vs 100)
+     ⚠️ EXCEÇÃO: "Valor Mercadoria" / "Valor Total" → SEMPRE 🟨 ALERTA
+
+   ⚠️ EXCEÇÃO ESPECIAL PARA VALOR MERCADORIA:
+   - Qualquer divergência em "Valor Mercadoria", "Valor Total Mercadoria", "Valor FOB", 
+     "Valor CIF", "Valor Total" → SEMPRE usar 🟨 ALERTA, NUNCA 🔴 CRÍTICO
+   - Motivo: valores de mercadoria variam naturalmente entre documentos (Invoice, PL, HBL, DI)
+   - Mesmo se diferença >20%, usar 🟨 e documentar na seção Observações
 
    ⚠️ STATUS 🟨 ALERTA — USAR OBRIGATORIAMENTE QUANDO:
    - Valores numéricos diferem mais que a tolerância MAS menos que 20%
@@ -709,9 +717,9 @@ ${fiscalRulesSection}${armadorSection}${taxasSection}
 
    ⚠️ REGRA CRÍTICA PARA COMPARAÇÃO MULTI-DOCUMENTO:
    - Documentos DIFERENTES podem ter valores DIFERENTES — isso é NORMAL
-   - MAS se o MESMO campo (ex.: Valor Mercadoria) aparece em 2+ docs com valores MUITO diferentes:
-     → EUR 28.234,23 (Invoice) vs EUR 508,22 (outro doc) → 🟨 ou 🔴 (valores claramente diferentes!)
-     → NÃO marcar como ✅ só porque são "documentos diferentes"
+   - MAS se o MESMO campo (ex.: Peso Bruto) aparece em 2+ docs com valores MUITO diferentes:
+     → Se diferença >20% → 🔴 CRÍTICO (exceto Valor Mercadoria)
+   - LEMBRETE: "Valor Mercadoria" e variações → SEMPRE 🟨 ALERTA (nunca 🔴)
    - Se valores estão em moedas diferentes e não podem ser comparados:
      → Marcar como 🟨 e explicar que "moedas diferentes, comparação requer conversão"
 

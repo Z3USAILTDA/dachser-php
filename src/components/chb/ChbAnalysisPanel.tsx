@@ -4,6 +4,8 @@ import { Play, CheckCircle, Loader2, RefreshCw, FileText, Copy, AlertTriangle, X
 import { toast } from 'sonner';
 import { ChbComparisonGrid } from './ChbComparisonGrid';
 import { exportChbHistoryToPDF } from '@/utils/chbPdfExport';
+import { createCorrectedHistoryEntries } from '@/utils/chbPdfCorrections';
+import { ChbCorrection } from '@/hooks/useChbCorrections';
 
 interface ChbAnalysisPanelProps {
   stepId: number;
@@ -18,6 +20,7 @@ interface ChbAnalysisPanelProps {
   analysisProgress?: string;
   reference?: string;
   itemId?: number | null;
+  corrections?: ChbCorrection[];
 }
 
 const copyAnalysisResult = (html: string) => {
@@ -39,28 +42,29 @@ export function ChbAnalysisPanel({
   isLastStepCompleted = false,
   analysisProgress = '',
   reference = '',
-  itemId = null
+  itemId = null,
+  corrections = []
 }: ChbAnalysisPanelProps) {
 
   const handleExportPDF = () => {
     // Build history entries from all analysis results (all 3 steps)
-    const historyEntries = [];
-    
+    // Apply user corrections to the HTML before exporting
     const resultsToExport = allAnalysisResults || { [stepId]: analysisResult };
     
+    // Convert to format expected by createCorrectedHistoryEntries
+    const resultsForCorrection: Record<number, { html: string; summary?: string; generatedAt: string } | null> = {};
     for (const [step, result] of Object.entries(resultsToExport)) {
       if (result) {
-        historyEntries.push({
-          id: parseInt(step),
-          etapa: step,
-          status: 'approved',
-          result_text: result.summary || '',
-          result_html: result.html,
-          created_by_email: '',
-          created_at: result.generatedAt
-        });
+        resultsForCorrection[parseInt(step)] = {
+          html: result.html,
+          summary: result.summary,
+          generatedAt: result.generatedAt
+        };
       }
     }
+    
+    // Create history entries with corrections applied
+    const historyEntries = createCorrectedHistoryEntries(resultsForCorrection, corrections);
     
     if (historyEntries.length === 0) {
       toast.error('Nenhuma análise disponível para exportar');
