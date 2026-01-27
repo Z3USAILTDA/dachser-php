@@ -1754,12 +1754,12 @@ serve(async (req) => {
                 ELSE 0
               END as has_free_time
             FROM dados_dachser.t_tracking_sea ts
-            LEFT JOIN master_data md ON md.mbl_id = ts.mbl_id
-            LEFT JOIN latest_vessel lv ON lv.mbl_id = ts.mbl_id AND lv.rn = 1
-            LEFT JOIN transship_direct td ON td.mbl_id = ts.mbl_id
-            LEFT JOIN transship_history th ON th.mbl_id = ts.mbl_id
-            LEFT JOIN has_freetime hf_proc ON hf_proc.mbl_id = ts.mbl_id AND hf_proc.tipo_ft = 'PROCESSO'
-            LEFT JOIN has_freetime hf_cont ON hf_cont.cliente_nome = ts.consignee AND hf_cont.tipo_ft = 'CONTRATO'
+            LEFT JOIN master_data md ON md.mbl_id COLLATE utf8mb4_unicode_ci = ts.mbl_id COLLATE utf8mb4_unicode_ci
+            LEFT JOIN latest_vessel lv ON lv.mbl_id COLLATE utf8mb4_unicode_ci = ts.mbl_id COLLATE utf8mb4_unicode_ci AND lv.rn = 1
+            LEFT JOIN transship_direct td ON td.mbl_id COLLATE utf8mb4_unicode_ci = ts.mbl_id COLLATE utf8mb4_unicode_ci
+            LEFT JOIN transship_history th ON th.mbl_id COLLATE utf8mb4_unicode_ci = ts.mbl_id COLLATE utf8mb4_unicode_ci
+            LEFT JOIN has_freetime hf_proc ON hf_proc.mbl_id COLLATE utf8mb4_unicode_ci = ts.mbl_id COLLATE utf8mb4_unicode_ci AND hf_proc.tipo_ft = 'PROCESSO'
+            LEFT JOIN has_freetime hf_cont ON hf_cont.cliente_nome COLLATE utf8mb4_unicode_ci = ts.consignee COLLATE utf8mb4_unicode_ci AND hf_cont.tipo_ft = 'CONTRATO'
             WHERE ts.active = 1
             GROUP BY ts.mbl_id
             HAVING 
