@@ -121,10 +121,8 @@ export default function DemurrageRates() {
   const validateForm = (): boolean => {
     const errors: Record<string, string> = {};
     
-    // Required fields
-    if (!formData.armador.trim()) {
-      errors.armador = "Armador é obrigatório";
-    } else if (formData.armador.length > 50) {
+    // Optional armador field - only validate length if provided
+    if (formData.armador.length > 50) {
       errors.armador = "Máximo 50 caracteres";
     }
     
