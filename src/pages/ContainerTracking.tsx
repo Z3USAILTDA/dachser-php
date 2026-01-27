@@ -295,7 +295,7 @@ const ContainerTracking = () => {
   const [filterLine, setFilterLine] = useState("all");
   const [filterCoordenador, setFilterCoordenador] = useState("all");
   const [filterTipoProcesso, setFilterTipoProcesso] = useState<"all" | "SEA IMPORT" | "SEA EXPORT">("all");
-  const [activeCardFilter, setActiveCardFilter] = useState<"all" | "transito" | "alerta" | "critico" | "entregues" | "nao_rastreados">("all");
+  const [activeCardFilter, setActiveCardFilter] = useState<"all" | "transito" | "alerta" | "critico" | "entregues">("all");
   const [mblList, setMblList] = useState<MblTrackingData[]>([]);
   const [currentPage, setCurrentPage] = useState(1);
   const [isLoadingData, setIsLoadingData] = useState(false);
@@ -1287,16 +1287,6 @@ const ContainerTracking = () => {
   // Filter MBL list
   const filteredMbls = useMemo(() => {
     let mbls = mblList.filter(m => {
-      const status = getReportStatus(m.last_event);
-      
-      // Filtro especial para "Não Rastreados" - mostra apenas AGD
-      if (activeCardFilter === "nao_rastreados") {
-        if (status.code !== 'AGD') return false;
-      } else {
-        // Para outros filtros, ocultar processos com status "Aguardando" (AGD)
-        if (status.code === 'AGD') return false;
-      }
-      
       const searchLower = searchTerm.toLowerCase();
       const matchesSearch = !searchTerm || m.mbl_id.toLowerCase().includes(searchLower) || m.consignee && m.consignee.toLowerCase().includes(searchLower) || m.shipping_line && m.shipping_line.toLowerCase().includes(searchLower) || m.navio && m.navio.toLowerCase().includes(searchLower);
       const armador = normalizeShippingLine(m.shipping_line);
@@ -1311,12 +1301,20 @@ const ContainerTracking = () => {
         matchesCardFilter = isEmCritico(m.is_critico);
       } else if (activeCardFilter === "entregues") {
         matchesCardFilter = isEntregue(m.last_event);
-      } else if (activeCardFilter === "nao_rastreados") {
-        matchesCardFilter = true; // Já filtrado acima
       }
       const matchesTipoProcesso = filterTipoProcesso === "all" || m.tipo_processo === filterTipoProcesso;
       return matchesSearch && matchesLine && matchesCardFilter && matchesTipoProcesso && matchesCoordenador;
     });
+    
+    // Ordenar: MBLs com status "Aguardando" (AGD) por último
+    mbls.sort((a, b) => {
+      const statusA = getReportStatus(a.last_event);
+      const statusB = getReportStatus(b.last_event);
+      if (statusA.code === 'AGD' && statusB.code !== 'AGD') return 1;
+      if (statusA.code !== 'AGD' && statusB.code === 'AGD') return -1;
+      return 0;
+    });
+    
     return mbls;
   }, [mblList, searchTerm, filterLine, filterCoordenador, activeCardFilter, filterTipoProcesso]);
   const totalPages = Math.ceil(filteredMbls.length / itemsPerPage);
@@ -1326,22 +1324,17 @@ const ContainerTracking = () => {
 
   // Dashboard stats
   const stats = useMemo(() => {
-    // Contar MBLs não rastreados (status AGD - Aguardando)
-    const naoRastreados = mblList.filter(m => getReportStatus(m.last_event).code === 'AGD').length;
-    // Total exclui não rastreados para manter consistência com a lista principal
-    const rastreados = mblList.filter(m => getReportStatus(m.last_event).code !== 'AGD');
-    const total = rastreados.length;
-    const criticos = rastreados.filter(m => isEmCritico(m.is_critico)).length;
-    const emTransito = rastreados.filter(m => isEmTransito(m.last_event) && !isEntregue(m.last_event) && !isEmAlerta(m.last_event, m.is_eta_delayed) && !isEmCritico(m.is_critico)).length;
-    const emAlerta = rastreados.filter(m => isEmAlerta(m.last_event, m.is_eta_delayed) && !isEmCritico(m.is_critico)).length;
-    const entregues = rastreados.filter(m => isEntregue(m.last_event)).length;
+    const total = mblList.length;
+    const criticos = mblList.filter(m => isEmCritico(m.is_critico)).length;
+    const emTransito = mblList.filter(m => isEmTransito(m.last_event) && !isEntregue(m.last_event) && !isEmAlerta(m.last_event, m.is_eta_delayed) && !isEmCritico(m.is_critico)).length;
+    const emAlerta = mblList.filter(m => isEmAlerta(m.last_event, m.is_eta_delayed) && !isEmCritico(m.is_critico)).length;
+    const entregues = mblList.filter(m => isEntregue(m.last_event)).length;
     return {
       total,
       emTransito,
       emAlerta,
       criticos,
-      entregues,
-      naoRastreados
+      entregues
     };
   }, [mblList]);
 
@@ -1463,7 +1456,7 @@ const ContainerTracking = () => {
       <main className="relative z-10 max-w-[95%] mx-auto mb-12 px-2 space-y-[18px]">
 
         {/* Dashboard Cards */}
-        <section className="grid grid-cols-1 md:grid-cols-6 gap-4">
+        <section className="grid grid-cols-1 md:grid-cols-5 gap-4">
           <Card className={`bg-card/90 border-border backdrop-blur-sm shadow-lg cursor-pointer transition-all hover:scale-[1.02] ${activeCardFilter === "all" ? "ring-2 ring-primary" : ""}`} onClick={() => {
           setActiveCardFilter("all");
           setCurrentPage(1);
@@ -1570,28 +1563,6 @@ const ContainerTracking = () => {
                   {stats.entregues}
                 </span>
                 <span className="text-xs text-green-200/80">GOD, DLV</span>
-              </div>
-            </div>
-          </Card>
-
-          <Card className={`bg-gradient-to-br from-gray-800/50 via-gray-800/20 to-card border-gray-600/50 shadow-lg cursor-pointer transition-all hover:scale-[1.02] ${activeCardFilter === "nao_rastreados" ? "ring-2 ring-gray-400" : ""}`} onClick={() => {
-          setActiveCardFilter("nao_rastreados");
-          setCurrentPage(1);
-        }}>
-            <div className="p-4 flex flex-col h-full">
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-xs uppercase tracking-wide text-gray-300">
-                  Não Rastreados
-                </span>
-                <span className="inline-flex items-center justify-center w-8 h-8 rounded-full bg-gray-700/60 text-gray-400">
-                  <Radar className="w-4 h-4" />
-                </span>
-              </div>
-              <div className="flex items-end justify-between mt-auto">
-                <span className="text-3xl font-semibold text-gray-400">
-                  {stats.naoRastreados}
-                </span>
-                <span className="text-xs text-gray-400/80">Aguardando</span>
               </div>
             </div>
           </Card>
