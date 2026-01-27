@@ -5,6 +5,9 @@
 
 import type { ShippingLineCode, ShippingLineInfo } from '@/types/sea';
 
+// Re-export types for convenience
+export type { ShippingLineCode, ShippingLineInfo };
+
 // Mapeamento de prefixos MBL para código do armador
 export const MBL_PREFIX_MAP: Record<string, ShippingLineCode> = {
   // Hapag-Lloyd

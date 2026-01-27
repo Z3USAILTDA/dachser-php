@@ -22,17 +22,31 @@ import { Filter as FilterIcon } from "lucide-react";
 import VesselFinderMap from "@/components/tracking/VesselFinderMap";
 import Swal from 'sweetalert2';
 import { useTheme } from "@/hooks/useTheme";
-import { detectCarrierFromMbl } from "@/lib/shippingLineMapping";
+import { detectCarrierFromMbl, getAllShippingLines, SHIPPING_LINE_INFO, ShippingLineCode } from "@/lib/shippingLineMapping";
 
-// Deriva o armador do MBL usando o mapeamento centralizado
-const getShippingLineFromMbl = (mbl_id: string, shipping_line: string | null | undefined): string => {
-  // Se já tiver shipping_line no banco, usa ele
+// Deriva o armador do MBL usando o mapeamento centralizado - retorna código normalizado
+const getShippingLineCodeFromMbl = (mbl_id: string, shipping_line: string | null | undefined): ShippingLineCode => {
+  // Se já tiver shipping_line no banco, tenta mapear para código
   if (shipping_line) {
-    return shipping_line;
+    const upper = shipping_line.toUpperCase().trim().replace(/[\s-]+/g, '_');
+    // Verifica se é um código válido
+    if (SHIPPING_LINE_INFO[upper as ShippingLineCode]) {
+      return upper as ShippingLineCode;
+    }
+    // Tenta pelo nome
+    const found = Object.entries(SHIPPING_LINE_INFO).find(([_, info]) => 
+      info.name.toUpperCase() === shipping_line.toUpperCase().trim()
+    );
+    if (found) return found[0] as ShippingLineCode;
   }
   // Caso contrário, detecta pelo prefixo do MBL
-  const detected = detectCarrierFromMbl(mbl_id);
-  return detected.code !== 'UNKNOWN' ? detected.name : 'N/D';
+  return detectCarrierFromMbl(mbl_id).code;
+};
+
+// Retorna o nome legível do armador
+const getShippingLineFromMbl = (mbl_id: string, shipping_line: string | null | undefined): string => {
+  const code = getShippingLineCodeFromMbl(mbl_id, shipping_line);
+  return code !== 'UNKNOWN' ? SHIPPING_LINE_INFO[code].name : 'N/D';
 };
 
 // ========== REPORT STATUS SYSTEM (12 statuses) ==========
@@ -1337,17 +1351,12 @@ const ContainerTracking = () => {
     };
   }, [mblList]);
 
-  // Dynamic list of armadores
-  const dynamicArmadores = useMemo(() => {
-    const armadoresSet = new Set<string>();
-    mblList.forEach(m => {
-      const armador = getShippingLineFromMbl(m.mbl_id, m.shipping_line);
-      if (armador && armador !== "N/D") {
-        armadoresSet.add(armador);
-      }
-    });
-    return Array.from(armadoresSet).sort();
-  }, [mblList]);
+  // Lista fixa de todos os armadores mapeados (exceto UNKNOWN)
+  const allArmadores = useMemo(() => {
+    return getAllShippingLines()
+      .map(info => info.name)
+      .sort((a, b) => a.localeCompare(b));
+  }, []);
 
   // Dynamic list of coordenadores
   const dynamicCoordenadores = useMemo(() => {
@@ -1609,7 +1618,7 @@ const ContainerTracking = () => {
                     </SelectTrigger>
                     <SelectContent className="bg-card border border-border z-50">
                       <SelectItem value="all">Todos</SelectItem>
-                      {dynamicArmadores.map(armador => <SelectItem key={armador} value={armador}>
+                      {allArmadores.map(armador => <SelectItem key={armador} value={armador}>
                           {armador}
                         </SelectItem>)}
                     </SelectContent>
