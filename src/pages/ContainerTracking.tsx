@@ -22,7 +22,7 @@ import { Filter as FilterIcon } from "lucide-react";
 import VesselFinderMap from "@/components/tracking/VesselFinderMap";
 import Swal from 'sweetalert2';
 import { useTheme } from "@/hooks/useTheme";
-import { detectCarrierFromMbl, getAllShippingLines, SHIPPING_LINE_INFO, ShippingLineCode } from "@/lib/shippingLineMapping";
+import { detectCarrierFromMbl, SHIPPING_LINE_INFO, ShippingLineCode } from "@/lib/shippingLineMapping";
 
 // Deriva o armador do MBL usando o mapeamento centralizado - retorna código normalizado
 const getShippingLineCodeFromMbl = (mbl_id: string, shipping_line: string | null | undefined): ShippingLineCode => {
@@ -1351,12 +1351,18 @@ const ContainerTracking = () => {
     };
   }, [mblList]);
 
-  // Lista fixa de todos os armadores mapeados (exceto UNKNOWN)
-  const allArmadores = useMemo(() => {
-    return getAllShippingLines()
-      .map(info => info.name)
-      .sort((a, b) => a.localeCompare(b));
-  }, []);
+  // Lista dinâmica de armadores: apenas os que existem no banco E têm suporte à API JSONCargo
+  const filteredArmadores = useMemo(() => {
+    const armadoresSet = new Set<string>();
+    mblList.forEach(m => {
+      const code = getShippingLineCodeFromMbl(m.mbl_id, m.shipping_line);
+      // Só inclui se tiver suporte API (apiSupported: true)
+      if (code !== 'UNKNOWN' && SHIPPING_LINE_INFO[code].apiSupported) {
+        armadoresSet.add(SHIPPING_LINE_INFO[code].name);
+      }
+    });
+    return Array.from(armadoresSet).sort((a, b) => a.localeCompare(b));
+  }, [mblList]);
 
   // Dynamic list of coordenadores
   const dynamicCoordenadores = useMemo(() => {
@@ -1618,7 +1624,7 @@ const ContainerTracking = () => {
                     </SelectTrigger>
                     <SelectContent className="bg-card border border-border z-50">
                       <SelectItem value="all">Todos</SelectItem>
-                      {allArmadores.map(armador => <SelectItem key={armador} value={armador}>
+                      {filteredArmadores.map(armador => <SelectItem key={armador} value={armador}>
                           {armador}
                         </SelectItem>)}
                     </SelectContent>
