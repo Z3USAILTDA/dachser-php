@@ -2708,12 +2708,33 @@ serve(async (req) => {
         ];
         const errorStatusFilter = errorStatuses.map(s => `'${s}'`).join(',');
         
-        // POST-TRACKING QUERY: AWBs that exited the tracking screen
-        // Criteria:
-        // 1. Post-ARR statuses (ATA, NFD, AWD, DLV, POD) - these don't appear in tracking
-        // 2. ARR/RCF status with arr_datetime > 120 hours ago AND no active alerts (data_atraso IS NULL)
-        // Use subquery to get the most recent record per house to avoid duplicates
-        // Optimized query: use subquery instead of JOIN to allow index usage
+        // POST-TRACKING QUERY: TWO-STEP OPTIMIZED APPROACH
+        // STEP 1: Get valid MAWBs from t_master_dados first (fast indexed query)
+        console.log('CCT Step 1: Fetching valid MAWBs from t_master_dados...');
+        const validMawbs = await client.query(`
+          SELECT DISTINCT mawb 
+          FROM ${database}.t_master_dados 
+          WHERE data_insert >= '2026-01-26 00:00:00'
+          AND data_insert < '2026-01-27 00:00:00'
+          AND tipo_processo IN ('AIR IMPORT', 'AIR EXPORT')
+          LIMIT 1000
+        `);
+        
+        const mawbList = (validMawbs || []).map((r: any) => r.mawb).filter((m: string) => m && m.trim() !== '');
+        console.log(`CCT Step 1: Found ${mawbList.length} valid MAWBs`);
+        
+        if (mawbList.length === 0) {
+          console.log('CCT: No valid MAWBs found for date range, returning empty');
+          return new Response(JSON.stringify({ success: true, data: [] }), {
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
+        }
+        
+        // Build WHERE IN clause with escaped values
+        const mawbFilter = mawbList.map((m: string) => `'${m.replace(/'/g, "''")}'`).join(',');
+        
+        // STEP 2: Query t_status_aereo with explicit MAWB list (no subquery = faster)
+        console.log('CCT Step 2: Fetching shipments from t_status_aereo...');
         const shipments = await client.query(`
           SELECT 
             sub.id,
@@ -2764,7 +2785,8 @@ serve(async (req) => {
               END as status_cct_oficial,
               ROW_NUMBER() OVER (PARTITION BY TRIM(s.hawb) ORDER BY s.\`última atualização\` DESC) as rn
             FROM ${database}.t_status_aereo s
-            WHERE (${airlineLikeConditions})
+            WHERE s.awb IN (${mawbFilter})
+            AND (${airlineLikeConditions})
             AND s.\`último_status\` NOT IN (${errorStatusFilter})
             AND (s.origem IS NOT NULL AND LOWER(TRIM(s.origem)) NOT IN ('n/a', 'na', 'erro', 'error', ''))
             AND (s.destino IS NOT NULL AND LOWER(TRIM(s.destino)) NOT IN ('n/a', 'na', 'erro', 'error', ''))
@@ -2778,17 +2800,13 @@ serve(async (req) => {
                AND s.arr_datetime <= NOW() - INTERVAL 120 HOUR
                AND s.data_atraso IS NULL)
             )
-            AND s.awb IN (
-              SELECT m.mawb FROM ${database}.t_master_dados m 
-              WHERE m.data_insert >= '2026-01-26 00:00:00'
-              AND m.data_insert < '2026-01-27 00:00:00'
-              AND m.tipo_processo IN ('AIR IMPORT', 'AIR EXPORT')
-            )
           ) sub
           WHERE sub.rn = 1
           ORDER BY sub.ultimo_evento_data DESC
           LIMIT 500
         `);
+        
+        console.log(`CCT Step 2: Found ${(shipments || []).length} shipments`);
 
         // STEP 2: Enrich with CCT data using a separate, optimized query
         // This avoids the heavy JOIN with TRIM/COLLATE in the main query
