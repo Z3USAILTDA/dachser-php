@@ -2716,7 +2716,7 @@ serve(async (req) => {
           FROM ${database}.t_master_dados 
           WHERE data_insert >= '2026-01-26 00:00:00'
           AND data_insert < '2026-01-27 00:00:00'
-          AND tipo_processo IN ('AIR IMPORT', 'AIR EXPORT')
+          AND tipo_processo = 'AIR IMPORT'
           LIMIT 1000
         `);
         
