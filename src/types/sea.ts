@@ -70,6 +70,123 @@ export const PORTOS_COMUNS_BRASIL = [
   "BRMAO",  // Manaus
 ];
 
+// Port groups by region for quick selection
+export const PORTOS_GRUPOS = {
+  // Brasil
+  BRASIL_SUL: ["BRSSZ", "BRPNG", "BRITJ", "BRNVT", "BRIOA", "BRRIG"],
+  BRASIL_SUDESTE: ["BRSSZ", "BRRIO", "BRVIX"],
+  BRASIL_NORDESTE: ["BRSSA", "BRSUA", "BRPEC"],
+  BRASIL_NORTE: ["BRMAO"],
+  BRASIL_TODOS: ["BRSSZ", "BRPNG", "BRITJ", "BRNVT", "BRIOA", "BRRIG", "BRRIO", "BRVIX", "BRSSA", "BRSUA", "BRPEC", "BRMAO"],
+  // Ásia
+  ASIA_CHINA: ["CNSHA", "CNNGB", "CNYTN", "CNTAO", "CNXMN", "HKHKG"],
+  ASIA_SUDESTE: ["SGSIN", "VNSGN", "MYPKG", "THLCH", "IDTPP", "IDJKT"],
+  ASIA_NORDESTE: ["KRPUS", "JPTYO", "JPYOK", "TWKHH", "TWKEL"],
+  // Europa
+  EUROPA_NORTE: ["NLRTM", "BEANR", "DEHAM", "DEBRV", "GBFXT", "FRLEH"],
+  EUROPA_SUL: ["ESVLC", "ESBCN", "ITGOA", "GRPIR", "PTLIS", "PTLEI"],
+  // Américas
+  AMERICAS_NORTE: ["USLAX", "USLGB", "USNYC", "USSAV", "USHOU", "USMIA"],
+  AMERICAS_SUL: ["ARBUE", "UYMVD", "CLVAP", "PECLL", "COBUN", "ECGYE"],
+  // Hubs de Transbordo
+  HUBS: ["PAPTY", "PACOL", "JMKIN", "BSFPO", "ESALG", "AEJEA", "OMSLH", "LKCMB"],
+} as const;
+
+// Human-readable labels for ports
+export const PORTOS_LABELS: Record<string, string> = {
+  // Brasil
+  BRSSZ: "Santos",
+  BRPNG: "Paranaguá",
+  BRITJ: "Itajaí",
+  BRNVT: "Navegantes",
+  BRIOA: "Itapoá",
+  BRRIG: "Rio Grande",
+  BRRIO: "Rio de Janeiro",
+  BRVIX: "Vitória",
+  BRSSA: "Salvador",
+  BRSUA: "Suape",
+  BRPEC: "Pecém",
+  BRMAO: "Manaus",
+  // China
+  CNSHA: "Xangai",
+  CNNGB: "Ningbo",
+  CNYTN: "Yantian",
+  CNTAO: "Qingdao",
+  CNXMN: "Xiamen",
+  HKHKG: "Hong Kong",
+  // Sudeste Asiático
+  SGSIN: "Singapura",
+  VNSGN: "Ho Chi Minh",
+  MYPKG: "Port Klang",
+  THLCH: "Laem Chabang",
+  IDTPP: "Tanjung Priok",
+  IDJKT: "Jakarta",
+  // Nordeste Asiático
+  KRPUS: "Busan",
+  JPTYO: "Tóquio",
+  JPYOK: "Yokohama",
+  TWKHH: "Kaohsiung",
+  TWKEL: "Keelung",
+  // Europa Norte
+  NLRTM: "Rotterdam",
+  BEANR: "Antuérpia",
+  DEHAM: "Hamburgo",
+  DEBRV: "Bremerhaven",
+  GBFXT: "Felixstowe",
+  FRLEH: "Le Havre",
+  // Europa Sul
+  ESVLC: "Valencia",
+  ESBCN: "Barcelona",
+  ITGOA: "Gênova",
+  GRPIR: "Piraeus",
+  PTLIS: "Lisboa",
+  PTLEI: "Leixões",
+  // América do Norte
+  USLAX: "Los Angeles",
+  USLGB: "Long Beach",
+  USNYC: "Nova York",
+  USSAV: "Savannah",
+  USHOU: "Houston",
+  USMIA: "Miami",
+  // América do Sul
+  ARBUE: "Buenos Aires",
+  UYMVD: "Montevidéu",
+  CLVAP: "Valparaíso",
+  PECLL: "Callao",
+  COBUN: "Buenaventura",
+  ECGYE: "Guayaquil",
+  // Hubs
+  PAPTY: "Panamá",
+  PACOL: "Colón",
+  JMKIN: "Kingston",
+  BSFPO: "Freeport",
+  ESALG: "Algeciras",
+  AEJEA: "Jebel Ali",
+  OMSLH: "Salalah",
+  LKCMB: "Colombo",
+};
+
+// Groups for UI quick-select buttons
+export const PORTOS_GRUPOS_UI = {
+  origem: [
+    { label: "+China", key: "ASIA_CHINA" },
+    { label: "+Ásia SE", key: "ASIA_SUDESTE" },
+    { label: "+Ásia NE", key: "ASIA_NORDESTE" },
+    { label: "+Europa N", key: "EUROPA_NORTE" },
+    { label: "+Europa S", key: "EUROPA_SUL" },
+    { label: "+Américas N", key: "AMERICAS_NORTE" },
+    { label: "+Américas S", key: "AMERICAS_SUL" },
+    { label: "+Hubs", key: "HUBS" },
+  ],
+  destino: [
+    { label: "+Santos", key: "BRASIL_SANTOS", ports: ["BRSSZ"] },
+    { label: "+Sul BR", key: "BRASIL_SUL" },
+    { label: "+Sudeste BR", key: "BRASIL_SUDESTE" },
+    { label: "+Nordeste BR", key: "BRASIL_NORDESTE" },
+    { label: "+Todos BR", key: "BRASIL_TODOS" },
+  ],
+} as const;
+
 export const CANAIS_NOTIFICACAO_SEA: { value: CanalNotificacaoSea; label: string }[] = [
   { value: 'EMAIL_CLIENTE', label: 'E-mail Cliente' },
   { value: 'EMAIL_INTERNO', label: 'E-mail Interno' },
@@ -87,7 +204,9 @@ export interface SeaRegraNotificacao {
   cliente_nome?: string | null;
   cnpj_consignatario?: string | null;
   tipo_processo: TipoProcessoMaritimo;
-  portos: string[];
+  portos_origem: string[];
+  portos_destino: string[];
+  portos?: string[]; // Deprecated - kept for backward compatibility
   eventos_disparo: string[];
   frequencia: FrequenciaNotificacao;
   canais: CanalNotificacaoSea[];
@@ -95,6 +214,7 @@ export interface SeaRegraNotificacao {
   emails_export?: string | null;
   template_id: string;
   ativo: boolean;
+  is_default: boolean;
   created_at: string;
   updated_at: string;
 }

@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { Ship, Plus, Pencil, Trash2, Search, RefreshCw, ArrowLeft, Anchor, Sun, Moon } from "lucide-react";
+import { Ship, Plus, Pencil, Trash2, Search, RefreshCw, ArrowLeft, Anchor, Sun, Moon, Star } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -9,8 +9,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { useSeaRegrasNotificacao } from "@/hooks/useSeaRegrasNotificacao";
 import { SeaRegraNotificacaoDialog } from "@/components/sea/SeaRegraNotificacaoDialog";
-import { SeaRegraNotificacao, getCanalColorSea, getTipoProcessoColor, getFrequenciaColor } from "@/types/sea";
-import { format } from "date-fns";
+import { SeaRegraNotificacao, getTipoProcessoColor, getFrequenciaColor } from "@/types/sea";
 import dachserBg from "@/assets/dachser-background.jpg";
 import { useTheme } from "@/hooks/useTheme";
 
@@ -29,11 +28,19 @@ export default function SeaRegrasNotificacao() {
 
   const filteredRegras = regras.filter(r => {
     const term = search.toLowerCase();
+    const allPorts = [...(r.portos_origem || []), ...(r.portos_destino || []), ...(r.portos || [])];
     return (
       (r.cliente_nome || '').toLowerCase().includes(term) ||
       (r.cnpj_consignatario || '').includes(term) ||
-      r.portos.some(p => p.toLowerCase().includes(term))
+      allPorts.some(p => p.toLowerCase().includes(term))
     );
+  });
+
+  // Sort to put default rules first
+  const sortedRegras = [...filteredRegras].sort((a, b) => {
+    if (a.is_default && !b.is_default) return -1;
+    if (!a.is_default && b.is_default) return 1;
+    return 0;
   });
 
   const handleEdit = (regra: SeaRegraNotificacao) => {
@@ -134,7 +141,8 @@ export default function SeaRegrasNotificacao() {
               <TableRow className="border-white/8 hover:bg-transparent">
                 <TableHead className="text-white/60 text-sm py-3">Cliente</TableHead>
                 <TableHead className="text-white/60 text-sm py-3">Tipo</TableHead>
-                <TableHead className="text-white/60 text-sm py-3">Portos</TableHead>
+                <TableHead className="text-white/60 text-sm py-3">Origem</TableHead>
+                <TableHead className="text-white/60 text-sm py-3">Destino</TableHead>
                 <TableHead className="text-white/60 text-sm py-3">Eventos</TableHead>
                 <TableHead className="text-white/60 text-sm py-3">Frequência</TableHead>
                 <TableHead className="text-white/60 text-sm py-3 text-center">Ativo</TableHead>
@@ -144,24 +152,32 @@ export default function SeaRegrasNotificacao() {
             <TableBody>
               {loading && regras.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={7} className="text-center py-12 text-white/50">
+                  <TableCell colSpan={8} className="text-center py-12 text-white/50">
                     Carregando regras...
                   </TableCell>
                 </TableRow>
-              ) : filteredRegras.length === 0 ? (
+              ) : sortedRegras.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={7} className="text-center py-12 text-white/50">
+                  <TableCell colSpan={8} className="text-center py-12 text-white/50">
                     <Ship className="h-8 w-8 mx-auto mb-2 opacity-50" />
                     Nenhuma regra encontrada
                   </TableCell>
                 </TableRow>
               ) : (
-                filteredRegras.map((regra) => (
-                  <TableRow key={regra.id} className="border-white/8 hover:bg-white/5">
+                sortedRegras.map((regra) => (
+                  <TableRow key={regra.id} className={`border-white/8 hover:bg-white/5 ${regra.is_default ? 'bg-amber-500/5' : ''}`}>
                     <TableCell className="py-3">
-                      <div>
-                        <div className="text-white font-medium text-sm">{regra.cliente_nome || '—'}</div>
-                        <div className="text-white/50 font-mono text-xs">{regra.cnpj_consignatario || ''}</div>
+                      <div className="flex items-center gap-2">
+                        {regra.is_default && (
+                          <Badge className="bg-amber-500/20 text-amber-300 border-amber-500/30 text-[10px] px-1.5">
+                            <Star className="h-3 w-3 mr-0.5" />
+                            PADRÃO
+                          </Badge>
+                        )}
+                        <div>
+                          <div className="text-white font-medium text-sm">{regra.cliente_nome || (regra.is_default ? 'Regra Global' : '—')}</div>
+                          <div className="text-white/50 font-mono text-xs">{regra.cnpj_consignatario || ''}</div>
+                        </div>
                       </div>
                     </TableCell>
                     <TableCell className="py-3">
@@ -171,19 +187,37 @@ export default function SeaRegrasNotificacao() {
                     </TableCell>
                     <TableCell className="py-3">
                       <div className="flex flex-wrap gap-1">
-                        {regra.portos.length > 0 ? (
-                          regra.portos.slice(0, 3).map(p => (
+                        {(regra.portos_origem || []).length > 0 ? (
+                          (regra.portos_origem || []).slice(0, 2).map(p => (
+                            <Badge key={p} variant="secondary" className="bg-orange-500/20 text-orange-300 text-xs">
+                              {p}
+                            </Badge>
+                          ))
+                        ) : (
+                          <span className="text-white/40 text-xs">Todos</span>
+                        )}
+                        {(regra.portos_origem || []).length > 2 && (
+                          <Badge variant="secondary" className="bg-white/10 text-white/60 text-xs">
+                            +{(regra.portos_origem || []).length - 2}
+                          </Badge>
+                        )}
+                      </div>
+                    </TableCell>
+                    <TableCell className="py-3">
+                      <div className="flex flex-wrap gap-1">
+                        {(regra.portos_destino || []).length > 0 ? (
+                          (regra.portos_destino || []).slice(0, 2).map(p => (
                             <Badge key={p} variant="secondary" className="bg-cyan-500/20 text-cyan-300 text-xs">
                               <Anchor className="h-3 w-3 mr-1" />
                               {p}
                             </Badge>
                           ))
                         ) : (
-                          <span className="text-white/40 text-sm">Todos</span>
+                          <span className="text-white/40 text-xs">Todos</span>
                         )}
-                        {regra.portos.length > 3 && (
+                        {(regra.portos_destino || []).length > 2 && (
                           <Badge variant="secondary" className="bg-white/10 text-white/60 text-xs">
-                            +{regra.portos.length - 3}
+                            +{(regra.portos_destino || []).length - 2}
                           </Badge>
                         )}
                       </div>
