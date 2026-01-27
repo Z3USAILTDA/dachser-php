@@ -252,7 +252,7 @@ export function SeaRegraNotificacaoDialog({ open, onOpenChange, regra, onSave }:
           <div className="grid grid-cols-2 gap-4">
             {/* Portos de Origem */}
             <div className="space-y-2 p-4 rounded-lg bg-white/5 border border-white/10">
-              <Label className="text-orange-400 font-medium">Portos de Origem (Internacional)</Label>
+              <Label className="text-orange-400 font-medium">Portos de Origem</Label>
               <div className="flex gap-2">
                 <Input
                   value={portoOrigemInput}
@@ -267,17 +267,32 @@ export function SeaRegraNotificacaoDialog({ open, onOpenChange, regra, onSave }:
                 </Button>
               </div>
               
-              {/* Quick-add buttons for origin */}
-              <div className="flex flex-wrap gap-1">
-                {PORTOS_GRUPOS_UI.origem.map(group => (
-                  <button
-                    key={group.key}
-                    onClick={() => handleAddGroupOrigem(group.key)}
-                    className="text-[10px] px-2 py-0.5 rounded bg-orange-500/20 text-orange-300 hover:bg-orange-500/30 transition"
-                  >
-                    {group.label}
-                  </button>
-                ))}
+              {/* Quick-add buttons - All regions for origin */}
+              <div className="space-y-1">
+                <span className="text-[9px] text-white/40 uppercase tracking-wide">Internacional</span>
+                <div className="flex flex-wrap gap-1">
+                  {PORTOS_GRUPOS_UI.origem.map(group => (
+                    <button
+                      key={group.key}
+                      onClick={() => handleAddGroupOrigem(group.key)}
+                      className="text-[10px] px-2 py-0.5 rounded bg-orange-500/20 text-orange-300 hover:bg-orange-500/30 transition"
+                    >
+                      {group.label}
+                    </button>
+                  ))}
+                </div>
+                <span className="text-[9px] text-white/40 uppercase tracking-wide">Brasil</span>
+                <div className="flex flex-wrap gap-1">
+                  {PORTOS_GRUPOS_UI.destino.map(group => (
+                    <button
+                      key={`origem-${group.key}`}
+                      onClick={() => handleAddGroupOrigem(group.key)}
+                      className="text-[10px] px-2 py-0.5 rounded bg-green-500/20 text-green-300 hover:bg-green-500/30 transition"
+                    >
+                      {group.label}
+                    </button>
+                  ))}
+                </div>
               </div>
               
               {/* Selected ports */}
@@ -300,7 +315,7 @@ export function SeaRegraNotificacaoDialog({ open, onOpenChange, regra, onSave }:
 
             {/* Portos de Destino */}
             <div className="space-y-2 p-4 rounded-lg bg-white/5 border border-white/10">
-              <Label className="text-cyan-400 font-medium">Portos de Destino (Brasil)</Label>
+              <Label className="text-cyan-400 font-medium">Portos de Destino</Label>
               <div className="flex gap-2">
                 <Input
                   value={portoDestinoInput}
@@ -315,17 +330,32 @@ export function SeaRegraNotificacaoDialog({ open, onOpenChange, regra, onSave }:
                 </Button>
               </div>
               
-              {/* Quick-add buttons for destination */}
-              <div className="flex flex-wrap gap-1">
-                {PORTOS_GRUPOS_UI.destino.map(group => (
-                  <button
-                    key={group.key}
-                    onClick={() => handleAddGroupDestino(group.key)}
-                    className="text-[10px] px-2 py-0.5 rounded bg-cyan-500/20 text-cyan-300 hover:bg-cyan-500/30 transition"
-                  >
-                    {group.label}
-                  </button>
-                ))}
+              {/* Quick-add buttons - All regions for destination */}
+              <div className="space-y-1">
+                <span className="text-[9px] text-white/40 uppercase tracking-wide">Brasil</span>
+                <div className="flex flex-wrap gap-1">
+                  {PORTOS_GRUPOS_UI.destino.map(group => (
+                    <button
+                      key={group.key}
+                      onClick={() => handleAddGroupDestino(group.key)}
+                      className="text-[10px] px-2 py-0.5 rounded bg-cyan-500/20 text-cyan-300 hover:bg-cyan-500/30 transition"
+                    >
+                      {group.label}
+                    </button>
+                  ))}
+                </div>
+                <span className="text-[9px] text-white/40 uppercase tracking-wide">Internacional</span>
+                <div className="flex flex-wrap gap-1">
+                  {PORTOS_GRUPOS_UI.origem.map(group => (
+                    <button
+                      key={`destino-${group.key}`}
+                      onClick={() => handleAddGroupDestino(group.key)}
+                      className="text-[10px] px-2 py-0.5 rounded bg-purple-500/20 text-purple-300 hover:bg-purple-500/30 transition"
+                    >
+                      {group.label}
+                    </button>
+                  ))}
+                </div>
               </div>
               
               {/* Selected ports */}
