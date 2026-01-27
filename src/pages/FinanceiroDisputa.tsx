@@ -7,7 +7,10 @@ import { Flag, Search, Filter, X, Plus, Check, Trash2, Clock, Scale, Upload, Fil
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Checkbox } from "@/components/ui/checkbox";
 import { TablePagination } from "@/components/layout/TablePagination";
+import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
+import ErrorBoundary from "@/components/ErrorBoundary";
 import {
   Select,
   SelectContent,
@@ -56,13 +59,14 @@ interface DisputaRow {
   escalation: string;
 }
 
-export default function FinanceiroDisputa() {
+function FinanceiroDisputaContent() {
   useUsageLog({ endpoint: "/fin/disputas" });
   const navigate = useNavigate();
   const { toast } = useToast();
 
   const [rows, setRows] = useState<DisputaRow[]>([]);
   const [loading, setLoading] = useState(true);
+  const [hasError, setHasError] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [tipoFilter, setTipoFilter] = useState("all");
   const [currentPage, setCurrentPage] = useState(1);
@@ -99,6 +103,14 @@ export default function FinanceiroDisputa() {
   const [editingResponsavel, setEditingResponsavel] = useState<string | null>(null);
   const responsavelDebounceTimers = useRef<Record<string, NodeJS.Timeout>>({});
   const responsavelInputRef = useRef<HTMLInputElement>(null);
+
+  // Bulk actions state
+  const [selectedDocKeys, setSelectedDocKeys] = useState<Set<string>>(new Set());
+  const [selectAll, setSelectAll] = useState(false);
+  const [bulkLoading, setBulkLoading] = useState(false);
+  const [bulkDeleteDialogOpen, setBulkDeleteDialogOpen] = useState(false);
+  const [bulkResolveDialogOpen, setBulkResolveDialogOpen] = useState(false);
+
   useEffect(() => {
     fetchDisputas();
   }, [tipoFilter]);
@@ -119,6 +131,7 @@ export default function FinanceiroDisputa() {
     } catch (err) {
       console.error("Erro ao carregar disputas:", err);
       toast({ title: "Erro", description: "Falha ao carregar disputas", variant: "destructive" });
+      setHasError(true);
     } finally {
       setLoading(false);
     }
@@ -137,9 +150,11 @@ export default function FinanceiroDisputa() {
     });
   }, [rows, searchQuery]);
 
-  // Reset page when filters change
+  // Reset page and selection when filters change
   useEffect(() => {
     setCurrentPage(1);
+    setSelectedDocKeys(new Set());
+    setSelectAll(false);
   }, [searchQuery, tipoFilter]);
 
   const totalPages = Math.ceil(filteredRows.length / PAGE_SIZE);
@@ -187,7 +202,6 @@ export default function FinanceiroDisputa() {
       const start = new Date(startDate);
       if (isNaN(start.getTime())) return "—";
       
-      // Use current time in São Paulo timezone for comparison
       const now = new Date();
       const ms = now.getTime() - start.getTime();
       
@@ -288,22 +302,84 @@ export default function FinanceiroDisputa() {
     }
   };
 
+  // Bulk action handlers
+  const toggleSelectAll = () => {
+    if (selectAll) {
+      setSelectedDocKeys(new Set());
+    } else {
+      setSelectedDocKeys(new Set(paginatedRows.map(r => r.doc_key)));
+    }
+    setSelectAll(!selectAll);
+  };
+
+  const toggleSelectRow = (docKey: string) => {
+    const newSet = new Set(selectedDocKeys);
+    if (newSet.has(docKey)) {
+      newSet.delete(docKey);
+      setSelectAll(false);
+    } else {
+      newSet.add(docKey);
+    }
+    setSelectedDocKeys(newSet);
+  };
+
+  const handleBulkDelete = async () => {
+    if (selectedDocKeys.size === 0) return;
+    setBulkLoading(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("mariadb-proxy", {
+        body: { action: "bulk_delete_disputas", doc_keys: Array.from(selectedDocKeys) },
+      });
+      if (error) throw error;
+      toast({ title: "Sucesso", description: `${data.deleted} disputa(s) excluída(s)` });
+      setSelectedDocKeys(new Set());
+      setSelectAll(false);
+      fetchDisputas();
+    } catch (err) {
+      console.error("Erro ao excluir em lote:", err);
+      toast({ title: "Erro", description: "Falha ao excluir disputas", variant: "destructive" });
+    } finally {
+      setBulkLoading(false);
+      setBulkDeleteDialogOpen(false);
+    }
+  };
+
+  const handleBulkResolve = async () => {
+    if (selectedDocKeys.size === 0) return;
+    setBulkLoading(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("mariadb-proxy", {
+        body: { action: "bulk_resolve_disputas", doc_keys: Array.from(selectedDocKeys) },
+      });
+      if (error) throw error;
+      toast({ title: "Sucesso", description: `${data.resolved} disputa(s) resolvida(s)` });
+      setSelectedDocKeys(new Set());
+      setSelectAll(false);
+      fetchDisputas();
+    } catch (err) {
+      console.error("Erro ao resolver em lote:", err);
+      toast({ title: "Erro", description: "Falha ao resolver disputas", variant: "destructive" });
+    } finally {
+      setBulkLoading(false);
+      setBulkResolveDialogOpen(false);
+    }
+  };
+
   const clearFilters = () => {
     setSearchQuery("");
     setTipoFilter("all");
+    setSelectedDocKeys(new Set());
+    setSelectAll(false);
   };
 
   // Debounced observacoes update
   const handleObservacoesChange = useCallback((docKey: string, value: string) => {
-    // Update local state immediately
     setRows(prev => prev.map(r => r.doc_key === docKey ? { ...r, observacoes: value } : r));
 
-    // Clear existing timer
     if (debounceTimers.current[docKey]) {
       clearTimeout(debounceTimers.current[docKey]);
     }
 
-    // Set new debounce timer (500ms)
     debounceTimers.current[docKey] = setTimeout(async () => {
       setSavingObservacoes(prev => ({ ...prev, [docKey]: true }));
       try {
@@ -326,15 +402,12 @@ export default function FinanceiroDisputa() {
 
   // Debounced responsavel update
   const handleResponsavelChange = useCallback((docKey: string, value: string) => {
-    // Update local state immediately
     setRows(prev => prev.map(r => r.doc_key === docKey ? { ...r, responsavel: value } : r));
 
-    // Clear existing timer
     if (responsavelDebounceTimers.current[docKey]) {
       clearTimeout(responsavelDebounceTimers.current[docKey]);
     }
 
-    // Set new debounce timer (500ms)
     responsavelDebounceTimers.current[docKey] = setTimeout(async () => {
       setSavingResponsavel(prev => ({ ...prev, [docKey]: true }));
       try {
@@ -355,6 +428,65 @@ export default function FinanceiroDisputa() {
     }, 500);
   }, [toast]);
 
+  // Improved column index finder with more variations
+  const findColumnIndex = (headers: string[], ...names: string[]): number => {
+    const normalize = (s: string) => 
+      s?.toString()
+        .toLowerCase()
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "")
+        .replace(/\s+/g, ' ')
+        .trim() || '';
+    
+    for (let i = 0; i < headers.length; i++) {
+      const h = normalize(headers[i]);
+      for (const name of names) {
+        if (h.includes(normalize(name))) return i;
+      }
+    }
+    return -1;
+  };
+
+  // Propagate observations between items of the same process
+  const propagateObservations = (
+    items: Array<{ nd: string; descricao: string; responsavel: string; departamento: string; escalation: string }>
+  ) => {
+    const groups = new Map<string, typeof items>();
+    
+    for (const item of items) {
+      // Extract process base (remove suffixes like -A, -B, /1, /2)
+      const processoBase = item.nd.replace(/[-\/][A-Z0-9]{1,2}$/i, '').substring(0, 12);
+      
+      if (!groups.has(processoBase)) {
+        groups.set(processoBase, []);
+      }
+      groups.get(processoBase)!.push(item);
+    }
+    
+    // Propagate OBS and Responsável within each group
+    for (const [, groupItems] of groups) {
+      if (groupItems.length <= 1) continue;
+      
+      const obsDoGrupo = groupItems.find(i => i.descricao?.trim())?.descricao || '';
+      const respDoGrupo = groupItems.find(i => i.responsavel?.trim())?.responsavel || '';
+      const deptDoGrupo = groupItems.find(i => i.departamento?.trim())?.departamento || '';
+      
+      for (const item of groupItems) {
+        if (!item.descricao?.trim() && obsDoGrupo) {
+          item.descricao = obsDoGrupo;
+        }
+        if (!item.responsavel?.trim() && respDoGrupo) {
+          item.responsavel = respDoGrupo;
+        }
+        if (!item.departamento?.trim() && deptDoGrupo) {
+          item.departamento = deptDoGrupo;
+        }
+      }
+    }
+    
+    return items;
+  };
+
   const parseSpreadsheet = async (file: File): Promise<Array<{
     nd: string;
     descricao: string;
@@ -372,18 +504,6 @@ export default function FinanceiroDisputa() {
 
     const ext = file.name.toLowerCase();
     
-    // Helper to find column index by name (case-insensitive, ignores accents)
-    const findColumnIndex = (headers: string[], ...names: string[]): number => {
-      const normalize = (s: string) => s?.toString().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/\s+/g, ' ').trim() || '';
-      for (let i = 0; i < headers.length; i++) {
-        const h = normalize(headers[i]);
-        for (const name of names) {
-          if (h.includes(normalize(name))) return i;
-        }
-      }
-      return -1;
-    };
-    
     if (ext.endsWith('.xlsx') || ext.endsWith('.xls')) {
       const arrayBuffer = await file.arrayBuffer();
       const workbook = XLSX.read(arrayBuffer, { type: 'array' });
@@ -392,16 +512,38 @@ export default function FinanceiroDisputa() {
       
       if (rows.length === 0) return items;
       
-      // Detect header row and column indices
       const headerRow = rows[0]?.map(c => c?.toString() || '') || [];
-      const hasHeader = headerRow.some(h => h.toLowerCase().includes('nd') || h.toLowerCase().includes('cnpj') || h.toLowerCase().includes('documento'));
+      const hasHeader = headerRow.some(h => 
+        h.toLowerCase().includes('nd') || 
+        h.toLowerCase().includes('cnpj') || 
+        h.toLowerCase().includes('documento') ||
+        h.toLowerCase().includes('nf')
+      );
       
-      // Find column indices dynamically or use defaults
-      const ndIdx = findColumnIndex(headerRow, 'nd', 'documento', 'nf');
-      const descIdx = findColumnIndex(headerRow, 'descrição', 'descricao', 'pendência', 'pendencia');
-      const deptIdx = findColumnIndex(headerRow, 'departamento', 'depto');
-      const respIdx = findColumnIndex(headerRow, 'responsável', 'responsavel');
-      const escIdx = findColumnIndex(headerRow, 'escalation', 'escalonamento');
+      // Find columns with expanded variations
+      const ndIdx = findColumnIndex(headerRow, 'nd', 'documento', 'nf', 'numero', 'doc', 'nota');
+      const descIdx = findColumnIndex(headerRow, 
+        'obs', 'observações', 'observacoes', 'observacao',
+        'descrição', 'descricao', 
+        'pendência', 'pendencia',
+        'motivo', 'comentário', 'comentario'
+      );
+      const deptIdx = findColumnIndex(headerRow, 'departamento', 'depto', 'dept');
+      const respIdx = findColumnIndex(headerRow, 
+        'responsável', 'responsavel', 'resp', 
+        'analista', 'atribuído', 'atribuido'
+      );
+      const escIdx = findColumnIndex(headerRow, 'escalation', 'escalonamento', 'escalacao');
+      
+      // Validate required column
+      if (ndIdx === -1) {
+        toast({ 
+          title: "Erro de formato", 
+          description: "Coluna 'ND' ou 'Documento' não encontrada na planilha",
+          variant: "destructive" 
+        });
+        return [];
+      }
       
       const startIdx = hasHeader ? 1 : 0;
       
@@ -425,13 +567,36 @@ export default function FinanceiroDisputa() {
       if (lines.length === 0) return items;
       
       const headerCols = lines[0].split(/[,;\t]/);
-      const hasHeader = headerCols.some(h => h.toLowerCase().includes('nd') || h.toLowerCase().includes('cnpj') || h.toLowerCase().includes('documento'));
+      const hasHeader = headerCols.some(h => 
+        h.toLowerCase().includes('nd') || 
+        h.toLowerCase().includes('cnpj') || 
+        h.toLowerCase().includes('documento') ||
+        h.toLowerCase().includes('nf')
+      );
       
-      const ndIdx = findColumnIndex(headerCols, 'nd', 'documento', 'nf');
-      const descIdx = findColumnIndex(headerCols, 'descrição', 'descricao', 'pendência', 'pendencia');
-      const deptIdx = findColumnIndex(headerCols, 'departamento', 'depto');
-      const respIdx = findColumnIndex(headerCols, 'responsável', 'responsavel');
-      const escIdx = findColumnIndex(headerCols, 'escalation', 'escalonamento');
+      const ndIdx = findColumnIndex(headerCols, 'nd', 'documento', 'nf', 'numero', 'doc', 'nota');
+      const descIdx = findColumnIndex(headerCols, 
+        'obs', 'observações', 'observacoes', 'observacao',
+        'descrição', 'descricao', 
+        'pendência', 'pendencia',
+        'motivo', 'comentário', 'comentario'
+      );
+      const deptIdx = findColumnIndex(headerCols, 'departamento', 'depto', 'dept');
+      const respIdx = findColumnIndex(headerCols, 
+        'responsável', 'responsavel', 'resp', 
+        'analista', 'atribuído', 'atribuido'
+      );
+      const escIdx = findColumnIndex(headerCols, 'escalation', 'escalonamento', 'escalacao');
+      
+      // Validate required column
+      if (ndIdx === -1) {
+        toast({ 
+          title: "Erro de formato", 
+          description: "Coluna 'ND' ou 'Documento' não encontrada na planilha",
+          variant: "destructive" 
+        });
+        return [];
+      }
       
       const startIdx = hasHeader ? 1 : 0;
       
@@ -450,7 +615,7 @@ export default function FinanceiroDisputa() {
       }
     }
     
-    console.log('Parsed items:', items.slice(0, 3)); // Debug log
+    console.log('Parsed items:', items.slice(0, 3));
     return items;
   };
 
@@ -470,8 +635,11 @@ export default function FinanceiroDisputa() {
         return;
       }
 
+      // Apply observation propagation
+      const processedItems = propagateObservations(items);
+
       const { data, error } = await supabase.functions.invoke("mariadb-proxy", {
-        body: { action: "import_disputas_planilha", items },
+        body: { action: "import_disputas_planilha", items: processedItems },
       });
 
       if (error) throw error;
@@ -515,6 +683,27 @@ export default function FinanceiroDisputa() {
     
     toast({ title: "Exportado", description: `${filteredRows.length} registro(s) exportado(s)` });
   };
+
+  // Error fallback
+  if (hasError && !loading && rows.length === 0) {
+    return (
+      <PageLayout 
+        title="DACHSER" 
+        subtitle="NFs em disputa"
+        pageIcon={Scale}
+        backTo="/fin/regua"
+      >
+        <TableCard>
+          <div className="flex flex-col items-center justify-center py-12 gap-4">
+            <p className="text-destructive">Erro ao carregar dados. Tente atualizar a página.</p>
+            <Button onClick={() => window.location.reload()}>
+              Recarregar
+            </Button>
+          </div>
+        </TableCard>
+      </PageLayout>
+    );
+  }
 
   const rightContent = (
     <div className="flex gap-2">
@@ -607,12 +796,53 @@ export default function FinanceiroDisputa() {
         </div>
       </FilterCard>
 
-      {/* Table Card */}
+      {/* Bulk Actions Bar */}
+      {selectedDocKeys.size > 0 && (
+        <div className="mb-3 p-3 bg-primary/10 border border-primary/30 rounded-lg flex items-center gap-4">
+          <span className="text-sm font-medium">
+            {selectedDocKeys.size} item(s) selecionado(s)
+          </span>
+          <Button 
+            size="sm" 
+            variant="outline" 
+            onClick={() => setBulkResolveDialogOpen(true)}
+            disabled={bulkLoading}
+            className="h-8 gap-1"
+          >
+            <Check className="w-3 h-3" /> Resolver selecionados
+          </Button>
+          <Button 
+            size="sm" 
+            variant="destructive" 
+            onClick={() => setBulkDeleteDialogOpen(true)}
+            disabled={bulkLoading}
+            className="h-8 gap-1"
+          >
+            <Trash2 className="w-3 h-3" /> Excluir selecionados
+          </Button>
+          <Button 
+            size="sm" 
+            variant="ghost" 
+            onClick={() => { setSelectedDocKeys(new Set()); setSelectAll(false); }}
+            className="h-8"
+          >
+            Limpar seleção
+          </Button>
+        </div>
+      )}
+
+      {/* Table Card with ScrollArea */}
       <TableCard>
-        <div className="rounded-2xl overflow-auto">
+        <ScrollArea className="w-full whitespace-nowrap rounded-2xl">
           <table className="w-full min-w-[1500px] border-collapse">
             <thead>
               <tr>
+                <th className="bg-[#15151f] sticky top-0 z-[1] px-2 py-[14px] w-10">
+                  <Checkbox 
+                    checked={selectAll && paginatedRows.length > 0}
+                    onCheckedChange={toggleSelectAll}
+                  />
+                </th>
                 <th className="bg-[#15151f] sticky top-0 z-[1] px-4 py-[14px] text-left text-[0.78rem] uppercase tracking-wider font-bold whitespace-nowrap max-w-[220px]">
                   Cliente
                 </th>
@@ -664,6 +894,12 @@ export default function FinanceiroDisputa() {
               ) : (
                 paginatedRows.map((r) => (
                   <tr key={r.doc_key} className="hover:bg-white/4 border-b border-white/14">
+                    <td className="px-2 py-[14px]">
+                      <Checkbox 
+                        checked={selectedDocKeys.has(r.doc_key)}
+                        onCheckedChange={() => toggleSelectRow(r.doc_key)}
+                      />
+                    </td>
                     <td className="px-4 py-[14px] whitespace-nowrap max-w-[220px] overflow-hidden text-ellipsis" title={r.cliente || "-"}>
                       {r.razao_base || r.cliente || "-"}
                     </td>
@@ -775,7 +1011,8 @@ export default function FinanceiroDisputa() {
               )}
             </tbody>
           </table>
-        </div>
+          <ScrollBar orientation="horizontal" />
+        </ScrollArea>
         
         {!loading && filteredRows.length > PAGE_SIZE && (
           <TablePagination
@@ -880,6 +1117,50 @@ export default function FinanceiroDisputa() {
         </AlertDialogContent>
       </AlertDialog>
 
+      {/* Bulk Delete Dialog */}
+      <AlertDialog open={bulkDeleteDialogOpen} onOpenChange={setBulkDeleteDialogOpen}>
+        <AlertDialogContent className="bg-[rgba(4,5,15,0.98)] border-white/12">
+          <AlertDialogHeader>
+            <AlertDialogTitle>Excluir {selectedDocKeys.size} disputa(s)?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Esta ação não pode ser desfeita. As NFs selecionadas serão removidas da lista de disputas.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={bulkLoading}>Cancelar</AlertDialogCancel>
+            <AlertDialogAction 
+              onClick={handleBulkDelete} 
+              disabled={bulkLoading}
+              className="bg-destructive text-destructive-foreground"
+            >
+              {bulkLoading ? "Excluindo..." : "Excluir"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Bulk Resolve Dialog */}
+      <AlertDialog open={bulkResolveDialogOpen} onOpenChange={setBulkResolveDialogOpen}>
+        <AlertDialogContent className="bg-[rgba(4,5,15,0.98)] border-white/12">
+          <AlertDialogHeader>
+            <AlertDialogTitle>Resolver {selectedDocKeys.size} disputa(s)?</AlertDialogTitle>
+            <AlertDialogDescription>
+              As NFs selecionadas serão marcadas como resolvidas e removidas da lista.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={bulkLoading}>Cancelar</AlertDialogCancel>
+            <AlertDialogAction 
+              onClick={handleBulkResolve} 
+              disabled={bulkLoading}
+              className="bg-green-600 text-white hover:bg-green-700"
+            >
+              {bulkLoading ? "Resolvendo..." : "Confirmar"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
       {/* Import Spreadsheet Modal */}
       <Dialog open={importModalOpen} onOpenChange={setImportModalOpen}>
         <DialogContent className="bg-[rgba(4,5,15,0.98)] border-white/12">
@@ -891,8 +1172,11 @@ export default function FinanceiroDisputa() {
           </DialogHeader>
           <div className="space-y-4 py-3">
             <div className="text-sm text-muted-foreground">
-              Faça upload de um arquivo Excel, CSV ou TXT com os documentos/NFs.
-              A primeira coluna será usada como identificador do documento.
+              Faça upload de um arquivo com os documentos/NFs.
+              <br />
+              <strong>Colunas obrigatórias:</strong> ND (ou Documento, NF)
+              <br />
+              <strong>Colunas opcionais:</strong> Responsável, OBS/Observações
             </div>
             
             <div
@@ -977,5 +1261,13 @@ export default function FinanceiroDisputa() {
         </DialogContent>
       </Dialog>
     </PageLayout>
+  );
+}
+
+export default function FinanceiroDisputa() {
+  return (
+    <ErrorBoundary>
+      <FinanceiroDisputaContent />
+    </ErrorBoundary>
   );
 }

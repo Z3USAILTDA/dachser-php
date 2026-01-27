@@ -9,11 +9,25 @@ const corsHeaders = {
 };
 
 interface AgingRequest {
-  cnpj: string;
+  cnpj?: string;
+  cnpjs?: string[]; // Support for grouped aging
   cliente: string;
   email_to: string;
   custom_text?: string;
 }
+
+// Parse and validate email list
+const parseEmails = (input: string): string[] => {
+  const fallback = ["devs@z3us.ai", "bia.souza@dachser.com", "jessica.costa@dachser.com"];
+  if (!input?.trim()) return fallback;
+  
+  const emails = input
+    .split(/[;,\n]/)
+    .map(e => e.trim().toLowerCase())
+    .filter(e => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e));
+  
+  return emails.length > 0 ? emails : fallback;
+};
 
 interface InvoiceRow {
   documento: string;
@@ -143,7 +157,7 @@ const STYLES = {
   // Data cell (normal)
   dataCell: {
     font: { name: "Arial", sz: 10, color: { rgb: "000000" } },
-    alignment: { horizontal: "left", vertical: "center" },
+    alignment: { horizontal: "left", vertical: "center", wrapText: true },
     border: {
       top: { style: "thin", color: { rgb: "D0D0D0" } },
       bottom: { style: "thin", color: { rgb: "D0D0D0" } },
@@ -154,7 +168,7 @@ const STYLES = {
   // Data cell (value/number - right aligned)
   dataCellNumber: {
     font: { name: "Arial", sz: 10, color: { rgb: "000000" } },
-    alignment: { horizontal: "right", vertical: "center" },
+    alignment: { horizontal: "right", vertical: "center", wrapText: true },
     border: {
       top: { style: "thin", color: { rgb: "D0D0D0" } },
       bottom: { style: "thin", color: { rgb: "D0D0D0" } },
@@ -165,7 +179,7 @@ const STYLES = {
   // Data cell (overdue - red text)
   dataCellOverdue: {
     font: { name: "Arial", sz: 10, color: { rgb: "FF0000" } },
-    alignment: { horizontal: "right", vertical: "center" },
+    alignment: { horizontal: "right", vertical: "center", wrapText: true },
     border: {
       top: { style: "thin", color: { rgb: "D0D0D0" } },
       bottom: { style: "thin", color: { rgb: "D0D0D0" } },
@@ -331,14 +345,17 @@ serve(async (req: Request): Promise<Response> => {
   let client: Client | null = null;
 
   try {
-    const { cnpj, cliente, email_to, custom_text }: AgingRequest = await req.json();
+    const { cnpj, cnpjs, cliente, email_to, custom_text }: AgingRequest = await req.json();
 
-    if (!cnpj || !email_to) {
+    if (!cnpj && (!cnpjs || cnpjs.length === 0)) {
       return new Response(
-        JSON.stringify({ error: "cnpj e email_to são obrigatórios" }),
+        JSON.stringify({ error: "cnpj ou cnpjs é obrigatório" }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
+
+    const recipientEmails = parseEmails(email_to);
+    console.log("Sending aging email to recipients:", recipientEmails);
 
     const resendApiKey = Deno.env.get("RESEND_API_KEY");
     if (!resendApiKey) {
@@ -367,21 +384,36 @@ serve(async (req: Request): Promise<Response> => {
       charset: "utf8mb4",
     });
 
-    // Get base CNPJ (first 8 digits) to find related CNPJs
-    const baseCnpj = cnpj.replace(/\D/g, "").substring(0, 8);
-
-    // Find all CNPJs from the same company group
-    const cnpjsResult = await client.query(`
-      SELECT DISTINCT cnpj 
-      FROM dados_dachser.t_dados_financeiro_nfs 
-      WHERE cnpj LIKE CONCAT(?, '%')
-      AND DATEDIFF(CURDATE(), data_vencimento) >= 1
-    `, [baseCnpj]);
-
-    const allCnpjs = cnpjsResult.map((r: { cnpj: string }) => r.cnpj);
+    // Determine target CNPJs - support both single and grouped mode
+    let allCnpjs: string[] = [];
     
-    if (allCnpjs.length === 0) {
-      allCnpjs.push(cnpj);
+    if (cnpjs && Array.isArray(cnpjs) && cnpjs.length > 0) {
+      // Grouped mode: process all provided CNPJs
+      for (const c of cnpjs) {
+        const baseCnpj = c.replace(/\D/g, "").substring(0, 8);
+        const cnpjsResult = await client.query(`
+          SELECT DISTINCT cnpj 
+          FROM dados_dachser.t_dados_financeiro_nfs 
+          WHERE cnpj LIKE CONCAT(?, '%')
+          AND DATEDIFF(CURDATE(), data_vencimento) >= 1
+        `, [baseCnpj]);
+        allCnpjs.push(...cnpjsResult.map((r: { cnpj: string }) => r.cnpj));
+      }
+      allCnpjs = [...new Set(allCnpjs)]; // Remove duplicates
+    } else if (cnpj) {
+      // Single mode (original behavior)
+      const baseCnpj = cnpj.replace(/\D/g, "").substring(0, 8);
+      const cnpjsResult = await client.query(`
+        SELECT DISTINCT cnpj 
+        FROM dados_dachser.t_dados_financeiro_nfs 
+        WHERE cnpj LIKE CONCAT(?, '%')
+        AND DATEDIFF(CURDATE(), data_vencimento) >= 1
+      `, [baseCnpj]);
+      allCnpjs = cnpjsResult.map((r: { cnpj: string }) => r.cnpj);
+      
+      if (allCnpjs.length === 0) {
+        allCnpjs.push(cnpj);
+      }
     }
 
     // Fetch all overdue invoices for these CNPJs with all required columns (16 columns)
