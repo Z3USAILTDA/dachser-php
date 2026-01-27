@@ -1501,14 +1501,16 @@ serve(async (req) => {
     }
 
     // ===== SEA TRACKING: Get MBL tracking data from t_tracking_sea (grouped by MBL) =====
-    if (action === 'get_sea_tracking') {
+    // ===== SETUP SEA TRACKING INDEXES =====
+    // Creates optimized indexes for the get_sea_tracking query
+    if (action === 'setup_sea_tracking_indexes') {
       const mariadbHost = Deno.env.get('MARIADB_HOST');
       const mariadbPort = Deno.env.get('MARIADB_PORT') || '3306';
       const mariadbUser = Deno.env.get('MARIADB_USER');
       const mariadbPass = Deno.env.get('MARIADB_PASSWORD');
 
       if (!mariadbHost || !mariadbUser || !mariadbPass) {
-        return new Response(JSON.stringify({ error: 'MariaDB não configurado', data: [] }), {
+        return new Response(JSON.stringify({ error: 'MariaDB não configurado' }), {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' }
         });
       }
@@ -1522,192 +1524,310 @@ serve(async (req) => {
         db: 'dados_dachser',
       });
 
+      const results: string[] = [];
       try {
-        // OTIMIZADO: Query refatorada com CTEs e LEFT JOINs para melhor performance
-        // - Substituídas 7+ subqueries correlacionadas por JOINs
-        // - Removido BINARY TRIM() que impedia uso de índices
-        // - Adicionada paginação com LIMIT
-        const rows = await client.query(`
-          WITH 
-            -- CTE 1: Pré-calcular dados do t_master_dados (eta, nome_analista) por mbl
-            master_data AS (
-              SELECT 
-                TRIM(mawb) COLLATE utf8mb4_unicode_ci as mbl_id,
-                eta,
-                nome_analista
-              FROM dados_dachser.t_master_dados
-              WHERE active = 1
-                AND mawb IS NOT NULL
-              GROUP BY TRIM(mawb) COLLATE utf8mb4_unicode_ci
-            ),
-            -- CTE 2: Pré-calcular navio/vessel_imo mais recente por mbl
-            latest_vessel AS (
-              SELECT 
-                mbl_id COLLATE utf8mb4_unicode_ci as mbl_id,
-                navio,
-                vessel_imo,
-                ROW_NUMBER() OVER (PARTITION BY mbl_id ORDER BY last_check DESC) as rn
-              FROM dados_dachser.t_tracking_sea
-              WHERE active = 1
-                AND (navio IS NOT NULL AND navio != '')
-            ),
-            -- CTE 3: Pré-calcular transshipment_port por mbl (prioridade campo direto)
-            transship_direct AS (
-              SELECT 
-                mbl_id COLLATE utf8mb4_unicode_ci as mbl_id,
-                transshipment_port
-              FROM dados_dachser.t_tracking_sea
-              WHERE transshipment_port IS NOT NULL 
-                AND transshipment_port != ''
-              GROUP BY mbl_id COLLATE utf8mb4_unicode_ci
-            ),
-            -- CTE 4: Transshipment do histórico (fallback)
-            transship_history AS (
-              SELECT 
-                mbl_id COLLATE utf8mb4_unicode_ci as mbl_id,
-                GROUP_CONCAT(DISTINCT location SEPARATOR ', ') as transshipment_port
-              FROM dados_dachser.t_tracking_sea_history
-              WHERE UPPER(event_code) IN ('TRANSSHIPMENT', 'TSP', 'TRANSSHIPMENT_DISCHARGED', 'TRANSSHIPMENT_LOADED', 'TRANSHIPMENT_ARRIVAL', 'TRANSHIPMENT_DEPARTURE', 'DISCHARGED', 'LOADED')
-                AND location IS NOT NULL
-                AND location != ''
-              GROUP BY mbl_id COLLATE utf8mb4_unicode_ci
-            ),
-            -- CTE 5: Verificar free time cadastrado
-            has_freetime AS (
-              SELECT DISTINCT
-                CASE 
-                  WHEN ft.tipo_ft = 'PROCESSO' THEN ft.mbl COLLATE utf8mb4_unicode_ci
-                  ELSE NULL
-                END as mbl_id,
-                ft.cliente_nome COLLATE utf8mb4_unicode_ci as cliente_nome,
-                ft.tipo_ft
-              FROM dados_dachser.t_client_free_time ft
-              WHERE ft.ativo = 1
-                AND (
-                  (ft.tipo_ft = 'PROCESSO')
-                  OR (
-                    ft.tipo_ft = 'CONTRATO' 
-                    AND (ft.vigencia_inicio IS NULL OR ft.vigencia_inicio <= CURDATE())
-                    AND (ft.vigencia_fim IS NULL OR ft.vigencia_fim >= CURDATE())
-                  )
-                )
-            )
-          SELECT 
-            ts.mbl_id,
-            MAX(ts.tipo_processo) as tipo_processo,
-            MAX(ts.consignee) as consignee,
-            MAX(ts.shipping_line) as shipping_line,
-            MAX(ts.origem) as origem,
-            MAX(ts.destino) as destino,
-            -- Navio do registro mais recente via CTE
-            MAX(lv.navio) as navio,
-            MAX(lv.vessel_imo) as vessel_imo,
-            -- ETA priorizado: t_master_dados > t_tracking_sea
-            COALESCE(MAX(md.eta), MAX(ts.eta)) as eta,
-            MAX(md.eta) as eta_master,
-            MAX(md.nome_analista) as nome_analista,
-            MAX(ts.eta) as eta_api,
-            MAX(ts.email_analista) as email_analista,
-            MAX(ts.email_cliente) as email_cliente,
-            COUNT(DISTINCT CASE WHEN ts.container NOT IN ('NAO_ENCONTRADO', 'PENDENTE', '') AND ts.container IS NOT NULL THEN ts.container END) as container_count,
-            MAX(ts.container_status) as container_status,
-            MAX(ts.last_event) as last_event,
-            MAX(ts.last_check) as last_check,
-            MAX(ts.active) as active,
-            MAX(ts.created_at) as created_at,
-            MAX(ts.updated_at) as updated_at,
-            -- DELAYED por ETA: se ETA passou há mais de 3 dias e não está entregue
-            CASE 
-              WHEN COALESCE(MAX(md.eta), MAX(ts.eta)) IS NOT NULL 
-                AND COALESCE(MAX(md.eta), MAX(ts.eta)) < DATE_SUB(NOW(), INTERVAL 3 DAY)
-                AND UPPER(COALESCE(MAX(ts.container_status), '')) NOT IN ('DELIVERED', 'GATE_OUT', 'DLV', 'GOD', 'EMPTY_RETURNED', 'EMPTY_RECEIVED_AT_CY')
-              THEN 1 
-              ELSE 0 
-            END as is_eta_delayed,
-            -- CRÍTICO: atraso >= 7 dias
-            CASE 
-              WHEN COALESCE(MAX(md.eta), MAX(ts.eta)) IS NOT NULL 
-                AND COALESCE(MAX(md.eta), MAX(ts.eta)) < DATE_SUB(NOW(), INTERVAL 7 DAY)
-                AND UPPER(COALESCE(MAX(ts.container_status), '')) NOT IN ('DELIVERED', 'GATE_OUT', 'DLV', 'GOD', 'EMPTY_RETURNED', 'EMPTY_RECEIVED_AT_CY')
-              THEN 1 
-              ELSE 0 
-            END as is_critico,
-            -- Dias de atraso calculados
-            CASE 
-              WHEN COALESCE(MAX(md.eta), MAX(ts.eta)) IS NOT NULL 
-                AND COALESCE(MAX(md.eta), MAX(ts.eta)) < CURDATE()
-              THEN DATEDIFF(CURDATE(), COALESCE(MAX(md.eta), MAX(ts.eta)))
-              ELSE 0 
-            END as dias_atraso,
-            -- Porto de transbordo: priorizar campo direto, fallback para histórico
-            COALESCE(
-              MAX(td.transshipment_port),
-              MAX(th.transshipment_port)
-            ) as transshipment_port,
-            -- Indicador de Free Time cadastrado via CTE
-            CASE
-              WHEN MAX(hf_proc.mbl_id) IS NOT NULL THEN 1
-              WHEN MAX(hf_cont.cliente_nome) IS NOT NULL THEN 1
-              ELSE 0
-            END as has_free_time
-          FROM dados_dachser.t_tracking_sea ts
-          LEFT JOIN master_data md ON md.mbl_id = ts.mbl_id COLLATE utf8mb4_unicode_ci
-          LEFT JOIN latest_vessel lv ON lv.mbl_id = ts.mbl_id COLLATE utf8mb4_unicode_ci AND lv.rn = 1
-          LEFT JOIN transship_direct td ON td.mbl_id = ts.mbl_id COLLATE utf8mb4_unicode_ci
-          LEFT JOIN transship_history th ON th.mbl_id = ts.mbl_id COLLATE utf8mb4_unicode_ci
-          LEFT JOIN has_freetime hf_proc ON hf_proc.mbl_id = ts.mbl_id COLLATE utf8mb4_unicode_ci AND hf_proc.tipo_ft = 'PROCESSO'
-          LEFT JOIN has_freetime hf_cont ON hf_cont.cliente_nome = ts.consignee COLLATE utf8mb4_unicode_ci AND hf_cont.tipo_ft = 'CONTRATO'
-          WHERE ts.active = 1
-          GROUP BY ts.mbl_id
-          HAVING 
-            -- Mostrar MBLs que:
-            -- 1. Têm pelo menos 1 container válido (não NAO_ENCONTRADO/IGNORADO)
-            -- 2. OU têm apenas container PENDENTE (recém-sincronizados, aguardando enriquecimento)
-            (
-              COUNT(DISTINCT CASE 
-                WHEN ts.container NOT IN ('NAO_ENCONTRADO', 'PENDENTE', 'IGNORADO', '') 
-                AND ts.container IS NOT NULL 
-                THEN ts.container 
-              END) > 0
-              OR 
-              (COUNT(*) = 1 AND MAX(ts.container) = 'PENDENTE')
-            )
-            -- E que NÃO tenham TODOS os containers com erro "Prefix not found" (exceto se for PENDENTE)
-            AND NOT (
-              COUNT(DISTINCT ts.container) = COUNT(DISTINCT CASE 
-                WHEN ts.last_error LIKE '%Prefix not found%' 
-                THEN ts.container 
-              END)
-              AND COUNT(DISTINCT CASE WHEN ts.last_error LIKE '%Prefix not found%' THEN ts.container END) > 0
-              AND MAX(ts.container) != 'PENDENTE'
-            )
-            -- Ocultar containers entregues há mais de 24 horas (exceto se tiver container pendente)
-            AND NOT (
-              UPPER(COALESCE(MAX(ts.container_status), '')) IN ('DELIVERED', 'DLV', 'GOD', 'GATE_OUT_FULL', 'EMPTY_RETURNED', 'EMPTY_RECEIVED_AT_CY')
-              AND MAX(ts.last_check) < DATE_SUB(NOW(), INTERVAL 24 HOUR)
-              AND MAX(ts.container) != 'PENDENTE'
-            )
-          ORDER BY 
-            -- MBLs pendentes primeiro (para facilitar visualização e ação)
-            CASE WHEN MAX(ts.container) = 'PENDENTE' THEN 0 ELSE 1 END,
-            MAX(ts.last_check) DESC, 
-            ts.mbl_id
-          LIMIT 500
-        `);
+        // Index 1: t_tracking_sea(mbl_id, active) - Principal para GROUP BY
+        try {
+          await client.execute(`
+            CREATE INDEX IF NOT EXISTS idx_tracking_sea_mbl_active 
+            ON dados_dachser.t_tracking_sea(mbl_id, active)
+          `);
+          results.push('✓ idx_tracking_sea_mbl_active criado');
+        } catch (e: any) {
+          if (!e.message?.includes('Duplicate')) throw e;
+          results.push('○ idx_tracking_sea_mbl_active já existe');
+        }
+
+        // Index 2: t_tracking_sea(mbl_id, last_check) - Para ordenação e navio recente
+        try {
+          await client.execute(`
+            CREATE INDEX IF NOT EXISTS idx_tracking_sea_mbl_lastcheck 
+            ON dados_dachser.t_tracking_sea(mbl_id, last_check DESC)
+          `);
+          results.push('✓ idx_tracking_sea_mbl_lastcheck criado');
+        } catch (e: any) {
+          if (!e.message?.includes('Duplicate')) throw e;
+          results.push('○ idx_tracking_sea_mbl_lastcheck já existe');
+        }
+
+        // Index 3: t_master_dados(mawb, active) - Para CTE master_data
+        try {
+          await client.execute(`
+            CREATE INDEX IF NOT EXISTS idx_master_dados_mawb_active 
+            ON dados_dachser.t_master_dados(mawb, active)
+          `);
+          results.push('✓ idx_master_dados_mawb_active criado');
+        } catch (e: any) {
+          if (!e.message?.includes('Duplicate')) throw e;
+          results.push('○ idx_master_dados_mawb_active já existe');
+        }
+
+        // Index 4: t_tracking_sea_history(mbl_id, event_code) - Para CTE transship
+        try {
+          await client.execute(`
+            CREATE INDEX IF NOT EXISTS idx_tracking_history_mbl_event 
+            ON dados_dachser.t_tracking_sea_history(mbl_id, event_code)
+          `);
+          results.push('✓ idx_tracking_history_mbl_event criado');
+        } catch (e: any) {
+          if (!e.message?.includes('Duplicate')) throw e;
+          results.push('○ idx_tracking_history_mbl_event já existe');
+        }
+
+        // Index 5: t_client_free_time(mbl, ativo) - Para CTE has_freetime
+        try {
+          await client.execute(`
+            CREATE INDEX IF NOT EXISTS idx_client_freetime_mbl_ativo 
+            ON dados_dachser.t_client_free_time(mbl, ativo)
+          `);
+          results.push('✓ idx_client_freetime_mbl_ativo criado');
+        } catch (e: any) {
+          if (!e.message?.includes('Duplicate')) throw e;
+          results.push('○ idx_client_freetime_mbl_ativo já existe');
+        }
+
+        // Index 6: t_client_free_time(cliente_nome, ativo) - Para JOIN por consignee
+        try {
+          await client.execute(`
+            CREATE INDEX IF NOT EXISTS idx_client_freetime_cliente_ativo 
+            ON dados_dachser.t_client_free_time(cliente_nome, ativo)
+          `);
+          results.push('✓ idx_client_freetime_cliente_ativo criado');
+        } catch (e: any) {
+          if (!e.message?.includes('Duplicate')) throw e;
+          results.push('○ idx_client_freetime_cliente_ativo já existe');
+        }
 
         await client.close();
-        console.log(`[get_sea_tracking] Returning ${rows.length} MBLs from t_tracking_sea`);
-        return new Response(JSON.stringify({ success: true, data: rows }), {
+        console.log('[setup_sea_tracking_indexes] Indexes setup completed:', results);
+        return new Response(JSON.stringify({ 
+          success: true, 
+          message: 'Indexes configurados com sucesso',
+          results 
+        }), {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' }
         });
       } catch (e: any) {
         await client.close();
-        console.error('[get_sea_tracking] Error:', e);
-        return new Response(JSON.stringify({ error: e.message, data: [] }), {
+        console.error('[setup_sea_tracking_indexes] Error:', e);
+        return new Response(JSON.stringify({ error: e.message, results }), {
           status: 500,
           headers: { ...corsHeaders, 'Content-Type': 'application/json' }
         });
       }
+    }
+
+    // ===== GET SEA TRACKING - OTIMIZADO =====
+    if (action === 'get_sea_tracking') {
+      const mariadbHost = Deno.env.get('MARIADB_HOST');
+      const mariadbPort = Deno.env.get('MARIADB_PORT') || '3306';
+      const mariadbUser = Deno.env.get('MARIADB_USER');
+      const mariadbPass = Deno.env.get('MARIADB_PASSWORD');
+
+      if (!mariadbHost || !mariadbUser || !mariadbPass) {
+        return new Response(JSON.stringify({ error: 'MariaDB não configurado', data: [] }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      }
+
+      // Retry logic with exponential backoff for transient connection errors
+      const MAX_RETRIES = 3;
+      const RETRY_DELAY_MS = 1000;
+      let lastError: any = null;
+      
+      for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+        const { Client } = await import("https://deno.land/x/mysql@v2.12.1/mod.ts");
+        let client: any = null;
+        
+        try {
+          client = await new Client().connect({
+            hostname: mariadbHost,
+            port: parseInt(mariadbPort, 10),
+            username: mariadbUser,
+            password: mariadbPass,
+            db: 'dados_dachser',
+          });
+
+          // OTIMIZADO V2: Query simplificada sem COLLATE nos JOINs
+          // - Removidas cláusulas COLLATE (assume collation alinhada nas tabelas)
+          // - CTEs simplificadas para melhor aproveitamento de índices
+          // - Timeout query aumentado via SET statement
+          await client.execute("SET SESSION max_statement_time = 30");
+          
+          const rows = await client.query(`
+            WITH 
+              -- CTE 1: Dados do t_master_dados agrupados por mbl_id
+              master_data AS (
+                SELECT 
+                  TRIM(mawb) as mbl_id,
+                  MAX(eta) as eta,
+                  MAX(nome_analista) as nome_analista
+                FROM dados_dachser.t_master_dados
+                WHERE active = 1 AND mawb IS NOT NULL AND TRIM(mawb) != ''
+                GROUP BY TRIM(mawb)
+              ),
+              -- CTE 2: Navio/vessel_imo mais recente por mbl (ranking)
+              latest_vessel AS (
+                SELECT 
+                  mbl_id,
+                  navio,
+                  vessel_imo,
+                  ROW_NUMBER() OVER (PARTITION BY mbl_id ORDER BY last_check DESC) as rn
+                FROM dados_dachser.t_tracking_sea
+                WHERE active = 1 AND navio IS NOT NULL AND navio != ''
+              ),
+              -- CTE 3: Transshipment direto do t_tracking_sea
+              transship_direct AS (
+                SELECT mbl_id, MAX(transshipment_port) as transshipment_port
+                FROM dados_dachser.t_tracking_sea
+                WHERE transshipment_port IS NOT NULL AND transshipment_port != ''
+                GROUP BY mbl_id
+              ),
+              -- CTE 4: Transshipment do histórico (fallback)
+              transship_history AS (
+                SELECT 
+                  mbl_id,
+                  GROUP_CONCAT(DISTINCT location ORDER BY location SEPARATOR ', ') as transshipment_port
+                FROM dados_dachser.t_tracking_sea_history
+                WHERE UPPER(event_code) IN ('TRANSSHIPMENT', 'TSP', 'TRANSSHIPMENT_DISCHARGED', 'TRANSSHIPMENT_LOADED')
+                  AND location IS NOT NULL AND location != ''
+                GROUP BY mbl_id
+              ),
+              -- CTE 5: Free time cadastrado (simplificado)
+              has_freetime AS (
+                SELECT DISTINCT
+                  CASE WHEN tipo_ft = 'PROCESSO' THEN mbl ELSE NULL END as mbl_id,
+                  CASE WHEN tipo_ft = 'CONTRATO' THEN cliente_nome ELSE NULL END as cliente_nome,
+                  tipo_ft
+                FROM dados_dachser.t_client_free_time
+                WHERE ativo = 1
+                  AND (tipo_ft = 'PROCESSO' OR (
+                    tipo_ft = 'CONTRATO' 
+                    AND (vigencia_inicio IS NULL OR vigencia_inicio <= CURDATE())
+                    AND (vigencia_fim IS NULL OR vigencia_fim >= CURDATE())
+                  ))
+              )
+            SELECT 
+              ts.mbl_id,
+              MAX(ts.tipo_processo) as tipo_processo,
+              MAX(ts.consignee) as consignee,
+              MAX(ts.shipping_line) as shipping_line,
+              MAX(ts.origem) as origem,
+              MAX(ts.destino) as destino,
+              MAX(lv.navio) as navio,
+              MAX(lv.vessel_imo) as vessel_imo,
+              COALESCE(MAX(md.eta), MAX(ts.eta)) as eta,
+              MAX(md.eta) as eta_master,
+              MAX(md.nome_analista) as nome_analista,
+              MAX(ts.eta) as eta_api,
+              MAX(ts.email_analista) as email_analista,
+              MAX(ts.email_cliente) as email_cliente,
+              COUNT(DISTINCT CASE WHEN ts.container NOT IN ('NAO_ENCONTRADO', 'PENDENTE', '') AND ts.container IS NOT NULL THEN ts.container END) as container_count,
+              MAX(ts.container_status) as container_status,
+              MAX(ts.last_event) as last_event,
+              MAX(ts.last_check) as last_check,
+              MAX(ts.active) as active,
+              MAX(ts.created_at) as created_at,
+              MAX(ts.updated_at) as updated_at,
+              CASE 
+                WHEN COALESCE(MAX(md.eta), MAX(ts.eta)) IS NOT NULL 
+                  AND COALESCE(MAX(md.eta), MAX(ts.eta)) < DATE_SUB(NOW(), INTERVAL 3 DAY)
+                  AND UPPER(COALESCE(MAX(ts.container_status), '')) NOT IN ('DELIVERED', 'GATE_OUT', 'DLV', 'GOD', 'EMPTY_RETURNED', 'EMPTY_RECEIVED_AT_CY')
+                THEN 1 ELSE 0 
+              END as is_eta_delayed,
+              CASE 
+                WHEN COALESCE(MAX(md.eta), MAX(ts.eta)) IS NOT NULL 
+                  AND COALESCE(MAX(md.eta), MAX(ts.eta)) < DATE_SUB(NOW(), INTERVAL 7 DAY)
+                  AND UPPER(COALESCE(MAX(ts.container_status), '')) NOT IN ('DELIVERED', 'GATE_OUT', 'DLV', 'GOD', 'EMPTY_RETURNED', 'EMPTY_RECEIVED_AT_CY')
+                THEN 1 ELSE 0 
+              END as is_critico,
+              CASE 
+                WHEN COALESCE(MAX(md.eta), MAX(ts.eta)) IS NOT NULL 
+                  AND COALESCE(MAX(md.eta), MAX(ts.eta)) < CURDATE()
+                THEN DATEDIFF(CURDATE(), COALESCE(MAX(md.eta), MAX(ts.eta)))
+                ELSE 0 
+              END as dias_atraso,
+              COALESCE(MAX(td.transshipment_port), MAX(th.transshipment_port)) as transshipment_port,
+              CASE
+                WHEN MAX(hf_proc.mbl_id) IS NOT NULL THEN 1
+                WHEN MAX(hf_cont.cliente_nome) IS NOT NULL THEN 1
+                ELSE 0
+              END as has_free_time
+            FROM dados_dachser.t_tracking_sea ts
+            LEFT JOIN master_data md ON md.mbl_id = ts.mbl_id
+            LEFT JOIN latest_vessel lv ON lv.mbl_id = ts.mbl_id AND lv.rn = 1
+            LEFT JOIN transship_direct td ON td.mbl_id = ts.mbl_id
+            LEFT JOIN transship_history th ON th.mbl_id = ts.mbl_id
+            LEFT JOIN has_freetime hf_proc ON hf_proc.mbl_id = ts.mbl_id AND hf_proc.tipo_ft = 'PROCESSO'
+            LEFT JOIN has_freetime hf_cont ON hf_cont.cliente_nome = ts.consignee AND hf_cont.tipo_ft = 'CONTRATO'
+            WHERE ts.active = 1
+            GROUP BY ts.mbl_id
+            HAVING 
+              (
+                COUNT(DISTINCT CASE 
+                  WHEN ts.container NOT IN ('NAO_ENCONTRADO', 'PENDENTE', 'IGNORADO', '') 
+                  AND ts.container IS NOT NULL 
+                  THEN ts.container 
+                END) > 0
+                OR (COUNT(*) = 1 AND MAX(ts.container) = 'PENDENTE')
+              )
+              AND NOT (
+                COUNT(DISTINCT ts.container) = COUNT(DISTINCT CASE 
+                  WHEN ts.last_error LIKE '%Prefix not found%' 
+                  THEN ts.container 
+                END)
+                AND COUNT(DISTINCT CASE WHEN ts.last_error LIKE '%Prefix not found%' THEN ts.container END) > 0
+                AND MAX(ts.container) != 'PENDENTE'
+              )
+              AND NOT (
+                UPPER(COALESCE(MAX(ts.container_status), '')) IN ('DELIVERED', 'DLV', 'GOD', 'GATE_OUT_FULL', 'EMPTY_RETURNED', 'EMPTY_RECEIVED_AT_CY')
+                AND MAX(ts.last_check) < DATE_SUB(NOW(), INTERVAL 24 HOUR)
+                AND MAX(ts.container) != 'PENDENTE'
+              )
+            ORDER BY 
+              CASE WHEN MAX(ts.container) = 'PENDENTE' THEN 0 ELSE 1 END,
+              MAX(ts.last_check) DESC, 
+              ts.mbl_id
+            LIMIT 500
+          `);
+
+          await client.close();
+          console.log(`[get_sea_tracking] Returning ${rows.length} MBLs (attempt ${attempt})`);
+          return new Response(JSON.stringify({ success: true, data: rows }), {
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+          });
+        } catch (e: any) {
+          lastError = e;
+          if (client) {
+            try { await client.close(); } catch {}
+          }
+          
+          // Check if this is a retriable error (connection reset, timeout)
+          const isRetriable = e.message && (
+            e.message.includes('Connection reset') ||
+            e.message.includes('os error 104') ||
+            e.message.includes('max_statement_time') ||
+            e.message.includes('interrupted') ||
+            e.message.includes('timed out')
+          );
+          
+          if (isRetriable && attempt < MAX_RETRIES) {
+            const delay = RETRY_DELAY_MS * Math.pow(2, attempt - 1);
+            console.warn(`[get_sea_tracking] Retriable error on attempt ${attempt}/${MAX_RETRIES}: ${e.message}. Retrying in ${delay}ms...`);
+            await new Promise(r => setTimeout(r, delay));
+            continue;
+          }
+          
+          console.error(`[get_sea_tracking] Error on attempt ${attempt}/${MAX_RETRIES}:`, e);
+          break;
+        }
+      }
+      
+      // All retries exhausted
+      return new Response(JSON.stringify({ error: lastError?.message || 'Query failed after retries', data: [] }), {
+        status: 500,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      });
     }
 
     // ===== SEA TRACKING: Get containers for a specific MBL =====
