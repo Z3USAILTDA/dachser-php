@@ -58,26 +58,35 @@ serve(async (req) => {
       console.log('Column check failed, assuming columns do not exist');
     }
 
-    let selectFields = '*';
-    if (hasArrCheckColumn) selectFields += ', arr_check_count';
-    else selectFields += ', 0 as arr_check_count';
-    if (hasArrDatetimeColumn) selectFields += ', arr_datetime';
-    else selectFields += ', NULL as arr_datetime';
+    // Date filter for t_master_dados.data_insert
+    const dateFilter = '2026-01-27';
 
-    // Date threshold for filtering records
-    const dateThreshold = '2026-01-27 00:00:00';
-    
-    let query = `SELECT ${selectFields} FROM ${database}.t_status_aereo 
-                 WHERE \`última atualização\` >= ? 
-                 ORDER BY id DESC`;
-    let params: string[] = [dateThreshold];
+    // Build base SELECT with table alias and JOIN to t_master_dados
+    const baseSelect = `
+      SELECT s.id, s.awb, s.hawb, s.destinatário, s.nome_analista, s.email_analista,
+             s.email_cliente, s.tipo_servico, s.data_atraso, s.\`última atualização\`,
+             s.\`último_status\`, s.origem, s.destino, s.alert_status, s.dep_datetime,
+             ${hasArrCheckColumn ? 's.arr_check_count' : '0 as arr_check_count'},
+             ${hasArrDatetimeColumn ? 's.arr_datetime' : 'NULL as arr_datetime'}
+      FROM ${database}.t_status_aereo s
+      INNER JOIN ${database}.t_master_dados m 
+        ON TRIM(s.awb) COLLATE utf8mb4_unicode_ci = TRIM(m.mawb) COLLATE utf8mb4_unicode_ci
+      WHERE DATE(m.data_insert) = ?
+        AND m.tipo_processo IN ('AIR IMPORT', 'AIR EXPORT')
+    `;
+
+    let query: string;
+    let params: string[];
 
     if (search && search.trim() !== '') {
-      query = `SELECT ${selectFields} FROM ${database}.t_status_aereo 
-               WHERE \`última atualização\` >= ? AND (awb LIKE ? OR hawb LIKE ? OR destinatário LIKE ?)
-               ORDER BY id DESC`;
       const searchPattern = `%${search.trim()}%`;
-      params = [dateThreshold, searchPattern, searchPattern, searchPattern];
+      query = `${baseSelect}
+        AND (s.awb LIKE ? OR s.hawb LIKE ? OR s.destinatário LIKE ?)
+        ORDER BY s.id DESC`;
+      params = [dateFilter, searchPattern, searchPattern, searchPattern];
+    } else {
+      query = `${baseSelect} ORDER BY s.id DESC`;
+      params = [dateFilter];
     }
 
     console.log(`Executing query: ${query} (hasArrCheckColumn: ${hasArrCheckColumn})`);
