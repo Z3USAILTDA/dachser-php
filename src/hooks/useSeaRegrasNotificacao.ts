@@ -19,9 +19,12 @@ export function useSeaRegrasNotificacao() {
       // Parse arrays from JSON strings if needed
       const parsed = (data?.data || []).map((r: any) => ({
         ...r,
+        portos_origem: typeof r.portos_origem === 'string' ? JSON.parse(r.portos_origem || '[]') : (r.portos_origem || []),
+        portos_destino: typeof r.portos_destino === 'string' ? JSON.parse(r.portos_destino || '[]') : (r.portos_destino || []),
         portos: typeof r.portos === 'string' ? JSON.parse(r.portos || '[]') : (r.portos || []),
         eventos_disparo: typeof r.eventos_disparo === 'string' ? JSON.parse(r.eventos_disparo || '[]') : (r.eventos_disparo || []),
         canais: typeof r.canais === 'string' ? JSON.parse(r.canais || '[]') : (r.canais || []),
+        is_default: !!r.is_default,
       }));
       
       setRegras(parsed);
@@ -39,9 +42,11 @@ export function useSeaRegrasNotificacao() {
         body: { 
           action: 'create_sea_regra_notificacao',
           ...regra,
-          portos: JSON.stringify(regra.portos),
+          portos_origem: JSON.stringify(regra.portos_origem),
+          portos_destino: JSON.stringify(regra.portos_destino),
           eventos_disparo: JSON.stringify(regra.eventos_disparo),
           canais: JSON.stringify(regra.canais),
+          is_default: regra.is_default,
         }
       });
 
@@ -63,7 +68,8 @@ export function useSeaRegrasNotificacao() {
       if (regra.cliente_nome !== undefined) payload.cliente_nome = regra.cliente_nome;
       if (regra.cnpj_consignatario !== undefined) payload.cnpj_consignatario = regra.cnpj_consignatario;
       if (regra.tipo_processo !== undefined) payload.tipo_processo = regra.tipo_processo;
-      if (regra.portos !== undefined) payload.portos = JSON.stringify(regra.portos);
+      if (regra.portos_origem !== undefined) payload.portos_origem = JSON.stringify(regra.portos_origem);
+      if (regra.portos_destino !== undefined) payload.portos_destino = JSON.stringify(regra.portos_destino);
       if (regra.eventos_disparo !== undefined) payload.eventos_disparo = JSON.stringify(regra.eventos_disparo);
       if (regra.frequencia !== undefined) payload.frequencia = regra.frequencia;
       if (regra.canais !== undefined) payload.canais = JSON.stringify(regra.canais);
@@ -71,6 +77,7 @@ export function useSeaRegrasNotificacao() {
       if (regra.emails_export !== undefined) payload.emails_export = regra.emails_export;
       if (regra.template_id !== undefined) payload.template_id = regra.template_id;
       if (regra.ativo !== undefined) payload.ativo = regra.ativo;
+      if (regra.is_default !== undefined) payload.is_default = regra.is_default;
 
       const { error } = await supabase.functions.invoke('olimpo-proxy', {
         body: payload

@@ -6072,7 +6072,7 @@ serve(async (req) => {
       });
 
       try {
-        // Create table if not exists
+        // Create table if not exists (with new columns for v2)
         await client.execute(`
           CREATE TABLE IF NOT EXISTS ${database}.t_sea_regras_notificacao (
             id INT PRIMARY KEY AUTO_INCREMENT,
@@ -6080,6 +6080,8 @@ serve(async (req) => {
             cnpj_consignatario VARCHAR(20),
             tipo_processo ENUM('IMPORT', 'EXPORT', 'BOTH') DEFAULT 'BOTH',
             portos TEXT,
+            portos_origem TEXT,
+            portos_destino TEXT,
             eventos_disparo TEXT,
             frequencia VARCHAR(20) DEFAULT 'IMEDIATO',
             canais TEXT,
@@ -6087,11 +6089,24 @@ serve(async (req) => {
             emails_export TEXT,
             template_id VARCHAR(100) DEFAULT 'default',
             ativo BOOLEAN DEFAULT TRUE,
+            is_default BOOLEAN DEFAULT FALSE,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
           )
         `);
-        const regras = await client.query(`SELECT * FROM ${database}.t_sea_regras_notificacao ORDER BY created_at DESC`);
+        
+        // Add new columns if they don't exist (migration for existing tables)
+        try {
+          await client.execute(`ALTER TABLE ${database}.t_sea_regras_notificacao ADD COLUMN portos_origem TEXT AFTER tipo_processo`);
+        } catch (e: any) { /* Column might already exist */ }
+        try {
+          await client.execute(`ALTER TABLE ${database}.t_sea_regras_notificacao ADD COLUMN portos_destino TEXT AFTER portos_origem`);
+        } catch (e: any) { /* Column might already exist */ }
+        try {
+          await client.execute(`ALTER TABLE ${database}.t_sea_regras_notificacao ADD COLUMN is_default BOOLEAN DEFAULT FALSE AFTER ativo`);
+        } catch (e: any) { /* Column might already exist */ }
+        
+        const regras = await client.query(`SELECT * FROM ${database}.t_sea_regras_notificacao ORDER BY is_default DESC, created_at DESC`);
         await client.close();
         return new Response(JSON.stringify({ success: true, data: regras || [] }), {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' }
@@ -6108,7 +6123,7 @@ serve(async (req) => {
 
     if (action === 'create_sea_regra_notificacao') {
       const body = await req.json();
-      const { cliente_nome, cnpj_consignatario, tipo_processo, portos, eventos_disparo, frequencia, canais, emails_import, emails_export, template_id, ativo } = body;
+      const { cliente_nome, cnpj_consignatario, tipo_processo, portos_origem, portos_destino, eventos_disparo, frequencia, canais, emails_import, emails_export, template_id, ativo, is_default } = body;
       
       const mariadbHost = Deno.env.get('MARIADB_HOST');
       const mariadbPort = Deno.env.get('MARIADB_PORT') || '3306';
@@ -6132,11 +6147,16 @@ serve(async (req) => {
       });
 
       try {
+        // If this is a default rule, unset all other defaults first
+        if (is_default) {
+          await client.execute(`UPDATE ${database}.t_sea_regras_notificacao SET is_default = FALSE WHERE is_default = TRUE`);
+        }
+        
         await client.execute(`
           INSERT INTO ${database}.t_sea_regras_notificacao 
-          (cliente_nome, cnpj_consignatario, tipo_processo, portos, eventos_disparo, frequencia, canais, emails_import, emails_export, template_id, ativo)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        `, [cliente_nome, cnpj_consignatario, tipo_processo || 'BOTH', portos || '[]', eventos_disparo || '[]', frequencia || 'IMEDIATO', canais || '[]', emails_import, emails_export, template_id || 'default', ativo !== false ? 1 : 0]);
+          (cliente_nome, cnpj_consignatario, tipo_processo, portos_origem, portos_destino, eventos_disparo, frequencia, canais, emails_import, emails_export, template_id, ativo, is_default)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `, [cliente_nome, cnpj_consignatario, tipo_processo || 'BOTH', portos_origem || '[]', portos_destino || '[]', eventos_disparo || '[]', frequencia || 'IMEDIATO', canais || '[]', emails_import, emails_export, template_id || 'default', ativo !== false ? 1 : 0, is_default ? 1 : 0]);
         await client.close();
         return new Response(JSON.stringify({ success: true, message: 'Regra criada com sucesso' }), {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' }
@@ -6153,7 +6173,7 @@ serve(async (req) => {
 
     if (action === 'update_sea_regra_notificacao') {
       const body = await req.json();
-      const { id, cliente_nome, cnpj_consignatario, tipo_processo, portos, eventos_disparo, frequencia, canais, emails_import, emails_export, template_id, ativo } = body;
+      const { id, cliente_nome, cnpj_consignatario, tipo_processo, portos_origem, portos_destino, eventos_disparo, frequencia, canais, emails_import, emails_export, template_id, ativo, is_default } = body;
       
       const mariadbHost = Deno.env.get('MARIADB_HOST');
       const mariadbPort = Deno.env.get('MARIADB_PORT') || '3306';
@@ -6177,12 +6197,18 @@ serve(async (req) => {
       });
 
       try {
+        // If setting this rule as default, unset all other defaults first
+        if (is_default === true) {
+          await client.execute(`UPDATE ${database}.t_sea_regras_notificacao SET is_default = FALSE WHERE is_default = TRUE AND id != ?`, [id]);
+        }
+        
         const fields: string[] = [];
         const values: any[] = [];
         if (cliente_nome !== undefined) { fields.push('cliente_nome = ?'); values.push(cliente_nome); }
         if (cnpj_consignatario !== undefined) { fields.push('cnpj_consignatario = ?'); values.push(cnpj_consignatario); }
         if (tipo_processo !== undefined) { fields.push('tipo_processo = ?'); values.push(tipo_processo); }
-        if (portos !== undefined) { fields.push('portos = ?'); values.push(portos); }
+        if (portos_origem !== undefined) { fields.push('portos_origem = ?'); values.push(portos_origem); }
+        if (portos_destino !== undefined) { fields.push('portos_destino = ?'); values.push(portos_destino); }
         if (eventos_disparo !== undefined) { fields.push('eventos_disparo = ?'); values.push(eventos_disparo); }
         if (frequencia !== undefined) { fields.push('frequencia = ?'); values.push(frequencia); }
         if (canais !== undefined) { fields.push('canais = ?'); values.push(canais); }
@@ -6190,6 +6216,7 @@ serve(async (req) => {
         if (emails_export !== undefined) { fields.push('emails_export = ?'); values.push(emails_export); }
         if (template_id !== undefined) { fields.push('template_id = ?'); values.push(template_id); }
         if (ativo !== undefined) { fields.push('ativo = ?'); values.push(ativo ? 1 : 0); }
+        if (is_default !== undefined) { fields.push('is_default = ?'); values.push(is_default ? 1 : 0); }
         if (fields.length > 0) {
           values.push(id);
           await client.execute(`UPDATE ${database}.t_sea_regras_notificacao SET ${fields.join(', ')} WHERE id = ?`, values);

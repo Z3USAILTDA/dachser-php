@@ -7,15 +7,17 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Badge } from '@/components/ui/badge';
 import { Textarea } from '@/components/ui/textarea';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
-import { X, Ship, Anchor } from 'lucide-react';
+import { X, Ship, Anchor, Star } from 'lucide-react';
 import { 
   SeaRegraNotificacao, 
   TipoProcessoMaritimo,
   FrequenciaNotificacao,
   STATUS_MARITIMOS, 
   STATUS_MARITIMOS_LABELS,
-  PORTOS_COMUNS_BRASIL,
-  FREQUENCIAS_NOTIFICACAO
+  FREQUENCIAS_NOTIFICACAO,
+  PORTOS_GRUPOS,
+  PORTOS_GRUPOS_UI,
+  PORTOS_LABELS,
 } from '@/types/sea';
 
 interface SeaRegraNotificacaoDialogProps {
@@ -29,13 +31,16 @@ export function SeaRegraNotificacaoDialog({ open, onOpenChange, regra, onSave }:
   const [clienteNome, setClienteNome] = useState('');
   const [cnpj, setCnpj] = useState('');
   const [tipoProcesso, setTipoProcesso] = useState<TipoProcessoMaritimo>('BOTH');
-  const [portos, setPortos] = useState<string[]>([]);
-  const [portoInput, setPortoInput] = useState('');
+  const [portosOrigem, setPortosOrigem] = useState<string[]>([]);
+  const [portosDestino, setPortosDestino] = useState<string[]>([]);
+  const [portoOrigemInput, setPortoOrigemInput] = useState('');
+  const [portoDestinoInput, setPortoDestinoInput] = useState('');
   const [eventosDisparo, setEventosDisparo] = useState<string[]>([]);
   const [frequencia, setFrequencia] = useState<FrequenciaNotificacao>('IMEDIATO');
   const [emailsImport, setEmailsImport] = useState('');
   const [emailsExport, setEmailsExport] = useState('');
   const [ativo, setAtivo] = useState(true);
+  const [isDefault, setIsDefault] = useState(false);
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
@@ -43,35 +48,75 @@ export function SeaRegraNotificacaoDialog({ open, onOpenChange, regra, onSave }:
       setClienteNome(regra.cliente_nome || '');
       setCnpj(regra.cnpj_consignatario || '');
       setTipoProcesso(regra.tipo_processo || 'BOTH');
-      setPortos(regra.portos || []);
+      // Handle migration from old portos field to new fields
+      setPortosOrigem(regra.portos_origem || regra.portos || []);
+      setPortosDestino(regra.portos_destino || regra.portos || []);
       setEventosDisparo(regra.eventos_disparo || []);
       setFrequencia(regra.frequencia || 'IMEDIATO');
       setEmailsImport(regra.emails_import || '');
       setEmailsExport(regra.emails_export || '');
       setAtivo(regra.ativo);
+      setIsDefault(regra.is_default || false);
     } else {
       setClienteNome('');
       setCnpj('');
       setTipoProcesso('BOTH');
-      setPortos([]);
+      setPortosOrigem([]);
+      setPortosDestino([]);
       setEventosDisparo([]);
       setFrequencia('IMEDIATO');
       setEmailsImport('');
       setEmailsExport('');
       setAtivo(true);
+      setIsDefault(false);
     }
   }, [regra, open]);
 
-  const handleAddPorto = () => {
-    const code = portoInput.toUpperCase().trim();
-    if (code.length >= 3 && code.length <= 6 && !portos.includes(code)) {
-      setPortos([...portos, code]);
-      setPortoInput('');
+  const handleAddPortoOrigem = () => {
+    const code = portoOrigemInput.toUpperCase().trim();
+    if (code.length >= 3 && code.length <= 6 && !portosOrigem.includes(code)) {
+      setPortosOrigem([...portosOrigem, code]);
+      setPortoOrigemInput('');
     }
   };
 
-  const handleRemovePorto = (code: string) => {
-    setPortos(portos.filter(p => p !== code));
+  const handleAddPortoDestino = () => {
+    const code = portoDestinoInput.toUpperCase().trim();
+    if (code.length >= 3 && code.length <= 6 && !portosDestino.includes(code)) {
+      setPortosDestino([...portosDestino, code]);
+      setPortoDestinoInput('');
+    }
+  };
+
+  const handleRemovePortoOrigem = (code: string) => {
+    setPortosOrigem(portosOrigem.filter(p => p !== code));
+  };
+
+  const handleRemovePortoDestino = (code: string) => {
+    setPortosDestino(portosDestino.filter(p => p !== code));
+  };
+
+  const handleAddGroupOrigem = (groupKey: string) => {
+    const group = PORTOS_GRUPOS[groupKey as keyof typeof PORTOS_GRUPOS];
+    if (group) {
+      const newPorts = group.filter(p => !portosOrigem.includes(p));
+      setPortosOrigem([...portosOrigem, ...newPorts]);
+    }
+  };
+
+  const handleAddGroupDestino = (groupKey: string) => {
+    // Special case for Santos
+    if (groupKey === 'BRASIL_SANTOS') {
+      if (!portosDestino.includes('BRSSZ')) {
+        setPortosDestino([...portosDestino, 'BRSSZ']);
+      }
+      return;
+    }
+    const portsToAdd = PORTOS_GRUPOS[groupKey as keyof typeof PORTOS_GRUPOS];
+    if (portsToAdd) {
+      const newPorts = portsToAdd.filter(p => !portosDestino.includes(p));
+      setPortosDestino([...portosDestino, ...newPorts]);
+    }
   };
 
   const toggleEvento = (evento: string) => {
@@ -83,7 +128,8 @@ export function SeaRegraNotificacaoDialog({ open, onOpenChange, regra, onSave }:
   };
 
   const handleSave = async () => {
-    if (!clienteNome.trim() && !cnpj.trim()) {
+    // For default rules, client name and CNPJ can be empty
+    if (!isDefault && !clienteNome.trim() && !cnpj.trim()) {
       return;
     }
     if (eventosDisparo.length === 0) {
@@ -95,14 +141,16 @@ export function SeaRegraNotificacaoDialog({ open, onOpenChange, regra, onSave }:
       cliente_nome: clienteNome || null,
       cnpj_consignatario: cnpj || null,
       tipo_processo: tipoProcesso,
-      portos,
+      portos_origem: portosOrigem,
+      portos_destino: portosDestino,
       eventos_disparo: eventosDisparo,
       frequencia,
-      canais: ['EMAIL_CLIENTE'], // Sempre será email cliente
+      canais: ['EMAIL_CLIENTE'],
       emails_import: emailsImport || null,
       emails_export: emailsExport || null,
-      template_id: 'default', // Sempre default
+      template_id: 'default',
       ativo,
+      is_default: isDefault,
     });
     setSaving(false);
 
@@ -114,9 +162,13 @@ export function SeaRegraNotificacaoDialog({ open, onOpenChange, regra, onSave }:
   const showImportEmails = tipoProcesso === 'IMPORT' || tipoProcesso === 'BOTH';
   const showExportEmails = tipoProcesso === 'EXPORT' || tipoProcesso === 'BOTH';
 
+  const getPortLabel = (code: string) => {
+    return PORTOS_LABELS[code] || code;
+  };
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto bg-[rgba(5,6,18,0.95)] border-white/12">
+      <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto bg-[rgba(5,6,18,0.95)] border-white/12">
         <DialogHeader>
           <DialogTitle className="text-white flex items-center gap-2">
             <Ship className="h-5 w-5 text-cyan-400" />
@@ -125,23 +177,49 @@ export function SeaRegraNotificacaoDialog({ open, onOpenChange, regra, onSave }:
         </DialogHeader>
 
         <div className="space-y-6 py-4">
+          {/* Default Rule Checkbox - Highlighted */}
+          <div className="p-3 rounded-lg bg-amber-500/10 border border-amber-500/30">
+            <label className="flex items-start gap-3 cursor-pointer">
+              <Checkbox
+                checked={isDefault}
+                onCheckedChange={(checked) => setIsDefault(!!checked)}
+                className="mt-0.5"
+              />
+              <div>
+                <div className="flex items-center gap-2">
+                  <Star className="h-4 w-4 text-amber-400" />
+                  <span className="text-amber-300 font-medium">Regra Padrão</span>
+                </div>
+                <span className="text-white/50 text-xs">
+                  Será usada como fallback para clientes sem regra específica cadastrada
+                </span>
+              </div>
+            </label>
+          </div>
+
           {/* Cliente */}
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
-              <Label className="text-white/70">Nome do Cliente</Label>
+              <Label className="text-white/70">
+                Nome do Cliente
+                {isDefault && <span className="text-amber-400 text-xs ml-2">(opcional para regra padrão)</span>}
+              </Label>
               <Input
                 value={clienteNome}
                 onChange={(e) => setClienteNome(e.target.value)}
-                placeholder="Ex: KLABIN"
+                placeholder={isDefault ? "Opcional" : "Ex: KLABIN"}
                 className="bg-white/5 border-white/12 text-white"
               />
             </div>
             <div className="space-y-2">
-              <Label className="text-white/70">CNPJ Consignatário</Label>
+              <Label className="text-white/70">
+                CNPJ Consignatário
+                {isDefault && <span className="text-amber-400 text-xs ml-2">(opcional para regra padrão)</span>}
+              </Label>
               <Input
                 value={cnpj}
                 onChange={(e) => setCnpj(e.target.value)}
-                placeholder="Ex: 12345678000190"
+                placeholder={isDefault ? "Opcional" : "Ex: 12345678000190"}
                 className="bg-white/5 border-white/12 text-white"
               />
             </div>
@@ -170,43 +248,102 @@ export function SeaRegraNotificacaoDialog({ open, onOpenChange, regra, onSave }:
             </RadioGroup>
           </div>
 
-          {/* Portos */}
-          <div className="space-y-2">
-            <Label className="text-white/70">Portos (códigos UN/LOCODE ou nome)</Label>
-            <div className="flex gap-2">
-              <Input
-                value={portoInput}
-                onChange={(e) => setPortoInput(e.target.value.toUpperCase())}
-                onKeyDown={(e) => e.key === 'Enter' && handleAddPorto()}
-                placeholder="BRSSZ"
-                maxLength={6}
-                className="bg-white/5 border-white/12 text-white w-32"
-              />
-              <Button variant="outline" size="sm" onClick={handleAddPorto}>
-                Adicionar
-              </Button>
-            </div>
-            <div className="flex flex-wrap gap-2 mt-2">
-              {portos.map(code => (
-                <Badge key={code} variant="secondary" className="bg-cyan-500/20 text-cyan-300">
-                  <Anchor className="h-3 w-3 mr-1" />
-                  {code}
-                  <button onClick={() => handleRemovePorto(code)} className="ml-1">
-                    <X className="h-3 w-3" />
+          {/* Portos - Split into Origin and Destination */}
+          <div className="grid grid-cols-2 gap-4">
+            {/* Portos de Origem */}
+            <div className="space-y-2 p-4 rounded-lg bg-white/5 border border-white/10">
+              <Label className="text-orange-400 font-medium">Portos de Origem (Internacional)</Label>
+              <div className="flex gap-2">
+                <Input
+                  value={portoOrigemInput}
+                  onChange={(e) => setPortoOrigemInput(e.target.value.toUpperCase())}
+                  onKeyDown={(e) => e.key === 'Enter' && handleAddPortoOrigem()}
+                  placeholder="CNSHA"
+                  maxLength={6}
+                  className="bg-white/5 border-white/12 text-white w-24"
+                />
+                <Button variant="outline" size="sm" onClick={handleAddPortoOrigem}>
+                  Add
+                </Button>
+              </div>
+              
+              {/* Quick-add buttons for origin */}
+              <div className="flex flex-wrap gap-1">
+                {PORTOS_GRUPOS_UI.origem.map(group => (
+                  <button
+                    key={group.key}
+                    onClick={() => handleAddGroupOrigem(group.key)}
+                    className="text-[10px] px-2 py-0.5 rounded bg-orange-500/20 text-orange-300 hover:bg-orange-500/30 transition"
+                  >
+                    {group.label}
                   </button>
-                </Badge>
-              ))}
+                ))}
+              </div>
+              
+              {/* Selected ports */}
+              <div className="flex flex-wrap gap-1 mt-2 min-h-[40px]">
+                {portosOrigem.map(code => (
+                  <Badge key={code} variant="secondary" className="bg-orange-500/20 text-orange-300 text-xs">
+                    <Anchor className="h-3 w-3 mr-1" />
+                    {code}
+                    <span className="text-orange-400/60 ml-1 text-[9px]">{getPortLabel(code)}</span>
+                    <button onClick={() => handleRemovePortoOrigem(code)} className="ml-1 hover:text-white">
+                      <X className="h-3 w-3" />
+                    </button>
+                  </Badge>
+                ))}
+                {portosOrigem.length === 0 && (
+                  <span className="text-white/40 text-xs italic">Todos (nenhum filtro)</span>
+                )}
+              </div>
             </div>
-            <div className="flex flex-wrap gap-1 mt-2">
-              {PORTOS_COMUNS_BRASIL.filter(p => !portos.includes(p)).slice(0, 8).map(code => (
-                <button
-                  key={code}
-                  onClick={() => setPortos([...portos, code])}
-                  className="text-[10px] px-2 py-0.5 rounded bg-white/5 text-white/50 hover:bg-white/10 hover:text-white/80"
-                >
-                  + {code}
-                </button>
-              ))}
+
+            {/* Portos de Destino */}
+            <div className="space-y-2 p-4 rounded-lg bg-white/5 border border-white/10">
+              <Label className="text-cyan-400 font-medium">Portos de Destino (Brasil)</Label>
+              <div className="flex gap-2">
+                <Input
+                  value={portoDestinoInput}
+                  onChange={(e) => setPortoDestinoInput(e.target.value.toUpperCase())}
+                  onKeyDown={(e) => e.key === 'Enter' && handleAddPortoDestino()}
+                  placeholder="BRSSZ"
+                  maxLength={6}
+                  className="bg-white/5 border-white/12 text-white w-24"
+                />
+                <Button variant="outline" size="sm" onClick={handleAddPortoDestino}>
+                  Add
+                </Button>
+              </div>
+              
+              {/* Quick-add buttons for destination */}
+              <div className="flex flex-wrap gap-1">
+                {PORTOS_GRUPOS_UI.destino.map(group => (
+                  <button
+                    key={group.key}
+                    onClick={() => handleAddGroupDestino(group.key)}
+                    className="text-[10px] px-2 py-0.5 rounded bg-cyan-500/20 text-cyan-300 hover:bg-cyan-500/30 transition"
+                  >
+                    {group.label}
+                  </button>
+                ))}
+              </div>
+              
+              {/* Selected ports */}
+              <div className="flex flex-wrap gap-1 mt-2 min-h-[40px]">
+                {portosDestino.map(code => (
+                  <Badge key={code} variant="secondary" className="bg-cyan-500/20 text-cyan-300 text-xs">
+                    <Anchor className="h-3 w-3 mr-1" />
+                    {code}
+                    <span className="text-cyan-400/60 ml-1 text-[9px]">{getPortLabel(code)}</span>
+                    <button onClick={() => handleRemovePortoDestino(code)} className="ml-1 hover:text-white">
+                      <X className="h-3 w-3" />
+                    </button>
+                  </Badge>
+                ))}
+                {portosDestino.length === 0 && (
+                  <span className="text-white/40 text-xs italic">Todos (nenhum filtro)</span>
+                )}
+              </div>
             </div>
           </div>
 
@@ -307,7 +444,7 @@ export function SeaRegraNotificacaoDialog({ open, onOpenChange, regra, onSave }:
           </Button>
           <Button 
             onClick={handleSave} 
-            disabled={saving || (!clienteNome.trim() && !cnpj.trim()) || eventosDisparo.length === 0}
+            disabled={saving || (!isDefault && !clienteNome.trim() && !cnpj.trim()) || eventosDisparo.length === 0}
             className="bg-cyan-500 hover:bg-cyan-600 text-black"
           >
             {saving ? 'Salvando...' : 'Salvar'}
