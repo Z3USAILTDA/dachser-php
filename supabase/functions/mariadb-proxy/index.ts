@@ -2786,8 +2786,7 @@ serve(async (req) => {
                AND s.arr_datetime <= NOW() - INTERVAL 120 HOUR
                AND s.data_atraso IS NULL)
             )
-            -- CCT RESET: Filtrar por DEP >= 26/01 E data_insert em t_master_dados = 26/01
-            AND s.dep_datetime >= '2026-01-26 00:00:00'
+            -- CCT RESET: Filtrar apenas por data_insert em t_master_dados = 26/01
             AND DATE(m.data_insert) = '2026-01-26'
           ) sub
           WHERE sub.rn = 1
