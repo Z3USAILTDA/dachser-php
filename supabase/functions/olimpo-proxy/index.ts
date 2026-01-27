@@ -533,8 +533,8 @@ serve(async (req) => {
 
     // ===== SEA SMART: Cache inteligente com atualização seletiva =====
     if (action === 'sea_seed_smart') {
-      // ⚠️ FLAG: Pausar chamadas JSONCargo - usar apenas cache
-      const SKIP_API_CALLS = true;
+      // FLAG: Chamadas JSONCargo ATIVADAS para tracking de todos armadores
+      const SKIP_API_CALLS = false;
       
       const mariadbHost = Deno.env.get('MARIADB_HOST');
       const mariadbPort = Deno.env.get('MARIADB_PORT') || '3306';
@@ -688,8 +688,8 @@ serve(async (req) => {
             continue;
           }
 
-          // Limitar chamadas de API para evitar rate limit
-          if (apiCallCount >= 5) {
+          // Limitar chamadas de API para evitar rate limit (10 por batch)
+          if (apiCallCount >= 10) {
             // Já atingiu limite, usar cache ou dados básicos
             results.push({
               container: containerId,
