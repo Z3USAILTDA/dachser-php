@@ -11150,6 +11150,82 @@ serve(async (req) => {
         break;
       }
 
+      // ==================== BULK DELETE DISPUTAS ====================
+      case 'bulk_delete_disputas': {
+        const { doc_keys } = body as { doc_keys?: string[] };
+        
+        if (!doc_keys || !Array.isArray(doc_keys) || doc_keys.length === 0) {
+          return new Response(
+            JSON.stringify({ error: 'doc_keys é obrigatório', success: false }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+        
+        console.log(`[bulk_delete_disputas] Processing ${doc_keys.length} documents for soft delete`);
+        
+        let deletedCount = 0;
+        for (const docKey of doc_keys) {
+          const insertSql = `
+            INSERT IGNORE INTO ai_agente.t_financeiro_soft_delete (documento, active)
+            VALUES (?, 0)
+          `;
+          await client.execute(insertSql, [docKey]);
+          deletedCount++;
+        }
+        
+        console.log(`[bulk_delete_disputas] Bulk soft-deleted ${deletedCount} disputas`);
+        result = { success: true, deleted: deletedCount };
+        break;
+      }
+
+      // ==================== BULK RESOLVE DISPUTAS ====================
+      case 'bulk_resolve_disputas': {
+        const { doc_keys: resolveDocKeys } = body as { doc_keys?: string[] };
+        
+        if (!resolveDocKeys || !Array.isArray(resolveDocKeys) || resolveDocKeys.length === 0) {
+          return new Response(
+            JSON.stringify({ error: 'doc_keys é obrigatório', success: false }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+        
+        console.log(`[bulk_resolve_disputas] Processing ${resolveDocKeys.length} documents`);
+        
+        let resolvedCount = 0;
+        for (const docKey of resolveDocKeys) {
+          // Obter id_rm
+          const getIdRmSql = `
+            SELECT id_rm FROM dados_dachser.t_dados_financeiro_nfs 
+            WHERE documento = ? OR numero_nf = ? OR nd = ?
+            LIMIT 1
+          `;
+          const idRmRows = await client.query(getIdRmSql, [docKey, docKey, docKey]);
+          const idRm = (idRmRows as any[])?.[0]?.id_rm;
+          
+          // Atualizar NFs
+          await client.execute(`
+            UPDATE dados_dachser.t_dados_financeiro_nfs 
+            SET disputa = 0, fim_disputa = NOW()
+            WHERE documento = ? OR numero_nf = ? OR nd = ?
+          `, [docKey, docKey, docKey]);
+          
+          // Atualizar RM se existir
+          if (idRm) {
+            await client.execute(`
+              UPDATE dados_dachser.t_dados_rm 
+              SET nf_disputa = 0, fim_disputa = NOW()
+              WHERE id_rm = ?
+            `, [idRm]);
+          }
+          
+          resolvedCount++;
+        }
+        
+        console.log(`[bulk_resolve_disputas] Bulk resolved ${resolvedCount} disputas`);
+        result = { success: true, resolved: resolvedCount };
+        break;
+      }
+
       // ==================== SEA MBL EXPORT ====================
       case 'get_sea_mbls_export': {
         console.log('[MARIADB] Fetching maritime MBLs for Excel export (last 2 months)...');

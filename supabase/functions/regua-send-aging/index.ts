@@ -354,8 +354,8 @@ serve(async (req: Request): Promise<Response> => {
       );
     }
 
-    const recipientEmails = parseEmails(email_to);
-    console.log("Sending aging email to recipients:", recipientEmails);
+    const recipientList = parseEmails(email_to);
+    console.log("Sending aging email to recipients:", recipientList);
 
     const resendApiKey = Deno.env.get("RESEND_API_KEY");
     if (!resendApiKey) {
@@ -534,18 +534,9 @@ serve(async (req: Request): Promise<Response> => {
     // Send email with attachment
     const dateForFile = new Date().toLocaleDateString("pt-BR").replace(/\//g, ".");
     
-    // Hardcoded recipients for aging emails
-    const recipientEmails = [
-      "devs@z3us.ai",
-      "bia.souza@dachser.com",
-      "jessica.costa@dachser.com"
-    ];
-    
-    console.log("Sending aging email to recipients:", recipientEmails);
-    
     const emailResponse = await resend.emails.send({
       from: "Financeiro Dachser <noreply@hermes.z3us.ai>",
-      to: recipientEmails,
+      to: recipientList,
       subject: `Aging List - ${clienteName}`,
       html: emailHtml,
       attachments: [
