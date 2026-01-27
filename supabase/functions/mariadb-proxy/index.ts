@@ -2784,8 +2784,8 @@ serve(async (req) => {
                AND s.arr_datetime <= NOW() - INTERVAL 120 HOUR
                AND s.data_atraso IS NULL)
             )
-            -- CCT RESET: Só mostrar AWBs com DEP a partir de 26/01/2026
-            AND s.dep_datetime >= '2026-01-26 00:00:00'
+            -- CCT RESET: Só mostrar AWBs com DEP a partir de 27/01/2026
+            AND s.dep_datetime >= '2026-01-27 00:00:00'
           ) sub
           WHERE sub.rn = 1
           ORDER BY sub.ultimo_evento_data DESC
@@ -10600,7 +10600,7 @@ serve(async (req) => {
                   AND s.arr_datetime IS NOT NULL 
                   AND s.arr_datetime <= NOW() - INTERVAL 120 HOUR)
             )
-            AND s.dep_datetime >= '2026-01-26 00:00:00'
+            AND s.dep_datetime >= '2026-01-27 00:00:00'
           `;
           
           if (!processAll) {
