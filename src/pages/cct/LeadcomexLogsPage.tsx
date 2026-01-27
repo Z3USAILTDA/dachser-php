@@ -30,6 +30,12 @@ const LeadcomexLogsPage: React.FC = () => {
   const [isRunningEnrich, setIsRunningEnrich] = useState(false);
   const [selectedLog, setSelectedLog] = useState<LeadcomexLog | null>(null);
   
+  // Manual search state
+  const [manualHawb, setManualHawb] = useState('');
+  const [manualDepDate, setManualDepDate] = useState('');
+  const [isManualSearching, setIsManualSearching] = useState(false);
+  const [manualSearchResult, setManualSearchResult] = useState<any>(null);
+  
   // Filters
   const [filters, setFilters] = useState<LeadcomexLogFilters>({
     limit: 50,
@@ -130,6 +136,41 @@ const LeadcomexLogsPage: React.FC = () => {
       toast.error('Erro ao executar atualização');
     } finally {
       setIsRunningEnrich(false);
+    }
+  };
+
+  const runManualSearch = async () => {
+    if (!manualHawb.trim()) {
+      toast.error('Informe o HAWB para buscar');
+      return;
+    }
+    
+    setIsManualSearching(true);
+    setManualSearchResult(null);
+    
+    try {
+      const { data, error } = await supabase.functions.invoke('leadcomex-test-reverse', {
+        body: { 
+          hawb: manualHawb.trim(),
+          dep_date: manualDepDate || undefined
+        }
+      });
+      
+      if (error) throw error;
+      
+      setManualSearchResult(data);
+      
+      if (data.success) {
+        toast.success(`HAWB encontrado! Offset: -${data.offset_days} dias`);
+      } else {
+        toast.warning('HAWB não encontrado no LeadComex');
+      }
+    } catch (err) {
+      console.error('Erro na busca manual:', err);
+      toast.error('Erro ao buscar HAWB');
+      setManualSearchResult({ success: false, error: String(err) });
+    } finally {
+      setIsManualSearching(false);
     }
   };
 
@@ -294,6 +335,113 @@ const LeadcomexLogsPage: React.FC = () => {
             </CardContent>
           </Card>
         </div>
+
+        {/* Manual Search Card */}
+        <Card className="bg-[#0d1117]/80 border-white/10 backdrop-blur-sm mb-6">
+          <CardHeader className="py-3 border-b border-white/10">
+            <CardTitle className="text-white text-base flex items-center gap-2">
+              <Search className="h-4 w-4 text-[#F5B843]" />
+              Consulta Manual
+              <span className="text-xs text-white/50 font-normal ml-2">
+                Teste um HAWB específico na API LeadComex
+              </span>
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="p-4">
+            <div className="flex flex-wrap gap-4 items-end">
+              <div className="flex-1 min-w-[200px]">
+                <label className="text-xs text-white/60 mb-1.5 block">HAWB *</label>
+                <Input
+                  placeholder="Ex: STR-15251092"
+                  value={manualHawb}
+                  onChange={(e) => setManualHawb(e.target.value)}
+                  className="bg-white/5 border-white/10 text-white placeholder:text-white/40"
+                />
+              </div>
+              <div className="w-[160px]">
+                <label className="text-xs text-white/60 mb-1.5 block">Data Emissão (opcional)</label>
+                <Input
+                  type="date"
+                  value={manualDepDate}
+                  onChange={(e) => setManualDepDate(e.target.value)}
+                  className="bg-white/5 border-white/10 text-white"
+                />
+              </div>
+              <Button
+                onClick={runManualSearch}
+                disabled={isManualSearching || !manualHawb.trim()}
+                className="bg-[#F5B843] hover:bg-[#F5B843]/90 text-black font-medium"
+              >
+                {isManualSearching ? (
+                  <>
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    Buscando...
+                  </>
+                ) : (
+                  <>
+                    <Search className="h-4 w-4 mr-2" />
+                    Buscar
+                  </>
+                )}
+              </Button>
+            </div>
+
+            {/* Manual Search Result */}
+            {manualSearchResult && (
+              <div className="mt-4 p-4 rounded-lg bg-white/5 border border-white/10">
+                <div className="flex items-center justify-between mb-3">
+                  <span className="font-mono text-white font-medium">{manualHawb}</span>
+                  {manualSearchResult.success ? (
+                    <Badge className="bg-emerald-500/20 text-emerald-400 border-emerald-500/30">
+                      <CheckCircle2 className="h-3 w-3 mr-1" />
+                      Encontrado
+                    </Badge>
+                  ) : (
+                    <Badge className="bg-red-500/20 text-red-400 border-red-500/30">
+                      <XCircle className="h-3 w-3 mr-1" />
+                      Não Encontrado
+                    </Badge>
+                  )}
+                </div>
+                
+                {manualSearchResult.success ? (
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
+                    <div>
+                      <span className="text-white/50 text-xs">Data Match</span>
+                      <div className="text-white font-medium">
+                        {manualSearchResult.matched_date ? formatDateOnly(manualSearchResult.matched_date) : '-'}
+                      </div>
+                    </div>
+                    <div>
+                      <span className="text-white/50 text-xs">Offset</span>
+                      <div className="text-purple-400 font-medium">-{manualSearchResult.offset_days || 0} dias</div>
+                    </div>
+                    <div>
+                      <span className="text-white/50 text-xs">Tentativas</span>
+                      <div className="text-white font-medium">{manualSearchResult.total_attempts || 0}</div>
+                    </div>
+                    <div>
+                      <span className="text-white/50 text-xs">Tempo</span>
+                      <div className="text-blue-400 font-medium">{manualSearchResult.total_time_ms || 0}ms</div>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="text-white/60 text-sm">
+                    {manualSearchResult.error || `Nenhum resultado encontrado após ${manualSearchResult.total_attempts || 0} tentativas`}
+                  </div>
+                )}
+
+                {manualSearchResult.attempts && manualSearchResult.attempts.length > 0 && (
+                  <div className="mt-4">
+                    <div className="text-xs text-white/50 mb-2">Timeline de Tentativas</div>
+                    <AttemptTimeline attempts={manualSearchResult.attempts} />
+                  </div>
+                )}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* Left: Logs Table */}
           <div className="lg:col-span-2">
