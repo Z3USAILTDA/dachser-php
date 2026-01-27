@@ -59,7 +59,7 @@ serve(async (req) => {
     }
 
     // Date filter for t_master_dados.data_insert
-    const dateFilter = '2026-01-27';
+    const dateFilter = '2026-01-26';
 
     // Build base SELECT with table alias and JOIN to t_master_dados
     // OPTIMIZATION: Removed TRIM() to allow index usage, using only COLLATE on one side
