@@ -22,18 +22,17 @@ import { Filter as FilterIcon } from "lucide-react";
 import VesselFinderMap from "@/components/tracking/VesselFinderMap";
 import Swal from 'sweetalert2';
 import { useTheme } from "@/hooks/useTheme";
+import { detectCarrierFromMbl } from "@/lib/shippingLineMapping";
 
-// Normaliza códigos de armadores do banco para nomes legíveis
-const normalizeShippingLine = (code: string | null | undefined): string => {
-  if (!code) return "N/D";
-  const upper = code.toUpperCase().trim();
-  const map: Record<string, string> = {
-    'CMA_CGM': 'CMA CGM',
-    'CMA': 'CMA CGM',
-    'HAPAG_LLOYD': 'HAPAG-LLOYD',
-    'YANG_MING': 'YANG MING'
-  };
-  return map[upper] || code;
+// Deriva o armador do MBL usando o mapeamento centralizado
+const getShippingLineFromMbl = (mbl_id: string, shipping_line: string | null | undefined): string => {
+  // Se já tiver shipping_line no banco, usa ele
+  if (shipping_line) {
+    return shipping_line;
+  }
+  // Caso contrário, detecta pelo prefixo do MBL
+  const detected = detectCarrierFromMbl(mbl_id);
+  return detected.code !== 'UNKNOWN' ? detected.name : 'N/D';
 };
 
 // ========== REPORT STATUS SYSTEM (12 statuses) ==========
@@ -1289,7 +1288,7 @@ const ContainerTracking = () => {
     let mbls = mblList.filter(m => {
       const searchLower = searchTerm.toLowerCase();
       const matchesSearch = !searchTerm || m.mbl_id.toLowerCase().includes(searchLower) || m.consignee && m.consignee.toLowerCase().includes(searchLower) || m.shipping_line && m.shipping_line.toLowerCase().includes(searchLower) || m.navio && m.navio.toLowerCase().includes(searchLower);
-      const armador = normalizeShippingLine(m.shipping_line);
+      const armador = getShippingLineFromMbl(m.mbl_id, m.shipping_line);
       const matchesLine = filterLine === "all" || armador === filterLine;
       const matchesCoordenador = filterCoordenador === "all" || (m.nome_analista || "-") === filterCoordenador;
       let matchesCardFilter = true;
@@ -1342,7 +1341,7 @@ const ContainerTracking = () => {
   const dynamicArmadores = useMemo(() => {
     const armadoresSet = new Set<string>();
     mblList.forEach(m => {
-      const armador = normalizeShippingLine(m.shipping_line);
+      const armador = getShippingLineFromMbl(m.mbl_id, m.shipping_line);
       if (armador && armador !== "N/D") {
         armadoresSet.add(armador);
       }
@@ -1832,7 +1831,7 @@ const ContainerTracking = () => {
                             </td>
                             <td className="px-4 py-3">
                               <span className="px-2 py-1 rounded-full text-xs font-medium bg-[rgba(255,200,0,.15)] text-[#ffc800] border border-[rgba(255,200,0,.3)]">
-                                {normalizeShippingLine(mbl.shipping_line)}
+                                {getShippingLineFromMbl(mbl.mbl_id, mbl.shipping_line)}
                               </span>
                             </td>
                             <td className="px-4 py-3 text-[#aaaaaa] text-sm">{mbl.origem || "-"}</td>
@@ -2016,7 +2015,7 @@ const ContainerTracking = () => {
                                   const cntStatus = getReportStatus(cnt.last_event);
                                   return <tr key={cnt.id} className="border-t border-[rgba(255,255,255,.05)] hover:bg-[rgba(255,255,255,.02)]">
                                                 <td className="px-3 py-2 font-mono text-[#f5f5f5]">{cnt.container}</td>
-                                                <td className="px-3 py-2 text-[#aaaaaa]">{normalizeShippingLine(cnt.shipping_line)}</td>
+                                                <td className="px-3 py-2 text-[#aaaaaa]">{getShippingLineFromMbl(cnt.container, cnt.shipping_line)}</td>
                                                 <td className="px-3 py-2">
                                                   <span className="text-xs font-bold px-2 py-0.5 rounded" style={{
                                         color: cntStatus.color,
