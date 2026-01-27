@@ -61,8 +61,9 @@ serve(async (req) => {
     // Date filter for t_master_dados.data_insert
     const dateFilter = '2026-01-26';
 
-    // Build base SELECT with table alias and JOIN to t_master_dados
-    // OPTIMIZATION: Removed TRIM() to allow index usage, using only COLLATE on one side
+    // OPTIMIZATION: Use subquery instead of JOIN to avoid full table scan
+    // Step 1: Get MAWBs from t_master_dados for the specific date
+    // Step 2: Use those MAWBs in a WHERE IN clause on t_status_aereo
     const baseSelect = `
       SELECT s.id, s.awb, s.hawb, s.destinatário, s.nome_analista, s.email_analista,
              s.email_cliente, s.tipo_servico, s.data_atraso, s.\`última atualização\`,
@@ -70,10 +71,11 @@ serve(async (req) => {
              ${hasArrCheckColumn ? 's.arr_check_count' : '0 as arr_check_count'},
              ${hasArrDatetimeColumn ? 's.arr_datetime' : 'NULL as arr_datetime'}
       FROM ${database}.t_status_aereo s
-      INNER JOIN ${database}.t_master_dados m 
-        ON s.awb = m.mawb COLLATE utf8mb4_unicode_ci
-      WHERE DATE(m.data_insert) = ?
+      WHERE s.awb IN (
+        SELECT m.mawb FROM ${database}.t_master_dados m 
+        WHERE DATE(m.data_insert) = ?
         AND m.tipo_processo IN ('AIR IMPORT', 'AIR EXPORT')
+      )
     `;
 
     let query: string;
