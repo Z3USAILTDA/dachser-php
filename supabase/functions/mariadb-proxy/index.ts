@@ -2766,7 +2766,9 @@ serve(async (req) => {
               END as status_cct_oficial,
               ROW_NUMBER() OVER (PARTITION BY TRIM(s.hawb) ORDER BY s.\`última atualização\` DESC) as rn
             FROM ${database}.t_status_aereo s
-            LEFT JOIN ${database}.t_master_dados m ON s.awb = m.mawb AND (m.tipo_processo = 'AIR IMPORT' OR m.tipo_processo IS NULL)
+            INNER JOIN ${database}.t_master_dados m 
+              ON TRIM(s.awb) COLLATE utf8mb4_unicode_ci = TRIM(m.mawb) COLLATE utf8mb4_unicode_ci
+              AND m.tipo_processo IN ('AIR IMPORT', 'AIR EXPORT')
             WHERE (${airlineLikeConditions})
             AND s.\`último_status\` NOT IN (${errorStatusFilter})
             AND (s.origem IS NOT NULL AND LOWER(TRIM(s.origem)) NOT IN ('n/a', 'na', 'erro', 'error', ''))
@@ -2784,8 +2786,9 @@ serve(async (req) => {
                AND s.arr_datetime <= NOW() - INTERVAL 120 HOUR
                AND s.data_atraso IS NULL)
             )
-            -- CCT RESET: Só mostrar AWBs com DEP a partir de 27/01/2026
+            -- CCT RESET: Filtrar por DEP >= 27/01 E data_insert em t_master_dados = 27/01
             AND s.dep_datetime >= '2026-01-27 00:00:00'
+            AND DATE(m.data_insert) = '2026-01-27'
           ) sub
           WHERE sub.rn = 1
           ORDER BY sub.ultimo_evento_data DESC
