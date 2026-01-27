@@ -95,7 +95,7 @@ const menuItems: MenuItem[] = [
         adminOnly: true,
       },
       {
-        label: "Monitoramento",
+        label: "Monitoramento FCL",
         href: "/sea/tracking",
       },
       {
