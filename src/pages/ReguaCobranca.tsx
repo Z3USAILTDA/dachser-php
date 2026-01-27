@@ -1,17 +1,18 @@
 import { useState, useEffect, useMemo, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
-import { CalendarRange, HelpCircle, Mail, Send } from "lucide-react";
+import { CalendarRange, HelpCircle, Mail, Send, RefreshCw, FileText, Clock, Flag, Search, X } from "lucide-react";
 import { useUsageLog } from "@/hooks/useUsageLog";
-import { FileText, Clock, Flag, Search, X, RefreshCw } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
+import { Checkbox } from "@/components/ui/checkbox";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { PageLayout } from "@/components/layout/PageLayout";
 import { PageCard } from "@/components/layout/PageCard";
 import { TablePagination } from "@/components/layout/TablePagination";
+import ErrorBoundary from "@/components/ErrorBoundary";
 import {
   Dialog,
   DialogContent,
@@ -84,7 +85,17 @@ const STAGE_POSITIONS: Record<string, number> = {
 
 const PAGE_SIZE = 15;
 
-export default function ReguaCobranca() {
+// Helper to format CNPJ
+const formatCnpj = (cnpj: string) => {
+  if (!cnpj) return "—";
+  const digits = cnpj.replace(/\D/g, "");
+  if (digits.length === 14) {
+    return `${digits.slice(0,2)}.${digits.slice(2,5)}.${digits.slice(5,8)}/${digits.slice(8,12)}-${digits.slice(12,14)}`;
+  }
+  return cnpj;
+};
+
+function ReguaCobrancaContent() {
   useUsageLog({ endpoint: "/fin/regua-cobranca" });
   const navigate = useNavigate();
   const { toast } = useToast();
@@ -95,6 +106,7 @@ export default function ReguaCobranca() {
   const [totalTitles, setTotalTitles] = useState(0);
   const [lastSync, setLastSync] = useState<string>("");
   const [loading, setLoading] = useState(true);
+  const [hasError, setHasError] = useState(false);
 
   // DB Stats
   const [dbStats, setDbStats] = useState<ReguaDbStats | null>(null);
@@ -111,6 +123,7 @@ export default function ReguaCobranca() {
   const [selectedRow, setSelectedRow] = useState<StageRow | null>(null);
   const [sendingAging, setSendingAging] = useState(false);
   const [agingEmailText, setAgingEmailText] = useState("");
+  const [agingRecipients, setAgingRecipients] = useState("devs@z3us.ai; bia.souza@dachser.com; jessica.costa@dachser.com");
 
   // Bulk send state (admin only)
   const [bulkSendModalOpen, setBulkSendModalOpen] = useState(false);
@@ -123,12 +136,17 @@ export default function ReguaCobranca() {
   const [clienteLoading, setClienteLoading] = useState(false);
   const [showClienteResults, setShowClienteResults] = useState(false);
 
+  // Grouped aging state
+  const [selectedClienteCnpjs, setSelectedClienteCnpjs] = useState<Set<string>>(new Set());
+  const [agrupamentoModalOpen, setAgrupamentoModalOpen] = useState(false);
+  const [agrupamentoCnpjs, setAgrupamentoCnpjs] = useState<string[]>([]);
+
   // Check admin status
   const storedUser = localStorage.getItem("user");
   const user = storedUser ? JSON.parse(storedUser) : null;
   const isAdmin = user?.is_admin === 1 || user?.is_admin === "1" || user?.is_admin === true;
 
-  const fetchCounts = async () => {
+  const fetchCounts = useCallback(async () => {
     setLoading(true);
     try {
       const { data, error } = await supabase.functions.invoke("mariadb-proxy", {
@@ -143,11 +161,12 @@ export default function ReguaCobranca() {
     } catch (err) {
       console.error("Erro ao carregar contagens:", err);
       toast({ title: "Erro", description: "Falha ao carregar dados da régua", variant: "destructive" });
+      setHasError(true);
     } finally {
       setLoading(false);
       setLastSync(new Date().toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" }) + " GMT-3");
     }
-  };
+  }, [toast]);
 
   const fetchDbStats = useCallback(async () => {
     setIsLoadingDbStats(true);
@@ -172,11 +191,19 @@ export default function ReguaCobranca() {
   }, []);
 
   useEffect(() => {
-    fetchCounts();
-    fetchDbStats();
+    const loadData = async () => {
+      try {
+        await fetchCounts();
+        await fetchDbStats();
+      } catch (err) {
+        console.error("Erro na inicialização:", err);
+        setHasError(true);
+      }
+    };
+    loadData();
     const statsInterval = setInterval(fetchDbStats, 60000);
     return () => clearInterval(statsInterval);
-  }, [fetchDbStats]);
+  }, [fetchCounts, fetchDbStats]);
 
   const fetchStageRows = async (stage: string) => {
     setStageLoading(true);
@@ -222,6 +249,7 @@ export default function ReguaCobranca() {
     if (!clienteSearch.trim()) return;
     setClienteLoading(true);
     setShowClienteResults(true);
+    setSelectedClienteCnpjs(new Set()); // Clear selection when searching
     
     try {
       const { data, error } = await supabase.functions.invoke("mariadb-proxy", {
@@ -243,10 +271,11 @@ export default function ReguaCobranca() {
     setShowClienteResults(false);
     setClienteRows([]);
     setClienteSearch("");
+    setSelectedClienteCnpjs(new Set());
   };
 
   const getDefaultAgingText = (cnpj: string) => {
-    const cnpjFormatted = cnpj ? cnpj.replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})$/, "$1.$2.$3/$4-$5") : "xx.xxx.xxx/xxxx-xx";
+    const cnpjFormatted = cnpj ? formatCnpj(cnpj) : "xx.xxx.xxx/xxxx-xx";
     return `Boa tarde!
 Tudo bem?
 
@@ -278,7 +307,94 @@ Financeiro Dachser`;
     };
     setSelectedRow(row);
     setAgingEmailText(getDefaultAgingText(cliente.cnpj));
+    setAgingRecipients("devs@z3us.ai; bia.souza@dachser.com; jessica.costa@dachser.com");
     setAgingModalOpen(true);
+  };
+
+  // Toggle client selection for grouped aging
+  const toggleClienteSelection = (cnpj: string) => {
+    const newSet = new Set(selectedClienteCnpjs);
+    if (newSet.has(cnpj)) {
+      newSet.delete(cnpj);
+    } else {
+      newSet.add(cnpj);
+    }
+    setSelectedClienteCnpjs(newSet);
+  };
+
+  const toggleSelectAllClientes = () => {
+    if (selectedClienteCnpjs.size === clienteRows.length) {
+      setSelectedClienteCnpjs(new Set());
+    } else {
+      setSelectedClienteCnpjs(new Set(clienteRows.map(c => c.cnpj)));
+    }
+  };
+
+  // Handle grouped aging
+  const handleSendAgingAgrupado = () => {
+    const cnpjsList = Array.from(selectedClienteCnpjs);
+    setAgrupamentoCnpjs(cnpjsList);
+    
+    // Build default text with all CNPJs
+    const cnpjsFormatted = cnpjsList.map(c => formatCnpj(c)).join("\n");
+    const defaultText = `Boa tarde!
+Tudo bem?
+
+Segue anexo, aging list para os CNPJ's:
+
+${cnpjsFormatted}
+
+Por gentileza, poderia verificar e nos retornar com a programação de pagamento para essa semana?
+
+Em caso de dúvidas ou eventuais divergências, nossa equipe está à disposição através do e-mail jessica.costa@dachser.com ou pelo telefone +55 (19) 3312-6185.
+
+Agradecemos a sua atenção e colaboração.
+
+Atenciosamente,
+Financeiro Dachser`;
+    
+    setAgingEmailText(defaultText);
+    setAgingRecipients("devs@z3us.ai; bia.souza@dachser.com; jessica.costa@dachser.com");
+    setAgrupamentoModalOpen(true);
+  };
+
+  const confirmSendAgingAgrupado = async () => {
+    if (agrupamentoCnpjs.length === 0) return;
+    
+    setSendingAging(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("regua-send-aging", {
+        body: {
+          cnpjs: agrupamentoCnpjs,
+          cliente: "Clientes Agrupados",
+          email_to: agingRecipients,
+          custom_text: agingEmailText,
+        },
+      });
+
+      if (error) throw error;
+      
+      if (data?.success) {
+        toast({
+          title: "E-mail enviado!",
+          description: data.message || "Aging List agrupada enviada com sucesso",
+        });
+        setSelectedClienteCnpjs(new Set());
+      } else {
+        throw new Error(data?.message || "Erro ao enviar e-mail");
+      }
+    } catch (err) {
+      console.error("Erro ao enviar aging agrupado:", err);
+      toast({
+        title: "Erro",
+        description: err instanceof Error ? err.message : "Falha ao enviar Aging List",
+        variant: "destructive",
+      });
+    } finally {
+      setSendingAging(false);
+      setAgrupamentoModalOpen(false);
+      setAgrupamentoCnpjs([]);
+    }
   };
 
   const filteredRows = useMemo(() => {
@@ -308,6 +424,7 @@ Financeiro Dachser`;
   const handleSendAging = (row: StageRow) => {
     setSelectedRow(row);
     setAgingEmailText(getDefaultAgingText(row.cnpj));
+    setAgingRecipients("devs@z3us.ai; bia.souza@dachser.com; jessica.costa@dachser.com");
     setAgingModalOpen(true);
   };
 
@@ -320,8 +437,8 @@ Financeiro Dachser`;
         body: {
           cnpj: selectedRow.cnpj,
           cliente: selectedRow.razao_base || selectedRow.razao_social,
-          email_to: "devs@z3us.ai; bia.souza@dachser.com; jessica.costa@dachser.com", // Fixed test email
-          custom_text: agingEmailText, // Custom email text
+          email_to: agingRecipients,
+          custom_text: agingEmailText,
         },
       });
 
@@ -330,7 +447,7 @@ Financeiro Dachser`;
       if (data?.success) {
         toast({
           title: "E-mail enviado!",
-          description: data.message || "Aging List enviada para devs@z3us.ai",
+          description: data.message || "Aging List enviada com sucesso",
         });
       } else {
         throw new Error(data?.message || "Erro ao enviar e-mail");
@@ -363,7 +480,7 @@ Financeiro Dachser`;
       const { data, error } = await supabase.functions.invoke("regua-send-emails", {
         body: {
           stage: openStage,
-          dryRun: false, // Set to true for testing without actually sending
+          dryRun: false,
         },
       });
 
@@ -393,6 +510,28 @@ Financeiro Dachser`;
       setSendingBulk(false);
     }
   };
+
+  // Error fallback UI
+  if (hasError) {
+    return (
+      <PageLayout 
+        title="DACHSER" 
+        subtitle="Régua de cobrança – títulos em aberto"
+        pageIcon={CalendarRange}
+        backTo="/dashboard"
+      >
+        <PageCard>
+          <div className="flex flex-col items-center justify-center py-12 gap-4">
+            <p className="text-destructive">Erro ao carregar dados. Tente atualizar a página.</p>
+            <Button onClick={() => window.location.reload()}>
+              <RefreshCw className="h-4 w-4 mr-2" />
+              Recarregar
+            </Button>
+          </div>
+        </PageCard>
+      </PageLayout>
+    );
+  }
 
   const rightContent = (
     <div className="flex items-center gap-3">
@@ -531,9 +670,21 @@ Financeiro Dachser`;
                 ({clienteRows.length} cliente{clienteRows.length !== 1 ? 's' : ''} encontrado{clienteRows.length !== 1 ? 's' : ''})
               </span>
             </h3>
-            <Button variant="ghost" size="sm" onClick={clearClienteSearch}>
-              <X className="h-4 w-4 mr-1" /> Fechar
-            </Button>
+            <div className="flex items-center gap-2">
+              {selectedClienteCnpjs.size > 1 && (
+                <Button
+                  size="sm"
+                  className="h-8 gap-1 bg-orange-600 hover:bg-orange-700"
+                  onClick={handleSendAgingAgrupado}
+                >
+                  <Mail className="h-3 w-3" />
+                  Enviar Aging Agrupado ({selectedClienteCnpjs.size})
+                </Button>
+              )}
+              <Button variant="ghost" size="sm" onClick={clearClienteSearch}>
+                <X className="h-4 w-4 mr-1" /> Fechar
+              </Button>
+            </div>
           </div>
 
           {clienteLoading ? (
@@ -545,8 +696,17 @@ Financeiro Dachser`;
               <table className="w-full text-[0.85rem]">
                 <thead>
                   <tr className="bg-[#15151f]">
+                    <th className="px-4 py-3 w-10">
+                      <Checkbox 
+                        checked={selectedClienteCnpjs.size === clienteRows.length && clienteRows.length > 0}
+                        onCheckedChange={toggleSelectAllClientes}
+                      />
+                    </th>
                     <th className="px-4 py-3 text-left text-[0.75rem] uppercase tracking-wider font-bold">
                       Cliente
+                    </th>
+                    <th className="px-4 py-3 text-left text-[0.75rem] uppercase tracking-wider font-bold">
+                      CNPJ
                     </th>
                     <th className="px-4 py-3 text-center text-[0.75rem] uppercase tracking-wider font-bold">
                       Faturas na Régua
@@ -559,7 +719,14 @@ Financeiro Dachser`;
                 <tbody>
                   {clienteRows.map((c, idx) => (
                     <tr key={idx} className="border-b border-white/9 hover:bg-white/5">
+                      <td className="px-4 py-3">
+                        <Checkbox 
+                          checked={selectedClienteCnpjs.has(c.cnpj)}
+                          onCheckedChange={() => toggleClienteSelection(c.cnpj)}
+                        />
+                      </td>
                       <td className="px-4 py-3">{c.razao_base}</td>
+                      <td className="px-4 py-3 font-mono text-[0.8rem]">{formatCnpj(c.cnpj)}</td>
                       <td className="px-4 py-3 text-center">
                         <Badge variant="secondary" className="text-[0.8rem]">
                           {c.qtd_faturas}
@@ -720,12 +887,21 @@ Financeiro Dachser`;
                 </div>
                 <div>
                   <span className="text-muted-foreground text-sm">CNPJ:</span>
-                  <p className="font-mono text-sm">{selectedRow.cnpj || selectedRow.documento?.slice(0, 18) || "—"}</p>
+                  <p className="font-mono text-sm">{formatCnpj(selectedRow.cnpj) || "—"}</p>
                 </div>
               </div>
-              <div>
-                <span className="text-muted-foreground text-sm">E-mail destino (teste):</span>
-                <p className="font-medium text-orange-400">devs@z3us.ai; bia.souza@dachser.com; jessica.costa@dachser.com</p>
+              
+              <div className="space-y-2">
+                <Label className="text-sm text-muted-foreground">Destinatários</Label>
+                <Input
+                  value={agingRecipients}
+                  onChange={(e) => setAgingRecipients(e.target.value)}
+                  placeholder="email1@domain.com; email2@domain.com"
+                  className="bg-[#13141a] border-white/20"
+                />
+                <p className="text-xs text-muted-foreground">
+                  Separe múltiplos emails com ponto e vírgula (;)
+                </p>
               </div>
               
               <div className="space-y-2">
@@ -769,6 +945,85 @@ Financeiro Dachser`;
                 <>
                   <Mail className="h-4 w-4 mr-2" />
                   Enviar E-mail
+                </>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Grouped Aging Modal */}
+      <Dialog open={agrupamentoModalOpen} onOpenChange={setAgrupamentoModalOpen}>
+        <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Enviar Aging List Agrupada</DialogTitle>
+            <DialogDescription>
+              Enviar Aging List consolidada para {agrupamentoCnpjs.length} cliente(s)?
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="py-4 space-y-4">
+            <div className="p-3 bg-orange-500/10 border border-orange-500/30 rounded-lg">
+              <p className="text-sm text-orange-400">
+                ⚠️ <strong>Atenção:</strong> Será gerada uma planilha consolidada com todos os CNPJs selecionados.
+              </p>
+            </div>
+            
+            <div>
+              <span className="text-muted-foreground text-sm">CNPJs incluídos:</span>
+              <div className="mt-1 p-2 bg-[#13141a] rounded-lg max-h-[100px] overflow-auto">
+                {agrupamentoCnpjs.map((cnpj, idx) => (
+                  <p key={idx} className="font-mono text-sm">{formatCnpj(cnpj)}</p>
+                ))}
+              </div>
+            </div>
+            
+            <div className="space-y-2">
+              <Label className="text-sm text-muted-foreground">Destinatários</Label>
+              <Input
+                value={agingRecipients}
+                onChange={(e) => setAgingRecipients(e.target.value)}
+                placeholder="email1@domain.com; email2@domain.com"
+                className="bg-[#13141a] border-white/20"
+              />
+              <p className="text-xs text-muted-foreground">
+                Separe múltiplos emails com ponto e vírgula (;)
+              </p>
+            </div>
+            
+            <div className="space-y-2">
+              <Label className="text-sm text-muted-foreground">Texto do e-mail (editável)</Label>
+              <Textarea
+                value={agingEmailText}
+                onChange={(e) => setAgingEmailText(e.target.value)}
+                className="min-h-[200px] bg-[#13141a] border-white/20 text-sm font-normal leading-relaxed"
+                placeholder="Texto do e-mail..."
+              />
+            </div>
+          </div>
+
+          <DialogFooter className="gap-2">
+            <Button
+              variant="outline"
+              onClick={() => setAgrupamentoModalOpen(false)}
+              disabled={sendingAging}
+            >
+              Cancelar
+            </Button>
+            <Button
+              onClick={confirmSendAgingAgrupado}
+              disabled={sendingAging}
+              className="bg-orange-600 hover:bg-orange-700 text-white"
+            >
+              {sendingAging ? (
+                <>
+                  <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+                  Enviando...
+                </>
+              ) : (
+                <>
+                  <Mail className="h-4 w-4 mr-2" />
+                  Enviar Aging Agrupado
                 </>
               )}
             </Button>
@@ -852,5 +1107,13 @@ Financeiro Dachser`;
         </DialogContent>
       </Dialog>
     </PageLayout>
+  );
+}
+
+export default function ReguaCobranca() {
+  return (
+    <ErrorBoundary>
+      <ReguaCobrancaContent />
+    </ErrorBoundary>
   );
 }
