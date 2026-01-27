@@ -65,7 +65,7 @@ serve(async (req) => {
     else selectFields += ', NULL as arr_datetime';
 
     // Date threshold for filtering records
-    const dateThreshold = '2026-01-26 00:00:00';
+    const dateThreshold = '2026-01-27 00:00:00';
     
     let query = `SELECT ${selectFields} FROM ${database}.t_status_aereo 
                  WHERE \`última atualização\` >= ? 
