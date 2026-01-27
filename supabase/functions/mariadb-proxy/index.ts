@@ -2813,7 +2813,7 @@ serve(async (req) => {
         const houseList = (shipments || []).map((s: any) => s.house).filter((h: string) => h && h.trim() !== '');
         
         let cctDataMap = new Map<string, any>();
-        let leadcomexStatusMap = new Map<string, { success: boolean; attempts: number }>();
+        let leadcomexStatusMap = new Map<string, { success: boolean; attempts: number; situacao_portal: string | null; status_cct: string | null }>();
         
         if (houseList.length > 0) {
           const houseFilter = houseList.map((h: string) => `'${h.replace(/'/g, "''")}'`).join(',');
@@ -2855,11 +2855,13 @@ serve(async (req) => {
           `);
           
           // Query LeadComex enrichment logs - get latest status for each HAWB
+          // Include lc_situacao_portal which contains the official CCT status from LeadComex
           const leadcomexLogs = await client.query(`
             SELECT 
               l.hawb,
               l.success,
-              l.total_attempts
+              l.total_attempts,
+              l.lc_situacao_portal
             FROM ${database}.t_leadcomex_enrichment_logs l
             INNER JOIN (
               SELECT hawb, MAX(created_at) as max_created
@@ -2875,11 +2877,29 @@ serve(async (req) => {
             cctDataMap.set(houseKey, cct);
           }
           
+          // Map LeadComex situacao_portal to CCT official status
+          const mapLeadcomexStatusToCCT = (situacao: string | null): string | null => {
+            if (!situacao) return null;
+            const statusMap: Record<string, string> = {
+              'Informado': 'MANIFESTADA',
+              'Informada': 'MANIFESTADA',
+              'Em área de transferência': 'EM_AREA_TRANSFERENCIA',
+              'Chegada informada': 'INFORMADA',
+              'Recepcionado': 'RECEPCIONADA',
+              'Em trânsito terrestre': 'EM_TRANSITO_TERRESTRE',
+              'Entregue': 'ENTREGUE',
+              'Processado': 'ENTREGUE',
+            };
+            return statusMap[situacao] || null;
+          };
+          
           for (const log of (leadcomexLogs || [])) {
             const hawbKey = (log.hawb || '').trim().toUpperCase();
             leadcomexStatusMap.set(hawbKey, {
               success: log.success === 1 || log.success === true,
-              attempts: log.total_attempts || 1
+              attempts: log.total_attempts || 1,
+              situacao_portal: log.lc_situacao_portal || null,
+              status_cct: mapLeadcomexStatusToCCT(log.lc_situacao_portal)
             });
           }
           
@@ -2904,8 +2924,24 @@ serve(async (req) => {
             leadcomex_status = leadcomexInfo.success ? 'success' : 'failed';
           }
           
+          // Use LeadComex status if available, otherwise fall back to tracking status
+          // When LeadComex has data (success), use its status; otherwise use 'AGUARDANDO_CONSULTA'
+          let statusCctOficial = row.status_cct_oficial; // Default from tracking
+          if (leadcomexInfo?.success && leadcomexInfo.status_cct) {
+            // LeadComex has data - use its official status
+            statusCctOficial = leadcomexInfo.status_cct;
+          } else if (leadcomexInfo && !leadcomexInfo.success) {
+            // LeadComex was called but no data found
+            statusCctOficial = 'AGUARDANDO_CONSULTA';
+          } else if (!leadcomexInfo) {
+            // LeadComex not yet called
+            statusCctOficial = 'AGUARDANDO_CONSULTA';
+          }
+          
           return {
             ...row,
+            status_cct_oficial: statusCctOficial,
+            situacao_portal: leadcomexInfo?.situacao_portal || null,
             peso_declarado: cctInfo.peso_declarado || null,
             peso_constatado: cctInfo.peso_constatado || null,
             volume_declarado: cctInfo.volume_declarado || null,
