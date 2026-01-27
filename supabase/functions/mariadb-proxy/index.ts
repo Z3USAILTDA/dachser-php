@@ -2713,6 +2713,7 @@ serve(async (req) => {
         // 1. Post-ARR statuses (ATA, NFD, AWD, DLV, POD) - these don't appear in tracking
         // 2. ARR/RCF status with arr_datetime > 120 hours ago AND no active alerts (data_atraso IS NULL)
         // Use subquery to get the most recent record per house to avoid duplicates
+        // Optimized query: use subquery instead of JOIN to allow index usage
         const shipments = await client.query(`
           SELECT 
             sub.id,
@@ -2732,7 +2733,6 @@ serve(async (req) => {
             sub.dep_datetime,
             sub.tipo_servico,
             sub.airline_code,
-            sub.tratamento,
             sub.ultimo_status_raw
           FROM (
             SELECT 
@@ -2753,8 +2753,6 @@ serve(async (req) => {
               s.dep_datetime,
               COALESCE(s.tipo_servico, 'N/A') as tipo_servico,
               LEFT(TRIM(s.awb), 3) as airline_code,
-              TRIM(m.tratamento) as tratamento,
-              -- Status de manifestação CCT (Nomenclatura Aduaneira)
               CASE 
                 WHEN s.\`último_status\` IN ('ARR', 'ATA') THEN 'INFORMADA'
                 WHEN s.\`último_status\` IN ('DEP', 'MAN', 'BKD') THEN 'MANIFESTADA'
@@ -2766,29 +2764,26 @@ serve(async (req) => {
               END as status_cct_oficial,
               ROW_NUMBER() OVER (PARTITION BY TRIM(s.hawb) ORDER BY s.\`última atualização\` DESC) as rn
             FROM ${database}.t_status_aereo s
-            INNER JOIN ${database}.t_master_dados m 
-              ON TRIM(s.awb) COLLATE utf8mb4_unicode_ci = TRIM(m.mawb) COLLATE utf8mb4_unicode_ci
-              AND m.tipo_processo IN ('AIR IMPORT', 'AIR EXPORT')
             WHERE (${airlineLikeConditions})
             AND s.\`último_status\` NOT IN (${errorStatusFilter})
             AND (s.origem IS NOT NULL AND LOWER(TRIM(s.origem)) NOT IN ('n/a', 'na', 'erro', 'error', ''))
             AND (s.destino IS NOT NULL AND LOWER(TRIM(s.destino)) NOT IN ('n/a', 'na', 'erro', 'error', ''))
             AND (
-              -- DEP status: espelhado no CCT (ainda em rastreio, mas também no CCT)
               s.\`último_status\` = 'DEP'
               OR
-              -- Post-ARR statuses (not shown in tracking screen)
               s.\`último_status\` IN ('ATA', 'NFD', 'AWD', 'DLV', 'POD')
               OR 
-              -- ARR/RCF with more than 120 hours (exited tracking by time)
               (s.\`último_status\` IN ('ARR', 'RCF') 
                AND s.arr_datetime IS NOT NULL 
                AND s.arr_datetime <= NOW() - INTERVAL 120 HOUR
                AND s.data_atraso IS NULL)
             )
-            -- CCT RESET: Filtrar por data_insert em t_master_dados = 26/01 (range para usar índice)
-            AND m.data_insert >= '2026-01-26 00:00:00'
-            AND m.data_insert < '2026-01-27 00:00:00'
+            AND s.awb IN (
+              SELECT m.mawb FROM ${database}.t_master_dados m 
+              WHERE m.data_insert >= '2026-01-26 00:00:00'
+              AND m.data_insert < '2026-01-27 00:00:00'
+              AND m.tipo_processo IN ('AIR IMPORT', 'AIR EXPORT')
+            )
           ) sub
           WHERE sub.rn = 1
           ORDER BY sub.ultimo_evento_data DESC
@@ -2804,6 +2799,25 @@ serve(async (req) => {
         
         if (houseList.length > 0) {
           const houseFilter = houseList.map((h: string) => `'${h.replace(/'/g, "''")}'`).join(',');
+          
+          // Get unique masters for tratamento lookup
+          const masterList = [...new Set((shipments || []).map((s: any) => s.master).filter((m: any) => m && String(m).trim() !== ''))] as string[];
+          const masterFilter = masterList.map((m) => `'${m.replace(/'/g, "''")}'`).join(',');
+          
+          // Query tratamento from t_master_dados (quick lookup by mawb)
+          let tratamentoMap = new Map<string, string>();
+          if (masterList.length > 0) {
+            const tratamentoData = await client.query(`
+              SELECT TRIM(mawb) as mawb, TRIM(tratamento) as tratamento
+              FROM ${database}.t_master_dados
+              WHERE mawb IN (${masterFilter})
+              AND data_insert >= '2026-01-26 00:00:00'
+              AND data_insert < '2026-01-27 00:00:00'
+            `);
+            for (const row of (tratamentoData || [])) {
+              tratamentoMap.set((row.mawb || '').trim(), row.tratamento || '');
+            }
+          }
           
           // Query CCT enrichment data
           const cctData = await client.query(`
@@ -2849,6 +2863,11 @@ serve(async (req) => {
               success: log.success === 1 || log.success === true,
               attempts: log.total_attempts || 1
             });
+          }
+          
+          // Add tratamento to shipments
+          for (const ship of (shipments || [])) {
+            ship.tratamento = tratamentoMap.get((ship.master || '').trim()) || null;
           }
         }
 
