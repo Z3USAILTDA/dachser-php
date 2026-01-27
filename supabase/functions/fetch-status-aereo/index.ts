@@ -62,6 +62,7 @@ serve(async (req) => {
     const dateFilter = '2026-01-27';
 
     // Build base SELECT with table alias and JOIN to t_master_dados
+    // OPTIMIZATION: Removed TRIM() to allow index usage, using only COLLATE on one side
     const baseSelect = `
       SELECT s.id, s.awb, s.hawb, s.destinatário, s.nome_analista, s.email_analista,
              s.email_cliente, s.tipo_servico, s.data_atraso, s.\`última atualização\`,
@@ -70,7 +71,7 @@ serve(async (req) => {
              ${hasArrDatetimeColumn ? 's.arr_datetime' : 'NULL as arr_datetime'}
       FROM ${database}.t_status_aereo s
       INNER JOIN ${database}.t_master_dados m 
-        ON TRIM(s.awb) COLLATE utf8mb4_unicode_ci = TRIM(m.mawb) COLLATE utf8mb4_unicode_ci
+        ON s.awb = m.mawb COLLATE utf8mb4_unicode_ci
       WHERE DATE(m.data_insert) = ?
         AND m.tipo_processo IN ('AIR IMPORT', 'AIR EXPORT')
     `;
@@ -82,10 +83,11 @@ serve(async (req) => {
       const searchPattern = `%${search.trim()}%`;
       query = `${baseSelect}
         AND (s.awb LIKE ? OR s.hawb LIKE ? OR s.destinatário LIKE ?)
-        ORDER BY s.id DESC`;
+        ORDER BY s.id DESC
+        LIMIT 500`;
       params = [dateFilter, searchPattern, searchPattern, searchPattern];
     } else {
-      query = `${baseSelect} ORDER BY s.id DESC`;
+      query = `${baseSelect} ORDER BY s.id DESC LIMIT 500`;
       params = [dateFilter];
     }
 
