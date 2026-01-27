@@ -1,170 +1,232 @@
 
-# Plano: Mapeamento Centralizado de Prefixos MBL para Identificação de Armadores
+
+# Plano: Ativação do Tracking de Armadores com Automação via Cron Job
 
 ## Objetivo
-Criar um mapeamento centralizado e completo de prefixos MBL (Bill of Lading) para identificar automaticamente o armador (shipping line) responsável pelo transporte marítimo.
+Ativar o tracking de containers para todos os armadores mapeados (COSCO, MSC, Maersk, ZIM, etc.), aumentar o limite de chamadas API por execução de 5 para 10, e criar um cron job que execute sincronização + enriquecimento + rastreamento duas vezes por semana.
 
 ## Situação Atual
 
-O projeto possui **4 mapeamentos dispersos** em diferentes arquivos:
+### Tracking Desativado
+```text
+// olimpo-proxy/index.ts - linha 537
+const SKIP_API_CALLS = true;  // ← Impede chamadas à API JSONCargo
+```
 
-| Local | Escopo | Problema |
-|-------|--------|----------|
-| `olimpo-proxy/index.ts` | MBL + Container prefixes | Duplicado em múltiplas funções |
-| `demurrage-import-jsoncargo/index.ts` | MBL prefixes (array) | Incompleto |
-| `fetch-sea-master-dados-stats/index.ts` | SCAC para nomes | Apenas estatísticas |
-| `ImportMblDialog.tsx` | Frontend simplificado | Muito básico |
+### Limite Baixo
+```text
+// olimpo-proxy/index.ts - linha 692
+if (apiCallCount >= 5) {  // ← Limite de 5 chamadas por execução
+```
+
+### Cron Jobs Existentes
+| Job | Frequência | Função |
+|-----|------------|--------|
+| anthropic-balance-check-daily | 12h diário | Saldo API |
+| leadcomex-enrich-hourly | A cada hora | Enriquecer AWBs |
+| leadcomex-10min-refresh | A cada 10min | Refresh HAWBs ativos |
+
+**Não existe cron job para tracking marítimo (SEA).**
 
 ## Implementação
 
-### Fase 1: Criar Arquivo Central de Mapeamentos
+### Fase 1: Ativar Tracking e Aumentar Limite
 
-**Arquivo:** `src/lib/shippingLineMapping.ts`
+**Arquivo:** `supabase/functions/olimpo-proxy/index.ts`
 
-Estrutura do mapeamento unificado:
+| Alteração | De | Para |
+|-----------|-----|------|
+| Flag API | `SKIP_API_CALLS = true` | `SKIP_API_CALLS = false` |
+| Limite chamadas | `apiCallCount >= 5` | `apiCallCount >= 10` |
 
-```text
-+------------------------+
-|  ShippingLineMapping   |
-+------------------------+
-| - MBL_PREFIX_MAP       |  -> Prefixos MBL para código do armador
-| - CONTAINER_PREFIX_MAP |  -> Prefixos container para código do armador  
-| - SHIPPING_LINE_NAMES  |  -> Código para nome legível
-| - SHIPPING_LINE_COLORS |  -> Cores para UI (badges)
-+------------------------+
-| + detectCarrierFromMbl |  -> Função de detecção automática
-| + getShippingLineName  |  -> Obter nome legível
-| + getShippingLineColor |  -> Obter cor do badge
-| + isValidMblFormat     |  -> Validar formato MBL
-+------------------------+
-```
+Resultado: A action `sea_seed_smart` passará a fazer até 10 chamadas à API JSONCargo por execução, rastreando containers de qualquer armador mapeado (Hapag, MSC, COSCO, Maersk, ZIM, etc.).
 
-**Prefixos MBL a serem mapeados** (baseado em dados reais do banco):
+### Fase 2: Criar Edge Function de Orquestração
+
+**Arquivo:** `supabase/functions/sea-tracking-cron/index.ts`
+
+Esta nova edge function orquestra a sequência completa de sincronização:
 
 ```text
-ARMADOR                  | PREFIXOS MBL
--------------------------|------------------------------------------
-Hapag-Lloyd              | HLCU, HLXU, HLBU, HBG, SAHL, HLC
-MSC                      | MSCU, MEDU, MSCM, MSDU, MSCB, MSCR
-Maersk                   | MAEU, MRKU, MSKU, PONU, SUDU, HASL, HSUD
-Hamburg Sud (Maersk)     | SUDU, HASL, HSUD
-CMA CGM                  | CMAU, CGMU, CMDU, CXDU, APLU, APHU, ANLU
-ONE                      | ONEY, ONEU, NYKU, MOLU, KKFU, MOAU
-Evergreen                | EISU, EITU, EGSU, EGHU, EMCU, EGLV
-COSCO/OOCL               | COSU, CSNU, CBHU, OOLU, CSLU, CCLU
-Yang Ming                | YMLU, YMMU, YMPU
-HMM                      | HDMU, HMMU, HMCU, KMTU
-ZIM                      | ZIMU, ZCSU
-PIL                      | PCIU, PILU
-Wan Hai                  | WHLU, WANU
-Seaboard                 | SEAU
-Crowley                  | CROU, CLHU
-Arkas                    | ARKU
-Turkon                   | TRKU
-Grimaldi                 | GRIU
-SM Line                  | SMLM
-Transroll                | TRHU
++---------------------------------------+
+|        sea-tracking-cron              |
++---------------------------------------+
+| 1. Chama olimpo-sync                  |  → Sincroniza t_olimpo_tracking
+|    (aguarda conclusão)                |
++---------------------------------------+
+| 2. Chama olimpo-proxy?action=         |  → Enriquece cache com dados
+|    sea_seed_smart                     |     de tracking (até 10 por batch)
+|    (repetido em batches)              |
++---------------------------------------+
+| 3. Retorna estatísticas combinadas    |
++---------------------------------------+
 ```
 
-**Prefixos internos DACHSER** (não são armadores):
+Lógica de execução:
+- Primeiro sincroniza dados base do MariaDB
+- Depois enriquece containers que precisam de atualização
+- Executa múltiplos batches se necessário (com limite total)
+- Registra logs de execução
+
+### Fase 3: Criar Cron Job - Segunda e Quarta
+
+**Schedule:** `0 2 * * 1,3` (Segunda e Quarta-feira às 02:00 UTC / 23:00 BRT)
+
+| Dia | Cron | Horário UTC | Horário BRT |
+|-----|------|-------------|-------------|
+| Segunda-feira | 1 | 02:00 | 23:00 (domingo) |
+| Quarta-feira | 3 | 02:00 | 23:00 (terça) |
+
+## Fluxo de Execução do Cron
 
 ```text
-GLNL, GLSL, GLDL, BRSA, SSZ
+  Segunda/Quarta 02:00 UTC
+           │
+           ▼
+  ┌─────────────────────┐
+  │  sea-tracking-cron  │
+  └─────────────────────┘
+           │
+           ▼
+  ┌─────────────────────┐
+  │ 1. olimpo-sync      │ ← Sincroniza base SEA + AIR
+  │    (sync MariaDB)   │
+  └─────────────────────┘
+           │
+           ▼
+  ┌─────────────────────┐
+  │ 2. sea_seed_smart   │ ← Enriquece containers ativos
+  │    (batch 1: 10)    │   via JSONCargo API
+  └─────────────────────┘
+           │
+           ▼ (se houver mais)
+  ┌─────────────────────┐
+  │ 3. sea_seed_smart   │
+  │    (batch 2: 10)    │
+  └─────────────────────┘
+           │
+           ▼
+  ┌─────────────────────┐
+  │ 4. Retorna stats    │
+  │    e logs           │
+  └─────────────────────┘
 ```
-
-### Fase 2: Criar Tipo TypeScript para Armadores
-
-**Arquivo:** `src/types/sea.ts` (adicionar ao existente)
-
-```typescript
-export type ShippingLineCode = 
-  | 'HAPAG_LLOYD' | 'MSC' | 'MAERSK' | 'CMA_CGM' 
-  | 'ONE' | 'EVERGREEN' | 'COSCO' | 'YANG_MING' 
-  | 'HMM' | 'ZIM' | 'PIL' | 'WAN_HAI' 
-  | 'SEABOARD' | 'CROWLEY' | 'ARKAS' | 'TURKON' 
-  | 'GRIMALDI' | 'SM_LINE' | 'TRANSROLL' | 'UNKNOWN';
-
-export interface ShippingLineInfo {
-  code: ShippingLineCode;
-  name: string;
-  country: string;
-  color: string;
-  apiSupported: boolean; // Se tem integração com API de tracking
-}
-```
-
-### Fase 3: Implementar Funções Utilitárias
-
-```typescript
-// Detecção automática de armador pelo MBL
-export function detectCarrierFromMbl(mbl: string): ShippingLineInfo {
-  const upper = mbl.toUpperCase().trim();
-  
-  // Tentar prefixos de 4 caracteres primeiro, depois 3
-  for (const length of [4, 3]) {
-    const prefix = upper.substring(0, length);
-    if (MBL_PREFIX_MAP[prefix]) {
-      return getShippingLineInfo(MBL_PREFIX_MAP[prefix]);
-    }
-  }
-  
-  return getShippingLineInfo('UNKNOWN');
-}
-
-// Verificar se MBL tem formato válido de armador
-export function isKnownCarrierMbl(mbl: string): boolean {
-  const info = detectCarrierFromMbl(mbl);
-  return info.code !== 'UNKNOWN';
-}
-
-// Obter lista de armadores com suporte a tracking API
-export function getTrackableCarriers(): ShippingLineInfo[] {
-  return Object.values(SHIPPING_LINE_INFO)
-    .filter(info => info.apiSupported);
-}
-```
-
-### Fase 4: Atualizar Edge Functions para Usar Mapeamento Central
-
-**Arquivos a modificar:**
-- `supabase/functions/olimpo-proxy/index.ts`
-- `supabase/functions/demurrage-import-jsoncargo/index.ts`
-- `supabase/functions/fetch-sea-master-dados-stats/index.ts`
-
-Como edge functions não podem importar de `src/`, o mapeamento será duplicado em:
-- `supabase/functions/_shared/shippingLineMapping.ts`
-
-### Fase 5: Atualizar Componentes Frontend
-
-**Arquivos a modificar:**
-- `src/components/demurrage/ImportMblDialog.tsx` - Usar novo utilitário
-- `src/pages/ContainerTracking.tsx` - Exibir badge com cor do armador
 
 ## Arquivos a Criar/Modificar
 
 | Arquivo | Ação | Descrição |
 |---------|------|-----------|
-| `src/lib/shippingLineMapping.ts` | Criar | Mapeamento central para frontend |
-| `supabase/functions/_shared/shippingLineMapping.ts` | Criar | Mapeamento para edge functions |
-| `src/types/sea.ts` | Modificar | Adicionar tipos de armadores |
-| `src/components/demurrage/ImportMblDialog.tsx` | Modificar | Usar novo utilitário |
-| `supabase/functions/olimpo-proxy/index.ts` | Modificar | Importar mapeamento central |
-| `supabase/functions/demurrage-import-jsoncargo/index.ts` | Modificar | Importar mapeamento central |
+| `supabase/functions/olimpo-proxy/index.ts` | Modificar | Ativar API + aumentar limite para 10 |
+| `supabase/functions/sea-tracking-cron/index.ts` | Criar | Orquestrador de sincronização |
+| SQL (via insert tool) | Executar | Criar cron job no pg_cron |
+
+## Detalhes Técnicos
+
+### Alterações no olimpo-proxy
+
+**Ativar API:**
+```typescript
+// ANTES
+const SKIP_API_CALLS = true;
+
+// DEPOIS
+const SKIP_API_CALLS = false;
+```
+
+**Aumentar limite:**
+```typescript
+// ANTES
+if (apiCallCount >= 5) {
+
+// DEPOIS
+if (apiCallCount >= 10) {
+```
+
+### Nova Edge Function: sea-tracking-cron
+
+Estrutura básica da função orquestradora:
+
+```typescript
+serve(async (req) => {
+  const supabaseUrl = Deno.env.get('SUPABASE_URL');
+  const supabaseKey = Deno.env.get('SUPABASE_ANON_KEY');
+  
+  const stats = {
+    olimpo_sync: null,
+    sea_seed_batches: [],
+    total_api_calls: 0,
+    total_cache_hits: 0
+  };
+
+  // Passo 1: Sincronizar dados base
+  const syncRes = await fetch(`${supabaseUrl}/functions/v1/olimpo-sync`, {
+    method: 'POST',
+    headers: { 'Authorization': `Bearer ${supabaseKey}` }
+  });
+  stats.olimpo_sync = await syncRes.json();
+
+  // Passo 2: Enriquecer containers (múltiplos batches)
+  const MAX_BATCHES = 5;  // Até 50 chamadas API total
+  for (let i = 0; i < MAX_BATCHES; i++) {
+    const seedRes = await fetch(
+      `${supabaseUrl}/functions/v1/olimpo-proxy?action=sea_seed_smart`,
+      { headers: { 'Authorization': `Bearer ${supabaseKey}` } }
+    );
+    const seedData = await seedRes.json();
+    stats.sea_seed_batches.push(seedData.stats);
+    stats.total_api_calls += seedData.stats?.api_calls || 0;
+    stats.total_cache_hits += seedData.stats?.cache_hits || 0;
+    
+    // Se não fez nenhuma chamada API, cache está atualizado
+    if ((seedData.stats?.api_calls || 0) === 0) break;
+    
+    // Delay entre batches para não sobrecarregar
+    await new Promise(r => setTimeout(r, 2000));
+  }
+
+  return new Response(JSON.stringify(stats));
+});
+```
+
+### Configuração do Cron Job
+
+```sql
+SELECT cron.schedule(
+  'sea-tracking-weekly',
+  '0 2 * * 1,3',  -- Segunda e Quarta às 02:00 UTC
+  $$
+  SELECT net.http_post(
+    url:='https://finktakbjcfmurqeiubz.supabase.co/functions/v1/sea-tracking-cron',
+    headers:=jsonb_build_object(
+      'Content-Type', 'application/json',
+      'Authorization', 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...'
+    ),
+    body:='{}'::jsonb
+  );
+  $$
+);
+```
+
+## Armadores que Passarão a Ser Rastreados
+
+Com a ativação, todos os armadores mapeados serão rastreados via JSONCargo:
+
+| Armador | Prefixos | Status Atual | Após Ativação |
+|---------|----------|--------------|---------------|
+| Hapag-Lloyd | HLCU, HBG | ✅ Ativo (API própria) | ✅ Mantém |
+| MSC | MEDU, MSCU | ❌ Desativado | ✅ Ativado |
+| COSCO | COSU, CSNU | ❌ Desativado | ✅ Ativado |
+| Maersk | MAEU, MRKU | ❌ Desativado | ✅ Ativado |
+| ZIM | ZIMU | ❌ Desativado | ✅ Ativado |
+| ONE | ONEY, NYKU | ❌ Desativado | ✅ Ativado |
+| Evergreen | EGLV, EISU | ❌ Desativado | ✅ Ativado |
+| CMA CGM | CMAU, CMDU | ❌ Desativado | ✅ Ativado |
 
 ## Resultado Esperado
 
-1. **Mapeamento único e centralizado** de 50+ prefixos MBL
-2. **Função `detectCarrierFromMbl()`** disponível em todo o projeto
-3. **Tipos TypeScript** para armadores com autocompletar
-4. **Cores consistentes** para badges de armadores na UI
-5. **Flag `apiSupported`** para identificar armadores com tracking disponível
-6. **Prefixos internos DACHSER** ignorados automaticamente
+1. **Tracking ativado** para todos os armadores mapeados
+2. **10 chamadas API** por batch (dobro do atual)
+3. **Cron job automático** - Segunda e Quarta-feira às 02:00 UTC
+4. **Sequência garantida**: sync → enrich → track
+5. **Logs detalhados** de cada execução para monitoramento
 
-## Armadores com API de Tracking Suportada
-
-| Armador | Integração | Status |
-|---------|------------|--------|
-| Hapag-Lloyd | `HAPAG_CLIENT_ID` + `HAPAG_API_KEY` | Ativa |
-| COSCO | Planejada | Pendente |
-| MSC | Via JSONCARGO | Parcial |
-| Maersk | Via JSONCARGO | Parcial |
