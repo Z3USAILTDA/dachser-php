@@ -266,7 +266,7 @@ function createSheetForCnpj(invoices: InvoiceRow[], clienteName: string, totalVa
       inv.data_vencimento || "",
       formatCnpj(inv.cnpj || ""),
       inv.razao_social || "",
-      formatCurrencyNumber(Number(inv.valor_nf) || 0),
+      null, // VALOR será inserido separadamente como número
       inv.numero_processo || "",
       inv.master || "",
       inv.house || "",
@@ -277,19 +277,67 @@ function createSheetForCnpj(invoices: InvoiceRow[], clienteName: string, totalVa
     rowData.forEach((value, colIdx) => {
       const cellRef = XLSX.utils.encode_cell({ r: row, c: colIdx });
       
+      // Skip VALOR column (handled separately)
+      if (colIdx === 10) return;
+      
       // Use different styles based on column
       let style = STYLES.dataCell;
-      if (colIdx === 10) {
-        // VALOR column - use overdue style (red) since all are overdue
-        style = STYLES.dataCellOverdue;
-      } else if (colIdx === 7) {
-        // VENCTO column - also red for overdue
+      if (colIdx === 7) {
+        // VENCTO column - red for overdue
         style = { ...STYLES.dataCell, font: { ...STYLES.dataCell.font, color: { rgb: "FF0000" } } };
       }
       
       ws[cellRef] = { v: value, s: style };
     });
+    
+    // Insert VALOR as numeric value with currency format
+    const valorCellRef = XLSX.utils.encode_cell({ r: row, c: 10 });
+    ws[valorCellRef] = { 
+      v: Number(inv.valor_nf) || 0, 
+      t: 'n',  // numeric type
+      s: STYLES.dataCellOverdue,
+      z: '#,##0.00'  // Brazilian number format
+    };
   });
+  
+  // Add TOTAL row at the end
+  const totalRow = 5 + invoices.length;
+  
+  // Label "TOTAL EM ATRASO:" in column J (index 9)
+  const totalLabelRef = XLSX.utils.encode_cell({ r: totalRow, c: 9 });
+  ws[totalLabelRef] = { 
+    v: "TOTAL EM ATRASO:", 
+    s: {
+      font: { name: "Arial", sz: 11, bold: true, color: { rgb: "FFFFFF" } },
+      fill: { fgColor: { rgb: "C00000" } },
+      alignment: { horizontal: "right", vertical: "center" },
+      border: {
+        top: { style: "thin", color: { rgb: "000000" } },
+        bottom: { style: "thin", color: { rgb: "000000" } },
+        left: { style: "thin", color: { rgb: "000000" } },
+        right: { style: "thin", color: { rgb: "000000" } },
+      },
+    }
+  };
+  
+  // Total value in column K (index 10)
+  const totalValueRef = XLSX.utils.encode_cell({ r: totalRow, c: 10 });
+  ws[totalValueRef] = { 
+    v: totalValue, 
+    t: 'n',
+    s: {
+      font: { name: "Arial", sz: 12, bold: true, color: { rgb: "FFFFFF" } },
+      fill: { fgColor: { rgb: "C00000" } },
+      alignment: { horizontal: "right", vertical: "center" },
+      border: {
+        top: { style: "thin", color: { rgb: "000000" } },
+        bottom: { style: "thin", color: { rgb: "000000" } },
+        left: { style: "thin", color: { rgb: "000000" } },
+        right: { style: "thin", color: { rgb: "000000" } },
+      },
+    },
+    z: '"R$ "#,##0.00'  // Currency format with R$
+  };
   
   // Set column widths (16 columns)
   ws['!cols'] = [
@@ -327,8 +375,8 @@ function createSheetForCnpj(invoices: InvoiceRow[], clienteName: string, totalVa
     { s: { r: 1, c: 3 }, e: { r: 1, c: 10 } },  // D2:K2 merge for title
   ];
   
-  // Set range
-  const lastRow = 5 + invoices.length;
+  // Set range (including total row)
+  const lastRow = 6 + invoices.length;
   ws['!ref'] = XLSX.utils.encode_range({ s: { r: 0, c: 0 }, e: { r: lastRow, c: 15 } });
   
   // Add AutoFilter to the table (row 5, columns A-P)
