@@ -64,9 +64,8 @@ serve(async (req) => {
     if (hasArrDatetimeColumn) selectFields += ', arr_datetime';
     else selectFields += ', NULL as arr_datetime';
 
-    // Screen intentionally cleared until further notice - set future date to exclude all records
-    // To reactivate: change back to '2026-01-26 00:00:00' or desired date
-    const dateThreshold = '2099-01-01 00:00:00';
+    // Date threshold for filtering records
+    const dateThreshold = '2026-01-26 00:00:00';
     
     let query = `SELECT ${selectFields} FROM ${database}.t_status_aereo 
                  WHERE \`última atualização\` >= ? 
