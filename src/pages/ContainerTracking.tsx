@@ -43,10 +43,19 @@ const getShippingLineCodeFromMbl = (mbl_id: string, shipping_line: string | null
   return detectCarrierFromMbl(mbl_id).code;
 };
 
-// Retorna o nome legível do armador
+// Normaliza nome do armador removendo sufixo após "-"
+const normalizeArmadorName = (name: string): string => {
+  if (name.includes(' - ')) {
+    return name.split(' - ')[0].trim();
+  }
+  return name;
+};
+
+// Retorna o nome legível do armador (normalizado)
 const getShippingLineFromMbl = (mbl_id: string, shipping_line: string | null | undefined): string => {
   const code = getShippingLineCodeFromMbl(mbl_id, shipping_line);
-  return code !== 'UNKNOWN' ? SHIPPING_LINE_INFO[code].name : 'N/D';
+  if (code === 'UNKNOWN') return 'N/D';
+  return normalizeArmadorName(SHIPPING_LINE_INFO[code].name);
 };
 
 // ========== REPORT STATUS SYSTEM (12 statuses) ==========
@@ -1358,7 +1367,7 @@ const ContainerTracking = () => {
       const code = getShippingLineCodeFromMbl(m.mbl_id, m.shipping_line);
       // Só inclui se tiver suporte API (apiSupported: true)
       if (code !== 'UNKNOWN' && SHIPPING_LINE_INFO[code].apiSupported) {
-        armadoresSet.add(SHIPPING_LINE_INFO[code].name);
+        armadoresSet.add(normalizeArmadorName(SHIPPING_LINE_INFO[code].name));
       }
     });
     return Array.from(armadoresSet).sort((a, b) => a.localeCompare(b));
