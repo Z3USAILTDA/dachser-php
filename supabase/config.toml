@@ -292,3 +292,6 @@ verify_jwt = false
 
 [functions.check-specific-awbs]
 verify_jwt = false
+
+[functions.sea-tracking-cron]
+verify_jwt = false
