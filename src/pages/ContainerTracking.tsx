@@ -375,7 +375,8 @@ const ContainerTracking = () => {
     container: '',
     armador: '',
     consignee: '',
-    eta: ''
+    eta: '',
+    transbordo: ''
   });
   const [isSubmittingLcl, setIsSubmittingLcl] = useState(false);
   
@@ -2407,6 +2408,17 @@ const ContainerTracking = () => {
               />
               <span className="text-xs text-gray-500">Formato: DD/MM/YYYY</span>
             </div>
+            
+            <div className="space-y-2">
+              <Label className="text-white">Transbordo</Label>
+              <Input
+                placeholder="Ex: SGSIN, Rotterdam, Shanghai..."
+                value={lclFormData.transbordo}
+                onChange={(e) => setLclFormData(prev => ({ ...prev, transbordo: e.target.value }))}
+                className="bg-[rgba(0,0,0,.3)] border-[rgba(255,255,255,.14)] text-white placeholder:text-gray-500"
+              />
+              <span className="text-xs text-gray-500">Porto(s) de transbordo, separados por vírgula</span>
+            </div>
           </div>
           
           <DialogFooter className="mt-6 gap-2">
@@ -2414,7 +2426,7 @@ const ContainerTracking = () => {
               variant="outline" 
               onClick={() => {
                 setShowLclDialog(false);
-                setLclFormData({ mbl: '', container: '', armador: '', consignee: '', eta: '' });
+                setLclFormData({ mbl: '', container: '', armador: '', consignee: '', eta: '', transbordo: '' });
               }}
               className="border-[rgba(255,255,255,.1)] text-gray-300 hover:bg-[rgba(255,255,255,.05)]"
             >
@@ -2443,7 +2455,8 @@ const ContainerTracking = () => {
                       container: lclFormData.container,
                       shipping_line: lclFormData.armador,
                       consignee: lclFormData.consignee,
-                      eta: lclFormData.eta || null
+                      eta: lclFormData.eta || null,
+                      transbordo: lclFormData.transbordo || null
                     })
                   });
                   const result = await res.json();
@@ -2453,7 +2466,7 @@ const ContainerTracking = () => {
                       description: `Container ${lclFormData.container} adicionado ao monitoramento`
                     });
                     setShowLclDialog(false);
-                    setLclFormData({ mbl: '', container: '', armador: '', consignee: '', eta: '' });
+                    setLclFormData({ mbl: '', container: '', armador: '', consignee: '', eta: '', transbordo: '' });
                     await fetchMblData();
                   } else {
                     toast({
