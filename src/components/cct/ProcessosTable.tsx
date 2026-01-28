@@ -63,6 +63,18 @@ export function ProcessosTable({ processos, onAssignAnalista, metricFilter }: Pr
       );
     }
 
+    // Sort: processos com status AGUARDANDO ficam por último
+    filtered = [...filtered].sort((a, b) => {
+      const statusA = a.status_atual?.status_cct_oficial || '';
+      const statusB = b.status_atual?.status_cct_oficial || '';
+      const isAguardandoA = statusA.startsWith('AGUARDANDO');
+      const isAguardandoB = statusB.startsWith('AGUARDANDO');
+      
+      if (isAguardandoA && !isAguardandoB) return 1;
+      if (!isAguardandoA && isAguardandoB) return -1;
+      return 0;
+    });
+
     return filtered;
   }, [processos, searchTerm, metricFilter]);
 
