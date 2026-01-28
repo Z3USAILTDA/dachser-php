@@ -372,7 +372,7 @@ const ContainerTracking = () => {
     container: '',
     armador: '',
     consignee: '',
-    eta: undefined as Date | undefined
+    eta: ''
   });
   const [isSubmittingLcl, setIsSubmittingLcl] = useState(false);
   
@@ -2294,21 +2294,18 @@ const ContainerTracking = () => {
             
             <div className="space-y-2">
               <Label className="text-white">Armador *</Label>
-              <Select
+              <Input
+                placeholder="Ex: Hapag-Lloyd, MSC, Maersk..."
                 value={lclFormData.armador}
-                onValueChange={(value) => setLclFormData(prev => ({ ...prev, armador: value }))}
-              >
-                <SelectTrigger className="bg-[rgba(0,0,0,.3)] border-[rgba(255,255,255,.14)] text-white">
-                  <SelectValue placeholder="Selecione o armador" />
-                </SelectTrigger>
-                <SelectContent className="bg-card border border-border z-50">
-                  {getTrackableCarriers().map(carrier => (
-                    <SelectItem key={carrier.code} value={carrier.code}>
-                      {normalizeArmadorName(carrier.name)}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+                onChange={(e) => setLclFormData(prev => ({ ...prev, armador: e.target.value }))}
+                className="bg-[rgba(0,0,0,.3)] border-[rgba(255,255,255,.14)] text-white placeholder:text-gray-500"
+                list="armadores-list"
+              />
+              <datalist id="armadores-list">
+                {getTrackableCarriers().map(carrier => (
+                  <option key={carrier.code} value={normalizeArmadorName(carrier.name)} />
+                ))}
+              </datalist>
             </div>
             
             <div className="space-y-2">
@@ -2323,30 +2320,14 @@ const ContainerTracking = () => {
             
             <div className="space-y-2">
               <Label className="text-white">ETA</Label>
-              <Popover>
-                <PopoverTrigger asChild>
-                  <Button
-                    variant="outline"
-                    className={cn(
-                      "w-full justify-start text-left font-normal bg-[rgba(0,0,0,.3)] border-[rgba(255,255,255,.14)]",
-                      !lclFormData.eta && "text-gray-500"
-                    )}
-                  >
-                    <Clock className="mr-2 h-4 w-4" />
-                    {lclFormData.eta ? format(lclFormData.eta, "dd/MM/yyyy", { locale: ptBR }) : <span>Selecione a data</span>}
-                  </Button>
-                </PopoverTrigger>
-                <PopoverContent className="w-auto p-0 bg-card border border-border z-50" align="start">
-                  <Calendar
-                    mode="single"
-                    selected={lclFormData.eta}
-                    onSelect={(date) => setLclFormData(prev => ({ ...prev, eta: date }))}
-                    initialFocus
-                    className={cn("p-3 pointer-events-auto")}
-                    locale={ptBR}
-                  />
-                </PopoverContent>
-              </Popover>
+              <Input
+                type="text"
+                placeholder="DD/MM/YYYY"
+                value={lclFormData.eta}
+                onChange={(e) => setLclFormData(prev => ({ ...prev, eta: e.target.value }))}
+                className="bg-[rgba(0,0,0,.3)] border-[rgba(255,255,255,.14)] text-white placeholder:text-gray-500"
+              />
+              <span className="text-xs text-gray-500">Formato: DD/MM/YYYY</span>
             </div>
           </div>
           
@@ -2355,8 +2336,8 @@ const ContainerTracking = () => {
               variant="outline" 
               onClick={() => {
                 setShowLclDialog(false);
-                setLclFormData({ mbl: '', container: '', armador: '', consignee: '', eta: undefined });
-              }} 
+                setLclFormData({ mbl: '', container: '', armador: '', consignee: '', eta: '' });
+              }}
               className="border-[rgba(255,255,255,.1)] text-gray-300 hover:bg-[rgba(255,255,255,.05)]"
             >
               Cancelar
@@ -2384,7 +2365,7 @@ const ContainerTracking = () => {
                       container: lclFormData.container,
                       shipping_line: lclFormData.armador,
                       consignee: lclFormData.consignee,
-                      eta: lclFormData.eta ? format(lclFormData.eta, 'yyyy-MM-dd') : null
+                      eta: lclFormData.eta || null
                     })
                   });
                   const result = await res.json();
@@ -2394,7 +2375,7 @@ const ContainerTracking = () => {
                       description: `Container ${lclFormData.container} adicionado ao monitoramento`
                     });
                     setShowLclDialog(false);
-                    setLclFormData({ mbl: '', container: '', armador: '', consignee: '', eta: undefined });
+                    setLclFormData({ mbl: '', container: '', armador: '', consignee: '', eta: '' });
                     await fetchMblData();
                   } else {
                     toast({
