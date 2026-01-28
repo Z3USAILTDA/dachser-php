@@ -45,8 +45,8 @@ export default function ProcessoTimeline() {
     return processos.find(p => p.shipment.id === id);
   }, [processos, id]);
 
-  // Fetch events from history table using the AWB (master)
-  const { data: eventosHistorico = [], isLoading: isLoadingEvents } = useCCTEvents(processo?.shipment.master || '');
+  // Fetch events from history table using the AWB (house - HAWB)
+  const { data: eventosHistorico = [], isLoading: isLoadingEvents } = useCCTEvents(processo?.shipment.house || '');
 
   const [activeTab, setActiveTab] = useState("timeline");
   const [editingPeso, setEditingPeso] = useState(false);
