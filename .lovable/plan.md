@@ -1,79 +1,97 @@
 
-# Diagnóstico: Processos do Tracking Não Aparecem no CCT
 
-## Problema Identificado
+## Plano: View de Armadores Mapeados + Botão Cadastro LCL
 
-Os processos aparecem no tracking mas não no CCT devido a um filtro que exige `dep_datetime`:
-
-```sql
--- Query atual no CCT (mariadb-proxy):
-AND s.dep_datetime >= '2026-01-26 00:00:00'  -- PROBLEMA: dep_datetime é NULL!
-AND DATE(m.data_insert) = '2026-01-26'
-```
-
-| Campo | Valor nos Registros | Impacto |
-|-------|---------------------|---------|
-| `dep_datetime` | **NULL** | Registros excluídos pelo filtro `>= '2026-01-26'` |
-| `último_status` | DEP, ARR, etc. | Status indica DEP, mas data não está preenchida |
-
-## Evidência
-
-Nos dados retornados do tracking (network requests):
-```json
-{
-  "último_status": "DEP",
-  "dep_datetime": null  // Campo vazio!
-}
-```
+Este plano adiciona à página "Monitoramento FCL" (ContainerTracking) uma view similar à existente no tracking aéreo para exibir os armadores cadastrados/mapeados, além de um botão para cadastro de containers LCL.
 
 ---
 
-## Solução Proposta
+### Resumo das Alterações
 
-Remover o filtro `s.dep_datetime >= '2026-01-26'` e manter apenas o filtro por `último_status` e `DATE(m.data_insert)`.
+1. **Botão "Armadores Mapeados"** - Exibe modal com lista de armadores com suporte à API
+2. **Botão "Cadastrar LCL"** - Abre dialog para cadastro manual de containers LCL
+3. **Modal de Armadores** - Tabela visual mostrando código, nome, país e cores de cada armador
+4. **Dialog de Cadastro LCL** - Formulário para cadastro de containers Less than Container Load
 
-### Alteração em `supabase/functions/mariadb-proxy/index.ts`
+---
 
-**Linha 2790**: Remover filtro problemático
+### Detalhes Técnicos
 
-| Antes | Depois |
-|-------|--------|
-| `AND s.dep_datetime >= '2026-01-26 00:00:00'` | *(removido)* |
-| `AND DATE(m.data_insert) = '2026-01-26'` | `AND DATE(m.data_insert) = '2026-01-26'` *(mantido)* |
+#### 1. Alterações em ContainerTracking.tsx
 
-### Query Corrigida
-
-```sql
-AND (
-  -- DEP status: espelhado no CCT
-  s.`último_status` = 'DEP'
-  OR
-  -- Post-ARR statuses
-  s.`último_status` IN ('ATA', 'NFD', 'AWD', 'DLV', 'POD')
-  OR 
-  -- ARR/RCF with more than 120 hours
-  (s.`último_status` IN ('ARR', 'RCF') 
-   AND s.arr_datetime IS NOT NULL 
-   AND s.arr_datetime <= NOW() - INTERVAL 120 HOUR
-   AND s.data_atraso IS NULL)
-)
--- CCT RESET: Filtrar apenas por data_insert em t_master_dados = 26/01
-AND DATE(m.data_insert) = '2026-01-26'
+**Novos estados:**
+```
+showArmaodoresModal: boolean
+showLclDialog: boolean
 ```
 
+**Novos botões na seção de filtros (ao lado de "Registrar FT"):**
+
+| Botão | Cor | Ação |
+|-------|-----|------|
+| Armadores Mapeados (13) | Emerald/Verde | Abre modal com lista dos armadores |
+| Cadastrar LCL | Cyan/Azul | Abre dialog de cadastro |
+
+**Modal "Armadores Mapeados":**
+- Usa os dados de `getTrackableCarriers()` já existente
+- Tabela com colunas: Código, Nome, País
+- Badge colorido para cada armador usando as cores de `SHIPPING_LINE_INFO`
+- Footer mostrando "13 armadores com integração ativa"
+
+**Dialog "Cadastrar LCL":**
+- Campos do formulário:
+  - MBL (texto obrigatório)
+  - Container (texto obrigatório) 
+  - Armador (select com armadores mapeados)
+  - Consignee (texto)
+  - ETA (date picker)
+- Integração: Chamará edge function para salvar no banco
+
+#### 2. Estrutura Visual
+
+```text
+┌─────────────────────────────────────────────────────────────────────────────────┐
+│  Barra de Filtros                                                               │
+├─────────────────────────────────────────────────────────────────────────────────┤
+│  [Tipo ▼] [Armador ▼] [Coordenador ▼]                                           │
+│                                                                                 │
+│  ... botões admin ...                                                           │
+│                                                                                 │
+│  [🚢 Armadores (13)] [📦 Cadastrar LCL] [⏱ Registrar FT] [🔄 Atualizar]         │
+│           ↑ Verde        ↑ Cyan            ↑ Amarelo       ↑ Amarelo            │
+└─────────────────────────────────────────────────────────────────────────────────┘
+```
+
+#### 3. Arquivos Modificados
+
+| Arquivo | Alterações |
+|---------|------------|
+| `src/pages/ContainerTracking.tsx` | Adicionar botões, estados, modais e dialog |
+| `src/lib/shippingLineMapping.ts` | Nenhuma (utilizar funções existentes) |
+
+#### 4. Componentes Reutilizados
+
+- `Dialog`, `DialogContent`, `DialogHeader`, `DialogTitle` do shadcn/ui
+- `Select`, `SelectContent`, `SelectItem` para dropdown de armador
+- `Button`, `Input`, `Label` para formulário
+
 ---
 
-## Resultado Esperado
+### Comportamento Esperado
 
-| Antes | Depois |
-|-------|--------|
-| 0 processos (dep_datetime é NULL) | Todos processos de 26/01 com status DEP ou pós-DEP |
-| Exigia dep_datetime preenchido | Usa apenas último_status e data_insert |
+**Modal de Armadores Mapeados:**
+- Clicando no botão "Armadores (13)" abre modal
+- Exibe tabela com 13 armadores que possuem integração API (Hapag-Lloyd, MSC, Maersk, etc.)
+- Cada linha mostra badge colorido seguindo o padrão visual do `SHIPPING_LINE_INFO`
+
+**Dialog Cadastrar LCL:**
+- Clicando em "Cadastrar LCL" abre formulário
+- Usuário preenche dados do container LCL manualmente
+- Ao submeter, container é adicionado ao monitoramento
 
 ---
 
-## Passos de Implementação
+### Dependências
 
-1. Atualizar `supabase/functions/mariadb-proxy/index.ts` (remover linha 2790)
-2. Deploy da Edge Function `mariadb-proxy`
-3. Verificar processos em /air/cct
+Nenhuma nova dependência necessária - todas as funcionalidades utilizam componentes já existentes no projeto.
+
