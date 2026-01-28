@@ -1780,7 +1780,12 @@ serve(async (req) => {
                 AND MAX(ts.container) != 'PENDENTE'
               )
               AND NOT (
-                UPPER(COALESCE(MAX(ts.container_status), '')) IN ('DELIVERED', 'DLV', 'GOD', 'GATE_OUT_FULL', 'EMPTY_RETURNED', 'EMPTY_RECEIVED_AT_CY')
+                (
+                  UPPER(COALESCE(MAX(ts.container_status), '')) IN ('DELIVERED', 'DLV', 'GOD', 'GATE_OUT_FULL', 'EMPTY_RETURNED', 'EMPTY_RECEIVED_AT_CY')
+                  OR UPPER(COALESCE(MAX(ts.last_event), '')) LIKE '%DELIVERED%'
+                  OR UPPER(COALESCE(MAX(ts.last_event), '')) LIKE '%GATE OUT%'
+                  OR UPPER(COALESCE(MAX(ts.last_event), '')) LIKE '%EMPTY RETURNED%'
+                )
                 AND MAX(ts.last_check) < DATE_SUB(NOW(), INTERVAL 24 HOUR)
                 AND MAX(ts.container) != 'PENDENTE'
               )
