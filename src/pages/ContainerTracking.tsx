@@ -365,6 +365,9 @@ const ContainerTracking = () => {
   // Armadores modal state
   const [showArmadoresModal, setShowArmadoresModal] = useState(false);
   
+  // Admin modal state
+  const [showAdminModal, setShowAdminModal] = useState(false);
+  
   // LCL cadastro dialog state
   const [showLclDialog, setShowLclDialog] = useState(false);
   const [lclFormData, setLclFormData] = useState({
@@ -1479,6 +1482,17 @@ const ContainerTracking = () => {
             @{loggedUsername || "usuário"}
           </div>
           
+          {isAdmin && (
+            <button 
+              onClick={() => setShowAdminModal(true)} 
+              className="px-3 py-1.5 rounded-full border border-primary/50 flex items-center gap-1.5 bg-primary/20 text-primary hover:bg-primary/30 transition font-medium text-xs uppercase tracking-wide"
+              title="Painel Administrativo"
+            >
+              <Database className="w-3.5 h-3.5" />
+              ADM
+            </button>
+          )}
+          
           <button onClick={() => navigate("/sea/tracking/notificacoes")} className="w-8 h-8 rounded-full border border-[rgba(255,255,255,.25)] flex items-center justify-center bg-[rgba(0,0,0,.7)] text-[#aaaaaa] hover:text-[#ffc800] hover:bg-[rgba(0,0,0,.9)] transition" title="Regras de Notificação">
             <Bell className="w-4 h-4" />
           </button>
@@ -1687,95 +1701,6 @@ const ContainerTracking = () => {
               </div>
 
               <div className="flex items-center gap-2 flex-wrap">
-                {/* Admin-only action buttons */}
-                {isAdmin && <>
-                    <TooltipProvider>
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                          <button onClick={handleAdminSync} disabled={isRunningSync || !!autoSyncStatus} className="h-8 px-3 rounded-full bg-[rgba(59,130,246,.2)] text-blue-400 text-[0.7rem] font-medium flex items-center gap-1.5 border border-blue-500/30 hover:bg-[rgba(59,130,246,.3)] transition disabled:opacity-50">
-                            {isRunningSync ? <Loader2 className="w-3 h-3 animate-spin" /> : <Database className="w-3 h-3" />}
-                            Sync
-                          </button>
-                        </TooltipTrigger>
-                        <TooltipContent>
-                          <p className="text-xs">Sincronizar novos MBLs do banco (t_master_dados)</p>
-                        </TooltipContent>
-                      </Tooltip>
-                    </TooltipProvider>
-                    
-                    <TooltipProvider>
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                          <button onClick={handleAdminEnrich} disabled={isRunningEnrich || !!autoSyncStatus} className="h-8 px-3 rounded-full bg-[rgba(16,185,129,.2)] text-emerald-400 text-[0.7rem] font-medium flex items-center gap-1.5 border border-emerald-500/30 hover:bg-[rgba(16,185,129,.3)] transition disabled:opacity-50">
-                            {isRunningEnrich ? <Loader2 className="w-3 h-3 animate-spin" /> : <Package className="w-3 h-3" />}
-                            Enrich
-                          </button>
-                        </TooltipTrigger>
-                        <TooltipContent>
-                          <p className="text-xs">Buscar containers para cada MBL via API</p>
-                        </TooltipContent>
-                      </Tooltip>
-                    </TooltipProvider>
-                    
-                    <TooltipProvider>
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                          <button onClick={handleAdminTrack} disabled={isRunningTrack || !!autoSyncStatus} className="h-8 px-3 rounded-full bg-[rgba(139,92,246,.2)] text-violet-400 text-[0.7rem] font-medium flex items-center gap-1.5 border border-violet-500/30 hover:bg-[rgba(139,92,246,.3)] transition disabled:opacity-50">
-                            {isRunningTrack ? <Loader2 className="w-3 h-3 animate-spin" /> : <Radar className="w-3 h-3" />}
-                            Track
-                          </button>
-                        </TooltipTrigger>
-                        <TooltipContent>
-                          <p className="text-xs">Atualizar status dos containers (apenas desatualizados)</p>
-                        </TooltipContent>
-                      </Tooltip>
-                    </TooltipProvider>
-                    
-                    <TooltipProvider>
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                          <button onClick={handleAdminRetrack} disabled={isRunningRetrack || !!autoSyncStatus} className="h-8 px-3 rounded-full bg-[rgba(239,68,68,.2)] text-red-400 text-[0.7rem] font-medium flex items-center gap-1.5 border border-red-500/30 hover:bg-[rgba(239,68,68,.3)] transition disabled:opacity-50">
-                            {isRunningRetrack ? <Loader2 className="w-3 h-3 animate-spin" /> : <RotateCcw className="w-3 h-3" />}
-                            Re-Track
-                          </button>
-                        </TooltipTrigger>
-                        <TooltipContent>
-                          <p className="text-xs">Forçar re-rastreio de TODOS os containers</p>
-                        </TooltipContent>
-                      </Tooltip>
-                    </TooltipProvider>
-                    
-                    <TooltipProvider>
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                          <button onClick={handleAdminRefreshImos} disabled={isRunningImoRefresh || !!autoSyncStatus} className="h-8 px-3 rounded-full bg-[rgba(99,102,241,.2)] text-indigo-400 text-[0.7rem] font-medium flex items-center gap-1.5 border border-indigo-500/30 hover:bg-[rgba(99,102,241,.3)] transition disabled:opacity-50">
-                            {isRunningImoRefresh ? <Loader2 className="w-3 h-3 animate-spin" /> : <Ship className="w-3 h-3" />}
-                            Fix IMO
-                          </button>
-                        </TooltipTrigger>
-                        <TooltipContent>
-                          <p className="text-xs">Corrigir IMOs buscando pelo nome do navio</p>
-                        </TooltipContent>
-                      </Tooltip>
-                    </TooltipProvider>
-                    
-                    <TooltipProvider>
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                          <button onClick={handleExportExcel} disabled={isExportingExcel || !!autoSyncStatus} className="h-8 px-3 rounded-full bg-[rgba(245,124,0,.2)] text-orange-400 text-[0.7rem] font-medium flex items-center gap-1.5 border border-orange-500/30 hover:bg-[rgba(245,124,0,.3)] transition disabled:opacity-50">
-                            {isExportingExcel ? <Loader2 className="w-3 h-3 animate-spin" /> : <FileSpreadsheet className="w-3 h-3" />}
-                            Export Excel
-                          </button>
-                        </TooltipTrigger>
-                        <TooltipContent>
-                          <p className="text-xs">Exportar MBLs marítimos (últimos 2 meses) para Excel</p>
-                        </TooltipContent>
-                      </Tooltip>
-                    </TooltipProvider>
-                    
-                    <div className="w-px h-6 bg-[rgba(255,255,255,.15)]" />
-                  </>}
-                
                 {/* Armadores Mapeados Button */}
                 <button 
                   onClick={() => setShowArmadoresModal(true)} 
@@ -2196,6 +2121,159 @@ const ContainerTracking = () => {
 
       {/* Register Free Time Dialog */}
       <RegisterFreeTimeDialog open={freeTimeDialogOpen} onOpenChange={setFreeTimeDialogOpen} />
+      
+      {/* Admin Actions Modal */}
+      <Dialog open={showAdminModal} onOpenChange={setShowAdminModal}>
+        <DialogContent className="max-w-lg bg-[rgba(5,6,18,.97)] border border-[rgba(255,255,255,.12)]">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-white">
+              <Database className="w-5 h-5 text-primary" />
+              Painel Administrativo
+            </DialogTitle>
+            <DialogDescription className="text-gray-400">
+              Ações de sincronização e manutenção do sistema
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="mt-4 space-y-4">
+            {/* Sync Actions */}
+            <div className="space-y-2">
+              <h4 className="text-xs uppercase tracking-wide text-gray-500 font-medium">Sincronização</h4>
+              <div className="flex flex-wrap gap-2">
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <button 
+                        onClick={() => { handleAdminSync(); setShowAdminModal(false); }} 
+                        disabled={isRunningSync || !!autoSyncStatus} 
+                        className="h-9 px-4 rounded-lg bg-[rgba(59,130,246,.2)] text-blue-400 text-sm font-medium flex items-center gap-2 border border-blue-500/30 hover:bg-[rgba(59,130,246,.3)] transition disabled:opacity-50"
+                      >
+                        {isRunningSync ? <Loader2 className="w-4 h-4 animate-spin" /> : <Database className="w-4 h-4" />}
+                        Sync MBLs
+                      </button>
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      <p className="text-xs">Sincronizar novos MBLs do banco (t_master_dados)</p>
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+                
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <button 
+                        onClick={() => { handleAdminEnrich(); setShowAdminModal(false); }} 
+                        disabled={isRunningEnrich || !!autoSyncStatus} 
+                        className="h-9 px-4 rounded-lg bg-[rgba(16,185,129,.2)] text-emerald-400 text-sm font-medium flex items-center gap-2 border border-emerald-500/30 hover:bg-[rgba(16,185,129,.3)] transition disabled:opacity-50"
+                      >
+                        {isRunningEnrich ? <Loader2 className="w-4 h-4 animate-spin" /> : <Package className="w-4 h-4" />}
+                        Enrich Containers
+                      </button>
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      <p className="text-xs">Buscar containers para cada MBL via API</p>
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+              </div>
+            </div>
+            
+            {/* Tracking Actions */}
+            <div className="space-y-2">
+              <h4 className="text-xs uppercase tracking-wide text-gray-500 font-medium">Rastreamento</h4>
+              <div className="flex flex-wrap gap-2">
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <button 
+                        onClick={() => { handleAdminTrack(); setShowAdminModal(false); }} 
+                        disabled={isRunningTrack || !!autoSyncStatus} 
+                        className="h-9 px-4 rounded-lg bg-[rgba(139,92,246,.2)] text-violet-400 text-sm font-medium flex items-center gap-2 border border-violet-500/30 hover:bg-[rgba(139,92,246,.3)] transition disabled:opacity-50"
+                      >
+                        {isRunningTrack ? <Loader2 className="w-4 h-4 animate-spin" /> : <Radar className="w-4 h-4" />}
+                        Track Containers
+                      </button>
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      <p className="text-xs">Atualizar status dos containers (apenas desatualizados)</p>
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+                
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <button 
+                        onClick={() => { handleAdminRetrack(); setShowAdminModal(false); }} 
+                        disabled={isRunningRetrack || !!autoSyncStatus} 
+                        className="h-9 px-4 rounded-lg bg-[rgba(239,68,68,.2)] text-red-400 text-sm font-medium flex items-center gap-2 border border-red-500/30 hover:bg-[rgba(239,68,68,.3)] transition disabled:opacity-50"
+                      >
+                        {isRunningRetrack ? <Loader2 className="w-4 h-4 animate-spin" /> : <RotateCcw className="w-4 h-4" />}
+                        Re-Track Todos
+                      </button>
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      <p className="text-xs">Forçar re-rastreio de TODOS os containers</p>
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+              </div>
+            </div>
+            
+            {/* Maintenance Actions */}
+            <div className="space-y-2">
+              <h4 className="text-xs uppercase tracking-wide text-gray-500 font-medium">Manutenção</h4>
+              <div className="flex flex-wrap gap-2">
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <button 
+                        onClick={() => { handleAdminRefreshImos(); setShowAdminModal(false); }} 
+                        disabled={isRunningImoRefresh || !!autoSyncStatus} 
+                        className="h-9 px-4 rounded-lg bg-[rgba(99,102,241,.2)] text-indigo-400 text-sm font-medium flex items-center gap-2 border border-indigo-500/30 hover:bg-[rgba(99,102,241,.3)] transition disabled:opacity-50"
+                      >
+                        {isRunningImoRefresh ? <Loader2 className="w-4 h-4 animate-spin" /> : <Ship className="w-4 h-4" />}
+                        Fix IMO
+                      </button>
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      <p className="text-xs">Corrigir IMOs buscando pelo nome do navio</p>
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+                
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <button 
+                        onClick={() => { handleExportExcel(); setShowAdminModal(false); }} 
+                        disabled={isExportingExcel || !!autoSyncStatus} 
+                        className="h-9 px-4 rounded-lg bg-[rgba(245,124,0,.2)] text-orange-400 text-sm font-medium flex items-center gap-2 border border-orange-500/30 hover:bg-[rgba(245,124,0,.3)] transition disabled:opacity-50"
+                      >
+                        {isExportingExcel ? <Loader2 className="w-4 h-4 animate-spin" /> : <FileSpreadsheet className="w-4 h-4" />}
+                        Export Excel
+                      </button>
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      <p className="text-xs">Exportar MBLs marítimos (últimos 2 meses) para Excel</p>
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+              </div>
+            </div>
+          </div>
+          
+          <DialogFooter className="mt-6 border-t border-[rgba(255,255,255,.08)] pt-4">
+            <Button 
+              variant="outline" 
+              onClick={() => setShowAdminModal(false)} 
+              className="border-[rgba(255,255,255,.1)] text-gray-300 hover:bg-[rgba(255,255,255,.05)]"
+            >
+              Fechar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
       
       {/* Armadores Mapeados Modal */}
       <Dialog open={showArmadoresModal} onOpenChange={setShowArmadoresModal}>
