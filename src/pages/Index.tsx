@@ -1762,8 +1762,8 @@ const Index = () => {
           case "transito":
             return ["DEP", "MAN", "RCF", "ARR", "TRA", "FOH"].includes(status);
           case "alerta":
-            // OFLD movido para críticos - apenas DIS em alerta
-            return status === "DIS";
+            // OFLD movido para críticos - DIS ou processos com data_atraso em alerta
+            return status === "DIS" || !!awb.data_atraso;
           case "criticos":
             // OFLD agora é crítico junto com NIL e NIF
             return status === "NIL" || status === "NIF" || status === "OFLD";
@@ -2006,8 +2006,8 @@ const Index = () => {
             const excludedStatuses = ["COMPANY_NOT_REGISTERED", "ERRO", "INFO", "Em Processamento", "NOT_FOUND", "DLV"];
             if (excludedStatuses.includes(awb.status || "")) return false;
             const status = getStatusCode(awb.last_event).toUpperCase();
-            // OFLD movido para críticos - apenas DIS em alerta
-            return status === "DIS";
+            // OFLD movido para críticos - DIS ou processos com data_atraso em alerta
+            return status === "DIS" || !!awb.data_atraso;
           }).length}
           criticos={statusAereoData.filter((awb) => {
             const excludedStatuses = ["COMPANY_NOT_REGISTERED", "ERRO", "INFO", "Em Processamento", "NOT_FOUND", "DLV"];
