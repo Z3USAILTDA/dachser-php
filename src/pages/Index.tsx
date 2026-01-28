@@ -139,7 +139,7 @@ const getTrackingUrl = (airlineCode: string, fullAwb: string): string | null => 
     "724": (iata, awb) => `https://offerandorder.swissworldcargo.com/app/offerandorder/#/shipments/list?type=D&values=${iata}${awb}`,
     "729": (iata, awb) => `https://cargoapps.aviancacargo.com/#/e-tracking/details/${iata}-${awb}`,
     "881": (iata, awb) => `https://www.condor.com/eu/en/cargo/tracking.jsp?awb=${iata}${awb}`,
-    "996": () => `https://www.crsairlines.aero/tracking/`,
+    "996": (iata, awb) => `https://parcelsapp.com/en/tracking/${iata}${awb}`,
   };
 
   const builder = urlBuilders[airlineCode];
