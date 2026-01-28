@@ -2246,7 +2246,7 @@ const Index = () => {
                           <tr
                             className={`border-b border-[rgba(255,255,255,.06)] transition-all duration-300 ${
                               isCriticalAwb
-                                ? "bg-red-600/30 border-red-500 border-2 animate-pulse shadow-[0_0_25px_rgba(255,0,0,0.4)]"
+                                ? "bg-red-500/15 border-red-400/50 border-2 animate-pulse shadow-[0_0_15px_rgba(255,0,0,0.2)]"
                                 : isCompanyNotRegistered
                                 ? "bg-slate-500/10 border-l-4 border-l-slate-400/50 opacity-70"
                                 : isErroStatus
