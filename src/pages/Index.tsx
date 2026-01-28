@@ -2439,7 +2439,20 @@ const Index = () => {
                                   return <span className="text-muted-foreground">—</span>;
                                 }
                                 const statusCode = getStatusCode(awb.last_event).toUpperCase();
-                                const isDelayed = awb.data_atraso !== null || statusCode === "DIS" || statusCode === "OFLD";
+                                // Verificar se é crítico (NIL, NIF, OFLD ou AWBs críticos específicos)
+                                const CRITICAL_AWBS = ["045-21167274"];
+                                const isCritical = statusCode === "NIL" || statusCode === "NIF" || statusCode === "OFLD" || CRITICAL_AWBS.includes(awb.awb);
+                                const isDelayed = awb.data_atraso !== null || statusCode === "DIS";
+                                
+                                if (isCritical) {
+                                  return (
+                                    <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-semibold bg-red-600/30 text-red-300 border border-red-500/50 animate-pulse">
+                                      <span className="w-1.5 h-1.5 rounded-full bg-red-400"></span>
+                                      Crítico
+                                    </span>
+                                  );
+                                }
+                                
                                 return isDelayed ? (
                                   <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-semibold bg-red-500/20 text-red-400 border border-red-500/30 animate-pulse">
                                     <span className="w-1.5 h-1.5 rounded-full bg-red-400"></span>
