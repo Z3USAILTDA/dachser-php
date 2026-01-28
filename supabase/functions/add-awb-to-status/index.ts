@@ -228,6 +228,57 @@ serve(async (req) => {
       ]
     );
 
+    // AUTO-SYNC TO CCT: When status becomes DEP, create CCT shipment entry
+    const database = Deno.env.get('MARIADB_DATABASE') || 'dados_dachser';
+    if (isDepStatus && sanitizedHawb && sanitizedHawb !== 'N/A') {
+      console.log('[CCT AUTO-SYNC] DEP detected, syncing to CCT for HAWB:', sanitizedHawb);
+      
+      try {
+        // Check if already exists in t_cct_shipments
+        const existingCct = await client.query(`
+          SELECT house FROM ${database}.t_cct_shipments 
+          WHERE TRIM(house) COLLATE utf8mb4_unicode_ci = TRIM(?) COLLATE utf8mb4_unicode_ci
+          LIMIT 1
+        `, [sanitizedHawb]);
+        
+        if (!existingCct || existingCct.length === 0) {
+          // Create CCT shipment entry
+          await client.execute(`
+            INSERT INTO ${database}.t_cct_shipments 
+            (house, master, cliente, aeroporto_origem, aeroporto_destino, 
+             nome_analista, emails_cliente, status_cct, created_at)
+            VALUES (TRIM(?), TRIM(?), TRIM(?), TRIM(?), TRIM(?), 
+                    TRIM(?), ?, 'AGUARDANDO_CONSULTA', NOW())
+            ON DUPLICATE KEY UPDATE 
+              master = TRIM(?),
+              aeroporto_origem = IF(TRIM(?) != 'N/A', TRIM(?), aeroporto_origem),
+              aeroporto_destino = IF(TRIM(?) != 'N/A', TRIM(?), aeroporto_destino)
+          `, [
+            sanitizedHawb, sanitizedMawb, finalConsigneeName, 
+            finalOrigin, finalDestination,
+            finalNomeAnalista, finalEmailCliente,
+            sanitizedMawb,
+            finalOrigin, finalOrigin,
+            finalDestination, finalDestination
+          ]);
+          
+          // Insert initial CCT event
+          await client.execute(`
+            INSERT IGNORE INTO ${database}.t_cct_eventos_historico 
+            (awb, codigo_evento, descricao_evento, data_hora_evento, fonte, aeroporto, nivel_confianca)
+            VALUES (TRIM(?), 'DEP', 'Processo iniciado - Aguardando consulta LeadComex', NOW(), 'TRACKING', TRIM(?), 'PRIMARIA')
+          `, [sanitizedHawb, finalOrigin]);
+          
+          console.log('[CCT AUTO-SYNC] Created CCT entry for HAWB:', sanitizedHawb);
+        } else {
+          console.log('[CCT AUTO-SYNC] HAWB already exists in CCT:', sanitizedHawb);
+        }
+      } catch (cctErr) {
+        console.error('[CCT AUTO-SYNC] Error (non-fatal):', cctErr);
+        // Don't fail the main operation
+      }
+    }
+
     // Also insert into event history table (t_cct_eventos_historico)
     // Create table if not exists
     try {

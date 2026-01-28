@@ -10676,7 +10676,12 @@ serve(async (req) => {
                   AND s.arr_datetime IS NOT NULL 
                   AND s.arr_datetime <= NOW() - INTERVAL 120 HOUR)
             )
-            AND s.dep_datetime >= '2026-01-27 00:00:00'
+            AND s.awb IN (
+              SELECT DISTINCT mawb FROM ${database}.t_master_dados 
+              WHERE data_insert >= '2026-01-26 00:00:00'
+              AND data_insert < '2026-01-27 00:00:00'
+              AND tipo_processo = 'AIR IMPORT'
+            )
           `;
           
           if (!processAll) {
