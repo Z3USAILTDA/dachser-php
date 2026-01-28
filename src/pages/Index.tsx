@@ -2426,7 +2426,7 @@ const Index = () => {
                                 <span className="text-sm font-bold" style={{ color: "hsl(120 100% 35%)" }}>
                                   {getStatusCode(awb.last_event)}
                                 </span>
-                                {['083', '147', '160', '615', '865', '016'].some(prefix => awb.awb?.startsWith(prefix)) && (
+                                {['083', '147', '160', '615', '865', '016', '577'].some(prefix => awb.awb?.startsWith(prefix)) && (
                                   <TooltipProvider>
                                     <Tooltip>
                                       <TooltipTrigger asChild>
