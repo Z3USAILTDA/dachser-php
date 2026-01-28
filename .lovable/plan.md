@@ -1,126 +1,97 @@
 
 
-# Plano: Preencher Data de Decolagem a partir do LeadComex
+# Plano: Corrigir Mapeamento de Status LeadComex para Timeline CCT
 
-## Situacao Atual
+## Problema Identificado
 
-A coluna `data_decolagem` (campo `dep_datetime` ou `data_decolagem_ultimo_trecho`) aparece vazia porque:
+A timeline mostra "Entregue" incorretamente porque:
 
-| Fonte | Estado | Problema |
-|-------|--------|----------|
-| `t_status_aereo.dep_datetime` | NULL para maioria | So e preenchido quando tracking envia `dep_timestamp` |
-| `t_cct_shipments.data_decolagem_ultimo_trecho` | NULL | Nunca e populado automaticamente |
-| LeadComex `viagensAssociadas[]` | Disponivel mas NAO usado | Contem dados de voos com datas de decolagem |
+### Evidência Real (CGN-16367758)
+| Campo LeadComex | Valor | Mapeamento Atual |
+|-----------------|-------|------------------|
+| `situacaoLead` | "Processado" | → ENTREGUE ❌ |
+| `situacaoPortal` | "Recepcionada" | → NULL (não existe) |
 
-## Dados Disponiveis no LeadComex
-
-A API LeadComex retorna o campo `viagensAssociadas` com informacoes de voos:
-
-```text
-viagensAssociadas: [
-  {
-    "nroVoo": "JJ8076",
-    "dataPartidaPrevista": "26/01/2026 14:30:00",
-    "dataPartidaReal": "26/01/2026 14:45:00",
-    "aeroportoOrigem": "MIA",
-    "aeroportoDestino": "GRU"
-  },
-  {
-    "nroVoo": "JJ8120",
-    "dataPartidaReal": "25/01/2026 18:00:00",
-    ...
-  }
-]
+### Lógica Atual (linha 586)
+```typescript
+const eventMapping = STATUS_TO_CCT_EVENT[situacaoLead] || STATUS_TO_CCT_EVENT[situacaoPortal];
 ```
 
-O campo `dataPartidaReal` (ou `dataPartidaPrevista` como fallback) do ULTIMO voo da lista e a data de decolagem do ultimo trecho.
+O código prioriza `situacaoLead` ("Processado" → ENTREGUE), ignorando `situacaoPortal` ("Recepcionada") que é o status operacional real.
 
-## Solucao
+## Causa Raiz
 
-Modificar o fluxo de sincronizacao LeadComex para extrair a data de decolagem do ultimo trecho.
+1. **`situacaoLead`** = Status interno do sistema LeadComex (ex: "Processado" significa que a carga foi processada no sistema, não que foi entregue fisicamente)
 
-## Mudancas
+2. **`situacaoPortal`** = Status operacional real da carga no portal CCT (ex: "Recepcionada" = carga recebida no terminal)
+
+3. Mapeamento incompleto: "Recepcionada" (feminino) não está mapeado, apenas "Recepcionado"
+
+## Solução
+
+### 1. Inverter prioridade: usar `situacaoPortal` como fonte primária
+
+O status do portal CCT (`situacaoPortal`) reflete a situação operacional real da carga. `situacaoLead` é apenas um indicador interno do sistema.
+
+### 2. Adicionar variantes femininas ao mapeamento
+
+A API retorna tanto "Recepcionado" quanto "Recepcionada" dependendo do contexto.
+
+## Mudanças
 
 ### Arquivo: `supabase/functions/leadcomex-sync/index.ts`
 
-**Localizacao:** Dentro da funcao `processLeadComexData` (apos linha ~500)
+**1. Adicionar variantes femininas ao mapeamento (linhas 42-51):**
 
-**Logica:**
-1. Verificar se `detalhe.viagensAssociadas` existe e tem dados
-2. Pegar o ULTIMO elemento do array (ultimo trecho do voo)
-3. Usar `dataPartidaReal` ou fallback para `dataPartidaPrevista`
-4. Parsear data brasileira para ISO
-5. Incluir no `updateData` para salvar em `t_cct_shipments.data_decolagem_ultimo_trecho`
-
-**Codigo a adicionar (apos linha ~512):**
 ```typescript
-// Extrair data de decolagem do ultimo trecho (viagensAssociadas)
-if (detalhe?.viagensAssociadas && detalhe.viagensAssociadas.length > 0) {
-  // Pegar o ultimo voo da lista (ultimo trecho)
-  const ultimoVoo = detalhe.viagensAssociadas[detalhe.viagensAssociadas.length - 1];
-  // Preferir dataPartidaReal, fallback para dataPartidaPrevista
-  const dataDecolagem = ultimoVoo.dataPartidaReal || ultimoVoo.dataPartidaPrevista;
-  if (dataDecolagem) {
-    const parsedDate = parseBrazilianDate(dataDecolagem);
-    if (parsedDate) {
-      updateData.data_decolagem_ultimo_trecho = parsedDate;
-      console.log(`[LEADCOMEX] Data decolagem encontrada: ${parsedDate} (voo ${ultimoVoo.nroVoo})`);
-    }
-  }
-}
+const STATUS_TO_CCT_EVENT: Record<string, { codigo: string; descricao: string }> = {
+  'Informado': { codigo: 'MANIFESTADO', descricao: 'Conhecimento manifestado no CCT' },
+  'Informada': { codigo: 'MANIFESTADO', descricao: 'Conhecimento manifestado no CCT' },
+  'Em área de transferência': { codigo: 'AREA_TRANSFERENCIA', descricao: 'Carga em área de transferência' },
+  'Chegada informada': { codigo: 'CHEGADA_INFORMADA', descricao: 'Chegada da carga informada ao terminal' },
+  'Recepcionado': { codigo: 'RECEPCIONADO', descricao: 'Carga recepcionada no terminal' },
+  'Recepcionada': { codigo: 'RECEPCIONADO', descricao: 'Carga recepcionada no terminal' }, // ADICIONAR
+  'Em trânsito terrestre': { codigo: 'EM_TRANSITO', descricao: 'Carga em trânsito terrestre' },
+  'Entregue': { codigo: 'ENTREGUE', descricao: 'Carga entregue ao destinatário' },
+  // Remover 'Processado' → não é status de entrega física
+};
 ```
 
-### Arquivo: `supabase/functions/mariadb-proxy/index.ts`
+**2. Inverter prioridade do mapeamento (linha 586):**
 
-**Localizacao:** Action `update_leadcomex_data` (~linha 3200+)
+```typescript
+// Priorizar situacaoPortal (status operacional real) sobre situacaoLead (status interno)
+const eventMapping = STATUS_TO_CCT_EVENT[situacaoPortal] || STATUS_TO_CCT_EVENT[situacaoLead];
+```
 
-**Garantir que `data_decolagem_ultimo_trecho` seja incluida nos campos de atualizacao:**
-- Verificar se o campo ja esta sendo salvo em `t_cct_shipments`
-- Se nao estiver, adicionar ao mapeamento de campos
+**3. Adicionar log para debug:**
 
-### Diagrama de Fluxo
+```typescript
+console.log(`[LEADCOMEX] Status para ${hawb}: Lead="${situacaoLead}", Portal="${situacaoPortal}" → ${eventMapping?.codigo || 'SEM_MAPEAMENTO'}`);
+```
 
+## Fluxo Corrigido
+
+### Exemplo CGN-16367758:
 ```text
-LeadComex API
-     |
-     v
-viagensAssociadas[N]  -->  Ultimo voo: dataPartidaReal ou dataPartidaPrevista
-     |
-     v
-parseBrazilianDate()  -->  "2026-01-26T14:45:00"
-     |
-     v
-updateData.data_decolagem_ultimo_trecho
-     |
-     v
-mariadb-proxy (update_leadcomex_data)
-     |
-     v
-t_cct_shipments.data_decolagem_ultimo_trecho
-     |
-     v
-get_cct_shipments retorna o campo
-     |
-     v
-UI exibe "Data de Decolagem: 26/01/2026 14:45"
+ANTES:
+  situacaoLead="Processado" → ENTREGUE (prioridade 1)
+  situacaoPortal="Recepcionada" → ignorado
+
+DEPOIS:
+  situacaoPortal="Recepcionada" → RECEPCIONADO (prioridade 1)
+  situacaoLead="Processado" → ignorado (não está mais no mapeamento)
 ```
-
-## Apos Implementacao
-
-1. Executar `refresh-all-active` na pagina de Logs LeadComex para reprocessar todos os HAWBs
-2. Os processos com `viagensAssociadas` disponiveis terao a data de decolagem preenchida automaticamente
-3. A timeline podera calcular SLA corretamente usando a data real de decolagem
 
 ## Arquivos a Modificar
 
-| Arquivo | Mudanca |
+| Arquivo | Mudança |
 |---------|---------|
-| `supabase/functions/leadcomex-sync/index.ts` | Adicionar extracao de `viagensAssociadas` para popular `data_decolagem_ultimo_trecho` |
-| `supabase/functions/mariadb-proxy/index.ts` | Verificar se `data_decolagem_ultimo_trecho` esta no mapeamento de `update_leadcomex_data` |
+| `supabase/functions/leadcomex-sync/index.ts` | Adicionar "Recepcionada" ao mapeamento, remover "Processado", inverter prioridade situacaoPortal/situacaoLead |
 
-## Validacao
+## Validação
 
-1. Verificar nos logs LeadComex se mensagem "Data decolagem encontrada" aparece
-2. Recarregar pagina CCT e verificar se coluna "Data Decolagem" esta preenchida
-3. Abrir detalhe de um processo e confirmar data de decolagem na aba Dados
+1. Executar `refresh-all-active` na página de Logs LeadComex
+2. Verificar nos logs a mensagem: `Status para XXX: Lead="Processado", Portal="Recepcionada" → RECEPCIONADO`
+3. Abrir processo CGN-16367758 e confirmar que timeline mostra "Recepcionado" (não "Entregue")
 
