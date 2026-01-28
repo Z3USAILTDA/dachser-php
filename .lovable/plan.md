@@ -1,114 +1,126 @@
 
 
-# Plano: Adicionar Eventos de Desbloqueio na Timeline CCT
+# Plano: Preencher Data de Decolagem a partir do LeadComex
 
 ## Situacao Atual
 
-A API LeadComex retorna dois arrays relacionados a bloqueios:
+A coluna `data_decolagem` (campo `dep_datetime` ou `data_decolagem_ultimo_trecho`) aparece vazia porque:
 
-| Campo | Uso Atual | Estrutura |
-|-------|-----------|-----------|
-| `bloqueiosAtivos[]` | Inserido na timeline como evento `BLOQUEIO` | `codigo`, `descricao`, `dataHoraBloqueio` |
-| `bloqueiosBaixados[]` | **Salvo em JSON, mas NAO inserido na timeline** | `codigo`, `descricao`, `dataHoraDesbloqueio` |
+| Fonte | Estado | Problema |
+|-------|--------|----------|
+| `t_status_aereo.dep_datetime` | NULL para maioria | So e preenchido quando tracking envia `dep_timestamp` |
+| `t_cct_shipments.data_decolagem_ultimo_trecho` | NULL | Nunca e populado automaticamente |
+| LeadComex `viagensAssociadas[]` | Disponivel mas NAO usado | Contem dados de voos com datas de decolagem |
 
-O codigo atual processa apenas bloqueios ativos (linhas 602-632 do leadcomex-sync), ignorando os desbloqueios.
+## Dados Disponiveis no LeadComex
+
+A API LeadComex retorna o campo `viagensAssociadas` com informacoes de voos:
+
+```text
+viagensAssociadas: [
+  {
+    "nroVoo": "JJ8076",
+    "dataPartidaPrevista": "26/01/2026 14:30:00",
+    "dataPartidaReal": "26/01/2026 14:45:00",
+    "aeroportoOrigem": "MIA",
+    "aeroportoDestino": "GRU"
+  },
+  {
+    "nroVoo": "JJ8120",
+    "dataPartidaReal": "25/01/2026 18:00:00",
+    ...
+  }
+]
+```
+
+O campo `dataPartidaReal` (ou `dataPartidaPrevista` como fallback) do ULTIMO voo da lista e a data de decolagem do ultimo trecho.
 
 ## Solucao
 
-Adicionar loop para processar `bloqueiosBaixados[]` e inserir eventos de desbloqueio na timeline.
+Modificar o fluxo de sincronizacao LeadComex para extrair a data de decolagem do ultimo trecho.
 
 ## Mudancas
 
 ### Arquivo: `supabase/functions/leadcomex-sync/index.ts`
 
-**Localizacao:** Apos o bloco de processamento de `bloqueiosAtivos` (linha ~632)
+**Localizacao:** Dentro da funcao `processLeadComexData` (apos linha ~500)
 
-**Codigo a adicionar:**
+**Logica:**
+1. Verificar se `detalhe.viagensAssociadas` existe e tem dados
+2. Pegar o ULTIMO elemento do array (ultimo trecho do voo)
+3. Usar `dataPartidaReal` ou fallback para `dataPartidaPrevista`
+4. Parsear data brasileira para ISO
+5. Incluir no `updateData` para salvar em `t_cct_shipments.data_decolagem_ultimo_trecho`
+
+**Codigo a adicionar (apos linha ~512):**
 ```typescript
-// Registrar cada DESBLOQUEIO como evento na timeline
-if (detalhe?.bloqueiosBaixados && detalhe.bloqueiosBaixados.length > 0) {
-  console.log(`[LEADCOMEX] ${detalhe.bloqueiosBaixados.length} desbloqueios para ${hawb}`);
-  
-  for (const desbloqueio of detalhe.bloqueiosBaixados) {
-    if (supabaseUrl && supabaseKey) {
-      try {
-        await fetch(`${supabaseUrl}/functions/v1/mariadb-proxy`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${supabaseKey}`,
-          },
-          body: JSON.stringify({
-            action: 'insert_cct_event',
-            awb: hawb,
-            codigo_evento: 'DESBLOQUEIO',
-            descricao_evento: `Desbloqueio ${desbloqueio.codigo}: ${desbloqueio.descricao}`,
-            data_hora_evento: parseBrazilianDate(desbloqueio.dataHoraDesbloqueio) || new Date().toISOString(),
-            fonte: 'LEADCOMEX',
-            nivel_confianca: 'PRIMARIA',
-          }),
-        });
-      } catch (e) {
-        console.warn(`[LEADCOMEX] Erro ao inserir desbloqueio na timeline:`, e);
-      }
+// Extrair data de decolagem do ultimo trecho (viagensAssociadas)
+if (detalhe?.viagensAssociadas && detalhe.viagensAssociadas.length > 0) {
+  // Pegar o ultimo voo da lista (ultimo trecho)
+  const ultimoVoo = detalhe.viagensAssociadas[detalhe.viagensAssociadas.length - 1];
+  // Preferir dataPartidaReal, fallback para dataPartidaPrevista
+  const dataDecolagem = ultimoVoo.dataPartidaReal || ultimoVoo.dataPartidaPrevista;
+  if (dataDecolagem) {
+    const parsedDate = parseBrazilianDate(dataDecolagem);
+    if (parsedDate) {
+      updateData.data_decolagem_ultimo_trecho = parsedDate;
+      console.log(`[LEADCOMEX] Data decolagem encontrada: ${parsedDate} (voo ${ultimoVoo.nroVoo})`);
     }
   }
 }
 ```
 
-### Arquivo: `src/components/cct/EventTimeline.tsx`
+### Arquivo: `supabase/functions/mariadb-proxy/index.ts`
 
-**Adicionar icone e cor para DESBLOQUEIO:**
+**Localizacao:** Action `update_leadcomex_data` (~linha 3200+)
 
-1. **Importar icone** (linha 3-16):
-```typescript
-import { Unlock } from "lucide-react"; // Adicionar
-```
+**Garantir que `data_decolagem_ultimo_trecho` seja incluida nos campos de atualizacao:**
+- Verificar se o campo ja esta sendo salvo em `t_cct_shipments`
+- Se nao estiver, adicionar ao mapeamento de campos
 
-2. **getEventIcon** - Adicionar caso para DESBLOQUEIO (apos linha 82):
-```typescript
-// Desbloqueio - carga liberada
-if (upperCode === 'DESBLOQUEIO') {
-  return Unlock;
-}
-```
-
-3. **getEventColor** - Adicionar cor verde para DESBLOQUEIO (apos linha 107):
-```typescript
-// Verde para Desbloqueios (carga liberada)
-if (upperCode === 'DESBLOQUEIO') {
-  return {
-    dot: "border-emerald-500 bg-emerald-500",
-    icon: "text-emerald-400",
-    card: "border-emerald-500/30 bg-emerald-500/5"
-  };
-}
-```
-
-## Visualizacao na Timeline
-
-Apos implementacao, a timeline exibira:
+### Diagrama de Fluxo
 
 ```text
-Timeline do Processo:
-[Verde] DESBLOQUEIO - Desbloqueio NFD: Carga liberada para retirada
-         27/01/2026 15:30 | LeadComex
-         
-[Vermelho] BLOQUEIO - Bloqueio NFD: Aguardando documentacao
-           26/01/2026 10:15 | LeadComex
+LeadComex API
+     |
+     v
+viagensAssociadas[N]  -->  Ultimo voo: dataPartidaReal ou dataPartidaPrevista
+     |
+     v
+parseBrazilianDate()  -->  "2026-01-26T14:45:00"
+     |
+     v
+updateData.data_decolagem_ultimo_trecho
+     |
+     v
+mariadb-proxy (update_leadcomex_data)
+     |
+     v
+t_cct_shipments.data_decolagem_ultimo_trecho
+     |
+     v
+get_cct_shipments retorna o campo
+     |
+     v
+UI exibe "Data de Decolagem: 26/01/2026 14:45"
 ```
+
+## Apos Implementacao
+
+1. Executar `refresh-all-active` na pagina de Logs LeadComex para reprocessar todos os HAWBs
+2. Os processos com `viagensAssociadas` disponiveis terao a data de decolagem preenchida automaticamente
+3. A timeline podera calcular SLA corretamente usando a data real de decolagem
 
 ## Arquivos a Modificar
 
 | Arquivo | Mudanca |
 |---------|---------|
-| `supabase/functions/leadcomex-sync/index.ts` | Adicionar loop para processar `bloqueiosBaixados[]` (apos linha 632) |
-| `src/components/cct/EventTimeline.tsx` | Adicionar icone `Unlock` e cor verde para evento `DESBLOQUEIO` |
+| `supabase/functions/leadcomex-sync/index.ts` | Adicionar extracao de `viagensAssociadas` para popular `data_decolagem_ultimo_trecho` |
+| `supabase/functions/mariadb-proxy/index.ts` | Verificar se `data_decolagem_ultimo_trecho` esta no mapeamento de `update_leadcomex_data` |
 
 ## Validacao
 
-1. Executar `refresh-all-active` para reprocessar HAWBs
-2. Verificar nos logs se desbloqueios foram detectados
-3. Abrir processo CCT que teve bloqueio e verificar se desbloqueio aparece na timeline
-4. Confirmar que desbloqueio aparece em verde com icone de cadeado aberto
+1. Verificar nos logs LeadComex se mensagem "Data decolagem encontrada" aparece
+2. Recarregar pagina CCT e verificar se coluna "Data Decolagem" esta preenchida
+3. Abrir detalhe de um processo e confirmar data de decolagem na aba Dados
 
