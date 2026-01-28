@@ -1765,8 +1765,9 @@ const Index = () => {
             // OFLD movido para críticos - DIS ou processos com data_atraso em alerta
             return status === "DIS" || !!awb.data_atraso;
           case "criticos":
-            // OFLD agora é crítico junto com NIL e NIF
-            return status === "NIL" || status === "NIF" || status === "OFLD";
+            // OFLD agora é crítico junto com NIL e NIF, e AWBs críticos específicos
+            const CRITICAL_AWBS = ["045-21167274"];
+            return status === "NIL" || status === "NIF" || status === "OFLD" || CRITICAL_AWBS.includes(awb.awb);
           default:
             return true;
         }
@@ -2013,8 +2014,9 @@ const Index = () => {
             const excludedStatuses = ["COMPANY_NOT_REGISTERED", "ERRO", "INFO", "Em Processamento", "NOT_FOUND", "DLV"];
             if (excludedStatuses.includes(awb.status || "")) return false;
             const status = getStatusCode(awb.last_event).toUpperCase();
-            // OFLD agora é crítico junto com NIL e NIF
-            return status === "NIL" || status === "NIF" || status === "OFLD";
+            // OFLD agora é crítico junto com NIL e NIF, e AWBs críticos específicos
+            const CRITICAL_AWBS = ["045-21167274"];
+            return status === "NIL" || status === "NIF" || status === "OFLD" || CRITICAL_AWBS.includes(awb.awb);
           }).length}
           activeFilter={cardFilter}
           onFilterChange={(filter) => {
@@ -2235,20 +2237,25 @@ const Index = () => {
                       const isCompanyNotRegistered = awb.status === "COMPANY_NOT_REGISTERED";
                       const isAwbInvalid = awb.status === "AWB_INVALID" || awb.last_event === "AWB_INVALID";
                       const isFalhaConsulta = isErroStatus || isCompanyNotRegistered;
+                      // AWBs críticos específicos com destaque vermelho piscante
+                      const CRITICAL_AWBS = ["045-21167274"];
+                      const isCriticalAwb = CRITICAL_AWBS.includes(awb.awb);
 
                       return (
                         <React.Fragment key={awb.id || index}>
                           <tr
                             className={`border-b border-[rgba(255,255,255,.06)] transition-all duration-300 ${
-                              isCompanyNotRegistered
+                              isCriticalAwb
+                                ? "bg-red-600/30 border-red-500 border-2 animate-pulse shadow-[0_0_25px_rgba(255,0,0,0.4)]"
+                                : isCompanyNotRegistered
                                 ? "bg-slate-500/10 border-l-4 border-l-slate-400/50 opacity-70"
                                 : isErroStatus
                                 ? "bg-orange-500/20 border-l-4 border-l-orange-500 shadow-[0_0_15px_rgba(249,115,22,0.2)]"
                                 : isNilStatus
                                 ? "bg-red-500/20 border-red-500 border-2 animate-pulse shadow-[0_0_20px_rgba(255,0,0,0.3)]"
                                 : "hover:bg-[rgba(255,255,255,.03)]"
-                            } ${isDelivered && !isNilStatus && !isErroStatus && !isCompanyNotRegistered ? "bg-emerald-500/10" : ""} ${
-                              isRetracking && !isNilStatus && !isErroStatus && !isCompanyNotRegistered ? "bg-blue-500/20 animate-pulse" : ""
+                            } ${isDelivered && !isNilStatus && !isErroStatus && !isCompanyNotRegistered && !isCriticalAwb ? "bg-emerald-500/10" : ""} ${
+                              isRetracking && !isNilStatus && !isErroStatus && !isCompanyNotRegistered && !isCriticalAwb ? "bg-blue-500/20 animate-pulse" : ""
                             }`}
                           >
                             <td className="px-4 py-3 whitespace-nowrap">
