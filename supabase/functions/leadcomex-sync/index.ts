@@ -512,6 +512,22 @@ async function processLeadComexData(
     updateData.aeroporto_destino = detalhe.codigoAeroportoDestinoConhecimento;
   }
   
+  // Extrair data de decolagem do último trecho (viagensAssociadas)
+  // O último voo da lista representa o último trecho antes de chegar ao destino final
+  if (cargaAny?.viagensAssociadas && Array.isArray(cargaAny.viagensAssociadas) && cargaAny.viagensAssociadas.length > 0) {
+    // Pegar o último voo da lista (último trecho)
+    const ultimoVoo = cargaAny.viagensAssociadas[cargaAny.viagensAssociadas.length - 1];
+    // Preferir dataPartidaReal, fallback para dataPartidaPrevista
+    const dataDecolagem = ultimoVoo.dataPartidaReal || ultimoVoo.dataPartidaPrevista;
+    if (dataDecolagem) {
+      const parsedDate = parseBrazilianDate(dataDecolagem);
+      if (parsedDate) {
+        updateData.data_decolagem_ultimo_trecho = parsedDate;
+        console.log(`[LEADCOMEX] Data decolagem encontrada: ${parsedDate} (voo ${ultimoVoo.nroVoo || 'N/A'})`);
+      }
+    }
+  }
+  
   // Se temos dados de manifestação ou entrega, atualizar status
   // Note: API returns "Informada" with "a", and also "Processado" for delivered
   const statusLower = identificacao.situacaoPortal?.toLowerCase() || '';

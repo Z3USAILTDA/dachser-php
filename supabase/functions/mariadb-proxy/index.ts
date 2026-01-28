@@ -3281,7 +3281,8 @@ serve(async (req) => {
         const allowedFields = [
           'peso_declarado', 'volume_declarado', 'cnpj_consignatario',
           'aeroporto_origem', 'aeroporto_destino', 
-          'status_manifestacao', 'data_manifestacao_cct'
+          'status_manifestacao', 'data_manifestacao_cct',
+          'data_decolagem_ultimo_trecho'
         ];
 
         const setClausesLead: string[] = [];
