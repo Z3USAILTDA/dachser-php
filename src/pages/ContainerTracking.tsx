@@ -29,7 +29,7 @@ import { Filter as FilterIcon } from "lucide-react";
 import VesselFinderMap from "@/components/tracking/VesselFinderMap";
 import Swal from 'sweetalert2';
 import { useTheme } from "@/hooks/useTheme";
-import { detectCarrierFromMbl, SHIPPING_LINE_INFO, ShippingLineCode, getTrackableCarriers } from "@/lib/shippingLineMapping";
+import { detectCarrierFromMbl, SHIPPING_LINE_INFO, ShippingLineCode, getTrackableCarriers, MBL_PREFIX_MAP } from "@/lib/shippingLineMapping";
 
 // Deriva o armador do MBL usando o mapeamento centralizado - retorna código normalizado
 const getShippingLineCodeFromMbl = (mbl_id: string, shipping_line: string | null | undefined): ShippingLineCode => {
@@ -2214,36 +2214,33 @@ const ContainerTracking = () => {
             <Table>
               <TableHeader>
                 <TableRow className="border-b border-[rgba(255,255,255,.08)] hover:bg-transparent">
-                  <TableHead className="text-[#aaaaaa]">Código</TableHead>
+                  <TableHead className="text-[#aaaaaa]">Prefixo</TableHead>
                   <TableHead className="text-[#aaaaaa]">Armador</TableHead>
                   <TableHead className="text-[#aaaaaa]">País</TableHead>
-                  <TableHead className="text-[#aaaaaa] text-center">Status API</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {getTrackableCarriers().map((carrier) => (
-                  <TableRow key={carrier.code} className="border-b border-[rgba(255,255,255,.05)] hover:bg-[rgba(255,255,255,.03)]">
-                    <TableCell className="font-mono text-sm text-gray-300">
-                      {carrier.code}
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex items-center gap-2">
-                        <span className={cn("px-2 py-0.5 text-xs rounded border", carrier.color)}>
-                          {normalizeArmadorName(carrier.name)}
-                        </span>
-                      </div>
-                    </TableCell>
-                    <TableCell className="text-gray-400 text-sm">
-                      {carrier.country}
-                    </TableCell>
-                    <TableCell className="text-center">
-                      <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
-                        <Check className="w-3 h-3" />
-                        Ativo
-                      </span>
-                    </TableCell>
-                  </TableRow>
-                ))}
+                {getTrackableCarriers().map((carrier) => {
+                  // Get the most common prefix for this carrier
+                  const prefixes = Object.entries(MBL_PREFIX_MAP)
+                    .filter(([_, code]) => code === carrier.code)
+                    .map(([prefix]) => prefix);
+                  const displayPrefix = prefixes[0] || carrier.code;
+                  
+                  return (
+                    <TableRow key={carrier.code} className="border-b border-[rgba(255,255,255,.05)] hover:bg-[rgba(255,255,255,.03)]">
+                      <TableCell className="font-mono text-sm text-gray-300">
+                        {displayPrefix}
+                      </TableCell>
+                      <TableCell className="text-gray-300">
+                        {normalizeArmadorName(carrier.name)}
+                      </TableCell>
+                      <TableCell className="text-gray-400 text-sm">
+                        {carrier.country}
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
               </TableBody>
             </Table>
           </div>
