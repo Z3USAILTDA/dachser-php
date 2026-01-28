@@ -38,16 +38,19 @@ async function logApiCall(params: {
 }
 
 // Mapeamento de status LeadComex → Eventos CCT
-// Note: API returns "Informada" (with "a"), not "Informado"
+// IMPORTANTE: Usar situacaoPortal (status operacional) como fonte primária
+// situacaoLead ("Processado") é status interno do sistema, não indica entrega física
 const STATUS_TO_CCT_EVENT: Record<string, { codigo: string; descricao: string }> = {
+  // Variantes masculinas e femininas (API retorna ambas dependendo do contexto)
   'Informado': { codigo: 'MANIFESTADO', descricao: 'Conhecimento manifestado no CCT' },
   'Informada': { codigo: 'MANIFESTADO', descricao: 'Conhecimento manifestado no CCT' },
   'Em área de transferência': { codigo: 'AREA_TRANSFERENCIA', descricao: 'Carga em área de transferência' },
   'Chegada informada': { codigo: 'CHEGADA_INFORMADA', descricao: 'Chegada da carga informada ao terminal' },
   'Recepcionado': { codigo: 'RECEPCIONADO', descricao: 'Carga recepcionada no terminal' },
+  'Recepcionada': { codigo: 'RECEPCIONADO', descricao: 'Carga recepcionada no terminal' },
   'Em trânsito terrestre': { codigo: 'EM_TRANSITO', descricao: 'Carga em trânsito terrestre' },
   'Entregue': { codigo: 'ENTREGUE', descricao: 'Carga entregue ao destinatário' },
-  'Processado': { codigo: 'ENTREGUE', descricao: 'Carga processada/entregue' },
+  // REMOVIDO: 'Processado' não indica entrega física, apenas processamento interno do sistema
 };
 
 // Ordem sequencial dos eventos no fluxo CCT (para inferir eventos intermediários)
@@ -581,9 +584,12 @@ async function processLeadComexData(
   
   // === NOVO: Registrar evento na timeline (t_cct_eventos_historico) ===
   // Mapear status LeadComex para evento CCT
+  // IMPORTANTE: Priorizar situacaoPortal (status operacional real) sobre situacaoLead (status interno)
   const situacaoLead = identificacao.situacaoLead;
   const situacaoPortal = identificacao.situacaoPortal;
-  const eventMapping = STATUS_TO_CCT_EVENT[situacaoLead] || STATUS_TO_CCT_EVENT[situacaoPortal];
+  const eventMapping = STATUS_TO_CCT_EVENT[situacaoPortal] || STATUS_TO_CCT_EVENT[situacaoLead];
+  
+  console.log(`[LEADCOMEX] Status para ${hawb}: Lead="${situacaoLead}", Portal="${situacaoPortal}" → ${eventMapping?.codigo || 'SEM_MAPEAMENTO'}`);
   
   if (eventMapping && supabaseUrl && supabaseKey) {
     try {
