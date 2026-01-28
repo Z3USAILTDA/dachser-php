@@ -10,7 +10,14 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
-import { Search, RefreshCw, Ship, Trash2, Mail, Check, ArrowLeft, Loader2, Anchor, AlertTriangle, HelpCircle, ChevronDown, ChevronUp, Package, Clock, Bell, Play, Database, Radar, RotateCcw, Sun, Moon, FileSpreadsheet } from "lucide-react";
+import { Search, RefreshCw, Ship, Trash2, Mail, Check, ArrowLeft, Loader2, Anchor, AlertTriangle, HelpCircle, ChevronDown, ChevronUp, Package, Clock, Bell, Play, Database, Radar, RotateCcw, Sun, Moon, FileSpreadsheet, BoxIcon } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Calendar } from "@/components/ui/calendar";
+import { format } from "date-fns";
+import { ptBR } from "date-fns/locale";
+import { cn } from "@/lib/utils";
 import { exportSeaMblsToExcel } from "@/utils/seaMblExcelExport";
 import { RegisterFreeTimeDialog } from "@/components/tracking/RegisterFreeTimeDialog";
 import { useToast } from "@/hooks/use-toast";
@@ -354,6 +361,21 @@ const ContainerTracking = () => {
 
   // Free Time dialog state
   const [freeTimeDialogOpen, setFreeTimeDialogOpen] = useState(false);
+  
+  // Armadores modal state
+  const [showArmadoresModal, setShowArmadoresModal] = useState(false);
+  
+  // LCL cadastro dialog state
+  const [showLclDialog, setShowLclDialog] = useState(false);
+  const [lclFormData, setLclFormData] = useState({
+    mbl: '',
+    container: '',
+    armador: '',
+    consignee: '',
+    eta: undefined as Date | undefined
+  });
+  const [isSubmittingLcl, setIsSubmittingLcl] = useState(false);
+  
   const itemsPerPage = 10;
 
   // Status categorization
@@ -1754,6 +1776,24 @@ const ContainerTracking = () => {
                     <div className="w-px h-6 bg-[rgba(255,255,255,.15)]" />
                   </>}
                 
+                {/* Armadores Mapeados Button */}
+                <button 
+                  onClick={() => setShowArmadoresModal(true)} 
+                  className="h-8 px-3 rounded-full bg-[rgba(16,185,129,.2)] text-emerald-400 text-[0.7rem] font-medium flex items-center gap-1.5 border border-emerald-500/30 hover:bg-[rgba(16,185,129,.3)] transition"
+                >
+                  <Ship className="w-3.5 h-3.5" />
+                  Armadores ({getTrackableCarriers().length})
+                </button>
+                
+                {/* Cadastrar LCL Button */}
+                <button 
+                  onClick={() => setShowLclDialog(true)} 
+                  className="h-8 px-3 rounded-full bg-[rgba(6,182,212,.2)] text-cyan-400 text-[0.7rem] font-medium flex items-center gap-1.5 border border-cyan-500/30 hover:bg-[rgba(6,182,212,.3)] transition"
+                >
+                  <BoxIcon className="w-3.5 h-3.5" />
+                  Cadastrar LCL
+                </button>
+                
                 <button onClick={() => setFreeTimeDialogOpen(true)} className="h-8 px-4 rounded-full bg-[#ffc800] text-[#000] text-[0.75rem] font-medium flex items-center gap-1.5 hover:bg-[#ffdc50] transition shadow-[0_0_20px_rgba(255,200,0,.3)]">
                   <Clock className="w-3.5 h-3.5" />
                   Registrar FT
@@ -2156,6 +2196,245 @@ const ContainerTracking = () => {
 
       {/* Register Free Time Dialog */}
       <RegisterFreeTimeDialog open={freeTimeDialogOpen} onOpenChange={setFreeTimeDialogOpen} />
+      
+      {/* Armadores Mapeados Modal */}
+      <Dialog open={showArmadoresModal} onOpenChange={setShowArmadoresModal}>
+        <DialogContent className="max-w-3xl bg-[rgba(5,6,18,.97)] border border-[rgba(255,255,255,.12)]">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-white">
+              <Ship className="w-5 h-5 text-emerald-400" />
+              Armadores Mapeados
+            </DialogTitle>
+            <DialogDescription className="text-gray-400">
+              Lista de armadores com integração de rastreamento via API
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="mt-4 max-h-[60vh] overflow-y-auto">
+            <Table>
+              <TableHeader>
+                <TableRow className="border-b border-[rgba(255,255,255,.08)] hover:bg-transparent">
+                  <TableHead className="text-[#aaaaaa]">Código</TableHead>
+                  <TableHead className="text-[#aaaaaa]">Armador</TableHead>
+                  <TableHead className="text-[#aaaaaa]">País</TableHead>
+                  <TableHead className="text-[#aaaaaa] text-center">Status API</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {getTrackableCarriers().map((carrier) => (
+                  <TableRow key={carrier.code} className="border-b border-[rgba(255,255,255,.05)] hover:bg-[rgba(255,255,255,.03)]">
+                    <TableCell className="font-mono text-sm text-gray-300">
+                      {carrier.code}
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex items-center gap-2">
+                        <span className={cn("px-2 py-0.5 text-xs rounded border", carrier.color)}>
+                          {normalizeArmadorName(carrier.name)}
+                        </span>
+                      </div>
+                    </TableCell>
+                    <TableCell className="text-gray-400 text-sm">
+                      {carrier.country}
+                    </TableCell>
+                    <TableCell className="text-center">
+                      <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
+                        <Check className="w-3 h-3" />
+                        Ativo
+                      </span>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+          
+          <DialogFooter className="mt-4 border-t border-[rgba(255,255,255,.08)] pt-4">
+            <div className="flex items-center justify-between w-full">
+              <span className="text-sm text-gray-400">
+                {getTrackableCarriers().length} armadores com integração ativa
+              </span>
+              <Button variant="outline" onClick={() => setShowArmadoresModal(false)} className="border-[rgba(255,255,255,.1)] text-gray-300 hover:bg-[rgba(255,255,255,.05)]">
+                Fechar
+              </Button>
+            </div>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+      
+      {/* Cadastrar LCL Dialog */}
+      <Dialog open={showLclDialog} onOpenChange={setShowLclDialog}>
+        <DialogContent className="max-w-md bg-[rgba(5,6,18,.97)] border border-[rgba(255,255,255,.12)]">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-white">
+              <BoxIcon className="w-5 h-5 text-cyan-400" />
+              Cadastrar Container LCL
+            </DialogTitle>
+            <DialogDescription className="text-gray-400">
+              Registre manualmente um container Less than Container Load
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="space-y-4 mt-4">
+            <div className="space-y-2">
+              <Label className="text-white">MBL *</Label>
+              <Input
+                placeholder="Ex: HLCUSHA241234567"
+                value={lclFormData.mbl}
+                onChange={(e) => setLclFormData(prev => ({ ...prev, mbl: e.target.value.toUpperCase() }))}
+                className="bg-[rgba(0,0,0,.3)] border-[rgba(255,255,255,.14)] text-white placeholder:text-gray-500"
+              />
+            </div>
+            
+            <div className="space-y-2">
+              <Label className="text-white">Container *</Label>
+              <Input
+                placeholder="Ex: HLCU1234567"
+                value={lclFormData.container}
+                onChange={(e) => setLclFormData(prev => ({ ...prev, container: e.target.value.toUpperCase() }))}
+                className="bg-[rgba(0,0,0,.3)] border-[rgba(255,255,255,.14)] text-white placeholder:text-gray-500"
+              />
+            </div>
+            
+            <div className="space-y-2">
+              <Label className="text-white">Armador *</Label>
+              <Select
+                value={lclFormData.armador}
+                onValueChange={(value) => setLclFormData(prev => ({ ...prev, armador: value }))}
+              >
+                <SelectTrigger className="bg-[rgba(0,0,0,.3)] border-[rgba(255,255,255,.14)] text-white">
+                  <SelectValue placeholder="Selecione o armador" />
+                </SelectTrigger>
+                <SelectContent className="bg-card border border-border z-50">
+                  {getTrackableCarriers().map(carrier => (
+                    <SelectItem key={carrier.code} value={carrier.code}>
+                      {normalizeArmadorName(carrier.name)}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            
+            <div className="space-y-2">
+              <Label className="text-white">Consignee</Label>
+              <Input
+                placeholder="Nome do consignatário"
+                value={lclFormData.consignee}
+                onChange={(e) => setLclFormData(prev => ({ ...prev, consignee: e.target.value }))}
+                className="bg-[rgba(0,0,0,.3)] border-[rgba(255,255,255,.14)] text-white placeholder:text-gray-500"
+              />
+            </div>
+            
+            <div className="space-y-2">
+              <Label className="text-white">ETA</Label>
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button
+                    variant="outline"
+                    className={cn(
+                      "w-full justify-start text-left font-normal bg-[rgba(0,0,0,.3)] border-[rgba(255,255,255,.14)]",
+                      !lclFormData.eta && "text-gray-500"
+                    )}
+                  >
+                    <Clock className="mr-2 h-4 w-4" />
+                    {lclFormData.eta ? format(lclFormData.eta, "dd/MM/yyyy", { locale: ptBR }) : <span>Selecione a data</span>}
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-auto p-0 bg-card border border-border z-50" align="start">
+                  <Calendar
+                    mode="single"
+                    selected={lclFormData.eta}
+                    onSelect={(date) => setLclFormData(prev => ({ ...prev, eta: date }))}
+                    initialFocus
+                    className={cn("p-3 pointer-events-auto")}
+                    locale={ptBR}
+                  />
+                </PopoverContent>
+              </Popover>
+            </div>
+          </div>
+          
+          <DialogFooter className="mt-6 gap-2">
+            <Button 
+              variant="outline" 
+              onClick={() => {
+                setShowLclDialog(false);
+                setLclFormData({ mbl: '', container: '', armador: '', consignee: '', eta: undefined });
+              }} 
+              className="border-[rgba(255,255,255,.1)] text-gray-300 hover:bg-[rgba(255,255,255,.05)]"
+            >
+              Cancelar
+            </Button>
+            <Button 
+              onClick={async () => {
+                if (!lclFormData.mbl || !lclFormData.container || !lclFormData.armador) {
+                  toast({
+                    title: "Campos obrigatórios",
+                    description: "Preencha MBL, Container e Armador",
+                    variant: "destructive"
+                  });
+                  return;
+                }
+                setIsSubmittingLcl(true);
+                try {
+                  const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/olimpo-proxy?action=add_lcl_container`, {
+                    method: 'POST',
+                    headers: {
+                      'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
+                      'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                      mbl_id: lclFormData.mbl,
+                      container: lclFormData.container,
+                      shipping_line: lclFormData.armador,
+                      consignee: lclFormData.consignee,
+                      eta: lclFormData.eta ? format(lclFormData.eta, 'yyyy-MM-dd') : null
+                    })
+                  });
+                  const result = await res.json();
+                  if (result.success) {
+                    toast({
+                      title: "Container LCL cadastrado",
+                      description: `Container ${lclFormData.container} adicionado ao monitoramento`
+                    });
+                    setShowLclDialog(false);
+                    setLclFormData({ mbl: '', container: '', armador: '', consignee: '', eta: undefined });
+                    await fetchMblData();
+                  } else {
+                    toast({
+                      title: "Erro ao cadastrar",
+                      description: result.error || "Falha ao adicionar container LCL",
+                      variant: "destructive"
+                    });
+                  }
+                } catch (error) {
+                  console.error("Error adding LCL container:", error);
+                  toast({
+                    title: "Erro",
+                    description: "Falha ao cadastrar container LCL",
+                    variant: "destructive"
+                  });
+                } finally {
+                  setIsSubmittingLcl(false);
+                }
+              }}
+              disabled={isSubmittingLcl || !lclFormData.mbl || !lclFormData.container || !lclFormData.armador}
+              className="bg-cyan-600 hover:bg-cyan-700 text-white"
+            >
+              {isSubmittingLcl ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Cadastrando...
+                </>
+              ) : (
+                <>
+                  <BoxIcon className="h-4 w-4 mr-2" />
+                  Cadastrar LCL
+                </>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>;
 };
 export default ContainerTracking;
