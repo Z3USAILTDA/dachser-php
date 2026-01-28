@@ -12,7 +12,8 @@ import {
   ShieldAlert, 
   FileCheck,
   ClipboardCheck,
-  MapPin
+  MapPin,
+  Unlock
 } from "lucide-react";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -81,6 +82,11 @@ const getEventIcon = (codigo: string) => {
     return ShieldAlert;
   }
   
+  // Desbloqueio - carga liberada
+  if (upperCode === 'DESBLOQUEIO') {
+    return Unlock;
+  }
+  
   return Clock;
 };
 
@@ -94,6 +100,15 @@ const getEventColor = (codigo: string) => {
       dot: "border-red-500 bg-red-500",
       icon: "text-red-400",
       card: "border-red-500/30 bg-red-500/5"
+    };
+  }
+  
+  // 🟢 Desbloqueios (carga liberada)
+  if (upperCode === 'DESBLOQUEIO') {
+    return {
+      dot: "border-emerald-500 bg-emerald-500",
+      icon: "text-emerald-400",
+      card: "border-emerald-500/30 bg-emerald-500/5"
     };
   }
   

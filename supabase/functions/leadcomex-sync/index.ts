@@ -631,6 +631,36 @@ async function processLeadComexData(
     }
   }
 
+  // Registrar cada DESBLOQUEIO como evento na timeline
+  if (detalhe?.bloqueiosBaixados && detalhe.bloqueiosBaixados.length > 0) {
+    console.log(`[LEADCOMEX] ${detalhe.bloqueiosBaixados.length} desbloqueios para ${hawb}`);
+    
+    for (const desbloqueio of detalhe.bloqueiosBaixados) {
+      if (supabaseUrl && supabaseKey) {
+        try {
+          await fetch(`${supabaseUrl}/functions/v1/mariadb-proxy`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${supabaseKey}`,
+            },
+            body: JSON.stringify({
+              action: 'insert_cct_event',
+              awb: hawb,
+              codigo_evento: 'DESBLOQUEIO',
+              descricao_evento: `Desbloqueio ${desbloqueio.codigo}: ${desbloqueio.descricao}`,
+              data_hora_evento: parseBrazilianDate(desbloqueio.dataHoraDesbloqueio) || new Date().toISOString(),
+              fonte: 'LEADCOMEX',
+              nivel_confianca: 'PRIMARIA',
+            }),
+          });
+        } catch (e) {
+          console.warn(`[LEADCOMEX] Erro ao inserir desbloqueio na timeline:`, e);
+        }
+      }
+    }
+  }
+
   // Log divergências
   if (detalhe?.divergencias && detalhe.divergencias.length > 0) {
     syncStats.divergencias += detalhe.divergencias.length;
