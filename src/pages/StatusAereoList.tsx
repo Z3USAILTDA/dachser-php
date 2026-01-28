@@ -164,7 +164,7 @@ const StatusAereoList = () => {
                           }`}>
                             {item.último_status || 'N/A'}
                           </span>
-                          {['083', '147', '160', '615', '865', '016'].some(prefix => item.awb?.startsWith(prefix)) && (
+                          {['083', '147', '160', '615', '865', '016', '996'].some(prefix => item.awb?.startsWith(prefix)) && (
                             <TooltipProvider>
                               <Tooltip>
                                 <TooltipTrigger asChild>
