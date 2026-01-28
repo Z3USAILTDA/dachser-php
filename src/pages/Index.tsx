@@ -121,6 +121,7 @@ const getTrackingUrl = (airlineCode: string, fullAwb: string): string | null => 
     "147": () => `https://ebooking.champ.aero/trace/AT/trace.asp`,
     "157": () => `https://www.qrcargo.com/s/track-your-shipment`,
     "160": () => `https://www.cathaycargo.com/en-us/track-and-trace.html`,
+    "176": (iata, awb) => `https://eskycargo.emirates.com/app/offerandorder/#/shipments/list?type=D&values=${iata}${awb}`,
     "369": (iata, awb) => `https://jumpseat.atlasair.com/aa/tracktracehtml/TrackTrace.html?pe=${iata}&se=${awb}`,
     "549": (iata, awb) => `https://www.latamcargo.com/en/trackshipment?docNumber=${awb}&docPrefix=${iata}&soType=MAWB`,
     "577": (iata, awb) => `https://azulcargoexpress.smartkargo.com/FrmAWBTracking.aspx?AWBPrefix=${iata}&AWBno=${awb}`,
