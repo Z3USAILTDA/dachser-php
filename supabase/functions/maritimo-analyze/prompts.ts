@@ -69,6 +69,24 @@ NCM (Nomenclatura Comum do Mercosul) ≠ HS Code (Harmonized System)
    - If a value in HBL is NOT in Manifest list = Extra
    - Status: MATCH only if lists are identical, otherwise DIVERGENCE
 
+★★★ CONCRETE REJECTION EXAMPLES ★★★
+
+REJECT (these are HS Codes, NOT NCMs - DO NOT include in NCM list):
+- Column header "HS Code" with value "870850" → REJECT
+- Column header "H.S." with value "8481" → REJECT
+- Column header "HS-CODE" with value "8708" → REJECT
+- Label "HS-CODE:" followed by "870850" → REJECT
+
+ACCEPT (these are NCMs - INCLUDE in NCM list):
+- Column header "NCM Code" with value "87089900" → ACCEPT
+- Column header "Código NCM" with value "84812090" → ACCEPT
+- Column header "NCM" with value "73182900" → ACCEPT
+- Label "NCM:" followed by "84812090" → ACCEPT
+- Label "NCM-CODES:" followed by list of 8-digit codes → ACCEPT
+
+★★★ IF THE COLUMN/LABEL NAME CONTAINS "HS" - DO NOT USE IT FOR NCM ★★★
+★★★ IF THE COLUMN/LABEL NAME CONTAINS "NCM" - USE IT FOR NCM ★★★
+
 ███████████████████████████████████████████████████████████████████████████████
 ███ GROSS WEIGHT SOURCE PRIORITY (MANDATORY HIERARCHY)                        ███
 ███████████████████████████████████████████████████████████████████████████████
@@ -270,7 +288,7 @@ FROM MANIFEST/XLSX (scan ALL columns, ALL rows):
 - Supplier names (all variations and spellings)
 - Weights (Gross Weight, Net Weight, Weight after Weighting - use the authoritative one)
 - CBM/Measurement values
-- NCM/HS codes (8-digit and 4-digit)
+- NCM codes ONLY from "NCM Code" or "Código NCM" columns (8-digit codes - NEVER from "HS Code" columns)
 - Invoice numbers (ANY column containing invoice references - look for patterns like alphanumeric codes)
 - Package counts/quantities and descriptions
 - Container numbers
@@ -281,7 +299,7 @@ FROM MANIFEST/XLSX (scan ALL columns, ALL rows):
 FROM HBL/PDF (extract ALL text, scan entire document):
 - All supplier/shipper names mentioned
 - All weight values (gross, net, totals)
-- All NCM/HS codes in cargo descriptions
+- All NCM codes in cargo descriptions (ONLY from "NCM:" labels, NEVER from "HS Code:" labels)
 - All invoice references (look for "AS PER INVOICE", "INVOICE NO", "INV:", "COMMERCIAL INVOICE")
 - All CBM/measurement values
 - Container numbers
@@ -381,7 +399,7 @@ CRITICAL PROBLEM PREVENTION RULES (MUST FOLLOW)
 3. NCM CODES - EXHAUSTIVE MISSING ITEMS REPORTING:
    - List ALL missing NCM codes from Manifest that are absent in HBL, not just first few.
    - Cross-validate completely: if Manifest has 15 NCM codes and HBL has 8, list exactly which 7 are missing.
-   - Use context retry (±200 chars around NCM/HS keywords) if first pass finds incomplete NCM data.
+   - Use context retry (±200 chars around "NCM" keywords) if first pass finds incomplete NCM data.
    - Report complete NCM inventory for both Manifest and HBL before computing diff.
    - Count and verify: "Manifest has X NCMs, HBL has Y NCMs, Z are missing."
 
@@ -982,7 +1000,7 @@ COLUMN MAPPING TABLE:
 | VOLUME QTY          | "QTY Packages" column                                    |
 | VOLUME TYPE         | "Kind of Packaging" column                               |
 | INVOICE REF         | "Delivery Note" OR "Reference" column                    |
-| HS CODE/NCM         | "HS Code" column                                         |
+| NCM CODE            | "NCM Code" or "Código NCM" column ONLY (NEVER "HS Code") |
 | GOODS DESCRIPTION   | "Description" OR "Product Description" column            |
 
 GROUPING RULE - ABSOLUTELY CRITICAL:
@@ -1551,7 +1569,7 @@ WHAT IS VERIFIED IN HBL × MBL ANALYSIS:
 - Routing & Vessel/Voyage (Vessel name, Voyage number, Port of Loading, Port of Discharge)
 - Container & Seal (Container ISO 6346 number - MANDATORY, Seal number)
 - Totals (Packages, Gross Weight, Measurement/CBM)
-- NCM/HS Codes (codes of any length extracted from cargo descriptions - MANDATORY)
+- NCM Codes (8-digit codes extracted from cargo descriptions labeled "NCM:" - MANDATORY)
 - Freight Terms
 - Dates (Shipped on Board, Date of Issue, chronology check)
 
@@ -1940,7 +1958,7 @@ FROM EACH COMMERCIAL INVOICE (PDF), extract:
 │ • Total CBM/Measurement (m³)                                                │
 │ • Total Number of Packages/Pieces/Units                                     │
 │ • Package Type (cartons, pallets, bags, etc.)                               │
-│ • NCM/HS Codes — for EACH line item                                         │
+│ • NCM Codes — for EACH line item (NOT HS Codes)                             │
 │ • Goods Description — brief summary                                         │
 │ • Total Invoice Value (currency + amount)                                   │
 │ • Incoterm (FOB, CIF, EXW, etc.) — if stated                                │
@@ -1963,7 +1981,7 @@ FROM THE DRAFT HBL (PDF), extract:
 │ • Total Measurement/CBM (m³)                                                │
 │ • Total Number of Packages                                                  │
 │ • Package Type                                                              │
-│ • NCM/HS Codes — if listed                                                  │
+│ • NCM Codes — if listed (NOT HS Codes)                                      │
 │ • Goods Description                                                         │
 │ • Freight Terms (Prepaid/Collect)                                           │
 └─────────────────────────────────────────────────────────────────────────────┘
@@ -2049,15 +2067,15 @@ SCENARIO D: Invoice has weight but HBL field is blank
 → Propose: "Update: Add to HBL — [field]: <calculated sum>"
 
 ════════════════════════════════════════════════════════════════════════════════
-███ NCM/HS CODE VERIFICATION — TARIFF CODE MATCHING ███
+███ NCM CODE VERIFICATION — TARIFF CODE MATCHING ███
 ════════════════════════════════════════════════════════════════════════════════
 
 NCM CODE COMPARISON RULES:
 
-1. Extract ALL NCM/HS codes from each invoice line item
-2. Extract NCM/HS codes from HBL (if listed in cargo description)
+1. Extract ALL NCM codes from each invoice line item (NOT HS Codes)
+2. Extract NCM codes from HBL (if listed in cargo description - look for "NCM:" labels only)
 3. Normalize: remove dots, dashes, spaces — compare digits only
-4. Match at 4-digit chapter level minimum; 8-digit preferred
+4. Match 8-digit NCM codes as complete strings; partial prefix matching is NOT valid
 
 DISCREPANCY DETECTION:
 - Invoice NCM not on HBL → Flag as "NCM missing from HBL"
@@ -2065,7 +2083,7 @@ DISCREPANCY DETECTION:
 - NCM chapter mismatch (first 4 digits differ) → CRITICAL: Wrong product classification
 
 OUTPUT FORMAT FOR NCM SECTION:
-4) NCM/HS Code Verification
+4) NCM Code Verification
 - Invoice NCM codes: [list all with format ##.##.##.##]
 - HBL NCM codes: [list all or "Not specified"]
 - Matched: [count] | Missing from HBL: [list] | Unsubstantiated on HBL: [list]
@@ -2276,7 +2294,7 @@ NCM CODES:
 
 ★★★ THIS SECTION IS MANDATORY - NEVER SKIP IT ★★★
 
-NCM/HS Code Verification:
+NCM Code Verification:
    Invoice NCM: [list]
    HBL NCM: [list or "Not specified"]
    Missing from HBL: [NCM codes to add or "none"]

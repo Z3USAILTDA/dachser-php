@@ -414,19 +414,24 @@ async function analyzeWithAnthropic(
 ██ NCM CODES - CRITICAL EXTRACTION FROM ALL DOCUMENTS (PDF/XLSX)                     ██
 ██████████████████████████████████████████████████████████████████████████████████████
 
-★★★ NCM/HS CODE EXTRACTION - SCAN ALL PAGES ★★★
+★★★ NCM CODE EXTRACTION - SCAN ALL PAGES ★★★
+
+CRITICAL: NCM (Nomenclatura Comum do Mercosul) ≠ HS Code (Harmonized System)
+- NCM: Brazilian 8-digit tariff code (e.g., 84812090, 73182900)
+- HS Code: International 4-6 digit code (e.g., 8481, 870850)
+- ONLY EXTRACT NCM CODES - NEVER USE HS CODES FOR COMPARISON
 
 1. FOR MANIFEST × HBL ANALYSIS:
-   - MANIFEST: Extract ALL NCM/HS Code values from the XLSX file
-   - HBL: Extract ALL NCM/HS Code values from the PDF document
+   - MANIFEST: Extract ONLY from "NCM Code" or "Código NCM" columns (NEVER from "HS Code" columns)
+   - HBL: Extract ONLY values labeled "NCM:" or "NCM-CODES:" (NEVER from "HS Code:" labels)
    
 2. FOR HBL × MBL ANALYSIS:
-   - HBL: Extract ALL NCM/HS Code values from the HBL PDF document
-   - MBL: Extract ALL NCM/HS Code values from the MBL PDF document
+   - HBL: Extract ONLY NCM Code values from the HBL PDF document (from "NCM:" labels)
+   - MBL: Extract ONLY NCM Code values from the MBL PDF document (from "NCM:" labels)
    - CRITICAL: Both HBL and MBL are PDFs - scan ALL PAGES (not just page 1)
    - NCM codes are often on LATER PAGES (page 4, 5, 6 in "Rider" or "Continuation" sections)
    - Look for "NCM-CODES:" section label followed by a vertical list of codes
-   - Look for "HS-CODE:" labels in cargo descriptions
+   - IGNORE "HS-CODE:" labels in cargo descriptions - these are NOT NCMs
    - Look for semicolon-separated 8-digit codes (e.g., "74152900; 84819090")
 
 3. EXTRACTION RULES:
