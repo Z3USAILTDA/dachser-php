@@ -1,97 +1,86 @@
 
 
-# Plano: Corrigir Mapeamento de Status LeadComex para Timeline CCT
+# Correção do Status "ARR - Destino" no Tooltip
 
 ## Problema Identificado
 
-A timeline mostra "Entregue" incorretamente porque:
+O AWB **176-21540853** está salvo corretamente no banco com o status **"ARR - Destino"**, porém o tooltip está mostrando **"Chegou na conexão"** ao invés de **"Chegou em seu destino final"**.
 
-### Evidência Real (CGN-16367758)
-| Campo LeadComex | Valor | Mapeamento Atual |
-|-----------------|-------|------------------|
-| `situacaoLead` | "Processado" | → ENTREGUE ❌ |
-| `situacaoPortal` | "Recepcionada" | → NULL (não existe) |
-
-### Lógica Atual (linha 586)
-```typescript
-const eventMapping = STATUS_TO_CCT_EVENT[situacaoLead] || STATUS_TO_CCT_EVENT[situacaoPortal];
-```
-
-O código prioriza `situacaoLead` ("Processado" → ENTREGUE), ignorando `situacaoPortal` ("Recepcionada") que é o status operacional real.
-
-## Causa Raiz
-
-1. **`situacaoLead`** = Status interno do sistema LeadComex (ex: "Processado" significa que a carga foi processada no sistema, não que foi entregue fisicamente)
-
-2. **`situacaoPortal`** = Status operacional real da carga no portal CCT (ex: "Recepcionada" = carga recebida no terminal)
-
-3. Mapeamento incompleto: "Recepcionada" (feminino) não está mapeado, apenas "Recepcionado"
+**Causa raiz:** A função `getStatusFromEvent()` na linha 1651-1683 de `src/pages/Index.tsx` não diferencia entre "ARR - Destino" e "ARR - Conexão". Ela extrai apenas os 3 primeiros caracteres do status ("ARR") e sempre mapeia para "Chegou na conexão".
 
 ## Solução
 
-### 1. Inverter prioridade: usar `situacaoPortal` como fonte primária
+Atualizar a função `getStatusFromEvent()` para reconhecer os sufixos de status ARR antes de fazer o mapeamento genérico.
 
-O status do portal CCT (`situacaoPortal`) reflete a situação operacional real da carga. `situacaoLead` é apenas um indicador interno do sistema.
+---
 
-### 2. Adicionar variantes femininas ao mapeamento
+## Detalhes Técnicos
 
-A API retorna tanto "Recepcionado" quanto "Recepcionada" dependendo do contexto.
+### Arquivo a Modificar
+- `src/pages/Index.tsx`
 
-## Mudanças
+### Mudança na Função `getStatusFromEvent()`
 
-### Arquivo: `supabase/functions/leadcomex-sync/index.ts`
-
-**1. Adicionar variantes femininas ao mapeamento (linhas 42-51):**
-
+**Antes (linhas 1651-1670):**
 ```typescript
-const STATUS_TO_CCT_EVENT: Record<string, { codigo: string; descricao: string }> = {
-  'Informado': { codigo: 'MANIFESTADO', descricao: 'Conhecimento manifestado no CCT' },
-  'Informada': { codigo: 'MANIFESTADO', descricao: 'Conhecimento manifestado no CCT' },
-  'Em área de transferência': { codigo: 'AREA_TRANSFERENCIA', descricao: 'Carga em área de transferência' },
-  'Chegada informada': { codigo: 'CHEGADA_INFORMADA', descricao: 'Chegada da carga informada ao terminal' },
-  'Recepcionado': { codigo: 'RECEPCIONADO', descricao: 'Carga recepcionada no terminal' },
-  'Recepcionada': { codigo: 'RECEPCIONADO', descricao: 'Carga recepcionada no terminal' }, // ADICIONAR
-  'Em trânsito terrestre': { codigo: 'EM_TRANSITO', descricao: 'Carga em trânsito terrestre' },
-  'Entregue': { codigo: 'ENTREGUE', descricao: 'Carga entregue ao destinatário' },
-  // Remover 'Processado' → não é status de entrega física
+const getStatusFromEvent = (lastEvent: string): string => {
+  if (!lastEvent) return "-";
+  const eventLower = lastEvent.toLowerCase();
+  const codeMatch = lastEvent.match(/^\(?([A-Z]{3})\)?/);
+  if (codeMatch) {
+    const code = codeMatch[1];
+    const statusMap: Record<string, string> = {
+      BKD: "Reserva confirmada",
+      ...
+      ARR: "Chegou na conexão",  // <- sempre mostra conexão
+      ...
+    };
+    return statusMap[code] || "-";
+  }
+  ...
 };
 ```
 
-**2. Inverter prioridade do mapeamento (linha 586):**
-
+**Depois:**
 ```typescript
-// Priorizar situacaoPortal (status operacional real) sobre situacaoLead (status interno)
-const eventMapping = STATUS_TO_CCT_EVENT[situacaoPortal] || STATUS_TO_CCT_EVENT[situacaoLead];
+const getStatusFromEvent = (lastEvent: string): string => {
+  if (!lastEvent) return "-";
+  
+  // NOVA LÓGICA: Verificar sufixos ARR primeiro
+  const upperEvent = lastEvent.toUpperCase().trim();
+  if (upperEvent === "ARR - DESTINO") {
+    return "Chegou em seu destino final";
+  }
+  if (upperEvent === "ARR - CONEXÃO") {
+    return "Chegou na conexão";
+  }
+  
+  // Lógica existente continua...
+  const eventLower = lastEvent.toLowerCase();
+  const codeMatch = lastEvent.match(/^\(?([A-Z]{3})\)?/);
+  if (codeMatch) {
+    const code = codeMatch[1];
+    const statusMap: Record<string, string> = {
+      BKD: "Reserva confirmada",
+      ...
+      ARR: "Chegou na conexão",  // fallback para ARR sem sufixo
+      ...
+    };
+    return statusMap[code] || "-";
+  }
+  ...
+};
 ```
 
-**3. Adicionar log para debug:**
+---
 
-```typescript
-console.log(`[LEADCOMEX] Status para ${hawb}: Lead="${situacaoLead}", Portal="${situacaoPortal}" → ${eventMapping?.codigo || 'SEM_MAPEAMENTO'}`);
-```
+## Resultado Esperado
 
-## Fluxo Corrigido
+| Status no Banco | Código Exibido | Descrição no Tooltip |
+|-----------------|----------------|----------------------|
+| ARR - Destino | ARR - DESTINO | Chegou em seu destino final |
+| ARR - Conexão | ARR - CONEXÃO | Chegou na conexão |
+| ARR (sem sufixo) | ARR | Chegou na conexão |
 
-### Exemplo CGN-16367758:
-```text
-ANTES:
-  situacaoLead="Processado" → ENTREGUE (prioridade 1)
-  situacaoPortal="Recepcionada" → ignorado
-
-DEPOIS:
-  situacaoPortal="Recepcionada" → RECEPCIONADO (prioridade 1)
-  situacaoLead="Processado" → ignorado (não está mais no mapeamento)
-```
-
-## Arquivos a Modificar
-
-| Arquivo | Mudança |
-|---------|---------|
-| `supabase/functions/leadcomex-sync/index.ts` | Adicionar "Recepcionada" ao mapeamento, remover "Processado", inverter prioridade situacaoPortal/situacaoLead |
-
-## Validação
-
-1. Executar `refresh-all-active` na página de Logs LeadComex
-2. Verificar nos logs a mensagem: `Status para XXX: Lead="Processado", Portal="Recepcionada" → RECEPCIONADO`
-3. Abrir processo CGN-16367758 e confirmar que timeline mostra "Recepcionado" (não "Entregue")
+O AWB 176-21540853 passará a mostrar corretamente **"Chegou em seu destino final"** no tooltip.
 
