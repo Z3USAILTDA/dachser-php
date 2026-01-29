@@ -35,13 +35,7 @@ import { EmailClienteRegrasDialog } from "@/components/air/EmailClienteRegrasDia
 import { Checkbox } from "@/components/ui/checkbox";
 import { useToast } from "@/hooks/use-toast";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import type { User, Session } from "@supabase/supabase-js";
 import DashboardCards, { CardFilterType } from "@/components/DashboardCards";
 import dachserBg from "@/assets/dachser-background.jpg";
@@ -117,7 +111,8 @@ const getTrackingUrl = (airlineCode: string, fullAwb: string): string | null => 
   const urlBuilders: Record<string, (iata: string, awb: string) => string> = {
     "001": (iata, awb) => `https://www.aacargo.com/shipping/tracking.jhtml?search=Search&awb=${iata}${awb}`,
     "014": (iata, awb) => `https://cargo.aircanada.com/Tracking?shipmentCode=${iata}${awb}`,
-    "006": (iata, awb) => `https://www.deltacargo.com/Cargo/home/trackShipment?awbNumber=${iata}${awb}&timeZoneOffset=180&t=${Date.now()}`,
+    "006": (iata, awb) =>
+      `https://www.deltacargo.com/Cargo/home/trackShipment?awbNumber=${iata}${awb}&timeZoneOffset=180&t=${Date.now()}`,
     "016": (iata, awb) => `https://www.unitedcargo.com/en/us/track/awb/${iata}-${awb}`,
     "020": (iata, awb) => `https://www.lufthansa-cargo.com/en/eservices/etracking/tracking/-/awb/${iata}/${awb}`,
     "045": (iata, awb) => `https://www.latamcargo.com/en/trackshipment?docNumber=${awb}&docPrefix=${iata}&soType=MAWB`,
@@ -130,16 +125,20 @@ const getTrackingUrl = (airlineCode: string, fullAwb: string): string | null => 
     "147": () => `https://ebooking.champ.aero/trace/AT/trace.asp`,
     "157": () => `https://www.qrcargo.com/s/track-your-shipment`,
     "160": () => `https://www.cathaycargo.com/en-us/track-and-trace.html`,
-    "176": (iata, awb) => `https://eskycargo.emirates.com/app/offerandorder/#/shipments/list?type=D&values=${iata}${awb}`,
+    "176": (iata, awb) =>
+      `https://eskycargo.emirates.com/app/offerandorder/#/shipments/list?type=D&values=${iata}${awb}`,
     "369": (iata, awb) => `https://jumpseat.atlasair.com/aa/tracktracehtml/TrackTrace.html?pe=${iata}&se=${awb}`,
     "549": (iata, awb) => `https://www.latamcargo.com/en/trackshipment?docNumber=${awb}&docPrefix=${iata}&soType=MAWB`,
     "577": (iata, awb) => `https://azulcargoexpress.smartkargo.com/FrmAWBTracking.aspx?AWBPrefix=${iata}&AWBno=${awb}`,
     "605": () => `https://cargo.skyairline.com/rastreo`,
     "615": (iata, awb) => `https://aviationcargo.dhl.com/track/${iata}-${awb}`,
-    "724": (iata, awb) => `https://offerandorder.swissworldcargo.com/app/offerandorder/#/shipments/list?type=D&values=${iata}${awb}`,
+    "724": (iata, awb) =>
+      `https://offerandorder.swissworldcargo.com/app/offerandorder/#/shipments/list?type=D&values=${iata}${awb}`,
     "729": (iata, awb) => `https://cargoapps.aviancacargo.com/#/e-tracking/details/${iata}-${awb}`,
     "881": (iata, awb) => `https://www.condor.com/eu/en/cargo/tracking.jsp?awb=${iata}${awb}`,
     "996": (iata, awb) => `https://parcelsapp.com/en/tracking/ist?type=D&values=${iata}${awb}`,
+    "235": (iata, awb) =>
+      `https://www.turkishcargo.com/en/online-services/shipment-tracking?quick=True&awbInput=${iata}-${awb}`,
   };
 
   const builder = urlBuilders[airlineCode];
@@ -204,19 +203,48 @@ const getStatusCode = (lastEvent: string | null): string => {
 
   // Se o lastEvent já é um código de status conhecido (4 caracteres ou menos), retorna como está
   const knownStatusCodes = [
-    "OFLD", "NIL", "NIF", "DIS", "DLV", "DEP", "ARR", "RCF", "RCS", 
-    "MAN", "NFD", "AWD", "BKD", "BKF", "AWB", "FWB", "FOH", "TFD", "RCT", 
-    "RCP", "PRE", "LOF", "TDE", "CCD", "ASN", "MIS", "TFS", "POD", "TRM",
-    "ARRT", "CAN", "DISCREPANCY",
-    "ARR - DESTINO", "ARR - CONEXÃO"
+    "OFLD",
+    "NIL",
+    "NIF",
+    "DIS",
+    "DLV",
+    "DEP",
+    "ARR",
+    "RCF",
+    "RCS",
+    "MAN",
+    "NFD",
+    "AWD",
+    "BKD",
+    "BKF",
+    "AWB",
+    "FWB",
+    "FOH",
+    "TFD",
+    "RCT",
+    "RCP",
+    "PRE",
+    "LOF",
+    "TDE",
+    "CCD",
+    "ASN",
+    "MIS",
+    "TFS",
+    "POD",
+    "TRM",
+    "ARRT",
+    "CAN",
+    "DISCREPANCY",
+    "ARR - DESTINO",
+    "ARR - CONEXÃO",
   ];
   const upperEvent = lastEvent.toUpperCase().trim();
-  
+
   // Preserve ARR status with suffix (ARR - Destino, ARR - Conexão)
-  if (upperEvent.startsWith('ARR - ')) {
+  if (upperEvent.startsWith("ARR - ")) {
     return upperEvent;
   }
-  
+
   if (knownStatusCodes.includes(upperEvent)) {
     return upperEvent;
   }
@@ -291,7 +319,7 @@ const getTimelineProgress = (lastEvent: string | null): number => {
     ARRIVAL: 100,
     ARRT: 95,
     TDE: 90,
-    
+
     // Status finais pós-ARR (mantém em 100%)
     NFD: 100,
     NOTIFIED: 100,
@@ -435,7 +463,6 @@ const Index = () => {
     return () => subscription.unsubscribe();
   }, []);
 
-
   const handleLogout = async () => {
     await supabase.auth.signOut();
     toast({
@@ -498,9 +525,9 @@ const Index = () => {
         // Deduplicate by AWB + HAWB combination - keep only the most recent record
         // An AWB can have multiple houses, so we use awb+hawb as the unique key
         const deduplicatedData = convertedData.reduce((acc: AWBData[], current: AWBData) => {
-          const currentKey = `${current.awb}|${current.hawb || '-'}`;
-          const existingIndex = acc.findIndex(item => {
-            const itemKey = `${item.awb}|${item.hawb || '-'}`;
+          const currentKey = `${current.awb}|${current.hawb || "-"}`;
+          const existingIndex = acc.findIndex((item) => {
+            const itemKey = `${item.awb}|${item.hawb || "-"}`;
             return itemKey === currentKey;
           });
           if (existingIndex === -1) {
@@ -534,7 +561,7 @@ const Index = () => {
     setIsLoadingDbStats(true);
     try {
       const { data, error } = await supabase.functions.invoke("fetch-master-dados-stats");
-      
+
       if (error) {
         console.error("Error fetching db stats:", error);
         return;
@@ -669,7 +696,9 @@ const Index = () => {
               // Mark AWB as being retracked
               setRetrackingAwbs((prev) => new Set(prev).add(awbNumber));
 
-              console.log(`Re-tracking AWB: ${awbNumber}, HAWB: ${itemHawb}, Analista: ${itemNomeAnalista}, Email Analista: ${itemEmailAnalista}`);
+              console.log(
+                `Re-tracking AWB: ${awbNumber}, HAWB: ${itemHawb}, Analista: ${itemNomeAnalista}, Email Analista: ${itemEmailAnalista}`,
+              );
 
               const { data: trackData, error: trackError } = await supabase.functions.invoke("track-awb", {
                 body: { awb: awbNumber, airlineCode },
@@ -684,7 +713,7 @@ const Index = () => {
                 // Extract DEP timestamp from carrier data when status is DEP
                 const statusCode = trackData.data.lastStatus?.code || trackData.data.status || "";
                 const depTimestamp = statusCode === "DEP" ? trackData.data.lastStatus?.timestamp : null;
-                
+
                 await supabase.functions.invoke("add-awb-to-status", {
                   body: {
                     mawb: awbNumber,
@@ -704,10 +733,12 @@ const Index = () => {
                 // Normalize both statuses to uppercase for comparison to avoid false positives (e.g., "ERRO" vs "Erro")
                 const normalizedOldStatus = (oldStatus || "").toUpperCase().trim();
                 const normalizedNewStatus = (newStatus || "").toUpperCase().trim();
-                
+
                 // CRITICAL: Skip if normalized statuses are the same (case-only difference)
                 if (normalizedOldStatus === normalizedNewStatus) {
-                  console.log(`[EMAIL SKIP] Case-only difference for ${awbNumber}: "${oldStatus}" vs "${newStatus}" - both normalize to "${normalizedOldStatus}"`);
+                  console.log(
+                    `[EMAIL SKIP] Case-only difference for ${awbNumber}: "${oldStatus}" vs "${newStatus}" - both normalize to "${normalizedOldStatus}"`,
+                  );
                 } else {
                   console.log(`Status change detected for ${awbNumber}: ${oldStatus} -> ${newStatus}`);
                   console.log("Sending individual email for AWB:", awbNumber, "HAWB:", itemHawb);
@@ -734,25 +765,28 @@ const Index = () => {
 
                   // Check if email enable timestamp is still valid (within timeout period)
                   const emailEnableAge = Date.now() - emailEnableTimestampRef.current;
-                  const isEmailTimestampValid = emailEnableAge < EMAIL_ENABLE_TIMEOUT_MS && emailEnableTimestampRef.current > 0;
-                  console.log(`[EMAIL DECISION] Email enable age: ${Math.round(emailEnableAge / 1000)}s, Valid: ${isEmailTimestampValid}`);
+                  const isEmailTimestampValid =
+                    emailEnableAge < EMAIL_ENABLE_TIMEOUT_MS && emailEnableTimestampRef.current > 0;
+                  console.log(
+                    `[EMAIL DECISION] Email enable age: ${Math.round(emailEnableAge / 1000)}s, Valid: ${isEmailTimestampValid}`,
+                  );
 
                   // Send individual email for this AWB - ONLY if user explicitly clicked button AND emails are enabled AND timestamp is valid
                   if (shouldSendEmailsRef.current && EMAIL_SENDING_ENABLED && isEmailTimestampValid) {
                     // Check if email was already sent for this AWB+status combination to prevent duplicates
                     const emailKey = `${awbNumber}-${normalizedNewStatus}`;
                     if (emailsSentRef.current.has(emailKey)) {
-                      console.log(`[EMAIL SKIPPED DUPLICATE] Email already sent for ${emailKey} - preventing duplicate`);
+                      console.log(
+                        `[EMAIL SKIPPED DUPLICATE] Email already sent for ${emailKey} - preventing duplicate`,
+                      );
                     } else {
                       // Mark as sent BEFORE sending to prevent race conditions
                       emailsSentRef.current.add(emailKey);
-                      
+
                       // Use email_cliente directly from the item
                       const customerEmail = itemEmailCliente || undefined;
 
-                      console.log(
-                        `[EMAIL SENDING] Customer email for ${awbNumber}: email=${customerEmail}`,
-                      );
+                      console.log(`[EMAIL SENDING] Customer email for ${awbNumber}: email=${customerEmail}`);
 
                       try {
                         const { data: emailData, error: emailError } = await supabase.functions.invoke(
@@ -790,7 +824,9 @@ const Index = () => {
                       await new Promise((resolve) => setTimeout(resolve, 60000));
                     }
                   } else {
-                    console.log(`[EMAIL SKIPPED] AWB ${awbNumber} - shouldSendEmailsRef=${shouldSendEmailsRef.current}, EMAIL_SENDING_ENABLED=${EMAIL_SENDING_ENABLED}, timestampValid=${Date.now() - emailEnableTimestampRef.current < EMAIL_ENABLE_TIMEOUT_MS}`);
+                    console.log(
+                      `[EMAIL SKIPPED] AWB ${awbNumber} - shouldSendEmailsRef=${shouldSendEmailsRef.current}, EMAIL_SENDING_ENABLED=${EMAIL_SENDING_ENABLED}, timestampValid=${Date.now() - emailEnableTimestampRef.current < EMAIL_ENABLE_TIMEOUT_MS}`,
+                    );
                   }
                 }
 
@@ -851,7 +887,7 @@ const Index = () => {
 
         // Show completion popup after retracking finishes
         setShowCompletionPopup(true);
-        
+
         // CRITICAL: Reset email flags after processing completes
         // This prevents emails from being sent on automatic/background processing
         console.log("[EMAIL CONTROL] Retracking complete - disabling email sending");
@@ -1085,25 +1121,30 @@ const Index = () => {
 
                 // Check if email enable timestamp is still valid
                 const emailEnableAgeNew = Date.now() - emailEnableTimestampRef.current;
-                const isEmailTimestampValidNew = emailEnableAgeNew < EMAIL_ENABLE_TIMEOUT_MS && emailEnableTimestampRef.current > 0;
-                console.log(`[EMAIL DECISION NEW AWB] Email enable age: ${Math.round(emailEnableAgeNew / 1000)}s, Valid: ${isEmailTimestampValidNew}`);
+                const isEmailTimestampValidNew =
+                  emailEnableAgeNew < EMAIL_ENABLE_TIMEOUT_MS && emailEnableTimestampRef.current > 0;
+                console.log(
+                  `[EMAIL DECISION NEW AWB] Email enable age: ${Math.round(emailEnableAgeNew / 1000)}s, Valid: ${isEmailTimestampValidNew}`,
+                );
 
                 // Send email for new AWB - ONLY if user explicitly clicked button AND emails are enabled AND timestamp valid
                 if (shouldSendEmailsRef.current && EMAIL_SENDING_ENABLED && isEmailTimestampValidNew) {
                   // Check if email was already sent for this AWB+status combination to prevent duplicates
                   const emailKey = `${awb.awb}-${newStatus.toUpperCase()}`;
                   if (emailsSentRef.current.has(emailKey)) {
-                    console.log(`[EMAIL SKIPPED DUPLICATE NEW AWB] Email already sent for ${emailKey} - preventing duplicate`);
+                    console.log(
+                      `[EMAIL SKIPPED DUPLICATE NEW AWB] Email already sent for ${emailKey} - preventing duplicate`,
+                    );
                   } else {
                     // Mark as sent BEFORE sending to prevent race conditions
                     emailsSentRef.current.add(emailKey);
-                    
+
                     try {
                       console.log(`[EMAIL SENDING NEW AWB] Sending email for ${awb.awb}...`);
                       const { data: emailData, error: emailError } = await supabase.functions.invoke(
                         "send-status-change-email",
                         {
-                          body: { 
+                          body: {
                             statusChanges: [statusChange],
                             analystEmail: awb.email_analista || null,
                           },
@@ -1132,7 +1173,9 @@ const Index = () => {
                     await new Promise((resolve) => setTimeout(resolve, 60000));
                   }
                 } else {
-                  console.log(`[EMAIL SKIPPED NEW AWB] AWB ${awb.awb} - shouldSendEmailsRef=${shouldSendEmailsRef.current}, EMAIL_SENDING_ENABLED=${EMAIL_SENDING_ENABLED}, timestampValid=${isEmailTimestampValidNew}`);
+                  console.log(
+                    `[EMAIL SKIPPED NEW AWB] AWB ${awb.awb} - shouldSendEmailsRef=${shouldSendEmailsRef.current}, EMAIL_SENDING_ENABLED=${EMAIL_SENDING_ENABLED}, timestampValid=${isEmailTimestampValidNew}`,
+                  );
                 }
 
                 // Step 4: Remove from queue after successful processing
@@ -1273,10 +1316,10 @@ const Index = () => {
         title: "Atualizando dados",
         description: "Buscando dados mais recentes do banco...",
       });
-      
+
       // Apenas atualiza os dados da tabela t_status_aereo (sem re-rastreio)
       await fetchStatusAereoData();
-      
+
       toast({
         title: "Dados atualizados",
         description: "A lista foi atualizada com os dados mais recentes.",
@@ -1428,7 +1471,7 @@ const Index = () => {
           // Extract DEP timestamp from carrier data when status is DEP
           const statusCode = data.data.lastStatus?.code || data.data.status || "";
           const depTimestamp = statusCode === "DEP" ? data.data.lastStatus?.timestamp : null;
-          
+
           const { data: dbData, error: dbError } = await supabase.functions.invoke("add-awb-to-status", {
             body: {
               mawb: updatedAwb.awb,
@@ -1707,7 +1750,7 @@ const Index = () => {
   const filteredAwbs = React.useMemo(() => {
     // Separate COMPANY_NOT_REGISTERED AWBs to append at the end
     const companyNotRegisteredAwbs: AWBData[] = [];
-    
+
     let awbs = statusAereoData.filter((awb) => {
       const searchLower = searchTerm.toLowerCase();
       const matchesSearch =
@@ -1723,24 +1766,44 @@ const Index = () => {
 
       // Only show AWBs with these specific status codes
       const allowedStatuses = [
-        "BKD", "BKF", "AWB", "RCS", "MAN", "DEP", "FOH", "TFD", 
-        "RCT", "RCP", "PRE", "LOF", "ARRT", "TDE", "ARR", "RCF",
+        "BKD",
+        "BKF",
+        "AWB",
+        "RCS",
+        "MAN",
+        "DEP",
+        "FOH",
+        "TFD",
+        "RCT",
+        "RCP",
+        "PRE",
+        "LOF",
+        "ARRT",
+        "TDE",
+        "ARR",
+        "RCF",
         // Status de alerta e críticos
-        "DIS", "OFLD", "NIL", "NIF",
+        "DIS",
+        "OFLD",
+        "NIL",
+        "NIF",
         // Status de erro no rastreio (inclui companhias sem integração e AWBs inválidos)
-        "ERRO", "COMPANY_NOT_REGISTERED", "AWB_INVALID",
+        "ERRO",
+        "COMPANY_NOT_REGISTERED",
+        "AWB_INVALID",
         // Outros status de rastreio
-        "FFM", "AUD"
+        "FFM",
+        "AUD",
       ];
       const statusToCheck = (awb.status || "").toUpperCase();
       const lastEventCode = getStatusCode(awb.last_event).toUpperCase();
-      
+
       // Check if status or last event code is in allowed list
       const isAllowed = allowedStatuses.includes(statusToCheck) || allowedStatuses.includes(lastEventCode);
 
       // AWBs com status ARR (chegaram) - permanecem na tabela por 48h para segurança
       const hasAlert = awb.data_atraso !== null || ["DIS", "OFLD", "NIL", "NIF"].includes(lastEventCode);
-      
+
       // Se está em ARR:
       // - Se tem alerta, mantém na tabela
       // - Se não tem alerta, verifica se já passaram 48h desde arr_datetime
@@ -1791,30 +1854,64 @@ const Index = () => {
       const status = (awb.status || "").toUpperCase();
       const lastEvent = (awb.last_event || "").toUpperCase(); // Raw value from database
       const lastEventCode = getStatusCode(awb.last_event).toUpperCase(); // Translated value for display
-      
+
       // Success statuses (tracking working) - priority 1 (first)
-      const successStatuses = ["BKD", "BKF", "AWB", "RCS", "MAN", "DEP", "FOH", "TFD", 
-        "RCT", "RCP", "PRE", "LOF", "ARRT", "TDE", "ARR", "RCF", "DLV", "FFM", "AUD",
-        "DIS", "OFLD", "NIL", "NIF"];
-      if (successStatuses.includes(status) || successStatuses.includes(lastEvent) || successStatuses.includes(lastEventCode)) {
+      const successStatuses = [
+        "BKD",
+        "BKF",
+        "AWB",
+        "RCS",
+        "MAN",
+        "DEP",
+        "FOH",
+        "TFD",
+        "RCT",
+        "RCP",
+        "PRE",
+        "LOF",
+        "ARRT",
+        "TDE",
+        "ARR",
+        "RCF",
+        "DLV",
+        "FFM",
+        "AUD",
+        "DIS",
+        "OFLD",
+        "NIL",
+        "NIF",
+      ];
+      if (
+        successStatuses.includes(status) ||
+        successStatuses.includes(lastEvent) ||
+        successStatuses.includes(lastEventCode)
+      ) {
         return 1;
       }
-      
+
       // Invalid AWB - priority 2 (check both raw and translated values)
-      if (status === "AWB_INVALID" || lastEvent === "AWB_INVALID" || 
-          lastEventCode === "AWB INVÁLIDO" ||
-          status === "NOT_FOUND" || lastEvent === "NOT_FOUND" ||
-          lastEventCode === "STATUS NÃO ENCONTRADO") {
+      if (
+        status === "AWB_INVALID" ||
+        lastEvent === "AWB_INVALID" ||
+        lastEventCode === "AWB INVÁLIDO" ||
+        status === "NOT_FOUND" ||
+        lastEvent === "NOT_FOUND" ||
+        lastEventCode === "STATUS NÃO ENCONTRADO"
+      ) {
         return 2;
       }
-      
+
       // Query failure (ERRO, COMPANY_NOT_REGISTERED, etc) - priority 3 (last)
-      if (status === "ERRO" || lastEvent === "ERRO" || 
-          status === "COMPANY_NOT_REGISTERED" || lastEvent === "COMPANY_NOT_REGISTERED" ||
-          lastEventCode === "FALHA NA CONSULTA") {
+      if (
+        status === "ERRO" ||
+        lastEvent === "ERRO" ||
+        status === "COMPANY_NOT_REGISTERED" ||
+        lastEvent === "COMPANY_NOT_REGISTERED" ||
+        lastEventCode === "FALHA NA CONSULTA"
+      ) {
         return 3;
       }
-      
+
       return 2; // Default: middle
     };
 
@@ -1853,11 +1950,11 @@ const Index = () => {
       awbs = [...awbs].sort((a, b) => {
         const priorityA = getStatusPriority(a);
         const priorityB = getStatusPriority(b);
-        
+
         if (priorityA !== priorityB) {
           return priorityA - priorityB; // Lower priority number first (success = 1)
         }
-        
+
         // Same priority: sort by last_check (most recent first)
         const dateA = a.last_check ? new Date(a.last_check).getTime() : 0;
         const dateB = b.last_check ? new Date(b.last_check).getTime() : 0;
@@ -1871,7 +1968,18 @@ const Index = () => {
     }
 
     return awbs;
-  }, [statusAereoData, searchTerm, filterAirline, filterAnalyst, filterService, cardFilter, sortAnalyst, sortAwb, sortClient, sortLastCheck]);
+  }, [
+    statusAereoData,
+    searchTerm,
+    filterAirline,
+    filterAnalyst,
+    filterService,
+    cardFilter,
+    sortAnalyst,
+    sortAwb,
+    sortClient,
+    sortLastCheck,
+  ]);
 
   const totalPages = Math.ceil(filteredAwbs.length / itemsPerPage);
   const startIndex = (currentPage - 1) * itemsPerPage;
@@ -1886,37 +1994,36 @@ const Index = () => {
     );
   }
 
-
   return (
     <div className="min-h-screen relative overflow-x-hidden">
       {/* Background with image and gradient overlay */}
       <div className="fixed inset-0 z-0">
-        <div 
+        <div
           className="absolute inset-0"
           style={{
             backgroundImage: `url(${dachserBg})`,
-            backgroundSize: 'cover',
-            backgroundPosition: 'center',
+            backgroundSize: "cover",
+            backgroundPosition: "center",
           }}
         />
-        <div 
+        <div
           className="absolute inset-0"
           style={{
-            background: 'linear-gradient(120deg, rgba(4, 17, 45, 0.92), rgba(26, 93, 173, 0.55))',
+            background: "linear-gradient(120deg, rgba(4, 17, 45, 0.92), rgba(26, 93, 173, 0.55))",
           }}
         />
-        
+
         {/* Radial gradient overlay */}
-        <div 
+        <div
           className="absolute inset-0"
           style={{
             background: `
               radial-gradient(ellipse at 20% 20%, rgba(245, 184, 67, 0.12) 0%, transparent 50%),
               radial-gradient(ellipse at 80% 80%, rgba(245, 184, 67, 0.08) 0%, transparent 50%)
-            `
+            `,
           }}
         />
-        
+
         {/* Animated Lines */}
         <div className="absolute inset-0 opacity-20">
           {[...Array(6)].map((_, i) => (
@@ -1959,9 +2066,7 @@ const Index = () => {
 
           <header>
             <h1 className="text-[1.6rem] tracking-[0.24em] uppercase text-[#f5f5f5]">DACHSER</h1>
-            <p className="text-[0.9rem] text-[#aaaaaa] mt-0.5">
-              Intelligent Logistics – Rastreio de AWBs
-            </p>
+            <p className="text-[0.9rem] text-[#aaaaaa] mt-0.5">Intelligent Logistics – Rastreio de AWBs</p>
             <div className="flex gap-1.5 mt-1.5">
               <span className="w-1.5 h-1.5 rounded-full bg-[#ffc800] shadow-[0_0_10px_rgba(255,200,0,.9)]" />
               <span className="w-1.5 h-1.5 rounded-full bg-[#ffc800] shadow-[0_0_10px_rgba(255,200,0,.9)]" />
@@ -2001,34 +2106,69 @@ const Index = () => {
 
       {/* Main Content */}
       <main className="relative z-10 max-w-[95%] mx-auto mb-12 px-2 space-y-[18px]">
-
         {/* Dashboard Cards */}
         <DashboardCards
-          totalMonitorados={statusAereoData.filter((awb) => {
-            const excludedStatuses = ["COMPANY_NOT_REGISTERED", "ERRO", "INFO", "Em Processamento", "NOT_FOUND", "DLV"];
-            return !excludedStatuses.includes(awb.status || "");
-          }).length}
-          emTransito={statusAereoData.filter((awb) => {
-            const excludedStatuses = ["COMPANY_NOT_REGISTERED", "ERRO", "INFO", "Em Processamento", "NOT_FOUND", "DLV"];
-            if (excludedStatuses.includes(awb.status || "")) return false;
-            const status = getStatusCode(awb.last_event).toUpperCase();
-            return ["DEP", "MAN", "RCF", "ARR", "TRA", "FOH"].includes(status);
-          }).length}
-          emAlerta={statusAereoData.filter((awb) => {
-            const excludedStatuses = ["COMPANY_NOT_REGISTERED", "ERRO", "INFO", "Em Processamento", "NOT_FOUND", "DLV"];
-            if (excludedStatuses.includes(awb.status || "")) return false;
-            const status = getStatusCode(awb.last_event).toUpperCase();
-            // OFLD movido para críticos - DIS ou processos com data_atraso em alerta
-            return status === "DIS" || !!awb.data_atraso;
-          }).length}
-          criticos={statusAereoData.filter((awb) => {
-            const excludedStatuses = ["COMPANY_NOT_REGISTERED", "ERRO", "INFO", "Em Processamento", "NOT_FOUND", "DLV"];
-            if (excludedStatuses.includes(awb.status || "")) return false;
-            const status = getStatusCode(awb.last_event).toUpperCase();
-            // OFLD agora é crítico junto com NIL e NIF, e AWBs críticos específicos
-            const CRITICAL_AWBS = ["045-21167274"];
-            return status === "NIL" || status === "NIF" || status === "OFLD" || CRITICAL_AWBS.includes(awb.awb);
-          }).length}
+          totalMonitorados={
+            statusAereoData.filter((awb) => {
+              const excludedStatuses = [
+                "COMPANY_NOT_REGISTERED",
+                "ERRO",
+                "INFO",
+                "Em Processamento",
+                "NOT_FOUND",
+                "DLV",
+              ];
+              return !excludedStatuses.includes(awb.status || "");
+            }).length
+          }
+          emTransito={
+            statusAereoData.filter((awb) => {
+              const excludedStatuses = [
+                "COMPANY_NOT_REGISTERED",
+                "ERRO",
+                "INFO",
+                "Em Processamento",
+                "NOT_FOUND",
+                "DLV",
+              ];
+              if (excludedStatuses.includes(awb.status || "")) return false;
+              const status = getStatusCode(awb.last_event).toUpperCase();
+              return ["DEP", "MAN", "RCF", "ARR", "TRA", "FOH"].includes(status);
+            }).length
+          }
+          emAlerta={
+            statusAereoData.filter((awb) => {
+              const excludedStatuses = [
+                "COMPANY_NOT_REGISTERED",
+                "ERRO",
+                "INFO",
+                "Em Processamento",
+                "NOT_FOUND",
+                "DLV",
+              ];
+              if (excludedStatuses.includes(awb.status || "")) return false;
+              const status = getStatusCode(awb.last_event).toUpperCase();
+              // OFLD movido para críticos - DIS ou processos com data_atraso em alerta
+              return status === "DIS" || !!awb.data_atraso;
+            }).length
+          }
+          criticos={
+            statusAereoData.filter((awb) => {
+              const excludedStatuses = [
+                "COMPANY_NOT_REGISTERED",
+                "ERRO",
+                "INFO",
+                "Em Processamento",
+                "NOT_FOUND",
+                "DLV",
+              ];
+              if (excludedStatuses.includes(awb.status || "")) return false;
+              const status = getStatusCode(awb.last_event).toUpperCase();
+              // OFLD agora é crítico junto com NIL e NIF, e AWBs críticos específicos
+              const CRITICAL_AWBS = ["045-21167274"];
+              return status === "NIL" || status === "NIF" || status === "OFLD" || CRITICAL_AWBS.includes(awb.awb);
+            }).length
+          }
           activeFilter={cardFilter}
           onFilterChange={(filter) => {
             setCardFilter(filter);
@@ -2036,14 +2176,13 @@ const Index = () => {
           }}
         />
 
-
         {/* Search and Filter Bar */}
-        <section 
+        <section
           className="rounded-2xl p-4"
           style={{
-            background: 'rgba(5,6,18,.9)',
-            border: '1px solid rgba(255,255,255,.12)',
-            boxShadow: '0 18px 40px rgba(0,0,0,.85)',
+            background: "rgba(5,6,18,.9)",
+            border: "1px solid rgba(255,255,255,.12)",
+            boxShadow: "0 18px 40px rgba(0,0,0,.85)",
           }}
         >
           <div className="space-y-3">
@@ -2144,19 +2283,21 @@ const Index = () => {
                 {/* Botão para ver companhias pendentes de cadastro */}
                 {(() => {
                   const pendingAirlineCodes = ["399"]; // CIAs realmente não cadastradas (apenas Marine Air)
-                  const pendingAwbs = statusAereoData.filter(awb => {
+                  const pendingAwbs = statusAereoData.filter((awb) => {
                     const code = (awb.airline_code || "").replace(/^0+/, "").padStart(3, "0");
                     return pendingAirlineCodes.includes(code);
                   });
-                  const uniqueAirlines = new Set(pendingAwbs.map(awb => awb.airline_code)).size;
-                  return uniqueAirlines > 0 && (
-                    <button
-                      onClick={() => setShowUnregisteredModal(true)}
-                      className="h-8 px-4 rounded-full bg-slate-600/80 text-white text-[0.75rem] font-medium flex items-center gap-1.5 hover:bg-slate-500/80 transition border border-slate-500/50"
-                    >
-                      <AlertCircle className="w-3.5 h-3.5" />
-                      Cias Pendentes ({uniqueAirlines})
-                    </button>
+                  const uniqueAirlines = new Set(pendingAwbs.map((awb) => awb.airline_code)).size;
+                  return (
+                    uniqueAirlines > 0 && (
+                      <button
+                        onClick={() => setShowUnregisteredModal(true)}
+                        className="h-8 px-4 rounded-full bg-slate-600/80 text-white text-[0.75rem] font-medium flex items-center gap-1.5 hover:bg-slate-500/80 transition border border-slate-500/50"
+                      >
+                        <AlertCircle className="w-3.5 h-3.5" />
+                        Cias Pendentes ({uniqueAirlines})
+                      </button>
+                    )
                   );
                 })()}
 
@@ -2182,12 +2323,12 @@ const Index = () => {
         </section>
 
         {/* AWBs Table */}
-        <section 
+        <section
           className="rounded-2xl overflow-hidden"
           style={{
-            background: 'rgba(5,6,18,.9)',
-            border: '1px solid rgba(255,255,255,.12)',
-            boxShadow: '0 18px 40px rgba(0,0,0,.85)',
+            background: "rgba(5,6,18,.9)",
+            border: "1px solid rgba(255,255,255,.12)",
+            boxShadow: "0 18px 40px rgba(0,0,0,.85)",
           }}
         >
           {filteredAwbs.length > 0 ? (
@@ -2206,7 +2347,9 @@ const Index = () => {
                           {sortAwb === "desc" && <span className="text-[#ffc800]">↓</span>}
                         </span>
                       </th>
-                      <th className="px-4 py-3 text-left text-[#aaaaaa] uppercase text-[0.68rem] tracking-[0.1em] font-medium">HAWB</th>
+                      <th className="px-4 py-3 text-left text-[#aaaaaa] uppercase text-[0.68rem] tracking-[0.1em] font-medium">
+                        HAWB
+                      </th>
                       <th
                         className="px-4 py-3 text-left text-[#aaaaaa] uppercase text-[0.68rem] tracking-[0.1em] font-medium cursor-pointer select-none hover:text-[#ffc800] transition"
                         onClick={handleClientSort}
@@ -2217,11 +2360,21 @@ const Index = () => {
                           {sortClient === "desc" && <span className="text-[#ffc800]">↓</span>}
                         </span>
                       </th>
-                      <th className="px-4 py-3 text-left text-[#aaaaaa] uppercase text-[0.68rem] tracking-[0.1em] font-medium">Rota</th>
-                      <th className="px-4 py-3 text-left text-[#aaaaaa] uppercase text-[0.68rem] tracking-[0.1em] font-medium">Rastreio</th>
-                      <th className="px-4 py-3 text-left text-[#aaaaaa] uppercase text-[0.68rem] tracking-[0.1em] font-medium">Último Evento</th>
-                      <th className="px-4 py-3 text-left text-[#aaaaaa] uppercase text-[0.68rem] tracking-[0.1em] font-medium">Data/Hora</th>
-                      <th className="px-4 py-3 text-center text-[#aaaaaa] uppercase text-[0.68rem] tracking-[0.1em] font-medium">Situação</th>
+                      <th className="px-4 py-3 text-left text-[#aaaaaa] uppercase text-[0.68rem] tracking-[0.1em] font-medium">
+                        Rota
+                      </th>
+                      <th className="px-4 py-3 text-left text-[#aaaaaa] uppercase text-[0.68rem] tracking-[0.1em] font-medium">
+                        Rastreio
+                      </th>
+                      <th className="px-4 py-3 text-left text-[#aaaaaa] uppercase text-[0.68rem] tracking-[0.1em] font-medium">
+                        Último Evento
+                      </th>
+                      <th className="px-4 py-3 text-left text-[#aaaaaa] uppercase text-[0.68rem] tracking-[0.1em] font-medium">
+                        Data/Hora
+                      </th>
+                      <th className="px-4 py-3 text-center text-[#aaaaaa] uppercase text-[0.68rem] tracking-[0.1em] font-medium">
+                        Situação
+                      </th>
                       <th
                         className="px-4 py-3 text-left text-[#aaaaaa] uppercase text-[0.68rem] tracking-[0.1em] font-medium cursor-pointer select-none hover:text-[#ffc800] transition"
                         onClick={handleAnalystSort}
@@ -2232,7 +2385,9 @@ const Index = () => {
                           {sortAnalyst === "desc" && <span className="text-[#ffc800]">↓</span>}
                         </span>
                       </th>
-                      <th className="px-4 py-3 text-left text-[#aaaaaa] uppercase text-[0.68rem] tracking-[0.1em] font-medium">Serviço</th>
+                      <th className="px-4 py-3 text-left text-[#aaaaaa] uppercase text-[0.68rem] tracking-[0.1em] font-medium">
+                        Serviço
+                      </th>
                       <th className="px-4 py-3 text-center text-[#aaaaaa] uppercase text-[0.68rem] tracking-[0.1em] font-medium">
                         Ações
                       </th>
@@ -2259,14 +2414,16 @@ const Index = () => {
                               isCriticalAwb
                                 ? "bg-red-500/15 border-red-400/50 border-2 animate-pulse shadow-[0_0_15px_rgba(255,0,0,0.2)]"
                                 : isCompanyNotRegistered
-                                ? "bg-slate-500/10 border-l-4 border-l-slate-400/50 opacity-70"
-                                : isErroStatus
-                                ? "bg-orange-500/20 border-l-4 border-l-orange-500 shadow-[0_0_15px_rgba(249,115,22,0.2)]"
-                                : isNilStatus
-                                ? "bg-red-500/20 border-red-500 border-2 animate-pulse shadow-[0_0_20px_rgba(255,0,0,0.3)]"
-                                : "hover:bg-[rgba(255,255,255,.03)]"
+                                  ? "bg-slate-500/10 border-l-4 border-l-slate-400/50 opacity-70"
+                                  : isErroStatus
+                                    ? "bg-orange-500/20 border-l-4 border-l-orange-500 shadow-[0_0_15px_rgba(249,115,22,0.2)]"
+                                    : isNilStatus
+                                      ? "bg-red-500/20 border-red-500 border-2 animate-pulse shadow-[0_0_20px_rgba(255,0,0,0.3)]"
+                                      : "hover:bg-[rgba(255,255,255,.03)]"
                             } ${isDelivered && !isNilStatus && !isErroStatus && !isCompanyNotRegistered && !isCriticalAwb ? "bg-emerald-500/10" : ""} ${
-                              isRetracking && !isNilStatus && !isErroStatus && !isCompanyNotRegistered && !isCriticalAwb ? "bg-blue-500/20 animate-pulse" : ""
+                              isRetracking && !isNilStatus && !isErroStatus && !isCompanyNotRegistered && !isCriticalAwb
+                                ? "bg-blue-500/20 animate-pulse"
+                                : ""
                             }`}
                           >
                             <td className="px-4 py-3 whitespace-nowrap">
@@ -2277,7 +2434,9 @@ const Index = () => {
                                 )}
                               </div>
                             </td>
-                            <td className="px-4 py-3 text-[#aaaaaa] text-[0.8rem] whitespace-nowrap">{awb.hawb || "-"}</td>
+                            <td className="px-4 py-3 text-[#aaaaaa] text-[0.8rem] whitespace-nowrap">
+                              {awb.hawb || "-"}
+                            </td>
                             <td className="px-4 py-3">
                               <div className="text-[#f5f5f5] text-[0.8rem] uppercase">
                                 {abbreviateName(awb.consignee_name)}
@@ -2396,7 +2555,9 @@ const Index = () => {
                                         <TooltipTrigger asChild>
                                           <div
                                             className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 transition-all duration-700 ease-out z-20 cursor-pointer"
-                                            style={{ left: `${isCompanyNotRegistered ? 0 : getTimelineProgress(awb.last_event)}%` }}
+                                            style={{
+                                              left: `${isCompanyNotRegistered ? 0 : getTimelineProgress(awb.last_event)}%`,
+                                            }}
                                           >
                                             <div className="relative">
                                               <Plane
@@ -2413,7 +2574,9 @@ const Index = () => {
                                         </TooltipTrigger>
                                         <TooltipContent>
                                           <p className="text-xs font-medium">{getStatusCode(awb.last_event)}</p>
-                                          <p className="text-xs text-muted-foreground">{getStatusFromEvent(awb.last_event)}</p>
+                                          <p className="text-xs text-muted-foreground">
+                                            {getStatusFromEvent(awb.last_event)}
+                                          </p>
                                         </TooltipContent>
                                       </Tooltip>
                                     </TooltipProvider>
@@ -2426,19 +2589,23 @@ const Index = () => {
                                 <span className="text-sm font-bold" style={{ color: "hsl(120 100% 35%)" }}>
                                   {getStatusCode(awb.last_event)}
                                 </span>
-                                {['083', '147', '160', '615', '865', '016', '996'].some(prefix => awb.awb?.startsWith(prefix)) && (
+                                {["083", "147", "160", "615", "865", "016", "996"].some((prefix) =>
+                                  awb.awb?.startsWith(prefix),
+                                ) && (
                                   <TooltipProvider>
                                     <Tooltip>
                                       <TooltipTrigger asChild>
                                         <Info className="h-4 w-4 text-amber-400 cursor-help" />
                                       </TooltipTrigger>
                                       <TooltipContent side="top" className="max-w-xs">
-                                        <p>Essa companhia está passando por ajustes, podendo apresentar inconsistência.</p>
+                                        <p>
+                                          Essa companhia está passando por ajustes, podendo apresentar inconsistência.
+                                        </p>
                                       </TooltipContent>
                                     </Tooltip>
                                   </TooltipProvider>
                                 )}
-                                {awb.awb?.startsWith('577') && (
+                                {awb.awb?.startsWith("577") && (
                                   <TooltipProvider>
                                     <Tooltip>
                                       <TooltipTrigger asChild>
@@ -2464,9 +2631,13 @@ const Index = () => {
                                 const statusCode = getStatusCode(awb.last_event).toUpperCase();
                                 // Verificar se é crítico (NIL, NIF, OFLD ou AWBs críticos específicos)
                                 const CRITICAL_AWBS = ["045-21167274"];
-                                const isCritical = statusCode === "NIL" || statusCode === "NIF" || statusCode === "OFLD" || CRITICAL_AWBS.includes(awb.awb);
+                                const isCritical =
+                                  statusCode === "NIL" ||
+                                  statusCode === "NIF" ||
+                                  statusCode === "OFLD" ||
+                                  CRITICAL_AWBS.includes(awb.awb);
                                 const isDelayed = awb.data_atraso !== null || statusCode === "DIS";
-                                
+
                                 if (isCritical) {
                                   return (
                                     <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-semibold bg-red-600/30 text-red-300 border border-red-500/50 animate-pulse">
@@ -2475,7 +2646,7 @@ const Index = () => {
                                     </span>
                                   );
                                 }
-                                
+
                                 return isDelayed ? (
                                   <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-semibold bg-red-500/20 text-red-400 border border-red-500/30 animate-pulse">
                                     <span className="w-1.5 h-1.5 rounded-full bg-red-400"></span>
@@ -2500,7 +2671,13 @@ const Index = () => {
                                       <Button
                                         variant="ghost"
                                         size="sm"
-                                        onClick={() => setTimelineModal({ open: true, awb: awb.awb, consigneeName: awb.consignee_name })}
+                                        onClick={() =>
+                                          setTimelineModal({
+                                            open: true,
+                                            awb: awb.awb,
+                                            consigneeName: awb.consignee_name,
+                                          })
+                                        }
                                         className="text-[#ffc800] hover:text-[#ffc800] hover:bg-[#ffc800]/10 h-8 w-8 p-0"
                                       >
                                         <Clock className="w-4 h-4" />
@@ -2585,40 +2762,46 @@ const Index = () => {
                 "399": "Marine Air",
               };
               const pendingAirlineCodes = Object.keys(pendingAirlineNames);
-              
-              const pendingAwbs = statusAereoData.filter(awb => {
+
+              const pendingAwbs = statusAereoData.filter((awb) => {
                 const code = (awb.airline_code || "").replace(/^0+/, "").padStart(3, "0");
                 return pendingAirlineCodes.includes(code);
               });
-              
-              const groupedByAirline = pendingAwbs.reduce((acc, awb) => {
-                const code = (awb.airline_code || "").replace(/^0+/, "").padStart(3, "0");
-                if (!acc[code]) acc[code] = { count: 0, name: pendingAirlineNames[code] || `Código ${code}` };
-                acc[code].count++;
-                return acc;
-              }, {} as Record<string, { count: number; name: string }>);
-              
+
+              const groupedByAirline = pendingAwbs.reduce(
+                (acc, awb) => {
+                  const code = (awb.airline_code || "").replace(/^0+/, "").padStart(3, "0");
+                  if (!acc[code]) acc[code] = { count: 0, name: pendingAirlineNames[code] || `Código ${code}` };
+                  acc[code].count++;
+                  return acc;
+                },
+                {} as Record<string, { count: number; name: string }>,
+              );
+
               const sortedAirlines = Object.entries(groupedByAirline).sort((a, b) => b[1].count - a[1].count);
-              
+
               if (sortedAirlines.length === 0) {
-                return (
-                  <div className="text-center py-8 text-[#aaaaaa]">
-                    Nenhuma companhia pendente de cadastro
-                  </div>
-                );
+                return <div className="text-center py-8 text-[#aaaaaa]">Nenhuma companhia pendente de cadastro</div>;
               }
-              
+
               return (
                 <table className="w-full border-collapse">
                   <thead className="sticky top-0 bg-[rgba(0,0,0,.8)]">
                     <tr className="border-b border-[rgba(255,255,255,.08)]">
-                      <th className="px-3 py-2 text-left text-[#aaaaaa] uppercase text-[0.68rem] tracking-[0.1em] font-medium">Companhia Aérea</th>
-                      <th className="px-3 py-2 text-right text-[#aaaaaa] uppercase text-[0.68rem] tracking-[0.1em] font-medium">Qtd AWBs</th>
+                      <th className="px-3 py-2 text-left text-[#aaaaaa] uppercase text-[0.68rem] tracking-[0.1em] font-medium">
+                        Companhia Aérea
+                      </th>
+                      <th className="px-3 py-2 text-right text-[#aaaaaa] uppercase text-[0.68rem] tracking-[0.1em] font-medium">
+                        Qtd AWBs
+                      </th>
                     </tr>
                   </thead>
                   <tbody>
                     {sortedAirlines.map(([code, data]) => (
-                      <tr key={code} className="border-b border-[rgba(255,255,255,.05)] hover:bg-[rgba(255,255,255,.03)]">
+                      <tr
+                        key={code}
+                        className="border-b border-[rgba(255,255,255,.05)] hover:bg-[rgba(255,255,255,.03)]"
+                      >
                         <td className="px-3 py-2.5 text-[#f5f5f5] text-sm">
                           <span className="text-[#888] font-mono mr-2">{code}</span>
                           {data.name}
@@ -2657,13 +2840,20 @@ const Index = () => {
             <table className="w-full border-collapse">
               <thead className="sticky top-0 bg-[rgba(0,0,0,.8)]">
                 <tr className="border-b border-[rgba(255,255,255,.08)]">
-                  <th className="px-3 py-2 text-left text-[#aaaaaa] uppercase text-[0.68rem] tracking-[0.1em] font-medium">Código</th>
-                  <th className="px-3 py-2 text-left text-[#aaaaaa] uppercase text-[0.68rem] tracking-[0.1em] font-medium">Companhia Aérea</th>
+                  <th className="px-3 py-2 text-left text-[#aaaaaa] uppercase text-[0.68rem] tracking-[0.1em] font-medium">
+                    Código
+                  </th>
+                  <th className="px-3 py-2 text-left text-[#aaaaaa] uppercase text-[0.68rem] tracking-[0.1em] font-medium">
+                    Companhia Aérea
+                  </th>
                 </tr>
               </thead>
               <tbody>
                 {monitoredAirlinesData.airlines.map((airline) => (
-                  <tr key={airline.code} className="border-b border-[rgba(255,255,255,.05)] hover:bg-[rgba(255,255,255,.03)]">
+                  <tr
+                    key={airline.code}
+                    className="border-b border-[rgba(255,255,255,.05)] hover:bg-[rgba(255,255,255,.03)]"
+                  >
                     <td className="px-3 py-2.5">
                       <span className="font-mono text-emerald-400 text-sm">{airline.code}</span>
                     </td>
@@ -2701,10 +2891,7 @@ const Index = () => {
         </div>
       )}
 
-      <EmailClienteRegrasDialog 
-        open={regrasDialogOpen} 
-        onOpenChange={setRegrasDialogOpen} 
-      />
+      <EmailClienteRegrasDialog open={regrasDialogOpen} onOpenChange={setRegrasDialogOpen} />
 
       {/* Modal de Timeline por AWB */}
       <AwbTimelineModal
