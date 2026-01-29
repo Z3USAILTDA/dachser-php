@@ -64,6 +64,7 @@ serve(async (req) => {
     // OPTIMIZATION: Use subquery instead of JOIN to avoid full table scan
     // Step 1: Get MAWBs from t_master_dados for the specific date
     // Step 2: Use those MAWBs in a WHERE IN clause on t_status_aereo
+    // REGRA: AWBs com "ARR - Destino" permanecem na lista por 5 dias após arr_datetime
     const baseSelect = `
       SELECT s.id, s.awb, s.hawb, s.destinatário, s.nome_analista, s.email_analista,
              s.email_cliente, s.tipo_servico, s.data_atraso, s.\`última atualização\`,
@@ -71,12 +72,21 @@ serve(async (req) => {
              ${hasArrCheckColumn ? 's.arr_check_count' : '0 as arr_check_count'},
              ${hasArrDatetimeColumn ? 's.arr_datetime' : 'NULL as arr_datetime'}
       FROM ${database}.t_status_aereo s
-      WHERE s.awb IN (
-        SELECT m.mawb FROM ${database}.t_master_dados m 
-        WHERE DATE(m.data_insert) = ?
-        AND m.tipo_processo IN ('AIR IMPORT', 'AIR EXPORT')
-      )
-    `;
+      WHERE (
+        -- AWBs do dia atual (regra padrão)
+        s.awb IN (
+          SELECT m.mawb FROM ${database}.t_master_dados m 
+          WHERE DATE(m.data_insert) = ?
+          AND m.tipo_processo IN ('AIR IMPORT', 'AIR EXPORT')
+        )
+        -- OU AWBs com "ARR - Destino" que ainda estão dentro dos 5 dias
+        ${hasArrDatetimeColumn ? `
+        OR (
+          s.\`último_status\` = 'ARR - Destino'
+          AND s.arr_datetime IS NOT NULL
+          AND s.arr_datetime >= DATE_SUB(NOW(), INTERVAL 5 DAY)
+        )` : ''}
+      )`;
 
     let query: string;
     let params: string[];
