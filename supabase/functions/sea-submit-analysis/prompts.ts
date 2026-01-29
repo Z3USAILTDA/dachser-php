@@ -1438,8 +1438,10 @@ REAL EXAMPLE:
 
 CRITICAL: NCM Code lists are often split across PAGE BREAKS. You MUST:
 
-1. SCAN ALL PAGES: Look for "NCM-CODES:", "NCM CODES:", "HS-CODE:", "HS CODE:" labels
-   - These labels may appear on any page
+1. SCAN ALL PAGES: Look for "NCM-CODES:", "NCM CODES:", "NCM CODE:", "NCM:" labels
+   - NEVER extract from "HS-CODE:", "HS CODE:", "HS:", "H.S.:" labels - those are HS Codes, NOT NCMs
+   - HS Codes (4-6 digits) and NCMs (8 digits) are DIFFERENT classification systems
+   - These NCM labels may appear on any page
    - The list of codes may START on one page and CONTINUE on the next page
 
 2. CONCATENATE LISTS: If a list starts on page N and continues on page N+1:
@@ -1562,7 +1564,7 @@ SEAL: "SEAL NO", "SEAL NUMBER", "SEAL"
 WEIGHT: "GROSS WEIGHT", "GR.WT", "WEIGHT", followed by KGS/KG/KGM
 CBM: "MEASUREMENT", "CBM", "M3", "m³", "MTQ", "VOLUME", "CUBIC"
 PACKAGES: "NO. OF PACKAGES", "PACKAGES", "PKGS", "PCS"
-HS/NCM: "HS-CODE", "HS CODE", "HSCODE", "NCM", "H.S."
+NCM: "NCM-CODES", "NCM CODES", "NCM CODE", "NCM:", "CODIGO NCM" (NEVER extract from "HS-CODE", "HS CODE", "HSCODE", "H.S." - those are HS Codes, NOT NCMs)
 
 ████████████████████████████████████████████████████████████████████████████████
 █ ⚠️ CRITICAL: DETAILED PER-EXPORTER ANALYSIS - MANDATORY FORMAT ⚠️            █
