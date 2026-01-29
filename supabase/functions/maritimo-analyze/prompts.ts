@@ -951,13 +951,16 @@ ZERO-DELTA SAFETY CHECK (ALL TOPICS)
 
 ★★★ RULE 11: PRESERVE NCM LENGTH DURING EXTRACTION - CRITICAL ★★★
 WHEN EXTRACTING NCMs FROM MANIFEST XLSX:
-- Look for "NCM Code", "Código NCM", or "HS Code" columns
+- Look for "NCM Code" or "Código NCM" columns ONLY
+- NEVER extract from "HS Code" columns - HS Code and NCM are DIFFERENT classification systems
 - If the column contains 8-digit values like "84812090", extract ALL 8 DIGITS
 - DO NOT truncate to 4 digits - preserve the FULL value
 - "84812090" must be extracted as "84812090", NOT as "8481"
 
 WHEN EXTRACTING NCMs FROM HBL PDF:
-- Extract exactly what you see (usually 4-digit HS codes like "8481")
+- Extract exactly what you see from "NCM:" or "NCM-CODES:" labels
+- NCM codes may be 4-digit (8481) or 8-digit (84812090) - preserve the exact length
+- NEVER extract from "HS:", "HS Code:", "HS-CODE:" labels - those are HS Codes, NOT NCMs
 - DO NOT pad or extend to 8 digits
 
 LENGTH COMPARISON IS CRITICAL:
