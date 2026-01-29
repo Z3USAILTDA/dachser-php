@@ -1,128 +1,119 @@
 
+# Correção do Problema NCM vs HS Code no Cenário HBL x MBL
 
-# Correção dos Problemas de NCM vs HS Code na Análise Documental SEA
+## Problema Identificado
 
-## Problemas Identificados
+No cenário **HBL x MBL**, o prompt `PROMPT_HBL_MBL` ainda contém múltiplas referências que instruem o modelo a buscar/extrair de labels "HS Code", causando confusão na comparação de NCMs.
 
-### Problema 1: HS Codes sendo tratados como NCM Codes
-O modelo LLM continua extraindo valores de colunas/labels de "HS Code" e comparando-os com valores de colunas "NCM Code", mesmo com instruções parcialmente corrigidas.
+### Referências Problemáticas Encontradas
 
-**Causa raiz identificada**:
-- Os prompts em `maritimo-analyze/prompts.ts` e `sea-submit-analysis/prompts.ts` contêm instruções contraditórias
-- A tabela de mapeamento de colunas diz explicitamente: `| HS CODE/NCM | "HS Code" column |` (linha ~985 em ambos arquivos)
-- Isso instrui o modelo a extrair da coluna "HS Code" quando deveria extrair APENAS de colunas "NCM Code"
-- Há referências mistas como "NCM/HS codes" que confundem o modelo
-
-### Problema 2: Valores marcados como "Extra" quando existem no documento base
-Valores que existem no documento base (Manifest) estão sendo marcados como "extras" porque:
-- O parsing de colunas NCM pode não estar identificando corretamente todos os valores
-- O código de extração em `simpleXlsxReader.ts` já tem lógica correta, mas o modelo está usando instruções conflitantes dos prompts
+| Arquivo | Linha | Problema |
+|---------|-------|----------|
+| `sea-submit-analysis/prompts.ts` | 1441 | Instrui buscar "HS-CODE:", "HS CODE:" para NCM |
+| `sea-submit-analysis/prompts.ts` | 1565 | Lista "HS-CODE", "HS CODE", "HSCODE", "H.S." como keywords para NCM |
+| `maritimo-analyze/prompts.ts` | 954 | Instrui buscar "HS Code" como fonte de NCM |
+| `maritimo-analyze/prompts.ts` | 1788 | Instrui usar keywords HS para extração de NCM |
 
 ---
 
-## Solução Proposta
+## Arquivos a Modificar
 
-Corrigir os prompts para eliminar referências a "HS Code" como fonte de extração de NCM, mantendo a estrutura visual do resultado inalterada.
+1. **`supabase/functions/sea-submit-analysis/prompts.ts`**
+2. **`supabase/functions/maritimo-analyze/prompts.ts`**
 
-### Arquivos a Modificar
+---
 
-1. **`supabase/functions/maritimo-analyze/prompts.ts`**
-2. **`supabase/functions/sea-submit-analysis/prompts.ts`**
+## Mudanças Específicas
 
-### Mudanças Específicas
+### 1. Linha 1441 (sea-submit-analysis) - Seção "NCM LIST EXTRACTION"
 
-#### 1. Corrigir a Tabela de Mapeamento de Colunas
-
-**Antes** (em ambos os arquivos):
+**Antes:**
 ```
-| HS CODE/NCM         | "HS Code" column                                         |
+1. SCAN ALL PAGES: Look for "NCM-CODES:", "NCM CODES:", "HS-CODE:", "HS CODE:" labels
 ```
 
-**Depois**:
+**Depois:**
 ```
-| NCM CODE            | "NCM Code" or "Código NCM" column ONLY (NEVER "HS Code") |
+1. SCAN ALL PAGES: Look for "NCM-CODES:", "NCM CODES:", "NCM CODE:", "NCM:" labels
+   - NEVER extract from "HS-CODE:", "HS CODE:", "HS:", "H.S.:" labels - those are HS Codes, NOT NCMs
 ```
 
-#### 2. Reforçar Instruções de Extração NCM
+### 2. Linha 1565 (sea-submit-analysis) - Seção "KEYWORD VARIATIONS"
 
-Adicionar seção explícita nos prompts com exemplos concretos de rejeição:
+**Antes:**
+```
+HS/NCM: "HS-CODE", "HS CODE", "HSCODE", "NCM", "H.S."
+```
+
+**Depois:**
+```
+NCM: "NCM-CODES", "NCM CODES", "NCM CODE", "NCM:", "CODIGO NCM" (NEVER "HS-CODE", "HS CODE", "HSCODE", "H.S.")
+```
+
+### 3. Linha 954 (maritimo-analyze) - PROMPT_MANIFEST_HBL
+
+**Antes:**
+```
+WHEN EXTRACTING NCMs FROM MANIFEST XLSX:
+- Look for "NCM Code", "Código NCM", or "HS Code" columns
+```
+
+**Depois:**
+```
+WHEN EXTRACTING NCMs FROM MANIFEST XLSX:
+- Look for "NCM Code", "Código NCM" columns ONLY
+- NEVER extract from "HS Code" columns - HS and NCM are different systems
+```
+
+### 4. Linha 1788 (maritimo-analyze) - PROMPT_INVOICES_HBL
+
+**Antes:**
+```
+- Extract NCM codes using ±60 character context window around keywords (NCM, HS, HS CODE, HSCODE, H.S., TARIC).
+```
+
+**Depois:**
+```
+- Extract NCM codes using ±60 character context window around keywords (NCM, NCM CODE, NCM-CODES, CODIGO NCM).
+- NEVER extract from HS keywords (HS, HS CODE, HSCODE, H.S., TARIC) - those are different classification systems.
+```
+
+---
+
+## Mudanças Adicionais no PROMPT_HBL_MBL
+
+Adicionar no início do prompt HBL_MBL uma seção explícita similar à que já existe no PROMPT_MANIFEST_HBL:
 
 ```
 ████████████████████████████████████████████████████████████████████████████████
-█ CRITICAL: NCM vs HS CODE - THESE ARE DIFFERENT SYSTEMS                        █
+█ NCM CODES ONLY - DO NOT INCLUDE HS CODES                                       █
 ████████████████████████████████████████████████████████████████████████████████
 
-★★★ EXTRACTION SOURCE RULES - READ BEFORE EXTRACTING ★★★
+★★★ CRITICAL DISTINCTION FOR HBL × MBL - READ BEFORE EXTRACTING ★★★
 
-FOR MANIFEST/XLSX FILES:
-✓ EXTRACT FROM: "NCM Code", "Código NCM", "NCM" columns
-✗ NEVER EXTRACT FROM: "HS Code", "HS", "H.S.", "Harmonized System" columns
+NCM (Nomenclatura Comum do Mercosul) ≠ HS Code (Harmonized System)
+- NCM: Brazilian 8-digit tariff code (e.g., 84812090, 73182900)
+- HS Code: International 4-6 digit code (e.g., 8481, 870850)
+- THESE ARE DIFFERENT CLASSIFICATION SYSTEMS - DO NOT MIX THEM
+
+FOR HBL AND MBL PDFs:
+1. Extract ONLY values labeled "NCM:", "NCM-CODES:", "NCM CODE:"
+2. NEVER extract from labels "HS:", "HS Code:", "HS-CODE:", "H.S.:"
+3. If a document has BOTH labels, use ONLY the NCM-labeled values
+4. A 4-6 digit code next to "HS" label is an HS Code, NOT an NCM - IGNORE IT
 
 ★★★ CONCRETE REJECTION EXAMPLES ★★★
 
-REJECT (these are HS Codes, NOT NCMs - DO NOT include in NCM list):
-- Column header "HS Code" with value "870850" → REJECT
-- Column header "H.S." with value "8481" → REJECT
-- Label "HS-CODE:" followed by "8708" → REJECT
+REJECT (these are HS Codes, NOT NCMs):
+- Label "HS Code:" with value "870850" → REJECT
+- Label "HS-CODE:" with value "8708" → REJECT
+- Label "H.S.:" with value "8481" → REJECT
 
-ACCEPT (these are NCMs - INCLUDE in NCM list):
-- Column header "NCM Code" with value "87089900" → ACCEPT
-- Column header "Código NCM" with value "84812090" → ACCEPT
-- Label "NCM:" followed by "73182900" → ACCEPT
-
-★★★ IF THE COLUMN NAME CONTAINS "HS" - DO NOT USE IT FOR NCM ★★★
-★★★ IF THE COLUMN NAME CONTAINS "NCM" - USE IT FOR NCM ★★★
+ACCEPT (these are NCMs):
+- Label "NCM-CODES:" with values "8708, 8481, 8421" → ACCEPT ALL
+- Label "NCM:" with value "84812090" → ACCEPT
+- Label "NCM CODE:" with value "73182900" → ACCEPT
 ```
-
-#### 3. Remover Referências Ambíguas
-
-Substituir todas as ocorrências de:
-- `"NCM/HS codes"` → `"NCM codes"`
-- `"NCM/HS Code"` → `"NCM Code"`
-- `"HS Code/NCM"` → `"NCM Code"`
-
-#### 4. Atualizar Seção de Extração de Dados Exhaustiva
-
-Na seção "EXHAUSTIVE DATA EXTRACTION" dos prompts, alterar:
-```
-FROM MANIFEST/XLSX (scan ALL columns, ALL rows):
-...
-- NCM/HS codes (8-digit and 4-digit)
-```
-
-Para:
-```
-FROM MANIFEST/XLSX (scan ALL columns, ALL rows):
-...
-- NCM codes ONLY from "NCM Code" or "Código NCM" columns (NEVER from "HS Code" columns)
-```
-
----
-
-## Detalhes Técnicos
-
-### Mudanças em `maritimo-analyze/prompts.ts`
-
-Linhas aproximadas a modificar:
-- Linha ~985: Tabela de mapeamento de colunas
-- Linhas ~270-280: Seção de extração exhaustiva
-- Múltiplas ocorrências de "NCM/HS" ao longo do arquivo
-
-### Mudanças em `sea-submit-analysis/prompts.ts`
-
-Linhas aproximadas a modificar:
-- Linha ~969: Tabela de mapeamento de colunas
-- Linhas ~248-260: Seção de extração exhaustiva
-- Múltiplas ocorrências de "NCM/HS" ao longo do arquivo
-
-### Padrões de Busca e Substituição
-
-| Buscar | Substituir por |
-|--------|----------------|
-| `NCM/HS codes` | `NCM codes` |
-| `NCM/HS Code` | `NCM Code` |
-| `HS Code/NCM` | `NCM Code` |
-| `"HS Code" column` (na tabela) | `"NCM Code" or "Código NCM" column ONLY` |
 
 ---
 
@@ -130,11 +121,21 @@ Linhas aproximadas a modificar:
 
 | Cenário | Antes | Depois |
 |---------|-------|--------|
-| Manifest tem coluna "HS Code" com "870850" | Modelo extrai e compara com NCMs | Modelo ignora esta coluna |
-| Manifest tem coluna "NCM Code" com "87089900" | Modelo pode ignorar ou misturar | Modelo extrai corretamente |
-| Valor existe no Manifest mas marcado como "Extra" | Falso positivo | Comparação correta |
+| MBL tem label "HS-CODE: 870850" | Modelo extrai e inclui na lista NCM | Modelo ignora esta label |
+| MBL tem label "NCM-CODES: 8708, 8481" | Modelo pode misturar com HS | Modelo extrai corretamente |
+| HBL tem ambos "HS: 8708" e "NCM: 87089900" | Modelo pode usar HS incorretamente | Modelo usa APENAS NCM |
 
 ## Impacto na Interface
 
 **Nenhum impacto visual** - Apenas a lógica interna de extração e comparação será corrigida. A estrutura do resultado que o usuário recebe permanece exatamente igual.
+
+---
+
+## Ordem de Implementação
+
+1. Atualizar `sea-submit-analysis/prompts.ts` - PROMPT_HBL_MBL (linhas 1441 e 1565)
+2. Atualizar `maritimo-analyze/prompts.ts` - PROMPT_MANIFEST_HBL (linha 954)
+3. Atualizar `maritimo-analyze/prompts.ts` - PROMPT_INVOICES_HBL (linha 1788)
+4. Adicionar seção NCM vs HS Code no PROMPT_HBL_MBL de ambos arquivos
+5. Deploy das edge functions
 
