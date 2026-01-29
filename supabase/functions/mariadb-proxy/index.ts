@@ -11321,10 +11321,21 @@ serve(async (req) => {
         
         console.log(`[update_awb_status] Updating AWB ${awbNumber} to status: ${newStatus}`);
         
-        const updateResult = await client.execute(
-          `UPDATE dados_dachser.t_status_aereo SET último_status = ? WHERE awb = ?`,
-          [newStatus, awbNumber]
-        );
+        // Se o status for "ARR - Destino", também atualiza arr_datetime para garantir a regra de 5 dias
+        let updateResult;
+        if (newStatus === 'ARR - Destino') {
+          updateResult = await client.execute(
+            `UPDATE dados_dachser.t_status_aereo 
+             SET último_status = ?, arr_datetime = COALESCE(arr_datetime, NOW()) 
+             WHERE awb LIKE ?`,
+            [newStatus, `%${awbNumber}%`]
+          );
+        } else {
+          updateResult = await client.execute(
+            `UPDATE dados_dachser.t_status_aereo SET último_status = ? WHERE awb LIKE ?`,
+            [newStatus, `%${awbNumber}%`]
+          );
+        }
         
         console.log(`[update_awb_status] Update result:`, updateResult);
         
