@@ -1651,6 +1651,15 @@ const Index = () => {
   const getStatusFromEvent = (lastEvent: string): string => {
     if (!lastEvent) return "-";
 
+    // Verificar sufixos ARR específicos primeiro
+    const upperEvent = lastEvent.toUpperCase().trim();
+    if (upperEvent === "ARR - DESTINO") {
+      return "Chegou em seu destino final";
+    }
+    if (upperEvent === "ARR - CONEXÃO") {
+      return "Chegou na conexão";
+    }
+
     const eventLower = lastEvent.toLowerCase();
 
     // Extract status code (first 3 letters, with or without parentheses)
