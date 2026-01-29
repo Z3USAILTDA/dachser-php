@@ -435,10 +435,11 @@ CRITICAL: NCM (Nomenclatura Comum do Mercosul) ≠ HS Code (Harmonized System)
    - Look for semicolon-separated 8-digit codes (e.g., "74152900; 84819090")
 
 3. EXTRACTION RULES:
-   - Include ALL columns that contain NCM or HS codes
-   - Keep the EXACT values as they appear (4-digit: 8481, 8-digit: 84819090)
+   - Include ONLY columns that contain NCM codes ("NCM Code", "Código NCM")
+   - NEVER include values from "HS Code" columns - HS and NCM are different classification systems
+   - Keep the EXACT NCM values as they appear (4-digit: 8481, 8-digit: 84819090)
    - DO NOT truncate or modify code lengths
-   - Extract codes of ANY length exactly as written
+   - Extract NCM codes of ANY length exactly as written
 
 4. COMPARISON:
    - Show both lists side by side
