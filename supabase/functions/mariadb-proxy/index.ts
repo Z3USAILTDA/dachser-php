@@ -11308,6 +11308,34 @@ serve(async (req) => {
         break;
       }
 
+      // ==================== UPDATE AWB STATUS ====================
+      case 'update_awb_status': {
+        const { awb: awbNumber, status: newStatus } = body as { awb?: string; status?: string };
+        
+        if (!awbNumber || !newStatus) {
+          return new Response(
+            JSON.stringify({ error: 'awb e status são obrigatórios', success: false }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+        
+        console.log(`[update_awb_status] Updating AWB ${awbNumber} to status: ${newStatus}`);
+        
+        const updateResult = await client.execute(
+          `UPDATE dados_dachser.t_status_aereo SET último_status = ? WHERE awb = ?`,
+          [newStatus, awbNumber]
+        );
+        
+        console.log(`[update_awb_status] Update result:`, updateResult);
+        
+        result = { 
+          success: true, 
+          message: `AWB ${awbNumber} atualizado para ${newStatus}`,
+          affectedRows: updateResult.affectedRows 
+        };
+        break;
+      }
+
       // ==================== SEA MBL EXPORT ====================
       case 'get_sea_mbls_export': {
         console.log('[MARIADB] Fetching maritime MBLs for Excel export (last 2 months)...');
