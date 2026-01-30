@@ -704,10 +704,10 @@ export default function Olimpo() {
         // Build route line
         const line = buildRouteLine(item, currentRouteIndex);
         
-        // Only show route if this vehicle is selected
+        // Only show route if this vehicle is selected (with proper null checks)
         const isSelected = selectedAssetDetails && (
-          selectedAssetDetails.asset === item.asset ||
-          selectedAssetDetails.flight === item.flight
+          (selectedAssetDetails.asset && item.asset && selectedAssetDetails.asset === item.asset) ||
+          (selectedAssetDetails.flight && item.flight && selectedAssetDetails.flight === item.flight)
         );
 
         if (isSelected && line.length > 1) {
