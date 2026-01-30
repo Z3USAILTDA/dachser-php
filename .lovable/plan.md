@@ -1,111 +1,73 @@
 
 
-# Melhorias de Visualização do Mapa Olimpo
+# Correção da Lógica de Seleção de Rotas no Mapa Olimpo
 
-## Resumo
-Substituir os ícones de emoji (✈️ e 🚢) por ícones Font Awesome profissionais com rotação dinâmica baseada no tipo de operação (importação/exportação), e alterar a lógica das rotas para só exibir a linha quando um veículo for selecionado.
+## Problema Identificado
+
+A condição `isSelected` está comparando valores `null` incorretamente:
+
+```typescript
+const isSelected = selectedAssetDetails && (
+  selectedAssetDetails.asset === item.asset ||      // null === null = TRUE!
+  selectedAssetDetails.flight === item.flight       // null === null = TRUE!
+);
+```
+
+Quando `item.asset` é `null` e `selectedAssetDetails.asset` também é `null`, a comparação retorna `true`, fazendo com que TODAS as rotas de veículos sem asset definido apareçam simultaneamente.
 
 ---
 
-## Mudanças Visuais
+## Solução
 
-### Ícones Novos
+Adicionar verificações para garantir que os valores não sejam `null` antes de compará-los:
 
-| Tipo | Ícone Atual | Ícone Novo |
-|------|-------------|------------|
-| Avião Importação | ✈️ | `faPlane` com rotação 120° (apontando para baixo/esquerda) |
-| Avião Exportação | ✈️ | `faPlane` com rotação 300° (apontando para cima/direita) |
-| Navio | 🚢 | `faShip` |
+```typescript
+const isSelected = selectedAssetDetails && (
+  (selectedAssetDetails.asset && item.asset && selectedAssetDetails.asset === item.asset) ||
+  (selectedAssetDetails.flight && item.flight && selectedAssetDetails.flight === item.flight)
+);
+```
 
-### Lógica de Rotas
-- **Antes**: Todas as linhas/rotas são exibidas para todos os veículos
-- **Depois**: Linhas só aparecem quando um veículo é selecionado (clicado)
+**Lógica corrigida:**
+- Só considera match de `asset` se AMBOS existirem e forem iguais
+- Só considera match de `flight` se AMBOS existirem e forem iguais
+- Isso evita que `null === null` seja tratado como seleção válida
 
 ---
 
-## Implementação Técnica
+## Arquivo Modificado
 
-### Arquivo: `src/pages/Olimpo.tsx`
+| Arquivo | Mudança |
+|---------|---------|
+| `src/pages/Olimpo.tsx` | Corrigir condição `isSelected` (linhas 707-711) |
 
-#### 1. Adicionar imports do Font Awesome (início do arquivo)
+---
 
+## Código Final
+
+**Linhas 707-711 - De:**
 ```typescript
-import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
-import { faPlane, faShip } from "@fortawesome/free-solid-svg-icons";
-```
-
-#### 2. Determinar se é importação ou exportação
-
-A lógica usará o campo `tipo_label` que já existe nos dados:
-- Se contiver "IMPORT" → Importação (avião aponta para baixo: 120°)
-- Se contiver "EXPORT" → Exportação (avião aponta para cima: 300°)
-
-#### 3. Alterar criação dos marcadores (linhas ~751-755)
-
-**De:**
-```typescript
-const el = document.createElement("div");
-el.className = "cursor-pointer text-2xl";
-el.innerHTML = item.mode === "air" ? "✈️" : "🚢";
-el.style.filter = "drop-shadow(0 2px 4px rgba(0,0,0,0.5))";
-```
-
-**Para:**
-```typescript
-const el = document.createElement("div");
-el.className = "cursor-pointer";
-el.style.filter = "drop-shadow(0 2px 4px rgba(0,0,0,0.5))";
-el.style.fontSize = "20px";
-
-if (item.mode === "air") {
-  // Determina rotação: IMPORT = 120°, EXPORT = 300°
-  const isImport = item.tipo_label.toUpperCase().includes("IMPORT");
-  const rotation = isImport ? 120 : 300;
-  el.innerHTML = `<i class="fa-solid fa-plane" style="color: #7fd0ff; transform: rotate(${rotation}deg);"></i>`;
-} else {
-  el.innerHTML = `<i class="fa-solid fa-ship" style="color: #ffc800;"></i>`;
-}
-```
-
-#### 4. Mostrar rotas apenas para veículo selecionado
-
-Alterar a lógica de renderização das rotas (linhas ~707-743) para só desenhar a linha quando o `key` do grupo corresponder ao asset selecionado.
-
-**Lógica:**
-```typescript
-// Só desenha rota se este veículo estiver selecionado
+// Only show route if this vehicle is selected
 const isSelected = selectedAssetDetails && (
   selectedAssetDetails.asset === item.asset ||
   selectedAssetDetails.flight === item.flight
 );
-
-if (isSelected && line.length > 1) {
-  // ... código existente para desenhar a rota
-}
 ```
 
-#### 5. Redesenhar mapa quando seleção mudar
-
-Adicionar `selectedAssetDetails` como dependência do useEffect que atualiza o mapa:
-
+**Para:**
 ```typescript
-}, [filteredData, mapboxToken, selectedAssetDetails]);
+// Only show route if this vehicle is selected (with proper null checks)
+const isSelected = selectedAssetDetails && (
+  (selectedAssetDetails.asset && item.asset && selectedAssetDetails.asset === item.asset) ||
+  (selectedAssetDetails.flight && item.flight && selectedAssetDetails.flight === item.flight)
+);
 ```
-
----
-
-## Arquivos Modificados
-
-| Arquivo | Tipo de Mudança |
-|---------|-----------------|
-| `src/pages/Olimpo.tsx` | Adicionar imports Font Awesome, alterar criação de marcadores, condicionar exibição de rotas |
 
 ---
 
 ## Resultado Esperado
 
-1. **Ícones profissionais**: Ícones Font Awesome substituem emojis
-2. **Direção visual**: Aviões de importação apontam "chegando" (120°), exportação apontam "partindo" (300°)
-3. **Mapa limpo**: Sem linhas de rota até clicar em um veículo
-4. **Foco no selecionado**: Ao clicar, só a rota daquele veículo aparece
+1. Ao clicar em um veículo específico, apenas a rota dele será exibida
+2. Veículos sem `asset` ou `flight` definidos não terão suas rotas exibidas erroneamente
+3. O filtro por tipo (aéreo/marítimo) não afetará a exibição de rotas - apenas o clique direto no veículo
 
