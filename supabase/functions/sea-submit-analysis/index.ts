@@ -119,6 +119,145 @@ RULES:
   }
 }
 
+// ============ NCM VALIDATION FUNCTIONS (POST-LLM ANTI-HALLUCINATION) ============
+
+/**
+ * Extract NCM codes from OCR text for post-LLM validation
+ * Uses multiple patterns to capture NCMs in different formats
+ */
+function extractNcmsFromOcrText(ocrText: string): string[] {
+  const allNcms: string[] = [];
+  
+  // Pattern 1: NCM-CODES: followed by list (common in BL documents)
+  const ncmCodesBlockMatch = ocrText.match(/NCM[-\s]?CODES?[:\s]+([^\n]+(?:\n(?!\d{4}[A-Z])[^\n]+)*)/i);
+  if (ncmCodesBlockMatch) {
+    const block = ncmCodesBlockMatch[1];
+    const codes = block.match(/\b(\d{4})(?:\d{4})?\b/g) || [];
+    allNcms.push(...codes.map(c => c.substring(0, 4))); // Normalize to 4 digits
+  }
+  
+  // Pattern 2: Standalone 4-digit numbers that start with 3, 4, 7, 8, 9 (valid NCM prefixes)
+  const standaloneMatches = ocrText.match(/\b([3-9]\d{3})\b/g) || [];
+  allNcms.push(...standaloneMatches);
+  
+  // Pattern 3: 8-digit NCMs (full format)
+  const eightDigitMatches = ocrText.match(/\b(\d{8})\b/g) || [];
+  for (const code of eightDigitMatches) {
+    const prefix = code.substring(0, 4);
+    if (/^[3-9]\d{3}$/.test(prefix)) {
+      allNcms.push(prefix);
+    }
+  }
+  
+  // Remove duplicates and sort
+  return [...new Set(allNcms)].sort();
+}
+
+/**
+ * Validate and correct LLM NCM analysis against OCR-extracted truth
+ * Removes hallucinated NCMs that don't exist in either document
+ */
+function validateAndCorrectNcmAnalysis(
+  llmResult: string, 
+  mblOcrText: string,
+  hblOcrText?: string
+): string {
+  console.log(`🔍 [NCM Validation] Starting post-LLM validation...`);
+  
+  // Extract NCMs from OCR of MBL (authoritative source)
+  const mblOcrNcms = extractNcmsFromOcrText(mblOcrText);
+  console.log(`🔍 [NCM Validation] NCMs found in MBL OCR: ${mblOcrNcms.join(', ') || 'none'}`);
+  
+  // Extract NCMs from OCR of HBL (if available) for cross-validation
+  const hblOcrNcms = hblOcrText ? extractNcmsFromOcrText(hblOcrText) : [];
+  if (hblOcrNcms.length > 0) {
+    console.log(`🔍 [NCM Validation] NCMs found in HBL OCR: ${hblOcrNcms.join(', ')}`);
+  }
+  
+  // Find the "Missing in MBL:" line in the LLM result
+  const missingMatch = llmResult.match(/Missing in MBL:\s*([^\n]+)/i);
+  if (!missingMatch) {
+    console.log(`✅ [NCM Validation] No "Missing in MBL" line found - skipping validation`);
+    return llmResult;
+  }
+  
+  const reportedMissingRaw = missingMatch[1].trim();
+  
+  // Check if already "none"
+  if (reportedMissingRaw.toLowerCase() === 'none' || reportedMissingRaw === '-') {
+    console.log(`✅ [NCM Validation] No NCMs reported as missing - skipping validation`);
+    return llmResult;
+  }
+  
+  // Extract NCM codes from the "Missing" line
+  const reportedMissing = reportedMissingRaw
+    .split(/[,\s]+/)
+    .map(n => n.trim())
+    .filter(n => /^\d{4}$/.test(n));
+  
+  if (reportedMissing.length === 0) {
+    console.log(`✅ [NCM Validation] No valid 4-digit NCMs in missing list - skipping validation`);
+    return llmResult;
+  }
+  
+  console.log(`🔍 [NCM Validation] LLM reported missing: ${reportedMissing.join(', ')}`);
+  
+  // Verify each "missing" NCM
+  const trulyMissing: string[] = [];
+  const falsePositives: string[] = [];
+  
+  for (const ncm of reportedMissing) {
+    // If NCM exists in MBL OCR, it's a false positive (LLM failed to see it)
+    if (mblOcrNcms.includes(ncm)) {
+      falsePositives.push(ncm);
+      console.log(`⚠️ [NCM Validation] NCM ${ncm} IS IN MBL OCR - LLM missed it (false positive)`);
+      continue;
+    }
+    
+    // If NCM doesn't exist in HBL OCR either, it's a hallucination
+    if (hblOcrNcms.length > 0 && !hblOcrNcms.includes(ncm)) {
+      falsePositives.push(ncm);
+      console.log(`⚠️ [NCM Validation] NCM ${ncm} is HALLUCINATED - not found in either document`);
+      continue;
+    }
+    
+    // NCM genuinely missing from MBL
+    trulyMissing.push(ncm);
+    console.log(`✓ [NCM Validation] NCM ${ncm} confirmed missing from MBL`);
+  }
+  
+  // If we found false positives, correct the result
+  if (falsePositives.length > 0) {
+    console.log(`⚠️ [NCM Validation] Removing ${falsePositives.length} false positives: ${falsePositives.join(', ')}`);
+    
+    const correctedMissing = trulyMissing.length > 0 ? trulyMissing.join(', ') : 'none';
+    let correctedResult = llmResult.replace(
+      /Missing in MBL:\s*[^\n]+/i,
+      `Missing in MBL: ${correctedMissing}`
+    );
+    
+    // Also update the structured NCM block if present
+    correctedResult = correctedResult.replace(
+      /MISSING_IN_MBL:\s*[^\n]+/i,
+      `MISSING_IN_MBL: ${correctedMissing}`
+    );
+    
+    // Update status if no more NCMs are truly missing
+    if (trulyMissing.length === 0) {
+      correctedResult = correctedResult
+        .replace(/NCM_STATUS:\s*UPDATE_REQUIRED/i, 'NCM_STATUS: MATCH')
+        .replace(/Status:\s*UPDATE REQUIRED(\s*[\n\r])/i, 'Status: MATCH$1');
+      
+      console.log(`✅ [NCM Validation] All "missing" NCMs were false positives - status corrected to MATCH`);
+    }
+    
+    return correctedResult;
+  }
+  
+  console.log(`✅ [NCM Validation] All reported missing NCMs are valid (truly missing from MBL)`);
+  return llmResult;
+}
+
 // ============ UTILITY FUNCTIONS ============
 
 // ============ OCR FALLBACK FOR SCANNED PDFs ============
@@ -498,17 +637,18 @@ async function analyzeWithAnthropic(
     { type: 'text', text: fullPrompt }
   ];
   
-  // ============ OCR PRE-EXTRACTION FOR MBL PDFs ============
+  // ============ OCR PRE-EXTRACTION FOR MBL AND HBL PDFs ============
   // MBL documents from carriers like CMA CGM are often image-based (scanned)
   // Pre-extract text via Vision API to ensure NCM codes are captured
+  // Also extract HBL text for post-LLM cross-validation (anti-hallucination)
   let preExtractedMblTexts: string[] = [];
+  let preExtractedHblTexts: string[] = [];
   
   for (let i = 0; i < pdfFiles.length; i++) {
     const file = pdfFiles[i];
     
     // ALWAYS apply OCR to MBL files in HBL×MBL analysis
     // MBL documents are frequently image-based and Claude struggles with NCM extraction
-    // Removing isPdfLikelyScanned check to ensure consistent extraction
     if (file.file_type === 'mbl') {
       console.log(`🔍 [OCR] ALWAYS pre-extracting text from MBL for better NCM extraction: ${file.name}`);
       const ocrText = await extractTextViaVisionAPI(file.base64, file.name);
@@ -518,6 +658,19 @@ async function analyzeWithAnthropic(
         console.log(`✅ [OCR] Successfully extracted ${ocrText.length} chars from MBL`);
       } else {
         console.log(`⚠️ [OCR] Extraction returned insufficient text (${ocrText?.length || 0} chars) for MBL: ${file.name}`);
+      }
+    }
+    
+    // Also extract HBL text for cross-validation (anti-hallucination)
+    if (file.file_type === 'base' || file.file_type === 'hbl') {
+      console.log(`🔍 [OCR] Also pre-extracting HBL for NCM cross-validation: ${file.name}`);
+      const ocrText = await extractTextViaVisionAPI(file.base64, file.name);
+      
+      if (ocrText && ocrText.length > 100) {
+        preExtractedHblTexts.push(ocrText);
+        console.log(`✅ [OCR] Successfully extracted ${ocrText.length} chars from HBL`);
+      } else {
+        console.log(`⚠️ [OCR] HBL extraction returned insufficient text (${ocrText?.length || 0} chars): ${file.name}`);
       }
     }
   }
@@ -724,7 +877,7 @@ If your "Total exporters identified" is LESS than the actual count in the manife
   }
   
   const data = await response.json();
-  const resultText = data.content?.[0]?.text || '';
+  let resultText = data.content?.[0]?.text || '';
   
   // DETAILED LOGGING FOR DEBUGGING
   console.log(`========== ANTHROPIC RESPONSE DEBUG ==========`);
@@ -747,6 +900,15 @@ If your "Total exporters identified" is LESS than the actual count in the manife
   console.log(`📝 First 500 chars: ${resultText.substring(0, 500)}`);
   console.log(`📝 Last 500 chars: ${resultText.substring(resultText.length - 500)}`);
   console.log(`==============================================`);
+  
+  // ============ POST-LLM NCM VALIDATION (ANTI-HALLUCINATION) ============
+  // For HBL×MBL analysis, validate reported "missing" NCMs against OCR truth
+  if (analysisType === 'hbl_mbl' && preExtractedMblTexts.length > 0) {
+    console.log(`🔍 [NCM Validation] Running post-LLM validation for HBL×MBL analysis...`);
+    const combinedMblOcr = preExtractedMblTexts.join('\n');
+    const combinedHblOcr = preExtractedHblTexts.length > 0 ? preExtractedHblTexts.join('\n') : undefined;
+    resultText = validateAndCorrectNcmAnalysis(resultText, combinedMblOcr, combinedHblOcr);
+  }
   
   return { text: resultText, model: 'claude-sonnet-4-5' };
 }
