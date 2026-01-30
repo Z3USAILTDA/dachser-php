@@ -282,7 +282,7 @@ serve(async (req) => {
 
   try {
     const body = await req.json().catch(() => ({}));
-    const testMode = body.test_mode !== false; // Default to test mode
+    const testMode = body.test_mode === true; // Default to production mode
     const forceAlert = body.force === true; // Force send even if recently alerted
 
     console.log(`Running db-critical-alert in ${testMode ? 'TEST' : 'PRODUCTION'} mode`);
