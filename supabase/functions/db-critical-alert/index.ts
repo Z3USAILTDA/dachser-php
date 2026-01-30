@@ -126,7 +126,10 @@ function generateCriticalAlertHtml(criticalTables: TableStats[], timestamp: Date
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
 </head>
 <body style="margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; background-color: #050608;">
-  <div style="max-width: 640px; margin: 0 auto; padding: 24px;">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color: #050608; min-height: 100vh;">
+    <tr>
+      <td align="center" style="padding: 24px;">
+        <div style="max-width: 640px; width: 100%;">
     
     <!-- Header Card -->
     <div style="background: linear-gradient(135deg, #0a0c10 0%, #050608 100%); border: 1px solid rgba(239, 68, 68, 0.3); border-radius: 24px; overflow: hidden; box-shadow: 0 0 60px rgba(239, 68, 68, 0.1);">
@@ -190,11 +193,14 @@ function generateCriticalAlertHtml(criticalTables: TableStats[], timestamp: Date
     </div>
 
     <!-- Footer -->
-    <div style="text-align: center; padding: 24px; color: #444444; font-size: 12px;">
+    <div style="text-align: center; padding: 24px; color: #666666; font-size: 12px;">
       <p style="margin: 0;">Alerta automático do sistema de monitoramento</p>
-      <p style="margin: 8px 0 0 0; color: #333333;">Z3US.AI • Verificação a cada 30 minutos</p>
+      <p style="margin: 8px 0 0 0; color: #555555;">Z3US.AI • Verificação a cada 30 minutos</p>
     </div>
-  </div>
+        </div>
+      </td>
+    </tr>
+  </table>
 </body>
 </html>
   `;
