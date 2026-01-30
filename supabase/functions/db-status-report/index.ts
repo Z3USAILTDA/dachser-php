@@ -99,6 +99,8 @@ function formatNumber(num: number): string {
   return num.toLocaleString('pt-BR');
 }
 
+const LOGO_URL = 'https://finktakbjcfmurqeiubz.supabase.co/storage/v1/object/public/maritime-files/email-assets/logo-z3us.png';
+
 function generateEmailHtml(stats: TableStats[], timestamp: Date): string {
   const healthyCount = stats.filter(s => s.status === 'healthy').length;
   const warningCount = stats.filter(s => s.status === 'warning').length;
@@ -113,22 +115,46 @@ function generateEmailHtml(stats: TableStats[], timestamp: Date): string {
     minute: '2-digit'
   });
 
+  const getStatusBgColor = (status: 'healthy' | 'warning' | 'critical') => {
+    switch (status) {
+      case 'healthy': return 'rgba(34, 197, 94, 0.15)';
+      case 'warning': return 'rgba(245, 184, 67, 0.15)';
+      case 'critical': return 'rgba(239, 68, 68, 0.15)';
+    }
+  };
+
+  const getStatusTextColor = (status: 'healthy' | 'warning' | 'critical') => {
+    switch (status) {
+      case 'healthy': return '#22c55e';
+      case 'warning': return '#F5B843';
+      case 'critical': return '#ef4444';
+    }
+  };
+
   const tableRows = stats.map(stat => `
-    <tr>
-      <td style="padding: 12px 16px; border-bottom: 1px solid #e5e7eb;">
-        ${getStatusEmoji(stat.status)} ${stat.displayName}
+    <tr style="border-bottom: 1px solid rgba(255, 255, 255, 0.08);">
+      <td style="padding: 16px; color: #ffffff; font-weight: 500;">
+        <span style="display: inline-block; width: 10px; height: 10px; border-radius: 50%; background-color: ${getStatusTextColor(stat.status)}; margin-right: 10px; box-shadow: 0 0 8px ${getStatusTextColor(stat.status)};"></span>
+        ${stat.displayName}
       </td>
-      <td style="padding: 12px 16px; border-bottom: 1px solid #e5e7eb; text-align: center;">
+      <td style="padding: 16px; text-align: center; color: ${stat.minutesSinceUpdate >= 30 ? '#F5B843' : '#B3B3B3'};">
         ${stat.lastUpdate ? formatMinutes(stat.minutesSinceUpdate) : 'N/A'}
       </td>
-      <td style="padding: 12px 16px; border-bottom: 1px solid #e5e7eb; text-align: right;">
+      <td style="padding: 16px; text-align: right; color: #B3B3B3; font-family: 'Monaco', 'Menlo', monospace;">
         ${formatNumber(stat.totalRecords)}
       </td>
-      <td style="padding: 12px 16px; border-bottom: 1px solid #e5e7eb; text-align: right; color: #059669;">
-        +${formatNumber(stat.recentInserts)}
+      <td style="padding: 16px; text-align: right;">
+        <span style="background: rgba(34, 197, 94, 0.15); color: #22c55e; padding: 4px 10px; border-radius: 12px; font-size: 13px; font-weight: 600;">
+          +${formatNumber(stat.recentInserts)}
+        </span>
       </td>
     </tr>
   `).join('');
+
+  const overallStatus = criticalCount > 0 ? 'critical' : warningCount > 0 ? 'warning' : 'healthy';
+  const statusBadge = criticalCount > 0 
+    ? '<span style="background: rgba(239, 68, 68, 0.2); color: #ef4444; padding: 6px 16px; border-radius: 20px; font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 1px;">Atenção Necessária</span>'
+    : '<span style="background: rgba(34, 197, 94, 0.2); color: #22c55e; padding: 6px 16px; border-radius: 20px; font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 1px;">Sistema Operacional</span>';
 
   return `
 <!DOCTYPE html>
@@ -137,63 +163,77 @@ function generateEmailHtml(stats: TableStats[], timestamp: Date): string {
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
 </head>
-<body style="margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; background-color: #f3f4f6;">
-  <div style="max-width: 600px; margin: 0 auto; padding: 20px;">
-    <!-- Header -->
-    <div style="background: linear-gradient(135deg, #1e3a5f 0%, #0f172a 100%); border-radius: 12px 12px 0 0; padding: 24px; text-align: center;">
-      <h1 style="margin: 0; color: #ffffff; font-size: 18px; font-weight: 600; letter-spacing: 2px;">
-        Z&#8203;3&#8203;U&#8203;S.AI
-      </h1>
-      <div style="margin-top: 16px;">
-        <span style="background-color: rgba(255,255,255,0.1); color: #ffffff; padding: 8px 16px; border-radius: 20px; font-size: 14px;">
-          📊 RELATÓRIO DE STATUS - BANCO DE DADOS
-        </span>
-      </div>
-      <p style="margin: 16px 0 0 0; color: #94a3b8; font-size: 14px;">
-        ${formattedDate} (São Paulo)
-      </p>
-    </div>
-
-    <!-- Content -->
-    <div style="background-color: #ffffff; padding: 24px; border-radius: 0 0 12px 12px; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);">
-      <!-- Summary -->
-      <div style="background-color: #f8fafc; border-radius: 8px; padding: 16px; margin-bottom: 24px;">
-        <p style="margin: 0; font-size: 14px; color: #64748b;">
-          <strong>Resumo Geral:</strong>
-          ${healthyCount > 0 ? `✅ ${healthyCount} tabelas saudáveis` : ''}
-          ${warningCount > 0 ? ` | ⚠️ ${warningCount} em atenção` : ''}
-          ${criticalCount > 0 ? ` | 🚨 ${criticalCount} críticas` : ''}
+<body style="margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; background-color: #050608;">
+  <div style="max-width: 640px; margin: 0 auto; padding: 24px;">
+    
+    <!-- Header Card -->
+    <div style="background: linear-gradient(135deg, #0a0c10 0%, #050608 100%); border: 1px solid rgba(245, 184, 67, 0.2); border-radius: 24px; overflow: hidden; box-shadow: 0 0 60px rgba(245, 184, 67, 0.08);">
+      
+      <!-- Logo & Title Section -->
+      <div style="background: radial-gradient(ellipse at top, rgba(245, 184, 67, 0.12) 0%, transparent 70%); padding: 40px 32px 24px; text-align: center; border-bottom: 1px solid rgba(245, 184, 67, 0.1);">
+        <img src="${LOGO_URL}" alt="Z3US.AI" style="height: 48px; margin-bottom: 20px;" />
+        <h1 style="margin: 0 0 8px 0; color: #F5B843; font-size: 13px; font-weight: 600; letter-spacing: 3px; text-transform: uppercase;">
+          Relatório de Status
+        </h1>
+        <p style="margin: 0 0 16px 0; color: #ffffff; font-size: 22px; font-weight: 600;">
+          Monitoramento de Banco de Dados
+        </p>
+        ${statusBadge}
+        <p style="margin: 16px 0 0 0; color: #666666; font-size: 13px;">
+          ${formattedDate} • São Paulo
         </p>
       </div>
 
-      <!-- Table -->
-      <table style="width: 100%; border-collapse: collapse; font-size: 14px;">
-        <thead>
-          <tr style="background-color: #f1f5f9;">
-            <th style="padding: 12px 16px; text-align: left; font-weight: 600; color: #475569; border-bottom: 2px solid #e2e8f0;">Tabela</th>
-            <th style="padding: 12px 16px; text-align: center; font-weight: 600; color: #475569; border-bottom: 2px solid #e2e8f0;">Última Atual.</th>
-            <th style="padding: 12px 16px; text-align: right; font-weight: 600; color: #475569; border-bottom: 2px solid #e2e8f0;">Registros</th>
-            <th style="padding: 12px 16px; text-align: right; font-weight: 600; color: #475569; border-bottom: 2px solid #e2e8f0;">24h</th>
+      <!-- Summary Stats -->
+      <div style="padding: 24px 32px; display: flex; border-bottom: 1px solid rgba(255, 255, 255, 0.06);">
+        <table style="width: 100%;">
+          <tr>
+            <td style="text-align: center; padding: 12px;">
+              <div style="font-size: 28px; font-weight: 700; color: #22c55e;">${healthyCount}</div>
+              <div style="font-size: 12px; color: #666666; text-transform: uppercase; letter-spacing: 1px; margin-top: 4px;">Saudáveis</div>
+            </td>
+            <td style="text-align: center; padding: 12px; border-left: 1px solid rgba(255, 255, 255, 0.08); border-right: 1px solid rgba(255, 255, 255, 0.08);">
+              <div style="font-size: 28px; font-weight: 700; color: #F5B843;">${warningCount}</div>
+              <div style="font-size: 12px; color: #666666; text-transform: uppercase; letter-spacing: 1px; margin-top: 4px;">Atenção</div>
+            </td>
+            <td style="text-align: center; padding: 12px;">
+              <div style="font-size: 28px; font-weight: 700; color: #ef4444;">${criticalCount}</div>
+              <div style="font-size: 12px; color: #666666; text-transform: uppercase; letter-spacing: 1px; margin-top: 4px;">Críticas</div>
+            </td>
           </tr>
-        </thead>
-        <tbody>
-          ${tableRows}
-        </tbody>
-      </table>
+        </table>
+      </div>
 
-      <!-- CTA -->
-      <div style="text-align: center; margin-top: 24px;">
+      <!-- Data Table -->
+      <div style="padding: 0 16px;">
+        <table style="width: 100%; border-collapse: collapse; font-size: 14px;">
+          <thead>
+            <tr style="border-bottom: 1px solid rgba(245, 184, 67, 0.15);">
+              <th style="padding: 16px; text-align: left; font-weight: 600; color: #F5B843; font-size: 11px; text-transform: uppercase; letter-spacing: 1px;">Tabela</th>
+              <th style="padding: 16px; text-align: center; font-weight: 600; color: #F5B843; font-size: 11px; text-transform: uppercase; letter-spacing: 1px;">Atualização</th>
+              <th style="padding: 16px; text-align: right; font-weight: 600; color: #F5B843; font-size: 11px; text-transform: uppercase; letter-spacing: 1px;">Total</th>
+              <th style="padding: 16px; text-align: right; font-weight: 600; color: #F5B843; font-size: 11px; text-transform: uppercase; letter-spacing: 1px;">24h</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${tableRows}
+          </tbody>
+        </table>
+      </div>
+
+      <!-- CTA Button -->
+      <div style="padding: 32px; text-align: center;">
         <a href="https://stellar-route-hub.lovable.app/admin/database-monitor" 
-           style="display: inline-block; background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%); color: #ffffff; text-decoration: none; padding: 12px 24px; border-radius: 8px; font-weight: 500; font-size: 14px;">
-          Ver Dashboard de Monitoramento
+           style="display: inline-block; background: linear-gradient(135deg, #F5B843 0%, #FFC800 100%); color: #050608; text-decoration: none; padding: 14px 32px; border-radius: 12px; font-weight: 600; font-size: 14px; box-shadow: 0 4px 20px rgba(245, 184, 67, 0.3);">
+          Abrir Dashboard
         </a>
       </div>
     </div>
 
     <!-- Footer -->
-    <div style="text-align: center; padding: 20px; color: #94a3b8; font-size: 12px;">
-      <p style="margin: 0;">Este é um email automático do sistema de monitoramento Z3US.AI</p>
-      <p style="margin: 8px 0 0 0;">Enviado a cada 30 minutos</p>
+    <div style="text-align: center; padding: 24px; color: #444444; font-size: 12px;">
+      <p style="margin: 0;">Alerta automático do sistema de monitoramento</p>
+      <p style="margin: 8px 0 0 0; color: #333333;">Z3US.AI • Enviado a cada 30 minutos</p>
     </div>
   </div>
 </body>
