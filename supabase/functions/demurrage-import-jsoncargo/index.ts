@@ -117,6 +117,19 @@ serve(async (req) => {
     return new Response(null, { headers: corsHeaders });
   }
 
+  // FLAG: JsonCargo DESATIVADO temporariamente até segunda ordem
+  const JSONCARGO_DISABLED = true;
+  if (JSONCARGO_DISABLED) {
+    return new Response(
+      JSON.stringify({ 
+        error: "JsonCargo desativado temporariamente", 
+        disabled: true,
+        message: "A integração com JsonCargo está suspensa até segunda ordem"
+      }),
+      { status: 503, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+    );
+  }
+
   const JSONCARGO_API_KEY = Deno.env.get("JSONCARGO_API_KEY");
   
   if (!JSONCARGO_API_KEY) {
