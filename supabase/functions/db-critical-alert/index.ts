@@ -99,23 +99,27 @@ function generateCriticalAlertHtml(criticalTables: TableStats[], timestamp: Date
     minute: '2-digit'
   });
 
-  const tableCards = criticalTables.map(table => `
-    <div style="background: linear-gradient(135deg, rgba(239, 68, 68, 0.1) 0%, rgba(239, 68, 68, 0.05) 100%); border: 1px solid rgba(239, 68, 68, 0.3); border-left: 4px solid #ef4444; border-radius: 16px; padding: 20px; margin-bottom: 16px;">
-      <div style="display: flex; align-items: center; margin-bottom: 12px;">
-        <span style="display: inline-block; width: 12px; height: 12px; border-radius: 50%; background-color: #ef4444; margin-right: 12px; box-shadow: 0 0 12px #ef4444;"></span>
-        <strong style="color: #ffffff; font-size: 18px; font-weight: 600;">${table.displayName}</strong>
-      </div>
-      <div style="display: flex; gap: 24px; flex-wrap: wrap;">
-        <div>
-          <span style="color: #666666; font-size: 11px; text-transform: uppercase; letter-spacing: 1px;">Sem atualização</span>
-          <p style="margin: 4px 0 0 0; color: #ef4444; font-size: 16px; font-weight: 600;">${formatMinutes(table.minutesSinceUpdate)}</p>
-        </div>
-        <div>
-          <span style="color: #666666; font-size: 11px; text-transform: uppercase; letter-spacing: 1px;">Aplicações afetadas</span>
-          <p style="margin: 4px 0 0 0; color: #F5B843; font-size: 16px; font-weight: 600;">${table.applications.join(', ')}</p>
-        </div>
-      </div>
-    </div>
+  const tableRows = criticalTables.map(table => `
+    <tr style="border-bottom: 1px solid rgba(255, 255, 255, 0.08);">
+      <td style="padding: 16px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
+        <table role="presentation" cellpadding="0" cellspacing="0" border="0">
+          <tr>
+            <td style="width: 12px; padding-right: 10px;">
+              <div style="width: 10px; height: 10px; border-radius: 50%; background-color: #ef4444;"></div>
+            </td>
+            <td style="color: #ffffff; font-weight: 500;">
+              ${table.displayName}
+            </td>
+          </tr>
+        </table>
+      </td>
+      <td style="padding: 16px; text-align: center; color: #ef4444; font-weight: 600; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
+        ${formatMinutes(table.minutesSinceUpdate)}
+      </td>
+      <td style="padding: 16px; text-align: right; color: #F5B843; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
+        ${table.applications.join(', ')}
+      </td>
+    </tr>
   `).join('');
 
   return `
@@ -157,22 +161,22 @@ function generateCriticalAlertHtml(criticalTables: TableStats[], timestamp: Date
                       
                       <!-- Header Section -->
                       <tr>
-                        <td align="center" style="background: linear-gradient(180deg, rgba(239, 68, 68, 0.15) 0%, transparent 100%); padding: 40px 32px 32px; border-bottom: 1px solid rgba(239, 68, 68, 0.15);">
+                        <td align="center" style="background: linear-gradient(180deg, rgba(239, 68, 68, 0.12) 0%, transparent 100%); padding: 40px 32px 24px; border-bottom: 1px solid rgba(239, 68, 68, 0.1);">
                           <img src="${LOGO_URL}" alt="Z3US.AI" width="120" style="height: 48px; margin-bottom: 20px; display: block;" />
-                          
-                          <!-- Alert Badge -->
-                          <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin-bottom: 16px;">
+                          <p style="margin: 0 0 8px 0; color: #ef4444; font-size: 13px; font-weight: 600; letter-spacing: 3px; text-transform: uppercase; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
+                            🚨 Alerta Crítico
+                          </p>
+                          <p style="margin: 0 0 16px 0; color: #ffffff; font-size: 22px; font-weight: 600; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
+                            Monitoramento de Banco de Dados
+                          </p>
+                          <table role="presentation" cellpadding="0" cellspacing="0" border="0">
                             <tr>
-                              <td style="background-color: rgba(239, 68, 68, 0.2); border: 1px solid rgba(239, 68, 68, 0.4); color: #ef4444; padding: 8px 20px; border-radius: 24px; font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 2px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
-                                🔴 ALERTA CRÍTICO
+                              <td style="background-color: rgba(239, 68, 68, 0.2); color: #ef4444; padding: 6px 16px; border-radius: 20px; font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 1px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
+                                ${criticalTables.length} Tabela${criticalTables.length > 1 ? 's' : ''} Crítica${criticalTables.length > 1 ? 's' : ''}
                               </td>
                             </tr>
                           </table>
-                          
-                          <p style="margin: 0 0 8px 0; color: #ffffff; font-size: 24px; font-weight: 700; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
-                            Banco de Dados
-                          </p>
-                          <p style="margin: 0; color: #888888; font-size: 13px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
+                          <p style="margin: 16px 0 0 0; color: #888888; font-size: 13px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
                             ${formattedDate} • São Paulo
                           </p>
                         </td>
@@ -181,11 +185,11 @@ function generateCriticalAlertHtml(criticalTables: TableStats[], timestamp: Date
                       <!-- Warning Message -->
                       <tr>
                         <td style="padding: 24px 32px; border-bottom: 1px solid rgba(255, 255, 255, 0.06);">
-                          <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color: rgba(245, 184, 67, 0.08); border: 1px solid rgba(245, 184, 67, 0.2); border-radius: 12px;">
+                          <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
                             <tr>
-                              <td style="padding: 16px 20px;">
+                              <td align="center" style="padding: 12px;">
                                 <p style="margin: 0; font-size: 14px; color: #cccccc; line-height: 1.6; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
-                                  ⚠️ As seguintes tabelas estão sem atualização há mais de <strong style="color: #F5B843;">60 minutos</strong> e requerem atenção imediata.
+                                  As seguintes tabelas estão sem atualização há mais de <strong style="color: #ef4444;">60 minutos</strong> e requerem atenção imediata.
                                 </p>
                               </td>
                             </tr>
@@ -193,27 +197,33 @@ function generateCriticalAlertHtml(criticalTables: TableStats[], timestamp: Date
                         </td>
                       </tr>
                       
-                      <!-- Critical Tables -->
+                      <!-- Data Table Section -->
                       <tr>
-                        <td style="padding: 24px 32px;">
-                          ${tableCards}
+                        <td style="padding: 0 16px;">
+                          <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="font-size: 14px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
+                            <tr style="border-bottom: 1px solid rgba(239, 68, 68, 0.15);">
+                              <th style="padding: 16px; text-align: left; font-weight: 600; color: #ef4444; font-size: 11px; text-transform: uppercase; letter-spacing: 1px;">Tabela</th>
+                              <th style="padding: 16px; text-align: center; font-weight: 600; color: #ef4444; font-size: 11px; text-transform: uppercase; letter-spacing: 1px;">Sem Atualização</th>
+                              <th style="padding: 16px; text-align: right; font-weight: 600; color: #ef4444; font-size: 11px; text-transform: uppercase; letter-spacing: 1px;">Aplicações</th>
+                            </tr>
+                            ${tableRows}
+                          </table>
                         </td>
                       </tr>
                       
                       <!-- Recommendations -->
                       <tr>
-                        <td style="padding: 0 32px 24px;">
-                          <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color: rgba(255, 255, 255, 0.03); border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 16px;">
+                        <td style="padding: 24px 32px;">
+                          <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color: rgba(255, 255, 255, 0.03); border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 12px;">
                             <tr>
-                              <td style="padding: 20px;">
-                                <p style="margin: 0 0 16px 0; font-size: 13px; font-weight: 600; color: #F5B843; text-transform: uppercase; letter-spacing: 1px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
+                              <td style="padding: 16px 20px;">
+                                <p style="margin: 0 0 12px 0; font-size: 12px; font-weight: 600; color: #F5B843; text-transform: uppercase; letter-spacing: 1px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
                                   📋 Recomendações
                                 </p>
-                                <p style="margin: 0; color: #cccccc; font-size: 14px; line-height: 2; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
+                                <p style="margin: 0; color: #999999; font-size: 13px; line-height: 1.8; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
                                   • Verificar conectividade do job de sincronização<br/>
-                                  • Verificar se há processos travados no servidor de origem<br/>
-                                  • Consultar logs do sistema para identificar erros<br/>
-                                  • Contatar a equipe de infraestrutura se o problema persistir
+                                  • Verificar processos travados no servidor<br/>
+                                  • Consultar logs do sistema
                                 </p>
                               </td>
                             </tr>
