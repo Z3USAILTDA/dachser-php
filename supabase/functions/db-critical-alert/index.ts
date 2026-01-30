@@ -87,6 +87,8 @@ function formatMinutes(minutes: number): string {
   return mins > 0 ? `${hours}h ${mins}min` : `${hours}h`;
 }
 
+const LOGO_URL = 'https://finktakbjcfmurqeiubz.supabase.co/storage/v1/object/public/maritime-files/email-assets/logo-z3us.png';
+
 function generateCriticalAlertHtml(criticalTables: TableStats[], timestamp: Date): string {
   const formattedDate = timestamp.toLocaleString('pt-BR', { 
     timeZone: 'America/Sao_Paulo',
@@ -98,17 +100,21 @@ function generateCriticalAlertHtml(criticalTables: TableStats[], timestamp: Date
   });
 
   const tableCards = criticalTables.map(table => `
-    <div style="background-color: #fef2f2; border: 1px solid #fecaca; border-left: 4px solid #dc2626; border-radius: 8px; padding: 16px; margin-bottom: 12px;">
-      <div style="display: flex; align-items: center; margin-bottom: 8px;">
-        <span style="font-size: 20px; margin-right: 8px;">🔴</span>
-        <strong style="color: #991b1b; font-size: 16px;">${table.displayName}</strong>
+    <div style="background: linear-gradient(135deg, rgba(239, 68, 68, 0.1) 0%, rgba(239, 68, 68, 0.05) 100%); border: 1px solid rgba(239, 68, 68, 0.3); border-left: 4px solid #ef4444; border-radius: 16px; padding: 20px; margin-bottom: 16px;">
+      <div style="display: flex; align-items: center; margin-bottom: 12px;">
+        <span style="display: inline-block; width: 12px; height: 12px; border-radius: 50%; background-color: #ef4444; margin-right: 12px; box-shadow: 0 0 12px #ef4444;"></span>
+        <strong style="color: #ffffff; font-size: 18px; font-weight: 600;">${table.displayName}</strong>
       </div>
-      <p style="margin: 4px 0; color: #7f1d1d; font-size: 14px;">
-        <strong>Sem atualização há:</strong> ${formatMinutes(table.minutesSinceUpdate)}
-      </p>
-      <p style="margin: 4px 0; color: #7f1d1d; font-size: 14px;">
-        <strong>Aplicações afetadas:</strong> ${table.applications.join(', ')}
-      </p>
+      <div style="display: flex; gap: 24px; flex-wrap: wrap;">
+        <div>
+          <span style="color: #666666; font-size: 11px; text-transform: uppercase; letter-spacing: 1px;">Sem atualização</span>
+          <p style="margin: 4px 0 0 0; color: #ef4444; font-size: 16px; font-weight: 600;">${formatMinutes(table.minutesSinceUpdate)}</p>
+        </div>
+        <div>
+          <span style="color: #666666; font-size: 11px; text-transform: uppercase; letter-spacing: 1px;">Aplicações afetadas</span>
+          <p style="margin: 4px 0 0 0; color: #F5B843; font-size: 16px; font-weight: 600;">${table.applications.join(', ')}</p>
+        </div>
+      </div>
     </div>
   `).join('');
 
@@ -119,61 +125,74 @@ function generateCriticalAlertHtml(criticalTables: TableStats[], timestamp: Date
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
 </head>
-<body style="margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; background-color: #f3f4f6;">
-  <div style="max-width: 600px; margin: 0 auto; padding: 20px;">
-    <!-- Header -->
-    <div style="background: linear-gradient(135deg, #991b1b 0%, #7f1d1d 100%); border-radius: 12px 12px 0 0; padding: 24px; text-align: center;">
-      <h1 style="margin: 0; color: #ffffff; font-size: 18px; font-weight: 600; letter-spacing: 2px;">
-        Z&#8203;3&#8203;U&#8203;S.AI
-      </h1>
-      <div style="margin-top: 16px;">
-        <span style="background-color: rgba(255,255,255,0.2); color: #ffffff; padding: 8px 16px; border-radius: 20px; font-size: 14px; font-weight: 600;">
-          🚨 ALERTA CRÍTICO - BANCO DE DADOS
-        </span>
-      </div>
-      <p style="margin: 16px 0 0 0; color: #fecaca; font-size: 14px;">
-        ${formattedDate} (São Paulo)
-      </p>
-    </div>
-
-    <!-- Content -->
-    <div style="background-color: #ffffff; padding: 24px; border-radius: 0 0 12px 12px; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);">
-      <!-- Warning Message -->
-      <div style="background-color: #fef3c7; border: 1px solid #fcd34d; border-radius: 8px; padding: 16px; margin-bottom: 24px;">
-        <p style="margin: 0; font-size: 14px; color: #92400e;">
-          ⚠️ As seguintes tabelas estão sem atualização há mais de <strong>60 minutos</strong> e requerem atenção imediata:
+<body style="margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; background-color: #050608;">
+  <div style="max-width: 640px; margin: 0 auto; padding: 24px;">
+    
+    <!-- Header Card -->
+    <div style="background: linear-gradient(135deg, #0a0c10 0%, #050608 100%); border: 1px solid rgba(239, 68, 68, 0.3); border-radius: 24px; overflow: hidden; box-shadow: 0 0 60px rgba(239, 68, 68, 0.1);">
+      
+      <!-- Logo & Title Section -->
+      <div style="background: radial-gradient(ellipse at top, rgba(239, 68, 68, 0.15) 0%, transparent 70%); padding: 40px 32px 32px; text-align: center; border-bottom: 1px solid rgba(239, 68, 68, 0.15);">
+        <img src="${LOGO_URL}" alt="Z3US.AI" style="height: 48px; margin-bottom: 20px;" />
+        
+        <!-- Alert Badge -->
+        <div style="margin-bottom: 16px;">
+          <span style="background: rgba(239, 68, 68, 0.2); border: 1px solid rgba(239, 68, 68, 0.4); color: #ef4444; padding: 8px 20px; border-radius: 24px; font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 2px; display: inline-flex; align-items: center; gap: 8px;">
+            <span style="display: inline-block; width: 8px; height: 8px; border-radius: 50%; background-color: #ef4444; animation: pulse 1.5s infinite;"></span>
+            ALERTA CRÍTICO
+          </span>
+        </div>
+        
+        <h1 style="margin: 0 0 8px 0; color: #ffffff; font-size: 24px; font-weight: 700;">
+          Banco de Dados
+        </h1>
+        <p style="margin: 0; color: #666666; font-size: 13px;">
+          ${formattedDate} • São Paulo
         </p>
+      </div>
+
+      <!-- Warning Message -->
+      <div style="padding: 24px 32px; border-bottom: 1px solid rgba(255, 255, 255, 0.06);">
+        <div style="background: linear-gradient(135deg, rgba(245, 184, 67, 0.1) 0%, rgba(245, 184, 67, 0.05) 100%); border: 1px solid rgba(245, 184, 67, 0.2); border-radius: 12px; padding: 16px 20px;">
+          <p style="margin: 0; font-size: 14px; color: #B3B3B3; line-height: 1.6;">
+            ⚠️ As seguintes tabelas estão sem atualização há mais de <strong style="color: #F5B843;">60 minutos</strong> e requerem atenção imediata.
+          </p>
+        </div>
       </div>
 
       <!-- Critical Tables -->
-      ${tableCards}
-
-      <!-- Recommendations -->
-      <div style="background-color: #f0f9ff; border: 1px solid #bae6fd; border-radius: 8px; padding: 16px; margin-top: 24px;">
-        <p style="margin: 0 0 12px 0; font-size: 14px; font-weight: 600; color: #0369a1;">
-          📋 Recomendações:
-        </p>
-        <ul style="margin: 0; padding-left: 20px; color: #0c4a6e; font-size: 14px;">
-          <li style="margin-bottom: 6px;">Verificar conectividade do job de sincronização</li>
-          <li style="margin-bottom: 6px;">Verificar se há processos travados no servidor de origem</li>
-          <li style="margin-bottom: 6px;">Consultar logs do sistema para identificar erros</li>
-          <li>Contatar a equipe de infraestrutura se o problema persistir</li>
-        </ul>
+      <div style="padding: 24px 32px;">
+        ${tableCards}
       </div>
 
-      <!-- CTA -->
-      <div style="text-align: center; margin-top: 24px;">
+      <!-- Recommendations -->
+      <div style="padding: 0 32px 24px;">
+        <div style="background: rgba(255, 255, 255, 0.03); border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 16px; padding: 20px;">
+          <p style="margin: 0 0 16px 0; font-size: 13px; font-weight: 600; color: #F5B843; text-transform: uppercase; letter-spacing: 1px;">
+            📋 Recomendações
+          </p>
+          <ul style="margin: 0; padding-left: 20px; color: #B3B3B3; font-size: 14px; line-height: 1.8;">
+            <li>Verificar conectividade do job de sincronização</li>
+            <li>Verificar se há processos travados no servidor de origem</li>
+            <li>Consultar logs do sistema para identificar erros</li>
+            <li>Contatar a equipe de infraestrutura se o problema persistir</li>
+          </ul>
+        </div>
+      </div>
+
+      <!-- CTA Button -->
+      <div style="padding: 8px 32px 32px; text-align: center;">
         <a href="https://stellar-route-hub.lovable.app/admin/database-monitor" 
-           style="display: inline-block; background: linear-gradient(135deg, #dc2626 0%, #991b1b 100%); color: #ffffff; text-decoration: none; padding: 12px 24px; border-radius: 8px; font-weight: 500; font-size: 14px;">
-          Ver Dashboard de Monitoramento
+           style="display: inline-block; background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%); color: #ffffff; text-decoration: none; padding: 14px 32px; border-radius: 12px; font-weight: 600; font-size: 14px; box-shadow: 0 4px 20px rgba(239, 68, 68, 0.3);">
+          Abrir Dashboard
         </a>
       </div>
     </div>
 
     <!-- Footer -->
-    <div style="text-align: center; padding: 20px; color: #94a3b8; font-size: 12px;">
-      <p style="margin: 0;">Este é um alerta automático do sistema de monitoramento Z3US.AI</p>
-      <p style="margin: 8px 0 0 0;">Verificação realizada a cada 30 minutos</p>
+    <div style="text-align: center; padding: 24px; color: #444444; font-size: 12px;">
+      <p style="margin: 0;">Alerta automático do sistema de monitoramento</p>
+      <p style="margin: 8px 0 0 0; color: #333333;">Z3US.AI • Verificação a cada 30 minutos</p>
     </div>
   </div>
 </body>
