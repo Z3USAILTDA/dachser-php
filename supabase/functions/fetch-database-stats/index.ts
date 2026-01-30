@@ -10,14 +10,16 @@ const corsHeaders = {
 interface ModalBreakdown {
   lastUpdate: string | null;
   totalRecords: number;
+  recentInserts: number;
   breakdown: {
-    [key: string]: { lastUpdate: string | null; count: number };
+    [key: string]: { lastUpdate: string | null; count: number; recentInserts: number };
   };
 }
 
 interface TableStats {
   lastUpdate: string | null;
   totalRecords: number;
+  recentInserts: number;
   applications: string[];
   byModal?: {
     AIR: ModalBreakdown;
@@ -94,16 +96,17 @@ serve(async (req) => {
     client = await connectWithRetry(3);
     console.log(`[fetch-database-stats] Fetching stats...`);
 
-    // Query 1: t_master_dados - general stats
+    // Query 1: t_master_dados - general stats with recent inserts (last 24h)
     const masterGeneral = await client.query(`
       SELECT 
         MAX(data_insert) as last_update, 
-        COUNT(*) as total_records
+        COUNT(*) as total_records,
+        SUM(CASE WHEN data_insert >= DATE_SUB(NOW(), INTERVAL 24 HOUR) THEN 1 ELSE 0 END) as recent_inserts
       FROM t_master_dados 
       WHERE active = 1
     `);
 
-    // Query 2: t_master_dados - by modal and tipo_processo
+    // Query 2: t_master_dados - by modal and tipo_processo with recent inserts
     const masterByModal = await client.query(`
       SELECT 
         CASE 
@@ -113,7 +116,8 @@ serve(async (req) => {
         END as modal,
         tipo_processo,
         MAX(data_insert) as last_update,
-        COUNT(*) as total_records
+        COUNT(*) as total_records,
+        SUM(CASE WHEN data_insert >= DATE_SUB(NOW(), INTERVAL 24 HOUR) THEN 1 ELSE 0 END) as recent_inserts
       FROM t_master_dados 
       WHERE active = 1 
         AND tipo_processo IN ('AIR IMPORT', 'AIR EXPORT', 'SEA IMPORT', 'SEA EXPORT')
@@ -121,27 +125,30 @@ serve(async (req) => {
       ORDER BY modal, tipo_processo
     `);
 
-    // Query 3: t_dados_financeiro_nfs
+    // Query 3: t_dados_financeiro_nfs with recent inserts
     const finNfs = await client.query(`
       SELECT 
         MAX(data_insert) as last_update, 
-        COUNT(*) as total_records
+        COUNT(*) as total_records,
+        SUM(CASE WHEN data_insert >= DATE_SUB(NOW(), INTERVAL 24 HOUR) THEN 1 ELSE 0 END) as recent_inserts
       FROM t_dados_financeiro_nfs
     `);
 
-    // Query 4: t_dados_financeiro_voucher
+    // Query 4: t_dados_financeiro_voucher with recent inserts
     const finVoucher = await client.query(`
       SELECT 
         MAX(data_insert) as last_update, 
-        COUNT(*) as total_records
+        COUNT(*) as total_records,
+        SUM(CASE WHEN data_insert >= DATE_SUB(NOW(), INTERVAL 24 HOUR) THEN 1 ELSE 0 END) as recent_inserts
       FROM t_dados_financeiro_voucher
     `);
 
-    // Query 5: tbaixas
+    // Query 5: tbaixas with recent inserts
     const baixas = await client.query(`
       SELECT 
         MAX(data_insert) as last_update, 
-        COUNT(*) as total_records
+        COUNT(*) as total_records,
+        SUM(CASE WHEN data_insert >= DATE_SUB(NOW(), INTERVAL 24 HOUR) THEN 1 ELSE 0 END) as recent_inserts
       FROM tbaixas
     `);
 
@@ -152,18 +159,20 @@ serve(async (req) => {
     const airBreakdown: ModalBreakdown = {
       lastUpdate: null,
       totalRecords: 0,
+      recentInserts: 0,
       breakdown: {
-        "AIR IMPORT": { lastUpdate: null, count: 0 },
-        "AIR EXPORT": { lastUpdate: null, count: 0 },
+        "AIR IMPORT": { lastUpdate: null, count: 0, recentInserts: 0 },
+        "AIR EXPORT": { lastUpdate: null, count: 0, recentInserts: 0 },
       },
     };
 
     const seaBreakdown: ModalBreakdown = {
       lastUpdate: null,
       totalRecords: 0,
+      recentInserts: 0,
       breakdown: {
-        "SEA IMPORT": { lastUpdate: null, count: 0 },
-        "SEA EXPORT": { lastUpdate: null, count: 0 },
+        "SEA IMPORT": { lastUpdate: null, count: 0, recentInserts: 0 },
+        "SEA EXPORT": { lastUpdate: null, count: 0, recentInserts: 0 },
       },
     };
 
@@ -175,10 +184,12 @@ serve(async (req) => {
       const tipoProcesso = row.tipo_processo;
       const lastUpdate = row.last_update ? new Date(row.last_update).toISOString() : null;
       const count = Number(row.total_records);
+      const recentInserts = Number(row.recent_inserts || 0);
 
       if (modal === "AIR") {
         airBreakdown.totalRecords += count;
-        airBreakdown.breakdown[tipoProcesso] = { lastUpdate, count };
+        airBreakdown.recentInserts += recentInserts;
+        airBreakdown.breakdown[tipoProcesso] = { lastUpdate, count, recentInserts };
         
         if (row.last_update) {
           const d = new Date(row.last_update);
@@ -188,7 +199,8 @@ serve(async (req) => {
         }
       } else if (modal === "SEA") {
         seaBreakdown.totalRecords += count;
-        seaBreakdown.breakdown[tipoProcesso] = { lastUpdate, count };
+        seaBreakdown.recentInserts += recentInserts;
+        seaBreakdown.breakdown[tipoProcesso] = { lastUpdate, count, recentInserts };
         
         if (row.last_update) {
           const d = new Date(row.last_update);
@@ -208,6 +220,7 @@ serve(async (req) => {
           ? new Date((masterGeneral as any[])[0].last_update).toISOString() 
           : null,
         totalRecords: Number((masterGeneral as any[])[0]?.total_records || 0),
+        recentInserts: Number((masterGeneral as any[])[0]?.recent_inserts || 0),
         applications: ["AIR", "SEA", "CCT", "TRACKING", "OLIMPO"],
         byModal: {
           AIR: airBreakdown,
@@ -219,6 +232,7 @@ serve(async (req) => {
           ? new Date((finNfs as any[])[0].last_update).toISOString() 
           : null,
         totalRecords: Number((finNfs as any[])[0]?.total_records || 0),
+        recentInserts: Number((finNfs as any[])[0]?.recent_inserts || 0),
         applications: ["REGUA"],
       },
       t_dados_financeiro_voucher: {
@@ -226,6 +240,7 @@ serve(async (req) => {
           ? new Date((finVoucher as any[])[0].last_update).toISOString() 
           : null,
         totalRecords: Number((finVoucher as any[])[0]?.total_records || 0),
+        recentInserts: Number((finVoucher as any[])[0]?.recent_inserts || 0),
         applications: ["ESTEIRA"],
       },
       tbaixas: {
@@ -233,6 +248,7 @@ serve(async (req) => {
           ? new Date((baixas as any[])[0].last_update).toISOString() 
           : null,
         totalRecords: Number((baixas as any[])[0]?.total_records || 0),
+        recentInserts: Number((baixas as any[])[0]?.recent_inserts || 0),
         applications: ["ESTEIRA"],
       },
       fetchedAt: new Date().toISOString(),

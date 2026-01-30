@@ -15,14 +15,16 @@ import { cn } from "@/lib/utils";
 interface ModalBreakdown {
   lastUpdate: string | null;
   totalRecords: number;
+  recentInserts: number;
   breakdown: {
-    [key: string]: { lastUpdate: string | null; count: number };
+    [key: string]: { lastUpdate: string | null; count: number; recentInserts: number };
   };
 }
 
 interface TableStats {
   lastUpdate: string | null;
   totalRecords: number;
+  recentInserts: number;
   applications: string[];
   byModal?: {
     AIR: ModalBreakdown;
@@ -140,11 +142,17 @@ function TableCard({
       </p>
 
       {/* Stats Grid */}
-      <div className="grid grid-cols-2 gap-3 mb-3">
+      <div className="grid grid-cols-3 gap-3 mb-3">
         <div className="p-2 rounded-lg bg-[#0a0b10] border border-white/10">
           <div className="text-[9px] uppercase tracking-wider text-muted-foreground">Registros</div>
           <div className="text-lg font-bold text-white mt-0.5">
             {formatNumber(stats.totalRecords)}
+          </div>
+        </div>
+        <div className="p-2 rounded-lg bg-[#0a0b10] border border-white/10">
+          <div className="text-[9px] uppercase tracking-wider text-muted-foreground">Últimas 24h</div>
+          <div className="text-lg font-bold text-emerald-400 mt-0.5">
+            +{formatNumber(stats.recentInserts)}
           </div>
         </div>
         <div className="p-2 rounded-lg bg-[#0a0b10] border border-white/10">
@@ -188,9 +196,9 @@ function MasterDataCard({ stats }: { stats: TableStats }) {
 
       {/* General Stats */}
       <div className="p-3 rounded-lg bg-[#0a0b10] border border-white/10 mb-4">
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-3 gap-4">
           <div>
-            <div className="text-[9px] uppercase tracking-wider text-muted-foreground mb-1">Última Atualização Geral</div>
+            <div className="text-[9px] uppercase tracking-wider text-muted-foreground mb-1">Última Atualização</div>
             <div className={`text-sm font-medium ${healthColors[health].text}`}>
               {formatRelativeTime(stats.lastUpdate)}
             </div>
@@ -204,6 +212,12 @@ function MasterDataCard({ stats }: { stats: TableStats }) {
             <div className="text-[9px] uppercase tracking-wider text-muted-foreground mb-1">Total de Registros</div>
             <div className="text-2xl font-bold text-white">
               {formatNumber(stats.totalRecords)}
+            </div>
+          </div>
+          <div>
+            <div className="text-[9px] uppercase tracking-wider text-muted-foreground mb-1">Inseridos (24h)</div>
+            <div className="text-2xl font-bold text-emerald-400">
+              +{formatNumber(stats.recentInserts)}
             </div>
           </div>
         </div>
@@ -236,7 +250,12 @@ function MasterDataCard({ stats }: { stats: TableStats }) {
               {Object.entries(stats.byModal.AIR.breakdown).map(([tipo, data]) => (
                 <div key={tipo} className="flex justify-between items-center text-sm">
                   <span className="text-white/60">{tipo}:</span>
-                  <span className="font-semibold text-white">{formatNumber(data.count)}</span>
+                  <div className="flex items-center gap-2">
+                    <span className="font-semibold text-white">{formatNumber(data.count)}</span>
+                    {data.recentInserts > 0 && (
+                      <span className="text-[10px] text-emerald-400">+{data.recentInserts}</span>
+                    )}
+                  </div>
                 </div>
               ))}
               <div className="pt-2 border-t border-blue-500/20 flex justify-between items-center">
@@ -262,7 +281,12 @@ function MasterDataCard({ stats }: { stats: TableStats }) {
               {Object.entries(stats.byModal.SEA.breakdown).map(([tipo, data]) => (
                 <div key={tipo} className="flex justify-between items-center text-sm">
                   <span className="text-white/60">{tipo}:</span>
-                  <span className="font-semibold text-white">{formatNumber(data.count)}</span>
+                  <div className="flex items-center gap-2">
+                    <span className="font-semibold text-white">{formatNumber(data.count)}</span>
+                    {data.recentInserts > 0 && (
+                      <span className="text-[10px] text-emerald-400">+{data.recentInserts}</span>
+                    )}
+                  </div>
                 </div>
               ))}
               <div className="pt-2 border-t border-cyan-500/20 flex justify-between items-center">
