@@ -119,88 +119,145 @@ function generateCriticalAlertHtml(criticalTables: TableStats[], timestamp: Date
   `).join('');
 
   return `
-<!DOCTYPE html>
-<html>
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml">
 <head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="color-scheme" content="dark" />
+  <meta name="supported-color-schemes" content="dark" />
+  <title>Alerta Crítico - Z3US.AI</title>
+  <style type="text/css">
+    body, html { margin: 0 !important; padding: 0 !important; background-color: #050608 !important; }
+    table { border-collapse: collapse !important; }
+    @media only screen and (max-width: 600px) {
+      .container { width: 100% !important; padding: 16px !important; }
+    }
+  </style>
 </head>
-<body style="margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; background-color: #050608;">
-  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color: #050608; min-height: 100vh;">
+<body bgcolor="#050608" style="margin: 0; padding: 0; -webkit-text-size-adjust: 100%; -ms-text-size-adjust: 100%; background-color: #050608 !important;">
+  
+  <!-- Wrapper Table -->
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" bgcolor="#050608" style="background-color: #050608 !important; width: 100%; margin: 0; padding: 0;">
     <tr>
-      <td align="center" style="padding: 24px;">
-        <div style="max-width: 640px; width: 100%;">
-    
-    <!-- Header Card -->
-    <div style="background: linear-gradient(135deg, #0a0c10 0%, #050608 100%); border: 1px solid rgba(239, 68, 68, 0.3); border-radius: 24px; overflow: hidden; box-shadow: 0 0 60px rgba(239, 68, 68, 0.1);">
-      
-      <!-- Logo & Title Section -->
-      <div style="background: radial-gradient(ellipse at top, rgba(239, 68, 68, 0.15) 0%, transparent 70%); padding: 40px 32px 32px; text-align: center; border-bottom: 1px solid rgba(239, 68, 68, 0.15);">
-        <img src="${LOGO_URL}" alt="Z3US.AI" style="height: 48px; margin-bottom: 20px;" />
+      <td bgcolor="#050608" style="background-color: #050608 !important;">
         
-        <!-- Alert Badge -->
-        <div style="margin-bottom: 16px;">
-          <span style="background: rgba(239, 68, 68, 0.2); border: 1px solid rgba(239, 68, 68, 0.4); color: #ef4444; padding: 8px 20px; border-radius: 24px; font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 2px; display: inline-flex; align-items: center; gap: 8px;">
-            <span style="display: inline-block; width: 8px; height: 8px; border-radius: 50%; background-color: #ef4444; animation: pulse 1.5s infinite;"></span>
-            ALERTA CRÍTICO
-          </span>
-        </div>
+        <!-- Outer Padding Table -->
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" bgcolor="#050608" style="background-color: #050608 !important;">
+          <tr>
+            <td align="center" bgcolor="#050608" style="padding: 24px; background-color: #050608 !important;">
+              
+              <!-- Content Container -->
+              <table role="presentation" class="container" width="640" cellpadding="0" cellspacing="0" border="0" style="max-width: 640px; width: 100%;">
+                <tr>
+                  <td>
+                    
+                    <!-- Main Card -->
+                    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color: #0a0c10; border: 1px solid rgba(239, 68, 68, 0.3); border-radius: 24px; overflow: hidden;">
+                      
+                      <!-- Header Section -->
+                      <tr>
+                        <td align="center" style="background: linear-gradient(180deg, rgba(239, 68, 68, 0.15) 0%, transparent 100%); padding: 40px 32px 32px; border-bottom: 1px solid rgba(239, 68, 68, 0.15);">
+                          <img src="${LOGO_URL}" alt="Z3US.AI" width="120" style="height: 48px; margin-bottom: 20px; display: block;" />
+                          
+                          <!-- Alert Badge -->
+                          <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin-bottom: 16px;">
+                            <tr>
+                              <td style="background-color: rgba(239, 68, 68, 0.2); border: 1px solid rgba(239, 68, 68, 0.4); color: #ef4444; padding: 8px 20px; border-radius: 24px; font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 2px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
+                                🔴 ALERTA CRÍTICO
+                              </td>
+                            </tr>
+                          </table>
+                          
+                          <p style="margin: 0 0 8px 0; color: #ffffff; font-size: 24px; font-weight: 700; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
+                            Banco de Dados
+                          </p>
+                          <p style="margin: 0; color: #888888; font-size: 13px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
+                            ${formattedDate} • São Paulo
+                          </p>
+                        </td>
+                      </tr>
+                      
+                      <!-- Warning Message -->
+                      <tr>
+                        <td style="padding: 24px 32px; border-bottom: 1px solid rgba(255, 255, 255, 0.06);">
+                          <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color: rgba(245, 184, 67, 0.08); border: 1px solid rgba(245, 184, 67, 0.2); border-radius: 12px;">
+                            <tr>
+                              <td style="padding: 16px 20px;">
+                                <p style="margin: 0; font-size: 14px; color: #cccccc; line-height: 1.6; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
+                                  ⚠️ As seguintes tabelas estão sem atualização há mais de <strong style="color: #F5B843;">60 minutos</strong> e requerem atenção imediata.
+                                </p>
+                              </td>
+                            </tr>
+                          </table>
+                        </td>
+                      </tr>
+                      
+                      <!-- Critical Tables -->
+                      <tr>
+                        <td style="padding: 24px 32px;">
+                          ${tableCards}
+                        </td>
+                      </tr>
+                      
+                      <!-- Recommendations -->
+                      <tr>
+                        <td style="padding: 0 32px 24px;">
+                          <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color: rgba(255, 255, 255, 0.03); border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 16px;">
+                            <tr>
+                              <td style="padding: 20px;">
+                                <p style="margin: 0 0 16px 0; font-size: 13px; font-weight: 600; color: #F5B843; text-transform: uppercase; letter-spacing: 1px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
+                                  📋 Recomendações
+                                </p>
+                                <p style="margin: 0; color: #cccccc; font-size: 14px; line-height: 2; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
+                                  • Verificar conectividade do job de sincronização<br/>
+                                  • Verificar se há processos travados no servidor de origem<br/>
+                                  • Consultar logs do sistema para identificar erros<br/>
+                                  • Contatar a equipe de infraestrutura se o problema persistir
+                                </p>
+                              </td>
+                            </tr>
+                          </table>
+                        </td>
+                      </tr>
+                      
+                      <!-- CTA Button -->
+                      <tr>
+                        <td align="center" style="padding: 8px 32px 32px;">
+                          <a href="https://stellar-route-hub.lovable.app/admin/database-monitor" 
+                             style="display: inline-block; background-color: #ef4444; color: #ffffff; text-decoration: none; padding: 14px 32px; border-radius: 12px; font-weight: 600; font-size: 14px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
+                            Abrir Dashboard
+                          </a>
+                        </td>
+                      </tr>
+                    </table>
+                    
+                    <!-- Footer -->
+                    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+                      <tr>
+                        <td align="center" style="padding: 24px;">
+                          <p style="margin: 0; font-size: 12px; color: #888888; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
+                            Alerta automático do sistema de monitoramento
+                          </p>
+                          <p style="margin: 8px 0 0 0; font-size: 12px; color: #666666; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
+                            Z3US.AI • Verificação a cada 30 minutos
+                          </p>
+                        </td>
+                      </tr>
+                    </table>
+                    
+                  </td>
+                </tr>
+              </table>
+              
+            </td>
+          </tr>
+        </table>
         
-        <h1 style="margin: 0 0 8px 0; color: #ffffff; font-size: 24px; font-weight: 700;">
-          Banco de Dados
-        </h1>
-        <p style="margin: 0; color: #666666; font-size: 13px;">
-          ${formattedDate} • São Paulo
-        </p>
-      </div>
-
-      <!-- Warning Message -->
-      <div style="padding: 24px 32px; border-bottom: 1px solid rgba(255, 255, 255, 0.06);">
-        <div style="background: linear-gradient(135deg, rgba(245, 184, 67, 0.1) 0%, rgba(245, 184, 67, 0.05) 100%); border: 1px solid rgba(245, 184, 67, 0.2); border-radius: 12px; padding: 16px 20px;">
-          <p style="margin: 0; font-size: 14px; color: #B3B3B3; line-height: 1.6;">
-            ⚠️ As seguintes tabelas estão sem atualização há mais de <strong style="color: #F5B843;">60 minutos</strong> e requerem atenção imediata.
-          </p>
-        </div>
-      </div>
-
-      <!-- Critical Tables -->
-      <div style="padding: 24px 32px;">
-        ${tableCards}
-      </div>
-
-      <!-- Recommendations -->
-      <div style="padding: 0 32px 24px;">
-        <div style="background: rgba(255, 255, 255, 0.03); border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 16px; padding: 20px;">
-          <p style="margin: 0 0 16px 0; font-size: 13px; font-weight: 600; color: #F5B843; text-transform: uppercase; letter-spacing: 1px;">
-            📋 Recomendações
-          </p>
-          <ul style="margin: 0; padding-left: 20px; color: #B3B3B3; font-size: 14px; line-height: 1.8;">
-            <li>Verificar conectividade do job de sincronização</li>
-            <li>Verificar se há processos travados no servidor de origem</li>
-            <li>Consultar logs do sistema para identificar erros</li>
-            <li>Contatar a equipe de infraestrutura se o problema persistir</li>
-          </ul>
-        </div>
-      </div>
-
-      <!-- CTA Button -->
-      <div style="padding: 8px 32px 32px; text-align: center;">
-        <a href="https://stellar-route-hub.lovable.app/admin/database-monitor" 
-           style="display: inline-block; background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%); color: #ffffff; text-decoration: none; padding: 14px 32px; border-radius: 12px; font-weight: 600; font-size: 14px; box-shadow: 0 4px 20px rgba(239, 68, 68, 0.3);">
-          Abrir Dashboard
-        </a>
-      </div>
-    </div>
-
-    <!-- Footer -->
-    <div style="text-align: center; padding: 24px; color: #666666; font-size: 12px;">
-      <p style="margin: 0;">Alerta automático do sistema de monitoramento</p>
-      <p style="margin: 8px 0 0 0; color: #555555;">Z3US.AI • Verificação a cada 30 minutos</p>
-    </div>
-        </div>
       </td>
     </tr>
   </table>
+  
 </body>
 </html>
   `;

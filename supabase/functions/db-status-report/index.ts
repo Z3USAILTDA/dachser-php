@@ -157,91 +157,133 @@ function generateEmailHtml(stats: TableStats[], timestamp: Date): string {
     : '<span style="background: rgba(34, 197, 94, 0.2); color: #22c55e; padding: 6px 16px; border-radius: 20px; font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 1px;">Sistema Operacional</span>';
 
   return `
-<!DOCTYPE html>
-<html>
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml">
 <head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="color-scheme" content="dark" />
+  <meta name="supported-color-schemes" content="dark" />
+  <title>Relatório de Status - Z3US.AI</title>
+  <style type="text/css">
+    body, html { margin: 0 !important; padding: 0 !important; background-color: #050608 !important; }
+    table { border-collapse: collapse !important; }
+    @media only screen and (max-width: 600px) {
+      .container { width: 100% !important; padding: 16px !important; }
+    }
+  </style>
 </head>
-<body style="margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; background-color: #050608;">
-  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color: #050608; min-height: 100vh;">
+<body bgcolor="#050608" style="margin: 0; padding: 0; -webkit-text-size-adjust: 100%; -ms-text-size-adjust: 100%; background-color: #050608 !important;">
+  
+  <!-- Wrapper Table -->
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" bgcolor="#050608" style="background-color: #050608 !important; width: 100%; margin: 0; padding: 0;">
     <tr>
-      <td align="center" style="padding: 24px;">
-        <div style="max-width: 640px; width: 100%;">
-    
-    <!-- Header Card -->
-    <div style="background: linear-gradient(135deg, #0a0c10 0%, #050608 100%); border: 1px solid rgba(245, 184, 67, 0.2); border-radius: 24px; overflow: hidden; box-shadow: 0 0 60px rgba(245, 184, 67, 0.08);">
-      
-      <!-- Logo & Title Section -->
-      <div style="background: radial-gradient(ellipse at top, rgba(245, 184, 67, 0.12) 0%, transparent 70%); padding: 40px 32px 24px; text-align: center; border-bottom: 1px solid rgba(245, 184, 67, 0.1);">
-        <img src="${LOGO_URL}" alt="Z3US.AI" style="height: 48px; margin-bottom: 20px;" />
-        <h1 style="margin: 0 0 8px 0; color: #F5B843; font-size: 13px; font-weight: 600; letter-spacing: 3px; text-transform: uppercase;">
-          Relatório de Status
-        </h1>
-        <p style="margin: 0 0 16px 0; color: #ffffff; font-size: 22px; font-weight: 600;">
-          Monitoramento de Banco de Dados
-        </p>
-        ${statusBadge}
-        <p style="margin: 16px 0 0 0; color: #666666; font-size: 13px;">
-          ${formattedDate} • São Paulo
-        </p>
-      </div>
-
-      <!-- Summary Stats -->
-      <div style="padding: 24px 32px; display: flex; border-bottom: 1px solid rgba(255, 255, 255, 0.06);">
-        <table style="width: 100%;">
+      <td bgcolor="#050608" style="background-color: #050608 !important;">
+        
+        <!-- Outer Padding Table -->
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" bgcolor="#050608" style="background-color: #050608 !important;">
           <tr>
-            <td style="text-align: center; padding: 12px;">
-              <div style="font-size: 28px; font-weight: 700; color: #22c55e;">${healthyCount}</div>
-              <div style="font-size: 12px; color: #666666; text-transform: uppercase; letter-spacing: 1px; margin-top: 4px;">Saudáveis</div>
-            </td>
-            <td style="text-align: center; padding: 12px; border-left: 1px solid rgba(255, 255, 255, 0.08); border-right: 1px solid rgba(255, 255, 255, 0.08);">
-              <div style="font-size: 28px; font-weight: 700; color: #F5B843;">${warningCount}</div>
-              <div style="font-size: 12px; color: #666666; text-transform: uppercase; letter-spacing: 1px; margin-top: 4px;">Atenção</div>
-            </td>
-            <td style="text-align: center; padding: 12px;">
-              <div style="font-size: 28px; font-weight: 700; color: #ef4444;">${criticalCount}</div>
-              <div style="font-size: 12px; color: #666666; text-transform: uppercase; letter-spacing: 1px; margin-top: 4px;">Críticas</div>
+            <td align="center" bgcolor="#050608" style="padding: 24px; background-color: #050608 !important;">
+              
+              <!-- Content Container -->
+              <table role="presentation" class="container" width="640" cellpadding="0" cellspacing="0" border="0" style="max-width: 640px; width: 100%;">
+                <tr>
+                  <td>
+                    
+                    <!-- Main Card -->
+                    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color: #0a0c10; border: 1px solid rgba(245, 184, 67, 0.2); border-radius: 24px; overflow: hidden;">
+                      
+                      <!-- Header Section -->
+                      <tr>
+                        <td align="center" style="background: linear-gradient(180deg, rgba(245, 184, 67, 0.12) 0%, transparent 100%); padding: 40px 32px 24px; border-bottom: 1px solid rgba(245, 184, 67, 0.1);">
+                          <img src="${LOGO_URL}" alt="Z3US.AI" width="120" style="height: 48px; margin-bottom: 20px; display: block;" />
+                          <p style="margin: 0 0 8px 0; color: #F5B843; font-size: 13px; font-weight: 600; letter-spacing: 3px; text-transform: uppercase; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
+                            Relatório de Status
+                          </p>
+                          <p style="margin: 0 0 16px 0; color: #ffffff; font-size: 22px; font-weight: 600; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
+                            Monitoramento de Banco de Dados
+                          </p>
+                          ${statusBadge}
+                          <p style="margin: 16px 0 0 0; color: #888888; font-size: 13px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
+                            ${formattedDate} • São Paulo
+                          </p>
+                        </td>
+                      </tr>
+                      
+                      <!-- Stats Section -->
+                      <tr>
+                        <td style="padding: 24px 32px; border-bottom: 1px solid rgba(255, 255, 255, 0.06);">
+                          <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+                            <tr>
+                              <td align="center" style="padding: 12px; width: 33%;">
+                                <p style="margin: 0; font-size: 28px; font-weight: 700; color: #22c55e; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">${healthyCount}</p>
+                                <p style="margin: 4px 0 0 0; font-size: 12px; color: #888888; text-transform: uppercase; letter-spacing: 1px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">Saudáveis</p>
+                              </td>
+                              <td align="center" style="padding: 12px; width: 33%; border-left: 1px solid rgba(255, 255, 255, 0.08); border-right: 1px solid rgba(255, 255, 255, 0.08);">
+                                <p style="margin: 0; font-size: 28px; font-weight: 700; color: #F5B843; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">${warningCount}</p>
+                                <p style="margin: 4px 0 0 0; font-size: 12px; color: #888888; text-transform: uppercase; letter-spacing: 1px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">Atenção</p>
+                              </td>
+                              <td align="center" style="padding: 12px; width: 33%;">
+                                <p style="margin: 0; font-size: 28px; font-weight: 700; color: #ef4444; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">${criticalCount}</p>
+                                <p style="margin: 4px 0 0 0; font-size: 12px; color: #888888; text-transform: uppercase; letter-spacing: 1px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">Críticas</p>
+                              </td>
+                            </tr>
+                          </table>
+                        </td>
+                      </tr>
+                      
+                      <!-- Data Table Section -->
+                      <tr>
+                        <td style="padding: 0 16px;">
+                          <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="font-size: 14px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
+                            <tr style="border-bottom: 1px solid rgba(245, 184, 67, 0.15);">
+                              <th style="padding: 16px; text-align: left; font-weight: 600; color: #F5B843; font-size: 11px; text-transform: uppercase; letter-spacing: 1px;">Tabela</th>
+                              <th style="padding: 16px; text-align: center; font-weight: 600; color: #F5B843; font-size: 11px; text-transform: uppercase; letter-spacing: 1px;">Atualização</th>
+                              <th style="padding: 16px; text-align: right; font-weight: 600; color: #F5B843; font-size: 11px; text-transform: uppercase; letter-spacing: 1px;">Total</th>
+                              <th style="padding: 16px; text-align: right; font-weight: 600; color: #F5B843; font-size: 11px; text-transform: uppercase; letter-spacing: 1px;">24h</th>
+                            </tr>
+                            ${tableRows}
+                          </table>
+                        </td>
+                      </tr>
+                      
+                      <!-- CTA Button -->
+                      <tr>
+                        <td align="center" style="padding: 32px;">
+                          <a href="https://stellar-route-hub.lovable.app/admin/database-monitor" 
+                             style="display: inline-block; background-color: #F5B843; color: #050608; text-decoration: none; padding: 14px 32px; border-radius: 12px; font-weight: 600; font-size: 14px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
+                            Abrir Dashboard
+                          </a>
+                        </td>
+                      </tr>
+                    </table>
+                    
+                    <!-- Footer -->
+                    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+                      <tr>
+                        <td align="center" style="padding: 24px;">
+                          <p style="margin: 0; font-size: 12px; color: #888888; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
+                            Alerta automático do sistema de monitoramento
+                          </p>
+                          <p style="margin: 8px 0 0 0; font-size: 12px; color: #666666; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
+                            Z3US.AI • Enviado a cada 30 minutos
+                          </p>
+                        </td>
+                      </tr>
+                    </table>
+                    
+                  </td>
+                </tr>
+              </table>
+              
             </td>
           </tr>
         </table>
-      </div>
-
-      <!-- Data Table -->
-      <div style="padding: 0 16px;">
-        <table style="width: 100%; border-collapse: collapse; font-size: 14px;">
-          <thead>
-            <tr style="border-bottom: 1px solid rgba(245, 184, 67, 0.15);">
-              <th style="padding: 16px; text-align: left; font-weight: 600; color: #F5B843; font-size: 11px; text-transform: uppercase; letter-spacing: 1px;">Tabela</th>
-              <th style="padding: 16px; text-align: center; font-weight: 600; color: #F5B843; font-size: 11px; text-transform: uppercase; letter-spacing: 1px;">Atualização</th>
-              <th style="padding: 16px; text-align: right; font-weight: 600; color: #F5B843; font-size: 11px; text-transform: uppercase; letter-spacing: 1px;">Total</th>
-              <th style="padding: 16px; text-align: right; font-weight: 600; color: #F5B843; font-size: 11px; text-transform: uppercase; letter-spacing: 1px;">24h</th>
-            </tr>
-          </thead>
-          <tbody>
-            ${tableRows}
-          </tbody>
-        </table>
-      </div>
-
-      <!-- CTA Button -->
-      <div style="padding: 32px; text-align: center;">
-        <a href="https://stellar-route-hub.lovable.app/admin/database-monitor" 
-           style="display: inline-block; background: linear-gradient(135deg, #F5B843 0%, #FFC800 100%); color: #050608; text-decoration: none; padding: 14px 32px; border-radius: 12px; font-weight: 600; font-size: 14px; box-shadow: 0 4px 20px rgba(245, 184, 67, 0.3);">
-          Abrir Dashboard
-        </a>
-      </div>
-    </div>
-
-    <!-- Footer -->
-    <div style="text-align: center; padding: 24px; color: #666666; font-size: 12px;">
-      <p style="margin: 0;">Alerta automático do sistema de monitoramento</p>
-      <p style="margin: 8px 0 0 0; color: #555555;">Z3US.AI • Enviado a cada 30 minutos</p>
-    </div>
-        </div>
+        
       </td>
     </tr>
   </table>
+  
 </body>
 </html>
   `;
