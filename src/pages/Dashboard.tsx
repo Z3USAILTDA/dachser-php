@@ -53,6 +53,10 @@ const menuItems: MenuItem[] = [
         label: "Gerenciamento de APIs",
         href: "/admin/apis",
       },
+      {
+        label: "Monitoramento de Dados",
+        href: "/admin/database",
+      },
     ],
   },
   {
