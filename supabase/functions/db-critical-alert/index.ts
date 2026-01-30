@@ -273,6 +273,7 @@ serve(async (req) => {
   try {
     const body = await req.json().catch(() => ({}));
     const testMode = body.test_mode !== false; // Default to test mode
+    const forceAlert = body.force === true; // Force send even if recently alerted
 
     console.log(`Running db-critical-alert in ${testMode ? 'TEST' : 'PRODUCTION'} mode`);
 
@@ -349,36 +350,41 @@ serve(async (req) => {
       });
     }
 
-    // Check which tables need alerts (avoid spam)
+    // Check which tables need alerts (avoid spam) - unless force is true
     const tablesToAlert: TableStats[] = [];
 
-    for (const table of criticalTables) {
-      try {
-        // Check if we sent an alert for this table in the last REALERT_INTERVAL_MINUTES
-        const checkQuery = `
-          SELECT sent_at 
-          FROM ai_agente.t_db_monitor_alerts 
-          WHERE alert_type = 'critical_alert' 
-            AND table_name = ?
-            AND sent_at >= DATE_SUB(NOW(), INTERVAL ? MINUTE)
-          ORDER BY sent_at DESC
-          LIMIT 1
-        `;
-        
-        const recentAlerts = await client.query(checkQuery, [table.name, REALERT_INTERVAL_MINUTES]);
-        
-        if (recentAlerts.length === 0) {
-          // No recent alert for this table, should send
+    if (forceAlert) {
+      console.log('Force mode enabled - skipping duplicate check');
+      tablesToAlert.push(...criticalTables);
+    } else {
+      for (const table of criticalTables) {
+        try {
+          // Check if we sent an alert for this table in the last REALERT_INTERVAL_MINUTES
+          const checkQuery = `
+            SELECT sent_at 
+            FROM ai_agente.t_db_monitor_alerts 
+            WHERE alert_type = 'critical_alert' 
+              AND table_name = ?
+              AND sent_at >= DATE_SUB(NOW(), INTERVAL ? MINUTE)
+            ORDER BY sent_at DESC
+            LIMIT 1
+          `;
+          
+          const recentAlerts = await client.query(checkQuery, [table.name, REALERT_INTERVAL_MINUTES]);
+          
+          if (recentAlerts.length === 0) {
+            // No recent alert for this table, should send
+            tablesToAlert.push(table);
+            console.log(`Table ${table.name} needs alert (no recent alert found)`);
+          } else {
+            console.log(`Table ${table.name} already alerted recently, skipping`);
+          }
+        } catch (err) {
+          const checkError = err as Error;
+          // If check fails, include the table to be safe
+          console.warn(`Could not check recent alerts for ${table.name}:`, checkError.message);
           tablesToAlert.push(table);
-          console.log(`Table ${table.name} needs alert (no recent alert found)`);
-        } else {
-          console.log(`Table ${table.name} already alerted recently, skipping`);
         }
-      } catch (err) {
-        const checkError = err as Error;
-        // If check fails, include the table to be safe
-        console.warn(`Could not check recent alerts for ${table.name}:`, checkError.message);
-        tablesToAlert.push(table);
       }
     }
 
