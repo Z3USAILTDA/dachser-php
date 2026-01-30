@@ -506,18 +506,18 @@ async function analyzeWithAnthropic(
   for (let i = 0; i < pdfFiles.length; i++) {
     const file = pdfFiles[i];
     
-    // Only apply OCR to MBL files (they're more likely to be image-based)
+    // ALWAYS apply OCR to MBL files in HBL×MBL analysis
+    // MBL documents are frequently image-based and Claude struggles with NCM extraction
+    // Removing isPdfLikelyScanned check to ensure consistent extraction
     if (file.file_type === 'mbl') {
-      const shouldTryOcr = isPdfLikelyScanned(file.name);
+      console.log(`🔍 [OCR] ALWAYS pre-extracting text from MBL for better NCM extraction: ${file.name}`);
+      const ocrText = await extractTextViaVisionAPI(file.base64, file.name);
       
-      if (shouldTryOcr) {
-        console.log(`🔍 [OCR] Pre-extracting text from MBL: ${file.name}`);
-        const ocrText = await extractTextViaVisionAPI(file.base64, file.name);
-        
-        if (ocrText && ocrText.length > 100) {
-          preExtractedMblTexts.push(ocrText);
-          console.log(`✅ [OCR] Successfully extracted ${ocrText.length} chars from MBL`);
-        }
+      if (ocrText && ocrText.length > 100) {
+        preExtractedMblTexts.push(ocrText);
+        console.log(`✅ [OCR] Successfully extracted ${ocrText.length} chars from MBL`);
+      } else {
+        console.log(`⚠️ [OCR] Extraction returned insufficient text (${ocrText?.length || 0} chars) for MBL: ${file.name}`);
       }
     }
   }
