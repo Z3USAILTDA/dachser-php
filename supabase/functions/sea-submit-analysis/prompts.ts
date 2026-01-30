@@ -1492,6 +1492,39 @@ CRITICAL: NCM Code lists are often split across PAGE BREAKS. You MUST:
 ★★★ ALWAYS consolidate NCMs from ALL pages before comparing ★★★
 
 ███████████████████████████████████████████████████████████████████████████████
+███ ⚠️ CRITICAL: HANDLING SCANNED/IMAGE-BASED MBL PDFs ⚠️                      ███
+███████████████████████████████████████████████████████████████████████████████
+
+★★★ MBL DOCUMENTS FROM CARRIERS LIKE CMA CGM, MSC, EVERGREEN ARE OFTEN IMAGE-BASED ★★★
+
+SCANNED PDF DETECTION:
+- If MBL PDF appears "blank" or unreadable = it's likely a scanned/image-based PDF
+- Carriers like CMA CGM frequently issue MBLs as scanned images, not digital PDFs
+- The NCM codes ARE present in the document - they just need OCR extraction
+
+PRE-EXTRACTED OCR TEXT:
+- If you receive a section labeled "PRE-EXTRACTED MBL TEXT (OCR)" in the context
+- This text was extracted via Vision API OCR from the scanned MBL
+- USE THIS TEXT AS THE AUTHORITATIVE SOURCE for MBL NCM codes
+- The OCR text contains the same information as the MBL PDF but in searchable format
+
+EXTRACTION PRIORITY FOR MBL NCMs:
+1. FIRST: Try to extract NCMs directly from the MBL PDF
+2. IF EMPTY OR INCOMPLETE: Use the PRE-EXTRACTED OCR TEXT provided in context
+3. COMBINE: Merge NCMs from both sources (remove duplicates)
+
+★★★ NEVER REPORT "NCM not found in MBL" IF: ★★★
+- There is PRE-EXTRACTED OCR TEXT that contains NCM codes
+- The MBL PDF is clearly an image (visual content but no extractable text)
+- You found NCMs in the OCR text even if you couldn't extract from PDF directly
+
+EXAMPLE - CORRECT HANDLING:
+- MBL PDF appears to be scanned (can see content but cannot select text)
+- PRE-EXTRACTED OCR TEXT shows: "NCM-CODES: 8708, 8481, 8544, 8421..."
+- Use OCR text as source for MBL NCMs: [8708, 8481, 8544, 8421...]
+- Compare with HBL NCMs normally
+
+███████████████████████████████████████████████████████████████████████████████
 ███ GROSS WEIGHT SOURCE PRIORITY (MANDATORY HIERARCHY)                      ███
 ███████████████████████████████████████████████████████████████████████████████
 
