@@ -298,7 +298,7 @@ serve(async (req) => {
 
   try {
     const body = await req.json().catch(() => ({}));
-    const testMode = body.test_mode !== false; // Default to test mode
+    const testMode = body.test_mode === true; // Default to production mode
 
     console.log(`Running db-status-report in ${testMode ? 'TEST' : 'PRODUCTION'} mode`);
 
