@@ -1,16 +1,15 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { Database, RefreshCw, Clock, Hash, AlertCircle, Plane, Ship } from "lucide-react";
+import { Database, RefreshCw, Clock, Hash, AlertCircle, Plane, Ship, Server, Activity, Loader2 } from "lucide-react";
 import { formatDistanceToNow, format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { supabase } from "@/integrations/supabase/client";
 import { PageLayout } from "@/components/layout/PageLayout";
-import { PageHeader } from "@/components/layout/PageHeader";
 import { PageCard } from "@/components/layout/PageCard";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Skeleton } from "@/components/ui/skeleton";
 import { toast } from "sonner";
+import { parseDBDate } from "@/utils/timezone";
 
 interface ModalBreakdown {
   lastUpdate: string | null;
@@ -44,7 +43,9 @@ const getHealthStatus = (lastUpdate: string | null): HealthStatus => {
   if (!lastUpdate) return "red";
 
   const now = new Date();
-  const updateTime = new Date(lastUpdate);
+  const updateTime = parseDBDate(lastUpdate);
+  if (!updateTime) return "red";
+  
   const diffMinutes = (now.getTime() - updateTime.getTime()) / (1000 * 60);
 
   if (diffMinutes <= 5) return "green";
@@ -52,20 +53,20 @@ const getHealthStatus = (lastUpdate: string | null): HealthStatus => {
   return "red";
 };
 
-const healthColors: Record<HealthStatus, string> = {
-  green: "bg-green-500",
-  yellow: "bg-yellow-500",
-  red: "bg-red-500",
+const healthColors: Record<HealthStatus, { dot: string; text: string }> = {
+  green: { dot: "bg-emerald-500", text: "text-emerald-400" },
+  yellow: { dot: "bg-amber-500", text: "text-amber-400" },
+  red: { dot: "bg-red-500", text: "text-red-400" },
 };
 
 const appBadgeStyles: Record<string, string> = {
-  AIR: "bg-blue-500/20 text-blue-400 border-blue-500/30",
-  SEA: "bg-cyan-500/20 text-cyan-400 border-cyan-500/30",
-  CCT: "bg-purple-500/20 text-purple-400 border-purple-500/30",
-  TRACKING: "bg-emerald-500/20 text-emerald-400 border-emerald-500/30",
-  OLIMPO: "bg-amber-500/20 text-amber-400 border-amber-500/30",
-  REGUA: "bg-orange-500/20 text-orange-400 border-orange-500/30",
-  ESTEIRA: "bg-pink-500/20 text-pink-400 border-pink-500/30",
+  AIR: "bg-blue-500/15 border-blue-500/50 text-blue-400",
+  SEA: "bg-cyan-500/15 border-cyan-500/50 text-cyan-400",
+  CCT: "bg-purple-500/15 border-purple-500/50 text-purple-400",
+  TRACKING: "bg-emerald-500/15 border-emerald-500/50 text-emerald-400",
+  OLIMPO: "bg-amber-500/15 border-amber-500/50 text-amber-400",
+  REGUA: "bg-orange-500/15 border-orange-500/50 text-orange-400",
+  ESTEIRA: "bg-pink-500/15 border-pink-500/50 text-pink-400",
 };
 
 const formatNumber = (num: number): string => {
@@ -74,19 +75,21 @@ const formatNumber = (num: number): string => {
 
 const formatRelativeTime = (date: string | null): string => {
   if (!date) return "Nunca";
-  return formatDistanceToNow(new Date(date), { addSuffix: true, locale: ptBR });
+  const parsed = parseDBDate(date);
+  if (!parsed) return "Nunca";
+  return formatDistanceToNow(parsed, { addSuffix: true, locale: ptBR });
 };
 
 const formatAbsoluteTime = (date: string | null): string => {
   if (!date) return "";
-  return format(new Date(date), "dd/MM/yyyy HH:mm", { locale: ptBR });
+  const parsed = parseDBDate(date);
+  if (!parsed) return "";
+  return format(parsed, "dd/MM/yyyy HH:mm", { locale: ptBR });
 };
 
 function HealthIndicator({ status }: { status: HealthStatus }) {
   return (
-    <div className="flex items-center gap-2">
-      <div className={`w-3 h-3 rounded-full ${healthColors[status]} shadow-lg animate-pulse`} />
-    </div>
+    <div className={`w-3 h-3 rounded-full ${healthColors[status].dot} shadow-lg animate-pulse`} />
   );
 }
 
@@ -94,7 +97,7 @@ function AppBadge({ app }: { app: string }) {
   return (
     <Badge 
       variant="outline" 
-      className={`text-xs font-medium ${appBadgeStyles[app] || "bg-muted text-muted-foreground"}`}
+      className={`text-[9px] font-semibold uppercase tracking-wider ${appBadgeStyles[app] || "bg-muted/50 text-muted-foreground"}`}
     >
       {app}
     </Badge>
@@ -103,63 +106,61 @@ function AppBadge({ app }: { app: string }) {
 
 function TableCard({ 
   tableName, 
-  stats, 
-  icon 
+  stats,
+  description 
 }: { 
   tableName: string; 
   stats: TableStats;
-  icon?: React.ReactNode;
+  description?: string;
 }) {
   const health = getHealthStatus(stats.lastUpdate);
 
   return (
-    <PageCard className="h-full">
-      <div className="p-5 space-y-4">
-        {/* Header */}
-        <div className="flex items-start justify-between">
-          <div className="flex items-center gap-3">
-            <div className="p-2 rounded-lg bg-primary/10 text-primary">
-              {icon || <Database size={24} />}
-            </div>
-            <div>
-              <h3 className="font-mono text-lg font-semibold text-foreground">{tableName}</h3>
-            </div>
-          </div>
-          <HealthIndicator status={health} />
+    <PageCard className="hover:border-[#ffc800]/50 hover:bg-white/[0.02] transition">
+      {/* Header */}
+      <div className="flex items-center justify-between mb-3">
+        <div className="flex items-center gap-2">
+          <div className="w-3 h-3 rounded-full bg-[#ffc800]" />
+          <span className="text-base font-semibold text-white">{tableName}</span>
         </div>
+        <HealthIndicator status={health} />
+      </div>
+      
+      {description && (
+        <p className="text-[10px] text-muted-foreground mb-3">{description}</p>
+      )}
 
-        {/* Stats */}
-        <div className="space-y-3">
-          <div className="flex items-center gap-2 text-sm">
-            <Clock size={16} className="text-muted-foreground" />
-            <span className="text-muted-foreground">Última Atualização:</span>
-            <span className="text-foreground font-medium">
-              {formatRelativeTime(stats.lastUpdate)}
-            </span>
-          </div>
-          {stats.lastUpdate && (
-            <div className="pl-6 text-xs text-muted-foreground">
-              {formatAbsoluteTime(stats.lastUpdate)}
-            </div>
-          )}
+      {/* Last Update */}
+      <p className="text-[10px] text-muted-foreground mb-3">
+        Última inserção: <span className={healthColors[health].text}>{formatRelativeTime(stats.lastUpdate)}</span>
+        {stats.lastUpdate && (
+          <span className="text-white/40 ml-1">({formatAbsoluteTime(stats.lastUpdate)})</span>
+        )}
+      </p>
 
-          <div className="flex items-center gap-2 text-sm">
-            <Hash size={16} className="text-muted-foreground" />
-            <span className="text-muted-foreground">Total de Registros:</span>
-            <span className="text-foreground font-semibold">
-              {formatNumber(stats.totalRecords)}
-            </span>
+      {/* Stats Grid */}
+      <div className="grid grid-cols-2 gap-3 mb-3">
+        <div className="p-2 rounded-lg bg-[#0a0b10] border border-white/10">
+          <div className="text-[9px] uppercase tracking-wider text-muted-foreground">Registros</div>
+          <div className="text-lg font-bold text-white mt-0.5">
+            {formatNumber(stats.totalRecords)}
           </div>
         </div>
-
-        {/* Applications */}
-        <div className="pt-2 border-t border-border/30">
-          <span className="text-xs text-muted-foreground mb-2 block">Aplicações:</span>
-          <div className="flex flex-wrap gap-1.5">
-            {stats.applications.map((app) => (
-              <AppBadge key={app} app={app} />
-            ))}
+        <div className="p-2 rounded-lg bg-[#0a0b10] border border-white/10">
+          <div className="text-[9px] uppercase tracking-wider text-muted-foreground">Status</div>
+          <div className={`text-lg font-bold mt-0.5 ${healthColors[health].text}`}>
+            {health === "green" ? "Saudável" : health === "yellow" ? "Atenção" : "Crítico"}
           </div>
+        </div>
+      </div>
+
+      {/* Applications */}
+      <div className="pt-2 border-t border-white/5">
+        <span className="text-[9px] uppercase tracking-wider text-muted-foreground mb-2 block">Aplicações</span>
+        <div className="flex flex-wrap gap-1.5">
+          {stats.applications.map((app) => (
+            <AppBadge key={app} app={app} />
+          ))}
         </div>
       </div>
     </PageCard>
@@ -170,134 +171,110 @@ function MasterDataCard({ stats }: { stats: TableStats }) {
   const health = getHealthStatus(stats.lastUpdate);
 
   return (
-    <PageCard>
-      <div className="p-5 space-y-5">
-        {/* Header */}
-        <div className="flex items-start justify-between">
-          <div className="flex items-center gap-3">
-            <div className="p-2 rounded-lg bg-primary/10 text-primary">
-              <Database size={24} />
+    <PageCard className="hover:border-[#ffc800]/50 hover:bg-white/[0.02] transition">
+      {/* Header */}
+      <div className="flex items-center justify-between mb-3">
+        <div className="flex items-center gap-2">
+          <div className="w-3 h-3 rounded-full bg-[#ffc800]" />
+          <span className="text-base font-semibold text-white">t_master_dados</span>
+        </div>
+        <HealthIndicator status={health} />
+      </div>
+
+      <p className="text-[10px] text-muted-foreground mb-4">
+        Tabela principal de processos operacionais
+      </p>
+
+      {/* General Stats */}
+      <div className="p-3 rounded-lg bg-[#0a0b10] border border-white/10 mb-4">
+        <div className="grid grid-cols-2 gap-4">
+          <div>
+            <div className="text-[9px] uppercase tracking-wider text-muted-foreground mb-1">Última Atualização Geral</div>
+            <div className={`text-sm font-medium ${healthColors[health].text}`}>
+              {formatRelativeTime(stats.lastUpdate)}
             </div>
-            <div>
-              <h3 className="font-mono text-lg font-semibold text-foreground">t_master_dados</h3>
-              <p className="text-xs text-muted-foreground">Tabela principal de processos</p>
+            {stats.lastUpdate && (
+              <div className="text-[10px] text-white/40 mt-0.5">
+                {formatAbsoluteTime(stats.lastUpdate)}
+              </div>
+            )}
+          </div>
+          <div>
+            <div className="text-[9px] uppercase tracking-wider text-muted-foreground mb-1">Total de Registros</div>
+            <div className="text-2xl font-bold text-white">
+              {formatNumber(stats.totalRecords)}
             </div>
           </div>
-          <HealthIndicator status={health} />
         </div>
+      </div>
 
-        {/* General Stats */}
-        <div className="grid grid-cols-2 gap-4 p-4 rounded-xl bg-muted/30">
-          <div>
-            <div className="flex items-center gap-2 text-sm">
-              <Clock size={16} className="text-muted-foreground" />
-              <span className="text-muted-foreground">Última Atualização Geral:</span>
+      {/* Applications */}
+      <div className="mb-4">
+        <span className="text-[9px] uppercase tracking-wider text-muted-foreground mb-2 block">Aplicações</span>
+        <div className="flex flex-wrap gap-1.5">
+          {stats.applications.map((app) => (
+            <AppBadge key={app} app={app} />
+          ))}
+        </div>
+      </div>
+
+      {/* Modal Breakdown */}
+      {stats.byModal && (
+        <div className="grid md:grid-cols-2 gap-3">
+          {/* AIR Modal */}
+          <div className="p-3 rounded-lg border border-blue-500/30 bg-blue-500/5">
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-2">
+                <Plane size={16} className="text-blue-400" />
+                <span className="text-sm font-semibold text-blue-400">MODAL AIR</span>
+              </div>
+              <HealthIndicator status={getHealthStatus(stats.byModal.AIR.lastUpdate)} />
             </div>
-            <div className="mt-1 ml-6">
-              <span className="text-foreground font-medium">
-                {formatRelativeTime(stats.lastUpdate)}
-              </span>
-              {stats.lastUpdate && (
-                <span className="text-xs text-muted-foreground ml-2">
-                  ({formatAbsoluteTime(stats.lastUpdate)})
+            
+            <div className="space-y-2">
+              {Object.entries(stats.byModal.AIR.breakdown).map(([tipo, data]) => (
+                <div key={tipo} className="flex justify-between items-center text-sm">
+                  <span className="text-white/60">{tipo}:</span>
+                  <span className="font-semibold text-white">{formatNumber(data.count)}</span>
+                </div>
+              ))}
+              <div className="pt-2 border-t border-blue-500/20 flex justify-between items-center">
+                <span className="text-[10px] text-white/40">Última:</span>
+                <span className="text-[10px] text-blue-400">
+                  {formatRelativeTime(stats.byModal.AIR.lastUpdate)}
                 </span>
-              )}
+              </div>
             </div>
           </div>
-          <div>
-            <div className="flex items-center gap-2 text-sm">
-              <Hash size={16} className="text-muted-foreground" />
-              <span className="text-muted-foreground">Total de Registros:</span>
+
+          {/* SEA Modal */}
+          <div className="p-3 rounded-lg border border-cyan-500/30 bg-cyan-500/5">
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-2">
+                <Ship size={16} className="text-cyan-400" />
+                <span className="text-sm font-semibold text-cyan-400">MODAL SEA</span>
+              </div>
+              <HealthIndicator status={getHealthStatus(stats.byModal.SEA.lastUpdate)} />
             </div>
-            <div className="mt-1 ml-6">
-              <span className="text-2xl font-bold text-foreground">
-                {formatNumber(stats.totalRecords)}
-              </span>
+            
+            <div className="space-y-2">
+              {Object.entries(stats.byModal.SEA.breakdown).map(([tipo, data]) => (
+                <div key={tipo} className="flex justify-between items-center text-sm">
+                  <span className="text-white/60">{tipo}:</span>
+                  <span className="font-semibold text-white">{formatNumber(data.count)}</span>
+                </div>
+              ))}
+              <div className="pt-2 border-t border-cyan-500/20 flex justify-between items-center">
+                <span className="text-[10px] text-white/40">Última:</span>
+                <span className="text-[10px] text-cyan-400">
+                  {formatRelativeTime(stats.byModal.SEA.lastUpdate)}
+                </span>
+              </div>
             </div>
           </div>
         </div>
-
-        {/* Applications */}
-        <div>
-          <span className="text-xs text-muted-foreground mb-2 block">Aplicações:</span>
-          <div className="flex flex-wrap gap-1.5">
-            {stats.applications.map((app) => (
-              <AppBadge key={app} app={app} />
-            ))}
-          </div>
-        </div>
-
-        {/* Modal Breakdown */}
-        {stats.byModal && (
-          <div className="grid md:grid-cols-2 gap-4">
-            {/* AIR Modal */}
-            <div className="p-4 rounded-xl border border-blue-500/30 bg-blue-500/5">
-              <div className="flex items-center gap-2 mb-3">
-                <Plane size={20} className="text-blue-400" />
-                <h4 className="font-semibold text-blue-400">MODAL AIR</h4>
-                <HealthIndicator status={getHealthStatus(stats.byModal.AIR.lastUpdate)} />
-              </div>
-              
-              <div className="space-y-2 text-sm">
-                {Object.entries(stats.byModal.AIR.breakdown).map(([tipo, data]) => (
-                  <div key={tipo} className="flex justify-between items-center">
-                    <span className="text-muted-foreground">{tipo}:</span>
-                    <span className="font-semibold text-foreground">{formatNumber(data.count)}</span>
-                  </div>
-                ))}
-                <div className="pt-2 border-t border-blue-500/20">
-                  <div className="flex justify-between items-center">
-                    <span className="text-muted-foreground text-xs">Última:</span>
-                    <span className="text-xs text-blue-400">
-                      {formatRelativeTime(stats.byModal.AIR.lastUpdate)}
-                    </span>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* SEA Modal */}
-            <div className="p-4 rounded-xl border border-cyan-500/30 bg-cyan-500/5">
-              <div className="flex items-center gap-2 mb-3">
-                <Ship size={20} className="text-cyan-400" />
-                <h4 className="font-semibold text-cyan-400">MODAL SEA</h4>
-                <HealthIndicator status={getHealthStatus(stats.byModal.SEA.lastUpdate)} />
-              </div>
-              
-              <div className="space-y-2 text-sm">
-                {Object.entries(stats.byModal.SEA.breakdown).map(([tipo, data]) => (
-                  <div key={tipo} className="flex justify-between items-center">
-                    <span className="text-muted-foreground">{tipo}:</span>
-                    <span className="font-semibold text-foreground">{formatNumber(data.count)}</span>
-                  </div>
-                ))}
-                <div className="pt-2 border-t border-cyan-500/20">
-                  <div className="flex justify-between items-center">
-                    <span className="text-muted-foreground text-xs">Última:</span>
-                    <span className="text-xs text-cyan-400">
-                      {formatRelativeTime(stats.byModal.SEA.lastUpdate)}
-                    </span>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
-      </div>
+      )}
     </PageCard>
-  );
-}
-
-function LoadingState() {
-  return (
-    <div className="space-y-6">
-      <Skeleton className="h-64 w-full rounded-2xl" />
-      <div className="grid md:grid-cols-2 gap-6">
-        <Skeleton className="h-48 w-full rounded-2xl" />
-        <Skeleton className="h-48 w-full rounded-2xl" />
-      </div>
-      <Skeleton className="h-48 w-full rounded-2xl" />
-    </div>
   );
 }
 
@@ -352,75 +329,97 @@ export default function DatabaseMonitor() {
 
   return (
     <PageLayout>
-      <PageHeader
-        title="Monitoramento de Dados"
-        subtitle="Estatísticas das tabelas principais do banco dados_dachser"
-      />
-
-      <div className="container mx-auto px-4 py-6 space-y-6">
-        {/* Refresh Button */}
-        <div className="flex justify-between items-center">
-          <div className="text-sm text-muted-foreground">
-            {stats?.fetchedAt && (
-              <span>
-                Dados obtidos {formatRelativeTime(stats.fetchedAt)}
-              </span>
-            )}
+      {/* Header */}
+      <div className="px-4 md:px-6 py-5 border-b border-white/5 bg-[#050608]/80 backdrop-blur-sm">
+        <div className="container mx-auto">
+          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+            <div>
+              <h1 className="text-xl md:text-2xl font-bold tracking-wide text-white flex items-center gap-3">
+                <Database className="w-6 h-6 text-[#ffc800]" />
+                Monitoramento de Dados
+              </h1>
+              <p className="text-sm text-white/60 mt-1">
+                Estatísticas das tabelas do banco dados_dachser
+              </p>
+            </div>
+            <div className="flex items-center gap-3">
+              {stats?.fetchedAt && (
+                <span className="text-[11px] text-white/40">
+                  Atualizado {formatRelativeTime(stats.fetchedAt)}
+                </span>
+              )}
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={fetchStats}
+                disabled={loading}
+                className="gap-2 border-[#ffc800]/30 hover:border-[#ffc800]/60 hover:bg-[#ffc800]/10"
+              >
+                <RefreshCw size={14} className={loading ? "animate-spin" : ""} />
+                Atualizar
+              </Button>
+            </div>
           </div>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={fetchStats}
-            disabled={loading}
-            className="gap-2"
-          >
-            <RefreshCw size={16} className={loading ? "animate-spin" : ""} />
-            Atualizar
-          </Button>
         </div>
+      </div>
+
+      <div className="container mx-auto px-4 py-6">
+        {/* Loading State */}
+        {loading && (
+          <div className="flex items-center justify-center py-20">
+            <Loader2 className="w-8 h-8 text-[#ffc800] animate-spin" />
+          </div>
+        )}
 
         {/* Error State */}
         {error && !loading && (
-          <PageCard className="border-destructive/50">
-            <div className="p-6 flex items-center gap-4 text-destructive">
+          <PageCard className="border-red-500/30">
+            <div className="flex items-center gap-4 text-red-400">
               <AlertCircle size={24} />
-              <div>
+              <div className="flex-1">
                 <h3 className="font-semibold">Erro ao carregar dados</h3>
-                <p className="text-sm text-muted-foreground">{error}</p>
+                <p className="text-sm text-white/60">{error}</p>
               </div>
-              <Button variant="outline" size="sm" onClick={fetchStats} className="ml-auto">
+              <Button variant="outline" size="sm" onClick={fetchStats} className="border-red-500/30 hover:bg-red-500/10">
                 Tentar novamente
               </Button>
             </div>
           </PageCard>
         )}
 
-        {/* Loading State */}
-        {loading && <LoadingState />}
+        {/* Empty State */}
+        {!loading && !error && !stats && (
+          <div className="flex flex-col items-center justify-center py-20 text-center">
+            <Server className="w-12 h-12 text-white/30 mb-4" />
+            <p className="text-white/60 text-lg font-medium">Nenhum dado disponível</p>
+            <p className="text-white/40 text-sm mt-2 max-w-md">
+              Não foi possível carregar as estatísticas do banco de dados.
+            </p>
+          </div>
+        )}
 
         {/* Data Display */}
         {!loading && stats && (
-          <div className="space-y-6">
+          <div className="space-y-5 animate-fade-in">
             {/* t_master_dados - Full Width */}
             <MasterDataCard stats={stats.t_master_dados} />
 
             {/* Financial Tables - Grid */}
-            <div className="grid md:grid-cols-2 gap-6">
+            <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
               <TableCard
                 tableName="t_dados_financeiro_nfs"
                 stats={stats.t_dados_financeiro_nfs}
+                description="Dados de notas fiscais para régua de cobrança"
               />
               <TableCard
                 tableName="t_dados_financeiro_voucher"
                 stats={stats.t_dados_financeiro_voucher}
+                description="Dados de vouchers para esteira de pagamentos"
               />
-            </div>
-
-            {/* tbaixas */}
-            <div className="max-w-xl">
               <TableCard
                 tableName="tbaixas"
                 stats={stats.tbaixas}
+                description="Comprovantes de pagamento"
               />
             </div>
           </div>
