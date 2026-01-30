@@ -1014,6 +1014,12 @@ export default function Olimpo() {
                 )}
               </div>
             </div>
+
+            {/* Faturamento */}
+            <div className="pt-2 border-t border-white/[0.05]">
+              <p className="text-xs text-muted-foreground uppercase tracking-wider mb-1">Faturamento</p>
+              <p className="text-xs text-muted-foreground italic">Em desenvolvimento...</p>
+            </div>
           </div>
         </div>
       )}
