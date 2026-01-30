@@ -298,3 +298,9 @@ verify_jwt = false
 
 [functions.sea-tracking-cron]
 verify_jwt = false
+
+[functions.db-status-report]
+verify_jwt = false
+
+[functions.db-critical-alert]
+verify_jwt = false
