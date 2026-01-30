@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { Database, RefreshCw, Clock, Hash, AlertCircle, Plane, Ship, Server, Activity, Loader2 } from "lucide-react";
+import { Database, RefreshCw, AlertCircle, Plane, Ship, Server, Loader2, HelpCircle, Hash, Clock, Activity, TrendingUp } from "lucide-react";
 import { formatDistanceToNow, format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { supabase } from "@/integrations/supabase/client";
@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 import { parseDBDate } from "@/utils/timezone";
+import { cn } from "@/lib/utils";
 
 interface ModalBreakdown {
   lastUpdate: string | null;
@@ -53,10 +54,10 @@ const getHealthStatus = (lastUpdate: string | null): HealthStatus => {
   return "red";
 };
 
-const healthColors: Record<HealthStatus, { dot: string; text: string }> = {
-  green: { dot: "bg-emerald-500", text: "text-emerald-400" },
-  yellow: { dot: "bg-amber-500", text: "text-amber-400" },
-  red: { dot: "bg-red-500", text: "text-red-400" },
+const healthColors: Record<HealthStatus, { dot: string; text: string; label: string }> = {
+  green: { dot: "bg-emerald-500", text: "text-emerald-400", label: "Saudável" },
+  yellow: { dot: "bg-amber-500", text: "text-amber-400", label: "Atenção" },
+  red: { dot: "bg-red-500", text: "text-red-400", label: "Crítico" },
 };
 
 const appBadgeStyles: Record<string, string> = {
@@ -149,7 +150,7 @@ function TableCard({
         <div className="p-2 rounded-lg bg-[#0a0b10] border border-white/10">
           <div className="text-[9px] uppercase tracking-wider text-muted-foreground">Status</div>
           <div className={`text-lg font-bold mt-0.5 ${healthColors[health].text}`}>
-            {health === "green" ? "Saudável" : health === "yellow" ? "Atenção" : "Crítico"}
+            {healthColors[health].label}
           </div>
         </div>
       </div>
@@ -282,10 +283,10 @@ export default function DatabaseMonitor() {
   const navigate = useNavigate();
   const [stats, setStats] = useState<DatabaseStats | null>(null);
   const [loading, setLoading] = useState(true);
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const fetchStats = async () => {
-    setLoading(true);
     setError(null);
 
     try {
@@ -304,9 +305,14 @@ export default function DatabaseMonitor() {
       console.error("Error fetching database stats:", err);
       setError(err.message || "Erro ao buscar estatísticas");
       toast.error("Erro ao buscar estatísticas do banco de dados");
-    } finally {
-      setLoading(false);
     }
+  };
+
+  const handleRefresh = async () => {
+    setIsRefreshing(true);
+    await fetchStats();
+    setIsRefreshing(false);
+    toast.success("Dados atualizados");
   };
 
   useEffect(() => {
@@ -324,107 +330,194 @@ export default function DatabaseMonitor() {
       return;
     }
 
-    fetchStats();
+    const loadData = async () => {
+      setLoading(true);
+      await fetchStats();
+      setLoading(false);
+    };
+
+    loadData();
   }, [navigate]);
 
+  // Calculate summary metrics
+  const totalRecords = stats ? 
+    stats.t_master_dados.totalRecords + 
+    stats.t_dados_financeiro_nfs.totalRecords + 
+    stats.t_dados_financeiro_voucher.totalRecords + 
+    stats.tbaixas.totalRecords : 0;
+
+  const healthyTables = stats ? [
+    stats.t_master_dados,
+    stats.t_dados_financeiro_nfs,
+    stats.t_dados_financeiro_voucher,
+    stats.tbaixas
+  ].filter(t => getHealthStatus(t.lastUpdate) === "green").length : 0;
+
+  const warningTables = stats ? [
+    stats.t_master_dados,
+    stats.t_dados_financeiro_nfs,
+    stats.t_dados_financeiro_voucher,
+    stats.tbaixas
+  ].filter(t => getHealthStatus(t.lastUpdate) === "yellow").length : 0;
+
+  const criticalTables = stats ? [
+    stats.t_master_dados,
+    stats.t_dados_financeiro_nfs,
+    stats.t_dados_financeiro_voucher,
+    stats.tbaixas
+  ].filter(t => getHealthStatus(t.lastUpdate) === "red").length : 0;
+
+  const rightContent = (
+    <div className="flex items-center gap-2.5">
+      <Button
+        onClick={handleRefresh}
+        disabled={isRefreshing || loading}
+        className="bg-[#ffc800] hover:bg-[#e6b400] text-black rounded-full px-4 h-8 text-xs font-semibold"
+      >
+        {isRefreshing ? (
+          <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" />
+        ) : (
+          <RefreshCw className="w-3.5 h-3.5 mr-1.5" />
+        )}
+        Atualizar
+      </Button>
+      <button
+        onClick={() => navigate("/admin/manual")}
+        className="w-8 h-8 rounded-full border border-white/25 flex items-center justify-center bg-black/70 text-gray-400 hover:text-[#ffc800] transition-colors"
+        title="Manual do usuário"
+      >
+        <HelpCircle className="h-4 w-4" />
+      </button>
+    </div>
+  );
+
   return (
-    <PageLayout>
-      {/* Header */}
-      <div className="px-4 md:px-6 py-5 border-b border-white/5 bg-[#050608]/80 backdrop-blur-sm">
-        <div className="container mx-auto">
-          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-            <div>
-              <h1 className="text-xl md:text-2xl font-bold tracking-wide text-white flex items-center gap-3">
-                <Database className="w-6 h-6 text-[#ffc800]" />
-                Monitoramento de Dados
-              </h1>
-              <p className="text-sm text-white/60 mt-1">
-                Estatísticas das tabelas do banco dados_dachser
-              </p>
-            </div>
-            <div className="flex items-center gap-3">
-              {stats?.fetchedAt && (
-                <span className="text-[11px] text-white/40">
-                  Atualizado {formatRelativeTime(stats.fetchedAt)}
-                </span>
-              )}
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={fetchStats}
-                disabled={loading}
-                className="gap-2 border-[#ffc800]/30 hover:border-[#ffc800]/60 hover:bg-[#ffc800]/10"
-              >
-                <RefreshCw size={14} className={loading ? "animate-spin" : ""} />
-                Atualizar
-              </Button>
-            </div>
+    <PageLayout 
+      title="DACHSER" 
+      subtitle="Monitoramento de Dados" 
+      pageIcon={Database} 
+      backTo="/dashboard"
+      rightContent={rightContent}
+    >
+      {/* Summary Metrics */}
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+        <div className="p-3 rounded-xl bg-[#0a0b10] border border-white/10">
+          <div className="text-[10px] uppercase tracking-[0.15em] text-muted-foreground flex items-center gap-1.5">
+            <Hash className="w-3 h-3 text-blue-400" />
+            Total Registros
+          </div>
+          <div className="text-xl font-bold mt-1">
+            {loading ? "..." : formatNumber(totalRecords)}
+          </div>
+        </div>
+
+        <div className="p-3 rounded-xl bg-[#0a0b10] border border-white/10">
+          <div className="text-[10px] uppercase tracking-[0.15em] text-muted-foreground flex items-center gap-1.5">
+            <Activity className="w-3 h-3 text-emerald-400" />
+            Tabelas Saudáveis
+          </div>
+          <div className="text-xl font-bold text-emerald-400 mt-1">
+            {loading ? "..." : healthyTables}
+          </div>
+        </div>
+
+        <div className="p-3 rounded-xl bg-[#0a0b10] border border-white/10">
+          <div className="text-[10px] uppercase tracking-[0.15em] text-muted-foreground flex items-center gap-1.5">
+            <Clock className="w-3 h-3 text-amber-400" />
+            Em Atenção
+          </div>
+          <div className="text-xl font-bold text-amber-400 mt-1">
+            {loading ? "..." : warningTables}
+          </div>
+        </div>
+
+        <div className="p-3 rounded-xl bg-[#0a0b10] border border-white/10">
+          <div className="text-[10px] uppercase tracking-[0.15em] text-muted-foreground flex items-center gap-1.5">
+            <AlertCircle className="w-3 h-3 text-red-400" />
+            Crítico
+          </div>
+          <div className="text-xl font-bold text-red-400 mt-1">
+            {loading ? "..." : criticalTables}
+          </div>
+        </div>
+
+        <div className="p-3 rounded-xl bg-[#0a0b10] border border-white/10">
+          <div className="text-[10px] uppercase tracking-[0.15em] text-muted-foreground flex items-center gap-1.5">
+            <Server className="w-3 h-3 text-[#ffc800]" />
+            Tabelas Monitoradas
+          </div>
+          <div className="text-xl font-bold mt-1">
+            {loading ? "..." : "4"}
           </div>
         </div>
       </div>
 
-      <div className="container mx-auto px-4 py-6">
-        {/* Loading State */}
-        {loading && (
-          <div className="flex items-center justify-center py-20">
-            <Loader2 className="w-8 h-8 text-[#ffc800] animate-spin" />
-          </div>
-        )}
+      {/* Loading State */}
+      {loading && (
+        <div className="flex items-center justify-center py-20">
+          <Loader2 className="w-8 h-8 text-[#ffc800] animate-spin" />
+        </div>
+      )}
 
-        {/* Error State */}
-        {error && !loading && (
-          <PageCard className="border-red-500/30">
-            <div className="flex items-center gap-4 text-red-400">
-              <AlertCircle size={24} />
-              <div className="flex-1">
-                <h3 className="font-semibold">Erro ao carregar dados</h3>
-                <p className="text-sm text-white/60">{error}</p>
-              </div>
-              <Button variant="outline" size="sm" onClick={fetchStats} className="border-red-500/30 hover:bg-red-500/10">
-                Tentar novamente
-              </Button>
+      {/* Error State */}
+      {error && !loading && (
+        <PageCard className="border-red-500/30">
+          <div className="flex items-center gap-4 text-red-400">
+            <AlertCircle size={24} />
+            <div className="flex-1">
+              <h3 className="font-semibold">Erro ao carregar dados</h3>
+              <p className="text-sm text-white/60">{error}</p>
             </div>
-          </PageCard>
-        )}
-
-        {/* Empty State */}
-        {!loading && !error && !stats && (
-          <div className="flex flex-col items-center justify-center py-20 text-center">
-            <Server className="w-12 h-12 text-white/30 mb-4" />
-            <p className="text-white/60 text-lg font-medium">Nenhum dado disponível</p>
-            <p className="text-white/40 text-sm mt-2 max-w-md">
-              Não foi possível carregar as estatísticas do banco de dados.
-            </p>
+            <Button variant="outline" size="sm" onClick={handleRefresh} className="border-red-500/30 hover:bg-red-500/10">
+              Tentar novamente
+            </Button>
           </div>
-        )}
+        </PageCard>
+      )}
 
-        {/* Data Display */}
-        {!loading && stats && (
-          <div className="space-y-5 animate-fade-in">
-            {/* t_master_dados - Full Width */}
-            <MasterDataCard stats={stats.t_master_dados} />
+      {/* Empty State */}
+      {!loading && !error && !stats && (
+        <div className="flex flex-col items-center justify-center py-20 text-center">
+          <Server className="w-12 h-12 text-white/30 mb-4" />
+          <p className="text-white/60 text-lg font-medium">Nenhum dado disponível</p>
+          <p className="text-white/40 text-sm mt-2 max-w-md">
+            Não foi possível carregar as estatísticas do banco de dados.
+          </p>
+        </div>
+      )}
 
-            {/* Financial Tables - Grid */}
-            <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
-              <TableCard
-                tableName="t_dados_financeiro_nfs"
-                stats={stats.t_dados_financeiro_nfs}
-                description="Dados de notas fiscais para régua de cobrança"
-              />
-              <TableCard
-                tableName="t_dados_financeiro_voucher"
-                stats={stats.t_dados_financeiro_voucher}
-                description="Dados de vouchers para esteira de pagamentos"
-              />
-              <TableCard
-                tableName="tbaixas"
-                stats={stats.tbaixas}
-                description="Comprovantes de pagamento"
-              />
-            </div>
+      {/* Data Display */}
+      {!loading && stats && (
+        <div className="space-y-5 animate-fade-in">
+          {/* t_master_dados - Full Width */}
+          <MasterDataCard stats={stats.t_master_dados} />
+
+          {/* Financial Tables - Grid */}
+          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
+            <TableCard
+              tableName="t_dados_financeiro_nfs"
+              stats={stats.t_dados_financeiro_nfs}
+              description="Dados de notas fiscais para régua de cobrança"
+            />
+            <TableCard
+              tableName="t_dados_financeiro_voucher"
+              stats={stats.t_dados_financeiro_voucher}
+              description="Dados de vouchers para esteira de pagamentos"
+            />
+            <TableCard
+              tableName="tbaixas"
+              stats={stats.tbaixas}
+              description="Comprovantes de pagamento"
+            />
           </div>
-        )}
-      </div>
+
+          {/* Footer info */}
+          <div className="flex items-center justify-center gap-2 py-4 text-white/40 text-[11px]">
+            <AlertCircle className="w-3.5 h-3.5" />
+            <span>Atualizado {formatRelativeTime(stats.fetchedAt)}</span>
+          </div>
+        </div>
+      )}
     </PageLayout>
   );
 }
