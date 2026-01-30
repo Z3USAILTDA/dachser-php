@@ -221,6 +221,7 @@ export default function Olimpo() {
   // Filters
   const [daysFilter, setDaysFilter] = useState<number | null>(7);
   const [modeFilter, setModeFilter] = useState<"air" | "sea" | null>(null);
+  const [tipoFilter, setTipoFilter] = useState<"import" | "export" | null>(null);
   const [statusFilter, setStatusFilter] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState("");
 
@@ -265,6 +266,11 @@ export default function Olimpo() {
     // Se não tem ETA, mostrar mesmo assim (melhor mostrar do que esconder)
 
     if (modeFilter && item.mode !== modeFilter) return false;
+    if (tipoFilter) {
+      const isImport = item.tipo_label.toUpperCase().includes("IMPORT");
+      if (tipoFilter === "import" && !isImport) return false;
+      if (tipoFilter === "export" && isImport) return false;
+    }
     if (statusFilter && item.status !== statusFilter) return false;
 
     if (searchTerm) {
@@ -888,6 +894,18 @@ export default function Olimpo() {
             <span className="w-1.5 h-1.5 rounded-full bg-primary" /> SEA
           </button>
           <button
+            onClick={() => setTipoFilter(tipoFilter === "import" ? null : "import")}
+            className={`px-3 py-1.5 rounded-full text-[10px] border transition-all flex items-center gap-1.5 ${tipoFilter === "import" ? "border-primary bg-[rgba(30,30,30,0.98)] text-amber-200" : "border-white/10 bg-[rgba(14,14,14,0.95)]"}`}
+          >
+            <span className="w-1.5 h-1.5 rounded-full bg-primary" /> IMPORT
+          </button>
+          <button
+            onClick={() => setTipoFilter(tipoFilter === "export" ? null : "export")}
+            className={`px-3 py-1.5 rounded-full text-[10px] border transition-all flex items-center gap-1.5 ${tipoFilter === "export" ? "border-primary bg-[rgba(30,30,30,0.98)] text-amber-200" : "border-white/10 bg-[rgba(14,14,14,0.95)]"}`}
+          >
+            <span className="w-1.5 h-1.5 rounded-full bg-primary" /> EXPORT
+          </button>
+          <button
             onClick={() => setStatusFilter(statusFilter === "Atraso" ? null : "Atraso")}
             className={`px-3 py-1.5 rounded-full text-[10px] border transition-all flex items-center gap-1.5 ${statusFilter === "Atraso" ? "border-primary bg-[rgba(30,30,30,0.98)] text-amber-200" : "border-white/10 bg-[rgba(14,14,14,0.95)]"}`}
           >
@@ -1315,6 +1333,18 @@ export default function Olimpo() {
                   className={`px-2 md:px-3 py-1 md:py-1.5 rounded-full text-[10px] md:text-xs border transition-all flex items-center gap-1 ${modeFilter === "sea" ? "border-primary bg-[rgba(30,30,30,0.98)] text-amber-200" : "border-white/10 bg-[rgba(14,14,14,0.95)]"}`}
                 >
                   <span className="w-1.5 h-1.5 rounded-full bg-primary" /> SEA
+                </button>
+                <button
+                  onClick={() => setTipoFilter(tipoFilter === "import" ? null : "import")}
+                  className={`px-2 md:px-3 py-1 md:py-1.5 rounded-full text-[10px] md:text-xs border transition-all flex items-center gap-1 ${tipoFilter === "import" ? "border-primary bg-[rgba(30,30,30,0.98)] text-amber-200" : "border-white/10 bg-[rgba(14,14,14,0.95)]"}`}
+                >
+                  <span className="w-1.5 h-1.5 rounded-full bg-primary" /> IMPORT
+                </button>
+                <button
+                  onClick={() => setTipoFilter(tipoFilter === "export" ? null : "export")}
+                  className={`px-2 md:px-3 py-1 md:py-1.5 rounded-full text-[10px] md:text-xs border transition-all flex items-center gap-1 ${tipoFilter === "export" ? "border-primary bg-[rgba(30,30,30,0.98)] text-amber-200" : "border-white/10 bg-[rgba(14,14,14,0.95)]"}`}
+                >
+                  <span className="w-1.5 h-1.5 rounded-full bg-primary" /> EXPORT
                 </button>
                 <button
                   onClick={() => setStatusFilter(statusFilter === "Atraso" ? null : "Atraso")}
