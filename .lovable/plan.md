@@ -1,145 +1,212 @@
 
-# Ajustes Visuais - Destaque de Divergências na Análise SEA
+# Suspensão Total da JsonCargo - Todas as Funções
 
-## Objetivo
+## Resumo
 
-Melhorar a apresentação visual dos resultados de análise documental SEA para:
-1. Destacar visualmente as linhas de divergência com cores e ícones
-2. Adicionar uma seção de resumo de divergências ao final do resultado para facilitar cópia
+Desativar **todas** as chamadas à API JsonCargo no sistema até segunda ordem. Isso afeta:
 
-## Implementação
+| Módulo | Função | Uso da JsonCargo |
+|--------|--------|------------------|
+| **Olimpo/Sea Tracking** | `sea_seed_smart` | Enriquecimento de containers |
+| **Olimpo/Sea Tracking** | `refresh_sea_tracking` | Re-track manual de containers |
+| **Olimpo/Sea Tracking** | `jc_container`, `jc_vessel_find`, `jc_vessel_basic`, `jc_port_find` | Endpoints diretos |
+| **CRON Marítimo** | `sea-tracking-cron` | Execução automática 2x/semana |
+| **Demurrage** | `demurrage-import-jsoncargo` | Importação de MBLs |
+| **Demurrage** | `demurrage-fetch-timelines` | Busca de eventos de container |
+| **Health Check** | `demurrage-health-check` | Verificação de status da API |
 
-### 1. Criar Componente Reutilizável `AnalysisResultDisplay`
+---
 
-Novo componente em `src/components/maritimo/AnalysisResultDisplay.tsx` que:
-- Recebe o texto bruto da análise
-- Processa linha por linha identificando padrões de divergência
-- Aplica estilos visuais diferenciados para cada tipo de linha
+## Arquivos a Modificar
 
-### 2. Regras de Highlighting
+### 1. `supabase/functions/olimpo-proxy/index.ts`
 
-| Padrão | Estilo Visual |
-|--------|--------------|
-| `UPDATE REQUIRED`, `Status: DIFFERENT`, `MISMATCH` | Fundo vermelho/laranja, borda lateral, ícone ⚠️ |
-| `Delta:` com valor não-zero | Fundo amarelo suave |
-| `Missing:`, `Extra:` com valores | Fundo vermelho suave |
-| `→ Update:`, `→ Action:` | Fundo azul suave com ícone 📝 |
-| `Status: MATCH` | Texto verde sutil (não destacado) |
-| Headers como `EXPORTER #N:`, `CONTAINER:` | Fundo escuro, texto bold |
+**Alteração 1 - Função `jcJson` (linha 268)**
 
-### 3. Estrutura Visual do Resultado
-
-```
-┌──────────────────────────────────────────────────────┐
-│ Análise concluída ✓                                 │
-├──────────────────────────────────────────────────────┤
-│                                                      │
-│ [Resultado da análise com highlighting]              │
-│                                                      │
-│ ┌─ DIVERGÊNCIA ─────────────────────────────────────┐│
-│ │ ⚠ Packaging Type: CARTON vs WOODEN PALLET        ││
-│ │   → Update: Change packaging type...              ││
-│ └────────────────────────────────────────────────────┘│
-│                                                      │
-│ [Linhas normais sem destaque]                        │
-│                                                      │
-├──────────────────────────────────────────────────────┤
-│ 📋 RESUMO DAS DIVERGÊNCIAS (para cópia)             │
-│ ──────────────────────────────────────────────────── │
-│                                                      │
-│ ⚠ Packaging Type: 5 discrepancies found             │
-│ EXPORTER #15: MALIK GmbH                            │
-│ - Pallet/Package Qty: Manifest: 1 CARTON | HBL: ... │
-│   → Update: Change packaging type...                 │
-│                                                      │
-│ [Botão: Copiar Resumo]                               │
-└──────────────────────────────────────────────────────┘
-```
-
-### 4. Arquivos a Criar/Modificar
-
-**Novo arquivo:**
-- `src/components/maritimo/AnalysisResultDisplay.tsx`
-
-**Arquivos a modificar:**
-- `src/pages/SubmeterHblMbl.tsx` - Substituir `<pre>` pelo novo componente
-- `src/pages/SubmeterManifestHbl.tsx` - Substituir `<pre>` pelo novo componente
-- `src/pages/InvoicesDraftHbl.tsx` - Substituir `<pre>` pelo novo componente
-
-### 5. Detalhes Técnicos
-
-#### Componente AnalysisResultDisplay
+Adicionar flag global no início da função para retornar imediatamente:
 
 ```typescript
-interface AnalysisResultDisplayProps {
-  resultText: string;
-  maxHeight?: string;
+async function jcJson(url: string, qs: Record<string, string> = {}, timeout = 25000): Promise<any> {
+  // FLAG: JsonCargo DESATIVADO temporariamente até segunda ordem
+  const JSONCARGO_DISABLED = true;
+  if (JSONCARGO_DISABLED) {
+    console.log('[jcJson] JsonCargo desativado até segunda ordem');
+    return { __curl_error: 'jsoncargo_disabled', disabled: true };
+  }
+  
+  const apiKey = Deno.env.get('JSONCARGO_API_KEY');
+  // ... resto do código
 }
+```
 
-// Função para classificar cada linha
-type LineType = 'divergence' | 'action' | 'warning' | 'header' | 'match' | 'normal';
+**Impacto:** Todas as chamadas via `jcJson()` retornarão erro "disabled" sem fazer requisição externa. Isso cobre:
+- `sea_seed_smart`
+- `refresh_sea_tracking`
+- `jc_container`
+- `jc_vessel_find`
+- `jc_vessel_basic`
+- `jc_port_find`
+- Busca de IMO de navios
 
-function classifyLine(line: string): LineType {
-  if (/UPDATE REQUIRED|Status:\s*DIFFERENT|MISMATCH/i.test(line)) return 'divergence';
-  if (/→\s*(Update|Action):/i.test(line)) return 'action';
-  if (/Missing:|Extra:|Delta:\s*[+-]?[1-9]/i.test(line)) return 'warning';
-  if (/EXPORTER\s*#\d+:|CONTAINER:|^NCM CODES:|^TOTAL/i.test(line)) return 'header';
-  if (/Status:\s*MATCH/i.test(line)) return 'match';
-  return 'normal';
+---
+
+### 2. `supabase/functions/sea-tracking-cron/index.ts`
+
+**Alteração - Pular Passo 2 (linha 79)**
+
+```typescript
+// ===== PASSO 2: Enriquecer containers via sea_seed_smart (múltiplos batches) =====
+// FLAG: JsonCargo DESATIVADO temporariamente até segunda ordem
+const JSONCARGO_DISABLED = true;
+
+if (JSONCARGO_DISABLED) {
+  console.log('[sea-tracking-cron] Passo 2 PULADO: JsonCargo desativado até segunda ordem');
+  stats.sea_seed_batches = [{ skipped: true, reason: 'JsonCargo desativado temporariamente' }];
+} else {
+  const MAX_BATCHES = 5;
+  // ... código existente dos batches
 }
-
-// Estilos por tipo de linha
-const lineStyles: Record<LineType, string> = {
-  divergence: 'bg-red-500/15 border-l-4 border-red-500 pl-3 text-red-300',
-  action: 'bg-blue-500/10 border-l-2 border-blue-400 pl-3 text-blue-300',
-  warning: 'bg-amber-500/10 border-l-2 border-amber-400 pl-3 text-amber-300',
-  header: 'bg-white/5 font-bold text-white mt-3',
-  match: 'text-emerald-400/70',
-  normal: 'text-neutral-300',
-};
 ```
 
-#### Seção de Resumo de Divergências
+**Impacto:** O CRON de segunda/quarta continuará executando o `olimpo-sync` (sincronização MariaDB) mas não fará chamadas à JsonCargo.
 
-Ao final do resultado, adiciona uma seção separada visualmente que:
-1. Extrai automaticamente todas as linhas de divergência
-2. Agrupa por contexto (Exporter, Container, etc.)
-3. Apresenta em formato copiável
-4. Inclui botão de cópia específico para esta seção
+---
 
-### 6. Impacto Visual
+### 3. `supabase/functions/demurrage-import-jsoncargo/index.ts`
 
-**Antes:**
+**Alteração - Retornar erro no início (após linha 42)**
+
+```typescript
+serve(async (req) => {
+  if (req.method === "OPTIONS") {
+    return new Response(null, { headers: corsHeaders });
+  }
+
+  // FLAG: JsonCargo DESATIVADO temporariamente até segunda ordem
+  const JSONCARGO_DISABLED = true;
+  if (JSONCARGO_DISABLED) {
+    return new Response(
+      JSON.stringify({ 
+        error: "JsonCargo desativado temporariamente", 
+        disabled: true,
+        message: "A integração com JsonCargo está suspensa até segunda ordem"
+      }),
+      { status: 503, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+    );
+  }
+
+  const JSONCARGO_API_KEY = Deno.env.get("JSONCARGO_API_KEY");
+  // ... resto do código
 ```
-texto monocromático em fonte mono
-tudo na mesma cor neutra
-difícil identificar o que precisa atenção
+
+**Impacto:** Qualquer tentativa de importar MBLs via JsonCargo no módulo de Demurrage retornará erro 503 com mensagem clara.
+
+---
+
+### 4. `supabase/functions/demurrage-fetch-timelines/index.ts`
+
+**Alteração - Retornar erro no início (após linha 222)**
+
+```typescript
+serve(async (req) => {
+  if (req.method === "OPTIONS") {
+    return new Response(null, { headers: corsHeaders });
+  }
+
+  // FLAG: JsonCargo DESATIVADO temporariamente até segunda ordem
+  const JSONCARGO_DISABLED = true;
+  if (JSONCARGO_DISABLED) {
+    return new Response(
+      JSON.stringify({ 
+        error: "JsonCargo desativado temporariamente", 
+        disabled: true,
+        processed: 0,
+        eventsInserted: 0
+      }),
+      { status: 503, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+    );
+  }
+
+  const JSONCARGO_API_KEY = Deno.env.get("JSONCARGO_API_KEY");
+  // ... resto do código
 ```
 
-**Depois:**
+**Impacto:** A busca de timelines de containers no Demurrage retornará erro 503.
+
+---
+
+### 5. `supabase/functions/demurrage-health-check/index.ts`
+
+**Alteração - Reportar como "disabled" (linha 81)**
+
+```typescript
+// FLAG: JsonCargo DESATIVADO temporariamente até segunda ordem
+const JSONCARGO_DISABLED = true;
+
+if (JSONCARGO_DISABLED) {
+  results.push({
+    service: "JSONCARGO",
+    status: "disabled",
+    latency_ms: 0,
+    message: "API desativada até segunda ordem",
+    last_checked: new Date().toISOString(),
+  });
+} else {
+  try {
+    const response = await fetch("https://api.jsoncargo.com/api/tracking/line/msc/container/MSCU1234567", {
+    // ... resto do código
 ```
-┌─ ⚠ DIVERGÊNCIA ──────────────────────────┐
-│ Packaging Type: CARTON vs WOODEN PALLET  │
-│ → Update: Change packaging type...        │
-└───────────────────────────────────────────┘
 
-Texto normal sem destaque
+**Impacto:** O health check mostrará JsonCargo como "disabled" ao invés de fazer chamada de teste.
 
-✓ Invoice Reference: MATCH (texto verde sutil)
-```
+---
 
-### 7. Ordem de Implementação
+## Resumo das Alterações
 
-1. Criar `AnalysisResultDisplay.tsx` com lógica de parsing e estilos
-2. Implementar função `extractDivergenceSummary()` para seção de resumo
-3. Atualizar `SubmeterHblMbl.tsx` para usar novo componente
-4. Atualizar `SubmeterManifestHbl.tsx` para usar novo componente
-5. Atualizar `InvoicesDraftHbl.tsx` para usar novo componente
-6. Testar com resultados de análise reais
+| Arquivo | Linha | Alteração |
+|---------|-------|-----------|
+| `olimpo-proxy/index.ts` | 268 | Flag `JSONCARGO_DISABLED = true` em `jcJson()` |
+| `sea-tracking-cron/index.ts` | 79 | Flag para pular Passo 2 |
+| `demurrage-import-jsoncargo/index.ts` | ~43 | Retorno 503 imediato |
+| `demurrage-fetch-timelines/index.ts` | ~223 | Retorno 503 imediato |
+| `demurrage-health-check/index.ts` | ~81 | Status "disabled" |
 
-### 8. Considerações
+---
 
-- O componente deve manter a estrutura de memória `sea/analysis-visual-consistency-constraint` intacta
-- O highlighting é puramente visual - não altera o texto copiado
-- A seção de resumo é adicional - o resultado completo continua disponível
-- Funciona com ambos os temas (claro e escuro)
+## Funcionalidades que Continuam Operando
+
+| Funcionalidade | Status |
+|----------------|--------|
+| Sincronização MariaDB → t_olimpo_tracking | ✅ Normal |
+| Visualização de dados em cache do tracking | ✅ Normal |
+| CRON de sincronização (Passo 1) | ✅ Normal |
+| Todas as análises HBL/MBL/Manifest | ✅ Normal |
+| Demurrage (exceto import/timeline) | ✅ Normal |
+
+## Funcionalidades Suspensas
+
+| Funcionalidade | Status |
+|----------------|--------|
+| Importação de MBLs via JsonCargo | ❌ Desativado |
+| Enriquecimento automático via CRON | ❌ Desativado |
+| Re-track manual de containers | ❌ Desativado |
+| Busca de eventos/timeline | ❌ Desativado |
+| Busca de navio/porto | ❌ Desativado |
+| Health check da API | ❌ Mostra "disabled" |
+
+---
+
+## Como Reativar
+
+Quando quiser reativar a JsonCargo, basta alterar todas as flags `JSONCARGO_DISABLED` de `true` para `false` nos 5 arquivos listados acima.
+
+---
+
+## Deploy
+
+Após as alterações, será necessário fazer deploy das seguintes edge functions:
+- `olimpo-proxy`
+- `sea-tracking-cron`
+- `demurrage-import-jsoncargo`
+- `demurrage-fetch-timelines`
+- `demurrage-health-check`
