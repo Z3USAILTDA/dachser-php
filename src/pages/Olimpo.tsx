@@ -772,12 +772,12 @@ export default function Olimpo() {
             const isImport = item.tipo_label.toUpperCase().includes("IMPORT");
             const rotation = isImport ? 120 : 300;
             // Using inline SVG for Font Awesome plane icon
-            el.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 576 512" width="20" height="20" style="fill: #7fd0ff; transform: rotate(${rotation}deg);">
+            el.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 576 512" width="24" height="24" style="fill: #7fd0ff; transform: rotate(${rotation}deg);">
               <path d="M482.3 192c34.2 0 93.7 29 93.7 64c0 36-59.5 64-93.7 64l-116.6 0L265.2 495.9c-5.7 10-16.3 16.1-27.8 16.1l-56.2 0c-10.6 0-18.3-10.2-15.4-20.4l49-171.6L112 320 68.8 377.6c-3 4-7.8 6.4-12.8 6.4l-42 0c-7.8 0-14-6.3-14-14c0-1.3 .2-2.6 .5-3.9L32 256 .5 145.9c-.4-1.3-.5-2.6-.5-3.9c0-7.8 6.3-14 14-14l42 0c5 0 9.8 2.4 12.8 6.4L112 192l102.9 0-49-171.6C162.9 10.2 170.6 0 181.2 0l56.2 0c11.5 0 22.1 6.2 27.8 16.1L365.7 192l116.6 0z"/>
             </svg>`;
           } else {
             // Using inline SVG for Font Awesome ship icon
-            el.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 576 512" width="20" height="20" style="fill: #ffc800;">
+            el.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 576 512" width="24" height="24" style="fill: #ffc800;">
               <path d="M192 32c0-17.7 14.3-32 32-32L352 0c17.7 0 32 14.3 32 32l0 32 48 0c26.5 0 48 21.5 48 48l0 128 44.4 0c15.5 0 28.1 12.6 28.1 28.1c0 5.2-1.5 10.4-4.2 14.9L480 416l-16 0c-17.7 0-32-14.3-32-32l0-64-288 0 0 64c0 17.7-14.3 32-32 32l-16 0L27.7 283c-2.8-4.5-4.2-9.7-4.2-14.9c0-15.5 12.6-28.1 28.1-28.1L96 240l0-128c0-26.5 21.5-48 48-48l48 0 0-32zM160 144l0 96 256 0 0-96-256 0zM96 480l0-32 128 0 0 32c0 17.7-14.3 32-32 32l-64 0c-17.7 0-32-14.3-32-32zm288-32l128 0 0 32c0 17.7-14.3 32-32 32l-64 0c-17.7 0-32-14.3-32-32l0-32z"/>
             </svg>`;
           }
