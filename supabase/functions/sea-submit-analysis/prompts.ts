@@ -1750,6 +1750,34 @@ NCM_STATUS: UPDATE_REQUIRED
 
 ★★★ THIS SECTION IS MANDATORY - NEVER SKIP IT ★★★
 
+████████████████████████████████████████████████████████████████████████████████
+█ ANTI-HALLUCINATION RULES FOR NCM CODES                                         █
+████████████████████████████████████████████████████████████████████████████████
+
+★★★ CRITICAL: EXTRACT NCM CODES ONLY FROM WHAT IS VISUALLY PRESENT ★★★
+
+FORBIDDEN ACTIONS:
+1. DO NOT invent NCM codes that are not explicitly written in the documents
+2. DO NOT mistake invoice numbers, weights, phone numbers, or dates for NCM codes
+3. DO NOT guess NCM codes based on product descriptions
+4. DO NOT report an NCM as "Missing in MBL" if you cannot clearly read it in the HBL
+
+VERIFICATION BEFORE REPORTING "MISSING":
+For EVERY NCM you list as "Missing in MBL", you MUST:
+1. CONFIRM it appears in the HBL document (identify the page and location)
+2. CONFIRM you checked ALL pages of the MBL (including continuation sheets)
+3. Only report as missing if you are 100% CERTAIN it exists in HBL but NOT in MBL
+
+COMMON HALLUCINATION PATTERNS TO AVOID:
+- "3917" is often incorrectly extracted from phone numbers or invoice sequences
+- Weight values like "1200 KG" should NOT become NCM "1200"
+- Invoice numbers like "INV-8421-003" should NOT contribute to NCM lists
+
+IF YOU ARE UNCERTAIN about an NCM code, DO NOT include it in your analysis.
+WHEN IN DOUBT, LEAVE IT OUT.
+
+★★★ AN INCORRECT "Missing in MBL" REPORT IS WORSE THAN MISSING A REAL DISCREPANCY ★★★
+
 6) NCM CODES (human-readable summary):
 - HBL NCMs: [list]
 - MBL NCMs: [list]
