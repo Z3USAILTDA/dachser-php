@@ -10,6 +10,7 @@ import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import { faFileContract } from "@fortawesome/free-solid-svg-icons";
 import { PageLayout } from "@/components/layout/PageLayout";
 import { PageCard } from "@/components/layout/PageCard";
+import { AnalysisResultDisplay } from "@/components/maritimo/AnalysisResultDisplay";
 import { FilePreviewDialog } from "@/components/maritimo/FilePreviewDialog";
 import { ThemeToggleButton } from "@/components/ThemeToggleButton";
 import {
@@ -1260,12 +1261,7 @@ export default function InvoicesDraftHbl() {
       {analysisResult && (
         <div id="analysis-results" className="space-y-6">
           <PageCard>
-            <pre className="text-sm text-foreground whitespace-pre-wrap font-mono max-h-[600px] overflow-y-auto bg-black/30 p-4 rounded-lg">
-              {analysisResult.text
-                ?.replace(/```json\s*\{[^`]*"hbl_shipping_data"[^`]*\}\s*```/g, '')
-                .replace(/===\s*NCM_EXTRACTION_START\s*===[\s\S]*?===\s*NCM_EXTRACTION_END\s*===/g, '')
-                .trim()}
-            </pre>
+            <AnalysisResultDisplay resultText={analysisResult.text || ''} maxHeight="max-h-[600px]" />
           </PageCard>
 
           <div className="flex items-center gap-4">

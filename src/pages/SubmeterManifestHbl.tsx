@@ -3,6 +3,7 @@ import { useNavigate, useLocation, useParams } from "react-router-dom";
 import { Send, FileText, AlertCircle, Copy, Check, Info, FileStack, Loader2, HelpCircle, ClipboardList } from "lucide-react";
 import { PageLayout } from "@/components/layout/PageLayout";
 import { PageCard } from "@/components/layout/PageCard";
+import { AnalysisResultDisplay } from "@/components/maritimo/AnalysisResultDisplay";
 import { Button } from "@/components/ui/button";
 import { UploadZone } from "@/components/maritimo/UploadZone";
 import { FileItem } from "@/components/maritimo/FileItem";
@@ -596,12 +597,7 @@ export default function SubmeterManifestHbl() {
                 <RejectedTokensDebug debugInfo={analysisResult.result_data?.debug_info} />
 
                 <div className="bg-black/20 border border-white/5 rounded-xl p-6">
-                  <pre className="text-sm text-neutral-200 whitespace-pre-wrap font-mono bg-black/30 p-4 rounded-lg max-h-96 overflow-y-auto">
-                    {analysisResult.result_text
-                      ?.replace(/```json\s*\{[^`]*"hbl_shipping_data"[^`]*\}\s*```/g, '')
-                      .replace(/===\s*NCM_EXTRACTION_START\s*===[\s\S]*?===\s*NCM_EXTRACTION_END\s*===/g, '')
-                      .trim()}
-                  </pre>
+                  <AnalysisResultDisplay resultText={analysisResult.result_text || ''} maxHeight="max-h-96" />
                 </div>
 
                 <div className="flex items-center gap-4 flex-wrap">
