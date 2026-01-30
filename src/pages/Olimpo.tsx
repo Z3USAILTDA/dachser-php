@@ -704,7 +704,13 @@ export default function Olimpo() {
         // Build route line
         const line = buildRouteLine(item, currentRouteIndex);
         
-        if (line.length > 1) {
+        // Only show route if this vehicle is selected
+        const isSelected = selectedAssetDetails && (
+          selectedAssetDetails.asset === item.asset ||
+          selectedAssetDetails.flight === item.flight
+        );
+
+        if (isSelected && line.length > 1) {
           // Convert to GeoJSON format [lng, lat]
           const coordinates = line.map(([lat, lng]) => [lng, lat]);
           
@@ -751,9 +757,18 @@ export default function Olimpo() {
         if (pos) {
           // Create marker element
           const el = document.createElement("div");
-          el.className = "cursor-pointer text-2xl";
-          el.innerHTML = item.mode === "air" ? "✈️" : "🚢";
+          el.className = "cursor-pointer";
           el.style.filter = "drop-shadow(0 2px 4px rgba(0,0,0,0.5))";
+          el.style.fontSize = "20px";
+
+          if (item.mode === "air") {
+            // Determine rotation: IMPORT = 120°, EXPORT = 300°
+            const isImport = item.tipo_label.toUpperCase().includes("IMPORT");
+            const rotation = isImport ? 120 : 300;
+            el.innerHTML = `<i class="fa-solid fa-plane" style="color: #7fd0ff; transform: rotate(${rotation}deg);"></i>`;
+          } else {
+            el.innerHTML = `<i class="fa-solid fa-ship" style="color: #ffc800;"></i>`;
+          }
 
           const marker = new mapboxgl.Marker({ element: el })
             .setLngLat([pos[1], pos[0]])
@@ -799,7 +814,7 @@ export default function Olimpo() {
         map.fitBounds(bounds, { padding: 50, maxZoom: 4 });
       }
     }
-  }, [filteredData, mapboxToken]);
+  }, [filteredData, mapboxToken, selectedAssetDetails]);
 
   // Load data on mount
   useEffect(() => {
