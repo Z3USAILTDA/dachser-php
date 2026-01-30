@@ -1,135 +1,145 @@
 
-# Correção Final: Remover Referências "HS Code" Remanescentes no Código
+# Ajustes Visuais - Destaque de Divergências na Análise SEA
 
-## Problema Identificado
+## Objetivo
 
-Ainda existem 2 instruções contraditórias que orientam o modelo LLM a extrair de colunas "HS Code" como fonte de NCM:
+Melhorar a apresentação visual dos resultados de análise documental SEA para:
+1. Destacar visualmente as linhas de divergência com cores e ícones
+2. Adicionar uma seção de resumo de divergências ao final do resultado para facilitar cópia
 
-### Referências Problemáticas Encontradas
+## Implementação
 
-| Arquivo | Linha | Texto Problemático |
-|---------|-------|-------------------|
-| `sea-submit-analysis/index.ts` | 438 | `Include ALL columns that contain NCM or HS codes` |
-| `sea-submit-analysis/prompts.ts` | 1199 | `Extract ALL values from "HS Code" or "NCM Code" columns` |
+### 1. Criar Componente Reutilizável `AnalysisResultDisplay`
 
-Estas instruções estão em conflito direto com as regras de exclusão de HS Code adicionadas anteriormente, causando comportamento inconsistente na extração de NCM.
+Novo componente em `src/components/maritimo/AnalysisResultDisplay.tsx` que:
+- Recebe o texto bruto da análise
+- Processa linha por linha identificando padrões de divergência
+- Aplica estilos visuais diferenciados para cada tipo de linha
 
----
+### 2. Regras de Highlighting
 
-## Arquivos a Modificar
+| Padrão | Estilo Visual |
+|--------|--------------|
+| `UPDATE REQUIRED`, `Status: DIFFERENT`, `MISMATCH` | Fundo vermelho/laranja, borda lateral, ícone ⚠️ |
+| `Delta:` com valor não-zero | Fundo amarelo suave |
+| `Missing:`, `Extra:` com valores | Fundo vermelho suave |
+| `→ Update:`, `→ Action:` | Fundo azul suave com ícone 📝 |
+| `Status: MATCH` | Texto verde sutil (não destacado) |
+| Headers como `EXPORTER #N:`, `CONTAINER:` | Fundo escuro, texto bold |
 
-1. **`supabase/functions/sea-submit-analysis/index.ts`**
-2. **`supabase/functions/sea-submit-analysis/prompts.ts`**
+### 3. Estrutura Visual do Resultado
 
----
+```
+┌──────────────────────────────────────────────────────┐
+│ Análise concluída ✓                                 │
+├──────────────────────────────────────────────────────┤
+│                                                      │
+│ [Resultado da análise com highlighting]              │
+│                                                      │
+│ ┌─ DIVERGÊNCIA ─────────────────────────────────────┐│
+│ │ ⚠ Packaging Type: CARTON vs WOODEN PALLET        ││
+│ │   → Update: Change packaging type...              ││
+│ └────────────────────────────────────────────────────┘│
+│                                                      │
+│ [Linhas normais sem destaque]                        │
+│                                                      │
+├──────────────────────────────────────────────────────┤
+│ 📋 RESUMO DAS DIVERGÊNCIAS (para cópia)             │
+│ ──────────────────────────────────────────────────── │
+│                                                      │
+│ ⚠ Packaging Type: 5 discrepancies found             │
+│ EXPORTER #15: MALIK GmbH                            │
+│ - Pallet/Package Qty: Manifest: 1 CARTON | HBL: ... │
+│   → Update: Change packaging type...                 │
+│                                                      │
+│ [Botão: Copiar Resumo]                               │
+└──────────────────────────────────────────────────────┘
+```
 
-## Mudanças Específicas
+### 4. Arquivos a Criar/Modificar
 
-### 1. Corrigir Linha 438 (sea-submit-analysis/index.ts)
+**Novo arquivo:**
+- `src/components/maritimo/AnalysisResultDisplay.tsx`
+
+**Arquivos a modificar:**
+- `src/pages/SubmeterHblMbl.tsx` - Substituir `<pre>` pelo novo componente
+- `src/pages/SubmeterManifestHbl.tsx` - Substituir `<pre>` pelo novo componente
+- `src/pages/InvoicesDraftHbl.tsx` - Substituir `<pre>` pelo novo componente
+
+### 5. Detalhes Técnicos
+
+#### Componente AnalysisResultDisplay
+
+```typescript
+interface AnalysisResultDisplayProps {
+  resultText: string;
+  maxHeight?: string;
+}
+
+// Função para classificar cada linha
+type LineType = 'divergence' | 'action' | 'warning' | 'header' | 'match' | 'normal';
+
+function classifyLine(line: string): LineType {
+  if (/UPDATE REQUIRED|Status:\s*DIFFERENT|MISMATCH/i.test(line)) return 'divergence';
+  if (/→\s*(Update|Action):/i.test(line)) return 'action';
+  if (/Missing:|Extra:|Delta:\s*[+-]?[1-9]/i.test(line)) return 'warning';
+  if (/EXPORTER\s*#\d+:|CONTAINER:|^NCM CODES:|^TOTAL/i.test(line)) return 'header';
+  if (/Status:\s*MATCH/i.test(line)) return 'match';
+  return 'normal';
+}
+
+// Estilos por tipo de linha
+const lineStyles: Record<LineType, string> = {
+  divergence: 'bg-red-500/15 border-l-4 border-red-500 pl-3 text-red-300',
+  action: 'bg-blue-500/10 border-l-2 border-blue-400 pl-3 text-blue-300',
+  warning: 'bg-amber-500/10 border-l-2 border-amber-400 pl-3 text-amber-300',
+  header: 'bg-white/5 font-bold text-white mt-3',
+  match: 'text-emerald-400/70',
+  normal: 'text-neutral-300',
+};
+```
+
+#### Seção de Resumo de Divergências
+
+Ao final do resultado, adiciona uma seção separada visualmente que:
+1. Extrai automaticamente todas as linhas de divergência
+2. Agrupa por contexto (Exporter, Container, etc.)
+3. Apresenta em formato copiável
+4. Inclui botão de cópia específico para esta seção
+
+### 6. Impacto Visual
 
 **Antes:**
-```typescript
-3. EXTRACTION RULES:
-   - Include ALL columns that contain NCM or HS codes
+```
+texto monocromático em fonte mono
+tudo na mesma cor neutra
+difícil identificar o que precisa atenção
 ```
 
 **Depois:**
-```typescript
-3. EXTRACTION RULES:
-   - Include ONLY columns that contain NCM codes ("NCM Code", "Código NCM")
-   - NEVER include values from "HS Code" columns - HS and NCM are different systems
+```
+┌─ ⚠ DIVERGÊNCIA ──────────────────────────┐
+│ Packaging Type: CARTON vs WOODEN PALLET  │
+│ → Update: Change packaging type...        │
+└───────────────────────────────────────────┘
+
+Texto normal sem destaque
+
+✓ Invoice Reference: MATCH (texto verde sutil)
 ```
 
-### 2. Corrigir Linha 1199 (sea-submit-analysis/prompts.ts)
+### 7. Ordem de Implementação
 
-**Antes:**
-```text
-EXTRACTION RULES FOR NCM CODES:
-1. From MANIFEST: Extract ALL values from "HS Code" or "NCM Code" columns EXACTLY as they appear.
-```
+1. Criar `AnalysisResultDisplay.tsx` com lógica de parsing e estilos
+2. Implementar função `extractDivergenceSummary()` para seção de resumo
+3. Atualizar `SubmeterHblMbl.tsx` para usar novo componente
+4. Atualizar `SubmeterManifestHbl.tsx` para usar novo componente
+5. Atualizar `InvoicesDraftHbl.tsx` para usar novo componente
+6. Testar com resultados de análise reais
 
-**Depois:**
-```text
-EXTRACTION RULES FOR NCM CODES:
-1. From MANIFEST: Extract ONLY values from "NCM Code" or "Código NCM" columns.
-   - NEVER extract from "HS Code" columns - HS and NCM are different classification systems
-```
+### 8. Considerações
 
----
-
-## Detalhes Técnicos
-
-### Mudanças em `sea-submit-analysis/index.ts`
-
-Localização: Linhas 437-441 (seção "3. EXTRACTION RULES")
-
-**Bloco atual:**
-```typescript
-3. EXTRACTION RULES:
-   - Include ALL columns that contain NCM or HS codes
-   - Keep the EXACT values as they appear (4-digit: 8481, 8-digit: 84819090)
-   - DO NOT truncate or modify code lengths
-   - Extract codes of ANY length exactly as written
-```
-
-**Bloco corrigido:**
-```typescript
-3. EXTRACTION RULES:
-   - Include ONLY columns that contain NCM codes ("NCM Code", "Código NCM")
-   - NEVER include values from "HS Code" columns - HS and NCM are different classification systems
-   - Keep the EXACT NCM values as they appear (4-digit: 8481, 8-digit: 84819090)
-   - DO NOT truncate or modify code lengths
-   - Extract NCM codes of ANY length exactly as written
-```
-
-### Mudanças em `sea-submit-analysis/prompts.ts`
-
-Localização: Linhas 1198-1209 (seção "EXTRACTION RULES FOR NCM CODES")
-
-**Bloco atual:**
-```text
-EXTRACTION RULES FOR NCM CODES:
-1. From MANIFEST: Extract ALL values from "HS Code" or "NCM Code" columns EXACTLY as they appear.
-2. From HBL: Extract ALL NCM values from NCM-CODES section and cargo descriptions EXACTLY as they appear.
-```
-
-**Bloco corrigido:**
-```text
-EXTRACTION RULES FOR NCM CODES:
-1. From MANIFEST: Extract ONLY values from "NCM Code" or "Código NCM" columns.
-   - NEVER extract from "HS Code" columns - HS and NCM are different classification systems
-2. From HBL: Extract ALL NCM values from NCM-CODES section and cargo descriptions.
-   - Look for labels: "NCM:", "NCM-CODES:", "NCM CODE:", "CODIGO NCM:"
-   - IGNORE labels: "HS:", "HS-CODE:", "HS CODE:", "H.S.:" - these are HS codes, NOT NCMs
-```
-
----
-
-## Resultado Esperado
-
-| Cenário | Antes | Depois |
-|---------|-------|--------|
-| Manifest tem coluna "HS Code" com "870850" | Modelo pode extrair e comparar como NCM | Modelo ignora esta coluna |
-| HBL tem label "HS: 8708" | Modelo pode extrair como NCM | Modelo ignora esta label |
-| NCM existe em ambos mas marcado como "Extra in MBL" | Falso positivo por confusão HS/NCM | Comparação correta apenas NCMs |
-
-## Impacto na Interface
-
-**Nenhum impacto visual** - Apenas a lógica interna de extração será corrigida. O formato do resultado que o usuário recebe permanece exatamente igual.
-
----
-
-## Ordem de Implementação
-
-1. Atualizar `sea-submit-analysis/index.ts` - linhas 437-441
-2. Atualizar `sea-submit-analysis/prompts.ts` - linhas 1198-1209
-3. Deploy das edge functions `sea-submit-analysis` e `maritimo-analyze`
-
----
-
-## Verificação Pós-Implementação
-
-Após a correção:
-- Submeter uma análise HBL × MBL com documento que contenha labels "HS Code"
-- Verificar que os valores de "HS Code" NÃO aparecem na lista de NCMs
-- Confirmar que "Extra in MBL" só contém NCMs verdadeiramente extras
+- O componente deve manter a estrutura de memória `sea/analysis-visual-consistency-constraint` intacta
+- O highlighting é puramente visual - não altera o texto copiado
+- A seção de resumo é adicional - o resultado completo continua disponível
+- Funciona com ambos os temas (claro e escuro)
