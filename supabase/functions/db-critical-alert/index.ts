@@ -31,7 +31,7 @@ const CRITICAL_THRESHOLD_MINUTES = 60;
 const REALERT_INTERVAL_MINUTES = 30;
 
 const TEST_RECIPIENTS = ['larissa@z3us.ai'];
-const PRODUCTION_RECIPIENTS = ['larissa@z3us.ai', 'rodrigo@z3us.ai', 'herbert@z3us.ai'];
+const PRODUCTION_RECIPIENTS = ['larissa@z3us.ai'];
 
 function sleep(ms: number): Promise<void> {
   return new Promise(resolve => setTimeout(resolve, ms));

@@ -25,6 +25,7 @@ const TABLES_CONFIG = [
   { name: 'tbaixas', displayName: 'Baixas', applications: ['ESTEIRA'] },
 ];
 
+const PRODUCTION_RECIPIENTS = ['larissa@z3us.ai'];
 const TEST_RECIPIENTS = ['larissa@z3us.ai'];
 
 function sleep(ms: number): Promise<void> {
@@ -302,7 +303,7 @@ serve(async (req) => {
 
     console.log(`Running db-status-report in ${testMode ? 'TEST' : 'PRODUCTION'} mode`);
 
-    const recipients = TEST_RECIPIENTS; // Always send to test recipients for now
+    const recipients = testMode ? TEST_RECIPIENTS : PRODUCTION_RECIPIENTS;
 
     // Connect to MariaDB
     client = await connectWithRetry();
