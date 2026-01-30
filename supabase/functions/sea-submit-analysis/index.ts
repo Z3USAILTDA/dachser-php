@@ -434,16 +434,18 @@ async function extractXlsxText(fileUrl: string, fileName: string): Promise<strin
     const fileSizeKB = Math.round(arrayBuffer.byteLength / 1024);
     console.log(`📊 [XLSX] File loaded: ${fileSizeKB} KB`);
     
-    // For very large files (>1.5MB), use stricter limits
-    const isLargeFile = fileSizeKB > 1500;
+    // MEMORY OPTIMIZATION: Stricter limits based on file size
+    // Edge functions have 256MB memory limit - reduce extraction for large files
+    const isVeryLargeFile = fileSizeKB > 2000; // >2MB
+    const isLargeFile = fileSizeKB > 1000;     // >1MB
     
     // Import xlsx library
     const XLSX = await import('https://esm.sh/xlsx@0.18.5');
     
-    // Read workbook with NO ROW LIMITS - capture ALL manifest data
+    // Read workbook with memory-optimized settings
     const workbook = XLSX.read(arrayBuffer, { 
       type: 'array',
-      // NO sheetRows limit - read ALL rows with data
+      sheetRows: isVeryLargeFile ? 200 : (isLargeFile ? 350 : 0), // Limit rows for large files
       cellFormula: false,
       cellStyles: false,
       cellNF: false,
@@ -451,7 +453,11 @@ async function extractXlsxText(fileUrl: string, fileName: string): Promise<strin
       dense: true,
     });
     
-    console.log(`📊 [XLSX] ${workbook.SheetNames.length} sheets found (large file: ${isLargeFile})`);
+    // Free arrayBuffer immediately after parsing
+    // @ts-ignore
+    arrayBuffer = null;
+    
+    console.log(`📊 [XLSX] ${workbook.SheetNames.length} sheets found (size: ${isVeryLargeFile ? 'VERY LARGE' : isLargeFile ? 'large' : 'normal'})`);
     
     // Prioritize sheets with summary/total data first, then detail sheets
     // "Resumo" and "Container List" usually have weight/CBM totals
@@ -474,14 +480,16 @@ async function extractXlsxText(fileUrl: string, fileName: string): Promise<strin
         return 0;
       });
     
-    // Process 4 sheets for large files, 5 for normal - need more to capture all data
-    const maxSheets = isLargeFile ? 4 : 5;
+    // MEMORY OPTIMIZATION: Process fewer sheets for large files
+    const maxSheets = isVeryLargeFile ? 2 : (isLargeFile ? 3 : 4);
     const sheetsToProcess = sortedSheets.slice(0, maxSheets);
     console.log(`📊 [XLSX] Processing ${sheetsToProcess.length} sheets: ${sheetsToProcess.join(', ')}`);
     
     let fullText = '';
     let totalRows = 0;
-    const MAX_CHARS = isLargeFile ? 45000 : 60000;
+    // MEMORY OPTIMIZATION: Reduced character limits
+    const MAX_CHARS = isVeryLargeFile ? 20000 : (isLargeFile ? 30000 : 45000);
+    const MAX_LINES_PER_SHEET = isVeryLargeFile ? 100 : (isLargeFile ? 150 : 250);
     
     for (const sheetName of sheetsToProcess) {
       if (fullText.length >= MAX_CHARS) break;
@@ -489,11 +497,15 @@ async function extractXlsxText(fileUrl: string, fileName: string): Promise<strin
       const sheet = workbook.Sheets[sheetName];
       if (sheet) {
         const csv = XLSX.utils.sheet_to_csv(sheet, { blankrows: false });
-        const lines = csv.split('\n')
+        let lines = csv.split('\n')
           .filter((line: string) => line.trim().length > 0);
         
-        // NO LINE LIMIT - process ALL lines with data
-        const linesToProcess = lines; // Process ALL lines, no slicing
+        // MEMORY OPTIMIZATION: Limit lines per sheet
+        const linesToProcess = lines.slice(0, MAX_LINES_PER_SHEET);
+        
+        // Free original lines array
+        // @ts-ignore
+        lines = null;
         
         if (linesToProcess.length > 0) {
           const sheetText = `\n=== ${sheetName} (${linesToProcess.length} rows) ===\n${linesToProcess.join('\n')}`;
@@ -638,41 +650,52 @@ async function analyzeWithAnthropic(
   ];
   
   // ============ OCR PRE-EXTRACTION FOR MBL AND HBL PDFs ============
-  // MBL documents from carriers like CMA CGM are often image-based (scanned)
-  // Pre-extract text via Vision API to ensure NCM codes are captured
-  // Also extract HBL text for post-LLM cross-validation (anti-hallucination)
+  // MEMORY OPTIMIZATION: Only apply OCR for HBL×MBL analysis type (where NCM comparison is critical)
+  // Skip OCR for other analysis types to save memory
   let preExtractedMblTexts: string[] = [];
   let preExtractedHblTexts: string[] = [];
   
-  for (let i = 0; i < pdfFiles.length; i++) {
-    const file = pdfFiles[i];
-    
-    // ALWAYS apply OCR to MBL files in HBL×MBL analysis
-    // MBL documents are frequently image-based and Claude struggles with NCM extraction
-    if (file.file_type === 'mbl') {
-      console.log(`🔍 [OCR] ALWAYS pre-extracting text from MBL for better NCM extraction: ${file.name}`);
-      const ocrText = await extractTextViaVisionAPI(file.base64, file.name);
+  const isHblMblAnalysis = analysisType === 'hbl_mbl';
+  const totalPdfSize = pdfFiles.reduce((sum, f) => sum + (f.base64?.length || 0), 0);
+  const isLargePayload = totalPdfSize > 2_000_000; // >2MB total PDFs (base64)
+  
+  console.log(`🔍 [OCR] Analysis type: ${analysisType}, Total PDF size: ${Math.round(totalPdfSize/1024)}KB, Large payload: ${isLargePayload}`);
+  
+  // MEMORY OPTIMIZATION: For large payloads, skip OCR to avoid memory exhaustion
+  // OCR adds significant memory overhead and is only critical for scanned MBLs
+  if (isHblMblAnalysis && !isLargePayload) {
+    for (let i = 0; i < pdfFiles.length; i++) {
+      const file = pdfFiles[i];
+      const fileSizeKB = Math.round((file.base64?.length || 0) / 1024);
       
-      if (ocrText && ocrText.length > 100) {
-        preExtractedMblTexts.push(ocrText);
-        console.log(`✅ [OCR] Successfully extracted ${ocrText.length} chars from MBL`);
-      } else {
-        console.log(`⚠️ [OCR] Extraction returned insufficient text (${ocrText?.length || 0} chars) for MBL: ${file.name}`);
+      // Apply OCR to MBL files (frequently image-based) - but only if file is not too large
+      if (file.file_type === 'mbl' && fileSizeKB < 1500) {
+        console.log(`🔍 [OCR] Pre-extracting text from MBL: ${file.name} (${fileSizeKB}KB)`);
+        const ocrText = await extractTextViaVisionAPI(file.base64, file.name);
+        
+        if (ocrText && ocrText.length > 100) {
+          preExtractedMblTexts.push(ocrText);
+          console.log(`✅ [OCR] Successfully extracted ${ocrText.length} chars from MBL`);
+        } else {
+          console.log(`⚠️ [OCR] Extraction returned insufficient text for MBL: ${file.name}`);
+        }
+      } else if (file.file_type === 'mbl') {
+        console.log(`⏭️ [OCR] Skipping large MBL file to save memory: ${file.name} (${fileSizeKB}KB)`);
+      }
+      
+      // For HBL, only OCR if it appears to be scanned (based on filename heuristics)
+      if ((file.file_type === 'base' || file.file_type === 'hbl') && isPdfLikelyScanned(file.name) && fileSizeKB < 1000) {
+        console.log(`🔍 [OCR] Pre-extracting HBL (likely scanned): ${file.name}`);
+        const ocrText = await extractTextViaVisionAPI(file.base64, file.name);
+        
+        if (ocrText && ocrText.length > 100) {
+          preExtractedHblTexts.push(ocrText);
+          console.log(`✅ [OCR] Successfully extracted ${ocrText.length} chars from HBL`);
+        }
       }
     }
-    
-    // Also extract HBL text for cross-validation (anti-hallucination)
-    if (file.file_type === 'base' || file.file_type === 'hbl') {
-      console.log(`🔍 [OCR] Also pre-extracting HBL for NCM cross-validation: ${file.name}`);
-      const ocrText = await extractTextViaVisionAPI(file.base64, file.name);
-      
-      if (ocrText && ocrText.length > 100) {
-        preExtractedHblTexts.push(ocrText);
-        console.log(`✅ [OCR] Successfully extracted ${ocrText.length} chars from HBL`);
-      } else {
-        console.log(`⚠️ [OCR] HBL extraction returned insufficient text (${ocrText?.length || 0} chars): ${file.name}`);
-      }
-    }
+  } else {
+    console.log(`⏭️ [OCR] Skipping OCR pre-extraction (${isLargePayload ? 'large payload - memory optimization' : 'not HBL×MBL analysis'})`);
   }
   
   // If we have OCR-extracted MBL text, add it as context for the main analysis
@@ -1039,20 +1062,27 @@ async function analyzeWithLLM(
   
   console.log(`📊 Manifest text extracted: ${manifestText.length} chars`);
   
-  // Fetch PDFs and preserve file_type information
-  const pdfPromises = pdfUrls.map(async f => {
-    const result = await fetchFileAsBase64(f.file_url, f.file_name);
-    if (result) {
-      return { ...result, file_type: f.file_type };
+  // MEMORY OPTIMIZATION: Fetch PDFs sequentially instead of in parallel
+  // This reduces peak memory usage by not holding all PDFs in memory simultaneously
+  const validPdfs: { base64: string; name: string; mediaType: string; ext: string; file_type: string }[] = [];
+  
+  console.log(`📎 Loading ${pdfUrls.length} PDFs sequentially (memory optimization)...`);
+  
+  for (const f of pdfUrls) {
+    try {
+      const result = await fetchFileAsBase64(f.file_url, f.file_name);
+      if (result) {
+        validPdfs.push({ ...result, file_type: f.file_type });
+        console.log(`📎 Loaded: ${f.file_name} (${Math.round(result.base64.length / 1024)}KB base64)`);
+      }
+    } catch (e) {
+      console.error(`❌ Failed to fetch PDF: ${f.file_name}`, e);
     }
-    return null;
-  });
-  const pdfResults = await Promise.all(pdfPromises);
-  const validPdfs = pdfResults.filter((f): f is { base64: string; name: string; mediaType: string; ext: string; file_type: string } => f !== null);
+  }
   
   console.log(`📎 PDFs loaded: ${validPdfs.length}`);
   console.log(`📎 PDF types: ${validPdfs.map(f => `${f.name} -> ${f.file_type}`).join(', ')}`);
-  
+  console.log(`📎 Total PDF memory: ${Math.round(validPdfs.reduce((sum, f) => sum + f.base64.length, 0) / 1024)}KB`);
   // Wait for approved examples
   const approvedExamplesText = await approvedExamplesPromise;
   console.log(`📚 Approved examples text: ${approvedExamplesText.length} chars`);
