@@ -854,7 +854,7 @@ export default function Olimpo() {
     <>
       {/* Floating panel - filters + KPIs at top center */}
       <div 
-        className="absolute top-4 left-1/2 -translate-x-1/2 z-[1000] rounded-xl flex flex-col w-[95vw] max-w-[900px]"
+        className="absolute top-4 left-1/2 -translate-x-1/2 z-[1000] rounded-xl flex flex-col w-[95vw] max-w-[1100px]"
         style={{
           background: 'rgba(5,6,18,.92)',
           border: '1px solid rgba(255,255,255,.12)',
@@ -950,7 +950,7 @@ export default function Olimpo() {
       {/* Asset Details Panel */}
       {selectedAssetDetails && (
         <div 
-          className="absolute right-4 top-4 w-72 max-h-[50vh] z-[1000] rounded-xl flex flex-col overflow-hidden"
+          className="absolute right-4 top-4 w-80 max-h-[60vh] z-[1000] rounded-xl flex flex-col overflow-hidden"
           style={{
             background: 'rgba(5,6,18,.95)',
             border: '1px solid rgba(255,255,255,.12)',
@@ -1194,7 +1194,7 @@ export default function Olimpo() {
               {/* Asset Details Panel */}
               {selectedAssetDetails && (
                 <div 
-                  className="absolute right-3 top-3 w-72 max-h-[calc(100%-24px)] z-[1000] rounded-xl flex flex-col overflow-hidden"
+                  className="absolute right-3 top-3 w-80 max-h-[calc(100%-24px)] z-[1000] rounded-xl flex flex-col overflow-hidden"
                   style={{
                     background: 'rgba(5,6,18,.95)',
                     border: '1px solid rgba(255,255,255,.15)',
