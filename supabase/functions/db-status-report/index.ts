@@ -76,8 +76,8 @@ async function connectWithRetry(maxRetries = 3): Promise<Client> {
 }
 
 function getStatusColor(minutes: number): 'healthy' | 'warning' | 'critical' {
-  if (minutes >= 60) return 'critical';
-  if (minutes >= 30) return 'warning';
+  if (minutes > 60) return 'critical';
+  if (minutes > 5) return 'warning';
   return 'healthy';
 }
 
