@@ -121,6 +121,125 @@ RULES:
 
 // ============ UTILITY FUNCTIONS ============
 
+// ============ OCR FALLBACK FOR SCANNED PDFs ============
+
+/**
+ * Extract text from scanned/image-based PDF using Gemini Vision API
+ * This is used as fallback when native PDF text extraction fails
+ */
+async function extractTextViaVisionAPI(pdfBase64: string, fileName: string): Promise<string> {
+  const geminiApiKey = Deno.env.get('GEMINI_API_KEY');
+  if (!geminiApiKey) {
+    console.warn('⚠️ [OCR] GEMINI_API_KEY not configured, cannot perform OCR');
+    return '';
+  }
+  
+  console.log(`🔍 [OCR] Extracting text from potentially scanned PDF: ${fileName}`);
+  const startTime = Date.now();
+  
+  try {
+    const response = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${geminiApiKey}`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [{
+            role: 'user',
+            parts: [
+              { 
+                text: `Extract ALL text from this PDF document. This is a Bill of Lading document.
+
+CRITICAL: Focus on extracting these elements with EXACT values:
+1. NCM CODES - Look for sections labeled "NCM-CODES:", "NCM:", "NCM CODE:" - extract ALL 4-digit and 8-digit codes
+2. HS CODES - Look for "HS-CODE:", "HS:", "H.S.:" labels (extract separately from NCMs)
+3. WEIGHT values - Look for "GROSS WEIGHT", "GW:", weight in KG/KGS
+4. CBM/MEASUREMENT values - Look for "MEASUREMENT", "CBM", "M3"
+5. CONTAINER NUMBER - Format: 4 letters + 7 digits (e.g., SEKU5762065)
+6. SEAL NUMBER - Near container info
+7. SHIPPER/CONSIGNEE names
+8. VESSEL and VOYAGE information
+9. PORTS of loading and discharge
+10. Package count and type
+
+IMPORTANT:
+- Scan ALL PAGES of the document
+- NCM codes may span multiple pages
+- Look for "Continued From Previous Sheet" indicators
+- Extract EVERY piece of text you can see
+
+Output the raw text content, preserving the structure and layout as much as possible.
+Format NCM codes as a comma-separated list when you find them.`
+              },
+              { inline_data: { mime_type: 'application/pdf', data: pdfBase64 } }
+            ]
+          }],
+          generationConfig: { 
+            maxOutputTokens: 12000,
+            temperature: 0.1
+          }
+        })
+      }
+    );
+    
+    const elapsed = Date.now() - startTime;
+    
+    if (!response.ok) {
+      const errorText = await response.text().catch(() => '');
+      console.error(`❌ [OCR] Vision API failed: ${response.status} - ${errorText.substring(0, 200)}`);
+      return '';
+    }
+    
+    const data = await response.json();
+    const extractedText = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+    
+    console.log(`✅ [OCR] Extracted ${extractedText.length} chars from ${fileName} in ${elapsed}ms`);
+    
+    // Log if NCM codes were found
+    const ncmMatches = extractedText.match(/NCM[:\s-]*(\d{4,8})/gi) || [];
+    console.log(`🔍 [OCR] Found ${ncmMatches.length} potential NCM codes in extracted text`);
+    
+    return extractedText;
+  } catch (error) {
+    console.error(`❌ [OCR] Error:`, error);
+    return '';
+  }
+}
+
+/**
+ * Detect if a PDF is likely scanned/image-based by checking text content quality
+ * This is a heuristic based on the file characteristics
+ */
+function isPdfLikelyScanned(fileName: string): boolean {
+  // Known carriers that frequently issue image-based PDFs
+  const imageBasedCarriers = [
+    'cma', 'cgm', 'cma-cgm', 'cmacgm',
+    'msc', 'mediterranean',
+    'evergreen',
+    'yang ming', 'yangming',
+    'wan hai', 'wanhai',
+    'zim'
+  ];
+  
+  const lowerName = fileName.toLowerCase();
+  
+  // Check if filename suggests a carrier known for image PDFs
+  for (const carrier of imageBasedCarriers) {
+    if (lowerName.includes(carrier)) {
+      console.log(`🔍 [OCR] File "${fileName}" matches carrier pattern "${carrier}" - may be image-based`);
+      return true;
+    }
+  }
+  
+  // MBL files are more likely to be image-based than HBL files
+  if (lowerName.includes('mbl') || lowerName.includes('master')) {
+    console.log(`🔍 [OCR] File "${fileName}" appears to be MBL - higher chance of being image-based`);
+    return true;
+  }
+  
+  return false;
+}
+
 // Chunked base64 encoding to avoid memory issues
 function arrayBufferToBase64Chunked(buffer: ArrayBuffer): string {
   const bytes = new Uint8Array(buffer);
@@ -379,6 +498,58 @@ async function analyzeWithAnthropic(
     { type: 'text', text: fullPrompt }
   ];
   
+  // ============ OCR PRE-EXTRACTION FOR MBL PDFs ============
+  // MBL documents from carriers like CMA CGM are often image-based (scanned)
+  // Pre-extract text via Vision API to ensure NCM codes are captured
+  let preExtractedMblTexts: string[] = [];
+  
+  for (let i = 0; i < pdfFiles.length; i++) {
+    const file = pdfFiles[i];
+    
+    // Only apply OCR to MBL files (they're more likely to be image-based)
+    if (file.file_type === 'mbl') {
+      const shouldTryOcr = isPdfLikelyScanned(file.name);
+      
+      if (shouldTryOcr) {
+        console.log(`🔍 [OCR] Pre-extracting text from MBL: ${file.name}`);
+        const ocrText = await extractTextViaVisionAPI(file.base64, file.name);
+        
+        if (ocrText && ocrText.length > 100) {
+          preExtractedMblTexts.push(ocrText);
+          console.log(`✅ [OCR] Successfully extracted ${ocrText.length} chars from MBL`);
+        }
+      }
+    }
+  }
+  
+  // If we have OCR-extracted MBL text, add it as context for the main analysis
+  if (preExtractedMblTexts.length > 0) {
+    const combinedOcrText = preExtractedMblTexts.join('\n\n--- NEXT MBL OCR ---\n\n');
+    contentParts.push({ 
+      type: 'text', 
+      text: `
+████████████████████████████████████████████████████████████████████████████████
+█ PRE-EXTRACTED MBL TEXT (OCR) - USE THIS AS AUTHORITATIVE SOURCE              █
+████████████████████████████████████████████████████████████████████████████████
+
+The following text was extracted via OCR from the MBL document(s) because they appear to be scanned/image-based PDFs.
+
+★★★ CRITICAL: If you cannot read NCM codes directly from the MBL PDF, USE THIS PRE-EXTRACTED TEXT ★★★
+★★★ This OCR text contains the same information as the MBL PDF but in searchable format ★★★
+
+Look for "NCM-CODES:", "NCM:", or similar labels in this text to find MBL NCM codes.
+
+=== OCR EXTRACTED TEXT START ===
+${combinedOcrText}
+=== OCR EXTRACTED TEXT END ===
+
+★★★ IMPORTANT: Compare MBL NCMs using BOTH the PDF and this OCR text ★★★
+★★★ If you find NCMs in this OCR text that you couldn't see in the PDF, they ARE valid ★★★
+` 
+    });
+    console.log(`🔍 [OCR] Added ${combinedOcrText.length} chars of pre-extracted MBL text to prompt context`);
+  }
+  
   // Add PDFs as base64 documents (Claude supports PDF natively)
   // CRITICAL: Identify each document explicitly for HBL vs MBL analysis
   for (let i = 0; i < pdfFiles.length; i++) {
@@ -390,6 +561,9 @@ async function analyzeWithAnthropic(
       docLabel = '★★★ THIS IS THE HBL (House Bill of Lading) - Extract NCM codes FROM THIS DOCUMENT for "HBL NCMs" ★★★';
     } else if (file.file_type === 'mbl') {
       docLabel = '★★★ THIS IS THE MBL (Master Bill of Lading) - Extract NCM codes FROM THIS DOCUMENT for "MBL NCMs" ★★★';
+      if (preExtractedMblTexts.length > 0) {
+        docLabel += '\n★★★ NOTE: OCR-extracted text from this MBL is provided above - use it if you cannot read NCMs directly ★★★';
+      }
     } else if (file.file_type === 'hbl') {
       docLabel = '★★★ THIS IS THE HBL (House Bill of Lading) ★★★';
     }
@@ -405,7 +579,7 @@ async function analyzeWithAnthropic(
     contentParts.push({ type: 'text', text: `[${docLabel}]\n[Arquivo PDF: ${file.name}]` });
   }
   
-  console.log(`🤖 Calling Anthropic Claude with ${pdfFiles.length} PDFs + manifest text (${manifestText.length} chars) + examples (${approvedExamplesText.length} chars)`);
+  console.log(`🤖 Calling Anthropic Claude with ${pdfFiles.length} PDFs + manifest text (${manifestText.length} chars) + examples (${approvedExamplesText.length} chars) + OCR context (${preExtractedMblTexts.length > 0 ? 'YES' : 'NO'})`);
   
   // Add system instruction to ensure complete response WITH MANDATORY FORMAT
   const systemPrompt = `You are CRONOS, a thorough logistics document auditor specialized in maritime Bills of Lading.
