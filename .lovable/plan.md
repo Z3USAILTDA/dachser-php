@@ -1,73 +1,59 @@
 
-
-# Correção da Lógica de Seleção de Rotas no Mapa Olimpo
+# Plano: Alinhar Critérios de Status entre Tela e Emails
 
 ## Problema Identificado
+Os critérios de classificação de saúde das tabelas são inconsistentes:
 
-A condição `isSelected` está comparando valores `null` incorretamente:
+| Critério | Tela (DatabaseMonitor.tsx) | Email (db-status-report) |
+|----------|---------------------------|--------------------------|
+| Verde (Saudável) | ≤ 5 minutos | < 30 minutos |
+| Amarelo (Atenção) | 5-60 minutos | 30-60 minutos |
+| Vermelho (Crítico) | > 60 minutos | ≥ 60 minutos |
 
-```typescript
-const isSelected = selectedAssetDetails && (
-  selectedAssetDetails.asset === item.asset ||      // null === null = TRUE!
-  selectedAssetDetails.flight === item.flight       // null === null = TRUE!
-);
-```
-
-Quando `item.asset` é `null` e `selectedAssetDetails.asset` também é `null`, a comparação retorna `true`, fazendo com que TODAS as rotas de veículos sem asset definido apareçam simultaneamente.
-
----
-
-## Solução
-
-Adicionar verificações para garantir que os valores não sejam `null` antes de compará-los:
-
-```typescript
-const isSelected = selectedAssetDetails && (
-  (selectedAssetDetails.asset && item.asset && selectedAssetDetails.asset === item.asset) ||
-  (selectedAssetDetails.flight && item.flight && selectedAssetDetails.flight === item.flight)
-);
-```
-
-**Lógica corrigida:**
-- Só considera match de `asset` se AMBOS existirem e forem iguais
-- Só considera match de `flight` se AMBOS existirem e forem iguais
-- Isso evita que `null === null` seja tratado como seleção válida
+## Recomendação
+Alinhar o edge function de email para usar os **mesmos critérios da tela** (mais rigoroso), garantindo consistência visual.
 
 ---
 
-## Arquivo Modificado
+## Alterações Necessárias
 
-| Arquivo | Mudança |
-|---------|---------|
-| `src/pages/Olimpo.tsx` | Corrigir condição `isSelected` (linhas 707-711) |
+### Arquivo: `supabase/functions/db-status-report/index.ts`
 
----
+**Linha 78-82** - Modificar função `getStatusColor`:
 
-## Código Final
-
-**Linhas 707-711 - De:**
 ```typescript
-// Only show route if this vehicle is selected
-const isSelected = selectedAssetDetails && (
-  selectedAssetDetails.asset === item.asset ||
-  selectedAssetDetails.flight === item.flight
-);
-```
+// ANTES (critérios do email - mais tolerante)
+function getStatusColor(minutes: number): 'healthy' | 'warning' | 'critical' {
+  if (minutes >= 60) return 'critical';
+  if (minutes >= 30) return 'warning';
+  return 'healthy';
+}
 
-**Para:**
-```typescript
-// Only show route if this vehicle is selected (with proper null checks)
-const isSelected = selectedAssetDetails && (
-  (selectedAssetDetails.asset && item.asset && selectedAssetDetails.asset === item.asset) ||
-  (selectedAssetDetails.flight && item.flight && selectedAssetDetails.flight === item.flight)
-);
+// DEPOIS (alinhado com a tela - mais rigoroso)
+function getStatusColor(minutes: number): 'healthy' | 'warning' | 'critical' {
+  if (minutes > 60) return 'critical';
+  if (minutes > 5) return 'warning';
+  return 'healthy';
+}
 ```
 
 ---
 
 ## Resultado Esperado
 
-1. Ao clicar em um veículo específico, apenas a rota dele será exibida
-2. Veículos sem `asset` ou `flight` definidos não terão suas rotas exibidas erroneamente
-3. O filtro por tipo (aéreo/marítimo) não afetará a exibição de rotas - apenas o clique direto no veículo
+Após a mudança, ambos os sistemas usarão:
+- **Verde**: ≤ 5 minutos
+- **Amarelo**: 5-60 minutos  
+- **Vermelho**: > 60 minutos
 
+Os emails passarão a reportar os mesmos valores que a tela de monitoramento.
+
+---
+
+## Seção Técnica
+
+| Etapa | Ação |
+|-------|------|
+| 1 | Editar `supabase/functions/db-status-report/index.ts` linha 78-82 |
+| 2 | Deploy automático do edge function |
+| 3 | Próximo email (a cada 30 min) usará critérios alinhados |
