@@ -9,7 +9,7 @@ const corsHeaders = {
 
 interface HealthCheckResult {
   service: string;
-  status: "healthy" | "degraded" | "unhealthy";
+  status: "healthy" | "degraded" | "unhealthy" | "disabled";
   latency_ms: number;
   message?: string;
   last_checked: string;
@@ -67,46 +67,59 @@ serve(async (req) => {
     }
 
     // 2. Check JSONCARGO API
-    const jsoncargoStart = Date.now();
-    const jsoncargoApiKey = Deno.env.get("JSONCARGO_API_KEY");
-    
-    if (!jsoncargoApiKey) {
+    // FLAG: JsonCargo DESATIVADO temporariamente até segunda ordem
+    const JSONCARGO_DISABLED = true;
+
+    if (JSONCARGO_DISABLED) {
       results.push({
         service: "JSONCARGO",
-        status: "unhealthy",
+        status: "disabled",
         latency_ms: 0,
-        message: "API key not configured",
+        message: "API desativada até segunda ordem",
         last_checked: new Date().toISOString(),
       });
     } else {
-      try {
-        const response = await fetch("https://api.jsoncargo.com/api/tracking/line/msc/container/MSCU1234567", {
-          method: "GET",
-          headers: {
-            "x-api-key": jsoncargoApiKey,
-            "Content-Type": "application/json",
-          },
-          signal: AbortSignal.timeout(10000),
+      const jsoncargoStart = Date.now();
+      const jsoncargoApiKey = Deno.env.get("JSONCARGO_API_KEY");
+      
+      if (!jsoncargoApiKey) {
+        results.push({
+          service: "JSONCARGO",
+          status: "unhealthy",
+          latency_ms: 0,
+          message: "API key not configured",
+          last_checked: new Date().toISOString(),
         });
+      } else {
+        try {
+          const response = await fetch("https://api.jsoncargo.com/api/tracking/line/msc/container/MSCU1234567", {
+            method: "GET",
+            headers: {
+              "x-api-key": jsoncargoApiKey,
+              "Content-Type": "application/json",
+            },
+            signal: AbortSignal.timeout(10000),
+          });
 
-        const latency = Date.now() - jsoncargoStart;
-        const isWorking = response.ok || response.status === 404;
-        
-        results.push({
-          service: "JSONCARGO",
-          status: isWorking ? "healthy" : "unhealthy",
-          latency_ms: latency,
-          message: isWorking ? "API accessible" : `HTTP ${response.status}: ${response.statusText}`,
-          last_checked: new Date().toISOString(),
-        });
-      } catch (e: any) {
-        results.push({
-          service: "JSONCARGO",
-          status: "degraded",
-          latency_ms: Date.now() - jsoncargoStart,
-          message: e.name === "TimeoutError" ? "Request timeout" : e.message,
-          last_checked: new Date().toISOString(),
-        });
+          const latency = Date.now() - jsoncargoStart;
+          const isWorking = response.ok || response.status === 404;
+          
+          results.push({
+            service: "JSONCARGO",
+            status: isWorking ? "healthy" : "unhealthy",
+            latency_ms: latency,
+            message: isWorking ? "API accessible" : `HTTP ${response.status}: ${response.statusText}`,
+            last_checked: new Date().toISOString(),
+          });
+        } catch (e: any) {
+          results.push({
+            service: "JSONCARGO",
+            status: "degraded",
+            latency_ms: Date.now() - jsoncargoStart,
+            message: e.name === "TimeoutError" ? "Request timeout" : e.message,
+            last_checked: new Date().toISOString(),
+          });
+        }
       }
     }
 

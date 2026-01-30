@@ -77,64 +77,72 @@ serve(async (req) => {
   }
 
   // ===== PASSO 2: Enriquecer containers via sea_seed_smart (múltiplos batches) =====
-  const MAX_BATCHES = 5; // Até 50 chamadas API total (5 batches x 10 por batch)
-  const BATCH_DELAY_MS = 3000; // 3 segundos entre batches
+  // FLAG: JsonCargo DESATIVADO temporariamente até segunda ordem
+  const JSONCARGO_DISABLED = true;
 
-  console.log('[sea-tracking-cron] Passo 2: Enriquecendo containers...');
+  if (JSONCARGO_DISABLED) {
+    console.log('[sea-tracking-cron] Passo 2 PULADO: JsonCargo desativado até segunda ordem');
+    stats.sea_seed_batches = [{ skipped: true, reason: 'JsonCargo desativado temporariamente' }];
+  } else {
+    const MAX_BATCHES = 5; // Até 50 chamadas API total (5 batches x 10 por batch)
+    const BATCH_DELAY_MS = 3000; // 3 segundos entre batches
 
-  for (let batchNum = 1; batchNum <= MAX_BATCHES; batchNum++) {
-    try {
-      console.log(`[sea-tracking-cron] Batch ${batchNum}/${MAX_BATCHES}...`);
-      
-      const seedRes = await fetch(
-        `${supabaseUrl}/functions/v1/olimpo-proxy?action=sea_seed_smart`,
-        { 
-          headers: { 
-            'Authorization': `Bearer ${supabaseKey}`,
-            'Content-Type': 'application/json'
-          } 
-        }
-      );
-      
-      const seedText = await seedRes.text();
-      let seedData: any = {};
+    console.log('[sea-tracking-cron] Passo 2: Enriquecendo containers...');
+
+    for (let batchNum = 1; batchNum <= MAX_BATCHES; batchNum++) {
       try {
-        seedData = JSON.parse(seedText);
-      } catch {
-        seedData = { raw: seedText, status: seedRes.status };
+        console.log(`[sea-tracking-cron] Batch ${batchNum}/${MAX_BATCHES}...`);
+        
+        const seedRes = await fetch(
+          `${supabaseUrl}/functions/v1/olimpo-proxy?action=sea_seed_smart`,
+          { 
+            headers: { 
+              'Authorization': `Bearer ${supabaseKey}`,
+              'Content-Type': 'application/json'
+            } 
+          }
+        );
+        
+        const seedText = await seedRes.text();
+        let seedData: any = {};
+        try {
+          seedData = JSON.parse(seedText);
+        } catch {
+          seedData = { raw: seedText, status: seedRes.status };
+        }
+        
+        const batchStats = seedData.stats || {};
+        stats.sea_seed_batches.push({
+          batch: batchNum,
+          api_calls: batchStats.api_calls || 0,
+          cache_hits: batchStats.cache_hits || 0,
+          total: batchStats.total || 0,
+          status: seedRes.status
+        });
+        
+        stats.total_api_calls += batchStats.api_calls || 0;
+        stats.total_cache_hits += batchStats.cache_hits || 0;
+        stats.total_containers = batchStats.total || stats.total_containers;
+        
+        console.log(`[sea-tracking-cron] Batch ${batchNum}: ${batchStats.api_calls || 0} API calls, ${batchStats.cache_hits || 0} cache hits`);
+        
+        // Se não fez nenhuma chamada API neste batch, cache está atualizado
+        if ((batchStats.api_calls || 0) === 0) {
+          console.log(`[sea-tracking-cron] Cache atualizado, parando batches.`);
+          break;
+        }
+        
+        // Delay entre batches para não sobrecarregar a API
+        if (batchNum < MAX_BATCHES) {
+          await new Promise(r => setTimeout(r, BATCH_DELAY_MS));
+        }
+        
+      } catch (e: any) {
+        const errMsg = `Batch ${batchNum} erro: ${e.message}`;
+        stats.errors.push(errMsg);
+        console.error('[sea-tracking-cron]', errMsg);
+        break; // Parar em caso de erro
       }
-      
-      const batchStats = seedData.stats || {};
-      stats.sea_seed_batches.push({
-        batch: batchNum,
-        api_calls: batchStats.api_calls || 0,
-        cache_hits: batchStats.cache_hits || 0,
-        total: batchStats.total || 0,
-        status: seedRes.status
-      });
-      
-      stats.total_api_calls += batchStats.api_calls || 0;
-      stats.total_cache_hits += batchStats.cache_hits || 0;
-      stats.total_containers = batchStats.total || stats.total_containers;
-      
-      console.log(`[sea-tracking-cron] Batch ${batchNum}: ${batchStats.api_calls || 0} API calls, ${batchStats.cache_hits || 0} cache hits`);
-      
-      // Se não fez nenhuma chamada API neste batch, cache está atualizado
-      if ((batchStats.api_calls || 0) === 0) {
-        console.log(`[sea-tracking-cron] Cache atualizado, parando batches.`);
-        break;
-      }
-      
-      // Delay entre batches para não sobrecarregar a API
-      if (batchNum < MAX_BATCHES) {
-        await new Promise(r => setTimeout(r, BATCH_DELAY_MS));
-      }
-      
-    } catch (e: any) {
-      const errMsg = `Batch ${batchNum} erro: ${e.message}`;
-      stats.errors.push(errMsg);
-      console.error('[sea-tracking-cron]', errMsg);
-      break; // Parar em caso de erro
     }
   }
 
