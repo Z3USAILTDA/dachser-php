@@ -4,7 +4,7 @@ import { Client } from "https://deno.land/x/mysql@v2.12.1/mod.ts";
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers":
-    "authorization, x-client-info, apikey, content-type",
+    "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
 interface ModalBreakdown {
@@ -33,21 +33,66 @@ interface DatabaseStats {
   fetchedAt: string;
 }
 
+// Helper to sleep for exponential backoff
+const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+
+// Connect with retry logic for transient network errors
+async function connectWithRetry(maxRetries = 3): Promise<Client> {
+  let lastError: Error | null = null;
+  
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      console.log(`[fetch-database-stats] Connection attempt ${attempt}/${maxRetries}...`);
+      
+      const client = await new Client().connect({
+        hostname: Deno.env.get("MARIADB_HOST") || "",
+        port: parseInt(Deno.env.get("MARIADB_PORT") || "3306"),
+        username: Deno.env.get("MARIADB_USER") || "",
+        password: Deno.env.get("MARIADB_PASSWORD") || "",
+        db: Deno.env.get("MARIADB_DATABASE") || "",
+      });
+      
+      console.log(`[fetch-database-stats] Connected successfully on attempt ${attempt}`);
+      return client;
+      
+    } catch (error: unknown) {
+      lastError = error instanceof Error ? error : new Error(String(error));
+      const errorMessage = lastError.message.toLowerCase();
+      
+      // Check if it's a transient network error worth retrying
+      const isTransient = 
+        errorMessage.includes("connection reset") ||
+        errorMessage.includes("os error 104") ||
+        errorMessage.includes("broken pipe") ||
+        errorMessage.includes("timed out") ||
+        errorMessage.includes("connection refused");
+      
+      if (isTransient && attempt < maxRetries) {
+        const backoffMs = Math.min(1000 * Math.pow(2, attempt - 1), 5000);
+        console.log(`[fetch-database-stats] Transient error, retrying in ${backoffMs}ms: ${lastError.message}`);
+        await sleep(backoffMs);
+      } else {
+        console.error(`[fetch-database-stats] Connection failed on attempt ${attempt}: ${lastError.message}`);
+        if (attempt >= maxRetries) {
+          throw lastError;
+        }
+      }
+    }
+  }
+  
+  throw lastError || new Error("Failed to connect after retries");
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }
 
-  const client = await new Client().connect({
-    hostname: Deno.env.get("MARIADB_HOST") || "",
-    port: parseInt(Deno.env.get("MARIADB_PORT") || "3306"),
-    username: Deno.env.get("MARIADB_USER") || "",
-    password: Deno.env.get("MARIADB_PASSWORD") || "",
-    db: Deno.env.get("MARIADB_DATABASE") || "",
-  });
+  let client: Client | null = null;
 
   try {
-    console.log(`[fetch-database-stats] Connected. Fetching stats...`);
+    client = await connectWithRetry(3);
+    console.log(`[fetch-database-stats] Fetching stats...`);
 
     // Query 1: t_master_dados - general stats
     const masterGeneral = await client.query(`
@@ -101,6 +146,7 @@ serve(async (req) => {
     `);
 
     await client.close();
+    client = null;
 
     // Process master data by modal
     const airBreakdown: ModalBreakdown = {
@@ -201,9 +247,11 @@ serve(async (req) => {
   } catch (error: unknown) {
     console.error(`[fetch-database-stats] Error:`, error);
     
-    try {
-      await client.close();
-    } catch {}
+    if (client) {
+      try {
+        await client.close();
+      } catch {}
+    }
 
     const errorMessage = error instanceof Error ? error.message : "Failed to fetch database stats";
 
