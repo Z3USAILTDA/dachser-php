@@ -360,12 +360,12 @@ serve(async (req) => {
       });
     }
 
-    // Check which tables need alerts (avoid spam) - unless force is true
-    const tablesToAlert: TableStats[] = [];
+    // Check if there are NEW critical tables (not alerted recently)
+    const newCriticalTables: TableStats[] = [];
 
     if (forceAlert) {
-      console.log('Force mode enabled - skipping duplicate check');
-      tablesToAlert.push(...criticalTables);
+      console.log('Force mode enabled - treating all critical tables as new');
+      newCriticalTables.push(...criticalTables);
     } else {
       for (const table of criticalTables) {
         try {
@@ -383,37 +383,43 @@ serve(async (req) => {
           const recentAlerts = await client.query(checkQuery, [table.name, REALERT_INTERVAL_MINUTES]);
           
           if (recentAlerts.length === 0) {
-            // No recent alert for this table, should send
-            tablesToAlert.push(table);
-            console.log(`Table ${table.name} needs alert (no recent alert found)`);
+            // No recent alert for this table - it's a NEW critical table
+            newCriticalTables.push(table);
+            console.log(`Table ${table.name} is NEW in critical status`);
           } else {
-            console.log(`Table ${table.name} already alerted recently, skipping`);
+            console.log(`Table ${table.name} was already alerted recently`);
           }
         } catch (err) {
           const checkError = err as Error;
-          // If check fails, include the table to be safe
+          // If check fails, consider it new to be safe
           console.warn(`Could not check recent alerts for ${table.name}:`, checkError.message);
-          tablesToAlert.push(table);
+          newCriticalTables.push(table);
         }
       }
     }
 
-    if (tablesToAlert.length === 0) {
+    // Only send alert if there are NEW critical tables
+    if (newCriticalTables.length === 0) {
       await client.close();
-      console.log('All critical tables were already alerted recently. No new alert needed.');
+      console.log('No NEW critical tables detected. All critical tables were already alerted recently.');
       return new Response(JSON.stringify({
         success: true,
-        message: 'All critical tables already alerted recently',
+        message: 'No new critical tables - all were already alerted',
         criticalCount: criticalTables.length,
+        newCriticalCount: 0,
         alertedCount: 0,
       }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
 
-    // Generate and send email
+    console.log(`Found ${newCriticalTables.length} NEW critical table(s). Will send alert with ALL ${criticalTables.length} critical tables.`);
+
+    // When there are new critical tables, send alert with ALL critical tables (not just new ones)
+
+    // Generate and send email with ALL critical tables
     const now = new Date();
-    const emailHtml = generateCriticalAlertHtml(tablesToAlert, now);
+    const emailHtml = generateCriticalAlertHtml(criticalTables, now);
 
     const resendApiKey = Deno.env.get('RESEND_API_KEY');
     if (!resendApiKey) {
@@ -422,7 +428,7 @@ serve(async (req) => {
 
     const resend = new Resend(resendApiKey);
 
-    const tableNames = tablesToAlert.map(t => t.displayName).join(', ');
+    const tableNames = criticalTables.map(t => t.displayName).join(', ');
     const emailResponse = await resend.emails.send({
       from: 'Z3US Monitor <noreply@hermes.z3us.ai>',
       to: recipients,
@@ -432,13 +438,13 @@ serve(async (req) => {
 
     console.log('Critical alert email sent successfully:', emailResponse);
 
-    // Log the alerts to database
-    for (const table of tablesToAlert) {
+    // Log the alerts to database - only log the NEW critical tables
+    for (const table of newCriticalTables) {
       try {
         await client.execute(`
           INSERT INTO ai_agente.t_db_monitor_alerts (alert_type, table_name, tables_affected, sent_to)
           VALUES ('critical_alert', ?, ?, ?)
-        `, [table.name, JSON.stringify([table.name]), JSON.stringify(recipients)]);
+        `, [table.name, JSON.stringify(criticalTables.map(t => t.name)), JSON.stringify(recipients)]);
       } catch (err) {
         const logError = err as Error;
         console.warn(`Could not log alert for ${table.name}:`, logError.message);
@@ -453,8 +459,9 @@ serve(async (req) => {
       message: 'Critical alert sent successfully',
       recipients,
       criticalCount: criticalTables.length,
-      alertedCount: tablesToAlert.length,
-      tables: tablesToAlert.map(t => ({ name: t.name, minutesSinceUpdate: t.minutesSinceUpdate })),
+      newCriticalCount: newCriticalTables.length,
+      alertedTables: criticalTables.map(t => ({ name: t.name, minutesSinceUpdate: t.minutesSinceUpdate })),
+      newTables: newCriticalTables.map(t => t.name),
     }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
