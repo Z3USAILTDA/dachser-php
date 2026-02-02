@@ -82,7 +82,7 @@ serve(async (req) => {
         -- OU AWBs com "ARR - Destino" que ainda estão dentro dos 5 dias
         ${hasArrDatetimeColumn ? `
         OR (
-          s.\`último_status\` = 'ARR - Destino'
+          s.\`último_status\` IN ('ARR', 'ARR - Destino')
           AND s.arr_datetime IS NOT NULL
           AND s.arr_datetime >= DATE_SUB(NOW(), INTERVAL 5 DAY)
         )` : ''}
