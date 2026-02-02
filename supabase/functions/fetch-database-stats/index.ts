@@ -11,8 +11,9 @@ interface ModalBreakdown {
   lastUpdate: string | null;
   totalRecords: number;
   recentInserts: number;
+  uniqueInserts: number;
   breakdown: {
-    [key: string]: { lastUpdate: string | null; count: number; recentInserts: number };
+    [key: string]: { lastUpdate: string | null; count: number; recentInserts: number; uniqueInserts: number };
   };
 }
 
@@ -20,6 +21,7 @@ interface TableStats {
   lastUpdate: string | null;
   totalRecords: number;
   recentInserts: number;
+  uniqueInserts?: number;
   applications: string[];
   byModal?: {
     AIR: ModalBreakdown;
@@ -152,6 +154,37 @@ serve(async (req) => {
       FROM tbaixas
     `);
 
+    // Query 6: Unique inserts by tipo_processo (MAWB+HAWB combinations that never existed before last 24h)
+    console.log("[fetch-database-stats] Querying unique inserts...");
+    const uniqueInsertsQuery = await client.query(`
+      SELECT 
+        tipo_processo,
+        COUNT(*) as unique_inserts
+      FROM (
+        SELECT DISTINCT n.mawb, n.hawb, n.tipo_processo
+        FROM t_master_dados n
+        WHERE n.active = 1
+          AND n.data_insert >= DATE_SUB(NOW(), INTERVAL 24 HOUR)
+          AND n.tipo_processo IN ('AIR IMPORT', 'AIR EXPORT', 'SEA IMPORT', 'SEA EXPORT')
+          AND NOT EXISTS (
+            SELECT 1 
+            FROM t_master_dados a
+            WHERE a.mawb = n.mawb 
+              AND a.hawb = n.hawb
+              AND a.active = 1
+              AND a.data_insert < DATE_SUB(NOW(), INTERVAL 24 HOUR)
+          )
+      ) AS unicos
+      GROUP BY tipo_processo
+    `);
+
+    // Build unique inserts map
+    const uniqueInsertsMap: Record<string, number> = {};
+    for (const row of uniqueInsertsQuery as any[]) {
+      uniqueInsertsMap[row.tipo_processo] = Number(row.unique_inserts || 0);
+    }
+    console.log("[fetch-database-stats] Unique inserts map:", uniqueInsertsMap);
+
     await client.close();
     client = null;
 
@@ -160,9 +193,10 @@ serve(async (req) => {
       lastUpdate: null,
       totalRecords: 0,
       recentInserts: 0,
+      uniqueInserts: 0,
       breakdown: {
-        "AIR IMPORT": { lastUpdate: null, count: 0, recentInserts: 0 },
-        "AIR EXPORT": { lastUpdate: null, count: 0, recentInserts: 0 },
+        "AIR IMPORT": { lastUpdate: null, count: 0, recentInserts: 0, uniqueInserts: 0 },
+        "AIR EXPORT": { lastUpdate: null, count: 0, recentInserts: 0, uniqueInserts: 0 },
       },
     };
 
@@ -170,9 +204,10 @@ serve(async (req) => {
       lastUpdate: null,
       totalRecords: 0,
       recentInserts: 0,
+      uniqueInserts: 0,
       breakdown: {
-        "SEA IMPORT": { lastUpdate: null, count: 0, recentInserts: 0 },
-        "SEA EXPORT": { lastUpdate: null, count: 0, recentInserts: 0 },
+        "SEA IMPORT": { lastUpdate: null, count: 0, recentInserts: 0, uniqueInserts: 0 },
+        "SEA EXPORT": { lastUpdate: null, count: 0, recentInserts: 0, uniqueInserts: 0 },
       },
     };
 
@@ -185,11 +220,13 @@ serve(async (req) => {
       const lastUpdate = row.last_update ? new Date(row.last_update).toISOString() : null;
       const count = Number(row.total_records);
       const recentInserts = Number(row.recent_inserts || 0);
+      const uniqueInserts = uniqueInsertsMap[tipoProcesso] || 0;
 
       if (modal === "AIR") {
         airBreakdown.totalRecords += count;
         airBreakdown.recentInserts += recentInserts;
-        airBreakdown.breakdown[tipoProcesso] = { lastUpdate, count, recentInserts };
+        airBreakdown.uniqueInserts += uniqueInserts;
+        airBreakdown.breakdown[tipoProcesso] = { lastUpdate, count, recentInserts, uniqueInserts };
         
         if (row.last_update) {
           const d = new Date(row.last_update);
@@ -200,7 +237,8 @@ serve(async (req) => {
       } else if (modal === "SEA") {
         seaBreakdown.totalRecords += count;
         seaBreakdown.recentInserts += recentInserts;
-        seaBreakdown.breakdown[tipoProcesso] = { lastUpdate, count, recentInserts };
+        seaBreakdown.uniqueInserts += uniqueInserts;
+        seaBreakdown.breakdown[tipoProcesso] = { lastUpdate, count, recentInserts, uniqueInserts };
         
         if (row.last_update) {
           const d = new Date(row.last_update);
