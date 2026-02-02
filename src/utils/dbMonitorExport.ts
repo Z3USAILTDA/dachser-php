@@ -270,65 +270,46 @@ export function exportDbMonitorPDF(stats: DatabaseStats): string {
   doc.setFontSize(10);
   doc.setTextColor(100, 100, 100);
   doc.text(`Data do Relatório: ${format(now, "dd 'de' MMMM 'de' yyyy", { locale: ptBR })}`, margin, yPos);
-  yPos += 10;
+  yPos += 12;
 
-  // Summary title
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(14);
-  doc.setTextColor(...darkColor);
-  doc.text("Resumo Executivo", margin, yPos);
-  yPos += 10;
-
-  // Summary cards
-  const cardWidth = (pageWidth - margin * 2 - 10) / 3;
+  // Summary cards - 2 cards only
+  const cardWidth = (pageWidth - margin * 2 - 5) / 2;
   const cardHeight = 35;
 
-  // Card 1: Total Records
+  // Card 1: Processed 24h
   doc.setFillColor(245, 245, 250);
   doc.roundedRect(margin, yPos, cardWidth, cardHeight, 3, 3, "F");
   doc.setFont("helvetica", "normal");
   doc.setFontSize(9);
   doc.setTextColor(100, 100, 100);
-  doc.text("TOTAL DE REGISTROS", margin + 5, yPos + 10);
+  doc.text("PROCESSADOS NAS ÚLTIMAS 24H", margin + 5, yPos + 12);
   doc.setFont("helvetica", "bold");
   doc.setFontSize(18);
-  doc.setTextColor(...darkColor);
-  doc.text(formatNumber(summary.totalRecords), margin + 5, yPos + 25);
+  doc.setTextColor(...greenColor);
+  doc.text(`+${formatNumber(summary.totalInserts24h)}`, margin + 5, yPos + 27);
 
-  // Card 2: Processed 24h
+  // Card 2: Status Overview
   doc.setFillColor(245, 245, 250);
   doc.roundedRect(margin + cardWidth + 5, yPos, cardWidth, cardHeight, 3, 3, "F");
   doc.setFont("helvetica", "normal");
   doc.setFontSize(9);
   doc.setTextColor(100, 100, 100);
-  doc.text("PROCESSADOS (24H)", margin + cardWidth + 10, yPos + 10);
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(18);
-  doc.setTextColor(...greenColor);
-  doc.text(`+${formatNumber(summary.totalInserts24h)}`, margin + cardWidth + 10, yPos + 25);
+  doc.text("SITUAÇÃO DAS ÁREAS", margin + cardWidth + 10, yPos + 12);
 
-  // Card 3: Status Overview
-  doc.setFillColor(245, 245, 250);
-  doc.roundedRect(margin + (cardWidth + 5) * 2, yPos, cardWidth, cardHeight, 3, 3, "F");
-  doc.setFont("helvetica", "normal");
-  doc.setFontSize(9);
-  doc.setTextColor(100, 100, 100);
-  doc.text("SITUAÇÃO DAS ÁREAS", margin + (cardWidth + 5) * 2 + 5, yPos + 10);
-
-  const statusY = yPos + 20;
-  const statusX = margin + (cardWidth + 5) * 2 + 5;
+  const statusY = yPos + 24;
+  const statusX = margin + cardWidth + 10;
 
   drawStatusIndicator(statusX + 3, statusY, "green");
   doc.setFont("helvetica", "normal");
   doc.setFontSize(10);
   doc.setTextColor(...darkColor);
-  doc.text(`${summary.healthyCount}`, statusX + 10, statusY + 3);
+  doc.text(`${summary.healthyCount} OK`, statusX + 10, statusY + 3);
 
-  drawStatusIndicator(statusX + 28, statusY, "yellow");
-  doc.text(`${summary.warningCount}`, statusX + 35, statusY + 3);
+  drawStatusIndicator(statusX + 43, statusY, "yellow");
+  doc.text(`${summary.warningCount} Atenção`, statusX + 50, statusY + 3);
 
-  drawStatusIndicator(statusX + 53, statusY, "red");
-  doc.text(`${summary.criticalCount}`, statusX + 60, statusY + 3);
+  drawStatusIndicator(statusX + 100, statusY, "red");
+  doc.text(`${summary.criticalCount} Crítico`, statusX + 107, statusY + 3);
 
   yPos += cardHeight + 15;
 
@@ -343,18 +324,17 @@ export function exportDbMonitorPDF(stats: DatabaseStats): string {
     area.name,
     area.status,
     formatRelativeTime(area.lastUpdate),
-    formatNumber(area.totalRecords),
     `+${formatNumber(area.recentInserts)}`,
   ]);
 
   autoTable(doc, {
     startY: yPos,
-    head: [["Área", "Status", "Última Atualização", "Total Registros", "Processados (24h)"]],
+    head: [["Área", "Status", "Última Atualização", "Processados (24h)"]],
     body: tableData,
     theme: "grid",
     styles: {
       fontSize: 9,
-      cellPadding: 4,
+      cellPadding: 5,
     },
     headStyles: {
       fillColor: primaryColor,
@@ -362,11 +342,10 @@ export function exportDbMonitorPDF(stats: DatabaseStats): string {
       fontStyle: "bold",
     },
     columnStyles: {
-      0: { fontStyle: "bold" },
-      1: { halign: "center" },
-      2: { halign: "center" },
-      3: { halign: "right" },
-      4: { halign: "right", textColor: greenColor },
+      0: { fontStyle: "bold", cellWidth: 55 },
+      1: { halign: "center", cellWidth: 40 },
+      2: { halign: "center", cellWidth: 45 },
+      3: { halign: "right", textColor: greenColor, cellWidth: 40 },
     },
     didParseCell: (data) => {
       if (data.section === "body" && data.column.index === 1) {
@@ -383,136 +362,38 @@ export function exportDbMonitorPDF(stats: DatabaseStats): string {
     margin: { left: margin, right: margin },
   });
 
-  yPos = (doc as any).lastAutoTable.finalY + 15;
+  yPos = (doc as any).lastAutoTable.finalY + 20;
 
-  // PAGE 2: Detailed Areas
-  doc.addPage();
-  addHeader();
-
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(14);
-  doc.setTextColor(...darkColor);
-  doc.text("Detalhamento por Área", margin, yPos);
-  yPos += 12;
-
-  for (const area of areas) {
-    if (yPos > pageHeight - 70) {
-      doc.addPage();
-      addHeader();
-    }
-
-    // Area card
-    const areaCardHeight = area.details ? 55 : 40;
-    doc.setFillColor(250, 250, 252);
-    doc.setDrawColor(220, 220, 230);
-    doc.roundedRect(margin, yPos, pageWidth - margin * 2, areaCardHeight, 3, 3, "FD");
-
-    // Status indicator
-    drawStatusIndicator(margin + 8, yPos + 10, area.statusColor);
-
-    // Area name
+  // Legend section - on same page if space allows
+  if (yPos < pageHeight - 80) {
     doc.setFont("helvetica", "bold");
-    doc.setFontSize(12);
+    doc.setFontSize(11);
     doc.setTextColor(...darkColor);
-    doc.text(area.name.toUpperCase(), margin + 15, yPos + 12);
+    doc.text("Legenda", margin, yPos);
+    yPos += 10;
 
-    // Status label
-    doc.setFont("helvetica", "normal");
-    doc.setFontSize(10);
-    doc.setTextColor(...statusColors[area.statusColor]);
-    doc.text(`Status: ${area.status}`, pageWidth - margin - 50, yPos + 12);
+    const legends = [
+      { color: "green" as HealthStatus, label: "Atualizado", desc: "Dados recebidos nos últimos 5 minutos" },
+      { color: "yellow" as HealthStatus, label: "Verificar", desc: "Sem atualização entre 5 e 60 minutos" },
+      { color: "red" as HealthStatus, label: "Ação Necessária", desc: "Sem atualização há mais de 60 minutos" },
+    ];
 
-    // Description
-    doc.setFont("helvetica", "normal");
-    doc.setFontSize(9);
-    doc.setTextColor(100, 100, 100);
-    doc.text(area.description, margin + 15, yPos + 22);
-
-    // Stats
-    doc.setFont("helvetica", "normal");
-    doc.setFontSize(9);
-    doc.setTextColor(80, 80, 80);
-    doc.text(`Última atualização: ${formatRelativeTime(area.lastUpdate)}`, margin + 15, yPos + 32);
-    doc.text(`Total de registros: ${formatNumber(area.totalRecords)}`, margin + 100, yPos + 32);
-    doc.setTextColor(...greenColor);
-    doc.text(`Processados (24h): +${formatNumber(area.recentInserts)}`, pageWidth - margin - 55, yPos + 32);
-
-    // Modal breakdown for t_master_dados
-    if (area.details) {
-      doc.setTextColor(80, 80, 80);
-      doc.setFontSize(8);
-      if (area.details.air) {
-        doc.text(`Operações Aéreas: ${formatNumber(area.details.air.total)} registros`, margin + 15, yPos + 45);
-      }
-      if (area.details.sea) {
-        doc.text(`Operações Marítimas: ${formatNumber(area.details.sea.total)} registros`, margin + 100, yPos + 45);
-      }
+    for (const legend of legends) {
+      drawStatusIndicator(margin + 5, yPos, legend.color);
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(9);
+      doc.setTextColor(...darkColor);
+      doc.text(legend.label, margin + 12, yPos + 3);
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(9);
+      doc.setTextColor(100, 100, 100);
+      doc.text(`- ${legend.desc}`, margin + 50, yPos + 3);
+      yPos += 10;
     }
-
-    yPos += areaCardHeight + 8;
   }
 
-  // PAGE 3: Legend
-  doc.addPage();
-  addHeader();
-
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(14);
-  doc.setTextColor(...darkColor);
-  doc.text("Legenda e Observações", margin, yPos);
-  yPos += 15;
-
-  // Status legend
-  const legends = [
-    { color: "green" as HealthStatus, label: "Atualizado", desc: "Dados atualizados nos últimos 5 minutos. Funcionando normalmente." },
-    { color: "yellow" as HealthStatus, label: "Verificar", desc: "Sem atualização entre 5 e 60 minutos. Recomenda-se verificação." },
-    { color: "red" as HealthStatus, label: "Ação Necessária", desc: "Sem atualização há mais de 60 minutos. Possível problema de sincronização." },
-  ];
-
-  for (const legend of legends) {
-    drawStatusIndicator(margin + 5, yPos, legend.color);
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(10);
-    doc.setTextColor(...darkColor);
-    doc.text(legend.label, margin + 12, yPos + 3);
-    doc.setFont("helvetica", "normal");
-    doc.setFontSize(9);
-    doc.setTextColor(100, 100, 100);
-    doc.text(legend.desc, margin + 12, yPos + 12);
-    yPos += 22;
-  }
-
-  yPos += 15;
-
-  // Additional info
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(11);
-  doc.setTextColor(...darkColor);
-  doc.text("Informações Adicionais", margin, yPos);
-  yPos += 8;
-
-  doc.setFont("helvetica", "normal");
-  doc.setFontSize(9);
-  doc.setTextColor(80, 80, 80);
-  const infoLines = [
-    "• Os dados são atualizados automaticamente a cada sincronização com os sistemas operacionais.",
-    "• A coluna 'Processados (24h)' mostra o volume de novos registros nas últimas 24 horas.",
-    "• Em caso de status 'Ação Necessária', entre em contato com a equipe técnica.",
-    "",
-    "Suporte Técnico: z3us.ai@dachser.com",
-  ];
-
-  for (const line of infoLines) {
-    doc.text(line, margin, yPos);
-    yPos += 6;
-  }
-
-  // Add footers to all pages
-  const totalPages = doc.getNumberOfPages();
-  for (let i = 1; i <= totalPages; i++) {
-    doc.setPage(i);
-    addFooter(i, totalPages);
-  }
+  // Add footer
+  addFooter(1, 1);
 
   // Save
   doc.save(fileName);
@@ -570,76 +451,47 @@ export function exportDbMonitorExcel(stats: DatabaseStats): string {
     alignment: { horizontal: "center" },
   };
 
-  // Sheet 1: Resumo Executivo
-  const summaryData = [
+  // Single Sheet: Relatório Completo
+  const data: (string | number)[][] = [
     ["RELATÓRIO DE MONITORAMENTO DE DADOS - DACHSER"],
     [`Gerado em: ${format(now, "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })}`],
     [],
-    ["RESUMO EXECUTIVO"],
+    ["RESUMO"],
+    ["Áreas Monitoradas", summary.areasCount, "", "Áreas OK", summary.healthyCount],
+    ["Processados (24h)", summary.totalInserts24h, "", "Áreas Atenção", summary.warningCount],
+    ["", "", "", "Áreas Críticas", summary.criticalCount],
     [],
-    ["Indicador", "Valor"],
-    ["Total de Registros", summary.totalRecords],
-    ["Áreas Monitoradas", summary.areasCount],
-    ["Áreas Atualizadas (Verde)", summary.healthyCount],
-    ["Áreas em Verificação (Amarelo)", summary.warningCount],
-    ["Áreas Críticas (Vermelho)", summary.criticalCount],
-    ["Registros Processados (24h)", summary.totalInserts24h],
-  ];
-
-  const ws1 = XLSX.utils.aoa_to_sheet(summaryData);
-
-  // Apply styles
-  ws1["A1"].s = titleStyle;
-  ws1["A2"].s = subtitleStyle;
-  ws1["A4"].s = { font: { bold: true, sz: 12 } };
-  ws1["A6"].s = headerStyle;
-  ws1["B6"].s = headerStyle;
-
-  // Number formatting
-  for (let i = 7; i <= 12; i++) {
-    if (ws1[`B${i}`]) {
-      ws1[`B${i}`].s = numberStyle;
-    }
-  }
-
-  ws1["!cols"] = [{ wch: 35 }, { wch: 20 }];
-  ws1["!merges"] = [
-    { s: { r: 0, c: 0 }, e: { r: 0, c: 1 } },
-    { s: { r: 1, c: 0 }, e: { r: 1, c: 1 } },
-    { s: { r: 3, c: 0 }, e: { r: 3, c: 1 } },
-  ];
-
-  XLSX.utils.book_append_sheet(wb, ws1, "Resumo Executivo");
-
-  // Sheet 2: Situação por Área
-  const areaData = [
     ["SITUAÇÃO POR ÁREA"],
-    [`Atualizado em: ${format(now, "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })}`],
-    [],
-    ["Área", "Status", "Última Atualização", "Total Registros", "Processados (24h)", "Sistemas"],
+    ["Área", "Status", "Última Atualização", "Processados (24h)"],
     ...areas.map((area) => [
       area.name,
       area.status,
       area.lastUpdateFormatted,
-      area.totalRecords,
       area.recentInserts,
-      area.applications.join(", "),
     ]),
+    [],
+    ["LEGENDA"],
+    ["Atualizado", "Dados recebidos nos últimos 5 minutos"],
+    ["Verificar", "Sem atualização entre 5 e 60 minutos"],
+    ["Ação Necessária", "Sem atualização há mais de 60 minutos"],
   ];
 
-  const ws2 = XLSX.utils.aoa_to_sheet(areaData);
+  const ws = XLSX.utils.aoa_to_sheet(data);
 
-  ws2["A1"].s = titleStyle;
-  ws2["A2"].s = subtitleStyle;
+  // Apply styles
+  if (ws["A1"]) ws["A1"].s = titleStyle;
+  if (ws["A2"]) ws["A2"].s = subtitleStyle;
+  if (ws["A4"]) ws["A4"].s = { font: { bold: true, sz: 12 } };
+  if (ws["A9"]) ws["A9"].s = { font: { bold: true, sz: 12 } };
 
-  // Header row
-  ["A4", "B4", "C4", "D4", "E4", "F4"].forEach((cell) => {
-    if (ws2[cell]) ws2[cell].s = headerStyle;
+  // Header row for table
+  ["A10", "B10", "C10", "D10"].forEach((cell) => {
+    if (ws[cell]) ws[cell].s = headerStyle;
   });
 
-  // Style status cells and numbers
-  for (let i = 5; i <= 5 + areas.length - 1; i++) {
-    const statusCell = ws2[`B${i}`];
+  // Style status cells
+  for (let i = 11; i <= 11 + areas.length - 1; i++) {
+    const statusCell = ws[`B${i}`];
     if (statusCell) {
       const value = statusCell.v as string;
       if (value === "Atualizado") statusCell.s = greenStyle;
@@ -647,57 +499,20 @@ export function exportDbMonitorExcel(stats: DatabaseStats): string {
       else if (value === "Ação Necessária") statusCell.s = redStyle;
     }
 
-    if (ws2[`D${i}`]) ws2[`D${i}`].s = numberStyle;
-    if (ws2[`E${i}`]) ws2[`E${i}`].s = { ...numberStyle, font: { color: { rgb: "22C55E" } } };
+    if (ws[`D${i}`]) ws[`D${i}`].s = { ...numberStyle, font: { color: { rgb: "22C55E" } } };
   }
 
-  ws2["!cols"] = [{ wch: 25 }, { wch: 18 }, { wch: 25 }, { wch: 18 }, { wch: 18 }, { wch: 40 }];
-  ws2["!merges"] = [
-    { s: { r: 0, c: 0 }, e: { r: 0, c: 5 } },
-    { s: { r: 1, c: 0 }, e: { r: 1, c: 5 } },
+  // Legend styles
+  const legendStartRow = 11 + areas.length + 2;
+  if (ws[`A${legendStartRow}`]) ws[`A${legendStartRow}`].s = { font: { bold: true, sz: 12 } };
+
+  ws["!cols"] = [{ wch: 25 }, { wch: 20 }, { wch: 25 }, { wch: 20 }, { wch: 15 }];
+  ws["!merges"] = [
+    { s: { r: 0, c: 0 }, e: { r: 0, c: 4 } },
+    { s: { r: 1, c: 0 }, e: { r: 1, c: 4 } },
   ];
 
-  XLSX.utils.book_append_sheet(wb, ws2, "Situação por Área");
-
-  // Sheet 3: Operações Detalhadas (for t_master_dados)
-  const masterArea = areas.find((a) => a.technicalName === "t_master_dados");
-  if (masterArea?.details) {
-    const detailData = [
-      ["DETALHAMENTO DE OPERAÇÕES"],
-      [`Atualizado em: ${format(now, "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })}`],
-      [],
-      ["OPERAÇÕES AÉREAS"],
-      ["Tipo", "Total de Registros"],
-    ];
-
-    if (masterArea.details.air?.breakdown) {
-      Object.entries(masterArea.details.air.breakdown).forEach(([tipo, count]) => {
-        detailData.push([tipo, String(count)]);
-      });
-    }
-    detailData.push(["Total Aéreo", String(masterArea.details.air?.total || 0)]);
-
-    detailData.push([]);
-    detailData.push(["OPERAÇÕES MARÍTIMAS"]);
-    detailData.push(["Tipo", "Total de Registros"]);
-
-    if (masterArea.details.sea?.breakdown) {
-      Object.entries(masterArea.details.sea.breakdown).forEach(([tipo, count]) => {
-        detailData.push([tipo, String(count)]);
-      });
-    }
-    detailData.push(["Total Marítimo", String(masterArea.details.sea?.total || 0)]);
-
-    const ws3 = XLSX.utils.aoa_to_sheet(detailData);
-
-    ws3["A1"].s = titleStyle;
-    ws3["A2"].s = subtitleStyle;
-    ws3["A4"].s = { font: { bold: true, sz: 11 } };
-
-    ws3["!cols"] = [{ wch: 25 }, { wch: 20 }];
-
-    XLSX.utils.book_append_sheet(wb, ws3, "Operações Detalhadas");
-  }
+  XLSX.utils.book_append_sheet(wb, ws, "Monitoramento");
 
   // Save
   XLSX.writeFile(wb, fileName);
