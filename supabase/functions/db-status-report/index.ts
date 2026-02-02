@@ -2,6 +2,7 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { Client } from "https://deno.land/x/mysql@v2.12.1/mod.ts";
 import { Resend } from "https://esm.sh/resend@2.0.0";
 import * as XLSX from "https://esm.sh/xlsx@0.18.5";
+import { jsPDF } from "https://esm.sh/jspdf@2.5.1";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -140,8 +141,8 @@ function formatDateTime(date: Date): string {
 
 const LOGO_URL = 'https://finktakbjcfmurqeiubz.supabase.co/storage/v1/object/public/maritime-files/email-assets/logo-z3us.png';
 
-// ========== PDF GENERATION (HTML) ==========
-function generatePdfHtml(stats: TableStats[], timestamp: Date): string {
+// ========== PDF GENERATION (Real PDF using jsPDF) ==========
+function generatePdfBuffer(stats: TableStats[], timestamp: Date): Uint8Array {
   const healthyCount = stats.filter(s => s.status === 'healthy').length;
   const warningCount = stats.filter(s => s.status === 'warning').length;
   const criticalCount = stats.filter(s => s.status === 'critical').length;
@@ -149,163 +150,285 @@ function generatePdfHtml(stats: TableStats[], timestamp: Date): string {
 
   const formattedDate = formatDateTime(timestamp);
 
-  const getStatusBadgeClass = (status: 'healthy' | 'warning' | 'critical'): string => {
+  // Create PDF document (A4 size)
+  const doc = new jsPDF({
+    orientation: 'portrait',
+    unit: 'mm',
+    format: 'a4'
+  });
+
+  const pageWidth = doc.internal.pageSize.getWidth();
+  const pageHeight = doc.internal.pageSize.getHeight();
+  const margin = 15;
+  let y = 0;
+
+  // Colors
+  const dachserYellow = [255, 200, 0];
+  const darkText = [30, 30, 35];
+  const grayText = [107, 114, 128];
+  const greenColor = [34, 197, 94];
+  const yellowColor = [245, 158, 11];
+  const redColor = [239, 68, 68];
+  const lightGray = [243, 244, 246];
+  const borderGray = [229, 231, 235];
+
+  // Helper functions
+  const setColor = (rgb: number[], type: 'fill' | 'text' | 'draw' = 'fill') => {
+    if (type === 'fill') doc.setFillColor(rgb[0], rgb[1], rgb[2]);
+    else if (type === 'text') doc.setTextColor(rgb[0], rgb[1], rgb[2]);
+    else doc.setDrawColor(rgb[0], rgb[1], rgb[2]);
+  };
+
+  const getStatusColor = (status: 'healthy' | 'warning' | 'critical'): number[] => {
     switch (status) {
-      case 'healthy': return 'status-green';
-      case 'warning': return 'status-yellow';
-      case 'critical': return 'status-red';
+      case 'healthy': return greenColor;
+      case 'warning': return yellowColor;
+      case 'critical': return redColor;
     }
   };
 
-  const areaCardsHTML = stats.map((stat) => `
-    <div class="area-card">
-      <div class="area-info">
-        <div class="area-name">${stat.businessName}</div>
-        <div class="area-update">Última atualização: ${stat.lastUpdate ? formatMinutes(stat.minutesSinceUpdate) : 'Nunca'}</div>
-      </div>
-      <div class="area-right">
-        <div class="status-badge ${getStatusBadgeClass(stat.status)}">${getStatusLabel(stat.status)}</div>
-        <div class="area-inserts">+${formatNumber(stat.recentInserts)} processados</div>
-      </div>
-    </div>
-  `).join("");
+  // ========== HEADER ==========
+  setColor(dachserYellow, 'fill');
+  doc.rect(0, 0, pageWidth, 35, 'F');
 
-  const descriptionsHTML = stats.map((stat) => `
-    <div class="desc-item">
-      <span class="desc-name">• ${stat.businessName}:</span>
-      <span class="desc-text">${stat.businessDescription}</span>
-    </div>
-  `).join("");
+  setColor(darkText, 'text');
+  doc.setFontSize(18);
+  doc.setFont('helvetica', 'bold');
+  doc.text('RELATÓRIO DE MONITORAMENTO DE DADOS', margin, 15);
 
-  return `
-<!DOCTYPE html>
-<html lang="pt-BR">
-  <head>
-    <meta charset="UTF-8">
-    <title>Relatório de Monitoramento - DACHSER</title>
-    <style>
-      * { margin: 0; padding: 0; box-sizing: border-box; }
-      body { 
-        font-family: 'Segoe UI', Arial, sans-serif; 
-        padding: 0; color: #333; background: #fff; line-height: 1.5;
-      }
-      .page { max-width: 800px; margin: 0 auto; padding: 40px; }
-      .header { 
-        background: #FFC800; color: #1E1E23; padding: 25px 40px; margin: 0 0 30px 0;
-      }
-      .header-title { font-size: 22px; font-weight: bold; margin-bottom: 5px; }
-      .header-subtitle { font-size: 14px; opacity: 0.8; }
-      .header-date { font-size: 12px; margin-top: 8px; opacity: 0.7; }
-      .section-title {
-        font-weight: bold; font-size: 14px; margin: 30px 0 15px 0;
-        background: #f3f4f6; padding: 12px 15px; border-left: 4px solid #FFC800; color: #1E1E23;
-      }
-      .summary-grid { display: flex; gap: 20px; margin-bottom: 10px; }
-      .summary-card {
-        flex: 1; background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 10px; padding: 20px;
-      }
-      .summary-label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; color: #6b7280; margin-bottom: 8px; }
-      .summary-value { font-size: 28px; font-weight: bold; color: #22c55e; }
-      .status-list { margin-top: 5px; }
-      .status-row { display: flex; align-items: center; gap: 8px; padding: 4px 0; font-size: 14px; }
-      .status-dot { width: 12px; height: 12px; border-radius: 50%; }
-      .dot-green { background: #22c55e; }
-      .dot-yellow { background: #f59e0b; }
-      .dot-red { background: #ef4444; }
-      .area-card {
-        border: 1px solid #e5e7eb; border-radius: 10px; padding: 18px 20px; margin-bottom: 12px;
-        display: flex; justify-content: space-between; align-items: center; background: #fff;
-      }
-      .area-info { flex: 1; }
-      .area-name { font-weight: 600; font-size: 15px; color: #1E1E23; margin-bottom: 4px; }
-      .area-update { font-size: 13px; color: #6b7280; }
-      .area-right { text-align: right; }
-      .area-inserts { font-size: 13px; color: #22c55e; font-weight: 500; margin-top: 6px; }
-      .status-badge { display: inline-block; padding: 5px 14px; border-radius: 20px; font-size: 12px; font-weight: 600; }
-      .status-green { background: #dcfce7; color: #166534; }
-      .status-yellow { background: #fef3c7; color: #92400e; }
-      .status-red { background: #fee2e2; color: #991b1b; }
-      .desc-item { padding: 8px 0; font-size: 13px; border-bottom: 1px solid #f3f4f6; }
-      .desc-item:last-child { border-bottom: none; }
-      .desc-name { font-weight: 600; color: #1E1E23; }
-      .desc-text { color: #6b7280; }
-      .legend-item { display: flex; align-items: center; gap: 12px; padding: 10px 0; font-size: 13px; }
-      .legend-label { font-weight: 600; min-width: 120px; }
-      .legend-desc { color: #6b7280; }
-      .footer { margin-top: 40px; padding-top: 20px; border-top: 1px solid #e5e7eb; text-align: center; font-size: 11px; color: #9ca3af; }
-      @media print {
-        body { padding: 0; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-        .page { padding: 20px 30px; }
-        .header { margin: -20px -30px 25px -30px; padding: 20px 30px; }
-        .area-card, .summary-card { break-inside: avoid; page-break-inside: avoid; }
-      }
-    </style>
-  </head>
-  <body>
-    <div class="header">
-      <div class="header-title">RELATÓRIO DE MONITORAMENTO DE DADOS</div>
-      <div class="header-subtitle">Sistema Z3US.AI - DACHSER</div>
-      <div class="header-date">Gerado em: ${formattedDate}</div>
-    </div>
-    
-    <div class="page">
-      <div class="section-title">RESUMO EXECUTIVO</div>
-      
-      <div class="summary-grid">
-        <div class="summary-card">
-          <div class="summary-label">Processados nas últimas 24h</div>
-          <div class="summary-value">+${formatNumber(totalInserts)}</div>
-        </div>
-        
-        <div class="summary-card">
-          <div class="summary-label">Situação das Áreas</div>
-          <div class="status-list">
-            <div class="status-row">
-              <div class="status-dot dot-green"></div>
-              <span>${healthyCount} OK</span>
-            </div>
-            <div class="status-row">
-              <div class="status-dot dot-yellow"></div>
-              <span>${warningCount} Atenção</span>
-            </div>
-            <div class="status-row">
-              <div class="status-dot dot-red"></div>
-              <span>${criticalCount} Crítico</span>
-            </div>
-          </div>
-        </div>
-      </div>
-      
-      <div class="section-title">SITUAÇÃO POR ÁREA</div>
-      ${areaCardsHTML}
-      
-      <div class="section-title">O QUE CADA ÁREA REPRESENTA</div>
-      ${descriptionsHTML}
-      
-      <div class="section-title">LEGENDA DE STATUS</div>
-      <div class="legend-item">
-        <div class="status-dot dot-green"></div>
-        <span class="legend-label">Atualizado</span>
-        <span class="legend-desc">Dados recebidos nos últimos 5 minutos</span>
-      </div>
-      <div class="legend-item">
-        <div class="status-dot dot-yellow"></div>
-        <span class="legend-label">Verificar</span>
-        <span class="legend-desc">Sem atualização entre 5 e 60 minutos</span>
-      </div>
-      <div class="legend-item">
-        <div class="status-dot dot-red"></div>
-        <span class="legend-label">Ação Necessária</span>
-        <span class="legend-desc">Sem atualização há mais de 60 minutos</span>
-      </div>
-      
-      <div class="footer">
-        Sistema Z3US.AI • Monitoramento de Dados • DACHSER
-      </div>
-    </div>
-  </body>
-</html>
-  `;
+  doc.setFontSize(11);
+  doc.setFont('helvetica', 'normal');
+  doc.text('Sistema Z3US.AI - DACHSER', margin, 22);
+
+  doc.setFontSize(9);
+  doc.text(`Gerado em: ${formattedDate}`, margin, 29);
+
+  y = 45;
+
+  // ========== RESUMO EXECUTIVO ==========
+  // Section title
+  setColor(lightGray, 'fill');
+  setColor(dachserYellow, 'draw');
+  doc.rect(margin, y, pageWidth - margin * 2, 10, 'F');
+  doc.setLineWidth(0.8);
+  doc.line(margin, y, margin, y + 10);
+  
+  setColor(darkText, 'text');
+  doc.setFontSize(11);
+  doc.setFont('helvetica', 'bold');
+  doc.text('RESUMO EXECUTIVO', margin + 5, y + 7);
+  y += 18;
+
+  // Summary cards
+  const cardWidth = (pageWidth - margin * 2 - 10) / 2;
+
+  // Card 1: Processados
+  setColor(borderGray, 'draw');
+  doc.setLineWidth(0.3);
+  doc.roundedRect(margin, y, cardWidth, 28, 3, 3, 'S');
+
+  setColor(grayText, 'text');
+  doc.setFontSize(8);
+  doc.setFont('helvetica', 'normal');
+  doc.text('PROCESSADOS NAS ÚLTIMAS 24H', margin + 5, y + 8);
+
+  setColor(greenColor, 'text');
+  doc.setFontSize(20);
+  doc.setFont('helvetica', 'bold');
+  doc.text(`+${formatNumber(totalInserts)}`, margin + 5, y + 22);
+
+  // Card 2: Status
+  const card2X = margin + cardWidth + 10;
+  setColor(borderGray, 'draw');
+  doc.roundedRect(card2X, y, cardWidth, 28, 3, 3, 'S');
+
+  setColor(grayText, 'text');
+  doc.setFontSize(8);
+  doc.setFont('helvetica', 'normal');
+  doc.text('SITUAÇÃO DAS ÁREAS', card2X + 5, y + 8);
+
+  // Status indicators
+  const statusY = y + 14;
+  doc.setFontSize(10);
+
+  // Green dot
+  setColor(greenColor, 'fill');
+  doc.circle(card2X + 7, statusY, 2, 'F');
+  setColor(darkText, 'text');
+  doc.setFont('helvetica', 'normal');
+  doc.text(`${healthyCount} OK`, card2X + 12, statusY + 1);
+
+  // Yellow dot
+  setColor(yellowColor, 'fill');
+  doc.circle(card2X + 35, statusY, 2, 'F');
+  setColor(darkText, 'text');
+  doc.text(`${warningCount} Atenção`, card2X + 40, statusY + 1);
+
+  // Red dot
+  setColor(redColor, 'fill');
+  doc.circle(card2X + 7, statusY + 8, 2, 'F');
+  setColor(darkText, 'text');
+  doc.text(`${criticalCount} Crítico`, card2X + 12, statusY + 9);
+
+  y += 38;
+
+  // ========== SITUAÇÃO POR ÁREA ==========
+  setColor(lightGray, 'fill');
+  setColor(dachserYellow, 'draw');
+  doc.rect(margin, y, pageWidth - margin * 2, 10, 'F');
+  doc.setLineWidth(0.8);
+  doc.line(margin, y, margin, y + 10);
+  
+  setColor(darkText, 'text');
+  doc.setFontSize(11);
+  doc.setFont('helvetica', 'bold');
+  doc.text('SITUAÇÃO POR ÁREA', margin + 5, y + 7);
+  y += 16;
+
+  // Area cards
+  stats.forEach((stat) => {
+    if (y > pageHeight - 40) {
+      doc.addPage();
+      y = 20;
+    }
+
+    setColor(borderGray, 'draw');
+    doc.setLineWidth(0.3);
+    doc.roundedRect(margin, y, pageWidth - margin * 2, 18, 2, 2, 'S');
+
+    // Area name
+    setColor(darkText, 'text');
+    doc.setFontSize(11);
+    doc.setFont('helvetica', 'bold');
+    doc.text(stat.businessName, margin + 5, y + 7);
+
+    // Last update
+    setColor(grayText, 'text');
+    doc.setFontSize(9);
+    doc.setFont('helvetica', 'normal');
+    doc.text(`Última atualização: ${stat.lastUpdate ? formatMinutes(stat.minutesSinceUpdate) : 'Nunca'}`, margin + 5, y + 14);
+
+    // Status badge
+    const statusColor = getStatusColor(stat.status);
+    const statusLabel = getStatusLabel(stat.status);
+    const badgeX = pageWidth - margin - 55;
+
+    // Badge background
+    const badgeBgColor = stat.status === 'healthy' ? [220, 252, 231] :
+                         stat.status === 'warning' ? [254, 243, 199] : [254, 226, 226];
+    setColor(badgeBgColor, 'fill');
+    doc.roundedRect(badgeX, y + 2, 50, 7, 2, 2, 'F');
+
+    // Badge text
+    const badgeTextColor = stat.status === 'healthy' ? [22, 101, 52] :
+                           stat.status === 'warning' ? [146, 64, 14] : [153, 27, 27];
+    setColor(badgeTextColor, 'text');
+    doc.setFontSize(8);
+    doc.setFont('helvetica', 'bold');
+    doc.text(statusLabel, badgeX + 25, y + 7, { align: 'center' });
+
+    // Inserts count
+    setColor(greenColor, 'text');
+    doc.setFontSize(9);
+    doc.setFont('helvetica', 'bold');
+    doc.text(`+${formatNumber(stat.recentInserts)} processados`, badgeX + 25, y + 14, { align: 'center' });
+
+    y += 22;
+  });
+
+  y += 5;
+
+  // ========== O QUE CADA ÁREA REPRESENTA ==========
+  if (y > pageHeight - 60) {
+    doc.addPage();
+    y = 20;
+  }
+
+  setColor(lightGray, 'fill');
+  setColor(dachserYellow, 'draw');
+  doc.rect(margin, y, pageWidth - margin * 2, 10, 'F');
+  doc.setLineWidth(0.8);
+  doc.line(margin, y, margin, y + 10);
+  
+  setColor(darkText, 'text');
+  doc.setFontSize(11);
+  doc.setFont('helvetica', 'bold');
+  doc.text('O QUE CADA ÁREA REPRESENTA', margin + 5, y + 7);
+  y += 15;
+
+  stats.forEach((stat) => {
+    if (y > pageHeight - 20) {
+      doc.addPage();
+      y = 20;
+    }
+
+    setColor(darkText, 'text');
+    doc.setFontSize(9);
+    doc.setFont('helvetica', 'bold');
+    doc.text(`• ${stat.businessName}:`, margin + 3, y);
+
+    setColor(grayText, 'text');
+    doc.setFont('helvetica', 'normal');
+    const descLines = doc.splitTextToSize(stat.businessDescription, pageWidth - margin * 2 - 50);
+    doc.text(descLines, margin + 45, y);
+    y += descLines.length * 5 + 3;
+  });
+
+  y += 5;
+
+  // ========== LEGENDA ==========
+  if (y > pageHeight - 50) {
+    doc.addPage();
+    y = 20;
+  }
+
+  setColor(lightGray, 'fill');
+  setColor(dachserYellow, 'draw');
+  doc.rect(margin, y, pageWidth - margin * 2, 10, 'F');
+  doc.setLineWidth(0.8);
+  doc.line(margin, y, margin, y + 10);
+  
+  setColor(darkText, 'text');
+  doc.setFontSize(11);
+  doc.setFont('helvetica', 'bold');
+  doc.text('LEGENDA DE STATUS', margin + 5, y + 7);
+  y += 15;
+
+  const legendItems = [
+    { color: greenColor, label: 'Atualizado', desc: 'Dados recebidos nos últimos 5 minutos' },
+    { color: yellowColor, label: 'Verificar', desc: 'Sem atualização entre 5 e 60 minutos' },
+    { color: redColor, label: 'Ação Necessária', desc: 'Sem atualização há mais de 60 minutos' },
+  ];
+
+  legendItems.forEach((item) => {
+    setColor(item.color, 'fill');
+    doc.circle(margin + 5, y, 2.5, 'F');
+
+    setColor(darkText, 'text');
+    doc.setFontSize(9);
+    doc.setFont('helvetica', 'bold');
+    doc.text(item.label, margin + 12, y + 1);
+
+    setColor(grayText, 'text');
+    doc.setFont('helvetica', 'normal');
+    doc.text(item.desc, margin + 50, y + 1);
+    y += 8;
+  });
+
+  // ========== FOOTER ==========
+  y = pageHeight - 15;
+  setColor(borderGray, 'draw');
+  doc.setLineWidth(0.3);
+  doc.line(margin, y - 5, pageWidth - margin, y - 5);
+
+  setColor(grayText, 'text');
+  doc.setFontSize(8);
+  doc.setFont('helvetica', 'normal');
+  doc.text('Sistema Z3US.AI • Monitoramento de Dados • DACHSER', pageWidth / 2, y, { align: 'center' });
+
+  // Return as Uint8Array
+  const pdfOutput = doc.output('arraybuffer');
+  return new Uint8Array(pdfOutput);
 }
 
 // ========== EXCEL GENERATION ==========
@@ -621,10 +744,10 @@ serve(async (req) => {
     const timeStr = now.toTimeString().slice(0, 5).replace(':', '');
 
     // Generate attachments
-    const pdfHtml = generatePdfHtml(stats, now);
+    const pdfBuffer = generatePdfBuffer(stats, now);
     const excelBuffer = generateExcelBuffer(stats, now);
 
-    console.log('Generated PDF HTML length:', pdfHtml.length);
+    console.log('Generated PDF buffer length:', pdfBuffer.length);
     console.log('Generated Excel buffer length:', excelBuffer.length);
 
     // Generate email HTML
@@ -638,16 +761,12 @@ serve(async (req) => {
 
     const resend = new Resend(resendApiKey);
 
-    // Convert HTML string to Uint8Array for PDF attachment
-    const pdfEncoder = new TextEncoder();
-    const pdfBytes = pdfEncoder.encode(pdfHtml);
-
     // Create attachments array with proper format for Resend
     // Resend accepts content as Buffer, ArrayBuffer, or base64 string
     const attachments = [
       {
-        filename: `relatorio-monitoramento-${dateStr}-${timeStr}.html`,
-        content: Array.from(pdfBytes),
+        filename: `relatorio-monitoramento-${dateStr}-${timeStr}.pdf`,
+        content: Array.from(pdfBuffer),
       },
       {
         filename: `relatorio-monitoramento-${dateStr}-${timeStr}.xlsx`,
