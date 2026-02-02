@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { Database, RefreshCw, AlertCircle, Plane, Ship, Server, Loader2, HelpCircle, Hash, Clock, Activity, TrendingUp } from "lucide-react";
+import { Database, RefreshCw, AlertCircle, Plane, Ship, Server, Loader2, HelpCircle, Hash, Clock, Activity, FileText, FileSpreadsheet } from "lucide-react";
 import { formatDistanceToNow, format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { supabase } from "@/integrations/supabase/client";
@@ -11,6 +11,7 @@ import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 import { parseDBDate } from "@/utils/timezone";
 import { cn } from "@/lib/utils";
+import { exportDbMonitorPDF, exportDbMonitorExcel } from "@/utils/dbMonitorExport";
 
 interface ModalBreakdown {
   lastUpdate: string | null;
@@ -308,6 +309,8 @@ export default function DatabaseMonitor() {
   const [stats, setStats] = useState<DatabaseStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [isExportingPDF, setIsExportingPDF] = useState(false);
+  const [isExportingExcel, setIsExportingExcel] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const fetchStats = async () => {
@@ -337,6 +340,34 @@ export default function DatabaseMonitor() {
     await fetchStats();
     setIsRefreshing(false);
     toast.success("Dados atualizados");
+  };
+
+  const handleExportPDF = async () => {
+    if (!stats) return;
+    setIsExportingPDF(true);
+    try {
+      const fileName = exportDbMonitorPDF(stats);
+      toast.success(`PDF exportado: ${fileName}`);
+    } catch (err: any) {
+      console.error("Error exporting PDF:", err);
+      toast.error("Erro ao exportar PDF");
+    } finally {
+      setIsExportingPDF(false);
+    }
+  };
+
+  const handleExportExcel = async () => {
+    if (!stats) return;
+    setIsExportingExcel(true);
+    try {
+      const fileName = exportDbMonitorExcel(stats);
+      toast.success(`Excel exportado: ${fileName}`);
+    } catch (err: any) {
+      console.error("Error exporting Excel:", err);
+      toast.error("Erro ao exportar Excel");
+    } finally {
+      setIsExportingExcel(false);
+    }
   };
 
   useEffect(() => {
@@ -393,6 +424,32 @@ export default function DatabaseMonitor() {
 
   const rightContent = (
     <div className="flex items-center gap-2.5">
+      <Button
+        onClick={handleExportPDF}
+        disabled={isExportingPDF || loading || !stats}
+        variant="outline"
+        className="border-white/25 bg-black/70 hover:bg-white/10 text-white rounded-full px-4 h-8 text-xs font-semibold"
+      >
+        {isExportingPDF ? (
+          <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" />
+        ) : (
+          <FileText className="w-3.5 h-3.5 mr-1.5" />
+        )}
+        PDF
+      </Button>
+      <Button
+        onClick={handleExportExcel}
+        disabled={isExportingExcel || loading || !stats}
+        variant="outline"
+        className="border-white/25 bg-black/70 hover:bg-white/10 text-white rounded-full px-4 h-8 text-xs font-semibold"
+      >
+        {isExportingExcel ? (
+          <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" />
+        ) : (
+          <FileSpreadsheet className="w-3.5 h-3.5 mr-1.5" />
+        )}
+        Excel
+      </Button>
       <Button
         onClick={handleRefresh}
         disabled={isRefreshing || loading}
