@@ -564,7 +564,7 @@ export function exportDbMonitorPDF(stats: DatabaseStats): string {
   return fileName;
 }
 
-// Excel Export (unchanged)
+// Excel Export - Enhanced Visual Design
 export function exportDbMonitorExcel(stats: DatabaseStats): string {
   const { areas, summary } = transformToExportable(stats);
   const now = new Date();
@@ -572,108 +572,305 @@ export function exportDbMonitorExcel(stats: DatabaseStats): string {
 
   const wb = XLSX.utils.book_new();
 
-  // Styles
-  const headerStyle = {
-    font: { bold: true, color: { rgb: "1E1E23" }, sz: 11 },
-    fill: { fgColor: { rgb: "FFC800" } },
-    alignment: { horizontal: "center", vertical: "center" },
+  // ===== STYLES =====
+  const dachserYellow = "FFC800";
+  const darkText = "1E1E23";
+  const grayBg = "F3F4F6";
+  const lightGrayBg = "F9FAFB";
+  const borderColor = "E5E7EB";
+  
+  const headerBannerStyle = {
+    font: { bold: true, sz: 18, color: { rgb: darkText } },
+    fill: { fgColor: { rgb: dachserYellow } },
+    alignment: { horizontal: "left", vertical: "center" },
+  };
+  
+  const headerSubtitleStyle = {
+    font: { sz: 11, color: { rgb: "666666" } },
+    fill: { fgColor: { rgb: dachserYellow } },
+    alignment: { horizontal: "left", vertical: "center" },
+  };
+  
+  const sectionTitleStyle = {
+    font: { bold: true, sz: 12, color: { rgb: darkText } },
+    fill: { fgColor: { rgb: grayBg } },
+    alignment: { horizontal: "left", vertical: "center" },
     border: {
-      top: { style: "thin", color: { rgb: "CCCCCC" } },
-      bottom: { style: "thin", color: { rgb: "CCCCCC" } },
-      left: { style: "thin", color: { rgb: "CCCCCC" } },
-      right: { style: "thin", color: { rgb: "CCCCCC" } },
+      left: { style: "thick", color: { rgb: dachserYellow } },
     },
   };
-
-  const titleStyle = {
-    font: { bold: true, sz: 14, color: { rgb: "1E1E23" } },
-    alignment: { horizontal: "left" },
+  
+  const tableHeaderStyle = {
+    font: { bold: true, sz: 10, color: { rgb: "FFFFFF" } },
+    fill: { fgColor: { rgb: "374151" } },
+    alignment: { horizontal: "center", vertical: "center" },
+    border: {
+      top: { style: "thin", color: { rgb: borderColor } },
+      bottom: { style: "thin", color: { rgb: borderColor } },
+      left: { style: "thin", color: { rgb: borderColor } },
+      right: { style: "thin", color: { rgb: borderColor } },
+    },
+  };
+  
+  const cellStyle = {
+    font: { sz: 10, color: { rgb: darkText } },
+    alignment: { horizontal: "left", vertical: "center" },
+    border: {
+      top: { style: "thin", color: { rgb: borderColor } },
+      bottom: { style: "thin", color: { rgb: borderColor } },
+      left: { style: "thin", color: { rgb: borderColor } },
+      right: { style: "thin", color: { rgb: borderColor } },
+    },
+  };
+  
+  const summaryCardStyle = {
+    font: { sz: 10, color: { rgb: "6B7280" } },
+    fill: { fgColor: { rgb: lightGrayBg } },
+    alignment: { horizontal: "left", vertical: "center" },
+    border: {
+      top: { style: "thin", color: { rgb: borderColor } },
+      bottom: { style: "thin", color: { rgb: borderColor } },
+      left: { style: "thin", color: { rgb: borderColor } },
+      right: { style: "thin", color: { rgb: borderColor } },
+    },
+  };
+  
+  const summaryValueStyle = {
+    font: { bold: true, sz: 16, color: { rgb: "22C55E" } },
+    fill: { fgColor: { rgb: lightGrayBg } },
+    alignment: { horizontal: "left", vertical: "center" },
+    border: {
+      top: { style: "thin", color: { rgb: borderColor } },
+      bottom: { style: "thin", color: { rgb: borderColor } },
+      left: { style: "thin", color: { rgb: borderColor } },
+      right: { style: "thin", color: { rgb: borderColor } },
+    },
+  };
+  
+  const statusGreenStyle = {
+    font: { bold: true, sz: 10, color: { rgb: "166534" } },
+    fill: { fgColor: { rgb: "DCFCE7" } },
+    alignment: { horizontal: "center", vertical: "center" },
+    border: {
+      top: { style: "thin", color: { rgb: borderColor } },
+      bottom: { style: "thin", color: { rgb: borderColor } },
+      left: { style: "thin", color: { rgb: borderColor } },
+      right: { style: "thin", color: { rgb: borderColor } },
+    },
+  };
+  
+  const statusYellowStyle = {
+    font: { bold: true, sz: 10, color: { rgb: "92400E" } },
+    fill: { fgColor: { rgb: "FEF3C7" } },
+    alignment: { horizontal: "center", vertical: "center" },
+    border: {
+      top: { style: "thin", color: { rgb: borderColor } },
+      bottom: { style: "thin", color: { rgb: borderColor } },
+      left: { style: "thin", color: { rgb: borderColor } },
+      right: { style: "thin", color: { rgb: borderColor } },
+    },
+  };
+  
+  const statusRedStyle = {
+    font: { bold: true, sz: 10, color: { rgb: "991B1B" } },
+    fill: { fgColor: { rgb: "FEE2E2" } },
+    alignment: { horizontal: "center", vertical: "center" },
+    border: {
+      top: { style: "thin", color: { rgb: borderColor } },
+      bottom: { style: "thin", color: { rgb: borderColor } },
+      left: { style: "thin", color: { rgb: borderColor } },
+      right: { style: "thin", color: { rgb: borderColor } },
+    },
+  };
+  
+  const insertsStyle = {
+    font: { bold: true, sz: 10, color: { rgb: "22C55E" } },
+    alignment: { horizontal: "right", vertical: "center" },
+    border: {
+      top: { style: "thin", color: { rgb: borderColor } },
+      bottom: { style: "thin", color: { rgb: borderColor } },
+      left: { style: "thin", color: { rgb: borderColor } },
+      right: { style: "thin", color: { rgb: borderColor } },
+    },
+  };
+  
+  const legendLabelStyle = {
+    font: { bold: true, sz: 10, color: { rgb: darkText } },
+    alignment: { horizontal: "left", vertical: "center" },
+  };
+  
+  const legendDescStyle = {
+    font: { sz: 10, color: { rgb: "6B7280" } },
+    alignment: { horizontal: "left", vertical: "center" },
   };
 
-  const subtitleStyle = {
-    font: { bold: false, sz: 10, color: { rgb: "666666" } },
-    alignment: { horizontal: "left" },
-  };
-
-  const numberStyle = {
-    numFmt: "#,##0",
-    alignment: { horizontal: "right" },
-  };
-
-  const greenStyle = {
-    font: { color: { rgb: "22C55E" }, bold: true },
-    alignment: { horizontal: "center" },
-  };
-
-  const yellowStyle = {
-    font: { color: { rgb: "F59E0B" }, bold: true },
-    alignment: { horizontal: "center" },
-  };
-
-  const redStyle = {
-    font: { color: { rgb: "EF4444" }, bold: true },
-    alignment: { horizontal: "center" },
-  };
-
-  // Single Sheet: Relatório Completo
+  // ===== BUILD DATA =====
   const data: (string | number)[][] = [
-    ["RELATÓRIO DE MONITORAMENTO DE DADOS - DACHSER"],
-    [`Gerado em: ${format(now, "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })}`],
-    [],
-    ["RESUMO"],
-    ["Áreas Monitoradas", summary.areasCount, "", "Áreas OK", summary.healthyCount],
-    ["Processados (24h)", summary.totalInserts24h, "", "Áreas Atenção", summary.warningCount],
-    ["", "", "", "Áreas Críticas", summary.criticalCount],
-    [],
-    ["SITUAÇÃO POR ÁREA"],
-    ["Área", "Status", "Última Atualização", "Processados (24h)"],
+    // Header Banner (rows 1-2)
+    ["RELATÓRIO DE MONITORAMENTO DE DADOS", "", "", "", ""],
+    [`Sistema Z3US.AI - DACHSER  •  Gerado em: ${format(now, "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })}`, "", "", "", ""],
+    // Empty row
+    ["", "", "", "", ""],
+    // Summary Section Title (row 4)
+    ["  RESUMO EXECUTIVO", "", "", "", ""],
+    // Empty row
+    ["", "", "", "", ""],
+    // Summary Cards (rows 6-7)
+    ["Processados nas últimas 24h", "", "Situação das Áreas", "", ""],
+    [`+${formatNumber(summary.totalInserts24h)}`, "", `${summary.healthyCount} OK  •  ${summary.warningCount} Atenção  •  ${summary.criticalCount} Crítico`, "", ""],
+    // Empty row
+    ["", "", "", "", ""],
+    // Areas Section Title (row 9)
+    ["  SITUAÇÃO POR ÁREA", "", "", "", ""],
+    // Table Header (row 10)
+    ["Área", "Status", "Última Atualização", "Processados (24h)", ""],
+    // Area rows (rows 11-14)
     ...areas.map((area) => [
       area.name,
       area.status,
       area.lastUpdateFormatted,
-      area.recentInserts,
+      `+${formatNumber(area.recentInserts)}`,
+      "",
     ]),
-    [],
-    ["LEGENDA"],
-    ["Atualizado", "Dados recebidos nos últimos 5 minutos"],
-    ["Verificar", "Sem atualização entre 5 e 60 minutos"],
-    ["Ação Necessária", "Sem atualização há mais de 60 minutos"],
+    // Empty row
+    ["", "", "", "", ""],
+    // Description Section Title
+    ["  O QUE CADA ÁREA REPRESENTA", "", "", "", ""],
+    // Descriptions
+    ...areas.map((area) => [
+      `• ${area.name}`,
+      area.description,
+      "",
+      "",
+      "",
+    ]),
+    // Empty row
+    ["", "", "", "", ""],
+    // Legend Section Title
+    ["  LEGENDA DE STATUS", "", "", "", ""],
+    // Legend items
+    ["Atualizado", "Dados recebidos nos últimos 5 minutos", "", "", ""],
+    ["Verificar", "Sem atualização entre 5 e 60 minutos", "", "", ""],
+    ["Ação Necessária", "Sem atualização há mais de 60 minutos", "", "", ""],
   ];
 
   const ws = XLSX.utils.aoa_to_sheet(data);
 
-  // Apply styles
-  if (ws["A1"]) ws["A1"].s = titleStyle;
-  if (ws["A2"]) ws["A2"].s = subtitleStyle;
-  if (ws["A4"]) ws["A4"].s = { font: { bold: true, sz: 12 } };
-  if (ws["A9"]) ws["A9"].s = { font: { bold: true, sz: 12 } };
-
-  // Header row for table
-  ["A10", "B10", "C10", "D10"].forEach((cell) => {
-    if (ws[cell]) ws[cell].s = headerStyle;
-  });
-
-  // Style status cells
-  for (let i = 11; i <= 11 + areas.length - 1; i++) {
-    const statusCell = ws[`B${i}`];
-    if (statusCell) {
-      const value = statusCell.v as string;
-      if (value === "Atualizado") statusCell.s = greenStyle;
-      else if (value === "Verificar") statusCell.s = yellowStyle;
-      else if (value === "Ação Necessária") statusCell.s = redStyle;
+  // ===== APPLY STYLES =====
+  
+  // Header banner (rows 1-2)
+  ["A1", "B1", "C1", "D1", "E1"].forEach(cell => { if (ws[cell]) ws[cell].s = headerBannerStyle; });
+  ["A2", "B2", "C2", "D2", "E2"].forEach(cell => { if (ws[cell]) ws[cell].s = headerSubtitleStyle; });
+  
+  // Summary section title (row 4)
+  ["A4", "B4", "C4", "D4", "E4"].forEach(cell => { if (ws[cell]) ws[cell].s = sectionTitleStyle; });
+  
+  // Summary cards (rows 6-7)
+  ["A6", "B6"].forEach(cell => { if (ws[cell]) ws[cell].s = summaryCardStyle; });
+  ["C6", "D6"].forEach(cell => { if (ws[cell]) ws[cell].s = summaryCardStyle; });
+  if (ws["A7"]) ws["A7"].s = summaryValueStyle;
+  if (ws["C7"]) ws["C7"].s = { ...summaryCardStyle, font: { sz: 11, color: { rgb: darkText } } };
+  
+  // Areas section title (row 9)
+  ["A9", "B9", "C9", "D9", "E9"].forEach(cell => { if (ws[cell]) ws[cell].s = sectionTitleStyle; });
+  
+  // Table header (row 10)
+  ["A10", "B10", "C10", "D10"].forEach(cell => { if (ws[cell]) ws[cell].s = tableHeaderStyle; });
+  
+  // Area rows (rows 11-14)
+  const areaStartRow = 11;
+  for (let i = 0; i < areas.length; i++) {
+    const row = areaStartRow + i;
+    const area = areas[i];
+    
+    // Area name
+    if (ws[`A${row}`]) ws[`A${row}`].s = { ...cellStyle, font: { bold: true, sz: 10, color: { rgb: darkText } } };
+    
+    // Status with colored background
+    if (ws[`B${row}`]) {
+      if (area.statusColor === "green") ws[`B${row}`].s = statusGreenStyle;
+      else if (area.statusColor === "yellow") ws[`B${row}`].s = statusYellowStyle;
+      else ws[`B${row}`].s = statusRedStyle;
     }
-
-    if (ws[`D${i}`]) ws[`D${i}`].s = { ...numberStyle, font: { color: { rgb: "22C55E" } } };
+    
+    // Last update
+    if (ws[`C${row}`]) ws[`C${row}`].s = cellStyle;
+    
+    // Inserts
+    if (ws[`D${row}`]) ws[`D${row}`].s = insertsStyle;
+  }
+  
+  // Description section title
+  const descTitleRow = areaStartRow + areas.length + 1;
+  ["A", "B", "C", "D", "E"].forEach(col => {
+    const cell = `${col}${descTitleRow}`;
+    if (ws[cell]) ws[cell].s = sectionTitleStyle;
+  });
+  
+  // Description rows
+  const descStartRow = descTitleRow + 1;
+  for (let i = 0; i < areas.length; i++) {
+    const row = descStartRow + i;
+    if (ws[`A${row}`]) ws[`A${row}`].s = legendLabelStyle;
+    if (ws[`B${row}`]) ws[`B${row}`].s = legendDescStyle;
+  }
+  
+  // Legend section title
+  const legendTitleRow = descStartRow + areas.length + 1;
+  ["A", "B", "C", "D", "E"].forEach(col => {
+    const cell = `${col}${legendTitleRow}`;
+    if (ws[cell]) ws[cell].s = sectionTitleStyle;
+  });
+  
+  // Legend rows
+  const legendStartRow = legendTitleRow + 1;
+  for (let i = 0; i < 3; i++) {
+    const row = legendStartRow + i;
+    if (ws[`A${row}`]) {
+      if (i === 0) ws[`A${row}`].s = { ...legendLabelStyle, font: { bold: true, sz: 10, color: { rgb: "166534" } } };
+      else if (i === 1) ws[`A${row}`].s = { ...legendLabelStyle, font: { bold: true, sz: 10, color: { rgb: "92400E" } } };
+      else ws[`A${row}`].s = { ...legendLabelStyle, font: { bold: true, sz: 10, color: { rgb: "991B1B" } } };
+    }
+    if (ws[`B${row}`]) ws[`B${row}`].s = legendDescStyle;
   }
 
-  // Legend styles
-  const legendStartRow = 11 + areas.length + 2;
-  if (ws[`A${legendStartRow}`]) ws[`A${legendStartRow}`].s = { font: { bold: true, sz: 12 } };
+  // ===== COLUMN WIDTHS =====
+  ws["!cols"] = [
+    { wch: 28 },  // A - Area names
+    { wch: 45 },  // B - Status/Description
+    { wch: 25 },  // C - Last update
+    { wch: 18 },  // D - Inserts
+    { wch: 5 },   // E - Spacer
+  ];
+  
+  // ===== ROW HEIGHTS =====
+  ws["!rows"] = [
+    { hpt: 35 },  // Row 1 - Header
+    { hpt: 22 },  // Row 2 - Subtitle
+    { hpt: 15 },  // Row 3 - Empty
+    { hpt: 28 },  // Row 4 - Section title
+    { hpt: 10 },  // Row 5 - Empty
+    { hpt: 20 },  // Row 6 - Summary label
+    { hpt: 28 },  // Row 7 - Summary value
+  ];
 
-  ws["!cols"] = [{ wch: 25 }, { wch: 20 }, { wch: 25 }, { wch: 20 }, { wch: 15 }];
+  // ===== MERGES =====
   ws["!merges"] = [
+    // Header banner
     { s: { r: 0, c: 0 }, e: { r: 0, c: 4 } },
     { s: { r: 1, c: 0 }, e: { r: 1, c: 4 } },
+    // Section titles
+    { s: { r: 3, c: 0 }, e: { r: 3, c: 4 } },
+    { s: { r: 8, c: 0 }, e: { r: 8, c: 4 } },
+    // Summary cards
+    { s: { r: 5, c: 0 }, e: { r: 5, c: 1 } },
+    { s: { r: 6, c: 0 }, e: { r: 6, c: 1 } },
+    { s: { r: 5, c: 2 }, e: { r: 5, c: 4 } },
+    { s: { r: 6, c: 2 }, e: { r: 6, c: 4 } },
+    // Description section title
+    { s: { r: descTitleRow - 1, c: 0 }, e: { r: descTitleRow - 1, c: 4 } },
+    // Legend section title
+    { s: { r: legendTitleRow - 1, c: 0 }, e: { r: legendTitleRow - 1, c: 4 } },
   ];
 
   XLSX.utils.book_append_sheet(wb, ws, "Monitoramento");
