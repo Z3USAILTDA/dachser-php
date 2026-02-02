@@ -1356,6 +1356,30 @@ const Index = () => {
     return false;
   }, []);
 
+  // State for airline direct API overrides (persisted in localStorage)
+  const [airlineApiOverrides, setAirlineApiOverrides] = useState<Record<string, boolean>>(() => {
+    try {
+      const stored = localStorage.getItem("airline-api-overrides");
+      return stored ? JSON.parse(stored) : {};
+    } catch {
+      return {};
+    }
+  });
+
+  // Handler to toggle direct API for an airline
+  const handleToggleDirectApi = useCallback((code: string, currentValue: boolean) => {
+    const newValue = !currentValue;
+    setAirlineApiOverrides(prev => {
+      const updated = { ...prev, [code]: newValue };
+      localStorage.setItem("airline-api-overrides", JSON.stringify(updated));
+      return updated;
+    });
+    toast({
+      title: newValue ? "API Direta ativada" : "API Direta desativada",
+      description: `Companhia ${code} atualizada.`,
+    });
+  }, [toast]);
+
   // Memoized data for monitored airlines modal
   const monitoredAirlinesData = useMemo(() => {
     type CollectionMethod = 'aggregator' | 'official_scraping' | 'direct_api';
@@ -1367,57 +1391,68 @@ const Index = () => {
       hasDirectApi: boolean;
     }
 
-    const monitoredAirlines: MonitoredAirline[] = [
+    const baseAirlines: Omit<MonitoredAirline, 'hasDirectApi'>[] = [
       // Agregador + Firecrawl (14 cias)
-      { code: "001", name: "American Airlines Cargo", method: "aggregator", hasDirectApi: false },
-      { code: "014", name: "Air Canada Cargo", method: "aggregator", hasDirectApi: false },
-      { code: "016", name: "United Cargo", method: "aggregator", hasDirectApi: false },
-      { code: "057", name: "Air France Cargo", method: "aggregator", hasDirectApi: false },
-      { code: "074", name: "AF/KL Cargo", method: "aggregator", hasDirectApi: false },
-      { code: "083", name: "SAA Cargo", method: "aggregator", hasDirectApi: false },
-      { code: "112", name: "China Cargo Airlines", method: "aggregator", hasDirectApi: false },
-      { code: "118", name: "TAAG Angola Airlines", method: "aggregator", hasDirectApi: false },
-      { code: "147", name: "Royal Air Maroc", method: "aggregator", hasDirectApi: false },
-      { code: "160", name: "Cathay Cargo", method: "aggregator", hasDirectApi: false },
-      { code: "615", name: "European Air Transport (DHL)", method: "aggregator", hasDirectApi: false },
-      { code: "827", name: "RUSA", method: "aggregator", hasDirectApi: false },
-      { code: "865", name: "MasAir (SmartKargo)", method: "aggregator", hasDirectApi: false },
-      { code: "996", name: "Air Europa Cargo", method: "aggregator", hasDirectApi: false },
-      { code: "999", name: "Air China Cargo", method: "aggregator", hasDirectApi: false },
+      { code: "001", name: "American Airlines Cargo", method: "aggregator" },
+      { code: "014", name: "Air Canada Cargo", method: "aggregator" },
+      { code: "016", name: "United Cargo", method: "aggregator" },
+      { code: "057", name: "Air France Cargo", method: "aggregator" },
+      { code: "074", name: "AF/KL Cargo", method: "aggregator" },
+      { code: "083", name: "SAA Cargo", method: "aggregator" },
+      { code: "112", name: "China Cargo Airlines", method: "aggregator" },
+      { code: "118", name: "TAAG Angola Airlines", method: "aggregator" },
+      { code: "147", name: "Royal Air Maroc", method: "aggregator" },
+      { code: "160", name: "Cathay Cargo", method: "aggregator" },
+      { code: "615", name: "European Air Transport (DHL)", method: "aggregator" },
+      { code: "827", name: "RUSA", method: "aggregator" },
+      { code: "865", name: "MasAir (SmartKargo)", method: "aggregator" },
+      { code: "996", name: "Air Europa Cargo", method: "aggregator" },
+      { code: "999", name: "Air China Cargo", method: "aggregator" },
       
       // Site Oficial + Firecrawl (2 cias)
-      { code: "023", name: "FedEx Express", method: "official_scraping", hasDirectApi: false },
-      { code: "139", name: "Aeromexico Cargo", method: "official_scraping", hasDirectApi: false },
+      { code: "023", name: "FedEx Express", method: "official_scraping" },
+      { code: "139", name: "Aeromexico Cargo", method: "official_scraping" },
       
       // API/HTML Direto (17 cias)
-      { code: "020", name: "Lufthansa Cargo", method: "direct_api", hasDirectApi: true },
-      { code: "045", name: "LATAM Cargo", method: "direct_api", hasDirectApi: true },
-      { code: "047", name: "TAP Air Portugal Cargo", method: "direct_api", hasDirectApi: true },
-      { code: "055", name: "ITA Airways Cargo", method: "direct_api", hasDirectApi: true },
-      { code: "075", name: "IAG Cargo", method: "direct_api", hasDirectApi: true },
-      { code: "125", name: "IAG Cargo (British Airways)", method: "direct_api", hasDirectApi: true },
-      { code: "127", name: "Gol Linhas Aéreas (GOLLOG)", method: "direct_api", hasDirectApi: true },
-      { code: "157", name: "Qatar Airways Cargo", method: "direct_api", hasDirectApi: true },
-      { code: "172", name: "Cargolux", method: "direct_api", hasDirectApi: true },
-      { code: "176", name: "Emirates SkyCargo", method: "direct_api", hasDirectApi: true },
-      { code: "202", name: "Avianca Cargo (DHL)", method: "direct_api", hasDirectApi: true },
-      { code: "235", name: "Turkish Airlines Cargo", method: "direct_api", hasDirectApi: true },
-      { code: "318", name: "SKY Carga", method: "direct_api", hasDirectApi: true },
-      { code: "369", name: "Atlas Air", method: "direct_api", hasDirectApi: true },
-      { code: "549", name: "LATAM Cargo (Alt)", method: "direct_api", hasDirectApi: true },
-      { code: "577", name: "Azul Cargo", method: "direct_api", hasDirectApi: true },
-      { code: "605", name: "SKY Airline Chile", method: "direct_api", hasDirectApi: true },
-      { code: "724", name: "Swiss WorldCargo", method: "direct_api", hasDirectApi: true },
-      { code: "729", name: "Avianca Cargo", method: "direct_api", hasDirectApi: true },
-      { code: "805", name: "GSA Force", method: "direct_api", hasDirectApi: true },
+      { code: "020", name: "Lufthansa Cargo", method: "direct_api" },
+      { code: "045", name: "LATAM Cargo", method: "direct_api" },
+      { code: "047", name: "TAP Air Portugal Cargo", method: "direct_api" },
+      { code: "055", name: "ITA Airways Cargo", method: "direct_api" },
+      { code: "075", name: "IAG Cargo", method: "direct_api" },
+      { code: "125", name: "IAG Cargo (British Airways)", method: "direct_api" },
+      { code: "127", name: "Gol Linhas Aéreas (GOLLOG)", method: "direct_api" },
+      { code: "157", name: "Qatar Airways Cargo", method: "direct_api" },
+      { code: "172", name: "Cargolux", method: "direct_api" },
+      { code: "176", name: "Emirates SkyCargo", method: "direct_api" },
+      { code: "202", name: "Avianca Cargo (DHL)", method: "direct_api" },
+      { code: "235", name: "Turkish Airlines Cargo", method: "direct_api" },
+      { code: "318", name: "SKY Carga", method: "direct_api" },
+      { code: "369", name: "Atlas Air", method: "direct_api" },
+      { code: "549", name: "LATAM Cargo (Alt)", method: "direct_api" },
+      { code: "577", name: "Azul Cargo", method: "direct_api" },
+      { code: "605", name: "SKY Airline Chile", method: "direct_api" },
+      { code: "724", name: "Swiss WorldCargo", method: "direct_api" },
+      { code: "729", name: "Avianca Cargo", method: "direct_api" },
+      { code: "805", name: "GSA Force", method: "direct_api" },
       
       // Outras companhias sem classificação específica
-      { code: "006", name: "Delta Cargo", method: "aggregator", hasDirectApi: false },
-      { code: "145", name: "LATAM Cargo Chile", method: "direct_api", hasDirectApi: true },
-      { code: "406", name: "UPS Airlines", method: "aggregator", hasDirectApi: false },
-      { code: "881", name: "Condor Flugdienst", method: "aggregator", hasDirectApi: false },
-      { code: "992", name: "DHL Aviation Cargo", method: "aggregator", hasDirectApi: false },
+      { code: "006", name: "Delta Cargo", method: "aggregator" },
+      { code: "145", name: "LATAM Cargo Chile", method: "direct_api" },
+      { code: "406", name: "UPS Airlines", method: "aggregator" },
+      { code: "881", name: "Condor Flugdienst", method: "aggregator" },
+      { code: "992", name: "DHL Aviation Cargo", method: "aggregator" },
     ];
+
+    // Merge base data with overrides
+    const monitoredAirlines: MonitoredAirline[] = baseAirlines.map(airline => {
+      // Default hasDirectApi based on method
+      const defaultHasApi = airline.method === 'direct_api';
+      // Check if there's an override
+      const hasOverride = airline.code in airlineApiOverrides;
+      const hasDirectApi = hasOverride ? airlineApiOverrides[airline.code] : defaultHasApi;
+      
+      return { ...airline, hasDirectApi };
+    });
 
     // Sort by code
     monitoredAirlines.sort((a, b) => a.code.localeCompare(b.code));
@@ -1426,7 +1461,7 @@ const Index = () => {
       airlines: monitoredAirlines,
       totalAirlines: monitoredAirlines.length,
     };
-  }, []);
+  }, [airlineApiOverrides]);
 
   const handleAddAWB = async () => {
     if (!awbNumber || !selectedAirline || !consigneeName) {
@@ -2932,8 +2967,8 @@ const Index = () => {
                         <td className="px-3 py-2.5 text-center">
                           <Checkbox
                             checked={airline.hasDirectApi}
-                            disabled
-                            className="data-[state=checked]:bg-emerald-500 data-[state=checked]:border-emerald-500"
+                            onCheckedChange={() => handleToggleDirectApi(airline.code, airline.hasDirectApi)}
+                            className="data-[state=checked]:bg-emerald-500 data-[state=checked]:border-emerald-500 cursor-pointer hover:border-emerald-400 transition-colors"
                           />
                         </td>
                       </>
