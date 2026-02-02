@@ -17,8 +17,9 @@ interface ModalBreakdown {
   lastUpdate: string | null;
   totalRecords: number;
   recentInserts: number;
+  uniqueInserts: number;
   breakdown: {
-    [key: string]: { lastUpdate: string | null; count: number; recentInserts: number };
+    [key: string]: { lastUpdate: string | null; count: number; recentInserts: number; uniqueInserts: number };
   };
 }
 
@@ -26,6 +27,7 @@ interface TableStats {
   lastUpdate: string | null;
   totalRecords: number;
   recentInserts: number;
+  uniqueInserts?: number;
   applications: string[];
   byModal?: {
     AIR: ModalBreakdown;
@@ -236,69 +238,93 @@ function MasterDataCard({ stats }: { stats: TableStats }) {
 
       {/* Modal Breakdown */}
       {stats.byModal && (
-        <div className="grid md:grid-cols-2 gap-3">
-          {/* AIR Modal */}
-          <div className="p-3 rounded-lg border border-blue-500/30 bg-blue-500/5">
-            <div className="flex items-center justify-between mb-3">
-              <div className="flex items-center gap-2">
-                <Plane size={16} className="text-blue-400" />
-                <span className="text-sm font-semibold text-blue-400">MODAL AIR</span>
-              </div>
-              <HealthIndicator status={getHealthStatus(stats.byModal.AIR.lastUpdate)} />
-            </div>
-            
-            <div className="space-y-2">
-              {Object.entries(stats.byModal.AIR.breakdown).map(([tipo, data]) => (
-                <div key={tipo} className="flex justify-between items-center text-sm">
-                  <span className="text-white/60">{tipo}:</span>
-                  <div className="flex items-center gap-2">
-                    <span className="font-semibold text-white">{formatNumber(data.count)}</span>
-                    {data.recentInserts > 0 && (
-                      <span className="text-[10px] text-emerald-400">+{data.recentInserts}</span>
-                    )}
-                  </div>
+        <>
+          <div className="grid md:grid-cols-2 gap-3">
+            {/* AIR Modal */}
+            <div className="p-3 rounded-lg border border-blue-500/30 bg-blue-500/5">
+              <div className="flex items-center justify-between mb-3">
+                <div className="flex items-center gap-2">
+                  <Plane size={16} className="text-blue-400" />
+                  <span className="text-sm font-semibold text-blue-400">MODAL AIR</span>
                 </div>
-              ))}
-              <div className="pt-2 border-t border-blue-500/20 flex justify-between items-center">
-                <span className="text-[10px] text-white/40">Última:</span>
-                <span className="text-[10px] text-blue-400">
-                  {formatRelativeTime(stats.byModal.AIR.lastUpdate)}
-                </span>
+                <HealthIndicator status={getHealthStatus(stats.byModal.AIR.lastUpdate)} />
+              </div>
+              
+              <div className="space-y-2">
+                {Object.entries(stats.byModal.AIR.breakdown).map(([tipo, data]) => (
+                  <div key={tipo} className="flex justify-between items-center text-sm">
+                    <span className="text-white/60">{tipo}:</span>
+                    <div className="flex items-center gap-2">
+                      <span className="font-semibold text-white">{formatNumber(data.count)}</span>
+                      {data.recentInserts > 0 && (
+                        <span className="text-[10px] text-emerald-400">+{data.recentInserts}</span>
+                      )}
+                      {data.uniqueInserts > 0 && (
+                        <span className="text-[10px] text-[#ffc800]" title="Novos Únicos (MAWB+HAWB inéditos)">
+                          ★{data.uniqueInserts}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                ))}
+                <div className="pt-2 border-t border-blue-500/20 flex justify-between items-center">
+                  <span className="text-[10px] text-white/40">Última:</span>
+                  <span className="text-[10px] text-blue-400">
+                    {formatRelativeTime(stats.byModal.AIR.lastUpdate)}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            {/* SEA Modal */}
+            <div className="p-3 rounded-lg border border-cyan-500/30 bg-cyan-500/5">
+              <div className="flex items-center justify-between mb-3">
+                <div className="flex items-center gap-2">
+                  <Ship size={16} className="text-cyan-400" />
+                  <span className="text-sm font-semibold text-cyan-400">MODAL SEA</span>
+                </div>
+                <HealthIndicator status={getHealthStatus(stats.byModal.SEA.lastUpdate)} />
+              </div>
+              
+              <div className="space-y-2">
+                {Object.entries(stats.byModal.SEA.breakdown).map(([tipo, data]) => (
+                  <div key={tipo} className="flex justify-between items-center text-sm">
+                    <span className="text-white/60">{tipo}:</span>
+                    <div className="flex items-center gap-2">
+                      <span className="font-semibold text-white">{formatNumber(data.count)}</span>
+                      {data.recentInserts > 0 && (
+                        <span className="text-[10px] text-emerald-400">+{data.recentInserts}</span>
+                      )}
+                      {data.uniqueInserts > 0 && (
+                        <span className="text-[10px] text-[#ffc800]" title="Novos Únicos (MAWB+HAWB inéditos)">
+                          ★{data.uniqueInserts}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                ))}
+                <div className="pt-2 border-t border-cyan-500/20 flex justify-between items-center">
+                  <span className="text-[10px] text-white/40">Última:</span>
+                  <span className="text-[10px] text-cyan-400">
+                    {formatRelativeTime(stats.byModal.SEA.lastUpdate)}
+                  </span>
+                </div>
               </div>
             </div>
           </div>
 
-          {/* SEA Modal */}
-          <div className="p-3 rounded-lg border border-cyan-500/30 bg-cyan-500/5">
-            <div className="flex items-center justify-between mb-3">
-              <div className="flex items-center gap-2">
-                <Ship size={16} className="text-cyan-400" />
-                <span className="text-sm font-semibold text-cyan-400">MODAL SEA</span>
-              </div>
-              <HealthIndicator status={getHealthStatus(stats.byModal.SEA.lastUpdate)} />
+          {/* Legend */}
+          <div className="mt-3 pt-3 border-t border-white/5 flex items-center gap-4 text-[10px] text-white/40">
+            <div className="flex items-center gap-1.5">
+              <span className="text-emerald-400">+N</span>
+              <span>Inserções 24h (total)</span>
             </div>
-            
-            <div className="space-y-2">
-              {Object.entries(stats.byModal.SEA.breakdown).map(([tipo, data]) => (
-                <div key={tipo} className="flex justify-between items-center text-sm">
-                  <span className="text-white/60">{tipo}:</span>
-                  <div className="flex items-center gap-2">
-                    <span className="font-semibold text-white">{formatNumber(data.count)}</span>
-                    {data.recentInserts > 0 && (
-                      <span className="text-[10px] text-emerald-400">+{data.recentInserts}</span>
-                    )}
-                  </div>
-                </div>
-              ))}
-              <div className="pt-2 border-t border-cyan-500/20 flex justify-between items-center">
-                <span className="text-[10px] text-white/40">Última:</span>
-                <span className="text-[10px] text-cyan-400">
-                  {formatRelativeTime(stats.byModal.SEA.lastUpdate)}
-                </span>
-              </div>
+            <div className="flex items-center gap-1.5">
+              <span className="text-[#ffc800]">★N</span>
+              <span>Novos Únicos (MAWB+HAWB inéditos)</span>
             </div>
           </div>
-        </div>
+        </>
       )}
     </PageCard>
   );
