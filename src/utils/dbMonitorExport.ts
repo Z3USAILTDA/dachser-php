@@ -198,243 +198,373 @@ function transformToExportable(stats: DatabaseStats): { areas: ExportableArea[];
   return { areas, summary };
 }
 
-// PDF Export
+// PDF Export via HTML/CSS
 export function exportDbMonitorPDF(stats: DatabaseStats): string {
   const { areas, summary } = transformToExportable(stats);
   const now = new Date();
   const fileName = `relatorio-monitoramento-${format(now, "yyyy-MM-dd-HHmm")}.pdf`;
+  const dateFormatted = format(now, "dd/MM/yyyy 'às' HH:mm", { locale: ptBR });
 
-  const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
-  const pageWidth = doc.internal.pageSize.getWidth();
-  const pageHeight = doc.internal.pageSize.getHeight();
-  const margin = 15;
-  let yPos = margin;
-
-  // Colors
-  const primaryColor: [number, number, number] = [255, 200, 0]; // DACHSER yellow
-  const darkColor: [number, number, number] = [30, 30, 35];
-  const greenColor: [number, number, number] = [34, 197, 94];
-  const yellowColor: [number, number, number] = [245, 158, 11];
-  const redColor: [number, number, number] = [239, 68, 68];
-
-  const statusColors: Record<HealthStatus, [number, number, number]> = {
-    green: greenColor,
-    yellow: yellowColor,
-    red: redColor,
+  // Helper to get status badge class
+  const getStatusBadgeClass = (color: HealthStatus): string => {
+    switch (color) {
+      case "green": return "status-green";
+      case "yellow": return "status-yellow";
+      case "red": return "status-red";
+    }
   };
 
-  // Helper: Add header
-  function addHeader() {
-    doc.setFillColor(...primaryColor);
-    doc.rect(0, 0, pageWidth, 25, "F");
+  // Generate area cards HTML
+  const areaCardsHTML = areas.map((area) => `
+    <div class="area-card">
+      <div class="area-info">
+        <div class="area-name">${area.name}</div>
+        <div class="area-update">Última atualização: ${formatRelativeTime(area.lastUpdate)}</div>
+      </div>
+      <div class="area-right">
+        <div class="status-badge ${getStatusBadgeClass(area.statusColor)}">${area.status}</div>
+        <div class="area-inserts">+${formatNumber(area.recentInserts)} processados</div>
+      </div>
+    </div>
+  `).join("");
 
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(18);
-    doc.setTextColor(...darkColor);
-    doc.text("DACHSER", margin, 15);
+  // Generate descriptions HTML
+  const descriptionsHTML = areas.map((area) => `
+    <div class="desc-item">
+      <span class="desc-name">• ${area.name}:</span>
+      <span class="desc-text">${area.description}</span>
+    </div>
+  `).join("");
 
-    doc.setFont("helvetica", "normal");
-    doc.setFontSize(12);
-    doc.text("Relatório de Monitoramento de Dados", pageWidth - margin, 15, { align: "right" });
-
-    yPos = 35;
+  // Open print window
+  const printWindow = window.open("", "_blank");
+  if (!printWindow) {
+    throw new Error("Permita pop-ups para gerar o PDF");
   }
 
-  // Helper: Add footer
-  function addFooter(pageNum: number, totalPages: number) {
-    doc.setFont("helvetica", "normal");
-    doc.setFontSize(8);
-    doc.setTextColor(120, 120, 120);
+  // Write HTML document
+  printWindow.document.write(`
+    <!DOCTYPE html>
+    <html lang="pt-BR">
+      <head>
+        <meta charset="UTF-8">
+        <title>Relatório de Monitoramento - DACHSER</title>
+        <style>
+          * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+          }
+          
+          body { 
+            font-family: 'Segoe UI', Arial, sans-serif; 
+            padding: 0;
+            color: #333;
+            background: #fff;
+            line-height: 1.5;
+          }
+          
+          .page {
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 40px;
+          }
+          
+          /* Header */
+          .header { 
+            background: #FFC800; 
+            color: #1E1E23;
+            padding: 25px 40px;
+            margin: 0 0 30px 0;
+          }
+          
+          .header-title {
+            font-size: 22px;
+            font-weight: bold;
+            margin-bottom: 5px;
+          }
+          
+          .header-subtitle {
+            font-size: 14px;
+            opacity: 0.8;
+          }
+          
+          .header-date {
+            font-size: 12px;
+            margin-top: 8px;
+            opacity: 0.7;
+          }
+          
+          /* Section Title */
+          .section-title {
+            font-weight: bold;
+            font-size: 14px;
+            margin: 30px 0 15px 0;
+            background: #f3f4f6;
+            padding: 12px 15px;
+            border-left: 4px solid #FFC800;
+            color: #1E1E23;
+          }
+          
+          /* Summary Cards */
+          .summary-grid {
+            display: flex;
+            gap: 20px;
+            margin-bottom: 10px;
+          }
+          
+          .summary-card {
+            flex: 1;
+            background: #f9fafb;
+            border: 1px solid #e5e7eb;
+            border-radius: 10px;
+            padding: 20px;
+          }
+          
+          .summary-label {
+            font-size: 11px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            color: #6b7280;
+            margin-bottom: 8px;
+          }
+          
+          .summary-value {
+            font-size: 28px;
+            font-weight: bold;
+            color: #22c55e;
+          }
+          
+          .status-list {
+            margin-top: 5px;
+          }
+          
+          .status-row {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 4px 0;
+            font-size: 14px;
+          }
+          
+          .status-dot {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+          }
+          
+          .dot-green { background: #22c55e; }
+          .dot-yellow { background: #f59e0b; }
+          .dot-red { background: #ef4444; }
+          
+          /* Area Cards */
+          .area-card {
+            border: 1px solid #e5e7eb;
+            border-radius: 10px;
+            padding: 18px 20px;
+            margin-bottom: 12px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background: #fff;
+          }
+          
+          .area-info {
+            flex: 1;
+          }
+          
+          .area-name {
+            font-weight: 600;
+            font-size: 15px;
+            color: #1E1E23;
+            margin-bottom: 4px;
+          }
+          
+          .area-update {
+            font-size: 13px;
+            color: #6b7280;
+          }
+          
+          .area-right {
+            text-align: right;
+          }
+          
+          .area-inserts {
+            font-size: 13px;
+            color: #22c55e;
+            font-weight: 500;
+            margin-top: 6px;
+          }
+          
+          /* Status Badges */
+          .status-badge {
+            display: inline-block;
+            padding: 5px 14px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 600;
+          }
+          
+          .status-green { 
+            background: #dcfce7; 
+            color: #166534; 
+          }
+          .status-yellow { 
+            background: #fef3c7; 
+            color: #92400e; 
+          }
+          .status-red { 
+            background: #fee2e2; 
+            color: #991b1b; 
+          }
+          
+          /* Description Section */
+          .desc-item {
+            padding: 8px 0;
+            font-size: 13px;
+            border-bottom: 1px solid #f3f4f6;
+          }
+          
+          .desc-item:last-child {
+            border-bottom: none;
+          }
+          
+          .desc-name {
+            font-weight: 600;
+            color: #1E1E23;
+          }
+          
+          .desc-text {
+            color: #6b7280;
+          }
+          
+          /* Legend Section */
+          .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 10px 0;
+            font-size: 13px;
+          }
+          
+          .legend-label {
+            font-weight: 600;
+            min-width: 120px;
+          }
+          
+          .legend-desc {
+            color: #6b7280;
+          }
+          
+          /* Footer */
+          .footer {
+            margin-top: 40px;
+            padding-top: 20px;
+            border-top: 1px solid #e5e7eb;
+            text-align: center;
+            font-size: 11px;
+            color: #9ca3af;
+          }
+          
+          /* Print Styles */
+          @media print {
+            body { 
+              padding: 0; 
+              -webkit-print-color-adjust: exact;
+              print-color-adjust: exact;
+            }
+            .page {
+              padding: 20px 30px;
+            }
+            .header {
+              margin: -20px -30px 25px -30px;
+              padding: 20px 30px;
+            }
+            .area-card, .summary-card {
+              break-inside: avoid;
+              page-break-inside: avoid;
+            }
+          }
+        </style>
+      </head>
+      <body>
+        <div class="header">
+          <div class="header-title">RELATÓRIO DE MONITORAMENTO DE DADOS</div>
+          <div class="header-subtitle">Sistema Z3US.AI - DACHSER</div>
+          <div class="header-date">Gerado em: ${dateFormatted}</div>
+        </div>
+        
+        <div class="page">
+          <div class="section-title">RESUMO EXECUTIVO</div>
+          
+          <div class="summary-grid">
+            <div class="summary-card">
+              <div class="summary-label">Processados nas últimas 24h</div>
+              <div class="summary-value">+${formatNumber(summary.totalInserts24h)}</div>
+            </div>
+            
+            <div class="summary-card">
+              <div class="summary-label">Situação das Áreas</div>
+              <div class="status-list">
+                <div class="status-row">
+                  <div class="status-dot dot-green"></div>
+                  <span>${summary.healthyCount} OK</span>
+                </div>
+                <div class="status-row">
+                  <div class="status-dot dot-yellow"></div>
+                  <span>${summary.warningCount} Atenção</span>
+                </div>
+                <div class="status-row">
+                  <div class="status-dot dot-red"></div>
+                  <span>${summary.criticalCount} Crítico</span>
+                </div>
+              </div>
+            </div>
+          </div>
+          
+          <div class="section-title">SITUAÇÃO POR ÁREA</div>
+          ${areaCardsHTML}
+          
+          <div class="section-title">O QUE CADA ÁREA REPRESENTA</div>
+          ${descriptionsHTML}
+          
+          <div class="section-title">LEGENDA DE STATUS</div>
+          <div class="legend-item">
+            <div class="status-dot dot-green"></div>
+            <span class="legend-label">Atualizado</span>
+            <span class="legend-desc">Dados recebidos nos últimos 5 minutos</span>
+          </div>
+          <div class="legend-item">
+            <div class="status-dot dot-yellow"></div>
+            <span class="legend-label">Verificar</span>
+            <span class="legend-desc">Sem atualização entre 5 e 60 minutos</span>
+          </div>
+          <div class="legend-item">
+            <div class="status-dot dot-red"></div>
+            <span class="legend-label">Ação Necessária</span>
+            <span class="legend-desc">Sem atualização há mais de 60 minutos</span>
+          </div>
+          
+          <div class="footer">
+            Sistema Z3US.AI • Monitoramento de Dados • DACHSER
+          </div>
+        </div>
+      </body>
+    </html>
+  `);
 
-    doc.text("Sistema Z3US.AI", margin, pageHeight - 10);
-    doc.text(`Página ${pageNum} de ${totalPages}`, pageWidth - margin, pageHeight - 10, { align: "right" });
-    doc.text(
-      `Gerado em: ${format(now, "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })}`,
-      pageWidth / 2,
-      pageHeight - 10,
-      { align: "center" }
-    );
-  }
+  printWindow.document.close();
+  printWindow.focus();
 
-  // Helper: Draw status indicator
-  function drawStatusIndicator(x: number, y: number, color: HealthStatus) {
-    doc.setFillColor(...statusColors[color]);
-    doc.circle(x, y, 3, "F");
-  }
+  // Print after rendering
+  setTimeout(() => {
+    printWindow.print();
+  }, 300);
 
-  // PAGE 1: Executive Summary
-  addHeader();
-
-  // Report info
-  doc.setFont("helvetica", "normal");
-  doc.setFontSize(10);
-  doc.setTextColor(100, 100, 100);
-  doc.text(`Data do Relatório: ${format(now, "dd 'de' MMMM 'de' yyyy", { locale: ptBR })}`, margin, yPos);
-  yPos += 12;
-
-  // Summary cards - 2 cards side by side
-  const cardWidth = (pageWidth - margin * 2 - 10) / 2;
-  const cardHeight = 40;
-
-  // Card 1: Processed 24h
-  doc.setFillColor(245, 245, 250);
-  doc.roundedRect(margin, yPos, cardWidth, cardHeight, 3, 3, "F");
-  doc.setFont("helvetica", "normal");
-  doc.setFontSize(9);
-  doc.setTextColor(100, 100, 100);
-  doc.text("PROCESSADOS NAS ÚLTIMAS 24H", margin + 5, yPos + 12);
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(18);
-  doc.setTextColor(...greenColor);
-  doc.text(`+${formatNumber(summary.totalInserts24h)}`, margin + 5, yPos + 30);
-
-  // Card 2: Status Overview - with vertical layout to avoid cutting
-  doc.setFillColor(245, 245, 250);
-  doc.roundedRect(margin + cardWidth + 10, yPos, cardWidth, cardHeight, 3, 3, "F");
-  doc.setFont("helvetica", "normal");
-  doc.setFontSize(9);
-  doc.setTextColor(100, 100, 100);
-  doc.text("SITUAÇÃO DAS ÁREAS", margin + cardWidth + 15, yPos + 12);
-
-  const statusX = margin + cardWidth + 15;
-  let statusY = yPos + 24;
-
-  // Horizontal layout with more spacing
-  const spacing = 55;
-  
-  drawStatusIndicator(statusX + 3, statusY, "green");
-  doc.setFont("helvetica", "normal");
-  doc.setFontSize(9);
-  doc.setTextColor(...darkColor);
-  doc.text(`${summary.healthyCount} OK`, statusX + 10, statusY + 3);
-
-  drawStatusIndicator(statusX + spacing + 3, statusY, "yellow");
-  doc.text(`${summary.warningCount} Atenção`, statusX + spacing + 10, statusY + 3);
-
-  statusY += 10;
-  drawStatusIndicator(statusX + 3, statusY, "red");
-  doc.text(`${summary.criticalCount} Crítico`, statusX + 10, statusY + 3);
-
-  yPos += cardHeight + 15;
-
-  // Status Table
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(12);
-  doc.setTextColor(...darkColor);
-  doc.text("Situação por Área", margin, yPos);
-  yPos += 8;
-
-  const tableData = areas.map((area) => [
-    area.name,
-    area.status,
-    formatRelativeTime(area.lastUpdate),
-    `+${formatNumber(area.recentInserts)}`,
-  ]);
-
-  autoTable(doc, {
-    startY: yPos,
-    head: [["Área", "Status", "Última Atualização", "Processados (24h)"]],
-    body: tableData,
-    theme: "grid",
-    styles: {
-      fontSize: 9,
-      cellPadding: 5,
-    },
-    headStyles: {
-      fillColor: primaryColor,
-      textColor: darkColor,
-      fontStyle: "bold",
-    },
-    columnStyles: {
-      0: { fontStyle: "bold", cellWidth: 55 },
-      1: { halign: "center", cellWidth: 40 },
-      2: { halign: "center", cellWidth: 45 },
-      3: { halign: "right", textColor: greenColor, cellWidth: 40 },
-    },
-    didParseCell: (data) => {
-      if (data.section === "body" && data.column.index === 1) {
-        const status = data.cell.raw as string;
-        if (status === "Atualizado") {
-          data.cell.styles.textColor = greenColor;
-        } else if (status === "Verificar") {
-          data.cell.styles.textColor = yellowColor;
-        } else if (status === "Ação Necessária") {
-          data.cell.styles.textColor = redColor;
-        }
-      }
-    },
-    margin: { left: margin, right: margin },
-  });
-
-  yPos = (doc as any).lastAutoTable.finalY + 12;
-
-  // Description of areas section - ALWAYS show (add page if needed)
-  const areaDescNeededHeight = 10 + (areas.length * 8);
-  if (yPos + areaDescNeededHeight > pageHeight - 50) {
-    doc.addPage();
-    addHeader();
-  }
-
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(10);
-  doc.setTextColor(...darkColor);
-  doc.text("O que cada área representa", margin, yPos);
-  yPos += 7;
-
-  doc.setFontSize(8);
-  for (const area of areas) {
-    doc.setFont("helvetica", "bold");
-    doc.setTextColor(...darkColor);
-    doc.text(`• ${area.name}:`, margin + 2, yPos);
-    doc.setFont("helvetica", "normal");
-    doc.setTextColor(80, 80, 80);
-    doc.text(area.description, margin + 42, yPos);
-    yPos += 6;
-  }
-
-  yPos += 6;
-
-  // Legend section - status colors - ALWAYS show (add page if needed)
-  const legendNeededHeight = 35;
-  if (yPos + legendNeededHeight > pageHeight - 15) {
-    doc.addPage();
-    addHeader();
-  }
-
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(10);
-  doc.setTextColor(...darkColor);
-  doc.text("Legenda de Status", margin, yPos);
-  yPos += 7;
-
-  const legends = [
-    { color: "green" as HealthStatus, label: "Atualizado", desc: "Dados recebidos nos últimos 5 minutos" },
-    { color: "yellow" as HealthStatus, label: "Verificar", desc: "Sem atualização entre 5 e 60 minutos" },
-    { color: "red" as HealthStatus, label: "Ação Necessária", desc: "Sem atualização há mais de 60 minutos" },
-  ];
-
-  for (const legend of legends) {
-    drawStatusIndicator(margin + 5, yPos, legend.color);
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(8);
-    doc.setTextColor(...darkColor);
-    doc.text(legend.label, margin + 12, yPos + 3);
-    doc.setFont("helvetica", "normal");
-    doc.setFontSize(8);
-    doc.setTextColor(100, 100, 100);
-    doc.text(`- ${legend.desc}`, margin + 48, yPos + 3);
-    yPos += 7;
-  }
-
-  // Add footer
-  addFooter(1, 1);
-
-  // Save
-  doc.save(fileName);
   return fileName;
 }
 
-// Excel Export
+// Excel Export (unchanged)
 export function exportDbMonitorExcel(stats: DatabaseStats): string {
   const { areas, summary } = transformToExportable(stats);
   const now = new Date();
