@@ -79,12 +79,12 @@ serve(async (req) => {
           WHERE DATE(m.data_insert) = ?
           AND m.tipo_processo IN ('AIR IMPORT', 'AIR EXPORT')
         )
-        -- OU AWBs com "ARR - Destino" que ainda estão dentro dos 5 dias
+        -- OU AWBs com "ARR" ou "ARR - Destino" que ainda estão dentro dos 5 dias
+        -- Usa arr_datetime se disponível, senão usa última atualização como fallback
         ${hasArrDatetimeColumn ? `
         OR (
           s.\`último_status\` IN ('ARR', 'ARR - Destino')
-          AND s.arr_datetime IS NOT NULL
-          AND s.arr_datetime >= DATE_SUB(NOW(), INTERVAL 5 DAY)
+          AND COALESCE(s.arr_datetime, s.\`última atualização\`) >= DATE_SUB(NOW(), INTERVAL 5 DAY)
         )` : ''}
       )`;
 
