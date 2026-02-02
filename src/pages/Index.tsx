@@ -1342,52 +1342,85 @@ const Index = () => {
   //   return () => clearTimeout(timer);
   // }, [fetchAWBsInBatches]);
 
+  // Check if user is admin
+  const isAdmin = useMemo(() => {
+    try {
+      const storedUser = localStorage.getItem("user") || localStorage.getItem("dachser_user");
+      if (storedUser) {
+        const parsed = JSON.parse(storedUser);
+        return parsed.is_admin === 1 || parsed.is_admin === "1" || parsed.is_admin === true;
+      }
+    } catch {
+      return false;
+    }
+    return false;
+  }, []);
+
   // Memoized data for monitored airlines modal
   const monitoredAirlinesData = useMemo(() => {
-    const monitoredAirlines = [
-      { code: "001", name: "American Airlines Cargo" },
-      { code: "006", name: "Delta Cargo" },
-      { code: "014", name: "Air Canada Cargo" },
-      { code: "016", name: "United Cargo" },
-      { code: "020", name: "Lufthansa Cargo" },
-      { code: "023", name: "FedEx Express" },
-      { code: "045", name: "LATAM Cargo" },
-      { code: "047", name: "TAP Air Portugal Cargo" },
-      { code: "055", name: "ITA Airways Cargo" },
-      { code: "057", name: "Air France Cargo" },
-      { code: "074", name: "AF/KL Cargo" },
-      { code: "075", name: "IAG Cargo" },
-      { code: "083", name: "SAA Cargo" },
-      { code: "112", name: "China Cargo Airlines" },
-      { code: "118", name: "TAAG Angola Airlines" },
-      { code: "125", name: "IAG Cargo (British Airways)" },
-      { code: "127", name: "Gol Linhas Aéreas (GOLLOG)" },
-      { code: "139", name: "Aeromexico Cargo" },
-      { code: "145", name: "LATAM Cargo Chile" },
-      { code: "147", name: "Royal Air Maroc" },
-      { code: "157", name: "Qatar Airways Cargo" },
-      { code: "160", name: "Cathay Cargo" },
-      { code: "172", name: "Cargolux" },
-      { code: "176", name: "Emirates SkyCargo" },
-      { code: "202", name: "DHLAvianca Cargo" },
-      { code: "235", name: "Turkish Airlines Cargo" },
-      { code: "318", name: "SKY Carga" },
-      { code: "369", name: "Atlas Air" },
-      { code: "406", name: "UPS Airlines" },
-      { code: "549", name: "LATAM Cargo (Alt)" },
-      { code: "577", name: "Azul Cargo" },
-      { code: "605", name: "SKY Airline Chile" },
-      { code: "615", name: "European Air Transport (DHL)" },
-      { code: "724", name: "Swiss WorldCargo" },
-      { code: "729", name: "Avianca Cargo" },
-      { code: "805", name: "GSA Force" },
-      { code: "827", name: "RUSA" },
-      { code: "865", name: "MasAir (SmartKargo)" },
-      { code: "881", name: "Condor Flugdienst" },
-      { code: "992", name: "DHL Aviation Cargo" },
-      { code: "996", name: "Air Europa Cargo" },
-      { code: "999", name: "Air China Cargo" },
+    type CollectionMethod = 'aggregator' | 'official_scraping' | 'direct_api';
+    
+    interface MonitoredAirline {
+      code: string;
+      name: string;
+      method: CollectionMethod;
+      hasDirectApi: boolean;
+    }
+
+    const monitoredAirlines: MonitoredAirline[] = [
+      // Agregador + Firecrawl (14 cias)
+      { code: "001", name: "American Airlines Cargo", method: "aggregator", hasDirectApi: false },
+      { code: "014", name: "Air Canada Cargo", method: "aggregator", hasDirectApi: false },
+      { code: "016", name: "United Cargo", method: "aggregator", hasDirectApi: false },
+      { code: "057", name: "Air France Cargo", method: "aggregator", hasDirectApi: false },
+      { code: "074", name: "AF/KL Cargo", method: "aggregator", hasDirectApi: false },
+      { code: "083", name: "SAA Cargo", method: "aggregator", hasDirectApi: false },
+      { code: "112", name: "China Cargo Airlines", method: "aggregator", hasDirectApi: false },
+      { code: "118", name: "TAAG Angola Airlines", method: "aggregator", hasDirectApi: false },
+      { code: "147", name: "Royal Air Maroc", method: "aggregator", hasDirectApi: false },
+      { code: "160", name: "Cathay Cargo", method: "aggregator", hasDirectApi: false },
+      { code: "615", name: "European Air Transport (DHL)", method: "aggregator", hasDirectApi: false },
+      { code: "827", name: "RUSA", method: "aggregator", hasDirectApi: false },
+      { code: "865", name: "MasAir (SmartKargo)", method: "aggregator", hasDirectApi: false },
+      { code: "996", name: "Air Europa Cargo", method: "aggregator", hasDirectApi: false },
+      { code: "999", name: "Air China Cargo", method: "aggregator", hasDirectApi: false },
+      
+      // Site Oficial + Firecrawl (2 cias)
+      { code: "023", name: "FedEx Express", method: "official_scraping", hasDirectApi: false },
+      { code: "139", name: "Aeromexico Cargo", method: "official_scraping", hasDirectApi: false },
+      
+      // API/HTML Direto (17 cias)
+      { code: "020", name: "Lufthansa Cargo", method: "direct_api", hasDirectApi: true },
+      { code: "045", name: "LATAM Cargo", method: "direct_api", hasDirectApi: true },
+      { code: "047", name: "TAP Air Portugal Cargo", method: "direct_api", hasDirectApi: true },
+      { code: "055", name: "ITA Airways Cargo", method: "direct_api", hasDirectApi: true },
+      { code: "075", name: "IAG Cargo", method: "direct_api", hasDirectApi: true },
+      { code: "125", name: "IAG Cargo (British Airways)", method: "direct_api", hasDirectApi: true },
+      { code: "127", name: "Gol Linhas Aéreas (GOLLOG)", method: "direct_api", hasDirectApi: true },
+      { code: "157", name: "Qatar Airways Cargo", method: "direct_api", hasDirectApi: true },
+      { code: "172", name: "Cargolux", method: "direct_api", hasDirectApi: true },
+      { code: "176", name: "Emirates SkyCargo", method: "direct_api", hasDirectApi: true },
+      { code: "202", name: "Avianca Cargo (DHL)", method: "direct_api", hasDirectApi: true },
+      { code: "235", name: "Turkish Airlines Cargo", method: "direct_api", hasDirectApi: true },
+      { code: "318", name: "SKY Carga", method: "direct_api", hasDirectApi: true },
+      { code: "369", name: "Atlas Air", method: "direct_api", hasDirectApi: true },
+      { code: "549", name: "LATAM Cargo (Alt)", method: "direct_api", hasDirectApi: true },
+      { code: "577", name: "Azul Cargo", method: "direct_api", hasDirectApi: true },
+      { code: "605", name: "SKY Airline Chile", method: "direct_api", hasDirectApi: true },
+      { code: "724", name: "Swiss WorldCargo", method: "direct_api", hasDirectApi: true },
+      { code: "729", name: "Avianca Cargo", method: "direct_api", hasDirectApi: true },
+      { code: "805", name: "GSA Force", method: "direct_api", hasDirectApi: true },
+      
+      // Outras companhias sem classificação específica
+      { code: "006", name: "Delta Cargo", method: "aggregator", hasDirectApi: false },
+      { code: "145", name: "LATAM Cargo Chile", method: "direct_api", hasDirectApi: true },
+      { code: "406", name: "UPS Airlines", method: "aggregator", hasDirectApi: false },
+      { code: "881", name: "Condor Flugdienst", method: "aggregator", hasDirectApi: false },
+      { code: "992", name: "DHL Aviation Cargo", method: "aggregator", hasDirectApi: false },
     ];
+
+    // Sort by code
+    monitoredAirlines.sort((a, b) => a.code.localeCompare(b.code));
 
     return {
       airlines: monitoredAirlines,
@@ -2835,7 +2868,7 @@ const Index = () => {
 
       {/* Modal de Companhias Monitoradas */}
       <Dialog open={showMonitoredModal} onOpenChange={setShowMonitoredModal}>
-        <DialogContent className="max-w-2xl max-h-[80vh] overflow-hidden bg-[rgba(5,6,18,.98)] border border-[rgba(255,255,255,.12)]">
+        <DialogContent className={`${isAdmin ? 'max-w-4xl' : 'max-w-2xl'} max-h-[80vh] overflow-hidden bg-[rgba(5,6,18,.98)] border border-[rgba(255,255,255,.12)]`}>
           <DialogHeader>
             <DialogTitle className="text-[#f5f5f5] flex items-center gap-2">
               <Plane className="w-5 h-5 text-emerald-400" />
@@ -2855,6 +2888,16 @@ const Index = () => {
                   <th className="px-3 py-2 text-left text-[#aaaaaa] uppercase text-[0.68rem] tracking-[0.1em] font-medium">
                     Companhia Aérea
                   </th>
+                  {isAdmin && (
+                    <>
+                      <th className="px-3 py-2 text-left text-[#aaaaaa] uppercase text-[0.68rem] tracking-[0.1em] font-medium">
+                        Método de Coleta
+                      </th>
+                      <th className="px-3 py-2 text-center text-[#aaaaaa] uppercase text-[0.68rem] tracking-[0.1em] font-medium">
+                        API Direta
+                      </th>
+                    </>
+                  )}
                 </tr>
               </thead>
               <tbody>
@@ -2867,6 +2910,34 @@ const Index = () => {
                       <span className="font-mono text-emerald-400 text-sm">{airline.code}</span>
                     </td>
                     <td className="px-3 py-2.5 text-[#f5f5f5] text-sm">{airline.name}</td>
+                    {isAdmin && (
+                      <>
+                        <td className="px-3 py-2.5">
+                          {airline.method === 'direct_api' && (
+                            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[0.7rem] font-medium bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
+                              API/HTML Direto
+                            </span>
+                          )}
+                          {airline.method === 'official_scraping' && (
+                            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[0.7rem] font-medium bg-yellow-500/20 text-yellow-400 border border-yellow-500/30">
+                              Site Oficial + Firecrawl
+                            </span>
+                          )}
+                          {airline.method === 'aggregator' && (
+                            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[0.7rem] font-medium bg-orange-500/20 text-orange-400 border border-orange-500/30">
+                              Agregador + Firecrawl
+                            </span>
+                          )}
+                        </td>
+                        <td className="px-3 py-2.5 text-center">
+                          <Checkbox
+                            checked={airline.hasDirectApi}
+                            disabled
+                            className="data-[state=checked]:bg-emerald-500 data-[state=checked]:border-emerald-500"
+                          />
+                        </td>
+                      </>
+                    )}
                   </tr>
                 ))}
               </tbody>
@@ -2874,6 +2945,11 @@ const Index = () => {
           </div>
           <div className="mt-4 pt-4 border-t border-[rgba(255,255,255,.08)] text-[0.75rem] text-[#aaa] text-center">
             {monitoredAirlinesData.totalAirlines} companhias integradas
+            {isAdmin && (
+              <span className="ml-2 text-emerald-400">
+                ({monitoredAirlinesData.airlines.filter(a => a.hasDirectApi).length} com API direta)
+              </span>
+            )}
           </div>
         </DialogContent>
       </Dialog>
