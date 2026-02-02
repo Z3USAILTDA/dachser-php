@@ -624,9 +624,8 @@ serve(async (req) => {
     const pdfHtml = generatePdfHtml(stats, now);
     const excelBuffer = generateExcelBuffer(stats, now);
 
-    // Convert to base64
-    const pdfBase64 = btoa(pdfHtml);
-    const excelBase64 = btoa(String.fromCharCode(...excelBuffer));
+    console.log('Generated PDF HTML length:', pdfHtml.length);
+    console.log('Generated Excel buffer length:', excelBuffer.length);
 
     // Generate email HTML
     const emailHtml = generateEmailHtml(stats, now);
@@ -639,21 +638,31 @@ serve(async (req) => {
 
     const resend = new Resend(resendApiKey);
 
+    // Convert HTML string to Uint8Array for PDF attachment
+    const pdfEncoder = new TextEncoder();
+    const pdfBytes = pdfEncoder.encode(pdfHtml);
+
+    // Create attachments array with proper format for Resend
+    // Resend accepts content as Buffer, ArrayBuffer, or base64 string
+    const attachments = [
+      {
+        filename: `relatorio-monitoramento-${dateStr}-${timeStr}.html`,
+        content: Array.from(pdfBytes),
+      },
+      {
+        filename: `relatorio-monitoramento-${dateStr}-${timeStr}.xlsx`,
+        content: Array.from(excelBuffer),
+      },
+    ];
+
+    console.log('Sending email with attachments:', attachments.map(a => ({ filename: a.filename, contentLength: a.content.length })));
+
     const emailResponse = await resend.emails.send({
       from: 'Z3US Monitor <noreply@hermes.z3us.ai>',
       to: recipients,
       subject: `📊 Relatório de Status - Banco de Dados - ${now.toLocaleDateString('pt-BR')}`,
       html: emailHtml,
-      attachments: [
-        {
-          filename: `relatorio-monitoramento-${dateStr}-${timeStr}.html`,
-          content: pdfBase64,
-        },
-        {
-          filename: `relatorio-monitoramento-${dateStr}-${timeStr}.xlsx`,
-          content: excelBase64,
-        },
-      ],
+      attachments: attachments,
     });
 
     console.log('Email sent successfully with attachments:', emailResponse);
