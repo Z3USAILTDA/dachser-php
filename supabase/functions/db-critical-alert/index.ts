@@ -28,7 +28,7 @@ const TABLES_CONFIG = [
 ];
 
 const CRITICAL_THRESHOLD_MINUTES = 60;
-const REALERT_INTERVAL_MINUTES = 30;
+const REALERT_INTERVAL_MINUTES = 120; // 2 hours - must be > cron interval to avoid race conditions
 
 const TEST_RECIPIENTS = ['larissa@z3us.ai'];
 const PRODUCTION_RECIPIENTS = ['larissa@z3us.ai', 'rodrigo@z3us.ai'];
