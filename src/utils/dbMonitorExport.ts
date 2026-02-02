@@ -366,59 +366,64 @@ export function exportDbMonitorPDF(stats: DatabaseStats): string {
     margin: { left: margin, right: margin },
   });
 
-  yPos = (doc as any).lastAutoTable.finalY + 20;
+  yPos = (doc as any).lastAutoTable.finalY + 12;
 
-  // Description of areas section
-  if (yPos < pageHeight - 120) {
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(11);
-    doc.setTextColor(...darkColor);
-    doc.text("O que cada área representa", margin, yPos);
-    yPos += 8;
-
-    doc.setFont("helvetica", "normal");
-    doc.setFontSize(8);
-    doc.setTextColor(80, 80, 80);
-
-    for (const area of areas) {
-      doc.setFont("helvetica", "bold");
-      doc.text(`${area.name}:`, margin + 2, yPos);
-      doc.setFont("helvetica", "normal");
-      const descWidth = pageWidth - margin * 2 - 45;
-      const descLines = doc.splitTextToSize(area.description, descWidth);
-      doc.text(descLines, margin + 45, yPos);
-      yPos += 6 * Math.max(1, descLines.length);
-    }
-
-    yPos += 8;
+  // Description of areas section - ALWAYS show (add page if needed)
+  const areaDescNeededHeight = 10 + (areas.length * 8);
+  if (yPos + areaDescNeededHeight > pageHeight - 50) {
+    doc.addPage();
+    addHeader();
   }
 
-  // Legend section - status colors
-  if (yPos < pageHeight - 50) {
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(10);
+  doc.setTextColor(...darkColor);
+  doc.text("O que cada área representa", margin, yPos);
+  yPos += 7;
+
+  doc.setFontSize(8);
+  for (const area of areas) {
     doc.setFont("helvetica", "bold");
-    doc.setFontSize(11);
     doc.setTextColor(...darkColor);
-    doc.text("Legenda de Status", margin, yPos);
-    yPos += 8;
+    doc.text(`• ${area.name}:`, margin + 2, yPos);
+    doc.setFont("helvetica", "normal");
+    doc.setTextColor(80, 80, 80);
+    doc.text(area.description, margin + 42, yPos);
+    yPos += 6;
+  }
 
-    const legends = [
-      { color: "green" as HealthStatus, label: "Atualizado", desc: "Dados recebidos nos últimos 5 minutos" },
-      { color: "yellow" as HealthStatus, label: "Verificar", desc: "Sem atualização entre 5 e 60 minutos" },
-      { color: "red" as HealthStatus, label: "Ação Necessária", desc: "Sem atualização há mais de 60 minutos" },
-    ];
+  yPos += 6;
 
-    for (const legend of legends) {
-      drawStatusIndicator(margin + 5, yPos, legend.color);
-      doc.setFont("helvetica", "bold");
-      doc.setFontSize(8);
-      doc.setTextColor(...darkColor);
-      doc.text(legend.label, margin + 12, yPos + 3);
-      doc.setFont("helvetica", "normal");
-      doc.setFontSize(8);
-      doc.setTextColor(100, 100, 100);
-      doc.text(`- ${legend.desc}`, margin + 50, yPos + 3);
-      yPos += 8;
-    }
+  // Legend section - status colors - ALWAYS show (add page if needed)
+  const legendNeededHeight = 35;
+  if (yPos + legendNeededHeight > pageHeight - 15) {
+    doc.addPage();
+    addHeader();
+  }
+
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(10);
+  doc.setTextColor(...darkColor);
+  doc.text("Legenda de Status", margin, yPos);
+  yPos += 7;
+
+  const legends = [
+    { color: "green" as HealthStatus, label: "Atualizado", desc: "Dados recebidos nos últimos 5 minutos" },
+    { color: "yellow" as HealthStatus, label: "Verificar", desc: "Sem atualização entre 5 e 60 minutos" },
+    { color: "red" as HealthStatus, label: "Ação Necessária", desc: "Sem atualização há mais de 60 minutos" },
+  ];
+
+  for (const legend of legends) {
+    drawStatusIndicator(margin + 5, yPos, legend.color);
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(8);
+    doc.setTextColor(...darkColor);
+    doc.text(legend.label, margin + 12, yPos + 3);
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(8);
+    doc.setTextColor(100, 100, 100);
+    doc.text(`- ${legend.desc}`, margin + 48, yPos + 3);
+    yPos += 7;
   }
 
   // Add footer
