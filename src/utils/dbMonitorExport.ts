@@ -66,19 +66,19 @@ interface ExportableSummary {
 const AREA_NAMES: Record<string, { name: string; description: string }> = {
   t_master_dados: {
     name: "Dados Operacionais",
-    description: "Processos de importação e exportação aérea e marítima",
+    description: "Processos de importação e exportação (aéreo e marítimo) - CCT, Tracking, Olimpo",
   },
   t_dados_financeiro_nfs: {
     name: "Notas Fiscais",
-    description: "Dados para régua de cobrança",
+    description: "Dados de faturamento para régua de cobrança automática",
   },
   t_dados_financeiro_voucher: {
     name: "Vouchers/SPO",
-    description: "Esteira de pagamentos",
+    description: "Solicitações de pagamento e despesas operacionais",
   },
   tbaixas: {
     name: "Baixas Financeiras",
-    description: "Comprovantes de pagamento processados",
+    description: "Comprovantes de pagamento processados pelo robô financeiro",
   },
 };
 
@@ -272,9 +272,9 @@ export function exportDbMonitorPDF(stats: DatabaseStats): string {
   doc.text(`Data do Relatório: ${format(now, "dd 'de' MMMM 'de' yyyy", { locale: ptBR })}`, margin, yPos);
   yPos += 12;
 
-  // Summary cards - 2 cards only
-  const cardWidth = (pageWidth - margin * 2 - 5) / 2;
-  const cardHeight = 35;
+  // Summary cards - 2 cards side by side
+  const cardWidth = (pageWidth - margin * 2 - 10) / 2;
+  const cardHeight = 40;
 
   // Card 1: Processed 24h
   doc.setFillColor(245, 245, 250);
@@ -286,30 +286,34 @@ export function exportDbMonitorPDF(stats: DatabaseStats): string {
   doc.setFont("helvetica", "bold");
   doc.setFontSize(18);
   doc.setTextColor(...greenColor);
-  doc.text(`+${formatNumber(summary.totalInserts24h)}`, margin + 5, yPos + 27);
+  doc.text(`+${formatNumber(summary.totalInserts24h)}`, margin + 5, yPos + 30);
 
-  // Card 2: Status Overview
+  // Card 2: Status Overview - with vertical layout to avoid cutting
   doc.setFillColor(245, 245, 250);
-  doc.roundedRect(margin + cardWidth + 5, yPos, cardWidth, cardHeight, 3, 3, "F");
+  doc.roundedRect(margin + cardWidth + 10, yPos, cardWidth, cardHeight, 3, 3, "F");
   doc.setFont("helvetica", "normal");
   doc.setFontSize(9);
   doc.setTextColor(100, 100, 100);
-  doc.text("SITUAÇÃO DAS ÁREAS", margin + cardWidth + 10, yPos + 12);
+  doc.text("SITUAÇÃO DAS ÁREAS", margin + cardWidth + 15, yPos + 12);
 
-  const statusY = yPos + 24;
-  const statusX = margin + cardWidth + 10;
+  const statusX = margin + cardWidth + 15;
+  let statusY = yPos + 24;
 
+  // Horizontal layout with more spacing
+  const spacing = 55;
+  
   drawStatusIndicator(statusX + 3, statusY, "green");
   doc.setFont("helvetica", "normal");
-  doc.setFontSize(10);
+  doc.setFontSize(9);
   doc.setTextColor(...darkColor);
   doc.text(`${summary.healthyCount} OK`, statusX + 10, statusY + 3);
 
-  drawStatusIndicator(statusX + 43, statusY, "yellow");
-  doc.text(`${summary.warningCount} Atenção`, statusX + 50, statusY + 3);
+  drawStatusIndicator(statusX + spacing + 3, statusY, "yellow");
+  doc.text(`${summary.warningCount} Atenção`, statusX + spacing + 10, statusY + 3);
 
-  drawStatusIndicator(statusX + 100, statusY, "red");
-  doc.text(`${summary.criticalCount} Crítico`, statusX + 107, statusY + 3);
+  statusY += 10;
+  drawStatusIndicator(statusX + 3, statusY, "red");
+  doc.text(`${summary.criticalCount} Crítico`, statusX + 10, statusY + 3);
 
   yPos += cardHeight + 15;
 
@@ -364,13 +368,38 @@ export function exportDbMonitorPDF(stats: DatabaseStats): string {
 
   yPos = (doc as any).lastAutoTable.finalY + 20;
 
-  // Legend section - on same page if space allows
-  if (yPos < pageHeight - 80) {
+  // Description of areas section
+  if (yPos < pageHeight - 120) {
     doc.setFont("helvetica", "bold");
     doc.setFontSize(11);
     doc.setTextColor(...darkColor);
-    doc.text("Legenda", margin, yPos);
-    yPos += 10;
+    doc.text("O que cada área representa", margin, yPos);
+    yPos += 8;
+
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(8);
+    doc.setTextColor(80, 80, 80);
+
+    for (const area of areas) {
+      doc.setFont("helvetica", "bold");
+      doc.text(`${area.name}:`, margin + 2, yPos);
+      doc.setFont("helvetica", "normal");
+      const descWidth = pageWidth - margin * 2 - 45;
+      const descLines = doc.splitTextToSize(area.description, descWidth);
+      doc.text(descLines, margin + 45, yPos);
+      yPos += 6 * Math.max(1, descLines.length);
+    }
+
+    yPos += 8;
+  }
+
+  // Legend section - status colors
+  if (yPos < pageHeight - 50) {
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(11);
+    doc.setTextColor(...darkColor);
+    doc.text("Legenda de Status", margin, yPos);
+    yPos += 8;
 
     const legends = [
       { color: "green" as HealthStatus, label: "Atualizado", desc: "Dados recebidos nos últimos 5 minutos" },
@@ -381,14 +410,14 @@ export function exportDbMonitorPDF(stats: DatabaseStats): string {
     for (const legend of legends) {
       drawStatusIndicator(margin + 5, yPos, legend.color);
       doc.setFont("helvetica", "bold");
-      doc.setFontSize(9);
+      doc.setFontSize(8);
       doc.setTextColor(...darkColor);
       doc.text(legend.label, margin + 12, yPos + 3);
       doc.setFont("helvetica", "normal");
-      doc.setFontSize(9);
+      doc.setFontSize(8);
       doc.setTextColor(100, 100, 100);
       doc.text(`- ${legend.desc}`, margin + 50, yPos + 3);
-      yPos += 10;
+      yPos += 8;
     }
   }
 
