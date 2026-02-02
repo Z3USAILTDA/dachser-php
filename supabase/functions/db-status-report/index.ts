@@ -626,7 +626,7 @@ function generateEmailHtml(stats: TableStats[], timestamp: Date): string {
                       <tr>
                         <td style="padding: 24px 32px; border-top: 1px solid rgba(255, 255, 255, 0.06);">
                           <p style="margin: 0 0 8px 0; color: #888888; font-size: 13px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
-                            📎 Anexos incluídos: <strong style="color: #F5B843;">Relatório PDF</strong> e <strong style="color: #F5B843;">Relatório Excel</strong>
+                            📎 Anexo incluído: <strong style="color: #F5B843;">Relatório PDF</strong>
                           </p>
                         </td>
                       </tr>
@@ -743,17 +743,15 @@ serve(async (req) => {
     const dateStr = now.toISOString().slice(0, 10).replace(/-/g, '');
     const timeStr = now.toTimeString().slice(0, 5).replace(':', '');
 
-    // Generate attachments
+    // Generate PDF attachment only
     const pdfBuffer = generatePdfBuffer(stats, now);
-    const excelBuffer = generateExcelBuffer(stats, now);
 
     console.log('Generated PDF buffer length:', pdfBuffer.length);
-    console.log('Generated Excel buffer length:', excelBuffer.length);
 
     // Generate email HTML
     const emailHtml = generateEmailHtml(stats, now);
 
-    // Send email via Resend with attachments
+    // Send email via Resend with PDF attachment
     const resendApiKey = Deno.env.get('RESEND_API_KEY');
     if (!resendApiKey) {
       throw new Error('RESEND_API_KEY not configured');
@@ -761,16 +759,11 @@ serve(async (req) => {
 
     const resend = new Resend(resendApiKey);
 
-    // Create attachments array with proper format for Resend
-    // Resend accepts content as Buffer, ArrayBuffer, or base64 string
+    // Create attachments array with PDF only
     const attachments = [
       {
         filename: `relatorio-monitoramento-${dateStr}-${timeStr}.pdf`,
         content: Array.from(pdfBuffer),
-      },
-      {
-        filename: `relatorio-monitoramento-${dateStr}-${timeStr}.xlsx`,
-        content: Array.from(excelBuffer),
       },
     ];
 
@@ -802,7 +795,7 @@ serve(async (req) => {
 
     return new Response(JSON.stringify({
       success: true,
-      message: 'Status report sent successfully with PDF and Excel attachments',
+      message: 'Status report sent successfully with PDF attachment',
       recipients,
       stats: stats.map(s => ({ name: s.name, status: s.status, minutesSinceUpdate: s.minutesSinceUpdate })),
     }), {
