@@ -1,190 +1,123 @@
 
-# Plano: Refatorar PDF para Modelo HTML/CSS
 
-## Objetivo
-Substituir a geração de PDF via jsPDF por um PDF gerado via HTML/CSS que abre na janela de impressão do browser. Este modelo é mais flexível, visualmente mais bonito e mais fácil de customizar.
+# Plano: Adicionar Colunas de Método de Coleta e API no Modal de Companhias Monitoradas
 
----
-
-## Mudanças Propostas
-
-### Arquivo: `src/utils/dbMonitorExport.ts`
-
-Refatorar a função `exportDbMonitorPDF` para:
-1. Abrir uma nova janela do browser (`window.open`)
-2. Escrever HTML com CSS inline completo
-3. Usar estilos modernos com cards, cores e ícones via Unicode
-4. Disparar `window.print()` automaticamente
+## Resumo
+Adicionar duas novas colunas ao modal de "Companhias Aéreas Monitoradas" na tela de rastreio aéreo (`/`), visíveis apenas para usuários administradores:
+1. **Método de Coleta** - Indica como os dados são obtidos (scraping de agregador, site oficial com Firecrawl, ou API direta)
+2. **Tem API** - Checkbox indicando se a companhia tem integração direta (sem Firecrawl)
 
 ---
 
-## Design do Novo PDF (HTML)
+## Alterações
 
-### Estrutura Visual
+### 1. Atualizar estrutura de dados das companhias monitoradas
 
-```text
-┌────────────────────────────────────────────────────────────┐
-│ [FAIXA AMARELA DACHSER]                                    │
-│ RELATÓRIO DE MONITORAMENTO DE DADOS                        │
-│ Sistema Z3US.AI                                             │
-│ Gerado em: 02/02/2026 às 09:37                              │
-└────────────────────────────────────────────────────────────┘
+**Arquivo:** `src/pages/Index.tsx` (linhas 1346-1396)
 
-┌────────────────────────────────────────────────────────────┐
-│ RESUMO EXECUTIVO                                            │
-│ ┌──────────────────┐  ┌──────────────────┐                 │
-│ │ Processados 24h  │  │ Situação Geral   │                 │
-│ │ +5.128           │  │ ● 1 OK           │                 │
-│ │                  │  │ ● 0 Atenção      │                 │
-│ │                  │  │ ● 3 Crítico      │                 │
-│ └──────────────────┘  └──────────────────┘                 │
-└────────────────────────────────────────────────────────────┘
-
-┌────────────────────────────────────────────────────────────┐
-│ SITUAÇÃO POR ÁREA                                           │
-│ ┌─────────────────────────────────────────────────────────┐│
-│ │ Dados Operacionais                    ● Ação Necessária ││
-│ │ Última atualização: há 13 horas       +3 processados    ││
-│ └─────────────────────────────────────────────────────────┘│
-│ ┌─────────────────────────────────────────────────────────┐│
-│ │ Notas Fiscais                         ● Ação Necessária ││
-│ │ Última atualização: há 9 horas        +60 processados   ││
-│ └─────────────────────────────────────────────────────────┘│
-│ ... (outras áreas)                                          │
-└────────────────────────────────────────────────────────────┘
-
-┌────────────────────────────────────────────────────────────┐
-│ O QUE CADA ÁREA REPRESENTA                                  │
-│ • Dados Operacionais: Processos de importação e exportação │
-│ • Notas Fiscais: Dados para régua de cobrança              │
-│ • Vouchers/SPO: Solicitações de pagamento                  │
-│ • Baixas Financeiras: Comprovantes processados             │
-└────────────────────────────────────────────────────────────┘
-
-┌────────────────────────────────────────────────────────────┐
-│ LEGENDA DE STATUS                                           │
-│ 🟢 Atualizado - Dados recebidos nos últimos 5 minutos      │
-│ 🟡 Verificar - Sem atualização entre 5 e 60 minutos        │
-│ 🔴 Ação Necessária - Sem atualização há mais de 60 minutos │
-└────────────────────────────────────────────────────────────┘
-```
-
----
-
-## Seção Técnica
-
-### CSS do Novo PDF
-
-```css
-body { 
-  font-family: Arial, sans-serif; 
-  padding: 40px; 
-  color: #333;
-  max-width: 800px;
-  margin: 0 auto;
-}
-
-.header { 
-  background: #FFC800; 
-  color: #1E1E23;
-  padding: 20px;
-  margin: -40px -40px 30px -40px;
-}
-
-.section-title {
-  font-weight: bold;
-  font-size: 14px;
-  margin: 25px 0 15px 0;
-  background: #f3f4f6;
-  padding: 10px 15px;
-  border-left: 4px solid #FFC800;
-}
-
-.area-card {
-  border: 1px solid #ddd;
-  border-radius: 8px;
-  padding: 15px;
-  margin-bottom: 10px;
-  display: flex;
-  justify-content: space-between;
-}
-
-.status-badge {
-  padding: 4px 12px;
-  border-radius: 12px;
-  font-size: 12px;
-  font-weight: bold;
-}
-
-.status-green { background: #dcfce7; color: #166534; }
-.status-yellow { background: #fef3c7; color: #92400e; }
-.status-red { background: #fee2e2; color: #991b1b; }
-```
-
-### Estrutura da Função
+Modificar o array `monitoredAirlines` dentro do `useMemo` para incluir os novos campos:
 
 ```typescript
-export function exportDbMonitorPDF(stats: DatabaseStats): string {
-  const { areas, summary } = transformToExportable(stats);
-  
-  // Abrir janela de impressão
-  const printWindow = window.open("", "_blank");
-  if (!printWindow) {
-    throw new Error("Permita pop-ups para gerar o PDF");
-  }
-  
-  // Escrever HTML
-  printWindow.document.write(`
-    <html>
-      <head>
-        <title>Relatório de Monitoramento</title>
-        <style>...</style>
-      </head>
-      <body>
-        <!-- Header -->
-        <!-- Summary Cards -->
-        <!-- Area Cards -->
-        <!-- Description Section -->
-        <!-- Legend Section -->
-      </body>
-    </html>
-  `);
-  
-  // Imprimir
-  setTimeout(() => {
-    printWindow.print();
-  }, 300);
-  
-  return fileName;
+interface MonitoredAirline {
+  code: string;
+  name: string;
+  method: 'aggregator' | 'official_scraping' | 'direct_api';
+  hasDirectApi: boolean;
 }
+```
+
+Mapeamento baseado na sua análise:
+
+| Código | Método | Tem API |
+|--------|--------|---------|
+| 001, 014, 016, 074, 057, 083, 112, 118, 147, 160, 615, 827, 865, 999 | aggregator | Não |
+| 996 | aggregator | Não |
+| 023, 139 | official_scraping | Não |
+| 020, 045, 047, 055, 075, 125, 127, 157, 172, 176, 202, 235, 318, 369, 549, 577, 605, 724, 729, 805 | direct_api | Sim |
+
+---
+
+### 2. Adicionar verificação de administrador
+
+**Arquivo:** `src/pages/Index.tsx`
+
+Adicionar um `useMemo` para verificar se o usuário logado é admin:
+
+```typescript
+const isAdmin = useMemo(() => {
+  try {
+    const storedUser = localStorage.getItem("user") || localStorage.getItem("dachser_user");
+    if (storedUser) {
+      const parsed = JSON.parse(storedUser);
+      return parsed.is_admin === 1 || parsed.is_admin === "1" || parsed.is_admin === true;
+    }
+  } catch {
+    return false;
+  }
+  return false;
+}, []);
 ```
 
 ---
 
-## Vantagens do Novo Modelo
+### 3. Atualizar o Modal com as novas colunas
 
-| jsPDF (Atual) | HTML/CSS (Novo) |
-|---------------|-----------------|
-| Layout rígido | Layout flexível com CSS |
-| Difícil ajustar | Fácil customizar cores/espaços |
-| Texto pode cortar | Texto ajusta automaticamente |
-| Sem suporte a emojis | Suporta emojis Unicode |
-| Cards retangulares básicos | Cards arredondados, sombras |
+**Arquivo:** `src/pages/Index.tsx` (linhas 2836-2879)
+
+Modificar o modal para:
+
+- Adicionar cabeçalhos condicionais (apenas admin):
+  - "Método de Coleta"
+  - "API Direta"
+
+- Adicionar células condicionais com:
+  - Badge colorido para o método (Ex: verde para API direta, amarelo para scraping, laranja para agregador)
+  - Checkbox desabilitado mostrando se tem API ou não
+
+```text
+┌─────────┬────────────────────────┬──────────────────────┬───────────┐
+│ Código  │ Companhia Aérea        │ Método de Coleta     │ API Direta│
+├─────────┼────────────────────────┼──────────────────────┼───────────┤
+│ 001     │ American Airlines      │ 🟠 Agregador         │    ☐      │
+│ 020     │ Lufthansa Cargo        │ 🟢 API Direta        │    ☑      │
+│ 023     │ FedEx Express          │ 🟡 Site Oficial      │    ☐      │
+└─────────┴────────────────────────┴──────────────────────┴───────────┘
+```
 
 ---
 
-## Arquivos a Modificar
+## Detalhes Técnicos
 
-1. **`src/utils/dbMonitorExport.ts`**
-   - Refatorar `exportDbMonitorPDF` para usar HTML/CSS
-   - Manter `exportDbMonitorExcel` inalterado
+### Labels para Métodos de Coleta:
+- `aggregator` → "Agregador + Firecrawl" (badge laranja)
+- `official_scraping` → "Site Oficial + Firecrawl" (badge amarelo)
+- `direct_api` → "API/HTML Direto" (badge verde)
+
+### Mapeamento Completo das Companhias:
+
+**Agregador + Firecrawl (14 cias):**
+- 001-American Airlines, 014-Air Canada, 016-United, 074/057-AFKL, 083-SAA, 112-China Cargo, 118-TAAG, 147-Royal Air Maroc, 160-Cathay, 615-DHL Aviation, 827-RUSA, 865-MasAir, 996-Air Europa, 999-Air China
+
+**Site Oficial + Firecrawl (2 cias):**
+- 023-FedEx, 139-Aeromexico
+
+**API/HTML Direto (17 cias):**
+- 020-Lufthansa, 045/549-LATAM, 047-TAP, 055-ITA, 075/125-IAG, 127-GOLLOG, 157-Qatar, 172-Cargolux, 176-Emirates, 235-Turkish, 318-SKY Carga, 369-Atlas Air, 577-Azul, 605-SKY Chile, 724-Swiss, 729/202-Avianca, 805-GSA Force
+
+### Estilo Visual:
+
+- Largura do modal: aumentar de `max-w-2xl` para `max-w-4xl` (admin) ou manter `max-w-2xl` (usuário comum)
+- Badge de método com cores:
+  - Verde (`bg-emerald-500/20 text-emerald-400`): API Direta
+  - Amarelo (`bg-yellow-500/20 text-yellow-400`): Site Oficial
+  - Laranja (`bg-orange-500/20 text-orange-400`): Agregador
+- Checkbox desabilitado com estilo visual de check/uncheck
 
 ---
 
-## Comportamento Esperado
+## Resumo das Alterações de Arquivos
 
-1. Usuário clica em "PDF"
-2. Abre nova janela do browser
-3. HTML renderizado com CSS profissional
-4. Dialog de impressão abre automaticamente
-5. Usuário pode salvar como PDF ou imprimir
+| Arquivo | Tipo de Alteração |
+|---------|-------------------|
+| `src/pages/Index.tsx` | Modificar `monitoredAirlinesData`, adicionar `isAdmin`, expandir modal UI |
+
