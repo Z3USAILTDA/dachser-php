@@ -10,8 +10,9 @@ interface ModalBreakdown {
   lastUpdate: string | null;
   totalRecords: number;
   recentInserts: number;
+  uniqueInserts?: number;
   breakdown: {
-    [key: string]: { lastUpdate: string | null; count: number; recentInserts: number };
+    [key: string]: { lastUpdate: string | null; count: number; recentInserts: number; uniqueInserts?: number };
   };
 }
 
@@ -19,6 +20,7 @@ interface TableStats {
   lastUpdate: string | null;
   totalRecords: number;
   recentInserts: number;
+  uniqueInserts?: number;
   applications: string[];
   byModal?: {
     AIR: ModalBreakdown;
@@ -46,10 +48,11 @@ interface ExportableArea {
   lastUpdateFormatted: string;
   totalRecords: number;
   recentInserts: number;
+  uniqueInserts: number;
   applications: string[];
   details?: {
-    air?: { total: number; inserts: number; breakdown?: Record<string, number> };
-    sea?: { total: number; inserts: number; breakdown?: Record<string, number> };
+    air?: { total: number; inserts: number; uniqueInserts?: number; breakdown?: Record<string, { count: number; uniqueInserts?: number }> };
+    sea?: { total: number; inserts: number; uniqueInserts?: number; breakdown?: Record<string, { count: number; uniqueInserts?: number }> };
   };
 }
 
@@ -59,6 +62,7 @@ interface ExportableSummary {
   warningCount: number;
   criticalCount: number;
   totalInserts24h: number;
+  totalUniqueInserts24h: number;
   areasCount: number;
 }
 
@@ -160,6 +164,7 @@ function transformToExportable(stats: DatabaseStats): { areas: ExportableArea[];
       lastUpdateFormatted: formatDateTime(data.lastUpdate),
       totalRecords: data.totalRecords,
       recentInserts: data.recentInserts,
+      uniqueInserts: data.uniqueInserts || 0,
       applications: data.applications.map((app) => APPLICATION_LABELS[app] || app),
     };
 
@@ -169,15 +174,17 @@ function transformToExportable(stats: DatabaseStats): { areas: ExportableArea[];
         air: {
           total: data.byModal.AIR.totalRecords,
           inserts: data.byModal.AIR.recentInserts,
+          uniqueInserts: data.byModal.AIR.uniqueInserts || 0,
           breakdown: Object.fromEntries(
-            Object.entries(data.byModal.AIR.breakdown).map(([k, v]) => [k, v.count])
+            Object.entries(data.byModal.AIR.breakdown).map(([k, v]) => [k, { count: v.count, uniqueInserts: v.uniqueInserts || 0 }])
           ),
         },
         sea: {
           total: data.byModal.SEA.totalRecords,
           inserts: data.byModal.SEA.recentInserts,
+          uniqueInserts: data.byModal.SEA.uniqueInserts || 0,
           breakdown: Object.fromEntries(
-            Object.entries(data.byModal.SEA.breakdown).map(([k, v]) => [k, v.count])
+            Object.entries(data.byModal.SEA.breakdown).map(([k, v]) => [k, { count: v.count, uniqueInserts: v.uniqueInserts || 0 }])
           ),
         },
       };
@@ -192,6 +199,7 @@ function transformToExportable(stats: DatabaseStats): { areas: ExportableArea[];
     warningCount: areas.filter((a) => a.statusColor === "yellow").length,
     criticalCount: areas.filter((a) => a.statusColor === "red").length,
     totalInserts24h: areas.reduce((sum, a) => sum + a.recentInserts, 0),
+    totalUniqueInserts24h: areas.reduce((sum, a) => sum + a.uniqueInserts, 0),
     areasCount: areas.length,
   };
 
@@ -223,7 +231,7 @@ export function exportDbMonitorPDF(stats: DatabaseStats): string {
       </div>
       <div class="area-right">
         <div class="status-badge ${getStatusBadgeClass(area.statusColor)}">${area.status}</div>
-        <div class="area-inserts">+${formatNumber(area.recentInserts)} processados</div>
+        <div class="area-inserts">+${formatNumber(area.recentInserts)} processados${area.uniqueInserts > 0 ? ` <span class="unique-badge">★${formatNumber(area.uniqueInserts)} únicos</span>` : ""}</div>
       </div>
     </div>
   `).join("");
@@ -396,6 +404,19 @@ export function exportDbMonitorPDF(stats: DatabaseStats): string {
             margin-top: 6px;
           }
           
+          .unique-badge {
+            color: #f59e0b;
+            font-weight: 600;
+            margin-left: 8px;
+          }
+          
+          .summary-unique {
+            font-size: 13px;
+            color: #f59e0b;
+            font-weight: 500;
+            margin-top: 6px;
+          }
+          
           /* Status Badges */
           .status-badge {
             display: inline-block;
@@ -501,6 +522,7 @@ export function exportDbMonitorPDF(stats: DatabaseStats): string {
             <div class="summary-card">
               <div class="summary-label">Processados nas últimas 24h</div>
               <div class="summary-value">+${formatNumber(summary.totalInserts24h)}</div>
+              <div class="summary-unique">★${formatNumber(summary.totalUniqueInserts24h)} novos únicos (MAWB+HAWB inéditos)</div>
             </div>
             
             <div class="summary-card">
@@ -707,35 +729,37 @@ export function exportDbMonitorExcel(stats: DatabaseStats): string {
   // ===== BUILD DATA =====
   const data: (string | number)[][] = [
     // Header Banner (rows 1-2)
-    ["RELATÓRIO DE MONITORAMENTO DE DADOS", "", "", "", ""],
-    [`Sistema Z3US.AI - DACHSER  •  Gerado em: ${format(now, "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })}`, "", "", "", ""],
+    ["RELATÓRIO DE MONITORAMENTO DE DADOS", "", "", "", "", ""],
+    [`Sistema Z3US.AI - DACHSER  •  Gerado em: ${format(now, "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })}`, "", "", "", "", ""],
     // Empty row
-    ["", "", "", "", ""],
+    ["", "", "", "", "", ""],
     // Summary Section Title (row 4)
-    ["  RESUMO EXECUTIVO", "", "", "", ""],
+    ["  RESUMO EXECUTIVO", "", "", "", "", ""],
     // Empty row
-    ["", "", "", "", ""],
-    // Summary Cards (rows 6-7)
-    ["Processados nas últimas 24h", "", "Situação das Áreas", "", ""],
-    [`+${formatNumber(summary.totalInserts24h)}`, "", `${summary.healthyCount} OK  •  ${summary.warningCount} Atenção  •  ${summary.criticalCount} Crítico`, "", ""],
+    ["", "", "", "", "", ""],
+    // Summary Cards (rows 6-8)
+    ["Processados nas últimas 24h", "", "Situação das Áreas", "", "", ""],
+    [`+${formatNumber(summary.totalInserts24h)}`, "", `${summary.healthyCount} OK  •  ${summary.warningCount} Atenção  •  ${summary.criticalCount} Crítico`, "", "", ""],
+    [`★${formatNumber(summary.totalUniqueInserts24h)} novos únicos (MAWB+HAWB inéditos)`, "", "", "", "", ""],
     // Empty row
-    ["", "", "", "", ""],
-    // Areas Section Title (row 9)
-    ["  SITUAÇÃO POR ÁREA", "", "", "", ""],
-    // Table Header (row 10)
-    ["Área", "Status", "Última Atualização", "Processados (24h)", ""],
-    // Area rows (rows 11-14)
+    ["", "", "", "", "", ""],
+    // Areas Section Title (row 10)
+    ["  SITUAÇÃO POR ÁREA", "", "", "", "", ""],
+    // Table Header (row 11)
+    ["Área", "Status", "Última Atualização", "Processados (24h)", "Novos Únicos (24h)", ""],
+    // Area rows (rows 12-15)
     ...areas.map((area) => [
       area.name,
       area.status,
       area.lastUpdateFormatted,
       `+${formatNumber(area.recentInserts)}`,
+      area.uniqueInserts > 0 ? `★${formatNumber(area.uniqueInserts)}` : "-",
       "",
     ]),
     // Empty row
-    ["", "", "", "", ""],
+    ["", "", "", "", "", ""],
     // Description Section Title
-    ["  O QUE CADA ÁREA REPRESENTA", "", "", "", ""],
+    ["  O QUE CADA ÁREA REPRESENTA", "", "", "", "", ""],
     // Descriptions
     ...areas.map((area) => [
       `• ${area.name}`,
@@ -743,15 +767,17 @@ export function exportDbMonitorExcel(stats: DatabaseStats): string {
       "",
       "",
       "",
+      "",
     ]),
     // Empty row
-    ["", "", "", "", ""],
+    ["", "", "", "", "", ""],
     // Legend Section Title
-    ["  LEGENDA DE STATUS", "", "", "", ""],
+    ["  LEGENDA", "", "", "", "", ""],
     // Legend items
-    ["Atualizado", "Dados recebidos nos últimos 5 minutos", "", "", ""],
-    ["Verificar", "Sem atualização entre 5 e 60 minutos", "", "", ""],
-    ["Ação Necessária", "Sem atualização há mais de 60 minutos", "", "", ""],
+    ["Atualizado", "Dados recebidos nos últimos 5 minutos", "", "", "", ""],
+    ["Verificar", "Sem atualização entre 5 e 60 minutos", "", "", "", ""],
+    ["Ação Necessária", "Sem atualização há mais de 60 minutos", "", "", "", ""],
+    ["★ Novos Únicos", "Combinações MAWB+HAWB que nunca existiram antes nas últimas 24h", "", "", "", ""],
   ];
 
   const ws = XLSX.utils.aoa_to_sheet(data);
@@ -759,26 +785,41 @@ export function exportDbMonitorExcel(stats: DatabaseStats): string {
   // ===== APPLY STYLES =====
   
   // Header banner (rows 1-2)
-  ["A1", "B1", "C1", "D1", "E1"].forEach(cell => { if (ws[cell]) ws[cell].s = headerBannerStyle; });
-  ["A2", "B2", "C2", "D2", "E2"].forEach(cell => { if (ws[cell]) ws[cell].s = headerSubtitleStyle; });
+  ["A1", "B1", "C1", "D1", "E1", "F1"].forEach(cell => { if (ws[cell]) ws[cell].s = headerBannerStyle; });
+  ["A2", "B2", "C2", "D2", "E2", "F2"].forEach(cell => { if (ws[cell]) ws[cell].s = headerSubtitleStyle; });
   
   // Summary section title (row 4)
-  ["A4", "B4", "C4", "D4", "E4"].forEach(cell => { if (ws[cell]) ws[cell].s = sectionTitleStyle; });
+  ["A4", "B4", "C4", "D4", "E4", "F4"].forEach(cell => { if (ws[cell]) ws[cell].s = sectionTitleStyle; });
   
-  // Summary cards (rows 6-7)
+  // Summary cards (rows 6-8)
   ["A6", "B6"].forEach(cell => { if (ws[cell]) ws[cell].s = summaryCardStyle; });
   ["C6", "D6"].forEach(cell => { if (ws[cell]) ws[cell].s = summaryCardStyle; });
   if (ws["A7"]) ws["A7"].s = summaryValueStyle;
   if (ws["C7"]) ws["C7"].s = { ...summaryCardStyle, font: { sz: 11, color: { rgb: darkText } } };
+  // Unique inserts row
+  const uniqueStyle = { font: { bold: true, sz: 12, color: { rgb: "F59E0B" } }, alignment: { horizontal: "left", vertical: "center" } };
+  if (ws["A8"]) ws["A8"].s = uniqueStyle;
   
-  // Areas section title (row 9)
-  ["A9", "B9", "C9", "D9", "E9"].forEach(cell => { if (ws[cell]) ws[cell].s = sectionTitleStyle; });
+  // Areas section title (row 10)
+  ["A10", "B10", "C10", "D10", "E10", "F10"].forEach(cell => { if (ws[cell]) ws[cell].s = sectionTitleStyle; });
   
-  // Table header (row 10)
-  ["A10", "B10", "C10", "D10"].forEach(cell => { if (ws[cell]) ws[cell].s = tableHeaderStyle; });
+  // Table header (row 11)
+  ["A11", "B11", "C11", "D11", "E11"].forEach(cell => { if (ws[cell]) ws[cell].s = tableHeaderStyle; });
   
-  // Area rows (rows 11-14)
-  const areaStartRow = 11;
+  // Unique inserts style
+  const uniqueInsertsStyle = {
+    font: { bold: true, sz: 10, color: { rgb: "F59E0B" } },
+    alignment: { horizontal: "center", vertical: "center" },
+    border: {
+      top: { style: "thin", color: { rgb: borderColor } },
+      bottom: { style: "thin", color: { rgb: borderColor } },
+      left: { style: "thin", color: { rgb: borderColor } },
+      right: { style: "thin", color: { rgb: borderColor } },
+    },
+  };
+  
+  // Area rows (rows 12-15)
+  const areaStartRow = 12;
   for (let i = 0; i < areas.length; i++) {
     const row = areaStartRow + i;
     const area = areas[i];
@@ -798,11 +839,14 @@ export function exportDbMonitorExcel(stats: DatabaseStats): string {
     
     // Inserts
     if (ws[`D${row}`]) ws[`D${row}`].s = insertsStyle;
+    
+    // Unique inserts
+    if (ws[`E${row}`]) ws[`E${row}`].s = uniqueInsertsStyle;
   }
   
   // Description section title
   const descTitleRow = areaStartRow + areas.length + 1;
-  ["A", "B", "C", "D", "E"].forEach(col => {
+  ["A", "B", "C", "D", "E", "F"].forEach(col => {
     const cell = `${col}${descTitleRow}`;
     if (ws[cell]) ws[cell].s = sectionTitleStyle;
   });
@@ -817,19 +861,20 @@ export function exportDbMonitorExcel(stats: DatabaseStats): string {
   
   // Legend section title
   const legendTitleRow = descStartRow + areas.length + 1;
-  ["A", "B", "C", "D", "E"].forEach(col => {
+  ["A", "B", "C", "D", "E", "F"].forEach(col => {
     const cell = `${col}${legendTitleRow}`;
     if (ws[cell]) ws[cell].s = sectionTitleStyle;
   });
   
-  // Legend rows
+  // Legend rows (now 4 items including unique)
   const legendStartRow = legendTitleRow + 1;
-  for (let i = 0; i < 3; i++) {
+  for (let i = 0; i < 4; i++) {
     const row = legendStartRow + i;
     if (ws[`A${row}`]) {
       if (i === 0) ws[`A${row}`].s = { ...legendLabelStyle, font: { bold: true, sz: 10, color: { rgb: "166534" } } };
       else if (i === 1) ws[`A${row}`].s = { ...legendLabelStyle, font: { bold: true, sz: 10, color: { rgb: "92400E" } } };
-      else ws[`A${row}`].s = { ...legendLabelStyle, font: { bold: true, sz: 10, color: { rgb: "991B1B" } } };
+      else if (i === 2) ws[`A${row}`].s = { ...legendLabelStyle, font: { bold: true, sz: 10, color: { rgb: "991B1B" } } };
+      else ws[`A${row}`].s = { ...legendLabelStyle, font: { bold: true, sz: 10, color: { rgb: "F59E0B" } } };
     }
     if (ws[`B${row}`]) ws[`B${row}`].s = legendDescStyle;
   }
@@ -837,10 +882,11 @@ export function exportDbMonitorExcel(stats: DatabaseStats): string {
   // ===== COLUMN WIDTHS =====
   ws["!cols"] = [
     { wch: 28 },  // A - Area names
-    { wch: 45 },  // B - Status/Description
+    { wch: 50 },  // B - Status/Description
     { wch: 25 },  // C - Last update
     { wch: 18 },  // D - Inserts
-    { wch: 5 },   // E - Spacer
+    { wch: 18 },  // E - Unique inserts
+    { wch: 5 },   // F - Spacer
   ];
   
   // ===== ROW HEIGHTS =====
@@ -857,20 +903,21 @@ export function exportDbMonitorExcel(stats: DatabaseStats): string {
   // ===== MERGES =====
   ws["!merges"] = [
     // Header banner
-    { s: { r: 0, c: 0 }, e: { r: 0, c: 4 } },
-    { s: { r: 1, c: 0 }, e: { r: 1, c: 4 } },
+    { s: { r: 0, c: 0 }, e: { r: 0, c: 5 } },
+    { s: { r: 1, c: 0 }, e: { r: 1, c: 5 } },
     // Section titles
-    { s: { r: 3, c: 0 }, e: { r: 3, c: 4 } },
-    { s: { r: 8, c: 0 }, e: { r: 8, c: 4 } },
+    { s: { r: 3, c: 0 }, e: { r: 3, c: 5 } },
+    { s: { r: 9, c: 0 }, e: { r: 9, c: 5 } },
     // Summary cards
     { s: { r: 5, c: 0 }, e: { r: 5, c: 1 } },
     { s: { r: 6, c: 0 }, e: { r: 6, c: 1 } },
-    { s: { r: 5, c: 2 }, e: { r: 5, c: 4 } },
-    { s: { r: 6, c: 2 }, e: { r: 6, c: 4 } },
+    { s: { r: 7, c: 0 }, e: { r: 7, c: 1 } },  // Unique inserts row
+    { s: { r: 5, c: 2 }, e: { r: 5, c: 5 } },
+    { s: { r: 6, c: 2 }, e: { r: 6, c: 5 } },
     // Description section title
-    { s: { r: descTitleRow - 1, c: 0 }, e: { r: descTitleRow - 1, c: 4 } },
+    { s: { r: descTitleRow - 1, c: 0 }, e: { r: descTitleRow - 1, c: 5 } },
     // Legend section title
-    { s: { r: legendTitleRow - 1, c: 0 }, e: { r: legendTitleRow - 1, c: 4 } },
+    { s: { r: legendTitleRow - 1, c: 0 }, e: { r: legendTitleRow - 1, c: 5 } },
   ];
 
   XLSX.utils.book_append_sheet(wb, ws, "Monitoramento");
