@@ -30,6 +30,7 @@ import {
   Settings,
   Clock,
   Info,
+  ArrowDownUp,
 } from "lucide-react";
 import { EmailClienteRegrasDialog } from "@/components/air/EmailClienteRegrasDialog";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -380,6 +381,7 @@ interface AWBData {
   fromStatusAereo?: boolean;
   data_atraso?: string | null;
   tipo_servico?: string;
+  tipo_processo?: string; // AIR IMPORT ou AIR EXPORT
   arr_check_count?: number; // Contador de verificações em ARR
 }
 
@@ -398,6 +400,7 @@ const Index = () => {
   const [filterAirline, setFilterAirline] = useState("all");
   const [filterAnalyst, setFilterAnalyst] = useState("all");
   const [filterService, setFilterService] = useState("all");
+  const [filterProcessType, setFilterProcessType] = useState("all");
   const [sortAnalyst, setSortAnalyst] = useState<"asc" | "desc" | null>(null);
   const [sortAwb, setSortAwb] = useState<"asc" | "desc" | null>(null);
   const [sortClient, setSortClient] = useState<"asc" | "desc" | null>(null);
@@ -1840,6 +1843,7 @@ const Index = () => {
       const matchesAirline = filterAirline === "all" || awb.airline_code === filterAirline;
       const matchesAnalyst = filterAnalyst === "all" || awb.nome_analista === filterAnalyst;
       const matchesService = filterService === "all" || awb.tipo_servico === filterService;
+      const matchesProcessType = filterProcessType === "all" || awb.tipo_processo === filterProcessType;
 
       // Only show AWBs with these specific status codes
       const allowedStatuses = [
@@ -1899,7 +1903,7 @@ const Index = () => {
         // Se não tem arr_datetime ou ainda não passaram 48h, mantém na tabela
       }
 
-      return matchesSearch && matchesAirline && matchesAnalyst && matchesService && isAllowed;
+      return matchesSearch && matchesAirline && matchesAnalyst && matchesService && matchesProcessType && isAllowed;
     });
 
     // Filtrar AWBs excluídos manualmente
@@ -2351,6 +2355,23 @@ const Index = () => {
                             {service}
                           </SelectItem>
                         ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="flex items-center gap-1.5">
+                  <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-[rgba(0,0,0,.5)] border border-[rgba(255,255,255,.22)]">
+                    <ArrowDownUp className="h-3 w-3 text-[#ffc800]" />
+                    <span className="text-[0.68rem] tracking-[0.1em] uppercase text-[#aaaaaa]">Impo/Expo</span>
+                  </div>
+                  <Select value={filterProcessType} onValueChange={setFilterProcessType}>
+                    <SelectTrigger className="h-8 w-[150px] rounded-full bg-[#13141a] border border-[rgba(255,255,255,.14)] text-[0.78rem]">
+                      <SelectValue placeholder="Todos" />
+                    </SelectTrigger>
+                    <SelectContent className="bg-card border border-border z-50">
+                      <SelectItem value="all">Todos</SelectItem>
+                      <SelectItem value="AIR IMPORT">Importação</SelectItem>
+                      <SelectItem value="AIR EXPORT">Exportação</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
