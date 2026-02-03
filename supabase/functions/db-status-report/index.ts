@@ -648,7 +648,7 @@ function generateEmailHtml(stats: TableStats[], timestamp: Date): string {
                             Alerta automático do sistema de monitoramento
                           </p>
                           <p style="margin: 8px 0 0 0; font-size: 12px; color: #666666; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
-                            Z3US.AI • Enviado a cada 30 minutos
+                            Z3US.AI • Enviado a cada 1 hora
                           </p>
                         </td>
                       </tr>

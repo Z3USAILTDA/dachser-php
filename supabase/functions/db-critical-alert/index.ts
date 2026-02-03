@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { Client } from "https://deno.land/x/mysql@v2.12.1/mod.ts";
 import { Resend } from "https://esm.sh/resend@2.0.0";
+import { jsPDF } from "https://esm.sh/jspdf@2.5.1";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -31,7 +32,13 @@ const CRITICAL_THRESHOLD_MINUTES = 60;
 const REALERT_INTERVAL_MINUTES = 120; // 2 hours - must be > cron interval to avoid race conditions
 
 const TEST_RECIPIENTS = ['larissa@z3us.ai'];
-const PRODUCTION_RECIPIENTS = ['larissa@z3us.ai', 'rodrigo@z3us.ai'];
+const PRODUCTION_RECIPIENTS = [
+  'larissa@z3us.ai',
+  'rodrigo@z3us.ai',
+  'ana.tozzo@dachser.com',
+  'danilo.pedroso@dachser.com',
+  'herbert@z3us.ai'
+];
 
 function sleep(ms: number): Promise<void> {
   return new Promise(resolve => setTimeout(resolve, ms));
@@ -87,7 +94,215 @@ function formatMinutes(minutes: number): string {
   return mins > 0 ? `${hours}h ${mins}min` : `${hours}h`;
 }
 
+function formatDateTime(date: Date): string {
+  return date.toLocaleString('pt-BR', { 
+    timeZone: 'America/Sao_Paulo',
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit'
+  });
+}
+
+function formatNumber(num: number): string {
+  return num.toLocaleString('pt-BR');
+}
+
+function getStatusLabel(status: 'healthy' | 'warning' | 'critical'): string {
+  switch (status) {
+    case 'healthy': return 'Atualizado';
+    case 'warning': return 'Verificar';
+    case 'critical': return 'Ação Necessária';
+  }
+}
+
 const LOGO_URL = 'https://finktakbjcfmurqeiubz.supabase.co/storage/v1/object/public/maritime-files/email-assets/logo-z3us.png';
+
+// ========== PDF GENERATION FOR CRITICAL ALERT ==========
+function generateCriticalAlertPdf(criticalTables: TableStats[], timestamp: Date): Uint8Array {
+  const formattedDate = formatDateTime(timestamp);
+
+  const doc = new jsPDF({
+    orientation: 'portrait',
+    unit: 'mm',
+    format: 'a4'
+  });
+
+  const pageWidth = doc.internal.pageSize.getWidth();
+  const pageHeight = doc.internal.pageSize.getHeight();
+  const margin = 15;
+  let y = 0;
+
+  // Colors
+  const criticalRed = [239, 68, 68];
+  const darkText = [30, 30, 35];
+  const grayText = [107, 114, 128];
+  const yellowColor = [245, 184, 67];
+  const lightGray = [243, 244, 246];
+  const borderGray = [229, 231, 235];
+
+  const setColor = (rgb: number[], type: 'fill' | 'text' | 'draw' = 'fill') => {
+    if (type === 'fill') doc.setFillColor(rgb[0], rgb[1], rgb[2]);
+    else if (type === 'text') doc.setTextColor(rgb[0], rgb[1], rgb[2]);
+    else doc.setDrawColor(rgb[0], rgb[1], rgb[2]);
+  };
+
+  // ========== HEADER ==========
+  setColor(criticalRed, 'fill');
+  doc.rect(0, 0, pageWidth, 35, 'F');
+
+  doc.setTextColor(255, 255, 255);
+  doc.setFontSize(18);
+  doc.setFont('helvetica', 'bold');
+  doc.text('🚨 ALERTA CRÍTICO - BANCO DE DADOS', margin, 15);
+
+  doc.setFontSize(11);
+  doc.setFont('helvetica', 'normal');
+  doc.text('Sistema Z3US.AI - DACHSER', margin, 22);
+
+  doc.setFontSize(9);
+  doc.text(`Gerado em: ${formattedDate}`, margin, 29);
+
+  y = 45;
+
+  // ========== RESUMO ==========
+  setColor(lightGray, 'fill');
+  setColor(criticalRed, 'draw');
+  doc.rect(margin, y, pageWidth - margin * 2, 10, 'F');
+  doc.setLineWidth(0.8);
+  doc.line(margin, y, margin, y + 10);
+  
+  setColor(darkText, 'text');
+  doc.setFontSize(11);
+  doc.setFont('helvetica', 'bold');
+  doc.text('TABELAS EM ESTADO CRÍTICO', margin + 5, y + 7);
+  y += 18;
+
+  // Warning box
+  setColor([254, 226, 226], 'fill');
+  setColor(criticalRed, 'draw');
+  doc.setLineWidth(0.5);
+  doc.roundedRect(margin, y, pageWidth - margin * 2, 22, 3, 3, 'FD');
+
+  setColor(criticalRed, 'text');
+  doc.setFontSize(12);
+  doc.setFont('helvetica', 'bold');
+  doc.text(`${criticalTables.length} tabela${criticalTables.length > 1 ? 's' : ''} sem atualização há mais de 60 minutos`, margin + 8, y + 9);
+
+  setColor([153, 27, 27], 'text');
+  doc.setFontSize(10);
+  doc.setFont('helvetica', 'normal');
+  doc.text('Ação imediata necessária para garantir a continuidade dos processos.', margin + 8, y + 17);
+
+  y += 32;
+
+  // ========== TABLE DETAILS ==========
+  setColor(lightGray, 'fill');
+  setColor(criticalRed, 'draw');
+  doc.rect(margin, y, pageWidth - margin * 2, 10, 'F');
+  doc.setLineWidth(0.8);
+  doc.line(margin, y, margin, y + 10);
+  
+  setColor(darkText, 'text');
+  doc.setFontSize(11);
+  doc.setFont('helvetica', 'bold');
+  doc.text('DETALHES DAS TABELAS AFETADAS', margin + 5, y + 7);
+  y += 16;
+
+  // Table header
+  setColor(borderGray, 'draw');
+  doc.setLineWidth(0.3);
+  doc.roundedRect(margin, y, pageWidth - margin * 2, 10, 2, 2, 'S');
+
+  setColor(grayText, 'text');
+  doc.setFontSize(9);
+  doc.setFont('helvetica', 'bold');
+  doc.text('TABELA', margin + 5, y + 7);
+  doc.text('SEM ATUALIZAÇÃO', pageWidth / 2, y + 7, { align: 'center' });
+  doc.text('APLICAÇÕES', pageWidth - margin - 5, y + 7, { align: 'right' });
+  y += 14;
+
+  // Table rows
+  criticalTables.forEach((table) => {
+    if (y > pageHeight - 40) {
+      doc.addPage();
+      y = 20;
+    }
+
+    setColor(borderGray, 'draw');
+    doc.roundedRect(margin, y, pageWidth - margin * 2, 14, 2, 2, 'S');
+
+    // Red indicator
+    setColor(criticalRed, 'fill');
+    doc.circle(margin + 7, y + 7, 2.5, 'F');
+
+    setColor(darkText, 'text');
+    doc.setFontSize(10);
+    doc.setFont('helvetica', 'bold');
+    doc.text(table.displayName, margin + 14, y + 8);
+
+    setColor(criticalRed, 'text');
+    doc.setFont('helvetica', 'bold');
+    doc.text(formatMinutes(table.minutesSinceUpdate), pageWidth / 2, y + 8, { align: 'center' });
+
+    setColor(yellowColor, 'text');
+    doc.setFontSize(9);
+    doc.setFont('helvetica', 'normal');
+    doc.text(table.applications.join(', '), pageWidth - margin - 5, y + 8, { align: 'right' });
+
+    y += 18;
+  });
+
+  y += 8;
+
+  // ========== RECOMMENDATIONS ==========
+  if (y > pageHeight - 60) {
+    doc.addPage();
+    y = 20;
+  }
+
+  setColor(lightGray, 'fill');
+  setColor(yellowColor, 'draw');
+  doc.rect(margin, y, pageWidth - margin * 2, 10, 'F');
+  doc.setLineWidth(0.8);
+  doc.line(margin, y, margin, y + 10);
+  
+  setColor(darkText, 'text');
+  doc.setFontSize(11);
+  doc.setFont('helvetica', 'bold');
+  doc.text('📋 RECOMENDAÇÕES', margin + 5, y + 7);
+  y += 15;
+
+  const recommendations = [
+    'Verificar conectividade do job de sincronização',
+    'Verificar processos travados no servidor',
+    'Consultar logs do sistema para identificar erros',
+    'Contatar equipe de infraestrutura se necessário'
+  ];
+
+  recommendations.forEach((rec) => {
+    setColor(grayText, 'text');
+    doc.setFontSize(9);
+    doc.setFont('helvetica', 'normal');
+    doc.text(`• ${rec}`, margin + 5, y);
+    y += 6;
+  });
+
+  // ========== FOOTER ==========
+  y = pageHeight - 15;
+  setColor(borderGray, 'draw');
+  doc.setLineWidth(0.3);
+  doc.line(margin, y - 5, pageWidth - margin, y - 5);
+
+  setColor(grayText, 'text');
+  doc.setFontSize(8);
+  doc.setFont('helvetica', 'normal');
+  doc.text('Sistema Z3US.AI • Alerta Crítico de Monitoramento • DACHSER', pageWidth / 2, y, { align: 'center' });
+
+  const pdfOutput = doc.output('arraybuffer');
+  return new Uint8Array(pdfOutput);
+}
 
 function generateCriticalAlertHtml(criticalTables: TableStats[], timestamp: Date): string {
   const formattedDate = timestamp.toLocaleString('pt-BR', { 
@@ -250,7 +465,7 @@ function generateCriticalAlertHtml(criticalTables: TableStats[], timestamp: Date
                             Alerta automático do sistema de monitoramento
                           </p>
                           <p style="margin: 8px 0 0 0; font-size: 12px; color: #666666; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
-                            Z3US.AI • Verificação a cada 30 minutos
+                            Z3US.AI • Verificação a cada 1 hora
                           </p>
                         </td>
                       </tr>
@@ -419,7 +634,14 @@ serve(async (req) => {
 
     // Generate and send email with ALL critical tables
     const now = new Date();
+    const dateStr = now.toISOString().slice(0, 10).replace(/-/g, '');
+    const timeStr = now.toTimeString().slice(0, 5).replace(':', '');
+    
     const emailHtml = generateCriticalAlertHtml(criticalTables, now);
+    
+    // Generate PDF attachment
+    const pdfBuffer = generateCriticalAlertPdf(criticalTables, now);
+    console.log('Generated critical alert PDF buffer length:', pdfBuffer.length);
 
     const resendApiKey = Deno.env.get('RESEND_API_KEY');
     if (!resendApiKey) {
@@ -429,14 +651,26 @@ serve(async (req) => {
     const resend = new Resend(resendApiKey);
 
     const tableNames = criticalTables.map(t => t.displayName).join(', ');
+    
+    // Create attachments array with PDF
+    const attachments = [
+      {
+        filename: `alerta-critico-${dateStr}-${timeStr}.pdf`,
+        content: Array.from(pdfBuffer),
+      },
+    ];
+
+    console.log('Sending critical alert email with attachments:', attachments.map(a => ({ filename: a.filename, contentLength: a.content.length })));
+
     const emailResponse = await resend.emails.send({
       from: 'Z3US Monitor <noreply@hermes.z3us.ai>',
       to: recipients,
       subject: `🚨 ALERTA CRÍTICO - Banco de Dados: ${tableNames}`,
       html: emailHtml,
+      attachments: attachments,
     });
 
-    console.log('Critical alert email sent successfully:', emailResponse);
+    console.log('Critical alert email sent successfully with PDF attachment:', emailResponse);
 
     // Log the alerts to database - only log the NEW critical tables
     for (const table of newCriticalTables) {
