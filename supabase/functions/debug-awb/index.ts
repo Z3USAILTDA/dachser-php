@@ -31,25 +31,25 @@ serve(async (req) => {
       password: dbPassword,
     });
 
-    // Query 1: Check if AWB exists in t_status_aereo
+    // Query 1: Check if AWB/HAWB exists in t_status_aereo (search both columns)
     const statusAereoQuery = `
       SELECT id, awb, hawb, \`último_status\`, arr_datetime, arr_check_count, 
              \`última atualização\`, origem, destino
       FROM ${database}.t_status_aereo 
-      WHERE awb LIKE ?
-      LIMIT 5
+      WHERE awb LIKE ? OR hawb LIKE ?
+      LIMIT 10
     `;
-    const statusAereoRows = await client.query(statusAereoQuery, [`%${awb}%`]);
+    const statusAereoRows = await client.query(statusAereoQuery, [`%${awb}%`, `%${awb}%`]);
 
-    // Query 2: Check if AWB exists in t_master_dados
+    // Query 2: Check if AWB exists in t_master_dados (search mawb AND hawb if exists)
     const masterDadosQuery = `
-      SELECT id, mawb, tipo_processo, data_insert
+      SELECT id, mawb, hawb, tipo_processo, data_insert
       FROM ${database}.t_master_dados 
-      WHERE mawb LIKE ?
+      WHERE mawb LIKE ? OR hawb LIKE ?
       ORDER BY data_insert DESC
-      LIMIT 5
+      LIMIT 10
     `;
-    const masterDadosRows = await client.query(masterDadosQuery, [`%${awb}%`]);
+    const masterDadosRows = await client.query(masterDadosQuery, [`%${awb}%`, `%${awb}%`]);
 
     // Query 3: Check arr_datetime column existence
     const colCheck = await client.query(

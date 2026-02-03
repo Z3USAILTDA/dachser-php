@@ -58,13 +58,9 @@ serve(async (req) => {
       console.log('Column check failed, assuming columns do not exist');
     }
 
-    // Date filter for t_master_dados.data_insert
-    const dateFilter = '2026-01-26';
-
-    // OPTIMIZATION: Use subquery instead of JOIN to avoid full table scan
-    // Step 1: Get MAWBs from t_master_dados for the specific date
-    // Step 2: Use those MAWBs in a WHERE IN clause on t_status_aereo
-    // REGRA: AWBs com "ARR - Destino" permanecem na lista por 5 dias após arr_datetime
+    // REGRA ATUALIZADA: Em vez de data fixa, usar janela de 10 dias para pegar processos recentes
+    // Isso garante que AWBs inseridas após a data antiga (26/01) também apareçam
+    // REGRA: AWBs com "ARR" ou "ARR - Destino" permanecem na lista por 5 dias após arr_datetime
     const baseSelect = `
       SELECT s.id, s.awb, s.hawb, s.destinatário, s.nome_analista, s.email_analista,
              s.email_cliente, s.tipo_servico, s.data_atraso, s.\`última atualização\`,
@@ -73,10 +69,10 @@ serve(async (req) => {
              ${hasArrDatetimeColumn ? 's.arr_datetime' : 'NULL as arr_datetime'}
       FROM ${database}.t_status_aereo s
       WHERE (
-        -- AWBs do dia atual (regra padrão)
+        -- AWBs dos últimos 10 dias (janela deslizante)
         s.awb IN (
-          SELECT m.mawb FROM ${database}.t_master_dados m 
-          WHERE DATE(m.data_insert) = ?
+          SELECT DISTINCT m.mawb FROM ${database}.t_master_dados m 
+          WHERE m.data_insert >= DATE_SUB(NOW(), INTERVAL 10 DAY)
           AND m.tipo_processo IN ('AIR IMPORT', 'AIR EXPORT')
         )
         -- OU AWBs com "ARR" ou "ARR - Destino" que ainda estão dentro dos 5 dias
@@ -97,10 +93,10 @@ serve(async (req) => {
         AND (s.awb LIKE ? OR s.hawb LIKE ? OR s.destinatário LIKE ?)
         ORDER BY s.id DESC
         LIMIT 500`;
-      params = [dateFilter, searchPattern, searchPattern, searchPattern];
+      params = [searchPattern, searchPattern, searchPattern];
     } else {
       query = `${baseSelect} ORDER BY s.id DESC LIMIT 500`;
-      params = [dateFilter];
+      params = [];
     }
 
     console.log(`Executing query: ${query} (hasArrCheckColumn: ${hasArrCheckColumn})`);
