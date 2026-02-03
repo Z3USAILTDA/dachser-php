@@ -1,159 +1,79 @@
 
-# Plano: Adicionar Prefixos Não-Padrão no Modal de Armadores Mapeados
+# Plano: Alterar Frequência do Cron CCT de 10 para 1 Minuto
 
 ## Resumo
-Expandir o modal "Armadores Mapeados" para incluir duas novas seções além da já existente seção LCL:
-1. **Prefixos DACHSER Internos** - Variantes do SSZ e outros prefixos internos
-2. **Prefixos Numéricos** - MBLs que não seguem o padrão SCAC (apenas números)
-3. **Formato com Barra** - MBLs no formato `ORIGEM/DESTINO/NUMERO`
+Alterar o cron job `leadcomex-10min-refresh` para processar dados do CCT a cada **1 minuto** ao invés dos atuais **10 minutos**.
+
+## Situação Atual
+
+| Job | Schedule Atual | Frequência |
+|-----|----------------|------------|
+| `leadcomex-10min-refresh` | `*/10 * * * *` | 10 minutos |
+
+## Mudança Proposta
+
+| Job | Novo Schedule | Frequência |
+|-----|---------------|------------|
+| `leadcomex-1min-refresh` | `* * * * *` | 1 minuto |
 
 ---
 
-## Dados Descobertos na t_master_dados
+## Etapas de Implementação
 
-### Prefixos SSZ/DACHSER Internos (com variantes):
-| Prefixo | Registros | Descrição |
-|---------|-----------|-----------|
-| SSZ1 | 14.218 | DACHSER Santos (com ano) |
-| SS01 | 3.543 | DACHSER Santos (variante) |
-| SSZN | 1.327 | DACHSER Santos NYC |
-| SS12 | 1.302 | DACHSER Santos (variante) |
-| SSZB | 844 | DACHSER Santos Brasil |
-| SS11, SSZA, SSZL, SS06 | < 10 | Outras variantes |
+### 1. Remover o Cron Job Antigo
+Deletar o job existente (jobid: 4) que roda a cada 10 minutos.
 
-### Prefixos com Barra (`/`):
-| Formato | Exemplo | Descrição |
-|---------|---------|-----------|
-| SSZ/HAM/... | SSZ/HAM/1175322 | Santos → Hamburgo |
-| ITJ/NAV/... | ITJ/NAV/02621 | Itajaí → Navegantes |
-
-### Prefixos Puramente Numéricos:
-| Padrão | Registros | Descrição |
-|--------|-----------|-----------|
-| 721274... | 6.455 | Booking number (sem SCAC) |
-| 265249... | 3.041 | Booking number |
-| 254608... | 1.755 | Booking number |
-| (+ ~20 outros) | ~15.000+ | Variados |
+### 2. Criar Novo Cron Job
+Criar um novo cron job com schedule `* * * * *` (a cada 1 minuto) mantendo a mesma configuração:
+- **Função chamada**: `leadcomex-sync`
+- **Ação**: `refresh-all-active`
+- **Novo nome sugerido**: `leadcomex-1min-refresh`
 
 ---
 
-## Alterações
+## Considerações Importantes
 
-### 1. Expandir constantes em `shippingLineMapping.ts`
-
-**Arquivo:** `src/lib/shippingLineMapping.ts`
-
-Adicionar novas constantes:
-
-```typescript
-// Prefixos LCL / Consolidadores DACHSER (variantes SSZ)
-export const LCL_PREFIXES: { prefix: string; label: string }[] = [
-  // Prefixos padrão
-  { prefix: 'GLNL', label: 'DACHSER Netherlands' },
-  { prefix: 'GLSL', label: 'DACHSER Sea Logistics' },
-  { prefix: 'GLDL', label: 'DACHSER Logistics' },
-  { prefix: 'BRSA', label: 'DACHSER Brasil' },
-  { prefix: 'DACS', label: 'DACHSER Consolidação' },
-  { prefix: 'BRAN', label: 'Brasil Consolidador' },
-  // Variantes SSZ
-  { prefix: 'SSZ', label: 'DACHSER Santos (base)' },
-  { prefix: 'SSZ1', label: 'DACHSER Santos + Ano' },
-  { prefix: 'SSZN', label: 'DACHSER Santos NYC' },
-  { prefix: 'SSZB', label: 'DACHSER Santos Brasil' },
-  { prefix: 'SSZA', label: 'DACHSER Santos Variante A' },
-  { prefix: 'SSZL', label: 'DACHSER Santos Variante L' },
-  { prefix: 'SS01', label: 'DACHSER Santos (SS01)' },
-  { prefix: 'SS06', label: 'DACHSER Santos (SS06)' },
-  { prefix: 'SS11', label: 'DACHSER Santos (SS11)' },
-  { prefix: 'SS12', label: 'DACHSER Santos (SS12)' },
-];
-
-// Prefixos com formato de rota (ORIGEM/DESTINO/...)
-export const ROUTE_FORMAT_PREFIXES: { prefix: string; label: string }[] = [
-  { prefix: 'SSZ/HAM', label: 'Santos → Hamburgo' },
-  { prefix: 'SSZ/RTM', label: 'Santos → Rotterdam' },
-  { prefix: 'ITJ/NAV', label: 'Itajaí → Navegantes' },
-  { prefix: 'PNG/SSZ', label: 'Paranaguá → Santos' },
-];
-
-// Descrição de MBLs numéricos (não SCAC)
-export const NUMERIC_MBL_INFO = {
-  description: 'MBLs puramente numéricos',
-  note: 'Estes MBLs não seguem o padrão SCAC (4 letras + números). São tipicamente booking numbers ou referências internas de consolidadores.',
-  examples: ['721274713', '265249042', '94263959'],
-};
-```
-
-### 2. Atualizar o Modal de Armadores
-
-**Arquivo:** `src/pages/ContainerTracking.tsx`
-
-Expandir o modal para incluir:
-- Seção de prefixos LCL (já existente, expandir com variantes SSZ)
-- Nova seção "Formatos Especiais" para prefixos com barra
-- Nova seção informativa sobre MBLs numéricos
-
-**Estrutura visual:**
-
-```text
-┌────────────────────────────────────────────────────────────────┐
-│  🚢 Armadores Mapeados (API)                                    │
-│  [tabela existente - 13 armadores]                             │
-├────────────────────────────────────────────────────────────────┤
-│  📦 Prefixos LCL / Consolidadores                              │
-│  GLNL, GLSL, GLDL, BRSA, SSZ, SSZ1, SSZN, SS01, SS12...       │
-├────────────────────────────────────────────────────────────────┤
-│  🔀 Formatos com Rota (ORIGEM/DESTINO)                         │
-│  SSZ/HAM → Santos-Hamburgo                                     │
-│  ITJ/NAV → Itajaí-Navegantes                                   │
-├────────────────────────────────────────────────────────────────┤
-│  🔢 MBLs Numéricos                                             │
-│  ⚠️ MBLs puramente numéricos não identificam armador.          │
-│  Ex: 721274713, 265249042                                      │
-│  São booking numbers de consolidadores.                        │
-└────────────────────────────────────────────────────────────────┘
-```
+- **Volume de chamadas API**: A frequência aumentará de 6 para 60 chamadas por hora à API LeadComex
+- **Consumo de recursos**: O backend terá 10x mais execuções diárias
+- **Benefício**: Dados CCT atualizados quase em tempo real
 
 ---
 
 ## Detalhes Técnicos
 
-### Importar novas constantes:
-```typescript
-import { 
-  LCL_PREFIXES, 
-  ROUTE_FORMAT_PREFIXES, 
-  NUMERIC_MBL_INFO,
-  // ... existentes
-} from "@/lib/shippingLineMapping";
+```text
+┌─────────────────────────────────────────────────────────────┐
+│  Cron Schedule: * * * * *                                   │
+│  ┌─────────────┬─────────────────────────────────────────┐  │
+│  │ Campo       │ Valor                                   │  │
+│  ├─────────────┼─────────────────────────────────────────┤  │
+│  │ Minuto      │ * (todos os minutos)                    │  │
+│  │ Hora        │ * (todas as horas)                      │  │
+│  │ Dia do mês  │ * (todos os dias)                       │  │
+│  │ Mês         │ * (todos os meses)                      │  │
+│  │ Dia semana  │ * (todos os dias)                       │  │
+│  └─────────────┴─────────────────────────────────────────┘  │
+│                                                             │
+│  Execuções: 1.440 por dia (60 * 24)                        │
+└─────────────────────────────────────────────────────────────┘
 ```
 
-### Ícones a usar:
-- 🚢 Ship (existente) - Armadores
-- 📦 Package (existente) - LCL
-- 🔀 ArrowLeftRight ou Shuffle - Rotas
-- 🔢 Hash ou ListOrdered - Numéricos
+### SQL a ser executado:
 
-### Cores por seção:
-- Armadores: Verde (existente)
-- LCL: Laranja (existente)
-- Rotas: Azul (`bg-blue-500/20 text-blue-400`)
-- Numéricos: Cinza/Amarelo (`bg-yellow-500/20 text-yellow-400`)
+```sql
+-- Passo 1: Remover cron antigo
+SELECT cron.unschedule('leadcomex-10min-refresh');
 
----
-
-## Resumo de Arquivos
-
-| Arquivo | Alteração |
-|---------|-----------|
-| `src/lib/shippingLineMapping.ts` | Expandir `LCL_PREFIXES`, adicionar `ROUTE_FORMAT_PREFIXES` e `NUMERIC_MBL_INFO` |
-| `src/pages/ContainerTracking.tsx` | Adicionar novas seções no modal de Armadores Mapeados |
-| `supabase/functions/_shared/shippingLineMapping.ts` | Sincronizar alterações (se necessário) |
-
----
-
-## Benefícios
-
-1. **Transparência**: Usuários entendem por que certos MBLs não têm armador identificado
-2. **Documentação**: Cataloga os diferentes formatos de MBL usados internamente
-3. **Manutenção**: Facilita identificar novos padrões quando surgirem
+-- Passo 2: Criar novo cron com frequência de 1 minuto
+SELECT cron.schedule(
+  'leadcomex-1min-refresh',
+  '* * * * *',
+  $$
+  SELECT net.http_post(
+    url:='https://finktakbjcfmurqeiubz.supabase.co/functions/v1/leadcomex-sync',
+    headers:='{"Content-Type": "application/json", "Authorization": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZpbmt0YWtiamNmbXVycWVpdWJ6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjQ4NjA2MjcsImV4cCI6MjA4MDQzNjYyN30.SqVlb4HtuPGbn6rRhZrTruR5JHf8XMSjVJfYxxPlT-s"}'::jsonb,
+    body:='{"action": "refresh-all-active"}'::jsonb
+  );
+  $$
+);
+```
