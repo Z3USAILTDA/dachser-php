@@ -1,33 +1,195 @@
-# ✅ IMPLEMENTADO: Evitar E-mails de Alerta Duplicados
+
+
+# Plano: Reestruturar Menu ADMIN com Subníveis DACHSER e Z3US
 
 ## Resumo
-Lógica de deduplicação de alertas implementada. Se um alerta já foi enviado e o status da tabela continua crítico, **não será enviado outro e-mail** até que a tabela recupere e volte a ficar crítica.
+Reorganizar o menu ADMIN para ter dois "filhos" (DACHSER e Z3US) que agrupam as opções administrativas, com comportamentos diferentes baseado no usuário logado.
 
-## Mudanças Realizadas
+---
 
-### 1. Nova Coluna `recovered_at`
-Adicionada à tabela `ai_agente.t_db_monitor_alerts` para rastrear quando uma tabela saiu do estado crítico.
+## Estrutura Proposta
 
-### 2. Nova Lógica de Verificação
-- Para cada tabela crítica, verifica se há um alerta ativo (SEM `recovered_at`)
-- Se existe alerta sem recuperação → tabela ainda crítica → **NÃO envia**
-- Se não existe alerta OU `recovered_at` preenchido → **envia novo alerta**
+```text
+ADMIN (pai)
+├── DACHSER (filho)
+│   ├── Métricas de Uso
+│   └── Monitoramento de Dados
+│
+└── Z3US (filho)
+    ├── Cadastro de Usuário
+    ├── Métricas de Uso
+    ├── Gerenciamento de Usuários
+    ├── Gerenciamento de APIs
+    └── Monitoramento de Dados
+```
 
-### 3. Rotina de Marcação de Recuperação
-Quando uma tabela que estava em alerta volta ao estado normal:
-- Marca o registro de alerta com `recovered_at = NOW()`
+---
 
-## Fluxo
+## Regras de Acesso por Usuário
 
-| Hora | Tabela Crítica | Status Anterior | Ação |
-|------|---------------|-----------------|------|
-| 09:00 | Sim | Normal | ✅ Envia alerta |
-| 10:00 | Sim | Crítico | ❌ Não envia |
-| 11:00 | Sim | Crítico | ❌ Não envia |
-| 12:00 | Não | Crítico → Normal | — (marca recovered_at) |
-| 13:00 | Sim | Normal → Crítico | ✅ Envia novo alerta |
+| Tipo | Usuários | Comportamento ao Clicar ADMIN |
+|------|----------|------------------------------|
+| **DACHSER** | `ana.tozzo`, `danilo.pedroso`, `teste.test3` | Abre diretamente as opções (Métricas de Uso, Monitoramento de Dados) |
+| **Z3US** | Todos outros admins | Mostra dois filhos expandíveis: DACHSER e Z3US |
+
+---
+
+## Mudanças no Código
+
+### 1. Definir Listas de Usuários
+
+```typescript
+// Usuários DACHSER (veem apenas opções DACHSER, abertura direta)
+const DACHSER_ADMIN_USERS = ["ana.tozzo", "danilo.pedroso", "teste.test3"];
+
+// Função para determinar tipo de usuário admin
+const getAdminUserType = (username: string) => {
+  if (DACHSER_ADMIN_USERS.includes(username)) return "DACHSER";
+  return "Z3US";
+};
+```
+
+### 2. Estrutura de Menu Dinâmica
+
+Para usuários **DACHSER** (ana.tozzo, danilo.pedroso, teste.test3):
+```text
+ADMIN (clique)
+├── Métricas de Uso
+└── Monitoramento de Dados
+```
+
+Para usuários **Z3US** (demais admins):
+```text
+ADMIN (clique)
+├── DACHSER (expandível)
+│   ├── Métricas de Uso
+│   └── Monitoramento de Dados
+└── Z3US (expandível)
+    ├── Cadastro de Usuário
+    ├── Métricas de Uso
+    ├── Gerenciamento de Usuários
+    ├── Gerenciamento de APIs
+    └── Monitoramento de Dados
+```
+
+### 3. Modificar `getVisibleChildren()` 
+
+A função será atualizada para retornar children diferentes baseado no tipo de usuário:
+
+```typescript
+const getVisibleChildren = (item: MenuItem) => {
+  if (!item.children) return [];
+  
+  if (item.id === "admin" && user?.username) {
+    const adminType = getAdminUserType(user.username);
+    
+    if (adminType === "DACHSER") {
+      // Mostra diretamente as opções DACHSER (sem subnível)
+      return [
+        { label: "Métricas de Uso", href: "/admin/metrics" },
+        { label: "Monitoramento de Dados", href: "/admin/database" },
+      ];
+    }
+    
+    // Z3US: mostra dois filhos expandíveis
+    return [
+      {
+        label: "DACHSER",
+        expandableId: "dachser-sub",
+        subChildren: [
+          { label: "Métricas de Uso", href: "/admin/metrics" },
+          { label: "Monitoramento de Dados", href: "/admin/database" },
+        ],
+      },
+      {
+        label: "Z3US",
+        expandableId: "z3us-sub",
+        subChildren: [
+          { label: "Cadastro de Usuário", href: "/admin/register" },
+          { label: "Métricas de Uso", href: "/admin/metrics" },
+          { label: "Gerenciamento de Usuários", href: "/admin/users" },
+          { label: "Gerenciamento de APIs", href: "/admin/apis" },
+          { label: "Monitoramento de Dados", href: "/admin/database" },
+        ],
+      },
+    ];
+  }
+  
+  return item.children.filter(child => !child.adminOnly || isAdmin);
+};
+```
+
+### 4. Remover Lógica Antiga
+
+Remover a constante `ADMIN_METRICS_ONLY_USERS` que ficará obsoleta com a nova lógica.
+
+---
+
+## Fluxo Visual
+
+### Usuário DACHSER (ana.tozzo, danilo.pedroso, teste.test3)
+
+```text
+┌─────────────────────────────────────────────────────────────────┐
+│                           ADMIN                                 │
+│                        (clique para expandir)                   │
+└──────────────────────────────┬──────────────────────────────────┘
+                               │
+               ┌───────────────┴───────────────┐
+               │                               │
+       ┌───────┴───────┐               ┌───────┴───────┐
+       │ Métricas de   │               │ Monitoramento │
+       │     Uso       │               │   de Dados    │
+       └───────────────┘               └───────────────┘
+```
+
+### Usuário Z3US (demais admins)
+
+```text
+┌─────────────────────────────────────────────────────────────────┐
+│                           ADMIN                                 │
+│                        (clique para expandir)                   │
+└──────────────────────────────┬──────────────────────────────────┘
+                               │
+               ┌───────────────┴───────────────┐
+               │                               │
+       ┌───────┴───────┐               ┌───────┴───────┐
+       │    DACHSER    │               │     Z3US      │
+       │  (expandível) │               │  (expandível) │
+       └───────┬───────┘               └───────┬───────┘
+               │                               │
+       ┌───────┴───────┐       ┌───────┬───────┼───────┬───────┐
+       │               │       │       │       │       │       │
+   ┌───┴───┐       ┌───┴───┐ ┌─┴─┐   ┌─┴─┐   ┌─┴─┐   ┌─┴─┐   ┌─┴─┐
+   │Métricas│     │Monitor│ │Cad│   │Mét│   │Ger│   │API│   │Mon│
+   │de Uso  │     │ Dados │ │Usr│   │Uso│   │Usr│   │   │   │Dat│
+   └────────┘     └───────┘ └───┘   └───┘   └───┘   └───┘   └───┘
+```
+
+---
+
+## Alterações por Arquivo
+
+| Arquivo | Alteração |
+|---------|-----------|
+| `src/pages/Dashboard.tsx` | Substituir `ADMIN_METRICS_ONLY_USERS` por `DACHSER_ADMIN_USERS`, adicionar função `getAdminUserType()`, modificar `getVisibleChildren()` |
+
+---
+
+## Lista de Usuários DACHSER
+
+| Username | Acesso |
+|----------|--------|
+| `ana.tozzo` | Métricas de Uso, Monitoramento de Dados |
+| `danilo.pedroso` | Métricas de Uso, Monitoramento de Dados |
+| `teste.test3` | Métricas de Uso, Monitoramento de Dados |
+
+---
 
 ## Benefícios
-1. **Zero alertas duplicados** enquanto o status não muda
-2. **Novos alertas** quando tabela recupera e fica crítica novamente
-3. **Histórico completo** com `recovered_at` registrado
+
+1. **Separação clara**: Usuários DACHSER veem apenas suas opções
+2. **Visão completa para Z3US**: Admins Z3US podem ver e acessar tudo
+3. **UX otimizada**: DACHSER não precisa de clique extra
+4. **Código reutilizável**: Usa estrutura existente de `expandableId` e `subChildren`
+
