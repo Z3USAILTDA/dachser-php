@@ -1839,7 +1839,10 @@ const Index = () => {
         (awb.nome_analista && awb.nome_analista.toLowerCase().includes(searchLower));
       const matchesAirline = filterAirline === "all" || awb.airline_code === filterAirline;
       const matchesAnalyst = filterAnalyst === "all" || awb.nome_analista === filterAnalyst;
-      const matchesService = filterService === "all" || awb.tipo_servico === filterService;
+      const matchesService = 
+        filterService === "all" || 
+        (filterService === "IMPO" && awb.tipo_servico === "AIR IMPORT") ||
+        (filterService === "EXPO" && awb.tipo_servico === "AIR EXPORT");
 
       // Only show AWBs with these specific status codes
       const allowedStatuses = [
@@ -2330,27 +2333,16 @@ const Index = () => {
                 <div className="flex items-center gap-1.5">
                   <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-[rgba(0,0,0,.5)] border border-[rgba(255,255,255,.22)]">
                     <Plane className="h-3 w-3 text-[#ffc800]" />
-                    <span className="text-[0.68rem] tracking-[0.1em] uppercase text-[#aaaaaa]">Serviço</span>
+                    <span className="text-[0.68rem] tracking-[0.1em] uppercase text-[#aaaaaa]">Tipo</span>
                   </div>
                   <Select value={filterService} onValueChange={setFilterService}>
-                    <SelectTrigger className="h-8 w-[160px] rounded-full bg-[#13141a] border border-[rgba(255,255,255,.14)] text-[0.78rem]">
+                    <SelectTrigger className="h-8 w-[120px] rounded-full bg-[#13141a] border border-[rgba(255,255,255,.14)] text-[0.78rem]">
                       <SelectValue placeholder="Todos" />
                     </SelectTrigger>
                     <SelectContent className="bg-card border border-border z-50">
                       <SelectItem value="all">Todos</SelectItem>
-                      {Array.from(
-                        new Set(
-                          statusAereoData
-                            .map((awb) => awb.tipo_servico)
-                            .filter((service) => service && service !== "N/A" && service.trim() !== ""),
-                        ),
-                      )
-                        .sort()
-                        .map((service) => (
-                          <SelectItem key={service} value={service}>
-                            {service}
-                          </SelectItem>
-                        ))}
+                      <SelectItem value="IMPO">IMPO</SelectItem>
+                      <SelectItem value="EXPO">EXPO</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
