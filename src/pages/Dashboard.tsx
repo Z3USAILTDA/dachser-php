@@ -26,8 +26,14 @@ interface MenuItem {
   href?: string;
   adminOnly?: boolean;
 }
-// Usuários que só podem ver "Métricas de Uso" no menu ADMIN
-const ADMIN_METRICS_ONLY_USERS = ["ana.tozzo"];
+// Usuários DACHSER (veem apenas opções DACHSER, abertura direta sem subnível)
+const DACHSER_ADMIN_USERS = ["ana.tozzo", "danilo.pedroso", "teste.test3"];
+
+// Função para determinar tipo de usuário admin
+const getAdminUserType = (username: string): "DACHSER" | "Z3US" => {
+  if (DACHSER_ADMIN_USERS.includes(username)) return "DACHSER";
+  return "Z3US";
+};
 
 const menuItems: MenuItem[] = [
   {
@@ -190,12 +196,43 @@ const Dashboard = () => {
   const filteredMenuItems = menuItems.filter((item) => !item.adminOnly || isAdmin);
   
   // Função para filtrar children baseado em restrições de usuário
-  const getVisibleChildren = (item: MenuItem) => {
+  const getVisibleChildren = (item: MenuItem): ChildItem[] => {
     if (!item.children) return [];
     
-    // Se for menu ADMIN e usuário está na lista de restritos, só mostrar "Métricas de Uso"
-    if (item.id === "admin" && user?.username && ADMIN_METRICS_ONLY_USERS.includes(user.username)) {
-      return item.children.filter(child => child.href === "/admin/metrics");
+    // Se for menu ADMIN, aplicar lógica DACHSER vs Z3US
+    if (item.id === "admin" && user?.username) {
+      const adminType = getAdminUserType(user.username);
+      
+      if (adminType === "DACHSER") {
+        // DACHSER: mostra diretamente as opções (sem subnível)
+        return [
+          { label: "Métricas de Uso", href: "/admin/metrics" },
+          { label: "Monitoramento de Dados", href: "/admin/database" },
+        ];
+      }
+      
+      // Z3US: mostra dois filhos expandíveis
+      return [
+        {
+          label: "DACHSER",
+          expandableId: "dachser-sub",
+          subChildren: [
+            { label: "Métricas de Uso", href: "/admin/metrics" },
+            { label: "Monitoramento de Dados", href: "/admin/database" },
+          ],
+        },
+        {
+          label: "Z3US",
+          expandableId: "z3us-sub",
+          subChildren: [
+            { label: "Cadastro de Usuário", href: "/admin/register" },
+            { label: "Métricas de Uso", href: "/admin/metrics" },
+            { label: "Gerenciamento de Usuários", href: "/admin/users" },
+            { label: "Gerenciamento de APIs", href: "/admin/apis" },
+            { label: "Monitoramento de Dados", href: "/admin/database" },
+          ],
+        },
+      ];
     }
     
     // Caso contrário, aplicar filtro padrão de adminOnly
