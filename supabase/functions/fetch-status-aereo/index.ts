@@ -134,13 +134,27 @@ serve(async (req) => {
     
     console.log(`Fetched ${Array.isArray(rows) ? rows.length : 0} records from t_status_aereo`);
 
+    // Debug: log some sample AWBs and their mappings
+    let matchedCount = 0;
+    let unmatchedSamples: string[] = [];
+
     // Convert dates to local format and add tipo_processo from lookup map
     const processedRows = (rows || []).map((row: any) => {
       const processed = { ...row };
       
       // Add tipo_processo from the pre-fetched map (evita subquery correlata)
       const awbTrimmed = String(processed.awb || '').trim();
-      processed.tipo_processo = mawbToProcessType.get(awbTrimmed) || null;
+      const tipoProcesso = mawbToProcessType.get(awbTrimmed);
+      
+      if (tipoProcesso) {
+        matchedCount++;
+        processed.tipo_processo = tipoProcesso;
+      } else {
+        processed.tipo_processo = null;
+        if (unmatchedSamples.length < 5) {
+          unmatchedSamples.push(awbTrimmed);
+        }
+      }
       
       // Convert última atualização - remove Z suffix to treat as local time
       if (processed['última atualização']) {
@@ -168,6 +182,11 @@ serve(async (req) => {
       
       return processed;
     });
+
+    console.log(`tipo_processo mapping: ${matchedCount}/${processedRows.length} matched`);
+    if (unmatchedSamples.length > 0) {
+      console.log(`Unmatched AWB samples: ${unmatchedSamples.join(', ')}`);
+    }
 
     return new Response(
       JSON.stringify({ success: true, data: processedRows }),
