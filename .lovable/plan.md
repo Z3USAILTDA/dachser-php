@@ -1,123 +1,127 @@
 
-
-# Plano: Adicionar Colunas de Método de Coleta e API no Modal de Companhias Monitoradas
+# Plano: Adicionar Prefixos LCL Não Identificados no Modal de Armadores Mapeados
 
 ## Resumo
-Adicionar duas novas colunas ao modal de "Companhias Aéreas Monitoradas" na tela de rastreio aéreo (`/`), visíveis apenas para usuários administradores:
-1. **Método de Coleta** - Indica como os dados são obtidos (scraping de agregador, site oficial com Firecrawl, ou API direta)
-2. **Tem API** - Checkbox indicando se a companhia tem integração direta (sem Firecrawl)
+Adicionar uma seção no modal "Armadores Mapeados" da tela de Monitoramento Marítimo (`/sea/tracking`) para exibir os prefixos de MBL que não conseguimos identificar como armadores conhecidos. Esses são tipicamente cargas LCL (Less than Container Load) ou consolidadores.
+
+---
+
+## Contexto Técnico
+
+### Situação Atual
+- O modal "Armadores Mapeados" (`ContainerTracking.tsx`, linhas 2279-2338) exibe apenas os 13 armadores com integração de API via `getTrackableCarriers()`
+- Os prefixos internos DACHSER já estão definidos em `INTERNAL_PREFIXES`: `['GLNL', 'GLSL', 'GLDL', 'BRSA', 'SSZ']`
+- A função `detectCarrierFromMbl()` retorna `UNKNOWN` quando não reconhece o prefixo
+
+### Objetivo
+Criar uma seção adicional no modal mostrando os prefixos que retornam `UNKNOWN` quando processados pela função de detecção - tipicamente identificados como cargas LCL/consolidadores.
 
 ---
 
 ## Alterações
 
-### 1. Atualizar estrutura de dados das companhias monitoradas
+### 1. Adicionar constante com prefixos LCL conhecidos
 
-**Arquivo:** `src/pages/Index.tsx` (linhas 1346-1396)
+**Arquivo:** `src/lib/shippingLineMapping.ts`
 
-Modificar o array `monitoredAirlines` dentro do `useMemo` para incluir os novos campos:
-
-```typescript
-interface MonitoredAirline {
-  code: string;
-  name: string;
-  method: 'aggregator' | 'official_scraping' | 'direct_api';
-  hasDirectApi: boolean;
-}
-```
-
-Mapeamento baseado na sua análise:
-
-| Código | Método | Tem API |
-|--------|--------|---------|
-| 001, 014, 016, 074, 057, 083, 112, 118, 147, 160, 615, 827, 865, 999 | aggregator | Não |
-| 996 | aggregator | Não |
-| 023, 139 | official_scraping | Não |
-| 020, 045, 047, 055, 075, 125, 127, 157, 172, 176, 202, 235, 318, 369, 549, 577, 605, 724, 729, 805 | direct_api | Sim |
-
----
-
-### 2. Adicionar verificação de administrador
-
-**Arquivo:** `src/pages/Index.tsx`
-
-Adicionar um `useMemo` para verificar se o usuário logado é admin:
+Adicionar uma nova constante exportada com os prefixos que são conhecidos como LCL/consolidadores (baseado nos `INTERNAL_PREFIXES` existentes mais outros comuns):
 
 ```typescript
-const isAdmin = useMemo(() => {
-  try {
-    const storedUser = localStorage.getItem("user") || localStorage.getItem("dachser_user");
-    if (storedUser) {
-      const parsed = JSON.parse(storedUser);
-      return parsed.is_admin === 1 || parsed.is_admin === "1" || parsed.is_admin === true;
-    }
-  } catch {
-    return false;
-  }
-  return false;
-}, []);
+// Prefixos LCL / Consolidadores conhecidos (não são armadores diretos)
+export const LCL_PREFIXES: { prefix: string; label: string }[] = [
+  { prefix: 'GLNL', label: 'DACHSER Netherlands' },
+  { prefix: 'GLSL', label: 'DACHSER Sea Logistics' },
+  { prefix: 'GLDL', label: 'DACHSER Logistics' },
+  { prefix: 'BRSA', label: 'DACHSER Brasil' },
+  { prefix: 'SSZ', label: 'DACHSER Santos' },
+  { prefix: 'DACS', label: 'DACHSER Consolidação' },
+  { prefix: 'BRAN', label: 'Brasil Consolidador' },
+];
 ```
 
 ---
 
-### 3. Atualizar o Modal com as novas colunas
+### 2. Atualizar o Modal de Armadores Mapeados
 
-**Arquivo:** `src/pages/Index.tsx` (linhas 2836-2879)
+**Arquivo:** `src/pages/ContainerTracking.tsx` (linhas 2279-2338)
 
-Modificar o modal para:
+Modificar o modal para incluir uma segunda tabela/seção mostrando os prefixos LCL:
 
-- Adicionar cabeçalhos condicionais (apenas admin):
-  - "Método de Coleta"
-  - "API Direta"
+**Alterações necessárias:**
 
-- Adicionar células condicionais com:
-  - Badge colorido para o método (Ex: verde para API direta, amarelo para scraping, laranja para agregador)
-  - Checkbox desabilitado mostrando se tem API ou não
+1. Importar `LCL_PREFIXES` do mapeamento
+2. Adicionar uma nova seção abaixo da tabela de armadores:
+   - Título: "Prefixos LCL / Consolidadores"
+   - Descrição: "Prefixos não mapeados para armadores específicos"
+3. Exibir em formato de tabela com:
+   - Coluna "Prefixo"
+   - Coluna "Descrição"
+
+**Estrutura visual proposta:**
 
 ```text
-┌─────────┬────────────────────────┬──────────────────────┬───────────┐
-│ Código  │ Companhia Aérea        │ Método de Coleta     │ API Direta│
-├─────────┼────────────────────────┼──────────────────────┼───────────┤
-│ 001     │ American Airlines      │ 🟠 Agregador         │    ☐      │
-│ 020     │ Lufthansa Cargo        │ 🟢 API Direta        │    ☑      │
-│ 023     │ FedEx Express          │ 🟡 Site Oficial      │    ☐      │
-└─────────┴────────────────────────┴──────────────────────┴───────────┘
+┌────────────────────────────────────────────────────────────┐
+│  🚢 Armadores Mapeados                                      │
+│  Lista de armadores com integração de rastreamento via API  │
+├────────────────────────────────────────────────────────────┤
+│  Prefixo    │  Armador              │  País                 │
+│  HLCU       │  Hapag-Lloyd          │  Germany              │
+│  MSCU       │  MSC                  │  Switzerland          │
+│  ...        │  ...                  │  ...                  │
+├────────────────────────────────────────────────────────────┤
+│  📦 Prefixos LCL / Consolidadores                           │
+│  Prefixos não mapeados para armadores específicos           │
+├────────────────────────────────────────────────────────────┤
+│  Prefixo    │  Descrição                                    │
+│  GLNL       │  DACHSER Netherlands                          │
+│  GLSL       │  DACHSER Sea Logistics                        │
+│  BRSA       │  DACHSER Brasil                               │
+│  SSZ        │  DACHSER Santos                               │
+│  ...        │  ...                                          │
+├────────────────────────────────────────────────────────────┤
+│  13 armadores com integração ativa | 5 prefixos LCL         │
+└────────────────────────────────────────────────────────────┘
 ```
 
 ---
 
-## Detalhes Técnicos
+## Detalhes de Implementação
 
-### Labels para Métodos de Coleta:
-- `aggregator` → "Agregador + Firecrawl" (badge laranja)
-- `official_scraping` → "Site Oficial + Firecrawl" (badge amarelo)
-- `direct_api` → "API/HTML Direto" (badge verde)
+### Cores e Estilo
+- Seção de armadores: mantém o estilo atual (ícone 🚢 verde)
+- Nova seção LCL: usar ícone 📦 (Package) em cor laranja ou amarelo
+- Badges de prefixos LCL: `bg-orange-500/20 text-orange-400`
 
-### Mapeamento Completo das Companhias:
+### Separação Visual
+- Adicionar um `Separator` entre as duas tabelas
+- Subtítulo com estilo diferenciado para a seção LCL
 
-**Agregador + Firecrawl (14 cias):**
-- 001-American Airlines, 014-Air Canada, 016-United, 074/057-AFKL, 083-SAA, 112-China Cargo, 118-TAAG, 147-Royal Air Maroc, 160-Cathay, 615-DHL Aviation, 827-RUSA, 865-MasAir, 996-Air Europa, 999-Air China
-
-**Site Oficial + Firecrawl (2 cias):**
-- 023-FedEx, 139-Aeromexico
-
-**API/HTML Direto (17 cias):**
-- 020-Lufthansa, 045/549-LATAM, 047-TAP, 055-ITA, 075/125-IAG, 127-GOLLOG, 157-Qatar, 172-Cargolux, 176-Emirates, 235-Turkish, 318-SKY Carga, 369-Atlas Air, 577-Azul, 605-SKY Chile, 724-Swiss, 729/202-Avianca, 805-GSA Force
-
-### Estilo Visual:
-
-- Largura do modal: aumentar de `max-w-2xl` para `max-w-4xl` (admin) ou manter `max-w-2xl` (usuário comum)
-- Badge de método com cores:
-  - Verde (`bg-emerald-500/20 text-emerald-400`): API Direta
-  - Amarelo (`bg-yellow-500/20 text-yellow-400`): Site Oficial
-  - Laranja (`bg-orange-500/20 text-orange-400`): Agregador
-- Checkbox desabilitado com estilo visual de check/uncheck
+### Footer Atualizado
+- Mostrar contagem de ambos: "13 armadores | 7 prefixos LCL"
 
 ---
 
-## Resumo das Alterações de Arquivos
+## Arquivos a Modificar
 
-| Arquivo | Tipo de Alteração |
-|---------|-------------------|
-| `src/pages/Index.tsx` | Modificar `monitoredAirlinesData`, adicionar `isAdmin`, expandir modal UI |
+| Arquivo | Alteração |
+|---------|-----------|
+| `src/lib/shippingLineMapping.ts` | Adicionar `LCL_PREFIXES` constante exportada |
+| `src/pages/ContainerTracking.tsx` | Adicionar seção LCL no modal de Armadores (linhas 2279-2338) |
 
+---
+
+## Prefixos LCL a Incluir
+
+Baseado na constante `INTERNAL_PREFIXES` existente e padrões conhecidos:
+
+| Prefixo | Descrição |
+|---------|-----------|
+| GLNL | DACHSER Netherlands |
+| GLSL | DACHSER Sea Logistics |
+| GLDL | DACHSER Logistics |
+| BRSA | DACHSER Brasil |
+| SSZ | DACHSER Santos |
+| DACS | DACHSER Consolidação |
+| BRAN | Brasil Consolidador |
+
+*Nota: Esta lista pode ser expandida conforme novos prefixos forem identificados na operação.*
