@@ -149,6 +149,17 @@ export const CONTAINER_PREFIX_MAP: Record<string, ShippingLineCode> = {
 // Prefixos internos DACHSER (não são armadores - devem ser ignorados)
 export const INTERNAL_PREFIXES = ['GLNL', 'GLSL', 'GLDL', 'BRSA', 'SSZ'];
 
+// Prefixos LCL / Consolidadores conhecidos (não são armadores diretos)
+export const LCL_PREFIXES: { prefix: string; label: string }[] = [
+  { prefix: 'GLNL', label: 'DACHSER Netherlands' },
+  { prefix: 'GLSL', label: 'DACHSER Sea Logistics' },
+  { prefix: 'GLDL', label: 'DACHSER Logistics' },
+  { prefix: 'BRSA', label: 'DACHSER Brasil' },
+  { prefix: 'SSZ', label: 'DACHSER Santos' },
+  { prefix: 'DACS', label: 'DACHSER Consolidação' },
+  { prefix: 'BRAN', label: 'Brasil Consolidador' },
+];
+
 // Informações completas de cada armador
 export const SHIPPING_LINE_INFO: Record<ShippingLineCode, ShippingLineInfo> = {
   'HAPAG_LLOYD': {
