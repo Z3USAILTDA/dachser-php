@@ -252,27 +252,35 @@ function MasterDataCard({ stats }: { stats: TableStats }) {
               
               <div className="space-y-2">
                 {Object.entries(stats.byModal.AIR.breakdown).map(([tipo, data]) => (
-                  <div key={tipo} className="flex justify-between items-center text-sm">
-                    <span className="text-white/60">{tipo}:</span>
-                    <div className="flex items-center gap-2">
-                      <span className="font-semibold text-white">{formatNumber(data.count)}</span>
-                      {data.recentInserts > 0 && (
-                        <span className="text-[10px] text-emerald-400">+{data.recentInserts}</span>
-                      )}
-                      {data.uniqueInserts > 0 && (
-                        <span className="text-[10px] text-[#ffc800]" title="Novos Únicos (MAWB+HAWB inéditos)">
-                          ★{data.uniqueInserts}
+                  <div key={tipo} className="p-2 rounded bg-blue-500/10 border border-blue-500/20">
+                    <div className="flex justify-between items-center text-sm mb-1">
+                      <span className="text-white/80 font-medium">{tipo}:</span>
+                      <div className="flex items-center gap-2">
+                        <span className="font-semibold text-white">{formatNumber(data.count)}</span>
+                        {data.recentInserts > 0 && (
+                          <span className="text-[10px] text-emerald-400">+{data.recentInserts}</span>
+                        )}
+                        {data.uniqueInserts > 0 && (
+                          <span className="text-[10px] text-[#ffc800]" title="Novos Únicos (MAWB+HAWB inéditos)">
+                            ★{data.uniqueInserts}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                    <div className="flex justify-between items-center text-[10px]">
+                      <div className="flex items-center gap-1.5">
+                        <Clock size={10} className="text-blue-400/60" />
+                        <span className="text-white/40">Última atualização:</span>
+                      </div>
+                      <div className="flex items-center gap-1.5">
+                        <HealthIndicator status={getHealthStatus(data.lastUpdate)} />
+                        <span className={healthColors[getHealthStatus(data.lastUpdate)].text}>
+                          {formatRelativeTime(data.lastUpdate)}
                         </span>
-                      )}
+                      </div>
                     </div>
                   </div>
                 ))}
-                <div className="pt-2 border-t border-blue-500/20 flex justify-between items-center">
-                  <span className="text-[10px] text-white/40">Última:</span>
-                  <span className="text-[10px] text-blue-400">
-                    {formatRelativeTime(stats.byModal.AIR.lastUpdate)}
-                  </span>
-                </div>
               </div>
             </div>
 
@@ -288,27 +296,35 @@ function MasterDataCard({ stats }: { stats: TableStats }) {
               
               <div className="space-y-2">
                 {Object.entries(stats.byModal.SEA.breakdown).map(([tipo, data]) => (
-                  <div key={tipo} className="flex justify-between items-center text-sm">
-                    <span className="text-white/60">{tipo}:</span>
-                    <div className="flex items-center gap-2">
-                      <span className="font-semibold text-white">{formatNumber(data.count)}</span>
-                      {data.recentInserts > 0 && (
-                        <span className="text-[10px] text-emerald-400">+{data.recentInserts}</span>
-                      )}
-                      {data.uniqueInserts > 0 && (
-                        <span className="text-[10px] text-[#ffc800]" title="Novos Únicos (MAWB+HAWB inéditos)">
-                          ★{data.uniqueInserts}
+                  <div key={tipo} className="p-2 rounded bg-cyan-500/10 border border-cyan-500/20">
+                    <div className="flex justify-between items-center text-sm mb-1">
+                      <span className="text-white/80 font-medium">{tipo}:</span>
+                      <div className="flex items-center gap-2">
+                        <span className="font-semibold text-white">{formatNumber(data.count)}</span>
+                        {data.recentInserts > 0 && (
+                          <span className="text-[10px] text-emerald-400">+{data.recentInserts}</span>
+                        )}
+                        {data.uniqueInserts > 0 && (
+                          <span className="text-[10px] text-[#ffc800]" title="Novos Únicos (MAWB+HAWB inéditos)">
+                            ★{data.uniqueInserts}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                    <div className="flex justify-between items-center text-[10px]">
+                      <div className="flex items-center gap-1.5">
+                        <Clock size={10} className="text-cyan-400/60" />
+                        <span className="text-white/40">Última atualização:</span>
+                      </div>
+                      <div className="flex items-center gap-1.5">
+                        <HealthIndicator status={getHealthStatus(data.lastUpdate)} />
+                        <span className={healthColors[getHealthStatus(data.lastUpdate)].text}>
+                          {formatRelativeTime(data.lastUpdate)}
                         </span>
-                      )}
+                      </div>
                     </div>
                   </div>
                 ))}
-                <div className="pt-2 border-t border-cyan-500/20 flex justify-between items-center">
-                  <span className="text-[10px] text-white/40">Última:</span>
-                  <span className="text-[10px] text-cyan-400">
-                    {formatRelativeTime(stats.byModal.SEA.lastUpdate)}
-                  </span>
-                </div>
               </div>
             </div>
           </div>
