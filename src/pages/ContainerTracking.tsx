@@ -29,7 +29,8 @@ import { Filter as FilterIcon } from "lucide-react";
 import VesselFinderMap from "@/components/tracking/VesselFinderMap";
 import Swal from 'sweetalert2';
 import { useTheme } from "@/hooks/useTheme";
-import { detectCarrierFromMbl, SHIPPING_LINE_INFO, ShippingLineCode, getTrackableCarriers, MBL_PREFIX_MAP } from "@/lib/shippingLineMapping";
+import { detectCarrierFromMbl, SHIPPING_LINE_INFO, ShippingLineCode, getTrackableCarriers, MBL_PREFIX_MAP, LCL_PREFIXES } from "@/lib/shippingLineMapping";
+import { Separator } from "@/components/ui/separator";
 
 // Deriva o armador do MBL usando o mapeamento centralizado - retorna código normalizado
 const getShippingLineCodeFromMbl = (mbl_id: string, shipping_line: string | null | undefined): ShippingLineCode => {
@@ -2289,7 +2290,8 @@ const ContainerTracking = () => {
             </DialogDescription>
           </DialogHeader>
           
-          <div className="mt-4 max-h-[60vh] overflow-y-auto">
+          <div className="mt-4 max-h-[60vh] overflow-y-auto space-y-6">
+            {/* Seção de Armadores com API */}
             <Table>
               <TableHeader>
                 <TableRow className="border-b border-[rgba(255,255,255,.08)] hover:bg-transparent">
@@ -2322,12 +2324,47 @@ const ContainerTracking = () => {
                 })}
               </TableBody>
             </Table>
+            
+            {/* Separador */}
+            <Separator className="bg-[rgba(255,255,255,.08)]" />
+            
+            {/* Seção de Prefixos LCL / Consolidadores */}
+            <div>
+              <div className="flex items-center gap-2 mb-3">
+                <Package className="w-4 h-4 text-orange-400" />
+                <h4 className="text-sm font-medium text-orange-400">Prefixos LCL / Consolidadores</h4>
+              </div>
+              <p className="text-xs text-gray-500 mb-3">Prefixos não mapeados para armadores específicos</p>
+              
+              <Table>
+                <TableHeader>
+                  <TableRow className="border-b border-[rgba(255,255,255,.08)] hover:bg-transparent">
+                    <TableHead className="text-[#aaaaaa]">Prefixo</TableHead>
+                    <TableHead className="text-[#aaaaaa]">Descrição</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {LCL_PREFIXES.map((item) => (
+                    <TableRow key={item.prefix} className="border-b border-[rgba(255,255,255,.05)] hover:bg-[rgba(255,255,255,.03)]">
+                      <TableCell>
+                        <span className="font-mono text-sm px-2 py-0.5 rounded bg-orange-500/20 text-orange-400 border border-orange-500/30">
+                          {item.prefix}
+                        </span>
+                      </TableCell>
+                      <TableCell className="text-gray-400 text-sm">
+                        {item.label}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
           </div>
           
           <DialogFooter className="mt-4 border-t border-[rgba(255,255,255,.08)] pt-4">
             <div className="flex items-center justify-between w-full">
               <span className="text-sm text-gray-400">
-                {getTrackableCarriers().length} armadores com integração ativa
+                {getTrackableCarriers().length} armadores com integração | {LCL_PREFIXES.length} prefixos LCL
               </span>
               <Button variant="outline" onClick={() => setShowArmadoresModal(false)} className="border-[rgba(255,255,255,.1)] text-gray-300 hover:bg-[rgba(255,255,255,.05)]">
                 Fechar
