@@ -634,6 +634,34 @@ export default function DatabaseMonitor() {
             />
           </div>
 
+          {/* Status Legend */}
+          <div className="p-4 rounded-lg bg-[#0a0b10] border border-white/10">
+            <h4 className="text-xs font-semibold text-white/60 uppercase tracking-wider mb-3">Legenda de Status</h4>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <div className="flex items-center gap-3 p-2 rounded bg-emerald-500/10 border border-emerald-500/20">
+                <div className="w-3 h-3 rounded-full bg-emerald-500 shadow-lg animate-pulse" />
+                <div>
+                  <span className="text-sm font-medium text-emerald-400">Saudável</span>
+                  <p className="text-[10px] text-white/40">Atualizado há ≤ 5 minutos</p>
+                </div>
+              </div>
+              <div className="flex items-center gap-3 p-2 rounded bg-amber-500/10 border border-amber-500/20">
+                <div className="w-3 h-3 rounded-full bg-amber-500 shadow-lg animate-pulse" />
+                <div>
+                  <span className="text-sm font-medium text-amber-400">Atenção</span>
+                  <p className="text-[10px] text-white/40">Atualizado entre 5 e 60 minutos</p>
+                </div>
+              </div>
+              <div className="flex items-center gap-3 p-2 rounded bg-red-500/10 border border-red-500/20">
+                <div className="w-3 h-3 rounded-full bg-red-500 shadow-lg animate-pulse" />
+                <div>
+                  <span className="text-sm font-medium text-red-400">Crítico</span>
+                  <p className="text-[10px] text-white/40">Sem atualização há &gt; 60 minutos</p>
+                </div>
+              </div>
+            </div>
+          </div>
+
           {/* Footer info */}
           <div className="flex items-center justify-center gap-2 py-4 text-white/40 text-[11px]">
             <AlertCircle className="w-3.5 h-3.5" />
