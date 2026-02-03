@@ -58,30 +58,55 @@ serve(async (req) => {
       console.log('Column check failed, assuming columns do not exist');
     }
 
-    // REGRA ATUALIZADA: Em vez de data fixa, usar janela de 10 dias para pegar processos recentes
-    // Isso garante que AWBs inseridas após a data antiga (26/01) também apareçam
-    // REGRA: AWBs com "ARR" ou "ARR - Destino" permanecem na lista por 5 dias após arr_datetime
-    // Agora incluímos tipo_processo via subquery correlata para filtros Impo/Expo
+    // OTIMIZAÇÃO: Primeiro buscar lista de MAWBs válidos (usa índice)
+    // Depois usar essa lista explícita no WHERE IN (evita subquery correlata)
+    const mawbListQuery = `
+      SELECT DISTINCT TRIM(mawb) as mawb, tipo_processo
+      FROM ${database}.t_master_dados 
+      WHERE data_insert >= DATE_SUB(NOW(), INTERVAL 10 DAY)
+      AND tipo_processo IN ('AIR IMPORT', 'AIR EXPORT')
+      AND mawb IS NOT NULL AND TRIM(mawb) != ''
+    `;
+    
+    const mawbListResult = await client.query(mawbListQuery);
+    const mawbList = Array.isArray(mawbListResult) ? mawbListResult : [];
+    
+    // Criar mapa de MAWB -> tipo_processo para lookup eficiente
+    const mawbToProcessType = new Map<string, string>();
+    const validMawbs: string[] = [];
+    for (const row of mawbList) {
+      const mawb = String(row.mawb || '').trim();
+      if (mawb) {
+        validMawbs.push(mawb);
+        if (row.tipo_processo) {
+          mawbToProcessType.set(mawb, row.tipo_processo);
+        }
+      }
+    }
+
+    console.log(`Found ${validMawbs.length} valid MAWBs from t_master_dados`);
+
+    // Se não houver MAWBs válidos, retorna vazio (evita query pesada)
+    if (validMawbs.length === 0) {
+      return new Response(
+        JSON.stringify({ success: true, data: [] }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    // Construir lista para WHERE IN (escapar aspas simples)
+    const mawbInClause = validMawbs.map(m => `'${m.replace(/'/g, "''")}'`).join(',');
+
+    // Query principal usando lista explícita (muito mais rápido que subquery)
     const baseSelect = `
       SELECT s.id, s.awb, s.hawb, s.destinatário, s.nome_analista, s.email_analista,
              s.email_cliente, s.tipo_servico, s.data_atraso, s.\`última atualização\`,
              s.\`último_status\`, s.origem, s.destino, s.alert_status, s.dep_datetime,
              ${hasArrCheckColumn ? 's.arr_check_count' : '0 as arr_check_count'},
-             ${hasArrDatetimeColumn ? 's.arr_datetime' : 'NULL as arr_datetime'},
-             (SELECT m2.tipo_processo FROM ${database}.t_master_dados m2 
-              WHERE TRIM(m2.mawb) = TRIM(s.awb) 
-              AND m2.tipo_processo IN ('AIR IMPORT', 'AIR EXPORT')
-              LIMIT 1) as tipo_processo
+             ${hasArrDatetimeColumn ? 's.arr_datetime' : 'NULL as arr_datetime'}
       FROM ${database}.t_status_aereo s
       WHERE (
-        -- AWBs dos últimos 10 dias (janela deslizante)
-        s.awb IN (
-          SELECT DISTINCT m.mawb FROM ${database}.t_master_dados m 
-          WHERE m.data_insert >= DATE_SUB(NOW(), INTERVAL 10 DAY)
-          AND m.tipo_processo IN ('AIR IMPORT', 'AIR EXPORT')
-        )
-        -- OU AWBs com "ARR" ou "ARR - Destino" que ainda estão dentro dos 5 dias
-        -- Usa arr_datetime se disponível, senão usa última atualização como fallback
+        s.awb IN (${mawbInClause})
         ${hasArrDatetimeColumn ? `
         OR (
           s.\`último_status\` IN ('ARR', 'ARR - Destino')
@@ -104,19 +129,22 @@ serve(async (req) => {
       params = [];
     }
 
-    console.log(`Executing query: ${query} (hasArrCheckColumn: ${hasArrCheckColumn})`);
+    console.log(`Executing optimized query with ${validMawbs.length} MAWBs in IN clause`);
     const rows = await client.query(query, params);
     
     console.log(`Fetched ${Array.isArray(rows) ? rows.length : 0} records from t_status_aereo`);
 
-    // Convert dates to local format without Z suffix (MariaDB stores in São Paulo timezone)
+    // Convert dates to local format and add tipo_processo from lookup map
     const processedRows = (rows || []).map((row: any) => {
       const processed = { ...row };
+      
+      // Add tipo_processo from the pre-fetched map (evita subquery correlata)
+      const awbTrimmed = String(processed.awb || '').trim();
+      processed.tipo_processo = mawbToProcessType.get(awbTrimmed) || null;
       
       // Convert última atualização - remove Z suffix to treat as local time
       if (processed['última atualização']) {
         const dateStr = String(processed['última atualização']);
-        // If it ends with Z or has timezone, remove it to keep as local time
         processed['última atualização'] = dateStr.replace(/Z$/, '').replace(/\.\d{3}Z$/, '');
       }
       
