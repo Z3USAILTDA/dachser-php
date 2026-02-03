@@ -29,7 +29,6 @@ const TABLES_CONFIG = [
 ];
 
 const CRITICAL_THRESHOLD_MINUTES = 60;
-const REALERT_INTERVAL_MINUTES = 120; // 2 hours - must be > cron interval to avoid race conditions
 
 const TEST_RECIPIENTS = ['larissa@z3us.ai'];
 const PRODUCTION_RECIPIENTS = [
@@ -507,7 +506,7 @@ serve(async (req) => {
     // Connect to MariaDB
     client = await connectWithRetry();
 
-    // Ensure the alerts table exists
+    // Ensure the alerts table exists with recovered_at column
     try {
       await client.execute(`
         CREATE TABLE IF NOT EXISTS ai_agente.t_db_monitor_alerts (
@@ -517,12 +516,25 @@ serve(async (req) => {
           tables_affected JSON,
           sent_to JSON,
           sent_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-          INDEX idx_type_table_sent (alert_type, table_name, sent_at)
+          recovered_at TIMESTAMP NULL DEFAULT NULL,
+          INDEX idx_type_table_sent (alert_type, table_name, sent_at),
+          INDEX idx_type_table_recovered (alert_type, table_name, recovered_at)
         )
       `);
     } catch (err) {
       const createError = err as Error;
       console.warn('Could not create alerts table (may already exist):', createError.message);
+    }
+
+    // Ensure recovered_at column exists (for existing tables)
+    try {
+      await client.execute(`
+        ALTER TABLE ai_agente.t_db_monitor_alerts 
+        ADD COLUMN IF NOT EXISTS recovered_at TIMESTAMP NULL DEFAULT NULL
+      `);
+    } catch (err) {
+      // Column may already exist - ignore error
+      console.log('recovered_at column check completed');
     }
 
     // Get stats for all tables
@@ -575,7 +587,33 @@ serve(async (req) => {
       });
     }
 
-    // Check if there are NEW critical tables (not alerted recently)
+    // First, mark any recovered tables (tables that were critical but are now healthy)
+    // This ensures we track the recovery state before checking for new alerts
+    for (const tableConfig of TABLES_CONFIG) {
+      const isCurrentlyCritical = criticalTables.some(t => t.name === tableConfig.name);
+      
+      if (!isCurrentlyCritical) {
+        // Table is now healthy - mark any unresolved alerts as recovered
+        try {
+          const updateResult = await client.execute(`
+            UPDATE ai_agente.t_db_monitor_alerts 
+            SET recovered_at = NOW()
+            WHERE alert_type = 'critical_alert' 
+              AND table_name = ?
+              AND recovered_at IS NULL
+          `, [tableConfig.name]);
+          
+          if (updateResult.affectedRows && updateResult.affectedRows > 0) {
+            console.log(`Marked table ${tableConfig.name} as RECOVERED`);
+          }
+        } catch (err) {
+          const updateError = err as Error;
+          console.warn(`Could not mark ${tableConfig.name} as recovered:`, updateError.message);
+        }
+      }
+    }
+
+    // Check if there are NEW critical tables (no active unresolved alert)
     const newCriticalTables: TableStats[] = [];
 
     if (forceAlert) {
@@ -584,30 +622,31 @@ serve(async (req) => {
     } else {
       for (const table of criticalTables) {
         try {
-          // Check if we sent an alert for this table in the last REALERT_INTERVAL_MINUTES
+          // Find the most recent alert for this table that hasn't recovered
           const checkQuery = `
-            SELECT sent_at 
+            SELECT id, sent_at, recovered_at 
             FROM ai_agente.t_db_monitor_alerts 
             WHERE alert_type = 'critical_alert' 
               AND table_name = ?
-              AND sent_at >= DATE_SUB(NOW(), INTERVAL ? MINUTE)
+              AND recovered_at IS NULL
             ORDER BY sent_at DESC
             LIMIT 1
           `;
           
-          const recentAlerts = await client.query(checkQuery, [table.name, REALERT_INTERVAL_MINUTES]);
+          const unresolvedAlerts = await client.query(checkQuery, [table.name]);
           
-          if (recentAlerts.length === 0) {
-            // No recent alert for this table - it's a NEW critical table
+          if (unresolvedAlerts.length === 0) {
+            // No unresolved alert - this is a NEW critical state (either first time or recovered and critical again)
             newCriticalTables.push(table);
-            console.log(`Table ${table.name} is NEW in critical status`);
+            console.log(`Table ${table.name} is NEW in critical status (no active unresolved alert)`);
           } else {
-            console.log(`Table ${table.name} was already alerted recently`);
+            // Already has an active (unrecovered) alert - don't send again
+            console.log(`Table ${table.name} still in critical status (alert from ${unresolvedAlerts[0].sent_at}, not recovered)`);
           }
         } catch (err) {
           const checkError = err as Error;
           // If check fails, consider it new to be safe
-          console.warn(`Could not check recent alerts for ${table.name}:`, checkError.message);
+          console.warn(`Could not check unresolved alerts for ${table.name}:`, checkError.message);
           newCriticalTables.push(table);
         }
       }
