@@ -1,127 +1,159 @@
 
-# Plano: Adicionar Prefixos LCL Não Identificados no Modal de Armadores Mapeados
+# Plano: Adicionar Prefixos Não-Padrão no Modal de Armadores Mapeados
 
 ## Resumo
-Adicionar uma seção no modal "Armadores Mapeados" da tela de Monitoramento Marítimo (`/sea/tracking`) para exibir os prefixos de MBL que não conseguimos identificar como armadores conhecidos. Esses são tipicamente cargas LCL (Less than Container Load) ou consolidadores.
+Expandir o modal "Armadores Mapeados" para incluir duas novas seções além da já existente seção LCL:
+1. **Prefixos DACHSER Internos** - Variantes do SSZ e outros prefixos internos
+2. **Prefixos Numéricos** - MBLs que não seguem o padrão SCAC (apenas números)
+3. **Formato com Barra** - MBLs no formato `ORIGEM/DESTINO/NUMERO`
 
 ---
 
-## Contexto Técnico
+## Dados Descobertos na t_master_dados
 
-### Situação Atual
-- O modal "Armadores Mapeados" (`ContainerTracking.tsx`, linhas 2279-2338) exibe apenas os 13 armadores com integração de API via `getTrackableCarriers()`
-- Os prefixos internos DACHSER já estão definidos em `INTERNAL_PREFIXES`: `['GLNL', 'GLSL', 'GLDL', 'BRSA', 'SSZ']`
-- A função `detectCarrierFromMbl()` retorna `UNKNOWN` quando não reconhece o prefixo
+### Prefixos SSZ/DACHSER Internos (com variantes):
+| Prefixo | Registros | Descrição |
+|---------|-----------|-----------|
+| SSZ1 | 14.218 | DACHSER Santos (com ano) |
+| SS01 | 3.543 | DACHSER Santos (variante) |
+| SSZN | 1.327 | DACHSER Santos NYC |
+| SS12 | 1.302 | DACHSER Santos (variante) |
+| SSZB | 844 | DACHSER Santos Brasil |
+| SS11, SSZA, SSZL, SS06 | < 10 | Outras variantes |
 
-### Objetivo
-Criar uma seção adicional no modal mostrando os prefixos que retornam `UNKNOWN` quando processados pela função de detecção - tipicamente identificados como cargas LCL/consolidadores.
+### Prefixos com Barra (`/`):
+| Formato | Exemplo | Descrição |
+|---------|---------|-----------|
+| SSZ/HAM/... | SSZ/HAM/1175322 | Santos → Hamburgo |
+| ITJ/NAV/... | ITJ/NAV/02621 | Itajaí → Navegantes |
+
+### Prefixos Puramente Numéricos:
+| Padrão | Registros | Descrição |
+|--------|-----------|-----------|
+| 721274... | 6.455 | Booking number (sem SCAC) |
+| 265249... | 3.041 | Booking number |
+| 254608... | 1.755 | Booking number |
+| (+ ~20 outros) | ~15.000+ | Variados |
 
 ---
 
 ## Alterações
 
-### 1. Adicionar constante com prefixos LCL conhecidos
+### 1. Expandir constantes em `shippingLineMapping.ts`
 
 **Arquivo:** `src/lib/shippingLineMapping.ts`
 
-Adicionar uma nova constante exportada com os prefixos que são conhecidos como LCL/consolidadores (baseado nos `INTERNAL_PREFIXES` existentes mais outros comuns):
+Adicionar novas constantes:
 
 ```typescript
-// Prefixos LCL / Consolidadores conhecidos (não são armadores diretos)
+// Prefixos LCL / Consolidadores DACHSER (variantes SSZ)
 export const LCL_PREFIXES: { prefix: string; label: string }[] = [
+  // Prefixos padrão
   { prefix: 'GLNL', label: 'DACHSER Netherlands' },
   { prefix: 'GLSL', label: 'DACHSER Sea Logistics' },
   { prefix: 'GLDL', label: 'DACHSER Logistics' },
   { prefix: 'BRSA', label: 'DACHSER Brasil' },
-  { prefix: 'SSZ', label: 'DACHSER Santos' },
   { prefix: 'DACS', label: 'DACHSER Consolidação' },
   { prefix: 'BRAN', label: 'Brasil Consolidador' },
+  // Variantes SSZ
+  { prefix: 'SSZ', label: 'DACHSER Santos (base)' },
+  { prefix: 'SSZ1', label: 'DACHSER Santos + Ano' },
+  { prefix: 'SSZN', label: 'DACHSER Santos NYC' },
+  { prefix: 'SSZB', label: 'DACHSER Santos Brasil' },
+  { prefix: 'SSZA', label: 'DACHSER Santos Variante A' },
+  { prefix: 'SSZL', label: 'DACHSER Santos Variante L' },
+  { prefix: 'SS01', label: 'DACHSER Santos (SS01)' },
+  { prefix: 'SS06', label: 'DACHSER Santos (SS06)' },
+  { prefix: 'SS11', label: 'DACHSER Santos (SS11)' },
+  { prefix: 'SS12', label: 'DACHSER Santos (SS12)' },
 ];
+
+// Prefixos com formato de rota (ORIGEM/DESTINO/...)
+export const ROUTE_FORMAT_PREFIXES: { prefix: string; label: string }[] = [
+  { prefix: 'SSZ/HAM', label: 'Santos → Hamburgo' },
+  { prefix: 'SSZ/RTM', label: 'Santos → Rotterdam' },
+  { prefix: 'ITJ/NAV', label: 'Itajaí → Navegantes' },
+  { prefix: 'PNG/SSZ', label: 'Paranaguá → Santos' },
+];
+
+// Descrição de MBLs numéricos (não SCAC)
+export const NUMERIC_MBL_INFO = {
+  description: 'MBLs puramente numéricos',
+  note: 'Estes MBLs não seguem o padrão SCAC (4 letras + números). São tipicamente booking numbers ou referências internas de consolidadores.',
+  examples: ['721274713', '265249042', '94263959'],
+};
 ```
 
----
+### 2. Atualizar o Modal de Armadores
 
-### 2. Atualizar o Modal de Armadores Mapeados
+**Arquivo:** `src/pages/ContainerTracking.tsx`
 
-**Arquivo:** `src/pages/ContainerTracking.tsx` (linhas 2279-2338)
+Expandir o modal para incluir:
+- Seção de prefixos LCL (já existente, expandir com variantes SSZ)
+- Nova seção "Formatos Especiais" para prefixos com barra
+- Nova seção informativa sobre MBLs numéricos
 
-Modificar o modal para incluir uma segunda tabela/seção mostrando os prefixos LCL:
-
-**Alterações necessárias:**
-
-1. Importar `LCL_PREFIXES` do mapeamento
-2. Adicionar uma nova seção abaixo da tabela de armadores:
-   - Título: "Prefixos LCL / Consolidadores"
-   - Descrição: "Prefixos não mapeados para armadores específicos"
-3. Exibir em formato de tabela com:
-   - Coluna "Prefixo"
-   - Coluna "Descrição"
-
-**Estrutura visual proposta:**
+**Estrutura visual:**
 
 ```text
-┌────────────────────────────────────────────────────────────┐
-│  🚢 Armadores Mapeados                                      │
-│  Lista de armadores com integração de rastreamento via API  │
-├────────────────────────────────────────────────────────────┤
-│  Prefixo    │  Armador              │  País                 │
-│  HLCU       │  Hapag-Lloyd          │  Germany              │
-│  MSCU       │  MSC                  │  Switzerland          │
-│  ...        │  ...                  │  ...                  │
-├────────────────────────────────────────────────────────────┤
-│  📦 Prefixos LCL / Consolidadores                           │
-│  Prefixos não mapeados para armadores específicos           │
-├────────────────────────────────────────────────────────────┤
-│  Prefixo    │  Descrição                                    │
-│  GLNL       │  DACHSER Netherlands                          │
-│  GLSL       │  DACHSER Sea Logistics                        │
-│  BRSA       │  DACHSER Brasil                               │
-│  SSZ        │  DACHSER Santos                               │
-│  ...        │  ...                                          │
-├────────────────────────────────────────────────────────────┤
-│  13 armadores com integração ativa | 5 prefixos LCL         │
-└────────────────────────────────────────────────────────────┘
+┌────────────────────────────────────────────────────────────────┐
+│  🚢 Armadores Mapeados (API)                                    │
+│  [tabela existente - 13 armadores]                             │
+├────────────────────────────────────────────────────────────────┤
+│  📦 Prefixos LCL / Consolidadores                              │
+│  GLNL, GLSL, GLDL, BRSA, SSZ, SSZ1, SSZN, SS01, SS12...       │
+├────────────────────────────────────────────────────────────────┤
+│  🔀 Formatos com Rota (ORIGEM/DESTINO)                         │
+│  SSZ/HAM → Santos-Hamburgo                                     │
+│  ITJ/NAV → Itajaí-Navegantes                                   │
+├────────────────────────────────────────────────────────────────┤
+│  🔢 MBLs Numéricos                                             │
+│  ⚠️ MBLs puramente numéricos não identificam armador.          │
+│  Ex: 721274713, 265249042                                      │
+│  São booking numbers de consolidadores.                        │
+└────────────────────────────────────────────────────────────────┘
 ```
 
 ---
 
-## Detalhes de Implementação
+## Detalhes Técnicos
 
-### Cores e Estilo
-- Seção de armadores: mantém o estilo atual (ícone 🚢 verde)
-- Nova seção LCL: usar ícone 📦 (Package) em cor laranja ou amarelo
-- Badges de prefixos LCL: `bg-orange-500/20 text-orange-400`
+### Importar novas constantes:
+```typescript
+import { 
+  LCL_PREFIXES, 
+  ROUTE_FORMAT_PREFIXES, 
+  NUMERIC_MBL_INFO,
+  // ... existentes
+} from "@/lib/shippingLineMapping";
+```
 
-### Separação Visual
-- Adicionar um `Separator` entre as duas tabelas
-- Subtítulo com estilo diferenciado para a seção LCL
+### Ícones a usar:
+- 🚢 Ship (existente) - Armadores
+- 📦 Package (existente) - LCL
+- 🔀 ArrowLeftRight ou Shuffle - Rotas
+- 🔢 Hash ou ListOrdered - Numéricos
 
-### Footer Atualizado
-- Mostrar contagem de ambos: "13 armadores | 7 prefixos LCL"
+### Cores por seção:
+- Armadores: Verde (existente)
+- LCL: Laranja (existente)
+- Rotas: Azul (`bg-blue-500/20 text-blue-400`)
+- Numéricos: Cinza/Amarelo (`bg-yellow-500/20 text-yellow-400`)
 
 ---
 
-## Arquivos a Modificar
+## Resumo de Arquivos
 
 | Arquivo | Alteração |
 |---------|-----------|
-| `src/lib/shippingLineMapping.ts` | Adicionar `LCL_PREFIXES` constante exportada |
-| `src/pages/ContainerTracking.tsx` | Adicionar seção LCL no modal de Armadores (linhas 2279-2338) |
+| `src/lib/shippingLineMapping.ts` | Expandir `LCL_PREFIXES`, adicionar `ROUTE_FORMAT_PREFIXES` e `NUMERIC_MBL_INFO` |
+| `src/pages/ContainerTracking.tsx` | Adicionar novas seções no modal de Armadores Mapeados |
+| `supabase/functions/_shared/shippingLineMapping.ts` | Sincronizar alterações (se necessário) |
 
 ---
 
-## Prefixos LCL a Incluir
+## Benefícios
 
-Baseado na constante `INTERNAL_PREFIXES` existente e padrões conhecidos:
-
-| Prefixo | Descrição |
-|---------|-----------|
-| GLNL | DACHSER Netherlands |
-| GLSL | DACHSER Sea Logistics |
-| GLDL | DACHSER Logistics |
-| BRSA | DACHSER Brasil |
-| SSZ | DACHSER Santos |
-| DACS | DACHSER Consolidação |
-| BRAN | Brasil Consolidador |
-
-*Nota: Esta lista pode ser expandida conforme novos prefixos forem identificados na operação.*
+1. **Transparência**: Usuários entendem por que certos MBLs não têm armador identificado
+2. **Documentação**: Cataloga os diferentes formatos de MBL usados internamente
+3. **Manutenção**: Facilita identificar novos padrões quando surgirem
