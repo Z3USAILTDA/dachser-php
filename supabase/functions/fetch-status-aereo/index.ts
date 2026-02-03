@@ -61,12 +61,17 @@ serve(async (req) => {
     // REGRA ATUALIZADA: Em vez de data fixa, usar janela de 10 dias para pegar processos recentes
     // Isso garante que AWBs inseridas após a data antiga (26/01) também apareçam
     // REGRA: AWBs com "ARR" ou "ARR - Destino" permanecem na lista por 5 dias após arr_datetime
+    // Agora incluímos tipo_processo via subquery correlata para filtros Impo/Expo
     const baseSelect = `
       SELECT s.id, s.awb, s.hawb, s.destinatário, s.nome_analista, s.email_analista,
              s.email_cliente, s.tipo_servico, s.data_atraso, s.\`última atualização\`,
              s.\`último_status\`, s.origem, s.destino, s.alert_status, s.dep_datetime,
              ${hasArrCheckColumn ? 's.arr_check_count' : '0 as arr_check_count'},
-             ${hasArrDatetimeColumn ? 's.arr_datetime' : 'NULL as arr_datetime'}
+             ${hasArrDatetimeColumn ? 's.arr_datetime' : 'NULL as arr_datetime'},
+             (SELECT m2.tipo_processo FROM ${database}.t_master_dados m2 
+              WHERE TRIM(m2.mawb) = TRIM(s.awb) 
+              AND m2.tipo_processo IN ('AIR IMPORT', 'AIR EXPORT')
+              LIMIT 1) as tipo_processo
       FROM ${database}.t_status_aereo s
       WHERE (
         -- AWBs dos últimos 10 dias (janela deslizante)
