@@ -151,14 +151,40 @@ export const INTERNAL_PREFIXES = ['GLNL', 'GLSL', 'GLDL', 'BRSA', 'SSZ'];
 
 // Prefixos LCL / Consolidadores conhecidos (não são armadores diretos)
 export const LCL_PREFIXES: { prefix: string; label: string }[] = [
+  // Prefixos padrão DACHSER
   { prefix: 'GLNL', label: 'DACHSER Netherlands' },
   { prefix: 'GLSL', label: 'DACHSER Sea Logistics' },
   { prefix: 'GLDL', label: 'DACHSER Logistics' },
   { prefix: 'BRSA', label: 'DACHSER Brasil' },
-  { prefix: 'SSZ', label: 'DACHSER Santos' },
   { prefix: 'DACS', label: 'DACHSER Consolidação' },
   { prefix: 'BRAN', label: 'Brasil Consolidador' },
+  // Variantes SSZ (DACHSER Santos)
+  { prefix: 'SSZ', label: 'DACHSER Santos (base)' },
+  { prefix: 'SSZ1', label: 'DACHSER Santos + Ano' },
+  { prefix: 'SSZN', label: 'DACHSER Santos NYC' },
+  { prefix: 'SSZB', label: 'DACHSER Santos Brasil' },
+  { prefix: 'SSZA', label: 'DACHSER Santos Variante A' },
+  { prefix: 'SSZL', label: 'DACHSER Santos Variante L' },
+  { prefix: 'SS01', label: 'DACHSER Santos (SS01)' },
+  { prefix: 'SS06', label: 'DACHSER Santos (SS06)' },
+  { prefix: 'SS11', label: 'DACHSER Santos (SS11)' },
+  { prefix: 'SS12', label: 'DACHSER Santos (SS12)' },
 ];
+
+// Prefixos com formato de rota (ORIGEM/DESTINO/...)
+export const ROUTE_FORMAT_PREFIXES: { prefix: string; label: string }[] = [
+  { prefix: 'SSZ/HAM', label: 'Santos → Hamburgo' },
+  { prefix: 'SSZ/RTM', label: 'Santos → Rotterdam' },
+  { prefix: 'ITJ/NAV', label: 'Itajaí → Navegantes' },
+  { prefix: 'PNG/SSZ', label: 'Paranaguá → Santos' },
+];
+
+// Descrição de MBLs numéricos (não SCAC)
+export const NUMERIC_MBL_INFO = {
+  description: 'MBLs puramente numéricos',
+  note: 'Estes MBLs não seguem o padrão SCAC (4 letras + números). São tipicamente booking numbers ou referências internas de consolidadores.',
+  examples: ['721274713', '265249042', '94263959'],
+};
 
 // Informações completas de cada armador
 export const SHIPPING_LINE_INFO: Record<ShippingLineCode, ShippingLineInfo> = {

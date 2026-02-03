@@ -10,7 +10,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
-import { Search, RefreshCw, Ship, Trash2, Mail, Check, ArrowLeft, Loader2, Anchor, AlertTriangle, HelpCircle, ChevronDown, ChevronUp, Package, Clock, Bell, Play, Database, Radar, RotateCcw, Sun, Moon, FileSpreadsheet, BoxIcon } from "lucide-react";
+import { Search, RefreshCw, Ship, Trash2, Mail, Check, ArrowLeft, Loader2, Anchor, AlertTriangle, HelpCircle, ChevronDown, ChevronUp, Package, Clock, Bell, Play, Database, Radar, RotateCcw, Sun, Moon, FileSpreadsheet, BoxIcon, ArrowLeftRight, Hash } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -29,7 +29,7 @@ import { Filter as FilterIcon } from "lucide-react";
 import VesselFinderMap from "@/components/tracking/VesselFinderMap";
 import Swal from 'sweetalert2';
 import { useTheme } from "@/hooks/useTheme";
-import { detectCarrierFromMbl, SHIPPING_LINE_INFO, ShippingLineCode, getTrackableCarriers, MBL_PREFIX_MAP, LCL_PREFIXES } from "@/lib/shippingLineMapping";
+import { detectCarrierFromMbl, SHIPPING_LINE_INFO, ShippingLineCode, getTrackableCarriers, MBL_PREFIX_MAP, LCL_PREFIXES, ROUTE_FORMAT_PREFIXES, NUMERIC_MBL_INFO } from "@/lib/shippingLineMapping";
 import { Separator } from "@/components/ui/separator";
 
 // Deriva o armador do MBL usando o mapeamento centralizado - retorna código normalizado
@@ -2359,12 +2359,70 @@ const ContainerTracking = () => {
                 </TableBody>
               </Table>
             </div>
+            
+            {/* Separador */}
+            <Separator className="bg-[rgba(255,255,255,.08)]" />
+            
+            {/* Seção de Formatos com Rota */}
+            <div>
+              <div className="flex items-center gap-2 mb-3">
+                <ArrowLeftRight className="w-4 h-4 text-blue-400" />
+                <h4 className="text-sm font-medium text-blue-400">Formatos com Rota (ORIGEM/DESTINO)</h4>
+              </div>
+              <p className="text-xs text-gray-500 mb-3">MBLs no formato rota com barra separadora</p>
+              
+              <Table>
+                <TableHeader>
+                  <TableRow className="border-b border-[rgba(255,255,255,.08)] hover:bg-transparent">
+                    <TableHead className="text-[#aaaaaa]">Prefixo</TableHead>
+                    <TableHead className="text-[#aaaaaa]">Rota</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {ROUTE_FORMAT_PREFIXES.map((item) => (
+                    <TableRow key={item.prefix} className="border-b border-[rgba(255,255,255,.05)] hover:bg-[rgba(255,255,255,.03)]">
+                      <TableCell>
+                        <span className="font-mono text-sm px-2 py-0.5 rounded bg-blue-500/20 text-blue-400 border border-blue-500/30">
+                          {item.prefix}
+                        </span>
+                      </TableCell>
+                      <TableCell className="text-gray-400 text-sm">
+                        {item.label}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+            
+            {/* Separador */}
+            <Separator className="bg-[rgba(255,255,255,.08)]" />
+            
+            {/* Seção de MBLs Numéricos */}
+            <div>
+              <div className="flex items-center gap-2 mb-3">
+                <Hash className="w-4 h-4 text-yellow-400" />
+                <h4 className="text-sm font-medium text-yellow-400">MBLs Numéricos</h4>
+              </div>
+              <div className="bg-yellow-500/10 border border-yellow-500/20 rounded-lg p-3">
+                <p className="text-xs text-yellow-300/80 mb-2">
+                  ⚠️ {NUMERIC_MBL_INFO.note}
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  {NUMERIC_MBL_INFO.examples.map((example) => (
+                    <span key={example} className="font-mono text-xs px-2 py-0.5 rounded bg-yellow-500/20 text-yellow-400 border border-yellow-500/30">
+                      {example}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            </div>
           </div>
           
           <DialogFooter className="mt-4 border-t border-[rgba(255,255,255,.08)] pt-4">
             <div className="flex items-center justify-between w-full">
               <span className="text-sm text-gray-400">
-                {getTrackableCarriers().length} armadores com integração | {LCL_PREFIXES.length} prefixos LCL
+                {getTrackableCarriers().length} armadores | {LCL_PREFIXES.length} LCL | {ROUTE_FORMAT_PREFIXES.length} rotas
               </span>
               <Button variant="outline" onClick={() => setShowArmadoresModal(false)} className="border-[rgba(255,255,255,.1)] text-gray-300 hover:bg-[rgba(255,255,255,.05)]">
                 Fechar
