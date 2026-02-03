@@ -58,10 +58,10 @@ serve(async (req) => {
       console.log('Column check failed, assuming columns do not exist');
     }
 
-    // OTIMIZAÇÃO: Primeiro buscar lista de MAWBs válidos (usa índice)
-    // Depois usar essa lista explícita no WHERE IN (evita subquery correlata)
+    // OTIMIZAÇÃO: Primeiro buscar lista de MAWBs válidos e mapear HAWB -> tipo_processo
+    // Usamos HAWB como chave pois t_status_aereo.hawb corresponde a t_master_dados.hawb
     const mawbListQuery = `
-      SELECT DISTINCT TRIM(mawb) as mawb, tipo_processo
+      SELECT DISTINCT TRIM(mawb) as mawb, TRIM(hawb) as hawb, tipo_processo
       FROM ${database}.t_master_dados 
       WHERE data_insert >= DATE_SUB(NOW(), INTERVAL 10 DAY)
       AND tipo_processo IN ('AIR IMPORT', 'AIR EXPORT')
@@ -71,18 +71,31 @@ serve(async (req) => {
     const mawbListResult = await client.query(mawbListQuery);
     const mawbList = Array.isArray(mawbListResult) ? mawbListResult : [];
     
-    // Criar mapa de MAWB -> tipo_processo para lookup eficiente
+    // Criar mapas para lookup eficiente
+    // mawbToProcessType: MAWB -> tipo_processo (para busca por AWB)
+    // hawbToProcessType: HAWB -> tipo_processo (para busca por HAWB quando AWB não bater)
     const mawbToProcessType = new Map<string, string>();
+    const hawbToProcessType = new Map<string, string>();
     const validMawbs: string[] = [];
+    
     for (const row of mawbList) {
       const mawb = String(row.mawb || '').trim();
+      const hawb = String(row.hawb || '').trim();
+      
       if (mawb) {
         validMawbs.push(mawb);
         if (row.tipo_processo) {
           mawbToProcessType.set(mawb, row.tipo_processo);
         }
       }
+      
+      // Também mapear por HAWB para correlação alternativa
+      if (hawb && row.tipo_processo) {
+        hawbToProcessType.set(hawb, row.tipo_processo);
+      }
     }
+    
+    console.log(`Built maps: ${mawbToProcessType.size} MAWBs, ${hawbToProcessType.size} HAWBs`)
 
     console.log(`Found ${validMawbs.length} valid MAWBs from t_master_dados`);
 
@@ -142,9 +155,18 @@ serve(async (req) => {
     const processedRows = (rows || []).map((row: any) => {
       const processed = { ...row };
       
-      // Add tipo_processo from the pre-fetched map (evita subquery correlata)
+      // Add tipo_processo from the pre-fetched maps
+      // Tentar primeiro por AWB (MAWB), depois por HAWB
       const awbTrimmed = String(processed.awb || '').trim();
-      const tipoProcesso = mawbToProcessType.get(awbTrimmed);
+      const hawbTrimmed = String(processed.hawb || '').trim();
+      
+      // Primeiro tenta mapear pelo AWB (que corresponde ao MAWB)
+      let tipoProcesso = mawbToProcessType.get(awbTrimmed);
+      
+      // Se não encontrou pelo AWB, tenta pelo HAWB
+      if (!tipoProcesso && hawbTrimmed) {
+        tipoProcesso = hawbToProcessType.get(hawbTrimmed);
+      }
       
       if (tipoProcesso) {
         matchedCount++;
@@ -152,7 +174,7 @@ serve(async (req) => {
       } else {
         processed.tipo_processo = null;
         if (unmatchedSamples.length < 5) {
-          unmatchedSamples.push(awbTrimmed);
+          unmatchedSamples.push(`awb:${awbTrimmed}/hawb:${hawbTrimmed}`);
         }
       }
       
