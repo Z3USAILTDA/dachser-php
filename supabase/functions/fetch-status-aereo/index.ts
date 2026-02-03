@@ -209,6 +209,12 @@ serve(async (req) => {
     if (unmatchedSamples.length > 0) {
       console.log(`Unmatched AWB samples: ${unmatchedSamples.join(', ')}`);
     }
+    
+    // Debug: log tipo_processo distribution
+    const importCount = processedRows.filter((r: any) => r.tipo_processo === 'AIR IMPORT').length;
+    const exportCount = processedRows.filter((r: any) => r.tipo_processo === 'AIR EXPORT').length;
+    const nullCount = processedRows.filter((r: any) => !r.tipo_processo).length;
+    console.log(`tipo_processo distribution: IMPORT=${importCount}, EXPORT=${exportCount}, null=${nullCount}`);
 
     return new Response(
       JSON.stringify({ success: true, data: processedRows }),
