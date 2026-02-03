@@ -1844,7 +1844,15 @@ const Index = () => {
       const matchesAirline = filterAirline === "all" || awb.airline_code === filterAirline;
       const matchesAnalyst = filterAnalyst === "all" || awb.nome_analista === filterAnalyst;
       const matchesService = filterService === "all" || awb.tipo_servico === filterService;
-      const matchesProcessType = filterProcessType === "all" || awb.tipo_processo === filterProcessType;
+      // Filtrar por tipo de processo baseado na rota:
+      // - IMPO: destino é aeroporto brasileiro
+      // - EXPO: destino é aeroporto internacional (não brasileiro)
+      const brazilianAirports = ['GRU', 'VCP', 'CGH', 'GIG', 'SDU', 'BSB', 'CNF', 'POA', 'CWB', 'REC', 'SSA', 'FOR', 'BEL', 'MAO', 'NAT', 'MCZ', 'FLN', 'VIX', 'CGB', 'GYN', 'SLZ', 'THE', 'AJU', 'JPA', 'PMW', 'PVH', 'RBR', 'BVB', 'MCP', 'CGR', 'LDB', 'MGF', 'IGU', 'NVT', 'JOI', 'XAP', 'UDI', 'RAO', 'SJP', 'PPB', 'BAU', 'CPQ', 'QPS', 'SOD', 'MAB', 'STM', 'SJK', 'PNZ'];
+      const destino = (awb.destino || '').toUpperCase().trim();
+      const isImport = brazilianAirports.includes(destino);
+      const matchesProcessType = filterProcessType === "all" || 
+        (filterProcessType === "AIR IMPORT" && isImport) ||
+        (filterProcessType === "AIR EXPORT" && !isImport);
 
       // Only show AWBs with these specific status codes
       const allowedStatuses = [
