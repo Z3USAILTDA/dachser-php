@@ -315,7 +315,40 @@ serve(async (req) => {
           results.push({ table: 't_leadcomex_enrichment_logs', database: 'dados_dachser', status: 'error', error: (e as Error).message });
         }
 
-        // 4. ALTER TABLE t_sea_master - Add SEA-specific columns if they don't exist
+        // 4. ALTER TABLE t_air_master - Add AIR-specific columns if they don't exist
+        const airColumns = [
+          { name: 'wh_treatment', definition: 'VARCHAR(255) NULL' },
+          { name: 'cct_transm', definition: 'VARCHAR(100) NULL' },
+          { name: 'eta_ata', definition: 'DATETIME NULL' },
+          { name: 'email_title', definition: 'TEXT NULL' },
+        ];
+
+        for (const col of airColumns) {
+          try {
+            // Check if column exists
+            const checkResult = await dadosDachserClient.execute(`
+              SELECT COUNT(*) as cnt FROM INFORMATION_SCHEMA.COLUMNS 
+              WHERE TABLE_SCHEMA = 'dados_dachser' 
+                AND TABLE_NAME = 't_air_master' 
+                AND COLUMN_NAME = ?
+            `, [col.name]);
+            
+            const exists = (checkResult.rows?.[0] as { cnt: number })?.cnt > 0;
+            
+            if (!exists) {
+              await dadosDachserClient.execute(`
+                ALTER TABLE dados_dachser.t_air_master ADD COLUMN ${col.name} ${col.definition}
+              `);
+              results.push({ table: `t_air_master.${col.name}`, database: 'dados_dachser', status: 'added' });
+            } else {
+              results.push({ table: `t_air_master.${col.name}`, database: 'dados_dachser', status: 'exists' });
+            }
+          } catch (e: unknown) {
+            results.push({ table: `t_air_master.${col.name}`, database: 'dados_dachser', status: 'error', error: (e as Error).message });
+          }
+        }
+
+        // 5. ALTER TABLE t_sea_master - Add SEA-specific columns if they don't exist
         const seaColumns = [
           { name: 'hbl', definition: 'VARCHAR(100) NULL' },
           { name: 'customer_order', definition: 'VARCHAR(100) NULL' },
@@ -325,8 +358,17 @@ serve(async (req) => {
           { name: 'email_title', definition: 'TEXT NULL' },
           { name: 'te', definition: 'VARCHAR(50) NULL' },
           { name: 'at_field', definition: 'VARCHAR(50) NULL' },
-          { name: 'wh_treatment', definition: 'VARCHAR(100) NULL' },
-          { name: 'cct_transm', definition: 'VARCHAR(100) NULL' },
+          { name: 'wh_treatment', definition: 'VARCHAR(255) NULL' },
+          { name: 'cct_transm', definition: 'VARCHAR(255) NULL' },
+          // NEW SEA Export columns
+          { name: 'deadline_draft_vgm', definition: 'DATETIME NULL' },
+          { name: 'drafts_sent', definition: 'TINYINT NULL' },
+          { name: 'deadline_load', definition: 'DATETIME NULL' },
+          { name: 'cargo_departed', definition: 'TINYINT NULL' },
+          { name: 'd_term', definition: 'VARCHAR(50) NULL' },
+          { name: 'pod_available', definition: 'TINYINT NULL' },
+          { name: 'dn_available', definition: 'TINYINT NULL' },
+          { name: 'hawb', definition: 'VARCHAR(100) NULL' },
         ];
 
         for (const col of seaColumns) {

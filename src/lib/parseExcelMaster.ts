@@ -24,18 +24,25 @@ const COLUMN_ALIASES: Record<string, string[]> = {
   cargo_departed: ["cargo_departed", "departed", "data_departed", "data_embarque", "embarque", "departure_date", "data_saida_real"],
   d_term: ["d_term", "dterm", "delivery_term", "incoterm", "incoterms", "termo", "termo_entrega"],
   pod_dn_available: ["pod_dn_available", "pod", "dn_available", "dn", "pod_dn", "document_available", "doc_available"],
+  // NEW AIR columns - also used by AIR
+  wh_treatment: ["wh_treatment", "wh", "warehouse_treatment", "tratamento_armazem", "wh_treatment_import"],
+  cct_transm: ["cct_transm", "cct", "transmissao_cct", "cct_transmissao"],
+  eta_ata: ["eta_ata", "e_t_a_a_t_a", "eta", "e_t_a", "ata", "a_t_a", "arrival", "chegada"],
+  email_title: ["email_title", "email_title_pre_alert", "titulo_email", "email_pre_alert"],
   
   // Campos SEA específicos
   hbl: ["hbl", "hbl_no", "hbl_number", "house_bl", "house_bill", "house_bill_of_lading"],
   customer_order: ["customer_order", "order", "order_no", "order_number", "pedido_cliente"],
   accrual: ["accrual", "provisao", "prov"],
   dep: ["dep", "departed", "partiu"],
-  eta_ata: ["eta_ata", "e_t_a_a_t_a", "eta", "e_t_a", "ata", "a_t_a", "arrival", "chegada"],
-  email_title: ["email_title", "email_title_pre_alert", "titulo_email"],
   te: ["te", "t_e", "transit_time", "tempo_transito"],
   at_field: ["at", "a_t", "at_field", "arrival_time"],
-  wh_treatment: ["wh_treatment", "wh", "warehouse_treatment", "tratamento_armazem"],
-  cct_transm: ["cct_transm", "cct", "transmissao_cct"],
+  // NEW SEA Export columns
+  deadline_draft_vgm: ["deadline_draft_vgm", "deadline_real_draft_vgm", "draft_vgm_deadline", "deadline_draft", "draft_vgm"],
+  drafts_sent: ["drafts_sent", "draft_sent", "drafts"],
+  deadline_load: ["deadline_load", "load_deadline", "prazo_embarque", "deadline_carga"],
+  pod_available: ["pod_available", "pod_avail"],
+  dn_available: ["dn_available", "dn_avail", "dn"],
 };
 
 // Colunas do banco - comuns e específicas por modal
@@ -50,23 +57,29 @@ export const DB_COLUMNS = [
   "oea_cl_doc",
   "remarks",
   
-  // Campos AIR
+  // Campos AIR (inclui novas colunas)
   "hawb",
   "cargo_departed",
   "d_term",
   "pod_dn_available",
+  "wh_treatment",
+  "cct_transm",
+  "eta_ata",
+  "email_title",
   
   // Campos SEA
   "hbl",
   "customer_order",
   "accrual",
   "dep",
-  "eta_ata",
-  "email_title",
   "te",
   "at_field",
-  "wh_treatment",
-  "cct_transm",
+  // NEW SEA Export columns
+  "deadline_draft_vgm",
+  "drafts_sent",
+  "deadline_load",
+  "pod_available",
+  "dn_available",
 ];
 
 export interface MasterRow {
@@ -82,23 +95,29 @@ export interface MasterRow {
   tipo_processo?: string;
   data_insert?: string;
   
-  // Campos AIR específicos
+  // Campos AIR específicos (inclui novas colunas)
   hawb?: string;
   cargo_departed?: string;
   d_term?: string;
   pod_dn_available?: string;
+  wh_treatment?: string;
+  cct_transm?: string;
+  eta_ata?: string;
+  email_title?: string;
   
   // Campos SEA específicos
   hbl?: string;
   customer_order?: string;
   accrual?: number | null;
   dep?: number | null;
-  eta_ata?: string;
-  email_title?: string;
   te?: string;
   at_field?: string;
-  wh_treatment?: string;
-  cct_transm?: string;
+  // NEW SEA Export columns
+  deadline_draft_vgm?: string;
+  drafts_sent?: number | null;
+  deadline_load?: string;
+  pod_available?: number | null;
+  dn_available?: number | null;
 }
 
 export interface ColumnMapping {
@@ -512,6 +531,12 @@ export async function parseExcelMasterFile(
               case "eta_ata":
                 row.eta_ata = parseDate(value) || undefined;
                 break;
+              case "deadline_draft_vgm":
+                row.deadline_draft_vgm = parseDate(value) || undefined;
+                break;
+              case "deadline_load":
+                row.deadline_load = parseDate(value) || undefined;
+                break;
               
               // Campos booleanos
               case "oea_cl_doc":
@@ -522,6 +547,15 @@ export async function parseExcelMasterFile(
                 break;
               case "dep":
                 row.dep = parseBoolean(value);
+                break;
+              case "drafts_sent":
+                row.drafts_sent = parseBoolean(value);
+                break;
+              case "pod_available":
+                row.pod_available = parseBoolean(value);
+                break;
+              case "dn_available":
+                row.dn_available = parseBoolean(value);
                 break;
               
               // Campos de texto
@@ -653,6 +687,12 @@ export function reprocessWithMapping(
         case "eta_ata":
           row.eta_ata = parseDate(value) || undefined;
           break;
+        case "deadline_draft_vgm":
+          row.deadline_draft_vgm = parseDate(value) || undefined;
+          break;
+        case "deadline_load":
+          row.deadline_load = parseDate(value) || undefined;
+          break;
         
         // Campos booleanos
         case "oea_cl_doc":
@@ -663,6 +703,15 @@ export function reprocessWithMapping(
           break;
         case "dep":
           row.dep = parseBoolean(value);
+          break;
+        case "drafts_sent":
+          row.drafts_sent = parseBoolean(value);
+          break;
+        case "pod_available":
+          row.pod_available = parseBoolean(value);
+          break;
+        case "dn_available":
+          row.dn_available = parseBoolean(value);
           break;
         
         // Campos de texto
@@ -702,9 +751,9 @@ export function reprocessWithMapping(
         case "te":
           row.te = value != null ? String(value).trim() : undefined;
           break;
-              case "at_field":
-                row.at_field = value != null ? String(value).trim() : undefined;
-                break;
+        case "at_field":
+          row.at_field = value != null ? String(value).trim() : undefined;
+          break;
         case "wh_treatment":
           row.wh_treatment = value != null ? String(value).trim() : undefined;
           break;

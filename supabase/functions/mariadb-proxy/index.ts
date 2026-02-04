@@ -11430,22 +11430,28 @@ serve(async (req) => {
             remarks?: string;
             tipo_processo?: string;
             data_insert?: string;
-            // Campos AIR
+            // Campos AIR (inclui novas colunas)
             hawb?: string;
             cargo_departed?: string;
             d_term?: string;
             pod_dn_available?: string;
+            wh_treatment?: string;
+            cct_transm?: string;
+            eta_ata?: string;
+            email_title?: string;
             // Campos SEA
             hbl?: string;
             customer_order?: string;
             accrual?: number;
             dep?: number;
-            eta_ata?: string;
-            email_title?: string;
             te?: string;
             at_field?: string;
-            wh_treatment?: string;
-            cct_transm?: string;
+            // NEW SEA Export columns
+            deadline_draft_vgm?: string;
+            drafts_sent?: number;
+            deadline_load?: string;
+            pod_available?: number;
+            dn_available?: number;
           }>;
           modal?: 'AIR' | 'SEA';
         };
@@ -11477,19 +11483,22 @@ serve(async (req) => {
           const row = rows[i];
           try {
             if (modal === 'SEA') {
-              // INSERT para SEA com colunas específicas
+              // INSERT para SEA com colunas específicas (inclui novas colunas)
               await client.execute(`
                 INSERT INTO ${tableName} (
-                  nome_analista, customer_no, po, hbl, master,
+                  nome_analista, customer_no, po, hbl, hawb, master,
                   etd, pre_alert_sent, oea_cl_doc, customer_order,
                   accrual, dep, eta_ata, email_title, te, at_field,
-                  wh_treatment, cct_transm, remarks, tipo_processo, data_insert
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                  wh_treatment, cct_transm, remarks, tipo_processo, data_insert,
+                  deadline_draft_vgm, drafts_sent, deadline_load, cargo_departed,
+                  d_term, pod_available, dn_available
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
               `, [
                 row.nome_analista || null,
                 row.customer_no || null,
                 row.po || null,
                 row.hbl || null,
+                row.hawb || null,
                 row.master || null,
                 row.etd || null,
                 row.pre_alert_sent || null,
@@ -11506,15 +11515,23 @@ serve(async (req) => {
                 row.remarks || null,
                 row.tipo_processo || null,
                 row.data_insert || null,
+                row.deadline_draft_vgm || null,
+                row.drafts_sent ?? null,
+                row.deadline_load || null,
+                row.cargo_departed || null,
+                row.d_term || null,
+                row.pod_available ?? null,
+                row.dn_available ?? null,
               ]);
             } else {
-              // INSERT para AIR com colunas específicas
+              // INSERT para AIR com colunas específicas (inclui novas colunas)
               await client.execute(`
                 INSERT INTO ${tableName} (
                   nome_analista, customer_no, po, hawb, master,
                   etd, pre_alert_sent, oea_cl_doc, cargo_departed,
-                  d_term, pod_dn_available, remarks, tipo_processo, data_insert
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                  d_term, pod_dn_available, remarks, tipo_processo, data_insert,
+                  wh_treatment, cct_transm, eta_ata, email_title
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
               `, [
                 row.nome_analista || null,
                 row.customer_no || null,
@@ -11530,6 +11547,10 @@ serve(async (req) => {
                 row.remarks || null,
                 row.tipo_processo || null,
                 row.data_insert || null,
+                row.wh_treatment || null,
+                row.cct_transm || null,
+                row.eta_ata || null,
+                row.email_title || null,
               ]);
             }
             inserted++;
