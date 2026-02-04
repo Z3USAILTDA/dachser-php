@@ -11,9 +11,14 @@ const corsHeaders = {
 interface TableStats {
   name: string;
   displayName: string;
+  businessName: string;
+  businessDescription: string;
   applications: string[];
   lastUpdate: Date | null;
+  totalRecords: number;
+  recentInserts: number;
   minutesSinceUpdate: number;
+  status: 'healthy' | 'warning' | 'critical';
 }
 
 interface AlertRecord {
@@ -22,10 +27,34 @@ interface AlertRecord {
 }
 
 const TABLES_CONFIG = [
-  { name: 't_master_dados', displayName: 'Master Dados', applications: ['AIR', 'SEA', 'CCT', 'TRACKING', 'OLIMPO'] },
-  { name: 't_dados_financeiro_nfs', displayName: 'Financeiro NFs', applications: ['REGUA'] },
-  { name: 't_dados_financeiro_voucher', displayName: 'Financeiro Voucher', applications: ['ESTEIRA'] },
-  { name: 'tbaixas', displayName: 'Baixas', applications: ['ESTEIRA'] },
+  { 
+    name: 't_master_dados', 
+    displayName: 'Master Dados', 
+    businessName: 'Dados Operacionais',
+    businessDescription: 'Processos de importação e exportação (aéreo e marítimo) - CCT, Tracking, Olimpo',
+    applications: ['AIR', 'SEA', 'CCT', 'TRACKING', 'OLIMPO'] 
+  },
+  { 
+    name: 't_dados_financeiro_nfs', 
+    displayName: 'Financeiro NFs', 
+    businessName: 'Notas Fiscais',
+    businessDescription: 'Dados de faturamento para régua de cobrança automática',
+    applications: ['REGUA'] 
+  },
+  { 
+    name: 't_dados_financeiro_voucher', 
+    displayName: 'Financeiro Voucher', 
+    businessName: 'Vouchers/SPO',
+    businessDescription: 'Solicitações de pagamento e despesas operacionais',
+    applications: ['ESTEIRA'] 
+  },
+  { 
+    name: 'tbaixas', 
+    displayName: 'Baixas', 
+    businessName: 'Baixas Financeiras',
+    businessDescription: 'Comprovantes de pagamento processados pelo robô financeiro',
+    applications: ['ESTEIRA'] 
+  },
 ];
 
 const CRITICAL_THRESHOLD_MINUTES = 60;
@@ -86,11 +115,17 @@ async function connectWithRetry(maxRetries = 3): Promise<Client> {
   throw new Error('Failed to connect after all retries');
 }
 
+function getStatusColor(minutes: number): 'healthy' | 'warning' | 'critical' {
+  if (minutes > 60) return 'critical';
+  if (minutes > 5) return 'warning';
+  return 'healthy';
+}
+
 function formatMinutes(minutes: number): string {
-  if (minutes < 60) return `${minutes} minutos`;
+  if (minutes < 60) return `há ${minutes} min`;
   const hours = Math.floor(minutes / 60);
   const mins = minutes % 60;
-  return mins > 0 ? `${hours}h ${mins}min` : `${hours}h`;
+  return mins > 0 ? `há ${hours}h ${mins}min` : `há ${hours}h`;
 }
 
 function formatDateTime(date: Date): string {
@@ -118,8 +153,13 @@ function getStatusLabel(status: 'healthy' | 'warning' | 'critical'): string {
 
 const LOGO_URL = 'https://finktakbjcfmurqeiubz.supabase.co/storage/v1/object/public/maritime-files/email-assets/logo-z3us.png';
 
-// ========== PDF GENERATION FOR CRITICAL ALERT ==========
-function generateCriticalAlertPdf(criticalTables: TableStats[], timestamp: Date): Uint8Array {
+// ========== PDF GENERATION (Same as db-status-report) ==========
+function generatePdfBuffer(stats: TableStats[], timestamp: Date): Uint8Array {
+  const healthyCount = stats.filter(s => s.status === 'healthy').length;
+  const warningCount = stats.filter(s => s.status === 'warning').length;
+  const criticalCount = stats.filter(s => s.status === 'critical').length;
+  const totalInserts = stats.reduce((sum, s) => sum + s.recentInserts, 0);
+
   const formattedDate = formatDateTime(timestamp);
 
   const doc = new jsPDF({
@@ -134,10 +174,12 @@ function generateCriticalAlertPdf(criticalTables: TableStats[], timestamp: Date)
   let y = 0;
 
   // Colors
-  const criticalRed = [239, 68, 68];
+  const dachserYellow = [255, 200, 0];
   const darkText = [30, 30, 35];
   const grayText = [107, 114, 128];
-  const yellowColor = [245, 184, 67];
+  const greenColor = [34, 197, 94];
+  const yellowColor = [245, 158, 11];
+  const redColor = [239, 68, 68];
   const lightGray = [243, 244, 246];
   const borderGray = [229, 231, 235];
 
@@ -147,14 +189,22 @@ function generateCriticalAlertPdf(criticalTables: TableStats[], timestamp: Date)
     else doc.setDrawColor(rgb[0], rgb[1], rgb[2]);
   };
 
+  const getStatusColorRgb = (status: 'healthy' | 'warning' | 'critical'): number[] => {
+    switch (status) {
+      case 'healthy': return greenColor;
+      case 'warning': return yellowColor;
+      case 'critical': return redColor;
+    }
+  };
+
   // ========== HEADER ==========
-  setColor(criticalRed, 'fill');
+  setColor(dachserYellow, 'fill');
   doc.rect(0, 0, pageWidth, 35, 'F');
 
-  doc.setTextColor(255, 255, 255);
+  setColor(darkText, 'text');
   doc.setFontSize(18);
   doc.setFont('helvetica', 'bold');
-  doc.text('🚨 ALERTA CRÍTICO - BANCO DE DADOS', margin, 15);
+  doc.text('RELATÓRIO DE MONITORAMENTO DE DADOS', margin, 15);
 
   doc.setFontSize(11);
   doc.setFont('helvetica', 'normal');
@@ -165,9 +215,9 @@ function generateCriticalAlertPdf(criticalTables: TableStats[], timestamp: Date)
 
   y = 45;
 
-  // ========== RESUMO ==========
+  // ========== RESUMO EXECUTIVO ==========
   setColor(lightGray, 'fill');
-  setColor(criticalRed, 'draw');
+  setColor(dachserYellow, 'draw');
   doc.rect(margin, y, pageWidth - margin * 2, 10, 'F');
   doc.setLineWidth(0.8);
   doc.line(margin, y, margin, y + 10);
@@ -175,30 +225,65 @@ function generateCriticalAlertPdf(criticalTables: TableStats[], timestamp: Date)
   setColor(darkText, 'text');
   doc.setFontSize(11);
   doc.setFont('helvetica', 'bold');
-  doc.text('TABELAS EM ESTADO CRÍTICO', margin + 5, y + 7);
+  doc.text('RESUMO EXECUTIVO', margin + 5, y + 7);
   y += 18;
 
-  // Warning box
-  setColor([254, 226, 226], 'fill');
-  setColor(criticalRed, 'draw');
-  doc.setLineWidth(0.5);
-  doc.roundedRect(margin, y, pageWidth - margin * 2, 22, 3, 3, 'FD');
+  // Summary cards
+  const cardWidth = (pageWidth - margin * 2 - 10) / 2;
 
-  setColor(criticalRed, 'text');
-  doc.setFontSize(12);
-  doc.setFont('helvetica', 'bold');
-  doc.text(`${criticalTables.length} tabela${criticalTables.length > 1 ? 's' : ''} sem atualização há mais de 60 minutos`, margin + 8, y + 9);
+  // Card 1: Processados
+  setColor(borderGray, 'draw');
+  doc.setLineWidth(0.3);
+  doc.roundedRect(margin, y, cardWidth, 28, 3, 3, 'S');
 
-  setColor([153, 27, 27], 'text');
-  doc.setFontSize(10);
+  setColor(grayText, 'text');
+  doc.setFontSize(8);
   doc.setFont('helvetica', 'normal');
-  doc.text('Ação imediata necessária para garantir a continuidade dos processos.', margin + 8, y + 17);
+  doc.text('PROCESSADOS NAS ÚLTIMAS 24H', margin + 5, y + 8);
 
-  y += 32;
+  setColor(greenColor, 'text');
+  doc.setFontSize(20);
+  doc.setFont('helvetica', 'bold');
+  doc.text(`+${formatNumber(totalInserts)}`, margin + 5, y + 22);
 
-  // ========== TABLE DETAILS ==========
+  // Card 2: Status
+  const card2X = margin + cardWidth + 10;
+  setColor(borderGray, 'draw');
+  doc.roundedRect(card2X, y, cardWidth, 28, 3, 3, 'S');
+
+  setColor(grayText, 'text');
+  doc.setFontSize(8);
+  doc.setFont('helvetica', 'normal');
+  doc.text('SITUAÇÃO DAS ÁREAS', card2X + 5, y + 8);
+
+  // Status indicators
+  const statusY = y + 14;
+  doc.setFontSize(10);
+
+  // Green dot
+  setColor(greenColor, 'fill');
+  doc.circle(card2X + 7, statusY, 2, 'F');
+  setColor(darkText, 'text');
+  doc.setFont('helvetica', 'normal');
+  doc.text(`${healthyCount} OK`, card2X + 12, statusY + 1);
+
+  // Yellow dot
+  setColor(yellowColor, 'fill');
+  doc.circle(card2X + 35, statusY, 2, 'F');
+  setColor(darkText, 'text');
+  doc.text(`${warningCount} Atenção`, card2X + 40, statusY + 1);
+
+  // Red dot
+  setColor(redColor, 'fill');
+  doc.circle(card2X + 7, statusY + 8, 2, 'F');
+  setColor(darkText, 'text');
+  doc.text(`${criticalCount} Crítico`, card2X + 12, statusY + 9);
+
+  y += 38;
+
+  // ========== SITUAÇÃO POR ÁREA ==========
   setColor(lightGray, 'fill');
-  setColor(criticalRed, 'draw');
+  setColor(dachserYellow, 'draw');
   doc.rect(margin, y, pageWidth - margin * 2, 10, 'F');
   doc.setLineWidth(0.8);
   doc.line(margin, y, margin, y + 10);
@@ -206,63 +291,70 @@ function generateCriticalAlertPdf(criticalTables: TableStats[], timestamp: Date)
   setColor(darkText, 'text');
   doc.setFontSize(11);
   doc.setFont('helvetica', 'bold');
-  doc.text('DETALHES DAS TABELAS AFETADAS', margin + 5, y + 7);
+  doc.text('SITUAÇÃO POR ÁREA', margin + 5, y + 7);
   y += 16;
 
-  // Table header
-  setColor(borderGray, 'draw');
-  doc.setLineWidth(0.3);
-  doc.roundedRect(margin, y, pageWidth - margin * 2, 10, 2, 2, 'S');
-
-  setColor(grayText, 'text');
-  doc.setFontSize(9);
-  doc.setFont('helvetica', 'bold');
-  doc.text('TABELA', margin + 5, y + 7);
-  doc.text('SEM ATUALIZAÇÃO', pageWidth / 2, y + 7, { align: 'center' });
-  doc.text('APLICAÇÕES', pageWidth - margin - 5, y + 7, { align: 'right' });
-  y += 14;
-
-  // Table rows
-  criticalTables.forEach((table) => {
+  // Area cards
+  stats.forEach((stat) => {
     if (y > pageHeight - 40) {
       doc.addPage();
       y = 20;
     }
 
     setColor(borderGray, 'draw');
-    doc.roundedRect(margin, y, pageWidth - margin * 2, 14, 2, 2, 'S');
+    doc.setLineWidth(0.3);
+    doc.roundedRect(margin, y, pageWidth - margin * 2, 18, 2, 2, 'S');
 
-    // Red indicator
-    setColor(criticalRed, 'fill');
-    doc.circle(margin + 7, y + 7, 2.5, 'F');
-
+    // Area name
     setColor(darkText, 'text');
-    doc.setFontSize(10);
+    doc.setFontSize(11);
     doc.setFont('helvetica', 'bold');
-    doc.text(table.displayName, margin + 14, y + 8);
+    doc.text(stat.businessName, margin + 5, y + 7);
 
-    setColor(criticalRed, 'text');
-    doc.setFont('helvetica', 'bold');
-    doc.text(formatMinutes(table.minutesSinceUpdate), pageWidth / 2, y + 8, { align: 'center' });
-
-    setColor(yellowColor, 'text');
+    // Last update
+    setColor(grayText, 'text');
     doc.setFontSize(9);
     doc.setFont('helvetica', 'normal');
-    doc.text(table.applications.join(', '), pageWidth - margin - 5, y + 8, { align: 'right' });
+    doc.text(`Última atualização: ${stat.lastUpdate ? formatMinutes(stat.minutesSinceUpdate) : 'Nunca'}`, margin + 5, y + 14);
 
-    y += 18;
+    // Status badge
+    const statusColor = getStatusColorRgb(stat.status);
+    const statusLabel = getStatusLabel(stat.status);
+    const badgeX = pageWidth - margin - 55;
+
+    // Badge background
+    const badgeBgColor = stat.status === 'healthy' ? [220, 252, 231] :
+                         stat.status === 'warning' ? [254, 243, 199] : [254, 226, 226];
+    setColor(badgeBgColor, 'fill');
+    doc.roundedRect(badgeX, y + 2, 50, 7, 2, 2, 'F');
+
+    // Badge text
+    const badgeTextColor = stat.status === 'healthy' ? [22, 101, 52] :
+                           stat.status === 'warning' ? [146, 64, 14] : [153, 27, 27];
+    setColor(badgeTextColor, 'text');
+    doc.setFontSize(8);
+    doc.setFont('helvetica', 'bold');
+    doc.text(statusLabel, badgeX + 25, y + 7, { align: 'center' });
+
+    // Inserts count
+    setColor(greenColor, 'text');
+    doc.setFontSize(9);
+    doc.setFont('helvetica', 'bold');
+    doc.text(`+${formatNumber(stat.recentInserts)} processados`, badgeX + 25, y + 14, { align: 'center' });
+
+    y += 22;
   });
 
-  y += 8;
+  y += 5;
 
-  // ========== RECOMMENDATIONS ==========
+  // ========== O QUE CADA ÁREA REPRESENTA ==========
   if (y > pageHeight - 60) {
     doc.addPage();
     y = 20;
   }
 
   setColor(lightGray, 'fill');
-  setColor(yellowColor, 'draw');
+  setColor(dachserYellow, 'draw');
   doc.rect(margin, y, pageWidth - margin * 2, 10, 'F');
   doc.setLineWidth(0.8);
   doc.line(margin, y, margin, y + 10);
@@ -270,22 +362,66 @@ function generateCriticalAlertPdf(criticalTables: TableStats[], timestamp: Date)
   setColor(darkText, 'text');
   doc.setFontSize(11);
   doc.setFont('helvetica', 'bold');
-  doc.text('📋 RECOMENDAÇÕES', margin + 5, y + 7);
+  doc.text('O QUE CADA ÁREA REPRESENTA', margin + 5, y + 7);
   y += 15;
 
-  const recommendations = [
-    'Verificar conectividade do job de sincronização',
-    'Verificar processos travados no servidor',
-    'Consultar logs do sistema para identificar erros',
-    'Contatar equipe de infraestrutura se necessário'
+  stats.forEach((stat) => {
+    if (y > pageHeight - 20) {
+      doc.addPage();
+      y = 20;
+    }
+
+    setColor(darkText, 'text');
+    doc.setFontSize(9);
+    doc.setFont('helvetica', 'bold');
+    doc.text(`• ${stat.businessName}:`, margin + 3, y);
+
+    setColor(grayText, 'text');
+    doc.setFont('helvetica', 'normal');
+    const descLines = doc.splitTextToSize(stat.businessDescription, pageWidth - margin * 2 - 50);
+    doc.text(descLines, margin + 45, y);
+    y += descLines.length * 5 + 3;
+  });
+
+  y += 5;
+
+  // ========== LEGENDA ==========
+  if (y > pageHeight - 50) {
+    doc.addPage();
+    y = 20;
+  }
+
+  setColor(lightGray, 'fill');
+  setColor(dachserYellow, 'draw');
+  doc.rect(margin, y, pageWidth - margin * 2, 10, 'F');
+  doc.setLineWidth(0.8);
+  doc.line(margin, y, margin, y + 10);
+  
+  setColor(darkText, 'text');
+  doc.setFontSize(11);
+  doc.setFont('helvetica', 'bold');
+  doc.text('LEGENDA DE STATUS', margin + 5, y + 7);
+  y += 15;
+
+  const legendItems = [
+    { color: greenColor, label: 'Atualizado', desc: 'Dados recebidos nos últimos 5 minutos' },
+    { color: yellowColor, label: 'Verificar', desc: 'Sem atualização entre 5 e 60 minutos' },
+    { color: redColor, label: 'Ação Necessária', desc: 'Sem atualização há mais de 60 minutos' },
   ];
 
-  recommendations.forEach((rec) => {
-    setColor(grayText, 'text');
+  legendItems.forEach((item) => {
+    setColor(item.color, 'fill');
+    doc.circle(margin + 5, y, 2.5, 'F');
+
+    setColor(darkText, 'text');
     doc.setFontSize(9);
+    doc.setFont('helvetica', 'bold');
+    doc.text(item.label, margin + 12, y + 1);
+
+    setColor(grayText, 'text');
     doc.setFont('helvetica', 'normal');
-    doc.text(`• ${rec}`, margin + 5, y);
-    y += 6;
+    doc.text(item.desc, margin + 50, y + 1);
+    y += 8;
   });
 
   // ========== FOOTER ==========
@@ -297,44 +433,48 @@ function generateCriticalAlertPdf(criticalTables: TableStats[], timestamp: Date)
   setColor(grayText, 'text');
   doc.setFontSize(8);
   doc.setFont('helvetica', 'normal');
-  doc.text('Sistema Z3US.AI • Alerta Crítico de Monitoramento • DACHSER', pageWidth / 2, y, { align: 'center' });
+  doc.text('Sistema Z3US.AI • Monitoramento de Dados • DACHSER', pageWidth / 2, y, { align: 'center' });
 
   const pdfOutput = doc.output('arraybuffer');
   return new Uint8Array(pdfOutput);
 }
 
-function generateCriticalAlertHtml(criticalTables: TableStats[], timestamp: Date): string {
-  const formattedDate = timestamp.toLocaleString('pt-BR', { 
-    timeZone: 'America/Sao_Paulo',
-    day: '2-digit',
-    month: '2-digit',
-    year: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit'
-  });
+function generateCriticalAlertHtml(stats: TableStats[], criticalTables: TableStats[], timestamp: Date): string {
+  const healthyCount = stats.filter(s => s.status === 'healthy').length;
+  const warningCount = stats.filter(s => s.status === 'warning').length;
+  const criticalCount = stats.filter(s => s.status === 'critical').length;
 
-  const tableRows = criticalTables.map(table => `
+  const formattedDate = formatDateTime(timestamp);
+
+  const getStatusTextColor = (status: 'healthy' | 'warning' | 'critical') => {
+    switch (status) {
+      case 'healthy': return '#22c55e';
+      case 'warning': return '#F5B843';
+      case 'critical': return '#ef4444';
+    }
+  };
+
+  const tableRows = stats.map(stat => `
     <tr style="border-bottom: 1px solid rgba(255, 255, 255, 0.08);">
-      <td style="padding: 16px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
-        <table role="presentation" cellpadding="0" cellspacing="0" border="0">
-          <tr>
-            <td style="width: 12px; padding-right: 10px;">
-              <div style="width: 10px; height: 10px; border-radius: 50%; background-color: #ef4444;"></div>
-            </td>
-            <td style="color: #ffffff; font-weight: 500;">
-              ${table.displayName}
-            </td>
-          </tr>
-        </table>
+      <td style="padding: 16px; color: #ffffff; font-weight: 500; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
+        <span style="display: inline-block; width: 10px; height: 10px; border-radius: 50%; background-color: ${getStatusTextColor(stat.status)}; margin-right: 10px; box-shadow: 0 0 8px ${getStatusTextColor(stat.status)};"></span>
+        ${stat.businessName}
       </td>
-      <td style="padding: 16px; text-align: center; color: #ef4444; font-weight: 600; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
-        ${formatMinutes(table.minutesSinceUpdate)}
+      <td style="padding: 16px; text-align: center; color: ${stat.minutesSinceUpdate >= 30 ? '#F5B843' : '#B3B3B3'}; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
+        ${stat.lastUpdate ? formatMinutes(stat.minutesSinceUpdate) : 'N/A'}
       </td>
-      <td style="padding: 16px; text-align: right; color: #F5B843; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
-        ${table.applications.join(', ')}
+      <td style="padding: 16px; text-align: right; color: #B3B3B3; font-family: 'Monaco', 'Menlo', monospace;">
+        ${formatNumber(stat.totalRecords)}
+      </td>
+      <td style="padding: 16px; text-align: right;">
+        <span style="background: rgba(34, 197, 94, 0.15); color: #22c55e; padding: 4px 10px; border-radius: 12px; font-size: 13px; font-weight: 600;">
+          +${formatNumber(stat.recentInserts)}
+        </span>
       </td>
     </tr>
   `).join('');
+
+  const criticalTableNames = criticalTables.map(t => t.businessName).join(', ');
 
   return `
 <!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
@@ -355,22 +495,18 @@ function generateCriticalAlertHtml(criticalTables: TableStats[], timestamp: Date
 </head>
 <body bgcolor="#050608" style="margin: 0; padding: 0; -webkit-text-size-adjust: 100%; -ms-text-size-adjust: 100%; background-color: #050608 !important;">
   
-  <!-- Wrapper Table -->
   <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" bgcolor="#050608" style="background-color: #050608 !important; width: 100%; margin: 0; padding: 0;">
     <tr>
       <td bgcolor="#050608" style="background-color: #050608 !important;">
         
-        <!-- Outer Padding Table -->
         <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" bgcolor="#050608" style="background-color: #050608 !important;">
           <tr>
             <td align="center" bgcolor="#050608" style="padding: 24px; background-color: #050608 !important;">
               
-              <!-- Content Container -->
               <table role="presentation" class="container" width="640" cellpadding="0" cellspacing="0" border="0" style="max-width: 640px; width: 100%;">
                 <tr>
                   <td>
                     
-                    <!-- Main Card -->
                     <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color: #0a0c10; border: 1px solid rgba(239, 68, 68, 0.3); border-radius: 24px; overflow: hidden;">
                       
                       <!-- Header Section -->
@@ -386,7 +522,7 @@ function generateCriticalAlertHtml(criticalTables: TableStats[], timestamp: Date
                           <table role="presentation" cellpadding="0" cellspacing="0" border="0">
                             <tr>
                               <td style="background-color: rgba(239, 68, 68, 0.2); color: #ef4444; padding: 6px 16px; border-radius: 20px; font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 1px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
-                                ${criticalTables.length} Tabela${criticalTables.length > 1 ? 's' : ''} Crítica${criticalTables.length > 1 ? 's' : ''}
+                                ${criticalCount} Tabela${criticalCount > 1 ? 's' : ''} Crítica${criticalCount > 1 ? 's' : ''}
                               </td>
                             </tr>
                           </table>
@@ -399,12 +535,34 @@ function generateCriticalAlertHtml(criticalTables: TableStats[], timestamp: Date
                       <!-- Warning Message -->
                       <tr>
                         <td style="padding: 24px 32px; border-bottom: 1px solid rgba(255, 255, 255, 0.06);">
+                          <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background: rgba(239, 68, 68, 0.1); border: 1px solid rgba(239, 68, 68, 0.2); border-radius: 12px;">
+                            <tr>
+                              <td style="padding: 16px;">
+                                <p style="margin: 0; font-size: 14px; color: #ef4444; line-height: 1.6; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
+                                  <strong>Ação necessária:</strong> As seguintes áreas estão sem atualização há mais de 60 minutos: <strong>${criticalTableNames}</strong>
+                                </p>
+                              </td>
+                            </tr>
+                          </table>
+                        </td>
+                      </tr>
+                      
+                      <!-- Summary Stats -->
+                      <tr>
+                        <td style="padding: 24px 32px; border-bottom: 1px solid rgba(255, 255, 255, 0.06);">
                           <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
                             <tr>
-                              <td align="center" style="padding: 12px;">
-                                <p style="margin: 0; font-size: 14px; color: #cccccc; line-height: 1.6; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
-                                  As seguintes tabelas estão sem atualização há mais de <strong style="color: #ef4444;">60 minutos</strong> e requerem atenção imediata.
-                                </p>
+                              <td align="center" style="padding: 12px; width: 33%;">
+                                <p style="margin: 0; font-size: 28px; font-weight: 700; color: #22c55e; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">${healthyCount}</p>
+                                <p style="margin: 4px 0 0 0; font-size: 12px; color: #888888; text-transform: uppercase; letter-spacing: 1px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">Saudáveis</p>
+                              </td>
+                              <td align="center" style="padding: 12px; width: 33%; border-left: 1px solid rgba(255, 255, 255, 0.08); border-right: 1px solid rgba(255, 255, 255, 0.08);">
+                                <p style="margin: 0; font-size: 28px; font-weight: 700; color: #F5B843; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">${warningCount}</p>
+                                <p style="margin: 4px 0 0 0; font-size: 12px; color: #888888; text-transform: uppercase; letter-spacing: 1px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">Atenção</p>
+                              </td>
+                              <td align="center" style="padding: 12px; width: 33%;">
+                                <p style="margin: 0; font-size: 28px; font-weight: 700; color: #ef4444; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">${criticalCount}</p>
+                                <p style="margin: 4px 0 0 0; font-size: 12px; color: #888888; text-transform: uppercase; letter-spacing: 1px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">Críticas</p>
                               </td>
                             </tr>
                           </table>
@@ -416,38 +574,28 @@ function generateCriticalAlertHtml(criticalTables: TableStats[], timestamp: Date
                         <td style="padding: 0 16px;">
                           <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="font-size: 14px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
                             <tr style="border-bottom: 1px solid rgba(239, 68, 68, 0.15);">
-                              <th style="padding: 16px; text-align: left; font-weight: 600; color: #ef4444; font-size: 11px; text-transform: uppercase; letter-spacing: 1px;">Tabela</th>
-                              <th style="padding: 16px; text-align: center; font-weight: 600; color: #ef4444; font-size: 11px; text-transform: uppercase; letter-spacing: 1px;">Sem Atualização</th>
-                              <th style="padding: 16px; text-align: right; font-weight: 600; color: #ef4444; font-size: 11px; text-transform: uppercase; letter-spacing: 1px;">Aplicações</th>
+                              <th style="padding: 16px; text-align: left; font-weight: 600; color: #ef4444; font-size: 11px; text-transform: uppercase; letter-spacing: 1px;">Área</th>
+                              <th style="padding: 16px; text-align: center; font-weight: 600; color: #ef4444; font-size: 11px; text-transform: uppercase; letter-spacing: 1px;">Atualização</th>
+                              <th style="padding: 16px; text-align: right; font-weight: 600; color: #ef4444; font-size: 11px; text-transform: uppercase; letter-spacing: 1px;">Total</th>
+                              <th style="padding: 16px; text-align: right; font-weight: 600; color: #ef4444; font-size: 11px; text-transform: uppercase; letter-spacing: 1px;">24h</th>
                             </tr>
                             ${tableRows}
                           </table>
                         </td>
                       </tr>
                       
-                      <!-- Recommendations -->
+                      <!-- PDF Attachment Note -->
                       <tr>
-                        <td style="padding: 24px 32px;">
-                          <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color: rgba(255, 255, 255, 0.03); border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 12px;">
-                            <tr>
-                              <td style="padding: 16px 20px;">
-                                <p style="margin: 0 0 12px 0; font-size: 12px; font-weight: 600; color: #F5B843; text-transform: uppercase; letter-spacing: 1px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
-                                  📋 Recomendações
-                                </p>
-                                <p style="margin: 0; color: #999999; font-size: 13px; line-height: 1.8; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
-                                  • Verificar conectividade do job de sincronização<br/>
-                                  • Verificar processos travados no servidor<br/>
-                                  • Consultar logs do sistema
-                                </p>
-                              </td>
-                            </tr>
-                          </table>
+                        <td style="padding: 24px 32px; border-top: 1px solid rgba(255, 255, 255, 0.06);">
+                          <p style="margin: 0 0 8px 0; color: #888888; font-size: 13px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
+                            📎 Anexo incluído: <strong style="color: #F5B843;">Relatório PDF Completo</strong>
+                          </p>
                         </td>
                       </tr>
                       
                       <!-- CTA Button -->
                       <tr>
-                        <td align="center" style="padding: 8px 32px 32px;">
+                        <td align="center" style="padding: 32px;">
                           <a href="https://stellar-route-hub.lovable.app/admin/database-monitor" 
                              style="display: inline-block; background-color: #ef4444; color: #ffffff; text-decoration: none; padding: 14px 32px; border-radius: 12px; font-weight: 600; font-size: 14px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
                             Abrir Dashboard
@@ -461,10 +609,10 @@ function generateCriticalAlertHtml(criticalTables: TableStats[], timestamp: Date
                       <tr>
                         <td align="center" style="padding: 24px;">
                           <p style="margin: 0; font-size: 12px; color: #888888; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
-                            Alerta automático do sistema de monitoramento
+                            Alerta crítico do sistema de monitoramento
                           </p>
                           <p style="margin: 8px 0 0 0; font-size: 12px; color: #666666; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
-                            Z3US.AI • Verificação a cada 1 hora
+                            Z3US.AI • Enviado quando há tabelas em estado crítico
                           </p>
                         </td>
                       </tr>
@@ -496,14 +644,13 @@ serve(async (req) => {
 
   try {
     const body = await req.json().catch(() => ({}));
-    const testMode = body.test_mode === true; // Default to production mode
-    const forceAlert = body.force === true; // Force send even if recently alerted
+    const testMode = body.test === true;
+    const forceAlert = body.force === true;
 
     console.log(`Running db-critical-alert in ${testMode ? 'TEST' : 'PRODUCTION'} mode`);
 
     const recipients = testMode ? TEST_RECIPIENTS : PRODUCTION_RECIPIENTS;
 
-    // Connect to MariaDB
     client = await connectWithRetry();
 
     // Ensure the alerts table exists with recovered_at column
@@ -533,18 +680,19 @@ serve(async (req) => {
         ADD COLUMN IF NOT EXISTS recovered_at TIMESTAMP NULL DEFAULT NULL
       `);
     } catch (err) {
-      // Column may already exist - ignore error
       console.log('recovered_at column check completed');
     }
 
-    // Get stats for all tables
+    // Get FULL stats for all tables (same as db-status-report)
     const allStats: TableStats[] = [];
 
     for (const tableConfig of TABLES_CONFIG) {
       try {
         const query = `
           SELECT 
-            MAX(data_insert) as last_update,
+            MAX(data_insert) as last_update, 
+            COUNT(*) as total_records,
+            SUM(CASE WHEN data_insert >= DATE_SUB(NOW(), INTERVAL 24 HOUR) THEN 1 ELSE 0 END) as recent_inserts,
             TIMESTAMPDIFF(MINUTE, MAX(data_insert), NOW()) as minutes_since_update
           FROM ${tableConfig.name}
         `;
@@ -552,12 +700,19 @@ serve(async (req) => {
         const result = await client.query(query);
         const row = result[0] || {};
         
+        const minutesSinceUpdate = row.minutes_since_update ?? 9999;
+        
         allStats.push({
           name: tableConfig.name,
           displayName: tableConfig.displayName,
+          businessName: tableConfig.businessName,
+          businessDescription: tableConfig.businessDescription,
           applications: tableConfig.applications,
           lastUpdate: row.last_update ? new Date(row.last_update) : null,
-          minutesSinceUpdate: row.minutes_since_update ?? 9999,
+          totalRecords: Number(row.total_records) || 0,
+          recentInserts: Number(row.recent_inserts) || 0,
+          minutesSinceUpdate: minutesSinceUpdate,
+          status: getStatusColor(minutesSinceUpdate),
         });
       } catch (err) {
         const error = err as Error;
@@ -565,9 +720,14 @@ serve(async (req) => {
         allStats.push({
           name: tableConfig.name,
           displayName: tableConfig.displayName,
+          businessName: tableConfig.businessName,
+          businessDescription: tableConfig.businessDescription,
           applications: tableConfig.applications,
           lastUpdate: null,
+          totalRecords: 0,
+          recentInserts: 0,
           minutesSinceUpdate: 9999,
+          status: 'critical',
         });
       }
     }
@@ -587,13 +747,11 @@ serve(async (req) => {
       });
     }
 
-    // First, mark any recovered tables (tables that were critical but are now healthy)
-    // This ensures we track the recovery state before checking for new alerts
+    // Mark any recovered tables
     for (const tableConfig of TABLES_CONFIG) {
       const isCurrentlyCritical = criticalTables.some(t => t.name === tableConfig.name);
       
       if (!isCurrentlyCritical) {
-        // Table is now healthy - mark any unresolved alerts as recovered
         try {
           const updateResult = await client.execute(`
             UPDATE ai_agente.t_db_monitor_alerts 
@@ -613,7 +771,7 @@ serve(async (req) => {
       }
     }
 
-    // Check if there are NEW critical tables (no active unresolved alert)
+    // Check for NEW critical tables
     const newCriticalTables: TableStats[] = [];
 
     if (forceAlert) {
@@ -622,7 +780,6 @@ serve(async (req) => {
     } else {
       for (const table of criticalTables) {
         try {
-          // Find the most recent alert for this table that hasn't recovered
           const checkQuery = `
             SELECT id, sent_at, recovered_at 
             FROM ai_agente.t_db_monitor_alerts 
@@ -636,16 +793,13 @@ serve(async (req) => {
           const unresolvedAlerts = await client.query(checkQuery, [table.name]);
           
           if (unresolvedAlerts.length === 0) {
-            // No unresolved alert - this is a NEW critical state (either first time or recovered and critical again)
             newCriticalTables.push(table);
-            console.log(`Table ${table.name} is NEW in critical status (no active unresolved alert)`);
+            console.log(`Table ${table.name} is NEW in critical status`);
           } else {
-            // Already has an active (unrecovered) alert - don't send again
-            console.log(`Table ${table.name} still in critical status (alert from ${unresolvedAlerts[0].sent_at}, not recovered)`);
+            console.log(`Table ${table.name} still in critical status (already alerted)`);
           }
         } catch (err) {
           const checkError = err as Error;
-          // If check fails, consider it new to be safe
           console.warn(`Could not check unresolved alerts for ${table.name}:`, checkError.message);
           newCriticalTables.push(table);
         }
@@ -655,7 +809,7 @@ serve(async (req) => {
     // Only send alert if there are NEW critical tables
     if (newCriticalTables.length === 0) {
       await client.close();
-      console.log('No NEW critical tables detected. All critical tables were already alerted recently.');
+      console.log('No NEW critical tables detected.');
       return new Response(JSON.stringify({
         success: true,
         message: 'No new critical tables - all were already alerted',
@@ -667,20 +821,18 @@ serve(async (req) => {
       });
     }
 
-    console.log(`Found ${newCriticalTables.length} NEW critical table(s). Will send alert with ALL ${criticalTables.length} critical tables.`);
+    console.log(`Found ${newCriticalTables.length} NEW critical table(s). Sending alert.`);
 
-    // When there are new critical tables, send alert with ALL critical tables (not just new ones)
-
-    // Generate and send email with ALL critical tables
     const now = new Date();
     const dateStr = now.toISOString().slice(0, 10).replace(/-/g, '');
     const timeStr = now.toTimeString().slice(0, 5).replace(':', '');
     
-    const emailHtml = generateCriticalAlertHtml(criticalTables, now);
+    // Generate email HTML with critical alert styling but full table data
+    const emailHtml = generateCriticalAlertHtml(allStats, criticalTables, now);
     
-    // Generate PDF attachment
-    const pdfBuffer = generateCriticalAlertPdf(criticalTables, now);
-    console.log('Generated critical alert PDF buffer length:', pdfBuffer.length);
+    // Generate PDF using the SAME format as db-status-report (full report PDF)
+    const pdfBuffer = generatePdfBuffer(allStats, now);
+    console.log('Generated report PDF buffer length:', pdfBuffer.length);
 
     const resendApiKey = Deno.env.get('RESEND_API_KEY');
     if (!resendApiKey) {
@@ -689,17 +841,17 @@ serve(async (req) => {
 
     const resend = new Resend(resendApiKey);
 
-    const tableNames = criticalTables.map(t => t.displayName).join(', ');
+    const tableNames = criticalTables.map(t => t.businessName).join(', ');
     
-    // Create attachments array with PDF
+    // Create attachments array with PDF (same filename format as report)
     const attachments = [
       {
-        filename: `alerta-critico-${dateStr}-${timeStr}.pdf`,
+        filename: `relatorio-monitoramento-${dateStr}-${timeStr}.pdf`,
         content: Array.from(pdfBuffer),
       },
     ];
 
-    console.log('Sending critical alert email with attachments:', attachments.map(a => ({ filename: a.filename, contentLength: a.content.length })));
+    console.log('Sending critical alert email with report PDF:', attachments.map(a => ({ filename: a.filename, contentLength: a.content.length })));
 
     const emailResponse = await resend.emails.send({
       from: 'Z3US Monitor <noreply@hermes.z3us.ai>',
@@ -709,9 +861,9 @@ serve(async (req) => {
       attachments: attachments,
     });
 
-    console.log('Critical alert email sent successfully with PDF attachment:', emailResponse);
+    console.log('Critical alert email sent successfully with report PDF:', emailResponse);
 
-    // Log the alerts to database - only log the NEW critical tables
+    // Log the alerts to database
     for (const table of newCriticalTables) {
       try {
         await client.execute(`
