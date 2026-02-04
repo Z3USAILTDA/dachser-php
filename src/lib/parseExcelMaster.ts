@@ -457,23 +457,7 @@ export async function parseExcelMasterFile(
           }
         }
         
-        // Verificar colunas essenciais (hawb, hbl ou master)
-        const hasHawb = columnMappings.some((m) => m.dbColumn === "hawb");
-        const hasHbl = columnMappings.some((m) => m.dbColumn === "hbl");
-        const hasMaster = columnMappings.some((m) => m.dbColumn === "master");
-        
-        if (!hasHawb && !hasHbl && !hasMaster) {
-          resolve({
-            success: false,
-            rows: [],
-            columnMappings,
-            unmappedColumns,
-            errors: [{ row: 0, message: "Coluna HAWB, HBL ou MASTER é obrigatória" }],
-            totalRows: 0,
-            previewRows: [],
-          });
-          return;
-        }
+        // Colunas HAWB/HBL/Master são opcionais - não bloquear importação
         
         // Processar linhas
         const rows: MasterRow[] = [];
@@ -570,17 +554,7 @@ export async function parseExcelMasterFile(
             }
           }
           
-          // Validar linha - aceitar HAWB (air), HBL (sea) ou Master
-          const hawbValue = row.hawb?.trim();
-          const hblValue = row.hbl?.trim();
-          const masterValue = row.master?.trim();
-          
-          if (!hawbValue && !hblValue && !masterValue) {
-            errors.push({
-              row: rowNumber,
-              message: "HAWB, HBL ou MASTER deve estar preenchido",
-            });
-          }
+          // Linha válida - não exigir HAWB/HBL/Master preenchido
           
           rows.push(row);
         }
@@ -720,17 +694,7 @@ export function reprocessWithMapping(
       }
     }
     
-    // Validar linha - aceitar HAWB (air), HBL (sea) ou Master
-    const hawbValue = row.hawb?.trim();
-    const hblValue = row.hbl?.trim();
-    const masterValue = row.master?.trim();
-    
-    if (!hawbValue && !hblValue && !masterValue) {
-      errors.push({
-        row: rowNumber,
-        message: "HAWB, HBL ou MASTER deve estar preenchido",
-      });
-    }
+    // Linha válida - não exigir HAWB/HBL/Master preenchido
     
     rows.push(row);
   }
