@@ -488,76 +488,11 @@ const Index = () => {
     }
   }, []);
 
-  // Fetch AWBs from t_status_aereo
+  // Fetch AWBs from t_status_aereo - TEMPORARIAMENTE DESATIVADO
   const fetchStatusAereoData = React.useCallback(async () => {
-    setIsLoadingStatusAereo(true);
-    try {
-      const { data, error } = await supabase.functions.invoke("fetch-status-aereo", {
-        body: { search: "" },
-      });
-
-      if (error) {
-        console.error("Error fetching status aereo:", error);
-        return;
-      }
-
-      if (data?.success && data?.data) {
-        // Convert t_status_aereo data to AWBData format
-        const convertedData: AWBData[] = data.data.map((item: any, index: number) => ({
-          id: `status-${item.id || index}`,
-          awb: item.awb || "",
-          airline_code: item.awb?.substring(0, 3) || "",
-          consignee_name: item.destinatário || "-",
-          hawb: item.hawb || "-",
-          nome_analista: item.nome_analista || "-",
-          email_analista: item.email_analista || null,
-          email_cliente: item.email_cliente || "",
-          origem: item.origem || "N/A",
-          destino: item.destino || "N/A",
-          last_event: item.status_info || item.último_status || "-",
-          status: item.último_status || "-",
-          last_check: item["última atualização"]
-            ? new Date(item["última atualização"]).toISOString()
-            : new Date().toISOString(),
-          fromStatusAereo: true,
-          data_atraso: item.data_atraso || null,
-          tipo_servico: item.tipo_servico || "N/A",
-          arr_check_count: item.arr_check_count || 0,
-          tipo_processo: item.tipo_processo || null,
-        }));
-
-        // Deduplicate by AWB + HAWB combination - keep only the most recent record
-        // An AWB can have multiple houses, so we use awb+hawb as the unique key
-        const deduplicatedData = convertedData.reduce((acc: AWBData[], current: AWBData) => {
-          const currentKey = `${current.awb}|${current.hawb || "-"}`;
-          const existingIndex = acc.findIndex((item) => {
-            const itemKey = `${item.awb}|${item.hawb || "-"}`;
-            return itemKey === currentKey;
-          });
-          if (existingIndex === -1) {
-            // AWB+HAWB combination doesn't exist yet, add it
-            acc.push(current);
-          } else {
-            // Combination exists, keep the one with most recent last_check
-            const existing = acc[existingIndex];
-            const existingDate = new Date(existing.last_check || 0).getTime();
-            const currentDate = new Date(current.last_check || 0).getTime();
-            if (currentDate > existingDate) {
-              // Replace with the more recent one
-              acc[existingIndex] = current;
-            }
-          }
-          return acc;
-        }, []);
-
-        console.log(`AWB Deduplication: ${convertedData.length} -> ${deduplicatedData.length} records`);
-        setStatusAereoData(deduplicatedData);
-      }
-    } catch (error) {
-      console.error("Error in fetchStatusAereoData:", error);
-    } finally {
-      setIsLoadingStatusAereo(false);
-    }
+    // Temporariamente desativado - não buscar dados do t_status_aereo
+    setIsLoadingStatusAereo(false);
+    setStatusAereoData([]);
   }, []);
 
   // Fetch database statistics from t_master_dados

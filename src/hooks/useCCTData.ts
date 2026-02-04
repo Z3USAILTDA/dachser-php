@@ -188,28 +188,12 @@ export function useProcessosCCT() {
   return useQuery({
     queryKey: ["cct-processos"],
     queryFn: async (): Promise<ProcessoCCT[]> => {
-      console.log("CCT: Fetching shipments from MariaDB via mariadb-proxy...");
-      
-      const { data, error } = await supabase.functions.invoke('mariadb-proxy', {
-        body: { action: 'get_cct_shipments' }
-      });
-
-      if (error) {
-        console.error("CCT: Error fetching shipments:", error);
-        throw new Error(error.message || 'Erro ao buscar processos CCT');
-      }
-
-      if (!data?.success) {
-        console.error("CCT: Error in response:", data?.error);
-        throw new Error(data?.error || 'Erro ao buscar processos CCT');
-      }
-
-      const processos = (data.data || []).map(mapRowToProcessoCCT);
-      console.log(`CCT: Loaded ${processos.length} processos from MariaDB`);
-      return processos;
+      // Temporariamente desativado - retornar array vazio
+      console.log("CCT: Dados temporariamente desativados");
+      return [];
     },
-    staleTime: 30000, // 30 seconds
-    refetchInterval: 60000, // Refetch every minute
+    staleTime: 30000,
+    refetchInterval: false, // Desabilitar refetch automático
   });
 }
 
@@ -399,16 +383,8 @@ export function useProfiles() {
   return useQuery({
     queryKey: ["cct-profiles"],
     queryFn: async (): Promise<CCTProfile[]> => {
-      const { data, error } = await supabase.functions.invoke('mariadb-proxy', {
-        body: { action: 'get_cct_profiles' }
-      });
-
-      if (error || !data?.success) {
-        console.error("CCT: Error fetching profiles:", error || data?.error);
-        return [];
-      }
-
-      return data.data || [];
+      // Temporariamente desativado
+      return [];
     },
   });
 }
