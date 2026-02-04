@@ -68,12 +68,20 @@ const MetricsUsage = () => {
   const [endpointData, setEndpointData] = useState<EndpointData[]>([]);
   const [availableUsers, setAvailableUsers] = useState<string[]>([]);
 
+  // Função auxiliar para obter data no formato YYYY-MM-DD em fuso local (São Paulo)
+  const getLocalDateString = (date: Date): string => {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, "0");
+    const day = String(date.getDate()).padStart(2, "0");
+    return `${year}-${month}-${day}`;
+  };
+
   const today = new Date();
   const defaultFrom = new Date(today);
   defaultFrom.setDate(defaultFrom.getDate() - 7);
 
-  const [dateFrom, setDateFrom] = useState(defaultFrom.toISOString().split("T")[0]);
-  const [dateTo, setDateTo] = useState(today.toISOString().split("T")[0]);
+  const [dateFrom, setDateFrom] = useState(getLocalDateString(defaultFrom));
+  const [dateTo, setDateTo] = useState(getLocalDateString(today));
   const [usernameFilter, setUsernameFilter] = useState("");
   const [moduleFilter, setModuleFilter] = useState("");
   const [perPage, setPerPage] = useState(50);
@@ -131,6 +139,7 @@ const MetricsUsage = () => {
           module: moduleFilter,
           perPage,
           page: currentPage,
+          requesterUsername: user?.username,
         },
       });
 
@@ -160,8 +169,8 @@ const MetricsUsage = () => {
   const clearFilters = () => {
     const newFrom = new Date();
     newFrom.setDate(newFrom.getDate() - 7);
-    setDateFrom(newFrom.toISOString().split("T")[0]);
-    setDateTo(new Date().toISOString().split("T")[0]);
+    setDateFrom(getLocalDateString(newFrom));
+    setDateTo(getLocalDateString(new Date()));
     setUsernameFilter("");
     setModuleFilter("");
     setCurrentPage(1);
