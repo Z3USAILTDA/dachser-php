@@ -397,6 +397,25 @@ function isEmptyRow(row: Record<string, unknown>): boolean {
 }
 
 /**
+ * Verifica se uma linha é de resumo/total (Grand Summary, etc.) que deve ser ignorada
+ */
+function isSummaryRow(row: Record<string, unknown>): boolean {
+  const summaryPatterns = [
+    /grand\s*summary/i,
+    /^total$/i,
+    /^subtotal$/i,
+    /^sum$/i,
+  ];
+  
+  return Object.values(row).some((v) => {
+    if (typeof v === "string") {
+      return summaryPatterns.some((pattern) => pattern.test(v.trim()));
+    }
+    return false;
+  });
+}
+
+/**
  * Parse arquivo Excel e retorna dados estruturados
  */
 export async function parseExcelMasterFile(
@@ -467,8 +486,8 @@ export async function parseExcelMasterFile(
           const rawRow = rawRows[i];
           const rowNumber = i + 2; // +2 porque linha 1 é header
           
-          // Ignorar linhas vazias
-          if (isEmptyRow(rawRow)) continue;
+          // Ignorar linhas vazias ou de resumo (Grand Summary, Total, etc.)
+          if (isEmptyRow(rawRow) || isSummaryRow(rawRow)) continue;
           
           const row: MasterRow = {
             tipo_processo: tipoProcesso.full,
@@ -609,7 +628,8 @@ export function reprocessWithMapping(
     const rawRow = rawRows[i];
     const rowNumber = i + 2;
     
-    if (isEmptyRow(rawRow)) continue;
+    // Ignorar linhas vazias ou de resumo
+    if (isEmptyRow(rawRow) || isSummaryRow(rawRow)) continue;
     
     const row: MasterRow = {
       tipo_processo: tipoProcesso.full,
