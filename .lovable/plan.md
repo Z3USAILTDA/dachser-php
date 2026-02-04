@@ -1,170 +1,128 @@
 
 
-# Plano: Reestruturar Menu ADMIN com Subníveis DACHSER e Z3US
+# Plano: Correções na Tela de Métricas de Uso
 
 ## Resumo
-Reorganizar o menu ADMIN para ter dois "filhos" (DACHSER e Z3US) que agrupam as opções administrativas, com comportamentos diferentes baseado no usuário logado.
+Implementar três correções na tela de Métricas de Uso (`/admin/metrics`):
+1. Ajustar o fuso horário para São Paulo
+2. Ocultar logs de `admin` e `teste.test3` para usuários DACHSER
+3. Corrigir a filtragem por módulo
 
 ---
 
-## Estrutura Proposta
+## Problema 1: Fuso Horário
 
-```text
-ADMIN (pai)
-├── DACHSER (filho)
-│   ├── Métricas de Uso
-│   └── Monitoramento de Dados
-│
-└── Z3US (filho)
-    ├── Cadastro de Usuário
-    ├── Métricas de Uso
-    ├── Gerenciamento de Usuários
-    ├── Gerenciamento de APIs
-    └── Monitoramento de Dados
-```
+### Situação Atual
+O código usa `new Date().toISOString().split("T")[0]` para definir as datas de filtro, o que retorna a data em **UTC**. Entre 21:00 e 23:59 em São Paulo (UTC-3), a data mostrada é do **dia seguinte**.
 
----
-
-## Regras de Acesso por Usuário
-
-| Tipo | Usuários | Comportamento ao Clicar ADMIN |
-|------|----------|------------------------------|
-| **DACHSER** | `ana.tozzo`, `danilo.pedroso`, `teste.test3` | Abre diretamente as opções (Métricas de Uso, Monitoramento de Dados) |
-| **Z3US** | Todos outros admins | Mostra dois filhos expandíveis: DACHSER e Z3US |
-
----
-
-## Mudanças no Código
-
-### 1. Definir Listas de Usuários
+### Solução
+Usar componentes de data locais (`getFullYear()`, `getMonth()`, `getDate()`) ao invés de `toISOString()`:
 
 ```typescript
-// Usuários DACHSER (veem apenas opções DACHSER, abertura direta)
+// Função auxiliar para obter data no formato YYYY-MM-DD em fuso local
+const getLocalDateString = (date: Date): string => {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+};
+
+// Uso
+const today = new Date();
+const defaultFrom = new Date(today);
+defaultFrom.setDate(defaultFrom.getDate() - 7);
+
+const [dateFrom, setDateFrom] = useState(getLocalDateString(defaultFrom));
+const [dateTo, setDateTo] = useState(getLocalDateString(today));
+```
+
+**Arquivos**: `src/pages/MetricsUsage.tsx` (linhas 71-76, 161-164)
+
+---
+
+## Problema 2: Logs Restritos por Tipo de Usuário
+
+### Situação Atual
+Todos os usuários com acesso à tela de métricas veem todos os logs, incluindo logs de `admin` e `teste.test3`.
+
+### Requisito
+- **Usuários DACHSER** (`ana.tozzo`, `danilo.pedroso`, `teste.test3`): **NÃO** devem ver logs de `admin` e `teste.test3`
+- **Usuários Z3US** (demais admins): podem ver todos os logs
+
+### Solução
+
+1. **Frontend**: Enviar o `requesterUsername` na requisição de métricas
+2. **Backend**: Adicionar filtro para excluir logs quando o requisitante for DACHSER
+
+```typescript
+// Frontend - adicionar ao body da requisição
+body: {
+  action: "get_metrics",
+  dateFrom,
+  dateTo,
+  username: usernameFilter,
+  module: moduleFilter,
+  perPage,
+  page: currentPage,
+  requesterUsername: user?.username, // NOVO
+}
+```
+
+```typescript
+// Backend - nova lógica de filtragem
 const DACHSER_ADMIN_USERS = ["ana.tozzo", "danilo.pedroso", "teste.test3"];
+const HIDDEN_LOG_USERS = ["admin", "teste.test3"];
 
-// Função para determinar tipo de usuário admin
-const getAdminUserType = (username: string) => {
-  if (DACHSER_ADMIN_USERS.includes(username)) return "DACHSER";
-  return "Z3US";
-};
+const isDachserUser = DACHSER_ADMIN_USERS.includes(requesterUsername);
+
+if (isDachserUser) {
+  // Excluir logs destes usuários
+  whereConditions.push("username NOT IN (?, ?)");
+  params.push(...HIDDEN_LOG_USERS);
+}
 ```
 
-### 2. Estrutura de Menu Dinâmica
-
-Para usuários **DACHSER** (ana.tozzo, danilo.pedroso, teste.test3):
-```text
-ADMIN (clique)
-├── Métricas de Uso
-└── Monitoramento de Dados
-```
-
-Para usuários **Z3US** (demais admins):
-```text
-ADMIN (clique)
-├── DACHSER (expandível)
-│   ├── Métricas de Uso
-│   └── Monitoramento de Dados
-└── Z3US (expandível)
-    ├── Cadastro de Usuário
-    ├── Métricas de Uso
-    ├── Gerenciamento de Usuários
-    ├── Gerenciamento de APIs
-    └── Monitoramento de Dados
-```
-
-### 3. Modificar `getVisibleChildren()` 
-
-A função será atualizada para retornar children diferentes baseado no tipo de usuário:
-
-```typescript
-const getVisibleChildren = (item: MenuItem) => {
-  if (!item.children) return [];
-  
-  if (item.id === "admin" && user?.username) {
-    const adminType = getAdminUserType(user.username);
-    
-    if (adminType === "DACHSER") {
-      // Mostra diretamente as opções DACHSER (sem subnível)
-      return [
-        { label: "Métricas de Uso", href: "/admin/metrics" },
-        { label: "Monitoramento de Dados", href: "/admin/database" },
-      ];
-    }
-    
-    // Z3US: mostra dois filhos expandíveis
-    return [
-      {
-        label: "DACHSER",
-        expandableId: "dachser-sub",
-        subChildren: [
-          { label: "Métricas de Uso", href: "/admin/metrics" },
-          { label: "Monitoramento de Dados", href: "/admin/database" },
-        ],
-      },
-      {
-        label: "Z3US",
-        expandableId: "z3us-sub",
-        subChildren: [
-          { label: "Cadastro de Usuário", href: "/admin/register" },
-          { label: "Métricas de Uso", href: "/admin/metrics" },
-          { label: "Gerenciamento de Usuários", href: "/admin/users" },
-          { label: "Gerenciamento de APIs", href: "/admin/apis" },
-          { label: "Monitoramento de Dados", href: "/admin/database" },
-        ],
-      },
-    ];
-  }
-  
-  return item.children.filter(child => !child.adminOnly || isAdmin);
-};
-```
-
-### 4. Remover Lógica Antiga
-
-Remover a constante `ADMIN_METRICS_ONLY_USERS` que ficará obsoleta com a nova lógica.
+**Arquivos**: 
+- `src/pages/MetricsUsage.tsx` (linhas 122-135)
+- `supabase/functions/mariadb-proxy/index.ts` (linhas 596-620)
 
 ---
 
-## Fluxo Visual
+## Problema 3: Filtragem por Módulo
 
-### Usuário DACHSER (ana.tozzo, danilo.pedroso, teste.test3)
+### Situação Atual
+O backend só aceita `['air', 'chb', 'maritime']` como módulos válidos:
 
-```text
-┌─────────────────────────────────────────────────────────────────┐
-│                           ADMIN                                 │
-│                        (clique para expandir)                   │
-└──────────────────────────────┬──────────────────────────────────┘
-                               │
-               ┌───────────────┴───────────────┐
-               │                               │
-       ┌───────┴───────┐               ┌───────┴───────┐
-       │ Métricas de   │               │ Monitoramento │
-       │     Uso       │               │   de Dados    │
-       └───────────────┘               └───────────────┘
+```typescript
+const validModules = ['air', 'chb', 'maritime'];
+if (moduleFilter && validModules.includes(moduleFilter.toLowerCase())) {
 ```
 
-### Usuário Z3US (demais admins)
+O frontend envia outros valores como `maritimo`, `fin`, `olimpo`, `admin` que são **ignorados**.
 
-```text
-┌─────────────────────────────────────────────────────────────────┐
-│                           ADMIN                                 │
-│                        (clique para expandir)                   │
-└──────────────────────────────┬──────────────────────────────────┘
-                               │
-               ┌───────────────┴───────────────┐
-               │                               │
-       ┌───────┴───────┐               ┌───────┴───────┐
-       │    DACHSER    │               │     Z3US      │
-       │  (expandível) │               │  (expandível) │
-       └───────┬───────┘               └───────┬───────┘
-               │                               │
-       ┌───────┴───────┐       ┌───────┬───────┼───────┬───────┐
-       │               │       │       │       │       │       │
-   ┌───┴───┐       ┌───┴───┐ ┌─┴─┐   ┌─┴─┐   ┌─┴─┐   ┌─┴─┐   ┌─┴─┐
-   │Métricas│     │Monitor│ │Cad│   │Mét│   │Ger│   │API│   │Mon│
-   │de Uso  │     │ Dados │ │Usr│   │Uso│   │Usr│   │   │   │Dat│
-   └────────┘     └───────┘ └───┘   └───┘   └───┘   └───┘   └───┘
+### Solução
+Expandir a lista de módulos válidos e criar um mapeamento para os padrões de endpoint corretos:
+
+```typescript
+// Mapeamento de módulos para padrões de endpoint
+const moduleEndpointPatterns: Record<string, string[]> = {
+  'air': ['/air/', '/check-awb', '/awb'],
+  'chb': ['/chb/', '/conferencia'],
+  'maritimo': ['/sea/', '/maritime/', '/draft/', '/container'],
+  'fin': ['/fin/', '/esteira/', '/voucher', '/regua'],
+  'olimpo': ['/olimpo/'],
+  'admin': ['/admin/'],
+};
+
+if (moduleFilter && moduleEndpointPatterns[moduleFilter.toLowerCase()]) {
+  const patterns = moduleEndpointPatterns[moduleFilter.toLowerCase()];
+  const patternConditions = patterns.map(() => "LOWER(endpoint) LIKE ?").join(' OR ');
+  whereConditions.push(`(${patternConditions})`);
+  params.push(...patterns.map(p => `%${p}%`));
+}
 ```
+
+**Arquivo**: `supabase/functions/mariadb-proxy/index.ts` (linhas 614-618)
 
 ---
 
@@ -172,24 +130,66 @@ Remover a constante `ADMIN_METRICS_ONLY_USERS` que ficará obsoleta com a nova l
 
 | Arquivo | Alteração |
 |---------|-----------|
-| `src/pages/Dashboard.tsx` | Substituir `ADMIN_METRICS_ONLY_USERS` por `DACHSER_ADMIN_USERS`, adicionar função `getAdminUserType()`, modificar `getVisibleChildren()` |
+| `src/pages/MetricsUsage.tsx` | Adicionar `getLocalDateString()`, usar nas datas padrão, enviar `requesterUsername` |
+| `supabase/functions/mariadb-proxy/index.ts` | Adicionar filtro de usuário DACHSER, expandir mapeamento de módulos |
 
 ---
 
-## Lista de Usuários DACHSER
+## Fluxo de Dados Atualizado
 
-| Username | Acesso |
-|----------|--------|
-| `ana.tozzo` | Métricas de Uso, Monitoramento de Dados |
-| `danilo.pedroso` | Métricas de Uso, Monitoramento de Dados |
-| `teste.test3` | Métricas de Uso, Monitoramento de Dados |
+```text
+┌─────────────────────────────────────────────────────────────────┐
+│                    Frontend (MetricsUsage.tsx)                 │
+├─────────────────────────────────────────────────────────────────┤
+│  1. Inicializa datas usando fuso local (São Paulo)             │
+│  2. Envia requesterUsername no body                            │
+│  3. Seleciona módulo (air, maritimo, fin, olimpo, admin, chb)  │
+└──────────────────────────────┬──────────────────────────────────┘
+                               │
+                               ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                  Backend (mariadb-proxy)                        │
+├─────────────────────────────────────────────────────────────────┤
+│  1. Recebe requesterUsername                                   │
+│  2. Se DACHSER → adiciona WHERE username NOT IN (...)          │
+│  3. Mapeia módulo para padrões de endpoint                     │
+│  4. Retorna logs filtrados                                     │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+---
+
+## Seção Técnica
+
+### Constantes Reutilizadas
+```typescript
+// Usuários DACHSER (ver apenas opções DACHSER)
+const DACHSER_ADMIN_USERS = ["ana.tozzo", "danilo.pedroso", "teste.test3"];
+
+// Usuários cujos logs devem ser ocultos para DACHSER
+const HIDDEN_LOG_USERS = ["admin", "teste.test3"];
+```
+
+### Queries SQL Modificadas
+
+**Antes (sem filtro de usuário)**:
+```sql
+SELECT * FROM t_dachser_usage_logs 
+WHERE event_time BETWEEN ? AND ?
+```
+
+**Depois (com filtro para DACHSER)**:
+```sql
+SELECT * FROM t_dachser_usage_logs 
+WHERE event_time BETWEEN ? AND ?
+  AND username NOT IN ('admin', 'teste.test3')
+```
 
 ---
 
 ## Benefícios
 
-1. **Separação clara**: Usuários DACHSER veem apenas suas opções
-2. **Visão completa para Z3US**: Admins Z3US podem ver e acessar tudo
-3. **UX otimizada**: DACHSER não precisa de clique extra
-4. **Código reutilizável**: Usa estrutura existente de `expandableId` e `subChildren`
+1. **Datas corretas**: Usuários em São Paulo verão as datas corretas mesmo após 21:00
+2. **Privacidade**: Logs de usuários de teste/admin ficam ocultos para clientes DACHSER
+3. **Filtragem funcional**: Módulos como FIN, OLIMPO e SEA funcionarão corretamente
 
