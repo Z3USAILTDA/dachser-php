@@ -22,6 +22,7 @@ interface QueryRequest {
   module?: string;
   perPage?: number;
   page?: number;
+  requesterUsername?: string;
   endpoint?: string;
   method?: string;
   matrixId?: number;
@@ -594,7 +595,7 @@ serve(async (req) => {
       }
 
       case 'get_metrics': {
-        const { username, dateFrom: reqDateFrom, dateTo: reqDateTo, module: reqModule, perPage: reqPerPage, page: reqPage } = body;
+        const { username, dateFrom: reqDateFrom, dateTo: reqDateTo, module: reqModule, perPage: reqPerPage, page: reqPage, requesterUsername } = body;
         const dateFrom = reqDateFrom || new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
         const dateTo = reqDateTo || new Date().toISOString().split('T')[0];
         const usernameFilter = username || '';
@@ -603,18 +604,40 @@ serve(async (req) => {
         const page = Math.max(reqPage || 1, 1);
         const offset = (page - 1) * perPage;
 
+        // Constantes para controle de visibilidade de logs
+        const DACHSER_ADMIN_USERS = ["ana.tozzo", "danilo.pedroso", "teste.test3"];
+        const HIDDEN_LOG_USERS = ["admin", "teste.test3"];
+
         let whereConditions = ["event_time BETWEEN ? AND ?"];
         let params: (string | number)[] = [`${dateFrom} 00:00:00`, `${dateTo} 23:59:59`];
+
+        // Filtrar logs de usuários de teste para usuários DACHSER
+        const isDachserUser = requesterUsername && DACHSER_ADMIN_USERS.includes(requesterUsername);
+        if (isDachserUser) {
+          whereConditions.push(`username NOT IN (${HIDDEN_LOG_USERS.map(() => '?').join(', ')})`);
+          params.push(...HIDDEN_LOG_USERS);
+        }
 
         if (usernameFilter) {
           whereConditions.push("username LIKE ?");
           params.push(`%${usernameFilter}%`);
         }
 
-        const validModules = ['air', 'chb', 'maritime'];
-        if (moduleFilter && validModules.includes(moduleFilter.toLowerCase())) {
-          whereConditions.push("LOWER(endpoint) LIKE ?");
-          params.push(`%${moduleFilter.toLowerCase()}%`);
+        // Mapeamento de módulos para padrões de endpoint
+        const moduleEndpointPatterns: Record<string, string[]> = {
+          'air': ['/air/', '/check-awb', '/awb', '/status-aereo'],
+          'chb': ['/chb/', '/conferencia'],
+          'maritimo': ['/sea/', '/maritime/', '/draft/', '/container', '/demurrage'],
+          'fin': ['/fin/', '/esteira/', '/voucher', '/regua'],
+          'olimpo': ['/olimpo/'],
+          'admin': ['/admin/', '/database', '/metrics', '/user-management'],
+        };
+
+        if (moduleFilter && moduleEndpointPatterns[moduleFilter.toLowerCase()]) {
+          const patterns = moduleEndpointPatterns[moduleFilter.toLowerCase()];
+          const patternConditions = patterns.map(() => "LOWER(endpoint) LIKE ?").join(' OR ');
+          whereConditions.push(`(${patternConditions})`);
+          params.push(...patterns.map(p => `%${p.toLowerCase()}%`));
         }
 
         const whereClause = whereConditions.length > 0 ? `WHERE ${whereConditions.join(' AND ')}` : '';
