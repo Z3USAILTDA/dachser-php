@@ -1,290 +1,112 @@
 
-# Plano: Adicionar Importação de "Clientes Base" na Tela de Upload Master
+# Plano: Ajuste das Tabelas t_air_master e t_sea_master
 
-## Resumo
+## Resumo Executivo
 
-Adicionar na tela existente (`/admin/z3us/upload-master`) suporte para importar planilhas de "Relação Clientes Base" para a tabela `dados_dachser.t_clientes_base_online`, sem alterar o fluxo já existente de Master (Air/Sea).
+Após analisar as 4 planilhas enviadas (Air Export, Air Import, Sea Import, Sea Export), identifiquei **11 colunas** que precisam ser adicionadas ou habilitadas nas tabelas do banco de dados para suportar todos os campos das novas planilhas.
 
 ---
 
-## Arquitetura da Solução
+## 1. Colunas a Adicionar
+
+### Tabela `t_air_master` (4 novas colunas)
+
+| Coluna | Tipo | Origem na Planilha |
+|--------|------|-------------------|
+| `wh_treatment` | VARCHAR(255) | "WH Treatment" (Air Import) |
+| `cct_transm` | VARCHAR(100) | "CCT Transm." (Air Import) |
+| `eta_ata` | DATETIME | "E.T.A. / A.T.A." (Air Import) |
+| `email_title` | TEXT | "Email Title Pre-Alert" (Ambas Air) |
+
+### Tabela `t_sea_master` (8 novas colunas)
+
+| Coluna | Tipo | Origem na Planilha |
+|--------|------|-------------------|
+| `deadline_draft_vgm` | DATETIME | "Deadline REAL Draft + VGM" (Sea Export) |
+| `drafts_sent` | TINYINT | "Drafts sent" (Sea Export) |
+| `deadline_load` | DATETIME | "Deadline Load" (Sea Export) |
+| `cargo_departed` | TINYINT | "Cargo Departed" (Sea Export) |
+| `d_term` | VARCHAR(50) | "D-Term" (Sea Export) |
+| `pod_available` | TINYINT | "POD available" (Sea Export) |
+| `dn_available` | TINYINT | "DN available" (Sea Export) |
+| `hawb` | VARCHAR(100) | "HAWB No." (opcional para Sea) |
+
+---
+
+## 2. Alterações Necessárias
+
+### 2.1. Script SQL de Migração (mariadb-tables-setup)
+
+Adicionar instruções `ALTER TABLE` para criar as novas colunas em ambas as tabelas.
+
+### 2.2. Parser Frontend (parseExcelMaster.ts)
+
+- Adicionar novos aliases de colunas no `COLUMN_ALIASES`
+- Expandir o array `DB_COLUMNS`
+- Atualizar a interface `MasterRow`
+- Adicionar conversões no switch de parsing
+
+### 2.3. Backend Insert (mariadb-proxy)
+
+- Modificar a action `bulk_insert_master` para incluir as novas colunas nas queries INSERT de AIR e SEA
+
+---
+
+## 3. Detalhes Técnicos
+
+### 3.1. Novos Aliases de Colunas
 
 ```text
-┌─────────────────────────────────────────────────────────────────┐
-│                     UploadMaster.tsx                            │
-├─────────────────────────────────────────────────────────────────┤
-│  [Tabs: Master (Air/Sea) | Clientes Base]                       │
-│  ────────────────────────────────────────                       │
-│  • Modo "master": fluxo atual (parseExcelMaster.ts)             │
-│  • Modo "clientes_base": novo parser (parseExcelClientesBase.ts)│
-│                                                                 │
-│  Upload Zone → Validar → Preview → Importar                     │
-└──────────────────────────┬──────────────────────────────────────┘
-                           │
-                           ▼
-┌─────────────────────────────────────────────────────────────────┐
-│                   mariadb-proxy Edge Function                   │
-├─────────────────────────────────────────────────────────────────┤
-│  action: "bulk_insert_master"   → t_air_master / t_sea_master   │
-│  action: "bulk_insert_clientes" → t_clientes_base_online (NOVO) │
-└─────────────────────────────────────────────────────────────────┘
+deadline_draft_vgm: ["deadline_draft_vgm", "deadline_real_draft_vgm", "draft_vgm_deadline"]
+drafts_sent: ["drafts_sent", "draft_sent", "drafts"]
+deadline_load: ["deadline_load", "load_deadline", "prazo_embarque"]
+pod_available: ["pod_available", "pod"]
+dn_available: ["dn_available", "dn"]
+
+# Já existem mas precisam ser adicionados como aliases AIR:
+wh_treatment: ["wh_treatment", "wh", "warehouse_treatment", "tratamento_armazem"]
+cct_transm: ["cct_transm", "cct", "transmissao_cct"]
+email_title: ["email_title", "email_title_pre_alert", "titulo_email"]
+eta_ata: ["eta_ata", "e_t_a_a_t_a", "eta", "ata", "arrival"]
+```
+
+### 3.2. SQL para Novas Colunas
+
+```sql
+-- t_air_master
+ALTER TABLE dados_dachser.t_air_master 
+  ADD COLUMN IF NOT EXISTS wh_treatment VARCHAR(255) NULL,
+  ADD COLUMN IF NOT EXISTS cct_transm VARCHAR(100) NULL,
+  ADD COLUMN IF NOT EXISTS eta_ata DATETIME NULL,
+  ADD COLUMN IF NOT EXISTS email_title TEXT NULL;
+
+-- t_sea_master
+ALTER TABLE dados_dachser.t_sea_master 
+  ADD COLUMN IF NOT EXISTS deadline_draft_vgm DATETIME NULL,
+  ADD COLUMN IF NOT EXISTS drafts_sent TINYINT NULL,
+  ADD COLUMN IF NOT EXISTS deadline_load DATETIME NULL,
+  ADD COLUMN IF NOT EXISTS cargo_departed TINYINT NULL,
+  ADD COLUMN IF NOT EXISTS d_term VARCHAR(50) NULL,
+  ADD COLUMN IF NOT EXISTS pod_available TINYINT NULL,
+  ADD COLUMN IF NOT EXISTS dn_available TINYINT NULL,
+  ADD COLUMN IF NOT EXISTS hawb VARCHAR(100) NULL;
 ```
 
 ---
 
-## Arquivos a Criar/Modificar
+## 4. Arquivos a Modificar
 
-| Arquivo | Ação | Descrição |
-|---------|------|-----------|
-| `src/lib/parseExcelClientesBase.ts` | **CRIAR** | Parser específico para Clientes Base |
-| `src/pages/admin/UploadMaster.tsx` | MODIFICAR | Adicionar Tabs para alternar modo |
-| `supabase/functions/mariadb-proxy/index.ts` | MODIFICAR | Adicionar action `bulk_insert_clientes` |
-
----
-
-## 1. Novo Parser: `parseExcelClientesBase.ts`
-
-### 1.1 Interface de Dados
-
-```typescript
-export interface ClienteBaseRow {
-  ativo?: number | null;           // tinyint(1)
-  classificacao?: string;          // varchar(50)
-  cod_rm?: number | null;          // int
-  dchr_customer_number?: string;   // varchar(50)
-  cnpj?: string;                   // varchar(20)
-  nome_cliente?: string;           // varchar(200)
-  cidade_uf?: string;              // varchar(50)
-  pais?: string;                   // varchar(50)
-  logradouro?: string;             // varchar(200)
-  cep?: string;                    // varchar(15)
-  info_complementar?: string;      // varchar(255)
-}
-```
-
-### 1.2 Mapeamento de Aliases (Excel → Banco)
-
-```typescript
-const CLIENTES_BASE_ALIASES: Record<string, string[]> = {
-  ativo: ["ativo", "status", "active"],
-  classificacao: ["classificacao", "classificação", "categoria", "classification"],
-  cod_rm: ["cod_rm", "cód_rm", "codigo_rm", "rm", "rm_code"],
-  dchr_customer_number: ["dchr_customer_number", "dchr_customer_number", "customer_number", "customer_no", "customer no"],
-  cnpj: ["cnpj", "cnpj_cliente", "documento", "document"],
-  nome_cliente: ["nome_cliente", "nome_do_cliente", "cliente", "razao_social", "razão_social", "company_name"],
-  cidade_uf: ["cidade_uf", "cidade_uf", "city_state", "cidade", "uf"],
-  pais: ["pais", "país", "country"],
-  logradouro: ["logradouro", "endereco", "endereço", "address", "rua"],
-  cep: ["cep", "postal_code", "zip", "zipcode"],
-  info_complementar: ["info_complementar", "informacao_complementar", "complemento", "obs", "observacao", "observação", "notes"],
-};
-```
-
-### 1.3 Conversões e Validações
-
-| Campo | Conversão |
-|-------|-----------|
-| `ativo` | Sim/Não, Yes/No, true/false, 1/0 → 1 ou 0 |
-| `cod_rm` | Converter para inteiro; se vazio → NULL |
-| `cnpj` | Texto, preservar zeros à esquerda, remover espaços |
-| `cep` | Texto, preservar zeros à esquerda, remover espaços |
-
-### 1.4 Validação de Linha
-
-- Ignorar linhas totalmente vazias
-- Ignorar linhas de resumo (Grand Summary, Total, etc.)
-- **Validação obrigatória**: `nome_cliente` preenchido E (`cnpj` OU `dchr_customer_number`)
-- Se não atender → marcar erro na linha, não bloquear importação total
+| Arquivo | Alteração |
+|---------|-----------|
+| `supabase/functions/mariadb-tables-setup/index.ts` | Adicionar colunas para ambas tabelas |
+| `src/lib/parseExcelMaster.ts` | Novos aliases, DB_COLUMNS, MasterRow interface |
+| `supabase/functions/mariadb-proxy/index.ts` | Atualizar bulk_insert_master para AIR e SEA |
 
 ---
 
-## 2. Modificações no Frontend: `UploadMaster.tsx`
+## 5. Ordem de Execução
 
-### 2.1 Novo Estado para Modo de Importação
-
-```typescript
-type ImportMode = "master" | "clientes_base";
-const [importMode, setImportMode] = useState<ImportMode>("master");
-```
-
-### 2.2 Seletor de Modo (Tabs)
-
-Adicionar no topo do conteúdo:
-
-```tsx
-<Tabs value={importMode} onValueChange={(v) => { setImportMode(v as ImportMode); handleReset(); }}>
-  <TabsList>
-    <TabsTrigger value="master">Master (Air/Sea)</TabsTrigger>
-    <TabsTrigger value="clientes_base">Clientes Base</TabsTrigger>
-  </TabsList>
-</Tabs>
-```
-
-### 2.3 Lógica Condicional
-
-| Ação | Modo "master" | Modo "clientes_base" |
-|------|---------------|---------------------|
-| Validação de nome do arquivo | Exige AIR/SEA + IMPORT/EXPORT | Sem restrição (qualquer nome) |
-| Parser | `parseExcelMasterFile()` | `parseExcelClientesBaseFile()` |
-| Preview (colunas da tabela) | Analista, Customer, PO, HAWB, Master, ETD | Nome Cliente, CNPJ, Customer No, Cidade/UF, Classificação |
-| Colunas disponíveis no Select | `DB_COLUMNS` (Master) | `CLIENTES_BASE_COLUMNS` |
-| Action do backend | `bulk_insert_master` | `bulk_insert_clientes` |
-
-### 2.4 Título Dinâmico
-
-```tsx
-<PageLayout
-  title={importMode === "master" ? "Upload Master (Air/Sea)" : "Upload Clientes Base"}
-  subtitle={importMode === "master" 
-    ? "Importação de planilhas para t_air_master ou t_sea_master" 
-    : "Importação de planilhas para t_clientes_base_online"}
-  backTo="/dashboard"
->
-```
-
-### 2.5 Preview de Clientes Base
-
-Nova tabela de preview com colunas:
-
-```tsx
-<TableHead>Nome Cliente</TableHead>
-<TableHead>CNPJ</TableHead>
-<TableHead>Customer No</TableHead>
-<TableHead>Cidade/UF</TableHead>
-<TableHead>Classificação</TableHead>
-<TableHead>Ativo</TableHead>
-<TableHead>Status</TableHead>
-```
-
----
-
-## 3. Modificações no Backend: `mariadb-proxy`
-
-### 3.1 Nova Action: `bulk_insert_clientes`
-
-```typescript
-case 'bulk_insert_clientes': {
-  const { rows } = body as { 
-    rows?: Array<{
-      ativo?: number;
-      classificacao?: string;
-      cod_rm?: number;
-      dchr_customer_number?: string;
-      cnpj?: string;
-      nome_cliente?: string;
-      cidade_uf?: string;
-      pais?: string;
-      logradouro?: string;
-      cep?: string;
-      info_complementar?: string;
-    }>;
-  };
-  
-  const tableName = 'dados_dachser.t_clientes_base_online';
-  
-  for (let i = 0; i < rows.length; i++) {
-    const row = rows[i];
-    try {
-      await client.execute(`
-        INSERT INTO ${tableName} (
-          ativo, classificacao, cod_rm, dchr_customer_number, cnpj,
-          nome_cliente, cidade_uf, pais, logradouro, cep, info_complementar
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      `, [
-        row.ativo ?? 1,
-        row.classificacao || null,
-        row.cod_rm ?? null,
-        row.dchr_customer_number || null,
-        row.cnpj || null,
-        row.nome_cliente || null,
-        row.cidade_uf || null,
-        row.pais || null,
-        row.logradouro || null,
-        row.cep || null,
-        row.info_complementar || null,
-      ]);
-      inserted++;
-    } catch (err) {
-      errors.push({ index: i, message: err.message });
-    }
-  }
-  
-  result = { success: true, inserted, rejected: errors.length, errors };
-  break;
-}
-```
-
----
-
-## 4. Fluxo Completo (Clientes Base)
-
-```text
-1. Usuário seleciona aba "Clientes Base"
-2. Faz upload do arquivo Excel
-3. Clica "Validar e Pré-visualizar"
-   → parseExcelClientesBaseFile() processa o arquivo
-   → Mapeia colunas automaticamente via aliases
-   → Valida: nome_cliente + (cnpj OU dchr_customer_number)
-   → Retorna preview (50 linhas) + lista de erros
-4. Usuário revisa preview e mapeamento
-5. Clica "Importar X registro(s)"
-   → Frontend chama mariadb-proxy com action: "bulk_insert_clientes"
-   → Backend insere linha por linha em t_clientes_base_online
-   → Retorna relatório: inseridos / rejeitados / erros
-6. Toast com resumo exibido ao usuário
-```
-
----
-
-## 5. Estrutura dos Novos Arquivos
-
-### `src/lib/parseExcelClientesBase.ts`
-
-```typescript
-// Exports:
-export const CLIENTES_BASE_COLUMNS: string[];
-export interface ClienteBaseRow { ... }
-export interface ColumnMapping { ... }
-export interface ParseValidationError { ... }
-export interface ParseClientesBaseResult { ... }
-export function parseExcelClientesBaseFile(file: File): Promise<ParseClientesBaseResult>;
-export function normalizeColumnName(name: string): string; // reutilizar do Master
-```
-
----
-
-## 6. Detalhes de Implementação
-
-### Upload Zone (Modo Clientes Base)
-
-- Remover validação de nome do arquivo (não exigir AIR/SEA)
-- Manter validação de extensão (.xlsx, .xls, etc.) e tamanho (20MB)
-- Instruções atualizadas: "Formatos aceitos: Excel (.xlsx, .xls, .xlsm, .xlsb), CSV, ODS"
-
-### Mensagens de Erro Específicas
-
-| Erro | Mensagem |
-|------|----------|
-| Falta nome_cliente | "Linha X: Campo 'nome_cliente' é obrigatório" |
-| Falta identificador | "Linha X: É necessário CNPJ ou Customer Number" |
-| cod_rm inválido | "Linha X: Código RM deve ser numérico" |
-
----
-
-## 7. Permissões
-
-Mantidas exatamente como estão:
-- Verificação `is_admin === 1` no `useEffect` inicial
-- Sem alterações no controle de acesso
-
----
-
-## Resumo de Mudanças por Arquivo
-
-| Arquivo | Linhas estimadas | Complexidade |
-|---------|------------------|--------------|
-| `src/lib/parseExcelClientesBase.ts` | ~250 linhas | Média (novo arquivo) |
-| `src/pages/admin/UploadMaster.tsx` | ~150 linhas adicionais | Média (condicionais por modo) |
-| `supabase/functions/mariadb-proxy/index.ts` | ~60 linhas | Baixa (nova action) |
-
-**Total estimado**: ~460 linhas de código
+1. **Deploy do mariadb-tables-setup** - Criar colunas no banco
+2. **Atualizar parseExcelMaster.ts** - Frontend consegue reconhecer novas colunas
+3. **Atualizar mariadb-proxy** - Backend insere dados nas novas colunas
+4. **Teste de importação** - Validar com as planilhas fornecidas
