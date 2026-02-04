@@ -6,6 +6,7 @@ import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 import { TablePagination } from "@/components/layout/TablePagination";
 import { supabase } from "@/integrations/supabase/client";
+import { parseDBDate, formatDateTimeBR } from "@/utils/timezone";
 import { PageLayout } from "@/components/layout/PageLayout";
 import { PageCard } from "@/components/layout/PageCard";
 import { Button } from "@/components/ui/button";
@@ -196,8 +197,10 @@ const MetricsUsage = () => {
   };
 
   const formatDate = (dateStr: string) => {
-    const date = new Date(dateStr);
-    return date.toLocaleDateString("pt-BR") + " " + date.toLocaleTimeString("pt-BR");
+    // Usar utilitário de timezone para interpretar corretamente o horário de São Paulo
+    const parsed = parseDBDate(dateStr);
+    if (!parsed) return dateStr;
+    return formatDateTimeBR(parsed);
   };
 
   const handleExportExcel = () => {
