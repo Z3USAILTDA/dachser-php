@@ -315,6 +315,45 @@ serve(async (req) => {
           results.push({ table: 't_leadcomex_enrichment_logs', database: 'dados_dachser', status: 'error', error: (e as Error).message });
         }
 
+        // 4. ALTER TABLE t_sea_master - Add SEA-specific columns if they don't exist
+        const seaColumns = [
+          { name: 'hbl', definition: 'VARCHAR(100) NULL' },
+          { name: 'customer_order', definition: 'VARCHAR(100) NULL' },
+          { name: 'accrual', definition: 'TINYINT NULL' },
+          { name: 'dep', definition: 'TINYINT NULL' },
+          { name: 'eta_ata', definition: 'DATETIME NULL' },
+          { name: 'email_title', definition: 'TEXT NULL' },
+          { name: 'te', definition: 'VARCHAR(50) NULL' },
+          { name: 'at_field', definition: 'VARCHAR(50) NULL' },
+          { name: 'wh_treatment', definition: 'VARCHAR(100) NULL' },
+          { name: 'cct_transm', definition: 'VARCHAR(100) NULL' },
+        ];
+
+        for (const col of seaColumns) {
+          try {
+            // Check if column exists
+            const checkResult = await dadosDachserClient.execute(`
+              SELECT COUNT(*) as cnt FROM INFORMATION_SCHEMA.COLUMNS 
+              WHERE TABLE_SCHEMA = 'dados_dachser' 
+                AND TABLE_NAME = 't_sea_master' 
+                AND COLUMN_NAME = ?
+            `, [col.name]);
+            
+            const exists = (checkResult.rows?.[0] as { cnt: number })?.cnt > 0;
+            
+            if (!exists) {
+              await dadosDachserClient.execute(`
+                ALTER TABLE dados_dachser.t_sea_master ADD COLUMN ${col.name} ${col.definition}
+              `);
+              results.push({ table: `t_sea_master.${col.name}`, database: 'dados_dachser', status: 'added' });
+            } else {
+              results.push({ table: `t_sea_master.${col.name}`, database: 'dados_dachser', status: 'exists' });
+            }
+          } catch (e: unknown) {
+            results.push({ table: `t_sea_master.${col.name}`, database: 'dados_dachser', status: 'error', error: (e as Error).message });
+          }
+        }
+
         await dadosDachserClient.close();
       } catch (connError: unknown) {
         results.push({ table: 'connection', database: 'dados_dachser', status: 'error', error: (connError as Error).message });
