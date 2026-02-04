@@ -11545,6 +11545,72 @@ serve(async (req) => {
         break;
       }
 
+      // ==================== BULK INSERT CLIENTES BASE ====================
+      case 'bulk_insert_clientes': {
+        const { rows: clienteRows } = body as { 
+          rows?: Array<{
+            ativo?: number;
+            classificacao?: string;
+            cod_rm?: number;
+            dchr_customer_number?: string;
+            cnpj?: string;
+            nome_cliente?: string;
+            cidade_uf?: string;
+            pais?: string;
+            logradouro?: string;
+            cep?: string;
+            info_complementar?: string;
+          }>;
+        };
+        
+        if (!clienteRows || !Array.isArray(clienteRows) || clienteRows.length === 0) {
+          return new Response(
+            JSON.stringify({ error: 'Nenhuma linha para inserir', success: false }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+        
+        const clienteTableName = 'dados_dachser.t_clientes_base_online';
+        
+        console.log(`[bulk_insert_clientes] Inserting ${clienteRows.length} rows into ${clienteTableName}`);
+        
+        let clienteInserted = 0;
+        const clienteErrors: Array<{index: number; message: string}> = [];
+        
+        for (let i = 0; i < clienteRows.length; i++) {
+          const row = clienteRows[i];
+          try {
+            await client.execute(`
+              INSERT INTO ${clienteTableName} (
+                ativo, classificacao, cod_rm, dchr_customer_number, cnpj,
+                nome_cliente, cidade_uf, pais, logradouro, cep, info_complementar
+              ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            `, [
+              row.ativo ?? 1,
+              row.classificacao || null,
+              row.cod_rm ?? null,
+              row.dchr_customer_number || null,
+              row.cnpj || null,
+              row.nome_cliente || null,
+              row.cidade_uf || null,
+              row.pais || null,
+              row.logradouro || null,
+              row.cep || null,
+              row.info_complementar || null,
+            ]);
+            clienteInserted++;
+          } catch (err: unknown) {
+            const errMsg = err instanceof Error ? err.message : 'Erro desconhecido';
+            console.error(`[bulk_insert_clientes] Error on row ${i}: ${errMsg}`);
+            clienteErrors.push({ index: i, message: errMsg });
+          }
+        }
+        
+        console.log(`[bulk_insert_clientes] Completed: ${clienteInserted} inserted, ${clienteErrors.length} errors`);
+        result = { success: true, inserted: clienteInserted, rejected: clienteErrors.length, errors: clienteErrors };
+        break;
+      }
+
       default:
         return new Response(
           JSON.stringify({ error: `Ação não suportada: ${action}` }),
