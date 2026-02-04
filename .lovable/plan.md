@@ -1,103 +1,159 @@
 
-# Plano: Corrigir Inconsistência da Coluna 'at' → 'at_field'
 
-## Problema Identificado
+# Plano: Esvaziar Dados das Telas AWB Tracking e CCT (Mantendo Visual)
 
-As 19 linhas foram rejeitadas com o erro:
-```
-Unknown column 'at' in 'field list'
-```
+## Objetivo
 
-A coluna existe no banco como `at_field`, mas o código está tentando inserir em `at`.
-
-## Alterações Necessárias
-
-### 1. Frontend: `src/lib/parseExcelMaster.ts`
-
-Atualizar todas as referências de `at` para `at_field`:
-
-**Interface MasterRow:**
-```typescript
-// De:
-at?: string;
-
-// Para:
-at_field?: string;
-```
-
-**COLUMN_ALIASES:**
-```typescript
-// De:
-at: ["at", "a_t", "arrival_time"],
-
-// Para:
-at_field: ["at", "a_t", "at_field", "arrival_time"],
-```
-
-**DB_COLUMNS:**
-```typescript
-// De:
-"at",
-
-// Para:
-"at_field",
-```
-
-**Switch case no parsing:**
-```typescript
-// De:
-case "at":
-  row.at = value != null ? String(value).trim() : undefined;
-  break;
-
-// Para:
-case "at_field":
-  row.at_field = value != null ? String(value).trim() : undefined;
-  break;
-```
-
-### 2. Backend: `supabase/functions/mariadb-proxy/index.ts`
-
-Atualizar a query INSERT para SEA:
-
-```typescript
-// De:
-INSERT INTO ${tableName} (
-  nome_analista, customer_no, po, hbl, master,
-  etd, pre_alert_sent, oea_cl_doc, customer_order,
-  accrual, dep, eta_ata, email_title, te, at,  // ❌
-  wh_treatment, cct_transm, remarks, tipo_processo, data_insert
-)
-
-// Para:
-INSERT INTO ${tableName} (
-  nome_analista, customer_no, po, hbl, master,
-  etd, pre_alert_sent, oea_cl_doc, customer_order,
-  accrual, dep, eta_ata, email_title, te, at_field,  // ✅
-  wh_treatment, cct_transm, remarks, tipo_processo, data_insert
-)
-```
-
-E também o valor passado:
-```typescript
-// De:
-row.at || null,
-
-// Para:
-row.at_field || null,
-```
+1. **Tela de Rastreio AWBs (`/air/tracking`)**: Remover a importação de dados do `t_status_aereo`, deixando a tabela vazia
+2. **Tela CCT (`/air/cct`)**: Manter toda a estrutura visual (métricas, tabs, tabela), mas sem dados (tudo zerado/vazio)
 
 ---
 
 ## Arquivos a Modificar
 
-| Arquivo | Alterações |
+| Arquivo | Alteração |
 |---------|-----------|
-| `src/lib/parseExcelMaster.ts` | Renomear `at` → `at_field` em interface, aliases, DB_COLUMNS e switch case |
-| `supabase/functions/mariadb-proxy/index.ts` | Renomear `at` → `at_field` na query INSERT e no valor do array |
+| `src/pages/Index.tsx` | Modificar `fetchStatusAereoData` para retornar array vazio |
+| `src/hooks/useCCTData.ts` | Modificar `useProcessosCCT`, `useExcecoes` e `useProfiles` para retornar arrays vazios |
 
 ---
 
-## Resultado Esperado
+## 1. Tela de Rastreio AWBs (`src/pages/Index.tsx`)
 
-Após as correções, a planilha Sea Import deverá importar todas as 19 linhas com sucesso, pois a coluna `at_field` já existe no banco de dados.
+### Alteração na função `fetchStatusAereoData` (linhas 492-561)
+
+**De:**
+```typescript
+const fetchStatusAereoData = React.useCallback(async () => {
+  setIsLoadingStatusAereo(true);
+  try {
+    const { data, error } = await supabase.functions.invoke("fetch-status-aereo", {
+      body: { search: "" },
+    });
+    // ... processamento de dados ...
+    setStatusAereoData(deduplicatedData);
+  } catch (error) {
+    // ...
+  } finally {
+    setIsLoadingStatusAereo(false);
+  }
+}, []);
+```
+
+**Para:**
+```typescript
+const fetchStatusAereoData = React.useCallback(async () => {
+  // Temporariamente desativado - não buscar dados do t_status_aereo
+  setIsLoadingStatusAereo(false);
+  setStatusAereoData([]);
+}, []);
+```
+
+---
+
+## 2. Tela CCT (`src/hooks/useCCTData.ts`)
+
+### 2.1 Hook `useProcessosCCT` (linhas 187-214)
+
+**De:**
+```typescript
+export function useProcessosCCT() {
+  return useQuery({
+    queryKey: ["cct-processos"],
+    queryFn: async (): Promise<ProcessoCCT[]> => {
+      const { data, error } = await supabase.functions.invoke('mariadb-proxy', {
+        body: { action: 'get_cct_shipments' }
+      });
+      // ... processamento ...
+      return processos;
+    },
+    staleTime: 30000,
+    refetchInterval: 60000,
+  });
+}
+```
+
+**Para:**
+```typescript
+export function useProcessosCCT() {
+  return useQuery({
+    queryKey: ["cct-processos"],
+    queryFn: async (): Promise<ProcessoCCT[]> => {
+      // Temporariamente desativado - retornar array vazio
+      console.log("CCT: Dados temporariamente desativados");
+      return [];
+    },
+    staleTime: 30000,
+    refetchInterval: false, // Desabilitar refetch automático
+  });
+}
+```
+
+### 2.2 Hook `useExcecoes` (linhas 294-311)
+
+Não precisa alterar - já depende de `useProcessosCCT` e retornará vazio automaticamente.
+
+### 2.3 Hook `useProfiles` (linhas 398-414)
+
+**De:**
+```typescript
+export function useProfiles() {
+  return useQuery({
+    queryKey: ["cct-profiles"],
+    queryFn: async (): Promise<CCTProfile[]> => {
+      const { data, error } = await supabase.functions.invoke('mariadb-proxy', {
+        body: { action: 'get_cct_profiles' }
+      });
+      // ...
+      return data.data || [];
+    },
+  });
+}
+```
+
+**Para:**
+```typescript
+export function useProfiles() {
+  return useQuery({
+    queryKey: ["cct-profiles"],
+    queryFn: async (): Promise<CCTProfile[]> => {
+      // Temporariamente desativado
+      return [];
+    },
+  });
+}
+```
+
+---
+
+## Resultado Visual Esperado
+
+### Tela AWB Tracking (`/air/tracking`)
+- Header, navegação e filtros funcionando normalmente
+- Tabela vazia (sem registros de AWBs)
+- Mensagem "Nenhum dado encontrado" ou similar
+
+### Tela CCT (`/air/cct`)
+- Background com imagem e gradiente mantido
+- Header com botões de ação mantido
+- Métricas exibindo zeros:
+  - Total Monitorados: 0
+  - Em Alerta: 0
+  - Críticos: 0
+  - Eventos 24h: 0
+- Tabs de navegação funcionando (Dashboard, Analytics, Exceções, Regras, Console)
+- Tabela de processos vazia
+- Estrutura visual 100% preservada
+
+---
+
+## Detalhes Técnicos
+
+| Componente | Comportamento com Dados Vazios |
+|-----------|-------------------------------|
+| `MetricCard` | Exibe valor 0 |
+| `ProcessosTable` | Exibe estado vazio (sem linhas) |
+| `AnalyticsTab` | Gráficos vazios |
+| `ExcecoesTab` | Lista vazia de exceções |
+| Botão "Atualizar" | Funciona mas retorna dados vazios |
+
