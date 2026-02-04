@@ -1,8 +1,9 @@
 import { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
-import { Upload, FileSpreadsheet, AlertCircle, CheckCircle2, X, RefreshCw } from "lucide-react";
+import { Upload, FileSpreadsheet, AlertCircle, CheckCircle2, X, RefreshCw, Download } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
+import * as XLSX from "xlsx";
 
 import { PageLayout } from "@/components/layout/PageLayout";
 import { PageCard } from "@/components/layout/PageCard";
@@ -88,6 +89,7 @@ export default function UploadMaster() {
     inserted: number;
     rejected: number;
     errors: Array<{ index: number; message: string }>;
+    rejectedRows?: Array<{ originalIndex: number; data: MasterRow | ClienteBaseRow; error: string }>;
   } | null>(null);
 
   // Verificar permissão admin
@@ -275,6 +277,75 @@ export default function UploadMaster() {
     );
   };
 
+  // Exportar linhas rejeitadas para Excel
+  const handleExportRejected = useCallback(() => {
+    if (!importResult || !importResult.rejectedRows || importResult.rejectedRows.length === 0) {
+      toast.error("Nenhuma linha rejeitada para exportar");
+      return;
+    }
+
+    try {
+      // Preparar dados para exportação
+      const exportData = importResult.rejectedRows.map((item) => {
+        if (importMode === "master") {
+          const row = item.data as MasterRow;
+          return {
+            "Linha Original": item.originalIndex + 2, // +2 porque Excel começa em 1 e tem header
+            "Erro": item.error,
+            "Analista": row.nome_analista || "",
+            "Customer No": row.customer_no || "",
+            "PO": row.po || "",
+            "HAWB": row.hawb || "",
+            "HBL": row.hbl || "",
+            "Master": row.master || "",
+            "ETD": row.etd || "",
+            "ETA/ATA": row.eta_ata || "",
+            "D Term": row.d_term || "",
+            "Remarks": row.remarks || "",
+          };
+        } else {
+          const row = item.data as ClienteBaseRow;
+          return {
+            "Linha Original": item.originalIndex + 2,
+            "Erro": item.error,
+            "Nome Cliente": row.nome_cliente || "",
+            "CNPJ": row.cnpj || "",
+            "Customer Number": row.dchr_customer_number || "",
+            "Classificação": row.classificacao || "",
+            "Cidade/UF": row.cidade_uf || "",
+            "País": row.pais || "",
+            "Logradouro": row.logradouro || "",
+            "CEP": row.cep || "",
+            "Info Complementar": row.info_complementar || "",
+            "Ativo": row.ativo === 1 ? "Sim" : "Não",
+          };
+        }
+      });
+
+      // Criar workbook
+      const ws = XLSX.utils.json_to_sheet(exportData);
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, "Linhas Rejeitadas");
+
+      // Ajustar largura das colunas
+      const colWidths = Object.keys(exportData[0] || {}).map((key) => ({
+        wch: Math.max(key.length, 15),
+      }));
+      ws["!cols"] = colWidths;
+
+      // Gerar nome do arquivo
+      const timestamp = new Date().toISOString().split("T")[0];
+      const fileName = `linhas_rejeitadas_${importMode}_${timestamp}.xlsx`;
+
+      // Download
+      XLSX.writeFile(wb, fileName);
+      toast.success(`Arquivo ${fileName} exportado com sucesso!`);
+    } catch (error) {
+      console.error("Erro ao exportar:", error);
+      toast.error("Erro ao exportar linhas rejeitadas");
+    }
+  }, [importResult, importMode]);
+
   // Importar dados
   const handleImport = async () => {
     if (importMode === "master") {
@@ -287,6 +358,9 @@ export default function UploadMaster() {
         // Filtrar linhas válidas (que não estão em erro)
         const errorRows = new Set(validationErrors.map((e) => e.row - 2));
         const validRows = allRows.filter((_, idx) => !errorRows.has(idx));
+        const validRowsWithIndex = allRows
+          .map((row, idx) => ({ row, originalIndex: idx }))
+          .filter(({ originalIndex }) => !errorRows.has(originalIndex));
 
         if (validRows.length === 0) {
           toast.error("Nenhuma linha válida para importar");
@@ -304,10 +378,26 @@ export default function UploadMaster() {
 
         if (error) throw error;
 
+        // Construir lista de linhas rejeitadas com dados originais
+        const rejectedRows: Array<{ originalIndex: number; data: MasterRow; error: string }> = [];
+        if (data.errors && data.errors.length > 0) {
+          data.errors.forEach((err: { index: number; message: string }) => {
+            const originalItem = validRowsWithIndex[err.index];
+            if (originalItem) {
+              rejectedRows.push({
+                originalIndex: originalItem.originalIndex,
+                data: originalItem.row,
+                error: err.message,
+              });
+            }
+          });
+        }
+
         setImportResult({
           inserted: data.inserted || 0,
           rejected: data.rejected || 0,
           errors: data.errors || [],
+          rejectedRows,
         });
 
         if (data.inserted > 0) {
@@ -335,6 +425,9 @@ export default function UploadMaster() {
         // Filtrar linhas válidas
         const errorRows = new Set(clientesValidationErrors.map((e) => e.row - 2));
         const validRows = clientesAllRows.filter((_, idx) => !errorRows.has(idx));
+        const validRowsWithIndex = clientesAllRows
+          .map((row, idx) => ({ row, originalIndex: idx }))
+          .filter(({ originalIndex }) => !errorRows.has(originalIndex));
 
         if (validRows.length === 0) {
           toast.error("Nenhuma linha válida para importar");
@@ -346,17 +439,19 @@ export default function UploadMaster() {
         // e adicionar delay entre batches para evitar sobrecarga de conexão
         const BATCH_SIZE = 15;
         const BATCH_DELAY_MS = 500; // 500ms entre batches
-        const batches: typeof validRows[] = [];
-        for (let i = 0; i < validRows.length; i += BATCH_SIZE) {
-          batches.push(validRows.slice(i, i + BATCH_SIZE));
+        const batches: Array<{ row: ClienteBaseRow; originalIndex: number }[]> = [];
+        for (let i = 0; i < validRowsWithIndex.length; i += BATCH_SIZE) {
+          batches.push(validRowsWithIndex.slice(i, i + BATCH_SIZE));
         }
 
         let totalInserted = 0;
         let totalRejected = 0;
         const allErrors: Array<{ index: number; message: string }> = [];
+        const rejectedRows: Array<{ originalIndex: number; data: ClienteBaseRow; error: string }> = [];
 
         for (let batchIndex = 0; batchIndex < batches.length; batchIndex++) {
           const batch = batches[batchIndex];
+          const batchRows = batch.map(b => b.row);
           const progress = Math.round(((batchIndex + 1) / batches.length) * 100);
           setImportProgress(progress);
 
@@ -368,17 +463,25 @@ export default function UploadMaster() {
           const { data, error } = await supabase.functions.invoke("mariadb-proxy", {
             body: {
               action: "bulk_insert_clientes",
-              rows: batch,
+              rows: batchRows,
             },
           });
 
           if (error) {
             console.error(`Erro no batch ${batchIndex + 1}:`, error);
-            // Continuar com os próximos batches mesmo em caso de erro
+            // Marcar todos os registros do batch como rejeitados
             totalRejected += batch.length;
-            allErrors.push({ 
-              index: batchIndex * BATCH_SIZE, 
-              message: `Batch ${batchIndex + 1} falhou: ${error.message}` 
+            batch.forEach((item, localIdx) => {
+              const globalIndex = batchIndex * BATCH_SIZE + localIdx;
+              allErrors.push({ 
+                index: globalIndex, 
+                message: `Batch ${batchIndex + 1} falhou: ${error.message}` 
+              });
+              rejectedRows.push({
+                originalIndex: item.originalIndex,
+                data: item.row,
+                error: `Batch ${batchIndex + 1} falhou: ${error.message}`,
+              });
             });
             continue;
           }
@@ -387,12 +490,21 @@ export default function UploadMaster() {
           totalRejected += data.rejected || 0;
           
           if (data.errors && data.errors.length > 0) {
-            // Ajustar índices dos erros para refletir posição global
-            const adjustedErrors = data.errors.map((e: { index: number; message: string }) => ({
-              ...e,
-              index: e.index + (batchIndex * BATCH_SIZE),
-            }));
-            allErrors.push(...adjustedErrors);
+            data.errors.forEach((e: { index: number; message: string }) => {
+              const globalIndex = batchIndex * BATCH_SIZE + e.index;
+              const originalItem = batch[e.index];
+              allErrors.push({
+                index: globalIndex,
+                message: e.message,
+              });
+              if (originalItem) {
+                rejectedRows.push({
+                  originalIndex: originalItem.originalIndex,
+                  data: originalItem.row,
+                  error: e.message,
+                });
+              }
+            });
           }
         }
 
@@ -400,6 +512,7 @@ export default function UploadMaster() {
           inserted: totalInserted,
           rejected: totalRejected,
           errors: allErrors,
+          rejectedRows,
         });
 
         if (totalInserted > 0) {
@@ -938,10 +1051,18 @@ export default function UploadMaster() {
                 </div>
               )}
 
-              <Button onClick={handleReset} variant="outline">
-                <RefreshCw className="h-4 w-4 mr-2" />
-                Nova Importação
-              </Button>
+              <div className="flex items-center gap-3">
+                {importResult.rejected > 0 && importResult.rejectedRows && importResult.rejectedRows.length > 0 && (
+                  <Button onClick={handleExportRejected} variant="default">
+                    <Download className="h-4 w-4 mr-2" />
+                    Exportar Rejeitadas ({importResult.rejectedRows.length})
+                  </Button>
+                )}
+                <Button onClick={handleReset} variant="outline">
+                  <RefreshCw className="h-4 w-4 mr-2" />
+                  Nova Importação
+                </Button>
+              </div>
             </div>
           </PageCard>
         )}
