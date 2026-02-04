@@ -184,16 +184,52 @@ function mapRowToProcessoCCT(row: any): ProcessoCCT {
  * Main hook to fetch CCT processes from MariaDB via mariadb-proxy
  * Source: t_master_dados (AIR IMPORT) LEFT JOIN t_status_aereo
  */
+// Lista de usuários DACHSER - Z3US são os que NÃO estão nesta lista
+const DACHSER_ADMIN_USERS = ["ana.tozzo", "danilo.pedroso", "teste.test3"];
+
+function isZ3usUser(): boolean {
+  const storedUser = localStorage.getItem("user");
+  if (!storedUser) return false;
+  try {
+    const user = JSON.parse(storedUser);
+    return user && !DACHSER_ADMIN_USERS.includes(user.username);
+  } catch {
+    return false;
+  }
+}
+
 export function useProcessosCCT() {
   return useQuery({
     queryKey: ["cct-processos"],
     queryFn: async (): Promise<ProcessoCCT[]> => {
-      // Temporariamente desativado - retornar array vazio
-      console.log("CCT: Dados temporariamente desativados");
-      return [];
+      // Verificar se é usuário Z3US
+      if (!isZ3usUser()) {
+        console.log("CCT: Dados restritos - usuário DACHSER");
+        return [];
+      }
+
+      console.log("CCT: Fetching shipments from MariaDB via mariadb-proxy...");
+      
+      const { data, error } = await supabase.functions.invoke('mariadb-proxy', {
+        body: { action: 'get_cct_shipments' }
+      });
+
+      if (error) {
+        console.error("CCT: Error fetching shipments:", error);
+        throw new Error(error.message || 'Erro ao buscar processos CCT');
+      }
+
+      if (!data?.success) {
+        console.error("CCT: Error in response:", data?.error);
+        throw new Error(data?.error || 'Erro ao buscar processos CCT');
+      }
+
+      const processos = (data.data || []).map(mapRowToProcessoCCT);
+      console.log(`CCT: Loaded ${processos.length} processos from MariaDB`);
+      return processos;
     },
     staleTime: 30000,
-    refetchInterval: false, // Desabilitar refetch automático
+    refetchInterval: 60000,
   });
 }
 
@@ -383,8 +419,21 @@ export function useProfiles() {
   return useQuery({
     queryKey: ["cct-profiles"],
     queryFn: async (): Promise<CCTProfile[]> => {
-      // Temporariamente desativado
-      return [];
+      // Verificar se é usuário Z3US
+      if (!isZ3usUser()) {
+        return [];
+      }
+
+      const { data, error } = await supabase.functions.invoke('mariadb-proxy', {
+        body: { action: 'get_cct_profiles' }
+      });
+
+      if (error || !data?.success) {
+        console.error("CCT: Error fetching profiles:", error || data?.error);
+        return [];
+      }
+
+      return data.data || [];
     },
   });
 }
