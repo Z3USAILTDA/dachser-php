@@ -6,54 +6,99 @@ export const ACCEPT_STRING = ".xlsx,.xls,.xlsm,.xlsb,.csv,.ods";
 
 // Aliases de colunas do Excel → banco de dados
 const COLUMN_ALIASES: Record<string, string[]> = {
+  // Campos comuns (AIR e SEA)
   nome_analista: ["nome_analista", "analista", "clerk", "operator", "responsavel", "responsável"],
   customer_no: ["customer_no", "customer", "customer_number", "customer_id", "cliente", "cod_cliente", "codigo_cliente"],
   po: ["po", "p_o", "purchase_order", "pedido", "pedido_compra"],
-  hawb: ["hawb", "hawb_no", "hawb_number", "house", "house_awb", "house_awb_no", "house_no"],
   master: [
     "master", "mawb", "mawb_no", "master_awb", "master_awb_no", "master_number",
-    "master_no", "master_id", "mawb_number", "master_awb_number", "masterawb", "no_master"
+    "master_no", "master_id", "mawb_number", "master_awb_number", "masterawb", "no_master", "mbl", "mbl_no"
   ],
   etd: ["etd", "e_t_d", "estimated_time_departure", "data_etd", "departure", "data_saida", "data_saida_prevista"],
   pre_alert_sent: ["pre_alert_sent", "prealert_sent", "pre_alert", "prealert", "sent_prealert", "enviado_prealert"],
   oea_cl_doc: ["oea_cl_doc", "oea", "cl_doc", "cldoc", "doc_ok", "docs_ok", "documentos_ok", "docs"],
+  remarks: ["remarks", "remark", "remarks_1", "observacao", "observacoes", "observacao_1", "observations", "notes", "note"],
+  
+  // Campos AIR específicos
+  hawb: ["hawb", "hawb_no", "hawb_number", "house", "house_awb", "house_awb_no", "house_no"],
   cargo_departed: ["cargo_departed", "departed", "data_departed", "data_embarque", "embarque", "departure_date", "data_saida_real"],
   d_term: ["d_term", "dterm", "delivery_term", "incoterm", "incoterms", "termo", "termo_entrega"],
   pod_dn_available: ["pod_dn_available", "pod", "dn_available", "dn", "pod_dn", "document_available", "doc_available"],
-  remarks: ["remarks", "remark", "remarks_1", "observacao", "observacoes", "observacao_1", "observations", "notes", "note"],
+  
+  // Campos SEA específicos
+  hbl: ["hbl", "hbl_no", "hbl_number", "house_bl", "house_bill", "house_bill_of_lading"],
+  customer_order: ["customer_order", "order", "order_no", "order_number", "pedido_cliente"],
+  accrual: ["accrual", "provisao", "prov"],
+  dep: ["dep", "departed", "partiu"],
+  eta_ata: ["eta_ata", "e_t_a_a_t_a", "eta", "e_t_a", "ata", "a_t_a", "arrival", "chegada"],
+  email_title: ["email_title", "email_title_pre_alert", "titulo_email"],
+  te: ["te", "t_e", "transit_time", "tempo_transito"],
+  at: ["at", "a_t", "arrival_time"],
+  wh_treatment: ["wh_treatment", "wh", "warehouse_treatment", "tratamento_armazem"],
+  cct_transm: ["cct_transm", "cct", "transmissao_cct"],
 };
 
-// Colunas do banco
+// Colunas do banco - comuns e específicas por modal
 export const DB_COLUMNS = [
+  // Campos comuns
   "nome_analista",
   "customer_no", 
   "po",
-  "hawb",
   "master",
   "etd",
   "pre_alert_sent",
   "oea_cl_doc",
+  "remarks",
+  
+  // Campos AIR
+  "hawb",
   "cargo_departed",
   "d_term",
   "pod_dn_available",
-  "remarks",
+  
+  // Campos SEA
+  "hbl",
+  "customer_order",
+  "accrual",
+  "dep",
+  "eta_ata",
+  "email_title",
+  "te",
+  "at",
+  "wh_treatment",
+  "cct_transm",
 ];
 
 export interface MasterRow {
+  // Campos comuns (AIR e SEA)
   nome_analista?: string;
   customer_no?: string;
   po?: string;
-  hawb?: string;
   master?: string;
   etd?: string;
   pre_alert_sent?: string;
   oea_cl_doc?: number | null;
-  cargo_departed?: string;
-  d_term?: string;
-  pod_dn_available?: string;
   remarks?: string;
   tipo_processo?: string;
   data_insert?: string;
+  
+  // Campos AIR específicos
+  hawb?: string;
+  cargo_departed?: string;
+  d_term?: string;
+  pod_dn_available?: string;
+  
+  // Campos SEA específicos
+  hbl?: string;
+  customer_order?: string;
+  accrual?: number | null;
+  dep?: number | null;
+  eta_ata?: string;
+  email_title?: string;
+  te?: string;
+  at?: string;
+  wh_treatment?: string;
+  cct_transm?: string;
 }
 
 export interface ColumnMapping {
@@ -412,17 +457,18 @@ export async function parseExcelMasterFile(
           }
         }
         
-        // Verificar colunas essenciais (hawb ou master)
+        // Verificar colunas essenciais (hawb, hbl ou master)
         const hasHawb = columnMappings.some((m) => m.dbColumn === "hawb");
+        const hasHbl = columnMappings.some((m) => m.dbColumn === "hbl");
         const hasMaster = columnMappings.some((m) => m.dbColumn === "master");
         
-        if (!hasHawb && !hasMaster) {
+        if (!hasHawb && !hasHbl && !hasMaster) {
           resolve({
             success: false,
             rows: [],
             columnMappings,
             unmappedColumns,
-            errors: [{ row: 0, message: "Coluna HAWB ou MASTER é obrigatória" }],
+            errors: [{ row: 0, message: "Coluna HAWB, HBL ou MASTER é obrigatória" }],
             totalRows: 0,
             previewRows: [],
           });
@@ -450,6 +496,7 @@ export async function parseExcelMasterFile(
             const value = rawRow[mapping.originalHeader];
             
             switch (mapping.dbColumn) {
+              // Campos de data
               case "etd":
                 row.etd = parseDate(value) || undefined;
                 break;
@@ -459,9 +506,22 @@ export async function parseExcelMasterFile(
               case "cargo_departed":
                 row.cargo_departed = parseDate(value) || undefined;
                 break;
+              case "eta_ata":
+                row.eta_ata = parseDate(value) || undefined;
+                break;
+              
+              // Campos booleanos
               case "oea_cl_doc":
                 row.oea_cl_doc = parseBoolean(value);
                 break;
+              case "accrual":
+                row.accrual = parseBoolean(value);
+                break;
+              case "dep":
+                row.dep = parseBoolean(value);
+                break;
+              
+              // Campos de texto
               case "nome_analista":
                 row.nome_analista = value != null ? String(value).trim() : undefined;
                 break;
@@ -473,6 +533,9 @@ export async function parseExcelMasterFile(
                 break;
               case "hawb":
                 row.hawb = value != null ? String(value).trim() : undefined;
+                break;
+              case "hbl":
+                row.hbl = value != null ? String(value).trim() : undefined;
                 break;
               case "master":
                 row.master = value != null ? String(value).trim() : undefined;
@@ -486,17 +549,36 @@ export async function parseExcelMasterFile(
               case "remarks":
                 row.remarks = value != null ? String(value).trim() : undefined;
                 break;
+              case "customer_order":
+                row.customer_order = value != null ? String(value).trim() : undefined;
+                break;
+              case "email_title":
+                row.email_title = value != null ? String(value).trim() : undefined;
+                break;
+              case "te":
+                row.te = value != null ? String(value).trim() : undefined;
+                break;
+              case "at":
+                row.at = value != null ? String(value).trim() : undefined;
+                break;
+              case "wh_treatment":
+                row.wh_treatment = value != null ? String(value).trim() : undefined;
+                break;
+              case "cct_transm":
+                row.cct_transm = value != null ? String(value).trim() : undefined;
+                break;
             }
           }
           
-          // Validar linha
+          // Validar linha - aceitar HAWB (air), HBL (sea) ou Master
           const hawbValue = row.hawb?.trim();
+          const hblValue = row.hbl?.trim();
           const masterValue = row.master?.trim();
           
-          if (!hawbValue && !masterValue) {
+          if (!hawbValue && !hblValue && !masterValue) {
             errors.push({
               row: rowNumber,
-              message: "HAWB ou MASTER deve estar preenchido",
+              message: "HAWB, HBL ou MASTER deve estar preenchido",
             });
           }
           
@@ -564,6 +646,7 @@ export function reprocessWithMapping(
       const value = rawRow[mapping.originalHeader];
       
       switch (mapping.dbColumn) {
+        // Campos de data
         case "etd":
           row.etd = parseDate(value) || undefined;
           break;
@@ -573,9 +656,22 @@ export function reprocessWithMapping(
         case "cargo_departed":
           row.cargo_departed = parseDate(value) || undefined;
           break;
+        case "eta_ata":
+          row.eta_ata = parseDate(value) || undefined;
+          break;
+        
+        // Campos booleanos
         case "oea_cl_doc":
           row.oea_cl_doc = parseBoolean(value);
           break;
+        case "accrual":
+          row.accrual = parseBoolean(value);
+          break;
+        case "dep":
+          row.dep = parseBoolean(value);
+          break;
+        
+        // Campos de texto
         case "nome_analista":
           row.nome_analista = value != null ? String(value).trim() : undefined;
           break;
@@ -587,6 +683,9 @@ export function reprocessWithMapping(
           break;
         case "hawb":
           row.hawb = value != null ? String(value).trim() : undefined;
+          break;
+        case "hbl":
+          row.hbl = value != null ? String(value).trim() : undefined;
           break;
         case "master":
           row.master = value != null ? String(value).trim() : undefined;
@@ -600,16 +699,36 @@ export function reprocessWithMapping(
         case "remarks":
           row.remarks = value != null ? String(value).trim() : undefined;
           break;
+        case "customer_order":
+          row.customer_order = value != null ? String(value).trim() : undefined;
+          break;
+        case "email_title":
+          row.email_title = value != null ? String(value).trim() : undefined;
+          break;
+        case "te":
+          row.te = value != null ? String(value).trim() : undefined;
+          break;
+        case "at":
+          row.at = value != null ? String(value).trim() : undefined;
+          break;
+        case "wh_treatment":
+          row.wh_treatment = value != null ? String(value).trim() : undefined;
+          break;
+        case "cct_transm":
+          row.cct_transm = value != null ? String(value).trim() : undefined;
+          break;
       }
     }
     
+    // Validar linha - aceitar HAWB (air), HBL (sea) ou Master
     const hawbValue = row.hawb?.trim();
+    const hblValue = row.hbl?.trim();
     const masterValue = row.master?.trim();
     
-    if (!hawbValue && !masterValue) {
+    if (!hawbValue && !hblValue && !masterValue) {
       errors.push({
         row: rowNumber,
-        message: "HAWB ou MASTER deve estar preenchido",
+        message: "HAWB, HBL ou MASTER deve estar preenchido",
       });
     }
     
