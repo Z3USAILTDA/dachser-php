@@ -93,6 +93,7 @@ import ManualFinanceiro from "./pages/fin/ManualFinanceiro";
 
 // Admin Module
 import ManualAdmin from "./pages/admin/ManualAdmin";
+import UploadMaster from "./pages/admin/UploadMaster";
 
 // AWB Pages
 import AWBList from "./pages/AWBList";
@@ -124,6 +125,7 @@ const App = () => (
           <Route path="/admin/users" element={<AdminUserManagement />} />
           <Route path="/admin/apis" element={<AdminApiManagement />} />
           <Route path="/admin/database" element={<DatabaseMonitor />} />
+          <Route path="/admin/z3us/upload-master" element={<UploadMaster />} />
           <Route path="/admin/logs" element={<Logs />} />
           <Route path="/air/check" element={<CheckAwb />} />
           <Route path="/sea/analysis" element={<SeaAnalysis />} />
