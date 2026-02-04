@@ -325,7 +325,7 @@ export default function UploadMaster() {
         setImportProgress(100);
       }
     } else {
-      // Modo Clientes Base
+      // Modo Clientes Base - com batching para evitar WORKER_LIMIT
       if (clientesAllRows.length === 0) return;
 
       setIsImporting(true);
@@ -342,27 +342,65 @@ export default function UploadMaster() {
           return;
         }
 
-        const { data, error } = await supabase.functions.invoke("mariadb-proxy", {
-          body: {
-            action: "bulk_insert_clientes",
-            rows: validRows,
-          },
-        });
-
-        if (error) throw error;
-
-        setImportResult({
-          inserted: data.inserted || 0,
-          rejected: data.rejected || 0,
-          errors: data.errors || [],
-        });
-
-        if (data.inserted > 0) {
-          toast.success(`${data.inserted} cliente(s) importado(s) com sucesso!`);
+        // Dividir em batches de 50 registros para evitar timeout/WORKER_LIMIT
+        const BATCH_SIZE = 50;
+        const batches: typeof validRows[] = [];
+        for (let i = 0; i < validRows.length; i += BATCH_SIZE) {
+          batches.push(validRows.slice(i, i + BATCH_SIZE));
         }
 
-        if (data.rejected > 0) {
-          toast.warning(`${data.rejected} registro(s) rejeitado(s)`);
+        let totalInserted = 0;
+        let totalRejected = 0;
+        const allErrors: Array<{ index: number; message: string }> = [];
+
+        for (let batchIndex = 0; batchIndex < batches.length; batchIndex++) {
+          const batch = batches[batchIndex];
+          const progress = Math.round(((batchIndex + 1) / batches.length) * 100);
+          setImportProgress(progress);
+
+          const { data, error } = await supabase.functions.invoke("mariadb-proxy", {
+            body: {
+              action: "bulk_insert_clientes",
+              rows: batch,
+            },
+          });
+
+          if (error) {
+            console.error(`Erro no batch ${batchIndex + 1}:`, error);
+            // Continuar com os próximos batches mesmo em caso de erro
+            totalRejected += batch.length;
+            allErrors.push({ 
+              index: batchIndex * BATCH_SIZE, 
+              message: `Batch ${batchIndex + 1} falhou: ${error.message}` 
+            });
+            continue;
+          }
+
+          totalInserted += data.inserted || 0;
+          totalRejected += data.rejected || 0;
+          
+          if (data.errors && data.errors.length > 0) {
+            // Ajustar índices dos erros para refletir posição global
+            const adjustedErrors = data.errors.map((e: { index: number; message: string }) => ({
+              ...e,
+              index: e.index + (batchIndex * BATCH_SIZE),
+            }));
+            allErrors.push(...adjustedErrors);
+          }
+        }
+
+        setImportResult({
+          inserted: totalInserted,
+          rejected: totalRejected,
+          errors: allErrors,
+        });
+
+        if (totalInserted > 0) {
+          toast.success(`${totalInserted} cliente(s) importado(s) com sucesso!`);
+        }
+
+        if (totalRejected > 0) {
+          toast.warning(`${totalRejected} registro(s) rejeitado(s)`);
         }
       } catch (error) {
         console.error("Erro na importação:", error);
