@@ -11570,7 +11570,7 @@ serve(async (req) => {
           );
         }
         
-        const clienteTableName = 'dados_dachser.t_clientes_base_online';
+        const clienteTableName = 'dados_dachser.t_clientes_base';
         
         console.log(`[bulk_insert_clientes] Inserting ${clienteRows.length} rows into ${clienteTableName}`);
         

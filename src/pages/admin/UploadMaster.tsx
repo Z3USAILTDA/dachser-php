@@ -444,9 +444,9 @@ export default function UploadMaster() {
   return (
     <PageLayout
       title={importMode === "master" ? "Upload Master (Air/Sea)" : "Upload Clientes Base"}
-      subtitle={importMode === "master" 
-        ? "Importação de planilhas para t_air_master ou t_sea_master" 
-        : "Importação de planilhas para t_clientes_base_online"}
+  subtitle={importMode === "master" 
+    ? "Importação de planilhas para t_air_master ou t_sea_master" 
+    : "Importação de planilhas para t_clientes_base"}
       backTo="/dashboard"
     >
       <div className="space-y-6">
