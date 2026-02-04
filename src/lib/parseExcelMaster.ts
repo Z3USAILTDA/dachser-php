@@ -9,8 +9,11 @@ const COLUMN_ALIASES: Record<string, string[]> = {
   nome_analista: ["nome_analista", "analista", "clerk", "operator", "responsavel", "responsável"],
   customer_no: ["customer_no", "customer", "customer_number", "customer_id", "cliente", "cod_cliente", "codigo_cliente"],
   po: ["po", "p_o", "purchase_order", "pedido", "pedido_compra"],
-  hawb: ["hawb", "hawb_no", "hawb_number", "house", "house_awb", "house_awb_no"],
-  master: ["master", "mawb", "mawb_no", "master_awb", "master_awb_no", "master_number"],
+  hawb: ["hawb", "hawb_no", "hawb_number", "house", "house_awb", "house_awb_no", "house_no"],
+  master: [
+    "master", "mawb", "mawb_no", "master_awb", "master_awb_no", "master_number",
+    "master_no", "master_id", "mawb_number", "master_awb_number", "masterawb", "no_master"
+  ],
   etd: ["etd", "e_t_d", "estimated_time_departure", "data_etd", "departure", "data_saida", "data_saida_prevista"],
   pre_alert_sent: ["pre_alert_sent", "prealert_sent", "pre_alert", "prealert", "sent_prealert", "enviado_prealert"],
   oea_cl_doc: ["oea_cl_doc", "oea", "cl_doc", "cldoc", "doc_ok", "docs_ok", "documentos_ok", "docs"],
@@ -99,16 +102,36 @@ export function normalizeColumnName(name: string): string {
  * Encontra a coluna do banco correspondente ao header do Excel
  */
 export function findDbColumn(normalizedHeader: string): string | null {
-  // Primeiro verifica correspondência exata
+  // Prioridade 1: Correspondência exata com DB_COLUMNS
   if (DB_COLUMNS.includes(normalizedHeader)) {
     return normalizedHeader;
   }
   
-  // Depois verifica aliases
+  // Prioridade 2: Correspondência exata com aliases
   for (const [dbCol, aliases] of Object.entries(COLUMN_ALIASES)) {
     for (const alias of aliases) {
       const normalizedAlias = normalizeColumnName(alias);
       if (normalizedHeader === normalizedAlias) {
+        return dbCol;
+      }
+    }
+  }
+  
+  // Prioridade 3: Header começa com nome do campo
+  for (const [dbCol, aliases] of Object.entries(COLUMN_ALIASES)) {
+    for (const alias of aliases) {
+      const normalizedAlias = normalizeColumnName(alias);
+      if (normalizedHeader.startsWith(normalizedAlias) && normalizedAlias.length >= 3) {
+        return dbCol;
+      }
+    }
+  }
+  
+  // Prioridade 4: Header contém nome do campo (ou vice-versa)
+  for (const [dbCol, aliases] of Object.entries(COLUMN_ALIASES)) {
+    for (const alias of aliases) {
+      const normalizedAlias = normalizeColumnName(alias);
+      if (normalizedAlias.length >= 4 && (normalizedHeader.includes(normalizedAlias) || normalizedAlias.includes(normalizedHeader))) {
         return dbCol;
       }
     }
@@ -369,6 +392,10 @@ export async function parseExcelMasterFile(
         const excelHeaders = Object.keys(rawRows[0] || {});
         const columnMappings: ColumnMapping[] = [];
         const unmappedColumns: string[] = [];
+        
+        // Debug: Log dos headers detectados
+        console.log("[parseExcelMaster] Headers detectados:", excelHeaders);
+        console.log("[parseExcelMaster] Headers normalizados:", excelHeaders.map(h => `${h} → ${normalizeColumnName(h)}`));
         
         for (const header of excelHeaders) {
           const normalized = normalizeColumnName(header);
