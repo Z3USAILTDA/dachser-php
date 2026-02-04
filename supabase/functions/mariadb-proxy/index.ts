@@ -11419,20 +11419,33 @@ serve(async (req) => {
       case 'bulk_insert_master': {
         const { rows, modal } = body as { 
           rows?: Array<{
+            // Campos comuns
             nome_analista?: string;
             customer_no?: string;
             po?: string;
-            hawb?: string;
             master?: string;
             etd?: string;
             pre_alert_sent?: string;
             oea_cl_doc?: number;
-            cargo_departed?: string;
-            d_term?: string;
-            pod_dn_available?: string;
             remarks?: string;
             tipo_processo?: string;
             data_insert?: string;
+            // Campos AIR
+            hawb?: string;
+            cargo_departed?: string;
+            d_term?: string;
+            pod_dn_available?: string;
+            // Campos SEA
+            hbl?: string;
+            customer_order?: string;
+            accrual?: number;
+            dep?: number;
+            eta_ata?: string;
+            email_title?: string;
+            te?: string;
+            at?: string;
+            wh_treatment?: string;
+            cct_transm?: string;
           }>;
           modal?: 'AIR' | 'SEA';
         };
@@ -11455,7 +11468,7 @@ serve(async (req) => {
           ? 'dados_dachser.t_air_master' 
           : 'dados_dachser.t_sea_master';
         
-        console.log(`[bulk_insert_master] Inserting ${rows.length} rows into ${tableName}`);
+        console.log(`[bulk_insert_master] Inserting ${rows.length} rows into ${tableName} (modal: ${modal})`);
         
         let inserted = 0;
         const errors: Array<{index: number; message: string}> = [];
@@ -11463,28 +11476,62 @@ serve(async (req) => {
         for (let i = 0; i < rows.length; i++) {
           const row = rows[i];
           try {
-            await client.execute(`
-              INSERT INTO ${tableName} (
-                nome_analista, customer_no, po, hawb, master,
-                etd, pre_alert_sent, oea_cl_doc, cargo_departed,
-                d_term, pod_dn_available, remarks, tipo_processo, data_insert
-              ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            `, [
-              row.nome_analista || null,
-              row.customer_no || null,
-              row.po || null,
-              row.hawb || null,
-              row.master || null,
-              row.etd || null,
-              row.pre_alert_sent || null,
-              row.oea_cl_doc ?? null,
-              row.cargo_departed || null,
-              row.d_term || null,
-              row.pod_dn_available || null,
-              row.remarks || null,
-              row.tipo_processo || null,
-              row.data_insert || null,
-            ]);
+            if (modal === 'SEA') {
+              // INSERT para SEA com colunas específicas
+              await client.execute(`
+                INSERT INTO ${tableName} (
+                  nome_analista, customer_no, po, hbl, master,
+                  etd, pre_alert_sent, oea_cl_doc, customer_order,
+                  accrual, dep, eta_ata, email_title, te, at,
+                  wh_treatment, cct_transm, remarks, tipo_processo, data_insert
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+              `, [
+                row.nome_analista || null,
+                row.customer_no || null,
+                row.po || null,
+                row.hbl || null,
+                row.master || null,
+                row.etd || null,
+                row.pre_alert_sent || null,
+                row.oea_cl_doc ?? null,
+                row.customer_order || null,
+                row.accrual ?? null,
+                row.dep ?? null,
+                row.eta_ata || null,
+                row.email_title || null,
+                row.te || null,
+                row.at || null,
+                row.wh_treatment || null,
+                row.cct_transm || null,
+                row.remarks || null,
+                row.tipo_processo || null,
+                row.data_insert || null,
+              ]);
+            } else {
+              // INSERT para AIR com colunas específicas
+              await client.execute(`
+                INSERT INTO ${tableName} (
+                  nome_analista, customer_no, po, hawb, master,
+                  etd, pre_alert_sent, oea_cl_doc, cargo_departed,
+                  d_term, pod_dn_available, remarks, tipo_processo, data_insert
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+              `, [
+                row.nome_analista || null,
+                row.customer_no || null,
+                row.po || null,
+                row.hawb || null,
+                row.master || null,
+                row.etd || null,
+                row.pre_alert_sent || null,
+                row.oea_cl_doc ?? null,
+                row.cargo_departed || null,
+                row.d_term || null,
+                row.pod_dn_available || null,
+                row.remarks || null,
+                row.tipo_processo || null,
+                row.data_insert || null,
+              ]);
+            }
             inserted++;
           } catch (err: unknown) {
             const errMsg = err instanceof Error ? err.message : 'Erro desconhecido';
