@@ -11443,7 +11443,7 @@ serve(async (req) => {
             eta_ata?: string;
             email_title?: string;
             te?: string;
-            at?: string;
+            at_field?: string;
             wh_treatment?: string;
             cct_transm?: string;
           }>;
@@ -11482,7 +11482,7 @@ serve(async (req) => {
                 INSERT INTO ${tableName} (
                   nome_analista, customer_no, po, hbl, master,
                   etd, pre_alert_sent, oea_cl_doc, customer_order,
-                  accrual, dep, eta_ata, email_title, te, at,
+                  accrual, dep, eta_ata, email_title, te, at_field,
                   wh_treatment, cct_transm, remarks, tipo_processo, data_insert
                 ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
               `, [
@@ -11500,7 +11500,7 @@ serve(async (req) => {
                 row.eta_ata || null,
                 row.email_title || null,
                 row.te || null,
-                row.at || null,
+                row.at_field || null,
                 row.wh_treatment || null,
                 row.cct_transm || null,
                 row.remarks || null,
