@@ -20,7 +20,7 @@ const COLUMN_ALIASES: Record<string, string[]> = {
   cargo_departed: ["cargo_departed", "departed", "data_departed", "data_embarque", "embarque", "departure_date", "data_saida_real"],
   d_term: ["d_term", "dterm", "delivery_term", "incoterm", "incoterms", "termo", "termo_entrega"],
   pod_dn_available: ["pod_dn_available", "pod", "dn_available", "dn", "pod_dn", "document_available", "doc_available"],
-  remarks: ["remarks", "remark", "observacao", "observacoes", "observacao_1", "observations", "notes", "note"],
+  remarks: ["remarks", "remark", "remarks_1", "observacao", "observacoes", "observacao_1", "observations", "notes", "note"],
 };
 
 // Colunas do banco
