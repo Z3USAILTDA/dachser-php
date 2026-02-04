@@ -342,8 +342,10 @@ export default function UploadMaster() {
           return;
         }
 
-        // Dividir em batches de 50 registros para evitar timeout/WORKER_LIMIT
-        const BATCH_SIZE = 50;
+        // Dividir em batches menores (15 registros) para evitar timeout/WORKER_LIMIT
+        // e adicionar delay entre batches para evitar sobrecarga de conexão
+        const BATCH_SIZE = 15;
+        const BATCH_DELAY_MS = 500; // 500ms entre batches
         const batches: typeof validRows[] = [];
         for (let i = 0; i < validRows.length; i += BATCH_SIZE) {
           batches.push(validRows.slice(i, i + BATCH_SIZE));
@@ -357,6 +359,11 @@ export default function UploadMaster() {
           const batch = batches[batchIndex];
           const progress = Math.round(((batchIndex + 1) / batches.length) * 100);
           setImportProgress(progress);
+
+          // Delay entre batches (exceto no primeiro)
+          if (batchIndex > 0) {
+            await new Promise(resolve => setTimeout(resolve, BATCH_DELAY_MS));
+          }
 
           const { data, error } = await supabase.functions.invoke("mariadb-proxy", {
             body: {
