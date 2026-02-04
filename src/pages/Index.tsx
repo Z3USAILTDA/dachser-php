@@ -489,15 +489,15 @@ const Index = () => {
   }, []);
 
   // Fetch AWBs from t_status_aereo - Apenas para usuários Z3US
-  const DACHSER_ADMIN_USERS = ["ana.tozzo", "danilo.pedroso", "teste.test3"];
+  const ALLOWED_DATA_USERS = ["admin", "herbert.zacatei"];
   
   const fetchStatusAereoData = React.useCallback(async () => {
-    // Verificar se é usuário Z3US (não está na lista DACHSER)
+    // Verificar se é usuário autorizado a ver dados
     const storedUser = localStorage.getItem("user");
     const user = storedUser ? JSON.parse(storedUser) : null;
-    const isZ3usUser = user && !DACHSER_ADMIN_USERS.includes(user.username);
+    const canViewData = user && ALLOWED_DATA_USERS.includes(user.username);
 
-    if (!isZ3usUser) {
+    if (!canViewData) {
       // Usuário DACHSER - não mostrar dados
       setIsLoadingStatusAereo(false);
       setStatusAereoData([]);

@@ -184,15 +184,15 @@ function mapRowToProcessoCCT(row: any): ProcessoCCT {
  * Main hook to fetch CCT processes from MariaDB via mariadb-proxy
  * Source: t_master_dados (AIR IMPORT) LEFT JOIN t_status_aereo
  */
-// Lista de usuários DACHSER - Z3US são os que NÃO estão nesta lista
-const DACHSER_ADMIN_USERS = ["ana.tozzo", "danilo.pedroso", "teste.test3"];
+// Lista de usuários autorizados a ver dados
+const ALLOWED_DATA_USERS = ["admin", "herbert.zacatei"];
 
-function isZ3usUser(): boolean {
+function canViewData(): boolean {
   const storedUser = localStorage.getItem("user");
   if (!storedUser) return false;
   try {
     const user = JSON.parse(storedUser);
-    return user && !DACHSER_ADMIN_USERS.includes(user.username);
+    return user && ALLOWED_DATA_USERS.includes(user.username);
   } catch {
     return false;
   }
@@ -202,9 +202,9 @@ export function useProcessosCCT() {
   return useQuery({
     queryKey: ["cct-processos"],
     queryFn: async (): Promise<ProcessoCCT[]> => {
-      // Verificar se é usuário Z3US
-      if (!isZ3usUser()) {
-        console.log("CCT: Dados restritos - usuário DACHSER");
+      // Verificar se é usuário autorizado
+      if (!canViewData()) {
+        console.log("CCT: Dados restritos - usuário não autorizado");
         return [];
       }
 
@@ -419,8 +419,8 @@ export function useProfiles() {
   return useQuery({
     queryKey: ["cct-profiles"],
     queryFn: async (): Promise<CCTProfile[]> => {
-      // Verificar se é usuário Z3US
-      if (!isZ3usUser()) {
+      // Verificar se é usuário autorizado
+      if (!canViewData()) {
         return [];
       }
 
