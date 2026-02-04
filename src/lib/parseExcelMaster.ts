@@ -33,7 +33,7 @@ const COLUMN_ALIASES: Record<string, string[]> = {
   eta_ata: ["eta_ata", "e_t_a_a_t_a", "eta", "e_t_a", "ata", "a_t_a", "arrival", "chegada"],
   email_title: ["email_title", "email_title_pre_alert", "titulo_email"],
   te: ["te", "t_e", "transit_time", "tempo_transito"],
-  at: ["at", "a_t", "arrival_time"],
+  at_field: ["at", "a_t", "at_field", "arrival_time"],
   wh_treatment: ["wh_treatment", "wh", "warehouse_treatment", "tratamento_armazem"],
   cct_transm: ["cct_transm", "cct", "transmissao_cct"],
 };
@@ -64,7 +64,7 @@ export const DB_COLUMNS = [
   "eta_ata",
   "email_title",
   "te",
-  "at",
+  "at_field",
   "wh_treatment",
   "cct_transm",
 ];
@@ -96,7 +96,7 @@ export interface MasterRow {
   eta_ata?: string;
   email_title?: string;
   te?: string;
-  at?: string;
+  at_field?: string;
   wh_treatment?: string;
   cct_transm?: string;
 }
@@ -558,8 +558,8 @@ export async function parseExcelMasterFile(
               case "te":
                 row.te = value != null ? String(value).trim() : undefined;
                 break;
-              case "at":
-                row.at = value != null ? String(value).trim() : undefined;
+              case "at_field":
+                row.at_field = value != null ? String(value).trim() : undefined;
                 break;
               case "wh_treatment":
                 row.wh_treatment = value != null ? String(value).trim() : undefined;
@@ -708,9 +708,9 @@ export function reprocessWithMapping(
         case "te":
           row.te = value != null ? String(value).trim() : undefined;
           break;
-        case "at":
-          row.at = value != null ? String(value).trim() : undefined;
-          break;
+              case "at_field":
+                row.at_field = value != null ? String(value).trim() : undefined;
+                break;
         case "wh_treatment":
           row.wh_treatment = value != null ? String(value).trim() : undefined;
           break;
