@@ -11432,6 +11432,7 @@ serve(async (req) => {
             pod_dn_available?: string;
             remarks?: string;
             tipo_processo?: string;
+            data_insert?: string;
           }>;
           modal?: 'AIR' | 'SEA';
         };
@@ -11466,8 +11467,8 @@ serve(async (req) => {
               INSERT INTO ${tableName} (
                 nome_analista, customer_no, po, hawb, master,
                 etd, pre_alert_sent, oea_cl_doc, cargo_departed,
-                d_term, pod_dn_available, remarks, tipo_processo
-              ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                d_term, pod_dn_available, remarks, tipo_processo, data_insert
+              ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             `, [
               row.nome_analista || null,
               row.customer_no || null,
@@ -11482,6 +11483,7 @@ serve(async (req) => {
               row.pod_dn_available || null,
               row.remarks || null,
               row.tipo_processo || null,
+              row.data_insert || null,
             ]);
             inserted++;
           } catch (err: unknown) {
