@@ -488,11 +488,85 @@ const Index = () => {
     }
   }, []);
 
-  // Fetch AWBs from t_status_aereo - TEMPORARIAMENTE DESATIVADO
+  // Fetch AWBs from t_status_aereo - Apenas para usuários Z3US
+  const DACHSER_ADMIN_USERS = ["ana.tozzo", "danilo.pedroso", "teste.test3"];
+  
   const fetchStatusAereoData = React.useCallback(async () => {
-    // Temporariamente desativado - não buscar dados do t_status_aereo
-    setIsLoadingStatusAereo(false);
-    setStatusAereoData([]);
+    // Verificar se é usuário Z3US (não está na lista DACHSER)
+    const storedUser = localStorage.getItem("user");
+    const user = storedUser ? JSON.parse(storedUser) : null;
+    const isZ3usUser = user && !DACHSER_ADMIN_USERS.includes(user.username);
+
+    if (!isZ3usUser) {
+      // Usuário DACHSER - não mostrar dados
+      setIsLoadingStatusAereo(false);
+      setStatusAereoData([]);
+      return;
+    }
+
+    // Usuário Z3US - buscar dados normalmente
+    setIsLoadingStatusAereo(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("fetch-status-aereo", {
+        body: { search: "" },
+      });
+
+      if (error) {
+        console.error("Error fetching status aereo:", error);
+        return;
+      }
+
+      if (data?.success && data?.data) {
+        const convertedData: AWBData[] = data.data.map((item: any, index: number) => ({
+          id: `status-${item.id || index}`,
+          awb: item.awb || "",
+          airline_code: item.awb?.substring(0, 3) || "",
+          consignee_name: item.destinatário || "-",
+          hawb: item.hawb || "-",
+          nome_analista: item.nome_analista || "-",
+          email_analista: item.email_analista || null,
+          email_cliente: item.email_cliente || "",
+          origem: item.origem || "N/A",
+          destino: item.destino || "N/A",
+          last_event: item.status_info || item.último_status || "-",
+          status: item.último_status || "-",
+          last_check: item["última atualização"]
+            ? new Date(item["última atualização"]).toISOString()
+            : new Date().toISOString(),
+          fromStatusAereo: true,
+          data_atraso: item.data_atraso || null,
+          tipo_servico: item.tipo_servico || "N/A",
+          arr_check_count: item.arr_check_count || 0,
+          tipo_processo: item.tipo_processo || null,
+        }));
+
+        const deduplicatedData = convertedData.reduce((acc: AWBData[], current: AWBData) => {
+          const currentKey = `${current.awb}|${current.hawb || "-"}`;
+          const existingIndex = acc.findIndex((item) => {
+            const itemKey = `${item.awb}|${item.hawb || "-"}`;
+            return itemKey === currentKey;
+          });
+          if (existingIndex === -1) {
+            acc.push(current);
+          } else {
+            const existing = acc[existingIndex];
+            const existingDate = new Date(existing.last_check || 0).getTime();
+            const currentDate = new Date(current.last_check || 0).getTime();
+            if (currentDate > existingDate) {
+              acc[existingIndex] = current;
+            }
+          }
+          return acc;
+        }, []);
+
+        console.log(`AWB Deduplication: ${convertedData.length} -> ${deduplicatedData.length} records`);
+        setStatusAereoData(deduplicatedData);
+      }
+    } catch (error) {
+      console.error("Error in fetchStatusAereoData:", error);
+    } finally {
+      setIsLoadingStatusAereo(false);
+    }
   }, []);
 
   // Fetch database statistics from t_master_dados
