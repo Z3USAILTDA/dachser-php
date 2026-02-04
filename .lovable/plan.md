@@ -1,195 +1,423 @@
 
+# Plano: Upload Master (Air/Sea) – Planilha
 
-# Plano: Correções na Tela de Métricas de Uso
+## Atualização: Suporte a Todos os Formatos Excel
+
+A biblioteca `xlsx` já instalada no projeto (`xlsx` versão ^0.18.5) suporta nativamente:
+- `.xlsx` (Excel 2007+)
+- `.xls` (Excel 97-2003)
+- `.xlsm` (Excel com macros)
+- `.xlsb` (Excel binário)
+- `.csv` (valores separados por vírgula)
+- `.ods` (OpenDocument Spreadsheet)
+
+---
 
 ## Resumo
-Implementar três correções na tela de Métricas de Uso (`/admin/metrics`):
-1. Ajustar o fuso horário para São Paulo
-2. Ocultar logs de `admin` e `teste.test3` para usuários DACHSER
-3. Corrigir a filtragem por módulo
+Criar nova tela para upload de planilhas Excel que permite:
+- Upload de arquivo Excel em qualquer formato suportado
+- Validação e normalização automática de colunas
+- Extração do tipo_processo (AIR/SEA + IMPORT/EXPORT) do nome do arquivo
+- Preview de dados
+- Bulk insert em `dados_dachser.t_air_master` ou `dados_dachser.t_sea_master`
 
 ---
 
-## Problema 1: Fuso Horário
+## Estrutura de Navegação
 
-### Situação Atual
-O código usa `new Date().toISOString().split("T")[0]` para definir as datas de filtro, o que retorna a data em **UTC**. Entre 21:00 e 23:59 em São Paulo (UTC-3), a data mostrada é do **dia seguinte**.
+```text
+ADMIN
+└── Z3US (expandível)
+    ├── Cadastro de Usuário
+    ├── Métricas de Uso
+    ├── Gerenciamento de Usuários
+    ├── Gerenciamento de APIs
+    ├── Monitoramento de Dados
+    └── Upload Master (Air/Sea) ← NOVA
+```
 
-### Solução
-Usar componentes de data locais (`getFullYear()`, `getMonth()`, `getDate()`) ao invés de `toISOString()`:
+**Rota**: `/admin/z3us/upload-master`
+
+---
+
+## Arquivos a Criar/Modificar
+
+| Arquivo | Ação |
+|---------|------|
+| `src/pages/admin/UploadMaster.tsx` | **CRIAR** - Tela principal |
+| `src/lib/parseExcelMaster.ts` | **CRIAR** - Parser especializado para planilhas master |
+| `src/App.tsx` | **MODIFICAR** - Adicionar rota |
+| `src/pages/Dashboard.tsx` | **MODIFICAR** - Adicionar item no menu Z3US |
+| `supabase/functions/mariadb-proxy/index.ts` | **MODIFICAR** - Adicionar action bulk_insert_master |
+
+---
+
+## 1. Formatos de Arquivo Aceitos
+
+### Extensões suportadas
+```typescript
+const ACCEPTED_EXTENSIONS = [
+  ".xlsx",  // Excel 2007+ (padrão)
+  ".xls",   // Excel 97-2003
+  ".xlsm",  // Excel com macros
+  ".xlsb",  // Excel binário
+  ".csv",   // CSV
+  ".ods",   // OpenDocument
+];
+
+const ACCEPT_STRING = ".xlsx,.xls,.xlsm,.xlsb,.csv,.ods";
+```
+
+### Validação de arquivo
+```typescript
+function isValidExcelFile(file: File): boolean {
+  const extension = file.name.toLowerCase().split('.').pop();
+  return ACCEPTED_EXTENSIONS.includes(`.${extension}`);
+}
+```
+
+---
+
+## 2. Parser de Excel (`src/lib/parseExcelMaster.ts`)
+
+### 2.1 Leitura Universal de Arquivos
 
 ```typescript
-// Função auxiliar para obter data no formato YYYY-MM-DD em fuso local
-const getLocalDateString = (date: Date): string => {
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, "0");
-  const day = String(date.getDate()).padStart(2, "0");
-  return `${year}-${month}-${day}`;
+import * as XLSX from "xlsx";
+
+export async function parseExcelMasterFile(file: File): Promise<ParseMasterResult> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+
+    reader.onload = (e) => {
+      try {
+        const data = new Uint8Array(e.target?.result as ArrayBuffer);
+        // XLSX.read detecta automaticamente o formato do arquivo
+        const workbook = XLSX.read(data, { type: "array" });
+        
+        // Continua com processamento...
+      } catch (error) {
+        reject(error);
+      }
+    };
+
+    reader.onerror = () => reject(new Error("Falha ao ler arquivo"));
+    reader.readAsArrayBuffer(file);
+  });
+}
+```
+
+### 2.2 Normalização de Cabeçalho
+
+```typescript
+function normalizeColumnName(name: string): string {
+  return name
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "") // Remove acentos
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "_")     // Substitui espaços e especiais por _
+    .replace(/_+/g, "_")             // Colapsa múltiplos _
+    .replace(/^_|_$/g, "");          // Remove _ inicial/final
+}
+```
+
+### 2.3 Mapeamento de Aliases
+
+```typescript
+const COLUMN_ALIASES: Record<string, string[]> = {
+  nome_analista: ["nome_analista", "analista", "clerk", "operator", "responsavel"],
+  customer_no: ["customer_no", "customer", "customer_number", "customer_id", "cliente", "cod_cliente", "codigo_cliente"],
+  po: ["po", "p_o", "purchase_order", "pedido", "pedido_compra"],
+  hawb: ["hawb", "hawb_no", "hawb_number", "house", "house_awb", "house_awb_no"],
+  master: ["master", "mawb", "mawb_no", "master_awb", "master_awb_no", "master_number"],
+  etd: ["etd", "e_t_d", "estimated_time_departure", "data_etd", "departure", "data_saida", "data_saida_prevista"],
+  pre_alert_sent: ["pre_alert_sent", "prealert_sent", "pre_alert", "prealert", "sent_prealert", "enviado_prealert"],
+  oea_cl_doc: ["oea_cl_doc", "oea", "cl_doc", "cldoc", "doc_ok", "docs_ok", "documentos_ok", "docs"],
+  cargo_departed: ["cargo_departed", "departed", "data_departed", "data_embarque", "embarque", "departure_date", "data_saida_real"],
+  d_term: ["d_term", "dterm", "delivery_term", "incoterm", "incoterms", "termo", "termo_entrega"],
+  pod_dn_available: ["pod_dn_available", "pod", "dn_available", "dn", "pod_dn", "document_available", "doc_available"],
+  remarks: ["remarks", "remark", "observacao", "observacoes", "observacao_1", "observations", "notes", "note"],
 };
-
-// Uso
-const today = new Date();
-const defaultFrom = new Date(today);
-defaultFrom.setDate(defaultFrom.getDate() - 7);
-
-const [dateFrom, setDateFrom] = useState(getLocalDateString(defaultFrom));
-const [dateTo, setDateTo] = useState(getLocalDateString(today));
 ```
 
-**Arquivos**: `src/pages/MetricsUsage.tsx` (linhas 71-76, 161-164)
-
----
-
-## Problema 2: Logs Restritos por Tipo de Usuário
-
-### Situação Atual
-Todos os usuários com acesso à tela de métricas veem todos os logs, incluindo logs de `admin` e `teste.test3`.
-
-### Requisito
-- **Usuários DACHSER** (`ana.tozzo`, `danilo.pedroso`, `teste.test3`): **NÃO** devem ver logs de `admin` e `teste.test3`
-- **Usuários Z3US** (demais admins): podem ver todos os logs
-
-### Solução
-
-1. **Frontend**: Enviar o `requesterUsername` na requisição de métricas
-2. **Backend**: Adicionar filtro para excluir logs quando o requisitante for DACHSER
+### 2.4 Extração do tipo_processo
 
 ```typescript
-// Frontend - adicionar ao body da requisição
-body: {
-  action: "get_metrics",
-  dateFrom,
-  dateTo,
-  username: usernameFilter,
-  module: moduleFilter,
-  perPage,
-  page: currentPage,
-  requesterUsername: user?.username, // NOVO
+function extractTipoProcesso(filename: string): { modal: string; direction: string } | null {
+  const normalized = filename.toLowerCase();
+  
+  let modal: string | null = null;
+  if (/\bair\b/.test(normalized)) modal = "AIR";
+  else if (/\bsea\b/.test(normalized)) modal = "SEA";
+  
+  let direction: string | null = null;
+  if (/\bimport\b/.test(normalized)) direction = "IMPORT";
+  else if (/\bexport\b/.test(normalized)) direction = "EXPORT";
+  
+  if (!modal || !direction) return null;
+  return { modal, direction };
 }
 ```
 
+### 2.5 Conversões de Dados
+
 ```typescript
-// Backend - nova lógica de filtragem
-const DACHSER_ADMIN_USERS = ["ana.tozzo", "danilo.pedroso", "teste.test3"];
-const HIDDEN_LOG_USERS = ["admin", "teste.test3"];
+// Converter data Excel para DATETIME MySQL
+function parseDate(value: any): string | null {
+  if (!value) return null;
+  
+  // Data numérica Excel (dias desde 1899-12-30)
+  if (typeof value === "number") {
+    const excelEpoch = new Date(1899, 11, 30);
+    const date = new Date(excelEpoch.getTime() + value * 86400000);
+    return formatDateTime(date);
+  }
+  
+  // String dd/mm/yyyy ou yyyy-mm-dd
+  // ...parsing logic
+}
 
-const isDachserUser = DACHSER_ADMIN_USERS.includes(requesterUsername);
-
-if (isDachserUser) {
-  // Excluir logs destes usuários
-  whereConditions.push("username NOT IN (?, ?)");
-  params.push(...HIDDEN_LOG_USERS);
+// Converter booleano para 0/1
+function parseBoolean(value: any): number | null {
+  if (value === null || value === undefined) return null;
+  const str = String(value).toLowerCase().trim();
+  if (["1", "true", "sim", "yes", "ok", "s"].includes(str)) return 1;
+  if (["0", "false", "nao", "não", "no", "n", ""].includes(str)) return 0;
+  return null;
 }
 ```
 
-**Arquivos**: 
-- `src/pages/MetricsUsage.tsx` (linhas 122-135)
-- `supabase/functions/mariadb-proxy/index.ts` (linhas 596-620)
-
 ---
 
-## Problema 3: Filtragem por Módulo
+## 3. Componente de Tela (`src/pages/admin/UploadMaster.tsx`)
 
-### Situação Atual
-O backend só aceita `['air', 'chb', 'maritime']` como módulos válidos:
+### 3.1 Estados
 
 ```typescript
-const validModules = ['air', 'chb', 'maritime'];
-if (moduleFilter && validModules.includes(moduleFilter.toLowerCase())) {
+const [file, setFile] = useState<File | null>(null);
+const [tipoProcesso, setTipoProcesso] = useState<string | null>(null);
+const [parseError, setParseError] = useState<string | null>(null);
+const [columnMapping, setColumnMapping] = useState<Record<string, string>>({});
+const [previewRows, setPreviewRows] = useState<any[]>([]);
+const [validationErrors, setValidationErrors] = useState<{row: number; message: string}[]>([]);
+const [isValidating, setIsValidating] = useState(false);
+const [isImporting, setIsImporting] = useState(false);
+const [importResult, setImportResult] = useState<{inserted: number; rejected: number} | null>(null);
 ```
 
-O frontend envia outros valores como `maritimo`, `fin`, `olimpo`, `admin` que são **ignorados**.
-
-### Solução
-Expandir a lista de módulos válidos e criar um mapeamento para os padrões de endpoint corretos:
+### 3.2 Zona de Upload
 
 ```typescript
-// Mapeamento de módulos para padrões de endpoint
-const moduleEndpointPatterns: Record<string, string[]> = {
-  'air': ['/air/', '/check-awb', '/awb'],
-  'chb': ['/chb/', '/conferencia'],
-  'maritimo': ['/sea/', '/maritime/', '/draft/', '/container'],
-  'fin': ['/fin/', '/esteira/', '/voucher', '/regua'],
-  'olimpo': ['/olimpo/'],
-  'admin': ['/admin/'],
-};
-
-if (moduleFilter && moduleEndpointPatterns[moduleFilter.toLowerCase()]) {
-  const patterns = moduleEndpointPatterns[moduleFilter.toLowerCase()];
-  const patternConditions = patterns.map(() => "LOWER(endpoint) LIKE ?").join(' OR ');
-  whereConditions.push(`(${patternConditions})`);
-  params.push(...patterns.map(p => `%${p}%`));
-}
+<div className="border-2 border-dashed rounded-lg p-8 text-center">
+  <Upload className="h-10 w-10 mx-auto mb-3 text-muted-foreground" />
+  <p className="font-medium mb-2">Arraste ou clique para selecionar</p>
+  <p className="text-sm text-muted-foreground">
+    Formatos aceitos: Excel (.xlsx, .xls, .xlsm, .xlsb), CSV, ODS
+  </p>
+  <input
+    type="file"
+    accept=".xlsx,.xls,.xlsm,.xlsb,.csv,.ods"
+    onChange={handleFileSelect}
+  />
+</div>
 ```
 
-**Arquivo**: `supabase/functions/mariadb-proxy/index.ts` (linhas 614-618)
-
----
-
-## Alterações por Arquivo
-
-| Arquivo | Alteração |
-|---------|-----------|
-| `src/pages/MetricsUsage.tsx` | Adicionar `getLocalDateString()`, usar nas datas padrão, enviar `requesterUsername` |
-| `supabase/functions/mariadb-proxy/index.ts` | Adicionar filtro de usuário DACHSER, expandir mapeamento de módulos |
-
----
-
-## Fluxo de Dados Atualizado
+### 3.3 Fluxo de UI
 
 ```text
 ┌─────────────────────────────────────────────────────────────────┐
-│                    Frontend (MetricsUsage.tsx)                 │
-├─────────────────────────────────────────────────────────────────┤
-│  1. Inicializa datas usando fuso local (São Paulo)             │
-│  2. Envia requesterUsername no body                            │
-│  3. Seleciona módulo (air, maritimo, fin, olimpo, admin, chb)  │
-└──────────────────────────────┬──────────────────────────────────┘
+│                          UPLOAD ZONE                            │
+│   Arraste ou clique para selecionar                             │
+│   Formatos: Excel (.xlsx, .xls, .xlsm, .xlsb), CSV, ODS        │
+└─────────────────────────────────────────────────────────────────┘
                                │
                                ▼
 ┌─────────────────────────────────────────────────────────────────┐
-│                  Backend (mariadb-proxy)                        │
-├─────────────────────────────────────────────────────────────────┤
-│  1. Recebe requesterUsername                                   │
-│  2. Se DACHSER → adiciona WHERE username NOT IN (...)          │
-│  3. Mapeia módulo para padrões de endpoint                     │
-│  4. Retorna logs filtrados                                     │
+│  Arquivo: Air Export 03fev.xls                                  │
+│  Formato: Excel 97-2003 (.xls)                                  │
+│  Badge: AIR EXPORT                                              │
+│  [Validar e Pre-visualizar]                                     │
+└─────────────────────────────────────────────────────────────────┘
+                               │
+                               ▼
+┌─────────────────────────────────────────────────────────────────┐
+│  MAPA DE CAMPOS DETECTADO                                       │
+│  ┌───────────────┬───────────────┬─────────────────────────┐    │
+│  │ Coluna Excel  │ Mapeado p/    │ Dropdown (editar)       │    │
+│  ├───────────────┼───────────────┼─────────────────────────┤    │
+│  │ Pre Alert     │ pre_alert_sent│ [Select]                │    │
+│  │ OEA CL DOC    │ oea_cl_doc    │ [Select]                │    │
+│  └───────────────┴───────────────┴─────────────────────────┘    │
+└─────────────────────────────────────────────────────────────────┘
+                               │
+                               ▼
+┌─────────────────────────────────────────────────────────────────┐
+│  PREVIEW (primeiras 50 linhas)                                  │
+│  ┌────┬─────────────┬───────────┬────────┬─────────┬─────────┐  │
+│  │ #  │ nome_analista│ customer │ hawb   │ master  │ etd     │  │
+│  ├────┼─────────────┼───────────┼────────┼─────────┼─────────┤  │
+│  │ 1  │ Joao Silva  │ CUST123   │ H12345 │ M98765  │ 2025-02 │  │
+│  │ 2  │ Maria       │ CUST456   │        │ M11111  │ 2025-02 │  │
+│  └────┴─────────────┴───────────┴────────┴─────────┴─────────┘  │
+│                                                                 │
+│  [Importar]                                                     │
+└─────────────────────────────────────────────────────────────────┘
+                               │
+                               ▼
+┌─────────────────────────────────────────────────────────────────┐
+│  IMPORTACAO CONCLUIDA                                           │
+│  Inseridas: 48 | Rejeitadas: 2                                  │
+│  Motivos: Linha 12: hawb obrigatorio, Linha 27: data invalida   │
 └─────────────────────────────────────────────────────────────────┘
 ```
 
+### 3.4 Componentes Reutilizados
+
+- `PageLayout` - Layout padrao com header
+- `PageCard` - Cards estilizados do projeto
+- `Table, TableHeader, TableBody, TableRow, TableCell` - Tabela de preview
+- `Badge` - Badge do tipo_processo e formato do arquivo
+- `Button` - Botoes de acao
+- `Select` - Dropdown para ajuste de mapeamento
+- `toast` / `sonner` - Notificacoes de sucesso/erro
+- `Progress` - Barra de progresso durante importacao
+
 ---
 
-## Seção Técnica
+## 4. Backend: Edge Function (`mariadb-proxy`)
 
-### Constantes Reutilizadas
+### 4.1 Novo Action: `bulk_insert_master`
+
 ```typescript
-// Usuários DACHSER (ver apenas opções DACHSER)
-const DACHSER_ADMIN_USERS = ["ana.tozzo", "danilo.pedroso", "teste.test3"];
-
-// Usuários cujos logs devem ser ocultos para DACHSER
-const HIDDEN_LOG_USERS = ["admin", "teste.test3"];
-```
-
-### Queries SQL Modificadas
-
-**Antes (sem filtro de usuário)**:
-```sql
-SELECT * FROM t_dachser_usage_logs 
-WHERE event_time BETWEEN ? AND ?
-```
-
-**Depois (com filtro para DACHSER)**:
-```sql
-SELECT * FROM t_dachser_usage_logs 
-WHERE event_time BETWEEN ? AND ?
-  AND username NOT IN ('admin', 'teste.test3')
+case 'bulk_insert_master': {
+  const { rows, modal } = body as { 
+    rows: Array<{
+      nome_analista?: string;
+      customer_no?: string;
+      po?: string;
+      hawb?: string;
+      master?: string;
+      etd?: string;
+      pre_alert_sent?: string;
+      oea_cl_doc?: number;
+      cargo_departed?: string;
+      d_term?: string;
+      pod_dn_available?: string;
+      remarks?: string;
+      tipo_processo?: string;
+    }>;
+    modal: 'AIR' | 'SEA';
+  };
+  
+  const tableName = modal === 'AIR' 
+    ? 'dados_dachser.t_air_master' 
+    : 'dados_dachser.t_sea_master';
+  
+  let inserted = 0;
+  const errors: Array<{index: number; message: string}> = [];
+  
+  for (let i = 0; i < rows.length; i++) {
+    const row = rows[i];
+    try {
+      await client.execute(`
+        INSERT INTO ${tableName} (
+          nome_analista, customer_no, po, hawb, master,
+          etd, pre_alert_sent, oea_cl_doc, cargo_departed,
+          d_term, pod_dn_available, remarks, tipo_processo
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `, [
+        row.nome_analista || null,
+        row.customer_no || null,
+        row.po || null,
+        row.hawb || null,
+        row.master || null,
+        row.etd || null,
+        row.pre_alert_sent || null,
+        row.oea_cl_doc ?? null,
+        row.cargo_departed || null,
+        row.d_term || null,
+        row.pod_dn_available || null,
+        row.remarks || null,
+        row.tipo_processo || null,
+      ]);
+      inserted++;
+    } catch (err: any) {
+      errors.push({ index: i, message: err.message });
+    }
+  }
+  
+  result = { success: true, inserted, rejected: errors.length, errors };
+  break;
+}
 ```
 
 ---
 
-## Benefícios
+## 5. Validacoes
 
-1. **Datas corretas**: Usuários em São Paulo verão as datas corretas mesmo após 21:00
-2. **Privacidade**: Logs de usuários de teste/admin ficam ocultos para clientes DACHSER
-3. **Filtragem funcional**: Módulos como FIN, OLIMPO e SEA funcionarão corretamente
+### 5.1 Validacao de Arquivo
 
+| Regra | Acao |
+|-------|------|
+| Extensao nao suportada | Bloquear com toast de erro |
+| Arquivo > 20MB | Bloquear com toast de erro |
+| Nao identifica modal (AIR/SEA) no nome | Bloquear com erro claro |
+| Nao identifica direcao (IMPORT/EXPORT) no nome | Bloquear com erro claro |
+
+### 5.2 Validacao de Colunas
+
+| Campo | Obrigatorio? | Validacao |
+|-------|--------------|-----------|
+| hawb ou master | Sim (um dos dois) | Pelo menos um deve estar preenchido |
+| etd | Nao | Se presente, deve ser data valida |
+| pre_alert_sent | Nao | Se presente, deve ser data valida |
+| cargo_departed | Nao | Se presente, deve ser data valida |
+| oea_cl_doc | Nao | Deve ser conversivel para 0/1 |
+
+---
+
+## 6. Modificacoes no Dashboard (Menu)
+
+Adicionar novo item no submenu Z3US:
+
+```typescript
+subChildren: [
+  { label: "Cadastro de Usuario", href: "/admin/register" },
+  { label: "Metricas de Uso", href: "/admin/metrics" },
+  { label: "Gerenciamento de Usuarios", href: "/admin/users" },
+  { label: "Gerenciamento de APIs", href: "/admin/apis" },
+  { label: "Monitoramento de Dados", href: "/admin/database" },
+  { label: "Upload Master", href: "/admin/z3us/upload-master" }, // NOVO
+],
+```
+
+---
+
+## 7. Modificacoes no App.tsx (Rotas)
+
+```typescript
+import UploadMaster from "./pages/admin/UploadMaster";
+
+<Route path="/admin/z3us/upload-master" element={<UploadMaster />} />
+```
+
+---
+
+## 8. Permissoes
+
+Verificacao de admin no componente (padrao ja existente no projeto).
+
+---
+
+## Resumo de Formatos Suportados
+
+| Formato | Extensao | Biblioteca |
+|---------|----------|------------|
+| Excel 2007+ | .xlsx | xlsx (nativo) |
+| Excel 97-2003 | .xls | xlsx (nativo) |
+| Excel com Macros | .xlsm | xlsx (nativo) |
+| Excel Binario | .xlsb | xlsx (nativo) |
+| CSV | .csv | xlsx (nativo) |
+| OpenDocument | .ods | xlsx (nativo) |
+
+A biblioteca `xlsx` ja instalada detecta automaticamente o formato do arquivo pelo conteudo, nao apenas pela extensao.
