@@ -50,6 +50,7 @@ export interface MasterRow {
   pod_dn_available?: string;
   remarks?: string;
   tipo_processo?: string;
+  data_insert?: string;
 }
 
 export interface ColumnMapping {
@@ -77,6 +78,7 @@ export interface TipoProcesso {
   modal: "AIR" | "SEA";
   direction: "IMPORT" | "EXPORT";
   full: string;
+  dataInsert?: string;
 }
 
 /**
@@ -116,6 +118,68 @@ export function findDbColumn(normalizedHeader: string): string | null {
 }
 
 /**
+ * Extrai data do nome do arquivo
+ * Aceita formatos: 03fev, 03-fev, 03_fev, 03 fev, 2025-02-03, 03/02/2025, etc.
+ */
+export function extractDateFromFilename(filename: string): string | null {
+  const normalized = filename.toLowerCase();
+  
+  // Mapa de meses em português
+  const monthMap: Record<string, string> = {
+    jan: "01", janeiro: "01",
+    fev: "02", fevereiro: "02",
+    mar: "03", marco: "03", março: "03",
+    abr: "04", abril: "04",
+    mai: "05", maio: "05",
+    jun: "06", junho: "06",
+    jul: "07", julho: "07",
+    ago: "08", agosto: "08",
+    set: "09", setembro: "09",
+    out: "10", outubro: "10",
+    nov: "11", novembro: "11",
+    dez: "12", dezembro: "12",
+  };
+  
+  // Padrão 1: dd + mês abreviado (03fev, 03-fev, 03_fev, 03 fev)
+  const brShortMatch = normalized.match(/(\d{1,2})[\s_\-]?(jan|fev|mar|abr|mai|jun|jul|ago|set|out|nov|dez)/);
+  if (brShortMatch) {
+    const day = brShortMatch[1].padStart(2, "0");
+    const month = monthMap[brShortMatch[2]];
+    const year = new Date().getFullYear();
+    return `${year}-${month}-${day} 00:00:00`;
+  }
+  
+  // Padrão 2: mês abreviado + dd (fev03, fev-03)
+  const brShortMatch2 = normalized.match(/(jan|fev|mar|abr|mai|jun|jul|ago|set|out|nov|dez)[\s_\-]?(\d{1,2})/);
+  if (brShortMatch2) {
+    const month = monthMap[brShortMatch2[1]];
+    const day = brShortMatch2[2].padStart(2, "0");
+    const year = new Date().getFullYear();
+    return `${year}-${month}-${day} 00:00:00`;
+  }
+  
+  // Padrão 3: dd/mm/yyyy ou dd-mm-yyyy
+  const brFullMatch = normalized.match(/(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})/);
+  if (brFullMatch) {
+    const day = brFullMatch[1].padStart(2, "0");
+    const month = brFullMatch[2].padStart(2, "0");
+    const year = brFullMatch[3];
+    return `${year}-${month}-${day} 00:00:00`;
+  }
+  
+  // Padrão 4: yyyy-mm-dd ou yyyy/mm/dd
+  const isoMatch = normalized.match(/(\d{4})[\/\-](\d{1,2})[\/\-](\d{1,2})/);
+  if (isoMatch) {
+    const year = isoMatch[1];
+    const month = isoMatch[2].padStart(2, "0");
+    const day = isoMatch[3].padStart(2, "0");
+    return `${year}-${month}-${day} 00:00:00`;
+  }
+  
+  return null;
+}
+
+/**
  * Extrai tipo_processo do nome do arquivo
  */
 export function extractTipoProcesso(filename: string): TipoProcesso | null {
@@ -133,10 +197,14 @@ export function extractTipoProcesso(filename: string): TipoProcesso | null {
   
   if (!modal || !direction) return null;
   
+  // Extrair data do nome do arquivo
+  const dataInsert = extractDateFromFilename(filename);
+  
   return {
     modal,
     direction,
     full: `${modal} ${direction}`,
+    dataInsert: dataInsert || undefined,
   };
 }
 
@@ -347,6 +415,7 @@ export async function parseExcelMasterFile(
           
           const row: MasterRow = {
             tipo_processo: tipoProcesso.full,
+            data_insert: tipoProcesso.dataInsert,
           };
           
           // Mapear valores
@@ -461,6 +530,7 @@ export function reprocessWithMapping(
     
     const row: MasterRow = {
       tipo_processo: tipoProcesso.full,
+      data_insert: tipoProcesso.dataInsert,
     };
     
     for (const mapping of columnMappings) {

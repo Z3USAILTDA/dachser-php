@@ -337,6 +337,16 @@ export default function UploadMaster() {
                 >
                   {tipoProcesso.full}
                 </Badge>
+                {tipoProcesso.dataInsert && (
+                  <Badge variant="outline" className="text-sm px-3 py-1">
+                    📅 {tipoProcesso.dataInsert.split(" ")[0]}
+                  </Badge>
+                )}
+                {!tipoProcesso.dataInsert && (
+                  <Badge variant="destructive" className="text-sm px-3 py-1">
+                    ⚠️ Data não detectada
+                  </Badge>
+                )}
                 {!columnMappings.length && (
                   <Button onClick={handleValidate} disabled={isValidating}>
                     {isValidating ? (
