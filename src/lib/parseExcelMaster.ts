@@ -1,0 +1,523 @@
+import * as XLSX from "xlsx";
+
+// Extensões aceitas
+export const ACCEPTED_EXTENSIONS = [".xlsx", ".xls", ".xlsm", ".xlsb", ".csv", ".ods"];
+export const ACCEPT_STRING = ".xlsx,.xls,.xlsm,.xlsb,.csv,.ods";
+
+// Aliases de colunas do Excel → banco de dados
+const COLUMN_ALIASES: Record<string, string[]> = {
+  nome_analista: ["nome_analista", "analista", "clerk", "operator", "responsavel", "responsável"],
+  customer_no: ["customer_no", "customer", "customer_number", "customer_id", "cliente", "cod_cliente", "codigo_cliente"],
+  po: ["po", "p_o", "purchase_order", "pedido", "pedido_compra"],
+  hawb: ["hawb", "hawb_no", "hawb_number", "house", "house_awb", "house_awb_no"],
+  master: ["master", "mawb", "mawb_no", "master_awb", "master_awb_no", "master_number"],
+  etd: ["etd", "e_t_d", "estimated_time_departure", "data_etd", "departure", "data_saida", "data_saida_prevista"],
+  pre_alert_sent: ["pre_alert_sent", "prealert_sent", "pre_alert", "prealert", "sent_prealert", "enviado_prealert"],
+  oea_cl_doc: ["oea_cl_doc", "oea", "cl_doc", "cldoc", "doc_ok", "docs_ok", "documentos_ok", "docs"],
+  cargo_departed: ["cargo_departed", "departed", "data_departed", "data_embarque", "embarque", "departure_date", "data_saida_real"],
+  d_term: ["d_term", "dterm", "delivery_term", "incoterm", "incoterms", "termo", "termo_entrega"],
+  pod_dn_available: ["pod_dn_available", "pod", "dn_available", "dn", "pod_dn", "document_available", "doc_available"],
+  remarks: ["remarks", "remark", "observacao", "observacoes", "observacao_1", "observations", "notes", "note"],
+};
+
+// Colunas do banco
+export const DB_COLUMNS = [
+  "nome_analista",
+  "customer_no", 
+  "po",
+  "hawb",
+  "master",
+  "etd",
+  "pre_alert_sent",
+  "oea_cl_doc",
+  "cargo_departed",
+  "d_term",
+  "pod_dn_available",
+  "remarks",
+];
+
+export interface MasterRow {
+  nome_analista?: string;
+  customer_no?: string;
+  po?: string;
+  hawb?: string;
+  master?: string;
+  etd?: string;
+  pre_alert_sent?: string;
+  oea_cl_doc?: number | null;
+  cargo_departed?: string;
+  d_term?: string;
+  pod_dn_available?: string;
+  remarks?: string;
+  tipo_processo?: string;
+}
+
+export interface ColumnMapping {
+  excelColumn: string;
+  dbColumn: string;
+  originalHeader: string;
+}
+
+export interface ParseValidationError {
+  row: number;
+  message: string;
+}
+
+export interface ParseMasterResult {
+  success: boolean;
+  rows: MasterRow[];
+  columnMappings: ColumnMapping[];
+  unmappedColumns: string[];
+  errors: ParseValidationError[];
+  totalRows: number;
+  previewRows: MasterRow[];
+}
+
+export interface TipoProcesso {
+  modal: "AIR" | "SEA";
+  direction: "IMPORT" | "EXPORT";
+  full: string;
+}
+
+/**
+ * Normaliza nome de coluna removendo acentos, espaços e caracteres especiais
+ */
+export function normalizeColumnName(name: string): string {
+  if (!name || typeof name !== "string") return "";
+  return name
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/_+/g, "_")
+    .replace(/^_|_$/g, "");
+}
+
+/**
+ * Encontra a coluna do banco correspondente ao header do Excel
+ */
+export function findDbColumn(normalizedHeader: string): string | null {
+  // Primeiro verifica correspondência exata
+  if (DB_COLUMNS.includes(normalizedHeader)) {
+    return normalizedHeader;
+  }
+  
+  // Depois verifica aliases
+  for (const [dbCol, aliases] of Object.entries(COLUMN_ALIASES)) {
+    for (const alias of aliases) {
+      const normalizedAlias = normalizeColumnName(alias);
+      if (normalizedHeader === normalizedAlias) {
+        return dbCol;
+      }
+    }
+  }
+  
+  return null;
+}
+
+/**
+ * Extrai tipo_processo do nome do arquivo
+ */
+export function extractTipoProcesso(filename: string): TipoProcesso | null {
+  const normalized = filename.toLowerCase();
+  
+  // Detectar modal
+  let modal: "AIR" | "SEA" | null = null;
+  if (/\bair\b/.test(normalized)) modal = "AIR";
+  else if (/\bsea\b/.test(normalized)) modal = "SEA";
+  
+  // Detectar direção
+  let direction: "IMPORT" | "EXPORT" | null = null;
+  if (/\bimport\b/.test(normalized)) direction = "IMPORT";
+  else if (/\bexport\b/.test(normalized)) direction = "EXPORT";
+  
+  if (!modal || !direction) return null;
+  
+  return {
+    modal,
+    direction,
+    full: `${modal} ${direction}`,
+  };
+}
+
+/**
+ * Valida extensão do arquivo
+ */
+export function isValidExcelFile(file: File): boolean {
+  const extension = "." + file.name.toLowerCase().split(".").pop();
+  return ACCEPTED_EXTENSIONS.includes(extension);
+}
+
+/**
+ * Retorna descrição do formato baseado na extensão
+ */
+export function getFileFormatDescription(filename: string): string {
+  const extension = filename.toLowerCase().split(".").pop();
+  const descriptions: Record<string, string> = {
+    xlsx: "Excel 2007+ (.xlsx)",
+    xls: "Excel 97-2003 (.xls)",
+    xlsm: "Excel com Macros (.xlsm)",
+    xlsb: "Excel Binário (.xlsb)",
+    csv: "CSV",
+    ods: "OpenDocument (.ods)",
+  };
+  return descriptions[extension || ""] || "Formato desconhecido";
+}
+
+/**
+ * Formata data para DATETIME MySQL
+ */
+function formatDateTime(date: Date): string {
+  const pad = (n: number) => n.toString().padStart(2, "0");
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`;
+}
+
+/**
+ * Converte valor para data MySQL DATETIME
+ */
+export function parseDate(value: unknown): string | null {
+  if (!value && value !== 0) return null;
+  
+  // Data numérica Excel (dias desde 1899-12-30)
+  if (typeof value === "number") {
+    // Excel epoch: 30/12/1899
+    const excelEpoch = new Date(Date.UTC(1899, 11, 30));
+    const date = new Date(excelEpoch.getTime() + value * 86400000);
+    return formatDateTime(date);
+  }
+  
+  if (typeof value === "string") {
+    const str = value.trim();
+    if (!str) return null;
+    
+    // Formato dd/mm/yyyy ou dd-mm-yyyy
+    const brMatch = str.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})(?:\s+(\d{1,2}):(\d{2})(?::(\d{2}))?)?$/);
+    if (brMatch) {
+      const [, d, m, y, hh, mm, ss] = brMatch;
+      const date = new Date(
+        parseInt(y),
+        parseInt(m) - 1,
+        parseInt(d),
+        parseInt(hh || "0"),
+        parseInt(mm || "0"),
+        parseInt(ss || "0")
+      );
+      return formatDateTime(date);
+    }
+    
+    // Formato yyyy-mm-dd
+    const isoMatch = str.match(/^(\d{4})[\/\-](\d{1,2})[\/\-](\d{1,2})(?:\s+(\d{1,2}):(\d{2})(?::(\d{2}))?)?$/);
+    if (isoMatch) {
+      const [, y, m, d, hh, mm, ss] = isoMatch;
+      const date = new Date(
+        parseInt(y),
+        parseInt(m) - 1,
+        parseInt(d),
+        parseInt(hh || "0"),
+        parseInt(mm || "0"),
+        parseInt(ss || "0")
+      );
+      return formatDateTime(date);
+    }
+    
+    // Tentar parse nativo
+    const parsed = new Date(str);
+    if (!isNaN(parsed.getTime())) {
+      return formatDateTime(parsed);
+    }
+  }
+  
+  if (value instanceof Date) {
+    return formatDateTime(value);
+  }
+  
+  return null;
+}
+
+/**
+ * Converte valor para booleano (0 ou 1)
+ */
+export function parseBoolean(value: unknown): number | null {
+  if (value === null || value === undefined || value === "") return null;
+  
+  if (typeof value === "number") {
+    return value === 0 ? 0 : 1;
+  }
+  
+  const str = String(value).toLowerCase().trim();
+  if (["1", "true", "sim", "yes", "ok", "s", "y", "x"].includes(str)) return 1;
+  if (["0", "false", "nao", "não", "no", "n", ""].includes(str)) return 0;
+  
+  return null;
+}
+
+/**
+ * Verifica se uma linha está completamente vazia
+ */
+function isEmptyRow(row: Record<string, unknown>): boolean {
+  return Object.values(row).every(
+    (v) => v === null || v === undefined || (typeof v === "string" && v.trim() === "")
+  );
+}
+
+/**
+ * Parse arquivo Excel e retorna dados estruturados
+ */
+export async function parseExcelMasterFile(
+  file: File,
+  tipoProcesso: TipoProcesso
+): Promise<ParseMasterResult> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+
+    reader.onload = (e) => {
+      try {
+        const data = new Uint8Array(e.target?.result as ArrayBuffer);
+        const workbook = XLSX.read(data, { type: "array" });
+        
+        // Pegar primeira planilha
+        const sheetName = workbook.SheetNames[0];
+        const worksheet = workbook.Sheets[sheetName];
+        
+        // Converter para JSON com headers
+        const rawRows = XLSX.utils.sheet_to_json<Record<string, unknown>>(worksheet, {
+          defval: null,
+        });
+        
+        if (rawRows.length === 0) {
+          resolve({
+            success: false,
+            rows: [],
+            columnMappings: [],
+            unmappedColumns: [],
+            errors: [{ row: 0, message: "Arquivo vazio ou sem dados válidos" }],
+            totalRows: 0,
+            previewRows: [],
+          });
+          return;
+        }
+        
+        // Mapear colunas
+        const excelHeaders = Object.keys(rawRows[0] || {});
+        const columnMappings: ColumnMapping[] = [];
+        const unmappedColumns: string[] = [];
+        
+        for (const header of excelHeaders) {
+          const normalized = normalizeColumnName(header);
+          const dbColumn = findDbColumn(normalized);
+          
+          if (dbColumn) {
+            columnMappings.push({
+              excelColumn: normalized,
+              dbColumn,
+              originalHeader: header,
+            });
+          } else {
+            unmappedColumns.push(header);
+          }
+        }
+        
+        // Verificar colunas essenciais (hawb ou master)
+        const hasHawb = columnMappings.some((m) => m.dbColumn === "hawb");
+        const hasMaster = columnMappings.some((m) => m.dbColumn === "master");
+        
+        if (!hasHawb && !hasMaster) {
+          resolve({
+            success: false,
+            rows: [],
+            columnMappings,
+            unmappedColumns,
+            errors: [{ row: 0, message: "Coluna HAWB ou MASTER é obrigatória" }],
+            totalRows: 0,
+            previewRows: [],
+          });
+          return;
+        }
+        
+        // Processar linhas
+        const rows: MasterRow[] = [];
+        const errors: ParseValidationError[] = [];
+        
+        for (let i = 0; i < rawRows.length; i++) {
+          const rawRow = rawRows[i];
+          const rowNumber = i + 2; // +2 porque linha 1 é header
+          
+          // Ignorar linhas vazias
+          if (isEmptyRow(rawRow)) continue;
+          
+          const row: MasterRow = {
+            tipo_processo: tipoProcesso.full,
+          };
+          
+          // Mapear valores
+          for (const mapping of columnMappings) {
+            const value = rawRow[mapping.originalHeader];
+            
+            switch (mapping.dbColumn) {
+              case "etd":
+                row.etd = parseDate(value) || undefined;
+                break;
+              case "pre_alert_sent":
+                row.pre_alert_sent = parseDate(value) || undefined;
+                break;
+              case "cargo_departed":
+                row.cargo_departed = parseDate(value) || undefined;
+                break;
+              case "oea_cl_doc":
+                row.oea_cl_doc = parseBoolean(value);
+                break;
+              case "nome_analista":
+                row.nome_analista = value != null ? String(value).trim() : undefined;
+                break;
+              case "customer_no":
+                row.customer_no = value != null ? String(value).trim() : undefined;
+                break;
+              case "po":
+                row.po = value != null ? String(value).trim() : undefined;
+                break;
+              case "hawb":
+                row.hawb = value != null ? String(value).trim() : undefined;
+                break;
+              case "master":
+                row.master = value != null ? String(value).trim() : undefined;
+                break;
+              case "d_term":
+                row.d_term = value != null ? String(value).trim() : undefined;
+                break;
+              case "pod_dn_available":
+                row.pod_dn_available = value != null ? String(value).trim() : undefined;
+                break;
+              case "remarks":
+                row.remarks = value != null ? String(value).trim() : undefined;
+                break;
+            }
+          }
+          
+          // Validar linha
+          const hawbValue = row.hawb?.trim();
+          const masterValue = row.master?.trim();
+          
+          if (!hawbValue && !masterValue) {
+            errors.push({
+              row: rowNumber,
+              message: "HAWB ou MASTER deve estar preenchido",
+            });
+          }
+          
+          rows.push(row);
+        }
+        
+        // Preview (primeiras 50 linhas)
+        const previewRows = rows.slice(0, 50);
+        
+        resolve({
+          success: errors.length === 0,
+          rows,
+          columnMappings,
+          unmappedColumns,
+          errors,
+          totalRows: rows.length,
+          previewRows,
+        });
+      } catch (error) {
+        reject(error);
+      }
+    };
+
+    reader.onerror = () => reject(new Error("Falha ao ler arquivo"));
+    reader.readAsArrayBuffer(file);
+  });
+}
+
+/**
+ * Atualiza mapeamento de colunas manualmente
+ */
+export function updateColumnMapping(
+  mappings: ColumnMapping[],
+  excelColumn: string,
+  newDbColumn: string
+): ColumnMapping[] {
+  return mappings.map((m) =>
+    m.excelColumn === excelColumn ? { ...m, dbColumn: newDbColumn } : m
+  );
+}
+
+/**
+ * Reprocessa dados com novo mapeamento
+ */
+export function reprocessWithMapping(
+  rawRows: Record<string, unknown>[],
+  columnMappings: ColumnMapping[],
+  tipoProcesso: TipoProcesso
+): { rows: MasterRow[]; errors: ParseValidationError[] } {
+  const rows: MasterRow[] = [];
+  const errors: ParseValidationError[] = [];
+  
+  for (let i = 0; i < rawRows.length; i++) {
+    const rawRow = rawRows[i];
+    const rowNumber = i + 2;
+    
+    if (isEmptyRow(rawRow)) continue;
+    
+    const row: MasterRow = {
+      tipo_processo: tipoProcesso.full,
+    };
+    
+    for (const mapping of columnMappings) {
+      const value = rawRow[mapping.originalHeader];
+      
+      switch (mapping.dbColumn) {
+        case "etd":
+          row.etd = parseDate(value) || undefined;
+          break;
+        case "pre_alert_sent":
+          row.pre_alert_sent = parseDate(value) || undefined;
+          break;
+        case "cargo_departed":
+          row.cargo_departed = parseDate(value) || undefined;
+          break;
+        case "oea_cl_doc":
+          row.oea_cl_doc = parseBoolean(value);
+          break;
+        case "nome_analista":
+          row.nome_analista = value != null ? String(value).trim() : undefined;
+          break;
+        case "customer_no":
+          row.customer_no = value != null ? String(value).trim() : undefined;
+          break;
+        case "po":
+          row.po = value != null ? String(value).trim() : undefined;
+          break;
+        case "hawb":
+          row.hawb = value != null ? String(value).trim() : undefined;
+          break;
+        case "master":
+          row.master = value != null ? String(value).trim() : undefined;
+          break;
+        case "d_term":
+          row.d_term = value != null ? String(value).trim() : undefined;
+          break;
+        case "pod_dn_available":
+          row.pod_dn_available = value != null ? String(value).trim() : undefined;
+          break;
+        case "remarks":
+          row.remarks = value != null ? String(value).trim() : undefined;
+          break;
+      }
+    }
+    
+    const hawbValue = row.hawb?.trim();
+    const masterValue = row.master?.trim();
+    
+    if (!hawbValue && !masterValue) {
+      errors.push({
+        row: rowNumber,
+        message: "HAWB ou MASTER deve estar preenchido",
+      });
+    }
+    
+    rows.push(row);
+  }
+  
+  return { rows, errors };
+}

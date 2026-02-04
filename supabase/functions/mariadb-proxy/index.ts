@@ -11415,6 +11415,87 @@ serve(async (req) => {
         break;
       }
 
+      // ==================== BULK INSERT MASTER (AIR/SEA) ====================
+      case 'bulk_insert_master': {
+        const { rows, modal } = body as { 
+          rows?: Array<{
+            nome_analista?: string;
+            customer_no?: string;
+            po?: string;
+            hawb?: string;
+            master?: string;
+            etd?: string;
+            pre_alert_sent?: string;
+            oea_cl_doc?: number;
+            cargo_departed?: string;
+            d_term?: string;
+            pod_dn_available?: string;
+            remarks?: string;
+            tipo_processo?: string;
+          }>;
+          modal?: 'AIR' | 'SEA';
+        };
+        
+        if (!rows || !Array.isArray(rows) || rows.length === 0) {
+          return new Response(
+            JSON.stringify({ error: 'Nenhuma linha para inserir', success: false }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+        
+        if (!modal || !['AIR', 'SEA'].includes(modal)) {
+          return new Response(
+            JSON.stringify({ error: 'Modal deve ser AIR ou SEA', success: false }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+        
+        const tableName = modal === 'AIR' 
+          ? 'dados_dachser.t_air_master' 
+          : 'dados_dachser.t_sea_master';
+        
+        console.log(`[bulk_insert_master] Inserting ${rows.length} rows into ${tableName}`);
+        
+        let inserted = 0;
+        const errors: Array<{index: number; message: string}> = [];
+        
+        for (let i = 0; i < rows.length; i++) {
+          const row = rows[i];
+          try {
+            await client.execute(`
+              INSERT INTO ${tableName} (
+                nome_analista, customer_no, po, hawb, master,
+                etd, pre_alert_sent, oea_cl_doc, cargo_departed,
+                d_term, pod_dn_available, remarks, tipo_processo
+              ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            `, [
+              row.nome_analista || null,
+              row.customer_no || null,
+              row.po || null,
+              row.hawb || null,
+              row.master || null,
+              row.etd || null,
+              row.pre_alert_sent || null,
+              row.oea_cl_doc ?? null,
+              row.cargo_departed || null,
+              row.d_term || null,
+              row.pod_dn_available || null,
+              row.remarks || null,
+              row.tipo_processo || null,
+            ]);
+            inserted++;
+          } catch (err: unknown) {
+            const errMsg = err instanceof Error ? err.message : 'Erro desconhecido';
+            console.error(`[bulk_insert_master] Error on row ${i}: ${errMsg}`);
+            errors.push({ index: i, message: errMsg });
+          }
+        }
+        
+        console.log(`[bulk_insert_master] Completed: ${inserted} inserted, ${errors.length} errors`);
+        result = { success: true, inserted, rejected: errors.length, errors };
+        break;
+      }
+
       default:
         return new Response(
           JSON.stringify({ error: `Ação não suportada: ${action}` }),

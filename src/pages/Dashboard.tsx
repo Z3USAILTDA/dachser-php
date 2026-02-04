@@ -230,6 +230,7 @@ const Dashboard = () => {
             { label: "Gerenciamento de Usuários", href: "/admin/users" },
             { label: "Gerenciamento de APIs", href: "/admin/apis" },
             { label: "Monitoramento de Dados", href: "/admin/database" },
+            { label: "Upload Master", href: "/admin/z3us/upload-master" },
           ],
         },
       ];
