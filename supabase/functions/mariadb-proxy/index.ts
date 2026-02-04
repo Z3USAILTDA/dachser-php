@@ -11577,32 +11577,90 @@ serve(async (req) => {
         let clienteInserted = 0;
         const clienteErrors: Array<{index: number; message: string}> = [];
         
+        // Helper function to reconnect if connection is lost
+        const ensureConnection = async (): Promise<Client> => {
+          try {
+            // Test if current connection is alive
+            await client!.query('SELECT 1');
+            return client!;
+          } catch (testErr) {
+            console.log('[bulk_insert_clientes] Connection lost, attempting reconnect...');
+            try {
+              await client!.close().catch(() => {});
+            } catch (_) {}
+            
+            // Reconnect with retry
+            for (let attempt = 1; attempt <= 3; attempt++) {
+              try {
+                const newClient = await new Client().connect({
+                  hostname: host,
+                  port: port,
+                  db: database,
+                  username: dbUser,
+                  password: dbPassword,
+                  charset: "utf8mb4",
+                  timeout: 30000,
+                });
+                await newClient.execute("SET NAMES utf8mb4 COLLATE utf8mb4_general_ci");
+                await newClient.execute("SET time_zone = '-03:00'");
+                console.log(`[bulk_insert_clientes] Reconnected on attempt ${attempt}`);
+                client = newClient;
+                return newClient;
+              } catch (connErr) {
+                console.warn(`[bulk_insert_clientes] Reconnect attempt ${attempt}/3 failed`);
+                if (attempt < 3) {
+                  await new Promise(resolve => setTimeout(resolve, 500 * attempt));
+                }
+              }
+            }
+            throw new Error('Failed to reconnect to database');
+          }
+        };
+        
         for (let i = 0; i < clienteRows.length; i++) {
           const row = clienteRows[i];
-          try {
-            await client.execute(`
-              INSERT INTO ${clienteTableName} (
-                ativo, classificacao, cod_rm, dchr_customer_number, cnpj,
-                nome_cliente, cidade_uf, pais, logradouro, cep, info_complementar
-              ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            `, [
-              row.ativo ?? 1,
-              row.classificacao || null,
-              row.cod_rm ?? null,
-              row.dchr_customer_number || null,
-              row.cnpj || null,
-              row.nome_cliente || null,
-              row.cidade_uf || null,
-              row.pais || null,
-              row.logradouro || null,
-              row.cep || null,
-              row.info_complementar || null,
-            ]);
-            clienteInserted++;
-          } catch (err: unknown) {
-            const errMsg = err instanceof Error ? err.message : 'Erro desconhecido';
-            console.error(`[bulk_insert_clientes] Error on row ${i}: ${errMsg}`);
-            clienteErrors.push({ index: i, message: errMsg });
+          let retryCount = 0;
+          const maxRetries = 2;
+          
+          while (retryCount <= maxRetries) {
+            try {
+              const activeClient = await ensureConnection();
+              await activeClient.execute(`
+                INSERT INTO ${clienteTableName} (
+                  ativo, classificacao, cod_rm, dchr_customer_number, cnpj,
+                  nome_cliente, cidade_uf, pais, logradouro, cep, info_complementar
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+              `, [
+                row.ativo ?? 1,
+                row.classificacao || null,
+                row.cod_rm ?? null,
+                row.dchr_customer_number || null,
+                row.cnpj || null,
+                row.nome_cliente || null,
+                row.cidade_uf || null,
+                row.pais || null,
+                row.logradouro || null,
+                row.cep || null,
+                row.info_complementar || null,
+              ]);
+              clienteInserted++;
+              break; // Success, exit retry loop
+            } catch (err: unknown) {
+              const errMsg = err instanceof Error ? err.message : 'Erro desconhecido';
+              const isConnectionError = errMsg.includes('reset by peer') || 
+                                         errMsg.includes('connection') || 
+                                         errMsg.includes('ECONNRESET');
+              
+              if (isConnectionError && retryCount < maxRetries) {
+                console.warn(`[bulk_insert_clientes] Connection error on row ${i}, retrying... (${retryCount + 1}/${maxRetries})`);
+                retryCount++;
+                await new Promise(resolve => setTimeout(resolve, 300 * retryCount));
+              } else {
+                console.error(`[bulk_insert_clientes] Error on row ${i}: ${errMsg}`);
+                clienteErrors.push({ index: i, message: errMsg });
+                break; // Non-retryable error or max retries reached
+              }
+            }
           }
         }
         
