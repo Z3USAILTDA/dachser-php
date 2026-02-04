@@ -1,89 +1,167 @@
 
+# Plano: Adicionar Colunas SEA à t_sea_master
 
-# Plano: Corrigir Detecção da Coluna Master
+## Análise da Planilha Sea Import
 
-## Problema Identificado
+Identifiquei as seguintes diferenças entre AIR e SEA:
 
-A função `findDbColumn` usa correspondência **exata** entre o nome normalizado do header e os aliases definidos. Se o nome da coluna na planilha não estiver exatamente na lista de aliases, ela não será detectada.
+| Coluna Excel | Descrição | Existe em AIR? |
+|--------------|-----------|----------------|
+| **HBL No.** | House Bill of Lading (equivalente ao HAWB no aéreo) | Não (usa HAWB) |
+| **Customer Order** | Número do pedido do cliente | Não |
+| **Accrual** | Indicador de provisão (booleano) | Não |
+| **DEP** | Indicador de partida (booleano) | Não (usa cargo_departed) |
+| **E.T.A. / A.T.A.** | Data de chegada estimada/real | Não |
+| **Email Title Pre-Alert** | Título do email de pré-alerta | Não |
+| **T.E.** | Transit Time Estimated (desconhecido) | Não |
+| **A.T.** | Arrival Time (desconhecido) | Não |
 
-### Aliases atuais para `master`:
-```
-master, mawb, mawb_no, master_awb, master_awb_no, master_number
-```
+## Solução Proposta
 
-### Nomes que NÃO seriam detectados (exemplos):
-- "Master No" → normaliza para `master_no` → não encontrado
-- "MASTER AWB NO" → normaliza para `master_awb_no` → encontrado, mas...
-- "Master ID" → normaliza para `master_id` → não encontrado
-- "MAWB Number" → normaliza para `mawb_number` → não encontrado
+### 1. Alterar estrutura da interface MasterRow
 
----
-
-## Solução: Melhorar a Detecção de Colunas
-
-### 1. Expandir a lista de aliases
-
-Adicionar mais variações comuns:
+Adicionar campos específicos para SEA mantendo compatibilidade com AIR:
 
 ```typescript
-master: [
-  "master", "mawb", "mawb_no", "master_awb", "master_awb_no", "master_number",
-  "master_no",           // NOVO
-  "master_id",           // NOVO  
-  "mawb_number",         // NOVO
-  "master_awb_number",   // NOVO
-  "masterawb",           // NOVO
-  "no_master",           // NOVO
-],
-```
-
-### 2. Implementar correspondência flexível (contains/startsWith)
-
-Adicionar fallback para correspondência parcial:
-
-```typescript
-export function findDbColumn(normalizedHeader: string): string | null {
-  // Prioridade 1: Correspondência exata com DB_COLUMNS
-  if (DB_COLUMNS.includes(normalizedHeader)) {
-    return normalizedHeader;
-  }
+export interface MasterRow {
+  // Campos comuns (AIR e SEA)
+  nome_analista?: string;
+  customer_no?: string;
+  po?: string;
+  master?: string;
+  etd?: string;
+  pre_alert_sent?: string;
+  oea_cl_doc?: number | null;
+  remarks?: string;
+  tipo_processo?: string;
+  data_insert?: string;
   
-  // Prioridade 2: Correspondência exata com aliases
-  for (const [dbCol, aliases] of Object.entries(COLUMN_ALIASES)) {
-    for (const alias of aliases) {
-      const normalizedAlias = normalizeColumnName(alias);
-      if (normalizedHeader === normalizedAlias) {
-        return dbCol;
-      }
-    }
-  }
+  // Campos AIR
+  hawb?: string;
+  cargo_departed?: string;
+  d_term?: string;
+  pod_dn_available?: string;
   
-  // Prioridade 3: Header começa com o nome do campo (novo)
-  for (const dbCol of DB_COLUMNS) {
-    if (normalizedHeader.startsWith(dbCol)) {
-      return dbCol;
-    }
-  }
-  
-  // Prioridade 4: Header contém o nome do campo (novo)
-  for (const dbCol of DB_COLUMNS) {
-    if (normalizedHeader.includes(dbCol)) {
-      return dbCol;
-    }
-  }
-  
-  return null;
+  // Campos SEA (novos)
+  hbl?: string;              // HBL No. (equivalente ao HAWB)
+  customer_order?: string;   // Customer Order
+  accrual?: number | null;   // Accrual (booleano)
+  dep?: number | null;       // DEP (booleano)
+  eta_ata?: string;          // E.T.A. / A.T.A. (data)
+  email_title?: string;      // Email Title Pre-Alert
+  te?: string;               // T.E.
+  at?: string;               // A.T.
 }
 ```
 
-### 3. Adicionar log de debug para diagnóstico
-
-Para entender exatamente qual header está sendo lido:
+### 2. Adicionar aliases para colunas SEA
 
 ```typescript
-// No parseExcelMasterFile, adicionar log temporário
-console.log("Headers detectados:", excelHeaders);
-console.log("Headers normalizados:", excelHeaders.map(normalizeColumnName));
+const COLUMN_ALIASES: Record<string, string[]> = {
+  // ... aliases existentes ...
+  
+  // Novos campos SEA
+  hbl: ["hbl", "hbl_no", "hbl_number", "house_bl", "house_bill", "house_bill_of_lading"],
+  customer_order: ["customer_order", "order", "order_no", "order_number", "pedido_cliente"],
+  accrual: ["accrual", "provisao", "prov"],
+  dep: ["dep", "departed", "partiu"],
+  eta_ata: ["eta_ata", "e_t_a_a_t_a", "eta", "e_t_a", "ata", "a_t_a", "arrival", "chegada"],
+  email_title: ["email_title", "email_title_pre_alert", "titulo_email", "email"],
+  te: ["te", "t_e", "transit_time", "tempo_transito"],
+  at: ["at", "a_t", "arrival_time"],
+};
+```
+
+### 3. Atualizar DB_COLUMNS
+
+```typescript
+export const DB_COLUMNS = [
+  // Campos comuns
+  "nome_analista", "customer_no", "po", "master", "etd", 
+  "pre_alert_sent", "oea_cl_doc", "remarks",
+  
+  // Campos AIR
+  "hawb", "cargo_departed", "d_term", "pod_dn_available",
+  
+  // Campos SEA
+  "hbl", "customer_order", "accrual", "dep", "eta_ata", "email_title", "te", "at",
+];
+```
+
+### 4. Atualizar lógica de parsing
+
+Adicionar processamento dos novos campos no switch case:
+
+```typescript
+case "hbl":
+  row.hbl = value != null ? String(value).trim() : undefined;
+  break;
+case "customer_order":
+  row.customer_order = value != null ? String(value).trim() : undefined;
+  break;
+case "accrual":
+  row.accrual = parseBoolean(value);
+  break;
+case "dep":
+  row.dep = parseBoolean(value);
+  break;
+case "eta_ata":
+  row.eta_ata = parseDate(value) || undefined;
+  break;
+case "email_title":
+  row.email_title = value != null ? String(value).trim() : undefined;
+  break;
+case "te":
+  row.te = value != null ? String(value).trim() : undefined;
+  break;
+case "at":
+  row.at = value != null ? String(value).trim() : undefined;
+  break;
+```
+
+### 5. Atualizar validação
+
+Para SEA, aceitar HBL além de HAWB/Master:
+
+```typescript
+const hasHawb = columnMappings.some((m) => m.dbColumn === "hawb");
+const hasHbl = columnMappings.some((m) => m.dbColumn === "hbl");
+const hasMaster = columnMappings.some((m) => m.dbColumn === "master");
+
+if (!hasHawb && !hasHbl && !hasMaster) {
+  // Erro: precisa de HAWB, HBL ou Master
+}
+```
+
+### 6. Atualizar Edge Function (mariadb-proxy)
+
+Modificar o `bulk_insert_master` para incluir colunas SEA condicionalmente:
+
+```typescript
+case 'bulk_insert_master': {
+  // ... validações ...
+  
+  if (modal === 'SEA') {
+    // INSERT com colunas SEA
+    await client.execute(`
+      INSERT INTO dados_dachser.t_sea_master (
+        nome_analista, customer_no, po, hbl, master,
+        etd, pre_alert_sent, oea_cl_doc, customer_order,
+        accrual, dep, eta_ata, email_title, te, at,
+        remarks, tipo_processo, data_insert
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `, [/* valores */]);
+  } else {
+    // INSERT com colunas AIR (atual)
+    await client.execute(`
+      INSERT INTO dados_dachser.t_air_master (
+        nome_analista, customer_no, po, hawb, master,
+        etd, pre_alert_sent, oea_cl_doc, cargo_departed,
+        d_term, pod_dn_available, remarks, tipo_processo, data_insert
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `, [/* valores */]);
+  }
+}
 ```
 
 ---
@@ -92,87 +170,49 @@ console.log("Headers normalizados:", excelHeaders.map(normalizeColumnName));
 
 | Arquivo | Alteração |
 |---------|-----------|
-| `src/lib/parseExcelMaster.ts` | Expandir aliases, adicionar fallback de correspondência flexível |
+| `src/lib/parseExcelMaster.ts` | Adicionar aliases, campos e lógica de parsing para SEA |
+| `supabase/functions/mariadb-proxy/index.ts` | Diferenciar INSERT entre AIR e SEA |
 
 ---
 
-## Alterações Detalhadas
+## Pré-requisito: Estrutura do Banco
 
-### `src/lib/parseExcelMaster.ts`
+Antes de implementar, preciso confirmar se a tabela `t_sea_master` já possui essas colunas no MariaDB:
 
-**Linha 8-21** - Expandir COLUMN_ALIASES:
+- `hbl` (VARCHAR)
+- `customer_order` (VARCHAR)
+- `accrual` (TINYINT)
+- `dep` (TINYINT)
+- `eta_ata` (DATETIME)
+- `email_title` (TEXT)
+- `te` (VARCHAR)
+- `at` (VARCHAR)
 
-```typescript
-const COLUMN_ALIASES: Record<string, string[]> = {
-  nome_analista: ["nome_analista", "analista", "clerk", "operator", "responsavel", "responsável"],
-  customer_no: ["customer_no", "customer", "customer_number", "customer_id", "cliente", "cod_cliente", "codigo_cliente"],
-  po: ["po", "p_o", "purchase_order", "pedido", "pedido_compra"],
-  hawb: ["hawb", "hawb_no", "hawb_number", "house", "house_awb", "house_awb_no", "house_no"],
-  master: [
-    "master", "mawb", "mawb_no", "master_awb", "master_awb_no", "master_number",
-    "master_no", "master_id", "mawb_number", "master_awb_number", "masterawb", "no_master"
-  ],
-  // ... resto permanece igual
-};
-```
+**Se não existirem**, você precisará adicionar via SQL no banco MariaDB:
 
-**Linhas 101-118** - Melhorar findDbColumn:
-
-```typescript
-export function findDbColumn(normalizedHeader: string): string | null {
-  // Prioridade 1: Correspondência exata
-  if (DB_COLUMNS.includes(normalizedHeader)) {
-    return normalizedHeader;
-  }
-  
-  // Prioridade 2: Correspondência exata com aliases
-  for (const [dbCol, aliases] of Object.entries(COLUMN_ALIASES)) {
-    for (const alias of aliases) {
-      const normalizedAlias = normalizeColumnName(alias);
-      if (normalizedHeader === normalizedAlias) {
-        return dbCol;
-      }
-    }
-  }
-  
-  // Prioridade 3: Header começa com nome do campo
-  for (const [dbCol, aliases] of Object.entries(COLUMN_ALIASES)) {
-    for (const alias of aliases) {
-      const normalizedAlias = normalizeColumnName(alias);
-      if (normalizedHeader.startsWith(normalizedAlias)) {
-        return dbCol;
-      }
-    }
-  }
-  
-  // Prioridade 4: Header contém nome do campo
-  for (const [dbCol, aliases] of Object.entries(COLUMN_ALIASES)) {
-    for (const alias of aliases) {
-      const normalizedAlias = normalizeColumnName(alias);
-      if (normalizedHeader.includes(normalizedAlias) || normalizedAlias.includes(normalizedHeader)) {
-        return dbCol;
-      }
-    }
-  }
-  
-  return null;
-}
+```sql
+ALTER TABLE dados_dachser.t_sea_master
+  ADD COLUMN hbl VARCHAR(100) NULL,
+  ADD COLUMN customer_order VARCHAR(100) NULL,
+  ADD COLUMN accrual TINYINT NULL,
+  ADD COLUMN dep TINYINT NULL,
+  ADD COLUMN eta_ata DATETIME NULL,
+  ADD COLUMN email_title TEXT NULL,
+  ADD COLUMN te VARCHAR(50) NULL,
+  ADD COLUMN at VARCHAR(50) NULL;
 ```
 
 ---
 
-## Próxima Etapa: Diagnóstico
+## Resumo das Alterações
 
-Para resolver de forma definitiva, preciso saber:
+1. **Frontend (parseExcelMaster.ts)**:
+   - Adicionar 8 novos campos na interface `MasterRow`
+   - Adicionar aliases para detectar colunas SEA
+   - Expandir `DB_COLUMNS` com campos SEA
+   - Atualizar switch case para processar novos campos
+   - Ajustar validação para aceitar HBL
 
-**Qual é o nome exato da coluna "Master" na sua planilha Excel?**
-
-Por exemplo:
-- "Master"
-- "Master No"
-- "MASTER AWB"
-- "MAWB"
-- Outro?
-
-Com essa informação, posso adicionar o alias exato e garantir que funcione.
-
+2. **Backend (mariadb-proxy)**:
+   - Separar lógica de INSERT para AIR vs SEA
+   - Adicionar colunas SEA no INSERT quando `modal === 'SEA'`
