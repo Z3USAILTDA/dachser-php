@@ -3804,6 +3804,164 @@ serve(async (req) => {
       }
     }
 
+    // ===== SEA TRACKING: Manually add containers to an MBL =====
+    // Use this when the JSONCargo BOL lookup fails but you know the containers
+    if (action === 'manual_add_containers') {
+      const mariadbHost = Deno.env.get('MARIADB_HOST');
+      const mariadbPort = Deno.env.get('MARIADB_PORT') || '3306';
+      const mariadbUser = Deno.env.get('MARIADB_USER');
+      const mariadbPass = Deno.env.get('MARIADB_PASSWORD');
+
+      if (!mariadbHost || !mariadbUser || !mariadbPass) {
+        return new Response(JSON.stringify({ error: 'MariaDB não configurado' }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      }
+
+      // Parse body for POST requests
+      let body: any = {};
+      if (req.method === 'POST') {
+        try {
+          body = await req.json();
+        } catch {
+          return new Response(JSON.stringify({ error: 'Body JSON inválido' }), {
+            status: 400,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+          });
+        }
+      }
+
+      const mblId = body.mbl_id;
+      const containers: string[] = body.containers || [];
+      const shippingLine = body.shipping_line || null;
+
+      if (!mblId) {
+        return new Response(JSON.stringify({ error: 'mbl_id é obrigatório' }), {
+          status: 400,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      }
+
+      if (!containers.length) {
+        return new Response(JSON.stringify({ error: 'containers é obrigatório (array de container IDs)' }), {
+          status: 400,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      }
+
+      // Validate container format (basic validation)
+      const validContainers: string[] = [];
+      const invalidContainers: string[] = [];
+      for (const c of containers) {
+        const normalized = String(c || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+        if (normalized.length >= 10 && normalized.length <= 12 && /^[A-Z]{4}\d{6,8}$/.test(normalized)) {
+          validContainers.push(normalized);
+        } else {
+          invalidContainers.push(c);
+        }
+      }
+
+      if (validContainers.length === 0) {
+        return new Response(JSON.stringify({ 
+          error: 'Nenhum container válido fornecido',
+          invalidContainers,
+          hint: 'Containers devem seguir formato ISO: 4 letras + 6-7 dígitos (ex: CSNU7842551)'
+        }), {
+          status: 400,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      }
+
+      const { Client } = await import("https://deno.land/x/mysql@v2.12.1/mod.ts");
+      const client = await new Client().connect({
+        hostname: mariadbHost,
+        port: parseInt(mariadbPort, 10),
+        username: mariadbUser,
+        password: mariadbPass,
+        db: 'dados_dachser',
+      });
+
+      try {
+        console.log(`[manual_add_containers] Adding ${validContainers.length} containers to MBL ${mblId}: ${validContainers.join(', ')}`);
+
+        // 1. Get existing MBL data for tipo_processo, consignee, etc.
+        const existingRows = await client.query(`
+          SELECT mbl_id, tipo_processo, consignee, email_analista, email_cliente, shipping_line
+          FROM dados_dachser.t_tracking_sea
+          WHERE mbl_id = ?
+          LIMIT 1
+        `, [mblId]);
+
+        const existingData = existingRows[0] || {};
+        const effectiveShippingLine = shippingLine || existingData.shipping_line || 'UNKNOWN';
+
+        // 2. Delete PENDENTE/NAO_ENCONTRADO/empty records for this MBL
+        const deleteResult = await client.execute(`
+          DELETE FROM dados_dachser.t_tracking_sea 
+          WHERE mbl_id = ? 
+            AND (container IN ('PENDENTE', 'NAO_ENCONTRADO', 'IGNORADO', '') OR container IS NULL)
+        `, [mblId]);
+
+        console.log(`[manual_add_containers] Deleted ${deleteResult.affectedRows || 0} placeholder records for MBL ${mblId}`);
+
+        // 3. Insert each valid container
+        let inserted = 0;
+        let updated = 0;
+        for (const container of validContainers) {
+          const result = await client.execute(`
+            INSERT INTO dados_dachser.t_tracking_sea 
+              (mbl_id, container, tipo_processo, consignee, email_analista, email_cliente, active, shipping_line)
+            VALUES (?, ?, ?, ?, ?, ?, 1, ?)
+            ON DUPLICATE KEY UPDATE
+              tipo_processo = COALESCE(VALUES(tipo_processo), tipo_processo),
+              consignee = COALESCE(VALUES(consignee), consignee),
+              email_analista = COALESCE(VALUES(email_analista), email_analista),
+              email_cliente = COALESCE(VALUES(email_cliente), email_cliente),
+              shipping_line = COALESCE(VALUES(shipping_line), shipping_line),
+              active = 1
+          `, [
+            mblId,
+            container,
+            existingData.tipo_processo || 'SEA IMPORT',
+            existingData.consignee || null,
+            existingData.email_analista || null,
+            existingData.email_cliente || null,
+            normalizeShippingLine(effectiveShippingLine)
+          ]);
+
+          if (result.affectedRows === 1) {
+            inserted++;
+          } else if (result.affectedRows === 2) {
+            updated++;
+          }
+        }
+
+        await client.close();
+
+        console.log(`[manual_add_containers] Completed for MBL ${mblId}: inserted=${inserted}, updated=${updated}`);
+
+        return new Response(JSON.stringify({ 
+          success: true,
+          mbl_id: mblId,
+          containers_added: validContainers,
+          inserted,
+          updated,
+          invalid_skipped: invalidContainers,
+          message: `${validContainers.length} containers adicionados ao MBL ${mblId}. Use refresh_sea_tracking para buscar tracking.`
+        }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+
+      } catch (e: any) {
+        await client.close();
+        console.error('[manual_add_containers] Error:', e);
+        return new Response(JSON.stringify({ error: e.message }), {
+          status: 500,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      }
+    }
+
     // ===== SEA TRACKING: Deactivate MBLs that only have invalid containers or are booking references =====
     if (action === 'deactivate_invalid_mbls') {
       const mariadbHost = Deno.env.get('MARIADB_HOST');
