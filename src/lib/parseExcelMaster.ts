@@ -18,6 +18,7 @@ const COLUMN_ALIASES: Record<string, string[]> = {
   pre_alert_sent: ["pre_alert_sent", "prealert_sent", "pre_alert", "prealert", "sent_prealert", "enviado_prealert"],
   oea_cl_doc: ["oea_cl_doc", "oea", "cl_doc", "cldoc", "doc_ok", "docs_ok", "documentos_ok", "docs"],
   remarks: ["remarks", "remark", "remarks_1", "observacao", "observacoes", "observacao_1", "observations", "notes", "note"],
+  data_insert: ["data_insert", "data_insercao", "inserted_at", "inclusion_date", "inclusion", "data_inclusao"],
   
   // Campos AIR específicos
   hawb: ["hawb", "hawb_no", "hawb_number", "house", "house_awb", "house_awb_no", "house_no"],
@@ -56,6 +57,7 @@ export const DB_COLUMNS = [
   "pre_alert_sent",
   "oea_cl_doc",
   "remarks",
+  "data_insert",
   
   // Campos AIR (inclui novas colunas)
   "hawb",
@@ -603,6 +605,13 @@ export async function parseExcelMasterFile(
                 break;
               case "cct_transm":
                 row.cct_transm = value != null ? String(value).trim() : undefined;
+                break;
+              case "data_insert":
+                // Se a planilha tiver coluna inclusion_date, usar para sobrescrever data_insert extraída do nome do arquivo
+                const parsedDataInsert = parseDate(value);
+                if (parsedDataInsert) {
+                  row.data_insert = parsedDataInsert;
+                }
                 break;
             }
           }
