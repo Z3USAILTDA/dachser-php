@@ -1673,7 +1673,6 @@ serve(async (req) => {
                 FROM dados_dachser.t_sea_master
                 WHERE master IS NOT NULL
                   AND TRIM(master) != ''
-                  AND etd >= '2025-11-01'
                 GROUP BY TRIM(master)
               ),
               -- CTE 2: Navio/vessel_imo mais recente por mbl (ranking)
@@ -2012,7 +2011,6 @@ serve(async (req) => {
           FROM dados_dachser.t_sea_master sm
           WHERE sm.master IS NOT NULL
             AND TRIM(sm.master) != ''
-            AND sm.etd >= '2025-11-01'
             AND (
               TRIM(sm.master) REGEXP '^[A-Za-z]{4}[0-9]+$'
               OR TRIM(sm.master) REGEXP '^(${VALID_MBL_PREFIXES})[A-Za-z]{0,6}[0-9]{2,}[A-Za-z0-9]*$'
