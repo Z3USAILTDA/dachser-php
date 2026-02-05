@@ -1655,27 +1655,27 @@ serve(async (req) => {
             db: 'dados_dachser',
           });
 
-          // OTIMIZADO V2: Query simplificada sem COLLATE nos JOINs
-          // - Removidas cláusulas COLLATE (assume collation alinhada nas tabelas)
-          // - CTEs simplificadas para melhor aproveitamento de índices
-          // - Timeout query aumentado via SET statement
+          // OTIMIZADO V3: Migrado de t_master_dados para t_sea_master
+          // - Usando campo 'master' em vez de 'mawb' para MBL
+          // - Campo 'eta_ata' em vez de 'eta' para data de chegada
+          // - Tabela específica para processos SEA
           await client.execute("SET SESSION max_statement_time = 30");
           
           const rows = await client.query(`
             WITH 
-              -- CTE 1: Dados do t_master_dados agrupados por mbl_id (filtrado por ETD >= 01/11/2025)
+              -- CTE 1: Dados do t_sea_master agrupados por mbl_id (filtrado por ETD >= 01/11/2025)
               master_data AS (
                 SELECT 
-                  TRIM(mawb) as mbl_id,
-                  MAX(eta) as eta,
+                  TRIM(master) as mbl_id,
+                  MAX(eta_ata) as eta,
                   MAX(etd) as etd,
                   MAX(nome_analista) as nome_analista
-                FROM dados_dachser.t_master_dados
+                FROM dados_dachser.t_sea_master
                 WHERE active = 1 
-                  AND mawb IS NOT NULL 
-                  AND TRIM(mawb) != ''
+                  AND master IS NOT NULL 
+                  AND TRIM(master) != ''
                   AND etd >= '2025-11-01'
-                GROUP BY TRIM(mawb)
+                GROUP BY TRIM(master)
               ),
               -- CTE 2: Navio/vessel_imo mais recente por mbl (ranking)
               latest_vessel AS (
@@ -2001,34 +2001,30 @@ serve(async (req) => {
         const existingSet = new Set((existingMbls as any[]).map(r => r.mbl_id?.trim()));
         console.log(`[sync_sea_tracking] Found ${existingSet.size} existing MBLs in tracking table`);
 
-        // Step 2: Get candidates from t_master_dados with ETD filter
+        // Step 2: Get candidates from t_sea_master with ETD filter
         const candidates = await client.query(`
           SELECT
-            TRIM(md.mawb) AS mbl_id,
-            md.tipo_processo,
-            CASE 
-              WHEN md.container IS NULL OR TRIM(md.container) = '' THEN 'PENDENTE'
-              ELSE TRIM(md.container)
-            END AS container,
-            md.cliente AS consignee,
-            md.email_analista,
-            md.emails_cliente AS email_cliente
-          FROM dados_dachser.t_master_dados md
-          WHERE md.active = 1
-            AND md.mawb IS NOT NULL 
-            AND TRIM(md.mawb) != ''
-            AND md.etd >= '2025-11-01'
-            AND md.tipo_processo LIKE '%SEA%'
+            TRIM(sm.master) AS mbl_id,
+            'SEA IMPORT' AS tipo_processo,
+            'PENDENTE' AS container,
+            sm.customer_no AS consignee,
+            sm.nome_analista AS email_analista,
+            NULL AS email_cliente
+          FROM dados_dachser.t_sea_master sm
+          WHERE sm.active = 1
+            AND sm.master IS NOT NULL 
+            AND TRIM(sm.master) != ''
+            AND sm.etd >= '2025-11-01'
             AND (
-              TRIM(md.mawb) REGEXP '^[A-Za-z]{4}[0-9]+$'
-              OR TRIM(md.mawb) REGEXP '^(${VALID_MBL_PREFIXES})[A-Za-z]{0,6}[0-9]{2,}[A-Za-z0-9]*$'
+              TRIM(sm.master) REGEXP '^[A-Za-z]{4}[0-9]+$'
+              OR TRIM(sm.master) REGEXP '^(${VALID_MBL_PREFIXES})[A-Za-z]{0,6}[0-9]{2,}[A-Za-z0-9]*$'
             )
-            AND LEFT(TRIM(md.mawb), 4) NOT IN ('EBKG', 'BKNG', 'GLNL', 'GLSL', 'GLDL', 'BRSA')
-            AND TRIM(md.mawb) NOT REGEXP '^BR[A-Za-z]{3}'
-          GROUP BY TRIM(md.mawb)
+            AND LEFT(TRIM(sm.master), 4) NOT IN ('EBKG', 'BKNG', 'GLNL', 'GLSL', 'GLDL', 'BRSA')
+            AND TRIM(sm.master) NOT REGEXP '^BR[A-Za-z]{3}'
+          GROUP BY TRIM(sm.master)
           LIMIT 500
         `);
-        console.log(`[sync_sea_tracking] Found ${(candidates as any[]).length} candidates from t_master_dados`);
+        console.log(`[sync_sea_tracking] Found ${(candidates as any[]).length} candidates from t_sea_master`);
 
         // Step 3: Filter out existing MBLs in JavaScript (much faster than SQL NOT EXISTS)
         const toInsert = (candidates as any[]).filter(c => !existingSet.has(c.mbl_id?.trim()));
