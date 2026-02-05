@@ -77,8 +77,8 @@ serve(async (req) => {
   }
 
   // ===== PASSO 2: Enriquecer containers via sea_seed_smart (múltiplos batches) =====
-  // FLAG: JsonCargo DESATIVADO temporariamente até segunda ordem
-  const JSONCARGO_DISABLED = true;
+  // FLAG: JsonCargo REATIVADO
+  const JSONCARGO_DISABLED = false;
 
   if (JSONCARGO_DISABLED) {
     console.log('[sea-tracking-cron] Passo 2 PULADO: JsonCargo desativado até segunda ordem');

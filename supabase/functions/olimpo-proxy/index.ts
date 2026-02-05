@@ -266,8 +266,8 @@ async function curlJson(url: string, headers: Record<string, string> = {}, timeo
 }
 
 async function jcJson(url: string, qs: Record<string, string> = {}, timeout = 25000): Promise<any> {
-  // FLAG: JsonCargo DESATIVADO temporariamente até segunda ordem
-  const JSONCARGO_DISABLED = true;
+  // FLAG: JsonCargo REATIVADO
+  const JSONCARGO_DISABLED = false;
   if (JSONCARGO_DISABLED) {
     console.log('[jcJson] JsonCargo desativado até segunda ordem');
     return { __curl_error: 'jsoncargo_disabled', disabled: true };
