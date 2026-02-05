@@ -1725,7 +1725,7 @@ serve(async (req) => {
               MAX(ts.destino) as destino,
               MAX(lv.navio) as navio,
               MAX(lv.vessel_imo) as vessel_imo,
-              COALESCE(MAX(ts.eta), MAX(md.eta)) as eta,
+              COALESCE(MAX(md.eta), MAX(ts.eta)) as eta,
               MAX(md.eta) as eta_master,
               MAX(md.nome_analista) as nome_analista,
               MAX(ts.eta) as eta_api,
@@ -1739,21 +1739,21 @@ serve(async (req) => {
               MAX(ts.created_at) as created_at,
               MAX(ts.updated_at) as updated_at,
               CASE 
-                WHEN COALESCE(MAX(ts.eta), MAX(md.eta)) IS NOT NULL 
-                  AND COALESCE(MAX(ts.eta), MAX(md.eta)) < DATE_SUB(NOW(), INTERVAL 3 DAY)
+                WHEN COALESCE(MAX(md.eta), MAX(ts.eta)) IS NOT NULL 
+                  AND COALESCE(MAX(md.eta), MAX(ts.eta)) < DATE_SUB(NOW(), INTERVAL 3 DAY)
                   AND UPPER(COALESCE(MAX(ts.container_status), '')) NOT IN ('DELIVERED', 'GATE_OUT', 'DLV', 'GOD', 'EMPTY_RETURNED', 'EMPTY_RECEIVED_AT_CY')
                 THEN 1 ELSE 0 
               END as is_eta_delayed,
               CASE 
-                WHEN COALESCE(MAX(ts.eta), MAX(md.eta)) IS NOT NULL 
-                  AND COALESCE(MAX(ts.eta), MAX(md.eta)) < DATE_SUB(NOW(), INTERVAL 7 DAY)
+                WHEN COALESCE(MAX(md.eta), MAX(ts.eta)) IS NOT NULL 
+                  AND COALESCE(MAX(md.eta), MAX(ts.eta)) < DATE_SUB(NOW(), INTERVAL 7 DAY)
                   AND UPPER(COALESCE(MAX(ts.container_status), '')) NOT IN ('DELIVERED', 'GATE_OUT', 'DLV', 'GOD', 'EMPTY_RETURNED', 'EMPTY_RECEIVED_AT_CY')
                 THEN 1 ELSE 0 
               END as is_critico,
               CASE 
-                WHEN COALESCE(MAX(ts.eta), MAX(md.eta)) IS NOT NULL 
-                  AND COALESCE(MAX(ts.eta), MAX(md.eta)) < CURDATE()
-                THEN DATEDIFF(CURDATE(), COALESCE(MAX(ts.eta), MAX(md.eta)))
+                WHEN COALESCE(MAX(md.eta), MAX(ts.eta)) IS NOT NULL 
+                  AND COALESCE(MAX(md.eta), MAX(ts.eta)) < CURDATE()
+                THEN DATEDIFF(CURDATE(), COALESCE(MAX(md.eta), MAX(ts.eta)))
                 ELSE 0 
               END as dias_atraso,
               COALESCE(MAX(td.transshipment_port), MAX(th.transshipment_port)) as transshipment_port,
