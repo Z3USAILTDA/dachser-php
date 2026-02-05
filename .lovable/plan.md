@@ -1,33 +1,19 @@
 
-# Plano: Filtrar Monitoramento Marítimo por ETD >= 01/11/2025
 
-## Resumo
-Adicionar filtro de data na query `get_sea_tracking` do `olimpo-proxy` para retornar apenas processos marítimos cujo ETD (Estimated Time of Departure) no `t_master_dados` seja a partir de 01/11/2025.
+# Plano: Migrar Fonte de Dados para `t_sea_master` (Backend Only)
+
+## Objetivo
+Alterar a fonte de dados do monitoramento marítimo de `t_master_dados` para `t_sea_master`, **sem qualquer alteração visual na tela**.
 
 ---
 
-## Alteração Necessária
+## Alterações Necessárias
 
 ### Arquivo: `supabase/functions/olimpo-proxy/index.ts`
 
-#### Modificação na action `get_sea_tracking` (linhas 1664-1808)
+#### 1. Modificar `get_sea_tracking` (linhas 1667-1678)
 
-**Objetivo**: Adicionar filtro de ETD na CTE `master_data` para limitar os registros retornados.
-
-**Antes (CTE master_data)**:
-```sql
-master_data AS (
-  SELECT 
-    TRIM(mawb) as mbl_id,
-    MAX(eta) as eta,
-    MAX(nome_analista) as nome_analista
-  FROM dados_dachser.t_master_dados
-  WHERE active = 1 AND mawb IS NOT NULL AND TRIM(mawb) != ''
-  GROUP BY TRIM(mawb)
-),
-```
-
-**Depois (CTE master_data com filtro ETD)**:
+**Antes** - CTE `master_data` usando `t_master_dados`:
 ```sql
 master_data AS (
   SELECT 
@@ -44,47 +30,76 @@ master_data AS (
 ),
 ```
 
-**Modificação adicional no WHERE principal**:
-
-Adicionar condição para que apenas MBLs que existam no `master_data` (com ETD válido) sejam retornados:
-
+**Depois** - CTE `master_data` usando `t_sea_master`:
 ```sql
-WHERE ts.active = 1
-  AND md.mbl_id IS NOT NULL  -- NOVO: Garante que MBL existe em master_data (ETD >= 2025-11-01)
+master_data AS (
+  SELECT 
+    TRIM(master) as mbl_id,
+    MAX(eta_ata) as eta,
+    MAX(etd) as etd,
+    MAX(nome_analista) as nome_analista
+  FROM dados_dachser.t_sea_master
+  WHERE active = 1 
+    AND master IS NOT NULL 
+    AND TRIM(master) != ''
+    AND etd >= '2025-11-01'
+  GROUP BY TRIM(master)
+),
+```
+
+#### 2. Modificar `sync_sea_tracking` (linhas 2004-2031)
+
+**Antes** - Query de candidatos usando `t_master_dados`:
+```sql
+SELECT
+  TRIM(md.mawb) AS mbl_id,
+  md.tipo_processo,
+  ...
+FROM dados_dachser.t_master_dados md
+WHERE ...
+  AND md.tipo_processo LIKE '%SEA%'
+```
+
+**Depois** - Query de candidatos usando `t_sea_master`:
+```sql
+SELECT
+  TRIM(sm.master) AS mbl_id,
+  'SEA IMPORT' AS tipo_processo,
+  ...
+FROM dados_dachser.t_sea_master sm
+WHERE ...
 ```
 
 ---
 
-## Benefícios
+## Mapeamento de Campos
 
-| Benefício | Descrição |
-|-----------|-----------|
-| **Performance** | Reduz volume de dados processados na query |
-| **Foco operacional** | Remove processos antigos/encerrados da visualização |
-| **Consistência** | Alinha com o filtro já existente no `sync_sea_tracking` |
-
----
-
-## Consideração de Performance
-
-A CTE `master_data` já existe e faz GROUP BY por `mbl_id`. Adicionar o filtro `etd >= '2025-11-01'` na CTE é mais eficiente do que filtrar depois, pois:
-- Reduz o número de linhas na CTE antes do JOIN
-- Aproveita índices existentes na coluna `etd` do `t_master_dados`
+| t_master_dados | t_sea_master | Descrição |
+|----------------|--------------|-----------|
+| `mawb` | `master` | Código MBL |
+| `eta` | `eta_ata` | Data de chegada |
+| `etd` | `etd` | Data de saída |
+| `nome_analista` | `nome_analista` | Coordenador |
+| `cliente` | `customer_no` | Cliente |
 
 ---
 
-## Arquivos a Modificar
+## O Que NÃO Muda
 
-| Arquivo | Alteração |
-|---------|-----------|
-| `supabase/functions/olimpo-proxy/index.ts` | Adicionar filtro ETD na CTE master_data e no WHERE principal |
+- Nenhuma alteração em `src/pages/ContainerTracking.tsx`
+- Interface `MblTrackingData` permanece igual
+- Colunas da tabela permanecem as mesmas
+- Filtros e ordenação não são alterados
+- Visual da tela 100% preservado
 
 ---
 
-## Ordem de Execução
+## Resumo das Alterações
 
-1. **Alterar a CTE master_data** - Adicionar `AND etd >= '2025-11-01'`
-2. **Adicionar campo etd na CTE** - Para possível uso futuro na UI
-3. **Modificar WHERE principal** - Garantir que apenas MBLs com ETD válido apareçam
-4. **Deploy da edge function** - Aplicar alterações
-5. **Teste** - Verificar se a tela de Monitoramento FCL exibe apenas processos com ETD a partir de 01/11/2025
+| Local | Alteração |
+|-------|-----------|
+| CTE `master_data` (get) | `t_master_dados.mawb` → `t_sea_master.master` |
+| CTE `master_data` (get) | `eta` → `eta_ata` |
+| Query candidatos (sync) | Trocar tabela fonte para `t_sea_master` |
+| Query candidatos (sync) | Remover filtro `tipo_processo LIKE '%SEA%'` (implícito) |
+
