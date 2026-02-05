@@ -1663,14 +1663,18 @@ serve(async (req) => {
           
           const rows = await client.query(`
             WITH 
-              -- CTE 1: Dados do t_master_dados agrupados por mbl_id
+              -- CTE 1: Dados do t_master_dados agrupados por mbl_id (filtrado por ETD >= 01/11/2025)
               master_data AS (
                 SELECT 
                   TRIM(mawb) as mbl_id,
                   MAX(eta) as eta,
+                  MAX(etd) as etd,
                   MAX(nome_analista) as nome_analista
                 FROM dados_dachser.t_master_dados
-                WHERE active = 1 AND mawb IS NOT NULL AND TRIM(mawb) != ''
+                WHERE active = 1 
+                  AND mawb IS NOT NULL 
+                  AND TRIM(mawb) != ''
+                  AND etd >= '2025-11-01'
                 GROUP BY TRIM(mawb)
               ),
               -- CTE 2: Navio/vessel_imo mais recente por mbl (ranking)
@@ -1768,6 +1772,7 @@ serve(async (req) => {
             LEFT JOIN has_freetime hf_proc ON hf_proc.mbl_id COLLATE utf8mb4_unicode_ci = ts.mbl_id COLLATE utf8mb4_unicode_ci AND hf_proc.tipo_ft = 'PROCESSO'
             LEFT JOIN has_freetime hf_cont ON hf_cont.cliente_nome COLLATE utf8mb4_unicode_ci = ts.consignee COLLATE utf8mb4_unicode_ci AND hf_cont.tipo_ft = 'CONTRATO'
             WHERE ts.active = 1
+              AND md.mbl_id IS NOT NULL  -- Garante que MBL existe em master_data (ETD >= 2025-11-01)
             GROUP BY ts.mbl_id
             HAVING 
               (
