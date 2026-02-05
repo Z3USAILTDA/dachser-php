@@ -42,9 +42,7 @@ const getShippingLineCodeFromMbl = (mbl_id: string, shipping_line: string | null
       return upper as ShippingLineCode;
     }
     // Tenta pelo nome
-    const found = Object.entries(SHIPPING_LINE_INFO).find(([_, info]) => 
-      info.name.toUpperCase() === shipping_line.toUpperCase().trim()
-    );
+    const found = Object.entries(SHIPPING_LINE_INFO).find(([_, info]) => info.name.toUpperCase() === shipping_line.toUpperCase().trim());
     if (found) return found[0] as ShippingLineCode;
   }
   // Caso contrário, detecta pelo prefixo do MBL
@@ -311,7 +309,7 @@ const ContainerTracking = () => {
   const {
     isAdmin
   } = useUserRole();
-  
+
   // Get username from localStorage (MariaDB auth)
   const storedUser = localStorage.getItem("user") || localStorage.getItem("dachser_user");
   const loggedUsername = storedUser ? JSON.parse(storedUser)?.username : null;
@@ -364,13 +362,13 @@ const ContainerTracking = () => {
 
   // Free Time dialog state
   const [freeTimeDialogOpen, setFreeTimeDialogOpen] = useState(false);
-  
+
   // Armadores modal state
   const [showArmadoresModal, setShowArmadoresModal] = useState(false);
-  
+
   // Admin modal state
   const [showAdminModal, setShowAdminModal] = useState(false);
-  
+
   // LCL cadastro dialog state
   const [showLclDialog, setShowLclDialog] = useState(false);
   const [lclFormData, setLclFormData] = useState({
@@ -382,7 +380,6 @@ const ContainerTracking = () => {
     transbordo: ''
   });
   const [isSubmittingLcl, setIsSubmittingLcl] = useState(false);
-  
   const itemsPerPage = 10;
 
   // Status categorization
@@ -1201,25 +1198,22 @@ const ContainerTracking = () => {
   const handleExportExcel = async () => {
     if (!isAdmin) return;
     setIsExportingExcel(true);
-    
     toast({
       title: "Exportando Excel...",
-      description: "Aguarde enquanto geramos o arquivo.",
+      description: "Aguarde enquanto geramos o arquivo."
     });
-
     try {
       const result = await exportSeaMblsToExcel();
-      
       if (result.success) {
         toast({
           title: "Exportação concluída!",
-          description: `${result.count} MBLs exportados para ${result.filename}`,
+          description: `${result.count} MBLs exportados para ${result.filename}`
         });
       } else {
         toast({
           title: "Erro na exportação",
           description: result.error || "Falha ao exportar dados",
-          variant: "destructive",
+          variant: "destructive"
         });
       }
     } catch (error) {
@@ -1227,13 +1221,12 @@ const ContainerTracking = () => {
       toast({
         title: "Erro na exportação",
         description: "Falha inesperada ao exportar dados",
-        variant: "destructive",
+        variant: "destructive"
       });
     } finally {
       setIsExportingExcel(false);
     }
   };
-
   useEffect(() => {
     if (!user) return;
     const TWELVE_HOURS_MS = 12 * 60 * 60 * 1000;
@@ -1362,13 +1355,12 @@ const ContainerTracking = () => {
         matchesCardFilter = isEntregue(m.last_event);
       }
       const matchesTipoProcesso = filterTipoProcesso === "all" || m.tipo_processo === filterTipoProcesso;
-      
+
       // Filtro: apenas sincronizados do banco hoje (usa updated_at do t_olimpo_tracking)
       const matchesSyncHoje = !filterSyncHoje || isSyncedToday(m.updated_at);
-      
       return matchesSearch && matchesLine && matchesCardFilter && matchesTipoProcesso && matchesCoordenador && matchesSyncHoje;
     });
-    
+
     // Ordenar: MBLs com status "Aguardando" (AGD) por último
     mbls.sort((a, b) => {
       const statusA = getReportStatus(a.last_event);
@@ -1377,7 +1369,6 @@ const ContainerTracking = () => {
       if (statusA.code !== 'AGD' && statusB.code === 'AGD') return -1;
       return 0;
     });
-    
     return mbls;
   }, [mblList, searchTerm, filterLine, filterCoordenador, activeCardFilter, filterTipoProcesso, filterSyncHoje]);
   const totalPages = Math.ceil(filteredMbls.length / itemsPerPage);
@@ -1403,9 +1394,7 @@ const ContainerTracking = () => {
 
   // Lista de todos os armadores com suporte à API JSONCargo (apiSupported: true)
   const trackableArmadores = useMemo(() => {
-    return getTrackableCarriers()
-      .map(info => normalizeArmadorName(info.name))
-      .sort((a, b) => a.localeCompare(b));
+    return getTrackableCarriers().map(info => normalizeArmadorName(info.name)).sort((a, b) => a.localeCompare(b));
   }, []);
 
   // Dynamic list of coordenadores
@@ -1498,16 +1487,10 @@ const ContainerTracking = () => {
             @{loggedUsername || "usuário"}
           </div>
           
-          {isAdmin && (
-            <button 
-              onClick={() => setShowAdminModal(true)} 
-              className="px-3 py-1.5 rounded-full border border-primary/50 flex items-center gap-1.5 bg-primary/20 text-primary hover:bg-primary/30 transition font-medium text-xs uppercase tracking-wide"
-              title="Painel Administrativo"
-            >
+          {isAdmin && <button onClick={() => setShowAdminModal(true)} className="px-3 py-1.5 rounded-full border border-primary/50 flex items-center gap-1.5 bg-primary/20 text-primary hover:bg-primary/30 transition font-medium text-xs uppercase tracking-wide" title="Painel Administrativo">
               <Database className="w-3.5 h-3.5" />
               ADM
-            </button>
-          )}
+            </button>}
           
           <button onClick={() => navigate("/sea/tracking/notificacoes")} className="w-8 h-8 rounded-full border border-[rgba(255,255,255,.25)] flex items-center justify-center bg-[rgba(0,0,0,.7)] text-[#aaaaaa] hover:text-[#ffc800] hover:bg-[rgba(0,0,0,.9)] transition" title="Regras de Notificação">
             <Bell className="w-4 h-4" />
@@ -1706,18 +1689,7 @@ const ContainerTracking = () => {
                 
                 {/* Filtro: Sincronizado Hoje */}
                 <div className="flex items-center gap-1.5">
-                  <button
-                    onClick={() => setFilterSyncHoje(!filterSyncHoje)}
-                    className={cn(
-                      "h-8 px-3 rounded-full text-[0.7rem] font-medium flex items-center gap-1.5 border transition",
-                      filterSyncHoje 
-                        ? "bg-[rgba(34,197,94,.2)] text-green-400 border-green-500/30" 
-                        : "bg-[rgba(0,0,0,.5)] text-[#aaaaaa] border-[rgba(255,255,255,.14)]"
-                    )}
-                  >
-                    <Clock className="w-3.5 h-3.5" />
-                    Sync Hoje
-                  </button>
+                  
                 </div>
                 
                 {/* Auto Sync Status Indicator */}
@@ -1734,19 +1706,13 @@ const ContainerTracking = () => {
 
               <div className="flex items-center gap-2 flex-wrap">
                 {/* Armadores Mapeados Button */}
-                <button 
-                  onClick={() => setShowArmadoresModal(true)} 
-                  className="h-8 px-3 rounded-full bg-[rgba(16,185,129,.2)] text-emerald-400 text-[0.7rem] font-medium flex items-center gap-1.5 border border-emerald-500/30 hover:bg-[rgba(16,185,129,.3)] transition"
-                >
+                <button onClick={() => setShowArmadoresModal(true)} className="h-8 px-3 rounded-full bg-[rgba(16,185,129,.2)] text-emerald-400 text-[0.7rem] font-medium flex items-center gap-1.5 border border-emerald-500/30 hover:bg-[rgba(16,185,129,.3)] transition">
                   <Ship className="w-3.5 h-3.5" />
                   Armadores ({getTrackableCarriers().length})
                 </button>
                 
                 {/* Cadastrar LCL Button */}
-                <button 
-                  onClick={() => setShowLclDialog(true)} 
-                  className="h-8 px-3 rounded-full bg-[rgba(6,182,212,.2)] text-cyan-400 text-[0.7rem] font-medium flex items-center gap-1.5 border border-cyan-500/30 hover:bg-[rgba(6,182,212,.3)] transition"
-                >
+                <button onClick={() => setShowLclDialog(true)} className="h-8 px-3 rounded-full bg-[rgba(6,182,212,.2)] text-cyan-400 text-[0.7rem] font-medium flex items-center gap-1.5 border border-cyan-500/30 hover:bg-[rgba(6,182,212,.3)] transition">
                   <BoxIcon className="w-3.5 h-3.5" />
                   Cadastrar LCL
                 </button>
@@ -2175,11 +2141,10 @@ const ContainerTracking = () => {
                 <TooltipProvider>
                   <Tooltip>
                     <TooltipTrigger asChild>
-                      <button 
-                        onClick={() => { handleAdminSync(); setShowAdminModal(false); }} 
-                        disabled={isRunningSync || !!autoSyncStatus} 
-                        className="h-9 px-4 rounded-lg bg-[rgba(59,130,246,.2)] text-blue-400 text-sm font-medium flex items-center gap-2 border border-blue-500/30 hover:bg-[rgba(59,130,246,.3)] transition disabled:opacity-50"
-                      >
+                      <button onClick={() => {
+                      handleAdminSync();
+                      setShowAdminModal(false);
+                    }} disabled={isRunningSync || !!autoSyncStatus} className="h-9 px-4 rounded-lg bg-[rgba(59,130,246,.2)] text-blue-400 text-sm font-medium flex items-center gap-2 border border-blue-500/30 hover:bg-[rgba(59,130,246,.3)] transition disabled:opacity-50">
                         {isRunningSync ? <Loader2 className="w-4 h-4 animate-spin" /> : <Database className="w-4 h-4" />}
                         Sync MBLs
                       </button>
@@ -2193,11 +2158,10 @@ const ContainerTracking = () => {
                 <TooltipProvider>
                   <Tooltip>
                     <TooltipTrigger asChild>
-                      <button 
-                        onClick={() => { handleAdminEnrich(); setShowAdminModal(false); }} 
-                        disabled={isRunningEnrich || !!autoSyncStatus} 
-                        className="h-9 px-4 rounded-lg bg-[rgba(16,185,129,.2)] text-emerald-400 text-sm font-medium flex items-center gap-2 border border-emerald-500/30 hover:bg-[rgba(16,185,129,.3)] transition disabled:opacity-50"
-                      >
+                      <button onClick={() => {
+                      handleAdminEnrich();
+                      setShowAdminModal(false);
+                    }} disabled={isRunningEnrich || !!autoSyncStatus} className="h-9 px-4 rounded-lg bg-[rgba(16,185,129,.2)] text-emerald-400 text-sm font-medium flex items-center gap-2 border border-emerald-500/30 hover:bg-[rgba(16,185,129,.3)] transition disabled:opacity-50">
                         {isRunningEnrich ? <Loader2 className="w-4 h-4 animate-spin" /> : <Package className="w-4 h-4" />}
                         Enrich Containers
                       </button>
@@ -2217,11 +2181,10 @@ const ContainerTracking = () => {
                 <TooltipProvider>
                   <Tooltip>
                     <TooltipTrigger asChild>
-                      <button 
-                        onClick={() => { handleAdminTrack(); setShowAdminModal(false); }} 
-                        disabled={isRunningTrack || !!autoSyncStatus} 
-                        className="h-9 px-4 rounded-lg bg-[rgba(139,92,246,.2)] text-violet-400 text-sm font-medium flex items-center gap-2 border border-violet-500/30 hover:bg-[rgba(139,92,246,.3)] transition disabled:opacity-50"
-                      >
+                      <button onClick={() => {
+                      handleAdminTrack();
+                      setShowAdminModal(false);
+                    }} disabled={isRunningTrack || !!autoSyncStatus} className="h-9 px-4 rounded-lg bg-[rgba(139,92,246,.2)] text-violet-400 text-sm font-medium flex items-center gap-2 border border-violet-500/30 hover:bg-[rgba(139,92,246,.3)] transition disabled:opacity-50">
                         {isRunningTrack ? <Loader2 className="w-4 h-4 animate-spin" /> : <Radar className="w-4 h-4" />}
                         Track Containers
                       </button>
@@ -2235,11 +2198,10 @@ const ContainerTracking = () => {
                 <TooltipProvider>
                   <Tooltip>
                     <TooltipTrigger asChild>
-                      <button 
-                        onClick={() => { handleAdminRetrack(); setShowAdminModal(false); }} 
-                        disabled={isRunningRetrack || !!autoSyncStatus} 
-                        className="h-9 px-4 rounded-lg bg-[rgba(239,68,68,.2)] text-red-400 text-sm font-medium flex items-center gap-2 border border-red-500/30 hover:bg-[rgba(239,68,68,.3)] transition disabled:opacity-50"
-                      >
+                      <button onClick={() => {
+                      handleAdminRetrack();
+                      setShowAdminModal(false);
+                    }} disabled={isRunningRetrack || !!autoSyncStatus} className="h-9 px-4 rounded-lg bg-[rgba(239,68,68,.2)] text-red-400 text-sm font-medium flex items-center gap-2 border border-red-500/30 hover:bg-[rgba(239,68,68,.3)] transition disabled:opacity-50">
                         {isRunningRetrack ? <Loader2 className="w-4 h-4 animate-spin" /> : <RotateCcw className="w-4 h-4" />}
                         Re-Track Todos
                       </button>
@@ -2259,11 +2221,10 @@ const ContainerTracking = () => {
                 <TooltipProvider>
                   <Tooltip>
                     <TooltipTrigger asChild>
-                      <button 
-                        onClick={() => { handleAdminRefreshImos(); setShowAdminModal(false); }} 
-                        disabled={isRunningImoRefresh || !!autoSyncStatus} 
-                        className="h-9 px-4 rounded-lg bg-[rgba(99,102,241,.2)] text-indigo-400 text-sm font-medium flex items-center gap-2 border border-indigo-500/30 hover:bg-[rgba(99,102,241,.3)] transition disabled:opacity-50"
-                      >
+                      <button onClick={() => {
+                      handleAdminRefreshImos();
+                      setShowAdminModal(false);
+                    }} disabled={isRunningImoRefresh || !!autoSyncStatus} className="h-9 px-4 rounded-lg bg-[rgba(99,102,241,.2)] text-indigo-400 text-sm font-medium flex items-center gap-2 border border-indigo-500/30 hover:bg-[rgba(99,102,241,.3)] transition disabled:opacity-50">
                         {isRunningImoRefresh ? <Loader2 className="w-4 h-4 animate-spin" /> : <Ship className="w-4 h-4" />}
                         Fix IMO
                       </button>
@@ -2277,11 +2238,10 @@ const ContainerTracking = () => {
                 <TooltipProvider>
                   <Tooltip>
                     <TooltipTrigger asChild>
-                      <button 
-                        onClick={() => { handleExportExcel(); setShowAdminModal(false); }} 
-                        disabled={isExportingExcel || !!autoSyncStatus} 
-                        className="h-9 px-4 rounded-lg bg-[rgba(245,124,0,.2)] text-orange-400 text-sm font-medium flex items-center gap-2 border border-orange-500/30 hover:bg-[rgba(245,124,0,.3)] transition disabled:opacity-50"
-                      >
+                      <button onClick={() => {
+                      handleExportExcel();
+                      setShowAdminModal(false);
+                    }} disabled={isExportingExcel || !!autoSyncStatus} className="h-9 px-4 rounded-lg bg-[rgba(245,124,0,.2)] text-orange-400 text-sm font-medium flex items-center gap-2 border border-orange-500/30 hover:bg-[rgba(245,124,0,.3)] transition disabled:opacity-50">
                         {isExportingExcel ? <Loader2 className="w-4 h-4 animate-spin" /> : <FileSpreadsheet className="w-4 h-4" />}
                         Export Excel
                       </button>
@@ -2296,11 +2256,7 @@ const ContainerTracking = () => {
           </div>
           
           <DialogFooter className="mt-6 border-t border-[rgba(255,255,255,.08)] pt-4">
-            <Button 
-              variant="outline" 
-              onClick={() => setShowAdminModal(false)} 
-              className="border-[rgba(255,255,255,.1)] text-gray-300 hover:bg-[rgba(255,255,255,.05)]"
-            >
+            <Button variant="outline" onClick={() => setShowAdminModal(false)} className="border-[rgba(255,255,255,.1)] text-gray-300 hover:bg-[rgba(255,255,255,.05)]">
               Fechar
             </Button>
           </DialogFooter>
@@ -2331,15 +2287,11 @@ const ContainerTracking = () => {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {getTrackableCarriers().map((carrier) => {
-                  // Get the most common prefix for this carrier
-                  const prefixes = Object.entries(MBL_PREFIX_MAP)
-                    .filter(([_, code]) => code === carrier.code)
-                    .map(([prefix]) => prefix);
-                  const displayPrefix = prefixes[0] || carrier.code;
-                  
-                  return (
-                    <TableRow key={carrier.code} className="border-b border-[rgba(255,255,255,.05)] hover:bg-[rgba(255,255,255,.03)]">
+                {getTrackableCarriers().map(carrier => {
+                // Get the most common prefix for this carrier
+                const prefixes = Object.entries(MBL_PREFIX_MAP).filter(([_, code]) => code === carrier.code).map(([prefix]) => prefix);
+                const displayPrefix = prefixes[0] || carrier.code;
+                return <TableRow key={carrier.code} className="border-b border-[rgba(255,255,255,.05)] hover:bg-[rgba(255,255,255,.03)]">
                       <TableCell className="font-mono text-sm text-gray-300">
                         {displayPrefix}
                       </TableCell>
@@ -2349,9 +2301,8 @@ const ContainerTracking = () => {
                       <TableCell className="text-gray-400 text-sm">
                         {carrier.country}
                       </TableCell>
-                    </TableRow>
-                  );
-                })}
+                    </TableRow>;
+              })}
               </TableBody>
             </Table>
             
@@ -2374,8 +2325,7 @@ const ContainerTracking = () => {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {LCL_PREFIXES.map((item) => (
-                    <TableRow key={item.prefix} className="border-b border-[rgba(255,255,255,.05)] hover:bg-[rgba(255,255,255,.03)]">
+                  {LCL_PREFIXES.map(item => <TableRow key={item.prefix} className="border-b border-[rgba(255,255,255,.05)] hover:bg-[rgba(255,255,255,.03)]">
                       <TableCell>
                         <span className="font-mono text-sm px-2 py-0.5 rounded bg-orange-500/20 text-orange-400 border border-orange-500/30">
                           {item.prefix}
@@ -2384,8 +2334,7 @@ const ContainerTracking = () => {
                       <TableCell className="text-gray-400 text-sm">
                         {item.label}
                       </TableCell>
-                    </TableRow>
-                  ))}
+                    </TableRow>)}
                 </TableBody>
               </Table>
             </div>
@@ -2409,8 +2358,7 @@ const ContainerTracking = () => {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {ROUTE_FORMAT_PREFIXES.map((item) => (
-                    <TableRow key={item.prefix} className="border-b border-[rgba(255,255,255,.05)] hover:bg-[rgba(255,255,255,.03)]">
+                  {ROUTE_FORMAT_PREFIXES.map(item => <TableRow key={item.prefix} className="border-b border-[rgba(255,255,255,.05)] hover:bg-[rgba(255,255,255,.03)]">
                       <TableCell>
                         <span className="font-mono text-sm px-2 py-0.5 rounded bg-blue-500/20 text-blue-400 border border-blue-500/30">
                           {item.prefix}
@@ -2419,8 +2367,7 @@ const ContainerTracking = () => {
                       <TableCell className="text-gray-400 text-sm">
                         {item.label}
                       </TableCell>
-                    </TableRow>
-                  ))}
+                    </TableRow>)}
                 </TableBody>
               </Table>
             </div>
@@ -2439,11 +2386,9 @@ const ContainerTracking = () => {
                   ⚠️ {NUMERIC_MBL_INFO.note}
                 </p>
                 <div className="flex flex-wrap gap-2">
-                  {NUMERIC_MBL_INFO.examples.map((example) => (
-                    <span key={example} className="font-mono text-xs px-2 py-0.5 rounded bg-yellow-500/20 text-yellow-400 border border-yellow-500/30">
+                  {NUMERIC_MBL_INFO.examples.map(example => <span key={example} className="font-mono text-xs px-2 py-0.5 rounded bg-yellow-500/20 text-yellow-400 border border-yellow-500/30">
                       {example}
-                    </span>
-                  ))}
+                    </span>)}
                 </div>
               </div>
             </div>
@@ -2478,153 +2423,139 @@ const ContainerTracking = () => {
           <div className="space-y-4 mt-4">
             <div className="space-y-2">
               <Label className="text-white">MBL *</Label>
-              <Input
-                placeholder="Ex: HLCUSHA241234567"
-                value={lclFormData.mbl}
-                onChange={(e) => setLclFormData(prev => ({ ...prev, mbl: e.target.value.toUpperCase() }))}
-                className="bg-[rgba(0,0,0,.3)] border-[rgba(255,255,255,.14)] text-white placeholder:text-gray-500"
-              />
+              <Input placeholder="Ex: HLCUSHA241234567" value={lclFormData.mbl} onChange={e => setLclFormData(prev => ({
+              ...prev,
+              mbl: e.target.value.toUpperCase()
+            }))} className="bg-[rgba(0,0,0,.3)] border-[rgba(255,255,255,.14)] text-white placeholder:text-gray-500" />
             </div>
             
             <div className="space-y-2">
               <Label className="text-white">Container *</Label>
-              <Input
-                placeholder="Ex: HLCU1234567"
-                value={lclFormData.container}
-                onChange={(e) => setLclFormData(prev => ({ ...prev, container: e.target.value.toUpperCase() }))}
-                className="bg-[rgba(0,0,0,.3)] border-[rgba(255,255,255,.14)] text-white placeholder:text-gray-500"
-              />
+              <Input placeholder="Ex: HLCU1234567" value={lclFormData.container} onChange={e => setLclFormData(prev => ({
+              ...prev,
+              container: e.target.value.toUpperCase()
+            }))} className="bg-[rgba(0,0,0,.3)] border-[rgba(255,255,255,.14)] text-white placeholder:text-gray-500" />
             </div>
             
             <div className="space-y-2">
               <Label className="text-white">Armador *</Label>
-              <Input
-                placeholder="Ex: Hapag-Lloyd, MSC, Maersk..."
-                value={lclFormData.armador}
-                onChange={(e) => setLclFormData(prev => ({ ...prev, armador: e.target.value }))}
-                className="bg-[rgba(0,0,0,.3)] border-[rgba(255,255,255,.14)] text-white placeholder:text-gray-500"
-                list="armadores-list"
-              />
+              <Input placeholder="Ex: Hapag-Lloyd, MSC, Maersk..." value={lclFormData.armador} onChange={e => setLclFormData(prev => ({
+              ...prev,
+              armador: e.target.value
+            }))} className="bg-[rgba(0,0,0,.3)] border-[rgba(255,255,255,.14)] text-white placeholder:text-gray-500" list="armadores-list" />
               <datalist id="armadores-list">
-                {getTrackableCarriers().map(carrier => (
-                  <option key={carrier.code} value={normalizeArmadorName(carrier.name)} />
-                ))}
+                {getTrackableCarriers().map(carrier => <option key={carrier.code} value={normalizeArmadorName(carrier.name)} />)}
               </datalist>
             </div>
             
             <div className="space-y-2">
               <Label className="text-white">Consignee</Label>
-              <Input
-                placeholder="Nome do consignatário"
-                value={lclFormData.consignee}
-                onChange={(e) => setLclFormData(prev => ({ ...prev, consignee: e.target.value }))}
-                className="bg-[rgba(0,0,0,.3)] border-[rgba(255,255,255,.14)] text-white placeholder:text-gray-500"
-              />
+              <Input placeholder="Nome do consignatário" value={lclFormData.consignee} onChange={e => setLclFormData(prev => ({
+              ...prev,
+              consignee: e.target.value
+            }))} className="bg-[rgba(0,0,0,.3)] border-[rgba(255,255,255,.14)] text-white placeholder:text-gray-500" />
             </div>
             
             <div className="space-y-2">
               <Label className="text-white">ETA</Label>
-              <Input
-                type="text"
-                placeholder="DD/MM/YYYY"
-                value={lclFormData.eta}
-                onChange={(e) => setLclFormData(prev => ({ ...prev, eta: e.target.value }))}
-                className="bg-[rgba(0,0,0,.3)] border-[rgba(255,255,255,.14)] text-white placeholder:text-gray-500"
-              />
+              <Input type="text" placeholder="DD/MM/YYYY" value={lclFormData.eta} onChange={e => setLclFormData(prev => ({
+              ...prev,
+              eta: e.target.value
+            }))} className="bg-[rgba(0,0,0,.3)] border-[rgba(255,255,255,.14)] text-white placeholder:text-gray-500" />
               <span className="text-xs text-gray-500">Formato: DD/MM/YYYY</span>
             </div>
             
             <div className="space-y-2">
               <Label className="text-white">Transbordo</Label>
-              <Input
-                placeholder="Ex: SGSIN, Rotterdam, Shanghai..."
-                value={lclFormData.transbordo}
-                onChange={(e) => setLclFormData(prev => ({ ...prev, transbordo: e.target.value }))}
-                className="bg-[rgba(0,0,0,.3)] border-[rgba(255,255,255,.14)] text-white placeholder:text-gray-500"
-              />
+              <Input placeholder="Ex: SGSIN, Rotterdam, Shanghai..." value={lclFormData.transbordo} onChange={e => setLclFormData(prev => ({
+              ...prev,
+              transbordo: e.target.value
+            }))} className="bg-[rgba(0,0,0,.3)] border-[rgba(255,255,255,.14)] text-white placeholder:text-gray-500" />
               <span className="text-xs text-gray-500">Porto(s) de transbordo, separados por vírgula</span>
             </div>
           </div>
           
           <DialogFooter className="mt-6 gap-2">
-            <Button 
-              variant="outline" 
-              onClick={() => {
-                setShowLclDialog(false);
-                setLclFormData({ mbl: '', container: '', armador: '', consignee: '', eta: '', transbordo: '' });
-              }}
-              className="border-[rgba(255,255,255,.1)] text-gray-300 hover:bg-[rgba(255,255,255,.05)]"
-            >
+            <Button variant="outline" onClick={() => {
+            setShowLclDialog(false);
+            setLclFormData({
+              mbl: '',
+              container: '',
+              armador: '',
+              consignee: '',
+              eta: '',
+              transbordo: ''
+            });
+          }} className="border-[rgba(255,255,255,.1)] text-gray-300 hover:bg-[rgba(255,255,255,.05)]">
               Cancelar
             </Button>
-            <Button 
-              onClick={async () => {
-                if (!lclFormData.mbl || !lclFormData.container || !lclFormData.armador) {
-                  toast({
-                    title: "Campos obrigatórios",
-                    description: "Preencha MBL, Container e Armador",
-                    variant: "destructive"
-                  });
-                  return;
-                }
-                setIsSubmittingLcl(true);
-                try {
-                  const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/olimpo-proxy?action=add_lcl_container`, {
-                    method: 'POST',
-                    headers: {
-                      'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
-                      'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify({
-                      mbl_id: lclFormData.mbl,
-                      container: lclFormData.container,
-                      shipping_line: lclFormData.armador,
-                      consignee: lclFormData.consignee,
-                      eta: lclFormData.eta || null,
-                      transbordo: lclFormData.transbordo || null
-                    })
-                  });
-                  const result = await res.json();
-                  if (result.success) {
-                    toast({
-                      title: "Container LCL cadastrado",
-                      description: `Container ${lclFormData.container} adicionado ao monitoramento`
-                    });
-                    setShowLclDialog(false);
-                    setLclFormData({ mbl: '', container: '', armador: '', consignee: '', eta: '', transbordo: '' });
-                    await fetchMblData();
-                  } else {
-                    toast({
-                      title: "Erro ao cadastrar",
-                      description: result.error || "Falha ao adicionar container LCL",
-                      variant: "destructive"
-                    });
-                  }
-                } catch (error) {
-                  console.error("Error adding LCL container:", error);
-                  toast({
-                    title: "Erro",
-                    description: "Falha ao cadastrar container LCL",
-                    variant: "destructive"
-                  });
-                } finally {
-                  setIsSubmittingLcl(false);
-                }
-              }}
-              disabled={isSubmittingLcl || !lclFormData.mbl || !lclFormData.container || !lclFormData.armador}
-              className="bg-cyan-600 hover:bg-cyan-700 text-white"
-            >
-              {isSubmittingLcl ? (
-                <>
+            <Button onClick={async () => {
+            if (!lclFormData.mbl || !lclFormData.container || !lclFormData.armador) {
+              toast({
+                title: "Campos obrigatórios",
+                description: "Preencha MBL, Container e Armador",
+                variant: "destructive"
+              });
+              return;
+            }
+            setIsSubmittingLcl(true);
+            try {
+              const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/olimpo-proxy?action=add_lcl_container`, {
+                method: 'POST',
+                headers: {
+                  'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
+                  'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                  mbl_id: lclFormData.mbl,
+                  container: lclFormData.container,
+                  shipping_line: lclFormData.armador,
+                  consignee: lclFormData.consignee,
+                  eta: lclFormData.eta || null,
+                  transbordo: lclFormData.transbordo || null
+                })
+              });
+              const result = await res.json();
+              if (result.success) {
+                toast({
+                  title: "Container LCL cadastrado",
+                  description: `Container ${lclFormData.container} adicionado ao monitoramento`
+                });
+                setShowLclDialog(false);
+                setLclFormData({
+                  mbl: '',
+                  container: '',
+                  armador: '',
+                  consignee: '',
+                  eta: '',
+                  transbordo: ''
+                });
+                await fetchMblData();
+              } else {
+                toast({
+                  title: "Erro ao cadastrar",
+                  description: result.error || "Falha ao adicionar container LCL",
+                  variant: "destructive"
+                });
+              }
+            } catch (error) {
+              console.error("Error adding LCL container:", error);
+              toast({
+                title: "Erro",
+                description: "Falha ao cadastrar container LCL",
+                variant: "destructive"
+              });
+            } finally {
+              setIsSubmittingLcl(false);
+            }
+          }} disabled={isSubmittingLcl || !lclFormData.mbl || !lclFormData.container || !lclFormData.armador} className="bg-cyan-600 hover:bg-cyan-700 text-white">
+              {isSubmittingLcl ? <>
                   <Loader2 className="h-4 w-4 mr-2 animate-spin" />
                   Cadastrando...
-                </>
-              ) : (
-                <>
+                </> : <>
                   <BoxIcon className="h-4 w-4 mr-2" />
                   Cadastrar LCL
-                </>
-              )}
+                </>}
             </Button>
           </DialogFooter>
         </DialogContent>
