@@ -1,30 +1,37 @@
-# ✅ Plano Concluído: Migrar Fonte de Dados para `t_sea_master`
 
-## Status: IMPLEMENTADO
 
-As alterações foram aplicadas com sucesso no arquivo `supabase/functions/olimpo-proxy/index.ts`:
+# Plano: Corrigir Erro na CTE `master_data`
 
-### Alterações Realizadas
+## Problema Detectado
+A query `get_sea_tracking` falha com erro:
+```
+Unknown column 'active' in 'where clause'
+```
 
-1. **CTE `master_data` em `get_sea_tracking`** (linhas ~1667-1679)
-   - `t_master_dados.mawb` → `t_sea_master.master`
-   - `eta` → `eta_ata`
+A tabela `t_sea_master` não possui coluna `active`, mas a CTE `master_data` (linha 1674) ainda faz referência a ela.
 
-2. **Query de candidatos em `sync_sea_tracking`** (linhas ~2004-2031)
-   - Tabela fonte: `t_master_dados` → `t_sea_master`
-   - Campo MBL: `md.mawb` → `sm.master`
-   - Removido filtro `tipo_processo LIKE '%SEA%'` (implícito na tabela)
+## Alteração Necessária
 
-### Mapeamento de Campos Aplicado
+### Arquivo: `supabase/functions/olimpo-proxy/index.ts`
 
-| t_master_dados | t_sea_master |
-|----------------|--------------|
-| `mawb` | `master` |
-| `eta` | `eta_ata` |
-| `etd` | `etd` |
-| `nome_analista` | `nome_analista` |
-| `cliente` | `customer_no` |
+**Linha 1674** - Remover condição `active = 1`:
 
-### Visual da Tela
-- ✅ Nenhuma alteração em `ContainerTracking.tsx`
-- ✅ Interface permanece idêntica
+```sql
+-- ANTES (linha 1674)
+WHERE active = 1 
+  AND master IS NOT NULL 
+  AND TRIM(master) != ''
+  AND etd >= '2025-11-01'
+
+-- DEPOIS
+WHERE master IS NOT NULL 
+  AND TRIM(master) != ''
+  AND etd >= '2025-11-01'
+```
+
+## Resultado Esperado
+Após a correção:
+1. `get_sea_tracking` executará sem erro
+2. A tela de monitoramento carregará os dados da nova fonte `t_sea_master`
+3. A tabela `t_tracking_sea` será populada via `sync_sea_tracking`
+
