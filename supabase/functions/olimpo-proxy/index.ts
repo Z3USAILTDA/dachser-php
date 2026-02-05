@@ -1770,7 +1770,6 @@ serve(async (req) => {
             LEFT JOIN has_freetime hf_proc ON hf_proc.mbl_id COLLATE utf8mb4_unicode_ci = ts.mbl_id COLLATE utf8mb4_unicode_ci AND hf_proc.tipo_ft = 'PROCESSO'
             LEFT JOIN has_freetime hf_cont ON hf_cont.cliente_nome COLLATE utf8mb4_unicode_ci = ts.consignee COLLATE utf8mb4_unicode_ci AND hf_cont.tipo_ft = 'CONTRATO'
             WHERE ts.active = 1
-              AND md.mbl_id IS NOT NULL  -- Garante que MBL existe em master_data (ETD >= 2025-11-01)
             GROUP BY ts.mbl_id
             HAVING 
               (
@@ -1780,6 +1779,7 @@ serve(async (req) => {
                   THEN ts.container 
                 END) > 0
                 OR (COUNT(*) = 1 AND MAX(ts.container) = 'PENDENTE')
+                OR (COUNT(*) >= 1 AND MAX(ts.container) = 'NAO_ENCONTRADO')
               )
               AND NOT (
                 COUNT(DISTINCT ts.container) = COUNT(DISTINCT CASE 
