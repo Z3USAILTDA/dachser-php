@@ -1671,8 +1671,7 @@ serve(async (req) => {
                   MAX(etd) as etd,
                   MAX(nome_analista) as nome_analista
                 FROM dados_dachser.t_sea_master
-                WHERE active = 1 
-                  AND master IS NOT NULL 
+                WHERE master IS NOT NULL
                   AND TRIM(master) != ''
                   AND etd >= '2025-11-01'
                 GROUP BY TRIM(master)
