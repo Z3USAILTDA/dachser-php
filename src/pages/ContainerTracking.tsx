@@ -326,6 +326,7 @@ const ContainerTracking = () => {
   const [filterCoordenador, setFilterCoordenador] = useState("all");
   const [filterTipoProcesso, setFilterTipoProcesso] = useState<"all" | "SEA IMPORT" | "SEA EXPORT">("all");
   const [activeCardFilter, setActiveCardFilter] = useState<"all" | "transito" | "alerta" | "critico" | "entregues">("all");
+  const [filterSyncHoje, setFilterSyncHoje] = useState(true); // Novo filtro: apenas sincronizados hoje
   const [mblList, setMblList] = useState<MblTrackingData[]>([]);
   const [currentPage, setCurrentPage] = useState(1);
   const [isLoadingData, setIsLoadingData] = useState(false);
@@ -1333,6 +1334,14 @@ const ContainerTracking = () => {
     return name;
   };
 
+  // Helper: verificar se last_check é de hoje
+  const isSyncedToday = (lastCheck: string | null): boolean => {
+    if (!lastCheck) return false;
+    const checkDate = new Date(lastCheck);
+    const today = new Date();
+    return checkDate.toDateString() === today.toDateString();
+  };
+
   // Filter MBL list
   const filteredMbls = useMemo(() => {
     let mbls = mblList.filter(m => {
@@ -1352,7 +1361,11 @@ const ContainerTracking = () => {
         matchesCardFilter = isEntregue(m.last_event);
       }
       const matchesTipoProcesso = filterTipoProcesso === "all" || m.tipo_processo === filterTipoProcesso;
-      return matchesSearch && matchesLine && matchesCardFilter && matchesTipoProcesso && matchesCoordenador;
+      
+      // Filtro: apenas sincronizados hoje
+      const matchesSyncHoje = !filterSyncHoje || isSyncedToday(m.last_check);
+      
+      return matchesSearch && matchesLine && matchesCardFilter && matchesTipoProcesso && matchesCoordenador && matchesSyncHoje;
     });
     
     // Ordenar: MBLs com status "Aguardando" (AGD) por último
@@ -1365,7 +1378,7 @@ const ContainerTracking = () => {
     });
     
     return mbls;
-  }, [mblList, searchTerm, filterLine, filterCoordenador, activeCardFilter, filterTipoProcesso]);
+  }, [mblList, searchTerm, filterLine, filterCoordenador, activeCardFilter, filterTipoProcesso, filterSyncHoje]);
   const totalPages = Math.ceil(filteredMbls.length / itemsPerPage);
   const startIndex = (currentPage - 1) * itemsPerPage;
   const endIndex = startIndex + itemsPerPage;
@@ -1688,6 +1701,22 @@ const ContainerTracking = () => {
                         </SelectItem>)}
                     </SelectContent>
                   </Select>
+                </div>
+                
+                {/* Filtro: Sincronizado Hoje */}
+                <div className="flex items-center gap-1.5">
+                  <button
+                    onClick={() => setFilterSyncHoje(!filterSyncHoje)}
+                    className={cn(
+                      "h-8 px-3 rounded-full text-[0.7rem] font-medium flex items-center gap-1.5 border transition",
+                      filterSyncHoje 
+                        ? "bg-[rgba(34,197,94,.2)] text-green-400 border-green-500/30" 
+                        : "bg-[rgba(0,0,0,.5)] text-[#aaaaaa] border-[rgba(255,255,255,.14)]"
+                    )}
+                  >
+                    <Clock className="w-3.5 h-3.5" />
+                    Sync Hoje
+                  </button>
                 </div>
                 
                 {/* Auto Sync Status Indicator */}
