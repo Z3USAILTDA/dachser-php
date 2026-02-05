@@ -2011,8 +2011,7 @@ serve(async (req) => {
             sm.nome_analista AS email_analista,
             NULL AS email_cliente
           FROM dados_dachser.t_sea_master sm
-          WHERE sm.active = 1
-            AND sm.master IS NOT NULL 
+          WHERE sm.master IS NOT NULL
             AND TRIM(sm.master) != ''
             AND sm.etd >= '2025-11-01'
             AND (
