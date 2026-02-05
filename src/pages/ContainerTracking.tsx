@@ -284,6 +284,7 @@ interface MblTrackingData {
   transshipment_port: string | null; // Porto(s) de escala/transbordo
   has_free_time: number; // 1 se possui Free Time cadastrado
   nome_analista: string | null; // Coordenador do processo
+  updated_at: string | null; // Data de sincronização do banco
 }
 
 // Container detail interface (expanded view)
@@ -1334,12 +1335,12 @@ const ContainerTracking = () => {
     return name;
   };
 
-  // Helper: verificar se last_check é de hoje
-  const isSyncedToday = (lastCheck: string | null): boolean => {
-    if (!lastCheck) return false;
-    const checkDate = new Date(lastCheck);
+  // Helper: verificar se updated_at (sync do banco) é de hoje
+  const isSyncedToday = (updatedAt: string | null): boolean => {
+    if (!updatedAt) return false;
+    const syncDate = new Date(updatedAt);
     const today = new Date();
-    return checkDate.toDateString() === today.toDateString();
+    return syncDate.toDateString() === today.toDateString();
   };
 
   // Filter MBL list
@@ -1362,8 +1363,8 @@ const ContainerTracking = () => {
       }
       const matchesTipoProcesso = filterTipoProcesso === "all" || m.tipo_processo === filterTipoProcesso;
       
-      // Filtro: apenas sincronizados hoje
-      const matchesSyncHoje = !filterSyncHoje || isSyncedToday(m.last_check);
+      // Filtro: apenas sincronizados do banco hoje (usa updated_at do t_olimpo_tracking)
+      const matchesSyncHoje = !filterSyncHoje || isSyncedToday(m.updated_at);
       
       return matchesSearch && matchesLine && matchesCardFilter && matchesTipoProcesso && matchesCoordenador && matchesSyncHoje;
     });
