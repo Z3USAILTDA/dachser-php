@@ -1993,13 +1993,16 @@ serve(async (req) => {
         // - Apenas processos SEA
         // INSERT IGNORE: Only insert NEW MBLs, never update existing records
         // This preserves: active status, last_error, tracking data for existing MBLs
-        const result = await client.execute(`
-          INSERT IGNORE INTO dados_dachser.t_tracking_sea (
-            mbl_id, tipo_processo, container,
-            shipping_line, consignee, origem, destino,
-            navio, eta, last_event, container_status,
-            last_check, email_analista, email_cliente, active
-          )
+        // OPTIMIZATION: Use a two-step approach to avoid timeout
+        // Step 1: Get list of existing MBLs in tracking table (fast indexed lookup)
+        const existingMbls = await client.query(`
+          SELECT DISTINCT mbl_id FROM dados_dachser.t_tracking_sea WHERE active = 1
+        `);
+        const existingSet = new Set((existingMbls as any[]).map(r => r.mbl_id?.trim()));
+        console.log(`[sync_sea_tracking] Found ${existingSet.size} existing MBLs in tracking table`);
+
+        // Step 2: Get candidates from t_master_dados with ETD filter
+        const candidates = await client.query(`
           SELECT
             TRIM(md.mawb) AS mbl_id,
             md.tipo_processo,
@@ -2007,48 +2010,47 @@ serve(async (req) => {
               WHEN md.container IS NULL OR TRIM(md.container) = '' THEN 'PENDENTE'
               ELSE TRIM(md.container)
             END AS container,
-            NULL AS shipping_line,
             md.cliente AS consignee,
-            NULL AS origem,
-            NULL AS destino,
-            NULL AS navio,
-            NULL AS eta,
-            NULL AS last_event,
-            NULL AS container_status,
-            NULL AS last_check,
             md.email_analista,
-            md.emails_cliente AS email_cliente,
-            1 AS active
+            md.emails_cliente AS email_cliente
           FROM dados_dachser.t_master_dados md
-          WHERE md.mawb IS NOT NULL 
+          WHERE md.active = 1
+            AND md.mawb IS NOT NULL 
             AND TRIM(md.mawb) != ''
-            -- VALIDAÇÃO MBL: formato SCAC padrão OU estendido (armadores conhecidos)
+            AND md.etd >= '2025-11-01'
+            AND md.tipo_processo LIKE '%SEA%'
             AND (
               TRIM(md.mawb) REGEXP '^[A-Za-z]{4}[0-9]+$'
               OR TRIM(md.mawb) REGEXP '^(${VALID_MBL_PREFIXES})[A-Za-z]{0,6}[0-9]{2,}[A-Za-z0-9]*$'
             )
-            -- REJEITAR booking references
-            AND LEFT(TRIM(md.mawb), 4) NOT IN ('EBKG', 'BKNG')
-            -- REJEITAR referências internas
-            AND LEFT(TRIM(md.mawb), 4) NOT IN ('GLNL', 'GLSL', 'GLDL', 'BRSA')
-            -- REJEITAR HAWBs brasileiros (começam com BR + 3 letras)
+            AND LEFT(TRIM(md.mawb), 4) NOT IN ('EBKG', 'BKNG', 'GLNL', 'GLSL', 'GLDL', 'BRSA')
             AND TRIM(md.mawb) NOT REGEXP '^BR[A-Za-z]{3}'
-            -- Filtro de antiguidade: ETD >= 01/12/2025
-            AND md.etd >= '2025-12-01'
-            -- Apenas processos marítimos
-            AND md.tipo_processo LIKE '%SEA%'
-            -- Only insert if this MBL doesn't already exist in tracking table
-            -- Check MBL existence ONLY (not the specific container combination)
-            -- This prevents adding new "PENDENTE" records to MBLs that already have enriched containers
-            AND NOT EXISTS (
-              SELECT 1 FROM dados_dachser.t_tracking_sea t 
-              WHERE BINARY t.mbl_id = BINARY TRIM(md.mawb)
-            )
+          GROUP BY TRIM(md.mawb)
+          LIMIT 500
         `);
+        console.log(`[sync_sea_tracking] Found ${(candidates as any[]).length} candidates from t_master_dados`);
+
+        // Step 3: Filter out existing MBLs in JavaScript (much faster than SQL NOT EXISTS)
+        const toInsert = (candidates as any[]).filter(c => !existingSet.has(c.mbl_id?.trim()));
+        console.log(`[sync_sea_tracking] ${toInsert.length} new MBLs to insert`);
+
+        // Step 4: Batch insert new records
+        let synced = 0;
+        for (const row of toInsert) {
+          try {
+            await client.execute(`
+              INSERT IGNORE INTO dados_dachser.t_tracking_sea (
+                mbl_id, tipo_processo, container, consignee, email_analista, email_cliente, active
+              ) VALUES (?, ?, ?, ?, ?, ?, 1)
+            `, [row.mbl_id, row.tipo_processo, row.container, row.consignee, row.email_analista, row.email_cliente]);
+            synced++;
+          } catch (insertErr) {
+            console.warn(`[sync_sea_tracking] Failed to insert ${row.mbl_id}:`, insertErr);
+          }
+        }
 
         await client.close();
         
-        const synced = result.affectedRows || 0;
         console.log(`[sync_sea_tracking] Synced ${synced} rows (MBL SCAC padrão + estendido, container opcional)`);
         
         return new Response(JSON.stringify({ 
@@ -2062,7 +2064,7 @@ serve(async (req) => {
             mbl_reject_internal: 'GLNL*, GLSL*, GLDL*, BRSA* (referências internas)',
             mbl_reject_hawb: '^BR[A-Za-z]{3} (HAWBs brasileiros)',
             container: 'Opcional (usa PENDENTE se vazio)',
-            etd_min: '2025-12-01'
+            etd_min: '2025-11-01'
           }
         }), {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' }
