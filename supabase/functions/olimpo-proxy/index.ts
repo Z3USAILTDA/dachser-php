@@ -2015,8 +2015,8 @@ serve(async (req) => {
         const existingSet = new Set((existingMbls as any[]).map(r => r.mbl_id?.trim()));
         console.log(`[sync_sea_tracking] Found ${existingSet.size} existing MBLs in tracking table`);
 
-        // Step 2: Get candidates from t_sea_master with ETD filter
-        const candidates = await client.query(`
+        // Step 2A: Get candidates from t_sea_master (FONTE PRINCIPAL)
+        const candidatesSeaMaster = await client.query(`
           SELECT
             TRIM(sm.master) AS mbl_id,
             'SEA IMPORT' AS tipo_processo,
@@ -2036,14 +2036,47 @@ serve(async (req) => {
           GROUP BY TRIM(sm.master)
           LIMIT 500
         `);
-        console.log(`[sync_sea_tracking] Found ${(candidates as any[]).length} candidates from t_sea_master`);
+        console.log(`[sync_sea_tracking] Found ${(candidatesSeaMaster as any[]).length} candidates from t_sea_master`);
 
-        // Step 3: Filter out existing MBLs in JavaScript (much faster than SQL NOT EXISTS)
-        const toInsert = (candidates as any[]).filter(c => !existingSet.has(c.mbl_id?.trim()));
+        // Step 2B: Get candidates from t_master_dados (FONTE SECUNDÁRIA - SEA IMPORT/EXPORT recentes)
+        const candidatesMasterDados = await client.query(`
+          SELECT
+            TRIM(md.mawb) AS mbl_id,
+            md.tipo_processo AS tipo_processo,
+            'PENDENTE' AS container,
+            md.customer_name AS consignee,
+            md.nome_analista AS email_analista,
+            NULL AS email_cliente
+          FROM dados_dachser.t_master_dados md
+          WHERE md.mawb IS NOT NULL
+            AND TRIM(md.mawb) != ''
+            AND md.tipo_processo IN ('SEA IMPORT', 'SEA EXPORT')
+            AND md.data_insert >= '2026-02-04 09:55:11'
+            AND (
+              TRIM(md.mawb) REGEXP '^[A-Za-z]{4}[0-9]+$'
+              OR TRIM(md.mawb) REGEXP '^(${VALID_MBL_PREFIXES})[A-Za-z]{0,6}[0-9]{2,}[A-Za-z0-9]*$'
+            )
+            AND LEFT(TRIM(md.mawb), 4) NOT IN ('EBKG', 'BKNG', 'GLNL', 'GLSL', 'GLDL', 'BRSA')
+            AND TRIM(md.mawb) NOT REGEXP '^BR[A-Za-z]{3}'
+          GROUP BY TRIM(md.mawb)
+          LIMIT 300
+        `);
+        console.log(`[sync_sea_tracking] Found ${(candidatesMasterDados as any[]).length} candidates from t_master_dados`);
+
+        // Step 3: Merge candidates (t_sea_master has priority for duplicates)
+        const seaMasterSet = new Set((candidatesSeaMaster as any[]).map(c => c.mbl_id?.trim()));
+        const uniqueMasterDados = (candidatesMasterDados as any[]).filter(c => !seaMasterSet.has(c.mbl_id?.trim()));
+        const allCandidates = [...(candidatesSeaMaster as any[]), ...uniqueMasterDados];
+        console.log(`[sync_sea_tracking] Total unique candidates: ${allCandidates.length} (${(candidatesSeaMaster as any[]).length} from t_sea_master + ${uniqueMasterDados.length} unique from t_master_dados)`);
+
+        // Step 4: Filter out existing MBLs in JavaScript (much faster than SQL NOT EXISTS)
+        const toInsert = allCandidates.filter(c => !existingSet.has(c.mbl_id?.trim()));
         console.log(`[sync_sea_tracking] ${toInsert.length} new MBLs to insert`);
 
-        // Step 4: Batch insert new records
+        // Step 5: Batch insert new records
         let synced = 0;
+        let syncedFromSeaMaster = 0;
+        let syncedFromMasterDados = 0;
         for (const row of toInsert) {
           try {
             await client.execute(`
@@ -2052,6 +2085,12 @@ serve(async (req) => {
               ) VALUES (?, ?, ?, ?, ?, ?, 1)
             `, [row.mbl_id, row.tipo_processo, row.container, row.consignee, row.email_analista, row.email_cliente]);
             synced++;
+            // Track source
+            if (seaMasterSet.has(row.mbl_id?.trim())) {
+              syncedFromSeaMaster++;
+            } else {
+              syncedFromMasterDados++;
+            }
           } catch (insertErr) {
             console.warn(`[sync_sea_tracking] Failed to insert ${row.mbl_id}:`, insertErr);
           }
@@ -2059,12 +2098,16 @@ serve(async (req) => {
 
         await client.close();
         
-        console.log(`[sync_sea_tracking] Synced ${synced} rows (MBL SCAC padrão + estendido, container opcional)`);
+        console.log(`[sync_sea_tracking] Synced ${synced} rows (${syncedFromSeaMaster} from t_sea_master, ${syncedFromMasterDados} from t_master_dados)`);
         
         return new Response(JSON.stringify({ 
           success: true, 
           synced,
-          message: `${synced} registros sincronizados`,
+          sources: {
+            t_sea_master: syncedFromSeaMaster,
+            t_master_dados: syncedFromMasterDados
+          },
+          message: `${synced} registros sincronizados (${syncedFromSeaMaster} t_sea_master + ${syncedFromMasterDados} t_master_dados)`,
           validation_rules: {
             mbl_scac_padrao: '^[A-Za-z]{4}[0-9]+$ (ex: COSU6437929310)',
             mbl_scac_estendido: `^(${VALID_MBL_PREFIXES.substring(0, 30)}...)[A-Za-z]{0,6}[0-9]{2,}[A-Za-z0-9]*$ (ex: HLCUHAM251021534)`,
@@ -2072,7 +2115,8 @@ serve(async (req) => {
             mbl_reject_internal: 'GLNL*, GLSL*, GLDL*, BRSA* (referências internas)',
             mbl_reject_hawb: '^BR[A-Za-z]{3} (HAWBs brasileiros)',
             container: 'Opcional (usa PENDENTE se vazio)',
-            etd_min: '2025-11-01'
+            etd_min: '2025-11-01',
+            t_master_dados_filter: 'tipo_processo IN (SEA IMPORT, SEA EXPORT), data_insert >= 2026-02-04 09:55:11'
           }
         }), {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' }
