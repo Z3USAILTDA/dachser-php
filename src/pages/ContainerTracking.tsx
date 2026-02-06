@@ -2745,8 +2745,8 @@ const ContainerTracking = () => {
               <span className="text-xs text-gray-500">Porto(s) de transbordo, separados por vírgula</span>
             </div>
             
-            {/* Campo Novo Container - aparece quando há transbordo */}
-            {lclFormData.transbordo && (
+            {/* Campo Novo Container - aparece quando há transbordo E não é auto-fill */}
+            {lclFormData.transbordo && !lclAutoFilled && (
               <div className="space-y-2 p-3 rounded-lg border border-orange-500/30 bg-orange-900/10">
                 <Label className="text-white flex items-center gap-2">
                   <ArrowLeftRight className="w-4 h-4 text-orange-400" />
