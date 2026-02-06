@@ -1738,6 +1738,8 @@ serve(async (req) => {
               MAX(ts.active) as active,
               MAX(ts.created_at) as created_at,
               MAX(ts.updated_at) as updated_at,
+              COALESCE(MAX(ts.tipo_carga), 'FCL') as tipo_carga,
+              MAX(ts.coloader) as coloader,
               CASE 
                 WHEN COALESCE(MAX(md.eta), MAX(ts.eta)) IS NOT NULL 
                   AND COALESCE(MAX(md.eta), MAX(ts.eta)) < DATE_SUB(NOW(), INTERVAL 3 DAY)
@@ -6684,6 +6686,199 @@ serve(async (req) => {
       } catch (e: any) {
         await client.close();
         console.error('[add_transshipment_port_column] Error:', e);
+        return new Response(JSON.stringify({ error: e.message }), {
+          status: 500,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      }
+    }
+
+    // ===== SEA TRACKING: Setup LCL columns (tipo_carga, coloader) =====
+    if (action === 'setup_lcl_columns') {
+      const mariadbHost = Deno.env.get('MARIADB_HOST');
+      const mariadbPort = Deno.env.get('MARIADB_PORT') || '3306';
+      const mariadbUser = Deno.env.get('MARIADB_USER');
+      const mariadbPass = Deno.env.get('MARIADB_PASSWORD');
+      const database = Deno.env.get('MARIADB_DATABASE') || 'dados_dachser';
+
+      if (!mariadbHost || !mariadbUser || !mariadbPass) {
+        return new Response(JSON.stringify({ error: 'MariaDB não configurado' }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      }
+
+      const { Client } = await import("https://deno.land/x/mysql@v2.12.1/mod.ts");
+      const client = await new Client().connect({
+        hostname: mariadbHost,
+        port: parseInt(mariadbPort, 10),
+        username: mariadbUser,
+        password: mariadbPass,
+        db: database,
+      });
+
+      try {
+        const results: string[] = [];
+        
+        // Check and add tipo_carga column
+        const tipoCargaExists = await client.query(`
+          SELECT COLUMN_NAME 
+          FROM INFORMATION_SCHEMA.COLUMNS 
+          WHERE TABLE_SCHEMA = '${database}' 
+            AND TABLE_NAME = 't_tracking_sea' 
+            AND COLUMN_NAME = 'tipo_carga'
+        `);
+        
+        if (tipoCargaExists.length === 0) {
+          await client.execute(`
+            ALTER TABLE ${database}.t_tracking_sea 
+            ADD COLUMN tipo_carga ENUM('FCL', 'LCL') DEFAULT 'FCL' 
+            COMMENT 'Tipo de carga: FCL ou LCL (manual)'
+          `);
+          results.push('tipo_carga column added');
+        } else {
+          results.push('tipo_carga column already exists');
+        }
+        
+        // Check and add coloader column
+        const coloaderExists = await client.query(`
+          SELECT COLUMN_NAME 
+          FROM INFORMATION_SCHEMA.COLUMNS 
+          WHERE TABLE_SCHEMA = '${database}' 
+            AND TABLE_NAME = 't_tracking_sea' 
+            AND COLUMN_NAME = 'coloader'
+        `);
+        
+        if (coloaderExists.length === 0) {
+          await client.execute(`
+            ALTER TABLE ${database}.t_tracking_sea 
+            ADD COLUMN coloader VARCHAR(255) NULL 
+            COMMENT 'Nome do coloader/consolidador (apenas para LCL)'
+          `);
+          results.push('coloader column added');
+        } else {
+          results.push('coloader column already exists');
+        }
+
+        await client.close();
+        console.log('[setup_lcl_columns] Results:', results);
+        return new Response(JSON.stringify({ success: true, results }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      } catch (e: any) {
+        await client.close();
+        console.error('[setup_lcl_columns] Error:', e);
+        return new Response(JSON.stringify({ error: e.message }), {
+          status: 500,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      }
+    }
+
+    // ===== SEA TRACKING: Add LCL container manually =====
+    if (action === 'add_lcl_container') {
+      const mariadbHost = Deno.env.get('MARIADB_HOST');
+      const mariadbPort = Deno.env.get('MARIADB_PORT') || '3306';
+      const mariadbUser = Deno.env.get('MARIADB_USER');
+      const mariadbPass = Deno.env.get('MARIADB_PASSWORD');
+      const database = Deno.env.get('MARIADB_DATABASE') || 'dados_dachser';
+
+      if (!mariadbHost || !mariadbUser || !mariadbPass) {
+        return new Response(JSON.stringify({ error: 'MariaDB não configurado' }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      }
+
+      // Parse request body
+      let body: any = bodyData;
+      if (!body) {
+        try {
+          body = await req.json();
+        } catch {
+          return new Response(JSON.stringify({ error: 'Body inválido' }), {
+            status: 400,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+          });
+        }
+      }
+
+      const { mbl_id, container, shipping_line, consignee, eta, transbordo } = body;
+      
+      // Validate required fields
+      if (!mbl_id || !container || !shipping_line) {
+        return new Response(JSON.stringify({ error: 'mbl_id, container e coloader são obrigatórios' }), {
+          status: 400,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      }
+
+      // Validate container format (basic ISO format: 4 letters + 7 digits)
+      const containerClean = container.trim().toUpperCase();
+      if (!/^[A-Z]{4}[0-9]{6,7}$/.test(containerClean)) {
+        return new Response(JSON.stringify({ error: 'Formato de container inválido. Use: ABCD1234567' }), {
+          status: 400,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      }
+
+      const { Client } = await import("https://deno.land/x/mysql@v2.12.1/mod.ts");
+      const client = await new Client().connect({
+        hostname: mariadbHost,
+        port: parseInt(mariadbPort, 10),
+        username: mariadbUser,
+        password: mariadbPass,
+        db: database,
+      });
+
+      try {
+        // Parse ETA if provided (format: DD/MM/YYYY)
+        let etaParsed: Date | null = null;
+        if (eta) {
+          const parts = eta.split('/');
+          if (parts.length === 3) {
+            const day = parseInt(parts[0], 10);
+            const month = parseInt(parts[1], 10) - 1;
+            const year = parseInt(parts[2], 10);
+            etaParsed = new Date(year, month, day);
+            if (isNaN(etaParsed.getTime())) {
+              etaParsed = null;
+            }
+          }
+        }
+
+        const mblClean = mbl_id.trim().toUpperCase();
+        const coloaderName = shipping_line.trim();
+        const consigneeClean = consignee ? consignee.trim() : null;
+        const transshipmentPort = transbordo ? transbordo.trim() : null;
+
+        // Insert the LCL container with tipo_carga = 'LCL' and coloader set
+        await client.execute(`
+          INSERT INTO ${database}.t_tracking_sea (
+            mbl_id, container, coloader, tipo_carga, consignee, eta, transshipment_port, 
+            active, tipo_processo, created_at, last_check
+          ) VALUES (?, ?, ?, 'LCL', ?, ?, ?, 1, 'SEA IMPORT', NOW(), NOW())
+          ON DUPLICATE KEY UPDATE 
+            coloader = VALUES(coloader),
+            tipo_carga = 'LCL',
+            consignee = COALESCE(VALUES(consignee), consignee),
+            eta = COALESCE(VALUES(eta), eta),
+            transshipment_port = COALESCE(VALUES(transshipment_port), transshipment_port),
+            active = 1,
+            last_check = NOW()
+        `, [mblClean, containerClean, coloaderName, consigneeClean, etaParsed, transshipmentPort]);
+
+        await client.close();
+        console.log(`[add_lcl_container] Added LCL container ${containerClean} for MBL ${mblClean} with coloader ${coloaderName}`);
+        
+        return new Response(JSON.stringify({ 
+          success: true, 
+          message: `Container LCL ${containerClean} cadastrado com sucesso`,
+          data: { mbl_id: mblClean, container: containerClean, coloader: coloaderName, tipo_carga: 'LCL' }
+        }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      } catch (e: any) {
+        await client.close();
+        console.error('[add_lcl_container] Error:', e);
         return new Response(JSON.stringify({ error: e.message }), {
           status: 500,
           headers: { ...corsHeaders, 'Content-Type': 'application/json' }
