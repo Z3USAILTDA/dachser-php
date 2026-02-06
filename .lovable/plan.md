@@ -1,272 +1,175 @@
 
-
-# Plano: Modal de Armadores - Manter Existentes + Adicionar Novos Dinamicamente
+# Plano: Adicionar t_master_dados como Fonte Secundária + Filtrar Prefixos Não Mapeados
 
 ## Objetivo
 
-Manter a lista estática de armadores/prefixos já mapeados no código (garantindo que sempre apareçam) e **adicionar dinamicamente apenas os novos** encontrados nos MBLs sincronizados, junto com contagens reais de uso.
+1. **Manter `t_sea_master` como fonte principal** (comportamento atual)
+2. **Adicionar `t_master_dados` como fonte secundária** para processos SEA recentes
+3. **Filtrar no frontend** todos os MBLs com prefixos não mapeados
+4. **Atualizar modal de Armadores** para refletir apenas dados filtrados
 
 ---
 
-## Lógica de Merge (Estático + Dinâmico)
+## Arquitetura de Dados
 
 ```text
-PARA CADA CATEGORIA:
-├── Manter TODOS os itens da lista estática (mesmo com 0 MBLs)
-├── Adicionar contagem de MBLs encontrados para cada item
-├── Adicionar badge "NOVO" para prefixos encontrados que NÃO existem na lista estática
-└── Ordenar: primeiro os com MBLs (por contagem desc), depois os sem MBLs
+┌─────────────────────────────────────────────────────────────────┐
+│                      FONTES DE DADOS                            │
+├─────────────────────────────────────────────────────────────────┤
+│  ┌─────────────────┐     ┌─────────────────────────────────┐   │
+│  │  t_sea_master   │     │       t_master_dados            │   │
+│  │  (principal)    │     │       (secundária)              │   │
+│  │                 │     │                                 │   │
+│  │  master = MBL   │     │  mawb = MBL                     │   │
+│  │  eta_ata = ETA  │     │  eta = ETA                      │   │
+│  │  (sem filtro)   │     │  tipo_processo: SEA IMPORT/EXP  │   │
+│  │                 │     │  data_insert >= 04/02/2026      │   │
+│  └────────┬────────┘     └─────────────┬───────────────────┘   │
+│           │                            │                        │
+│           └──────────┬─────────────────┘                        │
+│                      │                                          │
+│           ┌──────────▼──────────┐                               │
+│           │   t_tracking_sea    │                               │
+│           │  (dados de tracking)│                               │
+│           └──────────┬──────────┘                               │
+│                      │                                          │
+│           ┌──────────▼──────────┐                               │
+│           │ get_sea_tracking    │                               │
+│           │ (query combinada)   │                               │
+│           └──────────┬──────────┘                               │
+└──────────────────────┼──────────────────────────────────────────┘
+                       │
+┌──────────────────────▼──────────────────────────────────────────┐
+│                       FRONTEND                                   │
+├─────────────────────────────────────────────────────────────────┤
+│  ┌─────────────────────────────────────────────────────────┐    │
+│  │              Filtro de Prefixos (useMemo)               │    │
+│  │                                                         │    │
+│  │  MANTER:                      EXCLUIR:                  │    │
+│  │  ✓ Armadores mapeados         ✗ Numéricos puros        │    │
+│  │  ✓ LCLs cadastrados           ✗ Formato rota XXX/YYY   │    │
+│  │    (tipo_carga='LCL')         ✗ Prefixos internos      │    │
+│  │                               ✗ Prefixos LCL estáticos │    │
+│  │                               ✗ Padrão SS*             │    │
+│  │                               ✗ Prefixos desconhecidos │    │
+│  └─────────────────────────────────────────────────────────┘    │
+│                              │                                   │
+│              ┌───────────────┼───────────────┐                  │
+│              ▼               ▼               ▼                  │
+│         Dashboard        Tabela          Modal                  │
+│           Stats          MBLs          Armadores                │
+└─────────────────────────────────────────────────────────────────┘
 ```
 
 ---
 
 ## Alterações Técnicas
 
-### Arquivo: `src/pages/ContainerTracking.tsx`
+### 1. Backend: `olimpo-proxy` - action `get_sea_tracking`
 
-#### 1. Criar `useMemo` para merge de dados estáticos + dinâmicos
+**Arquivo**: `supabase/functions/olimpo-proxy/index.ts`
+
+**Modificação**: Adicionar CTE para `t_master_dados` e combinar com a query existente via LEFT JOIN
+
+```sql
+-- CTE ADICIONAL: Dados de t_master_dados para processos SEA recentes
+master_dados_new AS (
+  SELECT 
+    TRIM(mawb) as mbl_id,
+    MAX(tipo_processo) as tipo_processo,
+    MAX(eta) as eta,
+    MAX(nome_analista) as nome_analista
+  FROM dados_dachser.t_master_dados
+  WHERE mawb IS NOT NULL
+    AND TRIM(mawb) != ''
+    AND tipo_processo IN ('SEA IMPORT', 'SEA EXPORT')
+    AND data_insert >= '2026-02-04 09:55:11'
+  GROUP BY TRIM(mawb)
+)
+```
+
+**Modificação na query principal**: Usar COALESCE para priorizar t_sea_master mas buscar fallback de t_master_dados
+
+```sql
+-- Na CTE master_data existente, adicionar LEFT JOIN com master_dados_new
+-- Prioridade: t_sea_master > t_master_dados
+COALESCE(md.eta, mdn.eta) as eta,
+COALESCE(md.nome_analista, mdn.nome_analista) as nome_analista
+```
+
+---
+
+### 2. Frontend: Filtro de Prefixos Não Mapeados
+
+**Arquivo**: `src/pages/ContainerTracking.tsx`
+
+**Novo useMemo**: Criar `filteredMblListByCarrier` após receber os dados
 
 ```typescript
-// Estatísticas de armadores: merge estático + dinâmico
-const carrierStats = useMemo(() => {
-  // Contagem dinâmica baseada nos MBLs carregados
-  const dynamicCounts: Record<string, { count: number; prefixes: Set<string>; examples: string[] }> = {};
-  const newLclPrefixes: Record<string, { count: number; examples: string[] }> = {};
-  const newRoutePrefixes: Record<string, { count: number; examples: string[] }> = {};
-  const numericMbls: string[] = [];
-  const unknownPrefixes: Record<string, { count: number; examples: string[] }> = {};
-  
-  // Prefixos estáticos conhecidos (para detectar "novos")
-  const staticLclPrefixes = new Set(LCL_PREFIXES.map(p => p.prefix));
-  const staticRoutePrefixes = new Set(ROUTE_FORMAT_PREFIXES.map(p => p.prefix));
-  
-  // Contagem por prefixo LCL existente
-  const lclCounts: Record<string, number> = {};
-  LCL_PREFIXES.forEach(p => lclCounts[p.prefix] = 0);
-  
-  // Contagem por prefixo Rota existente
-  const routeCounts: Record<string, number> = {};
-  ROUTE_FORMAT_PREFIXES.forEach(p => routeCounts[p.prefix] = 0);
-  
-  for (const mbl of mblList) {
-    const mblId = (mbl.mbl_id || '').toUpperCase().trim();
-    if (!mblId) continue;
+// Filtrar MBLs com prefixos não mapeados (LCLs não cadastrados)
+const filteredMblListByCarrier = useMemo(() => {
+  return mblList.filter(m => {
+    const mblId = (m.mbl_id || '').toUpperCase().trim();
+    if (!mblId) return false;
     
+    // 1. LCL cadastrado explicitamente: MANTER
+    if (m.tipo_carga === 'LCL') return true;
+    
+    // 2. Armador mapeado (13 carriers): MANTER
     const carrier = detectCarrierFromMbl(mblId);
+    if (carrier.code !== 'UNKNOWN') return true;
     
-    if (carrier.code !== 'UNKNOWN') {
-      // Armador mapeado - incrementa contagem
-      if (!dynamicCounts[carrier.code]) {
-        dynamicCounts[carrier.code] = { count: 0, prefixes: new Set(), examples: [] };
-      }
-      dynamicCounts[carrier.code].count++;
-      dynamicCounts[carrier.code].prefixes.add(mblId.substring(0, 4));
-      
-    } else if (/^\d+$/.test(mblId)) {
-      // MBL numérico
-      if (numericMbls.length < 5) numericMbls.push(mblId);
-      
-    } else if (/^[A-Z]{2,4}\/[A-Z]{2,4}/.test(mblId)) {
-      // Formato rota
-      const prefix = mblId.split('/').slice(0, 2).join('/');
-      if (staticRoutePrefixes.has(prefix)) {
-        routeCounts[prefix] = (routeCounts[prefix] || 0) + 1;
-      } else {
-        // NOVO prefixo de rota
-        if (!newRoutePrefixes[prefix]) newRoutePrefixes[prefix] = { count: 0, examples: [] };
-        newRoutePrefixes[prefix].count++;
-        if (newRoutePrefixes[prefix].examples.length < 2) {
-          newRoutePrefixes[prefix].examples.push(mblId);
-        }
-      }
-      
-    } else {
-      // Verificar se é LCL conhecido
-      const matchedLcl = LCL_PREFIXES.find(p => mblId.startsWith(p.prefix));
-      if (matchedLcl) {
-        lclCounts[matchedLcl.prefix] = (lclCounts[matchedLcl.prefix] || 0) + 1;
-      } else if (INTERNAL_PREFIXES.some(p => mblId.startsWith(p)) || /^SS[0-9A-Z]/.test(mblId)) {
-        // NOVO prefixo LCL
-        const prefix = mblId.substring(0, 4);
-        if (!newLclPrefixes[prefix]) newLclPrefixes[prefix] = { count: 0, examples: [] };
-        newLclPrefixes[prefix].count++;
-        if (newLclPrefixes[prefix].examples.length < 2) {
-          newLclPrefixes[prefix].examples.push(mblId);
-        }
-      } else {
-        // Desconhecido
-        const prefix = mblId.substring(0, 4);
-        if (!unknownPrefixes[prefix]) unknownPrefixes[prefix] = { count: 0, examples: [] };
-        unknownPrefixes[prefix].count++;
-        if (unknownPrefixes[prefix].examples.length < 2) {
-          unknownPrefixes[prefix].examples.push(mblId);
-        }
-      }
-    }
-  }
-  
-  // MERGE: Armadores estáticos + contagem dinâmica
-  const carriers = getTrackableCarriers().map(carrier => ({
-    ...carrier,
-    count: dynamicCounts[carrier.code]?.count || 0,
-    prefixes: Array.from(dynamicCounts[carrier.code]?.prefixes || [])
-  })).sort((a, b) => b.count - a.count);
-  
-  // MERGE: LCL estáticos + contagem + novos
-  const lcl = [
-    ...LCL_PREFIXES.map(item => ({
-      prefix: item.prefix,
-      label: item.label,
-      count: lclCounts[item.prefix] || 0,
-      isNew: false
-    })),
-    ...Object.entries(newLclPrefixes).map(([prefix, data]) => ({
-      prefix,
-      label: `Novo (${data.examples[0] || prefix})`,
-      count: data.count,
-      isNew: true
-    }))
-  ].sort((a, b) => b.count - a.count);
-  
-  // MERGE: Rotas estáticas + contagem + novos
-  const routes = [
-    ...ROUTE_FORMAT_PREFIXES.map(item => ({
-      prefix: item.prefix,
-      label: item.label,
-      count: routeCounts[item.prefix] || 0,
-      isNew: false
-    })),
-    ...Object.entries(newRoutePrefixes).map(([prefix, data]) => ({
-      prefix,
-      label: `Rota descoberta`,
-      count: data.count,
-      isNew: true
-    }))
-  ].sort((a, b) => b.count - a.count);
-  
-  // Desconhecidos
-  const unknown = Object.entries(unknownPrefixes)
-    .map(([prefix, data]) => ({ prefix, ...data }))
-    .sort((a, b) => b.count - a.count);
-  
-  return {
-    carriers,
-    lcl,
-    routes,
-    numeric: { count: numericMbls.length, examples: numericMbls },
-    unknown,
-    totalMbls: mblList.length
-  };
+    // 3. MBL numérico puro: EXCLUIR
+    if (/^\d+$/.test(mblId)) return false;
+    
+    // 4. Formato rota XXX/YYY: EXCLUIR
+    if (/^[A-Z]{2,4}\/[A-Z]{2,4}/.test(mblId)) return false;
+    
+    // 5. Prefixo interno DACHSER: EXCLUIR
+    if (INTERNAL_PREFIXES.some(p => mblId.startsWith(p))) return false;
+    
+    // 6. Prefixo LCL estático conhecido: EXCLUIR
+    if (LCL_PREFIXES.some(p => mblId.startsWith(p.prefix))) return false;
+    
+    // 7. Padrão SS* (variantes Santos): EXCLUIR
+    if (/^SS[0-9A-Z]/.test(mblId)) return false;
+    
+    // 8. Qualquer outro prefixo desconhecido: EXCLUIR
+    return false;
+  });
 }, [mblList]);
 ```
 
-#### 2. Atualizar Modal para exibir contagens e badges "NOVO"
+**Substituições necessárias**:
 
-**Armadores (com contagem)**:
-```tsx
-<TableRow key={carrier.code}>
-  <TableCell className="font-mono text-sm text-gray-300">
-    {displayPrefix}
-  </TableCell>
-  <TableCell className="text-gray-300">
-    {normalizeArmadorName(carrier.name)}
-  </TableCell>
-  <TableCell className="text-gray-400 text-sm">
-    {carrier.country}
-  </TableCell>
-  <TableCell className="text-right">
-    {carrierStats.carriers.find(c => c.code === carrier.code)?.count > 0 ? (
-      <span className="bg-emerald-500/20 text-emerald-400 px-2 py-0.5 rounded text-xs">
-        {carrierStats.carriers.find(c => c.code === carrier.code)?.count}
-      </span>
-    ) : (
-      <span className="text-gray-600 text-xs">-</span>
-    )}
-  </TableCell>
-</TableRow>
-```
-
-**LCL (com badge NOVO)**:
-```tsx
-{carrierStats.lcl.map(item => (
-  <TableRow key={item.prefix}>
-    <TableCell>
-      <span className="font-mono text-sm px-2 py-0.5 rounded bg-orange-500/20 text-orange-400 border border-orange-500/30">
-        {item.prefix}
-      </span>
-      {item.isNew && (
-        <span className="ml-2 text-[10px] px-1.5 py-0.5 rounded bg-green-500/20 text-green-400 border border-green-500/30">
-          NOVO
-        </span>
-      )}
-    </TableCell>
-    <TableCell className="text-gray-400 text-sm">
-      {item.label}
-    </TableCell>
-    <TableCell className="text-right">
-      {item.count > 0 ? (
-        <span className="bg-orange-500/20 text-orange-400 px-2 py-0.5 rounded text-xs">
-          {item.count}
-        </span>
-      ) : (
-        <span className="text-gray-600 text-xs">-</span>
-      )}
-    </TableCell>
-  </TableRow>
-))}
-```
-
-**Footer atualizado**:
-```tsx
-<span className="text-sm text-gray-400">
-  {carrierStats.carriers.length} armadores | 
-  {carrierStats.lcl.length} LCL ({carrierStats.lcl.filter(l => l.isNew).length} novos) | 
-  {carrierStats.routes.length} rotas | 
-  {carrierStats.numeric.count} numéricos
-</span>
-```
+| Local | De | Para |
+|-------|-----|------|
+| `carrierStats` useMemo (~linha 505) | `mblList` | `filteredMblListByCarrier` |
+| `filteredMbls` useMemo | `mblList` | `filteredMblListByCarrier` |
+| `stats` useMemo | `mblList` | `filteredMblListByCarrier` |
 
 ---
 
-## Comportamento Final
+## Comportamento Esperado
 
-| Categoria | Comportamento |
-|-----------|---------------|
-| **Armadores** | Todos os 13 sempre aparecem, com contagem real de MBLs |
-| **LCL/Consolidadores** | 16 existentes + novos descobertos com badge "NOVO" |
-| **Rotas** | 4 existentes + novos padrões XXX/YYY descobertos |
-| **Numéricos** | Exemplos reais dos MBLs sincronizados |
-| **Desconhecidos** | Nova seção mostrando prefixos não mapeados |
+### Cenários de Teste
 
----
+| MBL | Prefixo | Fonte | tipo_carga | Armador | Exibido? | Razão |
+|-----|---------|-------|------------|---------|----------|-------|
+| HLCU1234567 | HLCU | t_sea_master | FCL | Hapag-Lloyd | ✅ | Armador mapeado |
+| MSCU9876543 | MSCU | t_master_dados | FCL | MSC | ✅ | Armador mapeado |
+| SSZ/HAM/2024 | SSZ | t_tracking_sea | FCL | - | ❌ | Formato rota |
+| GLNL456789 | GLNL | t_tracking_sea | FCL | - | ❌ | Prefixo LCL |
+| 721274713 | - | t_master_dados | FCL | - | ❌ | Numérico |
+| XYZW123456 | XYZW | t_tracking_sea | FCL | - | ❌ | Desconhecido |
+| SSZ123456 | SSZ | t_tracking_sea | LCL | - | ✅ | tipo_carga = LCL |
 
-## Visualização
+### Modal de Armadores
 
-```text
-┌─────────────────────────────────────────────────────────────┐
-│ Armadores Mapeados                    (baseado em 847 MBLs) │
-├─────────────────────────────────────────────────────────────┤
-│ ARMADORES COM API                                           │
-│ ┌────────┬─────────────────────┬──────────┬───────┐        │
-│ │ HLCU   │ Hapag-Lloyd         │ Germany  │  127  │        │
-│ │ MSCU   │ MSC                 │ Switz.   │   89  │        │
-│ │ MAEU   │ Maersk              │ Denmark  │   45  │        │
-│ │ COSU   │ COSCO               │ China    │    -  │ ← sem  │
-│ └────────┴─────────────────────┴──────────┴───────┘        │
-├─────────────────────────────────────────────────────────────┤
-│ LCL / CONSOLIDADORES                                        │
-│ ┌─────────────────────────────────────────────────┐        │
-│ │ SSZ     DACHSER Santos               34        │        │
-│ │ GLNL    DACHSER Netherlands          12        │        │
-│ │ BRAZ    Novo (BRAZ1234567)     NOVO   8        │ ← novo │
-│ │ SS01    DACHSER Santos (SS01)         -        │        │
-│ └─────────────────────────────────────────────────┘        │
-├─────────────────────────────────────────────────────────────┤
-│ ROTAS                                                       │
-│ │ SSZ/HAM    Santos → Hamburgo          23       │        │
-│ │ PNG/ITJ    Paranaguá → Itajaí   NOVO   5       │ ← novo │
-└─────────────────────────────────────────────────────────────┘
-```
+O modal continuará exibindo:
+- **13 armadores mapeados** com suas informações (Hapag-Lloyd, MSC, Maersk, etc.)
+- **Seção LCL/Consolidadores** para referência (prefixos conhecidos)
+- **Estatísticas baseadas apenas nos MBLs filtrados** (FCL com armadores mapeados + LCLs cadastrados)
 
 ---
 
@@ -274,15 +177,19 @@ const carrierStats = useMemo(() => {
 
 | Arquivo | Alteração |
 |---------|-----------|
-| `src/pages/ContainerTracking.tsx` | Adicionar `useMemo` para merge estático+dinâmico e atualizar renderização do modal |
+| `supabase/functions/olimpo-proxy/index.ts` | Adicionar CTE `master_dados_new` e LEFT JOIN na query `get_sea_tracking` |
+| `src/pages/ContainerTracking.tsx` | Adicionar `filteredMblListByCarrier` useMemo e usar em stats/tabela/modal |
 
 ---
 
-## Considerações
+## Considerações Técnicas
 
-1. **Preservação**: Todos os 13 armadores e 16+ prefixos LCL existentes sempre aparecem
-2. **Descoberta**: Novos prefixos são marcados com badge verde "NOVO"
-3. **Contagem**: Mostra quantidade real de MBLs por categoria
-4. **Ordenação**: Itens com mais MBLs aparecem primeiro
-5. **Performance**: `useMemo` garante recálculo apenas quando `mblList` muda
+1. **Prioridade de dados**: t_sea_master > t_master_dados (COALESCE na query SQL)
 
+2. **Filtro de data**: `data_insert >= '2026-02-04 09:55:11'` aplicado apenas em t_master_dados
+
+3. **LCLs cadastrados**: MBLs com `tipo_carga = 'LCL'` sempre aparecem (foram registrados manualmente)
+
+4. **Performance**: Filtro no frontend mantém flexibilidade; pode ser movido para backend se necessário
+
+5. **Deduplicação**: MBLs que existem em ambas as fontes aparecem apenas uma vez (prioridade t_sea_master)
