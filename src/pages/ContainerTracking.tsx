@@ -380,9 +380,44 @@ const ContainerTracking = () => {
     armador: '',
     consignee: '',
     eta: '',
-    transbordo: ''
+    transbordo: '',
+    novoContainer: '' // Container pós-transbordo
   });
   const [isSubmittingLcl, setIsSubmittingLcl] = useState(false);
+  const [lclAutoFilled, setLclAutoFilled] = useState(false); // Indica se houve auto-preenchimento
+
+  // Handler para auto-preenchimento do MBL no diálogo LCL
+  const handleLclMblChange = (value: string) => {
+    const mblUpper = value.toUpperCase();
+    setLclFormData(prev => ({ ...prev, mbl: mblUpper }));
+    
+    // Verifica se o MBL existe na lista de LCLs com transbordo (mínimo 6 caracteres)
+    if (mblUpper.length >= 6) {
+      const existingLcl = mblList.find(m => 
+        m.tipo_carga === 'LCL' && 
+        m.mbl_id.toUpperCase().startsWith(mblUpper) && 
+        m.transshipment_port
+      );
+      
+      if (existingLcl) {
+        // Auto-preenche todos os campos exceto novoContainer
+        setLclFormData({
+          mbl: existingLcl.mbl_id,
+          container: '', // Limpa - usuário vai preencher o novo container
+          armador: existingLcl.coloader || '',
+          consignee: existingLcl.consignee || '',
+          eta: existingLcl.eta || '',
+          transbordo: existingLcl.transshipment_port || '',
+          novoContainer: ''
+        });
+        setLclAutoFilled(true);
+      } else {
+        setLclAutoFilled(false);
+      }
+    } else {
+      setLclAutoFilled(false);
+    }
+  };
   const itemsPerPage = 10;
 
   // Status categorization
@@ -2474,130 +2509,218 @@ const ContainerTracking = () => {
           <div className="space-y-4 mt-4">
             <div className="space-y-2">
               <Label className="text-white">MBL *</Label>
-              <Input placeholder="Ex: HLCUSHA241234567" value={lclFormData.mbl} onChange={e => setLclFormData(prev => ({
-              ...prev,
-              mbl: e.target.value.toUpperCase()
-            }))} className="bg-[rgba(0,0,0,.3)] border-[rgba(255,255,255,.14)] text-white placeholder:text-gray-500" />
+              <Input 
+                placeholder="Ex: HLCUSHA241234567" 
+                value={lclFormData.mbl} 
+                onChange={e => handleLclMblChange(e.target.value)} 
+                className={cn(
+                  "bg-[rgba(0,0,0,.3)] border-[rgba(255,255,255,.14)] text-white placeholder:text-gray-500",
+                  lclAutoFilled && "border-green-500/50 bg-green-900/10"
+                )} 
+              />
+              {lclAutoFilled && (
+                <span className="text-xs text-green-400 flex items-center gap-1">
+                  <Check className="w-3 h-3" />
+                  MBL encontrado - campos preenchidos automaticamente
+                </span>
+              )}
             </div>
             
             <div className="space-y-2">
               <Label className="text-white">Container *</Label>
-              <Input placeholder="Ex: HLCU1234567" value={lclFormData.container} onChange={e => setLclFormData(prev => ({
-              ...prev,
-              container: e.target.value.toUpperCase()
-            }))} className="bg-[rgba(0,0,0,.3)] border-[rgba(255,255,255,.14)] text-white placeholder:text-gray-500" />
+              <Input 
+                placeholder={lclAutoFilled ? "Informe o novo container" : "Ex: HLCU1234567"} 
+                value={lclFormData.container} 
+                onChange={e => setLclFormData(prev => ({
+                  ...prev,
+                  container: e.target.value.toUpperCase()
+                }))} 
+                className={cn(
+                  "bg-[rgba(0,0,0,.3)] border-[rgba(255,255,255,.14)] text-white placeholder:text-gray-500",
+                  lclAutoFilled && "border-cyan-500/50 ring-1 ring-cyan-500/30"
+                )} 
+              />
+              {lclAutoFilled && (
+                <span className="text-xs text-cyan-400">Informe o container pós-transbordo</span>
+              )}
             </div>
             
             <div className="space-y-2">
-              <Label className="text-white">Coloader *</Label>
-              <Input placeholder="Ex: DACHSER Netherlands, DSV, Kuehne+Nagel..." value={lclFormData.armador} onChange={e => setLclFormData(prev => ({
-              ...prev,
-              armador: e.target.value
-            }))} className="bg-[rgba(0,0,0,.3)] border-[rgba(255,255,255,.14)] text-white placeholder:text-gray-500" />
+              <Label className={cn("text-white", lclAutoFilled && "text-green-300")}>Coloader *</Label>
+              <Input 
+                placeholder="Ex: DACHSER Netherlands, DSV, Kuehne+Nagel..." 
+                value={lclFormData.armador} 
+                onChange={e => setLclFormData(prev => ({
+                  ...prev,
+                  armador: e.target.value
+                }))} 
+                className={cn(
+                  "bg-[rgba(0,0,0,.3)] border-[rgba(255,255,255,.14)] text-white placeholder:text-gray-500",
+                  lclAutoFilled && lclFormData.armador && "border-green-500/30 bg-green-900/5"
+                )} 
+                readOnly={lclAutoFilled}
+              />
               <span className="text-xs text-gray-500">Nome do consolidador responsável pelo embarque LCL</span>
             </div>
             
             <div className="space-y-2">
-              <Label className="text-white">Consignee</Label>
-              <Input placeholder="Nome do consignatário" value={lclFormData.consignee} onChange={e => setLclFormData(prev => ({
-              ...prev,
-              consignee: e.target.value
-            }))} className="bg-[rgba(0,0,0,.3)] border-[rgba(255,255,255,.14)] text-white placeholder:text-gray-500" />
+              <Label className={cn("text-white", lclAutoFilled && lclFormData.consignee && "text-green-300")}>Consignee</Label>
+              <Input 
+                placeholder="Nome do consignatário" 
+                value={lclFormData.consignee} 
+                onChange={e => setLclFormData(prev => ({
+                  ...prev,
+                  consignee: e.target.value
+                }))} 
+                className={cn(
+                  "bg-[rgba(0,0,0,.3)] border-[rgba(255,255,255,.14)] text-white placeholder:text-gray-500",
+                  lclAutoFilled && lclFormData.consignee && "border-green-500/30 bg-green-900/5"
+                )} 
+                readOnly={lclAutoFilled}
+              />
             </div>
             
             <div className="space-y-2">
-              <Label className="text-white">ETA</Label>
-              <Input type="text" placeholder="DD/MM/YYYY" value={lclFormData.eta} onChange={e => setLclFormData(prev => ({
-              ...prev,
-              eta: e.target.value
-            }))} className="bg-[rgba(0,0,0,.3)] border-[rgba(255,255,255,.14)] text-white placeholder:text-gray-500" />
+              <Label className={cn("text-white", lclAutoFilled && lclFormData.eta && "text-green-300")}>ETA</Label>
+              <Input 
+                type="text" 
+                placeholder="DD/MM/YYYY" 
+                value={lclFormData.eta} 
+                onChange={e => setLclFormData(prev => ({
+                  ...prev,
+                  eta: e.target.value
+                }))} 
+                className={cn(
+                  "bg-[rgba(0,0,0,.3)] border-[rgba(255,255,255,.14)] text-white placeholder:text-gray-500",
+                  lclAutoFilled && lclFormData.eta && "border-green-500/30 bg-green-900/5"
+                )} 
+                readOnly={lclAutoFilled}
+              />
               <span className="text-xs text-gray-500">Formato: DD/MM/YYYY</span>
             </div>
             
             <div className="space-y-2">
-              <Label className="text-white">Transbordo</Label>
-              <Input placeholder="Ex: SGSIN, Rotterdam, Shanghai..." value={lclFormData.transbordo} onChange={e => setLclFormData(prev => ({
-              ...prev,
-              transbordo: e.target.value
-            }))} className="bg-[rgba(0,0,0,.3)] border-[rgba(255,255,255,.14)] text-white placeholder:text-gray-500" />
+              <Label className={cn("text-white", lclAutoFilled && lclFormData.transbordo && "text-green-300")}>Transbordo</Label>
+              <Input 
+                placeholder="Ex: SGSIN, Rotterdam, Shanghai..." 
+                value={lclFormData.transbordo} 
+                onChange={e => setLclFormData(prev => ({
+                  ...prev,
+                  transbordo: e.target.value
+                }))} 
+                className={cn(
+                  "bg-[rgba(0,0,0,.3)] border-[rgba(255,255,255,.14)] text-white placeholder:text-gray-500",
+                  lclAutoFilled && lclFormData.transbordo && "border-green-500/30 bg-green-900/5"
+                )} 
+                readOnly={lclAutoFilled}
+              />
               <span className="text-xs text-gray-500">Porto(s) de transbordo, separados por vírgula</span>
             </div>
+            
+            {/* Campo Novo Container - aparece quando há transbordo */}
+            {lclFormData.transbordo && (
+              <div className="space-y-2 p-3 rounded-lg border border-orange-500/30 bg-orange-900/10">
+                <Label className="text-white flex items-center gap-2">
+                  <ArrowLeftRight className="w-4 h-4 text-orange-400" />
+                  Novo Container (pós-transbordo)
+                </Label>
+                <Input 
+                  placeholder="Ex: MSCU1234567" 
+                  value={lclFormData.novoContainer} 
+                  onChange={e => setLclFormData(prev => ({
+                    ...prev,
+                    novoContainer: e.target.value.toUpperCase()
+                  }))} 
+                  className="bg-[rgba(0,0,0,.3)] border-[rgba(255,255,255,.14)] text-white placeholder:text-gray-500"
+                />
+                <span className="text-xs text-gray-500">
+                  Container atribuído após o transbordo (opcional)
+                </span>
+              </div>
+            )}
           </div>
           
           <DialogFooter className="mt-6 gap-2">
             <Button variant="outline" onClick={() => {
-            setShowLclDialog(false);
-            setLclFormData({
-              mbl: '',
-              container: '',
-              armador: '',
-              consignee: '',
-              eta: '',
-              transbordo: ''
-            });
-          }} className="border-[rgba(255,255,255,.1)] text-gray-300 hover:bg-[rgba(255,255,255,.05)]">
+              setShowLclDialog(false);
+              setLclFormData({
+                mbl: '',
+                container: '',
+                armador: '',
+                consignee: '',
+                eta: '',
+                transbordo: '',
+                novoContainer: ''
+              });
+              setLclAutoFilled(false);
+            }} className="border-[rgba(255,255,255,.1)] text-gray-300 hover:bg-[rgba(255,255,255,.05)]">
               Cancelar
             </Button>
             <Button onClick={async () => {
-            if (!lclFormData.mbl || !lclFormData.container || !lclFormData.armador) {
-              toast({
-                title: "Campos obrigatórios",
-                description: "Preencha MBL, Container e Coloader",
-                variant: "destructive"
-              });
-              return;
-            }
-            setIsSubmittingLcl(true);
-            try {
-              const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/olimpo-proxy?action=add_lcl_container`, {
-                method: 'POST',
-                headers: {
-                  'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
-                  'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({
-                  mbl_id: lclFormData.mbl,
-                  container: lclFormData.container,
-                  shipping_line: lclFormData.armador,
-                  consignee: lclFormData.consignee,
-                  eta: lclFormData.eta || null,
-                  transbordo: lclFormData.transbordo || null
-                })
-              });
-              const result = await res.json();
-              if (result.success) {
+              // Usa novo container se preenchido, senão usa container original
+              const containerToSubmit = lclFormData.novoContainer || lclFormData.container;
+              
+              if (!lclFormData.mbl || !containerToSubmit || !lclFormData.armador) {
                 toast({
-                  title: "Container LCL cadastrado",
-                  description: `Container ${lclFormData.container} adicionado ao monitoramento`
-                });
-                setShowLclDialog(false);
-                setLclFormData({
-                  mbl: '',
-                  container: '',
-                  armador: '',
-                  consignee: '',
-                  eta: '',
-                  transbordo: ''
-                });
-                await fetchMblData();
-              } else {
-                toast({
-                  title: "Erro ao cadastrar",
-                  description: result.error || "Falha ao adicionar container LCL",
+                  title: "Campos obrigatórios",
+                  description: "Preencha MBL, Container e Coloader",
                   variant: "destructive"
                 });
+                return;
               }
-            } catch (error) {
-              console.error("Error adding LCL container:", error);
-              toast({
-                title: "Erro",
-                description: "Falha ao cadastrar container LCL",
-                variant: "destructive"
-              });
-            } finally {
-              setIsSubmittingLcl(false);
-            }
-          }} disabled={isSubmittingLcl || !lclFormData.mbl || !lclFormData.container || !lclFormData.armador} className="bg-cyan-600 hover:bg-cyan-700 text-white">
+              setIsSubmittingLcl(true);
+              try {
+                const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/olimpo-proxy?action=add_lcl_container`, {
+                  method: 'POST',
+                  headers: {
+                    'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
+                    'Content-Type': 'application/json'
+                  },
+                  body: JSON.stringify({
+                    mbl_id: lclFormData.mbl,
+                    container: containerToSubmit,
+                    shipping_line: lclFormData.armador,
+                    consignee: lclFormData.consignee,
+                    eta: lclFormData.eta || null,
+                    transbordo: lclFormData.transbordo || null
+                  })
+                });
+                const result = await res.json();
+                if (result.success) {
+                  toast({
+                    title: "Container LCL cadastrado",
+                    description: `Container ${containerToSubmit} adicionado ao monitoramento`
+                  });
+                  setShowLclDialog(false);
+                  setLclFormData({
+                    mbl: '',
+                    container: '',
+                    armador: '',
+                    consignee: '',
+                    eta: '',
+                    transbordo: '',
+                    novoContainer: ''
+                  });
+                  setLclAutoFilled(false);
+                  await fetchMblData();
+                } else {
+                  toast({
+                    title: "Erro ao cadastrar",
+                    description: result.error || "Falha ao adicionar container LCL",
+                    variant: "destructive"
+                  });
+                }
+              } catch (error) {
+                console.error("Error adding LCL container:", error);
+                toast({
+                  title: "Erro",
+                  description: "Falha ao cadastrar container LCL",
+                  variant: "destructive"
+                });
+              } finally {
+                setIsSubmittingLcl(false);
+              }
+            }} disabled={isSubmittingLcl || !lclFormData.mbl || !(lclFormData.novoContainer || lclFormData.container) || !lclFormData.armador} className="bg-cyan-600 hover:bg-cyan-700 text-white">
               {isSubmittingLcl ? <>
                   <Loader2 className="h-4 w-4 mr-2 animate-spin" />
                   Cadastrando...
