@@ -2614,8 +2614,6 @@ const ContainerTracking = () => {
                   <TableRow className="border-b border-[rgba(255,255,255,.08)] hover:bg-transparent">
                     <TableHead className="text-[#aaaaaa]">Prefixo</TableHead>
                     <TableHead className="text-[#aaaaaa]">Descrição</TableHead>
-                    <TableHead className="text-[#aaaaaa] text-right">
-                  </TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -2658,7 +2656,6 @@ const ContainerTracking = () => {
                   <TableRow className="border-b border-[rgba(255,255,255,.08)] hover:bg-transparent">
                     <TableHead className="text-[#aaaaaa]">Prefixo</TableHead>
                     <TableHead className="text-[#aaaaaa]">Rota</TableHead>
-                    <TableHead className="text-[#aaaaaa] text-right">MBLs</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -2673,11 +2670,6 @@ const ContainerTracking = () => {
                       </TableCell>
                       <TableCell className="text-gray-400 text-sm">
                         {item.label}
-                      </TableCell>
-                      <TableCell className="text-right">
-                        {item.count > 0 ? <span className="bg-blue-500/20 text-blue-400 px-2 py-0.5 rounded text-xs">
-                            {item.count}
-                          </span> : <span className="text-gray-600 text-xs">-</span>}
                       </TableCell>
                     </TableRow>)}
                 </TableBody>
