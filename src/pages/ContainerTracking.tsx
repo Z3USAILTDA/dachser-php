@@ -328,7 +328,7 @@ const ContainerTracking = () => {
   const [filterTipoProcesso, setFilterTipoProcesso] = useState<"all" | "SEA IMPORT" | "SEA EXPORT">("all");
   const [filterTipoCarga, setFilterTipoCarga] = useState<"all" | "FCL" | "LCL">("all");
   const [activeCardFilter, setActiveCardFilter] = useState<"all" | "transito" | "alerta" | "critico" | "entregues">("all");
-  const [filterSyncHoje, setFilterSyncHoje] = useState(true); // Novo filtro: apenas sincronizados hoje
+  const [filterSyncHoje, setFilterSyncHoje] = useState(false); // Filtro: sincronizados hoje (desativado por padrão)
   const [mblList, setMblList] = useState<MblTrackingData[]>([]);
   const [currentPage, setCurrentPage] = useState(1);
   const [isLoadingData, setIsLoadingData] = useState(false);
