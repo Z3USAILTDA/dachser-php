@@ -1,231 +1,317 @@
 
 
-# Plano: Auto-preenchimento e Campo "Novo Container" no Cadastro LCL
+# Implementação: Autocomplete de Consignee com Busca Dinâmica
 
-## Contexto do Pedido
+## Resumo
 
-O usuário solicitou duas melhorias no diálogo de cadastro de containers LCL:
-
-1. **Campo "Novo Container"**: Quando o campo "Transbordo" for preenchido, deve aparecer um campo adicional para informar o novo container (não obrigatório)
-2. **Auto-preenchimento inteligente**: Ao reabrir o modal e começar a digitar um MBL que já existe como coloader com transbordo, todos os campos devem ser preenchidos automaticamente, deixando apenas o campo "Novo Container" aberto para input
-
----
-
-## Análise Técnica
-
-### Estado Atual do Diálogo LCL
-
-O diálogo atual (`ContainerTracking.tsx`, linhas 2460-2611) contém os campos:
-- MBL* (obrigatório)
-- Container* (obrigatório)  
-- Coloader* (obrigatório)
-- Consignee (opcional)
-- ETA (opcional)
-- Transbordo (opcional)
-
-O estado do formulário é gerenciado por:
-```typescript
-const [lclFormData, setLclFormData] = useState({
-  mbl: '',
-  container: '',
-  armador: '', // coloader
-  consignee: '',
-  eta: '',
-  transbordo: ''
-});
-```
-
-### Dados Disponíveis para Auto-preenchimento
-
-A lista `mblList` contém todos os MBLs carregados com os campos:
-- `mbl_id`: ID do MBL
-- `tipo_carga`: 'FCL' ou 'LCL'
-- `coloader`: Nome do coloader
-- `consignee`: Consignatário
-- `eta`: Data estimada
-- `transshipment_port`: Porto(s) de transbordo
+Implementar um campo de autocomplete para o Consignee no diálogo de cadastro LCL, com busca dinâmica na tabela `t_clientes_base` conforme o usuário digita. O usuário pode selecionar uma sugestão ou usar um valor customizado não cadastrado.
 
 ---
 
 ## Alterações Técnicas
 
-### 1. Frontend: `src/pages/ContainerTracking.tsx`
+### 1. Backend: `supabase/functions/olimpo-proxy/index.ts`
 
-**1.1 Adicionar novo campo ao estado do formulário:**
+**Nova action `search_clientes_base`** (inserir após linha 6775, antes de `add_lcl_container`):
 
 ```typescript
-const [lclFormData, setLclFormData] = useState({
-  mbl: '',
-  container: '',
-  armador: '',
-  consignee: '',
-  eta: '',
-  transbordo: '',
-  novoContainer: '' // NOVO: container após transbordo
-});
+// ===== SEARCH CLIENTES BASE: Autocomplete for consignee =====
+if (action === 'search_clientes_base') {
+  const mariadbHost = Deno.env.get('MARIADB_HOST');
+  const mariadbPort = Deno.env.get('MARIADB_PORT') || '3306';
+  const mariadbUser = Deno.env.get('MARIADB_USER');
+  const mariadbPass = Deno.env.get('MARIADB_PASSWORD');
+  const database = Deno.env.get('MARIADB_DATABASE') || 'dados_dachser';
+
+  if (!mariadbHost || !mariadbUser || !mariadbPass) {
+    return new Response(JSON.stringify({ error: 'MariaDB não configurado', clientes: [] }), {
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+    });
+  }
+
+  const searchTerm = url.searchParams.get('q') || '';
+  const limit = parseInt(url.searchParams.get('limit') || '15', 10);
+
+  if (searchTerm.length < 2) {
+    return new Response(JSON.stringify({ success: true, clientes: [] }), {
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+    });
+  }
+
+  const { Client } = await import("https://deno.land/x/mysql@v2.12.1/mod.ts");
+  const client = await new Client().connect({
+    hostname: mariadbHost,
+    port: parseInt(mariadbPort, 10),
+    username: mariadbUser,
+    password: mariadbPass,
+    db: database,
+  });
+
+  try {
+    const rows = await client.query(`
+      SELECT 
+        nome_cliente,
+        cnpj,
+        dchr_customer_number,
+        cidade_uf,
+        pais
+      FROM ${database}.t_clientes_base
+      WHERE ativo = 1 
+        AND nome_cliente LIKE ?
+      ORDER BY nome_cliente
+      LIMIT ?
+    `, [`%${searchTerm}%`, limit]);
+
+    await client.close();
+    console.log(`[search_clientes_base] Found ${rows.length} clients for term "${searchTerm}"`);
+    
+    return new Response(JSON.stringify({
+      success: true,
+      clientes: rows
+    }), { 
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+    });
+  } catch (e: any) {
+    await client.close();
+    console.error('[search_clientes_base] Error:', e);
+    return new Response(JSON.stringify({ error: e.message, clientes: [] }), {
+      status: 500,
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+    });
+  }
+}
 ```
 
-**1.2 Lógica de auto-preenchimento no input de MBL:**
+---
 
-Adicionar um `useEffect` ou handler `onBlur`/`onChange` que verifica se o MBL digitado já existe como LCL com transbordo:
+### 2. Frontend: `src/pages/ContainerTracking.tsx`
+
+**2.1 Adicionar imports** (linha ~1):
 
 ```typescript
-// Dentro do componente, após os estados
-const handleMblChange = (value: string) => {
-  const mblUpper = value.toUpperCase();
-  setLclFormData(prev => ({ ...prev, mbl: mblUpper }));
-  
-  // Verifica se o MBL existe na lista de LCLs com transbordo
-  if (mblUpper.length >= 6) {
-    const existingLcl = mblList.find(m => 
-      m.tipo_carga === 'LCL' && 
-      m.mbl_id.startsWith(mblUpper) && 
-      m.transshipment_port
-    );
-    
-    if (existingLcl) {
-      // Auto-preenche todos os campos exceto novoContainer
-      setLclFormData(prev => ({
-        ...prev,
-        mbl: existingLcl.mbl_id,
-        container: '', // Limpa - usuário vai preencher o novo
-        armador: existingLcl.coloader || '',
-        consignee: existingLcl.consignee || '',
-        eta: existingLcl.eta || '',
-        transbordo: existingLcl.transshipment_port || '',
-        novoContainer: '' // Campo novo para preenchimento
-      }));
-    }
+import { Command, CommandEmpty, CommandGroup, CommandItem, CommandList } from "@/components/ui/command";
+import { Plus } from "lucide-react";
+```
+
+**2.2 Adicionar tipo e estados** (após linha ~387):
+
+```typescript
+// Tipo para cliente sugerido
+interface ClienteSugerido {
+  nome_cliente: string;
+  cnpj?: string;
+  dchr_customer_number?: string;
+  cidade_uf?: string;
+  pais?: string;
+}
+
+// Estados para autocomplete de consignee
+const [consigneeSuggestions, setConsigneeSuggestions] = useState<ClienteSugerido[]>([]);
+const [consigneePopoverOpen, setConsigneePopoverOpen] = useState(false);
+const [isSearchingConsignee, setIsSearchingConsignee] = useState(false);
+
+// Debounce para busca de consignee
+const searchConsigneeTimeoutRef = React.useRef<NodeJS.Timeout | null>(null);
+
+const searchConsignee = (term: string) => {
+  // Limpa timeout anterior
+  if (searchConsigneeTimeoutRef.current) {
+    clearTimeout(searchConsigneeTimeoutRef.current);
   }
+  
+  if (term.length < 2) {
+    setConsigneeSuggestions([]);
+    setConsigneePopoverOpen(false);
+    return;
+  }
+  
+  // Debounce de 300ms
+  searchConsigneeTimeoutRef.current = setTimeout(async () => {
+    setIsSearchingConsignee(true);
+    try {
+      const res = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/olimpo-proxy?action=search_clientes_base&q=${encodeURIComponent(term)}&limit=15`,
+        {
+          headers: {
+            'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`
+          }
+        }
+      );
+      const data = await res.json();
+      if (data.success && data.clientes) {
+        setConsigneeSuggestions(data.clientes);
+        if (data.clientes.length > 0) {
+          setConsigneePopoverOpen(true);
+        }
+      }
+    } catch (e) {
+      console.error('Erro ao buscar consignees:', e);
+    } finally {
+      setIsSearchingConsignee(false);
+    }
+  }, 300);
 };
 ```
 
-**1.3 Exibir campo "Novo Container" condicionalmente:**
+**2.3 Substituir campo Consignee** (linhas ~2566-2581):
 
-Após o campo "Transbordo", adicionar:
+Substituir o input atual por um Popover com Command:
 
 ```tsx
-{/* Campo Novo Container - aparece quando há transbordo */}
-{lclFormData.transbordo && (
-  <div className="space-y-2">
-    <Label className="text-white flex items-center gap-2">
-      <ArrowLeftRight className="w-4 h-4 text-orange-400" />
-      Novo Container (pós-transbordo)
-    </Label>
-    <Input 
-      placeholder="Ex: MSCU1234567" 
-      value={lclFormData.novoContainer} 
-      onChange={e => setLclFormData(prev => ({
-        ...prev,
-        novoContainer: e.target.value.toUpperCase()
-      }))} 
-      className="bg-[rgba(0,0,0,.3)] border-[rgba(255,255,255,.14)] text-white placeholder:text-gray-500"
-    />
-    <span className="text-xs text-gray-500">
-      Container atribuído após o transbordo (opcional)
-    </span>
-  </div>
-)}
+<div className="space-y-2">
+  <Label className={cn("text-white", lclAutoFilled && lclFormData.consignee && "text-green-300")}>
+    Consignee
+  </Label>
+  <Popover open={consigneePopoverOpen} onOpenChange={setConsigneePopoverOpen}>
+    <PopoverTrigger asChild>
+      <div className="relative">
+        <Input 
+          placeholder="Digite para buscar clientes..."
+          value={lclFormData.consignee}
+          onChange={e => {
+            const value = e.target.value;
+            setLclFormData(prev => ({ ...prev, consignee: value }));
+            if (!lclAutoFilled) {
+              searchConsignee(value);
+            }
+          }}
+          onFocus={() => {
+            if (consigneeSuggestions.length > 0 && !lclAutoFilled) {
+              setConsigneePopoverOpen(true);
+            }
+          }}
+          className={cn(
+            "bg-[rgba(0,0,0,.3)] border-[rgba(255,255,255,.14)] text-white placeholder:text-gray-500 pr-8",
+            lclAutoFilled && lclFormData.consignee && "border-green-500/30 bg-green-900/5"
+          )}
+          readOnly={lclAutoFilled}
+        />
+        {isSearchingConsignee && (
+          <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 animate-spin text-gray-400" />
+        )}
+      </div>
+    </PopoverTrigger>
+    <PopoverContent 
+      className="w-[400px] p-0 bg-[#1a1a2e] border-[rgba(255,255,255,.1)]" 
+      align="start"
+      onOpenAutoFocus={e => e.preventDefault()}
+    >
+      <Command className="bg-transparent">
+        <CommandList>
+          {consigneeSuggestions.length === 0 ? (
+            <CommandEmpty className="text-gray-400 py-4 text-center text-sm">
+              {lclFormData.consignee.length < 2 
+                ? "Digite pelo menos 2 caracteres..." 
+                : "Nenhum cliente encontrado"}
+            </CommandEmpty>
+          ) : (
+            <CommandGroup heading="Clientes cadastrados" className="text-gray-400">
+              {consigneeSuggestions.map((cliente, idx) => (
+                <CommandItem
+                  key={idx}
+                  value={cliente.nome_cliente}
+                  onSelect={() => {
+                    setLclFormData(prev => ({ ...prev, consignee: cliente.nome_cliente }));
+                    setConsigneePopoverOpen(false);
+                  }}
+                  className="cursor-pointer hover:bg-[rgba(255,255,255,.05)] text-white"
+                >
+                  <div className="flex flex-col gap-0.5">
+                    <span className="font-medium">{cliente.nome_cliente}</span>
+                    <span className="text-xs text-gray-400">
+                      {[cliente.cidade_uf, cliente.pais].filter(Boolean).join(' - ')}
+                      {cliente.cnpj && ` • CNPJ: ${cliente.cnpj}`}
+                    </span>
+                  </div>
+                </CommandItem>
+              ))}
+            </CommandGroup>
+          )}
+        </CommandList>
+        {lclFormData.consignee && !consigneeSuggestions.some(c => c.nome_cliente === lclFormData.consignee) && (
+          <div className="border-t border-[rgba(255,255,255,.1)] p-2">
+            <Button 
+              variant="ghost" 
+              size="sm" 
+              className="w-full justify-start text-cyan-400 hover:text-cyan-300 hover:bg-cyan-900/20"
+              onClick={() => setConsigneePopoverOpen(false)}
+            >
+              <Plus className="w-4 h-4 mr-2" />
+              Usar "{lclFormData.consignee}" (não cadastrado)
+            </Button>
+          </div>
+        )}
+      </Command>
+    </PopoverContent>
+  </Popover>
+  <span className="text-xs text-gray-500">
+    Busque por nome ou digite um consignatário não cadastrado
+  </span>
+</div>
 ```
 
-**1.4 Atualizar envio do formulário:**
+**2.4 Reset do estado ao fechar dialog** (no onClick do botão Cancelar, ~linha 2644):
 
-Modificar a chamada à API para incluir o novo container:
-
-```typescript
-body: JSON.stringify({
-  mbl_id: lclFormData.mbl,
-  container: lclFormData.novoContainer || lclFormData.container, // Usa novo container se preenchido
-  shipping_line: lclFormData.armador,
-  consignee: lclFormData.consignee,
-  eta: lclFormData.eta || null,
-  transbordo: lclFormData.transbordo || null,
-  container_original: lclFormData.container // Mantém referência ao original
-})
-```
-
-**1.5 Reset do formulário ao cancelar/fechar:**
+Adicionar reset dos estados do autocomplete:
 
 ```typescript
-setLclFormData({
-  mbl: '',
-  container: '',
-  armador: '',
-  consignee: '',
-  eta: '',
-  transbordo: '',
-  novoContainer: ''
-});
+setConsigneeSuggestions([]);
+setConsigneePopoverOpen(false);
 ```
 
 ---
 
-### 2. Backend (opcional): `supabase/functions/olimpo-proxy/index.ts`
-
-Se necessário armazenar o container original como referência:
-
-```typescript
-// Dentro de add_lcl_container
-const { mbl_id, container, shipping_line, consignee, eta, transbordo, container_original } = body;
-
-// O container_original pode ser armazenado em um campo adicional ou log
-// Por enquanto, apenas o novo container será inserido na tabela
-```
-
----
-
-## Fluxo de Usuário
+## Fluxo de Funcionamento
 
 ```text
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                    FLUXO: CADASTRO LCL COM TRANSBORDO                       │
-├─────────────────────────────────────────────────────────────────────────────┤
-│                                                                             │
-│   Cenário 1: Cadastro Inicial (sem MBL existente)                          │
-│   ──────────────────────────────────────────────────────────────────────   │
-│                                                                             │
-│   1. Usuário clica em "Cadastrar LCL"                                      │
-│   2. Preenche MBL, Container, Coloader, Consignee, ETA                     │
-│   3. Preenche campo "Transbordo" (ex: SGSIN)                               │
-│   4. Campo "Novo Container" APARECE (opcional)                             │
-│   5. Usuário pode ou não preencher                                         │
-│   6. Clica "Cadastrar LCL"                                                 │
-│                                                                             │
-│   Cenário 2: Cadastro de Novo Container (MBL LCL já existe)                │
-│   ──────────────────────────────────────────────────────────────────────   │
-│                                                                             │
-│   1. Usuário clica em "Cadastrar LCL"                                      │
-│   2. Digita início do MBL (ex: "HLCU241")                                  │
-│   3. Sistema detecta MBL existente como LCL com transbordo                 │
-│   4. AUTO-PREENCHE:                                                        │
-│      - MBL completo                                                         │
-│      - Coloader                                                             │
-│      - Consignee                                                            │
-│      - ETA                                                                  │
-│      - Transbordo                                                           │
-│   5. Campo "Container" fica vazio (novo container)                         │
-│   6. Campo "Novo Container" aparece automaticamente                        │
-│   7. Usuário preenche apenas o novo container                              │
-│   8. Clica "Cadastrar LCL"                                                 │
-│                                                                             │
-└─────────────────────────────────────────────────────────────────────────────┘
+FLUXO: AUTOCOMPLETE DE CONSIGNEE
+
+1. Usuário abre o diálogo "Cadastrar LCL"
+
+2. Usuário digita no campo Consignee (ex: "DACH")
+
+3. Após 300ms (debounce), sistema busca em t_clientes_base:
+   SELECT nome_cliente, cnpj, cidade_uf, pais
+   WHERE ativo = 1 AND nome_cliente LIKE '%DACH%'
+   LIMIT 15
+
+4. Popover abre com sugestões:
+   ┌─────────────────────────────────────────────────┐
+   │ Clientes cadastrados                            │
+   ├─────────────────────────────────────────────────┤
+   │ DACHSER BRASIL LTDA                             │
+   │ São Paulo - SP • CNPJ: 12.345.678/0001-90      │
+   ├─────────────────────────────────────────────────┤
+   │ DACHSER NETHERLANDS BV                          │
+   │ Netherlands                                     │
+   ├─────────────────────────────────────────────────┤
+   │ ───────────────────────────────────────────────│
+   │ [+] Usar "DACH" (não cadastrado)               │
+   └─────────────────────────────────────────────────┘
+
+5. Usuário pode:
+   a) Clicar em uma sugestão -> preenche automaticamente
+   b) Continuar digitando -> permite valor customizado
+   c) Clicar "Usar (não cadastrado)" -> fecha popover, mantém texto
 ```
 
 ---
 
-## Resumo de Arquivos a Modificar
+## Arquivos a Modificar
 
 | Arquivo | Alteração |
 |---------|-----------|
-| `src/pages/ContainerTracking.tsx` | Estado `lclFormData` com `novoContainer`, lógica de auto-preenchimento, campo condicional no dialog |
+| `supabase/functions/olimpo-proxy/index.ts` | Nova action `search_clientes_base` para buscar clientes por nome |
+| `src/pages/ContainerTracking.tsx` | Autocomplete com Popover+Command, estados e lógica de busca |
 
 ---
 
-## Considerações
+## Considerações Técnicas
 
-1. **Busca por prefixo**: O auto-preenchimento será acionado quando o usuário digitar pelo menos 6 caracteres do MBL (para evitar buscas prematuras)
-
-2. **Prioridade do Container**: Se o campo "Novo Container" estiver preenchido, ele será usado; caso contrário, será usado o campo "Container" original
-
-3. **Indicador visual**: Quando ocorrer o auto-preenchimento, os campos preenchidos podem ter uma borda diferenciada (verde suave) para indicar que foram auto-preenchidos
+1. **Debounce de 300ms**: Evita chamadas excessivas à API durante digitação rápida
+2. **Mínimo 2 caracteres**: Busca só inicia após digitar pelo menos 2 letras
+3. **Limite de 15 resultados**: Mantém a lista gerenciável
+4. **Apenas clientes ativos**: Filtra `WHERE ativo = 1`
+5. **Auto-preenchimento preservado**: Se o MBL foi auto-preenchido, o campo Consignee fica readonly
+6. **Valor customizado**: Usuário pode usar qualquer texto, mesmo não cadastrado
 
