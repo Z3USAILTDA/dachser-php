@@ -283,6 +283,8 @@ interface MblTrackingData {
   has_free_time: number; // 1 se possui Free Time cadastrado
   nome_analista: string | null; // Coordenador do processo
   updated_at: string | null; // Data de sincronização do banco
+  tipo_carga: 'FCL' | 'LCL'; // Tipo de carga
+  coloader: string | null; // Nome do coloader (para LCL)
 }
 
 // Container detail interface (expanded view)
@@ -324,6 +326,7 @@ const ContainerTracking = () => {
   const [filterLine, setFilterLine] = useState("all");
   const [filterCoordenador, setFilterCoordenador] = useState("all");
   const [filterTipoProcesso, setFilterTipoProcesso] = useState<"all" | "SEA IMPORT" | "SEA EXPORT">("all");
+  const [filterTipoCarga, setFilterTipoCarga] = useState<"all" | "FCL" | "LCL">("all");
   const [activeCardFilter, setActiveCardFilter] = useState<"all" | "transito" | "alerta" | "critico" | "entregues">("all");
   const [filterSyncHoje, setFilterSyncHoje] = useState(true); // Novo filtro: apenas sincronizados hoje
   const [mblList, setMblList] = useState<MblTrackingData[]>([]);
@@ -1340,9 +1343,13 @@ const ContainerTracking = () => {
   const filteredMbls = useMemo(() => {
     let mbls = mblList.filter(m => {
       const searchLower = searchTerm.toLowerCase();
-      const matchesSearch = !searchTerm || m.mbl_id.toLowerCase().includes(searchLower) || m.consignee && m.consignee.toLowerCase().includes(searchLower) || m.shipping_line && m.shipping_line.toLowerCase().includes(searchLower) || m.navio && m.navio.toLowerCase().includes(searchLower);
+      const matchesSearch = !searchTerm || m.mbl_id.toLowerCase().includes(searchLower) || m.consignee && m.consignee.toLowerCase().includes(searchLower) || m.shipping_line && m.shipping_line.toLowerCase().includes(searchLower) || m.navio && m.navio.toLowerCase().includes(searchLower) || (m.coloader && m.coloader.toLowerCase().includes(searchLower));
+      
+      // Para LCL usa coloader, para FCL usa armador
       const armador = getShippingLineFromMbl(m.mbl_id, m.shipping_line);
-      const matchesLine = filterLine === "all" || armador === filterLine;
+      const matchesLine = filterLine === "all" || 
+        (m.tipo_carga === 'LCL' ? m.coloader === filterLine : armador === filterLine);
+      
       const matchesCoordenador = filterCoordenador === "all" || (m.nome_analista || "-") === filterCoordenador;
       let matchesCardFilter = true;
       if (activeCardFilter === "transito") {
@@ -1355,10 +1362,13 @@ const ContainerTracking = () => {
         matchesCardFilter = isEntregue(m.last_event);
       }
       const matchesTipoProcesso = filterTipoProcesso === "all" || m.tipo_processo === filterTipoProcesso;
+      
+      // Filtro de tipo de carga (LCL/FCL)
+      const matchesTipoCarga = filterTipoCarga === "all" || m.tipo_carga === filterTipoCarga;
 
       // Filtro: apenas sincronizados do banco hoje (usa updated_at do t_olimpo_tracking)
       const matchesSyncHoje = !filterSyncHoje || isSyncedToday(m.updated_at);
-      return matchesSearch && matchesLine && matchesCardFilter && matchesTipoProcesso && matchesCoordenador && matchesSyncHoje;
+      return matchesSearch && matchesLine && matchesCardFilter && matchesTipoProcesso && matchesCoordenador && matchesSyncHoje && matchesTipoCarga;
     });
 
     // Ordenar: MBLs com status "Aguardando" (AGD) por último
@@ -1370,7 +1380,7 @@ const ContainerTracking = () => {
       return 0;
     });
     return mbls;
-  }, [mblList, searchTerm, filterLine, filterCoordenador, activeCardFilter, filterTipoProcesso, filterSyncHoje]);
+  }, [mblList, searchTerm, filterLine, filterCoordenador, activeCardFilter, filterTipoProcesso, filterSyncHoje, filterTipoCarga]);
   const totalPages = Math.ceil(filteredMbls.length / itemsPerPage);
   const startIndex = (currentPage - 1) * itemsPerPage;
   const endIndex = startIndex + itemsPerPage;
@@ -1391,6 +1401,27 @@ const ContainerTracking = () => {
       entregues
     };
   }, [mblList]);
+
+  // Lista dinâmica de armadores/coloaders baseada no tipo de carga selecionado
+  const dynamicArmadoresColoaders = useMemo(() => {
+    if (filterTipoCarga === 'FCL') {
+      // Apenas armadores com API (JSONCargo)
+      return getTrackableCarriers().map(info => normalizeArmadorName(info.name)).sort((a, b) => a.localeCompare(b));
+    } else if (filterTipoCarga === 'LCL') {
+      // Apenas coloaders únicos dos registros LCL
+      const coloaders = mblList
+        .filter(m => m.tipo_carga === 'LCL' && m.coloader)
+        .map(m => m.coloader as string);
+      return [...new Set(coloaders)].sort((a, b) => a.localeCompare(b));
+    } else {
+      // Todos: armadores + coloaders
+      const armadores = getTrackableCarriers().map(info => normalizeArmadorName(info.name));
+      const coloaders = mblList
+        .filter(m => m.coloader)
+        .map(m => m.coloader as string);
+      return [...new Set([...armadores, ...coloaders])].sort((a, b) => a.localeCompare(b));
+    }
+  }, [mblList, filterTipoCarga]);
 
   // Lista de todos os armadores com suporte à API JSONCargo (apiSupported: true)
   const trackableArmadores = useMemo(() => {
@@ -1651,10 +1682,28 @@ const ContainerTracking = () => {
                   </Select>
                 </div>
                 
+                {/* Filtro: Tipo de Carga (LCL/FCL) */}
+                <div className="flex items-center gap-1.5">
+                  <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-[rgba(0,0,0,.5)] border border-[rgba(255,255,255,.22)]">
+                    <Package className="h-3 w-3 text-[#ffc800]" />
+                    <span className="text-[0.68rem] tracking-[0.1em] uppercase text-[#aaaaaa]">Carga</span>
+                  </div>
+                  <Select value={filterTipoCarga} onValueChange={v => setFilterTipoCarga(v as "all" | "FCL" | "LCL")}>
+                    <SelectTrigger className="h-8 w-[100px] rounded-full bg-[#13141a] border border-[rgba(255,255,255,.14)] text-[0.78rem]">
+                      <SelectValue placeholder="Todos" />
+                    </SelectTrigger>
+                    <SelectContent className="bg-card border border-border z-50">
+                      <SelectItem value="all">Todos</SelectItem>
+                      <SelectItem value="FCL">FCL</SelectItem>
+                      <SelectItem value="LCL">LCL</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                
                 <div className="flex items-center gap-1.5">
                   <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-[rgba(0,0,0,.5)] border border-[rgba(255,255,255,.22)]">
                     <FilterIcon className="h-3 w-3 text-[#ffc800]" />
-                    <span className="text-[0.68rem] tracking-[0.1em] uppercase text-[#aaaaaa]">Armador</span>
+                    <span className="text-[0.68rem] tracking-[0.1em] uppercase text-[#aaaaaa]">Armador/Coloader</span>
                   </div>
                   <Select value={filterLine} onValueChange={setFilterLine}>
                     <SelectTrigger className="h-8 w-[160px] rounded-full bg-[#13141a] border border-[rgba(255,255,255,.14)] text-[0.78rem]">
@@ -1662,8 +1711,8 @@ const ContainerTracking = () => {
                     </SelectTrigger>
                     <SelectContent className="bg-card border border-border z-50">
                       <SelectItem value="all">Todos</SelectItem>
-                      {trackableArmadores.map(armador => <SelectItem key={armador} value={armador}>
-                          {armador}
+                      {dynamicArmadoresColoaders.map(item => <SelectItem key={item} value={item}>
+                          {item}
                         </SelectItem>)}
                     </SelectContent>
                   </Select>
@@ -1685,11 +1734,6 @@ const ContainerTracking = () => {
                         </SelectItem>)}
                     </SelectContent>
                   </Select>
-                </div>
-                
-                {/* Filtro: Sincronizado Hoje */}
-                <div className="flex items-center gap-1.5">
-                  
                 </div>
                 
                 {/* Auto Sync Status Indicator */}
@@ -1744,7 +1788,7 @@ const ContainerTracking = () => {
                       <th className="px-4 py-3 text-left text-[#aaaaaa] uppercase text-[0.68rem] tracking-[0.1em] font-medium">MBL</th>
                       <th className="px-4 py-3 text-left text-[#aaaaaa] uppercase text-[0.68rem] tracking-[0.1em] font-medium">Consignee</th>
                       <th className="px-4 py-3 text-left text-[#aaaaaa] uppercase text-[0.68rem] tracking-[0.1em] font-medium">Coordenador</th>
-                      <th className="px-4 py-3 text-left text-[#aaaaaa] uppercase text-[0.68rem] tracking-[0.1em] font-medium">Armador</th>
+                      <th className="px-4 py-3 text-left text-[#aaaaaa] uppercase text-[0.68rem] tracking-[0.1em] font-medium">Armador/Coloader</th>
                       <th className="px-4 py-3 text-left text-[#aaaaaa] uppercase text-[0.68rem] tracking-[0.1em] font-medium">Origem</th>
                       <th className="px-4 py-3 text-left text-[#aaaaaa] uppercase text-[0.68rem] tracking-[0.1em] font-medium">Escala</th>
                       <th className="px-4 py-3 text-left text-[#aaaaaa] uppercase text-[0.68rem] tracking-[0.1em] font-medium">Destino</th>
@@ -1811,9 +1855,16 @@ const ContainerTracking = () => {
                               </TooltipProvider>
                             </td>
                             <td className="px-4 py-3">
-                              <span className="px-2 py-1 rounded-full text-xs font-medium bg-[rgba(255,200,0,.15)] text-[#ffc800] border border-[rgba(255,200,0,.3)]">
-                                {getShippingLineFromMbl(mbl.mbl_id, mbl.shipping_line)}
-                              </span>
+                              {mbl.tipo_carga === 'LCL' ? (
+                                <span className="px-2 py-1 rounded-full text-xs font-medium bg-[rgba(6,182,212,.15)] text-cyan-400 border border-[rgba(6,182,212,.3)] flex items-center gap-1 w-fit">
+                                  <Package className="w-3 h-3" />
+                                  {mbl.coloader || 'N/D'}
+                                </span>
+                              ) : (
+                                <span className="px-2 py-1 rounded-full text-xs font-medium bg-[rgba(255,200,0,.15)] text-[#ffc800] border border-[rgba(255,200,0,.3)]">
+                                  {getShippingLineFromMbl(mbl.mbl_id, mbl.shipping_line)}
+                                </span>
+                              )}
                             </td>
                             <td className="px-4 py-3 text-[#aaaaaa] text-sm">{mbl.origem || "-"}</td>
                             <td className="px-4 py-3 text-[#aaaaaa] text-sm">
@@ -2438,14 +2489,12 @@ const ContainerTracking = () => {
             </div>
             
             <div className="space-y-2">
-              <Label className="text-white">Armador *</Label>
-              <Input placeholder="Ex: Hapag-Lloyd, MSC, Maersk..." value={lclFormData.armador} onChange={e => setLclFormData(prev => ({
+              <Label className="text-white">Coloader *</Label>
+              <Input placeholder="Ex: DACHSER Netherlands, DSV, Kuehne+Nagel..." value={lclFormData.armador} onChange={e => setLclFormData(prev => ({
               ...prev,
               armador: e.target.value
-            }))} className="bg-[rgba(0,0,0,.3)] border-[rgba(255,255,255,.14)] text-white placeholder:text-gray-500" list="armadores-list" />
-              <datalist id="armadores-list">
-                {getTrackableCarriers().map(carrier => <option key={carrier.code} value={normalizeArmadorName(carrier.name)} />)}
-              </datalist>
+            }))} className="bg-[rgba(0,0,0,.3)] border-[rgba(255,255,255,.14)] text-white placeholder:text-gray-500" />
+              <span className="text-xs text-gray-500">Nome do consolidador responsável pelo embarque LCL</span>
             </div>
             
             <div className="space-y-2">
@@ -2493,7 +2542,7 @@ const ContainerTracking = () => {
             if (!lclFormData.mbl || !lclFormData.container || !lclFormData.armador) {
               toast({
                 title: "Campos obrigatórios",
-                description: "Preencha MBL, Container e Armador",
+                description: "Preencha MBL, Container e Coloader",
                 variant: "destructive"
               });
               return;
