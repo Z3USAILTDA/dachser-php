@@ -11474,17 +11474,37 @@ serve(async (req) => {
           ? 'dados_dachser.t_air_master' 
           : 'dados_dachser.t_sea_master';
         
-        console.log(`[bulk_insert_master] Inserting ${rows.length} rows into ${tableName} (modal: ${modal})`);
+        console.log(`[bulk_insert_master] UPSERT ${rows.length} rows into ${tableName} (modal: ${modal})`);
+        
+        // Garantir que índice único existe para UPSERT
+        try {
+          if (modal === 'AIR') {
+            await client.execute(`
+              CREATE UNIQUE INDEX IF NOT EXISTS idx_unique_master_hawb 
+              ON dados_dachser.t_air_master (master(100), hawb(100))
+            `);
+          } else {
+            await client.execute(`
+              CREATE UNIQUE INDEX IF NOT EXISTS idx_unique_master_hbl 
+              ON dados_dachser.t_sea_master (master(100), hbl(100))
+            `);
+          }
+          console.log(`[bulk_insert_master] Unique index ensured for ${modal}`);
+        } catch (indexErr) {
+          // Ignorar erro se índice já existe ou não puder ser criado
+          console.warn(`[bulk_insert_master] Index creation warning:`, indexErr);
+        }
         
         let inserted = 0;
+        let updated = 0;
         const errors: Array<{index: number; message: string}> = [];
         
         for (let i = 0; i < rows.length; i++) {
           const row = rows[i];
           try {
             if (modal === 'SEA') {
-              // INSERT para SEA com colunas específicas (inclui novas colunas)
-              await client.execute(`
+              // UPSERT para SEA com ON DUPLICATE KEY UPDATE
+              const upsertResult = await client.execute(`
                 INSERT INTO ${tableName} (
                   nome_analista, customer_no, po, hbl, hawb, master,
                   etd, pre_alert_sent, oea_cl_doc, customer_order,
@@ -11493,6 +11513,33 @@ serve(async (req) => {
                   deadline_draft_vgm, drafts_sent, deadline_load, cargo_departed,
                   d_term, pod_available, dn_available
                 ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON DUPLICATE KEY UPDATE
+                  nome_analista = COALESCE(VALUES(nome_analista), nome_analista),
+                  customer_no = COALESCE(VALUES(customer_no), customer_no),
+                  po = COALESCE(VALUES(po), po),
+                  hawb = COALESCE(VALUES(hawb), hawb),
+                  etd = COALESCE(VALUES(etd), etd),
+                  pre_alert_sent = COALESCE(VALUES(pre_alert_sent), pre_alert_sent),
+                  oea_cl_doc = COALESCE(VALUES(oea_cl_doc), oea_cl_doc),
+                  customer_order = COALESCE(VALUES(customer_order), customer_order),
+                  accrual = COALESCE(VALUES(accrual), accrual),
+                  dep = COALESCE(VALUES(dep), dep),
+                  eta_ata = COALESCE(VALUES(eta_ata), eta_ata),
+                  email_title = COALESCE(VALUES(email_title), email_title),
+                  te = COALESCE(VALUES(te), te),
+                  at_field = COALESCE(VALUES(at_field), at_field),
+                  wh_treatment = COALESCE(VALUES(wh_treatment), wh_treatment),
+                  cct_transm = COALESCE(VALUES(cct_transm), cct_transm),
+                  remarks = COALESCE(VALUES(remarks), remarks),
+                  tipo_processo = COALESCE(VALUES(tipo_processo), tipo_processo),
+                  data_insert = COALESCE(VALUES(data_insert), data_insert),
+                  deadline_draft_vgm = COALESCE(VALUES(deadline_draft_vgm), deadline_draft_vgm),
+                  drafts_sent = COALESCE(VALUES(drafts_sent), drafts_sent),
+                  deadline_load = COALESCE(VALUES(deadline_load), deadline_load),
+                  cargo_departed = COALESCE(VALUES(cargo_departed), cargo_departed),
+                  d_term = COALESCE(VALUES(d_term), d_term),
+                  pod_available = COALESCE(VALUES(pod_available), pod_available),
+                  dn_available = COALESCE(VALUES(dn_available), dn_available)
               `, [
                 row.nome_analista || null,
                 row.customer_no || null,
@@ -11523,15 +11570,41 @@ serve(async (req) => {
                 row.pod_available ?? null,
                 row.dn_available ?? null,
               ]);
+              
+              // affectedRows = 1 (insert) ou 2 (update no MariaDB)
+              if (upsertResult.affectedRows === 1) {
+                inserted++;
+              } else if (upsertResult.affectedRows === 2) {
+                updated++;
+              } else {
+                inserted++; // fallback
+              }
             } else {
-              // INSERT para AIR com colunas específicas (inclui novas colunas)
-              await client.execute(`
+              // UPSERT para AIR com ON DUPLICATE KEY UPDATE
+              const upsertResult = await client.execute(`
                 INSERT INTO ${tableName} (
                   nome_analista, customer_no, po, hawb, master,
                   etd, pre_alert_sent, oea_cl_doc, cargo_departed,
                   d_term, pod_dn_available, remarks, tipo_processo, data_insert,
                   wh_treatment, cct_transm, eta_ata, email_title
                 ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON DUPLICATE KEY UPDATE
+                  nome_analista = COALESCE(VALUES(nome_analista), nome_analista),
+                  customer_no = COALESCE(VALUES(customer_no), customer_no),
+                  po = COALESCE(VALUES(po), po),
+                  etd = COALESCE(VALUES(etd), etd),
+                  pre_alert_sent = COALESCE(VALUES(pre_alert_sent), pre_alert_sent),
+                  oea_cl_doc = COALESCE(VALUES(oea_cl_doc), oea_cl_doc),
+                  cargo_departed = COALESCE(VALUES(cargo_departed), cargo_departed),
+                  d_term = COALESCE(VALUES(d_term), d_term),
+                  pod_dn_available = COALESCE(VALUES(pod_dn_available), pod_dn_available),
+                  remarks = COALESCE(VALUES(remarks), remarks),
+                  tipo_processo = COALESCE(VALUES(tipo_processo), tipo_processo),
+                  data_insert = COALESCE(VALUES(data_insert), data_insert),
+                  wh_treatment = COALESCE(VALUES(wh_treatment), wh_treatment),
+                  cct_transm = COALESCE(VALUES(cct_transm), cct_transm),
+                  eta_ata = COALESCE(VALUES(eta_ata), eta_ata),
+                  email_title = COALESCE(VALUES(email_title), email_title)
               `, [
                 row.nome_analista || null,
                 row.customer_no || null,
@@ -11552,8 +11625,16 @@ serve(async (req) => {
                 row.eta_ata || null,
                 row.email_title || null,
               ]);
+              
+              // affectedRows = 1 (insert) ou 2 (update no MariaDB)
+              if (upsertResult.affectedRows === 1) {
+                inserted++;
+              } else if (upsertResult.affectedRows === 2) {
+                updated++;
+              } else {
+                inserted++; // fallback
+              }
             }
-            inserted++;
           } catch (err: unknown) {
             const errMsg = err instanceof Error ? err.message : 'Erro desconhecido';
             console.error(`[bulk_insert_master] Error on row ${i}: ${errMsg}`);
@@ -11561,8 +11642,8 @@ serve(async (req) => {
           }
         }
         
-        console.log(`[bulk_insert_master] Completed: ${inserted} inserted, ${errors.length} errors`);
-        result = { success: true, inserted, rejected: errors.length, errors };
+        console.log(`[bulk_insert_master] Completed: ${inserted} inserted, ${updated} updated, ${errors.length} errors`);
+        result = { success: true, inserted, updated, rejected: errors.length, errors };
         break;
       }
 
