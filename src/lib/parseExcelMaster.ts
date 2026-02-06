@@ -377,6 +377,26 @@ export function parseDate(value: unknown): string | null {
       return formatDateTime(date);
     }
     
+    // Formato mm/dd (apenas mês e dia - usa ano atual)
+    const shortMatch = str.match(/^(\d{1,2})[\/\-](\d{1,2})$/);
+    if (shortMatch) {
+      const [, first, second] = shortMatch;
+      const currentYear = new Date().getFullYear();
+      
+      // Interpretar como mm/dd (mês/dia) - padrão americano/Excel
+      const month = parseInt(first);
+      const day = parseInt(second);
+      
+      // Validar se é uma data válida
+      if (month >= 1 && month <= 12 && day >= 1 && day <= 31) {
+        const date = new Date(currentYear, month - 1, day, 0, 0, 0);
+        // Verificar se a data é válida (ex: 02/30 seria inválida)
+        if (date.getMonth() === month - 1 && date.getDate() === day) {
+          return formatDateTime(date);
+        }
+      }
+    }
+    
     // Tentar parse nativo
     const parsed = new Date(str);
     if (!isNaN(parsed.getTime())) {
