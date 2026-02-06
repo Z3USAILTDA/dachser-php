@@ -2044,7 +2044,7 @@ serve(async (req) => {
             TRIM(md.mawb) AS mbl_id,
             md.tipo_processo AS tipo_processo,
             'PENDENTE' AS container,
-            md.customer_name AS consignee,
+            md.cliente AS consignee,
             md.nome_analista AS email_analista,
             NULL AS email_cliente
           FROM dados_dachser.t_master_dados md
