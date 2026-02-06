@@ -87,6 +87,7 @@ export default function UploadMaster() {
   const [importProgress, setImportProgress] = useState(0);
   const [importResult, setImportResult] = useState<{
     inserted: number;
+    updated: number;
     rejected: number;
     errors: Array<{ index: number; message: string }>;
     rejectedRows?: Array<{ originalIndex: number; data: MasterRow | ClienteBaseRow; error: string }>;
@@ -395,13 +396,17 @@ export default function UploadMaster() {
 
         setImportResult({
           inserted: data.inserted || 0,
+          updated: data.updated || 0,
           rejected: data.rejected || 0,
           errors: data.errors || [],
           rejectedRows,
         });
 
-        if (data.inserted > 0) {
-          toast.success(`${data.inserted} registro(s) importado(s) com sucesso!`);
+        if (data.inserted > 0 || data.updated > 0) {
+          const parts = [];
+          if (data.inserted > 0) parts.push(`${data.inserted} inserido(s)`);
+          if (data.updated > 0) parts.push(`${data.updated} atualizado(s)`);
+          toast.success(`${parts.join(', ')} com sucesso!`);
         }
 
         if (data.rejected > 0) {
@@ -510,6 +515,7 @@ export default function UploadMaster() {
 
         setImportResult({
           inserted: totalInserted,
+          updated: 0, // Clientes Base não usa UPSERT
           rejected: totalRejected,
           errors: allErrors,
           rejectedRows,
@@ -1025,6 +1031,12 @@ export default function UploadMaster() {
                   <CheckCircle2 className="h-5 w-5 text-emerald-500" />
                   <span className="font-medium text-foreground">{importResult.inserted} inseridos</span>
                 </div>
+                {(importResult.updated ?? 0) > 0 && (
+                  <div className="flex items-center gap-2">
+                    <RefreshCw className="h-5 w-5 text-blue-500" />
+                    <span className="font-medium text-foreground">{importResult.updated} atualizados</span>
+                  </div>
+                )}
                 {importResult.rejected > 0 && (
                   <div className="flex items-center gap-2">
                     <AlertCircle className="h-5 w-5 text-destructive" />
