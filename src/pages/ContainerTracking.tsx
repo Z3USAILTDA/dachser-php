@@ -2574,7 +2574,6 @@ const ContainerTracking = () => {
                   <TableHead className="text-[#aaaaaa]">Prefixo</TableHead>
                   <TableHead className="text-[#aaaaaa]">Armador</TableHead>
                   <TableHead className="text-[#aaaaaa]">País</TableHead>
-                  <TableHead className="text-[#aaaaaa] text-right">MBLs</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -2591,15 +2590,6 @@ const ContainerTracking = () => {
                       </TableCell>
                       <TableCell className="text-gray-400 text-sm">
                         {carrier.country}
-                      </TableCell>
-                      <TableCell className="text-right">
-                        {carrier.count > 0 ? (
-                          <span className="bg-emerald-500/20 text-emerald-400 px-2 py-0.5 rounded text-xs">
-                            {carrier.count}
-                          </span>
-                        ) : (
-                          <span className="text-gray-600 text-xs">-</span>
-                        )}
                       </TableCell>
                     </TableRow>
                   );
