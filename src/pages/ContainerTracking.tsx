@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, Fragment } from "react";
+import React, { useState, useEffect, useMemo, Fragment, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useUsageLog } from "@/hooks/useUsageLog";
@@ -10,7 +10,8 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
-import { Search, RefreshCw, Ship, Trash2, Mail, Check, ArrowLeft, Loader2, Anchor, AlertTriangle, HelpCircle, ChevronDown, ChevronUp, Package, Clock, Bell, Play, Database, Radar, RotateCcw, Sun, Moon, FileSpreadsheet, BoxIcon, ArrowLeftRight, Hash } from "lucide-react";
+import { Search, RefreshCw, Ship, Trash2, Mail, Check, ArrowLeft, Loader2, Anchor, AlertTriangle, HelpCircle, ChevronDown, ChevronUp, Package, Clock, Bell, Play, Database, Radar, RotateCcw, Sun, Moon, FileSpreadsheet, BoxIcon, ArrowLeftRight, Hash, Plus } from "lucide-react";
+import { Command, CommandEmpty, CommandGroup, CommandItem, CommandList } from "@/components/ui/command";
 import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -385,6 +386,59 @@ const ContainerTracking = () => {
   });
   const [isSubmittingLcl, setIsSubmittingLcl] = useState(false);
   const [lclAutoFilled, setLclAutoFilled] = useState(false); // Indica se houve auto-preenchimento
+
+  // Tipo para cliente sugerido (autocomplete consignee)
+  interface ClienteSugerido {
+    nome_cliente: string;
+    cnpj?: string;
+    dchr_customer_number?: string;
+    cidade_uf?: string;
+    pais?: string;
+  }
+
+  // Estados para autocomplete de consignee
+  const [consigneeSuggestions, setConsigneeSuggestions] = useState<ClienteSugerido[]>([]);
+  const [consigneePopoverOpen, setConsigneePopoverOpen] = useState(false);
+  const [isSearchingConsignee, setIsSearchingConsignee] = useState(false);
+  const searchConsigneeTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Função de busca de consignees com debounce
+  const searchConsignee = (term: string) => {
+    if (searchConsigneeTimeoutRef.current) {
+      clearTimeout(searchConsigneeTimeoutRef.current);
+    }
+    
+    if (term.length < 2) {
+      setConsigneeSuggestions([]);
+      setConsigneePopoverOpen(false);
+      return;
+    }
+    
+    searchConsigneeTimeoutRef.current = setTimeout(async () => {
+      setIsSearchingConsignee(true);
+      try {
+        const res = await fetch(
+          `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/olimpo-proxy?action=search_clientes_base&q=${encodeURIComponent(term)}&limit=15`,
+          {
+            headers: {
+              'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`
+            }
+          }
+        );
+        const data = await res.json();
+        if (data.success && data.clientes) {
+          setConsigneeSuggestions(data.clientes);
+          if (data.clientes.length > 0) {
+            setConsigneePopoverOpen(true);
+          }
+        }
+      } catch (e) {
+        console.error('Erro ao buscar consignees:', e);
+      } finally {
+        setIsSearchingConsignee(false);
+      }
+    }, 300);
+  };
 
   // Handler para auto-preenchimento do MBL no diálogo LCL
   const handleLclMblChange = (value: string) => {
@@ -2564,20 +2618,94 @@ const ContainerTracking = () => {
             </div>
             
             <div className="space-y-2">
-              <Label className={cn("text-white", lclAutoFilled && lclFormData.consignee && "text-green-300")}>Consignee</Label>
-              <Input 
-                placeholder="Nome do consignatário" 
-                value={lclFormData.consignee} 
-                onChange={e => setLclFormData(prev => ({
-                  ...prev,
-                  consignee: e.target.value
-                }))} 
-                className={cn(
-                  "bg-[rgba(0,0,0,.3)] border-[rgba(255,255,255,.14)] text-white placeholder:text-gray-500",
-                  lclAutoFilled && lclFormData.consignee && "border-green-500/30 bg-green-900/5"
-                )} 
-                readOnly={lclAutoFilled}
-              />
+              <Label className={cn("text-white", lclAutoFilled && lclFormData.consignee && "text-green-300")}>
+                Consignee
+              </Label>
+              <Popover open={consigneePopoverOpen} onOpenChange={setConsigneePopoverOpen}>
+                <PopoverTrigger asChild>
+                  <div className="relative">
+                    <Input 
+                      placeholder="Digite para buscar clientes..."
+                      value={lclFormData.consignee}
+                      onChange={e => {
+                        const value = e.target.value;
+                        setLclFormData(prev => ({ ...prev, consignee: value }));
+                        if (!lclAutoFilled) {
+                          searchConsignee(value);
+                        }
+                      }}
+                      onFocus={() => {
+                        if (consigneeSuggestions.length > 0 && !lclAutoFilled) {
+                          setConsigneePopoverOpen(true);
+                        }
+                      }}
+                      className={cn(
+                        "bg-[rgba(0,0,0,.3)] border-[rgba(255,255,255,.14)] text-white placeholder:text-gray-500 pr-8",
+                        lclAutoFilled && lclFormData.consignee && "border-green-500/30 bg-green-900/5"
+                      )}
+                      readOnly={lclAutoFilled}
+                    />
+                    {isSearchingConsignee && (
+                      <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 animate-spin text-gray-400" />
+                    )}
+                  </div>
+                </PopoverTrigger>
+                <PopoverContent 
+                  className="w-[400px] p-0 bg-[#1a1a2e] border-[rgba(255,255,255,.1)]" 
+                  align="start"
+                  onOpenAutoFocus={e => e.preventDefault()}
+                >
+                  <Command className="bg-transparent">
+                    <CommandList>
+                      {consigneeSuggestions.length === 0 ? (
+                        <CommandEmpty className="text-gray-400 py-4 text-center text-sm">
+                          {lclFormData.consignee.length < 2 
+                            ? "Digite pelo menos 2 caracteres..." 
+                            : "Nenhum cliente encontrado"}
+                        </CommandEmpty>
+                      ) : (
+                        <CommandGroup heading="Clientes cadastrados" className="text-gray-400">
+                          {consigneeSuggestions.map((cliente, idx) => (
+                            <CommandItem
+                              key={idx}
+                              value={cliente.nome_cliente}
+                              onSelect={() => {
+                                setLclFormData(prev => ({ ...prev, consignee: cliente.nome_cliente }));
+                                setConsigneePopoverOpen(false);
+                              }}
+                              className="cursor-pointer hover:bg-[rgba(255,255,255,.05)] text-white"
+                            >
+                              <div className="flex flex-col gap-0.5">
+                                <span className="font-medium">{cliente.nome_cliente}</span>
+                                <span className="text-xs text-gray-400">
+                                  {[cliente.cidade_uf, cliente.pais].filter(Boolean).join(' - ')}
+                                  {cliente.cnpj && ` • CNPJ: ${cliente.cnpj}`}
+                                </span>
+                              </div>
+                            </CommandItem>
+                          ))}
+                        </CommandGroup>
+                      )}
+                    </CommandList>
+                    {lclFormData.consignee && !consigneeSuggestions.some(c => c.nome_cliente === lclFormData.consignee) && (
+                      <div className="border-t border-[rgba(255,255,255,.1)] p-2">
+                        <Button 
+                          variant="ghost" 
+                          size="sm" 
+                          className="w-full justify-start text-cyan-400 hover:text-cyan-300 hover:bg-cyan-900/20"
+                          onClick={() => setConsigneePopoverOpen(false)}
+                        >
+                          <Plus className="w-4 h-4 mr-2" />
+                          Usar "{lclFormData.consignee}" (não cadastrado)
+                        </Button>
+                      </div>
+                    )}
+                  </Command>
+                </PopoverContent>
+              </Popover>
+              <span className="text-xs text-gray-500">
+                Busque por nome ou digite um consignatário não cadastrado
+              </span>
             </div>
             
             <div className="space-y-2">
@@ -2653,6 +2781,8 @@ const ContainerTracking = () => {
                 novoContainer: ''
               });
               setLclAutoFilled(false);
+              setConsigneeSuggestions([]);
+              setConsigneePopoverOpen(false);
             }} className="border-[rgba(255,255,255,.1)] text-gray-300 hover:bg-[rgba(255,255,255,.05)]">
               Cancelar
             </Button>

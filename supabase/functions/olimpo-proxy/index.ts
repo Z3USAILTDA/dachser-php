@@ -6774,6 +6774,72 @@ serve(async (req) => {
       }
     }
 
+    // ===== SEARCH CLIENTES BASE: Autocomplete for consignee =====
+    if (action === 'search_clientes_base') {
+      const mariadbHost = Deno.env.get('MARIADB_HOST');
+      const mariadbPort = Deno.env.get('MARIADB_PORT') || '3306';
+      const mariadbUser = Deno.env.get('MARIADB_USER');
+      const mariadbPass = Deno.env.get('MARIADB_PASSWORD');
+      const database = Deno.env.get('MARIADB_DATABASE') || 'dados_dachser';
+
+      if (!mariadbHost || !mariadbUser || !mariadbPass) {
+        return new Response(JSON.stringify({ error: 'MariaDB não configurado', clientes: [] }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      }
+
+      const searchTerm = url.searchParams.get('q') || '';
+      const limit = parseInt(url.searchParams.get('limit') || '15', 10);
+
+      if (searchTerm.length < 2) {
+        return new Response(JSON.stringify({ success: true, clientes: [] }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      }
+
+      const { Client } = await import("https://deno.land/x/mysql@v2.12.1/mod.ts");
+      const client = await new Client().connect({
+        hostname: mariadbHost,
+        port: parseInt(mariadbPort, 10),
+        username: mariadbUser,
+        password: mariadbPass,
+        db: database,
+      });
+
+      try {
+        const rows = await client.query(`
+          SELECT 
+            nome_cliente,
+            cnpj,
+            dchr_customer_number,
+            cidade_uf,
+            pais
+          FROM ${database}.t_clientes_base
+          WHERE ativo = 1 
+            AND nome_cliente LIKE ?
+          ORDER BY nome_cliente
+          LIMIT ?
+        `, [`%${searchTerm}%`, limit]);
+
+        await client.close();
+        console.log(`[search_clientes_base] Found ${rows.length} clients for term "${searchTerm}"`);
+        
+        return new Response(JSON.stringify({
+          success: true,
+          clientes: rows
+        }), { 
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+        });
+      } catch (e: any) {
+        await client.close();
+        console.error('[search_clientes_base] Error:', e);
+        return new Response(JSON.stringify({ error: e.message, clientes: [] }), {
+          status: 500,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        });
+      }
+    }
+
     // ===== SEA TRACKING: Add LCL container manually =====
     if (action === 'add_lcl_container') {
       const mariadbHost = Deno.env.get('MARIADB_HOST');
