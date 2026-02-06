@@ -407,24 +407,19 @@ const ContainerTracking = () => {
     if (searchConsigneeTimeoutRef.current) {
       clearTimeout(searchConsigneeTimeoutRef.current);
     }
-    
     if (term.length < 2) {
       setConsigneeSuggestions([]);
       setConsigneePopoverOpen(false);
       return;
     }
-    
     searchConsigneeTimeoutRef.current = setTimeout(async () => {
       setIsSearchingConsignee(true);
       try {
-        const res = await fetch(
-          `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/olimpo-proxy?action=search_clientes_base&q=${encodeURIComponent(term)}&limit=15`,
-          {
-            headers: {
-              'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`
-            }
+        const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/olimpo-proxy?action=search_clientes_base&q=${encodeURIComponent(term)}&limit=15`, {
+          headers: {
+            'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`
           }
-        );
+        });
         const data = await res.json();
         if (data.success && data.clientes) {
           setConsigneeSuggestions(data.clientes);
@@ -443,21 +438,20 @@ const ContainerTracking = () => {
   // Handler para auto-preenchimento do MBL no diálogo LCL
   const handleLclMblChange = (value: string) => {
     const mblUpper = value.toUpperCase();
-    setLclFormData(prev => ({ ...prev, mbl: mblUpper }));
-    
+    setLclFormData(prev => ({
+      ...prev,
+      mbl: mblUpper
+    }));
+
     // Verifica se o MBL existe na lista de LCLs com transbordo (mínimo 6 caracteres)
     if (mblUpper.length >= 6) {
-      const existingLcl = mblList.find(m => 
-        m.tipo_carga === 'LCL' && 
-        m.mbl_id.toUpperCase().startsWith(mblUpper) && 
-        m.transshipment_port
-      );
-      
+      const existingLcl = mblList.find(m => m.tipo_carga === 'LCL' && m.mbl_id.toUpperCase().startsWith(mblUpper) && m.transshipment_port);
       if (existingLcl) {
         // Auto-preenche todos os campos exceto novoContainer
         setLclFormData({
           mbl: existingLcl.mbl_id,
-          container: '', // Limpa - usuário vai preencher o novo container
+          container: '',
+          // Limpa - usuário vai preencher o novo container
           armador: existingLcl.coloader || '',
           consignee: existingLcl.consignee || '',
           eta: existingLcl.eta || '',
@@ -477,45 +471,56 @@ const ContainerTracking = () => {
   // Estatísticas de armadores: merge estático + dinâmico
   const carrierStats = useMemo(() => {
     // Contagem dinâmica baseada nos MBLs carregados
-    const dynamicCounts: Record<string, { count: number; prefixes: Set<string>; examples: string[] }> = {};
-    const newLclPrefixes: Record<string, { count: number; examples: string[] }> = {};
-    const newRoutePrefixes: Record<string, { count: number; examples: string[] }> = {};
+    const dynamicCounts: Record<string, {
+      count: number;
+      prefixes: Set<string>;
+      examples: string[];
+    }> = {};
+    const newLclPrefixes: Record<string, {
+      count: number;
+      examples: string[];
+    }> = {};
+    const newRoutePrefixes: Record<string, {
+      count: number;
+      examples: string[];
+    }> = {};
     const numericMbls: string[] = [];
-    const unknownPrefixes: Record<string, { count: number; examples: string[] }> = {};
-    
+    const unknownPrefixes: Record<string, {
+      count: number;
+      examples: string[];
+    }> = {};
+
     // Prefixos estáticos conhecidos (para detectar "novos")
     const staticLclPrefixes = new Set(LCL_PREFIXES.map(p => p.prefix));
     const staticRoutePrefixes = new Set(ROUTE_FORMAT_PREFIXES.map(p => p.prefix));
-    
+
     // Contagem por prefixo LCL existente
     const lclCounts: Record<string, number> = {};
     LCL_PREFIXES.forEach(p => lclCounts[p.prefix] = 0);
-    
+
     // Contagem por prefixo Rota existente
     const routeCounts: Record<string, number> = {};
     ROUTE_FORMAT_PREFIXES.forEach(p => routeCounts[p.prefix] = 0);
-    
     let numericCount = 0;
-    
     for (const mbl of mblList) {
       const mblId = (mbl.mbl_id || '').toUpperCase().trim();
       if (!mblId) continue;
-      
       const carrier = detectCarrierFromMbl(mblId);
-      
       if (carrier.code !== 'UNKNOWN') {
         // Armador mapeado - incrementa contagem
         if (!dynamicCounts[carrier.code]) {
-          dynamicCounts[carrier.code] = { count: 0, prefixes: new Set(), examples: [] };
+          dynamicCounts[carrier.code] = {
+            count: 0,
+            prefixes: new Set(),
+            examples: []
+          };
         }
         dynamicCounts[carrier.code].count++;
         dynamicCounts[carrier.code].prefixes.add(mblId.substring(0, 4));
-        
       } else if (/^\d+$/.test(mblId)) {
         // MBL numérico
         numericCount++;
         if (numericMbls.length < 5) numericMbls.push(mblId);
-        
       } else if (/^[A-Z]{2,4}\/[A-Z]{2,4}/.test(mblId)) {
         // Formato rota
         const prefix = mblId.split('/').slice(0, 2).join('/');
@@ -523,13 +528,15 @@ const ContainerTracking = () => {
           routeCounts[prefix] = (routeCounts[prefix] || 0) + 1;
         } else {
           // NOVO prefixo de rota
-          if (!newRoutePrefixes[prefix]) newRoutePrefixes[prefix] = { count: 0, examples: [] };
+          if (!newRoutePrefixes[prefix]) newRoutePrefixes[prefix] = {
+            count: 0,
+            examples: []
+          };
           newRoutePrefixes[prefix].count++;
           if (newRoutePrefixes[prefix].examples.length < 2) {
             newRoutePrefixes[prefix].examples.push(mblId);
           }
         }
-        
       } else {
         // Verificar se é LCL conhecido
         const matchedLcl = LCL_PREFIXES.find(p => mblId.startsWith(p.prefix));
@@ -539,7 +546,10 @@ const ContainerTracking = () => {
           // NOVO prefixo LCL
           const prefix = mblId.substring(0, 4);
           if (!staticLclPrefixes.has(prefix)) {
-            if (!newLclPrefixes[prefix]) newLclPrefixes[prefix] = { count: 0, examples: [] };
+            if (!newLclPrefixes[prefix]) newLclPrefixes[prefix] = {
+              count: 0,
+              examples: []
+            };
             newLclPrefixes[prefix].count++;
             if (newLclPrefixes[prefix].examples.length < 2) {
               newLclPrefixes[prefix].examples.push(mblId);
@@ -550,7 +560,10 @@ const ContainerTracking = () => {
         } else {
           // Desconhecido
           const prefix = mblId.substring(0, 4);
-          if (!unknownPrefixes[prefix]) unknownPrefixes[prefix] = { count: 0, examples: [] };
+          if (!unknownPrefixes[prefix]) unknownPrefixes[prefix] = {
+            count: 0,
+            examples: []
+          };
           unknownPrefixes[prefix].count++;
           if (unknownPrefixes[prefix].examples.length < 2) {
             unknownPrefixes[prefix].examples.push(mblId);
@@ -558,60 +571,57 @@ const ContainerTracking = () => {
         }
       }
     }
-    
+
     // MERGE: Armadores estáticos + contagem dinâmica
     const carriers = getTrackableCarriers().map(carrier => ({
       ...carrier,
       count: dynamicCounts[carrier.code]?.count || 0,
       prefixes: Array.from(dynamicCounts[carrier.code]?.prefixes || [])
     })).sort((a, b) => b.count - a.count);
-    
+
     // MERGE: LCL estáticos + contagem + novos
-    const lcl = [
-      ...LCL_PREFIXES.map(item => ({
-        prefix: item.prefix,
-        label: item.label,
-        count: lclCounts[item.prefix] || 0,
-        isNew: false,
-        examples: [] as string[]
-      })),
-      ...Object.entries(newLclPrefixes).map(([prefix, data]) => ({
-        prefix,
-        label: `Novo (${data.examples[0] || prefix})`,
-        count: data.count,
-        isNew: true,
-        examples: data.examples
-      }))
-    ].sort((a, b) => b.count - a.count);
-    
+    const lcl = [...LCL_PREFIXES.map(item => ({
+      prefix: item.prefix,
+      label: item.label,
+      count: lclCounts[item.prefix] || 0,
+      isNew: false,
+      examples: [] as string[]
+    })), ...Object.entries(newLclPrefixes).map(([prefix, data]) => ({
+      prefix,
+      label: `Novo (${data.examples[0] || prefix})`,
+      count: data.count,
+      isNew: true,
+      examples: data.examples
+    }))].sort((a, b) => b.count - a.count);
+
     // MERGE: Rotas estáticas + contagem + novos
-    const routes = [
-      ...ROUTE_FORMAT_PREFIXES.map(item => ({
-        prefix: item.prefix,
-        label: item.label,
-        count: routeCounts[item.prefix] || 0,
-        isNew: false,
-        examples: [] as string[]
-      })),
-      ...Object.entries(newRoutePrefixes).map(([prefix, data]) => ({
-        prefix,
-        label: 'Rota descoberta',
-        count: data.count,
-        isNew: true,
-        examples: data.examples
-      }))
-    ].sort((a, b) => b.count - a.count);
-    
+    const routes = [...ROUTE_FORMAT_PREFIXES.map(item => ({
+      prefix: item.prefix,
+      label: item.label,
+      count: routeCounts[item.prefix] || 0,
+      isNew: false,
+      examples: [] as string[]
+    })), ...Object.entries(newRoutePrefixes).map(([prefix, data]) => ({
+      prefix,
+      label: 'Rota descoberta',
+      count: data.count,
+      isNew: true,
+      examples: data.examples
+    }))].sort((a, b) => b.count - a.count);
+
     // Desconhecidos
-    const unknown = Object.entries(unknownPrefixes)
-      .map(([prefix, data]) => ({ prefix, ...data }))
-      .sort((a, b) => b.count - a.count);
-    
+    const unknown = Object.entries(unknownPrefixes).map(([prefix, data]) => ({
+      prefix,
+      ...data
+    })).sort((a, b) => b.count - a.count);
     return {
       carriers,
       lcl,
       routes,
-      numeric: { count: numericCount, examples: numericMbls },
+      numeric: {
+        count: numericCount,
+        examples: numericMbls
+      },
       unknown,
       totalMbls: mblList.length,
       newLclCount: Object.keys(newLclPrefixes).length,
@@ -1577,13 +1587,11 @@ const ContainerTracking = () => {
   const filteredMbls = useMemo(() => {
     let mbls = mblList.filter(m => {
       const searchLower = searchTerm.toLowerCase();
-      const matchesSearch = !searchTerm || m.mbl_id.toLowerCase().includes(searchLower) || m.consignee && m.consignee.toLowerCase().includes(searchLower) || m.shipping_line && m.shipping_line.toLowerCase().includes(searchLower) || m.navio && m.navio.toLowerCase().includes(searchLower) || (m.coloader && m.coloader.toLowerCase().includes(searchLower));
-      
+      const matchesSearch = !searchTerm || m.mbl_id.toLowerCase().includes(searchLower) || m.consignee && m.consignee.toLowerCase().includes(searchLower) || m.shipping_line && m.shipping_line.toLowerCase().includes(searchLower) || m.navio && m.navio.toLowerCase().includes(searchLower) || m.coloader && m.coloader.toLowerCase().includes(searchLower);
+
       // Para LCL usa coloader, para FCL usa armador
       const armador = getShippingLineFromMbl(m.mbl_id, m.shipping_line);
-      const matchesLine = filterLine === "all" || 
-        (m.tipo_carga === 'LCL' ? m.coloader === filterLine : armador === filterLine);
-      
+      const matchesLine = filterLine === "all" || (m.tipo_carga === 'LCL' ? m.coloader === filterLine : armador === filterLine);
       const matchesCoordenador = filterCoordenador === "all" || (m.nome_analista || "-") === filterCoordenador;
       let matchesCardFilter = true;
       if (activeCardFilter === "transito") {
@@ -1596,7 +1604,7 @@ const ContainerTracking = () => {
         matchesCardFilter = isEntregue(m.last_event);
       }
       const matchesTipoProcesso = filterTipoProcesso === "all" || m.tipo_processo === filterTipoProcesso;
-      
+
       // Filtro de tipo de carga (LCL/FCL)
       const matchesTipoCarga = filterTipoCarga === "all" || m.tipo_carga === filterTipoCarga;
 
@@ -1643,16 +1651,12 @@ const ContainerTracking = () => {
       return getTrackableCarriers().map(info => normalizeArmadorName(info.name)).sort((a, b) => a.localeCompare(b));
     } else if (filterTipoCarga === 'LCL') {
       // Apenas coloaders únicos dos registros LCL
-      const coloaders = mblList
-        .filter(m => m.tipo_carga === 'LCL' && m.coloader)
-        .map(m => m.coloader as string);
+      const coloaders = mblList.filter(m => m.tipo_carga === 'LCL' && m.coloader).map(m => m.coloader as string);
       return [...new Set(coloaders)].sort((a, b) => a.localeCompare(b));
     } else {
       // Todos: armadores + coloaders
       const armadores = getTrackableCarriers().map(info => normalizeArmadorName(info.name));
-      const coloaders = mblList
-        .filter(m => m.coloader)
-        .map(m => m.coloader as string);
+      const coloaders = mblList.filter(m => m.coloader).map(m => m.coloader as string);
       return [...new Set([...armadores, ...coloaders])].sort((a, b) => a.localeCompare(b));
     }
   }, [mblList, filterTipoCarga]);
@@ -2089,16 +2093,12 @@ const ContainerTracking = () => {
                               </TooltipProvider>
                             </td>
                             <td className="px-4 py-3">
-                              {mbl.tipo_carga === 'LCL' ? (
-                                <span className="px-2 py-1 rounded-full text-xs font-medium bg-[rgba(6,182,212,.15)] text-cyan-400 border border-[rgba(6,182,212,.3)] flex items-center gap-1 w-fit">
+                              {mbl.tipo_carga === 'LCL' ? <span className="px-2 py-1 rounded-full text-xs font-medium bg-[rgba(6,182,212,.15)] text-cyan-400 border border-[rgba(6,182,212,.3)] flex items-center gap-1 w-fit">
                                   <Package className="w-3 h-3" />
                                   {mbl.coloader || 'N/D'}
-                                </span>
-                              ) : (
-                                <span className="px-2 py-1 rounded-full text-xs font-medium bg-[rgba(255,200,0,.15)] text-[#ffc800] border border-[rgba(255,200,0,.3)]">
+                                </span> : <span className="px-2 py-1 rounded-full text-xs font-medium bg-[rgba(255,200,0,.15)] text-[#ffc800] border border-[rgba(255,200,0,.3)]">
                                   {getShippingLineFromMbl(mbl.mbl_id, mbl.shipping_line)}
-                                </span>
-                              )}
+                                </span>}
                             </td>
                             <td className="px-4 py-3 text-[#aaaaaa] text-sm">{mbl.origem || "-"}</td>
                             <td className="px-4 py-3 text-[#aaaaaa] text-sm">
@@ -2555,11 +2555,9 @@ const ContainerTracking = () => {
             <DialogTitle className="flex items-center gap-2 text-white">
               <Ship className="w-5 h-5 text-emerald-400" />
               Armadores Mapeados
-              {carrierStats.totalMbls > 0 && (
-                <span className="text-xs text-gray-500 font-normal ml-2">
+              {carrierStats.totalMbls > 0 && <span className="text-xs text-gray-500 font-normal ml-2">
                   (baseado em {carrierStats.totalMbls} MBLs)
-                </span>
-              )}
+                </span>}
             </DialogTitle>
             <DialogDescription className="text-gray-400">
               Classificação dinâmica dos MBLs sincronizados
@@ -2578,10 +2576,9 @@ const ContainerTracking = () => {
               </TableHeader>
               <TableBody>
                 {carrierStats.carriers.map(carrier => {
-                  const prefixes = Object.entries(MBL_PREFIX_MAP).filter(([_, code]) => code === carrier.code).map(([prefix]) => prefix);
-                  const displayPrefix = carrier.prefixes.length > 0 ? carrier.prefixes[0] : (prefixes[0] || carrier.code);
-                  return (
-                    <TableRow key={carrier.code} className="border-b border-[rgba(255,255,255,.05)] hover:bg-[rgba(255,255,255,.03)]">
+                const prefixes = Object.entries(MBL_PREFIX_MAP).filter(([_, code]) => code === carrier.code).map(([prefix]) => prefix);
+                const displayPrefix = carrier.prefixes.length > 0 ? carrier.prefixes[0] : prefixes[0] || carrier.code;
+                return <TableRow key={carrier.code} className="border-b border-[rgba(255,255,255,.05)] hover:bg-[rgba(255,255,255,.03)]">
                       <TableCell className="font-mono text-sm text-gray-300">
                         {displayPrefix}
                       </TableCell>
@@ -2591,9 +2588,8 @@ const ContainerTracking = () => {
                       <TableCell className="text-gray-400 text-sm">
                         {carrier.country}
                       </TableCell>
-                    </TableRow>
-                  );
-                })}
+                    </TableRow>;
+              })}
               </TableBody>
             </Table>
             
@@ -2606,11 +2602,9 @@ const ContainerTracking = () => {
                 <Package className="w-4 h-4 text-orange-400" />
                 <h4 className="text-sm font-medium text-orange-400">
                   Prefixos LCL / Consolidadores
-                  {carrierStats.newLclCount > 0 && (
-                    <span className="ml-2 text-[10px] px-1.5 py-0.5 rounded bg-green-500/20 text-green-400 border border-green-500/30">
+                  {carrierStats.newLclCount > 0 && <span className="ml-2 text-[10px] px-1.5 py-0.5 rounded bg-green-500/20 text-green-400 border border-green-500/30">
                       +{carrierStats.newLclCount} NOVOS
-                    </span>
-                  )}
+                    </span>}
                 </h4>
               </div>
               <p className="text-xs text-gray-500 mb-3">Prefixos não mapeados para armadores específicos</p>
@@ -2620,36 +2614,25 @@ const ContainerTracking = () => {
                   <TableRow className="border-b border-[rgba(255,255,255,.08)] hover:bg-transparent">
                     <TableHead className="text-[#aaaaaa]">Prefixo</TableHead>
                     <TableHead className="text-[#aaaaaa]">Descrição</TableHead>
-                    <TableHead className="text-[#aaaaaa] text-right">MBLs</TableHead>
+                    <TableHead className="text-[#aaaaaa] text-right">
+                  </TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {carrierStats.lcl.map(item => (
-                    <TableRow key={item.prefix} className="border-b border-[rgba(255,255,255,.05)] hover:bg-[rgba(255,255,255,.03)]">
+                  {carrierStats.lcl.map(item => <TableRow key={item.prefix} className="border-b border-[rgba(255,255,255,.05)] hover:bg-[rgba(255,255,255,.03)]">
                       <TableCell>
                         <span className="font-mono text-sm px-2 py-0.5 rounded bg-orange-500/20 text-orange-400 border border-orange-500/30">
                           {item.prefix}
                         </span>
-                        {item.isNew && (
-                          <span className="ml-2 text-[10px] px-1.5 py-0.5 rounded bg-green-500/20 text-green-400 border border-green-500/30">
+                        {item.isNew && <span className="ml-2 text-[10px] px-1.5 py-0.5 rounded bg-green-500/20 text-green-400 border border-green-500/30">
                             NOVO
-                          </span>
-                        )}
+                          </span>}
                       </TableCell>
                       <TableCell className="text-gray-400 text-sm">
                         {item.label}
                       </TableCell>
-                      <TableCell className="text-right">
-                        {item.count > 0 ? (
-                          <span className="bg-orange-500/20 text-orange-400 px-2 py-0.5 rounded text-xs">
-                            {item.count}
-                          </span>
-                        ) : (
-                          <span className="text-gray-600 text-xs">-</span>
-                        )}
-                      </TableCell>
-                    </TableRow>
-                  ))}
+                      
+                    </TableRow>)}
                 </TableBody>
               </Table>
             </div>
@@ -2663,11 +2646,9 @@ const ContainerTracking = () => {
                 <ArrowLeftRight className="w-4 h-4 text-blue-400" />
                 <h4 className="text-sm font-medium text-blue-400">
                   Formatos com Rota (ORIGEM/DESTINO)
-                  {carrierStats.newRouteCount > 0 && (
-                    <span className="ml-2 text-[10px] px-1.5 py-0.5 rounded bg-green-500/20 text-green-400 border border-green-500/30">
+                  {carrierStats.newRouteCount > 0 && <span className="ml-2 text-[10px] px-1.5 py-0.5 rounded bg-green-500/20 text-green-400 border border-green-500/30">
                       +{carrierStats.newRouteCount} NOVOS
-                    </span>
-                  )}
+                    </span>}
                 </h4>
               </div>
               <p className="text-xs text-gray-500 mb-3">MBLs no formato rota com barra separadora</p>
@@ -2681,32 +2662,24 @@ const ContainerTracking = () => {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {carrierStats.routes.map(item => (
-                    <TableRow key={item.prefix} className="border-b border-[rgba(255,255,255,.05)] hover:bg-[rgba(255,255,255,.03)]">
+                  {carrierStats.routes.map(item => <TableRow key={item.prefix} className="border-b border-[rgba(255,255,255,.05)] hover:bg-[rgba(255,255,255,.03)]">
                       <TableCell>
                         <span className="font-mono text-sm px-2 py-0.5 rounded bg-blue-500/20 text-blue-400 border border-blue-500/30">
                           {item.prefix}
                         </span>
-                        {item.isNew && (
-                          <span className="ml-2 text-[10px] px-1.5 py-0.5 rounded bg-green-500/20 text-green-400 border border-green-500/30">
+                        {item.isNew && <span className="ml-2 text-[10px] px-1.5 py-0.5 rounded bg-green-500/20 text-green-400 border border-green-500/30">
                             NOVO
-                          </span>
-                        )}
+                          </span>}
                       </TableCell>
                       <TableCell className="text-gray-400 text-sm">
                         {item.label}
                       </TableCell>
                       <TableCell className="text-right">
-                        {item.count > 0 ? (
-                          <span className="bg-blue-500/20 text-blue-400 px-2 py-0.5 rounded text-xs">
+                        {item.count > 0 ? <span className="bg-blue-500/20 text-blue-400 px-2 py-0.5 rounded text-xs">
                             {item.count}
-                          </span>
-                        ) : (
-                          <span className="text-gray-600 text-xs">-</span>
-                        )}
+                          </span> : <span className="text-gray-600 text-xs">-</span>}
                       </TableCell>
-                    </TableRow>
-                  ))}
+                    </TableRow>)}
                 </TableBody>
               </Table>
             </div>
@@ -2720,11 +2693,9 @@ const ContainerTracking = () => {
                 <Hash className="w-4 h-4 text-yellow-400" />
                 <h4 className="text-sm font-medium text-yellow-400">
                   MBLs Numéricos
-                  {carrierStats.numeric.count > 0 && (
-                    <span className="ml-2 bg-yellow-500/20 text-yellow-400 px-2 py-0.5 rounded text-xs">
+                  {carrierStats.numeric.count > 0 && <span className="ml-2 bg-yellow-500/20 text-yellow-400 px-2 py-0.5 rounded text-xs">
                       {carrierStats.numeric.count}
-                    </span>
-                  )}
+                    </span>}
                 </h4>
               </div>
               <div className="bg-yellow-500/10 border border-yellow-500/20 rounded-lg p-3">
@@ -2732,26 +2703,17 @@ const ContainerTracking = () => {
                   ⚠️ {NUMERIC_MBL_INFO.note}
                 </p>
                 <div className="flex flex-wrap gap-2">
-                  {carrierStats.numeric.examples.length > 0 ? (
-                    carrierStats.numeric.examples.map(example => (
-                      <span key={example} className="font-mono text-xs px-2 py-0.5 rounded bg-yellow-500/20 text-yellow-400 border border-yellow-500/30">
+                  {carrierStats.numeric.examples.length > 0 ? carrierStats.numeric.examples.map(example => <span key={example} className="font-mono text-xs px-2 py-0.5 rounded bg-yellow-500/20 text-yellow-400 border border-yellow-500/30">
                         {example}
-                      </span>
-                    ))
-                  ) : (
-                    NUMERIC_MBL_INFO.examples.map(example => (
-                      <span key={example} className="font-mono text-xs px-2 py-0.5 rounded bg-yellow-500/20 text-yellow-400 border border-yellow-500/30">
+                      </span>) : NUMERIC_MBL_INFO.examples.map(example => <span key={example} className="font-mono text-xs px-2 py-0.5 rounded bg-yellow-500/20 text-yellow-400 border border-yellow-500/30">
                         {example}
-                      </span>
-                    ))
-                  )}
+                      </span>)}
                 </div>
               </div>
             </div>
             
             {/* Seção de Prefixos Desconhecidos */}
-            {carrierStats.unknown.length > 0 && (
-              <>
+            {carrierStats.unknown.length > 0 && <>
                 <Separator className="bg-[rgba(255,255,255,.08)]" />
                 <div>
                   <div className="flex items-center gap-2 mb-3">
@@ -2766,8 +2728,7 @@ const ContainerTracking = () => {
                   <p className="text-xs text-gray-500 mb-3">Prefixos encontrados que não estão mapeados no sistema</p>
                   
                   <div className="flex flex-wrap gap-2">
-                    {carrierStats.unknown.slice(0, 15).map(item => (
-                      <TooltipProvider key={item.prefix}>
+                    {carrierStats.unknown.slice(0, 15).map(item => <TooltipProvider key={item.prefix}>
                         <Tooltip>
                           <TooltipTrigger asChild>
                             <span className="font-mono text-xs px-2 py-1 rounded bg-white/10 text-gray-400 border border-white/20 cursor-help">
@@ -2778,17 +2739,13 @@ const ContainerTracking = () => {
                             <p className="text-xs">Ex: {item.examples.join(', ')}</p>
                           </TooltipContent>
                         </Tooltip>
-                      </TooltipProvider>
-                    ))}
-                    {carrierStats.unknown.length > 15 && (
-                      <span className="text-xs text-gray-500 self-center">
+                      </TooltipProvider>)}
+                    {carrierStats.unknown.length > 15 && <span className="text-xs text-gray-500 self-center">
                         +{carrierStats.unknown.length - 15} outros
-                      </span>
-                    )}
+                      </span>}
                   </div>
                 </div>
-              </>
-            )}
+              </>}
           </div>
           
           <DialogFooter className="mt-4 border-t border-[rgba(255,255,255,.08)] pt-4">
@@ -2820,57 +2777,28 @@ const ContainerTracking = () => {
           <div className="space-y-4 mt-4">
             <div className="space-y-2">
               <Label className="text-white">MBL *</Label>
-              <Input 
-                placeholder="Ex: HLCUSHA241234567" 
-                value={lclFormData.mbl} 
-                onChange={e => handleLclMblChange(e.target.value)} 
-                className={cn(
-                  "bg-[rgba(0,0,0,.3)] border-[rgba(255,255,255,.14)] text-white placeholder:text-gray-500",
-                  lclAutoFilled && "border-green-500/50 bg-green-900/10"
-                )} 
-              />
-              {lclAutoFilled && (
-                <span className="text-xs text-green-400 flex items-center gap-1">
+              <Input placeholder="Ex: HLCUSHA241234567" value={lclFormData.mbl} onChange={e => handleLclMblChange(e.target.value)} className={cn("bg-[rgba(0,0,0,.3)] border-[rgba(255,255,255,.14)] text-white placeholder:text-gray-500", lclAutoFilled && "border-green-500/50 bg-green-900/10")} />
+              {lclAutoFilled && <span className="text-xs text-green-400 flex items-center gap-1">
                   <Check className="w-3 h-3" />
                   MBL encontrado - campos preenchidos automaticamente
-                </span>
-              )}
+                </span>}
             </div>
             
             <div className="space-y-2">
               <Label className="text-white">Container *</Label>
-              <Input 
-                placeholder={lclAutoFilled ? "Informe o novo container" : "Ex: HLCU1234567"} 
-                value={lclFormData.container} 
-                onChange={e => setLclFormData(prev => ({
-                  ...prev,
-                  container: e.target.value.toUpperCase()
-                }))} 
-                className={cn(
-                  "bg-[rgba(0,0,0,.3)] border-[rgba(255,255,255,.14)] text-white placeholder:text-gray-500",
-                  lclAutoFilled && "border-cyan-500/50 ring-1 ring-cyan-500/30"
-                )} 
-              />
-              {lclAutoFilled && (
-                <span className="text-xs text-cyan-400">Informe o container pós-transbordo</span>
-              )}
+              <Input placeholder={lclAutoFilled ? "Informe o novo container" : "Ex: HLCU1234567"} value={lclFormData.container} onChange={e => setLclFormData(prev => ({
+              ...prev,
+              container: e.target.value.toUpperCase()
+            }))} className={cn("bg-[rgba(0,0,0,.3)] border-[rgba(255,255,255,.14)] text-white placeholder:text-gray-500", lclAutoFilled && "border-cyan-500/50 ring-1 ring-cyan-500/30")} />
+              {lclAutoFilled && <span className="text-xs text-cyan-400">Informe o container pós-transbordo</span>}
             </div>
             
             <div className="space-y-2">
               <Label className={cn("text-white", lclAutoFilled && "text-green-300")}>Coloader *</Label>
-              <Input 
-                placeholder="Ex: DACHSER Netherlands, DSV, Kuehne+Nagel..." 
-                value={lclFormData.armador} 
-                onChange={e => setLclFormData(prev => ({
-                  ...prev,
-                  armador: e.target.value
-                }))} 
-                className={cn(
-                  "bg-[rgba(0,0,0,.3)] border-[rgba(255,255,255,.14)] text-white placeholder:text-gray-500",
-                  lclAutoFilled && lclFormData.armador && "border-green-500/30 bg-green-900/5"
-                )} 
-                readOnly={lclAutoFilled}
-              />
+              <Input placeholder="Ex: DACHSER Netherlands, DSV, Kuehne+Nagel..." value={lclFormData.armador} onChange={e => setLclFormData(prev => ({
+              ...prev,
+              armador: e.target.value
+            }))} className={cn("bg-[rgba(0,0,0,.3)] border-[rgba(255,255,255,.14)] text-white placeholder:text-gray-500", lclAutoFilled && lclFormData.armador && "border-green-500/30 bg-green-900/5")} readOnly={lclAutoFilled} />
               <span className="text-xs text-gray-500">Nome do consolidador responsável pelo embarque LCL</span>
             </div>
             
@@ -2881,57 +2809,36 @@ const ContainerTracking = () => {
               <Popover open={consigneePopoverOpen} onOpenChange={setConsigneePopoverOpen}>
                 <PopoverTrigger asChild>
                   <div className="relative">
-                    <Input 
-                      placeholder="Digite para buscar clientes..."
-                      value={lclFormData.consignee}
-                      onChange={e => {
-                        const value = e.target.value;
-                        setLclFormData(prev => ({ ...prev, consignee: value }));
-                        if (!lclAutoFilled) {
-                          searchConsignee(value);
-                        }
-                      }}
-                      onFocus={() => {
-                        if (consigneeSuggestions.length > 0 && !lclAutoFilled) {
-                          setConsigneePopoverOpen(true);
-                        }
-                      }}
-                      className={cn(
-                        "bg-[rgba(0,0,0,.3)] border-[rgba(255,255,255,.14)] text-white placeholder:text-gray-500 pr-8",
-                        lclAutoFilled && lclFormData.consignee && "border-green-500/30 bg-green-900/5"
-                      )}
-                      readOnly={lclAutoFilled}
-                    />
-                    {isSearchingConsignee && (
-                      <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 animate-spin text-gray-400" />
-                    )}
+                    <Input placeholder="Digite para buscar clientes..." value={lclFormData.consignee} onChange={e => {
+                    const value = e.target.value;
+                    setLclFormData(prev => ({
+                      ...prev,
+                      consignee: value
+                    }));
+                    if (!lclAutoFilled) {
+                      searchConsignee(value);
+                    }
+                  }} onFocus={() => {
+                    if (consigneeSuggestions.length > 0 && !lclAutoFilled) {
+                      setConsigneePopoverOpen(true);
+                    }
+                  }} className={cn("bg-[rgba(0,0,0,.3)] border-[rgba(255,255,255,.14)] text-white placeholder:text-gray-500 pr-8", lclAutoFilled && lclFormData.consignee && "border-green-500/30 bg-green-900/5")} readOnly={lclAutoFilled} />
+                    {isSearchingConsignee && <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 animate-spin text-gray-400" />}
                   </div>
                 </PopoverTrigger>
-                <PopoverContent 
-                  className="w-[400px] p-0 bg-[#1a1a2e] border-[rgba(255,255,255,.1)]" 
-                  align="start"
-                  onOpenAutoFocus={e => e.preventDefault()}
-                >
+                <PopoverContent className="w-[400px] p-0 bg-[#1a1a2e] border-[rgba(255,255,255,.1)]" align="start" onOpenAutoFocus={e => e.preventDefault()}>
                   <Command className="bg-transparent">
                     <CommandList>
-                      {consigneeSuggestions.length === 0 ? (
-                        <CommandEmpty className="text-gray-400 py-4 text-center text-sm">
-                          {lclFormData.consignee.length < 2 
-                            ? "Digite pelo menos 2 caracteres..." 
-                            : "Nenhum cliente encontrado"}
-                        </CommandEmpty>
-                      ) : (
-                        <CommandGroup heading="Clientes cadastrados" className="text-gray-400">
-                          {consigneeSuggestions.map((cliente, idx) => (
-                            <CommandItem
-                              key={idx}
-                              value={cliente.nome_cliente}
-                              onSelect={() => {
-                                setLclFormData(prev => ({ ...prev, consignee: cliente.nome_cliente }));
-                                setConsigneePopoverOpen(false);
-                              }}
-                              className="cursor-pointer hover:bg-[rgba(255,255,255,.05)] text-white"
-                            >
+                      {consigneeSuggestions.length === 0 ? <CommandEmpty className="text-gray-400 py-4 text-center text-sm">
+                          {lclFormData.consignee.length < 2 ? "Digite pelo menos 2 caracteres..." : "Nenhum cliente encontrado"}
+                        </CommandEmpty> : <CommandGroup heading="Clientes cadastrados" className="text-gray-400">
+                          {consigneeSuggestions.map((cliente, idx) => <CommandItem key={idx} value={cliente.nome_cliente} onSelect={() => {
+                        setLclFormData(prev => ({
+                          ...prev,
+                          consignee: cliente.nome_cliente
+                        }));
+                        setConsigneePopoverOpen(false);
+                      }} className="cursor-pointer hover:bg-[rgba(255,255,255,.05)] text-white">
                               <div className="flex flex-col gap-0.5">
                                 <span className="font-medium">{cliente.nome_cliente}</span>
                                 <span className="text-xs text-gray-400">
@@ -2939,24 +2846,15 @@ const ContainerTracking = () => {
                                   {cliente.cnpj && ` • CNPJ: ${cliente.cnpj}`}
                                 </span>
                               </div>
-                            </CommandItem>
-                          ))}
-                        </CommandGroup>
-                      )}
+                            </CommandItem>)}
+                        </CommandGroup>}
                     </CommandList>
-                    {lclFormData.consignee && !consigneeSuggestions.some(c => c.nome_cliente === lclFormData.consignee) && (
-                      <div className="border-t border-[rgba(255,255,255,.1)] p-2">
-                        <Button 
-                          variant="ghost" 
-                          size="sm" 
-                          className="w-full justify-start text-cyan-400 hover:text-cyan-300 hover:bg-cyan-900/20"
-                          onClick={() => setConsigneePopoverOpen(false)}
-                        >
+                    {lclFormData.consignee && !consigneeSuggestions.some(c => c.nome_cliente === lclFormData.consignee) && <div className="border-t border-[rgba(255,255,255,.1)] p-2">
+                        <Button variant="ghost" size="sm" className="w-full justify-start text-cyan-400 hover:text-cyan-300 hover:bg-cyan-900/20" onClick={() => setConsigneePopoverOpen(false)}>
                           <Plus className="w-4 h-4 mr-2" />
                           Usar "{lclFormData.consignee}" (não cadastrado)
                         </Button>
-                      </div>
-                    )}
+                      </div>}
                   </Command>
                 </PopoverContent>
               </Popover>
@@ -2967,147 +2865,120 @@ const ContainerTracking = () => {
             
             <div className="space-y-2">
               <Label className={cn("text-white", lclAutoFilled && lclFormData.eta && "text-green-300")}>ETA</Label>
-              <Input 
-                type="text" 
-                placeholder="DD/MM/YYYY" 
-                value={lclFormData.eta} 
-                onChange={e => setLclFormData(prev => ({
-                  ...prev,
-                  eta: e.target.value
-                }))} 
-                className={cn(
-                  "bg-[rgba(0,0,0,.3)] border-[rgba(255,255,255,.14)] text-white placeholder:text-gray-500",
-                  lclAutoFilled && lclFormData.eta && "border-green-500/30 bg-green-900/5"
-                )} 
-                readOnly={lclAutoFilled}
-              />
+              <Input type="text" placeholder="DD/MM/YYYY" value={lclFormData.eta} onChange={e => setLclFormData(prev => ({
+              ...prev,
+              eta: e.target.value
+            }))} className={cn("bg-[rgba(0,0,0,.3)] border-[rgba(255,255,255,.14)] text-white placeholder:text-gray-500", lclAutoFilled && lclFormData.eta && "border-green-500/30 bg-green-900/5")} readOnly={lclAutoFilled} />
               <span className="text-xs text-gray-500">Formato: DD/MM/YYYY</span>
             </div>
             
             <div className="space-y-2">
               <Label className={cn("text-white", lclAutoFilled && lclFormData.transbordo && "text-green-300")}>Transbordo</Label>
-              <Input 
-                placeholder="Ex: SGSIN, Rotterdam, Shanghai..." 
-                value={lclFormData.transbordo} 
-                onChange={e => setLclFormData(prev => ({
-                  ...prev,
-                  transbordo: e.target.value
-                }))} 
-                className={cn(
-                  "bg-[rgba(0,0,0,.3)] border-[rgba(255,255,255,.14)] text-white placeholder:text-gray-500",
-                  lclAutoFilled && lclFormData.transbordo && "border-green-500/30 bg-green-900/5"
-                )} 
-                readOnly={lclAutoFilled}
-              />
+              <Input placeholder="Ex: SGSIN, Rotterdam, Shanghai..." value={lclFormData.transbordo} onChange={e => setLclFormData(prev => ({
+              ...prev,
+              transbordo: e.target.value
+            }))} className={cn("bg-[rgba(0,0,0,.3)] border-[rgba(255,255,255,.14)] text-white placeholder:text-gray-500", lclAutoFilled && lclFormData.transbordo && "border-green-500/30 bg-green-900/5")} readOnly={lclAutoFilled} />
               <span className="text-xs text-gray-500">Porto(s) de transbordo, separados por vírgula</span>
             </div>
             
             {/* Campo Novo Container - aparece quando há transbordo E não é auto-fill */}
-            {lclFormData.transbordo && !lclAutoFilled && (
-              <div className="space-y-2 p-3 rounded-lg border border-orange-500/30 bg-orange-900/10">
+            {lclFormData.transbordo && !lclAutoFilled && <div className="space-y-2 p-3 rounded-lg border border-orange-500/30 bg-orange-900/10">
                 <Label className="text-white flex items-center gap-2">
                   <ArrowLeftRight className="w-4 h-4 text-orange-400" />
                   Novo Container (pós-transbordo)
                 </Label>
-                <Input 
-                  placeholder="Ex: MSCU1234567" 
-                  value={lclFormData.novoContainer} 
-                  onChange={e => setLclFormData(prev => ({
-                    ...prev,
-                    novoContainer: e.target.value.toUpperCase()
-                  }))} 
-                  className="bg-[rgba(0,0,0,.3)] border-[rgba(255,255,255,.14)] text-white placeholder:text-gray-500"
-                />
+                <Input placeholder="Ex: MSCU1234567" value={lclFormData.novoContainer} onChange={e => setLclFormData(prev => ({
+              ...prev,
+              novoContainer: e.target.value.toUpperCase()
+            }))} className="bg-[rgba(0,0,0,.3)] border-[rgba(255,255,255,.14)] text-white placeholder:text-gray-500" />
                 <span className="text-xs text-gray-500">
                   Container atribuído após o transbordo (opcional)
                 </span>
-              </div>
-            )}
+              </div>}
           </div>
           
           <DialogFooter className="mt-6 gap-2">
             <Button variant="outline" onClick={() => {
-              setShowLclDialog(false);
-              setLclFormData({
-                mbl: '',
-                container: '',
-                armador: '',
-                consignee: '',
-                eta: '',
-                transbordo: '',
-                novoContainer: ''
-              });
-              setLclAutoFilled(false);
-              setConsigneeSuggestions([]);
-              setConsigneePopoverOpen(false);
-            }} className="border-[rgba(255,255,255,.1)] text-gray-300 hover:bg-[rgba(255,255,255,.05)]">
+            setShowLclDialog(false);
+            setLclFormData({
+              mbl: '',
+              container: '',
+              armador: '',
+              consignee: '',
+              eta: '',
+              transbordo: '',
+              novoContainer: ''
+            });
+            setLclAutoFilled(false);
+            setConsigneeSuggestions([]);
+            setConsigneePopoverOpen(false);
+          }} className="border-[rgba(255,255,255,.1)] text-gray-300 hover:bg-[rgba(255,255,255,.05)]">
               Cancelar
             </Button>
             <Button onClick={async () => {
-              // Usa novo container se preenchido, senão usa container original
-              const containerToSubmit = lclFormData.novoContainer || lclFormData.container;
-              
-              if (!lclFormData.mbl || !containerToSubmit || !lclFormData.armador) {
+            // Usa novo container se preenchido, senão usa container original
+            const containerToSubmit = lclFormData.novoContainer || lclFormData.container;
+            if (!lclFormData.mbl || !containerToSubmit || !lclFormData.armador) {
+              toast({
+                title: "Campos obrigatórios",
+                description: "Preencha MBL, Container e Coloader",
+                variant: "destructive"
+              });
+              return;
+            }
+            setIsSubmittingLcl(true);
+            try {
+              const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/olimpo-proxy?action=add_lcl_container`, {
+                method: 'POST',
+                headers: {
+                  'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
+                  'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                  mbl_id: lclFormData.mbl,
+                  container: containerToSubmit,
+                  shipping_line: lclFormData.armador,
+                  consignee: lclFormData.consignee,
+                  eta: lclFormData.eta || null,
+                  transbordo: lclFormData.transbordo || null
+                })
+              });
+              const result = await res.json();
+              if (result.success) {
                 toast({
-                  title: "Campos obrigatórios",
-                  description: "Preencha MBL, Container e Coloader",
+                  title: "Container LCL cadastrado",
+                  description: `Container ${containerToSubmit} adicionado ao monitoramento`
+                });
+                setShowLclDialog(false);
+                setLclFormData({
+                  mbl: '',
+                  container: '',
+                  armador: '',
+                  consignee: '',
+                  eta: '',
+                  transbordo: '',
+                  novoContainer: ''
+                });
+                setLclAutoFilled(false);
+                await fetchMblData();
+              } else {
+                toast({
+                  title: "Erro ao cadastrar",
+                  description: result.error || "Falha ao adicionar container LCL",
                   variant: "destructive"
                 });
-                return;
               }
-              setIsSubmittingLcl(true);
-              try {
-                const res = await fetch(`${import.meta.env.VITE_SUPABASE_URL}/functions/v1/olimpo-proxy?action=add_lcl_container`, {
-                  method: 'POST',
-                  headers: {
-                    'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
-                    'Content-Type': 'application/json'
-                  },
-                  body: JSON.stringify({
-                    mbl_id: lclFormData.mbl,
-                    container: containerToSubmit,
-                    shipping_line: lclFormData.armador,
-                    consignee: lclFormData.consignee,
-                    eta: lclFormData.eta || null,
-                    transbordo: lclFormData.transbordo || null
-                  })
-                });
-                const result = await res.json();
-                if (result.success) {
-                  toast({
-                    title: "Container LCL cadastrado",
-                    description: `Container ${containerToSubmit} adicionado ao monitoramento`
-                  });
-                  setShowLclDialog(false);
-                  setLclFormData({
-                    mbl: '',
-                    container: '',
-                    armador: '',
-                    consignee: '',
-                    eta: '',
-                    transbordo: '',
-                    novoContainer: ''
-                  });
-                  setLclAutoFilled(false);
-                  await fetchMblData();
-                } else {
-                  toast({
-                    title: "Erro ao cadastrar",
-                    description: result.error || "Falha ao adicionar container LCL",
-                    variant: "destructive"
-                  });
-                }
-              } catch (error) {
-                console.error("Error adding LCL container:", error);
-                toast({
-                  title: "Erro",
-                  description: "Falha ao cadastrar container LCL",
-                  variant: "destructive"
-                });
-              } finally {
-                setIsSubmittingLcl(false);
-              }
-            }} disabled={isSubmittingLcl || !lclFormData.mbl || !(lclFormData.novoContainer || lclFormData.container) || !lclFormData.armador} className="bg-cyan-600 hover:bg-cyan-700 text-white">
+            } catch (error) {
+              console.error("Error adding LCL container:", error);
+              toast({
+                title: "Erro",
+                description: "Falha ao cadastrar container LCL",
+                variant: "destructive"
+              });
+            } finally {
+              setIsSubmittingLcl(false);
+            }
+          }} disabled={isSubmittingLcl || !lclFormData.mbl || !(lclFormData.novoContainer || lclFormData.container) || !lclFormData.armador} className="bg-cyan-600 hover:bg-cyan-700 text-white">
               {isSubmittingLcl ? <>
                   <Loader2 className="h-4 w-4 mr-2 animate-spin" />
                   Cadastrando...
