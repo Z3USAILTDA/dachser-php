@@ -30,7 +30,7 @@ import { Filter as FilterIcon } from "lucide-react";
 import VesselFinderMap from "@/components/tracking/VesselFinderMap";
 import Swal from 'sweetalert2';
 import { useTheme } from "@/hooks/useTheme";
-import { detectCarrierFromMbl, SHIPPING_LINE_INFO, ShippingLineCode, getTrackableCarriers, MBL_PREFIX_MAP, LCL_PREFIXES, ROUTE_FORMAT_PREFIXES, NUMERIC_MBL_INFO } from "@/lib/shippingLineMapping";
+import { detectCarrierFromMbl, SHIPPING_LINE_INFO, ShippingLineCode, getTrackableCarriers, MBL_PREFIX_MAP, LCL_PREFIXES, ROUTE_FORMAT_PREFIXES, NUMERIC_MBL_INFO, INTERNAL_PREFIXES } from "@/lib/shippingLineMapping";
 import { Separator } from "@/components/ui/separator";
 
 // Deriva o armador do MBL usando o mapeamento centralizado - retorna código normalizado
@@ -473,6 +473,151 @@ const ContainerTracking = () => {
     }
   };
   const itemsPerPage = 10;
+
+  // Estatísticas de armadores: merge estático + dinâmico
+  const carrierStats = useMemo(() => {
+    // Contagem dinâmica baseada nos MBLs carregados
+    const dynamicCounts: Record<string, { count: number; prefixes: Set<string>; examples: string[] }> = {};
+    const newLclPrefixes: Record<string, { count: number; examples: string[] }> = {};
+    const newRoutePrefixes: Record<string, { count: number; examples: string[] }> = {};
+    const numericMbls: string[] = [];
+    const unknownPrefixes: Record<string, { count: number; examples: string[] }> = {};
+    
+    // Prefixos estáticos conhecidos (para detectar "novos")
+    const staticLclPrefixes = new Set(LCL_PREFIXES.map(p => p.prefix));
+    const staticRoutePrefixes = new Set(ROUTE_FORMAT_PREFIXES.map(p => p.prefix));
+    
+    // Contagem por prefixo LCL existente
+    const lclCounts: Record<string, number> = {};
+    LCL_PREFIXES.forEach(p => lclCounts[p.prefix] = 0);
+    
+    // Contagem por prefixo Rota existente
+    const routeCounts: Record<string, number> = {};
+    ROUTE_FORMAT_PREFIXES.forEach(p => routeCounts[p.prefix] = 0);
+    
+    let numericCount = 0;
+    
+    for (const mbl of mblList) {
+      const mblId = (mbl.mbl_id || '').toUpperCase().trim();
+      if (!mblId) continue;
+      
+      const carrier = detectCarrierFromMbl(mblId);
+      
+      if (carrier.code !== 'UNKNOWN') {
+        // Armador mapeado - incrementa contagem
+        if (!dynamicCounts[carrier.code]) {
+          dynamicCounts[carrier.code] = { count: 0, prefixes: new Set(), examples: [] };
+        }
+        dynamicCounts[carrier.code].count++;
+        dynamicCounts[carrier.code].prefixes.add(mblId.substring(0, 4));
+        
+      } else if (/^\d+$/.test(mblId)) {
+        // MBL numérico
+        numericCount++;
+        if (numericMbls.length < 5) numericMbls.push(mblId);
+        
+      } else if (/^[A-Z]{2,4}\/[A-Z]{2,4}/.test(mblId)) {
+        // Formato rota
+        const prefix = mblId.split('/').slice(0, 2).join('/');
+        if (staticRoutePrefixes.has(prefix)) {
+          routeCounts[prefix] = (routeCounts[prefix] || 0) + 1;
+        } else {
+          // NOVO prefixo de rota
+          if (!newRoutePrefixes[prefix]) newRoutePrefixes[prefix] = { count: 0, examples: [] };
+          newRoutePrefixes[prefix].count++;
+          if (newRoutePrefixes[prefix].examples.length < 2) {
+            newRoutePrefixes[prefix].examples.push(mblId);
+          }
+        }
+        
+      } else {
+        // Verificar se é LCL conhecido
+        const matchedLcl = LCL_PREFIXES.find(p => mblId.startsWith(p.prefix));
+        if (matchedLcl) {
+          lclCounts[matchedLcl.prefix] = (lclCounts[matchedLcl.prefix] || 0) + 1;
+        } else if (INTERNAL_PREFIXES.some(p => mblId.startsWith(p)) || /^SS[0-9A-Z]/.test(mblId)) {
+          // NOVO prefixo LCL
+          const prefix = mblId.substring(0, 4);
+          if (!staticLclPrefixes.has(prefix)) {
+            if (!newLclPrefixes[prefix]) newLclPrefixes[prefix] = { count: 0, examples: [] };
+            newLclPrefixes[prefix].count++;
+            if (newLclPrefixes[prefix].examples.length < 2) {
+              newLclPrefixes[prefix].examples.push(mblId);
+            }
+          } else {
+            lclCounts[prefix] = (lclCounts[prefix] || 0) + 1;
+          }
+        } else {
+          // Desconhecido
+          const prefix = mblId.substring(0, 4);
+          if (!unknownPrefixes[prefix]) unknownPrefixes[prefix] = { count: 0, examples: [] };
+          unknownPrefixes[prefix].count++;
+          if (unknownPrefixes[prefix].examples.length < 2) {
+            unknownPrefixes[prefix].examples.push(mblId);
+          }
+        }
+      }
+    }
+    
+    // MERGE: Armadores estáticos + contagem dinâmica
+    const carriers = getTrackableCarriers().map(carrier => ({
+      ...carrier,
+      count: dynamicCounts[carrier.code]?.count || 0,
+      prefixes: Array.from(dynamicCounts[carrier.code]?.prefixes || [])
+    })).sort((a, b) => b.count - a.count);
+    
+    // MERGE: LCL estáticos + contagem + novos
+    const lcl = [
+      ...LCL_PREFIXES.map(item => ({
+        prefix: item.prefix,
+        label: item.label,
+        count: lclCounts[item.prefix] || 0,
+        isNew: false,
+        examples: [] as string[]
+      })),
+      ...Object.entries(newLclPrefixes).map(([prefix, data]) => ({
+        prefix,
+        label: `Novo (${data.examples[0] || prefix})`,
+        count: data.count,
+        isNew: true,
+        examples: data.examples
+      }))
+    ].sort((a, b) => b.count - a.count);
+    
+    // MERGE: Rotas estáticas + contagem + novos
+    const routes = [
+      ...ROUTE_FORMAT_PREFIXES.map(item => ({
+        prefix: item.prefix,
+        label: item.label,
+        count: routeCounts[item.prefix] || 0,
+        isNew: false,
+        examples: [] as string[]
+      })),
+      ...Object.entries(newRoutePrefixes).map(([prefix, data]) => ({
+        prefix,
+        label: 'Rota descoberta',
+        count: data.count,
+        isNew: true,
+        examples: data.examples
+      }))
+    ].sort((a, b) => b.count - a.count);
+    
+    // Desconhecidos
+    const unknown = Object.entries(unknownPrefixes)
+      .map(([prefix, data]) => ({ prefix, ...data }))
+      .sort((a, b) => b.count - a.count);
+    
+    return {
+      carriers,
+      lcl,
+      routes,
+      numeric: { count: numericCount, examples: numericMbls },
+      unknown,
+      totalMbls: mblList.length,
+      newLclCount: Object.keys(newLclPrefixes).length,
+      newRouteCount: Object.keys(newRoutePrefixes).length
+    };
+  }, [mblList]);
 
   // Status categorization
   const isEmTransito = (lastEvent: string | null): boolean => {
@@ -2403,35 +2548,41 @@ const ContainerTracking = () => {
         </DialogContent>
       </Dialog>
       
-      {/* Armadores Mapeados Modal */}
+      {/* Armadores Mapeados Modal - DINÂMICO */}
       <Dialog open={showArmadoresModal} onOpenChange={setShowArmadoresModal}>
         <DialogContent className="max-w-3xl bg-[rgba(5,6,18,.97)] border border-[rgba(255,255,255,.12)]">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-white">
               <Ship className="w-5 h-5 text-emerald-400" />
               Armadores Mapeados
+              {carrierStats.totalMbls > 0 && (
+                <span className="text-xs text-gray-500 font-normal ml-2">
+                  (baseado em {carrierStats.totalMbls} MBLs)
+                </span>
+              )}
             </DialogTitle>
             <DialogDescription className="text-gray-400">
-              Lista de armadores com integração de rastreamento via API
+              Classificação dinâmica dos MBLs sincronizados
             </DialogDescription>
           </DialogHeader>
           
           <div className="mt-4 max-h-[60vh] overflow-y-auto space-y-6">
-            {/* Seção de Armadores com API */}
+            {/* Seção de Armadores com API - COM CONTAGEM */}
             <Table>
               <TableHeader>
                 <TableRow className="border-b border-[rgba(255,255,255,.08)] hover:bg-transparent">
                   <TableHead className="text-[#aaaaaa]">Prefixo</TableHead>
                   <TableHead className="text-[#aaaaaa]">Armador</TableHead>
                   <TableHead className="text-[#aaaaaa]">País</TableHead>
+                  <TableHead className="text-[#aaaaaa] text-right">MBLs</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {getTrackableCarriers().map(carrier => {
-                // Get the most common prefix for this carrier
-                const prefixes = Object.entries(MBL_PREFIX_MAP).filter(([_, code]) => code === carrier.code).map(([prefix]) => prefix);
-                const displayPrefix = prefixes[0] || carrier.code;
-                return <TableRow key={carrier.code} className="border-b border-[rgba(255,255,255,.05)] hover:bg-[rgba(255,255,255,.03)]">
+                {carrierStats.carriers.map(carrier => {
+                  const prefixes = Object.entries(MBL_PREFIX_MAP).filter(([_, code]) => code === carrier.code).map(([prefix]) => prefix);
+                  const displayPrefix = carrier.prefixes.length > 0 ? carrier.prefixes[0] : (prefixes[0] || carrier.code);
+                  return (
+                    <TableRow key={carrier.code} className="border-b border-[rgba(255,255,255,.05)] hover:bg-[rgba(255,255,255,.03)]">
                       <TableCell className="font-mono text-sm text-gray-300">
                         {displayPrefix}
                       </TableCell>
@@ -2441,19 +2592,36 @@ const ContainerTracking = () => {
                       <TableCell className="text-gray-400 text-sm">
                         {carrier.country}
                       </TableCell>
-                    </TableRow>;
-              })}
+                      <TableCell className="text-right">
+                        {carrier.count > 0 ? (
+                          <span className="bg-emerald-500/20 text-emerald-400 px-2 py-0.5 rounded text-xs">
+                            {carrier.count}
+                          </span>
+                        ) : (
+                          <span className="text-gray-600 text-xs">-</span>
+                        )}
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
               </TableBody>
             </Table>
             
             {/* Separador */}
             <Separator className="bg-[rgba(255,255,255,.08)]" />
             
-            {/* Seção de Prefixos LCL / Consolidadores */}
+            {/* Seção de Prefixos LCL / Consolidadores - COM CONTAGEM E BADGE NOVO */}
             <div>
               <div className="flex items-center gap-2 mb-3">
                 <Package className="w-4 h-4 text-orange-400" />
-                <h4 className="text-sm font-medium text-orange-400">Prefixos LCL / Consolidadores</h4>
+                <h4 className="text-sm font-medium text-orange-400">
+                  Prefixos LCL / Consolidadores
+                  {carrierStats.newLclCount > 0 && (
+                    <span className="ml-2 text-[10px] px-1.5 py-0.5 rounded bg-green-500/20 text-green-400 border border-green-500/30">
+                      +{carrierStats.newLclCount} NOVOS
+                    </span>
+                  )}
+                </h4>
               </div>
               <p className="text-xs text-gray-500 mb-3">Prefixos não mapeados para armadores específicos</p>
               
@@ -2462,19 +2630,36 @@ const ContainerTracking = () => {
                   <TableRow className="border-b border-[rgba(255,255,255,.08)] hover:bg-transparent">
                     <TableHead className="text-[#aaaaaa]">Prefixo</TableHead>
                     <TableHead className="text-[#aaaaaa]">Descrição</TableHead>
+                    <TableHead className="text-[#aaaaaa] text-right">MBLs</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {LCL_PREFIXES.map(item => <TableRow key={item.prefix} className="border-b border-[rgba(255,255,255,.05)] hover:bg-[rgba(255,255,255,.03)]">
+                  {carrierStats.lcl.map(item => (
+                    <TableRow key={item.prefix} className="border-b border-[rgba(255,255,255,.05)] hover:bg-[rgba(255,255,255,.03)]">
                       <TableCell>
                         <span className="font-mono text-sm px-2 py-0.5 rounded bg-orange-500/20 text-orange-400 border border-orange-500/30">
                           {item.prefix}
                         </span>
+                        {item.isNew && (
+                          <span className="ml-2 text-[10px] px-1.5 py-0.5 rounded bg-green-500/20 text-green-400 border border-green-500/30">
+                            NOVO
+                          </span>
+                        )}
                       </TableCell>
                       <TableCell className="text-gray-400 text-sm">
                         {item.label}
                       </TableCell>
-                    </TableRow>)}
+                      <TableCell className="text-right">
+                        {item.count > 0 ? (
+                          <span className="bg-orange-500/20 text-orange-400 px-2 py-0.5 rounded text-xs">
+                            {item.count}
+                          </span>
+                        ) : (
+                          <span className="text-gray-600 text-xs">-</span>
+                        )}
+                      </TableCell>
+                    </TableRow>
+                  ))}
                 </TableBody>
               </Table>
             </div>
@@ -2482,11 +2667,18 @@ const ContainerTracking = () => {
             {/* Separador */}
             <Separator className="bg-[rgba(255,255,255,.08)]" />
             
-            {/* Seção de Formatos com Rota */}
+            {/* Seção de Formatos com Rota - COM CONTAGEM E BADGE NOVO */}
             <div>
               <div className="flex items-center gap-2 mb-3">
                 <ArrowLeftRight className="w-4 h-4 text-blue-400" />
-                <h4 className="text-sm font-medium text-blue-400">Formatos com Rota (ORIGEM/DESTINO)</h4>
+                <h4 className="text-sm font-medium text-blue-400">
+                  Formatos com Rota (ORIGEM/DESTINO)
+                  {carrierStats.newRouteCount > 0 && (
+                    <span className="ml-2 text-[10px] px-1.5 py-0.5 rounded bg-green-500/20 text-green-400 border border-green-500/30">
+                      +{carrierStats.newRouteCount} NOVOS
+                    </span>
+                  )}
+                </h4>
               </div>
               <p className="text-xs text-gray-500 mb-3">MBLs no formato rota com barra separadora</p>
               
@@ -2495,19 +2687,36 @@ const ContainerTracking = () => {
                   <TableRow className="border-b border-[rgba(255,255,255,.08)] hover:bg-transparent">
                     <TableHead className="text-[#aaaaaa]">Prefixo</TableHead>
                     <TableHead className="text-[#aaaaaa]">Rota</TableHead>
+                    <TableHead className="text-[#aaaaaa] text-right">MBLs</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {ROUTE_FORMAT_PREFIXES.map(item => <TableRow key={item.prefix} className="border-b border-[rgba(255,255,255,.05)] hover:bg-[rgba(255,255,255,.03)]">
+                  {carrierStats.routes.map(item => (
+                    <TableRow key={item.prefix} className="border-b border-[rgba(255,255,255,.05)] hover:bg-[rgba(255,255,255,.03)]">
                       <TableCell>
                         <span className="font-mono text-sm px-2 py-0.5 rounded bg-blue-500/20 text-blue-400 border border-blue-500/30">
                           {item.prefix}
                         </span>
+                        {item.isNew && (
+                          <span className="ml-2 text-[10px] px-1.5 py-0.5 rounded bg-green-500/20 text-green-400 border border-green-500/30">
+                            NOVO
+                          </span>
+                        )}
                       </TableCell>
                       <TableCell className="text-gray-400 text-sm">
                         {item.label}
                       </TableCell>
-                    </TableRow>)}
+                      <TableCell className="text-right">
+                        {item.count > 0 ? (
+                          <span className="bg-blue-500/20 text-blue-400 px-2 py-0.5 rounded text-xs">
+                            {item.count}
+                          </span>
+                        ) : (
+                          <span className="text-gray-600 text-xs">-</span>
+                        )}
+                      </TableCell>
+                    </TableRow>
+                  ))}
                 </TableBody>
               </Table>
             </div>
@@ -2515,29 +2724,87 @@ const ContainerTracking = () => {
             {/* Separador */}
             <Separator className="bg-[rgba(255,255,255,.08)]" />
             
-            {/* Seção de MBLs Numéricos */}
+            {/* Seção de MBLs Numéricos - DINÂMICO */}
             <div>
               <div className="flex items-center gap-2 mb-3">
                 <Hash className="w-4 h-4 text-yellow-400" />
-                <h4 className="text-sm font-medium text-yellow-400">MBLs Numéricos</h4>
+                <h4 className="text-sm font-medium text-yellow-400">
+                  MBLs Numéricos
+                  {carrierStats.numeric.count > 0 && (
+                    <span className="ml-2 bg-yellow-500/20 text-yellow-400 px-2 py-0.5 rounded text-xs">
+                      {carrierStats.numeric.count}
+                    </span>
+                  )}
+                </h4>
               </div>
               <div className="bg-yellow-500/10 border border-yellow-500/20 rounded-lg p-3">
                 <p className="text-xs text-yellow-300/80 mb-2">
                   ⚠️ {NUMERIC_MBL_INFO.note}
                 </p>
                 <div className="flex flex-wrap gap-2">
-                  {NUMERIC_MBL_INFO.examples.map(example => <span key={example} className="font-mono text-xs px-2 py-0.5 rounded bg-yellow-500/20 text-yellow-400 border border-yellow-500/30">
-                      {example}
-                    </span>)}
+                  {carrierStats.numeric.examples.length > 0 ? (
+                    carrierStats.numeric.examples.map(example => (
+                      <span key={example} className="font-mono text-xs px-2 py-0.5 rounded bg-yellow-500/20 text-yellow-400 border border-yellow-500/30">
+                        {example}
+                      </span>
+                    ))
+                  ) : (
+                    NUMERIC_MBL_INFO.examples.map(example => (
+                      <span key={example} className="font-mono text-xs px-2 py-0.5 rounded bg-yellow-500/20 text-yellow-400 border border-yellow-500/30">
+                        {example}
+                      </span>
+                    ))
+                  )}
                 </div>
               </div>
             </div>
+            
+            {/* Seção de Prefixos Desconhecidos */}
+            {carrierStats.unknown.length > 0 && (
+              <>
+                <Separator className="bg-[rgba(255,255,255,.08)]" />
+                <div>
+                  <div className="flex items-center gap-2 mb-3">
+                    <HelpCircle className="w-4 h-4 text-gray-400" />
+                    <h4 className="text-sm font-medium text-gray-400">
+                      Prefixos Não Mapeados
+                      <span className="ml-2 bg-white/10 text-gray-400 px-2 py-0.5 rounded text-xs">
+                        {carrierStats.unknown.reduce((a, b) => a + b.count, 0)}
+                      </span>
+                    </h4>
+                  </div>
+                  <p className="text-xs text-gray-500 mb-3">Prefixos encontrados que não estão mapeados no sistema</p>
+                  
+                  <div className="flex flex-wrap gap-2">
+                    {carrierStats.unknown.slice(0, 15).map(item => (
+                      <TooltipProvider key={item.prefix}>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <span className="font-mono text-xs px-2 py-1 rounded bg-white/10 text-gray-400 border border-white/20 cursor-help">
+                              {item.prefix} ({item.count})
+                            </span>
+                          </TooltipTrigger>
+                          <TooltipContent>
+                            <p className="text-xs">Ex: {item.examples.join(', ')}</p>
+                          </TooltipContent>
+                        </Tooltip>
+                      </TooltipProvider>
+                    ))}
+                    {carrierStats.unknown.length > 15 && (
+                      <span className="text-xs text-gray-500 self-center">
+                        +{carrierStats.unknown.length - 15} outros
+                      </span>
+                    )}
+                  </div>
+                </div>
+              </>
+            )}
           </div>
           
           <DialogFooter className="mt-4 border-t border-[rgba(255,255,255,.08)] pt-4">
             <div className="flex items-center justify-between w-full">
               <span className="text-sm text-gray-400">
-                {getTrackableCarriers().length} armadores | {LCL_PREFIXES.length} LCL | {ROUTE_FORMAT_PREFIXES.length} rotas
+                {carrierStats.carriers.length} armadores | {carrierStats.lcl.length} LCL{carrierStats.newLclCount > 0 && ` (${carrierStats.newLclCount} novos)`} | {carrierStats.routes.length} rotas | {carrierStats.numeric.count} numéricos
               </span>
               <Button variant="outline" onClick={() => setShowArmadoresModal(false)} className="border-[rgba(255,255,255,.1)] text-gray-300 hover:bg-[rgba(255,255,255,.05)]">
                 Fechar
