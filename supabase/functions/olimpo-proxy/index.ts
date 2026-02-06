@@ -1655,15 +1655,14 @@ serve(async (req) => {
             db: 'dados_dachser',
           });
 
-          // OTIMIZADO V3: Migrado de t_master_dados para t_sea_master
-          // - Usando campo 'master' em vez de 'mawb' para MBL
-          // - Campo 'eta_ata' em vez de 'eta' para data de chegada
-          // - Tabela específica para processos SEA
+          // OTIMIZADO V4: t_sea_master (principal) + t_master_dados (secundária para SEA recentes)
+          // - t_sea_master: master -> mbl_id, eta_ata -> eta
+          // - t_master_dados: mawb -> mbl_id, filtrando SEA IMPORT/EXPORT e data >= 2026-02-04
           await client.execute("SET SESSION max_statement_time = 30");
           
           const rows = await client.query(`
             WITH 
-              -- CTE 1: Dados do t_sea_master agrupados por mbl_id (filtrado por ETD >= 01/11/2025)
+              -- CTE 1: Dados do t_sea_master agrupados por mbl_id (FONTE PRINCIPAL)
               master_data AS (
                 SELECT 
                   TRIM(master) as mbl_id,
@@ -1674,6 +1673,20 @@ serve(async (req) => {
                 WHERE master IS NOT NULL
                   AND TRIM(master) != ''
                 GROUP BY TRIM(master)
+              ),
+              -- CTE 1B: Dados do t_master_dados para processos SEA recentes (FONTE SECUNDÁRIA)
+              master_dados_new AS (
+                SELECT 
+                  TRIM(mawb) as mbl_id,
+                  MAX(tipo_processo) as tipo_processo,
+                  MAX(eta) as eta,
+                  MAX(nome_analista) as nome_analista
+                FROM dados_dachser.t_master_dados
+                WHERE mawb IS NOT NULL
+                  AND TRIM(mawb) != ''
+                  AND tipo_processo IN ('SEA IMPORT', 'SEA EXPORT')
+                  AND data_insert >= '2026-02-04 09:55:11'
+                GROUP BY TRIM(mawb)
               ),
               -- CTE 2: Navio/vessel_imo mais recente por mbl (ranking)
               latest_vessel AS (
@@ -1725,9 +1738,9 @@ serve(async (req) => {
               MAX(ts.destino) as destino,
               MAX(lv.navio) as navio,
               MAX(lv.vessel_imo) as vessel_imo,
-              COALESCE(MAX(md.eta), MAX(ts.eta)) as eta,
-              MAX(md.eta) as eta_master,
-              MAX(md.nome_analista) as nome_analista,
+              COALESCE(MAX(md.eta), MAX(mdn.eta), MAX(ts.eta)) as eta,
+              COALESCE(MAX(md.eta), MAX(mdn.eta)) as eta_master,
+              COALESCE(MAX(md.nome_analista), MAX(mdn.nome_analista)) as nome_analista,
               MAX(ts.eta) as eta_api,
               MAX(ts.email_analista) as email_analista,
               MAX(ts.email_cliente) as email_cliente,
@@ -1766,6 +1779,7 @@ serve(async (req) => {
               END as has_free_time
             FROM dados_dachser.t_tracking_sea ts
             LEFT JOIN master_data md ON md.mbl_id COLLATE utf8mb4_unicode_ci = ts.mbl_id COLLATE utf8mb4_unicode_ci
+            LEFT JOIN master_dados_new mdn ON mdn.mbl_id COLLATE utf8mb4_unicode_ci = ts.mbl_id COLLATE utf8mb4_unicode_ci
             LEFT JOIN latest_vessel lv ON lv.mbl_id COLLATE utf8mb4_unicode_ci = ts.mbl_id COLLATE utf8mb4_unicode_ci AND lv.rn = 1
             LEFT JOIN transship_direct td ON td.mbl_id COLLATE utf8mb4_unicode_ci = ts.mbl_id COLLATE utf8mb4_unicode_ci
             LEFT JOIN transship_history th ON th.mbl_id COLLATE utf8mb4_unicode_ci = ts.mbl_id COLLATE utf8mb4_unicode_ci

@@ -468,7 +468,40 @@ const ContainerTracking = () => {
   };
   const itemsPerPage = 10;
 
-  // Estatísticas de armadores: merge estático + dinâmico
+  // Filtrar MBLs com prefixos não mapeados (exclui possíveis LCLs não cadastrados)
+  const filteredMblListByCarrier = useMemo(() => {
+    return mblList.filter(m => {
+      const mblId = (m.mbl_id || '').toUpperCase().trim();
+      if (!mblId) return false;
+      
+      // 1. LCL cadastrado explicitamente: MANTER (foi registrado manualmente)
+      if (m.tipo_carga === 'LCL') return true;
+      
+      // 2. Armador mapeado (13 carriers com API): MANTER
+      const carrier = detectCarrierFromMbl(mblId);
+      if (carrier.code !== 'UNKNOWN') return true;
+      
+      // 3. MBL numérico puro (booking number): EXCLUIR
+      if (/^\d+$/.test(mblId)) return false;
+      
+      // 4. Formato rota XXX/YYY (consolidador): EXCLUIR
+      if (/^[A-Z]{2,4}\/[A-Z]{2,4}/.test(mblId)) return false;
+      
+      // 5. Prefixo interno DACHSER: EXCLUIR
+      if (INTERNAL_PREFIXES.some(p => mblId.startsWith(p))) return false;
+      
+      // 6. Prefixo LCL estático conhecido: EXCLUIR
+      if (LCL_PREFIXES.some(p => mblId.startsWith(p.prefix))) return false;
+      
+      // 7. Padrão SS* (variantes Santos): EXCLUIR
+      if (/^SS[0-9A-Z]/.test(mblId)) return false;
+      
+      // 8. Qualquer outro prefixo desconhecido: EXCLUIR
+      return false;
+    });
+  }, [mblList]);
+
+  // Estatísticas de armadores: merge estático + dinâmico (usa lista filtrada)
   const carrierStats = useMemo(() => {
     // Contagem dinâmica baseada nos MBLs carregados
     const dynamicCounts: Record<string, {
@@ -502,7 +535,7 @@ const ContainerTracking = () => {
     const routeCounts: Record<string, number> = {};
     ROUTE_FORMAT_PREFIXES.forEach(p => routeCounts[p.prefix] = 0);
     let numericCount = 0;
-    for (const mbl of mblList) {
+    for (const mbl of filteredMblListByCarrier) {
       const mblId = (mbl.mbl_id || '').toUpperCase().trim();
       if (!mblId) continue;
       const carrier = detectCarrierFromMbl(mblId);
@@ -623,11 +656,11 @@ const ContainerTracking = () => {
         examples: numericMbls
       },
       unknown,
-      totalMbls: mblList.length,
+      totalMbls: filteredMblListByCarrier.length,
       newLclCount: Object.keys(newLclPrefixes).length,
       newRouteCount: Object.keys(newRoutePrefixes).length
     };
-  }, [mblList]);
+  }, [filteredMblListByCarrier]);
 
   // Status categorization
   const isEmTransito = (lastEvent: string | null): boolean => {
@@ -1583,9 +1616,9 @@ const ContainerTracking = () => {
     return syncDate.toDateString() === today.toDateString();
   };
 
-  // Filter MBL list
+  // Filter MBL list (aplica filtros de usuário sobre a lista já filtrada por armador)
   const filteredMbls = useMemo(() => {
-    let mbls = mblList.filter(m => {
+    let mbls = filteredMblListByCarrier.filter(m => {
       const searchLower = searchTerm.toLowerCase();
       const matchesSearch = !searchTerm || m.mbl_id.toLowerCase().includes(searchLower) || m.consignee && m.consignee.toLowerCase().includes(searchLower) || m.shipping_line && m.shipping_line.toLowerCase().includes(searchLower) || m.navio && m.navio.toLowerCase().includes(searchLower) || m.coloader && m.coloader.toLowerCase().includes(searchLower);
 
@@ -1622,19 +1655,19 @@ const ContainerTracking = () => {
       return 0;
     });
     return mbls;
-  }, [mblList, searchTerm, filterLine, filterCoordenador, activeCardFilter, filterTipoProcesso, filterSyncHoje, filterTipoCarga]);
+  }, [filteredMblListByCarrier, searchTerm, filterLine, filterCoordenador, activeCardFilter, filterTipoProcesso, filterSyncHoje, filterTipoCarga]);
   const totalPages = Math.ceil(filteredMbls.length / itemsPerPage);
   const startIndex = (currentPage - 1) * itemsPerPage;
   const endIndex = startIndex + itemsPerPage;
   const currentMbls = filteredMbls.slice(startIndex, endIndex);
 
-  // Dashboard stats
+  // Dashboard stats (usa lista filtrada por armador)
   const stats = useMemo(() => {
-    const total = mblList.length;
-    const criticos = mblList.filter(m => isEmCritico(m.is_critico)).length;
-    const emTransito = mblList.filter(m => isEmTransito(m.last_event) && !isEntregue(m.last_event) && !isEmAlerta(m.last_event, m.is_eta_delayed) && !isEmCritico(m.is_critico)).length;
-    const emAlerta = mblList.filter(m => isEmAlerta(m.last_event, m.is_eta_delayed) && !isEmCritico(m.is_critico)).length;
-    const entregues = mblList.filter(m => isEntregue(m.last_event)).length;
+    const total = filteredMblListByCarrier.length;
+    const criticos = filteredMblListByCarrier.filter(m => isEmCritico(m.is_critico)).length;
+    const emTransito = filteredMblListByCarrier.filter(m => isEmTransito(m.last_event) && !isEntregue(m.last_event) && !isEmAlerta(m.last_event, m.is_eta_delayed) && !isEmCritico(m.is_critico)).length;
+    const emAlerta = filteredMblListByCarrier.filter(m => isEmAlerta(m.last_event, m.is_eta_delayed) && !isEmCritico(m.is_critico)).length;
+    const entregues = filteredMblListByCarrier.filter(m => isEntregue(m.last_event)).length;
     return {
       total,
       emTransito,
@@ -1642,7 +1675,7 @@ const ContainerTracking = () => {
       criticos,
       entregues
     };
-  }, [mblList]);
+  }, [filteredMblListByCarrier]);
 
   // Lista dinâmica de armadores/coloaders baseada no tipo de carga selecionado
   const dynamicArmadoresColoaders = useMemo(() => {
@@ -1651,25 +1684,25 @@ const ContainerTracking = () => {
       return getTrackableCarriers().map(info => normalizeArmadorName(info.name)).sort((a, b) => a.localeCompare(b));
     } else if (filterTipoCarga === 'LCL') {
       // Apenas coloaders únicos dos registros LCL
-      const coloaders = mblList.filter(m => m.tipo_carga === 'LCL' && m.coloader).map(m => m.coloader as string);
+      const coloaders = filteredMblListByCarrier.filter(m => m.tipo_carga === 'LCL' && m.coloader).map(m => m.coloader as string);
       return [...new Set(coloaders)].sort((a, b) => a.localeCompare(b));
     } else {
       // Todos: armadores + coloaders
       const armadores = getTrackableCarriers().map(info => normalizeArmadorName(info.name));
-      const coloaders = mblList.filter(m => m.coloader).map(m => m.coloader as string);
+      const coloaders = filteredMblListByCarrier.filter(m => m.coloader).map(m => m.coloader as string);
       return [...new Set([...armadores, ...coloaders])].sort((a, b) => a.localeCompare(b));
     }
-  }, [mblList, filterTipoCarga]);
+  }, [filteredMblListByCarrier, filterTipoCarga]);
 
   // Lista de todos os armadores com suporte à API JSONCargo (apiSupported: true)
   const trackableArmadores = useMemo(() => {
     return getTrackableCarriers().map(info => normalizeArmadorName(info.name)).sort((a, b) => a.localeCompare(b));
   }, []);
 
-  // Dynamic list of coordenadores
+  // Dynamic list of coordenadores (usa lista filtrada)
   const dynamicCoordenadores = useMemo(() => {
     const coordenadoresSet = new Set<string>();
-    mblList.forEach(m => {
+    filteredMblListByCarrier.forEach(m => {
       const coordenador = m.nome_analista || "-";
       coordenadoresSet.add(coordenador);
     });
@@ -1678,7 +1711,7 @@ const ContainerTracking = () => {
       if (b === "-") return -1;
       return a.localeCompare(b);
     });
-  }, [mblList]);
+  }, [filteredMblListByCarrier]);
 
   // Get auto sync status label
   const getAutoSyncLabel = () => {
