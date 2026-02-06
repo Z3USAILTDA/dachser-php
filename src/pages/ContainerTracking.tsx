@@ -2741,14 +2741,7 @@ const ContainerTracking = () => {
           </div>
           
           <DialogFooter className="mt-4 border-t border-[rgba(255,255,255,.08)] pt-4">
-            <div className="flex items-center justify-between w-full">
-              <span className="text-sm text-gray-400">
-                {carrierStats.carriers.length} armadores | {carrierStats.lcl.length} LCL{carrierStats.newLclCount > 0 && ` (${carrierStats.newLclCount} novos)`} | {carrierStats.routes.length} rotas | {carrierStats.numeric.count} numéricos
-              </span>
-              <Button variant="outline" onClick={() => setShowArmadoresModal(false)} className="border-[rgba(255,255,255,.1)] text-gray-300 hover:bg-[rgba(255,255,255,.05)]">
-                Fechar
-              </Button>
-            </div>
+            
           </DialogFooter>
         </DialogContent>
       </Dialog>
