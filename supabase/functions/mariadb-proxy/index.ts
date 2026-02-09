@@ -7992,7 +7992,9 @@ serve(async (req) => {
           )
         `);
 
-        // Get aggregated stats per API (last 30 days)
+        // With 3.5M+ rows (mostly Leadcomex), we use a 2-step approach:
+        // 1. Fast count per API from last 24h
+        // 2. Recent logs from last 24h
         const stats = await client.query(`
           SELECT 
             api_name,
@@ -8001,45 +8003,64 @@ serve(async (req) => {
             ROUND(AVG(response_time_ms), 0) as avg_response_time_ms,
             SUM(CASE WHEN status_code >= 400 OR error_message IS NOT NULL THEN 1 ELSE 0 END) as error_count,
             ROUND(100.0 * SUM(CASE WHEN status_code < 400 AND error_message IS NULL THEN 1 ELSE 0 END) / COUNT(*), 1) as success_rate
-          FROM ai_agente.t_api_usage_logs
-          WHERE created_at >= DATE_SUB(NOW(), INTERVAL 30 DAY)
+          FROM ai_agente.t_api_usage_logs FORCE INDEX (idx_created_at_api)
+          WHERE created_at >= DATE_SUB(NOW(), INTERVAL 24 HOUR)
           GROUP BY api_name
           ORDER BY total_calls DESC
         `);
 
-        // Get recent logs
+        // Get recent logs (last 24h)
         const recentLogs = await client.query(`
           SELECT id, api_name, endpoint, method, status_code, response_time_ms, created_at, user_email, edge_function, error_message
-          FROM ai_agente.t_api_usage_logs
+          FROM ai_agente.t_api_usage_logs FORCE INDEX (idx_created_at)
+          WHERE created_at >= DATE_SUB(NOW(), INTERVAL 24 HOUR)
           ORDER BY created_at DESC
           LIMIT 100
         `);
 
-        // Get daily trend data (last 30 days, grouped by date and API)
-        const dailyTrend = await client.query(`
+        // Daily trend: last 7 days, but only non-Leadcomex to keep it fast
+        // Leadcomex totals computed separately with simple COUNT
+        const dailyTrendOther = await client.query(`
           SELECT 
             DATE(created_at) as date,
             api_name,
             COUNT(*) as calls,
             SUM(CASE WHEN status_code >= 400 OR error_message IS NOT NULL THEN 1 ELSE 0 END) as errors,
             ROUND(AVG(response_time_ms), 0) as avg_response_time
-          FROM ai_agente.t_api_usage_logs
-          WHERE created_at >= DATE_SUB(NOW(), INTERVAL 30 DAY)
+          FROM ai_agente.t_api_usage_logs FORCE INDEX (idx_created_at_api)
+          WHERE created_at >= DATE_SUB(NOW(), INTERVAL 7 DAY)
+            AND api_name != 'Leadcomex'
           GROUP BY DATE(created_at), api_name
           ORDER BY date ASC, api_name
         `);
 
-        // Get total calls per day (for overview chart)
-        const dailyTotal = await client.query(`
+        // Leadcomex daily counts (simple, fast)
+        const dailyLeadcomex = await client.query(`
           SELECT 
             DATE(created_at) as date,
-            COUNT(*) as total_calls,
-            SUM(CASE WHEN status_code >= 400 OR error_message IS NOT NULL THEN 1 ELSE 0 END) as total_errors
-          FROM ai_agente.t_api_usage_logs
-          WHERE created_at >= DATE_SUB(NOW(), INTERVAL 30 DAY)
+            'Leadcomex' as api_name,
+            COUNT(*) as calls,
+            SUM(CASE WHEN status_code >= 400 THEN 1 ELSE 0 END) as errors,
+            ROUND(AVG(response_time_ms), 0) as avg_response_time
+          FROM ai_agente.t_api_usage_logs FORCE INDEX (idx_created_at_api)
+          WHERE created_at >= DATE_SUB(NOW(), INTERVAL 7 DAY)
+            AND api_name = 'Leadcomex'
           GROUP BY DATE(created_at)
           ORDER BY date ASC
         `);
+
+        const dailyTrend = [...dailyTrendOther, ...dailyLeadcomex];
+
+        // Compute daily totals in-memory instead of a 4th query
+        const dailyTotalMap = new Map<string, { total_calls: number; total_errors: number }>();
+        for (const row of dailyTrend) {
+          const d = String(row.date);
+          const entry = dailyTotalMap.get(d) || { total_calls: 0, total_errors: 0 };
+          entry.total_calls += Number(row.calls) || 0;
+          entry.total_errors += Number(row.errors) || 0;
+          dailyTotalMap.set(d, entry);
+        }
+        const dailyTotal = Array.from(dailyTotalMap.entries()).map(([date, v]) => ({ date, ...v }));
 
         // Normalize numeric values (Deno MySQL driver returns aggregates as strings)
         const normalizedStats = stats.map((row: any) => ({
@@ -8059,14 +8080,8 @@ serve(async (req) => {
           avg_response_time: row.avg_response_time != null ? Number(row.avg_response_time) : null,
         }));
 
-        const normalizedDailyTotal = dailyTotal.map((row: any) => ({
-          date: row.date,
-          total_calls: Number(row.total_calls) || 0,
-          total_errors: Number(row.total_errors) || 0,
-        }));
-
         console.log(`[get_api_stats] Found ${normalizedStats.length} APIs, ${recentLogs.length} recent logs, ${normalizedDailyTrend.length} daily trend records`);
-        result = { success: true, stats: normalizedStats, recent_logs: recentLogs, daily_trend: normalizedDailyTrend, daily_total: normalizedDailyTotal };
+        result = { success: true, stats: normalizedStats, recent_logs: recentLogs, daily_trend: normalizedDailyTrend, daily_total: dailyTotal };
         break;
       }
 
