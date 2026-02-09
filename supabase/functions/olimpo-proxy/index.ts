@@ -1804,6 +1804,7 @@ serve(async (req) => {
                 END)
                 AND COUNT(DISTINCT CASE WHEN ts.last_error LIKE '%Prefix not found%' THEN ts.container END) > 0
                 AND MAX(ts.container) != 'PENDENTE'
+                AND UPPER(LEFT(ts.mbl_id, 3)) NOT IN ('HLC', 'HLS')
               )
               AND NOT (
                 UPPER(COALESCE(MAX(ts.container_status), '')) IN ('DELIVERED', 'DLV')
