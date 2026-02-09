@@ -2203,12 +2203,12 @@ const ContainerTracking = () => {
                                 color: statusColor,
                                 backgroundColor: `${statusColor}20`
                               }}>
-                                      {isGateOutEmpty ? 'Paralisado' : statusCode}
+                                      {statusCode}
                                     </span>
                                   </TooltipTrigger>
                                   <TooltipContent>
-                                    <p className="text-xs font-medium">{isGateOutEmpty ? 'Gate out empty — Paralisado' : reportStatus.label}</p>
-                                    <p className="text-xs text-muted-foreground">Etapa: {reportStatus.etapa.replace('_', ' ')}</p>
+                                    <p className="text-xs font-medium">{reportStatus.label}</p>
+                                    <p className="text-xs text-muted-foreground">Etapa: {reportStatus.etapa.replace('_', ' ')}{isGateOutEmpty ? ' (sem atualização)' : ''}</p>
                                   </TooltipContent>
                                 </Tooltip>
                               </TooltipProvider>
@@ -2323,7 +2323,7 @@ const ContainerTracking = () => {
                                         color: cntColor,
                                         backgroundColor: `${cntColor}20`
                                       }}>
-                                                    {cntIsGateOutEmpty ? 'Paralisado' : cntStatus.code}
+                                                    {cntStatus.code}
                                                   </span>
                                                 </td>
                                                 <td className="px-3 py-2 text-[#aaaaaa] max-w-[200px] truncate">
