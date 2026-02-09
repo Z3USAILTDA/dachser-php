@@ -2071,11 +2071,10 @@ const ContainerTracking = () => {
                   </thead>
                   <tbody>
                     {currentMbls.map((mbl, idx) => {
-                   const reportStatus = getReportStatus(mbl.last_event);
-                   const isGateOutEmpty = (mbl.last_event || '').toUpperCase().replace(/[\s-]/g, '_').includes('GATE_OUT_EMPTY');
-                   const statusCode = reportStatus.code;
-                   const progress = isGateOutEmpty ? 0 : getTimelineProgress(mbl.last_event);
-                   const statusColor = isGateOutEmpty ? '#64748b' : reportStatus.color;
+                  const reportStatus = getReportStatus(mbl.last_event);
+                  const statusCode = reportStatus.code;
+                  const progress = getTimelineProgress(mbl.last_event);
+                  const statusColor = reportStatus.color;
                   const isExpanded = expandedMbl === mbl.mbl_id;
                   return <Fragment key={`${mbl.mbl_id}-${idx}`}>
                           <tr className="border-b border-[rgba(255,255,255,.05)] hover:bg-[rgba(255,255,255,.03)] transition">
@@ -2208,7 +2207,7 @@ const ContainerTracking = () => {
                                   </TooltipTrigger>
                                   <TooltipContent>
                                     <p className="text-xs font-medium">{reportStatus.label}</p>
-                                    <p className="text-xs text-muted-foreground">Etapa: {reportStatus.etapa.replace('_', ' ')}{isGateOutEmpty ? ' (sem atualização)' : ''}</p>
+                                    <p className="text-xs text-muted-foreground">Etapa: {reportStatus.etapa.replace('_', ' ')}</p>
                                   </TooltipContent>
                                 </Tooltip>
                               </TooltipProvider>
@@ -2312,16 +2311,14 @@ const ContainerTracking = () => {
                                         </thead>
                                         <tbody>
                                           {mblContainers.map(cnt => {
-                                   const cntStatus = getReportStatus(cnt.last_event);
-                                   const cntIsGateOutEmpty = (cnt.last_event || '').toUpperCase().replace(/[\s-]/g, '_').includes('GATE_OUT_EMPTY');
-                                   const cntColor = cntIsGateOutEmpty ? '#64748b' : cntStatus.color;
-                                   return <tr key={cnt.id} className="border-t border-[rgba(255,255,255,.05)] hover:bg-[rgba(255,255,255,.02)]">
+                                  const cntStatus = getReportStatus(cnt.last_event);
+                                  return <tr key={cnt.id} className="border-t border-[rgba(255,255,255,.05)] hover:bg-[rgba(255,255,255,.02)]">
                                                 <td className="px-3 py-2 font-mono text-[#f5f5f5]">{cnt.container}</td>
                                                 <td className="px-3 py-2 text-[#aaaaaa]">{getShippingLineFromMbl(cnt.container, cnt.shipping_line)}</td>
                                                 <td className="px-3 py-2">
                                                   <span className="text-xs font-bold px-2 py-0.5 rounded" style={{
-                                        color: cntColor,
-                                        backgroundColor: `${cntColor}20`
+                                        color: cntStatus.color,
+                                        backgroundColor: `${cntStatus.color}20`
                                       }}>
                                                     {cntStatus.code}
                                                   </span>
