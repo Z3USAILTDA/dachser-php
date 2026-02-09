@@ -1816,7 +1816,7 @@ serve(async (req) => {
                   OR UPPER(COALESCE(MAX(ts.last_event), '')) LIKE '%GATE OUT%'
                   OR UPPER(COALESCE(MAX(ts.last_event), '')) LIKE '%EMPTY RETURNED%'
                 )
-                AND MAX(ts.last_check) < DATE_SUB(NOW(), INTERVAL 24 HOUR)
+                AND MAX(ts.last_check) < DATE_SUB(NOW(), INTERVAL 5 DAY)
                 AND MAX(ts.container) != 'PENDENTE'
               )
             ORDER BY 
