@@ -443,11 +443,12 @@ serve(async (req: Request): Promise<Response> => {
           SELECT DISTINCT cnpj 
           FROM dados_dachser.t_dados_financeiro_nfs t
           WHERE cnpj LIKE CONCAT(?, '%')
-          AND DATEDIFF(CURDATE(), data_vencimento) >= 1
+        AND DATEDIFF(CURDATE(), data_vencimento) >= 1
           AND NOT EXISTS (
             SELECT 1 FROM dados_dachser.tbaixas b
             WHERE b.IdLancamentoRM = t.id_rm AND b.StatusLan IN (1, 2, 3)
           )
+          AND (t.disputa IS NULL OR t.disputa = 0)
         `, [baseCnpj]);
         allCnpjs.push(...cnpjsResult.map((r: { cnpj: string }) => r.cnpj));
       }
@@ -464,6 +465,7 @@ serve(async (req: Request): Promise<Response> => {
           SELECT 1 FROM dados_dachser.tbaixas b
           WHERE b.IdLancamentoRM = t.id_rm AND b.StatusLan IN (1, 2, 3)
         )
+        AND (t.disputa IS NULL OR t.disputa = 0)
       `, [baseCnpj]);
       allCnpjs = cnpjsResult.map((r: { cnpj: string }) => r.cnpj);
       
@@ -501,6 +503,7 @@ serve(async (req: Request): Promise<Response> => {
           SELECT 1 FROM dados_dachser.tbaixas b
           WHERE b.IdLancamentoRM = t.id_rm AND b.StatusLan IN (1, 2, 3)
         )
+        AND (t.disputa IS NULL OR t.disputa = 0)
         AND DATEDIFF(CURDATE(), t.data_vencimento) >= 1
       ORDER BY t.cnpj, t.data_vencimento ASC
     `, allCnpjs);
