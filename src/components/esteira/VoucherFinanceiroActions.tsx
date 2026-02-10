@@ -236,12 +236,17 @@ export const VoucherFinanceiroActions = ({ voucher, onUpdate }: VoucherFinanceir
       try {
         await supabase.functions.invoke("send-voucher-notification", {
           body: {
+            type: "AJUSTE_SOLICITADO",
             voucherId: voucher.id,
             voucherNumber: voucher.numeroSPO,
             fromStage: "FINANCEIRO",
             toStage: "AJUSTE_FISCAL",
             reason: motivoAjusteFiscal,
             senderName: userData.username,
+            fornecedor: voucher.fornecedor,
+            valor: voucher.valor?.toLocaleString("pt-BR", { minimumFractionDigits: 2 }),
+            moeda: voucher.moeda,
+            vencimento: voucher.vencimento,
           },
         });
       } catch (emailErr) {

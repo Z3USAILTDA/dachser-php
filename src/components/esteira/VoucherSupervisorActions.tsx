@@ -66,6 +66,26 @@ export const VoucherSupervisorActions = ({ voucher, onUpdate }: VoucherSuperviso
         },
       });
 
+      // Send email notification to FINANCEIRO
+      try {
+        await supabase.functions.invoke("send-voucher-notification", {
+          body: {
+            type: "VOUCHER_ENVIADO",
+            voucherId: voucher.id,
+            voucherNumber: voucher.numeroSPO,
+            toStage: "FINANCEIRO",
+            fromStage: "SUPERVISOR",
+            senderName: userData.username,
+            fornecedor: voucher.fornecedor,
+            valor: voucher.valor?.toLocaleString("pt-BR", { minimumFractionDigits: 2 }),
+            moeda: voucher.moeda,
+            vencimento: voucher.vencimento,
+          },
+        });
+      } catch (emailErr) {
+        console.log("Email notification skipped:", emailErr);
+      }
+
       toast({
         title: "Voucher/SPO aprovado",
         description: "Voucher/SPO urgente aprovado e enviado para Financeiro",
