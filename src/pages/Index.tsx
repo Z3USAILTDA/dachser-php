@@ -2075,6 +2075,7 @@ const Index = () => {
     filterAirline,
     filterAnalyst,
     filterService,
+    filterProcessType,
     cardFilter,
     sortAnalyst,
     sortAwb,
