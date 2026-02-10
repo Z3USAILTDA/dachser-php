@@ -1849,15 +1849,21 @@ const Index = () => {
       const matchesAirline = filterAirline === "all" || awb.airline_code === filterAirline;
       const matchesAnalyst = filterAnalyst === "all" || awb.nome_analista === filterAnalyst;
       const matchesService = filterService === "all" || awb.tipo_servico === filterService;
-      // Filtrar por tipo de processo baseado na rota:
-      // - IMPO: destino é aeroporto brasileiro
-      // - EXPO: destino é aeroporto internacional (não brasileiro)
-      const brazilianAirports = ['GRU', 'VCP', 'CGH', 'GIG', 'SDU', 'BSB', 'CNF', 'POA', 'CWB', 'REC', 'SSA', 'FOR', 'BEL', 'MAO', 'NAT', 'MCZ', 'FLN', 'VIX', 'CGB', 'GYN', 'SLZ', 'THE', 'AJU', 'JPA', 'PMW', 'PVH', 'RBR', 'BVB', 'MCP', 'CGR', 'LDB', 'MGF', 'IGU', 'NVT', 'JOI', 'XAP', 'UDI', 'RAO', 'SJP', 'PPB', 'BAU', 'CPQ', 'QPS', 'SOD', 'MAB', 'STM', 'SJK', 'PNZ'];
-      const destino = (awb.destino || '').toUpperCase().trim();
-      const isImport = brazilianAirports.includes(destino);
+      // Filtrar por tipo de processo usando o campo tipo_processo do backend
+      // Fallback: inferir pelo destino se tipo_processo não estiver disponível
+      let isImport: boolean | null = null;
+      if (awb.tipo_processo) {
+        isImport = awb.tipo_processo.toUpperCase().includes('IMPORT');
+      } else {
+        const brazilianAirports = ['GRU', 'VCP', 'CGH', 'GIG', 'SDU', 'BSB', 'CNF', 'POA', 'CWB', 'REC', 'SSA', 'FOR', 'BEL', 'MAO', 'NAT', 'MCZ', 'FLN', 'VIX', 'CGB', 'GYN', 'SLZ', 'THE', 'AJU', 'JPA', 'PMW', 'PVH', 'RBR', 'BVB', 'MCP', 'CGR', 'LDB', 'MGF', 'IGU', 'NVT', 'JOI', 'XAP', 'UDI', 'RAO', 'SJP', 'PPB', 'BAU', 'CPQ', 'QPS', 'SOD', 'MAB', 'STM', 'SJK', 'PNZ'];
+        const destino = (awb.destino || '').toUpperCase().trim();
+        if (destino && destino !== 'N/A') {
+          isImport = brazilianAirports.includes(destino);
+        }
+      }
       const matchesProcessType = filterProcessType === "all" || 
-        (filterProcessType === "AIR IMPORT" && isImport) ||
-        (filterProcessType === "AIR EXPORT" && !isImport);
+        (filterProcessType === "AIR IMPORT" && isImport === true) ||
+        (filterProcessType === "AIR EXPORT" && isImport === false);
 
       // Only show AWBs with these specific status codes
       const allowedStatuses = [
