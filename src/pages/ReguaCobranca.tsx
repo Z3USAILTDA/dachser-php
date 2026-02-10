@@ -580,7 +580,7 @@ Financeiro Dachser`;
         </span>
         <span className="px-3 py-2 rounded-full bg-white/6 border border-white/12 text-[#ddd] text-[0.85rem] inline-flex items-center gap-[6px]">
           <Clock className="w-4 h-4" />
-          <span>Última atualização:</span> {dbStats?.lastUpdate ? (() => { try { const d = new Date(dbStats.lastUpdate.replace('Z', '')); return formatDistanceToNow(d, { addSuffix: true, locale: ptBR }); } catch { return "N/A"; } })() : "..."}
+          <span>Última atualização:</span> {dbStats?.lastUpdate ? (() => { try { const d = new Date(dbStats.lastUpdate.replace('Z', '')); return d.toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit' }); } catch { return "N/A"; } })() : "..."}
         </span>
 
         {/* Client search */}
