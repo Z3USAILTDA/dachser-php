@@ -199,21 +199,7 @@ export const VoucherFiscalActions = ({ voucher, onUpdate }: VoucherFiscalActions
         },
       });
 
-      // Try to send notification email (optional - may fail silently)
-      try {
-        await supabase.functions.invoke("send-voucher-notification", {
-          body: {
-            voucherId: voucher.id,
-            voucherNumber: voucher.numeroSPO,
-            fromStage: "FISCAL",
-            toStage: "AJUSTE_OPERACAO",
-            reason: motivoAjuste,
-            senderName: userData.username,
-          },
-        });
-      } catch (emailErr) {
-        console.log("Email notification skipped:", emailErr);
-      }
+      // OPERACAO não recebe e-mail (quem inicia o processo)
 
       toast({
         title: "Voucher/SPO devolvido",

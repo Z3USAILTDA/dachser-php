@@ -124,21 +124,7 @@ export const VoucherSupervisorActions = ({ voucher, onUpdate }: VoucherSuperviso
         },
       });
 
-      // Try to send notification email (optional)
-      try {
-        await supabase.functions.invoke("send-voucher-notification", {
-          body: {
-            voucherId: voucher.id,
-            voucherNumber: voucher.numeroSPO,
-            fromStage: "SUPERVISOR",
-            toStage: "OPERACAO",
-            reason: comentarios,
-            senderName: userData.username,
-          },
-        });
-      } catch (emailErr) {
-        console.log("Email notification skipped:", emailErr);
-      }
+      // OPERACAO não recebe e-mail (quem inicia o processo)
 
       toast({
         title: "Voucher/SPO rejeitado",
