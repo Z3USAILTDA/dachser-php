@@ -54,6 +54,7 @@ import DatabaseMonitor from "./pages/admin/DatabaseMonitor";
 import EsteiraVoucherDetails from "./pages/esteira/EsteiraVoucherDetails";
 import AccrualManagement from "./pages/esteira/AccrualManagement";
 import VoucherRules from "./pages/esteira/VoucherRules";
+import EmailPreview from "./pages/esteira/EmailPreview";
 import Olimpo from "./pages/Olimpo";
 import ConferenciaChb from "./pages/ConferenciaChb";
 import ChbAnalises from "./pages/ChbAnalises";
@@ -179,6 +180,7 @@ const App = () => (
           <Route path="/fin/esteira/voucher/:id" element={<EsteiraVoucherDetails />} />
           <Route path="/fin/esteira/accrual" element={<AccrualManagement />} />
           <Route path="/fin/esteira/rules" element={<VoucherRules />} />
+          <Route path="/fin/esteira/email-preview" element={<EmailPreview />} />
           <Route path="/olimpo" element={<Olimpo />} />
           <Route path="/chb/conferences" element={<ChbAnalises />} />
           <Route path="/chb/conferences/:id" element={<ConferenciaChb />} />
