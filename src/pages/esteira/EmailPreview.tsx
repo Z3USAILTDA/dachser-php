@@ -25,7 +25,7 @@ const mockData = {
   fromStage: "FISCAL",
   toStage: "OPERAÇÃO",
   senderName: "Maria Santos",
-  voucherLink: "#",
+  voucherLink: "https://dachser.z3us.app",
 };
 
 const typeConfig: Record<NotificationType, { title: string; titleColor: string; btnBg: string; btnColor: string; subject: string }> = {
