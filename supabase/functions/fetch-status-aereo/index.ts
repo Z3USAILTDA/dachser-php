@@ -235,15 +235,15 @@ serve(async (req) => {
     }
 
     // ========== PASSO 1.5: Fallback via t_aereo_api para AWBs sem dados ==========
-    const invalidStatuses = new Set(['', 'N/A', 'NOT_FOUND', 'ERRO']);
+    const invalidStatuses = new Set(['', 'N/A', 'NOT_FOUND', 'ERRO', 'UNK']);
     const awbsSemDados: string[] = [];
     const apiFallbackMap = new Map<string, any>(); // mawb -> api row
 
     for (const ws of wsList) {
       const status = (ws.last_status_code || '').trim().toUpperCase();
-      const timeline = ws.timeline_json ? String(ws.timeline_json).trim() : '';
-      if ((invalidStatuses.has(status) || !ws.last_status_code) && !timeline) {
+      if (invalidStatuses.has(status) || !ws.last_status_code) {
         const awb = String(ws.awb || '').trim();
+        if (awb) awbsSemDados.push(awb);
         if (awb) awbsSemDados.push(awb);
       }
     }
@@ -280,8 +280,7 @@ serve(async (req) => {
         const apiRow = apiFallbackMap.get(awb);
         if (!apiRow) continue;
         const status = (ws.last_status_code || '').trim().toUpperCase();
-        const timeline = ws.timeline_json ? String(ws.timeline_json).trim() : '';
-        if ((invalidStatuses.has(status) || !ws.last_status_code) && !timeline) {
+        if (invalidStatuses.has(status) || !ws.last_status_code) {
           ws.last_status_code = apiRow.ultimo_status || null;
           ws.last_status_description = apiRow.ultimo_status || null;
           ws.origin = apiRow.origem || ws.origin || null;
