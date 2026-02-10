@@ -40,14 +40,30 @@ function classifyArrival(lastStatusCode: string | null, timelineJson: string | n
 
     // Events come DESC (newest first) – find the first ARR event (most recent)
     for (const ev of events) {
-      const evStatus = (ev.status || '').toUpperCase();
+      const evStatus = (ev.status || ev.Status || '').toUpperCase();
       const evDesc = (ev.Description || ev.description || ev.title || '').toUpperCase();
       if (evStatus !== 'ARR' && !evDesc.includes('ARRIVED') && !evDesc.includes('ARR')) continue;
 
-      // Try to extract airport code from structured fields first
-      const airport = (ev.station || ev.airport || ev.location || '').trim().toUpperCase();
-      if (airport && airport.length === 3) {
-        return airport === dest ? 'ARR - DESTINO' : 'ARR - CONEXAO';
+      // Try to extract airport code from structured fields first (case-insensitive keys)
+      const locationRaw = (ev.station || ev.Station || ev.airport || ev.Airport || ev.location || ev.Location || '').trim();
+      const locationUpper = locationRaw.toUpperCase();
+      
+      // Exact 3-letter code
+      if (locationUpper && locationUpper.length === 3) {
+        return locationUpper === dest ? 'ARR - DESTINO' : 'ARR - CONEXAO';
+      }
+      
+      // Extract code from parentheses: "Guarulhos (GRU)" or "Some Airport (GRU), City"
+      if (locationRaw) {
+        const parenMatch = locationRaw.match(/\(([A-Z]{3})\)/i);
+        if (parenMatch) {
+          return parenMatch[1].toUpperCase() === dest ? 'ARR - DESTINO' : 'ARR - CONEXAO';
+        }
+        // Try first 3-letter code in the location string
+        const locCode = locationUpper.match(/\b([A-Z]{3})\b/);
+        if (locCode) {
+          return locCode[1] === dest ? 'ARR - DESTINO' : 'ARR - CONEXAO';
+        }
       }
 
       // Try regex on description
@@ -65,7 +81,6 @@ function classifyArrival(lastStatusCode: string | null, timelineJson: string | n
       // Fallback: any standalone 3-letter uppercase code in the description
       const allCodes = desc.match(/\b([A-Z]{3})\b/g);
       if (allCodes && allCodes.length > 0) {
-        // Use the last 3-letter code found (usually the airport)
         const candidate = allCodes[allCodes.length - 1].toUpperCase();
         return candidate === dest ? 'ARR - DESTINO' : 'ARR - CONEXAO';
       }
@@ -273,7 +288,8 @@ serve(async (req) => {
       const { pieces_discrepancy, baseline_pieces, has_dis_event } = detectPiecesDiscrepancy(timelineStr);
 
       // Classify ARR as connection or final destination
-      const classifiedStatus = classifyArrival(ws.last_status_code, timelineStr, ws.destination);
+      const rawStatus = ws.last_status_code ? String(ws.last_status_code).trim() : null;
+      const classifiedStatus = classifyArrival(rawStatus, timelineStr, ws.destination ? String(ws.destination).trim() : null);
 
       const baseRow = {
         id: ws.id,
