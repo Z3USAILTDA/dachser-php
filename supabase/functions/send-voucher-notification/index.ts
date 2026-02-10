@@ -17,7 +17,7 @@ interface NotificationRequest {
 }
 
 const getEmailContent = (data: NotificationRequest) => {
-  const baseUrl = Deno.env.get("SITE_URL") || "https://z3us-dachser.lovable.app";
+  const baseUrl = "https://dachser.z3us.app";
   const voucherLink = `${baseUrl}/fin/esteira/voucher/${data.voucherId}`;
 
   switch (data.type) {
