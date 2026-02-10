@@ -138,7 +138,7 @@ function generateEmailHtml(type: NotificationType, forceTheme: "auto" | "light" 
         <tr><td style="padding:12px 28px 0" align="left">
           <h1 style="margin:0 0 4px;font-family:Arial,Helvetica,sans-serif;font-size:22px;line-height:1.3;color:${cfg.titleColor}">${cfg.title}</h1>
           <p style="margin:0 0 16px;font-family:Arial,Helvetica,sans-serif;font-size:12px" class="muted">
-            [DACHSER] ${cfg.subject} — ${d.voucherNumber}
+            ${cfg.subject} — ${d.voucherNumber}
           </p>
         </td></tr>
 
@@ -252,7 +252,7 @@ export default function EmailPreview() {
         {/* Subject line */}
         <div className="mb-4 p-3 rounded-lg border border-[#262626] bg-[#0d0d0d] text-sm">
           <span className="text-[#888]">Subject: </span>
-          <span className="text-white font-medium">[DACHSER] {typeConfig[selectedType].subject} — {mockData.voucherNumber}</span>
+          <span className="text-white font-medium">{typeConfig[selectedType].subject} — {mockData.voucherNumber}</span>
         </div>
 
         {/* Preview iframe */}
