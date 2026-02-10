@@ -1,57 +1,68 @@
 
-## Detectar ARR Conexao vs ARR Destino usando a Timeline
+
+## Fallback para t_aereo_api quando t_aereo_ws tem dados incompletos
 
 ### Objetivo
-Usar os dados da timeline (`timeline_json`) junto com o campo `destination` do `t_aereo_ws` para determinar automaticamente se o ultimo evento ARR e uma chegada na conexao ou no destino final.
+AWBs que existem na `t_aereo_ws` mas cujo rastreio falhou (sem status, ou status de erro) devem buscar dados na `t_aereo_api` como fallback. Se o AWB existir na `t_aereo_api` com dados validos, esses dados serao usados no lugar.
 
-### Logica de Deteccao (Backend)
+### Criterio de "dados incompletos" no t_aereo_ws
+Um registro da `t_aereo_ws` sera considerado "sem dados" se:
+- `last_status_code` for NULL, vazio, `"N/A"`, `"NOT_FOUND"` ou `"ERRO"`
+- E `timeline_json` for NULL ou vazio
 
-O campo `destination` do `t_aereo_ws` contem o aeroporto de destino final (ex: "GRU"). Na timeline, os eventos ARR geralmente incluem o aeroporto onde ocorreu a chegada na descricao ou em campo dedicado.
+### Logica no Backend
 
-A funcao no backend vai:
-1. Verificar se o `last_status_code` e `ARR`
-2. Parsear o `timeline_json` para encontrar o ultimo evento ARR
-3. Extrair o aeroporto do evento ARR (da descricao ou campo `airport`/`station`)
-4. Comparar com o `destination` do AWB:
-   - Se o aeroporto do ARR == destination -> `"ARR - DESTINO"`
-   - Se o aeroporto do ARR != destination -> `"ARR - CONEXAO"`
-   - Se nao conseguir determinar o aeroporto -> manter `"ARR"` generico
+#### Arquivo: `supabase/functions/fetch-status-aereo/index.ts`
 
-### Alteracoes
+Apos o PASSO 1 (buscar snapshots de `t_aereo_ws`), adicionar um novo passo intermediario:
 
-#### 1. Backend: `supabase/functions/fetch-status-aereo/index.ts`
+1. Identificar quais AWBs da lista `wsList` estao com dados incompletos
+2. Para esses AWBs, fazer uma query na `t_aereo_api` buscando pelo campo `mawb`
+3. Se encontrar dados na `t_aereo_api` com status valido (`ultimo_status` diferente de NULL/N/A), substituir os campos do registro `t_aereo_ws` pelos da `t_aereo_api`:
+   - `ultimo_status` -> `last_status_code`
+   - `origem` -> `origin`
+   - `destino` -> `destination`
+   - `historico_status` -> `timeline_json`
+   - Tambem ja trazer `hawb`, `destinatario`, `nome_analista`, `email_analista`, `emaill_cliente` (com typo), `tipo_servico` diretamente, evitando a necessidade de buscar no `t_master_dados`
 
-Adicionar uma funcao `classifyArrival(lastStatusCode, timelineJson, destination)` que:
-- Retorna o `last_status_code` original se nao for ARR
-- Se for ARR, parseia a timeline para encontrar o evento ARR mais recente
-- Extrai o aeroporto do evento via regex (ex: `"Arrived at GRU"`, `"ARR - GRU"`, campo `station`, campo `airport`)
-- Compara com `destination` e retorna `"ARR - DESTINO"` ou `"ARR - CONEXAO"`
+4. No PASSO 3 (merge), os AWBs que foram enriquecidos pela `t_aereo_api` ja terao os dados completos e serao tratados normalmente
 
-O campo `ultimo_status` no response ja sera retornado com o sufixo correto.
+### Fluxo resumido
 
-#### 2. Frontend: `src/pages/Index.tsx`
-
-Nenhuma mudanca estrutural necessaria no frontend, pois:
-- `getStatusCode()` ja reconhece `"ARR - DESTINO"` e `"ARR - CONEXAO"` (linhas 240-241, 245-248)
-- `getStatusFromEvent()` ja traduz ambos (linhas 1731-1738)
-- O progress map e os badges ja tratam esses valores
-
-A unica alteracao no frontend sera garantir que o mapeamento no `fetchStatusAereoData` propague o valor enriquecido do `ultimo_status` corretamente (o que ja acontece hoje).
+```text
+t_aereo_ws (500 AWBs)
+    |
+    +-- AWBs com status valido -> seguem fluxo normal (enriquecer via t_master_dados)
+    |
+    +-- AWBs sem dados (status NULL/N/A/ERRO/NOT_FOUND) 
+            |
+            +-- Buscar na t_aereo_api
+            |       |
+            |       +-- Encontrou com dados validos -> substituir campos do ws
+            |       +-- Nao encontrou -> manter como esta (sem dados)
+            |
+            +-- Seguir fluxo normal de enriquecimento
+```
 
 ### Secao Tecnica
 
-**Regex para extrair aeroporto do evento ARR na timeline:**
-- Campo `station` ou `airport` do evento JSON (acesso direto)
-- Descricao: `/(?:arrived?\s+(?:at|in)\s+)([A-Z]{3})/i`
-- Descricao: `/\b([A-Z]{3})\b/` como fallback (3 letras maiusculas)
-- Campo `location` do evento
+**Query na t_aereo_api (fallback):**
+```sql
+SELECT mawb, hawb, destinatario, nome_analista, email_analista,
+       emaill_cliente, tipo_servico, ultimo_status, origem, destino,
+       historico_status
+FROM t_aereo_api
+WHERE mawb IN (<awbs_sem_dados>)
+  AND ultimo_status IS NOT NULL
+  AND ultimo_status != 'N/A'
+```
 
-**Comparacao:**
-- Case-insensitive, trim de espacos
-- Se o aeroporto extraido for igual ao `destination` -> DESTINO
-- Se diferente -> CONEXAO
-- Se nao encontrado -> manter ARR sem sufixo
+**Substituicao no objeto ws:**
+- Para cada AWB sem dados que tem fallback na `t_aereo_api`, sobrescrever os campos `last_status_code`, `last_status_description`, `origin`, `destination`, `timeline_json` com os valores da API
+- Marcar o registro com um flag `source: 'api'` para diferenciar dos `source: 'ws'` no frontend (opcional, para debug)
 
 **Arquivos modificados:**
-1. `supabase/functions/fetch-status-aereo/index.ts` - nova funcao `classifyArrival` + aplicar no campo `ultimo_status` do baseRow
-2. `src/pages/Index.tsx` - ajustes minimos se necessarios (ex: tooltip do ponto ARR na regua)
+1. `supabase/functions/fetch-status-aereo/index.ts` - adicionar PASSO 1.5 de fallback via t_aereo_api
+
+**Frontend:**
+- Nenhuma alteracao necessaria no `src/pages/Index.tsx`, pois os dados ja chegarao normalizados no mesmo formato
