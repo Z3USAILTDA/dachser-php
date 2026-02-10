@@ -10,7 +10,7 @@ const corsHeaders = {
 // Stage → roles mapping (mirrors src/utils/esteiraNotifications.ts)
 const STAGE_TO_ROLES: Record<string, string[]> = {
   OPERACAO: [],
-  AJUSTE_OPERACAO: [],
+  AJUSTE_OPERACAO: ["__OPERACAO_FIXED__"], // special: uses fixed email list
   FISCAL: ["FISCAL", "GESTOR_FISCAL"],
   AJUSTE_FISCAL: ["FISCAL", "GESTOR_FISCAL"],
   SUPERVISOR: ["SUPERVISOR", "GESTOR_SUPERVISOR"],
@@ -18,6 +18,16 @@ const STAGE_TO_ROLES: Record<string, string[]> = {
   ROBO: ["FINANCEIRO", "GESTOR_FINANCEIRO"],
   CONCLUIDO: [],
 };
+
+// Fixed recipients for AJUSTE_OPERACAO (adjustment requests back to Operação)
+const OPERACAO_FIXED_EMAILS = [
+  "beatriz.tozzi@dachser.com",
+  "cleiciane.faconi@dachser.com",
+  "julia.stanguerlin@dachser.com",
+  "laura.estevam@dachser.com",
+  "leandro.geraldo@dachser.com",
+  "priscila.neves-external@dachser.com",
+];
 
 interface NotificationRequest {
   type: "AJUSTE_SOLICITADO" | "URGENCIA_REJEITADA" | "VOUCHER_ENVIADO" | "VOUCHER_CONCLUIDO" | "VENCIMENTO_PROXIMO";
@@ -175,8 +185,10 @@ const handler = async (req: Request): Promise<Response> => {
       );
     }
 
-    // Fetch recipient emails from MariaDB
-    const emails = await getRecipientEmails(roles);
+    // Fetch recipient emails — fixed list for AJUSTE_OPERACAO, MariaDB for others
+    const emails = roles.includes("__OPERACAO_FIXED__")
+      ? [...OPERACAO_FIXED_EMAILS]
+      : await getRecipientEmails(roles);
     if (!emails.length) {
       console.log(`No recipients found for roles: ${roles.join(", ")}`);
       return new Response(

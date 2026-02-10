@@ -17,7 +17,7 @@ type EsteiraStage =
 
 const STAGE_TO_ROLES: Record<EsteiraStage, string[]> = {
   OPERACAO: [],
-  AJUSTE_OPERACAO: [],
+  AJUSTE_OPERACAO: ["OPERACAO"], // fixed list handled in edge function
   FISCAL: ["FISCAL", "GESTOR_FISCAL"],
   AJUSTE_FISCAL: ["FISCAL", "GESTOR_FISCAL"],
   SUPERVISOR: ["SUPERVISOR", "GESTOR_SUPERVISOR"],
