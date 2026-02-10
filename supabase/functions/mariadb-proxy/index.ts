@@ -5888,7 +5888,40 @@ serve(async (req) => {
           };
 
           // Convert timeline entries to frontend format
+          // Supports two formats:
+          // - t_aereo_ws: { Description, Timestamp, Location, Carrier }
+          // - t_aereo_api: { status, aeroporto, dataEvento, voo, quantidadeCarga, pesoCarga }
           const events = timelineData.map((entry: any, idx: number) => {
+            // t_aereo_api format
+            if (entry.status && !entry.Description && !entry.description) {
+              const statusCode = (entry.status || '').toUpperCase();
+              const airport = entry.aeroporto || '';
+              const flight = entry.voo || '';
+              const qty = entry.quantidadeCarga;
+              const weight = entry.pesoCarga;
+              
+              // Build description from API fields
+              let desc = statusCode;
+              if (airport) desc += ` - ${airport}`;
+              if (flight) desc += `, Flight ${flight}`;
+              if (qty && qty > 0) desc += `, Pieces: ${qty}`;
+              if (weight && weight !== 'N/A') desc += `, Weight: ${weight}`;
+
+              return {
+                id: idx + 1,
+                awb: queryAwb,
+                hawb: null,
+                codigo_evento: statusCode || 'UNK',
+                descricao_evento: desc,
+                data_hora_evento: entry.dataEvento || null,
+                fonte: 'API',
+                aeroporto: airport || null,
+                nivel_confianca: 'PRIMARIA',
+                created_at: entry.dataEvento || null,
+              };
+            }
+            
+            // t_aereo_ws format
             const description = entry.Description || entry.description || '';
             const codigoEvento = extractStatusCode(description);
             
