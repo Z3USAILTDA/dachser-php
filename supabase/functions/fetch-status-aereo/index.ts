@@ -6,6 +6,73 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
+// Extract pieces count from event description
+function extractPieces(text: string): number | null {
+  if (!text) return null;
+  // Format: "Pieces: 2, Weight: 64.00"
+  const longMatch = text.match(/Pieces:\s*(\d+)/i);
+  if (longMatch) return parseInt(longMatch[1], 10);
+  // Format: "2 / 64.00KGS"
+  const shortMatch = text.match(/(\d+)\s*\/\s*[\d.]+\s*KGS/i);
+  if (shortMatch) return parseInt(shortMatch[1], 10);
+  return null;
+}
+
+// Check if an event is a delivery event
+function isDeliveryEvent(event: any): boolean {
+  const status = (event.status || '').toUpperCase();
+  const desc = (event.description || event.title || '').toUpperCase();
+  return status === 'DLV' || status === 'DELIVERED' || desc.includes('DELIVERED') || desc.includes('DLV');
+}
+
+// Detect pieces discrepancy in timeline
+function detectPiecesDiscrepancy(timelineJson: string | null): { pieces_discrepancy: boolean; baseline_pieces: number | null } {
+  if (!timelineJson) return { pieces_discrepancy: false, baseline_pieces: null };
+
+  try {
+    const events = JSON.parse(timelineJson);
+    if (!Array.isArray(events) || events.length === 0) return { pieces_discrepancy: false, baseline_pieces: null };
+
+    // Events come in DESC order (newest first), reverse for chronological
+    const chronological = [...events].reverse();
+
+    // Extract pieces from each event's description/details
+    const eventsWithPieces: Array<{ pieces: number; isDelivery: boolean; index: number }> = [];
+    for (let i = 0; i < chronological.length; i++) {
+      const ev = chronological[i];
+      const desc = ev.description || ev.details || ev.title || '';
+      const pieces = extractPieces(desc);
+      if (pieces !== null) {
+        eventsWithPieces.push({ pieces, isDelivery: isDeliveryEvent(ev), index: i });
+      }
+    }
+
+    if (eventsWithPieces.length < 2) return { pieces_discrepancy: false, baseline_pieces: eventsWithPieces[0]?.pieces || null };
+
+    const baseline = eventsWithPieces[0].pieces;
+    let hasDiscrepancy = false;
+
+    for (let i = 1; i < eventsWithPieces.length; i++) {
+      if (eventsWithPieces[i].pieces !== baseline) {
+        hasDiscrepancy = true;
+        break;
+      }
+    }
+
+    if (!hasDiscrepancy) return { pieces_discrepancy: false, baseline_pieces: baseline };
+
+    // Check if last event is delivery with correct count
+    const lastWithPieces = eventsWithPieces[eventsWithPieces.length - 1];
+    if (lastWithPieces.isDelivery && lastWithPieces.pieces === baseline) {
+      return { pieces_discrepancy: false, baseline_pieces: baseline };
+    }
+
+    return { pieces_discrepancy: true, baseline_pieces: baseline };
+  } catch {
+    return { pieces_discrepancy: false, baseline_pieces: null };
+  }
+}
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
@@ -48,7 +115,7 @@ serve(async (req) => {
     const baseWsQuery = `
       SELECT w.id, w.awb, w.last_status_code, w.last_status_description,
              w.origin, w.destination, w.last_flight, w.scraped_at,
-             w.sidebar_days_in_transit
+             w.sidebar_days_in_transit, w.timeline_json
       FROM ${database}.t_aereo_ws w
       INNER JOIN (
         SELECT awb, MAX(id) as max_id
@@ -109,7 +176,7 @@ serve(async (req) => {
       }
     }
 
-    // ========== PASSO 3: Merge em memória ==========
+    // ========== PASSO 3: Merge em memória + detecção de discrepância ==========
     const processedRows = wsList.map((ws: any) => {
       const awb = String(ws.awb || '').trim();
       const master = masterMap.get(awb);
@@ -119,6 +186,10 @@ serve(async (req) => {
       if (scrapedAt) {
         scrapedAt = scrapedAt.replace(/Z$/, '').replace(/\.\d{3}Z$/, '');
       }
+
+      // Detect pieces discrepancy from timeline
+      const timelineStr = ws.timeline_json ? String(ws.timeline_json) : null;
+      const { pieces_discrepancy, baseline_pieces } = detectPiecesDiscrepancy(timelineStr);
 
       return {
         id: ws.id,
@@ -137,6 +208,8 @@ serve(async (req) => {
         'última atualização': scrapedAt,
         last_flight: ws.last_flight || null,
         days_in_transit: ws.sidebar_days_in_transit || null,
+        pieces_discrepancy,
+        baseline_pieces,
       };
     });
 
@@ -144,7 +217,9 @@ serve(async (req) => {
     const importCount = processedRows.filter((r: any) => r.tipo_processo === 'AIR IMPORT').length;
     const exportCount = processedRows.filter((r: any) => r.tipo_processo === 'AIR EXPORT').length;
     const nullCount = processedRows.filter((r: any) => !r.tipo_processo).length;
+    const discrepancyCount = processedRows.filter((r: any) => r.pieces_discrepancy).length;
     console.log(`tipo_processo distribution: IMPORT=${importCount}, EXPORT=${exportCount}, null=${nullCount}`);
+    console.log(`Pieces discrepancy detected in ${discrepancyCount} AWBs`);
 
     return new Response(
       JSON.stringify({ success: true, data: processedRows }),
