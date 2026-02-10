@@ -1,6 +1,8 @@
 import { useState, useEffect, useMemo, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { CalendarRange, HelpCircle, Mail, Send, RefreshCw, FileText, Clock, Flag, Search, X } from "lucide-react";
+import { formatDistanceToNow } from "date-fns";
+import { ptBR } from "date-fns/locale";
 import { useUsageLog } from "@/hooks/useUsageLog";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -104,7 +106,7 @@ function ReguaCobrancaContent() {
     PRE: 0, D1: 0, D7: 0, D15: 0, D30: 0, D45: 0, D60: 0,
   });
   const [totalTitles, setTotalTitles] = useState(0);
-  const [lastSync, setLastSync] = useState<string>("");
+  
   const [loading, setLoading] = useState(true);
   const [hasError, setHasError] = useState(false);
 
@@ -164,7 +166,7 @@ function ReguaCobrancaContent() {
       setHasError(true);
     } finally {
       setLoading(false);
-      setLastSync(new Date().toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" }) + " GMT-3");
+      
     }
   }, [toast]);
 
@@ -578,7 +580,7 @@ Financeiro Dachser`;
         </span>
         <span className="px-3 py-2 rounded-full bg-white/6 border border-white/12 text-[#ddd] text-[0.85rem] inline-flex items-center gap-[6px]">
           <Clock className="w-4 h-4" />
-          <span>Última atualização:</span> {lastSync || "..."}
+          <span>Última atualização:</span> {dbStats?.lastUpdate ? (() => { try { const d = new Date(dbStats.lastUpdate.replace('Z', '')); return formatDistanceToNow(d, { addSuffix: true, locale: ptBR }); } catch { return "N/A"; } })() : "..."}
         </span>
 
         {/* Client search */}
