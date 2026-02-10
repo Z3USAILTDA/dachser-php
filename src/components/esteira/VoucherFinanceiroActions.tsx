@@ -173,21 +173,7 @@ export const VoucherFinanceiroActions = ({ voucher, onUpdate }: VoucherFinanceir
         },
       });
 
-      // Try to send notification email (optional)
-      try {
-        await supabase.functions.invoke("send-voucher-notification", {
-          body: {
-            voucherId: voucher.id,
-            voucherNumber: voucher.numeroSPO,
-            fromStage: "FINANCEIRO",
-            toStage: "AJUSTE_OPERACAO",
-            reason: motivoAjusteOperacao,
-            senderName: userData.username,
-          },
-        });
-      } catch (emailErr) {
-        console.log("Email notification skipped:", emailErr);
-      }
+      // OPERACAO não recebe e-mail (quem inicia o processo)
 
       toast({
         title: "Voucher/SPO devolvido",
