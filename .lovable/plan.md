@@ -1,43 +1,35 @@
 
+## Ajustes na Timeline de Rastreio Aereo
 
-## Corrigir Fallback para incluir AWBs com status UNK
+### Problema 1: AWBs com erro e sem dados no fallback
+Quando a timeline contem mensagem de erro (ex: "Nao foi possivel detectar a operadora...") e nao existe registro na `t_aereo_api`, o modal mostra a mensagem de erro crua como se fosse um evento normal. Deve exibir um estado claro de "Falha no rastreio".
 
-### Problema Identificado
-O fallback para `t_aereo_api` nao esta disparando porque:
-- Existem **46 AWBs com status "UNK"** e **5 com status NULL** na `t_aereo_ws`
-- Todos esses 51 AWBs **possuem** `timeline_json` preenchido
-- O criterio atual exige que o status seja invalido **E** a timeline esteja vazia
-- Como a timeline esta preenchida, nenhum AWB entra no fallback
+### Problema 2: Ordem da timeline
+Os eventos nao estao sendo ordenados em ordem decrescente (mais recente primeiro).
 
 ### Solucao
 
-Modificar o criterio do PASSO 1.5 em `supabase/functions/fetch-status-aereo/index.ts`:
+**Arquivo 1: `supabase/functions/mariadb-proxy/index.ts`** (acao `get_awb_tracking_events`)
 
-1. Adicionar `"UNK"` a lista de status invalidos
-2. Relaxar a condicao: verificar o fallback **somente pelo status invalido**, sem exigir que a timeline tambem esteja vazia
-3. Se o AWB existir na `t_aereo_api` com dados validos, substituir tanto o status quanto a timeline pelos dados da API (que serao mais confiáveis)
+1. Apos o fallback, se `timelineData` continuar vazia ou contiver apenas mensagens de erro, retornar um campo especial `tracking_failed: true` na resposta em vez de um array vazio
+2. Ordenar os eventos por `data_hora_evento` em ordem decrescente antes de retornar
 
-### Criterio Atualizado
+**Arquivo 2: `src/components/air/AwbTimelineModal.tsx`**
 
-**Antes:**
-```text
-Status invalido (NULL, vazio, N/A, NOT_FOUND, ERRO) 
-  E timeline vazia
-```
+1. Detectar o campo `tracking_failed` na resposta e exibir um estado visual de "Falha no rastreio" com icone vermelho e mensagem amigavel
+2. Adicionar ordenacao decrescente dos eventos por data no frontend como garantia adicional (caso o backend ja nao ordene)
+3. Filtrar eventos que contenham frases de erro conhecidas para que nunca sejam exibidos como eventos validos
 
-**Depois:**
-```text
-Status invalido (NULL, vazio, N/A, NOT_FOUND, ERRO, UNK)
-  (sem exigir timeline vazia)
-```
+---
 
 ### Secao Tecnica
 
-**Arquivo:** `supabase/functions/fetch-status-aereo/index.ts`
+**`supabase/functions/mariadb-proxy/index.ts`** - acao `get_awb_tracking_events`:
+- Apos a linha 5866, adicionar verificacao: se `timelineData` esta vazia ou todos os itens contem frases de erro, retornar `{ success: true, data: [], tracking_failed: true }`
+- Antes de retornar os eventos (linha 5943), ordenar o array `events` por `data_hora_evento` DESC usando `sort()` com comparacao de datas
+- Filtrar do array final qualquer evento cuja descricao contenha frases de erro conhecidas
 
-Alteracoes no PASSO 1.5:
-- Adicionar `'UNK'` ao Set `invalidStatuses`
-- Remover a condicao `&& !timeline` do filtro de AWBs sem dados
-- Manter a logica de substituicao: se a `t_aereo_api` tiver dados validos, sobrescrever status, origin, destination e timeline_json do registro ws
-
-Isso fara com que os 51 AWBs (46 UNK + 5 NULL) sejam verificados na `t_aereo_api`, e os que tiverem dados validos la serao enriquecidos com a informacao correta.
+**`src/components/air/AwbTimelineModal.tsx`**:
+- Atualizar a interface de retorno do `useQuery` para incluir `tracking_failed`
+- Adicionar estado visual "Falha no Rastreio" com icone `AlertTriangle` vermelho, texto "Rastreamento indisponivel para este AWB" e subtexto "Nao foi possivel obter dados de rastreio em nenhuma fonte disponivel"
+- Adicionar `.sort()` por `data_hora_evento` DESC nos eventos recebidos como camada de seguranca
