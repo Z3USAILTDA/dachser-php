@@ -5865,6 +5865,36 @@ serve(async (req) => {
             }
           }
 
+          // Check if timeline still has no valid data after fallback
+          const ERROR_PHRASES = [
+            'não foi possível detectar',
+            'nao foi possivel detectar',
+            'could not detect',
+            'carrier not supported',
+            'operadora não suportada',
+            'erro ao rastrear',
+            'error tracking',
+            'timeout',
+            'failed to fetch',
+          ];
+
+          const isErrorEvent = (text: string): boolean => {
+            if (!text) return false;
+            const lower = text.toLowerCase();
+            return ERROR_PHRASES.some(phrase => lower.includes(phrase));
+          };
+
+          const allAreErrors = timelineData.length === 0 || timelineData.every((entry: any) => {
+            const desc = entry.Description || entry.description || entry.status || '';
+            return isErrorEvent(String(desc));
+          });
+
+          if (allAreErrors) {
+            console.log(`Tracking failed for AWB ${queryAwb}: no valid events in any source`);
+            result = { success: true, data: [], tracking_failed: true };
+            break;
+          }
+
           // Helper: extract status code from description text
           const extractStatusCode = (description: string): string => {
             if (!description) return 'UNK';
@@ -5939,8 +5969,16 @@ serve(async (req) => {
             };
           });
 
-          console.log(`Tracking: Parsed ${events.length} events from ${timelineSource} for AWB ${queryAwb}`);
-          result = { success: true, data: events };
+          // Filter out error events and sort DESC by date
+          const validEvents = events.filter((e: any) => !isErrorEvent(e.descricao_evento));
+          validEvents.sort((a: any, b: any) => {
+            const dateA = a.data_hora_evento ? new Date(a.data_hora_evento).getTime() : 0;
+            const dateB = b.data_hora_evento ? new Date(b.data_hora_evento).getTime() : 0;
+            return dateB - dateA;
+          });
+
+          console.log(`Tracking: Parsed ${validEvents.length} valid events from ${timelineSource} for AWB ${queryAwb}`);
+          result = { success: true, data: validEvents };
         } catch (tableErr) {
           console.log('Error fetching from t_aereo_ws:', tableErr);
           result = { success: true, data: [] };
