@@ -1997,7 +1997,7 @@ serve(async (req) => {
             SELECT
               CASE
                 WHEN DATEDIFF(CURDATE(), t.data_vencimento) <= 0 THEN 'PRE'
-                WHEN DATEDIFF(CURDATE(), t.data_vencimento) BETWEEN 1 AND 6 THEN 'D1'
+                WHEN DATEDIFF(CURDATE(), t.data_vencimento) = 1 THEN 'D1'
                 WHEN t.tipo_documento = 'FAT_NF' THEN
                   CASE
                     WHEN DATEDIFF(CURDATE(), t.data_vencimento) BETWEEN 7  AND 14 THEN 'D7'
@@ -2087,7 +2087,7 @@ serve(async (req) => {
             AND (
               CASE
                 WHEN ? = 'PRE' THEN DATEDIFF(CURDATE(), t.data_vencimento) <= 0
-                WHEN ? = 'D1' THEN DATEDIFF(CURDATE(), t.data_vencimento) BETWEEN 1 AND 6
+                WHEN ? = 'D1' THEN DATEDIFF(CURDATE(), t.data_vencimento) = 1
                 WHEN t.tipo_documento='FAT_NF' THEN
                   CASE ?
                     WHEN 'D7' THEN DATEDIFF(CURDATE(), t.data_vencimento) BETWEEN 7 AND 14
