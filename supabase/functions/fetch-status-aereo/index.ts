@@ -235,14 +235,29 @@ serve(async (req) => {
     }
 
     // ========== PASSO 1.5: Fallback via t_aereo_api para AWBs sem dados ==========
-    const invalidStatuses = new Set(['', 'N/A', 'NOT_FOUND', 'ERRO']);
+    const invalidStatuses = new Set(['', 'N/A', 'NOT_FOUND', 'ERRO', 'UNK']);
+    // Known error phrases in timeline that indicate bad/unusable data
+    const timelineErrorPhrases = [
+      'não foi possível detectar',
+      'unable to detect',
+      'envie-me o número',
+      'send me the tracking number',
+      'adicionarei suporte',
+      'add support for',
+    ];
     const awbsSemDados: string[] = [];
     const apiFallbackMap = new Map<string, any>(); // mawb -> api row
 
+    function isTimelineError(timelineJson: string | null): boolean {
+      if (!timelineJson) return false;
+      const lower = String(timelineJson).toLowerCase();
+      return timelineErrorPhrases.some(phrase => lower.includes(phrase));
+    }
+
     for (const ws of wsList) {
       const status = (ws.last_status_code || '').trim().toUpperCase();
-      const timeline = ws.timeline_json ? String(ws.timeline_json).trim() : '';
-      if ((invalidStatuses.has(status) || !ws.last_status_code) && !timeline) {
+      const needsFallback = invalidStatuses.has(status) || !ws.last_status_code || isTimelineError(ws.timeline_json);
+      if (needsFallback) {
         const awb = String(ws.awb || '').trim();
         if (awb) awbsSemDados.push(awb);
       }
@@ -280,14 +295,14 @@ serve(async (req) => {
         const apiRow = apiFallbackMap.get(awb);
         if (!apiRow) continue;
         const status = (ws.last_status_code || '').trim().toUpperCase();
-        const timeline = ws.timeline_json ? String(ws.timeline_json).trim() : '';
-        if ((invalidStatuses.has(status) || !ws.last_status_code) && !timeline) {
+        const needsFallback = invalidStatuses.has(status) || !ws.last_status_code || isTimelineError(ws.timeline_json);
+        if (needsFallback) {
           ws.last_status_code = apiRow.ultimo_status || null;
           ws.last_status_description = apiRow.ultimo_status || null;
           ws.origin = apiRow.origem || ws.origin || null;
           ws.destination = apiRow.destino || ws.destination || null;
           ws.timeline_json = apiRow.historico_status || null;
-          ws._apiFallback = apiRow; // carry enrichment data
+          ws._apiFallback = apiRow;
           ws._source = 'api';
         }
       }
