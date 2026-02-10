@@ -7943,7 +7943,8 @@ serve(async (req) => {
         
         console.log(`Fetching historico baixas (periodo: ${periodo})...`);
 
-        const baixas = await client.query(`
+        // Step 1: Fetch baixas IDs with date + StatusLan filter (fast, indexed)
+        const baixasRaw = await client.query(`
           SELECT 
             b.IdLancamentoRM,
             b.IdBaixa,
@@ -7951,27 +7952,59 @@ serve(async (req) => {
             b.ValorBaixado as valor_baixa,
             b.DataDaBaixa as data_baixa,
             b.UsuarioBaixa as usuario_baixa,
-            b.StatusLan as status_lan,
-            dfv.nd,
-            dfv.documento,
-            dfv.nome_beneficiario,
-            dfv.nome_cobranca,
-            dfv.numero_processo,
-            dfv.forma_pag,
-            dfv.data_vencimento,
-            dfv.valor_nf,
-            dfv.moeda
+            b.StatusLan as status_lan
           FROM dados_dachser.tbaixas b
-          LEFT JOIN dados_dachser.t_dados_financeiro_voucher dfv 
-            ON b.IdLancamentoRM = dfv.id_rm
           WHERE b.StatusLan IN (1, 2, 3) ${dateFilter}
-            AND (dfv.modal IS NULL OR dfv.modal <> 'ADM')
           ORDER BY b.DataDaBaixa DESC
           LIMIT 1000
         `);
 
-        console.log(`Found ${baixas?.length || 0} baixas`);
-        result = { success: true, data: baixas || [], count: baixas?.length || 0 };
+        if (!baixasRaw || baixasRaw.length === 0) {
+          result = { success: true, data: [], count: 0 };
+          break;
+        }
+
+        // Step 2: Get unique IdLancamentoRM values and fetch dfv data
+        const idRms = [...new Set(baixasRaw.map((b: any) => b.IdLancamentoRM).filter(Boolean))];
+        
+        let dfvMap: Record<string, any> = {};
+        if (idRms.length > 0) {
+          const placeholders = idRms.map(() => '?').join(',');
+          const dfvRows = await client.query(`
+            SELECT id_rm, nd, documento, nome_beneficiario, nome_cobranca, 
+                   numero_processo, forma_pag, data_vencimento, valor_nf, moeda, modal
+            FROM dados_dachser.t_dados_financeiro_voucher
+            WHERE id_rm IN (${placeholders})
+          `, idRms);
+          
+          for (const row of (dfvRows || [])) {
+            dfvMap[String(row.id_rm)] = row;
+          }
+        }
+
+        // Step 3: Merge in-memory and filter out ADM modal
+        const baixas = baixasRaw
+          .map((b: any) => {
+            const dfv = dfvMap[String(b.IdLancamentoRM)] || {};
+            return {
+              ...b,
+              nd: dfv.nd || null,
+              documento: dfv.documento || null,
+              nome_beneficiario: dfv.nome_beneficiario || null,
+              nome_cobranca: dfv.nome_cobranca || null,
+              numero_processo: dfv.numero_processo || null,
+              forma_pag: dfv.forma_pag || null,
+              data_vencimento: dfv.data_vencimento || null,
+              valor_nf: dfv.valor_nf || null,
+              moeda: dfv.moeda || null,
+              _modal: dfv.modal || null,
+            };
+          })
+          .filter((b: any) => b._modal !== 'ADM')
+          .map(({ _modal, ...rest }: any) => rest);
+
+        console.log(`Found ${baixas.length} baixas`);
+        result = { success: true, data: baixas, count: baixas.length };
         break;
       }
 
