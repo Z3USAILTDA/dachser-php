@@ -24,6 +24,61 @@ function extractPieces(text: string): number | null {
   return null;
 }
 
+// Classify ARR status as connection or final destination
+function classifyArrival(lastStatusCode: string | null, timelineJson: string | null, destination: string | null): string | null {
+  if (!lastStatusCode) return lastStatusCode;
+  const code = lastStatusCode.trim().toUpperCase();
+  if (code !== 'ARR') return lastStatusCode;
+  if (!timelineJson || !destination) return lastStatusCode;
+
+  const dest = destination.trim().toUpperCase();
+  if (!dest) return lastStatusCode;
+
+  try {
+    const events = JSON.parse(timelineJson);
+    if (!Array.isArray(events) || events.length === 0) return lastStatusCode;
+
+    // Events come DESC (newest first) – find the first ARR event (most recent)
+    for (const ev of events) {
+      const evStatus = (ev.status || '').toUpperCase();
+      const evDesc = (ev.Description || ev.description || ev.title || '').toUpperCase();
+      if (evStatus !== 'ARR' && !evDesc.includes('ARRIVED') && !evDesc.includes('ARR')) continue;
+
+      // Try to extract airport code from structured fields first
+      const airport = (ev.station || ev.airport || ev.location || '').trim().toUpperCase();
+      if (airport && airport.length === 3) {
+        return airport === dest ? 'ARR - DESTINO' : 'ARR - CONEXAO';
+      }
+
+      // Try regex on description
+      const desc = ev.Description || ev.description || ev.title || '';
+      // "Arrived at GRU" / "Arrive in GRU"
+      const arrMatch = desc.match(/(?:arrived?\s+(?:at|in)\s+)([A-Z]{3})/i);
+      if (arrMatch) {
+        return arrMatch[1].toUpperCase() === dest ? 'ARR - DESTINO' : 'ARR - CONEXAO';
+      }
+      // "ARR - GRU" or "ARR/GRU"
+      const dashMatch = desc.match(/ARR\s*[-\/]\s*([A-Z]{3})/i);
+      if (dashMatch) {
+        return dashMatch[1].toUpperCase() === dest ? 'ARR - DESTINO' : 'ARR - CONEXAO';
+      }
+      // Fallback: any standalone 3-letter uppercase code in the description
+      const allCodes = desc.match(/\b([A-Z]{3})\b/g);
+      if (allCodes && allCodes.length > 0) {
+        // Use the last 3-letter code found (usually the airport)
+        const candidate = allCodes[allCodes.length - 1].toUpperCase();
+        return candidate === dest ? 'ARR - DESTINO' : 'ARR - CONEXAO';
+      }
+
+      // Found ARR event but couldn't extract airport
+      return lastStatusCode;
+    }
+  } catch (_e) {
+    // parse error – return as-is
+  }
+  return lastStatusCode;
+}
+
 // Check if an event is a delivery event
 function isDeliveryEvent(event: any): boolean {
   const status = (event.status || '').toUpperCase();
@@ -217,12 +272,15 @@ serve(async (req) => {
       const timelineStr = ws.timeline_json ? String(ws.timeline_json) : null;
       const { pieces_discrepancy, baseline_pieces, has_dis_event } = detectPiecesDiscrepancy(timelineStr);
 
+      // Classify ARR as connection or final destination
+      const classifiedStatus = classifyArrival(ws.last_status_code, timelineStr, ws.destination);
+
       const baseRow = {
         id: ws.id,
         awb: awb,
         origem: ws.origin || null,
         destino: ws.destination || null,
-        último_status: ws.last_status_code || null,
+        último_status: classifiedStatus || null,
         status_info: ws.last_status_description || null,
         'última atualização': scrapedAt,
         last_flight: ws.last_flight || null,
