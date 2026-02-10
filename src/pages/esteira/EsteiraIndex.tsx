@@ -752,6 +752,7 @@ const EsteiraIndex = () => {
     chavePix: v.chave_pix || null,
     statusDocumentoFiscal: v.status_documento_fiscal || "ANEXADO",
     statusComprovante: v.status_comprovante || "PENDENTE",
+    idRm: v.id_rm || null,
     tipoExecucaoPagamento: v.tipo_execucao_pagamento || null,
     isProntoParaRobo: v.is_pronto_para_robo === 1 || v.is_pronto_para_robo === true,
     linhaDigitavel: v.linha_digitavel || null,
