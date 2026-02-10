@@ -1,68 +1,43 @@
 
 
-## Fallback para t_aereo_api quando t_aereo_ws tem dados incompletos
+## Corrigir Fallback para incluir AWBs com status UNK
 
-### Objetivo
-AWBs que existem na `t_aereo_ws` mas cujo rastreio falhou (sem status, ou status de erro) devem buscar dados na `t_aereo_api` como fallback. Se o AWB existir na `t_aereo_api` com dados validos, esses dados serao usados no lugar.
+### Problema Identificado
+O fallback para `t_aereo_api` nao esta disparando porque:
+- Existem **46 AWBs com status "UNK"** e **5 com status NULL** na `t_aereo_ws`
+- Todos esses 51 AWBs **possuem** `timeline_json` preenchido
+- O criterio atual exige que o status seja invalido **E** a timeline esteja vazia
+- Como a timeline esta preenchida, nenhum AWB entra no fallback
 
-### Criterio de "dados incompletos" no t_aereo_ws
-Um registro da `t_aereo_ws` sera considerado "sem dados" se:
-- `last_status_code` for NULL, vazio, `"N/A"`, `"NOT_FOUND"` ou `"ERRO"`
-- E `timeline_json` for NULL ou vazio
+### Solucao
 
-### Logica no Backend
+Modificar o criterio do PASSO 1.5 em `supabase/functions/fetch-status-aereo/index.ts`:
 
-#### Arquivo: `supabase/functions/fetch-status-aereo/index.ts`
+1. Adicionar `"UNK"` a lista de status invalidos
+2. Relaxar a condicao: verificar o fallback **somente pelo status invalido**, sem exigir que a timeline tambem esteja vazia
+3. Se o AWB existir na `t_aereo_api` com dados validos, substituir tanto o status quanto a timeline pelos dados da API (que serao mais confiáveis)
 
-Apos o PASSO 1 (buscar snapshots de `t_aereo_ws`), adicionar um novo passo intermediario:
+### Criterio Atualizado
 
-1. Identificar quais AWBs da lista `wsList` estao com dados incompletos
-2. Para esses AWBs, fazer uma query na `t_aereo_api` buscando pelo campo `mawb`
-3. Se encontrar dados na `t_aereo_api` com status valido (`ultimo_status` diferente de NULL/N/A), substituir os campos do registro `t_aereo_ws` pelos da `t_aereo_api`:
-   - `ultimo_status` -> `last_status_code`
-   - `origem` -> `origin`
-   - `destino` -> `destination`
-   - `historico_status` -> `timeline_json`
-   - Tambem ja trazer `hawb`, `destinatario`, `nome_analista`, `email_analista`, `emaill_cliente` (com typo), `tipo_servico` diretamente, evitando a necessidade de buscar no `t_master_dados`
-
-4. No PASSO 3 (merge), os AWBs que foram enriquecidos pela `t_aereo_api` ja terao os dados completos e serao tratados normalmente
-
-### Fluxo resumido
-
+**Antes:**
 ```text
-t_aereo_ws (500 AWBs)
-    |
-    +-- AWBs com status valido -> seguem fluxo normal (enriquecer via t_master_dados)
-    |
-    +-- AWBs sem dados (status NULL/N/A/ERRO/NOT_FOUND) 
-            |
-            +-- Buscar na t_aereo_api
-            |       |
-            |       +-- Encontrou com dados validos -> substituir campos do ws
-            |       +-- Nao encontrou -> manter como esta (sem dados)
-            |
-            +-- Seguir fluxo normal de enriquecimento
+Status invalido (NULL, vazio, N/A, NOT_FOUND, ERRO) 
+  E timeline vazia
+```
+
+**Depois:**
+```text
+Status invalido (NULL, vazio, N/A, NOT_FOUND, ERRO, UNK)
+  (sem exigir timeline vazia)
 ```
 
 ### Secao Tecnica
 
-**Query na t_aereo_api (fallback):**
-```sql
-SELECT mawb, hawb, destinatario, nome_analista, email_analista,
-       emaill_cliente, tipo_servico, ultimo_status, origem, destino,
-       historico_status
-FROM t_aereo_api
-WHERE mawb IN (<awbs_sem_dados>)
-  AND ultimo_status IS NOT NULL
-  AND ultimo_status != 'N/A'
-```
+**Arquivo:** `supabase/functions/fetch-status-aereo/index.ts`
 
-**Substituicao no objeto ws:**
-- Para cada AWB sem dados que tem fallback na `t_aereo_api`, sobrescrever os campos `last_status_code`, `last_status_description`, `origin`, `destination`, `timeline_json` com os valores da API
-- Marcar o registro com um flag `source: 'api'` para diferenciar dos `source: 'ws'` no frontend (opcional, para debug)
+Alteracoes no PASSO 1.5:
+- Adicionar `'UNK'` ao Set `invalidStatuses`
+- Remover a condicao `&& !timeline` do filtro de AWBs sem dados
+- Manter a logica de substituicao: se a `t_aereo_api` tiver dados validos, sobrescrever status, origin, destination e timeline_json do registro ws
 
-**Arquivos modificados:**
-1. `supabase/functions/fetch-status-aereo/index.ts` - adicionar PASSO 1.5 de fallback via t_aereo_api
-
-**Frontend:**
-- Nenhuma alteracao necessaria no `src/pages/Index.tsx`, pois os dados ja chegarao normalizados no mesmo formato
+Isso fara com que os 51 AWBs (46 UNK + 5 NULL) sejam verificados na `t_aereo_api`, e os que tiverem dados validos la serao enriquecidos com a informacao correta.
