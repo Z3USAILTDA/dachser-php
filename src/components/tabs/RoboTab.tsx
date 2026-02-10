@@ -285,13 +285,13 @@ export function RoboTab() {
 
         if (attachmentError) throw attachmentError;
 
-        // Update voucher status_comprovante to ANEXADO and etapa to CONCLUIDO
+        // Update voucher status_comprovante to VALIDADO and etapa to CONCLUIDO
         await supabase.functions.invoke('mariadb-proxy', {
           body: {
             action: 'update_voucher_esteira',
             voucher_id: fileMatch.voucherId,
             updates: {
-              status_comprovante: 'ANEXADO',
+              status_comprovante: 'VALIDADO',
               etapa_atual: 'CONCLUIDO',
               status_baixa: 'PROCESSADO',
             },

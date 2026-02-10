@@ -212,12 +212,10 @@ export const VoucherRascunhoActions = ({ voucher, onUpdate }: VoucherRascunhoAct
         });
       }
 
-      // Determinar próxima etapa
+      // Determinar próxima etapa (ADF segue fluxo normal)
       let proximaEtapa: "OPERACAO" | "FISCAL" | "FINANCEIRO" | "SUPERVISOR";
       
-      if (voucher.tipoDocumento === "ADF") {
-        proximaEtapa = "FINANCEIRO";
-      } else if (voucher.urgenciaTipo === "URGENTE_REAL") {
+      if (voucher.urgenciaTipo === "URGENTE_REAL") {
         proximaEtapa = "SUPERVISOR";
       } else if (voucher.cobrancaEmNomeDe === "DACHSER") {
         proximaEtapa = "FISCAL";

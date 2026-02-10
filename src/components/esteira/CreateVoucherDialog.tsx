@@ -421,13 +421,11 @@ export const CreateVoucherDialog = ({
           ? "URGENTE_AUTOMATICO" 
           : "NORMAL";
 
-      // Determine etapa_atual based on isDraft and tipoDocumento
-      // Voucher criado pela operação vai direto para FISCAL (exceto rascunho ou ADF)
+      // Determine etapa_atual based on isDraft (ADF segue fluxo normal)
+      // Voucher criado pela operação vai direto para FISCAL (exceto rascunho)
       let etapaAtual = "FISCAL"; // Padrão: direto para fiscal
       if (isDraft) {
         etapaAtual = "RASCUNHO";
-      } else if (values.tipoDocumento === "ADF") {
-        etapaAtual = "FINANCEIRO";
       }
 
       // ADF criado sem anexo recebe status_documento_fiscal = PENDENTE
