@@ -5222,18 +5222,18 @@ serve(async (req) => {
         const whereClause = whereConditions.length > 0 ? `WHERE ${whereConditions.join(' AND ')}` : '';
         
         const vouchers = await client.query(`
-          SELECT v.*,
+           SELECT v.*, dfv.id_rm as dfv_id_rm,
             (SELECT l.user_name FROM dados_dachser.t_voucher_logs l
              WHERE l.voucher_id COLLATE utf8mb4_general_ci = v.id COLLATE utf8mb4_general_ci
              AND l.acao IN ('ENVIADO_OPERACAO', 'APROVADO_FISCAL', 'APROVADO_SUPERVISOR', 
                            'REENVIO_APOS_AJUSTE', 'APROVADO_URGENTE', 'BAIXA_MANUAL', 'VOUCHER_CRIADO',
                            'RASCUNHO_ENVIADO', 'MASTER_APROVADO_OPERACAO')
              ORDER BY l.data_hora DESC LIMIT 1) AS enviado_por_user_name
-          FROM dados_dachser.t_vouchers v
-          LEFT JOIN dados_dachser.t_dados_financeiro_voucher dfv ON v.id_rm COLLATE utf8mb4_general_ci = dfv.id_rm COLLATE utf8mb4_general_ci
-          ${whereClause} 
-          ORDER BY v.created_at DESC
-        `, params);
+           FROM dados_dachser.t_vouchers v
+           LEFT JOIN dados_dachser.t_dados_financeiro_voucher dfv ON dfv.nd COLLATE utf8mb4_general_ci = v.numero_spo COLLATE utf8mb4_general_ci
+           ${whereClause} 
+           ORDER BY v.created_at DESC
+         `, params);
         
         result = { success: true, data: vouchers };
         break;
@@ -6687,7 +6687,7 @@ serve(async (req) => {
         // Count total
         const countResult = await client.query(
           `SELECT COUNT(*) as total FROM dados_dachser.t_vouchers v
-           LEFT JOIN dados_dachser.t_dados_financeiro_voucher dfv ON v.id_rm COLLATE utf8mb4_general_ci = dfv.id_rm COLLATE utf8mb4_general_ci
+           LEFT JOIN dados_dachser.t_dados_financeiro_voucher dfv ON dfv.nd COLLATE utf8mb4_general_ci = v.numero_spo COLLATE utf8mb4_general_ci
            ${whereClause}`,
           params
         );
@@ -6707,7 +6707,7 @@ serve(async (req) => {
                            'REENVIO_APOS_AJUSTE', 'APROVADO_URGENTE')
              ORDER BY l.data_hora DESC LIMIT 1) AS enviado_por_user_name
           FROM dados_dachser.t_vouchers v
-          LEFT JOIN dados_dachser.t_dados_financeiro_voucher dfv ON v.id_rm COLLATE utf8mb4_general_ci = dfv.id_rm COLLATE utf8mb4_general_ci
+           LEFT JOIN dados_dachser.t_dados_financeiro_voucher dfv ON dfv.nd COLLATE utf8mb4_general_ci = v.numero_spo COLLATE utf8mb4_general_ci
           ${whereClause}
           ORDER BY v.vencimento ASC, v.created_at DESC
           LIMIT ? OFFSET ?`,
@@ -6739,7 +6739,7 @@ serve(async (req) => {
             -- Total valor
             SUM(COALESCE(v.valor, 0)) as valor_total
           FROM dados_dachser.t_vouchers v
-          LEFT JOIN dados_dachser.t_dados_financeiro_voucher dfv ON v.id_rm COLLATE utf8mb4_general_ci = dfv.id_rm COLLATE utf8mb4_general_ci
+          LEFT JOIN dados_dachser.t_dados_financeiro_voucher dfv ON dfv.nd COLLATE utf8mb4_general_ci = v.numero_spo COLLATE utf8mb4_general_ci
           WHERE (v.etapa_atual = 'FINANCEIRO' OR (v.etapa_atual = 'ROBO' AND NOT EXISTS (SELECT 1 FROM dados_dachser.t_voucher_anexos a WHERE a.voucher_id = v.id AND a.tipo = 'COMPROVANTE')))
           AND (dfv.modal IS NULL OR dfv.modal <> 'ADM')`
         );
@@ -10605,7 +10605,7 @@ serve(async (req) => {
         const whereClause = whereConditions.length > 0 ? `WHERE ${whereConditions.join(' AND ')}` : '';
         
         const vouchers = await client.query(`
-          SELECT v.*,
+           SELECT v.*, dfv.id_rm as dfv_id_rm,
             (SELECT l.user_name FROM dados_dachser.t_voucher_logs l
              WHERE l.voucher_id COLLATE utf8mb4_general_ci = v.id COLLATE utf8mb4_general_ci
              AND l.acao IN ('ENVIADO_OPERACAO', 'APROVADO_FISCAL', 'APROVADO_SUPERVISOR', 
@@ -10613,6 +10613,7 @@ serve(async (req) => {
                            'RASCUNHO_ENVIADO', 'MASTER_APROVADO_OPERACAO')
              ORDER BY l.data_hora DESC LIMIT 1) AS enviado_por_user_name
           FROM dados_dachser.t_vouchers v
+          LEFT JOIN dados_dachser.t_dados_financeiro_voucher dfv ON dfv.nd COLLATE utf8mb4_general_ci = v.numero_spo COLLATE utf8mb4_general_ci
           ${whereClause} ORDER BY v.created_at DESC
         `, params);
         
