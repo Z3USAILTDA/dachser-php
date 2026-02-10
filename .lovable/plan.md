@@ -1,72 +1,77 @@
 
 
-## Integrar tbaixas e StatusLan na Filtragem de Vouchers da Esteira
+## Migrar Rastreio Aereo: t_aereo_ws como Fonte Primaria
 
-### Contexto Atual
+### Mudanca de Abordagem
 
-A esteira de vouchers (`get_vouchers_esteira`) filtra apenas por `etapa_atual != 'CONCLUIDO'` para remover processos finalizados. Porem, a tabela `tbaixas` do MariaDB contem registros de baixas financeiras com o campo `StatusLan` que indica:
+A `t_aereo_ws` passa a ser a **fonte primaria**. Somente AWBs presentes nessa tabela aparecem na tela. A `t_master_dados` serve apenas para enriquecer com dados do processo (cliente, analista, tipo).
 
-- **StatusLan 1** = Finalizado
-- **StatusLan 2** = Cancelado  
-- **StatusLan 3** = Negociado
-- **StatusLan 0 ou 4** = Em aberto (deve permanecer visivel)
-
-A mesma logica ja e aplicada na Regua de Cobranca (`regua-send-emails`, `regua-send-aging`, `mariadb-proxy` para NFs).
-
-### Alteracoes Necessarias
-
-#### 1. `get_vouchers_esteira` (mariadb-proxy)
-
-Adicionar um `LEFT JOIN` com `tbaixas` e excluir vouchers cujo `id_rm` corresponda a uma baixa com `StatusLan IN (1, 2, 3)`:
-
-```sql
-SELECT v.*, dfv.id_rm as dfv_id_rm, ...
-FROM dados_dachser.t_vouchers v
-LEFT JOIN dados_dachser.t_dados_financeiro_voucher dfv 
-  ON dfv.nd COLLATE utf8mb4_general_ci = v.numero_spo COLLATE utf8mb4_general_ci
-WHERE ...
-  AND NOT EXISTS (
-    SELECT 1 FROM dados_dachser.tbaixas b
-    WHERE b.IdLancamentoRM = dfv.id_rm 
-      AND b.StatusLan IN (1, 2, 3)
-  )
+```text
+t_aereo_ws (PRIMARIA)                t_master_dados (ENRIQUECIMENTO)
++------------------------+           +------------------+
+| awb (chave)            |--LOOKUP-->| mawb             |
+| last_status_code       |           | hawb             |
+| last_status_description|           | cliente          |
+| origin                 |           | nome_analista    |
+| destination            |           | email_analista   |
+| last_flight            |           | emails_cliente   |
+| scraped_at             |           | tipo_processo    |
+| timeline_json          |           | tipo_servico     |
+| sidebar_days_in_transit|           +------------------+
++------------------------+
 ```
 
-Isso garante que vouchers ja pagos/cancelados/negociados sejam automaticamente removidos do pipeline ativo.
+### Alteracoes
 
-#### 2. `get_historico_baixas` (mariadb-proxy)
+#### 1. `supabase/functions/fetch-status-aereo/index.ts` - Reescrever
 
-Adicionar a coluna `StatusLan` como informacao visivel e, opcionalmente, filtrar para mostrar apenas baixas com `StatusLan IN (1, 2, 3)` (as efetivamente concluidas), ja que registros com `StatusLan 0/4` ainda estao em aberto.
+**Passo 1**: Buscar os snapshots mais recentes de `t_aereo_ws` (1 por AWB, usando `MAX(id)`). Aplicar filtro de busca se houver search term.
 
-#### 3. `voucher-sync-setup`
+**Passo 2**: Coletar os AWBs retornados e buscar dados complementares de `t_master_dados` (cliente, analista, tipo_processo, tipo_servico, hawb) usando `WHERE mawb IN (...)`.
 
-Refinar a marcacao de `BAIXADO` para considerar `StatusLan`:
+**Passo 3**: Merge em memoria - combinar os dados de ambas as tabelas. AWBs sem correspondencia em `t_master_dados` aparecem normalmente, apenas com campos de enriquecimento vazios.
 
-```sql
-UPDATE dados_dachser.t_vouchers v
-JOIN dados_dachser.t_dados_financeiro_voucher dfv 
-  ON v.numero_spo COLLATE utf8mb4_unicode_ci = dfv.nd COLLATE utf8mb4_unicode_ci
-JOIN dados_dachser.tbaixas b ON dfv.id_rm = b.IdLancamentoRM
-SET v.sync_status = 'BAIXADO'
-WHERE v.sync_status = 'ATIVO'
-  AND b.StatusLan IN (1, 2, 3)
-```
+Mapeamento de campos para o frontend:
+- `awb` <- t_aereo_ws.awb
+- `origem` <- t_aereo_ws.origin
+- `destino` <- t_aereo_ws.destination
+- `ultimo_status` <- t_aereo_ws.last_status_code
+- `status_info` <- t_aereo_ws.last_status_description
+- `ultima_atualizacao` <- t_aereo_ws.scraped_at
+- `destinatario` <- t_master_dados.cliente (via lookup)
+- `hawb` <- t_master_dados.hawb (via lookup)
+- `nome_analista` <- t_master_dados.nome_analista (via lookup)
+- `email_analista` <- t_master_dados.email_analista (via lookup)
+- `email_cliente` <- t_master_dados.emails_cliente (via lookup)
+- `tipo_servico` <- t_master_dados.tipo_servico (via lookup)
+- `tipo_processo` <- t_master_dados.tipo_processo (via lookup)
 
-#### 4. `HistoricoBaixasTab.tsx` (UI)
+#### 2. `supabase/functions/mariadb-proxy/index.ts` - `get_awb_tracking_events`
 
-Exibir o `StatusLan` como badge na tabela de historico para que o usuario saiba o status de cada baixa (Finalizado, Cancelado, Negociado, Em Aberto).
+Alterar de `t_status_historico` para `t_aereo_ws.timeline_json`:
 
-### Detalhes Tecnicos
+- Buscar o registro mais recente do AWB em `t_aereo_ws`
+- Parsear `timeline_json` (formato: `[{Timestamp, Description, Location, Carrier}, ...]`)
+- Converter cada entrada para o formato do frontend:
+  - `Timestamp` -> `data_hora_evento`
+  - `Description` -> `descricao_evento` (extrair codigo como DEP, ARR, NFD do texto)
+  - `Location` -> `aeroporto`
+  - `Carrier` -> `fonte`
 
-- O JOIN com `tbaixas` usa `dfv.id_rm = b.IdLancamentoRM` (mesmo padrao da Regua)
-- Collation `utf8mb4_unicode_ci` nos JOINs entre `t_vouchers` e `t_dados_financeiro_voucher` para evitar erros de collation
-- `NOT EXISTS` e preferivel a `LEFT JOIN ... IS NULL` para performance quando a subquery e simples
-- Vouchers sem correspondencia em `t_dados_financeiro_voucher` (sem `id_rm`) continuam visiveis no pipeline
+#### 3. `src/pages/Index.tsx` - Ajustar mapeamento
+
+Atualizar `fetchStatusAereoData` para os novos nomes de campo. Remover referencias a `data_atraso`, `alert_status`, `arr_check_count` que nao existem em `t_aereo_ws`. O campo `last_check` passa a usar `scraped_at`.
+
+### Campos Removidos (nao existem em t_aereo_ws)
+
+- `data_atraso` - removido
+- `alert_status` - removido
+- `arr_check_count` / `arr_datetime` - removido
+- `dep_datetime` - removido (pode ser derivado do timeline_json futuramente se necessario)
 
 ### Arquivos Modificados
 
-1. **supabase/functions/mariadb-proxy/index.ts** - `get_vouchers_esteira`: adicionar filtro `NOT EXISTS tbaixas`
-2. **supabase/functions/mariadb-proxy/index.ts** - `get_historico_baixas`: incluir `StatusLan` como dado retornado (ja esta presente)
-3. **supabase/functions/voucher-sync-setup/index.ts** - Refinar query `BAIXADO` com `StatusLan IN (1, 2, 3)`
-4. **src/components/esteira/HistoricoBaixasTab.tsx** - Exibir badge de StatusLan na tabela
+1. **supabase/functions/fetch-status-aereo/index.ts** - Reescrever: t_aereo_ws como fonte primaria, t_master_dados como enriquecimento
+2. **supabase/functions/mariadb-proxy/index.ts** - Alterar `get_awb_tracking_events` para usar timeline_json de t_aereo_ws
+3. **src/pages/Index.tsx** - Ajustar mapeamento de campos no fetchStatusAereoData
 
