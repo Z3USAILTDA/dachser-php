@@ -1,55 +1,69 @@
 
 
-# Ajustes na Esteira de Vouchers/SPO
+# Visualizacao dos Templates de E-mail
 
-## 1. Voucher CONCLUIDO sai da tela apos 24h sem retorno de comprovante
+## O que sera feito
 
-**Problema:** Quando um voucher atinge a etapa CONCLUIDO, ele permanece visivel na tela principal indefinidamente. O comportamento correto e: apos 24 horas sem que o status do comprovante seja alterado para "PENDENTE", o voucher deve sair da tela principal e aparecer apenas no historico de baixas.
+Criar uma pagina temporaria de preview (`/fin/esteira/email-preview`) que renderiza os templates de e-mail diretamente no navegador. Isso permite visualizar e ajustar o design antes de implementar o envio real.
 
-**Solucao:** Filtrar na query `get_vouchers_ativos` e `get_vouchers_esteira` os vouchers CONCLUIDO com mais de 24h de `updated_at` sem status_comprovante = "PENDENTE". Vouchers CONCLUIDO com menos de 24h ou com comprovante PENDENTE continuam visiveis.
+A pagina tera:
+- Seletor de tipo de notificacao (VOUCHER_ENVIADO, AJUSTE_SOLICITADO, URGENCIA_REJEITADA, VOUCHER_CONCLUIDO, VENCIMENTO_PROXIMO)
+- Preview do e-mail renderizado em iframe com dados ficticio
+- Toggle dark/light para ver como fica nos dois temas de e-mail
 
-**Arquivos:**
-- `supabase/functions/mariadb-proxy/index.ts` -- Nas actions `get_vouchers_esteira` e `get_vouchers_ativos`, adicionar filtro: excluir vouchers onde `etapa_atual = 'CONCLUIDO' AND updated_at < NOW() - INTERVAL 24 HOUR AND (status_comprovante IS NULL OR status_comprovante != 'PENDENTE')`
-
----
-
-## 2. Corrigir id_rm na t_dados_rm (preenchido com numero_spo em vez de id_rm)
-
-**Problema:** Ao inserir em `t_dados_rm`, o campo `id_rm` esta recebendo o `numero_spo` do voucher em vez do valor real de `id_rm` (que vem da tabela `t_dados_financeiro_voucher`). Isso acontece porque o mapeamento `mapVoucherFromDB` (linha 714 de EsteiraIndex.tsx) NAO inclui o campo `idRm` a partir de `v.id_rm`. O campo so e preenchido para vouchers pendentes do RM. Resultado: `voucher.idRm` e sempre `undefined`, e o fallback `voucher.idRm || voucher.numeroSPO` sempre usa `numeroSPO`.
-
-**Solucao:** Adicionar `idRm: v.id_rm || null` ao mapeamento `mapVoucherFromDB` em `EsteiraIndex.tsx`.
-
-**Arquivos:**
-- `src/pages/esteira/EsteiraIndex.tsx` -- Na funcao `mapVoucherFromDB` (linha ~714), adicionar o campo `idRm: v.id_rm || null` ao objeto retornado
-
----
+Os templates seguirao o padrao visual do e-mail de boas-vindas ja existente:
+- Logo Z3US no topo (com suporte dark/light)
+- Titulo colorido por tipo (verde=concluido, amarelo=enviado, vermelho=rejeitado, laranja=ajuste, amber=vencimento)
+- Dados do voucher em tabela (numero SPO, fornecedor, valor, moeda, vencimento, etapa)
+- Botao CTA com link direto ao voucher
+- Rodape com copyright
 
 ## Secao Tecnica
 
-### Filtro 24h para CONCLUIDO (item 1)
+### Novo arquivo: `src/pages/esteira/EmailPreview.tsx`
 
-Nas queries `get_vouchers_esteira` e `get_vouchers_ativos`, adicionar condicao WHERE:
+Componente React que:
+1. Contem as funcoes `generateEmailHtml(type, data)` com os 5 templates
+2. Renderiza o HTML em um iframe via `srcdoc`
+3. Permite trocar entre os tipos via tabs/select
+4. Usa dados mock para popular os campos
 
-```text
-AND NOT (
-  v.etapa_atual = 'CONCLUIDO' 
-  AND v.updated_at < NOW() - INTERVAL 24 HOUR 
-  AND (v.status_comprovante IS NULL OR v.status_comprovante != 'PENDENTE')
-)
-```
+### Rota temporaria
 
-Isso garante que:
-- Vouchers CONCLUIDO com menos de 24h continuam visiveis (janela para retornar comprovante a pendente)
-- Vouchers CONCLUIDO com comprovante retornado a PENDENTE permanecem visiveis independente do tempo
-- Vouchers CONCLUIDO com mais de 24h e comprovante nao-pendente desaparecem da tela e ficam apenas no historico de baixas
+Adicionar rota `/fin/esteira/email-preview` em `App.tsx` apontando para o novo componente.
 
-### Correcao id_rm (item 2)
-
-Na funcao `mapVoucherFromDB` falta o campo `idRm`. Adicionar entre as linhas existentes:
+### Dados mock para preview
 
 ```text
-idRm: v.id_rm || null,
+{
+  voucherNumber: "SPO-2025-00123",
+  fornecedor: "Transportes Silva Ltda",
+  valor: 15750.00,
+  moeda: "BRL",
+  vencimento: "15/02/2025",
+  etapaDestino: "FISCAL",
+  reason: "Nota fiscal com CNPJ divergente do cadastro",
+  fromStage: "FISCAL",
+  toStage: "OPERACAO",
+  senderName: "Maria Santos"
+}
 ```
 
-Isso faz com que o valor correto de `id_rm` (vindo de `t_vouchers.id_rm`, que por sua vez veio de `t_dados_financeiro_voucher.id_rm`) seja propagado para o frontend e usado corretamente ao inserir em `t_dados_rm`.
+### Estrutura dos templates
+
+Cada template segue a mesma estrutura base do `send-welcome-email`:
+- Fundo claro/escuro responsivo via `prefers-color-scheme`
+- Painel central 640px com bordas arredondadas
+- Logo Z3US com versao light/dark
+- Secao de conteudo especifica por tipo
+- Tabela de dados do voucher
+- Botao CTA (cor varia por tipo)
+- Texto de rodape
+
+### Arquivos a criar/editar
+
+| Arquivo | Acao |
+|---------|------|
+| `src/pages/esteira/EmailPreview.tsx` | Novo -- pagina de preview com templates |
+| `src/App.tsx` | Adicionar rota `/fin/esteira/email-preview` |
 
