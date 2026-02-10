@@ -534,9 +534,9 @@ const Index = () => {
             ? new Date(item["última atualização"]).toISOString()
             : new Date().toISOString(),
           fromStatusAereo: true,
-          data_atraso: item.data_atraso || null,
+          data_atraso: null,
           tipo_servico: item.tipo_servico || "N/A",
-          arr_check_count: item.arr_check_count || 0,
+          arr_check_count: 0,
           tipo_processo: item.tipo_processo || null,
         }));
 

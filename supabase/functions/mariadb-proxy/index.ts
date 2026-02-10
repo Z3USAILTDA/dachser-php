@@ -5762,7 +5762,7 @@ serve(async (req) => {
         break;
       }
 
-      // ==================== AWB TRACKING EVENTS (from t_status_historico) ====================
+      // ==================== AWB TRACKING EVENTS (from t_aereo_ws.timeline_json) ====================
       case 'get_awb_tracking_events': {
         const { awb: queryAwb } = body as any;
         
@@ -5773,52 +5773,91 @@ serve(async (req) => {
           );
         }
 
-        console.log('Fetching AWB tracking events from t_status_historico:', queryAwb);
+        console.log('Fetching AWB tracking events from t_aereo_ws.timeline_json:', queryAwb);
 
         try {
-          const events = await client.query(`
-            SELECT 
-              id,
-              TRIM(awb) as awb,
-              TRIM(hawb) as hawb,
-              status_code as codigo_evento,
-              CASE status_code
-                WHEN 'DEP' THEN 'Partida'
-                WHEN 'ARR' THEN 'Chegada'
-                WHEN 'RCF' THEN 'Recebido do voo'
-                WHEN 'DLV' THEN 'Entregue'
-                WHEN 'NFD' THEN 'Notificação de entrega'
-                WHEN 'MAN' THEN 'Manifestado'
-                WHEN 'BKD' THEN 'Reservado'
-                WHEN 'RCS' THEN 'Recebido do embarcador'
-                WHEN 'DIS' THEN 'Discrepância detectada'
-                WHEN 'NIL' THEN 'AWB não encontrado'
-                WHEN 'OFLD' THEN 'Descarregado (offload)'
-                WHEN 'FOH' THEN 'Fora de horário'
-                WHEN 'TRM' THEN 'Transferido'
-                WHEN 'PRE' THEN 'Pré-alerta'
-                WHEN 'TGC' THEN 'Transferido para armazém'
-                WHEN 'AWD' THEN 'Aguardando documentação'
-                WHEN 'CCD' THEN 'Desembaraço concluído'
-                WHEN 'DDL' THEN 'Atraso na entrega'
-                WHEN 'AWR' THEN 'Aguardando retirada'
-                ELSE status_code
-              END as descricao_evento,
-              data_evento as data_hora_evento,
-              'TRACKING' as fonte,
-              NULL as aeroporto,
-              'PRIMARIA' as nivel_confianca,
-              data_evento as created_at
-            FROM ${database}.t_status_historico
+          // Get the most recent record for this AWB from t_aereo_ws
+          const wsRows = await client.query(`
+            SELECT id, awb, timeline_json, scraped_at
+            FROM ${database}.t_aereo_ws
             WHERE TRIM(awb) COLLATE utf8mb4_unicode_ci = TRIM(?) COLLATE utf8mb4_unicode_ci
-            ORDER BY data_evento DESC
-            LIMIT 100
+            ORDER BY id DESC
+            LIMIT 1
           `, [queryAwb]);
 
-          console.log(`Tracking: Found ${events?.length || 0} events in t_status_historico for AWB ${queryAwb}`);
-          result = { success: true, data: events || [] };
+          if (!wsRows || wsRows.length === 0) {
+            console.log(`No t_aereo_ws record found for AWB ${queryAwb}`);
+            result = { success: true, data: [] };
+            break;
+          }
+
+          const wsRecord = wsRows[0];
+          let timelineData: any[] = [];
+
+          // Parse timeline_json
+          if (wsRecord.timeline_json) {
+            try {
+              const rawTimeline = typeof wsRecord.timeline_json === 'string'
+                ? JSON.parse(wsRecord.timeline_json)
+                : wsRecord.timeline_json;
+              
+              if (Array.isArray(rawTimeline)) {
+                timelineData = rawTimeline;
+              }
+            } catch (parseErr) {
+              console.log('Error parsing timeline_json:', parseErr);
+            }
+          }
+
+          // Helper: extract status code from description text
+          const extractStatusCode = (description: string): string => {
+            if (!description) return 'UNK';
+            const upper = description.toUpperCase();
+            // Check for known codes in the description
+            const knownCodes = ['DEP', 'ARR', 'RCF', 'DLV', 'NFD', 'MAN', 'BKD', 'RCS', 'DIS', 'NIL', 'OFLD', 'FOH', 'TRM', 'PRE', 'AWD', 'CCD', 'TGC', 'DDL', 'AWR', 'POD', 'TFD', 'RCT', 'RCP', 'LOF', 'TDE', 'ASN', 'MIS', 'TFS', 'BKF', 'FWB', 'CAN', 'NIF'];
+            // Check for parenthesized code like "(NFD)"
+            const parenMatch = description.match(/\(([A-Z]{2,5})\)/);
+            if (parenMatch && knownCodes.includes(parenMatch[1])) {
+              return parenMatch[1];
+            }
+            // Check if description starts with a known code
+            for (const code of knownCodes) {
+              if (upper.startsWith(code + ' ') || upper.startsWith(code + '-') || upper === code) {
+                return code;
+              }
+            }
+            // Check if description contains a known code
+            for (const code of knownCodes) {
+              if (upper.includes(code)) {
+                return code;
+              }
+            }
+            return upper.substring(0, 3) || 'UNK';
+          };
+
+          // Convert timeline entries to frontend format
+          const events = timelineData.map((entry: any, idx: number) => {
+            const description = entry.Description || entry.description || '';
+            const codigoEvento = extractStatusCode(description);
+            
+            return {
+              id: idx + 1,
+              awb: queryAwb,
+              hawb: null,
+              codigo_evento: codigoEvento,
+              descricao_evento: description,
+              data_hora_evento: entry.Timestamp || entry.timestamp || null,
+              fonte: entry.Carrier || entry.carrier || 'TRACKING',
+              aeroporto: entry.Location || entry.location || null,
+              nivel_confianca: 'PRIMARIA',
+              created_at: entry.Timestamp || entry.timestamp || null,
+            };
+          });
+
+          console.log(`Tracking: Parsed ${events.length} events from t_aereo_ws.timeline_json for AWB ${queryAwb}`);
+          result = { success: true, data: events };
         } catch (tableErr) {
-          console.log('Error fetching from t_status_historico:', tableErr);
+          console.log('Error fetching from t_aereo_ws:', tableErr);
           result = { success: true, data: [] };
         }
         break;
