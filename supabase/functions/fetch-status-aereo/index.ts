@@ -15,13 +15,19 @@ function extractPieces(text: string): number | null {
   // Format: "2 / 64.00KGS"
   const shortMatch = text.match(/(\d+)\s*\/\s*[\d.]+\s*KGS/i);
   if (shortMatch) return parseInt(shortMatch[1], 10);
+  // Format: "qty: 8, weight: 123"
+  const qtyMatch = text.match(/qty:\s*(\d+)/i);
+  if (qtyMatch) return parseInt(qtyMatch[1], 10);
+  // Format: "5 pieces delivered" or "1 piece(s)" or "1 piece pending" or "1 piece weighing"
+  const piecesMatch = text.match(/(\d+)\s*piece(?:s|\(s\))?/i);
+  if (piecesMatch) return parseInt(piecesMatch[1], 10);
   return null;
 }
 
 // Check if an event is a delivery event
 function isDeliveryEvent(event: any): boolean {
   const status = (event.status || '').toUpperCase();
-  const desc = (event.description || event.title || '').toUpperCase();
+  const desc = (event.Description || event.description || event.title || '').toUpperCase();
   return status === 'DLV' || status === 'DELIVERED' || desc.includes('DELIVERED') || desc.includes('DLV');
 }
 
@@ -40,7 +46,8 @@ function detectPiecesDiscrepancy(timelineJson: string | null): { pieces_discrepa
     const eventsWithPieces: Array<{ pieces: number; isDelivery: boolean; index: number }> = [];
     for (let i = 0; i < chronological.length; i++) {
       const ev = chronological[i];
-      const desc = ev.description || ev.details || ev.title || '';
+      // Timeline events use capitalized keys: Description, Timestamp, Location, Carrier
+      const desc = ev.Description || ev.description || ev.details || ev.title || '';
       const pieces = extractPieces(desc);
       if (pieces !== null) {
         eventsWithPieces.push({ pieces, isDelivery: isDeliveryEvent(ev), index: i });
@@ -68,7 +75,7 @@ function detectPiecesDiscrepancy(timelineJson: string | null): { pieces_discrepa
     }
 
     return { pieces_discrepancy: true, baseline_pieces: baseline };
-  } catch {
+  } catch (_e) {
     return { pieces_discrepancy: false, baseline_pieces: null };
   }
 }
