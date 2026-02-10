@@ -493,23 +493,9 @@ const Index = () => {
     }
   }, []);
 
-  // Fetch AWBs from t_status_aereo - Apenas para usuários Z3US
-  const ALLOWED_DATA_USERS = ["admin", "herbert.zacatei"];
-  
+  // Fetch AWBs from t_aereo_ws - Visível para todos os usuários
   const fetchStatusAereoData = React.useCallback(async () => {
-    // Verificar se é usuário autorizado a ver dados
-    const storedUser = localStorage.getItem("user");
-    const user = storedUser ? JSON.parse(storedUser) : null;
-    const canViewData = user && ALLOWED_DATA_USERS.includes(user.username);
-
-    if (!canViewData) {
-      // Usuário DACHSER - não mostrar dados
-      setIsLoadingStatusAereo(false);
-      setStatusAereoData([]);
-      return;
-    }
-
-    // Usuário Z3US - buscar dados normalmente
+    // Buscar dados para todos os usuários autenticados
     setIsLoadingStatusAereo(true);
     try {
       const { data, error } = await supabase.functions.invoke("fetch-status-aereo", {
