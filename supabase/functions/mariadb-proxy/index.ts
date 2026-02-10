@@ -5520,6 +5520,27 @@ serve(async (req) => {
         break;
       }
 
+      case 'get_users_by_esteira_roles': {
+        const { roles } = body as { roles?: string[] };
+        if (!roles || roles.length === 0) {
+          result = { success: true, users: [] };
+          break;
+        }
+
+        // esteira_role can be comma-separated (e.g. "FISCAL,GESTOR_FISCAL")
+        // Build conditions to match any role in the comma-separated field
+        const conditions = roles.map(() => `FIND_IN_SET(?, REPLACE(esteira_role, ' ', ''))`).join(' OR ');
+        const users = await client.query(
+          `SELECT id, username, email, esteira_role
+           FROM ai_agente.t_users_dachser
+           WHERE esteira_active = 1 AND email IS NOT NULL AND email != '' AND (${conditions})`,
+          roles
+        );
+
+        result = { success: true, users: users || [] };
+        break;
+      }
+
       // ==================== RAW QUERY (ADMIN) ====================
       case 'raw_query': {
         const { query, params: queryParams } = body as { query?: string; params?: any[] };
