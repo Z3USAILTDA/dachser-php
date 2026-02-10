@@ -32,21 +32,31 @@ function isDeliveryEvent(event: any): boolean {
 }
 
 // Detect pieces discrepancy in timeline
-function detectPiecesDiscrepancy(timelineJson: string | null): { pieces_discrepancy: boolean; baseline_pieces: number | null } {
-  if (!timelineJson) return { pieces_discrepancy: false, baseline_pieces: null };
+function detectPiecesDiscrepancy(timelineJson: string | null): { pieces_discrepancy: boolean; baseline_pieces: number | null; has_dis_event: boolean } {
+  if (!timelineJson) return { pieces_discrepancy: false, baseline_pieces: null, has_dis_event: false };
 
   try {
     const events = JSON.parse(timelineJson);
-    if (!Array.isArray(events) || events.length === 0) return { pieces_discrepancy: false, baseline_pieces: null };
+    if (!Array.isArray(events) || events.length === 0) return { pieces_discrepancy: false, baseline_pieces: null, has_dis_event: false };
 
     // Events come in DESC order (newest first), reverse for chronological
     const chronological = [...events].reverse();
+
+    // Check if any event has DIS status
+    let has_dis_event = false;
+    for (const ev of chronological) {
+      const status = (ev.status || '').toUpperCase();
+      const desc = (ev.Description || ev.description || ev.title || '').toUpperCase();
+      if (status === 'DIS' || desc.includes('DISCREPANCY') || desc.includes('DIS')) {
+        has_dis_event = true;
+        break;
+      }
+    }
 
     // Extract pieces from each event's description/details
     const eventsWithPieces: Array<{ pieces: number; isDelivery: boolean; index: number }> = [];
     for (let i = 0; i < chronological.length; i++) {
       const ev = chronological[i];
-      // Timeline events use capitalized keys: Description, Timestamp, Location, Carrier
       const desc = ev.Description || ev.description || ev.details || ev.title || '';
       const pieces = extractPieces(desc);
       if (pieces !== null) {
@@ -54,7 +64,7 @@ function detectPiecesDiscrepancy(timelineJson: string | null): { pieces_discrepa
       }
     }
 
-    if (eventsWithPieces.length < 2) return { pieces_discrepancy: false, baseline_pieces: eventsWithPieces[0]?.pieces || null };
+    if (eventsWithPieces.length < 2) return { pieces_discrepancy: false, baseline_pieces: eventsWithPieces[0]?.pieces || null, has_dis_event };
 
     const baseline = eventsWithPieces[0].pieces;
     let hasDiscrepancy = false;
@@ -66,17 +76,17 @@ function detectPiecesDiscrepancy(timelineJson: string | null): { pieces_discrepa
       }
     }
 
-    if (!hasDiscrepancy) return { pieces_discrepancy: false, baseline_pieces: baseline };
+    if (!hasDiscrepancy) return { pieces_discrepancy: false, baseline_pieces: baseline, has_dis_event };
 
     // Check if last event is delivery with correct count
     const lastWithPieces = eventsWithPieces[eventsWithPieces.length - 1];
     if (lastWithPieces.isDelivery && lastWithPieces.pieces === baseline) {
-      return { pieces_discrepancy: false, baseline_pieces: baseline };
+      return { pieces_discrepancy: false, baseline_pieces: baseline, has_dis_event };
     }
 
-    return { pieces_discrepancy: true, baseline_pieces: baseline };
+    return { pieces_discrepancy: true, baseline_pieces: baseline, has_dis_event };
   } catch (_e) {
-    return { pieces_discrepancy: false, baseline_pieces: null };
+    return { pieces_discrepancy: false, baseline_pieces: null, has_dis_event: false };
   }
 }
 
@@ -205,7 +215,7 @@ serve(async (req) => {
 
       // Detect pieces discrepancy from timeline
       const timelineStr = ws.timeline_json ? String(ws.timeline_json) : null;
-      const { pieces_discrepancy, baseline_pieces } = detectPiecesDiscrepancy(timelineStr);
+      const { pieces_discrepancy, baseline_pieces, has_dis_event } = detectPiecesDiscrepancy(timelineStr);
 
       const baseRow = {
         id: ws.id,
@@ -219,6 +229,7 @@ serve(async (req) => {
         days_in_transit: ws.sidebar_days_in_transit || null,
         pieces_discrepancy,
         baseline_pieces,
+        has_dis_event,
       };
 
       if (masters && masters.length > 0) {
