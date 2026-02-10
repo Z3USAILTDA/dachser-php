@@ -174,19 +174,28 @@ serve(async (req) => {
     const masterList = Array.isArray(masterRows) ? masterRows : [];
     console.log(`Found ${masterList.length} enrichment records from t_master_dados`);
 
-    // Build lookup map: MAWB -> master data (use first/most recent match)
-    const masterMap = new Map<string, any>();
+    // Build lookup map: MAWB -> array of master data rows (one per HAWB)
+    const masterMultiMap = new Map<string, any[]>();
+    const seenHawbs = new Set<string>();
     for (const row of masterList) {
       const mawb = String(row.mawb || '').trim();
-      if (mawb && !masterMap.has(mawb)) {
-        masterMap.set(mawb, row);
+      const hawb = String(row.hawb || '').trim();
+      const dedupeKey = `${mawb}|${hawb}`;
+      if (mawb && !seenHawbs.has(dedupeKey)) {
+        seenHawbs.add(dedupeKey);
+        if (!masterMultiMap.has(mawb)) {
+          masterMultiMap.set(mawb, []);
+        }
+        masterMultiMap.get(mawb)!.push(row);
       }
     }
 
     // ========== PASSO 3: Merge em memória + detecção de discrepância ==========
-    const processedRows = wsList.map((ws: any) => {
+    // For each AWB from t_aereo_ws, create one row per HAWB found in t_master_dados
+    const processedRows: any[] = [];
+    for (const ws of wsList) {
       const awb = String(ws.awb || '').trim();
-      const master = masterMap.get(awb);
+      const masters = masterMultiMap.get(awb);
 
       // Convert scraped_at - remove Z suffix to treat as local time
       let scrapedAt = ws.scraped_at ? String(ws.scraped_at) : null;
@@ -198,16 +207,9 @@ serve(async (req) => {
       const timelineStr = ws.timeline_json ? String(ws.timeline_json) : null;
       const { pieces_discrepancy, baseline_pieces } = detectPiecesDiscrepancy(timelineStr);
 
-      return {
+      const baseRow = {
         id: ws.id,
         awb: awb,
-        hawb: master ? String(master.hawb || '').trim() : null,
-        destinatário: master ? (master.cliente || null) : null,
-        nome_analista: master ? (master.nome_analista || null) : null,
-        email_analista: master ? (master.email_analista || null) : null,
-        email_cliente: master ? (master.emails_cliente || null) : null,
-        tipo_servico: master ? (master.tipo_servico || null) : null,
-        tipo_processo: master ? (master.tipo_processo || null) : null,
         origem: ws.origin || null,
         destino: ws.destination || null,
         último_status: ws.last_status_code || null,
@@ -218,7 +220,34 @@ serve(async (req) => {
         pieces_discrepancy,
         baseline_pieces,
       };
-    });
+
+      if (masters && masters.length > 0) {
+        for (const master of masters) {
+          processedRows.push({
+            ...baseRow,
+            hawb: String(master.hawb || '').trim() || null,
+            destinatário: master.cliente || null,
+            nome_analista: master.nome_analista || null,
+            email_analista: master.email_analista || null,
+            email_cliente: master.emails_cliente || null,
+            tipo_servico: master.tipo_servico || null,
+            tipo_processo: master.tipo_processo || null,
+          });
+        }
+      } else {
+        // No master data found - still show the AWB
+        processedRows.push({
+          ...baseRow,
+          hawb: null,
+          destinatário: null,
+          nome_analista: null,
+          email_analista: null,
+          email_cliente: null,
+          tipo_servico: null,
+          tipo_processo: null,
+        });
+      }
+    }
 
     // Debug: log distribution
     const importCount = processedRows.filter((r: any) => r.tipo_processo === 'AIR IMPORT').length;
