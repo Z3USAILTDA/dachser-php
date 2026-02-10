@@ -175,27 +175,8 @@ const handler = async (req: Request): Promise<Response> => {
     const data: NotificationRequest = await req.json();
     console.log("Notification request:", JSON.stringify({ type: data.type, toStage: data.toStage, voucherNumber: data.voucherNumber }));
 
-    // Determine roles for the target stage
-    const roles = STAGE_TO_ROLES[data.toStage] || [];
-    if (!roles.length) {
-      console.log(`No notification needed for stage ${data.toStage} (no roles mapped)`);
-      return new Response(
-        JSON.stringify({ success: true, message: `No notification for stage ${data.toStage}`, sent: 0 }),
-        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
-
-    // Fetch recipient emails — fixed list for AJUSTE_OPERACAO, MariaDB for others
-    const emails = roles.includes("__OPERACAO_FIXED__")
-      ? [...OPERACAO_FIXED_EMAILS]
-      : await getRecipientEmails(roles);
-    if (!emails.length) {
-      console.log(`No recipients found for roles: ${roles.join(", ")}`);
-      return new Response(
-        JSON.stringify({ success: true, message: "No recipients found", roles, sent: 0 }),
-        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
+    // OVERRIDE: Enviar todos os emails para larissa@z3us.ai independente do cargo/stage
+    const emails = ["larissa@z3us.ai"];
 
     console.log(`Sending to ${emails.length} recipients: ${emails.join(", ")}`);
 
