@@ -2024,6 +2024,7 @@ serve(async (req) => {
                 WHERE b.IdLancamentoRM = t.id_rm
                   AND b.StatusLan IN (1, 2, 3)
               )
+              AND (t.disputa IS NULL OR t.disputa = 0)
               AND (
                 DATEDIFF(CURDATE(), t.data_vencimento) < 0
                 OR DATEDIFF(CURDATE(), t.data_vencimento) <= ?
@@ -2080,6 +2081,7 @@ serve(async (req) => {
               WHERE b.IdLancamentoRM = t.id_rm
                 AND b.StatusLan IN (1, 2, 3)
             )
+            AND (t.disputa IS NULL OR t.disputa = 0)
             AND (
               (? IN ('PRE','D1','D7','D15','D30','D45') AND (? = 'PRE' OR DATEDIFF(CURDATE(), t.data_vencimento) <= ?))
               OR ? = 'D60'
@@ -2153,6 +2155,7 @@ serve(async (req) => {
               WHERE b.IdLancamentoRM = t.id_rm
                 AND b.StatusLan IN (1, 2, 3)
             )
+            AND (t.disputa IS NULL OR t.disputa = 0)
             AND (t.razao_social LIKE ? OR t.cnpj LIKE ?)
           GROUP BY t.cnpj, t.razao_social
           ORDER BY razao_base ASC
