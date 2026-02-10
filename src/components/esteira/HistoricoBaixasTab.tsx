@@ -3,7 +3,8 @@ import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { format, parseISO } from "date-fns";
 import { ptBR } from "date-fns/locale";
-import { RefreshCw, Search, Download, Calendar, DollarSign, CheckCircle2 } from "lucide-react";
+import { RefreshCw, Search, Download, Calendar, DollarSign, CheckCircle2, CircleDot } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -157,6 +158,7 @@ export const HistoricoBaixasTab = () => {
       "Documento": b.documento || "-",
       "Beneficiário": b.nome_beneficiario || "-",
       "Processo": b.numero_processo || "-",
+      "Status": String(b.status_lan) === "1" ? "Finalizado" : String(b.status_lan) === "2" ? "Cancelado" : String(b.status_lan) === "3" ? "Negociado" : "Em Aberto",
       "Valor Baixa": Number(b.valor_baixa) || Number(b.valor_nf) || 0,
       "Moeda": b.moeda || "BRL",
       "Vencimento": b.data_vencimento ? format(parseISO(b.data_vencimento), "dd/MM/yyyy", { locale: ptBR }) : "-",
@@ -199,6 +201,7 @@ export const HistoricoBaixasTab = () => {
       { wch: 15 }, // Documento
       { wch: 35 }, // Beneficiário
       { wch: 18 }, // Processo
+      { wch: 12 }, // Status
       { wch: 15 }, // Valor Baixa
       { wch: 8 },  // Moeda
       { wch: 12 }, // Vencimento
@@ -325,6 +328,7 @@ export const HistoricoBaixasTab = () => {
                 <TableHead className="text-muted-foreground text-xs">ND</TableHead>
                 <TableHead className="text-muted-foreground text-xs">Beneficiário</TableHead>
                 <TableHead className="text-muted-foreground text-xs">Processo</TableHead>
+                <TableHead className="text-muted-foreground text-xs">Status</TableHead>
                 <TableHead className="text-muted-foreground text-xs text-right">Valor</TableHead>
                 <TableHead className="text-muted-foreground text-xs">Vencimento</TableHead>
                 <TableHead className="text-muted-foreground text-xs">Data Baixa</TableHead>
@@ -338,6 +342,15 @@ export const HistoricoBaixasTab = () => {
                     {baixa.nome_beneficiario || "-"}
                   </TableCell>
                   <TableCell className="text-xs">{baixa.numero_processo || "-"}</TableCell>
+                  <TableCell className="text-xs">
+                    {(() => {
+                      const s = String(baixa.status_lan);
+                      if (s === "1") return <Badge variant="success" className="text-[10px]">Finalizado</Badge>;
+                      if (s === "2") return <Badge variant="destructive" className="text-[10px]">Cancelado</Badge>;
+                      if (s === "3") return <Badge variant="warning" className="text-[10px]">Negociado</Badge>;
+                      return <Badge variant="outline" className="text-[10px]">Em Aberto</Badge>;
+                    })()}
+                  </TableCell>
                   <TableCell className="text-right font-mono text-xs">
                     {formatCurrency(baixa.valor_baixa || baixa.valor_nf, baixa.moeda)}
                   </TableCell>

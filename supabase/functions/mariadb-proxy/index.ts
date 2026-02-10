@@ -5209,6 +5209,13 @@ serve(async (req) => {
         // Exclude ALL CONCLUIDO vouchers - they go to baixas
         whereConditions.push('v.etapa_atual != "CONCLUIDO"');
         
+        // Exclude vouchers already paid/cancelled/negotiated in tbaixas (StatusLan 1=Finalizado, 2=Cancelado, 3=Negociado)
+        whereConditions.push(`NOT EXISTS (
+          SELECT 1 FROM dados_dachser.tbaixas b
+          WHERE b.IdLancamentoRM = dfv.id_rm 
+            AND b.StatusLan IN (1, 2, 3)
+        )`);
+        
         if (search) {
           whereConditions.push('(v.numero_spo LIKE ? OR v.fornecedor LIKE ? OR v.cnpj_fornecedor LIKE ?)');
           params.push(`%${search}%`, `%${search}%`, `%${search}%`);
@@ -7957,7 +7964,7 @@ serve(async (req) => {
           FROM dados_dachser.tbaixas b
           LEFT JOIN dados_dachser.t_dados_financeiro_voucher dfv 
             ON b.IdLancamentoRM = dfv.id_rm
-          WHERE 1=1 ${dateFilter}
+          WHERE b.StatusLan IN (1, 2, 3) ${dateFilter}
             AND (dfv.modal IS NULL OR dfv.modal <> 'ADM')
           ORDER BY b.DataDaBaixa DESC
           LIMIT 1000

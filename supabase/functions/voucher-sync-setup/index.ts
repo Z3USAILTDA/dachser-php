@@ -153,6 +153,7 @@ serve(async (req) => {
         JOIN dados_dachser.tbaixas b ON dfv.id_rm = b.IdLancamentoRM
         SET v.sync_status = 'BAIXADO'
         WHERE v.sync_status = 'ATIVO'
+          AND b.StatusLan IN (1, 2, 3)
       `);
       results.push(`✅ Marked ${baixadosUpdate.affectedRows || 0} vouchers as BAIXADO`);
       console.log(`[voucher-sync-setup] Marked as BAIXADO: ${baixadosUpdate.affectedRows || 0}`);
