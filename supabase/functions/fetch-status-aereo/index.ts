@@ -234,6 +234,66 @@ serve(async (req) => {
       );
     }
 
+    // ========== PASSO 1.5: Fallback via t_aereo_api para AWBs sem dados ==========
+    const invalidStatuses = new Set(['', 'N/A', 'NOT_FOUND', 'ERRO']);
+    const awbsSemDados: string[] = [];
+    const apiFallbackMap = new Map<string, any>(); // mawb -> api row
+
+    for (const ws of wsList) {
+      const status = (ws.last_status_code || '').trim().toUpperCase();
+      const timeline = ws.timeline_json ? String(ws.timeline_json).trim() : '';
+      if ((invalidStatuses.has(status) || !ws.last_status_code) && !timeline) {
+        const awb = String(ws.awb || '').trim();
+        if (awb) awbsSemDados.push(awb);
+      }
+    }
+
+    if (awbsSemDados.length > 0) {
+      const uniqueSemDados = [...new Set(awbsSemDados)];
+      const semDadosClause = uniqueSemDados.map(a => `'${a.replace(/'/g, "''")}'`).join(',');
+      const apiQuery = `
+        SELECT mawb, hawb, destinatario, nome_analista, email_analista,
+               emaill_cliente, tipo_servico, ultimo_status, origem, destino,
+               historico_status
+        FROM ${database}.t_aereo_api
+        WHERE TRIM(mawb) COLLATE utf8mb4_unicode_ci IN (${semDadosClause})
+          AND ultimo_status IS NOT NULL
+          AND ultimo_status != 'N/A'
+        ORDER BY id DESC
+      `;
+      console.log(`Fallback: buscando ${uniqueSemDados.length} AWBs sem dados na t_aereo_api...`);
+      const apiRows = await client.query(apiQuery);
+      const apiList = Array.isArray(apiRows) ? apiRows : [];
+      console.log(`Fallback: encontrados ${apiList.length} registros na t_aereo_api`);
+
+      // Build map (keep first = most recent due to ORDER BY id DESC)
+      for (const row of apiList) {
+        const mawb = String(row.mawb || '').trim();
+        if (mawb && !apiFallbackMap.has(mawb)) {
+          apiFallbackMap.set(mawb, row);
+        }
+      }
+
+      // Overwrite ws records with api data
+      for (const ws of wsList) {
+        const awb = String(ws.awb || '').trim();
+        const apiRow = apiFallbackMap.get(awb);
+        if (!apiRow) continue;
+        const status = (ws.last_status_code || '').trim().toUpperCase();
+        const timeline = ws.timeline_json ? String(ws.timeline_json).trim() : '';
+        if ((invalidStatuses.has(status) || !ws.last_status_code) && !timeline) {
+          ws.last_status_code = apiRow.ultimo_status || null;
+          ws.last_status_description = apiRow.ultimo_status || null;
+          ws.origin = apiRow.origem || ws.origin || null;
+          ws.destination = apiRow.destino || ws.destination || null;
+          ws.timeline_json = apiRow.historico_status || null;
+          ws._apiFallback = apiRow; // carry enrichment data
+          ws._source = 'api';
+        }
+      }
+      console.log(`Fallback: ${apiFallbackMap.size} AWBs enriquecidos via t_aereo_api`);
+    }
+
     // ========== PASSO 2: Enriquecer com dados de t_master_dados ==========
     const awbsFromWs = wsList.map((r: any) => String(r.awb || '').trim()).filter(Boolean);
     const uniqueAwbs = [...new Set(awbsFromWs)];
@@ -306,10 +366,25 @@ serve(async (req) => {
         has_dis_event,
       };
 
-      if (masters && masters.length > 0) {
+      // If this AWB was enriched via t_aereo_api fallback, use that data directly
+      const apiFb = ws._apiFallback;
+      if (apiFb) {
+        processedRows.push({
+          ...baseRow,
+          source: 'api',
+          hawb: String(apiFb.hawb || '').trim() || null,
+          destinatário: apiFb.destinatario || null,
+          nome_analista: apiFb.nome_analista || null,
+          email_analista: apiFb.email_analista || null,
+          email_cliente: apiFb.emaill_cliente || null,
+          tipo_servico: apiFb.tipo_servico || null,
+          tipo_processo: null,
+        });
+      } else if (masters && masters.length > 0) {
         for (const master of masters) {
           processedRows.push({
             ...baseRow,
+            source: 'ws',
             hawb: String(master.hawb || '').trim() || null,
             destinatário: master.cliente || null,
             nome_analista: master.nome_analista || null,
@@ -320,9 +395,9 @@ serve(async (req) => {
           });
         }
       } else {
-        // No master data found - still show the AWB
         processedRows.push({
           ...baseRow,
+          source: 'ws',
           hawb: null,
           destinatário: null,
           nome_analista: null,
