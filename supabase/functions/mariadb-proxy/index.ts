@@ -5778,7 +5778,7 @@ serve(async (req) => {
         try {
           // Get the most recent record for this AWB from t_aereo_ws
           const wsRows = await client.query(`
-            SELECT id, awb, timeline_json, scraped_at
+            SELECT id, awb, timeline_json, scraped_at, last_status_code
             FROM ${database}.t_aereo_ws
             WHERE TRIM(awb) COLLATE utf8mb4_unicode_ci = TRIM(?) COLLATE utf8mb4_unicode_ci
             ORDER BY id DESC
@@ -5793,8 +5793,25 @@ serve(async (req) => {
 
           const wsRecord = wsRows[0];
           let timelineData: any[] = [];
+          let timelineSource = 'ws';
 
-          // Parse timeline_json
+          // Known error phrases in timeline that indicate unusable data
+          const errorPhrases = [
+            'não foi possível detectar',
+            'unable to detect',
+            'envie-me o número',
+            'send me the tracking number',
+            'adicionarei suporte',
+            'add support for',
+          ];
+
+          const isTimelineError = (raw: string | null): boolean => {
+            if (!raw) return false;
+            const lower = String(raw).toLowerCase();
+            return errorPhrases.some(p => lower.includes(p));
+          };
+
+          // Parse timeline_json from t_aereo_ws
           if (wsRecord.timeline_json) {
             try {
               const rawTimeline = typeof wsRecord.timeline_json === 'string'
@@ -5809,24 +5826,59 @@ serve(async (req) => {
             }
           }
 
+          // Fallback: if timeline is empty, has error messages, or status is invalid -> try t_aereo_api
+          const invalidStatuses = new Set(['', 'N/A', 'NOT_FOUND', 'ERRO', 'UNK']);
+          const wsStatus = (wsRecord.last_status_code || '').trim().toUpperCase();
+          const needsFallback = timelineData.length === 0 
+            || isTimelineError(wsRecord.timeline_json ? String(wsRecord.timeline_json) : null)
+            || invalidStatuses.has(wsStatus) 
+            || !wsRecord.last_status_code;
+
+          if (needsFallback) {
+            console.log(`Timeline fallback needed for AWB ${queryAwb} (status=${wsStatus}, timelineLen=${timelineData.length})`);
+            try {
+              const apiRows = await client.query(`
+                SELECT historico_status
+                FROM ${database}.t_aereo_api
+                WHERE TRIM(mawb) COLLATE utf8mb4_unicode_ci = TRIM(?) COLLATE utf8mb4_unicode_ci
+                  AND historico_status IS NOT NULL
+                ORDER BY id DESC
+                LIMIT 1
+              `, [queryAwb]);
+
+              if (apiRows && apiRows.length > 0 && apiRows[0].historico_status) {
+                try {
+                  const apiTimeline = typeof apiRows[0].historico_status === 'string'
+                    ? JSON.parse(apiRows[0].historico_status)
+                    : apiRows[0].historico_status;
+                  if (Array.isArray(apiTimeline) && apiTimeline.length > 0) {
+                    timelineData = apiTimeline;
+                    timelineSource = 'api';
+                    console.log(`Timeline fallback: using ${apiTimeline.length} events from t_aereo_api for AWB ${queryAwb}`);
+                  }
+                } catch (apiParseErr) {
+                  console.log('Error parsing t_aereo_api historico_status:', apiParseErr);
+                }
+              }
+            } catch (apiErr) {
+              console.log('Error fetching fallback from t_aereo_api:', apiErr);
+            }
+          }
+
           // Helper: extract status code from description text
           const extractStatusCode = (description: string): string => {
             if (!description) return 'UNK';
             const upper = description.toUpperCase();
-            // Check for known codes in the description
             const knownCodes = ['DEP', 'ARR', 'RCF', 'DLV', 'NFD', 'MAN', 'BKD', 'RCS', 'DIS', 'NIL', 'OFLD', 'FOH', 'TRM', 'PRE', 'AWD', 'CCD', 'TGC', 'DDL', 'AWR', 'POD', 'TFD', 'RCT', 'RCP', 'LOF', 'TDE', 'ASN', 'MIS', 'TFS', 'BKF', 'FWB', 'CAN', 'NIF'];
-            // Check for parenthesized code like "(NFD)"
             const parenMatch = description.match(/\(([A-Z]{2,5})\)/);
             if (parenMatch && knownCodes.includes(parenMatch[1])) {
               return parenMatch[1];
             }
-            // Check if description starts with a known code
             for (const code of knownCodes) {
               if (upper.startsWith(code + ' ') || upper.startsWith(code + '-') || upper === code) {
                 return code;
               }
             }
-            // Check if description contains a known code
             for (const code of knownCodes) {
               if (upper.includes(code)) {
                 return code;
@@ -5854,7 +5906,7 @@ serve(async (req) => {
             };
           });
 
-          console.log(`Tracking: Parsed ${events.length} events from t_aereo_ws.timeline_json for AWB ${queryAwb}`);
+          console.log(`Tracking: Parsed ${events.length} events from ${timelineSource} for AWB ${queryAwb}`);
           result = { success: true, data: events };
         } catch (tableErr) {
           console.log('Error fetching from t_aereo_ws:', tableErr);
