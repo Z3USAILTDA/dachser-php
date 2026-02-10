@@ -1,56 +1,73 @@
 
 
-## Corrigir Nomenclaturas de Status no Rastreio Aereo
+## Regra de Discrepancia de Pecas/Volume no Rastreio Aereo
 
-### Problema
+### Contexto
 
-Apos a migracao para `t_aereo_ws`, os codigos de status exibidos na tela estao diferentes do esperado. Isso acontece porque:
+Na timeline de eventos do `t_aereo_ws`, cada evento pode conter informacao de pecas/volume em dois formatos:
+- `"Pieces: 2, Weight: 64.00"` (formato longo)
+- `"2 / 64.00KGS"` (formato curto)
 
-1. O campo `last_event` do frontend recebe `status_info || ultimo_status`
-2. O `status_info` de `t_aereo_ws` tem formato diferente do antigo: `"(NFD) Cargo and documents ready..."` em vez de `"NFD - Notificado"`
-3. A funcao `getStatusCode()` nao consegue extrair as siglas corretamente desse novo formato
-4. Exemplos do problema:
-   - `"Booked. Flight IB267..."` -> exibe `"BOO"` em vez de `"BKD"`
-   - `"(NFD) Cargo and documents..."` -> pode exibir `"(NF"` em vez de `"NFD"`
-   - `"UNK"` -> codigo novo que nao existia antes
+O primeiro evento cronologico (ultimo no array, pois vem em ordem DESC) estabelece a quantidade de referencia. Se qualquer evento posterior mostrar quantidade diferente, o AWB deve ser marcado como **critico** e permanecer critico ate que o evento de entrega (DLV/Delivered) confirme a quantidade original.
 
-### Solucao
-
-Ajustar o mapeamento no `fetchStatusAereoData` para separar corretamente o **codigo de status** da **descricao do evento**, usando os campos certos da API:
-
-- `status` <- `ultimo_status` (codigo limpo: NFD, DLV, ARR, DEP, UNK...)
-- `last_event` <- `ultimo_status` (para a funcao `getStatusCode` funcionar corretamente)
-- Adicionar campo de descricao separado para exibir `status_info` no tooltip
-
-### Detalhes Tecnicos
-
-#### 1. `src/pages/Index.tsx` - Ajustar mapeamento de campos (linhas 520-541)
-
-Alterar o mapeamento dentro de `fetchStatusAereoData`:
+### Logica da Regra
 
 ```text
-ANTES:
-  last_event: item.status_info || item.ultimo_status || "-"
-  status: item.ultimo_status || "-"
-
-DEPOIS:
-  last_event: item.ultimo_status || "-"
-  status: item.ultimo_status || "-"
-  status_description: item.status_info || null
+Timeline (ordem cronologica):
+  1. Booking Confirmed: 20 pecas    <- REFERENCIA (baseline)
+  2. Freight on Hand:   20 pecas    <- OK
+  3. Manifested:        18 pecas    <- CRITICO (18 != 20)
+  4. Departed:          18 pecas    <- CRITICO (mantido)
+  5. Arrived:           18 pecas    <- CRITICO (mantido)
+  6. Delivered:         20 pecas    <- LIBERADO (entregou o original)
+  6b. Delivered:        18 pecas    <- CRITICO (nao entregou o original)
 ```
 
-#### 2. `src/pages/Index.tsx` - Interface AWBData
+### Implementacao
 
-Adicionar campo `status_description` opcional na interface para guardar a descricao completa do `status_info`.
+#### 1. `supabase/functions/fetch-status-aereo/index.ts` - Adicionar coluna `timeline_json` na query
 
-#### 3. `src/pages/Index.tsx` - Adicionar `"UNK"` aos codigos conhecidos
+Incluir o campo `timeline_json` na query do Passo 1 (busca de snapshots de `t_aereo_ws`) para que o backend possa analisar a discrepancia de pecas sem precisar de uma segunda query.
 
-Incluir `"UNK"` na lista `knownStatusCodes` (linha 206) e no `progressMap` com posicao 0 (inicio da timeline, pois e desconhecido).
+#### 2. `supabase/functions/fetch-status-aereo/index.ts` - Logica de deteccao de discrepancia
 
-#### 4. `src/pages/Index.tsx` - Tooltip de status
+Apos buscar os snapshots, para cada AWB:
+- Parsear o `timeline_json`
+- Extrair quantidade de pecas de cada evento usando regex:
+  - `/Pieces:\s*(\d+)/i` para formato longo
+  - `/(\d+)\s*\/\s*[\d.]+\s*KGS/i` para formato curto
+- Ordenar eventos por data (mais antigo primeiro)
+- O primeiro evento com pecas define o `baseline_pieces`
+- Verificar se algum evento posterior tem quantidade diferente
+- Verificar se o ultimo evento e entrega (DLV) e se a quantidade coincide com o baseline
+- Retornar dois novos campos: `pieces_discrepancy: boolean` e `baseline_pieces: number | null`
 
-Nos locais onde o tooltip exibe informacoes do status (ao passar o mouse), usar `status_description` para mostrar a descricao completa do ParcelsApp em vez de tentar derivar do codigo.
+#### 3. `src/pages/Index.tsx` - Interface AWBData
+
+Adicionar campos:
+- `pieces_discrepancy?: boolean` - indica discrepancia de pecas detectada
+- `baseline_pieces?: number | null` - quantidade de pecas de referencia
+
+#### 4. `src/pages/Index.tsx` - Mapeamento no fetchStatusAereoData
+
+Mapear os novos campos `pieces_discrepancy` e `baseline_pieces` vindos do backend.
+
+#### 5. `src/pages/Index.tsx` - Filtro de criticos
+
+Atualizar a logica de filtragem de AWBs criticos (em 3 locais: filtro do card, contagem de criticos no dashboard, e badge de status) para incluir `pieces_discrepancy === true` como criterio de critico:
+
+```text
+const isCritical = status === "NIL" || status === "NIF" || status === "OFLD" 
+  || CRITICAL_AWBS.includes(awb.awb) 
+  || awb.pieces_discrepancy === true;
+```
+
+#### 6. `src/pages/Index.tsx` - Destaque visual
+
+AWBs com `pieces_discrepancy === true` receberao o mesmo estilo dos AWBs criticos: fundo vermelho pulsante (`bg-red-500/15 animate-pulse`) e badge "DISCREPANCIA PECAS".
 
 ### Arquivos Modificados
 
-1. **src/pages/Index.tsx** - Ajustar mapeamento de campos, interface AWBData, knownStatusCodes, e tooltips de status
+1. **supabase/functions/fetch-status-aereo/index.ts** - Incluir `timeline_json` na query e adicionar logica de deteccao de discrepancia de pecas
+2. **src/pages/Index.tsx** - Interface AWBData, mapeamento de campos, filtros de criticos e destaque visual
+
