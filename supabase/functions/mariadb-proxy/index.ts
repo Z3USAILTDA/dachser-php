@@ -5206,8 +5206,8 @@ serve(async (req) => {
         // CRITICAL: Exclude ADM modal vouchers via JOIN with t_dados_financeiro_voucher
         whereConditions.push('(dfv.modal IS NULL OR dfv.modal <> "ADM")');
         
-        // Exclude CONCLUIDO vouchers older than 24h without PENDENTE comprovante
-        whereConditions.push('NOT (v.etapa_atual = "CONCLUIDO" AND v.updated_at < NOW() - INTERVAL 24 HOUR AND (v.status_comprovante IS NULL OR v.status_comprovante != "PENDENTE"))');
+        // Exclude ALL CONCLUIDO vouchers - they go to baixas
+        whereConditions.push('v.etapa_atual != "CONCLUIDO"');
         
         if (search) {
           whereConditions.push('(v.numero_spo LIKE ? OR v.fornecedor LIKE ? OR v.cnpj_fornecedor LIKE ?)');
@@ -10589,8 +10589,8 @@ serve(async (req) => {
         // Exclude child vouchers (consolidated into a master)
         whereConditions.push('(voucher_master_id IS NULL OR voucher_master_id = "")');
         
-        // Exclude CONCLUIDO vouchers older than 24h without PENDENTE comprovante
-        whereConditions.push('NOT (etapa_atual = "CONCLUIDO" AND updated_at < NOW() - INTERVAL 24 HOUR AND (status_comprovante IS NULL OR status_comprovante != "PENDENTE"))');
+        // Exclude ALL CONCLUIDO vouchers - they go to baixas
+        whereConditions.push('etapa_atual != "CONCLUIDO"');
         
         if (search) {
           whereConditions.push('(numero_spo LIKE ? OR fornecedor LIKE ? OR cnpj_fornecedor LIKE ?)');
