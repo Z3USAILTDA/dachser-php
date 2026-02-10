@@ -31,7 +31,7 @@ serve(async (req) => {
       );
     }
 
-    console.log(`Connecting to MariaDB at ${host}:${port}/${database} for fetch-status-aereo`);
+    console.log(`Connecting to MariaDB at ${host}:${port}/${database} for fetch-status-aereo (t_aereo_ws primary)`);
     
     client = await new Client().connect({
       hostname: host,
@@ -41,176 +41,106 @@ serve(async (req) => {
       password: dbPassword,
     });
 
-    // Check if arr_check_count and arr_datetime columns exist
-    let hasArrCheckColumn = false;
-    let hasArrDatetimeColumn = false;
-    try {
-      const colCheck = await client.query(
-        `SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS 
-         WHERE TABLE_SCHEMA = ? AND TABLE_NAME = 't_status_aereo' AND COLUMN_NAME IN ('arr_check_count', 'arr_datetime')`,
-        [database]
-      );
-      if (Array.isArray(colCheck)) {
-        hasArrCheckColumn = colCheck.some((r: any) => r.COLUMN_NAME === 'arr_check_count');
-        hasArrDatetimeColumn = colCheck.some((r: any) => r.COLUMN_NAME === 'arr_datetime');
-      }
-    } catch (e) {
-      console.log('Column check failed, assuming columns do not exist');
-    }
+    // ========== PASSO 1: Buscar snapshots mais recentes de t_aereo_ws ==========
+    let wsQuery: string;
+    let wsParams: string[] = [];
 
-    // OTIMIZAÇÃO: Primeiro buscar lista de MAWBs válidos e mapear HAWB -> tipo_processo
-    // Usamos HAWB como chave pois t_status_aereo.hawb corresponde a t_master_dados.hawb
-    const mawbListQuery = `
-      SELECT DISTINCT TRIM(mawb) as mawb, TRIM(hawb) as hawb, tipo_processo
-      FROM ${database}.t_master_dados 
-      WHERE data_insert >= DATE_SUB(NOW(), INTERVAL 10 DAY)
-      AND tipo_processo IN ('AIR IMPORT', 'AIR EXPORT')
-      AND mawb IS NOT NULL AND TRIM(mawb) != ''
+    const baseWsQuery = `
+      SELECT w.id, w.awb, w.last_status_code, w.last_status_description,
+             w.origin, w.destination, w.last_flight, w.scraped_at,
+             w.sidebar_days_in_transit
+      FROM ${database}.t_aereo_ws w
+      INNER JOIN (
+        SELECT awb, MAX(id) as max_id
+        FROM ${database}.t_aereo_ws
+        GROUP BY awb
+      ) latest ON w.id = latest.max_id
     `;
-    
-    const mawbListResult = await client.query(mawbListQuery);
-    const mawbList = Array.isArray(mawbListResult) ? mawbListResult : [];
-    
-    // Criar mapas para lookup eficiente
-    // mawbToProcessType: MAWB -> tipo_processo (para busca por AWB)
-    // hawbToProcessType: HAWB -> tipo_processo (para busca por HAWB quando AWB não bater)
-    const mawbToProcessType = new Map<string, string>();
-    const hawbToProcessType = new Map<string, string>();
-    const validMawbs: string[] = [];
-    
-    for (const row of mawbList) {
-      const mawb = String(row.mawb || '').trim();
-      const hawb = String(row.hawb || '').trim();
-      
-      if (mawb) {
-        validMawbs.push(mawb);
-        if (row.tipo_processo) {
-          mawbToProcessType.set(mawb, row.tipo_processo);
-        }
-      }
-      
-      // Também mapear por HAWB para correlação alternativa
-      if (hawb && row.tipo_processo) {
-        hawbToProcessType.set(hawb, row.tipo_processo);
-      }
+
+    if (search && search.trim() !== '') {
+      const searchPattern = `%${search.trim()}%`;
+      wsQuery = `${baseWsQuery}
+        WHERE (w.awb LIKE ? OR w.last_status_code LIKE ? OR w.last_status_description LIKE ?)
+        ORDER BY w.scraped_at DESC
+        LIMIT 500`;
+      wsParams = [searchPattern, searchPattern, searchPattern];
+    } else {
+      wsQuery = `${baseWsQuery} ORDER BY w.scraped_at DESC LIMIT 500`;
     }
-    
-    console.log(`Built maps: ${mawbToProcessType.size} MAWBs, ${hawbToProcessType.size} HAWBs`)
 
-    console.log(`Found ${validMawbs.length} valid MAWBs from t_master_dados`);
+    console.log('Fetching latest snapshots from t_aereo_ws...');
+    const wsRows = await client.query(wsQuery, wsParams);
+    const wsList = Array.isArray(wsRows) ? wsRows : [];
+    console.log(`Found ${wsList.length} AWBs from t_aereo_ws`);
 
-    // Se não houver MAWBs válidos, retorna vazio (evita query pesada)
-    if (validMawbs.length === 0) {
+    if (wsList.length === 0) {
       return new Response(
         JSON.stringify({ success: true, data: [] }),
         { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
-    // Construir lista para WHERE IN (escapar aspas simples)
-    const mawbInClause = validMawbs.map(m => `'${m.replace(/'/g, "''")}'`).join(',');
+    // ========== PASSO 2: Enriquecer com dados de t_master_dados ==========
+    const awbsFromWs = wsList.map((r: any) => String(r.awb || '').trim()).filter(Boolean);
+    const uniqueAwbs = [...new Set(awbsFromWs)];
+    const awbInClause = uniqueAwbs.map(a => `'${a.replace(/'/g, "''")}'`).join(',');
 
-    // Query principal usando lista explícita (muito mais rápido que subquery)
-    const baseSelect = `
-      SELECT s.id, s.awb, s.hawb, s.destinatário, s.nome_analista, s.email_analista,
-             s.email_cliente, s.tipo_servico, s.data_atraso, s.\`última atualização\`,
-             s.\`último_status\`, s.origem, s.destino, s.alert_status, s.dep_datetime,
-             ${hasArrCheckColumn ? 's.arr_check_count' : '0 as arr_check_count'},
-             ${hasArrDatetimeColumn ? 's.arr_datetime' : 'NULL as arr_datetime'}
-      FROM ${database}.t_status_aereo s
-      WHERE (
-        s.awb IN (${mawbInClause})
-        ${hasArrDatetimeColumn ? `
-        OR (
-          s.\`último_status\` IN ('ARR', 'ARR - Destino')
-          AND COALESCE(s.arr_datetime, s.\`última atualização\`) >= DATE_SUB(NOW(), INTERVAL 5 DAY)
-        )` : ''}
-      )`;
+    const masterQuery = `
+      SELECT DISTINCT TRIM(mawb) as mawb, TRIM(hawb) as hawb, 
+             cliente, nome_analista, email_analista, emails_cliente,
+             tipo_processo, tipo_servico
+      FROM ${database}.t_master_dados
+      WHERE TRIM(mawb) COLLATE utf8mb4_unicode_ci IN (${awbInClause})
+        AND tipo_processo IN ('AIR IMPORT', 'AIR EXPORT')
+      ORDER BY data_insert DESC
+    `;
 
-    let query: string;
-    let params: string[];
+    console.log(`Enriching with t_master_dados for ${uniqueAwbs.length} AWBs...`);
+    const masterRows = await client.query(masterQuery);
+    const masterList = Array.isArray(masterRows) ? masterRows : [];
+    console.log(`Found ${masterList.length} enrichment records from t_master_dados`);
 
-    if (search && search.trim() !== '') {
-      const searchPattern = `%${search.trim()}%`;
-      query = `${baseSelect}
-        AND (s.awb LIKE ? OR s.hawb LIKE ? OR s.destinatário LIKE ?)
-        ORDER BY s.id DESC
-        LIMIT 500`;
-      params = [searchPattern, searchPattern, searchPattern];
-    } else {
-      query = `${baseSelect} ORDER BY s.id DESC LIMIT 500`;
-      params = [];
+    // Build lookup map: MAWB -> master data (use first/most recent match)
+    const masterMap = new Map<string, any>();
+    for (const row of masterList) {
+      const mawb = String(row.mawb || '').trim();
+      if (mawb && !masterMap.has(mawb)) {
+        masterMap.set(mawb, row);
+      }
     }
 
-    console.log(`Executing optimized query with ${validMawbs.length} MAWBs in IN clause`);
-    const rows = await client.query(query, params);
-    
-    console.log(`Fetched ${Array.isArray(rows) ? rows.length : 0} records from t_status_aereo`);
+    // ========== PASSO 3: Merge em memória ==========
+    const processedRows = wsList.map((ws: any) => {
+      const awb = String(ws.awb || '').trim();
+      const master = masterMap.get(awb);
 
-    // Debug: log some sample AWBs and their mappings
-    let matchedCount = 0;
-    let unmatchedSamples: string[] = [];
+      // Convert scraped_at - remove Z suffix to treat as local time
+      let scrapedAt = ws.scraped_at ? String(ws.scraped_at) : null;
+      if (scrapedAt) {
+        scrapedAt = scrapedAt.replace(/Z$/, '').replace(/\.\d{3}Z$/, '');
+      }
 
-    // Convert dates to local format and add tipo_processo from lookup map
-    const processedRows = (rows || []).map((row: any) => {
-      const processed = { ...row };
-      
-      // Add tipo_processo from the pre-fetched maps
-      // Tentar primeiro por AWB (MAWB), depois por HAWB
-      const awbTrimmed = String(processed.awb || '').trim();
-      const hawbTrimmed = String(processed.hawb || '').trim();
-      
-      // Primeiro tenta mapear pelo AWB (que corresponde ao MAWB)
-      let tipoProcesso = mawbToProcessType.get(awbTrimmed);
-      
-      // Se não encontrou pelo AWB, tenta pelo HAWB
-      if (!tipoProcesso && hawbTrimmed) {
-        tipoProcesso = hawbToProcessType.get(hawbTrimmed);
-      }
-      
-      if (tipoProcesso) {
-        matchedCount++;
-        processed.tipo_processo = tipoProcesso;
-      } else {
-        processed.tipo_processo = null;
-        if (unmatchedSamples.length < 5) {
-          unmatchedSamples.push(`awb:${awbTrimmed}/hawb:${hawbTrimmed}`);
-        }
-      }
-      
-      // Convert última atualização - remove Z suffix to treat as local time
-      if (processed['última atualização']) {
-        const dateStr = String(processed['última atualização']);
-        processed['última atualização'] = dateStr.replace(/Z$/, '').replace(/\.\d{3}Z$/, '');
-      }
-      
-      // Convert arr_datetime
-      if (processed.arr_datetime) {
-        const dateStr = String(processed.arr_datetime);
-        processed.arr_datetime = dateStr.replace(/Z$/, '').replace(/\.\d{3}Z$/, '');
-      }
-      
-      // Convert dep_datetime
-      if (processed.dep_datetime) {
-        const dateStr = String(processed.dep_datetime);
-        processed.dep_datetime = dateStr.replace(/Z$/, '').replace(/\.\d{3}Z$/, '');
-      }
-      
-      // Convert data_atraso - ensure it's passed correctly to frontend
-      if (processed.data_atraso) {
-        const dateStr = String(processed.data_atraso);
-        processed.data_atraso = dateStr.replace(/Z$/, '').replace(/\.\d{3}Z$/, '');
-      }
-      
-      return processed;
+      return {
+        id: ws.id,
+        awb: awb,
+        hawb: master ? String(master.hawb || '').trim() : null,
+        destinatário: master ? (master.cliente || null) : null,
+        nome_analista: master ? (master.nome_analista || null) : null,
+        email_analista: master ? (master.email_analista || null) : null,
+        email_cliente: master ? (master.emails_cliente || null) : null,
+        tipo_servico: master ? (master.tipo_servico || null) : null,
+        tipo_processo: master ? (master.tipo_processo || null) : null,
+        origem: ws.origin || null,
+        destino: ws.destination || null,
+        último_status: ws.last_status_code || null,
+        status_info: ws.last_status_description || null,
+        'última atualização': scrapedAt,
+        last_flight: ws.last_flight || null,
+        days_in_transit: ws.sidebar_days_in_transit || null,
+      };
     });
 
-    console.log(`tipo_processo mapping: ${matchedCount}/${processedRows.length} matched`);
-    if (unmatchedSamples.length > 0) {
-      console.log(`Unmatched AWB samples: ${unmatchedSamples.join(', ')}`);
-    }
-    
-    // Debug: log tipo_processo distribution
+    // Debug: log distribution
     const importCount = processedRows.filter((r: any) => r.tipo_processo === 'AIR IMPORT').length;
     const exportCount = processedRows.filter((r: any) => r.tipo_processo === 'AIR EXPORT').length;
     const nullCount = processedRows.filter((r: any) => !r.tipo_processo).length;
