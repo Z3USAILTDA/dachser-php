@@ -1,77 +1,56 @@
 
 
-## Migrar Rastreio Aereo: t_aereo_ws como Fonte Primaria
+## Corrigir Nomenclaturas de Status no Rastreio Aereo
 
-### Mudanca de Abordagem
+### Problema
 
-A `t_aereo_ws` passa a ser a **fonte primaria**. Somente AWBs presentes nessa tabela aparecem na tela. A `t_master_dados` serve apenas para enriquecer com dados do processo (cliente, analista, tipo).
+Apos a migracao para `t_aereo_ws`, os codigos de status exibidos na tela estao diferentes do esperado. Isso acontece porque:
+
+1. O campo `last_event` do frontend recebe `status_info || ultimo_status`
+2. O `status_info` de `t_aereo_ws` tem formato diferente do antigo: `"(NFD) Cargo and documents ready..."` em vez de `"NFD - Notificado"`
+3. A funcao `getStatusCode()` nao consegue extrair as siglas corretamente desse novo formato
+4. Exemplos do problema:
+   - `"Booked. Flight IB267..."` -> exibe `"BOO"` em vez de `"BKD"`
+   - `"(NFD) Cargo and documents..."` -> pode exibir `"(NF"` em vez de `"NFD"`
+   - `"UNK"` -> codigo novo que nao existia antes
+
+### Solucao
+
+Ajustar o mapeamento no `fetchStatusAereoData` para separar corretamente o **codigo de status** da **descricao do evento**, usando os campos certos da API:
+
+- `status` <- `ultimo_status` (codigo limpo: NFD, DLV, ARR, DEP, UNK...)
+- `last_event` <- `ultimo_status` (para a funcao `getStatusCode` funcionar corretamente)
+- Adicionar campo de descricao separado para exibir `status_info` no tooltip
+
+### Detalhes Tecnicos
+
+#### 1. `src/pages/Index.tsx` - Ajustar mapeamento de campos (linhas 520-541)
+
+Alterar o mapeamento dentro de `fetchStatusAereoData`:
 
 ```text
-t_aereo_ws (PRIMARIA)                t_master_dados (ENRIQUECIMENTO)
-+------------------------+           +------------------+
-| awb (chave)            |--LOOKUP-->| mawb             |
-| last_status_code       |           | hawb             |
-| last_status_description|           | cliente          |
-| origin                 |           | nome_analista    |
-| destination            |           | email_analista   |
-| last_flight            |           | emails_cliente   |
-| scraped_at             |           | tipo_processo    |
-| timeline_json          |           | tipo_servico     |
-| sidebar_days_in_transit|           +------------------+
-+------------------------+
+ANTES:
+  last_event: item.status_info || item.ultimo_status || "-"
+  status: item.ultimo_status || "-"
+
+DEPOIS:
+  last_event: item.ultimo_status || "-"
+  status: item.ultimo_status || "-"
+  status_description: item.status_info || null
 ```
 
-### Alteracoes
+#### 2. `src/pages/Index.tsx` - Interface AWBData
 
-#### 1. `supabase/functions/fetch-status-aereo/index.ts` - Reescrever
+Adicionar campo `status_description` opcional na interface para guardar a descricao completa do `status_info`.
 
-**Passo 1**: Buscar os snapshots mais recentes de `t_aereo_ws` (1 por AWB, usando `MAX(id)`). Aplicar filtro de busca se houver search term.
+#### 3. `src/pages/Index.tsx` - Adicionar `"UNK"` aos codigos conhecidos
 
-**Passo 2**: Coletar os AWBs retornados e buscar dados complementares de `t_master_dados` (cliente, analista, tipo_processo, tipo_servico, hawb) usando `WHERE mawb IN (...)`.
+Incluir `"UNK"` na lista `knownStatusCodes` (linha 206) e no `progressMap` com posicao 0 (inicio da timeline, pois e desconhecido).
 
-**Passo 3**: Merge em memoria - combinar os dados de ambas as tabelas. AWBs sem correspondencia em `t_master_dados` aparecem normalmente, apenas com campos de enriquecimento vazios.
+#### 4. `src/pages/Index.tsx` - Tooltip de status
 
-Mapeamento de campos para o frontend:
-- `awb` <- t_aereo_ws.awb
-- `origem` <- t_aereo_ws.origin
-- `destino` <- t_aereo_ws.destination
-- `ultimo_status` <- t_aereo_ws.last_status_code
-- `status_info` <- t_aereo_ws.last_status_description
-- `ultima_atualizacao` <- t_aereo_ws.scraped_at
-- `destinatario` <- t_master_dados.cliente (via lookup)
-- `hawb` <- t_master_dados.hawb (via lookup)
-- `nome_analista` <- t_master_dados.nome_analista (via lookup)
-- `email_analista` <- t_master_dados.email_analista (via lookup)
-- `email_cliente` <- t_master_dados.emails_cliente (via lookup)
-- `tipo_servico` <- t_master_dados.tipo_servico (via lookup)
-- `tipo_processo` <- t_master_dados.tipo_processo (via lookup)
-
-#### 2. `supabase/functions/mariadb-proxy/index.ts` - `get_awb_tracking_events`
-
-Alterar de `t_status_historico` para `t_aereo_ws.timeline_json`:
-
-- Buscar o registro mais recente do AWB em `t_aereo_ws`
-- Parsear `timeline_json` (formato: `[{Timestamp, Description, Location, Carrier}, ...]`)
-- Converter cada entrada para o formato do frontend:
-  - `Timestamp` -> `data_hora_evento`
-  - `Description` -> `descricao_evento` (extrair codigo como DEP, ARR, NFD do texto)
-  - `Location` -> `aeroporto`
-  - `Carrier` -> `fonte`
-
-#### 3. `src/pages/Index.tsx` - Ajustar mapeamento
-
-Atualizar `fetchStatusAereoData` para os novos nomes de campo. Remover referencias a `data_atraso`, `alert_status`, `arr_check_count` que nao existem em `t_aereo_ws`. O campo `last_check` passa a usar `scraped_at`.
-
-### Campos Removidos (nao existem em t_aereo_ws)
-
-- `data_atraso` - removido
-- `alert_status` - removido
-- `arr_check_count` / `arr_datetime` - removido
-- `dep_datetime` - removido (pode ser derivado do timeline_json futuramente se necessario)
+Nos locais onde o tooltip exibe informacoes do status (ao passar o mouse), usar `status_description` para mostrar a descricao completa do ParcelsApp em vez de tentar derivar do codigo.
 
 ### Arquivos Modificados
 
-1. **supabase/functions/fetch-status-aereo/index.ts** - Reescrever: t_aereo_ws como fonte primaria, t_master_dados como enriquecimento
-2. **supabase/functions/mariadb-proxy/index.ts** - Alterar `get_awb_tracking_events` para usar timeline_json de t_aereo_ws
-3. **src/pages/Index.tsx** - Ajustar mapeamento de campos no fetchStatusAereoData
-
+1. **src/pages/Index.tsx** - Ajustar mapeamento de campos, interface AWBData, knownStatusCodes, e tooltips de status
