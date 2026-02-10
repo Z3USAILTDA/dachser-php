@@ -50,12 +50,12 @@ export const ProntidaoChecklist = ({ voucher, className }: ProntidaoChecklistPro
     });
   }
 
-  // 4. Para ADF: documento fiscal deve estar anexado
+  // 4. Para ADF: documento fiscal é opcional (informativo)
   if (voucher.tipoDocumento === "ADF") {
     items.push({
-      label: "Documento fiscal anexado (ADF)",
+      label: "Documento fiscal (ADF - opcional)",
       checked: voucher.statusDocumentoFiscal === "ANEXADO",
-      required: true
+      required: false
     });
   }
 

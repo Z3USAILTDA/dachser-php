@@ -7472,15 +7472,43 @@ serve(async (req) => {
           );
         }
 
-        const vouchers = await client.query(`
+        // 1. Exact match first
+        let vouchers = await client.query(`
           SELECT 
             id, numero_spo, fornecedor, valor, vencimento, etapa_atual, 
             cobranca_em_nome_de, moeda
           FROM dados_dachser.t_vouchers
-          WHERE numero_spo = ? OR numero_spo LIKE ?
+          WHERE numero_spo = ?
           ORDER BY created_at DESC
           LIMIT 5
-        `, [numero_spo, `%${numero_spo}%`]);
+        `, [numero_spo]);
+
+        // 2. LIKE match
+        if (!vouchers || vouchers.length === 0) {
+          vouchers = await client.query(`
+            SELECT 
+              id, numero_spo, fornecedor, valor, vencimento, etapa_atual, 
+              cobranca_em_nome_de, moeda
+            FROM dados_dachser.t_vouchers
+            WHERE numero_spo LIKE ?
+            ORDER BY created_at DESC
+            LIMIT 5
+          `, [`%${numero_spo}%`]);
+        }
+
+        // 3. Progressive prefix match: the extracted number STARTS WITH the DB numero_spo
+        // e.g. filename "2025187823128012026" starts with DB value "20251878231"
+        if (!vouchers || vouchers.length === 0) {
+          vouchers = await client.query(`
+            SELECT 
+              id, numero_spo, fornecedor, valor, vencimento, etapa_atual, 
+              cobranca_em_nome_de, moeda
+            FROM dados_dachser.t_vouchers
+            WHERE ? LIKE CONCAT(numero_spo, '%') AND CHAR_LENGTH(numero_spo) >= 5
+            ORDER BY CHAR_LENGTH(numero_spo) DESC, created_at DESC
+            LIMIT 5
+          `, [numero_spo]);
+        }
 
         result = { success: true, vouchers: vouchers || [] };
         console.log(`Found ${vouchers?.length || 0} vouchers for SPO ${numero_spo}`);
@@ -7498,16 +7526,55 @@ serve(async (req) => {
           );
         }
 
-        // ND is stored in id_rm or can be searched in processo_id
-        const vouchers = await client.query(`
+        // 1. Exact match first
+        let vouchers = await client.query(`
           SELECT 
             id, numero_spo, fornecedor, valor, vencimento, etapa_atual,
             cobranca_em_nome_de, moeda, id_rm, processo_id
           FROM dados_dachser.t_vouchers
-          WHERE id_rm = ? OR id_rm LIKE ? OR processo_id LIKE ?
+          WHERE id_rm = ?
           ORDER BY created_at DESC
           LIMIT 5
-        `, [numero_nd, `%${numero_nd}%`, `%${numero_nd}%`]);
+        `, [numero_nd]);
+
+        // 2. LIKE match
+        if (!vouchers || vouchers.length === 0) {
+          vouchers = await client.query(`
+            SELECT 
+              id, numero_spo, fornecedor, valor, vencimento, etapa_atual,
+              cobranca_em_nome_de, moeda, id_rm, processo_id
+            FROM dados_dachser.t_vouchers
+            WHERE id_rm LIKE ? OR processo_id LIKE ?
+            ORDER BY created_at DESC
+            LIMIT 5
+          `, [`%${numero_nd}%`, `%${numero_nd}%`]);
+        }
+
+        // 3. Progressive prefix match: extracted number STARTS WITH the DB id_rm
+        if (!vouchers || vouchers.length === 0) {
+          vouchers = await client.query(`
+            SELECT 
+              id, numero_spo, fornecedor, valor, vencimento, etapa_atual,
+              cobranca_em_nome_de, moeda, id_rm, processo_id
+            FROM dados_dachser.t_vouchers
+            WHERE ? LIKE CONCAT(id_rm, '%') AND CHAR_LENGTH(id_rm) >= 5
+            ORDER BY CHAR_LENGTH(id_rm) DESC, created_at DESC
+            LIMIT 5
+          `, [numero_nd]);
+        }
+
+        // 4. Progressive prefix on numero_spo too
+        if (!vouchers || vouchers.length === 0) {
+          vouchers = await client.query(`
+            SELECT 
+              id, numero_spo, fornecedor, valor, vencimento, etapa_atual,
+              cobranca_em_nome_de, moeda, id_rm, processo_id
+            FROM dados_dachser.t_vouchers
+            WHERE ? LIKE CONCAT(numero_spo, '%') AND CHAR_LENGTH(numero_spo) >= 5
+            ORDER BY CHAR_LENGTH(numero_spo) DESC, created_at DESC
+            LIMIT 5
+          `, [numero_nd]);
+        }
 
         result = { success: true, vouchers: vouchers || [] };
         console.log(`Found ${vouchers?.length || 0} vouchers for ND ${numero_nd}`);
@@ -7578,10 +7645,10 @@ serve(async (req) => {
               ) VALUES (?, ?, 'COMPROVANTE', ?, ?, ?, NOW())
             `, [anexoId, comp.voucher_id, comp.file_name, comp.file_url, comp.file_size || 0]);
 
-            // Update voucher status_comprovante
+            // Update voucher status_comprovante - já entra como VALIDADO
             await client.execute(`
               UPDATE dados_dachser.t_vouchers 
-              SET status_comprovante = 'ANEXADO', updated_at = NOW()
+              SET status_comprovante = 'VALIDADO', updated_at = NOW()
               WHERE id = ?
             `, [comp.voucher_id]);
 

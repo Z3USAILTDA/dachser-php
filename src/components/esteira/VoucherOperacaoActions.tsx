@@ -263,13 +263,11 @@ export const VoucherOperacaoActions = ({ voucher, onUpdate }: VoucherOperacaoAct
         }
       }
 
-      // Determinar próxima etapa (Masters sempre vão para FISCAL)
+      // Determinar próxima etapa (Masters sempre vão para FISCAL, ADF segue fluxo normal)
       let proximaEtapa: "FISCAL" | "FINANCEIRO" | "SUPERVISOR";
       
       if (isMaster) {
         proximaEtapa = "FISCAL";
-      } else if (voucher.tipoDocumento === "ADF") {
-        proximaEtapa = "FINANCEIRO";
       } else if (voucher.urgenciaTipo === "URGENTE_REAL") {
         proximaEtapa = "SUPERVISOR";
       } else if (voucher.cobrancaEmNomeDe === "DACHSER") {

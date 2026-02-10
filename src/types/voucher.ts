@@ -402,10 +402,7 @@ export const validarProntoParaRobo = (voucher: Voucher): ValidacaoProntoParaRobo
     }
   }
 
-  // 4. Para ADF: documento fiscal deve estar anexado
-  if (voucher.tipoDocumento === 'ADF' && voucher.statusDocumentoFiscal === 'PENDENTE') {
-    pendencias.push("Documento fiscal não anexado (ADF aguardando documento)");
-  }
+  // 4. ADF: documento fiscal é opcional, não bloqueia
 
   return { valido: pendencias.length === 0, pendencias };
 };

@@ -290,17 +290,17 @@ export const VoucherFinanceiroActions = ({ voucher, onUpdate }: VoucherFinanceir
         </p>
       </div>
 
-      {/* Alerta ADF - Documento Fiscal Pendente */}
+      {/* Alerta ADF - Documento Fiscal Informativo (não bloqueante) */}
       {voucher.tipoDocumento === 'ADF' && voucher.statusDocumentoFiscal === 'PENDENTE' && (
-        <div className="flex items-start gap-3 p-4 rounded-lg bg-amber-500/10 border border-amber-500/30 animate-pulse">
+        <div className="flex items-start gap-3 p-4 rounded-lg bg-amber-500/10 border border-amber-500/30">
           <FileWarning className="h-5 w-5 text-amber-500 shrink-0 mt-0.5" />
           <div>
             <p className="font-medium text-amber-600 dark:text-amber-400">
-              ADF - Aguardando Documento Fiscal
+              ADF - Documento Fiscal Opcional
             </p>
             <p className="text-sm text-muted-foreground mt-1">
-              Este voucher foi criado como ADF (Aguardando Documento Fiscal). 
-              O documento fiscal deve ser anexado na aba "Anexos" antes de enviar para o ROBÔ.
+              Este voucher é do tipo ADF. O documento fiscal pode ser anexado na aba "Anexos", 
+              mas não é obrigatório para seguir na esteira.
             </p>
           </div>
         </div>

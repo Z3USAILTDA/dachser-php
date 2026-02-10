@@ -461,18 +461,18 @@ export const VoucherTable = ({ vouchers, onViewDetails, onEdit, onDelete, onGoBa
                                 Master
                               </Badge>
                             )}
-                            {/* Indicador ADF Aguardando Documento */}
+                            {/* Indicador ADF - Documento Opcional */}
                             {voucher.tipoDocumento === "ADF" && voucher.statusDocumentoFiscal === "PENDENTE" && (
                               <Tooltip>
                                 <TooltipTrigger onClick={(e) => e.stopPropagation()}>
-                                  <Badge className="bg-amber-500/20 text-amber-500 border-amber-500/30 text-[10px] gap-1 animate-pulse">
+                                  <Badge className="bg-amber-500/20 text-amber-500 border-amber-500/30 text-[10px] gap-1">
                                     <FileQuestion className="h-3 w-3" />
-                                    Aguardando Doc
+                                    ADF
                                   </Badge>
                                 </TooltipTrigger>
                                 <TooltipContent>
-                                  <p className="font-medium">ADF - Aguardando Documento Fiscal</p>
-                                  <p className="text-xs text-muted-foreground">O documento fiscal deve ser anexado antes de enviar para o ROBÔ</p>
+                                  <p className="font-medium">ADF - Documento Fiscal Opcional</p>
+                                  <p className="text-xs text-muted-foreground">O documento fiscal pode ser anexado, mas não é obrigatório</p>
                                 </TooltipContent>
                               </Tooltip>
                             )}
