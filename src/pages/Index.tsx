@@ -388,6 +388,7 @@ interface AWBData {
   status_description?: string | null; // Descrição completa do status (de status_info)
   pieces_discrepancy?: boolean; // Discrepância de peças detectada na timeline
   baseline_pieces?: number | null; // Quantidade de peças de referência
+  has_dis_event?: boolean; // Timeline contém evento DIS (discrepância)
 }
 
 const STORAGE_KEY = "tracked-awbs";
@@ -532,6 +533,7 @@ const Index = () => {
           tipo_processo: item.tipo_processo || null,
           pieces_discrepancy: item.pieces_discrepancy || false,
           baseline_pieces: item.baseline_pieces || null,
+          has_dis_event: item.has_dis_event || false,
         }));
 
         const deduplicatedData = convertedData.reduce((acc: AWBData[], current: AWBData) => {
@@ -1934,7 +1936,7 @@ const Index = () => {
           case "criticos":
             // OFLD agora é crítico junto com NIL e NIF, AWBs críticos específicos, e discrepância de peças
             const CRITICAL_AWBS = ["045-21167274"];
-            return status === "NIL" || status === "NIF" || status === "OFLD" || CRITICAL_AWBS.includes(awb.awb) || awb.pieces_discrepancy === true;
+            return status === "NIL" || status === "NIF" || status === "OFLD" || CRITICAL_AWBS.includes(awb.awb) || awb.pieces_discrepancy === true || awb.has_dis_event === true;
           default:
             return true;
         }
@@ -2259,7 +2261,7 @@ const Index = () => {
               const status = getStatusCode(awb.last_event).toUpperCase();
               // OFLD agora é crítico junto com NIL e NIF, AWBs críticos específicos, e discrepância de peças
               const CRITICAL_AWBS = ["045-21167274"];
-              return status === "NIL" || status === "NIF" || status === "OFLD" || CRITICAL_AWBS.includes(awb.awb) || awb.pieces_discrepancy === true;
+              return status === "NIL" || status === "NIF" || status === "OFLD" || CRITICAL_AWBS.includes(awb.awb) || awb.pieces_discrepancy === true || awb.has_dis_event === true;
             }).length
           }
           activeFilter={cardFilter}
@@ -2515,7 +2517,7 @@ const Index = () => {
                       const isFalhaConsulta = isErroStatus || isCompanyNotRegistered;
                       // AWBs críticos específicos com destaque vermelho piscante (inclui discrepância de peças)
                       const CRITICAL_AWBS = ["045-21167274"];
-                      const isCriticalAwb = CRITICAL_AWBS.includes(awb.awb) || awb.pieces_discrepancy === true;
+                      const isCriticalAwb = CRITICAL_AWBS.includes(awb.awb) || awb.pieces_discrepancy === true || awb.has_dis_event === true;
 
                       return (
                         <React.Fragment key={awb.id || index}>
@@ -2746,14 +2748,15 @@ const Index = () => {
                                   statusCode === "NIF" ||
                                   statusCode === "OFLD" ||
                                   CRITICAL_AWBS.includes(awb.awb) ||
-                                  awb.pieces_discrepancy === true;
+                                  awb.pieces_discrepancy === true ||
+                                  awb.has_dis_event === true;
                                 const isDelayed = awb.data_atraso !== null || statusCode === "DIS";
 
                                 if (isCritical) {
                                   return (
                                     <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-semibold bg-red-600/30 text-red-300 border border-red-500/50 animate-pulse">
                                       <span className="w-1.5 h-1.5 rounded-full bg-red-400"></span>
-                                      {awb.pieces_discrepancy ? `Discrepância Peças (${awb.baseline_pieces})` : "Crítico"}
+                                      {awb.pieces_discrepancy ? `Discrepância Peças (${awb.baseline_pieces})` : awb.has_dis_event ? "DIS - Discrepância" : "Crítico"}
                                     </span>
                                   );
                                 }
