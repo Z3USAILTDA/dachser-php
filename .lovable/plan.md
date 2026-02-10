@@ -1,73 +1,57 @@
 
+## Detectar ARR Conexao vs ARR Destino usando a Timeline
 
-## Regra de Discrepancia de Pecas/Volume no Rastreio Aereo
+### Objetivo
+Usar os dados da timeline (`timeline_json`) junto com o campo `destination` do `t_aereo_ws` para determinar automaticamente se o ultimo evento ARR e uma chegada na conexao ou no destino final.
 
-### Contexto
+### Logica de Deteccao (Backend)
 
-Na timeline de eventos do `t_aereo_ws`, cada evento pode conter informacao de pecas/volume em dois formatos:
-- `"Pieces: 2, Weight: 64.00"` (formato longo)
-- `"2 / 64.00KGS"` (formato curto)
+O campo `destination` do `t_aereo_ws` contem o aeroporto de destino final (ex: "GRU"). Na timeline, os eventos ARR geralmente incluem o aeroporto onde ocorreu a chegada na descricao ou em campo dedicado.
 
-O primeiro evento cronologico (ultimo no array, pois vem em ordem DESC) estabelece a quantidade de referencia. Se qualquer evento posterior mostrar quantidade diferente, o AWB deve ser marcado como **critico** e permanecer critico ate que o evento de entrega (DLV/Delivered) confirme a quantidade original.
+A funcao no backend vai:
+1. Verificar se o `last_status_code` e `ARR`
+2. Parsear o `timeline_json` para encontrar o ultimo evento ARR
+3. Extrair o aeroporto do evento ARR (da descricao ou campo `airport`/`station`)
+4. Comparar com o `destination` do AWB:
+   - Se o aeroporto do ARR == destination -> `"ARR - DESTINO"`
+   - Se o aeroporto do ARR != destination -> `"ARR - CONEXAO"`
+   - Se nao conseguir determinar o aeroporto -> manter `"ARR"` generico
 
-### Logica da Regra
+### Alteracoes
 
-```text
-Timeline (ordem cronologica):
-  1. Booking Confirmed: 20 pecas    <- REFERENCIA (baseline)
-  2. Freight on Hand:   20 pecas    <- OK
-  3. Manifested:        18 pecas    <- CRITICO (18 != 20)
-  4. Departed:          18 pecas    <- CRITICO (mantido)
-  5. Arrived:           18 pecas    <- CRITICO (mantido)
-  6. Delivered:         20 pecas    <- LIBERADO (entregou o original)
-  6b. Delivered:        18 pecas    <- CRITICO (nao entregou o original)
-```
+#### 1. Backend: `supabase/functions/fetch-status-aereo/index.ts`
 
-### Implementacao
+Adicionar uma funcao `classifyArrival(lastStatusCode, timelineJson, destination)` que:
+- Retorna o `last_status_code` original se nao for ARR
+- Se for ARR, parseia a timeline para encontrar o evento ARR mais recente
+- Extrai o aeroporto do evento via regex (ex: `"Arrived at GRU"`, `"ARR - GRU"`, campo `station`, campo `airport`)
+- Compara com `destination` e retorna `"ARR - DESTINO"` ou `"ARR - CONEXAO"`
 
-#### 1. `supabase/functions/fetch-status-aereo/index.ts` - Adicionar coluna `timeline_json` na query
+O campo `ultimo_status` no response ja sera retornado com o sufixo correto.
 
-Incluir o campo `timeline_json` na query do Passo 1 (busca de snapshots de `t_aereo_ws`) para que o backend possa analisar a discrepancia de pecas sem precisar de uma segunda query.
+#### 2. Frontend: `src/pages/Index.tsx`
 
-#### 2. `supabase/functions/fetch-status-aereo/index.ts` - Logica de deteccao de discrepancia
+Nenhuma mudanca estrutural necessaria no frontend, pois:
+- `getStatusCode()` ja reconhece `"ARR - DESTINO"` e `"ARR - CONEXAO"` (linhas 240-241, 245-248)
+- `getStatusFromEvent()` ja traduz ambos (linhas 1731-1738)
+- O progress map e os badges ja tratam esses valores
 
-Apos buscar os snapshots, para cada AWB:
-- Parsear o `timeline_json`
-- Extrair quantidade de pecas de cada evento usando regex:
-  - `/Pieces:\s*(\d+)/i` para formato longo
-  - `/(\d+)\s*\/\s*[\d.]+\s*KGS/i` para formato curto
-- Ordenar eventos por data (mais antigo primeiro)
-- O primeiro evento com pecas define o `baseline_pieces`
-- Verificar se algum evento posterior tem quantidade diferente
-- Verificar se o ultimo evento e entrega (DLV) e se a quantidade coincide com o baseline
-- Retornar dois novos campos: `pieces_discrepancy: boolean` e `baseline_pieces: number | null`
+A unica alteracao no frontend sera garantir que o mapeamento no `fetchStatusAereoData` propague o valor enriquecido do `ultimo_status` corretamente (o que ja acontece hoje).
 
-#### 3. `src/pages/Index.tsx` - Interface AWBData
+### Secao Tecnica
 
-Adicionar campos:
-- `pieces_discrepancy?: boolean` - indica discrepancia de pecas detectada
-- `baseline_pieces?: number | null` - quantidade de pecas de referencia
+**Regex para extrair aeroporto do evento ARR na timeline:**
+- Campo `station` ou `airport` do evento JSON (acesso direto)
+- Descricao: `/(?:arrived?\s+(?:at|in)\s+)([A-Z]{3})/i`
+- Descricao: `/\b([A-Z]{3})\b/` como fallback (3 letras maiusculas)
+- Campo `location` do evento
 
-#### 4. `src/pages/Index.tsx` - Mapeamento no fetchStatusAereoData
+**Comparacao:**
+- Case-insensitive, trim de espacos
+- Se o aeroporto extraido for igual ao `destination` -> DESTINO
+- Se diferente -> CONEXAO
+- Se nao encontrado -> manter ARR sem sufixo
 
-Mapear os novos campos `pieces_discrepancy` e `baseline_pieces` vindos do backend.
-
-#### 5. `src/pages/Index.tsx` - Filtro de criticos
-
-Atualizar a logica de filtragem de AWBs criticos (em 3 locais: filtro do card, contagem de criticos no dashboard, e badge de status) para incluir `pieces_discrepancy === true` como criterio de critico:
-
-```text
-const isCritical = status === "NIL" || status === "NIF" || status === "OFLD" 
-  || CRITICAL_AWBS.includes(awb.awb) 
-  || awb.pieces_discrepancy === true;
-```
-
-#### 6. `src/pages/Index.tsx` - Destaque visual
-
-AWBs com `pieces_discrepancy === true` receberao o mesmo estilo dos AWBs criticos: fundo vermelho pulsante (`bg-red-500/15 animate-pulse`) e badge "DISCREPANCIA PECAS".
-
-### Arquivos Modificados
-
-1. **supabase/functions/fetch-status-aereo/index.ts** - Incluir `timeline_json` na query e adicionar logica de deteccao de discrepancia de pecas
-2. **src/pages/Index.tsx** - Interface AWBData, mapeamento de campos, filtros de criticos e destaque visual
-
+**Arquivos modificados:**
+1. `supabase/functions/fetch-status-aereo/index.ts` - nova funcao `classifyArrival` + aplicar no campo `ultimo_status` do baseRow
+2. `src/pages/Index.tsx` - ajustes minimos se necessarios (ex: tooltip do ponto ARR na regua)
