@@ -437,6 +437,10 @@ serve(async (req: Request): Promise<Response> => {
       LEFT JOIN ai_agente.t_financeiro_soft_delete sd ON sd.documento = t.documento
       LEFT JOIN dados_dachser.t_dados_nfs nf ON CAST(nf.id_rm AS CHAR) = CAST(t.id_rm AS CHAR)
       WHERE COALESCE(sd.active, 1) = 1
+        AND NOT EXISTS (
+          SELECT 1 FROM dados_dachser.tbaixas b
+          WHERE b.IdLancamentoRM = t.id_rm AND b.StatusLan IN (1, 2, 3)
+        )
         AND (t.disputa IS NULL OR t.disputa = 0)
         AND ${getStageCondition(stage)}
       ORDER BY t.data_vencimento ASC, t.razao_social ASC

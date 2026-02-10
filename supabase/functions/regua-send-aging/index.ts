@@ -441,9 +441,13 @@ serve(async (req: Request): Promise<Response> => {
         const baseCnpj = c.replace(/\D/g, "").substring(0, 8);
         const cnpjsResult = await client.query(`
           SELECT DISTINCT cnpj 
-          FROM dados_dachser.t_dados_financeiro_nfs 
+          FROM dados_dachser.t_dados_financeiro_nfs t
           WHERE cnpj LIKE CONCAT(?, '%')
           AND DATEDIFF(CURDATE(), data_vencimento) >= 1
+          AND NOT EXISTS (
+            SELECT 1 FROM dados_dachser.tbaixas b
+            WHERE b.IdLancamentoRM = t.id_rm AND b.StatusLan IN (1, 2, 3)
+          )
         `, [baseCnpj]);
         allCnpjs.push(...cnpjsResult.map((r: { cnpj: string }) => r.cnpj));
       }
@@ -453,9 +457,13 @@ serve(async (req: Request): Promise<Response> => {
       const baseCnpj = cnpj.replace(/\D/g, "").substring(0, 8);
       const cnpjsResult = await client.query(`
         SELECT DISTINCT cnpj 
-        FROM dados_dachser.t_dados_financeiro_nfs 
+        FROM dados_dachser.t_dados_financeiro_nfs t
         WHERE cnpj LIKE CONCAT(?, '%')
         AND DATEDIFF(CURDATE(), data_vencimento) >= 1
+        AND NOT EXISTS (
+          SELECT 1 FROM dados_dachser.tbaixas b
+          WHERE b.IdLancamentoRM = t.id_rm AND b.StatusLan IN (1, 2, 3)
+        )
       `, [baseCnpj]);
       allCnpjs = cnpjsResult.map((r: { cnpj: string }) => r.cnpj);
       
@@ -489,6 +497,10 @@ serve(async (req: Request): Promise<Response> => {
       LEFT JOIN ai_agente.t_financeiro_soft_delete sd ON sd.documento = t.documento
       WHERE t.cnpj IN (${placeholders})
         AND COALESCE(sd.active, 1) = 1
+        AND NOT EXISTS (
+          SELECT 1 FROM dados_dachser.tbaixas b
+          WHERE b.IdLancamentoRM = t.id_rm AND b.StatusLan IN (1, 2, 3)
+        )
         AND DATEDIFF(CURDATE(), t.data_vencimento) >= 1
       ORDER BY t.cnpj, t.data_vencimento ASC
     `, allCnpjs);

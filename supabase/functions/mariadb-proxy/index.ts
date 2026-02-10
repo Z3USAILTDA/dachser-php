@@ -1996,8 +1996,8 @@ serve(async (req) => {
           FROM (
             SELECT
               CASE
-                WHEN DATEDIFF(CURDATE(), t.data_vencimento) < 0 THEN 'PRE'
-                WHEN DATEDIFF(CURDATE(), t.data_vencimento) = 1 THEN 'D1'
+                WHEN DATEDIFF(CURDATE(), t.data_vencimento) <= 0 THEN 'PRE'
+                WHEN DATEDIFF(CURDATE(), t.data_vencimento) BETWEEN 1 AND 6 THEN 'D1'
                 WHEN t.tipo_documento = 'FAT_NF' THEN
                   CASE
                     WHEN DATEDIFF(CURDATE(), t.data_vencimento) BETWEEN 7  AND 14 THEN 'D7'
@@ -2019,6 +2019,11 @@ serve(async (req) => {
             FROM dados_dachser.t_dados_financeiro_nfs t
             LEFT JOIN ai_agente.t_financeiro_soft_delete sd ON sd.documento = t.documento
             WHERE COALESCE(sd.active, 1) = 1
+              AND NOT EXISTS (
+                SELECT 1 FROM dados_dachser.tbaixas b
+                WHERE b.IdLancamentoRM = t.id_rm
+                  AND b.StatusLan IN (1, 2, 3)
+              )
               AND (
                 DATEDIFF(CURDATE(), t.data_vencimento) < 0
                 OR DATEDIFF(CURDATE(), t.data_vencimento) <= ?
@@ -2070,14 +2075,19 @@ serve(async (req) => {
           FROM dados_dachser.t_dados_financeiro_nfs t
           LEFT JOIN ai_agente.t_financeiro_soft_delete sd ON sd.documento = t.documento
           WHERE COALESCE(sd.active, 1) = 1
+            AND NOT EXISTS (
+              SELECT 1 FROM dados_dachser.tbaixas b
+              WHERE b.IdLancamentoRM = t.id_rm
+                AND b.StatusLan IN (1, 2, 3)
+            )
             AND (
               (? IN ('PRE','D1','D7','D15','D30','D45') AND (? = 'PRE' OR DATEDIFF(CURDATE(), t.data_vencimento) <= ?))
               OR ? = 'D60'
             )
             AND (
               CASE
-                WHEN ? = 'PRE' THEN DATEDIFF(CURDATE(), t.data_vencimento) < 0
-                WHEN ? = 'D1' THEN DATEDIFF(CURDATE(), t.data_vencimento) = 1
+                WHEN ? = 'PRE' THEN DATEDIFF(CURDATE(), t.data_vencimento) <= 0
+                WHEN ? = 'D1' THEN DATEDIFF(CURDATE(), t.data_vencimento) BETWEEN 1 AND 6
                 WHEN t.tipo_documento='FAT_NF' THEN
                   CASE ?
                     WHEN 'D7' THEN DATEDIFF(CURDATE(), t.data_vencimento) BETWEEN 7 AND 14
@@ -2138,6 +2148,11 @@ serve(async (req) => {
           FROM dados_dachser.t_dados_financeiro_nfs t
           LEFT JOIN ai_agente.t_financeiro_soft_delete sd ON sd.documento COLLATE utf8mb4_general_ci = t.documento COLLATE utf8mb4_general_ci
           WHERE COALESCE(sd.active, 1) = 1
+            AND NOT EXISTS (
+              SELECT 1 FROM dados_dachser.tbaixas b
+              WHERE b.IdLancamentoRM = t.id_rm
+                AND b.StatusLan IN (1, 2, 3)
+            )
             AND (t.razao_social LIKE ? OR t.cnpj LIKE ?)
           GROUP BY t.cnpj, t.razao_social
           ORDER BY razao_base ASC
