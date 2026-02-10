@@ -221,6 +221,7 @@ const getStatusCode = (lastEvent: string | null): string => {
     "AWB",
     "FWB",
     "FOH",
+    "UNK",
     "TFD",
     "RCT",
     "RCP",
@@ -279,6 +280,7 @@ const getTimelineProgress = (lastEvent: string | null): number => {
   // Mapeamento de status para a nova régua: BKD → RCF → MAN → DEP → ARR
   const progressMap: Record<string, number> = {
     // BKD e variações (0%)
+    UNK: 0,
     BKD: 0,
     BOOKED: 0,
     BOOKING: 0,
@@ -383,6 +385,7 @@ interface AWBData {
   tipo_servico?: string;
   tipo_processo?: string; // AIR IMPORT ou AIR EXPORT
   arr_check_count?: number; // Contador de verificações em ARR
+  status_description?: string | null; // Descrição completa do status (de status_info)
 }
 
 const STORAGE_KEY = "tracked-awbs";
@@ -528,8 +531,9 @@ const Index = () => {
           email_cliente: item.email_cliente || "",
           origem: item.origem || "N/A",
           destino: item.destino || "N/A",
-          last_event: item.status_info || item.último_status || "-",
+          last_event: item.último_status || "-",
           status: item.último_status || "-",
+          status_description: item.status_info || null,
           last_check: item["última atualização"]
             ? new Date(item["última atualização"]).toISOString()
             : new Date().toISOString(),
