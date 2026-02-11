@@ -397,7 +397,6 @@ export default function DemurragePreInvoicing() {
                       <TableHead>Status Info</TableHead>
                       <TableHead>MISK</TableHead>
                       <TableHead>Reg. Othello</TableHead>
-                      <TableHead>Observação</TableHead>
                       <TableHead>Financeiro</TableHead>
                       <TableHead className="w-[80px]"></TableHead>
                     </TableRow>
@@ -430,9 +429,6 @@ export default function DemurragePreInvoicing() {
                         <TableCell className="text-sm">{(invoice as any).status_info || '-'}</TableCell>
                         <TableCell className="font-mono text-sm">{(invoice as any).misk || '-'}</TableCell>
                         <TableCell className="text-sm">{(invoice as any).othello_registro || '-'}</TableCell>
-                        <TableCell className="text-sm max-w-[200px] truncate" title={(invoice as any).observacao || ''}>
-                          {(invoice as any).observacao || '-'}
-                        </TableCell>
                         <TableCell>{getFinancialBadge(invoice.financial_status)}</TableCell>
                         <TableCell>
                           <div className="flex items-center gap-1">
