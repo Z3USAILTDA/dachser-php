@@ -430,7 +430,7 @@ async function extractXlsxText(fileUrl: string, fileName: string): Promise<strin
       throw new Error(`Failed to fetch XLSX: ${response.statusText}`);
     }
     
-    const arrayBuffer = await response.arrayBuffer();
+    let arrayBuffer = await response.arrayBuffer();
     const fileSizeKB = Math.round(arrayBuffer.byteLength / 1024);
     console.log(`📊 [XLSX] File loaded: ${fileSizeKB} KB`);
     
@@ -497,7 +497,7 @@ async function extractXlsxText(fileUrl: string, fileName: string): Promise<strin
       const sheet = workbook.Sheets[sheetName];
       if (sheet) {
         const csv = XLSX.utils.sheet_to_csv(sheet, { blankrows: false });
-        let lines = csv.split('\n')
+        let lines: string[] | null = csv.split('\n')
           .filter((line: string) => line.trim().length > 0);
         
         // MEMORY OPTIMIZATION: Limit lines per sheet
