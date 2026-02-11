@@ -510,7 +510,7 @@ const Index = () => {
 
       if (data?.success && data?.data) {
         const convertedData: AWBData[] = data.data.map((item: any, index: number) => ({
-          id: `status-${item.id || index}-${item.hawb || index}`,
+          id: `status-${item.id || index}`,
           awb: item.awb || "",
           airline_code: item.awb?.substring(0, 3) || "",
           consignee_name: item.destinatário || "-",
@@ -1895,10 +1895,6 @@ const Index = () => {
         // Outros status de rastreio
         "FFM",
         "AUD",
-        // Status desconhecido (tracking retornou mas sem código mapeado)
-        "UNK",
-        "FWB",
-        "FOH",
       ];
       const statusToCheck = (awb.status || "").toUpperCase();
       const lastEventCode = getStatusCode(awb.last_event).toUpperCase();
@@ -2313,7 +2309,7 @@ const Index = () => {
                     <FilterIcon className="h-3 w-3 text-[#ffc800]" />
                     <span className="text-[0.68rem] tracking-[0.1em] uppercase text-[#aaaaaa]">Companhia</span>
                   </div>
-                  <Select value={filterAirline} onValueChange={(v) => { setFilterAirline(v); setCurrentPage(1); }}>
+                  <Select value={filterAirline} onValueChange={setFilterAirline}>
                     <SelectTrigger className="h-8 w-[160px] rounded-full bg-[#13141a] border border-[rgba(255,255,255,.14)] text-[0.78rem]">
                       <SelectValue placeholder="Todas" />
                     </SelectTrigger>
@@ -2333,7 +2329,7 @@ const Index = () => {
                     <span className="w-1.5 h-1.5 rounded-full bg-[#ffc800]" />
                     <span className="text-[0.68rem] tracking-[0.1em] uppercase text-[#aaaaaa]">Analista</span>
                   </div>
-                  <Select value={filterAnalyst} onValueChange={(v) => { setFilterAnalyst(v); setCurrentPage(1); }}>
+                  <Select value={filterAnalyst} onValueChange={setFilterAnalyst}>
                     <SelectTrigger className="h-8 w-[160px] rounded-full bg-[#13141a] border border-[rgba(255,255,255,.14)] text-[0.78rem]">
                       <SelectValue placeholder="Todos" />
                     </SelectTrigger>
@@ -2361,7 +2357,7 @@ const Index = () => {
                     <Plane className="h-3 w-3 text-[#ffc800]" />
                     <span className="text-[0.68rem] tracking-[0.1em] uppercase text-[#aaaaaa]">Serviço</span>
                   </div>
-                  <Select value={filterService} onValueChange={(v) => { setFilterService(v); setCurrentPage(1); }}>
+                  <Select value={filterService} onValueChange={setFilterService}>
                     <SelectTrigger className="h-8 w-[160px] rounded-full bg-[#13141a] border border-[rgba(255,255,255,.14)] text-[0.78rem]">
                       <SelectValue placeholder="Todos" />
                     </SelectTrigger>
@@ -2389,7 +2385,7 @@ const Index = () => {
                     <ArrowDownUp className="h-3 w-3 text-[#ffc800]" />
                     <span className="text-[0.68rem] tracking-[0.1em] uppercase text-[#aaaaaa]">Impo/Expo</span>
                   </div>
-                  <Select value={filterProcessType} onValueChange={(v) => { setFilterProcessType(v); setCurrentPage(1); }}>
+                  <Select value={filterProcessType} onValueChange={setFilterProcessType}>
                     <SelectTrigger className="h-8 w-[150px] rounded-full bg-[#13141a] border border-[rgba(255,255,255,.14)] text-[0.78rem]">
                       <SelectValue placeholder="Todos" />
                     </SelectTrigger>
