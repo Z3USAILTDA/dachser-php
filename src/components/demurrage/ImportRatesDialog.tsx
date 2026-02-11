@@ -26,11 +26,23 @@ interface ImportRatesDialogProps {
   onSuccess?: () => void;
 }
 
-const PERIOD_MAP: Record<string, string> = {
-  '1': 'first_period',
-  '2': 'second_period',
-  '3': 'third_period',
-};
+const PERIOD_TYPES = ['first_period', 'second_period', 'third_period'] as const;
+
+function parseMoney(val: any): number {
+  if (val == null || val === '') return 0;
+  const str = String(val).trim();
+  if (/^n\/?a$/i.test(str) || str === '-') return 0;
+  let cleaned = str.replace(/[R$€£¥\s]/g, '');
+  const lastComma = cleaned.lastIndexOf(',');
+  const lastDot = cleaned.lastIndexOf('.');
+  if (lastComma > lastDot) {
+    cleaned = cleaned.replace(/\./g, '').replace(',', '.');
+  } else {
+    cleaned = cleaned.replace(/,/g, '');
+  }
+  const num = parseFloat(cleaned);
+  return isNaN(num) ? 0 : num;
+}
 
 export function ImportRatesDialog({ open, onOpenChange, onSuccess }: ImportRatesDialogProps) {
   const [parsedRates, setParsedRates] = useState<ParsedRate[]>([]);
@@ -61,19 +73,37 @@ export function ImportRatesDialog({ open, onOpenChange, onSuccess }: ImportRates
         }
 
         const headers = (rows[0] || []).map((h: any) => String(h || "").trim().toLowerCase());
-        
-        // Find column indices with flexible matching
+
         const findCol = (aliases: string[]) => headers.findIndex(h => aliases.some(a => h.includes(a)));
-        
-        const colArmador = findCol(["armador", "prestador", "carrier", "shipping line"]);
-        const colContainer = findCol(["tipo", "container", "equip"]);
+
+        const colArmador = findCol(["prestador", "armador", "carrier", "shipping line"]);
+        const colContainer = findCol(["tipo de container", "tipo container", "container", "equip"]);
         const colFreeTime = findCol(["free time", "freetime", "ft"]);
+
+        // Detect pivoted perdiem columns
+        const perdiemCols: number[] = [];
+        headers.forEach((h, idx) => {
+          if (h.includes("perdiem") || h.includes("per diem")) {
+            perdiemCols.push(idx);
+          }
+        });
+
+        // Sort perdiem columns by period number (1st, 2nd, 3rd)
+        perdiemCols.sort((a, b) => {
+          const numA = parseInt(headers[a].replace(/\D/g, '') || '0');
+          const numB = parseInt(headers[b].replace(/\D/g, '') || '0');
+          return numA - numB;
+        });
+
+        // Fallback: also check for flat format columns
         const colPeriodo = findCol(["periodo", "period"]);
         const colDiaInicio = findCol(["dia inicio", "dia ini", "start day", "de"]);
         const colDiaFim = findCol(["dia fim", "end day", "ate", "até"]);
         const colValor = findCol(["valor", "rate", "usd", "taxa"]);
 
+        const isPivoted = perdiemCols.length > 0;
         const rates: ParsedRate[] = [];
+        const DEFAULT_PERIOD_SPAN = 10;
 
         for (let i = 1; i < rows.length; i++) {
           const row = rows[i];
@@ -82,32 +112,70 @@ export function ImportRatesDialog({ open, onOpenChange, onSuccess }: ImportRates
           const armador = colArmador >= 0 ? String(row[colArmador] || "").trim().toUpperCase() : "";
           const containerType = colContainer >= 0 ? String(row[colContainer] || "").trim().toUpperCase() : "";
           const freeTimeDays = colFreeTime >= 0 ? parseInt(String(row[colFreeTime] || "0")) : 0;
-          const periodoRaw = colPeriodo >= 0 ? String(row[colPeriodo] || "1").trim() : "1";
-          const periodType = PERIOD_MAP[periodoRaw] || "first_period";
-          const diaInicio = colDiaInicio >= 0 ? parseInt(String(row[colDiaInicio] || "0")) : 0;
-          const diaFim = colDiaFim >= 0 ? parseInt(String(row[colDiaFim] || "0")) || null : null;
-          const rateUsd = colValor >= 0 ? parseFloat(String(row[colValor] || "0")) : 0;
 
-          let valid = true;
-          let error: string | undefined;
+          if (!armador && !containerType) continue; // skip empty rows
 
-          if (!armador) { valid = false; error = "Armador vazio"; }
-          else if (!containerType) { valid = false; error = "Tipo container vazio"; }
-          else if (freeTimeDays < 0) { valid = false; error = "Free time inválido"; }
-          else if (rateUsd <= 0) { valid = false; error = "Valor inválido"; }
-          else if (diaInicio <= 0) { valid = false; error = "Dia início inválido"; }
+          if (isPivoted) {
+            // Pivoted format: one row, multiple period columns
+            let nextStart = freeTimeDays + 1;
 
-          rates.push({
-            armador,
-            container_type: containerType,
-            free_time_days: freeTimeDays,
-            period_type: periodType,
-            period_start_day: diaInicio,
-            period_end_day: diaFim,
-            rate_usd: rateUsd,
-            valid,
-            error,
-          });
+            for (let p = 0; p < perdiemCols.length && p < 3; p++) {
+              const rateUsd = parseMoney(row[perdiemCols[p]]);
+              if (rateUsd <= 0) continue;
+
+              const periodStart = nextStart;
+              const isLast = p === perdiemCols.length - 1 || p === 2;
+              const periodEnd = isLast ? null : periodStart + DEFAULT_PERIOD_SPAN - 1;
+
+              let valid = true;
+              let error: string | undefined;
+              if (!armador) { valid = false; error = "Armador vazio"; }
+              else if (!containerType) { valid = false; error = "Tipo container vazio"; }
+              else if (freeTimeDays < 0) { valid = false; error = "Free time inválido"; }
+
+              rates.push({
+                armador,
+                container_type: containerType,
+                free_time_days: freeTimeDays,
+                period_type: PERIOD_TYPES[p],
+                period_start_day: periodStart,
+                period_end_day: periodEnd,
+                rate_usd: rateUsd,
+                valid,
+                error,
+              });
+
+              nextStart = (periodEnd || periodStart) + 1;
+            }
+          } else {
+            // Flat format fallback (original logic)
+            const periodoRaw = colPeriodo >= 0 ? String(row[colPeriodo] || "1").trim() : "1";
+            const periodIdx = parseInt(periodoRaw) - 1;
+            const periodType = PERIOD_TYPES[periodIdx] || "first_period";
+            const diaInicio = colDiaInicio >= 0 ? parseInt(String(row[colDiaInicio] || "0")) : 0;
+            const diaFim = colDiaFim >= 0 ? parseInt(String(row[colDiaFim] || "0")) || null : null;
+            const rateUsd = colValor >= 0 ? parseMoney(row[colValor]) : 0;
+
+            let valid = true;
+            let error: string | undefined;
+            if (!armador) { valid = false; error = "Armador vazio"; }
+            else if (!containerType) { valid = false; error = "Tipo container vazio"; }
+            else if (freeTimeDays < 0) { valid = false; error = "Free time inválido"; }
+            else if (rateUsd <= 0) { valid = false; error = "Valor inválido"; }
+            else if (diaInicio <= 0) { valid = false; error = "Dia início inválido"; }
+
+            rates.push({
+              armador,
+              container_type: containerType,
+              free_time_days: freeTimeDays,
+              period_type: periodType,
+              period_start_day: diaInicio,
+              period_end_day: diaFim,
+              rate_usd: rateUsd,
+              valid,
+              error,
+            });
+          }
         }
 
         setParsedRates(rates);
