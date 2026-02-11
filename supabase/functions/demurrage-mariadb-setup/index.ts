@@ -285,6 +285,23 @@ serve(async (req) => {
     `);
     console.log("✓ Created t_dachser_demurrage_pre_invoices table");
 
+    // Add new columns to pre_invoices if not exists
+    console.log("Adding new columns to t_dachser_demurrage_pre_invoices...");
+    const preInvoiceNewCols = [
+      "ADD COLUMN IF NOT EXISTS status_info VARCHAR(50) DEFAULT NULL",
+      "ADD COLUMN IF NOT EXISTS misk VARCHAR(100) DEFAULT NULL",
+      "ADD COLUMN IF NOT EXISTS observacao TEXT DEFAULT NULL",
+      "ADD COLUMN IF NOT EXISTS othello_registro VARCHAR(100) DEFAULT NULL",
+      "ADD COLUMN IF NOT EXISTS alert_sent_at DATETIME DEFAULT NULL",
+      "ADD COLUMN IF NOT EXISTS contestacao_deadline DATETIME DEFAULT NULL",
+    ];
+    for (const col of preInvoiceNewCols) {
+      try {
+        await client.execute(`ALTER TABLE dados_dachser.t_dachser_demurrage_pre_invoices ${col}`);
+      } catch (_e) { /* column may already exist */ }
+    }
+    console.log("✓ Added new columns to t_dachser_demurrage_pre_invoices");
+
     // Create pre-invoice items table
     console.log("Creating t_dachser_demurrage_pre_invoice_items table...");
     await client.execute(`
@@ -360,6 +377,21 @@ serve(async (req) => {
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
     `);
     console.log("✓ Created t_dachser_demurrage_alerts table");
+
+    // Add new columns to alerts if not exists
+    console.log("Adding new columns to t_dachser_demurrage_alerts...");
+    const alertNewCols = [
+      "ADD COLUMN IF NOT EXISTS client_returned TINYINT(1) DEFAULT 0",
+      "ADD COLUMN IF NOT EXISTS client_returned_at DATETIME DEFAULT NULL",
+      "ADD COLUMN IF NOT EXISTS client_returned_by VARCHAR(100) DEFAULT NULL",
+    ];
+    for (const col of alertNewCols) {
+      try {
+        await client.execute(`ALTER TABLE dados_dachser.t_dachser_demurrage_alerts ${col}`);
+      } catch (_e) { /* column may already exist */ }
+    }
+    console.log("✓ Added new columns to t_dachser_demurrage_alerts");
+
 
     // Create disputes table
     console.log("Creating t_dachser_demurrage_disputes table...");
