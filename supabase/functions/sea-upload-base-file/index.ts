@@ -192,7 +192,7 @@ serve(async (req) => {
       charset: "utf8mb4",
     });
 
-    // First create file record
+    // First create file record with the public URL
     const fileResult = await dbClient.execute(`
       INSERT INTO ai_agente.t_dachser_sea_files 
       (filename, mime, rel_path, url, size_bytes, created_at)
