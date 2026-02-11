@@ -66,19 +66,72 @@ interface ColumnMap {
 }
 
 const COLUMN_ALIASES: Record<keyof ColumnMap, string[]> = {
-  supplier: ['supplier name', 'supplier', 'exporter', 'shipper', 'exportador', 'fornecedor'],
-  gross_weight: ['total gross weight', 'gross weight', 'weight after weighting', 'gross wt', 'gw', 'peso bruto', 'peso bruto total'],
-  net_weight: ['net weight', 'nett weight', 'net wt', 'nw', 'peso liquido'],
-  cbm: ['cbm', 'cbm [m³]', 'cbm [m3]', 'measurement', 'volume m3', 'cubagem'],
-  ncm: ['ncm code', 'ncm', 'código ncm', 'codigo ncm', 'ncm-code'],
-  hs_code: ['hs code', 'hs', 'hs-code', 'h.s.', 'hs code 6 digits'],
-  packages_qty: ['qty packages', 'packages', 'qty', 'quantity', 'volumes', 'no. of packages', 'number of packages'],
-  packages_type: ['kind of packaging', 'packaging', 'packing type', 'package type', 'tipo embalagem'],
-  invoice_ref: ['delivery note', 'reference', 'invoice', 'invoice no', 'invoice number', 'ref', 'referencia'],
-  description: ['description', 'product description', 'goods description', 'descricao', 'commodity'],
-  container: ['container', 'container no', 'container number', 'container no.'],
-  seal: ['seal', 'seal no', 'seal number', 'seal no.', 'lacre'],
-  cnpj: ['vat no.', 'vat no', 'cnpj', 'tax id', 'cnpj/cpf'],
+  supplier: [
+    'supplier name', 'supplier', 'exporter', 'shipper', 'exportador', 'fornecedor',
+    'lieferant', 'lieferantenname', 'absender', 'sender', 'vendor', 'vendor name',
+    'hersteller', 'manufacturer', 'company', 'company name', 'firm', 'firma',
+    'remetente', 'expedidor', 'consignor',
+  ],
+  gross_weight: [
+    'total gross weight', 'gross weight', 'weight after weighting', 'gross wt', 'gw',
+    'peso bruto', 'peso bruto total', 'bruttogewicht', 'brutto', 'brutto gewicht',
+    'brutto kg', 'total weight', 'weight kg', 'gesamtgewicht', 'weight',
+    'gross weight kg', 'gross weight kgs', 'g.w.', 'g.w', 'peso bruto kg',
+  ],
+  net_weight: [
+    'net weight', 'nett weight', 'net wt', 'nw', 'peso liquido',
+    'nettogewicht', 'netto', 'netto gewicht', 'netto kg', 'n.w.', 'n.w',
+    'peso liquido kg', 'net weight kg', 'net weight kgs',
+  ],
+  cbm: [
+    'cbm', 'cbm [m³]', 'cbm [m3]', 'measurement', 'volume m3', 'cubagem',
+    'volumen', 'volume', 'kubikmeter', 'm3', 'cubic meter', 'cubic metres',
+    'metragem cubica', 'medida', 'cbm m3',
+  ],
+  ncm: [
+    'ncm code', 'ncm', 'código ncm', 'codigo ncm', 'ncm-code',
+    'ncm nr', 'tariff code', 'tariff', 'taric', 'warentarifnummer', 'zolltarif',
+    'ncm code 8 digits', 'ncm 8', 'codigo ncm 8',
+  ],
+  hs_code: [
+    'hs code', 'hs', 'hs-code', 'h.s.', 'hs code 6 digits',
+    'harmonized code', 'harmonized system',
+  ],
+  packages_qty: [
+    'qty packages', 'packages', 'qty', 'quantity', 'volumes', 'no. of packages',
+    'number of packages', 'anzahl', 'stueck', 'stuck', 'pcs', 'colli', 'collis',
+    'no of packages', 'package qty', 'qtd', 'qtde', 'quantidade',
+    'number of cartons', 'cartons', 'pieces', 'units',
+  ],
+  packages_type: [
+    'kind of packaging', 'packaging', 'packing type', 'package type', 'tipo embalagem',
+    'verpackungsart', 'art der verpackung', 'pack type', 'embalagem', 'tipo de embalagem',
+  ],
+  invoice_ref: [
+    'delivery note', 'reference', 'invoice', 'invoice no', 'invoice number', 'ref',
+    'referencia', 'lieferschein', 'rechnung', 'bestellnummer', 'order', 'order no',
+    'order number', 'po', 'po number', 'auftrags nr', 'auftragsnummer',
+    'nota fiscal', 'nf', 'invoice ref', 'delivery note no',
+  ],
+  description: [
+    'description', 'product description', 'goods description', 'descricao', 'commodity',
+    'bezeichnung', 'beschreibung', 'waren', 'warenbezeichnung', 'article',
+    'artikelbeschreibung', 'material', 'item description', 'goods', 'product',
+    'descricao do produto', 'mercadoria',
+  ],
+  container: [
+    'container', 'container no', 'container number', 'container no.',
+    'container nr', 'container id', 'behaelter', 'contentor', 'contenedor',
+  ],
+  seal: [
+    'seal', 'seal no', 'seal number', 'seal no.', 'lacre',
+    'plombe', 'siegelnummer', 'plombennummer', 'seal nr', 'numero do lacre',
+  ],
+  cnpj: [
+    'vat no.', 'vat no', 'cnpj', 'tax id', 'cnpj/cpf',
+    'steuernummer', 'ust id', 'vat', 'vat number', 'tax number',
+    'cpf/cnpj', 'cnpj/cpf do importador',
+  ],
 };
 
 function normalizeHeader(h: string): string {
@@ -235,7 +288,15 @@ export async function extractXlsxStructured(fileUrl: string, fileName: string): 
     allHeaders = [...new Set([...allHeaders, ...headers.filter((h: string) => h.trim())])];
     const colMap = mapColumns(headers);
 
-    console.log(`📊 [XLSX Extractor] Sheet "${sheetName}": ${rows.length - headerRowIdx - 1} data rows, supplier col: ${colMap.supplier}, weight col: ${colMap.gross_weight}, ncm col: ${colMap.ncm}`);
+    console.log(`📊 [XLSX Extractor] Sheet "${sheetName}" RAW HEADERS: [${headers.join(' | ')}]`);
+    console.log(`📊 [XLSX Extractor] Sheet "${sheetName}": ${rows.length - headerRowIdx - 1} data rows, supplier col: ${colMap.supplier}, weight col: ${colMap.gross_weight}, ncm col: ${colMap.ncm}, desc col: ${colMap.description}`);
+
+    // Determine fallback grouping column when supplier is not found
+    const useSupplierCol = colMap.supplier >= 0;
+    const useDescriptionFallback = !useSupplierCol && colMap.description >= 0;
+    if (!useSupplierCol) {
+      console.log(`⚠️ [XLSX Extractor] No supplier column found! ${useDescriptionFallback ? 'Using description as fallback grouping key' : 'Aggregating all rows into single exporter'}`);
+    }
 
     // Process data rows
     for (let r = headerRowIdx + 1; r < rows.length; r++) {
@@ -245,8 +306,24 @@ export async function extractXlsxStructured(fileUrl: string, fileName: string): 
 
       totalRowsProcessed++;
 
-      const supplierName = colMap.supplier >= 0 ? parseString(row[colMap.supplier]) : '';
-      if (!supplierName) continue; // Skip rows without supplier
+      // Determine row grouping key: supplier > description > fallback
+      let supplierName = '';
+      if (useSupplierCol) {
+        supplierName = parseString(row[colMap.supplier]);
+      } else if (useDescriptionFallback) {
+        supplierName = parseString(row[colMap.description]);
+      }
+      if (!supplierName) {
+        // If still no name but we have numeric data, use fallback name
+        const hasAnyNumericData = (colMap.gross_weight >= 0 && parseNumber(row[colMap.gross_weight]) > 0)
+          || (colMap.cbm >= 0 && parseNumber(row[colMap.cbm]) > 0)
+          || (colMap.packages_qty >= 0 && parseNumber(row[colMap.packages_qty]) > 0);
+        if (hasAnyNumericData) {
+          supplierName = 'UNKNOWN EXPORTER';
+        } else {
+          continue; // Truly empty row
+        }
+      }
 
       const grossWeight = colMap.gross_weight >= 0 ? parseNumber(row[colMap.gross_weight]) : 0;
       const netWeight = colMap.net_weight >= 0 ? parseNumber(row[colMap.net_weight]) : 0;

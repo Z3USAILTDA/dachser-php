@@ -1048,8 +1048,15 @@ async function analyzeWithStructuredPipeline(
       try {
         manifestData = await extractXlsxStructured(xlsxFile.file_url, xlsxFile.file_name);
         console.log(`📊 [Structured Pipeline] XLSX extracted: ${manifestData.exporters.length} exporters, ${manifestData.total_rows} rows`);
+        
+        // VALIDATION GATE: If 0 exporters from a non-empty file, headers were not recognized
+        if (manifestData.exporters.length === 0 && manifestData.total_rows > 5) {
+          console.warn(`⚠️ [Structured Pipeline] 0 exporters from ${manifestData.total_rows} rows - headers not recognized. Raw headers: [${manifestData.raw_headers.join(' | ')}]`);
+          throw new Error(`XLSX headers not recognized: 0 exporters from ${manifestData.total_rows} rows. Headers: ${manifestData.raw_headers.slice(0, 10).join(', ')}`);
+        }
       } catch (e) {
         console.error(`❌ [Structured Pipeline] XLSX extraction failed:`, e);
+        throw e; // Propagate to trigger fallback to legacy pipeline
       }
     }
   }
