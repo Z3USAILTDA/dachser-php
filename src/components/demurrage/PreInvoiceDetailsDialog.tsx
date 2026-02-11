@@ -133,8 +133,25 @@ export function PreInvoiceDetailsDialog({ open, onOpenChange, preInvoice }: PreI
               <p>{preInvoice.voyage_number || '-'}</p>
             </div>
             <div>
-              <span className="text-muted-foreground">Vencimento:</span>
-              <p>{formatDate(preInvoice.due_date)}</p>
+              <span className="text-muted-foreground">Prazo Contestação:</span>
+              <p className="font-medium">
+                {(preInvoice as any).alert_sent_at 
+                  ? (() => {
+                      const start = new Date((preInvoice as any).alert_sent_at);
+                      let hoursRemaining = 48;
+                      const current = new Date(start);
+                      while (hoursRemaining > 0) {
+                        current.setHours(current.getHours() + 1);
+                        const day = current.getDay();
+                        if (day !== 0 && day !== 6) {
+                          hoursRemaining--;
+                        }
+                      }
+                      return format(current, "dd/MM/yyyy HH:mm", { locale: ptBR });
+                    })()
+                  : <span className="text-muted-foreground italic">Aguardando envio de alerta</span>
+                }
+              </p>
             </div>
             <div>
               <span className="text-muted-foreground">Origem:</span>

@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { 
   FileText, Clock, CheckCircle2, Send, Eye, AlertTriangle, DollarSign,
-  MoreHorizontal, FileSpreadsheet, Loader2, RefreshCw, Plus
+  MoreHorizontal, FileSpreadsheet, Loader2, RefreshCw, Plus, Edit2
 } from "lucide-react";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -36,6 +36,7 @@ import {
   type PreInvoice 
 } from "@/hooks/useDemurrageData";
 import { PreInvoiceDetailsDialog } from "@/components/demurrage/PreInvoiceDetailsDialog";
+import { PreInvoiceInfoDialog } from "@/components/demurrage/PreInvoiceInfoDialog";
 import { toast } from "sonner";
 import { format, parseISO } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -52,7 +53,9 @@ export default function DemurragePreInvoicing() {
   const [bulkAction, setBulkAction] = useState<BulkAction>(null);
   const [isGenerating, setIsGenerating] = useState(false);
   const [detailsDialogOpen, setDetailsDialogOpen] = useState(false);
+  const [infoDialogOpen, setInfoDialogOpen] = useState(false);
   const [selectedInvoice, setSelectedInvoice] = useState<PreInvoice | null>(null);
+  const [infoInvoice, setInfoInvoice] = useState<PreInvoice | null>(null);
 
   const { data: preInvoices = [], isLoading, refetch } = useDemurragePreInvoices();
   const updateMutation = useUpdatePreInvoice();
@@ -392,7 +395,7 @@ export default function DemurragePreInvoicing() {
                       <TableHead className="text-right">Total USD</TableHead>
                       <TableHead>Status</TableHead>
                       <TableHead>Financeiro</TableHead>
-                      <TableHead className="w-[50px]"></TableHead>
+                      <TableHead className="w-[80px]"></TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -422,48 +425,58 @@ export default function DemurragePreInvoicing() {
                         <TableCell>{getWorkflowBadge(invoice.workflow_status)}</TableCell>
                         <TableCell>{getFinancialBadge(invoice.financial_status)}</TableCell>
                         <TableCell>
-                          <DropdownMenu>
-                            <DropdownMenuTrigger asChild>
-                              <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
-                                <MoreHorizontal className="h-4 w-4" />
-                              </Button>
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent align="end" className="bg-[#1a1a1a] border-[rgba(255,255,255,0.1)]">
-                              <DropdownMenuItem 
-                                onClick={() => handleViewDetails(invoice)}
-                                className="cursor-pointer"
-                              >
-                                <Eye className="h-4 w-4 mr-2" />
-                                Ver Detalhes
-                              </DropdownMenuItem>
-                              <DropdownMenuSeparator className="bg-[rgba(255,255,255,0.1)]" />
-                              <DropdownMenuItem 
-                                onClick={() => handleSingleAction(invoice, 'reviewed')}
-                                className="cursor-pointer"
-                                disabled={invoice.workflow_status === 'reviewed'}
-                              >
-                                <CheckCircle2 className="h-4 w-4 mr-2" />
-                                Marcar como Revisada
-                              </DropdownMenuItem>
-                              <DropdownMenuItem 
-                                onClick={() => handleSingleAction(invoice, 'sent')}
-                                className="cursor-pointer"
-                                disabled={invoice.workflow_status === 'sent'}
-                              >
-                                <Send className="h-4 w-4 mr-2" />
-                                Lançar no Othello
-                              </DropdownMenuItem>
-                              <DropdownMenuSeparator className="bg-[rgba(255,255,255,0.1)]" />
-                              <DropdownMenuItem 
-                                onClick={() => handleSingleAction(invoice, 'paid')}
-                                className="cursor-pointer text-green-400"
-                                disabled={invoice.workflow_status === 'paid'}
-                              >
-                                <CheckCircle2 className="h-4 w-4 mr-2" />
-                                Marcar como Pago
-                              </DropdownMenuItem>
-                            </DropdownMenuContent>
-                          </DropdownMenu>
+                          <div className="flex items-center gap-1">
+                            <Button 
+                              variant="ghost" 
+                              size="sm" 
+                              className="h-8 w-8 p-0 text-muted-foreground hover:text-[#ffc800]"
+                              onClick={() => { setInfoInvoice(invoice); setInfoDialogOpen(true); }}
+                            >
+                              <Edit2 className="h-4 w-4" />
+                            </Button>
+                            <DropdownMenu>
+                              <DropdownMenuTrigger asChild>
+                                <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
+                                  <MoreHorizontal className="h-4 w-4" />
+                                </Button>
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent align="end" className="bg-[#1a1a1a] border-[rgba(255,255,255,0.1)]">
+                                <DropdownMenuItem 
+                                  onClick={() => handleViewDetails(invoice)}
+                                  className="cursor-pointer"
+                                >
+                                  <Eye className="h-4 w-4 mr-2" />
+                                  Ver Detalhes
+                                </DropdownMenuItem>
+                                <DropdownMenuSeparator className="bg-[rgba(255,255,255,0.1)]" />
+                                <DropdownMenuItem 
+                                  onClick={() => handleSingleAction(invoice, 'reviewed')}
+                                  className="cursor-pointer"
+                                  disabled={invoice.workflow_status === 'reviewed'}
+                                >
+                                  <CheckCircle2 className="h-4 w-4 mr-2" />
+                                  Marcar como Revisada
+                                </DropdownMenuItem>
+                                <DropdownMenuItem 
+                                  onClick={() => handleSingleAction(invoice, 'sent')}
+                                  className="cursor-pointer"
+                                  disabled={invoice.workflow_status === 'sent'}
+                                >
+                                  <Send className="h-4 w-4 mr-2" />
+                                  Lançar no Othello
+                                </DropdownMenuItem>
+                                <DropdownMenuSeparator className="bg-[rgba(255,255,255,0.1)]" />
+                                <DropdownMenuItem 
+                                  onClick={() => handleSingleAction(invoice, 'paid')}
+                                  className="cursor-pointer text-green-400"
+                                  disabled={invoice.workflow_status === 'paid'}
+                                >
+                                  <CheckCircle2 className="h-4 w-4 mr-2" />
+                                  Marcar como Pago
+                                </DropdownMenuItem>
+                              </DropdownMenuContent>
+                            </DropdownMenu>
+                          </div>
                         </TableCell>
                       </TableRow>
                     ))}
@@ -514,6 +527,13 @@ export default function DemurragePreInvoicing() {
         open={detailsDialogOpen}
         onOpenChange={setDetailsDialogOpen}
         preInvoice={selectedInvoice}
+      />
+
+      {/* Pre-Invoice Info Dialog */}
+      <PreInvoiceInfoDialog
+        open={infoDialogOpen}
+        onOpenChange={setInfoDialogOpen}
+        preInvoice={infoInvoice}
       />
     </DemurrageLayout>
   );

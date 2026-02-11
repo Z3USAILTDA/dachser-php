@@ -7,12 +7,13 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { DollarSign, Plus, Edit, Trash2, Clock, TrendingUp, Filter, Loader2 } from "lucide-react";
+import { DollarSign, Plus, Edit, Trash2, Clock, TrendingUp, Filter, Loader2, FileSpreadsheet } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
 import { toast } from "sonner";
 import { useDemurrageRates, useCreateDemurrageRate, useUpdateDemurrageRate, useDeleteDemurrageRate, DemurrageRate } from "@/hooks/useDemurrageData";
+import { ImportRatesDialog } from "@/components/demurrage/ImportRatesDialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { TablePagination } from "@/components/layout/TablePagination";
 
@@ -35,6 +36,7 @@ export default function DemurrageRates() {
   const deleteRate = useDeleteDemurrageRate();
 
   const [showAddDialog, setShowAddDialog] = useState(false);
+  const [showImportDialog, setShowImportDialog] = useState(false);
   const [editingRate, setEditingRate] = useState<DemurrageRate | null>(null);
   const [deletingRate, setDeletingRate] = useState<DemurrageRate | null>(null);
   const [filterArmador, setFilterArmador] = useState<string>("all");
@@ -249,10 +251,20 @@ export default function DemurrageRates() {
   };
 
   const rightActions = (
-    <Button className="bg-[#ffc800] text-black hover:bg-[#e6b400]" onClick={openAddDialog}>
-      <Plus className="h-4 w-4 mr-2" />
-      Nova Tarifa
-    </Button>
+    <div className="flex gap-2">
+      <Button 
+        variant="outline"
+        className="bg-[rgba(0,0,0,0.7)] border-[rgba(255,255,255,0.25)] text-[#aaaaaa] hover:text-white hover:bg-[rgba(0,0,0,0.9)]"
+        onClick={() => setShowImportDialog(true)}
+      >
+        <FileSpreadsheet className="h-4 w-4 mr-2" />
+        Importar Excel
+      </Button>
+      <Button className="bg-[#ffc800] text-black hover:bg-[#e6b400]" onClick={openAddDialog}>
+        <Plus className="h-4 w-4 mr-2" />
+        Nova Tarifa
+      </Button>
+    </div>
   );
 
   const customCards = (
@@ -552,6 +564,12 @@ export default function DemurrageRates() {
             </AlertDialogFooter>
           </AlertDialogContent>
         </AlertDialog>
+
+        {/* Import Excel Dialog */}
+        <ImportRatesDialog
+          open={showImportDialog}
+          onOpenChange={setShowImportDialog}
+        />
       </div>
     </DemurrageLayout>
   );
