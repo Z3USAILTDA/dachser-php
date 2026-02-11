@@ -2,6 +2,10 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { Client } from "https://deno.land/x/mysql@v2.12.1/mod.ts";
 import { getPromptForAnalysisType } from "./prompts.ts";
+import { extractXlsxStructured } from "./xlsxExtractor.ts";
+import { extractPdfStructured } from "./pdfExtractor.ts";
+import { compareManifestHbl, compareHblMbl, compareInvoicesHbl } from "./deterministicCompare.ts";
+import { formatComparisonResult } from "./resultFormatter.ts";
 
 // Declare EdgeRuntime for background tasks
 declare const EdgeRuntime: { waitUntil: (promise: Promise<any>) => void };
@@ -1018,6 +1022,115 @@ async function analyzeWithGeminiPro(
   return { text: resultText, model: 'gemini-2.5-pro' };
 }
 
+// ============ 2-STAGE STRUCTURED PIPELINE ============
+
+async function analyzeWithStructuredPipeline(
+  analysisType: string,
+  files: FileInfo[],
+  metadata: { consignee?: string; container?: string }
+): Promise<AnalysisResult> {
+  const startTime = Date.now();
+  console.log(`🚀 [Structured Pipeline] Starting 2-stage analysis for ${files.length} files (type: ${analysisType})`);
+
+  const xlsxFiles = files.filter(f => {
+    const ext = f.file_name.toLowerCase().split('.').pop() || '';
+    return ['xlsx', 'xls', 'xlsm', 'csv'].includes(ext);
+  });
+  const pdfFiles = files.filter(f => {
+    const ext = f.file_name.toLowerCase().split('.').pop() || '';
+    return !['xlsx', 'xls', 'xlsm', 'csv'].includes(ext);
+  });
+
+  // ========= STAGE 1A: Extract XLSX structured data =========
+  let manifestData = null;
+  if (xlsxFiles.length > 0) {
+    for (const xlsxFile of xlsxFiles) {
+      try {
+        manifestData = await extractXlsxStructured(xlsxFile.file_url, xlsxFile.file_name);
+        console.log(`📊 [Structured Pipeline] XLSX extracted: ${manifestData.exporters.length} exporters, ${manifestData.total_rows} rows`);
+      } catch (e) {
+        console.error(`❌ [Structured Pipeline] XLSX extraction failed:`, e);
+      }
+    }
+  }
+
+  // ========= STAGE 1B: Extract PDFs structured data =========
+  const pdfExtractions = [];
+  for (const pdfFile of pdfFiles) {
+    try {
+      const fetchResp = await fetch(pdfFile.file_url);
+      if (!fetchResp.ok) continue;
+      const buffer = await fetchResp.arrayBuffer();
+      if (buffer.byteLength < 100) continue;
+
+      // Convert to base64
+      const bytes = new Uint8Array(buffer);
+      const chunkSize = 8192;
+      let binaryStr = '';
+      for (let i = 0; i < bytes.length; i += chunkSize) {
+        const chunk = bytes.slice(i, Math.min(i + chunkSize, bytes.length));
+        binaryStr += String.fromCharCode.apply(null, Array.from(chunk));
+      }
+      const base64 = btoa(binaryStr);
+
+      const extracted = await extractPdfStructured(base64, pdfFile.file_name, pdfFile.file_type);
+      if (extracted.raw_extraction) {
+        pdfExtractions.push({ data: extracted, file: pdfFile });
+        console.log(`📄 [Structured Pipeline] PDF extracted: ${pdfFile.file_name} (${extracted.exporters.length} exporters, weight=${extracted.gross_weight_kg}kg)`);
+      } else {
+        console.warn(`⚠️ [Structured Pipeline] PDF extraction failed for ${pdfFile.file_name} - will fallback`);
+        throw new Error(`PDF extraction failed for ${pdfFile.file_name}`);
+      }
+    } catch (e) {
+      console.error(`❌ [Structured Pipeline] PDF processing failed for ${pdfFile.file_name}:`, e);
+      throw e; // Propagate to trigger fallback
+    }
+  }
+
+  // ========= STAGE 2: Deterministic comparison =========
+  let comparisonResult;
+
+  if (analysisType === 'manifest_hbl') {
+    if (!manifestData) throw new Error('No manifest data extracted');
+    const hblExtractions = pdfExtractions.map(p => p.data);
+    if (hblExtractions.length === 0) throw new Error('No HBL data extracted');
+    comparisonResult = compareManifestHbl(manifestData, hblExtractions);
+  } else if (analysisType === 'hbl_mbl') {
+    const baseFile = pdfExtractions.find(p => p.file.file_type === 'base');
+    const mblFile = pdfExtractions.find(p => p.file.file_type === 'mbl');
+    if (!baseFile || !mblFile) throw new Error('Missing HBL or MBL extraction');
+    comparisonResult = compareHblMbl(baseFile.data, mblFile.data);
+  } else if (analysisType === 'invoices_hbl') {
+    const hblFile = pdfExtractions.find(p => p.file.file_type === 'base' || p.file.file_type === 'hbl');
+    const invoiceFiles = pdfExtractions.filter(p => p.file.file_type === 'invoice' || p.file.file_type === 'outro');
+    if (!hblFile) throw new Error('Missing HBL extraction');
+    comparisonResult = compareInvoicesHbl(invoiceFiles.map(i => i.data), hblFile.data);
+  } else {
+    throw new Error(`Unsupported analysis type for structured pipeline: ${analysisType}`);
+  }
+
+  // ========= STAGE 3: Format result =========
+  const resultText = formatComparisonResult(comparisonResult);
+
+  const elapsed = Math.round((Date.now() - startTime) / 1000);
+  console.log(`✅ [Structured Pipeline] Completed in ${elapsed}s - Status: ${comparisonResult.overall_status}`);
+
+  return {
+    result_text: resultText,
+    json_result: {
+      status: 'completed',
+      model: 'structured-pipeline-v1',
+      pipeline: 'two-stage',
+      total_time_ms: Date.now() - startTime,
+      file_count: files.length,
+      exporters_found: comparisonResult.exporters.length,
+      overall_status: comparisonResult.overall_status,
+      used_examples: false,
+    },
+    model: 'structured-pipeline-v1',
+  };
+}
+
 // ============ MAIN LLM ANALYSIS FUNCTION ============
 
 async function analyzeWithLLM(
@@ -1025,10 +1138,30 @@ async function analyzeWithLLM(
   files: FileInfo[], 
   metadata: { consignee?: string; container?: string }
 ): Promise<AnalysisResult> {
+  
+  // ========= TRY 2-STAGE STRUCTURED PIPELINE FIRST =========
+  try {
+    console.log(`🔄 [Pipeline] Attempting structured 2-stage pipeline...`);
+    const structuredResult = await analyzeWithStructuredPipeline(analysisType, files, metadata);
+    
+    // Validate the result has meaningful content
+    if (structuredResult.result_text && structuredResult.result_text.length > 200) {
+      console.log(`✅ [Pipeline] Structured pipeline succeeded (${structuredResult.result_text.length} chars)`);
+      return structuredResult;
+    }
+    
+    console.warn(`⚠️ [Pipeline] Structured pipeline result too short (${structuredResult.result_text?.length || 0} chars), falling back to legacy`);
+  } catch (pipelineError) {
+    console.error(`⚠️ [Pipeline] Structured pipeline failed, falling back to legacy LLM:`, pipelineError);
+  }
+  
+  // ========= LEGACY FALLBACK: Single-prompt LLM analysis =========
+  console.log(`🔄 [Pipeline] Using legacy single-prompt LLM analysis...`);
+  
   const basePrompt = getPromptForAnalysisType(analysisType);
   const startTime = Date.now();
   
-  console.log(`🚀 Starting analysis for ${files.length} files`);
+  console.log(`🚀 Starting legacy analysis for ${files.length} files`);
   
   // Count HBLs for fetching relevant examples
   const hblCount = files.filter(f => !f.file_name.toLowerCase().includes('manifest') && !f.file_name.toLowerCase().includes('pack')).length;
@@ -1063,7 +1196,6 @@ async function analyzeWithLLM(
   console.log(`📊 Manifest text extracted: ${manifestText.length} chars`);
   
   // MEMORY OPTIMIZATION: Fetch PDFs sequentially instead of in parallel
-  // This reduces peak memory usage by not holding all PDFs in memory simultaneously
   const validPdfs: { base64: string; name: string; mediaType: string; ext: string; file_type: string }[] = [];
   
   console.log(`📎 Loading ${pdfUrls.length} PDFs sequentially (memory optimization)...`);
@@ -1123,6 +1255,7 @@ async function analyzeWithLLM(
     json_result: { 
       status: 'completed', 
       model: result.model, 
+      pipeline: 'legacy',
       total_time_ms: Date.now() - startTime,
       file_count: xlsxUrls.length + validPdfs.length,
       used_examples: approvedExamplesText.length > 0
