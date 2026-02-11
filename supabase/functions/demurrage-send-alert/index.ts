@@ -10,13 +10,39 @@ const corsHeaders = {
 interface AlertRequest {
   container_id?: string;
   container_number?: string;
-  alert_type: 'risk_warning' | 'risk_critical' | 'exceeded';
+  alert_type: 'initial_notice' | 'cost_statement' | 're_notification' | 'risk_warning' | 'risk_critical' | 'exceeded';
   risk_score?: number;
   expected_cost_usd?: number;
   days_remaining?: number;
   recipient_emails: string[];
   client_name?: string;
   shipment_master?: string;
+  free_time_end_date?: string;
+  excedente_dias?: number;
+  contestacao_deadline?: string;
+  cost_breakdown?: Array<{ period: string; days: number; rate_usd: number; total_usd: number }>;
+  test_mode?: boolean;
+}
+
+function add48BusinessHours(startDate: Date): Date {
+  let hoursRemaining = 48;
+  const current = new Date(startDate);
+  while (hoursRemaining > 0) {
+    current.setTime(current.getTime() + 60 * 60 * 1000);
+    const day = current.getDay();
+    if (day !== 0 && day !== 6) {
+      hoursRemaining--;
+    }
+  }
+  return current;
+}
+
+function formatDateBR(dateStr: string | undefined): string {
+  if (!dateStr) return 'N/A';
+  try {
+    const d = new Date(dateStr);
+    return d.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+  } catch { return dateStr; }
 }
 
 serve(async (req) => {
@@ -25,7 +51,6 @@ serve(async (req) => {
   }
 
   const RESEND_API_KEY = Deno.env.get("RESEND_API_KEY");
-
   if (!RESEND_API_KEY) {
     console.error("[Demurrage Alert] RESEND_API_KEY not configured");
     return new Response(
@@ -44,35 +69,27 @@ serve(async (req) => {
     const body: AlertRequest = await req.json();
 
     const {
-      container_id,
-      container_number,
-      alert_type,
-      risk_score,
-      expected_cost_usd,
-      days_remaining,
-      recipient_emails,
-      client_name,
-      shipment_master
+      container_id, container_number, alert_type, risk_score, expected_cost_usd,
+      days_remaining, recipient_emails, client_name, shipment_master,
+      free_time_end_date, excedente_dias, contestacao_deadline, cost_breakdown, test_mode
     } = body;
 
     if (!recipient_emails || recipient_emails.length === 0) {
       throw new Error("recipient_emails is required");
     }
 
-    console.log(`[Demurrage Alert] Sending ${alert_type} alert for container ${container_number || container_id}`);
+    // For test mode, use initial_notice template
+    const effectiveAlertType = test_mode ? 'initial_notice' : (alert_type || 'initial_notice');
 
-    // Generate email content based on alert type
+    console.log(`[Demurrage Alert] Sending ${effectiveAlertType} alert for container ${container_number || container_id}`);
+
     const { subject, html } = generateEmailContent({
-      alert_type,
-      container_number,
-      risk_score,
-      expected_cost_usd,
-      days_remaining,
-      client_name,
-      shipment_master
+      alert_type: effectiveAlertType,
+      container_number, risk_score, expected_cost_usd, days_remaining,
+      client_name, shipment_master, free_time_end_date, excedente_dias,
+      contestacao_deadline, cost_breakdown, test_mode
     });
 
-    // Send email
     const emailResponse = await resend.emails.send({
       from: "DACHSER CRONOS <alerts@hermes.z3us.ai>",
       to: recipient_emails,
@@ -82,32 +99,29 @@ serve(async (req) => {
 
     const emailSuccess = emailResponse && !('error' in emailResponse);
 
-    // Record alert in database
-    const { error: insertError } = await supabaseClient
-      .from('demurrage_alerts')
-      .insert({
-        container_id: container_id || null,
-        alert_type,
-        risk_score,
-        expected_cost_usd,
-        days_remaining,
-        email_sent_to: recipient_emails,
-        email_sent_at: new Date().toISOString(),
-        email_status: emailSuccess ? 'sent' : 'failed'
-      });
-
-    if (insertError) {
-      console.error('[Demurrage Alert] Error recording alert:', insertError);
+    // Record alert in database (skip for test mode)
+    if (!test_mode) {
+      const { error: insertError } = await supabaseClient
+        .from('demurrage_alerts')
+        .insert({
+          container_id: container_id || null,
+          alert_type: effectiveAlertType,
+          risk_score,
+          expected_cost_usd,
+          days_remaining,
+          email_sent_to: recipient_emails,
+          email_sent_at: new Date().toISOString(),
+          email_status: emailSuccess ? 'sent' : 'failed'
+        });
+      if (insertError) {
+        console.error('[Demurrage Alert] Error recording alert:', insertError);
+      }
     }
 
     return new Response(
-      JSON.stringify({
-        status: 'success',
-        message: `Alert sent to ${recipient_emails.length} recipients`
-      }),
+      JSON.stringify({ status: 'success', message: `Alert sent to ${recipient_emails.length} recipients` }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
-
   } catch (error) {
     console.error("[Demurrage Alert] Error:", error);
     return new Response(
@@ -125,126 +139,192 @@ function generateEmailContent(params: {
   days_remaining?: number;
   client_name?: string;
   shipment_master?: string;
+  free_time_end_date?: string;
+  excedente_dias?: number;
+  contestacao_deadline?: string;
+  cost_breakdown?: Array<{ period: string; days: number; rate_usd: number; total_usd: number }>;
+  test_mode?: boolean;
 }): { subject: string; html: string } {
-  const {
-    alert_type,
-    container_number,
-    risk_score,
-    expected_cost_usd,
-    days_remaining,
-    client_name,
-    shipment_master
-  } = params;
+  const { alert_type, container_number, expected_cost_usd, client_name, shipment_master,
+    free_time_end_date, excedente_dias, contestacao_deadline, cost_breakdown, test_mode } = params;
 
-  const alertConfig = {
-    risk_warning: {
-      subject: `⚠️ Alerta de Risco - Container ${container_number || 'N/A'}`,
-      color: '#f59e0b',
-      icon: '⚠️',
-      title: 'Alerta de Risco de Demurrage',
-      message: 'O container está entrando na zona de risco de demurrage.'
-    },
-    risk_critical: {
-      subject: `🔴 CRÍTICO - Container ${container_number || 'N/A'} em Risco Alto`,
-      color: '#ef4444',
-      icon: '🔴',
-      title: 'Risco Crítico de Demurrage',
-      message: 'Ação imediata necessária! O container está em risco crítico de incorrer em custos de demurrage.'
-    },
-    exceeded: {
-      subject: `🚨 Demurrage Excedido - Container ${container_number || 'N/A'}`,
-      color: '#dc2626',
-      icon: '🚨',
-      title: 'Free Time Excedido',
-      message: 'O período de free time foi excedido. Custos de demurrage estão sendo incorridos.'
-    }
-  };
+  const testPrefix = test_mode ? '[TESTE] ' : '';
+  const year = new Date().getFullYear();
 
-  const config = alertConfig[alert_type as keyof typeof alertConfig] || alertConfig.risk_warning;
+  // ============ TEMPLATE 1: Alerta Inicial (Free Time Vencido) ============
+  if (alert_type === 'initial_notice' || alert_type === 'risk_warning' || alert_type === 're_notification') {
+    const isReNotification = alert_type === 're_notification';
+    const subject = `${testPrefix}${isReNotification ? '🔁 Re-notificação' : '⚠️ Aviso'} - Free Time Vencido - ${container_number || 'N/A'}`;
 
-  const html = `
-<!DOCTYPE html>
-<html>
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>${config.title}</title>
-</head>
-<body style="margin: 0; padding: 0; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f3f4f6;">
-  <div style="max-width: 600px; margin: 0 auto; padding: 20px;">
-    <!-- Header -->
-    <div style="background: linear-gradient(135deg, #1e3a5f 0%, #0f172a 100%); padding: 30px; border-radius: 12px 12px 0 0; text-align: center;">
-      <h1 style="color: white; margin: 0; font-size: 28px; font-weight: bold;">DACHSER CRONOS</h1>
-      <p style="color: #94a3b8; margin: 10px 0 0 0; font-size: 14px;">Demurrage & Detention Intelligence</p>
-    </div>
-    
-    <!-- Alert Banner -->
-    <div style="background-color: ${config.color}; padding: 20px; text-align: center;">
-      <span style="font-size: 36px;">${config.icon}</span>
-      <h2 style="color: white; margin: 10px 0 0 0; font-size: 20px;">${config.title}</h2>
-    </div>
-    
-    <!-- Content -->
-    <div style="background-color: white; padding: 30px; border-radius: 0 0 12px 12px; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);">
-      <p style="color: #374151; font-size: 16px; line-height: 1.6; margin-top: 0;">
-        ${config.message}
-      </p>
-      
-      <!-- Details Card -->
-      <div style="background-color: #f8fafc; border-radius: 8px; padding: 20px; margin: 20px 0;">
-        <h3 style="color: #1e3a5f; margin: 0 0 15px 0; font-size: 16px;">Detalhes do Container</h3>
-        
-        <table style="width: 100%; border-collapse: collapse;">
-          <tr>
-            <td style="padding: 8px 0; color: #6b7280; font-size: 14px;">Container:</td>
-            <td style="padding: 8px 0; color: #111827; font-weight: bold; font-size: 14px; text-align: right; font-family: monospace;">${container_number || 'N/A'}</td>
-          </tr>
-          ${client_name ? `
-          <tr>
-            <td style="padding: 8px 0; color: #6b7280; font-size: 14px;">Cliente:</td>
-            <td style="padding: 8px 0; color: #111827; font-weight: bold; font-size: 14px; text-align: right;">${client_name}</td>
-          </tr>
-          ` : ''}
-          ${shipment_master ? `
-          <tr>
-            <td style="padding: 8px 0; color: #6b7280; font-size: 14px;">BL Master:</td>
-            <td style="padding: 8px 0; color: #111827; font-weight: bold; font-size: 14px; text-align: right; font-family: monospace;">${shipment_master}</td>
-          </tr>
-          ` : ''}
-          ${risk_score !== undefined ? `
-          <tr>
-            <td style="padding: 8px 0; color: #6b7280; font-size: 14px;">Score de Risco:</td>
-            <td style="padding: 8px 0; color: ${risk_score >= 80 ? '#ef4444' : risk_score >= 50 ? '#f59e0b' : '#22c55e'}; font-weight: bold; font-size: 14px; text-align: right;">${risk_score}/100</td>
-          </tr>
-          ` : ''}
-          ${days_remaining !== undefined ? `
-          <tr>
-            <td style="padding: 8px 0; color: #6b7280; font-size: 14px;">Dias Restantes:</td>
-            <td style="padding: 8px 0; color: ${days_remaining <= 0 ? '#ef4444' : days_remaining <= 3 ? '#f59e0b' : '#22c55e'}; font-weight: bold; font-size: 14px; text-align: right;">${days_remaining} dia(s)</td>
-          </tr>
-          ` : ''}
-          ${expected_cost_usd !== undefined ? `
-          <tr>
-            <td style="padding: 8px 0; color: #6b7280; font-size: 14px;">Custo Estimado:</td>
-            <td style="padding: 8px 0; color: #ef4444; font-weight: bold; font-size: 16px; text-align: right;">USD ${expected_cost_usd.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
-          </tr>
-          ` : ''}
-        </table>
-      </div>
-      
-      <p style="color: #6b7280; font-size: 12px; text-align: center; margin: 0;">
-        Este é um alerta automático gerado pelo sistema DACHSER CRONOS.
-      </p>
-    </div>
-    
-    <!-- Footer -->
-    <div style="text-align: center; padding: 20px; color: #9ca3af; font-size: 12px;">
-      <p style="margin: 0;">© ${new Date().getFullYear()} DACHSER CRONOS - Demurrage Intelligence Platform</p>
-    </div>
+    const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"></head>
+<body style="margin:0;padding:0;font-family:'Segoe UI',Tahoma,Geneva,Verdana,sans-serif;background-color:#f3f4f6;">
+<div style="max-width:650px;margin:0 auto;padding:20px;">
+  <!-- Header DACHSER -->
+  <div style="background:linear-gradient(135deg,#003369 0%,#001a3a 100%);padding:30px;border-radius:12px 12px 0 0;">
+    <table style="width:100%;"><tr>
+      <td><h1 style="color:#ffc800;margin:0;font-size:26px;font-weight:bold;">DACHSER</h1>
+        <p style="color:#94a3b8;margin:5px 0 0;font-size:13px;">CRONOS — Demurrage & Detention Intelligence</p></td>
+      <td style="text-align:right;"><span style="font-size:12px;color:#ffc800;background:rgba(255,200,0,0.15);padding:4px 12px;border-radius:20px;">${isReNotification ? 'RE-NOTIFICAÇÃO' : 'AVISO INICIAL'}</span></td>
+    </tr></table>
   </div>
-</body>
-</html>
-  `;
 
-  return { subject: config.subject, html };
+  <!-- Alert Banner -->
+  <div style="background-color:${isReNotification ? '#ef4444' : '#f59e0b'};padding:18px;text-align:center;">
+    <h2 style="color:white;margin:0;font-size:18px;">${isReNotification ? '🔁 Re-notificação: Free Time Excedido' : '⚠️ Aviso de Free Time Vencido'}</h2>
+  </div>
+
+  <!-- Content -->
+  <div style="background-color:white;padding:30px;border-radius:0 0 12px 12px;box-shadow:0 4px 6px rgba(0,0,0,0.1);">
+    <p style="color:#374151;font-size:15px;line-height:1.6;margin-top:0;">
+      Prezado(a) <strong>${client_name || 'Cliente'}</strong>,
+    </p>
+    <p style="color:#374151;font-size:15px;line-height:1.6;">
+      ${isReNotification 
+        ? 'Informamos que não recebemos retorno referente ao aviso anterior de free time vencido. Segue abaixo o demonstrativo atualizado dos custos incorridos.'
+        : 'Informamos que o período de <strong>free time</strong> do(s) container(s) abaixo foi excedido, e custos de <strong>demurrage/detention</strong> estão sendo incorridos.'}
+    </p>
+
+    <!-- Details -->
+    <div style="background-color:#f8fafc;border-radius:8px;padding:20px;margin:20px 0;border-left:4px solid #ffc800;">
+      <h3 style="color:#003369;margin:0 0 12px;font-size:15px;">📦 Detalhes</h3>
+      <table style="width:100%;border-collapse:collapse;">
+        <tr><td style="padding:6px 0;color:#6b7280;font-size:14px;">Container:</td>
+            <td style="padding:6px 0;color:#111827;font-weight:bold;font-size:14px;text-align:right;font-family:monospace;">${container_number || 'N/A'}</td></tr>
+        ${shipment_master ? `<tr><td style="padding:6px 0;color:#6b7280;font-size:14px;">BL Master:</td>
+            <td style="padding:6px 0;color:#111827;font-weight:bold;font-size:14px;text-align:right;font-family:monospace;">${shipment_master}</td></tr>` : ''}
+        ${free_time_end_date ? `<tr><td style="padding:6px 0;color:#6b7280;font-size:14px;">Free Time Encerrado em:</td>
+            <td style="padding:6px 0;color:#ef4444;font-weight:bold;font-size:14px;text-align:right;">${formatDateBR(free_time_end_date)}</td></tr>` : ''}
+        ${excedente_dias !== undefined ? `<tr><td style="padding:6px 0;color:#6b7280;font-size:14px;">Dias Excedentes:</td>
+            <td style="padding:6px 0;color:#ef4444;font-weight:bold;font-size:14px;text-align:right;">${excedente_dias} dia(s)</td></tr>` : ''}
+        ${expected_cost_usd !== undefined ? `<tr><td style="padding:6px 0;color:#6b7280;font-size:14px;">Custo Estimado:</td>
+            <td style="padding:6px 0;color:#ef4444;font-weight:bold;font-size:16px;text-align:right;">USD ${expected_cost_usd.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td></tr>` : ''}
+      </table>
+    </div>
+
+    <p style="color:#374151;font-size:14px;line-height:1.6;">
+      Solicitamos que providencie a <strong>devolução/retirada</strong> do(s) container(s) o mais breve possível para evitar custos adicionais.
+    </p>
+
+    <p style="color:#6b7280;font-size:12px;text-align:center;margin:20px 0 0;">
+      Este é um alerta automático gerado pelo sistema DACHSER CRONOS.<br/>
+      Em caso de dúvidas, entre em contato com o seu analista responsável.
+    </p>
+  </div>
+
+  <div style="text-align:center;padding:16px;color:#9ca3af;font-size:11px;">
+    <p style="margin:0;">© ${year} DACHSER CRONOS — Demurrage & Detention Intelligence Platform</p>
+  </div>
+</div></body></html>`;
+
+    return { subject, html };
+  }
+
+  // ============ TEMPLATE 2: Demonstrativo de Custos (48h Contestação) ============
+  if (alert_type === 'cost_statement' || alert_type === 'risk_critical' || alert_type === 'exceeded') {
+    const deadline = contestacao_deadline || (free_time_end_date ? add48BusinessHours(new Date()).toISOString() : undefined);
+    const subject = `${testPrefix}🚨 Demonstrativo de Custos - Demurrage - ${container_number || 'N/A'}`;
+
+    let costRows = '';
+    if (cost_breakdown && cost_breakdown.length > 0) {
+      costRows = cost_breakdown.map(cb => `
+        <tr>
+          <td style="padding:8px 12px;border-bottom:1px solid #e5e7eb;font-size:13px;color:#374151;">${cb.period}</td>
+          <td style="padding:8px 12px;border-bottom:1px solid #e5e7eb;font-size:13px;color:#374151;text-align:center;">${cb.days}</td>
+          <td style="padding:8px 12px;border-bottom:1px solid #e5e7eb;font-size:13px;color:#374151;text-align:right;">USD ${cb.rate_usd.toFixed(2)}</td>
+          <td style="padding:8px 12px;border-bottom:1px solid #e5e7eb;font-size:13px;color:#374151;text-align:right;font-weight:bold;">USD ${cb.total_usd.toFixed(2)}</td>
+        </tr>
+      `).join('');
+    } else {
+      costRows = `<tr><td colspan="4" style="padding:12px;text-align:center;color:#6b7280;font-size:13px;">Detalhamento não disponível</td></tr>`;
+    }
+
+    const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"></head>
+<body style="margin:0;padding:0;font-family:'Segoe UI',Tahoma,Geneva,Verdana,sans-serif;background-color:#f3f4f6;">
+<div style="max-width:650px;margin:0 auto;padding:20px;">
+  <!-- Header DACHSER -->
+  <div style="background:linear-gradient(135deg,#003369 0%,#001a3a 100%);padding:30px;border-radius:12px 12px 0 0;">
+    <table style="width:100%;"><tr>
+      <td><h1 style="color:#ffc800;margin:0;font-size:26px;font-weight:bold;">DACHSER</h1>
+        <p style="color:#94a3b8;margin:5px 0 0;font-size:13px;">CRONOS — Demurrage & Detention Intelligence</p></td>
+      <td style="text-align:right;"><span style="font-size:12px;color:white;background:#ef4444;padding:4px 12px;border-radius:20px;">DEMONSTRATIVO</span></td>
+    </tr></table>
+  </div>
+
+  <!-- Alert Banner -->
+  <div style="background-color:#dc2626;padding:18px;text-align:center;">
+    <h2 style="color:white;margin:0;font-size:18px;">🚨 Demonstrativo de Custos de Demurrage</h2>
+  </div>
+
+  <!-- Content -->
+  <div style="background-color:white;padding:30px;border-radius:0 0 12px 12px;box-shadow:0 4px 6px rgba(0,0,0,0.1);">
+    <p style="color:#374151;font-size:15px;line-height:1.6;margin-top:0;">
+      Prezado(a) <strong>${client_name || 'Cliente'}</strong>,
+    </p>
+    <p style="color:#374151;font-size:15px;line-height:1.6;">
+      Segue abaixo o demonstrativo de custos de <strong>demurrage/detention</strong> referente ao container indicado. 
+      Caso deseje contestar os valores, o prazo é de <strong>48 horas úteis</strong> a partir do recebimento deste e-mail.
+    </p>
+
+    <!-- Container Info -->
+    <div style="background-color:#f8fafc;border-radius:8px;padding:16px;margin:16px 0;border-left:4px solid #003369;">
+      <table style="width:100%;border-collapse:collapse;">
+        <tr><td style="padding:4px 0;color:#6b7280;font-size:13px;">Container:</td>
+            <td style="padding:4px 0;color:#111827;font-weight:bold;font-size:13px;text-align:right;font-family:monospace;">${container_number || 'N/A'}</td></tr>
+        ${shipment_master ? `<tr><td style="padding:4px 0;color:#6b7280;font-size:13px;">BL Master:</td>
+            <td style="padding:4px 0;color:#111827;font-weight:bold;font-size:13px;text-align:right;font-family:monospace;">${shipment_master}</td></tr>` : ''}
+        ${free_time_end_date ? `<tr><td style="padding:4px 0;color:#6b7280;font-size:13px;">Free Time Encerrado:</td>
+            <td style="padding:4px 0;color:#ef4444;font-weight:bold;font-size:13px;text-align:right;">${formatDateBR(free_time_end_date)}</td></tr>` : ''}
+      </table>
+    </div>
+
+    <!-- Cost Breakdown Table -->
+    <h3 style="color:#003369;font-size:15px;margin:20px 0 10px;">Demonstrativo de Custos</h3>
+    <table style="width:100%;border-collapse:collapse;border:1px solid #e5e7eb;border-radius:8px;">
+      <thead>
+        <tr style="background-color:#003369;">
+          <th style="padding:10px 12px;text-align:left;color:white;font-size:12px;font-weight:600;">Período</th>
+          <th style="padding:10px 12px;text-align:center;color:white;font-size:12px;font-weight:600;">Dias</th>
+          <th style="padding:10px 12px;text-align:right;color:white;font-size:12px;font-weight:600;">Diária</th>
+          <th style="padding:10px 12px;text-align:right;color:white;font-size:12px;font-weight:600;">Total</th>
+        </tr>
+      </thead>
+      <tbody>${costRows}</tbody>
+      <tfoot>
+        <tr style="background-color:#f8fafc;">
+          <td colspan="3" style="padding:10px 12px;font-size:14px;font-weight:bold;color:#003369;">TOTAL</td>
+          <td style="padding:10px 12px;text-align:right;font-size:16px;font-weight:bold;color:#ef4444;">USD ${(expected_cost_usd || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+        </tr>
+      </tfoot>
+    </table>
+
+    <!-- Contestação Deadline -->
+    <div style="background-color:#fef3c7;border-radius:8px;padding:16px;margin:20px 0;border:1px solid #fbbf24;">
+      <p style="color:#92400e;font-size:14px;margin:0;font-weight:bold;">⏰ Prazo de Contestação</p>
+      <p style="color:#92400e;font-size:13px;margin:6px 0 0;">
+        ${deadline ? `Até <strong>${formatDateBR(deadline)}</strong> (48 horas úteis)` : 'Até 48 horas úteis após o recebimento deste e-mail'}
+      </p>
+      <p style="color:#92400e;font-size:12px;margin:6px 0 0;">
+        Caso não haja manifestação dentro deste prazo, os valores serão considerados aceitos e lançados para faturamento.
+      </p>
+    </div>
+
+    <p style="color:#6b7280;font-size:12px;text-align:center;margin:20px 0 0;">
+      Este é um alerta automático gerado pelo sistema DACHSER CRONOS.<br/>
+      Em caso de dúvidas, entre em contato com o seu analista responsável.
+    </p>
+  </div>
+
+  <div style="text-align:center;padding:16px;color:#9ca3af;font-size:11px;">
+    <p style="margin:0;">© ${year} DACHSER CRONOS — Demurrage & Detention Intelligence Platform</p>
+  </div>
+</div></body></html>`;
+
+    return { subject, html };
+  }
+
+  // Fallback for unknown types
+  return {
+    subject: `${testPrefix}DACHSER CRONOS - Alerta Demurrage - ${container_number || 'N/A'}`,
+    html: `<p>Alerta de demurrage para container ${container_number || 'N/A'}. Cliente: ${client_name || 'N/A'}.</p>`
+  };
 }

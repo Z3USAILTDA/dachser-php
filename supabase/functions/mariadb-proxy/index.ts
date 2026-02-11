@@ -9441,12 +9441,14 @@ serve(async (req) => {
       }
 
       case 'demurrage_update_pre_invoice': {
-        const { id: updatePiId, updates: piUpdates } = body as { id: number; updates: Record<string, unknown> };
+        const rawPiBody = body as any;
+        const updatePiId = rawPiBody.invoice_id || rawPiBody.id;
+        const piUpdates = rawPiBody.updates as Record<string, unknown> | undefined;
         console.log('Updating demurrage pre-invoice:', updatePiId);
 
         if (!updatePiId || !piUpdates) {
           return new Response(
-            JSON.stringify({ error: 'id e updates são obrigatórios' }),
+            JSON.stringify({ error: 'id/invoice_id e updates são obrigatórios' }),
             { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
           );
         }
@@ -9455,7 +9457,8 @@ serve(async (req) => {
           'shipment_mbl', 'client_name', 'bl_number', 'vessel_name', 'voyage_number',
           'origin_port', 'destination_port', 'arrival_date', 'issue_date', 'due_date',
           'total_usd', 'total_brl', 'exchange_rate', 'status', 'workflow_status', 'financial_status',
-          'notes', 'posted_at'
+          'notes', 'posted_at',
+          'status_info', 'misk', 'observacao', 'othello_registro', 'alert_sent_at', 'contestacao_deadline'
         ];
 
         const piSetClauses: string[] = [];
@@ -9764,6 +9767,62 @@ serve(async (req) => {
         `, [alertNewStatus || 'sent', alertError || null, alertId]);
 
         result = { success: true };
+        break;
+      }
+
+      case 'demurrage_mark_alert_returned': {
+        const { id: returnAlertId, user_name: returnedBy } = body as any;
+        console.log('Marking demurrage alert as returned:', returnAlertId);
+
+        if (!returnAlertId) {
+          return new Response(
+            JSON.stringify({ error: 'id é obrigatório' }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+
+        await client.execute(`
+          UPDATE dados_dachser.t_dachser_demurrage_alerts
+          SET client_returned = 1, client_returned_at = NOW(), client_returned_by = ?
+          WHERE id = ?
+        `, [returnedBy || 'sistema', returnAlertId]);
+
+        result = { success: true };
+        break;
+      }
+
+      case 'demurrage_bulk_create_rates': {
+        const { rates } = body as { rates: Array<{
+          armador: string; container_type: string; free_time_days: number;
+          rate_usd: number; period_type?: string; period_start_day?: number; period_end_day?: number;
+        }> };
+        console.log('Bulk creating demurrage rates:', rates?.length);
+
+        if (!rates || rates.length === 0) {
+          return new Response(
+            JSON.stringify({ error: 'rates array é obrigatório' }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+
+        let insertedCount = 0;
+        for (const rate of rates) {
+          try {
+            await client.execute(`
+              INSERT INTO dados_dachser.t_dachser_demurrage_rates 
+                (armador, container_type, free_time_days, rate_usd, period_type, period_start_day, period_end_day)
+              VALUES (?, ?, ?, ?, ?, ?, ?)
+            `, [
+              rate.armador, rate.container_type, rate.free_time_days, rate.rate_usd,
+              rate.period_type || 'STANDARD', rate.period_start_day || null, rate.period_end_day || null
+            ]);
+            insertedCount++;
+          } catch (e) {
+            console.error('Error inserting rate:', e);
+          }
+        }
+
+        result = { success: true, inserted: insertedCount, total: rates.length };
         break;
       }
 

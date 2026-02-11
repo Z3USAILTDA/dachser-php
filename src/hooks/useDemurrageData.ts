@@ -730,3 +730,48 @@ export function useCreateAuditEvent() {
     },
   });
 }
+
+// Mark Alert as Client Returned
+export function useMarkAlertReturned() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({ alertId, userName }: { alertId: number; userName?: string }) => {
+      const { data, error } = await supabase.functions.invoke('mariadb-proxy', {
+        body: {
+          action: 'demurrage_mark_alert_returned',
+          id: alertId,
+          user_name: userName || 'manual',
+        }
+      });
+      if (error) throw error;
+      if (!data.success) throw new Error(data.error || 'Failed to mark alert as returned');
+      return data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['demurrage_alerts'] });
+    },
+  });
+}
+
+// Bulk Create Rates
+export function useBulkCreateDemurrageRates() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (rates: Array<{
+      armador: string; container_type: string; free_time_days: number;
+      rate_usd: number; period_type?: string; period_start_day?: number; period_end_day?: number;
+    }>) => {
+      const { data, error } = await supabase.functions.invoke('mariadb-proxy', {
+        body: { action: 'demurrage_bulk_create_rates', rates }
+      });
+      if (error) throw error;
+      if (!data.success) throw new Error(data.error || 'Failed to bulk create rates');
+      return data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['demurrage_rates'] });
+    },
+  });
+}
