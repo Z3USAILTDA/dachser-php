@@ -2309,7 +2309,7 @@ const Index = () => {
                     <FilterIcon className="h-3 w-3 text-[#ffc800]" />
                     <span className="text-[0.68rem] tracking-[0.1em] uppercase text-[#aaaaaa]">Companhia</span>
                   </div>
-                  <Select value={filterAirline} onValueChange={setFilterAirline}>
+                  <Select value={filterAirline} onValueChange={(v) => { setFilterAirline(v); setCurrentPage(1); }}>
                     <SelectTrigger className="h-8 w-[160px] rounded-full bg-[#13141a] border border-[rgba(255,255,255,.14)] text-[0.78rem]">
                       <SelectValue placeholder="Todas" />
                     </SelectTrigger>
@@ -2329,7 +2329,7 @@ const Index = () => {
                     <span className="w-1.5 h-1.5 rounded-full bg-[#ffc800]" />
                     <span className="text-[0.68rem] tracking-[0.1em] uppercase text-[#aaaaaa]">Analista</span>
                   </div>
-                  <Select value={filterAnalyst} onValueChange={setFilterAnalyst}>
+                  <Select value={filterAnalyst} onValueChange={(v) => { setFilterAnalyst(v); setCurrentPage(1); }}>
                     <SelectTrigger className="h-8 w-[160px] rounded-full bg-[#13141a] border border-[rgba(255,255,255,.14)] text-[0.78rem]">
                       <SelectValue placeholder="Todos" />
                     </SelectTrigger>
@@ -2357,7 +2357,7 @@ const Index = () => {
                     <Plane className="h-3 w-3 text-[#ffc800]" />
                     <span className="text-[0.68rem] tracking-[0.1em] uppercase text-[#aaaaaa]">Serviço</span>
                   </div>
-                  <Select value={filterService} onValueChange={setFilterService}>
+                  <Select value={filterService} onValueChange={(v) => { setFilterService(v); setCurrentPage(1); }}>
                     <SelectTrigger className="h-8 w-[160px] rounded-full bg-[#13141a] border border-[rgba(255,255,255,.14)] text-[0.78rem]">
                       <SelectValue placeholder="Todos" />
                     </SelectTrigger>
@@ -2385,7 +2385,7 @@ const Index = () => {
                     <ArrowDownUp className="h-3 w-3 text-[#ffc800]" />
                     <span className="text-[0.68rem] tracking-[0.1em] uppercase text-[#aaaaaa]">Impo/Expo</span>
                   </div>
-                  <Select value={filterProcessType} onValueChange={setFilterProcessType}>
+                  <Select value={filterProcessType} onValueChange={(v) => { setFilterProcessType(v); setCurrentPage(1); }}>
                     <SelectTrigger className="h-8 w-[150px] rounded-full bg-[#13141a] border border-[rgba(255,255,255,.14)] text-[0.78rem]">
                       <SelectValue placeholder="Todos" />
                     </SelectTrigger>
@@ -2527,7 +2527,7 @@ const Index = () => {
                       const isCriticalAwb = CRITICAL_AWBS.includes(awb.awb) || awb.pieces_discrepancy === true || awb.has_dis_event === true;
 
                       return (
-                        <React.Fragment key={awb.id || index}>
+                        <React.Fragment key={`${awb.id}-${index}`}>
                           <tr
                             className={`border-b border-[rgba(255,255,255,.06)] transition-all duration-300 ${
                               isCriticalAwb
