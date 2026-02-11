@@ -7,12 +7,13 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { DollarSign, Plus, Edit, Trash2, Clock, TrendingUp, Filter, Loader2, FileSpreadsheet } from "lucide-react";
+import { DollarSign, Plus, Edit, Trash2, Clock, TrendingUp, Filter, Loader2, FileSpreadsheet, CheckSquare } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
 import { toast } from "sonner";
-import { useDemurrageRates, useCreateDemurrageRate, useUpdateDemurrageRate, useDeleteDemurrageRate, DemurrageRate } from "@/hooks/useDemurrageData";
+import { useDemurrageRates, useCreateDemurrageRate, useUpdateDemurrageRate, useDeleteDemurrageRate, useBulkDeleteDemurrageRates, DemurrageRate } from "@/hooks/useDemurrageData";
+import { Checkbox } from "@/components/ui/checkbox";
 import { ImportRatesDialog } from "@/components/demurrage/ImportRatesDialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { TablePagination } from "@/components/layout/TablePagination";
@@ -34,11 +35,14 @@ export default function DemurrageRates() {
   const createRate = useCreateDemurrageRate();
   const updateRate = useUpdateDemurrageRate();
   const deleteRate = useDeleteDemurrageRate();
+  const bulkDelete = useBulkDeleteDemurrageRates();
 
   const [showAddDialog, setShowAddDialog] = useState(false);
   const [showImportDialog, setShowImportDialog] = useState(false);
   const [editingRate, setEditingRate] = useState<DemurrageRate | null>(null);
   const [deletingRate, setDeletingRate] = useState<DemurrageRate | null>(null);
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
+  const [showBulkDeleteDialog, setShowBulkDeleteDialog] = useState(false);
   const [filterArmador, setFilterArmador] = useState<string>("all");
   const [quickFilter, setQuickFilter] = useState<QuickFilter>("all");
   const [currentPage, setCurrentPage] = useState(1);
@@ -250,6 +254,33 @@ export default function DemurrageRates() {
     setQuickFilter(filter);
   };
 
+  const toggleSelect = (id: number) => {
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  };
+
+  const toggleSelectAll = () => {
+    if (selectedIds.size === filteredRates.length) {
+      setSelectedIds(new Set());
+    } else {
+      setSelectedIds(new Set(filteredRates.map(r => r.id)));
+    }
+  };
+
+  const handleBulkDelete = async () => {
+    try {
+      await bulkDelete.mutateAsync(Array.from(selectedIds));
+      toast.success(`${selectedIds.size} tarifa(s) excluída(s) com sucesso!`);
+      setSelectedIds(new Set());
+      setShowBulkDeleteDialog(false);
+    } catch (err) {
+      toast.error(`Erro ao excluir tarifas: ${err instanceof Error ? err.message : 'Erro desconhecido'}`);
+    }
+  };
+
   const rightActions = (
     <div className="flex gap-2">
       <Button 
@@ -320,14 +351,28 @@ export default function DemurrageRates() {
 
         {/* Rates Table */}
         <Card className="bg-[rgba(5,6,18,0.85)] border-[rgba(255,255,255,0.1)]">
-          <CardHeader className="pb-3">
-            <CardTitle className="flex items-center gap-2 text-foreground text-base">
-              <TrendingUp className="h-5 w-5 text-[#ffc800]" />
-              Tarifas Configuradas
-            </CardTitle>
-            <CardDescription>
-              {filteredRates.length} tarifa(s) {filterArmador !== 'all' ? `- ${filterArmador}` : ''}
-            </CardDescription>
+           <CardHeader className="pb-3">
+            <div className="flex items-center justify-between">
+              <div>
+                <CardTitle className="flex items-center gap-2 text-foreground text-base">
+                  <TrendingUp className="h-5 w-5 text-[#ffc800]" />
+                  Tarifas Configuradas
+                </CardTitle>
+                <CardDescription>
+                  {filteredRates.length} tarifa(s) {filterArmador !== 'all' ? `- ${filterArmador}` : ''}
+                </CardDescription>
+              </div>
+              {selectedIds.size > 0 && (
+                <Button
+                  variant="destructive"
+                  size="sm"
+                  onClick={() => setShowBulkDeleteDialog(true)}
+                >
+                  <Trash2 className="h-4 w-4 mr-2" />
+                  Excluir {selectedIds.size} selecionada(s)
+                </Button>
+              )}
+            </div>
           </CardHeader>
           <CardContent>
             {isLoading ? (
@@ -348,6 +393,12 @@ export default function DemurrageRates() {
                 <Table>
                   <TableHeader>
                     <TableRow className="border-[rgba(255,255,255,0.1)]">
+                      <TableHead className="w-10">
+                        <Checkbox
+                          checked={filteredRates.length > 0 && selectedIds.size === filteredRates.length}
+                          onCheckedChange={toggleSelectAll}
+                        />
+                      </TableHead>
                       <TableHead>Armador</TableHead>
                       <TableHead>Container</TableHead>
                       <TableHead className="text-center">Free Time</TableHead>
@@ -360,7 +411,13 @@ export default function DemurrageRates() {
                   </TableHeader>
                   <TableBody>
                     {paginatedRates.map((rate) => (
-                      <TableRow key={rate.id} className="border-[rgba(255,255,255,0.1)]">
+                      <TableRow key={rate.id} className={`border-[rgba(255,255,255,0.1)] ${selectedIds.has(rate.id) ? 'bg-primary/5' : ''}`}>
+                        <TableCell>
+                          <Checkbox
+                            checked={selectedIds.has(rate.id)}
+                            onCheckedChange={() => toggleSelect(rate.id)}
+                          />
+                        </TableCell>
                         <TableCell className="font-medium">{rate.armador}</TableCell>
                         <TableCell><span className="font-mono">{rate.container_type}</span></TableCell>
                         <TableCell className="text-center"><Badge variant="outline" className="bg-green-500/10 text-green-500 border-green-500/20"><Clock className="h-3 w-3 mr-1" />{rate.free_time_days}d</Badge></TableCell>
@@ -560,6 +617,30 @@ export default function DemurrageRates() {
               >
                 {deleteRate.isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
                 Excluir
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+
+        {/* Bulk Delete Confirmation Dialog */}
+        <AlertDialog open={showBulkDeleteDialog} onOpenChange={setShowBulkDeleteDialog}>
+          <AlertDialogContent className="bg-[rgba(5,6,18,0.95)] border-[rgba(255,255,255,0.1)]">
+            <AlertDialogHeader>
+              <AlertDialogTitle>Excluir {selectedIds.size} Tarifa(s)</AlertDialogTitle>
+              <AlertDialogDescription>
+                Tem certeza que deseja excluir <strong>{selectedIds.size}</strong> tarifa(s) selecionada(s)?
+                Esta ação não pode ser desfeita.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel className="border-[rgba(255,255,255,0.2)]">Cancelar</AlertDialogCancel>
+              <AlertDialogAction 
+                onClick={handleBulkDelete}
+                className="bg-red-600 hover:bg-red-700"
+                disabled={bulkDelete.isPending}
+              >
+                {bulkDelete.isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+                Excluir {selectedIds.size} Tarifa(s)
               </AlertDialogAction>
             </AlertDialogFooter>
           </AlertDialogContent>
